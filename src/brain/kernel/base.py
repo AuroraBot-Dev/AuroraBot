@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 logger = get_logger("NodeBase")
 
 
+# 节点状态
+# # 然而我并没有看出哪里用到了. 还得观望观望
 class NodeState(Enum):
     IDLE = auto()
     READY = auto()
@@ -43,7 +45,14 @@ class LockPolicy:
 
 @dataclass(slots=True)
 class FileDescriptor:
+    """文件描述符。
 
+    用于唯一标识文件，包含文件路径、数据格式、锁策略等信息。
+    """
+
+    # 文件路径
+    # 文件数据格式
+    # 文件锁策略
     path: str
     schema: str = "json"
     lock: str = LockPolicy.WRITE_OVERWRITE
@@ -59,7 +68,12 @@ class FileDescriptor:
 
 @dataclass(slots=True)
 class FilePattern:
+    """文件模式。
 
+    用于匹配文件路径，支持通配符模式。
+    """
+
+    # 文件路径模式
     pattern: str
 
     def match(self, file_path: str) -> bool:
@@ -68,7 +82,15 @@ class FilePattern:
 
 @dataclass(slots=True)
 class FileEvent:
+    """文件事件。
 
+    用于通知文件变更，包含文件路径、变更类型、时间戳、版本号、元数据等信息。
+    """
+
+    # 文件路径
+    # 变更类型
+    # 版本号
+    # 元数据
     path: str
     change_type: str
     timestamp: str = field(default_factory=now_text)
@@ -78,7 +100,14 @@ class FileEvent:
 
 @dataclass(slots=True)
 class FileUpdate:
+    """文件更新。
 
+    用于描述文件变更，包含文件描述符、变更内容、变更模式等信息。
+    """
+
+    # 文件描述符
+    # 变更内容
+    # 变更模式
     descriptor: FileDescriptor
     content: Any
     mode: str = "overwrite"
@@ -97,15 +126,22 @@ class Node:
     Subclass Hooks
     --------------
     子类必须实现：
-    - :meth:`guards` —— 返回守护的文件模式列表
-    - :meth:`produces` —— 返回产出文件的描述符列表
     - :meth:`execute` —— 执行认知操作，返回文件变更列表
     - :meth:`type` —— 返回 ``"agent"`` 或 ``"router"``
 
+    子类应设置：
+    - ``_default_guards`` —— 守护的文件模式列表（类属性）
+    - ``_default_produces`` —— 产出文件路径列表（类属性）
+
     子类可覆写：
+    - :meth:`guards` / :meth:`produces` —— 仅当默认值依赖实例配置时
     - :meth:`on_event` —— 自定义事件过滤逻辑
     - :meth:`on_complete` —— 执行完成后的清理钩子
     """
+
+    # 子类覆写为静态默认值（拓扑配置通过 _config_watch / _config_emit 动态覆盖）
+    _default_guards: list[str] = []
+    _default_produces: list[str] = []
 
     def __init__(self, node_id: str) -> None:
         self.id = node_id
@@ -127,16 +163,32 @@ class Node:
         return self.__class__.__name__
 
     @property
-    @abstractmethod
     def guards(self) -> list[FilePattern]:
-        """守护的文件模式列表，支持 glob 通配。"""
-        raise NotImplementedError
+        """守护的文件模式列表。
+
+        优先使用拓扑配置的 :attr:`_config_watch`，
+        否则回退到子类的 :attr:`_default_guards`。
+        """
+        patterns = (
+            self._config_watch
+            if self._config_watch is not None
+            else self._default_guards
+        )
+        return [FilePattern(p) for p in patterns]
 
     @property
-    @abstractmethod
     def produces(self) -> list[FileDescriptor]:
-        """产出文件描述符列表。"""
-        raise NotImplementedError
+        """产出文件描述符列表。
+
+        优先使用拓扑配置的 :attr:`_config_emit`，
+        否则回退到子类的 :attr:`_default_produces`。
+        """
+        paths = (
+            self._config_emit
+            if self._config_emit is not None
+            else self._default_produces
+        )
+        return [FileDescriptor(p) for p in paths]
 
     def on_event(self, event: FileEvent) -> bool:
         """判断给定事件是否应激活本节点。
@@ -147,7 +199,7 @@ class Node:
         """
         if self.state not in (NodeState.IDLE, NodeState.READY):
             return False
-        # 跳过自身产出的文件事件（防自触发空转）
+        # 跳过自身产出的文件事件
         if event.metadata.get("source_node") == self.id:
             return False
         return any(guard.match(event.path) for guard in self.guards)
