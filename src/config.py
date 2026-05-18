@@ -55,6 +55,7 @@ class Config:
     RUN_MODE: str = os.getenv("RUN_MODE", "prod")
     HEARTBEAT_INTERVAL: float = float(os.getenv("HEARTBEAT_INTERVAL", "1.0"))
     APP_FRAME_INTERVAL: float = float(os.getenv("APP_FRAME_INTERVAL", "1.0"))
+    EVENT_BRIDGE_INTERVAL: float = float(os.getenv("EVENT_BRIDGE_INTERVAL", "1.5"))
 
     # MAX_ACTIONS_PER_BEAT: int = int(os.getenv("MAX_ACTIONS_PER_BEAT", "50"))
     # SELF_MAINTENANCE_INTERVAL: int = int(os.getenv("SELF_MAINTENANCE_INTERVAL", "12"))

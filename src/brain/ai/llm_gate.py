@@ -1,8 +1,16 @@
 from __future__ import annotations
+import os
 from typing import Any, Dict, List
+
+# 禁用 LiteLLM 远程模型成本图获取，避免网络超时警告。
+# 必须在 import litellm 之前设置。
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
 import litellm
 from litellm import acompletion
+
+# 进一步抑制 LiteLLM 的调试信息
+litellm.suppress_debug_info = True
 
 from src.config import Config
 from src.utils.log_utils import get_logger
