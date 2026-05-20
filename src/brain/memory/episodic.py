@@ -20,7 +20,7 @@ class EpisodicMemory:
         self._file_path = Config.MEMORY_DATA_DIR / "episodes.json"
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
         # 触发压缩的阈值
-        self._COMPRESS_THRESHOLD = 2
+        self._COMPRESS_THRESHOLD = 50
 
     def record_event(self, event_type: str, content: str, user_id: str) -> None:
         """写策略：追加写入 (Append Only)，并在必要时触发压缩。同时防止连续重复写入。"""
