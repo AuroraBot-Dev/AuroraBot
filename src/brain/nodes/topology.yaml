@@ -27,7 +27,8 @@ nodes:
   # ── 入口扇出（inbox → 多路 pending） ────────────
   - id: fanout
     type: fanout
-    watch: ["inbox/event_*.json"]
+    watch:
+      - "inbox/event_*.json"
     emit:
       - "fanout/to-planner/pending"
       - "fanout/to-reflex/pending"
@@ -35,8 +36,10 @@ nodes:
   # ── 自发目标生成 ──────────────────────────────
   - id: goal-generator
     type: goal_generator
-    watch: ["heartbeat/tick.json"]
-    emit: ["intent/pending/goal.json"]
+    watch:
+      - "heartbeat/tick.json"
+    emit:
+      - "intent/pending/goal.json"
     config:
       cooldown_ticks: 6
 
@@ -46,7 +49,8 @@ nodes:
     watch:
       - "fanout/to-reflex/pending/event_*.json"
       - "reflexes/rules.json"
-    emit: ["actions/pending/action.json"]
+    emit:
+      - "actions/pending/action.json"
     config:
       min_confidence: 0.7
 
@@ -64,11 +68,13 @@ nodes:
     watch:
       - "fanout/to-planner/pending/event_*.json"
       - "intent/pending/goal*.json"
-    emit: ["plans/pending/plan.json"]
+    emit:
+      - "plans/pending/plan.json"
 
   - id: priority-switch
     type: switch
-    watch: ["plans/pending/plan_*.json"]
+    watch:
+      - "plans/pending/plan_*.json"
     config:
       guard_pattern: "plans/pending/plan_*.json"
       condition_field: "priority"
@@ -79,18 +85,23 @@ nodes:
 
   - id: expander
     type: expander
-    watch: ["plans/pending/plan_*.json"]
-    emit: ["actions/pending/action.json"]
+    watch:
+      - "plans/pending/plan_*.json"
+    emit:
+      - "actions/pending/action.json"
 
   - id: executor
     type: executor
-    watch: ["actions/pending/action_*.json"]
-    emit: ["results/pending/result.json"]
+    watch:
+      - "actions/pending/action_*.json"
+    emit:
+      - "results/pending/result.json"
 
   # ── 汇合 ────────────────────────────────────────
   - id: merge
     type: merge
-    watch: ["actions/pending/action_*.json"]
+    watch:
+      - "actions/pending/action_*.json"
     config:
       input_patterns:
         - "actions/pending/action_*.json"
@@ -111,12 +122,10 @@ nodes:
   # ── 生命周期终止（清理 done/） ────────────────
   - id: terminal
     type: terminal
-    watch: ["*/done/*.json"]
-    emit: ["terminal/tick.json"]
+    watch:
+      - "*/done/*.json"
+      - "terminal/tick.json"
+    emit:
+      - "terminal/tick.json"
     config:
       ttl_sec: 60
-
-  # ── 示例节点（默认禁用） ──────────────────────
-  - id: example
-    type: example
-    enabled: false

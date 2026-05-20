@@ -20,7 +20,6 @@ NODE_REGISTRY: dict[str, type[Node]] = {
     "planner": PlanAgent,
     "expander": ExpandAgent,
     "executor": ExecuteAgent,
-    "example": ExampleAgent,
     "fanout": FanOutRouter,
     "switch": SwitchRouter,
     "terminal": TerminalRouter,
