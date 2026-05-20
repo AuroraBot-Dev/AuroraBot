@@ -23,10 +23,10 @@ class UnifiedMemoryManager:
         self.episodic.record_event(event_type=f"chat_{role}", content=content, user_id=user_id)
         
         # 3. 语义提炼 (L3: LLM级，较慢)
-        # 策略优化：通常我们只提炼用户说的话，系统助手的回复往往不需要存为知识库
+        # 策略优化：因为 DeepSeek Token 成本极低，这里直接把所有 user 的话送给 mem0，
+        # 让 mem0 内部的 LLM 依靠 Prompt 自行判断是否包含有价值的事实，不再做前置规则拦截。
         if role == "user":
-            # 注意：在真实的生产环境中，这一步通常会被放进异步任务队列 (Task Queue) 里执行，
-            # 避免因为大模型处理慢而阻塞了回复用户的速度。
+            # 真实环境中，这里应该丢进一个异步任务队列，如 Celery 或 asyncio.create_task
             self.semantic.extract_and_store(text=content, user_id=user_id)
 
     def retrieve_context(self, current_query: str, user_id: str) -> MemoryContext:
