@@ -2,10 +2,8 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterable
 import inspect
-import json
 from typing import Any
 
-from src.config import Config
 from src.platform.application_api import PlatformAPI
 from src.platform.application_protocol import ApplicationProtocol
 from src.platform.contracts import AppEvent, CommandSpec
@@ -13,8 +11,6 @@ from src.platform.manifest import CommandDecl, Manifest
 from src.utils.log_utils import get_logger
 
 logger = get_logger("ApplicationHost")
-
-events_json = Config.KERNEL_DATA_DIR / "events.json"
 
 
 class ApplicationHost:
@@ -108,16 +104,6 @@ class ApplicationHost:
                 await _maybe_await(app.on_tick())
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"应用 {package} 执行 on_tick 失败: {exc}")
-
-        # 将当前事件队列可视化到文件
-        # TODO: 目前事件队列是内存中的, 文件只读不可改，后续可以考虑持久化
-        with open(events_json, "w") as f:
-            json.dump(
-                [event.to_dict() for event in self._events],
-                f,
-                indent=2,
-                ensure_ascii=False,
-            )
 
     async def stop_all(self) -> None:
         for package, app in reversed(list(self._apps.items())):

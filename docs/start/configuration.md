@@ -97,7 +97,7 @@ apps:
 
 ## 人格文档
 
-通常位于`src/brain/prompt/`目录下.
+通常位于`src/brain/prompts/`目录下.
 
 此处给出默认人格`小光`的人格文档：
 

@@ -1,6 +1,6 @@
 apps:
   qq:
-    enabled: false
+    enabled: true
     startup:
       enable_listener: true
   diary:
@@ -19,7 +19,7 @@ apps:
     enabled: false
     startup: {}
   example:
-    enabled: false
+    enabled: true
     startup:
       greeting: hello from example
       emit_startup_event: true

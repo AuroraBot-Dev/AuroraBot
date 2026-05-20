@@ -328,42 +328,44 @@ graph LR
 
 ### 8.1 第一阶段：核心回路（最小可执行通路）
 
-实现：
+**实现 ✅**（当前代码库已完成）：
 
-- 文件抽象与元信息管理
-- Node基类、Agent基类与LLMHost接口
-- EventBus基础版（文件轮询 + 简单订阅）
-- `PlannerAgent`、`PersonaAgent`（仅支持“用户输入→回复”）
-- 对应的文件（`user_input.md`, `intent.json`, `response.md`）
-
-**目标**：零外部依赖（LLM API除外），跑通“说话→回应”闭环。
+- ✅ 文件抽象与元信息管理 — `FileDescriptor` / `FilePattern` / `FileEvent` / `FileUpdate`
+- ✅ Node / Agent / Router 基类 — `src/brain/kernel/base.py`
+- ✅ EventBus — `FileEventBus`（`event_bus.py`），异步队列分发
+- ✅ 规划/展开/执行全链路 — `PlanAgent`、`ExpandAgent`、`ExecuteAgent`
+- ✅ 文件流 — `inbox/event_*.json` → `plans/plan_*.json` → `actions/action_*.json` 驱动节点
 
 ### 8.2 第二阶段：Router引入与认知扩展
 
-- Router基类及`SwitchRouter`、`MergeRouter`等基本实现
-- 加入`MemoryDrawerAgent`（嵌入向量检索，简易版）
-- 实现`BroadcastRouter`作为冷热翻译层
-- 完善事件合并与优先级调度
+**实现 ✅**（大部分已完成）：
 
-**目标**：证明双上下文隔离的有效性，记忆参与对话。
+- ✅ Router基类及`SwitchRouter`、`MergeRouter`、`WaitRouter`、`FanOutRouter`、`TerminalRouter`、`HeartbeatRouter`、`ReflexRouter`
+- ✅ `MemoryAgent`（简易版，写入 JSON 文件）
+- ✅ EventBridge 替代手动广播，连接 App 事件与文件事件
+- 🔄 `BroadcastRouter`（冷热翻译层）待实现
+- 🔄 事件合并与优先级调度待细化
 
 ### 8.3 第三阶段：自循环与反思
 
-- `HeartbeatRouter`与`GoalGeneratorAgent`
-- `ConsolidatorAgent`与`CriticAgent`
-- 循环控制结构（`LoopRouter`、`WaitRouter`）
-- 文件多版本与回滚机制
+**部分实现 🟡**：
 
-**目标**：智能体展现出自主行为和基础反思能力。
+- ✅ `HeartbeatRouter` — 定时脉冲（默认 300s 间隔）
+- ✅ `GoalGeneratorAgent` — 沉默时主动生成意图
+- ✅ `ReflexLearnerAgent` — 从成功动作中学习反射规则
+- ✅ `WaitRouter` — 条件等待
+- ⏳ `LoopRouter` / 多版本与回滚机制 待实现
+- ⏳ 反思评估节点（CriticAgent/ConsolidatorAgent）待实现
 
 ### 8.4 第四阶段：内核化与工具链
 
-- 图管理器正式化（动态加载、可视化、调试界面）
-- 事件溯源日志分析工具
-- 节点配置DSL（声明式定义整个认知拓扑）
-- 性能优化（真实文件系统事件、大量节点下的调度优化）
+**部分实现 🟡**：
 
-**目标**：系统收敛为可复用的认知内核，能通过配置文件生成不同个性的智能体。
+- ✅ 节点配置 DSL — `topology.yaml` 声明式定义认知拓扑，邻接表条目自动映射为 `Node` 实例
+- ✅ `node_factory.py` + `NODE_REGISTRY` — 类型分派构造器，支持多实例
+- 🔄 图管理器（动态加载、可视化、调试界面）待正式化
+- ⏳ 事件溯源日志分析工具待实现
+- ⏳ 文件系统事件（inotify/kqueue）代替轮询
 
 ## 9. 已识别风险与缓解
 

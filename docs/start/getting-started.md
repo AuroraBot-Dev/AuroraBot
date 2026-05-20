@@ -61,9 +61,9 @@ cp .env.example .env
 ONEBOT_ACCESS_TOKEN=
 
 # 模型配置
-DEEPSEEK_URL_BASE=https://api.deepseek.com #默认为Deepseek
+DEEPSEEK_URL_BASE=https://api.deepseek.com   # 默认为 DeepSeek
 DEEPSEEK_API_KEY=
-LITELLM_MODEL=deepseek/deepseek-v4-flash #默认为Deepseek
+LITELLM_MODEL=deepseek/deepseek-v4-flash     # 默认为 DeepSeek
 
 # 记忆配置
 MEM0_API_KEY=

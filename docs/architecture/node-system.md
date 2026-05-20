@@ -76,17 +76,18 @@ class Router(Node):
     host: ApplicationHost | None     # 部分 Router 需要宿主能力
 ```
 
-Router 是控制结构原语。代码中已规划的 Router 类型：
+Router 是控制结构原语。当前已实现的 Router 类型（`src/brain/nodes/routers/`）：
 
-| Router            | 功能                                           |
-| ----------------- | ---------------------------------------------- |
-| `SwitchRouter`    | 检查文件内容条件，激活不同下游                 |
-| `WaitRouter`      | 等待多个文件就绪后触发                         |
-| `MergeRouter`     | 将多个输入文件汇总为一个                       |
-| `LoopRouter`      | 维护循环状态，条件满足时重置或终止             |
-| `TerminateRouter` | 关闭一个子图                                   |
-| `HeartbeatRouter` | 定时产生脉冲事件，驱动自主意识                 |
-| `BroadcastRouter` | 将冷认知池的结构化文件翻译为热认知池的自然语言 |
+| Router             | 功能                                           |
+| ------------------ | ---------------------------------------------- |
+| `SwitchRouter`     | 检查文件内容条件，激活不同下游                 |
+| `WaitRouter`       | 等待多个文件满足条件后触发                     |
+| `MergeRouter`      | 将多个输入文件汇总为一个                       |
+| `HeartbeatRouter`  | 定时产生脉冲事件，驱动自主意识                 |
+| `ReflexRouter`     | 缓存规则匹配，短路径响应（零 LLM）            |
+| `FanOutRouter`     | 将事件扇出到多个下游节点                       |
+| `TerminalRouter`   | 关闭一个子图                                   |
+| `MemoryAgent`      | 将执行结果写入记忆存储                         |
 
 ## 文件相关数据结构
 
@@ -154,21 +155,6 @@ class LockPolicy:
 ```
 
 每个 `FileDescriptor` 声明其锁策略。运行时，锁机制确保同一时刻只有一个节点以写入模式操作同一文件。
-
-## 与旧 Agent 体系的对比
-
-当前代码库中存在两套体系：
-
-|          | 旧体系（agent_base.py）                   | 新体系（base.py）                     |
-| -------- | ----------------------------------------- | ------------------------------------- |
-| 基类     | `Agent` → `AgentProposal` / `AgentResult` | `Node` → `Agent` / `Router`           |
-| 激活方式 | 调度器轮询 `propose()`                    | 事件驱动 `on_event(FileEvent)`        |
-| 输入     | 直接读 ApplicationHost 事件队列           | 声明 `guards: List[FilePattern]`      |
-| 输出     | 调用 `invoke_command()`                   | 声明 `produces: List[FileDescriptor]` |
-| 文件     | 不感知文件版本                            | FileDescriptor + FileEvent + 锁       |
-| 注册     | `agent_factory.py` 字典                   | `node_factory.py`（待实现）           |
-
-迁移完成后，旧体系将被移除。当前 `kernel/loop.py` 仍在运行旧体系。
 
 ## 下一步阅读
 

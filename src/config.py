@@ -24,10 +24,12 @@ class Config:
     DATA_DIR = PROJECT_ROOT / "data"
     APP_DIR = PROJECT_ROOT / "apps"
 
-    PROMPTS_DIR = SRC_ROOT / "brain" / "prompts"
     APP_DATA_DIR = DATA_DIR / "app_data"
     MEMORY_DATA_DIR = DATA_DIR / "memory"
     KERNEL_DATA_DIR = DATA_DIR / "kernel"
+
+    PROMPTS_DIR = SRC_ROOT / "brain" / "prompts"
+    TOPOLOGY_CONFIG = SRC_ROOT / "brain" / "nodes" / "topology.yaml"
 
     # QUEUES_SNAPSHOT_FILE = QUEUES_DATA_DIR / "runtime_queues.json"
     # EPISODIC_MEMORY_FILE = MEMORY_DATA_DIR / "episodes.json"

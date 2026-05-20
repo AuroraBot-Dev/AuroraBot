@@ -40,7 +40,7 @@ export default withMermaid(
         { text: "开始", link: "/start/overview" },
         { text: "开发", link: "/develop/app-development" },
         { text: "架构", link: "/architecture/system-overview" },
-        { text: "问答", link: "/qa/" },
+        { text: "问答", link: "/qa/cross-platform" },
       ],
       sidebar: (() => {
         const raw = generateSidebar({

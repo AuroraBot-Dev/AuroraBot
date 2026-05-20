@@ -1,0 +1,122 @@
+# 认知拓扑电路 — 邻接表配置
+#
+# 每个条目是一个节点实例。边由 watch/emit 的文件模式隐式形成：
+#   节点 A 的 emit 匹配节点 B 的 watch → 存在有向边 A → B
+#
+# 字段：
+#   id       — 全局唯一标识（同时也是 node.id）
+#   type     — NODE_REGISTRY 中的类型名
+#   enabled  — 是否启用（可选，默认 true）
+#   watch    — 监听的文件 glob 列表（可选，覆盖节点类默认值）
+#   emit     — 产出的文件路径列表（可选，覆盖节点类默认值）
+#   config   — 节点类特定参数（可选）
+#
+# 相邻节点间靠文件模式匹配自动连边，无需显式声明上下游。
+#
+# 生命周期约定：
+#   pending/ — 待处理（文件在此即表示 pending 状态）
+#   done/    — 已处理（文件在此即表示 done 状态，由 TerminalRouter 清理）
+
+nodes:
+  # ── 脉冲源 ──────────────────────────────────────
+  - id: heartbeat
+    type: heartbeat
+    config:
+      interval_sec: 300
+
+  # ── 入口扇出（inbox → 多路 pending） ────────────
+  - id: fanout
+    type: fanout
+    watch: ["inbox/event_*.json"]
+    emit:
+      - "fanout/to-planner/pending"
+      - "fanout/to-reflex/pending"
+
+  # ── 自发目标生成 ──────────────────────────────
+  - id: goal-generator
+    type: goal_generator
+    watch: ["heartbeat/tick.json"]
+    emit: ["intent/pending/goal.json"]
+    config:
+      cooldown_ticks: 6
+
+  # ── 反射链路（短路径——直接响应） ──────────────
+  - id: reflex
+    type: reflex
+    watch:
+      - "fanout/to-reflex/pending/event_*.json"
+      - "reflexes/rules.json"
+    emit: ["actions/pending/action.json"]
+    config:
+      min_confidence: 0.7
+
+  - id: reflex-learner
+    type: reflex_learner
+    watch:
+      - "plans/done/plan_*.json"
+      - "results/done/result_*.json"
+    config:
+      cooldown_ticks: 12
+
+  # ── 全链路（规划 → 展开 → 执行） ──────────────
+  - id: planner
+    type: planner
+    watch:
+      - "fanout/to-planner/pending/event_*.json"
+      - "intent/pending/goal*.json"
+    emit: ["plans/pending/plan.json"]
+
+  - id: priority-switch
+    type: switch
+    watch: ["plans/pending/plan_*.json"]
+    config:
+      guard_pattern: "plans/pending/plan_*.json"
+      condition_field: "priority"
+      condition_op: ">"
+      condition_value: 70
+      true_trigger: "router/switch/urgent.trigger"
+      false_trigger: "router/switch/normal.trigger"
+
+  - id: expander
+    type: expander
+    watch: ["plans/pending/plan_*.json"]
+    emit: ["actions/pending/action.json"]
+
+  - id: executor
+    type: executor
+    watch: ["actions/pending/action_*.json"]
+    emit: ["results/pending/result.json"]
+
+  # ── 汇合 ────────────────────────────────────────
+  - id: merge
+    type: merge
+    watch: ["actions/pending/action_*.json"]
+    config:
+      input_patterns:
+        - "actions/pending/action_*.json"
+      output_path: "router/merge/merged.json"
+      merge_strategy: "concat_array"
+
+  # ── 记忆（只读 done/，自触发 tick） ────────────
+  - id: memory
+    type: memory
+    watch:
+      - "plans/done/plan_*.json"
+      - "results/done/result_*.json"
+      - "memory/tick.json"
+    emit:
+      - "memory/facts.json"
+      - "memory/tick.json"
+
+  # ── 生命周期终止（清理 done/） ────────────────
+  - id: terminal
+    type: terminal
+    watch: ["*/done/*.json"]
+    emit: ["terminal/tick.json"]
+    config:
+      ttl_sec: 60
+
+  # ── 示例节点（默认禁用） ──────────────────────
+  - id: example
+    type: example
+    enabled: false

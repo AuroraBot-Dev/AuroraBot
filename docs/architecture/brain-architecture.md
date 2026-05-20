@@ -75,8 +75,8 @@ Node:
 #### Router（反射型节点）
 
 - **零 LLM 调用**，纯逻辑门，执行时间可预测
-- 是流程控制结构的原生载体：条件分支、多路汇集、循环控制、终止信号等
-- 规划中的 Router 类型：`SwitchRouter`、`WaitRouter`、`MergeRouter`、`LoopRouter`、`TerminateRouter`、`HeartbeatRouter`、`BroadcastRouter`
+- 是流程控制结构的原生载体：条件分支、多路汇集、扇出、终止信号等
+- 已实现的 Router 类型：`SwitchRouter`、`WaitRouter`、`MergeRouter`、`HeartbeatRouter`、`ReflexRouter`、`FanOutRouter`、`TerminalRouter`、`MemoryAgent`（详见 [节点系统](./node-system.html)）
 
 ### 事件总线 — 神经束
 
@@ -163,7 +163,7 @@ graph LR
     CRITIC --> SELF_EVAL
 ```
 
-> 上图来自设计白皮书 `CortexForge 0.7`，展示的是目标态认知拓扑。当前实现仍在从线性流水线向此图迁移。
+> 上图来自设计白皮书 `CortexForge 0.7`，展示的是目标态认知拓扑。当前实现的部分节点（ReflexRouter、SwitchRouter、WaitRouter、HeartbeatRouter、MergeRouter）已就位，其余节点正在逐步填充。
 
 ## 双上下文认知
 
@@ -172,7 +172,7 @@ AuroraBot 的认知系统天然分为两个池：
 ### 热认知池 — 人格主上下文
 
 - 载体：`conscious_stream.md`（追加的散文式意识流）
-- 由 `PersonaAgent` 维护，呈现小光的人格、语气、记忆
+- 由认知节点维护，呈现小光的人格、语气、记忆
 - 沉浸式、连续、不可删除——这是她的"自我感"的来源
 
 ### 冷认知池 — 结构化认知上下文
@@ -182,30 +182,6 @@ AuroraBot 的认知系统天然分为两个池：
 - 工单式、可版本化、可回滚——这是她的"思考过程"
 
 两个池通过 `BroadcastRouter` 连接：它将冷冰冰的结构化文件翻译成自然语言的内心独白，注入热认知池。
-
-## 与旧内核的对比
-
-当前 AuroraBot 的 Brain 层正处在 **从旧内核向 CortexForge 架构过渡** 的阶段：
-
-| 维度       | 旧内核（运行中）                           | CortexForge（目标态）                        |
-| ---------- | ------------------------------------------ | -------------------------------------------- |
-| 基类       | `Agent`（agent_base.py）                   | `Node` → `Agent` / `Router`（base.py）       |
-| 调度       | `loop.py` 线性轮询 plan/expand/execute     | 事件总线 + 文件变更驱动                      |
-| 状态模型   | JSON 文件队列（plans.json / actions.json） | 文件 + 元信息 + 版本 + 锁                    |
-| 节点类型   | 只有 Agent                                 | Agent + Router（控制结构原语）               |
-| 依赖关系   | 硬编码调用顺序                             | 声明式 guards / produces 静态依赖图          |
-| Agent 注册 | `agent_factory.py` 字典                    | `node_factory.py`（待填充）                  |
-| 节点目录   | —                                          | `nodes/agents/` + `nodes/routers/`（已就位） |
-
-**当前已就位的 CortexForge 基础设施**：
-
-- ✅ `Node` / `Agent` / `Router` 基类
-- ✅ `FileDescriptor` / `FilePattern` / `FileEvent` / `FileUpdate`
-- ✅ `NodeState` 六状态机（IDLE → READY → RUNNING → WAITING / ERROR → TERMINATED）
-- ✅ `LockPolicy`（`read_only` / `write_overwrite` / `append_only` / `locked_by_<id>`）
-- ✅ `nodes/agents/` 和 `nodes/routers/` 目录结构
-
-**待迁移**：旧的 `PlanAgent` / `ExpandAgent` / `ExecuteAgent` 需要在新的 `Node` 体系下重写为符合 `guards` / `produces` 声明的节点。
 
 ## 下一步阅读
 

@@ -11,6 +11,7 @@ from src.utils.time_utils import now_text
 
 if TYPE_CHECKING:
     from src.platform.application_host import ApplicationHost
+    from src.brain.kernel.event_bus import FileEventBus
 
 logger = get_logger("NodeBase")
 
@@ -110,7 +111,10 @@ class Node:
         self.id = node_id
         self.state = NodeState.IDLE
         self._ready_event: asyncio.Event = asyncio.Event()
-        self._bus: Any = None
+        self._bus: FileEventBus | None = None
+        # 拓扑配置可覆盖 guards/produces（由 build_circuit 设置）
+        self._config_watch: list[str] | None = None
+        self._config_emit: list[str] | None = None
 
     @property
     @abstractmethod
@@ -138,9 +142,13 @@ class Node:
         """判断给定事件是否应激活本节点。
 
         默认实现遍历 :attr:`guards`，匹配第一个命中后返回 ``True``。
+        跳过自身产出的文件事件以防自触发空转。
         子类可覆写以实现更精细的激活条件（如版本号比对、并发门控）。
         """
         if self.state not in (NodeState.IDLE, NodeState.READY):
+            return False
+        # 跳过自身产出的文件事件（防自触发空转）
+        if event.metadata.get("source_node") == self.id:
             return False
         return any(guard.match(event.path) for guard in self.guards)
 
@@ -230,7 +238,7 @@ class Agent(Node):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost",  # noqa: F821  # 运行时由 agent_factory 注入
+        host: ApplicationHost | None = None,  # noqa: F821
         *,
         system_prompt: str = "",
     ) -> None:
@@ -244,11 +252,11 @@ class Agent(Node):
         return "agent"
 
     @property
-    def host(self) -> "ApplicationHost":  # noqa: F821
+    def host(self) -> ApplicationHost | None:  # noqa: F821
         return self._host
 
     @host.setter
-    def host(self, value: "ApplicationHost") -> None:  # noqa: F821
+    def host(self, value: ApplicationHost | None) -> None:  # noqa: F821
         self._host = value
 
     @property
@@ -337,7 +345,7 @@ class Router(Node):
     def __init__(
         self,
         node_id: str,
-        host: Optional[ApplicationHost] = None,  # noqa: F821
+        host: ApplicationHost | None = None,  # noqa: F821
     ) -> None:
         super().__init__(node_id)
         self._host = host
@@ -347,7 +355,7 @@ class Router(Node):
         return "router"
 
     @property
-    def host(self) -> Optional[ApplicationHost]:  # noqa: F821
+    def host(self) -> ApplicationHost | None:  # noqa: F821
         return self._host
 
     def on_event(self, event: FileEvent) -> bool:
