@@ -1,0 +1,14 @@
+{
+    "results": [
+        {
+            "id": "11fb77ec-d61d-4f83-98f4-852978e4b89b",
+            "memory": "User likes oolong tea and prefers low-sugar drinks",
+            "hash": "bc7c619c6db141d440267e1add7854e5",
+            "metadata": null,
+            "score": 0.4921586811542511,
+            "created_at": "2026-05-15T13:58:33.736320+00:00",
+            "updated_at": "2026-05-15T13:58:33.736320+00:00",
+            "user_id": "demo_user"
+        }
+    ]
+}
