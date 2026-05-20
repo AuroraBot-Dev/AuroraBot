@@ -1,28 +1,12 @@
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
+from typing import Any, TYPE_CHECKING
 
 import yaml
 
-from src.brain.kernel.circuit import Circuit
 from src.brain.kernel.base import Node
-from src.brain.nodes.agents import (
-    ExampleAgent,
-    ExecuteAgent,
-    ExpandAgent,
-    GoalGeneratorAgent,
-    PlanAgent,
-    ReflexLearnerAgent,
-)
-from src.brain.nodes.routers import (
-    FanOutRouter,
-    HeartbeatRouter,
-    MemoryAgent,
-    MergeRouter,
-    ReflexRouter,
-    SwitchRouter,
-    TerminalRouter,
-)
+from src.brain.kernel.circuit import Circuit
+from src.brain.nodes.agents import *
+from src.brain.nodes.routers import *
 from src.config import Config
 from src.utils.log_utils import get_logger
 
@@ -36,7 +20,6 @@ NODE_REGISTRY: dict[str, type[Node]] = {
     "planner": PlanAgent,
     "expander": ExpandAgent,
     "executor": ExecuteAgent,
-    "example": ExampleAgent,
     "fanout": FanOutRouter,
     "switch": SwitchRouter,
     "terminal": TerminalRouter,
@@ -45,7 +28,7 @@ NODE_REGISTRY: dict[str, type[Node]] = {
     "goal_generator": GoalGeneratorAgent,
     "reflex": ReflexRouter,
     "reflex_learner": ReflexLearnerAgent,
-    "memory": MemoryAgent,
+    "memory": MemoryRouter,
 }
 
 # 节点构造时是否需要 host 引用（按 type 判断）
@@ -180,9 +163,11 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
             node._config_emit = entry["emit"]
 
         instances.append(node)
-        logger.info(f"节点已装配: {node_id} ({node_cls.__name__})")
+        logger.info(
+            f"节点已装配: {node_id} ({node_cls.__name__}): {node._config_watch} -> {node._config_emit}"
+        )
 
     if not instances:
-        logger.warning("电路没有装配任何节点 — 空转")
+        logger.warning("电路没有装配任何节点")
 
     return Circuit(instances)

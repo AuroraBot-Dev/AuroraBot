@@ -7,6 +7,33 @@ from typing import Any
 
 from src.config import Config
 
+# ── 所有节点共享的常量 ──────────────────────────────
+kernel_data_dir: Path = Config.KERNEL_DATA_DIR
+
+# ── 安全的条件运算符白名单（SwitchRouter / WaitRouter 共用） ─
+OP_FUNCS: dict[str, Any] = {
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+    ">": lambda a, b: a > b,
+    "<": lambda a, b: a < b,
+    ">=": lambda a, b: a >= b,
+    "<=": lambda a, b: a <= b,
+    "in": lambda a, b: a in b,
+    "not_in": lambda a, b: a not in b,
+    "contains": lambda a, b: b in str(a),
+}
+
+
+def resolve_field(data: dict[str, Any], field_path: str) -> Any:
+    """按点号分隔路径从嵌套 dict 中取值，如 ``"payload.text"``。"""
+    current: Any = data
+    for part in field_path.split("."):
+        if isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    return current
+
 
 def kernel_file(name: str) -> Path:
     return Config.KERNEL_DATA_DIR / name
@@ -63,6 +90,7 @@ def parse_llm_json(raw: str) -> dict[str, Any] | None:
     if not raw or not raw.strip():
         return None
     text = raw.strip()
+
     # 1) 直接解析
     try:
         result = json.loads(text)
@@ -70,8 +98,10 @@ def parse_llm_json(raw: str) -> dict[str, Any] | None:
             return result
     except json.JSONDecodeError:
         pass
+
     # 2) ```json ... ``` 代码块
     import re
+
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if match:
         try:
@@ -80,6 +110,7 @@ def parse_llm_json(raw: str) -> dict[str, Any] | None:
                 return result
         except json.JSONDecodeError:
             pass
+
     # 3) 首尾花括号
     match = re.search(r"\{[\s\S]*\}", text)
     if match:

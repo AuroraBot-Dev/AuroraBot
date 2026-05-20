@@ -1,23 +1,13 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
 
-from src.brain.kernel.base import (
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
-    Router,
-)
-from src.brain.kernel.state_store import move_to_done
-from src.config import Config
+from src.brain.kernel.base import FileDescriptor, FilePattern, FileUpdate, Router
+from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
 
 logger = get_logger("FanOutRouter")
-
-_DATA_DIR = Config.KERNEL_DATA_DIR
 
 
 class FanOutRouter(Router):
@@ -42,22 +32,6 @@ class FanOutRouter(Router):
         # watch/emit 由 build_circuit 在装配时通过 _config_watch / _config_emit
         # 注入，不在此处消费 **config。
 
-    @property
-    def type(self) -> str:
-        return "router"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [FilePattern("inbox/event_*.json")]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return []
-
     async def execute(self) -> list[FileUpdate]:
         """扫描匹配的源文件，逐文件复制到所有 emit 目录。
 
@@ -67,17 +41,17 @@ class FanOutRouter(Router):
         3. 生成 :class:`FileUpdate` 列表
         4. 调用 :func:`move_to_done` 将源文件移入 ``done/`` 子目录
         """
-        watch_patterns = self._config_watch or ["inbox/event_*.json"]
+        watch_patterns = self._config_watch or []
         emit_dirs = self._config_emit or []
 
-        if not emit_dirs:
-            logger.warning("FanOutRouter: emit 目录列表为空，跳过执行")
+        if not watch_patterns or not emit_dirs:
+            logger.warning("FanOutRouter: watch 或 emit 为空，跳过执行")
             return []
 
         # ── 收集所有匹配的源文件 ──────────────────────────────────
         all_matched: list[Path] = []
         for pattern in watch_patterns:
-            guard_path = _DATA_DIR / pattern
+            guard_path = kernel_data_dir / pattern
             parent = guard_path.parent
             pattern_name = guard_path.name
 
@@ -103,9 +77,7 @@ class FanOutRouter(Router):
             try:
                 content = json.loads(src_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
-                logger.warning(
-                    f"FanOutRouter 读取源文件失败 {src_path}: {exc}"
-                )
+                logger.warning(f"FanOutRouter 读取源文件失败 {src_path}: {exc}")
                 continue
 
             # 2) 复制到每个 emit 目录
@@ -120,19 +92,24 @@ class FanOutRouter(Router):
                         content=content,
                     )
                 )
-                logger.debug(
-                    f"FanOutRouter: {source_filename} → {target_path}"
-                )
+                logger.debug(f"FanOutRouter: {source_filename} → {target_path}")
 
-            # 3) 源文件生命周期标记：移入 done/ 子目录
-            done_dir = src_path.parent / "done"
-            move_to_done(src_path, done_dir)
-            logger.debug(
-                f"FanOutRouter: 源文件 {src_path.name} → {done_dir}"
+            # 3) 源文件移入 inbox/done/ — 通过 FileUpdate 走总线，唤醒 Planner
+            inbox_done_path = f"inbox/done/{source_filename}"
+            updates.append(
+                FileUpdate(
+                    descriptor=FileDescriptor(
+                        path=inbox_done_path,
+                        schema="json",
+                    ),
+                    content=content,
+                )
             )
+            # 删除 inbox/pending/ 中的源文件（内容已转移）
+            try:
+                src_path.unlink()
+            except OSError as exc:
+                logger.warning(f"FanOutRouter 删除源文件失败 {src_path}: {exc}")
+            logger.debug(f"FanOutRouter: 源文件 {source_filename} → {inbox_done_path}")
 
         return updates
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE

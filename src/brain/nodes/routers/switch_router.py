@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
@@ -11,25 +10,10 @@ from src.brain.kernel.base import (
     NodeState,
     Router,
 )
-from src.config import Config
+from src.brain.kernel.state_store import OP_FUNCS, kernel_data_dir, resolve_field
 from src.utils.log_utils import get_logger
 
 logger = get_logger("SwitchRouter")
-
-_DATA_DIR = Config.KERNEL_DATA_DIR
-
-# 安全的条件运算符白名单
-_OP_FUNCS: dict[str, Any] = {
-    "==": lambda a, b: a == b,
-    "!=": lambda a, b: a != b,
-    ">": lambda a, b: a > b,
-    "<": lambda a, b: a < b,
-    ">=": lambda a, b: a >= b,
-    "<=": lambda a, b: a <= b,
-    "in": lambda a, b: a in b,
-    "not_in": lambda a, b: a not in b,
-    "contains": lambda a, b: b in str(a),
-}
 
 
 class SwitchRouter(Router):
@@ -63,15 +47,11 @@ class SwitchRouter(Router):
             config.get("false_trigger", "router/switch/false.trigger")
         )
 
-        if self._condition_op not in _OP_FUNCS:
+        if self._condition_op not in OP_FUNCS:
             raise ValueError(
                 f"SwitchRouter 不支持的条件运算符: {self._condition_op!r}。"
-                f" 支持: {sorted(_OP_FUNCS)}"
+                f" 支持: {sorted(OP_FUNCS)}"
             )
-
-    @property
-    def type(self) -> str:
-        return "router"
 
     @property
     def guards(self) -> list[FilePattern]:
@@ -90,7 +70,7 @@ class SwitchRouter(Router):
 
     async def execute(self) -> list[FileUpdate]:
         """扫描匹配文件，对每个文件评估条件并分发。"""
-        guard_path = _DATA_DIR / self._guard_pattern
+        guard_path = kernel_data_dir / self._guard_pattern
         parent = guard_path.parent
         pattern_name = guard_path.name
 
@@ -112,8 +92,8 @@ class SwitchRouter(Router):
                 continue
 
             try:
-                field_value = _resolve_field(data, self._condition_field)
-                result = _OP_FUNCS[self._condition_op](
+                field_value = resolve_field(data, self._condition_field)
+                result = OP_FUNCS[self._condition_op](
                     field_value, self._condition_value
                 )
             except Exception as exc:
@@ -125,7 +105,7 @@ class SwitchRouter(Router):
 
             trigger_path = self._true_trigger if result else self._false_trigger
             trigger_content = {
-                "source_file": str(file_path.relative_to(_DATA_DIR)),
+                "source_file": str(file_path.relative_to(kernel_data_dir)),
                 "condition_field": self._condition_field,
                 "condition_op": self._condition_op,
                 "condition_value": self._condition_value,
@@ -150,18 +130,3 @@ class SwitchRouter(Router):
             )
 
         return updates
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE
-
-
-def _resolve_field(data: dict[str, Any], field_path: str) -> Any:
-    """按点号分隔路径从嵌套 dict 中取值，如 ``"payload.text"``。"""
-    current: Any = data
-    for part in field_path.split("."):
-        if isinstance(current, dict):
-            current = current.get(part)
-        else:
-            return None
-    return current

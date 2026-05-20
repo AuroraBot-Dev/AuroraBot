@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from typing import TYPE_CHECKING
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate
 from src.utils.log_utils import get_logger
+from src.config import Config
 
 if TYPE_CHECKING:
     from src.brain.kernel.circuit import Circuit
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = get_logger("EventBridge")
 
-_DEFAULT_INTERVAL = 0.5
+_DEFAULT_INTERVAL = max(Config.EVENT_BRIDGE_INTERVAL, Config.APP_FRAME_INTERVAL)
 
 
 async def run_event_bridge(
@@ -22,14 +22,14 @@ async def run_event_bridge(
     stop_event: asyncio.Event,
     interval: float = _DEFAULT_INTERVAL,
 ) -> None:
-    """将 ApplicationHost 的 AppEvent 桥接到 Circuit 的文件事件。
+    """将 ApplicationHost 的 AppEvent 桥接到 Circuit 的 FileEvent。
 
     App 层通过 ``host.emit_event(AppEvent)`` 上报事件，
     而 Node 图结构通过文件变更（FileEvent）驱动。
 
     本桥接层是两者的正式接口：
     1. 定期 drain ApplicationHost 事件队列
-    2. 每个事件写入 ``data/kernel/inbox/event_<type>_<id>.json``
+    2. 每个事件写入 ``data/kernel/inbox/pending/event_<type>_<id>.json``
     3. 写入自动触发 FileEvent，唤醒下游节点
 
     Parameters
@@ -41,7 +41,7 @@ async def run_event_bridge(
     stop_event : asyncio.Event
         停止信号，置位时退出循环。
     interval : float
-        轮询间隔（秒），默认 0.5。
+        轮询间隔（秒），默认 1.5。
     """
     logger.info("事件桥接已启动")
     while not stop_event.is_set():
@@ -51,8 +51,9 @@ async def run_event_bridge(
                 logger.debug(f"桥接 {len(events)} 个事件到文件总线")
                 for event in events:
                     # 文件名编码事件类型，允许节点按类型精细化订阅
+                    # IDEA 考虑是否需要添加事件摘要到文件名
                     safe_type = str(event.type).replace(".", "_").replace("/", "_")
-                    file_path = f"inbox/event_{safe_type}_{event.id}.json"
+                    file_path = f"inbox/pending/event_{safe_type}_{event.id}.json"
                     update = FileUpdate(
                         descriptor=FileDescriptor(
                             path=file_path,

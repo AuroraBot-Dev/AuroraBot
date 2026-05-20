@@ -1,196 +1,179 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
 
-from src.brain.kernel.base import (
-    Agent,
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
+from src.brain.kernel.base import Agent, FileDescriptor, FilePattern, FileUpdate
+from src.brain.kernel.state_store import (
+    kernel_data_dir,
+    move_to_done,
+    next_record_id,
+    parse_llm_json,
 )
-from src.brain.kernel.state_store import move_to_done, next_record_id, parse_llm_json
-from src.config import Config
+import src.brain.prompts as prompts
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
 
 logger = get_logger("PlanAgent")
 
-_DATA_DIR = Config.KERNEL_DATA_DIR
-
-_PLAN_SYSTEM_PROMPT = """\
-你是 AuroraBot 的规划节点。根据外部事件生成结构化的行动计划。
-
-你会收到一个 JSON 事件对象，包含 type、source、session_id、summary、payload 等字段。
-
-输出严格 JSON：
-{
-  "goal": "清晰可执行的目标描述",
-  "reasoning": "为什么做出这个规划（一句话）",
-  "priority": 50,
-  "suggested_actions": 1
-}
-
-规则：
-- goal 要具体可执行，不能是泛泛的"处理事件"
-- 用户消息事件：goal 应回应用户意图
-- 系统提醒事件（alarm_reminder、diary_prompt）：判断是否需要行动
-- 无意义或噪音事件：priority 设为 0，goal 说明跳过原因
-- priority 参考：紧急/用户直接相关 80+，普通事件 50，低优先级后台任务 20-，跳过 0
-- suggested_actions：建议展开为几个命令，通常 1-3
-"""
+_PLAN_SYSTEM_PROMPT = prompts.PLAND.get_content()
 
 
 class PlanAgent(Agent):
-    """从外部事件生成计划的 Agent 节点。
+    """从 inbox/done/ 中整合多个已完成事件生成计划的 Agent 节点。
 
-    守护 ``inbox/event_*.json`` 文件，当新的外部事件到达时，
-    调用 LLM 理解事件意图并生成 plan 记录，
-    写入 ``plans/pending/plan_<id>.json``。
+    守护 ``inbox/done/event_*.json`` 文件。Fanout 分发后的事件
+    被移入此处，Planner 按 ``session_id`` 分组整合，调用 LLM
+    判断事件输入是否完整并生成 plan，写入
+    ``plans/pending/plan_<id>.json``。
 
-    LLM 不可用或输出不可解析时回退到机械规划。
-    处理完成的输入文件通过 :func:`move_to_done` 移入 ``done/``
-    子目录（文件不可变原则）。
+    处理完成的输入事件移入 ``inbox/done/archived/`` 子目录
+    （文件不可变原则）。
+    LLM 不可用时回退到机械规划。
     """
+
+    _default_guards = ["inbox/done/event_*.json"]
 
     def __init__(self, node_id: str) -> None:
         super().__init__(node_id, system_prompt=_PLAN_SYSTEM_PROMPT)
-        self._plans_pending_dir = _DATA_DIR / "plans" / "pending"
-
-    @property
-    def type(self) -> str:
-        return "agent"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [FilePattern("fanout/to-planner/pending/event_*.json")]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("plans/pending/plan.json")]
+        self._inbox_done_dir = kernel_data_dir / "inbox" / "done"
+        self._plans_pending_dir = kernel_data_dir / "plans" / "pending"
 
     async def execute(self) -> list[FileUpdate]:
-        """扫描 watch 模式匹配的事件文件，调用 LLM 生成 plan。
+        """扫描 inbox/done/ 中的事件，按 session_id 分组整合生成 plan。
 
-        处理完成的输入文件通过 :func:`move_to_done` 移入 ``done/``
-        子目录，而不是直接删除（文件不可变原则）。
+        处理完成的输入事件移入 ``inbox/done/archived/`` 子目录。
         """
-        # ── 收集所有匹配的输入文件 ──────────────────────────────────
-        watch_patterns = self._config_watch or [
-            "fanout/to-planner/pending/event_*.json"
-        ]
-        all_matched: list[Path] = []
-        for pattern in watch_patterns:
-            guard_path = _DATA_DIR / pattern
-            parent = guard_path.parent
-            pattern_name = guard_path.name
-            if parent.exists():
-                all_matched.extend(sorted(parent.glob(pattern_name)))
+        if not self._inbox_done_dir.exists():
+            return []
 
-        if not all_matched:
+        event_files = sorted(self._inbox_done_dir.glob("event_*.json"))
+        if not event_files:
+            return []
+
+        grouped = self._group_by_session(event_files)
+        if not grouped:
             return []
 
         self._plans_pending_dir.mkdir(parents=True, exist_ok=True)
-        plan_updates: list[FileUpdate] = []
+        archived_dir = self._inbox_done_dir / "archived"
+        archived_dir.mkdir(parents=True, exist_ok=True)
+        updates: list[FileUpdate] = []
 
-        for event_file in all_matched:
+        for session_id, events in grouped.items():
             try:
-                event_data = self._read_event(event_file)
-                if event_data is None:
-                    move_to_done(event_file, event_file.parent / "done")
+                if not events:
                     continue
 
-                event_id = event_data.get("id", "")
-                if not event_id:
-                    move_to_done(event_file, event_file.parent / "done")
-                    continue
-
-                plan_path = self._plans_pending_dir / f"plan_{event_id}.json"
-                if plan_path.exists():
-                    move_to_done(event_file, event_file.parent / "done")
-                    continue
-
-                plan = await self._generate_plan(event_data)
+                plan = await self._generate_plan(session_id, events)
                 if plan is None:
                     continue
 
-                plan_updates.append(
+                plan_id = str(plan["id"])
+                updates.append(
                     FileUpdate(
                         descriptor=FileDescriptor(
-                            path=f"plans/pending/plan_{event_id}.json",
+                            path=f"plans/pending/plan_{plan_id}.json",
                             schema="json",
                         ),
                         content=plan,
                     )
                 )
-                move_to_done(event_file, event_file.parent / "done")
+                logger.info(
+                    f"PlanAgent: session={session_id} 整合 {len(events)} 个事件 → plan={plan_id}"
+                )
 
             except Exception:
-                logger.exception(f"PlanAgent 处理事件文件失败: {event_file.name}")
+                logger.exception(f"PlanAgent session={session_id} 整合失败")
 
-        return plan_updates
+            for event_file in [e["_path"] for e in events]:
+                move_to_done(event_file, archived_dir)
 
-    async def _generate_plan(self, event_data: dict[str, Any]) -> dict[str, Any] | None:
-        """调用 LLM 理解事件意图并生成计划。"""
-        event_json = json.dumps(event_data, indent=2, ensure_ascii=False)
-        user_msg = f"事件:\n{event_json}\n\n请为这个事件生成计划。"
+        return updates
+
+    async def _generate_plan(
+        self, session_id: str, events: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """调用 LLM 整合多个事件为一个 plan。"""
+        events_display = []
+        for ev in events:
+            events_display.append(
+                {
+                    "id": ev.get("id", ""),
+                    "type": ev.get("type", "unknown"),
+                    "source": ev.get("source", ""),
+                    "summary": ev.get("summary", ""),
+                    "payload": ev.get("payload", {}),
+                }
+            )
+        event_json = json.dumps(events_display, indent=2, ensure_ascii=False)
+        user_msg = (
+            f"session_id: {session_id}\n"
+            f"当前轮次事件 ({len(events)} 个):\n{event_json}\n\n"
+            f"请判断这些事件是否构成一个完整的用户意图，生成计划。"
+        )
         messages = [{"role": "user", "content": user_msg}]
 
         try:
             raw = await self.think(messages, max_tokens=512)
         except Exception:
             logger.exception("PlanAgent LLM 调用失败，回退到机械规划")
-            return self._fallback_plan(event_data)
+            return self._fallback_plan(session_id, events)
 
         parsed = parse_llm_json(raw)
         if parsed is None:
             logger.warning(f"PlanAgent LLM 输出不可解析，回退到机械规划: {raw!r}")
-            return self._fallback_plan(event_data)
+            return self._fallback_plan(session_id, events)
 
-        return self._build_plan(event_data, parsed)
+        merged_event = events[0] if events else {}
+        return self._build_plan(merged_event, parsed, session_id)
 
     def _build_plan(
-        self, event_data: dict[str, Any], llm_output: dict[str, Any]
+        self,
+        primary_event: dict[str, Any],
+        llm_output: dict[str, Any],
+        session_id: str,
     ) -> dict[str, Any]:
         timestamp = now_text()
         return {
             "id": next_record_id("plan"),
-            "source_event_id": event_data.get("id", ""),
-            "source_event_type": str(event_data.get("type", "unknown")),
-            "source": str(event_data.get("source", "")),
-            "session_id": str(event_data.get("session_id", "")),
+            "source_event_id": str(primary_event.get("id", "")),
+            "source_event_type": str(primary_event.get("type", "unknown")),
+            "source": str(primary_event.get("source", "")),
+            "session_id": session_id,
             "goal": str(llm_output.get("goal", "")),
             "reasoning": str(llm_output.get("reasoning", "")),
-            "summary": str(event_data.get("summary", "")),
-            "payload": event_data.get("payload", {}),
+            "summary": str(primary_event.get("summary", "")),
+            "payload": primary_event.get("payload", {}),
             "priority": int(llm_output.get("priority", 50)),
             "suggested_actions": int(llm_output.get("suggested_actions", 1)),
             "created_at": timestamp,
         }
 
-    def _fallback_plan(self, event_data: dict[str, Any]) -> dict[str, Any]:
+    def _fallback_plan(
+        self, session_id: str, events: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
         """LLM 不可用时的机械回退。"""
+        if not events:
+            return None
+        primary = events[0]
         timestamp = now_text()
-        event_type = str(event_data.get("type", "unknown"))
-        summary = str(event_data.get("summary", "") or "")
+        summaries = [
+            str(e.get("summary", "")) for e in events if str(e.get("summary", ""))
+        ]
         return {
             "id": next_record_id("plan"),
-            "source_event_id": event_data.get("id", ""),
-            "source_event_type": event_type,
-            "source": str(event_data.get("source", "")),
-            "session_id": str(event_data.get("session_id", "")),
-            "goal": summary or f"处理事件 {event_type}",
+            "source_event_id": str(primary.get("id", "")),
+            "source_event_type": str(primary.get("type", "unknown")),
+            "source": str(primary.get("source", "")),
+            "session_id": session_id,
+            "goal": "; ".join(summaries)
+            or f"处理 session {session_id} 的 {len(events)} 个事件",
             "reasoning": "LLM 不可用，使用机械回退",
-            "summary": summary,
-            "payload": event_data.get("payload", {}),
+            "summary": ", ".join(summaries),
+            "payload": primary.get("payload", {}),
             "priority": 50,
-            "suggested_actions": 1,
+            "suggested_actions": min(len(events), 3),
             "created_at": timestamp,
         }
 
@@ -203,6 +186,16 @@ class PlanAgent(Agent):
             logger.warning(f"读取事件文件失败 {path}: {exc}")
             return None
 
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE
+    def _group_by_session(self, paths: list[Path]) -> dict[str, list[dict[str, Any]]]:
+        """按 session_id 分组，返回有序字典（FIFO 保持时间序）。"""
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for path in paths:
+            data = self._read_event(path)
+            if data is None:
+                continue
+            sid = str(data.get("session_id", ""))
+            data["_path"] = path
+            if sid not in grouped:
+                grouped[sid] = []
+            grouped[sid].append(data)
+        return dict(grouped)

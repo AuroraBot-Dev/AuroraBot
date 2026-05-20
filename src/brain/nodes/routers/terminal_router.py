@@ -1,10 +1,9 @@
 from __future__ import annotations
-
 import json
-import time
-import uuid
 from pathlib import Path
-from typing import Any
+import time
+from typing import Any, TYPE_CHECKING
+import uuid
 
 from src.brain.kernel.base import (
     FileDescriptor,
@@ -13,12 +12,14 @@ from src.brain.kernel.base import (
     NodeState,
     Router,
 )
-from src.config import Config
+from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
 
-logger = get_logger("TerminalRouter")
+if TYPE_CHECKING:
+    from src.platform.application_host import ApplicationHost
+    from src.brain.kernel.base import FileEvent
 
-_DATA_DIR = Config.KERNEL_DATA_DIR
+logger = get_logger("TerminalRouter")
 
 
 class TerminalRouter(Router):
@@ -39,32 +40,13 @@ class TerminalRouter(Router):
     - ``ttl_sec``: 文件存活时间（秒），默认 60
     """
 
+    _default_guards = ["*/done/*.json"]
+    _default_produces = ["terminal/tick.json"]
+
     def __init__(self, node_id: str, **config: Any) -> None:
         super().__init__(node_id)
         self._ttl_sec = float(config.get("ttl_sec", 60))
-        self._tick_dir = _DATA_DIR / "terminal"
-
-    @property
-    def type(self) -> str:
-        return "router"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        patterns: list[FilePattern] = []
-        if self._config_watch is not None:
-            patterns = [FilePattern(p) for p in self._config_watch]
-        else:
-            patterns = [FilePattern("*/done/*.json")]
-        # 始终添加自触发 tick 文件
-        if not any(p.match("terminal/tick.json") for p in patterns):
-            patterns.append(FilePattern("terminal/tick.json"))
-        return patterns
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("terminal/tick.json")]
+        self._tick_dir = kernel_data_dir / "terminal"
 
     def on_event(self, event: FileEvent) -> bool:
         """允许自触发 —— terminal tick 驱动周期性清理。"""
@@ -100,7 +82,9 @@ class TerminalRouter(Router):
             "ttl_sec": self._ttl_sec,
             "last_cleanup_count": deleted,
         }
-        logger.debug(f"TerminalRouter: tick {tick_data['tick_id']}, 清理 {deleted} 个过期文件")
+        logger.debug(
+            f"TerminalRouter: tick {tick_data['tick_id']}, 清理 {deleted} 个过期文件"
+        )
 
         return [
             FileUpdate(
@@ -123,7 +107,7 @@ class TerminalRouter(Router):
             if "/done/" not in pattern and "done/" not in pattern:
                 continue
 
-            guard_path = _DATA_DIR / pattern
+            guard_path = kernel_data_dir / pattern
             parent = guard_path.parent
             pattern_name = guard_path.name
 
@@ -153,7 +137,3 @@ class TerminalRouter(Router):
             logger.info(f"TerminalRouter: 清理了 {deleted} 个过期文件")
 
         return deleted
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE

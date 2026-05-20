@@ -19,7 +19,7 @@ apps:
     enabled: false
     startup: {}
   example:
-    enabled: true
+    enabled: false
     startup:
       greeting: hello from example
       emit_startup_event: true
