@@ -1,10 +1,9 @@
 from __future__ import annotations
-
 import json
-import time
-import uuid
 from pathlib import Path
+import time
 from typing import Any
+import uuid
 
 from src.brain.kernel.base import (
     FileDescriptor,
@@ -14,12 +13,10 @@ from src.brain.kernel.base import (
     NodeState,
     Router,
 )
-from src.config import Config
+from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
 
 logger = get_logger("HeartbeatRouter")
-
-_DATA_DIR = Config.KERNEL_DATA_DIR
 
 
 class HeartbeatRouter(Router):
@@ -35,26 +32,13 @@ class HeartbeatRouter(Router):
     - ``interval_sec``: 脉冲间隔（秒），默认 300（5 分钟）
     """
 
+    _default_guards = ["heartbeat/tick.json"]
+    _default_produces = ["heartbeat/tick.json"]
+
     def __init__(self, node_id: str, **config: Any) -> None:
         super().__init__(node_id)
         self._interval_sec = float(config.get("interval_sec", 300))
-        self._tick_dir = _DATA_DIR / "heartbeat"
-
-    @property
-    def type(self) -> str:
-        return "router"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [FilePattern("heartbeat/tick.json")]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("heartbeat/tick.json")]
+        self._tick_dir = kernel_data_dir / "heartbeat"
 
     def on_event(self, event: FileEvent) -> bool:
         """允许自触发 —— 心跳的本质是自我维持的振荡。"""
@@ -93,7 +77,3 @@ class HeartbeatRouter(Router):
                 content=tick_data,
             )
         ]
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE

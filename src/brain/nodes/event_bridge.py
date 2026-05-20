@@ -29,7 +29,7 @@ async def run_event_bridge(
 
     本桥接层是两者的正式接口：
     1. 定期 drain ApplicationHost 事件队列
-    2. 每个事件写入 ``data/kernel/inbox/event_<type>_<id>.json``
+    2. 每个事件写入 ``data/kernel/inbox/pending/event_<type>_<id>.json``
     3. 写入自动触发 FileEvent，唤醒下游节点
 
     Parameters
@@ -53,7 +53,7 @@ async def run_event_bridge(
                     # 文件名编码事件类型，允许节点按类型精细化订阅
                     # IDEA 考虑是否需要添加事件摘要到文件名
                     safe_type = str(event.type).replace(".", "_").replace("/", "_")
-                    file_path = f"inbox/event_{safe_type}_{event.id}.json"
+                    file_path = f"inbox/pending/event_{safe_type}_{event.id}.json"
                     update = FileUpdate(
                         descriptor=FileDescriptor(
                             path=file_path,

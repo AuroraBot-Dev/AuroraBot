@@ -1,24 +1,14 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
 
-from src.brain.kernel.base import (
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
-    Router,
-)
-from src.brain.kernel.state_store import move_to_done, next_record_id
-from src.config import Config
+from src.brain.kernel.base import FileDescriptor, FilePattern, FileUpdate, Router
+from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
 
 logger = get_logger("ReflexRouter")
-
-_DATA_DIR = Config.KERNEL_DATA_DIR
 
 # 支持的匹配模式
 _MATCHERS: dict[str, Any] = {
@@ -34,11 +24,10 @@ class ReflexRouter(Router):
 
     纯机械逻辑，零 LLM 调用。
 
-    守护 ``fanout/to-reflex/pending/event_*.json`` 和
-    ``reflexes/rules.json``。对每条消息读取 ``reflexes/rules.json``
-    做规则匹配：
+    守护 ``reflex/pending/event_*.json``，对每条消息读取
+    ``reflexes/rules.json`` 做规则匹配：
     - 命中 → 直接写 action 到 ``actions/pending/``
-    - 未命中 → 返回空，留给 PlanAgent 全链路
+    - 未命中 / 无规则 → 静默消费输入，留给 Planner 全链路
 
     处理完成的输入文件通过 :func:`move_to_done` 移入 ``done/``
     子目录（不再直接删除）。
@@ -52,26 +41,7 @@ class ReflexRouter(Router):
         super().__init__(node_id)
         self._min_confidence = float(config.get("min_confidence", 0.7))
         self._rules_path = str(config.get("rules_path", "reflexes/rules.json"))
-        self._actions_pending_dir = _DATA_DIR / "actions" / "pending"
-
-    @property
-    def type(self) -> str:
-        return "router"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [
-            FilePattern("fanout/to-reflex/pending/event_*.json"),
-            FilePattern("reflexes/rules.json"),
-        ]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("actions/pending/action.json")]
+        self._actions_pending_dir = kernel_data_dir / "actions" / "pending"
 
     async def execute(self) -> list[FileUpdate]:
         """扫描匹配的事件文件，对文本做规则匹配并产出 action。
@@ -80,19 +50,14 @@ class ReflexRouter(Router):
         子目录（不再直接 ``unlink``）。
         """
         rules = self._load_rules()
-        if not rules:
-            return []
 
-        # ── 收集事件文件（跳过 rules.json 模式） ────────────────────
+        # ── 收集事件文件 ──────────────────────────────────────────
         watch_patterns = self._config_watch or [
-            "fanout/to-reflex/pending/event_*.json",
-            "reflexes/rules.json",
+            "reflex/pending/event_*.json",
         ]
         event_files: list[Path] = []
         for pattern in watch_patterns:
-            if "rules.json" in pattern:
-                continue
-            guard_path = _DATA_DIR / pattern
+            guard_path = kernel_data_dir / pattern
             parent = guard_path.parent
             pattern_name = guard_path.name
             if parent.exists():
@@ -154,9 +119,7 @@ class ReflexRouter(Router):
                 )
 
             except Exception:
-                logger.exception(
-                    f"ReflexRouter 处理事件文件失败: {event_file.name}"
-                )
+                logger.exception(f"ReflexRouter 处理事件文件失败: {event_file.name}")
 
         return updates
 
@@ -179,7 +142,9 @@ class ReflexRouter(Router):
                 continue
             if matcher(text, pattern):
                 return {
-                    "command_name": str(rule.get("command", "im.polaris.qq.send_qq_message")),
+                    "command_name": str(
+                        rule.get("command", "im.polaris.qq.send_qq_message")
+                    ),
                     "kwargs": {
                         "text": str(rule.get("response", "")),
                     },
@@ -208,7 +173,7 @@ class ReflexRouter(Router):
         }
 
     def _load_rules(self) -> list[dict[str, Any]]:
-        rules_path = _DATA_DIR / self._rules_path
+        rules_path = kernel_data_dir / self._rules_path
         if not rules_path.exists():
             return []
         try:
@@ -219,7 +184,7 @@ class ReflexRouter(Router):
             return []
 
     def _save_rules(self, rules: list[dict[str, Any]]) -> None:
-        rules_path = _DATA_DIR / self._rules_path
+        rules_path = kernel_data_dir / self._rules_path
         rules_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             rules_path.write_text(
@@ -236,7 +201,3 @@ class ReflexRouter(Router):
             return data if isinstance(data, dict) else None
         except (OSError, json.JSONDecodeError):
             return None
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE

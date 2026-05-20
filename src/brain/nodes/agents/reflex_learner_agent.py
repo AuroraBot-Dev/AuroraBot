@@ -1,24 +1,14 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
 
-from src.brain.kernel.base import (
-    Agent,
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
-)
-from src.brain.kernel.state_store import parse_llm_json
-from src.config import Config
+from src.brain.kernel.base import Agent, FileDescriptor, FilePattern, FileUpdate
+from src.brain.kernel.state_store import kernel_data_dir, parse_llm_json
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
 
 logger = get_logger("ReflexLearnerAgent")
-
-_DATA_DIR = Config.KERNEL_DATA_DIR
 
 _LEARNER_SYSTEM_PROMPT = """\
 你是 AuroraBot 的反射学习节点。扫描最近的对话与执行记录，
@@ -65,33 +55,20 @@ class ReflexLearnerAgent(Agent):
     同时负责淘汰低质量规则：命中率低、长期未命中、置信度衰减。
     """
 
+    _default_guards = ["heartbeat/tick.json"]
+    _default_produces = ["reflexes/rules.json"]
+
     def __init__(self, node_id: str, **config: Any) -> None:
         super().__init__(node_id, system_prompt=_LEARNER_SYSTEM_PROMPT)
-        self._plans_done_dir = _DATA_DIR / "plans" / "done"
-        self._results_done_dir = _DATA_DIR / "results" / "done"
-        self._rules_path = _DATA_DIR / "reflexes" / "rules.json"
+        self._plans_done_dir = kernel_data_dir / "plans" / "done"
+        self._results_done_dir = kernel_data_dir / "results" / "done"
+        self._rules_path = kernel_data_dir / "reflexes" / "rules.json"
         # 冷却：每 N 个 tick 才学习一次（比 GoalGenerator 更稀疏）
         self._cooldown_ticks = int(config.get("cooldown_ticks", 12))
         self._tick_count = 0
         # 机械衰减：低置信度 + 低命中 → 自动淘汰
         self._mechanical_decay = float(config.get("mechanical_decay", 0.02))
         self._min_confidence = float(config.get("min_confidence", 0.3))
-
-    @property
-    def type(self) -> str:
-        return "agent"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [FilePattern("heartbeat/tick.json")]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("reflexes/rules.json")]
 
     async def execute(self) -> list[FileUpdate]:
         self._tick_count += 1
@@ -104,7 +81,9 @@ class ReflexLearnerAgent(Agent):
         rules_changed = self._mechanical_prune(existing_rules)
 
         # 收集近期记录
-        recent_actions = self._scan_recent(self._results_done_dir, "result_*.json", limit=20)
+        recent_actions = self._scan_recent(
+            self._results_done_dir, "result_*.json", limit=20
+        )
         recent_plans = self._scan_recent(self._plans_done_dir, "plan_*.json", limit=20)
 
         if not recent_actions and not recent_plans:
@@ -131,9 +110,7 @@ class ReflexLearnerAgent(Agent):
 
         parsed = parse_llm_json(raw)
         if parsed is None:
-            logger.warning(
-                f"ReflexLearnerAgent LLM 输出不可解析: {raw!r}"
-            )
+            logger.warning(f"ReflexLearnerAgent LLM 输出不可解析: {raw!r}")
             if rules_changed:
                 return self._make_rules_update(existing_rules)
             return []
@@ -156,20 +133,20 @@ class ReflexLearnerAgent(Agent):
                 ):
                     continue
 
-                existing_rules.append({
-                    "id": f"reflex_{now_text().replace(':', '-')}",
-                    "pattern": pattern,
-                    "pattern_type": str(nr.get("pattern_type", "contains")),
-                    "response": response,
-                    "command": "im.polaris.qq.send_qq_message",
-                    "confidence": min(
-                        float(nr.get("confidence", 0.7)), 0.85
-                    ),
-                    "hit_count": 0,
-                    "created_at": now_text(),
-                    "last_hit_at": None,
-                    "reasoning": str(nr.get("reasoning", "")),
-                })
+                existing_rules.append(
+                    {
+                        "id": f"reflex_{now_text().replace(':', '-')}",
+                        "pattern": pattern,
+                        "pattern_type": str(nr.get("pattern_type", "contains")),
+                        "response": response,
+                        "command": "im.polaris.qq.send_qq_message",
+                        "confidence": min(float(nr.get("confidence", 0.7)), 0.85),
+                        "hit_count": 0,
+                        "created_at": now_text(),
+                        "last_hit_at": None,
+                        "reasoning": str(nr.get("reasoning", "")),
+                    }
+                )
                 logger.info(
                     f"ReflexLearner: 新增规则 pattern={pattern!r} "
                     f"response={response!r}"
@@ -181,8 +158,7 @@ class ReflexLearnerAgent(Agent):
             deprecated = set(str(did) for did in deprecate_ids)
             before = len(existing_rules)
             existing_rules = [
-                r for r in existing_rules
-                if str(r.get("id", "")) not in deprecated
+                r for r in existing_rules if str(r.get("id", "")) not in deprecated
             ]
             if len(existing_rules) < before:
                 logger.info(
@@ -234,12 +210,22 @@ class ReflexLearnerAgent(Agent):
                 data = json.loads(file_path.read_text(encoding="utf-8"))
                 if isinstance(data, dict):
                     # 只取关键字段，减少 token
-                    results.append({
-                        k: data.get(k)
-                        for k in ("goal", "status", "command", "kwargs", "result",
-                                   "reasoning", "created_at", "summary")
-                        if k in data
-                    })
+                    results.append(
+                        {
+                            k: data.get(k)
+                            for k in (
+                                "goal",
+                                "status",
+                                "command",
+                                "kwargs",
+                                "result",
+                                "reasoning",
+                                "created_at",
+                                "summary",
+                            )
+                            if k in data
+                        }
+                    )
             except (OSError, json.JSONDecodeError):
                 continue
         return results
@@ -254,9 +240,7 @@ class ReflexLearnerAgent(Agent):
             logger.warning(f"ReflexLearnerAgent 读取规则文件失败: {exc}")
             return []
 
-    def _make_rules_update(
-        self, rules: list[dict[str, Any]]
-    ) -> list[FileUpdate]:
+    def _make_rules_update(self, rules: list[dict[str, Any]]) -> list[FileUpdate]:
         return [
             FileUpdate(
                 descriptor=FileDescriptor(
@@ -266,7 +250,3 @@ class ReflexLearnerAgent(Agent):
                 content=rules,
             )
         ]
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE

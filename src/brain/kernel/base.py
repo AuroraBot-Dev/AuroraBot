@@ -148,7 +148,6 @@ class Node:
         self.state = NodeState.IDLE
         self._ready_event: asyncio.Event = asyncio.Event()
         self._bus: FileEventBus | None = None
-        # 拓扑配置可覆盖 guards/produces（由 build_circuit 设置）
         self._config_watch: list[str] | None = None
         self._config_emit: list[str] | None = None
 

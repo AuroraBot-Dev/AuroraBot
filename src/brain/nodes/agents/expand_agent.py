@@ -1,20 +1,19 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-from src.brain.kernel.base import (
-    Agent,
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
+from src.brain.kernel.base import Agent, FileDescriptor, FilePattern, FileUpdate
+from src.brain.kernel.state_store import (
+    kernel_data_dir,
+    move_to_done,
+    next_record_id,
+    parse_llm_json,
 )
-from src.brain.kernel.state_store import move_to_done, next_record_id, parse_llm_json
-from src.config import Config
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
+import src.brain.prompts as prompts
+
 
 if TYPE_CHECKING:
     from src.platform.application_host import ApplicationHost
@@ -22,34 +21,7 @@ if TYPE_CHECKING:
 
 logger = get_logger("ExpandAgent")
 
-_DATA_DIR = Config.KERNEL_DATA_DIR
-
-_EXPAND_SYSTEM_PROMPT = """\
-你是 AuroraBot 的行动展开节点。根据计划选择合适的命令并构造参数。
-
-你会收到两个部分：
-1. plan：包含 goal、summary、payload、source_event_type 的计划对象
-2. commands：可用命令列表，每个命令有 name、description、params（parameters_schema）
-
-输出严格 JSON：
-{
-  "actions": [
-    {
-      "command_name": "im.polaris.xxx.yyy",
-      "kwargs": {},
-      "reasoning": "为什么选这个命令"
-    }
-  ]
-}
-
-规则：
-- 根据 plan.goal 和 plan.summary 语义匹配最合适的命令
-- 从 plan.payload 和上下文推断 kwargs
-- 如果找不到合适命令，返回空 actions 数组
-- 优先选专用命令，其次通用命令
-- kwargs 必须符合命令 params 中声明的 schema
-- 支持一个 plan 展开为多个 action
-"""
+_EXPAND_SYSTEM_PROMPT = prompts.EXPAND.get_content()
 
 
 class ExpandAgent(Agent):
@@ -64,26 +36,13 @@ class ExpandAgent(Agent):
     子目录（文件不可变原则，不再原地修改 status 字段）。
     """
 
+    _default_guards = ["plans/pending/plan_*.json"]
+    _default_produces = ["actions/pending/action.json"]
+
     def __init__(self, node_id: str, host: ApplicationHost) -> None:  # noqa: F821
         super().__init__(node_id, host, system_prompt=_EXPAND_SYSTEM_PROMPT)
-        self._plans_pending_dir = _DATA_DIR / "plans" / "pending"
-        self._actions_pending_dir = _DATA_DIR / "actions" / "pending"
-
-    @property
-    def type(self) -> str:
-        return "agent"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [FilePattern("plans/pending/plan_*.json")]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("actions/pending/action.json")]
+        self._plans_pending_dir = kernel_data_dir / "plans" / "pending"
+        self._actions_pending_dir = kernel_data_dir / "actions" / "pending"
 
     async def execute(self) -> list[FileUpdate]:
         """扫描 plans/pending/ 中的 plan，调用 LLM 生成 action。
@@ -254,7 +213,3 @@ class ExpandAgent(Agent):
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(f"读取 plan 文件失败 {plan_path.name}: {exc}")
         return pending
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE
