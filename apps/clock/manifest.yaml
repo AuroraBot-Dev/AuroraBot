@@ -1,0 +1,86 @@
+package: im.polaris.clock
+name: 时钟
+version: 1.0.0
+brain_version: ">=5.0.0"
+app_desc: >-
+  这个应用可以用来：
+  获取当前时间；
+  设定闹钟并等待闹钟触发时提醒；
+  设定计时器并等待计时器触发时提醒；
+  设定秒表并等待秒表暂停时获取记录的时长。
+commands:
+  - name: get_current_time
+    description: 获取当前时间.
+    parameters:
+      timezone:
+        type: string
+        description: 当前时区, 例如 Asia/Shanghai, UTC+8
+        required: false
+    returns:
+      current_time:
+        type: string
+        description: 当前时间
+        required: true
+        
+  - name: set_alarm
+    description: 设置一个会在未来触发的提醒（闹钟）, 并将提醒状态写入本地存储. 
+    parameters:
+      interval_seconds:
+        type: string
+        description: 闹钟触发的时间
+        required: true
+      message:
+        type: string
+        description: 闹钟触发时的提醒内容
+        required: false      
+    returns:
+      alarm_id:
+        type: string
+        description: 闹钟 ID
+        required: true
+      status:
+        type: string
+        description: 闹钟状态，例如未触发、触发时、已触发
+        required: true
+        
+  - name: set_timer
+    description: 设定一个倒计时器，等待计时器倒数结束时发出提醒.
+    parameters:
+      duration_seconds:
+        type: string
+        description: 倒计时的时长（秒数）
+        required: true
+      message:
+        type: string
+        description: 计时器结束时的提醒内容
+        required: false
+    returns:
+      timer_id:
+        type: string
+        description: 计时器 ID
+        required: true
+      status:
+        type: string
+        description: 计时器状态，例如未触发、触发时、已触发
+        required: true
+        
+  - name: manage_stopwatch
+    description: 操作秒表，支持启动、暂停或停止，并在暂停/停止时获取记录的时长.
+    parameters:
+      action:
+        type: string
+        description: 操作类型，可选值为 'start' (启动), 'pause' (暂停), 'stop' (停止), 'get_record' (获取当前记录时长)
+        required: true
+    returns:
+      # elapsed_seconds:
+      #   type: string
+      #   description: 记录的时长（秒），在暂停、停止或获取记录时返回
+      #   required: true
+      # status:
+      #   type: string
+      #   description: 当前秒表状态，例如 'running', 'paused', 'stopped'
+      #   required: true
+      # is_running:
+      #   type: boolean
+      #   description: 秒表当前是否正在运行
+      #   required: true
