@@ -15,6 +15,7 @@ class SemanticMemory:
     def __init__(self):
         # 延迟初始化 mem0 客户端，避免导入时就进行耗时的初始化和连接操作
         self._client = None
+        logger.info("L3 缓存已启动")
 
     @property
     def mem0(self):
@@ -28,6 +29,12 @@ class SemanticMemory:
         调用 mem0 的 add 方法。mem0 会在内部调用大模型(DeepSeek)分析这段文本，
         如果包含有价值的长期信息，就会将其转换为向量并存入 ChromaDB。
         """
+        if not user_id or not str(user_id).strip():
+            logger.warning(f"提取语义记忆跳过：user_id 为空")
+            return
+        
+        logger.info("已成功提取语义记忆")
+
         try:
             # mem0 的 add 需要传入特定的 message 格式
             messages = [{"role": "user", "content": text}]
@@ -41,6 +48,10 @@ class SemanticMemory:
         
         根据当前任务或问题，去向量库中寻找最相关的长期记忆事实。
         """
+        if not user_id or not str(user_id).strip():
+            logger.warning(f"搜索语义记忆跳过：user_id 为空")
+            return []
+
         try:
             # 使用 filters 语法按用户隔离记忆
             hits = self.mem0.search(query, filters={"user_id": user_id})
