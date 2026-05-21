@@ -157,3 +157,5 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 
 .reasonix/
+
+uv.lock
