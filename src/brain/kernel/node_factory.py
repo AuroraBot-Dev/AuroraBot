@@ -5,6 +5,7 @@ import yaml
 
 from src.brain.kernel.base import Node
 from src.brain.kernel.circuit import Circuit
+from src.brain.memory import UnifiedMemoryManager
 from src.brain.nodes.agents import *
 from src.brain.nodes.routers import *
 from src.config import Config
@@ -52,6 +53,16 @@ NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset(
         "reflex",
         "reflex_learner",
         "memory",
+    }
+)
+
+# 节点构造时是否注入 UnifiedMemoryManager（按 type 判断）
+NODE_NEEDS_MEMORY: frozenset[str] = frozenset(
+    {
+        "memory",
+        "planner",
+        "expander",
+        "executor",
     }
 )
 
@@ -136,6 +147,7 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
     """
     topology = _load_topology_config()
     instances: list[Node] = []
+    memory_manager = UnifiedMemoryManager()
 
     for entry in topology:
         node_id = entry["id"]
@@ -147,14 +159,17 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
             continue
 
         node_cls = NODE_REGISTRY[node_type]
+        memory_kw = (
+            {"memory": memory_manager} if node_type in NODE_NEEDS_MEMORY else {}
+        )
 
         # 构造 —— 按类型的构造函数签名分发
         if node_type in NODE_ACCEPTS_CONFIG:
-            node = node_cls(node_id, **node_config)
+            node = node_cls(node_id, **node_config, **memory_kw)
         elif node_type in NODE_NEEDS_HOST:
-            node = node_cls(node_id, host)
+            node = node_cls(node_id, host, **memory_kw)
         else:
-            node = node_cls(node_id)
+            node = node_cls(node_id, **memory_kw)
 
         # 覆盖 guards / produces（可选，来自邻接表条目的 watch / emit）
         if entry.get("watch") is not None:
