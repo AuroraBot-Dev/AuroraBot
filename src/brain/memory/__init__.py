@@ -19,6 +19,18 @@ class UnifiedMemoryManager:
         self.episodic = EpisodicMemory()
         self.semantic = SemanticMemory()
 
+    def initialize_system_prompt(self, user_id: str = "system_user", core_prompt: str = "") -> None:
+        """
+        【系统初始化】向 L3 (mem0) 注入基础身份或全局偏好。
+        通常在机器人启动时或用户首次注册时调用。
+        """
+        if not core_prompt:
+            core_prompt = "我是AuroraBot，一个拥有三级记忆框架的贴心智能助理。我的设计目标是陪伴并协助用户，通过长短时记忆提供连贯的对话体验。"
+            
+        # 直接使用 semantic 的 extract_and_store 方法。
+        # 内部会依靠 LLM 提炼这段话，如果是全新的事实，会被并入 ChromaDB。
+        self.semantic.extract_and_store(text=core_prompt, user_id=user_id)
+
     def process_interaction(self, content: str, role: str, user_id: str) -> None:
         """【一键写入】当发生一次交互时，将数据瀑布式地灌入各个记忆层级。
         
