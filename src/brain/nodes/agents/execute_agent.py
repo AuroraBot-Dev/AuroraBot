@@ -1,18 +1,16 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-from src.brain.kernel.base import (
-    Agent,
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
+from src.brain.kernel.base import Agent, FileDescriptor, FilePattern, FileUpdate
+from src.brain.kernel.state_store import (
+    kernel_data_dir,
+    move_to_done,
+    next_record_id,
+    parse_llm_json,
 )
-from src.brain.kernel.state_store import move_to_done, next_record_id, parse_llm_json
-from src.config import Config
+import src.brain.prompts as prompts
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
 
@@ -21,33 +19,7 @@ if TYPE_CHECKING:
 
 logger = get_logger("ExecuteAgent")
 
-_DATA_DIR = Config.KERNEL_DATA_DIR
-
-_EXECUTE_SYSTEM_PROMPT = """\
-你是 AuroraBot 的执行节点。根据命令执行结果决定动作状态。
-
-你会收到：
-1. action：包含 command、kwargs 的动作对象
-2. result：命令执行的返回结果
-
-输出严格 JSON：
-{
-  "status": "done",
-  "reasoning": "判断依据（一句话）",
-  "next_step": null
-}
-
-status 取值：
-- "done"：执行成功，无需后续
-- "failed"：不可恢复的错误（参数错误、权限不足等）
-- "retry"：临时错误（超时、网络问题），建议重试
-
-规则：
-- 执行成功返回 done
-- 临时错误（timeout、connection、rate_limit）→ retry
-- 参数错误、不可恢复 → failed
-- next_step：仅在 failed/retry 时填写建议的下一步
-"""
+_EXECUTE_SYSTEM_PROMPT = prompts.EXEC.get_content()
 
 
 class ExecuteAgent(Agent):
@@ -62,26 +34,13 @@ class ExecuteAgent(Agent):
     LLM 不可用时回退到机械判断（无异常 → done）。
     """
 
+    _default_guards = ["actions/pending/action_*.json"]
+    _default_produces = ["results/pending/result.json"]
+
     def __init__(self, node_id: str, host: ApplicationHost) -> None:  # noqa: F821
         super().__init__(node_id, host, system_prompt=_EXECUTE_SYSTEM_PROMPT)
-        self._actions_pending_dir = _DATA_DIR / "actions" / "pending"
-        self._results_pending_dir = _DATA_DIR / "results" / "pending"
-
-    @property
-    def type(self) -> str:
-        return "agent"
-
-    @property
-    def guards(self) -> list[FilePattern]:
-        if self._config_watch is not None:
-            return [FilePattern(p) for p in self._config_watch]
-        return [FilePattern("actions/pending/action_*.json")]
-
-    @property
-    def produces(self) -> list[FileDescriptor]:
-        if self._config_emit is not None:
-            return [FileDescriptor(p) for p in self._config_emit]
-        return [FileDescriptor("results/pending/result.json")]
+        self._actions_pending_dir = kernel_data_dir / "actions" / "pending"
+        self._results_pending_dir = kernel_data_dir / "results" / "pending"
 
     async def execute(self) -> list[FileUpdate]:
         """扫描 actions/pending/ 中的 action，执行命令并产出结果。
@@ -132,6 +91,9 @@ class ExecuteAgent(Agent):
                             content=result_data,
                         )
                     )
+                    updates.append(
+                        self._build_failure_event(action_data, "failed", str(exc))
+                    )
                     logger.warning(f"命令执行异常: {command_name}, error={exc}")
                     move_to_done(action_path, action_path.parent / "done")
                     continue
@@ -159,9 +121,16 @@ class ExecuteAgent(Agent):
                     )
                 )
 
-                logger.info(
-                    f"命令执行完成: {command_name} → status={status}"
-                )
+                logger.info(f"命令执行完成: {command_name} → status={status}")
+
+                if status in ("failed", "retry"):
+                    updates.append(
+                        self._build_failure_event(
+                            action_data,
+                            status,
+                            reasoning=str(judgement.get("reasoning", "")),
+                        )
+                    )
 
                 # 消费输入 action
                 move_to_done(action_path, action_path.parent / "done")
@@ -234,10 +203,38 @@ class ExecuteAgent(Agent):
 
     @staticmethod
     def _fallback_judgement(result: Any) -> dict[str, Any]:
-        """LLM 不可用时的机械判断：命令没抛异常 → done。"""
+        """LLM 不可用时的机械判断：检查 result 中的失败标记。
+
+        多数命令返回 ``{"success": true/false, ...}`` 或包含
+        ``error`` / ``code`` 字段的 dict。LLM 不可用时用此机械规则兜底，
+        不再盲目标记 done。
+        """
+        if isinstance(result, dict):
+            # 显式 success: false → 失败
+            if result.get("success") is False:
+                return {
+                    "status": "failed",
+                    "reasoning": "机械判断: result.success=False",
+                    "next_step": None,
+                }
+            # 包含 error / err / code 字段 → 可能失败
+            if "error" in result or "err" in result:
+                return {
+                    "status": "failed",
+                    "reasoning": f"机械判断: result 包含错误字段: {result.get('error') or result.get('err')}",
+                    "next_step": None,
+                }
+        if isinstance(result, str) and result.strip():
+            lowered = result.lower()
+            if any(kw in lowered for kw in ("error", "fail", "失败", "错误")):
+                return {
+                    "status": "failed",
+                    "reasoning": f"机械判断: result 文本包含错误关键词",
+                    "next_step": None,
+                }
         return {
             "status": "done",
-            "reasoning": "LLM 不可用，使用机械回退（无异常视为成功）",
+            "reasoning": "LLM 不可用，机械回退未发现失败标记",
             "next_step": None,
         }
 
@@ -262,6 +259,35 @@ class ExecuteAgent(Agent):
     def _normalize_kwargs(value: Any) -> dict[str, Any]:
         return value if isinstance(value, dict) else {}
 
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE
+    @staticmethod
+    def _build_failure_event(
+        action_data: dict[str, Any],
+        status: str,
+        reasoning: str,
+    ) -> FileUpdate:
+        """失败时写回 inbox/pending/，触发 Planner 重规划。"""
+        failure_event = {
+            "id": next_record_id("event"),
+            "type": "exec_failure",
+            "source": "executor",
+            "session_id": str(action_data.get("session_id", "")),
+            "summary": (
+                f"命令 {action_data.get('command', '')} 执行{status}: {reasoning}"
+            ),
+            "payload": {
+                "plan_id": action_data.get("plan_id", ""),
+                "action_id": action_data.get("id", ""),
+                "command": action_data.get("command", ""),
+                "kwargs": action_data.get("kwargs", {}),
+                "failure_status": status,
+                "failure_reasoning": reasoning,
+            },
+            "created_at": now_text(),
+        }
+        return FileUpdate(
+            descriptor=FileDescriptor(
+                path=f"inbox/pending/event_failure_{failure_event['id']}.json",
+                schema="json",
+            ),
+            content=failure_event,
+        )

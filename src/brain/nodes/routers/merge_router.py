@@ -1,22 +1,13 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
 
-from src.brain.kernel.base import (
-    FileDescriptor,
-    FilePattern,
-    FileUpdate,
-    NodeState,
-    Router,
-)
-from src.config import Config
+from src.brain.kernel.base import FileDescriptor, FilePattern, FileUpdate, Router
+from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
 
 logger = get_logger("MergeRouter")
-
-_DATA_DIR = Config.KERNEL_DATA_DIR
 
 
 class MergeRouter(Router):
@@ -44,10 +35,6 @@ class MergeRouter(Router):
         self._merge_strategy = str(config.get("merge_strategy", "concat_array"))
 
     @property
-    def type(self) -> str:
-        return "router"
-
-    @property
     def guards(self) -> list[FilePattern]:
         if self._config_watch is not None:
             return [FilePattern(p) for p in self._config_watch]
@@ -63,7 +50,7 @@ class MergeRouter(Router):
         """检查所有输入文件是否存在，全部就位则合并输出。"""
         all_files: list[Path] = []
         for pattern in self._input_patterns:
-            guard_path = _DATA_DIR / pattern
+            guard_path = kernel_data_dir / pattern
             parent = guard_path.parent
             pattern_name = guard_path.name
 
@@ -83,7 +70,7 @@ class MergeRouter(Router):
         seen: set[str] = set()
         unique: list[Path] = []
         for f in all_files:
-            key = str(f.relative_to(_DATA_DIR))
+            key = str(f.relative_to(kernel_data_dir))
             if key not in seen:
                 seen.add(key)
                 unique.append(f)
@@ -128,12 +115,8 @@ class MergeRouter(Router):
                 if isinstance(data, dict):
                     merged_dict.update(data)
                 else:
-                    merged_dict[str(f.relative_to(_DATA_DIR))] = data
+                    merged_dict[str(f.relative_to(kernel_data_dir))] = data
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(f"MergeRouter 读取文件失败 {f}: {exc}")
                 continue
         return merged_dict
-
-    def on_complete(self) -> None:
-        if self.state != NodeState.ERROR:
-            self.state = NodeState.IDLE
