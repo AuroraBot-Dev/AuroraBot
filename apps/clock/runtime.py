@@ -49,7 +49,7 @@ class ClockApplication:
         self._load_state()
         api = self._require_api()
         api.log("info", "Clock application started")
-        self._emit("clock.started", "时钟应用已启动", {"data_dir": str(api.data_dir)})
+        # self._emit("clock.started", "时钟应用已启动", {"data_dir": str(api.data_dir)})
 
     async def on_stop(self) -> None:
         self._save_state()
