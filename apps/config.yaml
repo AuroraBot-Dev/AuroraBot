@@ -13,7 +13,7 @@ apps:
     enabled: false
     startup: {}
   clock:
-    enabled: true
+    enabled: false
     startup: {}
   test:
     enabled: false
