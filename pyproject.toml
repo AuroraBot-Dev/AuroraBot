@@ -1,18 +1,20 @@
 [project]
-name = "Bot-Polaris"
+name = "AuroraBot"
 version = "0.1.0"
-description = "Bot-Polaris"
+description = "AuroraBot 是一个新一代的内驱式、自主决策的智能体框架。"
 readme = "README.md"
-requires-python = ">=3.10, <4.0"
+requires-python = ">=3.12, <3.13"
 dependencies = [
-    "nonebot2[fastapi]>=2.5.0",
+    "nonebot2[fastapi]>=2.5.0,<3.0.0",
     "nonebot-adapter-onebot>=2.4.6",
     "nonebot-plugin-localstore>=0.7.4",
     "litellm>=1.83.14",
     "concurrent-log-handler>=0.9.29",
-    "mem0ai>=2.0.1",
+    "mem0ai[nlp]>=2.0.1",
     "pyyaml>=6.0.3",
     "chromadb>=1.5.9",
+    "websockets<14.0",
+    "botocore>=1.43.12",
 ]
 
 [project.optional-dependencies]

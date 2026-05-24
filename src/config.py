@@ -67,8 +67,8 @@ class Config:
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-xxx")
     AI_CONTEXT_CHAR_LIMIT: int = int(os.getenv("AI_CONTEXT_CHAR_LIMIT", "6000"))
 
-    MEM0_API_KEY: str = os.getenv("MEM0_API_KEY", "m0-xxx")
-    MEM0_API_BASE_URL: str = os.getenv("MEM0_API_BASE_URL", "https://api.mem0.ai")
+    # MEM0_API_KEY: str = os.getenv("MEM0_API_KEY", "m0-xxx")
+    # MEM0_API_BASE_URL: str = os.getenv("MEM0_API_BASE_URL", "https://api.mem0.ai")
 
     @staticmethod
     def ensure_dirs() -> None:

@@ -37,8 +37,8 @@ class ExecuteAgent(Agent):
     _default_guards = ["actions/pending/action_*.json"]
     _default_produces = ["results/pending/result.json"]
 
-    def __init__(self, node_id: str, host: ApplicationHost) -> None:  # noqa: F821
-        super().__init__(node_id, host, system_prompt=_EXECUTE_SYSTEM_PROMPT)
+    def __init__(self, node_id: str, host: ApplicationHost, **kwargs: Any) -> None:  # noqa: F821
+        super().__init__(node_id, host, system_prompt=_EXECUTE_SYSTEM_PROMPT, **kwargs)
         self._actions_pending_dir = kernel_data_dir / "actions" / "pending"
         self._results_pending_dir = kernel_data_dir / "results" / "pending"
 
@@ -95,6 +95,7 @@ class ExecuteAgent(Agent):
                         self._build_failure_event(action_data, "failed", str(exc))
                     )
                     logger.warning(f"命令执行异常: {command_name}, error={exc}")
+                    self._record_to_memory(action_data, "failed", str(exc))
                     move_to_done(action_path, action_path.parent / "done")
                     continue
 
@@ -131,6 +132,12 @@ class ExecuteAgent(Agent):
                             reasoning=str(judgement.get("reasoning", "")),
                         )
                     )
+
+                # 记录到记忆
+                self._record_to_memory(
+                    action_data, status,
+                    str(judgement.get("reasoning", "")),
+                )
 
                 # 消费输入 action
                 move_to_done(action_path, action_path.parent / "done")
@@ -254,6 +261,26 @@ class ExecuteAgent(Agent):
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning(f"读取 action 文件失败 {action_path.name}: {exc}")
         return pending
+
+    def _record_to_memory(
+        self,
+        action_data: dict[str, Any],
+        status: str,
+        detail: str,
+    ) -> None:
+        """将执行结果写入三级记忆系统。"""
+        if self.memory is None:
+            return
+        session_id = str(action_data.get("session_id", ""))
+        if not session_id:
+            return
+        command = str(action_data.get("command", ""))
+        content = f"[{status}] {command}: {detail}"
+        self.memory.process_interaction(
+            content=content,
+            role="system",
+            user_id=session_id,
+        )
 
     @staticmethod
     def _normalize_kwargs(value: Any) -> dict[str, Any]:

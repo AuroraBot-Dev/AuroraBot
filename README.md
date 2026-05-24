@@ -5,12 +5,16 @@
 <h1 align="center">AuroraBot</h1>
 
 <p align="center">
+  <b>中文</b> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a>
+</p>
+
+<p align="center">
   <em>新一代内驱式、自主决策的智能体框架</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/JuFireX/AuroraBot"><img src="https://img.shields.io/badge/GitHub-Repository-black?logo=github" alt="GitHub" /></a>
-  <a href="https://jufirex.github.io/AuroraBot/"><img src="https://img.shields.io/badge/Docs-文档站-blue?logo=vitepress" alt="Docs" /></a>
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-Repository-black?logo=github" alt="GitHub" /></a>
+  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-文档站-blue?logo=vitepress" alt="Docs" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License" /></a>
 </p>
 
@@ -86,17 +90,17 @@ AuroraBot 的记忆不只是“存下来”，而是**结构化地生长**。知
 
 ## 快速导航
 
-完整的架构设计、使用指南与开发文档请 **[访问 AuroraBot 文档站 📖](https://jufirex.github.io/AuroraBot/)**：
+完整的架构设计、使用指南与开发文档请 **[访问 AuroraBot 文档站 📖](https://www.aurorabot.org/)**：
 
-| 文档                                                                                  | 说明                                       |
-| ------------------------------------------------------------------------------------- | ------------------------------------------ |
-| [项目总览](https://jufirex.github.io/AuroraBot/start/overview.html)                   | 快速了解 AuroraBot 的定位与四层分层        |
-| [快速开始](https://jufirex.github.io/AuroraBot/start/getting-started.html)            | 从零把项目跑起来                           |
-| [系统架构总览](https://jufirex.github.io/AuroraBot/architecture/system-overview.html) | 理解 Apps / Platform / Kernel / Brain 四层 |
-| [认知架构](https://jufirex.github.io/AuroraBot/architecture/brain-architecture.html)  | 深入有向有环图的 Agent 节点网络            |
-| [平台运行时](https://jufirex.github.io/AuroraBot/architecture/platform-runtime.html)  | 理解宿主与 App 的运行时关系                |
-| [App 开发指南](https://jufirex.github.io/AuroraBot/develop/app-development.html)      | 开发你自己的 App                           |
-| [AUR CLI](https://jufirex.github.io/AuroraBot/develop/aur-cli.html)                   | 应用开发工具链                             |
+| 文档                                                                        | 说明                                       |
+| --------------------------------------------------------------------------- | ------------------------------------------ |
+| [项目总览](https://www.aurorabot.org/start/overview.html)                   | 快速了解 AuroraBot 的定位与四层分层        |
+| [快速开始](https://www.aurorabot.org/start/getting-started.html)            | 从零把项目跑起来                           |
+| [系统架构总览](https://www.aurorabot.org/architecture/system-overview.html) | 理解 Apps / Platform / Kernel / Brain 四层 |
+| [认知架构](https://www.aurorabot.org/architecture/brain-architecture.html)  | 深入有向有环图的 Agent 节点网络            |
+| [平台运行时](https://www.aurorabot.org/architecture/platform-runtime.html)  | 理解宿主与 App 的运行时关系                |
+| [App 开发指南](https://www.aurorabot.org/develop/app-development.html)      | 开发你自己的 App                           |
+| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                   | 应用开发工具链                             |
 
 ## 开源致谢
 
@@ -120,5 +124,5 @@ AuroraBot 站在众多优秀开源项目的肩膀上构建：
 ---
 
 <p align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/JuFireX">JuFireX</a></sub>
+  <sub>Built with ❤️ by <a href="https://github.com/JuFireX">JuFireX</a> | <a href="https://github.com/AuroraBot-Dev">AuroraBot-Dev</a></sub>
 </p>
