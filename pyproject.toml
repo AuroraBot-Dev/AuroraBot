@@ -1,7 +1,7 @@
 [project]
-name = "Bot-Polaris"
+name = "AuroraBot"
 version = "0.1.0"
-description = "Bot-Polaris"
+description = "AuroraBot 是一个新一代的内驱式、自主决策的智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
