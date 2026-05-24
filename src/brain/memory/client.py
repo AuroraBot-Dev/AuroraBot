@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 from typing import Any
 
 from mem0 import Memory
-
-from src.brain.memory import config
+from src.config import Config as config
 
 
 def build_mem0_config() -> dict[str, Any]:
