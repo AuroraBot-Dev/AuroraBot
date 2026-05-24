@@ -44,5 +44,8 @@ class UnifiedMemoryManager:
         
         return ctx
 
+# 全局单例，供其它节点和模块直接导入使用
+memory_manager = UnifiedMemoryManager()
+
 # 暴露给外部方便导入的公共接口
-__all__ = ["UnifiedMemoryManager", "MemoryContext", "MemoryItem"]
+__all__ = ["UnifiedMemoryManager", "MemoryContext", "MemoryItem", "memory_manager"]
