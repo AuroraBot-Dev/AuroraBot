@@ -12,6 +12,7 @@ from src.utils.time_utils import now_text
 if TYPE_CHECKING:
     from src.platform.application_host import ApplicationHost
     from src.brain.kernel.event_bus import FileEventBus
+    from src.brain.memory import UnifiedMemoryManager
 
 logger = get_logger("NodeBase")
 
@@ -292,10 +293,12 @@ class Agent(Node):
         host: ApplicationHost | None = None,  # noqa: F821
         *,
         system_prompt: str = "",
+        memory: UnifiedMemoryManager | None = None,  # noqa: F821
     ) -> None:
         super().__init__(node_id)
         self._host = host
         self._system_prompt = system_prompt
+        self._memory = memory
         self._current_think_task: asyncio.Task[Any] | None = None
 
     @property
@@ -309,6 +312,14 @@ class Agent(Node):
     @host.setter
     def host(self, value: ApplicationHost | None) -> None:  # noqa: F821
         self._host = value
+
+    @property
+    def memory(self) -> UnifiedMemoryManager | None:  # noqa: F821
+        return self._memory
+
+    @memory.setter
+    def memory(self, value: UnifiedMemoryManager | None) -> None:  # noqa: F821
+        self._memory = value
 
     @property
     def system_prompt(self) -> str:
@@ -397,9 +408,12 @@ class Router(Node):
         self,
         node_id: str,
         host: ApplicationHost | None = None,  # noqa: F821
+        *,
+        memory: UnifiedMemoryManager | None = None,  # noqa: F821
     ) -> None:
         super().__init__(node_id)
         self._host = host
+        self._memory = memory
 
     @property
     def type(self) -> str:
@@ -408,6 +422,14 @@ class Router(Node):
     @property
     def host(self) -> ApplicationHost | None:  # noqa: F821
         return self._host
+
+    @property
+    def memory(self) -> UnifiedMemoryManager | None:  # noqa: F821
+        return self._memory
+
+    @memory.setter
+    def memory(self, value: UnifiedMemoryManager | None) -> None:  # noqa: F821
+        self._memory = value
 
     def on_event(self, event: FileEvent) -> bool:
         """Router 默认采用与 Node 相同的事件匹配逻辑。

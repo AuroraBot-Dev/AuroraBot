@@ -111,14 +111,11 @@ nodes:
       output_path: "router/merge/merged.json"
       merge_strategy: "concat_array"
 
-  # ── 记忆（记录原始事件） ──────────────────────────
+  # ── 记忆（记录到 L1/L2/L3 三级记忆系统） ──────────
   - id: memory
     type: memory
     watch:
       - "memory/pending/event_*.json"
-    emit:
-      - "memory/facts.json"
-      - "memory/tick.json"
 
   # ── 生命周期终止（暂关） ────────────────────────
   - id: terminal

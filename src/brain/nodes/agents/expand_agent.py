@@ -39,8 +39,8 @@ class ExpandAgent(Agent):
     _default_guards = ["plans/pending/plan_*.json"]
     _default_produces = ["actions/pending/action.json"]
 
-    def __init__(self, node_id: str, host: ApplicationHost) -> None:  # noqa: F821
-        super().__init__(node_id, host, system_prompt=_EXPAND_SYSTEM_PROMPT)
+    def __init__(self, node_id: str, host: ApplicationHost, **kwargs: Any) -> None:  # noqa: F821
+        super().__init__(node_id, host, system_prompt=_EXPAND_SYSTEM_PROMPT, **kwargs)
         self._plans_pending_dir = kernel_data_dir / "plans" / "pending"
         self._actions_pending_dir = kernel_data_dir / "actions" / "pending"
 
@@ -117,11 +117,24 @@ class ExpandAgent(Agent):
             for c in commands
         ]
 
+        session_id = str(plan.get("session_id", ""))
+
+        # 记忆召回：检索三级记忆上下文
+        memory_text = ""
+        if self.memory is not None and session_id:
+            query = str(plan.get("goal", ""))
+            ctx = self.memory.retrieve_context(
+                current_query=query, user_id=session_id
+            )
+            memory_text = ctx.to_prompt_text()
+
         user_msg = (
             f"plan:\n{json.dumps(plan_info, indent=2, ensure_ascii=False)}\n\n"
-            f"commands:\n{json.dumps(cmd_info, indent=2, ensure_ascii=False)}\n\n"
-            f"请为这个 plan 选择命令。"
+            f"commands:\n{json.dumps(cmd_info, indent=2, ensure_ascii=False)}"
         )
+        if memory_text:
+            user_msg += f"\n\n【历史记忆】\n{memory_text}"
+        user_msg += f"\n\n请为这个 plan 选择命令。"
         messages = [{"role": "user", "content": user_msg}]
 
         try:
@@ -173,6 +186,7 @@ class ExpandAgent(Agent):
             "id": next_record_id("action"),
             "plan_id": plan.get("id", ""),
             "source_event_id": plan.get("source_event_id", ""),
+            "session_id": plan.get("session_id", ""),
             "command": spec["command_name"],
             "kwargs": spec.get("kwargs", {}),
             "reasoning": spec.get("reasoning", ""),

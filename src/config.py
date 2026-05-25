@@ -67,8 +67,8 @@ class Config:
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-xxx")
     AI_CONTEXT_CHAR_LIMIT: int = int(os.getenv("AI_CONTEXT_CHAR_LIMIT", "6000"))
 
-    MEM0_API_KEY: str = os.getenv("MEM0_API_KEY", "m0-xxx")
-    MEM0_API_BASE_URL: str = os.getenv("MEM0_API_BASE_URL", "https://api.mem0.ai")
+    # MEM0_API_KEY: str = os.getenv("MEM0_API_KEY", "m0-xxx")
+    # MEM0_API_BASE_URL: str = os.getenv("MEM0_API_BASE_URL", "https://api.mem0.ai")
 
     @staticmethod
     def ensure_dirs() -> None:
@@ -83,5 +83,22 @@ class Config:
         ):
             path.mkdir(parents=True, exist_ok=True)
 
+    #记忆配置
+    MEM0_VECTOR_STORE: str = os.getenv("MEM0_VECTOR_STORE", "chroma")
+    MEM0_COLLECTION_NAME: str = os.getenv("MEM0_COLLECTION_NAME", "aurora_memory_bgem3")
+    MEM0_STORE_PATH: Path = MEMORY_DATA_DIR / "mem0"
+
+    MEM0_EMBEDDER_PROVIDER: str = os.getenv("MEM0_EMBEDDER_PROVIDER", "openai")
+    MEM0_EMBEDDER_API_KEY: str = os.getenv("MEM0_EMBEDDER_API_KEY", "")
+    MEM0_EMBEDDER_BASE_URL: str = os.getenv(
+        "MEM0_EMBEDDER_BASE_URL",
+        "https://api.siliconflow.cn/v1",
+    )
+    MEM0_EMBEDDER_MODEL: str = os.getenv("MEM0_EMBEDDER_MODEL", "BAAI/bge-m3")
+
+    MEM0_LLM_PROVIDER: str = os.getenv("MEM0_LLM_PROVIDER", "openai")
+    MEM0_LLM_API_KEY: str = os.getenv("MEM0_LLM_API_KEY", DEEPSEEK_API_KEY)
+    MEM0_LLM_BASE_URL: str = os.getenv("MEM0_LLM_BASE_URL", "https://api.deepseek.com")
+    MEM0_LLM_MODEL: str = os.getenv("MEM0_LLM_MODEL", "deepseek-chat")
 
 Config.ensure_dirs()

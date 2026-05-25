@@ -37,9 +37,10 @@ class FanOutRouter(Router):
 
         对每个源文件：
         1. 读取 JSON 内容
-        2. 为每个 emit 目录构造 ``<emit_dir>/<源文件名>`` 作为目标路径
-        3. 生成 :class:`FileUpdate` 列表
-        4. 调用 :func:`move_to_done` 将源文件移入 ``done/`` 子目录
+        2. 为每个 emit 目录构造 ``<emit_dir>/<源文件名>`` 的 FileUpdate
+        3. 为 ``inbox/done/<源文件名>`` 构造 FileUpdate（走总线唤醒 Planner）
+        4. 删除 inbox/pending/ 中的源文件
+        5. 返回所有 FileUpdate 列表
         """
         watch_patterns = self._config_watch or []
         emit_dirs = self._config_emit or []

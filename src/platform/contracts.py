@@ -39,3 +39,12 @@ class CommandSpec:
     parameters_schema: dict[str, Any]
     returns_schema: dict[str, Any]
     handler: Callable[..., Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters_schema": self.parameters_schema,
+            "returns_schema": self.returns_schema,
+            "handler": str(self.handler),
+        }

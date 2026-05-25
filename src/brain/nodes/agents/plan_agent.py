@@ -27,15 +27,16 @@ class PlanAgent(Agent):
     判断事件输入是否完整并生成 plan，写入
     ``plans/pending/plan_<id>.json``。
 
-    处理完成的输入事件移入 ``inbox/done/archived/`` 子目录
-    （文件不可变原则）。
+    LLM 调用前通过 :class:`UnifiedMemoryManager.retrieve_context`
+    检索 L1/L2/L3 三级记忆，注入 prompt 辅助决策。
+    处理完成的输入事件移入 ``inbox/done/archived/`` 子目录。
     LLM 不可用时回退到机械规划。
     """
 
     _default_guards = ["inbox/done/event_*.json"]
 
-    def __init__(self, node_id: str) -> None:
-        super().__init__(node_id, system_prompt=_PLAN_SYSTEM_PROMPT)
+    def __init__(self, node_id: str, **kwargs: Any) -> None:
+        super().__init__(node_id, system_prompt=_PLAN_SYSTEM_PROMPT, **kwargs)
         self._inbox_done_dir = kernel_data_dir / "inbox" / "done"
         self._plans_pending_dir = kernel_data_dir / "plans" / "pending"
 
@@ -107,10 +108,24 @@ class PlanAgent(Agent):
                 }
             )
         event_json = json.dumps(events_display, indent=2, ensure_ascii=False)
+
+        # 检索三级记忆上下文
+        memory_text = ""
+        if self.memory is not None:
+            query = str(events[0].get("summary", "")) if events else ""
+            ctx = self.memory.retrieve_context(
+                current_query=query, user_id=session_id
+            )
+            memory_text = ctx.to_prompt_text()
+
         user_msg = (
             f"session_id: {session_id}\n"
-            f"当前轮次事件 ({len(events)} 个):\n{event_json}\n\n"
-            f"请判断这些事件是否构成一个完整的用户意图，生成计划。"
+            f"当前轮次事件 ({len(events)} 个):\n{event_json}"
+        )
+        if memory_text:
+            user_msg += f"\n\n【历史记忆】\n{memory_text}"
+        user_msg += (
+            f"\n\n请判断这些事件是否构成一个完整的用户意图，生成计划。"
         )
         messages = [{"role": "user", "content": user_msg}]
 

@@ -1,7 +1,11 @@
 import json
 import os
+import sys
 import requests
 from dotenv import load_dotenv
+
+# 将项目根目录（AuroraBot）加入到系统路径，解决 'src' 模块找不到的问题
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
 from src.brain.memory import UnifiedMemoryManager
 
