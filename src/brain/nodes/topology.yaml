@@ -1,0 +1,20 @@
+# kernel-α 认知拓扑电路 — 邻接表配置
+#
+# 节点 A 的 emit 匹配节点 B 的 watch → 存在有向边 A → B
+#
+# 字段：
+#   id       — 全局唯一标识
+#   type     — NODE_REGISTRY 中的类型名
+#   enabled  — 是否启用（默认 true）
+#   watch    — 监听的文件 glob 列表（可选）
+#   emit     — 产出的文件路径列表（可选）
+#   config   — 节点类特定参数（可选）
+
+nodes:
+  # ── kernel-α: PolarisAgent（XiaoGuang-Bot 移植） ──
+  # 单体节点，内部处理：消息防抖 → 脉冲门控 → LLM 回复 → QQ 发送
+  # 后台运行日记定时调度器
+  - id: polaris
+    type: polaris
+    watch:
+      - "inbox/pending/event_message_received_*.json"
