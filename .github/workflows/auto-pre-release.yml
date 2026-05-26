@@ -1,0 +1,30 @@
+name: Auto Pre-release
+
+on:
+  push:
+    tags:
+      - "*-alpha*"
+      - "*-beta*"
+      - "*-rc*"
+      - "*-pre*"
+
+permissions:
+  contents: write
+
+jobs:
+  pre-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true # 标记为预发布版
+          generate_release_notes: true # 自动生成 Changelog
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
