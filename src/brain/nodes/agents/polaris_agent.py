@@ -22,6 +22,8 @@ from src.config import Config
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
 
+import src.brain.prompts as prompts
+
 if TYPE_CHECKING:
     from src.platform.application_host import ApplicationHost
 
@@ -38,13 +40,7 @@ DIARY_RUN_HOUR = 23
 DIARY_RUN_MINUTE = 20
 
 # 脉冲门控系统提示词
-IMPULSE_GATE_PROMPT = (
-    "你是回复门控器。"
-    "你要根据现实生活中的节律和人际关系来判断此刻是否想回复或应该回复："
-    "如果正在忙、累、分心、或话题关联度低，可选择不回。"
-    "如果话题与主体高相关、情绪上想接话、且符合当下状态，可选择回复。"
-    "只输出一个字：是 或 否。不要输出其他任何内容。"
-)
+IMPULSE_GATE_PROMPT = prompts.IMPULSE_GATE_PROMPT
 
 # 静默回复文本（命中后不发送）
 SILENT_REPLY_TEXTS = {"（与我无关，不回）"}
@@ -58,14 +54,24 @@ _EVENT_LINE_PATTERN = re.compile(
 _MOOD_POSITIVE_WORDS = {"开心", "哈哈", "晚安", "喜欢", "谢谢", "好耶", "可爱", "奶茶"}
 _MOOD_NEGATIVE_WORDS = {"难过", "烦", "累", "生气", "困", "崩溃", "伤心", "压力"}
 _MEMORY_HINT_WORDS = {
-    "叫我", "我是", "外号", "昵称", "喜欢", "讨厌",
-    "工作", "学习", "生日", "明天", "晚安",
+    "叫我",
+    "我是",
+    "外号",
+    "昵称",
+    "喜欢",
+    "讨厌",
+    "工作",
+    "学习",
+    "生日",
+    "明天",
+    "晚安",
 }
 
 
 # ═══════════════════════════════════════════════════════════════
 # 日记系统（移植自 XiaoGuang-Bot polaris/tasks/diary.py）
 # ═══════════════════════════════════════════════════════════════
+
 
 def _today_date_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
@@ -115,25 +121,29 @@ def _parse_user_events(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 except ValueError:
                     ts = None
                 group_id = matched.group("group_id")
-                events.append({
-                    "user_id": matched.group("user_id"),
-                    "timestamp": timestamp_text,
-                    "date": ts.date().isoformat() if ts else None,
-                    "scene": "group" if group_id else "private",
-                    "group_id": group_id,
-                    "content": matched.group("content").strip(),
-                    "raw_line": line,
-                })
+                events.append(
+                    {
+                        "user_id": matched.group("user_id"),
+                        "timestamp": timestamp_text,
+                        "date": ts.date().isoformat() if ts else None,
+                        "scene": "group" if group_id else "private",
+                        "group_id": group_id,
+                        "content": matched.group("content").strip(),
+                        "raw_line": line,
+                    }
+                )
             else:
-                events.append({
-                    "user_id": fallback_user_id,
-                    "timestamp": None,
-                    "date": None,
-                    "scene": "unknown",
-                    "group_id": None,
-                    "content": line,
-                    "raw_line": line,
-                })
+                events.append(
+                    {
+                        "user_id": fallback_user_id,
+                        "timestamp": None,
+                        "date": None,
+                        "scene": "unknown",
+                        "group_id": None,
+                        "content": line,
+                        "raw_line": line,
+                    }
+                )
     return events
 
 
@@ -142,7 +152,7 @@ def _safe_parse_json_object(content: str) -> dict[str, Any]:
     right = content.rfind("}")
     if left == -1 or right == -1 or right <= left:
         raise ValueError("LLM did not return a JSON object")
-    return json.loads(content[left: right + 1])
+    return json.loads(content[left : right + 1])
 
 
 async def _extract_with_llm(system_prompt: str, user_prompt: str) -> dict[str, Any]:
@@ -156,49 +166,6 @@ async def _extract_with_llm(system_prompt: str, user_prompt: str) -> dict[str, A
     )
     content = (response or "").strip()
     return _safe_parse_json_object(content)
-
-
-def _extract_daily_diary_payload(
-    *,
-    soul_text: str,
-    day: str,
-    day_events: list[dict[str, Any]],
-) -> dict[str, Any]:
-    event_lines = [event["raw_line"] for event in day_events[-200:]]
-    if not event_lines:
-        return {
-            "title": f"小光日记 {day}",
-            "summary": "今天比较安静，聊天记录不多。",
-            "major_events": [],
-            "important_events": [],
-            "mood": "平静",
-            "mood_reason": "没有明显波动事件。",
-            "reflection": "慢慢来，保持观察和记录。",
-        }
-
-    system_prompt = (
-        "你是小光的日记整理器。你会根据人格设定和当天聊天，"
-        "写出像人类一样的日记结构。只输出 JSON，格式如下："
-        '{"title":"","summary":"","major_events":[""],'
-        '"important_events":[""],"mood":"","mood_reason":"","reflection":""}'
-    )
-    user_prompt = (
-        f"日期：{day}\n"
-        f"人格文档：\n{soul_text}\n\n"
-        "今日聊天记录：\n"
-        + "\n".join(event_lines)
-        + "\n\n要求：major_events 2~5 条，important_events 1~3 条，语气真实自然。"
-    )
-    # 同步回退：日记作业在后台线程中调用，无法直接 await 异步 LLM
-    # 此处由调用方在外层处理 async
-    return {
-        "_system_prompt": system_prompt,
-        "_user_prompt": user_prompt,
-        "_day": day,
-        "_soul_text": soul_text,
-        "_day_events": day_events,
-        "_event_lines": event_lines,
-    }
 
 
 async def _extract_daily_diary_async(
@@ -291,7 +258,10 @@ async def _extract_user_daily_update(
     if not user_day_events:
         return {
             "important_info_append": {
-                "names": [], "basic_info": [], "nicknames": [], "personality_traits": [],
+                "names": [],
+                "basic_info": [],
+                "nicknames": [],
+                "personality_traits": [],
             },
             "relationships_daily": [],
             "subjective_impression_daily": "",
@@ -325,19 +295,23 @@ async def _extract_user_daily_update(
             "important_info_append": {
                 "names": [
                     str(item).strip()
-                    for item in (info.get("names") or []) if str(item).strip()
+                    for item in (info.get("names") or [])
+                    if str(item).strip()
                 ],
                 "basic_info": [
                     str(item).strip()
-                    for item in (info.get("basic_info") or []) if str(item).strip()
+                    for item in (info.get("basic_info") or [])
+                    if str(item).strip()
                 ],
                 "nicknames": [
                     str(item).strip()
-                    for item in (info.get("nicknames") or []) if str(item).strip()
+                    for item in (info.get("nicknames") or [])
+                    if str(item).strip()
                 ],
                 "personality_traits": [
                     str(item).strip()
-                    for item in (info.get("personality_traits") or []) if str(item).strip()
+                    for item in (info.get("personality_traits") or [])
+                    if str(item).strip()
                 ],
             },
             "relationships_daily": [
@@ -370,7 +344,10 @@ async def _extract_user_daily_update(
     ][:4]
     return {
         "important_info_append": {
-            "names": [], "basic_info": [], "nicknames": [], "personality_traits": [],
+            "names": [],
+            "basic_info": [],
+            "nicknames": [],
+            "personality_traits": [],
         },
         "relationships_daily": [],
         "subjective_impression_daily": "今天互动自然，先继续观察。",
@@ -431,9 +408,9 @@ async def extract_daily_memory_bundle(
     else:
         day_events = list(events)
 
-    known_user_ids = sorted({
-        event["user_id"] for event in day_events if event.get("user_id")
-    })
+    known_user_ids = sorted(
+        {event["user_id"] for event in day_events if event.get("user_id")}
+    )
 
     day_by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
     group_user_map: dict[str, set[str]] = defaultdict(set)
@@ -454,7 +431,9 @@ async def extract_daily_memory_bundle(
         relation_candidates[user_id] = sorted(set(relation_candidates[user_id]))
 
     diary_payload = await _extract_daily_diary_async(
-        soul_text=soul_text, day=day, day_events=day_events,
+        soul_text=soul_text,
+        day=day,
+        day_events=day_events,
     )
 
     user_daily_updates: dict[str, dict[str, Any]] = {}
@@ -512,7 +491,9 @@ def apply_daily_memory_bundle(
             ),
             "personality_traits": _uniq_append(
                 important.get("personality_traits", []),
-                (update.get("important_info_append") or {}).get("personality_traits", []),
+                (update.get("important_info_append") or {}).get(
+                    "personality_traits", []
+                ),
             ),
         }
 
@@ -585,11 +566,13 @@ def _render_diary_markdown(day: str, diary_payload: dict[str, Any]) -> str:
     reflection = str(diary_payload.get("reflection") or "").strip()
     major_events = [
         str(item).strip()
-        for item in (diary_payload.get("major_events") or []) if str(item).strip()
+        for item in (diary_payload.get("major_events") or [])
+        if str(item).strip()
     ]
     important_events = [
         str(item).strip()
-        for item in (diary_payload.get("important_events") or []) if str(item).strip()
+        for item in (diary_payload.get("important_events") or [])
+        if str(item).strip()
     ]
 
     lines = [f"# {title}", "", f"- 日期：{day}", f"- 心情：{mood}"]
@@ -620,7 +603,9 @@ def _render_diary_markdown(day: str, diary_payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _archive_history_snapshot(history_path: Path, archive_dir: Path, day: str) -> str | None:
+def _archive_history_snapshot(
+    history_path: Path, archive_dir: Path, day: str
+) -> str | None:
     history = _load_history(history_path)
     has_chat = any(m.get("role") != "system" for m in history)
     if not has_chat:
@@ -700,7 +685,7 @@ class PolarisAgent(Agent):
 
         # ── 数据路径（保留 XiaoGuang-Bot 原始目录结构） ──
         self._history_path = Config.DATA_DIR / "history.json"
-        self._soul_path = Config.DATA_DIR / "SOUL.md"
+        self._soul_path = Config.PROMPTS_DIR / "SOUL.md"
         self._diary_dir = Config.DATA_DIR / "diary"
         self._impression_dir = Config.DATA_DIR / "impressions"
         self._archive_dir = Config.DATA_DIR / "history_archive"
@@ -728,13 +713,7 @@ class PolarisAgent(Agent):
     def _init_data(self) -> None:
         """初始化 SOUL 与 history.json。"""
         # 加载 SOUL
-        if self._soul_path.exists():
-            self._soul = self._soul_path.read_text(encoding="utf-8")
-        else:
-            # 回退到 prompts 目录
-            prompts_soul = Config.PROMPTS_DIR / "SOUL.md"
-            if prompts_soul.exists():
-                self._soul = prompts_soul.read_text(encoding="utf-8")
+        self._soul = prompts.SOUL
 
         # 确保目录存在
         for d in (self._diary_dir, self._impression_dir, self._archive_dir):
@@ -769,7 +748,8 @@ class PolarisAgent(Agent):
         self._diary_task = asyncio.create_task(self._diary_scheduler_loop())
         logger.info(
             "PolarisAgent: 日记调度器已启动, 每日 %02d:%02d 执行",
-            DIARY_RUN_HOUR, DIARY_RUN_MINUTE,
+            DIARY_RUN_HOUR,
+            DIARY_RUN_MINUTE,
         )
         try:
             await super().run()
@@ -829,11 +809,16 @@ class PolarisAgent(Agent):
             is_group = bool(payload.get("is_group", False))
             group_id = str(payload.get("group_id", "")) if is_group else None
 
-            session_key = f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"
+            session_key = (
+                f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"
+            )
 
             logger.info(
                 "PolarisAgent: 收到消息 session=%s user=%s is_group=%s text=%.60s",
-                session_key, user_id, is_group, text,
+                session_key,
+                user_id,
+                is_group,
+                text,
             )
 
             # 构建格式化的历史行（与 XiaoGuang-Bot 完全一致）
@@ -844,14 +829,14 @@ class PolarisAgent(Agent):
                 )
                 scene_name = "群聊"
             else:
-                input_line = (
-                    f"{timestamp} 的时候, {user_id} 在与你的私聊中说: {text}"
-                )
+                input_line = f"{timestamp} 的时候, {user_id} 在与你的私聊中说: {text}"
                 scene_name = "私聊"
 
             # 更新最近消息滑动窗口
             if is_group:
-                self._append_recent_message(self._group_recent[int(group_id or 0)], input_line)
+                self._append_recent_message(
+                    self._group_recent[int(group_id or 0)], input_line
+                )
             else:
                 self._append_recent_message(self._private_recent[user_id], input_line)
 
@@ -871,9 +856,7 @@ class PolarisAgent(Agent):
             self._session_versions[session_key] = current_version
 
             # 启动防抖任务
-            asyncio.create_task(
-                self._debounce_and_reply(session_key, current_version)
-            )
+            asyncio.create_task(self._debounce_and_reply(session_key, current_version))
 
         return []
 
@@ -901,18 +884,22 @@ class PolarisAgent(Agent):
 
         logger.info(
             "PolarisAgent: 防抖完成 session=%s 合并 %d 条 → 脉冲门控",
-            session_key, len(entries),
+            session_key,
+            len(entries),
         )
 
         # ── 脉冲门控 ──
         recent_messages = (
-            self._group_recent[int(group_id or 0)] if is_group
+            self._group_recent[int(group_id or 0)]
+            if is_group
             else self._private_recent[user_id]
         )
         recent_lines = self._get_recent_lines(recent_messages)
 
         try:
-            should_reply = await self._impulse_gate(scene_name, recent_lines, merged_input)
+            should_reply = await self._impulse_gate(
+                scene_name, recent_lines, merged_input
+            )
         except Exception:
             logger.exception("PolarisAgent 脉冲门控异常，默认跳过回复")
             return
@@ -932,7 +919,8 @@ class PolarisAgent(Agent):
 
         logger.info(
             "PolarisAgent: LLM 回复生成完成 len=%d preview=%.80s",
-            len(response), response,
+            len(response),
+            response,
         )
 
         if self._session_versions.get(session_key) != version:
@@ -971,7 +959,11 @@ class PolarisAgent(Agent):
                         session_id=session_id,
                         text=msg,
                     )
-                    logger.info("PolarisAgent: 已发送片段 len=%d session=%s", len(msg), session_id)
+                    logger.info(
+                        "PolarisAgent: 已发送片段 len=%d session=%s",
+                        len(msg),
+                        session_id,
+                    )
                 else:
                     logger.warning("PolarisAgent: host 未注入, 无法发送消息")
             except Exception:
@@ -982,13 +974,18 @@ class PolarisAgent(Agent):
             await self._append_assistant_message(response)
             logger.info(
                 "PolarisAgent: 回复已完成 session=%s user=%s total_len=%d",
-                session_key, user_id, len(response),
+                session_key,
+                user_id,
+                len(response),
             )
 
     # ── 脉冲门控 ──────────────────────────────────────
 
     async def _impulse_gate(
-        self, scene_name: str, recent_lines: list[str], merged_input: str,
+        self,
+        scene_name: str,
+        recent_lines: list[str],
+        merged_input: str,
     ) -> bool:
         """调用 LLM 判断当前是否应该回复。"""
         recent_text = "\n".join(recent_lines) if recent_lines else "(暂无历史)"
@@ -1014,9 +1011,7 @@ class PolarisAgent(Agent):
 
         # 空响应兜底：模型返回空时放行回复（避免门控故障导致永远静默）
         if not response or not response.strip():
-            logger.warning(
-                "PolarisAgent: 脉冲门控 LLM 返回空响应，默认放行回复"
-            )
+            logger.warning("PolarisAgent: 脉冲门控 LLM 返回空响应，默认放行回复")
             return True
 
         return self._parse_yes_no(response)
@@ -1060,7 +1055,9 @@ class PolarisAgent(Agent):
     # ── 对话历史管理 ──────────────────────────────────
 
     async def _append_user_message(
-        self, user_id: str, input_line: str,
+        self,
+        user_id: str,
+        input_line: str,
     ) -> list[dict[str, Any]]:
         """将用户消息写入 history.json，返回裁剪后的消息列表（system + 最近 N 条）。"""
         async with self._history_lock:
@@ -1075,11 +1072,13 @@ class PolarisAgent(Agent):
                 prev = history[-1].get("content", "")
                 history[-1]["content"] = f"{prev}\n{input_line}" if prev else input_line
             else:
-                history.append({
-                    "role": "user",
-                    "name": str(user_id),
-                    "content": input_line,
-                })
+                history.append(
+                    {
+                        "role": "user",
+                        "name": str(user_id),
+                        "content": input_line,
+                    }
+                )
 
             self._write_history(history)
 
@@ -1145,7 +1144,9 @@ class PolarisAgent(Agent):
     def _load_previous_two_diaries(self) -> list[dict[str, str]]:
         diaries: list[dict[str, str]] = []
         for days_ago in (1, 2):
-            target_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+            target_date = (datetime.now() - timedelta(days=days_ago)).strftime(
+                "%Y-%m-%d"
+            )
             json_path = self._diary_dir / f"{target_date}.json"
             md_path = self._diary_dir / f"{target_date}.md"
 
@@ -1178,7 +1179,8 @@ class PolarisAgent(Agent):
 
     @staticmethod
     def _prioritize_impressions(
-        current_user_id: str, impressions: dict[str, Any],
+        current_user_id: str,
+        impressions: dict[str, Any],
     ) -> dict[str, Any]:
         if not impressions:
             return {}
@@ -1209,9 +1211,7 @@ class PolarisAgent(Agent):
             for uid in sorted(direct_related_ids)
             if uid in impressions and uid != user_key
         )
-        ordered_ids.extend(
-            uid for uid in sorted(impressions) if uid not in ordered_ids
-        )
+        ordered_ids.extend(uid for uid in sorted(impressions) if uid not in ordered_ids)
         return {uid: impressions[uid] for uid in ordered_ids}
 
     # ── 最近消息滑动窗口 ──────────────────────────────
@@ -1221,7 +1221,9 @@ class PolarisAgent(Agent):
         return float(RECENT_MESSAGE_LIMIT) * 60.0
 
     def _prune_recent_messages(
-        self, recent: deque[tuple[float, str]], now_ts: float | None = None,
+        self,
+        recent: deque[tuple[float, str]],
+        now_ts: float | None = None,
     ) -> None:
         current_ts = time.time() if now_ts is None else now_ts
         cutoff = current_ts - self._recent_window_seconds()
@@ -1229,7 +1231,9 @@ class PolarisAgent(Agent):
             recent.popleft()
 
     def _append_recent_message(
-        self, recent: deque[tuple[float, str]], message_line: str,
+        self,
+        recent: deque[tuple[float, str]],
+        message_line: str,
     ) -> None:
         now_ts = time.time()
         self._prune_recent_messages(recent, now_ts=now_ts)
@@ -1245,7 +1249,10 @@ class PolarisAgent(Agent):
     def _seconds_until_next_diary_run() -> float:
         now = datetime.now()
         next_run = now.replace(
-            hour=DIARY_RUN_HOUR, minute=DIARY_RUN_MINUTE, second=0, microsecond=0,
+            hour=DIARY_RUN_HOUR,
+            minute=DIARY_RUN_MINUTE,
+            second=0,
+            microsecond=0,
         )
         if next_run <= now:
             next_run += timedelta(days=1)
@@ -1257,7 +1264,9 @@ class PolarisAgent(Agent):
             wait_seconds = self._seconds_until_next_diary_run()
             logger.info(
                 "PolarisAgent: 日记调度器等待 %.0f 秒 (下次 %02d:%02d)",
-                wait_seconds, DIARY_RUN_HOUR, DIARY_RUN_MINUTE,
+                wait_seconds,
+                DIARY_RUN_HOUR,
+                DIARY_RUN_MINUTE,
             )
             await asyncio.sleep(wait_seconds)
 
