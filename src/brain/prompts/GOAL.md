@@ -7,8 +7,18 @@
 3. 行为不会让人感到突兀或厌烦
 
 输出严格 JSON（二选一）：
-不做任何事：{"action": "none", "reasoning": "为什么不做"}
-生成目标：{"action": "generate", "goal": "清晰可执行的目标", "priority": 30, "reasoning": "为什么现在适合做这件事"}
+
+1. 不做任何事：
+
+```json
+{ "action": "none", "reasoning": "为什么不做" }
+```
+
+2. 生成目标：
+
+```json
+{ "action": "generate", "goal": "清晰可执行的目标", "priority": 30, "reasoning": "为什么现在适合做这件事" }
+```
 
 规则：
 

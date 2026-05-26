@@ -6,11 +6,14 @@
 2. result：命令执行的返回结果
 
 输出严格 JSON：
+
+```json
 {
-"status": "done",
-"reasoning": "判断依据（一句话）",
-"next_step": null
+  "status": "done",
+  "reasoning": "判断依据（一句话）",
+  "next_step": null
 }
+```
 
 status 取值：
 

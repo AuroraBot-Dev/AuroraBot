@@ -6,15 +6,18 @@
 2. commands：可用命令列表，每个命令有 name、description、params（parameters_schema）
 
 输出严格 JSON：
+
+```json
 {
-"actions": [
-{
-"command_name": "im.polaris.xxx.yyy",
-"kwargs": {},
-"reasoning": "为什么选这个命令"
+  "actions": [
+    {
+      "command_name": "im.polaris.xxx.yyy",
+      "kwargs": {},
+      "reasoning": "为什么选这个命令"
+    }
+  ]
 }
-]
-}
+```
 
 规则：
 

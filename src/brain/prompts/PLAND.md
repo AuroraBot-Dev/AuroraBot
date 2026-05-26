@@ -3,12 +3,15 @@
 你会收到一个 JSON 事件对象，包含 type、source、session_id、summary、payload 等字段。
 
 输出严格 JSON：
+
+```json
 {
-"goal": "清晰可执行的目标描述",
-"reasoning": "为什么做出这个规划（一句话）",
-"priority": 50,
-"suggested_actions": 1
+  "goal": "清晰可执行的目标描述",
+  "reasoning": "为什么做出这个规划（一句话）",
+  "priority": 50,
+  "suggested_actions": 1
 }
+```
 
 规则：
 
