@@ -153,3 +153,6 @@ legacy/
 .idea/
 .trae/
 .reasonix/
+*.code-workspace
+
+nodes-beta/
