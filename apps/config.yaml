@@ -4,7 +4,7 @@ apps:
     startup:
       enable_listener: true
   diary:
-    enabled: false
+    enabled: true
     startup: {}
   weather:
     enabled: false
