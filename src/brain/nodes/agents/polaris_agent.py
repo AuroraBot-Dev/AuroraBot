@@ -1,26 +1,24 @@
-"""kernel-α: XiaoGuang-Bot PolarisBot → AuroraBot PolarisAgent 单体节点
+"""kernel-α: AuroraBot PolarisAgent 单体节点
 
 移植自 XiaoGuang-Bot/polaris/main.py + polaris/tasks/diary.py，
-保留原耦合度：history.json 对话历史、脉冲门控、日记/印象记忆系统。
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 from collections import defaultdict, deque
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 from src.brain.ai.llm_gate import llm_chat
-from src.brain.kernel.base import Agent, FileUpdate
-from src.brain.kernel.state_store import kernel_data_dir, move_to_done
+from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
+from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.config import Config
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
+from src.utils.json_utils import safe_parse_json_object
 
 import src.brain.prompts as prompts
 
@@ -30,629 +28,16 @@ if TYPE_CHECKING:
 logger = get_logger("PolarisAgent")
 
 # ═══════════════════════════════════════════════════════════════
-# 常量（移植自 XiaoGuang-Bot polaris/config.py）
+# 常量
 # ═══════════════════════════════════════════════════════════════
 
 REPLY_DEBOUNCE_SECONDS = 2.0
 RECENT_MESSAGE_LIMIT = 6  # 分钟
 MESSAGE_WINDOW = 300
-DIARY_RUN_HOUR = 23
-DIARY_RUN_MINUTE = 20
+MAX_SELF_RECOVERY_ATTEMPTS = 2
 
 # 脉冲门控系统提示词
 IMPULSE_GATE_PROMPT = prompts.IMPULSE_GATE.get_content()
-
-# 静默回复文本（命中后不发送）
-SILENT_REPLY_TEXTS = {"（与我无关，不回）"}
-
-# ── 日记系统常量 ──────────────────────────────────
-_EVENT_LINE_PATTERN = re.compile(
-    r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) 的时候, "
-    r"(?P<user_id>\d+) 在(?:(?:群聊 (?P<group_id>\d+))|(?:与你的私聊))中说: "
-    r"(?P<content>.*)$"
-)
-_MOOD_POSITIVE_WORDS = {"开心", "哈哈", "晚安", "喜欢", "谢谢", "好耶", "可爱", "奶茶"}
-_MOOD_NEGATIVE_WORDS = {"难过", "烦", "累", "生气", "困", "崩溃", "伤心", "压力"}
-_MEMORY_HINT_WORDS = {
-    "叫我",
-    "我是",
-    "外号",
-    "昵称",
-    "喜欢",
-    "讨厌",
-    "工作",
-    "学习",
-    "生日",
-    "明天",
-    "晚安",
-}
-
-
-# ═══════════════════════════════════════════════════════════════
-# 日记系统（移植自 XiaoGuang-Bot polaris/tasks/diary.py）
-# ═══════════════════════════════════════════════════════════════
-
-
-def _today_date_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-def _load_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-
-
-def _load_history(history_path: Path) -> list[dict[str, Any]]:
-    return _load_json(history_path, [])
-
-
-def _load_soul_text(history: list[dict[str, Any]], soul_path: Path) -> str:
-    if soul_path.exists():
-        return soul_path.read_text(encoding="utf-8")
-    if history and history[0].get("role") == "system":
-        return str(history[0].get("content", ""))
-    return ""
-
-
-def _parse_user_events(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
-    for message in history:
-        if message.get("role") != "user":
-            continue
-        fallback_user_id = str(message.get("name", "unknown"))
-        content = str(message.get("content", ""))
-        for raw_line in content.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            matched = _EVENT_LINE_PATTERN.match(line)
-            if matched:
-                timestamp_text = matched.group("timestamp")
-                try:
-                    ts = datetime.strptime(timestamp_text, "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    ts = None
-                group_id = matched.group("group_id")
-                events.append(
-                    {
-                        "user_id": matched.group("user_id"),
-                        "timestamp": timestamp_text,
-                        "date": ts.date().isoformat() if ts else None,
-                        "scene": "group" if group_id else "private",
-                        "group_id": group_id,
-                        "content": matched.group("content").strip(),
-                        "raw_line": line,
-                    }
-                )
-            else:
-                events.append(
-                    {
-                        "user_id": fallback_user_id,
-                        "timestamp": None,
-                        "date": None,
-                        "scene": "unknown",
-                        "group_id": None,
-                        "content": line,
-                        "raw_line": line,
-                    }
-                )
-    return events
-
-
-def _safe_parse_json_object(content: str) -> dict[str, Any]:
-    left = content.find("{")
-    right = content.rfind("}")
-    if left == -1 or right == -1 or right <= left:
-        raise ValueError("LLM did not return a JSON object")
-    return json.loads(content[left : right + 1])
-
-
-async def _extract_with_llm(system_prompt: str, user_prompt: str) -> dict[str, Any]:
-    response = await llm_chat(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=1024,
-        temperature=0.2,
-    )
-    content = (response or "").strip()
-    return _safe_parse_json_object(content)
-
-
-async def _extract_daily_diary_async(
-    soul_text: str,
-    day: str,
-    day_events: list[dict[str, Any]],
-) -> dict[str, Any]:
-    event_lines = [event["raw_line"] for event in day_events[-200:]]
-    if not event_lines:
-        return {
-            "title": f"小光日记 {day}",
-            "summary": "今天比较安静，聊天记录不多。",
-            "major_events": [],
-            "important_events": [],
-            "mood": "平静",
-            "mood_reason": "没有明显波动事件。",
-            "reflection": "慢慢来，保持观察和记录。",
-        }
-
-    system_prompt = (
-        "你是小光的日记整理器。你会根据人格设定和当天聊天，"
-        "写出像人类一样的日记结构。只输出 JSON，格式如下："
-        '{"title":"","summary":"","major_events":[""],'
-        '"important_events":[""],"mood":"","mood_reason":"","reflection":""}'
-    )
-    user_prompt = (
-        f"日期：{day}\n"
-        f"人格文档：\n{soul_text}\n\n"
-        "今日聊天记录：\n"
-        + "\n".join(event_lines)
-        + "\n\n要求：major_events 2~5 条，important_events 1~3 条，语气真实自然。"
-    )
-
-    try:
-        payload = await _extract_with_llm(system_prompt, user_prompt)
-        return {
-            "title": str(payload.get("title") or f"小光日记 {day}").strip(),
-            "summary": str(payload.get("summary") or "").strip(),
-            "major_events": [
-                str(item).strip()
-                for item in (payload.get("major_events") or [])
-                if str(item).strip()
-            ][:5],
-            "important_events": [
-                str(item).strip()
-                for item in (payload.get("important_events") or [])
-                if str(item).strip()
-            ][:3],
-            "mood": str(payload.get("mood") or "平静").strip(),
-            "mood_reason": str(payload.get("mood_reason") or "").strip(),
-            "reflection": str(payload.get("reflection") or "").strip(),
-        }
-    except Exception as exc:
-        logger.warning("daily diary extract failed: %s", exc)
-
-    mood_score = 0
-    for event in day_events:
-        text = event["content"]
-        if any(word in text for word in _MOOD_POSITIVE_WORDS):
-            mood_score += 1
-        if any(word in text for word in _MOOD_NEGATIVE_WORDS):
-            mood_score -= 1
-
-    mood = "轻松" if mood_score > 0 else "低落" if mood_score < 0 else "平静"
-    major_events = [event["raw_line"] for event in day_events[-5:]]
-    important_events = [
-        event["raw_line"]
-        for event in day_events
-        if any(word in event["content"] for word in _MEMORY_HINT_WORDS)
-    ][:3]
-    return {
-        "title": f"小光日记 {day}",
-        "summary": "今天和大家有一些交流，整体节奏还算自然。",
-        "major_events": major_events,
-        "important_events": important_events,
-        "mood": mood,
-        "mood_reason": "基于当天聊天语气关键词的粗略判断。",
-        "reflection": "继续在真实互动中积累记忆。",
-    }
-
-
-async def _extract_user_daily_update(
-    *,
-    user_id: str,
-    soul_text: str,
-    day: str,
-    user_day_events: list[dict[str, Any]],
-    relation_candidates: list[str],
-) -> dict[str, Any]:
-    if not user_day_events:
-        return {
-            "important_info_append": {
-                "names": [],
-                "basic_info": [],
-                "nicknames": [],
-                "personality_traits": [],
-            },
-            "relationships_daily": [],
-            "subjective_impression_daily": "",
-            "important_memories_daily": [],
-        }
-
-    records = [event["raw_line"] for event in user_day_events[-80:]]
-    system_prompt = (
-        "你是关系记忆提取器。根据人格与当日对话，为指定用户提取记忆。"
-        "只输出 JSON，格式如下："
-        '{"important_info_append":{"names":[""],"basic_info":[""],'
-        '"nicknames":[""],"personality_traits":[""]},'
-        '"relationships_daily":[{"target_user_id":"","relation":"","evidence":""}],'
-        '"subjective_impression_daily":"","important_memories_daily":[""]}'
-    )
-    user_prompt = (
-        f"日期：{day}\n"
-        f"目标用户：{user_id}\n"
-        f"人格文档：\n{soul_text}\n\n"
-        f"可能相关的人：{', '.join(relation_candidates) if relation_candidates else '无'}\n"
-        "该用户今日聊天：\n"
-        + "\n".join(records)
-        + "\n\n要求：关系只填今天可推断出的内容。"
-    )
-
-    try:
-        payload = await _extract_with_llm(system_prompt, user_prompt)
-        info = payload.get("important_info_append") or {}
-        relation_rows = payload.get("relationships_daily") or []
-        return {
-            "important_info_append": {
-                "names": [
-                    str(item).strip()
-                    for item in (info.get("names") or [])
-                    if str(item).strip()
-                ],
-                "basic_info": [
-                    str(item).strip()
-                    for item in (info.get("basic_info") or [])
-                    if str(item).strip()
-                ],
-                "nicknames": [
-                    str(item).strip()
-                    for item in (info.get("nicknames") or [])
-                    if str(item).strip()
-                ],
-                "personality_traits": [
-                    str(item).strip()
-                    for item in (info.get("personality_traits") or [])
-                    if str(item).strip()
-                ],
-            },
-            "relationships_daily": [
-                {
-                    "target_user_id": str(row.get("target_user_id") or "").strip(),
-                    "relation": str(row.get("relation") or "").strip(),
-                    "evidence": str(row.get("evidence") or "").strip(),
-                }
-                for row in relation_rows
-                if isinstance(row, dict)
-                and str(row.get("target_user_id") or "").strip()
-                and str(row.get("relation") or "").strip()
-            ],
-            "subjective_impression_daily": str(
-                payload.get("subjective_impression_daily") or ""
-            ).strip(),
-            "important_memories_daily": [
-                str(item).strip()
-                for item in (payload.get("important_memories_daily") or [])
-                if str(item).strip()
-            ][:6],
-        }
-    except Exception as exc:
-        logger.warning("user daily extract failed for user=%s: %s", user_id, exc)
-
-    fallback_memories = [
-        event["raw_line"]
-        for event in user_day_events
-        if any(word in event["content"] for word in _MEMORY_HINT_WORDS)
-    ][:4]
-    return {
-        "important_info_append": {
-            "names": [],
-            "basic_info": [],
-            "nicknames": [],
-            "personality_traits": [],
-        },
-        "relationships_daily": [],
-        "subjective_impression_daily": "今天互动自然，先继续观察。",
-        "important_memories_daily": fallback_memories,
-    }
-
-
-def _uniq_append(old_items: list[str], new_items: list[str]) -> list[str]:
-    merged: list[str] = []
-    for item in old_items + new_items:
-        item_clean = str(item).strip()
-        if item_clean and item_clean not in merged:
-            merged.append(item_clean)
-    return merged
-
-
-def _merge_relationships(
-    existing: list[dict[str, Any]],
-    today_rows: list[dict[str, Any]],
-    day: str,
-) -> list[dict[str, Any]]:
-    merged = [row for row in existing if isinstance(row, dict)]
-    index_by_target: dict[str, int] = {
-        str(row.get("target_user_id")): idx
-        for idx, row in enumerate(merged)
-        if str(row.get("target_user_id", "")).strip()
-    }
-    for row in today_rows:
-        target = str(row.get("target_user_id", "")).strip()
-        if not target:
-            continue
-        new_row = {
-            "target_user_id": target,
-            "relation": str(row.get("relation", "")).strip(),
-            "evidence": str(row.get("evidence", "")).strip(),
-            "updated_on": day,
-        }
-        if target in index_by_target:
-            merged[index_by_target[target]] = new_row
-        else:
-            merged.append(new_row)
-            index_by_target[target] = len(merged) - 1
-    return merged
-
-
-async def extract_daily_memory_bundle(
-    history_path: Path,
-    soul_path: Path,
-    target_day: str | None = None,
-) -> dict[str, Any]:
-    day = target_day or _today_date_str()
-    history = _load_history(history_path)
-    soul_text = _load_soul_text(history, soul_path)
-    events = _parse_user_events(history)
-
-    if target_day:
-        day_events = [event for event in events if event.get("date") == day]
-    else:
-        day_events = list(events)
-
-    known_user_ids = sorted(
-        {event["user_id"] for event in day_events if event.get("user_id")}
-    )
-
-    day_by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    group_user_map: dict[str, set[str]] = defaultdict(set)
-    for event in day_events:
-        user_id = event["user_id"]
-        day_by_user[user_id].append(event)
-        group_id = event.get("group_id")
-        if group_id:
-            group_user_map[group_id].add(user_id)
-
-    relation_candidates: dict[str, list[str]] = defaultdict(list)
-    for users in group_user_map.values():
-        for user_id in users:
-            relation_candidates[user_id].extend(
-                sorted(uid for uid in users if uid != user_id)
-            )
-    for user_id in relation_candidates:
-        relation_candidates[user_id] = sorted(set(relation_candidates[user_id]))
-
-    diary_payload = await _extract_daily_diary_async(
-        soul_text=soul_text,
-        day=day,
-        day_events=day_events,
-    )
-
-    user_daily_updates: dict[str, dict[str, Any]] = {}
-    for user_id in known_user_ids:
-        user_daily_updates[user_id] = await _extract_user_daily_update(
-            user_id=user_id,
-            soul_text=soul_text,
-            day=day,
-            user_day_events=day_by_user.get(user_id, []),
-            relation_candidates=relation_candidates.get(user_id, []),
-        )
-
-    return {
-        "date": day,
-        "events_count": len(day_events),
-        "known_user_ids": known_user_ids,
-        "day_events": day_events,
-        "diary_payload": diary_payload,
-        "user_daily_updates": user_daily_updates,
-    }
-
-
-def apply_daily_memory_bundle(
-    bundle: dict[str, Any],
-    *,
-    diary_dir: Path,
-    impression_dir: Path,
-) -> dict[str, Any]:
-    day = str(bundle.get("date") or _today_date_str())
-    known_user_ids = [str(item) for item in (bundle.get("known_user_ids") or [])]
-    updates = bundle.get("user_daily_updates") or {}
-    diary_payload = bundle.get("diary_payload") or {}
-
-    impression_count = 0
-    impression_dir.mkdir(parents=True, exist_ok=True)
-
-    for user_id in known_user_ids:
-        update = updates.get(user_id) or {}
-        path = impression_dir / f"{user_id}.json"
-        current = _load_json(path, {})
-        important = current.get("important_info") or {}
-
-        new_important = {
-            "names": _uniq_append(
-                important.get("names", []),
-                (update.get("important_info_append") or {}).get("names", []),
-            ),
-            "basic_info": _uniq_append(
-                important.get("basic_info", []),
-                (update.get("important_info_append") or {}).get("basic_info", []),
-            ),
-            "nicknames": _uniq_append(
-                important.get("nicknames", []),
-                (update.get("important_info_append") or {}).get("nicknames", []),
-            ),
-            "personality_traits": _uniq_append(
-                important.get("personality_traits", []),
-                (update.get("important_info_append") or {}).get(
-                    "personality_traits", []
-                ),
-            ),
-        }
-
-        old_relations = current.get("relationships", [])
-        today_relations = update.get("relationships_daily", [])
-        merged_relations = _merge_relationships(old_relations, today_relations, day)
-
-        daily_relation_updates = current.get("daily_relationship_updates", [])
-        if today_relations:
-            daily_relation_updates = list(daily_relation_updates) + [
-                {"date": day, "updates": today_relations}
-            ]
-
-        old_memories = current.get("important_memories", [])
-        new_memories = _uniq_append(
-            list(old_memories), list(update.get("important_memories_daily", []))
-        )
-
-        subjective_impression = str(
-            update.get("subjective_impression_daily")
-            or current.get("subjective_impression", "")
-        ).strip()
-
-        payload = {
-            "user_id": user_id,
-            "created_at": current.get("created_at")
-            or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "important_info": new_important,
-            "relationships": merged_relations,
-            "daily_relationship_updates": daily_relation_updates,
-            "subjective_impression": subjective_impression,
-            "important_memories": new_memories,
-            "last_active_date": (
-                day
-                if update.get("important_memories_daily")
-                else current.get("last_active_date")
-            ),
-        }
-        _write_json(path, payload)
-        impression_count += 1
-
-    diary_markdown = _render_diary_markdown(day, diary_payload)
-    diary_json_payload = {
-        "date": day,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "events_count": bundle.get("events_count", 0),
-        "diary": diary_payload,
-    }
-
-    diary_dir.mkdir(parents=True, exist_ok=True)
-    diary_md_path = diary_dir / f"{day}.md"
-    diary_json_path = diary_dir / f"{day}.json"
-    diary_md_path.write_text(diary_markdown, encoding="utf-8")
-    _write_json(diary_json_path, diary_json_payload)
-
-    return {
-        "date": day,
-        "impression_count": impression_count,
-        "diary_path": str(diary_md_path),
-        "diary_json_path": str(diary_json_path),
-    }
-
-
-def _render_diary_markdown(day: str, diary_payload: dict[str, Any]) -> str:
-    title = str(diary_payload.get("title") or f"小光日记 {day}").strip()
-    summary = str(diary_payload.get("summary") or "").strip()
-    mood = str(diary_payload.get("mood") or "平静").strip()
-    mood_reason = str(diary_payload.get("mood_reason") or "").strip()
-    reflection = str(diary_payload.get("reflection") or "").strip()
-    major_events = [
-        str(item).strip()
-        for item in (diary_payload.get("major_events") or [])
-        if str(item).strip()
-    ]
-    important_events = [
-        str(item).strip()
-        for item in (diary_payload.get("important_events") or [])
-        if str(item).strip()
-    ]
-
-    lines = [f"# {title}", "", f"- 日期：{day}", f"- 心情：{mood}"]
-    if mood_reason:
-        lines.append(f"- 心情原因：{mood_reason}")
-    lines.append("")
-
-    if summary:
-        lines.extend(["## 今日概述", "", summary, ""])
-
-    lines.extend(["## 主要事件", ""])
-    if major_events:
-        for item in major_events:
-            lines.append(f"- {item}")
-    else:
-        lines.append("- 今天相对平稳。")
-    lines.append("")
-
-    lines.extend(["## 重要事件", ""])
-    if important_events:
-        for item in important_events:
-            lines.append(f"- {item}")
-    else:
-        lines.append("- 暂无特别重大的事件。")
-    lines.append("")
-
-    lines.extend(["## 自我反思", "", reflection or "继续沉淀记忆，保持真实交流。", ""])
-    return "\n".join(lines)
-
-
-def _archive_history_snapshot(
-    history_path: Path, archive_dir: Path, day: str
-) -> str | None:
-    history = _load_history(history_path)
-    has_chat = any(m.get("role") != "system" for m in history)
-    if not has_chat:
-        return None
-
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = archive_dir / f"{day}.json"
-    if archive_path.exists():
-        suffix = datetime.now().strftime("%H%M%S")
-        archive_path = archive_dir / f"{day}_{suffix}.json"
-    _write_json(archive_path, history)
-    return str(archive_path)
-
-
-def _reset_history_to_system_only(history_path: Path, soul_path: Path) -> None:
-    history = _load_history(history_path)
-    soul_text = _load_soul_text(history, soul_path).strip()
-    if not soul_text:
-        soul_text = "# 灵魂文档\n"
-    _write_json(history_path, [{"role": "system", "content": soul_text}])
-
-
-async def run_diary_job(
-    *,
-    history_path: Path,
-    soul_path: Path,
-    diary_dir: Path,
-    impression_dir: Path,
-    archive_dir: Path,
-    target_day: str | None = None,
-) -> dict[str, Any]:
-    """执行完整日记作业：提取 → 写入 → 归档 → 重置历史。"""
-    bundle = await extract_daily_memory_bundle(
-        history_path=history_path,
-        soul_path=soul_path,
-        target_day=target_day,
-    )
-    result = apply_daily_memory_bundle(
-        bundle,
-        diary_dir=diary_dir,
-        impression_dir=impression_dir,
-    )
-    archive_path = _archive_history_snapshot(history_path, archive_dir, result["date"])
-    _reset_history_to_system_only(history_path, soul_path)
-    result["history_archive_path"] = archive_path
-    result["history_reset"] = True
-    return result
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -661,19 +46,19 @@ async def run_diary_job(
 
 
 class PolarisAgent(Agent):
-    """kernel-α: XiaoGuang-Bot PolarisBot 单体移植节点。
+    """kernel-α:　AuroraBot PolarisAgent
 
-    守护 ``inbox/pending/event_message.received_*.json``，
-    处理 QQ 消息事件：防抖合并 → 脉冲门控 → LLM 回复 → 发送。
+    守护消息事件和自身回复失败事件，
+    处理流程包括：防抖合并 → 脉冲门控 → LLM 回复 → 命令派发
+    与失败后的自恢复重试。
 
     内部维护：
     - history.json 对话历史（asyncio.Lock 保护）
     - 最近消息滑动窗口（按群/私聊分组）
     - 会话版本号（防抖用）
-    - 日记定时调度器（后台 asyncio.Task）
     """
 
-    _default_guards = ["inbox/pending/event_message_received_*.json"]
+    _default_guards = ["inbox/pending/event_*.json"]
 
     def __init__(
         self,
@@ -686,9 +71,6 @@ class PolarisAgent(Agent):
         # ── 数据路径（保留 XiaoGuang-Bot 原始目录结构） ──
         self._history_path = Config.DATA_DIR / "history.json"
         self._soul_path = Config.PROMPTS_DIR / "SOUL.md"
-        self._diary_dir = Config.DATA_DIR / "diary"
-        self._impression_dir = Config.DATA_DIR / "impressions"
-        self._archive_dir = Config.DATA_DIR / "history_archive"
 
         # ── 运行时状态 ──
         self._history_lock = asyncio.Lock()
@@ -701,9 +83,6 @@ class PolarisAgent(Agent):
             lambda: deque()
         )
 
-        # ── 日记调度器 ──
-        self._diary_task: asyncio.Task[None] | None = None
-
         # ── SOUL ──
         self._soul = ""
         self._init_data()
@@ -714,10 +93,6 @@ class PolarisAgent(Agent):
         """初始化 SOUL 与 history.json。"""
         # 加载 SOUL
         self._soul = prompts.SOUL.get_content()
-
-        # 确保目录存在
-        for d in (self._diary_dir, self._impression_dir, self._archive_dir):
-            d.mkdir(parents=True, exist_ok=True)
 
         # 初始化 history.json（空则写入 system 消息）
         self._history_path.parent.mkdir(parents=True, exist_ok=True)
@@ -744,24 +119,13 @@ class PolarisAgent(Agent):
             )
 
     async def run(self) -> None:
-        """启动节点主循环 + 日记后台调度器。"""
-        self._diary_task = asyncio.create_task(self._diary_scheduler_loop())
-        logger.info(
-            "PolarisAgent: 日记调度器已启动, 每日 %02d:%02d 执行",
-            DIARY_RUN_HOUR,
-            DIARY_RUN_MINUTE,
-        )
-        try:
-            await super().run()
-        finally:
-            if self._diary_task is not None:
-                self._diary_task.cancel()
-                self._diary_task = None
+        """启动节点主循环。"""
+        await super().run()
 
     # ── execute ───────────────────────────────────────
 
     async def execute(self) -> list[FileUpdate]:
-        """扫描待处理消息事件，启动防抖→门控→回复流水线。
+        """扫描待处理事件，启动回复流水线或自恢复流程。
 
         处理完成的输入文件移入 done/ 子目录。
         本方法快速返回（仅 spawn 后台任务），不阻塞事件循环。
@@ -770,7 +134,10 @@ class PolarisAgent(Agent):
         if not pending_dir.exists():
             return []
 
-        event_files = sorted(pending_dir.glob("event_message_received_*.json"))
+        event_files = sorted(
+            pending_dir.glob("event_*.json"),
+            key=lambda path: path.name,
+        )
         if not event_files:
             return []
 
@@ -789,76 +156,206 @@ class PolarisAgent(Agent):
                 move_to_done(event_file, done_dir)
                 continue
 
+            event_type = str(data.get("type", "")).strip()
             payload = data.get("payload", {})
             if not isinstance(payload, dict):
                 logger.warning("PolarisAgent: 事件 payload 无效 %s", event_file.name)
                 move_to_done(event_file, done_dir)
                 continue
 
-            text = str(payload.get("text", "")).strip()
-            if not text:
-                logger.debug("PolarisAgent: 事件文本为空 %s", event_file.name)
-                move_to_done(event_file, done_dir)
-                continue
-
-            # ── 校验通过，消费源文件 ──
             move_to_done(event_file, done_dir)
 
-            user_id = str(payload.get("user_id", ""))
-            session_id = str(payload.get("session_id", ""))
-            is_group = bool(payload.get("is_group", False))
-            group_id = str(payload.get("group_id", "")) if is_group else None
+            if event_type == "message.received":
+                self._queue_message_event(payload)
+                continue
 
-            session_key = (
-                f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"
-            )
-
-            logger.info(
-                "PolarisAgent: 收到消息 session=%s user=%s is_group=%s text=%.60s",
-                session_key,
-                user_id,
-                is_group,
-                text,
-            )
-
-            # 构建格式化的历史行（与 XiaoGuang-Bot 完全一致）
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            if is_group and group_id:
-                input_line = (
-                    f"{timestamp} 的时候, {user_id} 在群聊 {group_id} 中说: {text}"
+            if event_type.startswith("agent.reply_"):
+                asyncio.create_task(
+                    self._consume_reply_failure_event(
+                        event_type=event_type,
+                        session_id=str(data.get("session_id", "")),
+                        summary=str(data.get("summary", "")),
+                        payload=payload,
+                    )
                 )
-                scene_name = "群聊"
-            else:
-                input_line = f"{timestamp} 的时候, {user_id} 在与你的私聊中说: {text}"
-                scene_name = "私聊"
+                continue
 
-            # 更新最近消息滑动窗口
-            if is_group:
-                self._append_recent_message(
-                    self._group_recent[int(group_id or 0)], input_line
+            if event_type.startswith("clock."):
+                asyncio.create_task(
+                    self._consume_clock_event(
+                        event_type=event_type,
+                        summary=str(data.get("summary", "")),
+                        payload=payload,
+                    )
                 )
-            else:
-                self._append_recent_message(self._private_recent[user_id], input_line)
+                continue
 
-            # 加入待处理队列并更新版本号
-            entry = {
-                "user_id": user_id,
-                "session_key": session_key,
-                "session_id": session_id,
-                "input_line": input_line,
-                "text": text,
-                "is_group": is_group,
-                "group_id": group_id,
-                "scene_name": scene_name,
-            }
-            self._pending_inputs.setdefault(session_key, []).append(entry)
-            current_version = self._session_versions.get(session_key, 0) + 1
-            self._session_versions[session_key] = current_version
-
-            # 启动防抖任务
-            asyncio.create_task(self._debounce_and_reply(session_key, current_version))
+            logger.debug(
+                "PolarisAgent: 忽略未处理事件 %s (%s)", event_file.name, event_type
+            )
 
         return []
+
+    def _queue_message_event(self, payload: dict[str, Any]) -> None:
+        text = str(payload.get("text", "")).strip()
+        if not text:
+            return
+
+        user_id = str(payload.get("user_id", ""))
+        session_id = str(payload.get("session_id", ""))
+        is_group = bool(payload.get("is_group", False))
+        group_id = str(payload.get("group_id", "")) if is_group else None
+        session_key = self._make_session_key(user_id, is_group, group_id)
+
+        logger.info(
+            "PolarisAgent: 收到消息 session=%s user=%s is_group=%s text=%.60s",
+            session_key,
+            user_id,
+            is_group,
+            text,
+        )
+
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        if is_group and group_id:
+            input_line = f"{timestamp} 的时候, {user_id} 在群聊 {group_id} 中说: {text}"
+            scene_name = "群聊"
+        else:
+            input_line = f"{timestamp} 的时候, {user_id} 在与你的私聊中说: {text}"
+            scene_name = "私聊"
+
+        if is_group:
+            self._append_recent_message(
+                self._group_recent[int(group_id or 0)], input_line
+            )
+        else:
+            self._append_recent_message(self._private_recent[user_id], input_line)
+
+        entry = {
+            "user_id": user_id,
+            "session_key": session_key,
+            "session_id": session_id,
+            "input_line": input_line,
+            "text": text,
+            "is_group": is_group,
+            "group_id": group_id,
+            "scene_name": scene_name,
+        }
+        self._pending_inputs.setdefault(session_key, []).append(entry)
+        current_version = self._session_versions.get(session_key, 0) + 1
+        self._session_versions[session_key] = current_version
+        asyncio.create_task(self._debounce_and_reply(session_key, current_version))
+
+    async def _consume_reply_failure_event(
+        self,
+        *,
+        event_type: str,
+        session_id: str,
+        summary: str,
+        payload: dict[str, Any],
+    ) -> None:
+        scene_info = payload.get("scene_info", {})
+        if not isinstance(scene_info, dict):
+            logger.warning("PolarisAgent: 回复失败事件缺少 scene_info")
+            return
+
+        merged_input = str(payload.get("merged_input", "")).strip()
+        if not merged_input:
+            logger.warning("PolarisAgent: 回复失败事件缺少 merged_input")
+            return
+
+        user_id = str(scene_info.get("user_id", "")).strip()
+        if not user_id:
+            logger.warning("PolarisAgent: 回复失败事件缺少 user_id")
+            return
+
+        is_group = bool(scene_info.get("is_group", False))
+        group_id = str(scene_info.get("group_id", "")) if is_group else None
+        session_key = str(
+            payload.get("session_key", "")
+        ).strip() or self._make_session_key(
+            user_id,
+            is_group,
+            group_id,
+        )
+        event_session_id = session_id or str(scene_info.get("session_id", ""))
+        recovery_depth = self._coerce_int(payload.get("recovery_depth"), default=0)
+        if recovery_depth >= MAX_SELF_RECOVERY_ATTEMPTS:
+            logger.warning(
+                "PolarisAgent: 自恢复次数已达上限，放弃继续恢复 session=%s type=%s",
+                session_key,
+                event_type,
+            )
+            return
+
+        expected_version = self._coerce_int(payload.get("version"), default=0)
+        current_version = self._session_versions.get(session_key)
+        if (
+            expected_version > 0
+            and current_version is not None
+            and current_version != expected_version
+        ):
+            logger.info(
+                "PolarisAgent: 回复失败事件已过期，跳过恢复 session=%s expected=%s current=%s",
+                session_key,
+                expected_version,
+                current_version,
+            )
+            return
+
+        logger.info(
+            "PolarisAgent: 自恢复回复失败事件 session=%s type=%s depth=%d",
+            session_key,
+            event_type,
+            recovery_depth + 1,
+        )
+        await self._run_reply_pipeline(
+            user_id=user_id,
+            session_key=session_key,
+            session_id=event_session_id,
+            merged_input=merged_input,
+            scene_info=scene_info,
+            version=expected_version,
+            append_user=False,
+            recovery_depth=recovery_depth + 1,
+            recovery_note=self._build_recovery_note(event_type, summary, payload),
+        )
+
+    async def _consume_clock_event(
+        self,
+        *,
+        event_type: str,
+        summary: str,
+        payload: dict[str, Any],
+    ) -> None:
+        kind = str(payload.get("kind", ""))
+        message = str(payload.get("message", summary)).strip()
+        kind_label = "闹钟" if kind == "alarm" else "计时器"
+
+        synthetic_input = f"[系统通知] 你的{kind_label}响了: {message}"
+
+        logger.info(
+            "PolarisAgent: 收到时钟事件 %s message=%s",
+            event_type,
+            message,
+        )
+
+        scene_info: dict[str, Any] = {
+            "session_id": "",
+            "is_group": False,
+            "group_id": None,
+            "user_id": "system",
+            "scene_name": "系统通知",
+        }
+        await self._run_reply_pipeline(
+            user_id="system",
+            session_key="system:clock",
+            session_id="",
+            merged_input=synthetic_input,
+            scene_info=scene_info,
+            version=0,
+            append_user=False,
+            recovery_depth=0,
+        )
 
     # ── 防抖与回复 ────────────────────────────────────
 
@@ -910,74 +407,25 @@ class PolarisAgent(Agent):
 
         logger.info("PolarisAgent: 脉冲门控通过 → LLM 回复生成")
 
-        # ── LLM 回复生成 ──
-        try:
-            response = await self._generate_reply(user_id, merged_input)
-        except Exception:
-            logger.exception("PolarisAgent LLM 回复生成失败")
-            return
+        # ── 构建场景信息 ──
+        scene_info: dict[str, Any] = {
+            "session_id": session_id,
+            "is_group": is_group,
+            "group_id": group_id,
+            "user_id": user_id,
+            "scene_name": scene_name,
+        }
 
-        logger.info(
-            "PolarisAgent: LLM 回复生成完成 len=%d preview=%.80s",
-            len(response),
-            response,
+        await self._run_reply_pipeline(
+            user_id=user_id,
+            session_key=session_key,
+            session_id=session_id,
+            merged_input=merged_input,
+            scene_info=scene_info,
+            version=version,
+            append_user=True,
+            recovery_depth=0,
         )
-
-        if self._session_versions.get(session_key) != version:
-            logger.debug("PolarisAgent: 发送前版本已变更，丢弃回复")
-            return  # 发送前再次检查版本
-
-        # ── 分条发送 ──
-        msgs = [
-            segment.strip()
-            for segment in re.split(r"[|｜]", response)
-            if segment.strip()
-        ]
-        if not msgs:
-            msgs = [response.strip()]
-
-        fully_sent = True
-        for msg in msgs:
-            if self._session_versions.get(session_key) != version:
-                fully_sent = False
-                break
-            if not msg.strip() or msg.strip() in SILENT_REPLY_TEXTS:
-                continue
-
-            # 模拟打字延迟
-            delay = min(1.8, max(0.25, len(msg) * 0.06))
-            await asyncio.sleep(delay)
-
-            if self._session_versions.get(session_key) != version:
-                fully_sent = False
-                break
-
-            try:
-                if self._host is not None:
-                    await self._host.invoke_command(
-                        "im.polaris.qq.send_qq_message",
-                        session_id=session_id,
-                        text=msg,
-                    )
-                    logger.info(
-                        "PolarisAgent: 已发送片段 len=%d session=%s",
-                        len(msg),
-                        session_id,
-                    )
-                else:
-                    logger.warning("PolarisAgent: host 未注入, 无法发送消息")
-            except Exception:
-                logger.exception("PolarisAgent 发送消息失败")
-
-        # 完整发送后写入 assistant 历史
-        if fully_sent:
-            await self._append_assistant_message(response)
-            logger.info(
-                "PolarisAgent: 回复已完成 session=%s user=%s total_len=%d",
-                session_key,
-                user_id,
-                len(response),
-            )
 
     # ── 脉冲门控 ──────────────────────────────────────
 
@@ -994,11 +442,12 @@ class PolarisAgent(Agent):
             {"role": "system", "content": IMPULSE_GATE_PROMPT},
             {
                 "role": "user",
-                "content": (
-                    f"人格文档：\n{self._soul}\n\n"
-                    f"{scene_name}最近{RECENT_MESSAGE_LIMIT}分钟消息：\n{recent_text}\n\n"
-                    f"当前用户连续输入合并后内容：\n{merged_input}\n\n"
-                    "此刻是否要完整回复？请仅输出：是 或 否。"
+                "content": prompts.IMPULSE_GATE_USER.fill(
+                    soul=self._soul,
+                    scene_name=scene_name,
+                    recent_limit=str(RECENT_MESSAGE_LIMIT),
+                    recent_text=recent_text,
+                    merged_input=merged_input,
                 ),
             },
         ]
@@ -1031,25 +480,209 @@ class PolarisAgent(Agent):
 
     # ── LLM 回复生成 ──────────────────────────────────
 
-    async def _generate_reply(self, user_id: str, merged_input: str) -> str:
-        """构建记忆上下文 + 对话历史，调用 LLM 生成回复。"""
-        # 先写用户消息到历史
-        messages = await self._append_user_message(user_id, merged_input)
-
-        # 构建记忆上下文（日记 + 印象）
-        memory_context = self._build_memory_context(user_id)
-
-        # 注入记忆上下文到消息列表
-        if messages:
-            messages = (
-                messages[:1]
-                + [{"role": "system", "content": memory_context}]
-                + messages[1:]
+    async def _run_reply_pipeline(
+        self,
+        *,
+        user_id: str,
+        session_key: str,
+        session_id: str,
+        merged_input: str,
+        scene_info: dict[str, Any],
+        version: int,
+        append_user: bool,
+        recovery_depth: int,
+        recovery_note: str = "",
+    ) -> None:
+        try:
+            raw_response = await self._generate_reply(
+                user_id,
+                merged_input,
+                scene_info,
+                append_user=append_user,
+                recovery_note=recovery_note,
             )
-        else:
-            messages = [{"role": "system", "content": memory_context}]
+        except Exception:
+            logger.exception("PolarisAgent LLM 回复生成失败")
+            await self._emit_inbox_event(
+                event_type="agent.reply_generation_failed",
+                session_id=session_id,
+                summary="LLM 回复生成失败",
+                payload={
+                    "agent_id": self.id,
+                    "session_key": session_key,
+                    "scene_info": scene_info,
+                    "merged_input": merged_input,
+                    "version": version,
+                    "recovery_depth": recovery_depth,
+                },
+            )
+            return
 
-        response = await llm_chat(messages, max_tokens=512)
+        logger.info(
+            "PolarisAgent: LLM 回复生成完成 len=%d preview=%.80s",
+            len(raw_response),
+            raw_response,
+        )
+
+        parsed: dict[str, Any] | None = None
+        try:
+            parsed = safe_parse_json_object(raw_response)
+            if not isinstance(parsed, dict):
+                parsed = None
+        except (ValueError, json.JSONDecodeError):
+            pass
+
+        if parsed is None:
+            event_type = (
+                "agent.reply_parse_failed"
+                if raw_response.strip()
+                else "agent.reply_empty"
+            )
+            summary = (
+                "LLM 输出无法解析为结构化动作"
+                if raw_response.strip()
+                else "LLM 返回空响应"
+            )
+            logger.warning("PolarisAgent: %s session=%s", summary, session_key)
+            await self._emit_inbox_event(
+                event_type=event_type,
+                session_id=session_id,
+                summary=summary,
+                payload={
+                    "agent_id": self.id,
+                    "session_key": session_key,
+                    "scene_info": scene_info,
+                    "merged_input": merged_input,
+                    "raw_response": raw_response,
+                    "version": version,
+                    "recovery_depth": recovery_depth,
+                },
+            )
+            return
+
+        thought = str(parsed.get("thought", "")).strip()
+        actions = parsed.get("actions", [])
+        if not isinstance(actions, list):
+            actions = []
+
+        logger.info("PolarisAgent: 思考: %.120s", thought)
+
+        if not actions:
+            logger.info(
+                "PolarisAgent: LLM 决定不执行任何动作 (session=%s)", session_key
+            )
+            return
+
+        if version > 0 and self._session_versions.get(session_key) != version:
+            logger.debug("PolarisAgent: 发送前版本已变更，丢弃回复")
+            return
+
+        dispatched_count = 0
+        invalid_action_count = 0
+        for action in actions:
+            if not isinstance(action, dict):
+                invalid_action_count += 1
+                continue
+            command = str(action.get("command") or action.get("cmd") or "").strip()
+            params = action.get("params", {})
+            if not isinstance(params, dict):
+                params = {}
+            if not command:
+                invalid_action_count += 1
+                continue
+
+            if version > 0 and self._session_versions.get(session_key) != version:
+                break
+
+            text_content = str(params.get("text", ""))
+            if text_content.strip():
+                delay = min(1.8, max(0.25, len(text_content) * 0.06))
+                await asyncio.sleep(delay)
+
+            if version > 0 and self._session_versions.get(session_key) != version:
+                break
+
+            try:
+                if self._host is not None:
+                    result = await self._host.invoke_command(command, **params)
+                    dispatched_count += 1
+                    logger.info(
+                        "PolarisAgent: 已执行命令 %s params=%s result=%s",
+                        command,
+                        {k: str(v)[:80] for k, v in params.items()},
+                        str(result)[:120],
+                    )
+                else:
+                    logger.warning(
+                        "PolarisAgent: host 未注入, 无法执行命令 %s", command
+                    )
+            except Exception:
+                logger.exception("PolarisAgent 执行命令 %s 失败", command)
+
+        if dispatched_count == 0 and actions:
+            logger.warning(
+                "PolarisAgent: actions 中没有可执行命令 session=%s invalid=%d total=%d",
+                session_key,
+                invalid_action_count,
+                len(actions),
+            )
+
+        if dispatched_count > 0:
+            await self._append_assistant_message(raw_response)
+            logger.info(
+                "PolarisAgent: 回复已完成 session=%s user=%s actions=%d",
+                session_key,
+                user_id,
+                dispatched_count,
+            )
+
+    async def _generate_reply(
+        self,
+        user_id: str,
+        merged_input: str,
+        scene_info: dict[str, Any],
+        *,
+        append_user: bool = True,
+        recovery_note: str = "",
+    ) -> str:
+        """构建记忆 + 命令 + 场景上下文，调用 LLM 生成结构化回复。"""
+        if append_user:
+            messages = await self._append_user_message(user_id, merged_input)
+        else:
+            messages = await self._get_recent_history_messages()
+            if not messages or messages[-1].get("role") != "user":
+                messages.append(
+                    {
+                        "role": "user",
+                        "name": str(user_id),
+                        "content": merged_input,
+                    }
+                )
+
+        if messages and messages[0].get("role") == "system":
+            messages = messages[1:]
+
+        memory_context = self._build_memory_context(user_id)
+        commands_context = self._build_commands_context()
+        scene_context = self._build_scene_context(scene_info, strict=True)
+
+        reply_output_prompt = prompts.REPLY_OUTPUT_STRICT.fill(
+            commands=commands_context,
+        )
+
+        if messages and messages[-1]["role"] == "user":
+            messages[-1]["content"] = scene_context + "\n\n" + messages[-1]["content"]
+
+        system_messages = [
+            {"role": "system", "content": memory_context},
+            {"role": "system", "content": reply_output_prompt},
+        ]
+        if recovery_note:
+            system_messages.append({"role": "system", "content": recovery_note})
+
+        messages = system_messages + messages
+
+        response = await llm_chat(messages, max_tokens=1024, temperature=0.0)
         return (response or "").strip()
 
     # ── 对话历史管理 ──────────────────────────────────
@@ -1093,6 +726,13 @@ class PolarisAgent(Agent):
             history.append({"role": "assistant", "content": content})
             self._write_history(history)
 
+    async def _get_recent_history_messages(self) -> list[dict[str, Any]]:
+        """读取最近窗口内的历史消息，但不追加新的用户消息。"""
+        async with self._history_lock:
+            history = self._read_history()
+            recent_start = max(1, len(history) - MESSAGE_WINDOW)
+            return history[:1] + history[recent_start:]
+
     def _read_history(self) -> list[dict[str, Any]]:
         """读取 history.json（调用方需持有 _history_lock）。"""
         try:
@@ -1114,6 +754,72 @@ class PolarisAgent(Agent):
             encoding="utf-8",
         )
 
+    async def _emit_inbox_event(
+        self,
+        event_type: str,
+        *,
+        session_id: str = "",
+        summary: str = "",
+        payload: dict[str, Any] | None = None,
+    ) -> str:
+        """把智能体内部异常转成 inbox 事件，而不是在程序内静默降级。"""
+        safe_type = str(event_type).replace(".", "_").replace("/", "_")
+        event_id = next_record_id("evt")
+        relative_path = f"inbox/pending/event_{safe_type}_{event_id}.json"
+        event = {
+            "source": self.id,
+            "type": event_type,
+            "session_id": session_id,
+            "summary": summary,
+            "payload": payload or {},
+            "expire_at": None,
+            "id": event_id,
+            "created_at": now_text(),
+        }
+        update = FileUpdate(
+            descriptor=FileDescriptor(path=relative_path, schema="json"),
+            content=event,
+        )
+        if self._bus is not None:
+            await self._bus.apply_update(update, self.id)
+        else:
+            event_path = kernel_data_dir / relative_path
+            event_path.parent.mkdir(parents=True, exist_ok=True)
+            event_path.write_text(
+                json.dumps(event, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        logger.info("PolarisAgent: 已写入 inbox 事件 %s", relative_path)
+        return relative_path
+
+    @staticmethod
+    def _make_session_key(user_id: str, is_group: bool, group_id: str | None) -> str:
+        return f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"
+
+    @staticmethod
+    def _coerce_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _build_recovery_note(
+        self,
+        event_type: str,
+        summary: str,
+        payload: dict[str, Any],
+    ) -> str:
+        raw_response = str(payload.get("raw_response", "")).strip()
+        lines = [
+            "你正在修复自己上一轮的结构化输出失败。",
+            f"失败类型: {event_type}",
+            f"失败摘要: {summary or '无'}",
+            "要求: 忽略口癖、寒暄冲动和人格表演，不要解释失败过程，直接重新给出严格 JSON 动作结果。",
+        ]
+        if raw_response:
+            lines.append(f"上一轮错误输出: {raw_response}")
+        return "\n".join(lines)
+
     # ── 记忆上下文 ─────────────────────────────────────
 
     def _build_memory_context(self, current_user_id: str) -> str:
@@ -1133,43 +839,67 @@ class PolarisAgent(Agent):
         else:
             impression_block = "{}"
 
-        return (
-            "以下是长期记忆上下文，请在回复时参考：\n\n"
-            "【前两天日记】\n"
-            f"{diary_block}\n\n"
-            "【所有人际关系印象 JSON】\n"
-            f"{impression_block}"
+        return prompts.MEMORY_CONTEXT.fill(
+            diary_block=diary_block,
+            impression_block=impression_block,
+        )
+
+    def _build_commands_context(self) -> str:
+        if self._host is None:
+            return "无可用命令"
+        lines: list[str] = []
+        for spec in self._host.list_command_specs():
+            lines.append(f"### {spec.name}")
+            lines.append(f"{spec.description}")
+            params = spec.parameters_schema.get("properties", {})
+            required = spec.parameters_schema.get("required", [])
+            if params:
+                lines.append("参数：")
+                for pname, pschema in params.items():
+                    req_mark = " (必填)" if pname in required else ""
+                    ptype = pschema.get("type", "string")
+                    pdesc = pschema.get("description", "")
+                    lines.append(f"  {pname}: {ptype}{req_mark}  {pdesc}")
+            lines.append("")
+        return "\n".join(lines) if lines else "无可用命令"
+
+    def _build_scene_context(
+        self,
+        scene_info: dict[str, Any],
+        *,
+        strict: bool = False,
+    ) -> str:
+        is_group = scene_info.get("is_group", False)
+        prompt = prompts.REPLY_SCENE_STRICT if strict else prompts.REPLY_SCENE
+        return prompt.fill(
+            scene_type="群聊" if is_group else "私聊",
+            session_id=str(scene_info.get("session_id", "")),
+            user_id=str(scene_info.get("user_id", "")),
+            group_id=str(scene_info.get("group_id") or "无"),
         )
 
     def _load_previous_two_diaries(self) -> list[dict[str, str]]:
+        diary_dir = Config.DATA_DIR / "app_data" / "im_polaris_diary" / "diaries"
         diaries: list[dict[str, str]] = []
         for days_ago in (1, 2):
             target_date = (datetime.now() - timedelta(days=days_ago)).strftime(
                 "%Y-%m-%d"
             )
-            json_path = self._diary_dir / f"{target_date}.json"
-            md_path = self._diary_dir / f"{target_date}.md"
-
+            json_path = diary_dir / f"{target_date}.json"
             if json_path.exists():
                 try:
                     content = json_path.read_text(encoding="utf-8")
-                    diaries.append({"date": target_date, "content": content})
-                    continue
-                except OSError:
-                    pass
-            if md_path.exists():
-                try:
-                    content = md_path.read_text(encoding="utf-8")
                     diaries.append({"date": target_date, "content": content})
                 except OSError:
                     pass
         return diaries
 
     def _load_all_impressions(self) -> dict[str, Any]:
+        impression_dir = Config.DATA_DIR / "impressions"
         payload: dict[str, Any] = {}
-        if not self._impression_dir.exists():
+        if not impression_dir.exists():
             return payload
-        for path in sorted(self._impression_dir.glob("*.json")):
+        for path in sorted(impression_dir.glob("*.json")):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     payload[path.stem] = json.load(f)
@@ -1242,50 +972,3 @@ class PolarisAgent(Agent):
     def _get_recent_lines(self, recent: deque[tuple[float, str]]) -> list[str]:
         self._prune_recent_messages(recent)
         return [line for _, line in recent]
-
-    # ── 日记定时调度 ──────────────────────────────────
-
-    @staticmethod
-    def _seconds_until_next_diary_run() -> float:
-        now = datetime.now()
-        next_run = now.replace(
-            hour=DIARY_RUN_HOUR,
-            minute=DIARY_RUN_MINUTE,
-            second=0,
-            microsecond=0,
-        )
-        if next_run <= now:
-            next_run += timedelta(days=1)
-        return (next_run - now).total_seconds()
-
-    async def _diary_scheduler_loop(self) -> None:
-        """后台循环：每天定时执行日记作业。"""
-        while True:
-            wait_seconds = self._seconds_until_next_diary_run()
-            logger.info(
-                "PolarisAgent: 日记调度器等待 %.0f 秒 (下次 %02d:%02d)",
-                wait_seconds,
-                DIARY_RUN_HOUR,
-                DIARY_RUN_MINUTE,
-            )
-            await asyncio.sleep(wait_seconds)
-
-            try:
-                result = await run_diary_job(
-                    history_path=self._history_path,
-                    soul_path=self._soul_path,
-                    diary_dir=self._diary_dir,
-                    impression_dir=self._impression_dir,
-                    archive_dir=self._archive_dir,
-                )
-                logger.info(
-                    "PolarisAgent: 日记作业完成 date=%s impressions=%s path=%s",
-                    result.get("date"),
-                    result.get("impression_count"),
-                    result.get("diary_path"),
-                )
-            except Exception:
-                logger.exception("PolarisAgent: 日记作业失败")
-
-            # 短暂休眠避免秒级重复触发
-            await asyncio.sleep(60)
