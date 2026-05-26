@@ -40,7 +40,7 @@ DIARY_RUN_HOUR = 23
 DIARY_RUN_MINUTE = 20
 
 # 脉冲门控系统提示词
-IMPULSE_GATE_PROMPT = prompts.IMPULSE_GATE
+IMPULSE_GATE_PROMPT = prompts.IMPULSE_GATE.get_content()
 
 # 静默回复文本（命中后不发送）
 SILENT_REPLY_TEXTS = {"（与我无关，不回）"}
@@ -713,7 +713,7 @@ class PolarisAgent(Agent):
     def _init_data(self) -> None:
         """初始化 SOUL 与 history.json。"""
         # 加载 SOUL
-        self._soul = prompts.SOUL
+        self._soul = prompts.SOUL.get_content()
 
         # 确保目录存在
         for d in (self._diary_dir, self._impression_dir, self._archive_dir):
