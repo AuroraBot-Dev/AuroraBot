@@ -1004,15 +1004,15 @@ class PolarisAgent(Agent):
         ]
 
         try:
-            response = await llm_chat(messages, max_tokens=64, temperature=0.0)
+            response = await llm_chat(messages, max_tokens=512, temperature=0.0)
         except Exception:
             logger.exception("PolarisAgent 脉冲门控 LLM 调用失败，默认不回复")
             return False
 
-        # 空响应兜底：模型返回空时放行回复（避免门控故障导致永远静默）
+        # 空响应兜底：模型返回空时默认不回复（避免无节制搭话）
         if not response or not response.strip():
-            logger.warning("PolarisAgent: 脉冲门控 LLM 返回空响应，默认放行回复")
-            return True
+            logger.warning("PolarisAgent: 脉冲门控 LLM 返回空响应，默认不回复")
+            return False
 
         return self._parse_yes_no(response)
 
