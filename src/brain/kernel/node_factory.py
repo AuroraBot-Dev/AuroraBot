@@ -17,54 +17,23 @@ if TYPE_CHECKING:
 logger = get_logger("NodeFactory")
 
 # 节点注册表 —— 新节点加在这里
+# kernel-α: 仅注册 PolarisAgent，旧节点类暂存于 nodes-beta
 NODE_REGISTRY: dict[str, type[Node]] = {
-    "planner": PlanAgent,
-    "expander": ExpandAgent,
-    "executor": ExecuteAgent,
-    "fanout": FanOutRouter,
-    "switch": SwitchRouter,
-    "terminal": TerminalRouter,
-    "merge": MergeRouter,
-    "heartbeat": HeartbeatRouter,
-    "goal_generator": GoalGeneratorAgent,
-    "reflex": ReflexRouter,
-    "reflex_learner": ReflexLearnerAgent,
-    "memory": MemoryRouter,
+    "polaris": PolarisAgent,
 }
 
 # 节点构造时是否需要 host 引用（按 type 判断）
 NODE_NEEDS_HOST: frozenset[str] = frozenset(
     {
-        "expander",
-        "executor",
-        "example",
+        "polaris",
     }
 )
 
 # 节点构造时是否接收 **config 参数（按 type 判断）
-NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset(
-    {
-        "fanout",
-        "switch",
-        "terminal",
-        "merge",
-        "heartbeat",
-        "goal_generator",
-        "reflex",
-        "reflex_learner",
-        "memory",
-    }
-)
+NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset()
 
 # 节点构造时是否注入 UnifiedMemoryManager（按 type 判断）
-NODE_NEEDS_MEMORY: frozenset[str] = frozenset(
-    {
-        "memory",
-        "planner",
-        "expander",
-        "executor",
-    }
-)
+NODE_NEEDS_MEMORY: frozenset[str] = frozenset()
 
 
 # ── 拓扑配置加载 ──────────────────────────────────

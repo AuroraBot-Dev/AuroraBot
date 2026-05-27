@@ -52,6 +52,7 @@ class Config:
     CAPABILITY_LOG_EXECUTION: bool = _get_bool("CAPABILITY_LOG_EXECUTION", False)
 
     # 核心配置
+    DEVELOPER_QQ: str = os.getenv("DEVELOPER_QQ", "10001")
     RUN_MODE: str = os.getenv("RUN_MODE", "prod")
     HEARTBEAT_INTERVAL: float = float(os.getenv("HEARTBEAT_INTERVAL", "1.0"))
     APP_FRAME_INTERVAL: float = float(os.getenv("APP_FRAME_INTERVAL", "1.0"))
@@ -83,7 +84,7 @@ class Config:
         ):
             path.mkdir(parents=True, exist_ok=True)
 
-    #记忆配置
+    # 记忆配置
     MEM0_VECTOR_STORE: str = os.getenv("MEM0_VECTOR_STORE", "chroma")
     MEM0_COLLECTION_NAME: str = os.getenv("MEM0_COLLECTION_NAME", "aurora_memory_bgem3")
     MEM0_STORE_PATH: Path = MEMORY_DATA_DIR / "mem0"
@@ -100,5 +101,6 @@ class Config:
     MEM0_LLM_API_KEY: str = os.getenv("MEM0_LLM_API_KEY", DEEPSEEK_API_KEY)
     MEM0_LLM_BASE_URL: str = os.getenv("MEM0_LLM_BASE_URL", "https://api.deepseek.com")
     MEM0_LLM_MODEL: str = os.getenv("MEM0_LLM_MODEL", "deepseek-chat")
+
 
 Config.ensure_dirs()

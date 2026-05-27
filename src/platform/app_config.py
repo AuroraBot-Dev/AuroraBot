@@ -16,13 +16,23 @@ from src.utils.log_utils import get_logger
 logger = get_logger("AppConfig")
 
 
+def _resolve_config_path() -> Path:
+    yml_path = Config.APP_DIR / "config.yml"
+    yaml_path = Config.APP_DIR / "config.yaml"
+    if yml_path.exists():
+        return yml_path
+    if yaml_path.exists():
+        return yaml_path
+    return yml_path
+
+
 def app_config_path() -> Path:
-    return Config.APP_DIR / "config.yaml"
+    return _resolve_config_path()
 
 
 # 加载应用配置
 def load_apps_config(path: Path | None = None) -> dict[str, dict[str, Any]]:
-    config_path = path or app_config_path()
+    config_path = path or _resolve_config_path()
     discovered = discover_apps()
 
     # 当配置文件不存在时, 根据发现的应用生成初始化配置

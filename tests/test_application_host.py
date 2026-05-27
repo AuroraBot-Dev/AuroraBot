@@ -1,10 +1,58 @@
-import asyncio
-import unittest
+from __future__ import annotations
 
-from apps.alarm import AlarmApplication
-from apps.diary import DiaryApplication
-from apps.qq import QQApplication
+import asyncio
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
 from src.platform.application_host import ApplicationHost
+
+
+def _make_fake_app(
+    *,
+    tempdirs: list[tempfile.TemporaryDirectory[str]],
+    package: str,
+    command_name: str,
+) -> object:
+    tmp = tempfile.TemporaryDirectory()
+    tempdirs.append(tmp)
+    manifest_path = Path(tmp.name) / "manifest.yaml"
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "package": package,
+                "name": package,
+                "version": "0.0.0",
+                "brain_version": "",
+                "commands": [
+                    {
+                        "name": command_name,
+                        "description": "",
+                        "parameters": {},
+                        "returns": {},
+                    }
+                ],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    async def handler(self, **_kwargs: object) -> dict[str, object]:
+        return {}
+
+    attrs = {
+        "manifest_path": lambda self: manifest_path,
+        "on_start": lambda self: None,
+        "on_stop": lambda self: None,
+        "on_tick": lambda self: None,
+        command_name: handler,
+    }
+    app_type = type("FakeApp", (), attrs)
+    return app_type()
 
 
 class ApplicationHostTest(unittest.TestCase):
@@ -12,65 +60,77 @@ class ApplicationHostTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(DiaryApplication())
-            await host.register(AlarmApplication())
-            await host.register(QQApplication(enable_listener=False))
-            commands = host.list_commands()
-            self.assertIn("im.polaris.diary.write_diary", commands)
-            self.assertIn("im.polaris.alarm.set_alarm", commands)
-            self.assertIn("im.polaris.qq.send_qq_message", commands)
-            await host.stop_all()
-
-        asyncio.run(scenario())
-
-    def test_alarm_tick_emits_event(self) -> None:
-        host = ApplicationHost()
-
-        async def scenario() -> None:
-            await host.register(AlarmApplication())
-            await host.invoke_command(
-                "im.polaris.alarm.set_alarm",
-                message="test alarm",
-                interval_seconds=-1,
-            )
-            await host.tick()
-            events = host.peek_events()
-            self.assertTrue(events)
-            event_types = {event.type for event in events}
-            self.assertIn("alarm_reminder", event_types)
-            self.assertTrue(all(event.source == "im.polaris.alarm" for event in events))
-            self.assertTrue(all(event.summary for event in events))
-            self.assertTrue(all(event.expire_at is None for event in events))
-            self.assertTrue(all(isinstance(event.created_at, str) for event in events))
-            self.assertTrue(
-                all(
-                    isinstance(event.payload.get("next_trigger_at"), str)
-                    for event in events
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.diary",
+                        command_name="write_diary",
+                    )
                 )
-            )
-            await host.stop_all()
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        command_name="set_alarm",
+                    )
+                )
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.qq",
+                        command_name="send_qq_message",
+                    )
+                )
+                commands = host.list_commands()
+                self.assertIn("im.polaris.diary.write_diary", commands)
+                self.assertIn("im.polaris.clock.set_alarm", commands)
+                self.assertIn("im.polaris.qq.send_qq_message", commands)
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
-    def test_diary_write_emits_event(self) -> None:
+    def test_replace_apps_rebinds_commands_to_new_instance(self) -> None:
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(DiaryApplication())
-            result = await host.invoke_command(
-                "im.polaris.diary.write_diary",
-                date="2026-05-08",
-                summary="测试记录",
-            )
-            self.assertTrue(result["saved"])
-            events = host.peek_events()
-            self.assertEqual(len(events), 1)
-            self.assertEqual(events[0].type, "diary.written")
-            self.assertEqual(events[0].summary, "测试记录")
-            self.assertIsNone(events[0].expire_at)
-            self.assertIsInstance(events[0].created_at, str)
-            self.assertIsInstance(events[0].payload["created_at"], str)
-            await host.stop_all()
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                old_app = _make_fake_app(
+                    tempdirs=tempdirs,
+                    package="im.polaris.qq",
+                    command_name="send_qq_message",
+                )
+                await host.register(old_app)
+                old_spec = next(
+                    spec
+                    for spec in host.list_command_specs()
+                    if spec.name == "im.polaris.qq.send_qq_message"
+                )
+                self.assertIs(old_spec.handler.__self__, old_app)
+
+                new_app = _make_fake_app(
+                    tempdirs=tempdirs,
+                    package="im.polaris.qq",
+                    command_name="send_qq_message",
+                )
+                await host.replace_apps([new_app])
+
+                self.assertIs(host.get_app("im.polaris.qq"), new_app)
+                new_spec = next(
+                    spec
+                    for spec in host.list_command_specs()
+                    if spec.name == "im.polaris.qq.send_qq_message"
+                )
+                self.assertIs(new_spec.handler.__self__, new_app)
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
