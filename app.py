@@ -9,29 +9,15 @@ from typing import Any
 
 import yaml
 
+from src.brain.runtime import register_selected_apps
 from src.config import Config
 from src.platform.app_config import enabled_app_names, load_apps_config
-from src.platform.app_discovery import discover_apps, instantiate_app
 from src.platform.application_host import ApplicationHost
 from src.platform.contracts import AppEvent
 
 
 def _build_host() -> ApplicationHost:
     return ApplicationHost()
-
-
-async def _register_selected_apps(
-    host: ApplicationHost,
-    names: list[str],
-    apps_config: dict[str, dict[str, Any]],
-) -> None:
-    for name in names:
-        if name not in discover_apps():
-            raise KeyError(f"Unknown application: {name}")
-        await host.register(
-            instantiate_app(name, apps_config.get(name, {}).get("startup", {}))
-        )
-
 
 def _parse_json(text: str | None) -> dict[str, Any]:
     if not text:
@@ -119,7 +105,7 @@ async def main() -> None:
         args.apps if args.apps is not None else enabled_app_names(apps_config)
     )
     host = _build_host()
-    await _register_selected_apps(host, selected_apps, apps_config)
+    await register_selected_apps(host, selected_apps, apps_config)
 
     try:
         payload = _parse_json(args.payload)
