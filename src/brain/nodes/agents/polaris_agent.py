@@ -582,6 +582,16 @@ class PolarisAgent(Agent):
         text = raw.strip()
         if not text:
             return None
+        if not is_group and session_id == "private:localhost":
+            return {
+                "thought": text,
+                "actions": [
+                    {
+                        "command": "im.polaris.console.send_message",
+                        "params": {"text": text},
+                    }
+                ],
+            }
         if is_group and group_id:
             return {
                 "thought": text,

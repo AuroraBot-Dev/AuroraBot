@@ -1,27 +1,87 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 
-from apps.clock import ClockApplication
-from apps.diary import DiaryApplication
-from apps.qq import QQApplication
+import yaml
+
 from src.platform.application_host import ApplicationHost
 from src.platform.contracts import AppEvent
 
 
-class ApplicationHostExtraTest(unittest.TestCase):
-    """ApplicationHost 边界行为测试。"""
+def _make_fake_app(
+    *,
+    tempdirs: list[tempfile.TemporaryDirectory[str]],
+    package: str,
+    commands: list[str],
+    tick_hook: SimpleNamespace | None = None,
+) -> object:
+    tmp = tempfile.TemporaryDirectory()
+    tempdirs.append(tmp)
+    manifest_path = Path(tmp.name) / "manifest.yaml"
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "package": package,
+                "name": package,
+                "version": "0.0.0",
+                "brain_version": "",
+                "commands": [
+                    {
+                        "name": command_name,
+                        "description": "",
+                        "parameters": {},
+                        "returns": {},
+                    }
+                    for command_name in commands
+                ],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
 
+    async def on_tick() -> None:
+        if tick_hook is not None:
+            tick_hook.calls += 1
+
+    async def handler(**_kwargs: object) -> dict[str, object]:
+        return {}
+
+    return SimpleNamespace(
+        manifest_path=lambda: manifest_path,
+        on_start=lambda: None,
+        on_stop=lambda: None,
+        on_tick=on_tick,
+        **{name: handler for name in commands},
+    )
+
+
+class ApplicationHostExtraTest(unittest.TestCase):
     def test_invoke_unknown_command_raises_keyerror(self) -> None:
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(DiaryApplication())
-            with self.assertRaises(KeyError) as ctx:
-                await host.invoke_command("does.not.exist")
-            self.assertIn("does.not.exist", str(ctx.exception))
-            await host.stop_all()
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.diary",
+                        commands=["write_diary"],
+                    )
+                )
+                with self.assertRaises(KeyError) as ctx:
+                    await host.invoke_command("does.not.exist")
+                self.assertIn("does.not.exist", str(ctx.exception))
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -29,20 +89,13 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(DiaryApplication())
-            await host.invoke_command(
-                "im.polaris.diary.write_diary",
-                date="2026-01-01",
-                content="test",
-            )
-
+            host.emit_event(AppEvent(source="test", type="t1"))
             self.assertEqual(len(host.peek_events()), 1)
 
             drained = host.drain_events()
             self.assertEqual(len(drained), 1)
-            self.assertEqual(drained[0].type, "diary.written")
+            self.assertEqual(drained[0].type, "t1")
 
-            # 排空后队列应为空
             self.assertEqual(len(host.peek_events()), 0)
             self.assertEqual(len(host.drain_events()), 0)
             await host.stop_all()
@@ -53,20 +106,13 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(DiaryApplication())
-            await host.invoke_command(
-                "im.polaris.diary.write_diary", date="2026-01-01", content="a"
-            )
-            await host.invoke_command(
-                "im.polaris.diary.write_diary", date="2026-01-02", content="b"
-            )
-            await host.invoke_command(
-                "im.polaris.diary.write_diary", date="2026-01-03", content="c"
-            )
+            host.emit_event(AppEvent(source="test", type="t1"))
+            host.emit_event(AppEvent(source="test", type="t2"))
+            host.emit_event(AppEvent(source="test", type="t3"))
 
             drained = host.drain_events(limit=2)
             self.assertEqual(len(drained), 2)
-            self.assertEqual(len(host.peek_events()), 1)  # 还剩 1 个
+            self.assertEqual(len(host.peek_events()), 1)
             await host.stop_all()
 
         asyncio.run(scenario())
@@ -75,13 +121,9 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(DiaryApplication())
-            await host.invoke_command(
-                "im.polaris.diary.write_diary", date="2026-01-01", content="x"
-            )
-
+            host.emit_event(AppEvent(source="test", type="t1"))
             self.assertEqual(len(host.peek_events()), 1)
-            self.assertEqual(len(host.peek_events()), 1)  # 第二次 peek 仍在
+            self.assertEqual(len(host.peek_events()), 1)
             await host.stop_all()
 
         asyncio.run(scenario())
@@ -90,18 +132,25 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(ClockApplication())
-            await host.invoke_command(
-                "im.polaris.clock.set_alarm",
-                time_text="2000-01-01 00:00 test",
-            )
-            await host.tick()
-            self.assertGreater(len(host.peek_events()), 0)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        commands=["set_alarm"],
+                    )
+                )
+                host.emit_event(AppEvent(source="test", type="t1"))
+                self.assertGreater(len(host.peek_events()), 0)
 
-            await host.stop_all()
-            self.assertEqual(len(host.list_apps()), 0)
-            self.assertEqual(len(host.list_commands()), 0)
-            self.assertEqual(len(host.peek_events()), 0)
+                await host.stop_all()
+                self.assertEqual(len(host.list_apps()), 0)
+                self.assertEqual(len(host.list_commands()), 0)
+                self.assertEqual(len(host.peek_events()), 0)
+            finally:
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -109,14 +158,30 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(ClockApplication())
-            commands_before = host.list_commands()
-            cmd_count = len(commands_before)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        commands=["set_alarm"],
+                    )
+                )
+                commands_before = host.list_commands()
 
-            await host.register(ClockApplication())  # 重复注册应被忽略
-            commands_after = host.list_commands()
-            self.assertEqual(len(commands_after), cmd_count)
-            await host.stop_all()
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        commands=["set_alarm"],
+                    )
+                )
+                commands_after = host.list_commands()
+                self.assertEqual(len(commands_after), len(commands_before))
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -157,19 +222,34 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(ClockApplication())
-            await host.register(DiaryApplication())
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        commands=["set_alarm"],
+                    )
+                )
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.diary",
+                        commands=["write_diary"],
+                    )
+                )
 
-            specs = host.list_command_specs()
-            names = [s.name for s in specs]
-            # 排序验证
-            self.assertEqual(names, sorted(names))
-            # 每个 spec 应有 name / description / handler
-            for spec in specs:
-                self.assertIsInstance(spec.name, str)
-                self.assertIsInstance(spec.description, str)
-                self.assertIsNotNone(spec.handler)
-            await host.stop_all()
+                specs = host.list_command_specs()
+                names = [s.name for s in specs]
+                self.assertEqual(names, sorted(names))
+                for spec in specs:
+                    self.assertIsInstance(spec.name, str)
+                    self.assertIsInstance(spec.description, str)
+                    self.assertIsNotNone(spec.handler)
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -177,12 +257,34 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(ClockApplication())
-            await host.register(QQApplication(enable_listener=False))
-            # tick should not raise for any registered app
-            await host.tick()
-            await host.tick()
-            await host.stop_all()
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            tick_a = SimpleNamespace(calls=0)
+            tick_b = SimpleNamespace(calls=0)
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        commands=["set_alarm"],
+                        tick_hook=tick_a,
+                    )
+                )
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.qq",
+                        commands=["send_qq_message"],
+                        tick_hook=tick_b,
+                    )
+                )
+                await host.tick()
+                await host.tick()
+                self.assertEqual(tick_a.calls, 2)
+                self.assertEqual(tick_b.calls, 2)
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -190,23 +292,41 @@ class ApplicationHostExtraTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            await host.register(ClockApplication())
-            clock_cmds = [
-                c for c in host.list_commands() if c.startswith("im.polaris.clock")
-            ]
-            self.assertGreater(len(clock_cmds), 0)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            try:
+                await host.register(
+                    _make_fake_app(
+                        tempdirs=tempdirs,
+                        package="im.polaris.clock",
+                        commands=["set_alarm"],
+                    )
+                )
+                clock_cmds = [
+                    c for c in host.list_commands() if c.startswith("im.polaris.clock")
+                ]
+                self.assertGreater(len(clock_cmds), 0)
 
-            # replace 仅保留新应用
-            await host.replace_apps([DiaryApplication()])
-            clock_cmds_after = [
-                c for c in host.list_commands() if c.startswith("im.polaris.clock")
-            ]
-            self.assertEqual(len(clock_cmds_after), 0)
-            diary_cmds_after = [
-                c for c in host.list_commands() if c.startswith("im.polaris.diary")
-            ]
-            self.assertGreater(len(diary_cmds_after), 0)
-            await host.stop_all()
+                await host.replace_apps(
+                    [
+                        _make_fake_app(
+                            tempdirs=tempdirs,
+                            package="im.polaris.diary",
+                            commands=["write_diary"],
+                        )
+                    ]
+                )
+                clock_cmds_after = [
+                    c for c in host.list_commands() if c.startswith("im.polaris.clock")
+                ]
+                self.assertEqual(len(clock_cmds_after), 0)
+                diary_cmds_after = [
+                    c for c in host.list_commands() if c.startswith("im.polaris.diary")
+                ]
+                self.assertGreater(len(diary_cmds_after), 0)
+            finally:
+                await host.stop_all()
+                for tmp in tempdirs:
+                    tmp.cleanup()
 
         asyncio.run(scenario())
 

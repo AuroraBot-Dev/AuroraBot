@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from src.brain.runtime import (
     RuntimeState,
@@ -40,7 +40,9 @@ class RuntimeTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            with patch("src.brain.runtime.discover_apps", return_value={"qq": object()}):
+            with patch(
+                "src.brain.runtime.discover_apps", return_value={"qq": object()}
+            ):
                 with self.assertRaises(KeyError):
                     await register_selected_apps(host, ["missing"], {})
 
@@ -60,6 +62,7 @@ class RuntimeTest(unittest.TestCase):
             ):
                 await start_runtime_components(state)
 
+            self.assertIn("im.polaris.console.send_message", host.list_commands())
             self.assertIs(state.circuit, fake_circuit)
             self.assertEqual(fake_circuit.start_calls, 1)
             self.assertIsNotNone(state.app_task)
@@ -68,6 +71,34 @@ class RuntimeTest(unittest.TestCase):
                 await state.app_task
             if state.bridge_task is not None:
                 await state.bridge_task
+
+        asyncio.run(scenario())
+
+    def test_start_runtime_components_reregisters_builtin_commands_after_stop_all(
+        self,
+    ) -> None:
+        host = ApplicationHost()
+        fake_circuit = _FakeCircuit()
+
+        async def scenario() -> None:
+            state = RuntimeState(host=host, stop_event=asyncio.Event())
+            with (
+                patch("src.brain.runtime.build_circuit", return_value=fake_circuit),
+                patch("src.brain.runtime.run_app_loop", new=_noop_loop),
+                patch("src.brain.runtime.run_event_bridge", new=_noop_loop),
+                patch.object(Config, "RUN_MODE", "prod"),
+            ):
+                await start_runtime_components(state)
+                self.assertIn("im.polaris.console.send_message", host.list_commands())
+                await shutdown_runtime(state)
+                self.assertNotIn(
+                    "im.polaris.console.send_message", host.list_commands()
+                )
+
+                state2 = RuntimeState(host=host, stop_event=asyncio.Event())
+                await start_runtime_components(state2)
+                self.assertIn("im.polaris.console.send_message", host.list_commands())
+                await shutdown_runtime(state2)
 
         asyncio.run(scenario())
 
@@ -114,7 +145,7 @@ class RuntimeTest(unittest.TestCase):
         state = RuntimeState(host=host, stop_event=asyncio.Event())
 
         async def scenario() -> None:
-            with patch.object(host, "stop_all") as mock_stop_all:
+            with patch.object(host, "stop_all", new=AsyncMock()) as mock_stop_all:
                 await shutdown_runtime(state)
             self.assertTrue(state.stop_event.is_set())
             mock_stop_all.assert_awaited_once()

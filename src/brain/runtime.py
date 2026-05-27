@@ -12,10 +12,37 @@ from src.config import Config
 from src.platform.app_config import app_startup, enabled_app_names, load_apps_config
 from src.platform.app_discovery import discover_apps, instantiate_app
 from src.platform.application_host import ApplicationHost
+from src.platform.contracts import CommandSpec
 from src.platform.loop import run_app_loop
 from src.utils.log_utils import get_logger
 
 logger = get_logger("Runtime")
+
+_BUILTIN_CONSOLE_SEND_MESSAGE = "im.polaris.console.send_message"
+
+
+async def _console_print(*, text: str) -> None:
+    print("\nBot: " + text + "\n")
+
+
+def _register_builtin_commands(host: ApplicationHost) -> None:
+    if _BUILTIN_CONSOLE_SEND_MESSAGE in host.list_commands():
+        return
+    host.register_command(
+        CommandSpec(
+            name=_BUILTIN_CONSOLE_SEND_MESSAGE,
+            description="发送消息到本地控制台",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "要发送的消息文本"}
+                },
+                "required": ["text"],
+            },
+            returns_schema={"type": "object", "properties": {}},
+            handler=_console_print,
+        )
+    )
 
 
 @dataclass(slots=True)
@@ -53,6 +80,7 @@ async def start_runtime(host: ApplicationHost) -> RuntimeState:
 
 
 async def start_runtime_components(state: RuntimeState) -> RuntimeState:
+    _register_builtin_commands(state.host)
     if Config.RUN_MODE in ["app", "application", "prod"]:
         state.app_task = asyncio.create_task(
             run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL)
@@ -79,6 +107,7 @@ async def restart_runtime_components(
     start_app_loop: bool,
     start_bridge: bool,
 ) -> RuntimeState:
+    _register_builtin_commands(state.host)
     if start_app_loop:
         state.app_task = asyncio.create_task(
             run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL)

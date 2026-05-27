@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from apps.qq import QQApplication
+import yaml
+
 from src.brain.localhost import (
     HotReloadError,
     _request_process_exit,
@@ -19,6 +22,49 @@ from src.brain.runtime import RuntimeState
 from src.config import Config
 from src.platform.application_host import ApplicationHost
 from src.platform.contracts import AppEvent
+
+
+def _make_fake_qq_app(
+    *,
+    tempdirs: list[tempfile.TemporaryDirectory[str]],
+) -> object:
+    tmp = tempfile.TemporaryDirectory()
+    tempdirs.append(tmp)
+    manifest_path = Path(tmp.name) / "manifest.yaml"
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "package": "im.polaris.qq",
+                "name": "im.polaris.qq",
+                "version": "0.0.0",
+                "brain_version": "",
+                "commands": [
+                    {
+                        "name": "send_qq_message",
+                        "description": "",
+                        "parameters": {},
+                        "returns": {},
+                    }
+                ],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    async def send_qq_message(self, **_kwargs: object) -> dict[str, object]:
+        return {}
+
+    attrs = {
+        "manifest_path": lambda self: manifest_path,
+        "on_start": lambda self: None,
+        "on_stop": lambda self: None,
+        "on_tick": lambda self: None,
+        "send_qq_message": send_qq_message,
+    }
+    app_type = type("FakeQQApplication", (), attrs)
+    return app_type()
 
 
 class _FakeCircuit:
@@ -58,9 +104,10 @@ class HotReloadTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            old_app = QQApplication(enable_listener=False)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            old_app = _make_fake_qq_app(tempdirs=tempdirs)
             await host.register(old_app)
-            new_app = QQApplication(enable_listener=False)
+            new_app = _make_fake_qq_app(tempdirs=tempdirs)
             runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
             with (
@@ -100,6 +147,8 @@ class HotReloadTest(unittest.TestCase):
             if runtime.bridge_task is not None:
                 await runtime.bridge_task
             await host.stop_all()
+            for tmp in tempdirs:
+                tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -107,9 +156,10 @@ class HotReloadTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            old_app = QQApplication(enable_listener=False)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            old_app = _make_fake_qq_app(tempdirs=tempdirs)
             await host.register(old_app)
-            new_app = QQApplication(enable_listener=False)
+            new_app = _make_fake_qq_app(tempdirs=tempdirs)
             runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
             with (
@@ -146,6 +196,8 @@ class HotReloadTest(unittest.TestCase):
             )
             self.assertIs(send_spec.handler.__self__, old_app)
             await host.stop_all()
+            for tmp in tempdirs:
+                tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -153,7 +205,8 @@ class HotReloadTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            old_app = QQApplication(enable_listener=False)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            old_app = _make_fake_qq_app(tempdirs=tempdirs)
             await host.register(old_app)
             old_circuit = _FakeCircuit()
             old_circuit.is_running = True
@@ -179,6 +232,8 @@ class HotReloadTest(unittest.TestCase):
             self.assertEqual(old_circuit.start_calls, 1)
             self.assertIs(host.get_app("im.polaris.qq"), old_app)
             await host.stop_all()
+            for tmp in tempdirs:
+                tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -193,12 +248,12 @@ class HotReloadTest(unittest.TestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await run_console_control_loop(
                     dispatch,
-                    readline=lambda: "  ~reload  \n",
+                    readline=lambda: "  /reload  \n",
                     idle_delay=0,
                 )
 
         asyncio.run(scenario())
-        self.assertEqual(seen, ["~reload"])
+        self.assertEqual(seen, ["/reload"])
 
     def test_handle_control_command_ignores_unknown_command(self) -> None:
         lock = asyncio.Lock()
@@ -223,7 +278,7 @@ class HotReloadTest(unittest.TestCase):
                 new=AsyncMock(return_value=updated_runtime),
             ) as mock_reload:
                 result = await handle_control_command(
-                    "~reload",
+                    "/reload",
                     runtime=runtime,
                     lock=lock,
                 )
@@ -243,7 +298,7 @@ class HotReloadTest(unittest.TestCase):
                 new=AsyncMock(side_effect=HotReloadError("boom", runtime=runtime)),
             ):
                 result = await handle_control_command(
-                    "~reload",
+                    "/reload",
                     runtime=runtime,
                     lock=lock,
                 )
@@ -262,7 +317,7 @@ class HotReloadTest(unittest.TestCase):
                 new=AsyncMock(),
             ) as mock_stop:
                 result = await handle_control_command(
-                    "~stop",
+                    "/stop",
                     runtime=runtime,
                     lock=lock,
                 )
@@ -371,7 +426,8 @@ class HotReloadTest(unittest.TestCase):
         runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
         async def scenario() -> None:
-            old_app = QQApplication(enable_listener=False)
+            tempdirs: list[tempfile.TemporaryDirectory[str]] = []
+            old_app = _make_fake_qq_app(tempdirs=tempdirs)
             await host.register(old_app)
             with patch("src.brain.localhost.logger.info") as mock_info:
                 result = await handle_control_command(
@@ -381,6 +437,8 @@ class HotReloadTest(unittest.TestCase):
             self.assertIs(result, runtime)
             self.assertGreaterEqual(mock_info.call_count, 1)
             await host.stop_all()
+            for tmp in tempdirs:
+                tmp.cleanup()
 
         asyncio.run(scenario())
 
@@ -409,6 +467,75 @@ class HotReloadTest(unittest.TestCase):
 
             self.assertIs(result, runtime)
             self.assertGreaterEqual(mock_info.call_count, 1)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_lists_commands_with_detail(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            async def sample_handler(message: str) -> dict[str, str]:
+                return {"echo": message}
+
+            host.register_command(
+                SimpleNamespace(
+                    name="manual.echo",
+                    description="echo message",
+                    parameters_schema={
+                        "type": "object",
+                        "properties": {"message": {"type": "string"}},
+                        "required": ["message"],
+                    },
+                    returns_schema={
+                        "type": "object",
+                        "properties": {"echo": {"type": "string"}},
+                    },
+                    handler=sample_handler,
+                )
+            )
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/commands --detail manual.echo", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            rendered = mock_info.call_args[0][0]
+            self.assertIn("manual.echo", rendered)
+            self.assertIn("parameters_schema", rendered)
+            self.assertIn("returns_schema", rendered)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_lists_all_commands_with_detail(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            async def sample_handler() -> dict[str, str]:
+                return {"ok": "1"}
+
+            host.register_command(
+                SimpleNamespace(
+                    name="manual.echo",
+                    description="",
+                    parameters_schema={},
+                    returns_schema={},
+                    handler=sample_handler,
+                )
+            )
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/commands --detail all", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            rendered = mock_info.call_args[0][0]
+            self.assertIn("manual.echo", rendered)
+            self.assertIn("parameters_schema", rendered)
+            self.assertIn("returns_schema", rendered)
 
         asyncio.run(scenario())
 
