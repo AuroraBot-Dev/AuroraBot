@@ -298,7 +298,19 @@ async def handle_control_command(
 ) -> RuntimeState | None:
     parsed = _parse_control_command(raw)
     if parsed is None:
-        return runtime
+        text = raw.strip()
+        if not text:
+            return runtime
+        say_spec = next(
+            spec for spec in _console_commands() if spec.names == SAY_COMMANDS
+        )
+        parsed = ParsedConsoleCommand(
+            raw=raw,
+            name=SAY_COMMANDS[0],
+            args=(text,),
+            raw_args=text,
+            spec=say_spec,
+        )
     if runtime is None:
         logger.warning("控制命令已忽略: runtime 尚未初始化")
         return runtime
