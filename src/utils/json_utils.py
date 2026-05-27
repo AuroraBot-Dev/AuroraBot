@@ -51,7 +51,47 @@ def parse_llm_json(raw: str) -> dict[str, Any] | None:
                 return result
         except json.JSONDecodeError:
             pass
+
+    # 4) 换行修复：LLM 经常在 JSON 字符串值里插入真正的换行 → 转义后重试
+    fixed = _fix_json_multiline(text)
+    if fixed != text:
+        return parse_llm_json(fixed)
+
     return None
+
+
+def _fix_json_multiline(text: str) -> str:
+    """替换 JSON 字符串值中未被转义的换行。"""
+    result: list[str] = []
+    in_string = False
+    escape = False
+    for ch in text:
+        if in_string:
+            if escape:
+                result.append(ch)
+                escape = False
+                continue
+            if ch == "\\":
+                result.append(ch)
+                escape = True
+                continue
+            if ch == "\n":
+                result.append("\\n")
+                continue
+            if ch == "\r":
+                result.append("\\r")
+                continue
+            if ch == "\t":
+                result.append("\\t")
+                continue
+            if ch == '"':
+                in_string = False
+            result.append(ch)
+        else:
+            if ch == '"':
+                in_string = True
+            result.append(ch)
+    return "".join(result)
 
 
 def safe_parse_json_object(content: str) -> dict[str, Any]:
