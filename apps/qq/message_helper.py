@@ -12,6 +12,14 @@ class MessageHelper:
     """
 
     @staticmethod
+    def split_text(text: str) -> list[str]:
+        segments: list[str] = []
+        for part in text.split("\n\n"):
+            sub = part.split("|")
+            segments.extend(s.strip() for s in sub if s.strip())
+        return segments if segments else [text.strip()]
+
+    @staticmethod
     def normalize_user_input(plain_text: str, raw_message: str) -> str:
         user_input = plain_text.strip()
         if user_input:

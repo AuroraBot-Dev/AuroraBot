@@ -92,6 +92,9 @@ class QQApplication:
         if not message_text:
             return
 
+        if message_text.strip() in ("~reload", "热重载"):
+            return
+
         is_group = isinstance(event, GroupMessageEvent)
         session_id = str(event.group_id) if is_group else str(event.user_id)
         await self.ingest_message(
@@ -160,19 +163,25 @@ class QQApplication:
             return {"success": False, "delivered_at": now_text()}
 
         if bool(target.get("is_group")):
-            await self._send_group(
-                group_id=str(target.get("group_id", session_id)),
-                text=text,
-                bot_id=str(target.get("bot_id", "")),
-                session_id=str(session_id),
-                user_id=str(target.get("user_id", "")),
+            await self._auto_split_send(
+                lambda t: self._send_group(
+                    group_id=str(target.get("group_id", session_id)),
+                    text=t,
+                    bot_id=str(target.get("bot_id", "")),
+                    session_id=str(session_id),
+                    user_id=str(target.get("user_id", "")),
+                ),
+                text,
             )
         else:
-            await self._send_private(
-                user_id=str(target.get("user_id", session_id)),
-                text=text,
-                bot_id=str(target.get("bot_id", "")),
-                session_id=str(session_id),
+            await self._auto_split_send(
+                lambda t: self._send_private(
+                    user_id=str(target.get("user_id", session_id)),
+                    text=t,
+                    bot_id=str(target.get("bot_id", "")),
+                    session_id=str(session_id),
+                ),
+                text,
             )
         return {"success": True, "delivered_at": now_text()}
 
@@ -182,11 +191,14 @@ class QQApplication:
         text: str,
     ) -> dict[str, object]:
         target = self._session_targets.get(str(user_id), {})
-        await self._send_private(
-            user_id=str(user_id),
-            text=text,
-            bot_id=str(target.get("bot_id", "")),
-            session_id=str(user_id),
+        await self._auto_split_send(
+            lambda t: self._send_private(
+                user_id=str(user_id),
+                text=t,
+                bot_id=str(target.get("bot_id", "")),
+                session_id=str(user_id),
+            ),
+            text,
         )
         return {"success": True}
 
@@ -197,15 +209,37 @@ class QQApplication:
         text: str,
     ) -> dict[str, object]:
         target = self._session_targets.get(str(group_id), {})
-        message = f"[CQ:at,qq={user_id}] {text}".strip()
-        await self._send_group(
-            group_id=str(group_id),
-            text=message,
-            bot_id=str(target.get("bot_id", "")),
-            session_id=str(group_id),
-            user_id=str(user_id),
-        )
+        from apps.qq.message_helper import MessageHelper
+
+        segments = MessageHelper.split_text(text)
+        for i, seg in enumerate(segments):
+            content = f"[CQ:at,qq={user_id}] {seg}".strip()
+            await self._send_group(
+                group_id=str(group_id),
+                text=content,
+                bot_id=str(target.get("bot_id", "")),
+                session_id=str(group_id),
+                user_id=str(user_id),
+            )
+            if i < len(segments) - 1:
+                await asyncio.sleep(0.3)
         return {"success": True}
+
+    # ── 自动分条 ────────────────────────────────────
+
+    @staticmethod
+    async def _auto_split_send(
+        sender,
+        text: str,
+        gap: float = 0.3,
+    ) -> None:
+        from apps.qq.message_helper import MessageHelper
+
+        segments = MessageHelper.split_text(text)
+        for i, seg in enumerate(segments):
+            await sender(seg)
+            if i < len(segments) - 1:
+                await asyncio.sleep(gap)
 
     # ── 内部发送 ────────────────────────────────────
 

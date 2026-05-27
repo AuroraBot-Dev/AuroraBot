@@ -2,8 +2,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 
-from nonebot import get_driver
+from nonebot import get_driver, on_message
+from nonebot.adapters.onebot.v11 import MessageEvent
 
+from src.brain.hotreload import reload_brain
 from src.brain.kernel.circuit import Circuit
 from src.brain.kernel.node_factory import build_circuit
 from src.brain.nodes import run_event_bridge
@@ -27,7 +29,6 @@ async def startup_agent() -> None:
     global _app_task, _bridge_task, _circuit, _stop_event
 
     Config.ensure_dirs()
-    # FIXME: 当前实现下, 就算禁用APP循环, 仍然会导入所有应用配置, 如果贸然禁用应用配置流程, 又会导致app_host无引用
     apps_config = load_apps_config()
 
     for app_name, spec in apps_config.items():
@@ -57,6 +58,38 @@ async def startup_agent() -> None:
                 interval=Config.HEARTBEAT_INTERVAL,
             )
         )
+
+    _register_hotreload()
+
+
+def _register_hotreload() -> None:
+    developer_qq = Config.DEVELOPER_QQ.strip()
+
+    @on_message(priority=99, block=False).handle()
+    async def _maybe_reload(event: MessageEvent) -> None:
+        global _circuit, _bridge_task
+        if str(event.user_id) != developer_qq:
+            return
+        raw = (event.raw_message or "").strip()
+        if raw not in ("~reload", "热重载"):
+            return
+
+        logger.info("收到热重载指令 (user=%s)", developer_qq)
+        current_circuit = _circuit
+        current_bridge = _bridge_task
+        try:
+            new_circuit, new_bridge = await reload_brain(
+                host=app_host,
+                circuit=current_circuit,
+                bridge_task=current_bridge,
+                stop_event=_stop_event,
+            )
+        except Exception:
+            logger.exception("热重载失败")
+            return
+
+        _circuit = new_circuit
+        _bridge_task = new_bridge
 
 
 @driver.on_shutdown
