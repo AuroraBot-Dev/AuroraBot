@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from nonebot import get_bot, get_bots, on_message
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    Message,
+    MessageEvent,
+)
 
 from apps.qq.message_helper import MessageHelper
 from src.platform.contracts import AppEvent
@@ -48,6 +54,143 @@ def _ensure_message_listener_registered() -> None:
         if current is None:
             return
         await current.handle_message(bot, event)
+
+
+class MessageHelper:
+    """消息段解析器 —— 移植自 XiaoGuang-Bot 的 PolarisBot.MessageHelper。
+
+    将 OneBot v11 消息段转换为可读的自然语言文本，
+    供下游 LLM 节点理解消息的完整语义。
+    """
+
+    @staticmethod
+    def to_debug_segment(segment: Any) -> dict[str, Any]:
+        segment_type = str(getattr(segment, "type", ""))
+        raw_data = getattr(segment, "data", {}) or {}
+        if hasattr(raw_data, "items"):
+            data = {str(k): v for k, v in raw_data.items()}
+        else:
+            data = {"raw": str(raw_data)}
+        return {"type": segment_type, "data": data}
+
+    @staticmethod
+    def normalize_user_input(plain_text: str, raw_message: str) -> str:
+        user_input = plain_text.strip()
+        if user_input:
+            return user_input
+        return raw_message.strip()
+
+    @staticmethod
+    async def segment_to_text(bot: Bot, segment: Any) -> str:
+        segment_type = getattr(segment, "type", "")
+        segment_data = getattr(segment, "data", {}) or {}
+        if segment_type == "text":
+            return str(segment_data.get("text", ""))
+        if segment_type == "at":
+            target = str(segment_data.get("qq", "")).strip()
+            if target == "all":
+                return "@全体成员"
+            else:
+                if not target:
+                    return "@未知人员"
+                try:
+                    info = await bot.get_stranger_info(
+                        user_id=int(target), no_cache=True
+                    )
+                except Exception:  # noqa: BLE001
+                    return f"@{target}"
+                nickname = str(info.get("nickname") or "").strip()
+                if nickname:
+                    return f"@{nickname}({target})"
+                return f"@{target}"
+        if segment_type == "face":
+            face_id = str(segment_data.get("id", "")).strip()
+            return f"[表情:{face_id}]" if face_id else "[表情]"
+        if segment_type == "image":
+            summary = str(segment_data.get("summary") or "").strip()
+            if summary:
+                readable_summary = summary.strip("[]").strip()
+                if readable_summary:
+                    return f"[图片:{readable_summary}]"
+            sub_type = str(segment_data.get("sub_type", "")).strip()
+            if sub_type == "13":
+                return "[图片:动画表情]"
+            file_name = str(segment_data.get("file") or "").strip()
+            if file_name.lower().endswith(".gif"):
+                return "[图片:GIF]"
+            return "[图片]"
+        if segment_type == "record":
+            return "[语音]"
+        if segment_type == "video":
+            return "[视频]"
+        if segment_type == "file":
+            return "[文件]"
+        if segment_type == "reply":
+            reply_id = str(segment_data.get("id", "")).strip()
+            if not reply_id:
+                return ""
+            try:
+                payload = await bot.get_msg(message_id=int(reply_id))
+            except Exception:  # noqa: BLE001
+                return f"[引用未知用户在未知时间的消息: id={reply_id}] "
+
+            sender = payload.get("sender") or {}
+            sender_name = (
+                str(sender.get("card") or "").strip()
+                or str(sender.get("nickname") or "").strip()
+                or str(payload.get("user_id") or "").strip()
+                or "未知用户"
+            )
+
+            quote_timestamp = payload.get("time")
+            if isinstance(quote_timestamp, (int, float)):
+                quote_time_text = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(float(quote_timestamp))
+                )
+            else:
+                quote_time_text = "未知时间"
+
+            quoted_text = str(payload.get("raw_message") or "").strip()
+            if not quoted_text:
+                quoted_text = str(payload.get("message") or "").strip()
+            if not quoted_text:
+                return ""
+            return f"[引用{sender_name}在{quote_time_text}的消息: {quoted_text}] "
+        return str(segment).strip()
+
+    @classmethod
+    async def extract_message_text(
+        cls,
+        bot: Bot,
+        event: MessageEvent,
+        plain_text: str,
+        raw_message: str,
+    ) -> str:
+        source_segments = list(event.message)
+        has_non_text_segment = any(
+            str(getattr(segment, "type", "")) != "text" for segment in source_segments
+        )
+        if not has_non_text_segment and raw_message and "[CQ:" in raw_message:
+            try:
+                parsed_message = Message(raw_message)
+            except Exception:  # noqa: BLE001
+                parsed_message = None
+            if parsed_message:
+                parsed_segments = list(parsed_message)
+                parsed_has_non_text = any(
+                    str(getattr(segment, "type", "")) != "text"
+                    for segment in parsed_segments
+                )
+                if parsed_has_non_text:
+                    source_segments = parsed_segments
+
+        pieces = []
+        for segment in source_segments:
+            pieces.append(await cls.segment_to_text(bot, segment))
+        merged = "".join(piece for piece in pieces if piece)
+        if merged.strip():
+            return merged.strip()
+        return cls.normalize_user_input(plain_text, raw_message)
 
 
 class QQApplication:
