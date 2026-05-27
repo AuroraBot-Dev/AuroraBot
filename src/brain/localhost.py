@@ -1,25 +1,34 @@
-"""AuroraBot 热重载 —— 保持 QQ/NoneBot 连接存活，仅重启脑回路。
+"""AuroraBot 本地控制 —— 提供控制台热重载与停机能力。
 
-触发方式：开发者在 QQ 发送 ``~reload`` 或 ``热重载``。
+触发方式：开发者在控制台输入 ``~reload`` / ``~stop``。
 """
 
 from __future__ import annotations
 
 import asyncio
 import importlib
+import os
+import signal
 import sys
-from typing import TYPE_CHECKING
+import threading
+from types import ModuleType
+from typing import Awaitable, Callable
 
-from src.brain.runtime import RuntimeState, restart_runtime_components, stop_runtime_components
+from src.brain.runtime import (
+    RuntimeState,
+    restart_runtime_components,
+    shutdown_runtime,
+    stop_runtime_components,
+)
 from src.utils.log_utils import get_logger
 
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
+logger = get_logger("Localhost")
 
-logger = get_logger("HotReload")
+RELOAD_COMMANDS = frozenset({"~reload", "/reload"})
+STOP_COMMANDS = frozenset({"~stop", "/stop"})
+DEVELOPER_COMMANDS = RELOAD_COMMANDS | STOP_COMMANDS
 
-_MODULES_TO_RELOAD = [
-    "src.config",
+_MODULES_TO_RELOAD: list[str] = [
     "src.platform.app_config",
     "src.platform.app_discovery",
     "src.utils.json_utils",
@@ -34,6 +43,11 @@ _MODULES_TO_RELOAD = [
     "src.brain.nodes",
     "src.brain.kernel.node_factory",
 ]
+
+_MODULES_TO_SKIP_RELOAD: dict[str, str] = {
+    "src.config": "该模块由 NoneBot 插件系统管理",
+    "src.main": "该模块由 NoneBot 插件系统管理",
+}
 
 
 class HotReloadError(RuntimeError):
@@ -50,11 +64,30 @@ class HotReloadError(RuntimeError):
 def _reload_module(name: str) -> None:
     try:
         module = importlib.import_module(name)
+        skip_reason = _should_skip_reload(name, module)
+        if skip_reason is not None:
+            logger.info(f"跳过模块重载 {name}: {skip_reason}")
+            return
         importlib.reload(module)
-        logger.info("已重载模块 %s", name)
+        logger.info(f"已重载模块 {name}")
     except Exception:
-        logger.exception("重载模块 %s 失败", name)
+        logger.exception(f"重载模块 {name} 失败")
         raise
+
+
+def _should_skip_reload(name: str, module: ModuleType) -> str | None:
+    if name in _MODULES_TO_SKIP_RELOAD:
+        return _MODULES_TO_SKIP_RELOAD[name]
+
+    spec = getattr(module, "__spec__", None)
+    loader = getattr(spec, "loader", None)
+    if loader is None:
+        return None
+
+    loader_module = getattr(loader.__class__, "__module__", "")
+    if loader_module.startswith("nonebot.plugin"):
+        return "该模块由 NoneBot 插件加载器管理"
+    return None
 
 
 def _reload_modules() -> None:
@@ -77,18 +110,7 @@ async def reload_brain(
     *,
     runtime: RuntimeState,
 ) -> RuntimeState:
-    """热重载脑回路：停止 → 重载模块 → 重建 → 重启。
-
-    Parameters
-    ----------
-    runtime : RuntimeState
-        当前运行时句柄集合。
-
-    Returns
-    -------
-    RuntimeState
-        新的运行时句柄集合。
-    """
+    """热重载脑回路：停止 → 重载模块 → 重建 → 重启。"""
     logger.info("热重载开始 — 冻结运行时...")
     previous_apps = [
         app
@@ -102,11 +124,9 @@ async def reload_brain(
     try:
         await stop_runtime_components(runtime)
 
-        # 1) 重载 Python 模块
         _reload_modules()
 
         from src.brain.runtime import start_runtime_components
-        from src.config import Config
         from src.platform.app_config import (
             app_startup,
             enabled_app_names,
@@ -114,7 +134,6 @@ async def reload_brain(
         )
         from src.platform.app_discovery import discover_apps, instantiate_app
 
-        # 4) 重载应用模块并替换宿主中的应用实例/命令绑定
         apps_config = load_apps_config()
         discovered = discover_apps()
         enabled_names = [
@@ -155,3 +174,70 @@ async def reload_brain(
 
     logger.info("热重载完成")
     return runtime
+
+
+async def stop_process(*, runtime: RuntimeState) -> None:
+    logger.info("收到停止请求，准备关闭当前进程")
+    await shutdown_runtime(runtime)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    _request_process_exit()
+
+
+async def run_console_control_loop(
+    dispatch_command: Callable[[str], Awaitable[None]],
+    *,
+    readline: Callable[[], str] | None = None,
+    idle_delay: float = 0.5,
+) -> None:
+    read_line = readline or sys.stdin.readline
+    loop = asyncio.get_running_loop()
+    input_queue: asyncio.Queue[str] = asyncio.Queue()
+    stop_event = threading.Event()
+
+    def _reader() -> None:
+        while not stop_event.is_set():
+            try:
+                line = read_line()
+            except Exception:
+                logger.exception("控制台输入读取失败")
+                break
+
+            if line == "":
+                if stop_event.wait(idle_delay):
+                    break
+                continue
+
+            try:
+                loop.call_soon_threadsafe(input_queue.put_nowait, line)
+            except RuntimeError:
+                break
+
+    reader_thread = threading.Thread(
+        target=_reader,
+        name="console-control-reader",
+        daemon=True,
+    )
+    reader_thread.start()
+    logger.info(
+        f"控制台命令监听已启动，支持命令: [{', '.join(sorted(DEVELOPER_COMMANDS))}]"
+    )
+    try:
+        while True:
+            line = await input_queue.get()
+            command = line.strip()
+            if not command:
+                continue
+
+            await dispatch_command(command)
+    except asyncio.CancelledError:
+        stop_event.set()
+        logger.info("控制台命令监听已停止")
+        raise
+
+
+def _request_process_exit() -> None:
+    try:
+        signal.raise_signal(signal.SIGINT)
+    except AttributeError:
+        os.kill(os.getpid(), signal.SIGINT)

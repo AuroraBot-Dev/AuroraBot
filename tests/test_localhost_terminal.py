@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from apps.qq import QQApplication
-from src.brain.hotreload import HotReloadError, reload_brain
+from src.brain.localhost import (
+    HotReloadError,
+    _request_process_exit,
+    _should_skip_reload,
+    reload_brain,
+    stop_process,
+    run_console_control_loop,
+)
 from src.brain.runtime import RuntimeState
 from src.config import Config
 from src.platform.application_host import ApplicationHost
@@ -31,6 +39,19 @@ async def _noop_loop(*_args, **_kwargs) -> None:
 
 
 class HotReloadTest(unittest.TestCase):
+    def test_should_skip_reload_for_nonebot_plugin_module(self) -> None:
+        fake_module = SimpleNamespace(
+            __spec__=SimpleNamespace(
+                loader=type(
+                    "PluginLoader",
+                    (),
+                    {"__module__": "nonebot.plugin.manager"},
+                )()
+            )
+        )
+
+        self.assertTrue(_should_skip_reload("src.config", fake_module))
+
     def test_reload_brain_replaces_apps_and_starts_new_runtime(self) -> None:
         host = ApplicationHost()
 
@@ -41,8 +62,8 @@ class HotReloadTest(unittest.TestCase):
             runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
             with (
-                patch("src.brain.hotreload._reload_modules"),
-                patch("src.brain.hotreload._reload_package_modules"),
+                patch("src.brain.localhost._reload_modules"),
+                patch("src.brain.localhost._reload_package_modules"),
                 patch(
                     "src.platform.app_config.load_apps_config",
                     return_value={"qq": {"enabled": True, "startup": {}}},
@@ -90,8 +111,8 @@ class HotReloadTest(unittest.TestCase):
             runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
             with (
-                patch("src.brain.hotreload._reload_modules"),
-                patch("src.brain.hotreload._reload_package_modules"),
+                patch("src.brain.localhost._reload_modules"),
+                patch("src.brain.localhost._reload_package_modules"),
                 patch(
                     "src.platform.app_config.load_apps_config",
                     return_value={"qq": {"enabled": True, "startup": {}}},
@@ -106,7 +127,9 @@ class HotReloadTest(unittest.TestCase):
                     "src.platform.app_discovery.instantiate_app",
                     return_value=new_app,
                 ),
-                patch("src.brain.runtime.build_circuit", side_effect=RuntimeError("boom")),
+                patch(
+                    "src.brain.runtime.build_circuit", side_effect=RuntimeError("boom")
+                ),
                 patch.object(Config, "RUN_MODE", "core"),
             ):
                 with self.assertRaises(HotReloadError) as ctx:
@@ -140,7 +163,7 @@ class HotReloadTest(unittest.TestCase):
 
             with (
                 patch(
-                    "src.brain.hotreload._reload_modules",
+                    "src.brain.localhost._reload_modules",
                     side_effect=RuntimeError("reload failed"),
                 ),
                 patch.object(Config, "RUN_MODE", "core"),
@@ -154,6 +177,48 @@ class HotReloadTest(unittest.TestCase):
             self.assertEqual(old_circuit.start_calls, 1)
             self.assertIs(host.get_app("im.polaris.qq"), old_app)
             await host.stop_all()
+
+        asyncio.run(scenario())
+
+    def test_console_control_loop_dispatches_trimmed_commands(self) -> None:
+        seen: list[str] = []
+
+        async def scenario() -> None:
+            async def dispatch(command: str) -> None:
+                seen.append(command)
+                raise asyncio.CancelledError()
+
+            with self.assertRaises(asyncio.CancelledError):
+                await run_console_control_loop(
+                    dispatch,
+                    readline=lambda: "  ~reload  \n",
+                    idle_delay=0,
+                )
+
+        asyncio.run(scenario())
+        self.assertEqual(seen, ["~reload"])
+
+    def test_request_process_exit_raises_sigint(self) -> None:
+        with patch("src.brain.localhost.signal.raise_signal") as mock_raise_signal:
+            _request_process_exit()
+
+        mock_raise_signal.assert_called_once()
+
+    def test_stop_process_shuts_down_runtime_and_requests_exit(self) -> None:
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            with (
+                patch(
+                    "src.brain.localhost.shutdown_runtime",
+                    new=AsyncMock(),
+                ) as mock_shutdown,
+                patch("src.brain.localhost.signal.raise_signal") as mock_raise_signal,
+            ):
+                await stop_process(runtime=runtime)
+
+            mock_shutdown.assert_awaited_once_with(runtime)
+            mock_raise_signal.assert_called_once()
 
         asyncio.run(scenario())
 

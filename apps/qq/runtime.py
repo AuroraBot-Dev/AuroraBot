@@ -114,9 +114,6 @@ class QQApplication:
         if not message_text:
             return
 
-        if message_text.strip() in ("~reload", "热重载"):
-            return
-
         is_group = isinstance(event, GroupMessageEvent)
         session_id = str(event.group_id) if is_group else str(event.user_id)
         await self.ingest_message(
