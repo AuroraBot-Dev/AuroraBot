@@ -272,13 +272,16 @@ class PolarisAgent(Agent):
         )
         recent_lines = self._get_recent_lines(recent)
 
-        try:
-            should_reply = await self._impulse_gate(
-                scene_name, recent_lines, merged_input
-            )
-        except Exception:
-            logger.exception("门控异常，跳过")
-            return
+        if session_id == "private:localhost":
+            should_reply = True
+        else:
+            try:
+                should_reply = await self._impulse_gate(
+                    scene_name, recent_lines, merged_input
+                )
+            except Exception:
+                logger.exception("门控异常，跳过")
+                return
 
         if not should_reply:
             logger.info(f"门控判定不回复 session={session_key}")
@@ -616,7 +619,7 @@ class PolarisAgent(Agent):
 
     @staticmethod
     def _trim_for_action(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        recent_start = max(1, len(messages) - ACTION_WINDOW)
+        recent_start = max(0, len(messages) - ACTION_WINDOW)
         return messages[recent_start:]
 
     # ═══════════════════════════════════════════════════
