@@ -9,11 +9,15 @@
 </p>
 
 <p align="center">
-  <em>新一代内驱式、自主决策的智能体框架</em>
+  <em>基于 NoneBot2 的新一代内驱式、自主决策的智能体框架</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-Repository-black?logo=github" alt="GitHub" /></a>
+  声明式认知拓扑 · 三级联合记忆 · 统一 LLM 网关
+</p>
+
+<p align="center">
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-仓库-black?logo=github" alt="GitHub" /></a>
   <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-文档站-blue?logo=vitepress" alt="Docs" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License" /></a>
 </p>
@@ -22,59 +26,74 @@
 
 ## 她是什么
 
-AuroraBot 是新一代**内驱式、自主决策的智能体框架**。
+AuroraBot 是新一代**内驱式、自主决策的智能体框架**。她由两层运行时 + 一个认知引擎构成：
 
-她由四层协作者构成：
+- **应用层 (Apps)** — 可插拔的感知器与执行器，每个 App 通过 `manifest.yaml` 声明能力，通过统一 `PlatformAPI` 接入外部世界
+- **平台层 (Platform)** — `ApplicationHost` 统一管理 App 的注册、生命周期与事件队列，`PlatformAPI` 向 App 提供双向通信能力
+- **认知引擎 (Brain / CortexForge)** — 文件驱动认知操作系统内核，包含两个子系统：
+  - **kernel**：`Node` / `Agent` / `Router` 节点网络 + `FileEventBus` 事件总线 + `Circuit` 编排器
+  - **memory**：L1 工作记忆 / L2 情景记忆 / L3 语义记忆，通过 `UnifiedMemoryManager` 统一存取
 
-- **应用层（Apps）** — 可插拔的感知器与执行器，通过统一 PlatformAPI 接入外部世界
-- **平台层（Platform）** — 统一管理应用的运行时宿主，负责与上下层双向通信
-- **内核层（Kernel）** — 管理与调度核心，编排事件流与命令流
-- **认知层（Brain）** — 文件驱动的认知操作系统内核。Node / Agent / Router 节点网络 + 事件总线 + 统一 LLM 网关 + 统一联合记忆
+> 她不是在"等待指令"，而是在"持续观察、自主决策、主动行动"。
 
-> 她不是在“等待指令”，而是在“持续观察、自主决策、主动行动”。
-
-## 四层架构
+## 架构概览
 
 ```mermaid
 flowchart LR
     subgraph APPS["应用层 (Apps)"]
+        direction TB
         QQ["QQ 接入"]
         ALARM["定时提醒"]
         DIARY["日记"]
     end
 
     subgraph PLATFORM["平台层 (Platform)"]
+        direction TB
+        HOST["ApplicationHost"]
+        API["PlatformAPI"]
         EVENTS["事件队列"]
         CMDS["命令注册"]
     end
 
-    subgraph KERNEL["内核层 (Kernel)"]
-        SCHEDULER["心跳调度器"]
-    end
-
-    subgraph BRAIN["认知层 (Brain)"]
-        direction LR
-        NODES["Agent 节点 (有向有环图)"]
-        GATEWAY["LLM / Embedding 网关"]
-        MEMORY["统一联合记忆"]
+    subgraph BRAIN["认知引擎 (CortexForge)"]
+        subgraph KERNEL["kernel 子系统"]
+            direction LR
+            CIRCUIT["Circuit 编排器"]
+            BUS["FileEventBus"]
+            NODES["Agent / Router 节点"]
+        end
+        subgraph MEMORY["memory 子系统"]
+            direction LR
+            L1["L1 工作记忆"]
+            L2["L2 情景记忆"]
+            L3["L3 语义记忆"]
+        end
+        GATEWAY["LLM / Embedding 网关 (litellm)"]
     end
 
     APPS <-->|"AppEvent / invoke_command"| PLATFORM
-    PLATFORM <-->|"事件 / 命令"| KERNEL
-    KERNEL <-->|"调度 / 状态"| BRAIN
+    PLATFORM <-->|"事件桥"| BRAIN
 ```
 
 ### 高度解耦的 App 插件体系
 
-每个 App 都是独立的感知器与执行器，通过统一的 `PlatformAPI` 与宿主交互。接入 QQ、定时器、文件系统、甚至外部 API——都只需要一个 App。
+每个 App 都是独立的感知器与执行器。接入 QQ、定时器、文件系统、甚至外部 API——都只需要一个 App。App 通过 `manifest.yaml` 声明命令，通过 `PlatformAPI` 与宿主交互，按需启用。
 
-### 有向有环图的认知 Agent 网络
+### 声明式认知拓扑
 
-认知不依赖单一“超级 Agent”，而是由多个 Agent / Router 节点构成有向有环图。节点之间通过文件篮机制传递状态，形成持续运转的认知循环。未来开放认知节点插件，供第三方扩展认知能力。
+认知不依赖单一"超级 Agent"，而是由多个 `Agent` / `Router` 节点通过 `topology.yaml` 声明式配置邻接关系。节点之间通过 `FileEventBus` 文件事件总线传递状态，形成文件驱动的认知管道。未来开放认知节点插件，供第三方扩展认知能力。
 
-### 统一联合记忆
+### 三级联合记忆
 
-AuroraBot 的记忆不只是“存下来”，而是**结构化地生长**。知识图谱、向量检索与情景记忆融合为一个统一记忆层，让每一次事件、每一次决策都参与记忆演化。
+AuroraBot 的记忆是**结构化地生长**的：
+
+| 层级        | 类型          | 存储             | 用途           |
+| ----------- | ------------- | ---------------- | -------------- |
+| L1 工作记忆 | FIFO 内存列表 | 不持久化         | 当前会话上下文 |
+| L2 情景记忆 | JSON 文件追加 | 50 条后 LLM 压缩 | 按时间线存档   |
+| L3 语义记忆 | ChromaDB 向量 | 无上限           | 语义相似度检索 |
+
+`UnifiedMemoryManager` 封装三层统一入口，节点无需关心底层流转。每次交互一键写入三层，检索时合并返回。
 
 ## 计划中的 MCP 适配容器
 
@@ -92,15 +111,18 @@ AuroraBot 的记忆不只是“存下来”，而是**结构化地生长**。知
 
 完整的架构设计、使用指南与开发文档请 **[访问 AuroraBot 文档站 📖](https://www.aurorabot.org/)**：
 
-| 文档                                                                        | 说明                                       |
-| --------------------------------------------------------------------------- | ------------------------------------------ |
-| [项目总览](https://www.aurorabot.org/start/overview.html)                   | 快速了解 AuroraBot 的定位与四层分层        |
-| [快速开始](https://www.aurorabot.org/start/getting-started.html)            | 从零把项目跑起来                           |
-| [系统架构总览](https://www.aurorabot.org/architecture/system-overview.html) | 理解 Apps / Platform / Kernel / Brain 四层 |
-| [认知架构](https://www.aurorabot.org/architecture/brain-architecture.html)  | 深入有向有环图的 Agent 节点网络            |
-| [平台运行时](https://www.aurorabot.org/architecture/platform-runtime.html)  | 理解宿主与 App 的运行时关系                |
-| [App 开发指南](https://www.aurorabot.org/develop/app-development.html)      | 开发你自己的 App                           |
-| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                   | 应用开发工具链                             |
+| 文档                                                                           | 说明                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------ |
+| [项目总览](https://www.aurorabot.org/start/overview.html)                      | 快速了解 AuroraBot 的定位与架构            |
+| [快速开始](https://www.aurorabot.org/start/getting-started.html)               | 从零把项目跑起来                           |
+| [配置说明](https://www.aurorabot.org/start/configuration.html)                 | 环境变量、平台配置、应用配置与人格文档     |
+| [架构总览](https://www.aurorabot.org/architecture/system-overview.html)        | 理解 Apps / Platform / Kernel / Brain 四层 |
+| [认知引擎架构](https://www.aurorabot.org/architecture/brain-architecture.html) | 文件驱动认知管道与当前启用的认知管线       |
+| [节点系统](https://www.aurorabot.org/architecture/node-system.html)            | Node / Agent / Router 数据结构与事件总线   |
+| [记忆系统](https://www.aurorabot.org/architecture/memory-system.html)          | L1 / L2 / L3 三级联合记忆的存储与检索      |
+| [App 开发指南](https://www.aurorabot.org/develop/app-development.html)         | 从目录结构到生命周期开发 App               |
+| [认知节点开发](https://www.aurorabot.org/develop/brain-node-development.html)  | 编写 Agent / Router 节点                   |
+| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                      | 应用开发工具链路线图                       |
 
 ## 开源致谢
 

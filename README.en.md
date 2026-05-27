@@ -9,72 +9,91 @@
 </p>
 
 <p align="center">
-  <em>A next-generation internally-driven, autonomous agent framework</em>
+  <em>A next-generation intrinsically-driven, autonomous decision-making agent framework built on NoneBot2</em>
+</p>
+
+<p align="center">
+  Declarative Cognitive Topology · Three-Tier Unified Memory · Unified LLM Gateway
 </p>
 
 <p align="center">
   <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-Repository-black?logo=github" alt="GitHub" /></a>
-  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-blue?logo=vitepress" alt="Docs" /></a>
+  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-Documentation-blue?logo=vitepress" alt="Docs" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License" /></a>
 </p>
 
 ---
 
-## What Is She
+## What She Is
 
-AuroraBot is a next-generation **internally-driven, autonomous agent framework**.
+AuroraBot is a next-generation **intrinsically-driven, autonomous agent framework**. She consists of two runtime layers plus a cognitive engine:
 
-She is composed of four collaborative layers:
-
-- **Application Layer (Apps)** — Pluggable sensors and actuators connecting to the outside world via a unified PlatformAPI
-- **Platform Layer (Platform)** — Manages the runtime host for all apps, responsible for bidirectional communication between layers
-- **Kernel Layer (Kernel)** — The management & scheduling core; orchestrates event streams and command flows
-- **Cognitive Layer (Brain)** — A file-driven cognitive operating system kernel. Node / Agent / Router node network + Event Bus + Unified LLM Gateway + Unified Federated Memory
+- **Application Layer (Apps)** — Pluggable sensors and actuators. Each App declares its capabilities via `manifest.yaml` and connects to the outside world through a unified `PlatformAPI`
+- **Platform Layer (Platform)** — `ApplicationHost` manages App registration, lifecycle, and event queues. `PlatformAPI` provides bidirectional communication to each App
+- **Cognitive Engine (Brain / CortexForge)** — A file-driven cognitive operating system kernel, composed of two subsystems:
+  - **kernel**: `Node` / `Agent` / `Router` node network + `FileEventBus` event bus + `Circuit` orchestrator
+  - **memory**: L1 working memory / L2 episodic memory / L3 semantic memory, accessed through `UnifiedMemoryManager`
 
 > She doesn't "wait for instructions" — she continuously observes, autonomously decides, and proactively acts.
 
-## Four-Layer Architecture
+## Architecture Overview
 
 ```mermaid
 flowchart LR
     subgraph APPS["Application Layer (Apps)"]
+        direction TB
         QQ["QQ Adapter"]
         ALARM["Scheduled Reminders"]
         DIARY["Diary"]
     end
 
     subgraph PLATFORM["Platform Layer (Platform)"]
+        direction TB
+        HOST["ApplicationHost"]
+        API["PlatformAPI"]
         EVENTS["Event Queue"]
         CMDS["Command Registry"]
     end
 
-    subgraph KERNEL["Kernel Layer (Kernel)"]
-        SCHEDULER["Heartbeat Scheduler"]
-    end
-
-    subgraph BRAIN["Cognitive Layer (Brain)"]
-        direction LR
-        NODES["Agent Nodes (Directed Cyclic Graph)"]
-        GATEWAY["LLM / Embedding Gateway"]
-        MEMORY["Unified Federated Memory"]
+    subgraph BRAIN["Cognitive Engine (CortexForge)"]
+        subgraph KERNEL["kernel Subsystem"]
+            direction LR
+            CIRCUIT["Circuit Orchestrator"]
+            BUS["FileEventBus"]
+            NODES["Agent / Router Nodes"]
+        end
+        subgraph MEMORY["memory Subsystem"]
+            direction LR
+            L1["L1 Working Memory"]
+            L2["L2 Episodic Memory"]
+            L3["L3 Semantic Memory"]
+        end
+        GATEWAY["LLM / Embedding Gateway (litellm)"]
     end
 
     APPS <-->|"AppEvent / invoke_command"| PLATFORM
-    PLATFORM <-->|"Events / Commands"| KERNEL
-    KERNEL <-->|"Scheduling / State"| BRAIN
+    PLATFORM <-->|"Event Bridge"| BRAIN
 ```
 
 ### Highly Decoupled App Plugin System
 
-Each App is an independent sensor and actuator, interacting with the host through a unified `PlatformAPI`. Connecting QQ, timers, file systems, or even external APIs — it only takes one App.
+Each App is an independent sensor and actuator. Connecting QQ, timers, file systems, or even external APIs — it only takes one App. Apps declare commands through `manifest.yaml`, interact with the host via `PlatformAPI`, and are enabled on demand.
 
-### Directed Cyclic Graph Cognitive Agent Network
+### Declarative Cognitive Topology
 
-Cognition doesn't rely on a single "super agent" — instead, multiple Agent / Router nodes form a directed cyclic graph. Nodes pass state among themselves through a file basket mechanism, forming a continuously running cognitive loop. In the future, cognitive node plugins will be opened for third-party cognitive capability extensions.
+Cognition doesn't rely on a single "super agent" — instead, multiple `Agent` / `Router` nodes are declaratively configured through `topology.yaml`. Nodes pass state through the `FileEventBus` file event bus, forming a file-driven cognitive pipeline. In the future, cognitive node plugins will be opened for third-party cognitive capability extensions.
 
-### Unified Federated Memory
+### Three-Tier Unified Memory
 
-AuroraBot's memory isn't just about "storing" — it grows structurally. The knowledge graph, vector retrieval, and episodic memory merge into a unified memory layer, ensuring every event and every decision participates in the evolution of memory.
+AuroraBot's memory grows structurally:
+
+| Tier | Type | Storage | Purpose |
+|------|------|---------|---------|
+| L1 Working Memory | FIFO in-memory list | Not persisted | Current session context |
+| L2 Episodic Memory | JSON file append | LLM-compressed after 50 entries | Timeline-based archiving |
+| L3 Semantic Memory | ChromaDB vector | Unlimited | Semantic similarity retrieval |
+
+`UnifiedMemoryManager` encapsulates all three tiers behind a unified interface — nodes never need to understand the underlying data flow. Every interaction writes to all three tiers at once, and retrieval merges results across all layers.
 
 ## MCP Adaptation Container (Planned)
 
@@ -92,15 +111,18 @@ This means:
 
 For complete architecture design, usage guides, and development documentation, please **[visit the AuroraBot Documentation 📖](https://www.aurorabot.org/)**:
 
-| Document                                                                                 | Description                                                  |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [Overview](https://www.aurorabot.org/start/overview.html)                                | A quick introduction to AuroraBot's vision & layers          |
-| [Getting Started](https://www.aurorabot.org/start/getting-started.html)                  | Run the project from scratch                                 |
-| [System Architecture](https://www.aurorabot.org/architecture/system-overview.html)       | Understand the four layers: Apps / Platform / Kernel / Brain |
-| [Cognitive Architecture](https://www.aurorabot.org/architecture/brain-architecture.html) | Deep dive into the directed cyclic Agent node network        |
-| [Platform Runtime](https://www.aurorabot.org/architecture/platform-runtime.html)         | Understand the runtime relationship between host and Apps    |
-| [App Development Guide](https://www.aurorabot.org/develop/app-development.html)          | Develop your own App                                         |
-| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                                | App development toolchain                                    |
+| Document                                                                                  | Description                                                          |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [Overview](https://www.aurorabot.org/start/overview.html)                                 | A quick introduction to AuroraBot's vision & architecture            |
+| [Getting Started](https://www.aurorabot.org/start/getting-started.html)                   | Run the project from scratch                                         |
+| [Configuration](https://www.aurorabot.org/start/configuration.html)                       | Environment variables, platform config, app config & persona docs    |
+| [System Architecture](https://www.aurorabot.org/architecture/system-overview.html)        | Understand the Apps / Platform / Kernel / Brain layers               |
+| [Cognitive Architecture](https://www.aurorabot.org/architecture/brain-architecture.html)  | File-driven cognitive pipeline and currently enabled topology        |
+| [Node System](https://www.aurorabot.org/architecture/node-system.html)                    | Node / Agent / Router data structures and event bus                  |
+| [Memory System](https://www.aurorabot.org/architecture/memory-system.html)                | L1 / L2 / L3 three-tier unified memory storage and retrieval         |
+| [App Development Guide](https://www.aurorabot.org/develop/app-development.html)           | Develop your own App from structure to lifecycle                     |
+| [Brain Node Development](https://www.aurorabot.org/develop/brain-node-development.html)   | Write Agent / Router nodes                                           |
+| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                                 | Application development toolchain roadmap                            |
 
 ## Open Source Acknowledgments
 
