@@ -587,7 +587,7 @@ class PolarisAgent(Agent):
                 "thought": text,
                 "actions": [
                     {
-                        "command": "system.console.print",
+                        "command": "im.polaris.console.send_message",
                         "params": {"text": text},
                     }
                 ],

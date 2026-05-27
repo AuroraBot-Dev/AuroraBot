@@ -18,24 +18,24 @@ from src.utils.log_utils import get_logger
 
 logger = get_logger("Runtime")
 
-_BUILTIN_COMMANDS_REGISTERED_ATTR = "_aurora_builtin_commands_registered"
+_BUILTIN_CONSOLE_SEND_MESSAGE = "im.polaris.console.send_message"
 
 
 async def _console_print(*, text: str) -> None:
-    logger.info(text)
+    print("\nBot: " + text + "\n")
 
 
 def _register_builtin_commands(host: ApplicationHost) -> None:
-    if getattr(host, _BUILTIN_COMMANDS_REGISTERED_ATTR, False):
+    if _BUILTIN_CONSOLE_SEND_MESSAGE in host.list_commands():
         return
     host.register_command(
         CommandSpec(
-            name="system.console.print",
-            description="输出文本到本地控制台",
+            name=_BUILTIN_CONSOLE_SEND_MESSAGE,
+            description="发送消息到本地控制台",
             parameters_schema={
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "要输出的文本"}
+                    "text": {"type": "string", "description": "要发送的消息文本"}
                 },
                 "required": ["text"],
             },
@@ -43,7 +43,6 @@ def _register_builtin_commands(host: ApplicationHost) -> None:
             handler=_console_print,
         )
     )
-    setattr(host, _BUILTIN_COMMANDS_REGISTERED_ATTR, True)
 
 
 @dataclass(slots=True)
@@ -108,6 +107,7 @@ async def restart_runtime_components(
     start_app_loop: bool,
     start_bridge: bool,
 ) -> RuntimeState:
+    _register_builtin_commands(state.host)
     if start_app_loop:
         state.app_task = asyncio.create_task(
             run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL)
