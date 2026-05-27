@@ -61,12 +61,6 @@ def _parse_alarm_time(text: str) -> dict[str, object]:
 
     dt_match = _ALARM_DATETIME.search(raw)
     if dt_match:
-        dt = datetime(
-            year=int(dt_match.group(1)),
-            month=1, day=1,
-            hour=int(dt_match.group(2)),
-            minute=int(dt_match.group(3)),
-        )
         result_dt = datetime.strptime(
             f"{dt_match.group(1)} {dt_match.group(2)}:{dt_match.group(3)}",
             "%Y-%m-%d %H:%M",

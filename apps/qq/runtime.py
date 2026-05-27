@@ -17,6 +17,37 @@ if TYPE_CHECKING:
     from src.platform.application_api import PlatformAPI
 
 logger = get_logger("QQApplication")
+_message_handler = None
+_active_runtime: "QQApplication | None" = None
+
+
+def _set_active_runtime(app: "QQApplication") -> None:
+    global _active_runtime
+    _active_runtime = app
+
+
+def _clear_active_runtime(app: "QQApplication") -> None:
+    global _active_runtime
+    if _active_runtime is app:
+        _active_runtime = None
+
+
+def _ensure_message_listener_registered() -> None:
+    global _message_handler
+    if _message_handler is not None:
+        return
+    try:
+        _message_handler = on_message(priority=5, block=False)
+    except Exception as exc:
+        logger.warning("QQ listener registration skipped: %s", exc)
+        return
+
+    @_message_handler.handle()
+    async def handle_message(bot: Bot, event: MessageEvent) -> None:
+        current = _active_runtime
+        if current is None:
+            return
+        await current.handle_message(bot, event)
 
 
 class QQApplication:
@@ -24,7 +55,6 @@ class QQApplication:
         self._api: PlatformAPI | None = None
         self._enable_listener = enable_listener
         self._running = False
-        self._message_handler = None
         self._events_file: Path | None = None
         self._targets_file: Path | None = None
         self._events: list[dict[str, Any]] = []
@@ -42,13 +72,15 @@ class QQApplication:
 
     async def on_start(self) -> None:
         if self._enable_listener:
-            self._register_message_listener()
+            _ensure_message_listener_registered()
         self._load_persistent_state()
         self._running = True
+        _set_active_runtime(self)
         logger.info("QQ application started")
 
     async def on_stop(self) -> None:
         self._running = False
+        _clear_active_runtime(self)
         self._save_persistent_state()
         logger.info("QQ application stopped")
 
@@ -58,17 +90,7 @@ class QQApplication:
     # ── 消息监听 ────────────────────────────────────
 
     def _register_message_listener(self) -> None:
-        if self._message_handler is not None:
-            return
-        try:
-            self._message_handler = on_message(priority=5, block=False)
-        except Exception as exc:
-            logger.warning("QQ listener registration skipped: %s", exc)
-            return
-
-        @self._message_handler.handle()
-        async def handle_message(bot: Bot, event: MessageEvent) -> None:
-            await self.handle_message(bot, event)
+        _ensure_message_listener_registered()
 
     async def handle_message(self, bot: Bot, event: MessageEvent) -> None:
         if not self._running:
