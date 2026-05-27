@@ -6,9 +6,6 @@ apps:
   diary:
     enabled: false
     startup: {}
-  alarm:
-    enabled: false
-    startup: {}
   weather:
     enabled: false
     startup: {}

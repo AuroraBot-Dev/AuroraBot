@@ -13,6 +13,12 @@ class Prompt:
     def get_content(self) -> str:
         return self._filepath.read_text(encoding="utf-8")
 
+    def fill(self, **kwargs: str) -> str:
+        result = self.get_content()
+        for key, value in kwargs.items():
+            result = result.replace(f"$${key}$$", value)
+        return result
+
     def __repr__(self) -> str:
         return f"Prompt({self._filepath.name})"
 

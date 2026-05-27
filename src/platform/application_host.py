@@ -105,7 +105,12 @@ class ApplicationHost:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"应用 {package} 执行 on_tick 失败: {exc}")
 
-    async def stop_all(self) -> None:
+    async def replace_apps(self, apps: Iterable[ApplicationProtocol]) -> None:
+        await self.stop_all(clear_events=False)
+        for app in apps:
+            await self.register(app)
+
+    async def stop_all(self, *, clear_events: bool = True) -> None:
         for package, app in reversed(list(self._apps.items())):
             try:
                 await _maybe_await(app.on_stop())
@@ -114,7 +119,8 @@ class ApplicationHost:
         self._apps.clear()
         self._manifests.clear()
         self._commands.clear()
-        self._events.clear()
+        if clear_events:
+            self._events.clear()
         logger.info("已注销所有应用")
 
 

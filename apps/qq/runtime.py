@@ -14,14 +14,46 @@ from nonebot.adapters.onebot.v11 import (
     MessageEvent,
 )
 
+from apps.qq.message_helper import MessageHelper
 from src.platform.contracts import AppEvent
-from src.utils.time_utils import now_text
 from src.utils.log_utils import get_logger
+from src.utils.time_utils import now_text
 
 if TYPE_CHECKING:
     from src.platform.application_api import PlatformAPI
 
 logger = get_logger("QQApplication")
+_message_handler = None
+_active_runtime: "QQApplication | None" = None
+
+
+def _set_active_runtime(app: "QQApplication") -> None:
+    global _active_runtime
+    _active_runtime = app
+
+
+def _clear_active_runtime(app: "QQApplication") -> None:
+    global _active_runtime
+    if _active_runtime is app:
+        _active_runtime = None
+
+
+def _ensure_message_listener_registered() -> None:
+    global _message_handler
+    if _message_handler is not None:
+        return
+    try:
+        _message_handler = on_message(priority=5, block=False)
+    except Exception as exc:
+        logger.warning("QQ listener registration skipped: %s", exc)
+        return
+
+    @_message_handler.handle()
+    async def handle_message(bot: Bot, event: MessageEvent) -> None:
+        current = _active_runtime
+        if current is None:
+            return
+        await current.handle_message(bot, event)
 
 
 class MessageHelper:
@@ -166,11 +198,12 @@ class QQApplication:
         self._api: PlatformAPI | None = None
         self._enable_listener = enable_listener
         self._running = False
-        self._message_handler = None
         self._events_file: Path | None = None
         self._targets_file: Path | None = None
         self._events: list[dict[str, Any]] = []
         self._session_targets: dict[str, dict[str, Any]] = {}
+
+    # ── 生命周期 ────────────────────────────────────
 
     def _bind(self, api: "PlatformAPI") -> None:
         self._api = api
@@ -182,31 +215,25 @@ class QQApplication:
 
     async def on_start(self) -> None:
         if self._enable_listener:
-            self._register_message_listener()
+            _ensure_message_listener_registered()
         self._load_persistent_state()
         self._running = True
+        _set_active_runtime(self)
         logger.info("QQ application started")
 
     async def on_stop(self) -> None:
         self._running = False
+        _clear_active_runtime(self)
         self._save_persistent_state()
         logger.info("QQ application stopped")
 
     async def on_tick(self) -> None:
         return None
 
-    def _register_message_listener(self) -> None:
-        if self._message_handler is not None:
-            return
-        try:
-            self._message_handler = on_message(priority=5, block=False)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("QQ listener registration skipped: %s", exc)
-            return
+    # ── 消息监听 ────────────────────────────────────
 
-        @self._message_handler.handle()
-        async def handle_message(bot: Bot, event: MessageEvent) -> None:
-            await self.handle_message(bot, event)
+    def _register_message_listener(self) -> None:
+        _ensure_message_listener_registered()
 
     async def handle_message(self, bot: Bot, event: MessageEvent) -> None:
         if not self._running:
@@ -217,14 +244,15 @@ class QQApplication:
         raw_msg = event.raw_message
         plain_text = event.get_plaintext()
 
-        # 移植自 XiaoGuang-Bot: 忽略以 "ign" 开头的测试/调试消息
-        candidate_text = (plain_text or raw_msg or "").strip()
-        if candidate_text.lower().startswith("ign"):
+        candidate = (plain_text or raw_msg or "").strip()
+        if candidate.lower().startswith("ign"):
             return
 
-        # 富文本解析: 回复引用、@提及、图片摘要等
         message_text = await MessageHelper.extract_message_text(
-            bot, event, plain_text, raw_msg
+            bot,
+            event,
+            plain_text,
+            raw_msg,
         )
         if not message_text:
             return
@@ -257,14 +285,14 @@ class QQApplication:
             "is_group": is_group,
             "bot_id": bot_id,
         }
-        self._append_event(
-            direction="inbound",
-            session_id=session_id,
-            text=text,
-            user_id=user_id,
-            is_group=is_group,
-            group_id=group_id,
-            bot_id=bot_id,
+        self._log_event(
+            "inbound",
+            session_id,
+            text,
+            user_id,
+            is_group,
+            group_id,
+            bot_id,
         )
         api.emit_event(
             AppEvent(
@@ -284,57 +312,100 @@ class QQApplication:
         )
         self._save_persistent_state()
 
-    async def send_qq_message(self, session_id: str, text: str) -> dict[str, object]:
+    # ── 命令: 发送消息 ───────────────────────────────
+
+    async def send_qq_message(
+        self,
+        session_id: str,
+        text: str,
+    ) -> dict[str, object]:
         target = self._session_targets.get(str(session_id))
         if target is None:
-            logger.warning("Missing target for session %s; logging only", session_id)
+            logger.warning("session %s 缺少目标信息", session_id)
             return {"success": False, "delivered_at": now_text()}
+
         if bool(target.get("is_group")):
-            await self._send_group_message(
-                group_id=str(target.get("group_id", session_id)),
-                text=text,
-                bot_id=str(target.get("bot_id", "")),
-                session_id=str(session_id),
-                user_id=str(target.get("user_id", "")),
+            await self._auto_split_send(
+                lambda t: self._send_group(
+                    group_id=str(target.get("group_id", session_id)),
+                    text=t,
+                    bot_id=str(target.get("bot_id", "")),
+                    session_id=str(session_id),
+                    user_id=str(target.get("user_id", "")),
+                ),
+                text,
             )
         else:
-            await self._send_private_message(
-                user_id=str(target.get("user_id", session_id)),
-                text=text,
-                bot_id=str(target.get("bot_id", "")),
-                session_id=str(session_id),
+            await self._auto_split_send(
+                lambda t: self._send_private(
+                    user_id=str(target.get("user_id", session_id)),
+                    text=t,
+                    bot_id=str(target.get("bot_id", "")),
+                    session_id=str(session_id),
+                ),
+                text,
             )
         return {"success": True, "delivered_at": now_text()}
 
     async def send_qq_private_message(
-        self, user_id: str, text: str
+        self,
+        user_id: str,
+        text: str,
     ) -> dict[str, object]:
-        session_id = str(user_id)
-        target = self._session_targets.get(session_id, {})
-        await self._send_private_message(
-            user_id=session_id,
-            text=text,
-            bot_id=str(target.get("bot_id", "")),
-            session_id=session_id,
+        target = self._session_targets.get(str(user_id), {})
+        await self._auto_split_send(
+            lambda t: self._send_private(
+                user_id=str(user_id),
+                text=t,
+                bot_id=str(target.get("bot_id", "")),
+                session_id=str(user_id),
+            ),
+            text,
         )
         return {"success": True}
 
     async def at_user_in_group(
-        self, group_id: str, user_id: str, text: str
+        self,
+        group_id: str,
+        user_id: str,
+        text: str,
     ) -> dict[str, object]:
-        session_id = str(group_id)
-        target = self._session_targets.get(session_id, {})
-        final_text = f"[CQ:at,qq={user_id}] {text}".strip()
-        await self._send_group_message(
-            group_id=str(group_id),
-            text=final_text,
-            bot_id=str(target.get("bot_id", "")),
-            session_id=session_id,
-            user_id=str(user_id),
-        )
+        target = self._session_targets.get(str(group_id), {})
+        from apps.qq.message_helper import MessageHelper
+
+        segments = MessageHelper.split_text(text)
+        for i, seg in enumerate(segments):
+            content = f"[CQ:at,qq={user_id}] {seg}".strip()
+            await self._send_group(
+                group_id=str(group_id),
+                text=content,
+                bot_id=str(target.get("bot_id", "")),
+                session_id=str(group_id),
+                user_id=str(user_id),
+            )
+            if i < len(segments) - 1:
+                await asyncio.sleep(0.3)
         return {"success": True}
 
-    async def _send_group_message(
+    # ── 自动分条 ────────────────────────────────────
+
+    @staticmethod
+    async def _auto_split_send(
+        sender,
+        text: str,
+        gap: float = 0.3,
+    ) -> None:
+        from apps.qq.message_helper import MessageHelper
+
+        segments = MessageHelper.split_text(text)
+        for i, seg in enumerate(segments):
+            await sender(seg)
+            if i < len(segments) - 1:
+                await asyncio.sleep(gap)
+
+    # ── 内部发送 ────────────────────────────────────
+
+    async def _send_group(
         self,
         group_id: str,
         text: str,
@@ -343,22 +414,12 @@ class QQApplication:
         user_id: str,
     ) -> None:
         bot = self._resolve_bot(bot_id)
-        for part in self._split_reply_segments(text):
-            await asyncio.sleep(self._typing_delay_seconds(part))
-            if bot is not None:
-                await bot.send_group_msg(group_id=int(group_id), message=part)
-            self._append_event(
-                direction="outbound",
-                session_id=session_id,
-                text=part,
-                user_id=user_id,
-                is_group=True,
-                group_id=group_id,
-                bot_id=bot_id,
-            )
+        if bot is not None:
+            await bot.send_group_msg(group_id=int(group_id), message=text)
+        self._log_event("outbound", session_id, text, user_id, True, group_id, bot_id)
         self._save_persistent_state()
 
-    async def _send_private_message(
+    async def _send_private(
         self,
         user_id: str,
         text: str,
@@ -366,39 +427,31 @@ class QQApplication:
         session_id: str,
     ) -> None:
         bot = self._resolve_bot(bot_id)
-        for part in self._split_reply_segments(text):
-            await asyncio.sleep(self._typing_delay_seconds(part))
-            if bot is not None:
-                await bot.send_private_msg(user_id=int(user_id), message=part)
-            self._append_event(
-                direction="outbound",
-                session_id=session_id,
-                text=part,
-                user_id=user_id,
-                is_group=False,
-                group_id=None,
-                bot_id=bot_id,
-            )
+        if bot is not None:
+            await bot.send_private_msg(user_id=int(user_id), message=text)
+        self._log_event("outbound", session_id, text, user_id, False, None, bot_id)
         self._save_persistent_state()
+
+    # ── Bot 解析 ─────────────────────────────────────
 
     def _resolve_bot(self, bot_id: str) -> Bot | None:
         try:
             if bot_id:
                 return get_bot(bot_id)
         except Exception:
-            logger.warning(
-                "Bot %s not found; falling back to the first active bot", bot_id
-            )
+            logger.warning("Bot %s 未找到", bot_id)
         try:
             bots = get_bots()
         except Exception:
             return None
         if bots:
-            first_bot = next(iter(bots.values()))
-            return first_bot if isinstance(first_bot, Bot) else None
+            first = next(iter(bots.values()))
+            return first if isinstance(first, Bot) else None
         return None
 
-    def _append_event(
+    # ── 持久化 ───────────────────────────────────────
+
+    def _log_event(
         self,
         direction: str,
         session_id: str,
@@ -420,30 +473,17 @@ class QQApplication:
                 "created_at": now_text(),
             }
         )
-        max_events = max(20, 4 * 50)
-        if len(self._events) > max_events:
-            self._events = self._events[-max_events:]
+        if len(self._events) > 200:
+            self._events = self._events[-200:]
 
     def _load_persistent_state(self) -> None:
-        loaded_events = self._read_json(self._events_file, [])
-        self._events = [dict(item) for item in loaded_events if isinstance(item, dict)]
+        loaded = self._read_json(self._events_file, [])
+        self._events = [dict(item) for item in loaded if isinstance(item, dict)]
         self._session_targets = self._read_json(self._targets_file, {})
 
     def _save_persistent_state(self) -> None:
         self._write_json(self._events_file, self._events)
         self._write_json(self._targets_file, self._session_targets)
-
-    def _split_reply_segments(self, reply: str) -> list[str]:
-        # 兼容旧输出: 主设计应由 brain 直接产出多条发送动作, 这里只保留对历史 "|" 写法的兜底拆分.
-        parts = [part.strip() for part in reply.split("|")]
-        parts = [part for part in parts if part]
-        return parts or [reply]
-
-    def _typing_delay_seconds(self, text: str) -> float:
-        text_length = len(text.strip())
-        if text_length <= 0:
-            return 0.0
-        return min(1.8, max(0.25, text_length * 0.06))
 
     def _read_json(self, file_path: Path | None, default: Any) -> Any:
         if file_path is None or not file_path.exists():
@@ -458,7 +498,8 @@ class QQApplication:
             return
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
 
     def _require_api(self) -> "PlatformAPI":

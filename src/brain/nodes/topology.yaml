@@ -17,4 +17,4 @@ nodes:
   - id: polaris
     type: polaris
     watch:
-      - "inbox/pending/event_message_received_*.json"
+      - "inbox/pending/event_*.json"
