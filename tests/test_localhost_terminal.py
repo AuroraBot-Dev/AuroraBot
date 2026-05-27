@@ -10,6 +10,7 @@ from src.brain.localhost import (
     HotReloadError,
     _request_process_exit,
     _should_skip_reload,
+    handle_control_command,
     reload_brain,
     stop_process,
     run_console_control_loop,
@@ -17,6 +18,7 @@ from src.brain.localhost import (
 from src.brain.runtime import RuntimeState
 from src.config import Config
 from src.platform.application_host import ApplicationHost
+from src.platform.contracts import AppEvent
 
 
 class _FakeCircuit:
@@ -197,6 +199,239 @@ class HotReloadTest(unittest.TestCase):
 
         asyncio.run(scenario())
         self.assertEqual(seen, ["~reload"])
+
+    def test_handle_control_command_ignores_unknown_command(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            result = await handle_control_command("noop", runtime=runtime, lock=lock)
+            self.assertIs(result, runtime)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_reloads_runtime(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+        updated_runtime = RuntimeState(
+            host=ApplicationHost(), stop_event=asyncio.Event()
+        )
+
+        async def scenario() -> None:
+            with patch(
+                "src.brain.localhost.reload_brain",
+                new=AsyncMock(return_value=updated_runtime),
+            ) as mock_reload:
+                result = await handle_control_command(
+                    "~reload",
+                    runtime=runtime,
+                    lock=lock,
+                )
+
+            mock_reload.assert_awaited_once_with(runtime=runtime)
+            self.assertIs(result, updated_runtime)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_restores_runtime_after_reload_error(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            with patch(
+                "src.brain.localhost.reload_brain",
+                new=AsyncMock(side_effect=HotReloadError("boom", runtime=runtime)),
+            ):
+                result = await handle_control_command(
+                    "~reload",
+                    runtime=runtime,
+                    lock=lock,
+                )
+
+            self.assertIs(result, runtime)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_stops_runtime(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            with patch(
+                "src.brain.localhost.stop_process",
+                new=AsyncMock(),
+            ) as mock_stop:
+                result = await handle_control_command(
+                    "~stop",
+                    runtime=runtime,
+                    lock=lock,
+                )
+
+            mock_stop.assert_awaited_once_with(runtime=runtime)
+            self.assertIsNone(result)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_injects_console_message(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            result = await handle_control_command(
+                '/say "你好 本地控制台"',
+                runtime=runtime,
+                lock=lock,
+            )
+
+            self.assertIs(result, runtime)
+            events = runtime.host.peek_events()
+            self.assertEqual(len(events), 1)
+            event = events[0]
+            self.assertEqual(event.source, "manual.console")
+            self.assertEqual(event.type, "message.received")
+            self.assertEqual(event.session_id, "private:localhost")
+            self.assertEqual(event.summary, "你好 本地控制台")
+            self.assertEqual(event.payload["text"], "你好 本地控制台")
+            self.assertEqual(event.payload["user_id"], "localhost")
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_prints_help(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/help", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            self.assertGreaterEqual(mock_info.call_count, 1)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_injects_custom_event(self) -> None:
+        lock = asyncio.Lock()
+        runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            result = await handle_control_command(
+                "/event custom.event --source manual.test --session s1 --summary hi --payload '{\"x\":1}'",
+                runtime=runtime,
+                lock=lock,
+            )
+
+            self.assertIs(result, runtime)
+            events = runtime.host.peek_events()
+            self.assertEqual(len(events), 1)
+            event = events[0]
+            self.assertEqual(event.type, "custom.event")
+            self.assertEqual(event.source, "manual.test")
+            self.assertEqual(event.session_id, "s1")
+            self.assertEqual(event.summary, "hi")
+            self.assertEqual(event.payload["x"], 1)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_invokes_command_and_logs_result(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            async def sample_handler(text: str) -> dict[str, str]:
+                return {"echo": text}
+
+            host.register_command(
+                SimpleNamespace(
+                    name="manual.echo",
+                    description="",
+                    parameters_schema={},
+                    returns_schema={},
+                    handler=sample_handler,
+                )
+            )
+
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    '/invoke manual.echo --payload \'{"text":"hello"}\'',
+                    runtime=runtime,
+                    lock=lock,
+                )
+
+            self.assertIs(result, runtime)
+            self.assertGreaterEqual(mock_info.call_count, 1)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_lists_apps(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            old_app = QQApplication(enable_listener=False)
+            await host.register(old_app)
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/apps", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            self.assertGreaterEqual(mock_info.call_count, 1)
+            await host.stop_all()
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_lists_commands(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            async def sample_handler() -> dict[str, str]:
+                return {"ok": "1"}
+
+            host.register_command(
+                SimpleNamespace(
+                    name="manual.echo",
+                    description="",
+                    parameters_schema={},
+                    returns_schema={},
+                    handler=sample_handler,
+                )
+            )
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/commands", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            self.assertGreaterEqual(mock_info.call_count, 1)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_drains_events(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            host.emit_event(AppEvent(source="manual.test", type="e1"))
+            host.emit_event(AppEvent(source="manual.test", type="e2"))
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/events --drain --limit 1",
+                    runtime=runtime,
+                    lock=lock,
+                )
+
+            self.assertIs(result, runtime)
+            self.assertEqual(len(host.peek_events()), 1)
+            self.assertGreaterEqual(mock_info.call_count, 1)
+
+        asyncio.run(scenario())
 
     def test_request_process_exit_raises_sigint(self) -> None:
         with patch("src.brain.localhost.signal.raise_signal") as mock_raise_signal:

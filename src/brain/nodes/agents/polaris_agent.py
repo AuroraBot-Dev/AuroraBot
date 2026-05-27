@@ -193,12 +193,7 @@ class PolarisAgent(Agent):
         group_id = str(payload.get("group_id", "")) if is_group else None
         session_key = self._make_session_key(user_id, is_group, group_id)
 
-        logger.info(
-            "收到消息 session=%s user=%s text=%.60s",
-            session_key,
-            user_id,
-            input_text,
-        )
+        logger.info(f"收到消息 session={session_key} user={user_id} text={input_text}")
 
         scene_name = "群聊" if is_group else "私聊"
         if is_group:
@@ -227,7 +222,7 @@ class PolarisAgent(Agent):
     # ═══════════════════════════════════════════════════
 
     async def _process_system_event(self, event_type: str, input_text: str) -> None:
-        logger.info("处理系统事件 type=%s text=%s", event_type, input_text)
+        logger.info(f"处理系统事件 type={event_type} text={input_text}")
         recovery_note = ""
         if event_type.startswith("agent.reply_"):
             recovery_note = (
@@ -268,11 +263,7 @@ class PolarisAgent(Agent):
         group_id = first["group_id"]
         scene_name = first["scene_name"]
 
-        logger.info(
-            "防抖完成 session=%s 合并 %d 条 → 门控",
-            session_key,
-            len(entries),
-        )
+        logger.info(f"防抖完成 session={session_key} 合并 {len(entries)} 条到门控")
 
         recent = (
             self._group_recent[int(group_id or 0)]
@@ -290,7 +281,7 @@ class PolarisAgent(Agent):
             return
 
         if not should_reply:
-            logger.info("门控判定不回复 session=%s", session_key)
+            logger.info(f"门控判定不回复 session={session_key}")
             return
 
         logger.info("门控通过 → 动作规划")
@@ -394,7 +385,7 @@ class PolarisAgent(Agent):
             )
             return
 
-        logger.info("动作生成完成 len=%d preview=%.80s", len(raw), raw)
+        logger.info(f"动作生成完成 len={len(raw)} preview={raw}")
 
         parsed = self._parse_actions(raw)
         if parsed is None:
@@ -404,12 +395,12 @@ class PolarisAgent(Agent):
                 )
                 if parsed is not None:
                     logger.warning(
-                        "纯文本兜底发送（JSON 解析失败）session=%s", session_key
+                        f"纯文本兜底发送（JSON 解析失败）session={session_key}"
                     )
         if parsed is None:
             et = "agent.reply_parse_failed" if raw.strip() else "agent.reply_empty"
             summary = "无法解析为结构化动作" if raw.strip() else "返回空响应"
-            logger.warning("%s session=%s", summary, session_key)
+            logger.warning(f"{summary} session={session_key}")
             await self._emit_inbox_event(
                 et,
                 session_id=session_id,
@@ -431,10 +422,10 @@ class PolarisAgent(Agent):
         if not isinstance(actions, list):
             actions = []
 
-        logger.info("思考: %.120s", thought)
+        logger.info(f"思考: {thought}")
 
         if not actions:
-            logger.info("无动作 session=%s", session_key)
+            logger.info(f"无动作 session={session_key}")
             return
 
         if version > 0 and self._session_versions.get(session_key) != version:
@@ -444,10 +435,7 @@ class PolarisAgent(Agent):
         if dispatched > 0:
             await self._append_assistant_message(raw)
             logger.info(
-                "回复完成 session=%s user=%s actions=%d",
-                session_key,
-                user_id,
-                dispatched,
+                f"回复完成 session={session_key} user={user_id} actions={dispatched}"
             )
 
     # ═══════════════════════════════════════════════════
@@ -653,16 +641,13 @@ class PolarisAgent(Agent):
                     await self._host.invoke_command(command, **params)
                     dispatched += 1
                 else:
-                    logger.warning("host 未注入, 无法执行 %s", command)
+                    logger.warning(f"host 未注入, 无法执行 {command}")
             except Exception:
-                logger.exception("执行命令 %s 失败", command)
+                logger.exception(f"执行命令 {command} 失败")
 
         if dispatched == 0 and actions:
             logger.warning(
-                "actions 中无可执行命令 session=%s invalid=%d total=%d",
-                session_key,
-                invalid,
-                len(actions),
+                f"actions 中无可执行命令 session={session_key} invalid={invalid} total={len(actions)}"
             )
         return dispatched
 
@@ -715,7 +700,7 @@ class PolarisAgent(Agent):
                     if isinstance(data, list):
                         return data
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("读取 history.json 失败: %s", exc)
+            logger.warning(f"读取 history.json 失败: {exc}")
         return [{"role": "system", "content": self._soul}]
 
     def _write_history(self, history: list[dict[str, Any]]) -> None:
@@ -763,7 +748,7 @@ class PolarisAgent(Agent):
                 json.dumps(event, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        logger.info("已写入 inbox 事件 %s", relative_path)
+        logger.info(f"已写入 inbox 事件 {relative_path}")
         return relative_path
 
     # ═══════════════════════════════════════════════════

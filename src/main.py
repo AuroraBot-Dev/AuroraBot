@@ -3,15 +3,7 @@ import asyncio
 
 from nonebot import get_driver
 
-from src.brain.localhost import (
-    DEVELOPER_COMMANDS,
-    HotReloadError,
-    RELOAD_COMMANDS,
-    STOP_COMMANDS,
-    reload_brain,
-    run_console_control_loop,
-    stop_process,
-)
+from src.brain.localhost import handle_control_command, run_console_control_loop
 from src.brain.runtime import RuntimeState, shutdown_runtime, start_runtime
 from src.platform.application_host import app_host
 from src.utils.log_utils import get_logger
@@ -36,34 +28,7 @@ async def startup_agent() -> None:
 
 async def _handle_control_command(raw: str) -> None:
     global _runtime
-
-    if raw not in DEVELOPER_COMMANDS:
-        return
-    if _runtime is None:
-        logger.warning("控制命令已忽略: runtime 尚未初始化")
-        return
-    if _reload_lock.locked():
-        logger.info("已有控制任务在执行，忽略重复指令")
-        return
-
-    logger.info(f"收到控制台指令: {raw}")
-    async with _reload_lock:
-        try:
-            if raw in RELOAD_COMMANDS:
-                _runtime = await reload_brain(runtime=_runtime)
-                return
-            if raw in STOP_COMMANDS:
-                runtime = _runtime
-                _runtime = None
-                await stop_process(runtime=runtime)
-                return
-        except HotReloadError as exc:
-            _runtime = exc.runtime
-            logger.exception("热重载失败，已回滚旧运行时")
-            return
-        except Exception:
-            logger.exception(f"控制台命令执行失败: {raw}")
-            return
+    _runtime = await handle_control_command(raw, runtime=_runtime, lock=_reload_lock)
 
 
 @driver.on_shutdown
