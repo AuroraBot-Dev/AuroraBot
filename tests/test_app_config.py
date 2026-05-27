@@ -17,7 +17,7 @@ class AppConfigTest(unittest.TestCase):
             loaded = load_apps_config(config_path)
             self.assertIn("qq", loaded)
             self.assertIn("diary", loaded)
-            self.assertIn("alarm", loaded)
+            self.assertIn("clock", loaded)
             self.assertTrue(loaded["qq"]["enabled"])
             self.assertEqual(loaded["qq"]["startup"]["enable_listener"], True)
 
@@ -25,7 +25,7 @@ class AppConfigTest(unittest.TestCase):
         discovered = discover_apps()
         self.assertIn("qq", discovered)
         self.assertIn("diary", discovered)
-        self.assertIn("alarm", discovered)
+        self.assertIn("clock", discovered)
 
         app = instantiate_app("qq", {"enable_listener": False, "unknown": 1})
         self.assertEqual(app.__class__.__name__, "QQApplication")
