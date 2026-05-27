@@ -29,6 +29,7 @@ async def startup_agent() -> None:
     global _app_task, _bridge_task, _circuit, _stop_event
 
     Config.ensure_dirs()
+    # FIXME: 当前实现下, 就算禁用APP循环, 仍然会导入所有应用配置, 如果贸然禁用应用配置流程, 又会导致app_host无引用
     apps_config = load_apps_config()
 
     for app_name, spec in apps_config.items():
