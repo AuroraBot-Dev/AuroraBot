@@ -193,12 +193,12 @@ class HotReloadTest(unittest.TestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await run_console_control_loop(
                     dispatch,
-                    readline=lambda: "  ~reload  \n",
+                    readline=lambda: "  /reload  \n",
                     idle_delay=0,
                 )
 
         asyncio.run(scenario())
-        self.assertEqual(seen, ["~reload"])
+        self.assertEqual(seen, ["/reload"])
 
     def test_handle_control_command_ignores_unknown_command(self) -> None:
         lock = asyncio.Lock()
@@ -223,7 +223,7 @@ class HotReloadTest(unittest.TestCase):
                 new=AsyncMock(return_value=updated_runtime),
             ) as mock_reload:
                 result = await handle_control_command(
-                    "~reload",
+                    "/reload",
                     runtime=runtime,
                     lock=lock,
                 )
@@ -243,7 +243,7 @@ class HotReloadTest(unittest.TestCase):
                 new=AsyncMock(side_effect=HotReloadError("boom", runtime=runtime)),
             ):
                 result = await handle_control_command(
-                    "~reload",
+                    "/reload",
                     runtime=runtime,
                     lock=lock,
                 )
@@ -262,7 +262,7 @@ class HotReloadTest(unittest.TestCase):
                 new=AsyncMock(),
             ) as mock_stop:
                 result = await handle_control_command(
-                    "~stop",
+                    "/stop",
                     runtime=runtime,
                     lock=lock,
                 )
@@ -409,6 +409,75 @@ class HotReloadTest(unittest.TestCase):
 
             self.assertIs(result, runtime)
             self.assertGreaterEqual(mock_info.call_count, 1)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_lists_commands_with_detail(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            async def sample_handler(message: str) -> dict[str, str]:
+                return {"echo": message}
+
+            host.register_command(
+                SimpleNamespace(
+                    name="manual.echo",
+                    description="echo message",
+                    parameters_schema={
+                        "type": "object",
+                        "properties": {"message": {"type": "string"}},
+                        "required": ["message"],
+                    },
+                    returns_schema={
+                        "type": "object",
+                        "properties": {"echo": {"type": "string"}},
+                    },
+                    handler=sample_handler,
+                )
+            )
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/commands --detail manual.echo", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            rendered = mock_info.call_args[0][0]
+            self.assertIn("manual.echo", rendered)
+            self.assertIn("parameters_schema", rendered)
+            self.assertIn("returns_schema", rendered)
+
+        asyncio.run(scenario())
+
+    def test_handle_control_command_lists_all_commands_with_detail(self) -> None:
+        lock = asyncio.Lock()
+        host = ApplicationHost()
+        runtime = RuntimeState(host=host, stop_event=asyncio.Event())
+
+        async def scenario() -> None:
+            async def sample_handler() -> dict[str, str]:
+                return {"ok": "1"}
+
+            host.register_command(
+                SimpleNamespace(
+                    name="manual.echo",
+                    description="",
+                    parameters_schema={},
+                    returns_schema={},
+                    handler=sample_handler,
+                )
+            )
+            with patch("src.brain.localhost.logger.info") as mock_info:
+                result = await handle_control_command(
+                    "/commands --detail all", runtime=runtime, lock=lock
+                )
+
+            self.assertIs(result, runtime)
+            rendered = mock_info.call_args[0][0]
+            self.assertIn("manual.echo", rendered)
+            self.assertIn("parameters_schema", rendered)
+            self.assertIn("returns_schema", rendered)
 
         asyncio.run(scenario())
 

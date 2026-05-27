@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 from typing import Any
+
+import yaml
 
 
 def parse_llm_json(raw: str) -> dict[str, Any] | None:
@@ -105,3 +108,26 @@ def safe_parse_json_object(content: str) -> dict[str, Any]:
     if left == -1 or right == -1 or right <= left:
         raise ValueError("LLM did not return a JSON object")
     return json.loads(content[left : right + 1])
+
+
+def parse_json_or_yaml_object(text: str | None) -> dict[str, Any]:
+    if not text or not text.strip():
+        return {}
+    raw = text.strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        payload = yaml.safe_load(raw)
+    return json_ready(payload) if isinstance(payload, dict) else {}
+
+
+def json_ready(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): json_ready(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [json_ready(item) for item in value]
+    if isinstance(value, tuple):
+        return [json_ready(item) for item in value]
+    if isinstance(value, (dt.date, dt.datetime)):
+        return value.isoformat()
+    return value

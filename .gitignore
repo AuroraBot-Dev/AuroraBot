@@ -145,6 +145,7 @@ dmypy.json
 logs/
 data/
 legacy/
+temp.*
 
 # IDE / Editor
 .vscode/

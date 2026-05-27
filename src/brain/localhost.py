@@ -3,10 +3,9 @@
 # ============================================
 
 from __future__ import annotations
-
 import argparse
 import asyncio
-import datetime as dt
+from dataclasses import dataclass
 import importlib
 import json
 import os
@@ -14,11 +13,8 @@ import shlex
 import signal
 import sys
 import threading
-from dataclasses import dataclass
 from types import ModuleType
-from typing import Any, Awaitable, Callable
-
-import yaml
+from typing import Awaitable, Callable
 
 from src.brain.runtime import (
     RuntimeState,
@@ -27,6 +23,7 @@ from src.brain.runtime import (
     stop_runtime_components,
 )
 from src.platform.contracts import AppEvent
+from src.utils.json_utils import json_ready, parse_json_or_yaml_object
 from src.utils.log_utils import get_logger
 
 logger = get_logger("Localhost")
@@ -40,6 +37,8 @@ INVOKE_COMMANDS = ("/invoke", "/i")
 APPS_COMMANDS = ("/apps", "/a")
 COMMANDS_COMMANDS = ("/commands", "/c")
 EVENTS_COMMANDS = ("/events", "/E")
+
+_SELF_MODULE = __name__
 
 _MODULES_TO_RELOAD: list[str] = [
     "src.platform.app_config",
@@ -55,6 +54,7 @@ _MODULES_TO_RELOAD: list[str] = [
     "src.brain.nodes.event_bridge",
     "src.brain.nodes",
     "src.brain.kernel.node_factory",
+    _SELF_MODULE,
 ]
 
 _MODULES_TO_SKIP_RELOAD: dict[str, str] = {
@@ -114,7 +114,7 @@ async def handle_control_command(
         logger.info("已有控制任务在执行，忽略重复指令")
         return runtime
 
-    logger.info(f"收到控制台指令: {parsed.name}")
+    logger.info(f"执行指令: {parsed.name}")
     async with lock:
         try:
             return await parsed.spec.handler(runtime, parsed)
@@ -122,10 +122,8 @@ async def handle_control_command(
             logger.exception("热重载失败，已回滚旧运行时")
             return exc.runtime
         except Exception:
-            logger.exception(f"控制台命令执行失败: {parsed.name}")
+            logger.exception(f"指令执行失败: {parsed.name}")
             return runtime
-
-    return runtime
 
 
 async def _handle_reload_command(
@@ -147,8 +145,16 @@ async def _handle_help_command(
     runtime: RuntimeState,
     _parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
-    for spec in _console_commands():
-        logger.info("%s - %s", spec.usage, spec.description)
+
+    specs = list(_console_commands())
+    usage_width = max((len(spec.usage) for spec in specs), default=0)
+    gap = 2
+    all_commands = "\n"
+    for spec in specs:
+        all_commands += (
+            f"{spec.usage.ljust(usage_width)}{' ' * gap}{spec.description}\n"
+        )
+    logger.info(all_commands)
     return runtime
 
 
@@ -158,7 +164,7 @@ async def _handle_say_command(
 ) -> RuntimeState:
     message = " ".join(parsed.args).strip()
     if not message:
-        logger.warning("控制台命令 `%s` 需要提供消息文本", parsed.name)
+        logger.warning(f"控制台命令 {parsed.name} 需要提供消息文本")
         return runtime
 
     session_id = "private:localhost"
@@ -178,7 +184,7 @@ async def _handle_say_command(
             },
         )
     )
-    logger.info("已注入控制台消息: %s", message)
+    logger.info(f"已注入消息: {message}")
     return runtime
 
 
@@ -190,10 +196,10 @@ async def _handle_event_command(
     try:
         args = parser.parse_args(list(parsed.args))
     except ValueError as exc:
-        logger.warning("命令 `%s` 参数错误: %s", parsed.name, exc)
+        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
         return runtime
 
-    payload = _parse_json(args.payload)
+    payload = parse_json_or_yaml_object(args.payload)
     runtime.host.emit_event(
         AppEvent(
             source=args.source,
@@ -204,10 +210,7 @@ async def _handle_event_command(
         )
     )
     logger.info(
-        "已注入事件 type=%s source=%s session=%s",
-        args.event_type,
-        args.source,
-        args.session_id,
+        f"已注入事件 type={args.event_type} source={args.source} session={args.session_id}",
     )
     return runtime
 
@@ -220,15 +223,18 @@ async def _handle_invoke_command(
     try:
         args = parser.parse_args(list(parsed.args))
     except ValueError as exc:
-        logger.warning("命令 `%s` 参数错误: %s", parsed.name, exc)
+        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
         return runtime
 
-    payload = _parse_json(args.payload)
+    payload = parse_json_or_yaml_object(args.payload)
     result = await runtime.host.invoke_command(args.command_name, **payload)
     logger.info(
-        "命令执行结果 %s:\n%s",
-        args.command_name,
-        json.dumps({"result": _json_ready(result)}, ensure_ascii=False, indent=2),
+        f"命令执行结果 {args.command_name}:\n"
+        + json.dumps(
+            {"result": json_ready(result)},
+            ensure_ascii=False,
+            indent=2,
+        )
     )
     return runtime
 
@@ -238,20 +244,60 @@ async def _handle_apps_command(
     _parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
     logger.info(
-        "已加载应用:\n%s",
-        json.dumps({"apps": runtime.host.list_apps()}, ensure_ascii=False, indent=2),
+        f"已加载应用:\n"
+        + json.dumps(
+            {"apps": runtime.host.list_apps()},
+            ensure_ascii=False,
+            indent=2,
+        ),
     )
     return runtime
 
 
 async def _handle_commands_command(
     runtime: RuntimeState,
-    _parsed: ParsedConsoleCommand,
+    parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
+    parser = _build_commands_parser()
+    try:
+        args = parser.parse_args(list(parsed.args))
+    except ValueError as exc:
+        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
+        return runtime
+
+    if not args.detail:
+        payload = {"commands": runtime.host.list_commands()}
+    else:
+        specs = runtime.host.list_command_specs()
+        if args.detail == "all":
+            payload = {
+                "commands": [
+                    {
+                        "name": spec.name,
+                        "description": spec.description,
+                        "parameters_schema": spec.parameters_schema,
+                        "returns_schema": spec.returns_schema,
+                    }
+                    for spec in specs
+                ]
+            }
+        else:
+            target = next((spec for spec in specs if spec.name == args.detail), None)
+            if target is None:
+                logger.warning(f"命令 {parsed.name} 未找到: {args.detail}")
+                return runtime
+            payload = {
+                "command": {
+                    "name": target.name,
+                    "description": target.description,
+                    "parameters_schema": target.parameters_schema,
+                    "returns_schema": target.returns_schema,
+                }
+            }
     logger.info(
-        "可用命令:\n%s",
-        json.dumps(
-            {"commands": runtime.host.list_commands()},
+        f"可用命令:\n"
+        + json.dumps(
+            payload,
             ensure_ascii=False,
             indent=2,
         ),
@@ -267,7 +313,7 @@ async def _handle_events_command(
     try:
         args = parser.parse_args(list(parsed.args))
     except ValueError as exc:
-        logger.warning("命令 `%s` 参数错误: %s", parsed.name, exc)
+        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
         return runtime
 
     events = (
@@ -280,8 +326,8 @@ async def _handle_events_command(
         )
     )
     logger.info(
-        "当前事件队列:\n%s",
-        json.dumps(
+        f"当前事件队列:\n"
+        + json.dumps(
             {"events": [event.to_dict() for event in events]},
             ensure_ascii=False,
             indent=2,
@@ -330,8 +376,8 @@ def _console_commands() -> tuple[ConsoleCommand, ...]:
         ),
         ConsoleCommand(
             names=COMMANDS_COMMANDS,
-            usage="/commands",
-            description="列出当前可调用命令",
+            usage="/commands [--detail all|<name>]",
+            description="列出当前可调用命令（--detail 展开 schema：all 或指定命令名）",
             handler=_handle_commands_command,
         ),
         ConsoleCommand(
@@ -408,26 +454,10 @@ def _build_events_parser() -> _ConsoleArgumentParser:
     return parser
 
 
-def _parse_json(text: str | None) -> dict[str, Any]:
-    if not text:
-        return {}
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        payload = yaml.safe_load(text)
-    return _json_ready(payload) if isinstance(payload, dict) else {}
-
-
-def _json_ready(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(key): _json_ready(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_json_ready(item) for item in value]
-    if isinstance(value, tuple):
-        return [_json_ready(item) for item in value]
-    if isinstance(value, (dt.date, dt.datetime)):
-        return value.isoformat()
-    return value
+def _build_commands_parser() -> _ConsoleArgumentParser:
+    parser = _ConsoleArgumentParser(add_help=False, prog="/commands")
+    parser.add_argument("--detail")
+    return parser
 
 
 def _reload_module(name: str) -> None:
@@ -461,7 +491,10 @@ def _should_skip_reload(name: str, module: ModuleType) -> str | None:
 
 def _reload_modules() -> None:
     importlib.invalidate_caches()
-    for name in _MODULES_TO_RELOAD:
+    names = [name for name in _MODULES_TO_RELOAD if name != _SELF_MODULE]
+    if _SELF_MODULE in _MODULES_TO_RELOAD:
+        names.append(_SELF_MODULE)
+    for name in names:
         _reload_module(name)
 
 
@@ -588,9 +621,7 @@ async def run_console_control_loop(
         daemon=True,
     )
     reader_thread.start()
-    logger.info(
-        f"控制台命令监听已启动，支持命令: [{', '.join(_console_command_aliases())}]"
-    )
+    logger.info(f"控制台命令监听已启动，使用 `/help` 查看支持的命令")
     try:
         while True:
             line = await input_queue.get()
