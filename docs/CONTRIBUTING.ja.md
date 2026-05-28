@@ -1,6 +1,6 @@
 # コントリビューションガイド
 
-<a href="CONTRIBUTING.md">中文</a> | <a href="CONTRIBUTING.en.md">English</a> | <b>日本語</b>
+<a href="./CONTRIBUTING.md">中文</a> | <a href="./CONTRIBUTING.en.md">English</a> | <b>日本語</b>
 
 AuroraBot に関心をお寄せいただきありがとうございます！このガイドでは、プロジェクトを素早く起動する方法と、推奨されるコントリビューションフローについて説明します。
 
