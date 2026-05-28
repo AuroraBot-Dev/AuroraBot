@@ -52,6 +52,9 @@ APPS_COMMANDS = ("/apps", "/A")
 COMMANDS_COMMANDS = ("/commands", "/C")
 EVENTS_COMMANDS = ("/events", "/E")
 
+# -- 记忆测试命令 --
+MEMTEST_COMMANDS = ("/memtest", "/mt")
+
 _SELF_MODULE = __name__
 
 _MODULES_TO_RELOAD: list[str] = [
