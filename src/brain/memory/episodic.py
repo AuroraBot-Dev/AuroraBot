@@ -71,6 +71,9 @@ class EpisodicMemory:
         to_compress = records[:-10]
         to_keep = records[-10:]
 
+        if not to_compress:
+            return records
+
         start_time = to_compress[0]["timestamp"]
         end_time = to_compress[-1]["timestamp"]
 
