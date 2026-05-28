@@ -67,6 +67,9 @@ class Config:
     LITELLM_MODEL: str = os.getenv("LITELLM_MODEL", "deepseek/deepseek-v4-flash")
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-xxx")
     AI_CONTEXT_CHAR_LIMIT: int = int(os.getenv("AI_CONTEXT_CHAR_LIMIT", "6000"))
+    LLM_TIMEOUT: float = float(os.getenv("LLM_TIMEOUT", "120"))
+    LLM_GATE_TIMEOUT: float = float(os.getenv("LLM_GATE_TIMEOUT", "30"))
+    MEMORY_RETRIEVE_TIMEOUT: float = float(os.getenv("MEMORY_RETRIEVE_TIMEOUT", "30"))
 
     # MEM0_API_KEY: str = os.getenv("MEM0_API_KEY", "m0-xxx")
     # MEM0_API_BASE_URL: str = os.getenv("MEM0_API_BASE_URL", "https://api.mem0.ai")

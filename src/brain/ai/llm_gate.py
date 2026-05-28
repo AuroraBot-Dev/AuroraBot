@@ -40,6 +40,7 @@ class LLMGateError(Exception):
 async def llm_chat(
     messages: List[Dict[str, str]],
     max_tokens: int = 2048,
+    timeout: float | None = None,
     **kwargs: Any,
 ) -> str:
     """使用 litellm 异步接口调用 LLM，返回模型生成的文本内容。
@@ -60,6 +61,9 @@ async def llm_chat(
         ``role`` 和 ``content`` 字段。
     max_tokens : int
         模型输出的最大 token 数，默认 2048。
+    timeout : float | None
+        请求超时秒数，默认 None（由 litellm 内部超时决定）。
+        推荐传入 ``Config.LLM_TIMEOUT`` 或 ``Config.LLM_GATE_TIMEOUT``。
     **kwargs : Any
         透传给 ``litellm.acompletion`` 的额外参数（temperature、top_p 等）。
         ``model`` 参数被显式禁止，传入即抛出 ``PermissionError``。
@@ -89,6 +93,9 @@ async def llm_chat(
     ... ]))
     >>> print(result)
     """
+    if timeout is None:
+        timeout = Config.LLM_TIMEOUT
+
     if "model" in kwargs:
         raise PermissionError("调用方禁止传入 model 参数，模型由项目配置统一指定")
 
@@ -104,6 +111,7 @@ async def llm_chat(
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
+        "timeout": timeout,
     }
     if api_key:
         litellm_kwargs["api_key"] = api_key
@@ -111,7 +119,7 @@ async def llm_chat(
 
     if Config.LLM_LOG_QUERY:
         logger.info(
-            f"LLM 请求: model={model}, messages_count={len(messages)}, max_tokens={max_tokens}",
+            f"LLM 请求: model={model}, messages_count={len(messages)}, max_tokens={max_tokens}, timeout={timeout}",
         )
 
     try:
