@@ -42,6 +42,8 @@ logs/
 data/
 legacy/
 temp.*
+tmp/
+temp/
 
 # IDE / Editor
 .vscode/

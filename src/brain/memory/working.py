@@ -1,4 +1,4 @@
-#L1缓存，内存存储
+# L1缓存，内存存储
 
 from typing import List
 from src.brain.memory.base import MemoryItem
@@ -12,6 +12,7 @@ class WorkingMemory:
     存储当前对话的最近几轮记录，生命周期短，不持久化（或只做临时文件备份）。
     主要解决：让大模型知道刚才的上下文是什么。
     """
+
     def __init__(self, max_items: int = 10):
         # max_items 控制上下文窗口大小，防止 Token 爆炸
         self.max_items = max_items
