@@ -288,6 +288,12 @@ class PolarisAgent(Agent):
             return
 
         logger.info("门控通过 → 动作规划")
+        
+        # 【优化】：提前异步发起高级记忆检索任务，利用防抖或准备上下文的时间掩盖 I/O 延迟
+        advanced_memory_task = asyncio.create_task(
+            self._prefetch_advanced_memory(user_id, merged_input)
+        )
+        
         await self._run_reply_pipeline(
             user_id=user_id,
             session_key=session_key,
@@ -298,6 +304,7 @@ class PolarisAgent(Agent):
             version=version,
             append_user=True,
             recovery_depth=0,
+            advanced_memory_task=advanced_memory_task,
         )
 
     # ═══════════════════════════════════════════════════
@@ -360,6 +367,7 @@ class PolarisAgent(Agent):
         append_user: bool,
         recovery_depth: int,
         recovery_note: str = "",
+        advanced_memory_task: asyncio.Task[str] | None = None,
     ) -> None:
         try:
             raw = await self._generate_actions(
@@ -370,6 +378,7 @@ class PolarisAgent(Agent):
                 group_id=group_id,
                 append_user=append_user,
                 recovery_note=recovery_note,
+                advanced_memory_task=advanced_memory_task,
             )
         except Exception:
             logger.exception("LLM 动作生成失败")
@@ -436,7 +445,7 @@ class PolarisAgent(Agent):
 
         dispatched = await self._dispatch_actions(actions, session_key, version)
         if dispatched > 0:
-            await self._append_assistant_message(raw)
+            await self._append_assistant_message(raw, user_id)
             logger.info(
                 f"回复完成 session={session_key} user={user_id} actions={dispatched}"
             )
@@ -455,6 +464,7 @@ class PolarisAgent(Agent):
         group_id: str | None,
         append_user: bool,
         recovery_note: str = "",
+        advanced_memory_task: asyncio.Task[str] | None = None,
     ) -> str:
         if append_user:
             messages = await self._append_user_message(user_id, merged_input)
@@ -477,6 +487,15 @@ class PolarisAgent(Agent):
         scene_text = self._build_scene_text(session_id, is_group, group_id)
         commands_text = self._build_commands_text()
         memory_text = self._build_memory_text(user_id)
+        
+        #记忆模块接入 (使用预取的 Task 如果有的话)
+        if advanced_memory_task:
+            advanced_memory_text = await advanced_memory_task
+        else:
+            advanced_memory_text = self._build_advanced_memory_text(user_id, merged_input)
+            
+        combined_memory_text = f"{memory_text}\n\n{advanced_memory_text}" if advanced_memory_text else memory_text
+        
         action_prompt = prompts.ACTION.fill(
             scene=scene_text,
             commands=commands_text,
@@ -492,7 +511,8 @@ class PolarisAgent(Agent):
         messages.append({"role": "user", "content": final_instruction})
 
         response = await llm_chat(
-            [{"role": "system", "content": memory_text}] + messages,
+            #记忆模块更改
+            [{"role": "system", "content": combined_memory_text}] + messages,
             max_tokens=2048,
             temperature=0.0,
         )
@@ -556,6 +576,28 @@ class PolarisAgent(Agent):
             diary_block=diary_block,
             impression_block=impression_block,
         )
+
+    #获取记忆文本
+    async def _prefetch_advanced_memory(self, current_user_id: str, current_query: str) -> str:
+        """异步包装，用于提前发起检索任务"""
+        # 如果 retrieve_context 是异步的，这里可以直接 await；
+        # 由于当前 retrieve_context 是同步阻塞的，我们将其丢入线程池中运行以防阻塞主事件循环
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, 
+            self._build_advanced_memory_text, 
+            current_user_id, 
+            current_query
+        )
+
+    def _build_advanced_memory_text(self, current_user_id: str, current_query: str) -> str:
+        try:
+            from src.brain.memory import memory_manager
+            ctx = memory_manager.retrieve_context(current_query=current_query, user_id=current_user_id)
+            return ctx.to_prompt_text()
+        except Exception as e:
+            logger.warning(f"获取高级统一记忆失败: {e}")
+            return ""
 
     # ═══════════════════════════════════════════════════
     # JSON 解析
@@ -667,6 +709,13 @@ class PolarisAgent(Agent):
     # ═══════════════════════════════════════════════════
     # 对话历史
     # ═══════════════════════════════════════════════════
+    #写入统一记忆
+    def _record_unified_memory(self, content: str, role: str, user_id: str) -> None:
+        try:
+            from src.brain.memory import memory_manager
+            memory_manager.process_interaction(content=content, role=role, user_id=str(user_id))
+        except Exception as e:
+            logger.error(f"写入统一记忆失败 ({role}): {e}")
 
     async def _append_user_message(
         self, user_id: str, input_line: str
@@ -689,14 +738,19 @@ class PolarisAgent(Agent):
                     }
                 )
             self._write_history(history)
+            #写入统一记忆
+            self._record_unified_memory(input_line, "user", user_id)
+            
             recent_start = max(1, len(history) - MESSAGE_WINDOW)
             return history[:1] + history[recent_start:]
 
-    async def _append_assistant_message(self, content: str) -> None:
+    async def _append_assistant_message(self, content: str, user_id: str = "unknown") -> None:
         async with self._history_lock:
             history = self._read_history()
             history.append({"role": "assistant", "content": content})
             self._write_history(history)
+            
+        self._record_unified_memory(content, "assistant", user_id)
 
     async def _get_recent_history_messages(self) -> list[dict[str, Any]]:
         async with self._history_lock:
