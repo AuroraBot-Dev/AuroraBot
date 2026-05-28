@@ -1,5 +1,7 @@
 # 贡献指南
 
+<b>中文</b> | <a href="CONTRIBUTING.en.md">English</a> | <a href="CONTRIBUTING.ja.md">日本語</a>
+
 感谢你对 AuroraBot 的关注！这份指南会帮助你快速把项目跑起来，并说明推荐的贡献流程。
 
 ## 环境要求

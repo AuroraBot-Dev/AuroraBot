@@ -1,5 +1,7 @@
 # Contributing Guide
 
+<a href="CONTRIBUTING.md">中文</a> | <b>English</b> | <a href="CONTRIBUTING.ja.md">日本語</a>
+
 Thank you for your interest in AuroraBot! This guide will help you get the project running and walk you through the recommended contribution workflow.
 
 ## Prerequisites
