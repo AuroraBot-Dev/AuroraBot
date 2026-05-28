@@ -1,0 +1,85 @@
+name: Bug 反馈 | Bug Report
+description: 反馈一个 AuroraBot 的错误。| File a bug report for AuroraBot.
+title: "[Bug] "
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请确认：
+
+        * 该问题确实是 **AuroraBot 框架本身的错误**，而**不是 LLM / 模型服务 / 上游适配器（如 OneBot）的问题**。
+        * 你使用的是**最新版本**的 AuroraBot。请先检查是否有可用的更新。
+
+        Before submitting, please confirm:
+
+        * The issue is indeed **a bug in the AuroraBot framework itself**, not an issue with the LLM / model service / upstream adapter (e.g., OneBot).
+        * You are using the **latest version** of AuroraBot. Please check for available updates first.
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: 问题描述 | Bug Description
+      description: |
+        请尽可能详细地描述你所遇到的问题。
+        Please describe the bug you met in as much detail as possible.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce-steps
+    attributes:
+      label: 复现步骤 | Steps to Reproduce
+      description: |
+        请描述如何触发这个问题。
+        Please describe the steps to reproduce this bug.
+      placeholder: |
+        1. 启动 AuroraBot
+        2. 发送指令 ...
+        3. 观察日志输出 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: 预期行为 | Expected Behavior
+      description: |
+        请描述你期望发生什么。
+        Please describe what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: 实际行为 | Actual Behavior
+      description: |
+        请描述实际发生了什么。
+        Please describe what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 错误信息 | Logs / Error Output
+      description: |
+        请粘贴相关的日志输出或 Python Traceback。
+        **请注意：日志是诊断问题的重要依据，请务必上传！**
+
+        Please paste the relevant log output or Python traceback.
+        **ATTENTION: Logs are the key to resolving the bug. Please upload them!**
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息 | Environment
+      description: |
+        请提供你的运行环境信息。
+        Please provide your environment information.
+      value: |
+        - OS:
+        - Python 版本 | Python Version:
+        - AuroraBot 版本 | AuroraBot Version:
+        - 使用的 LLM 网关 | LLM Gateway (e.g., OpenAI / DeepSeek / ...):
+        - 使用的适配器 | Adapter (e.g., OneBot V11 / ...):
+    validations:
+      required: true
