@@ -7,8 +7,8 @@
 
     from src.brain.ai.models import get_pricing_by_id
 
-    pricing = await get_pricing_by_id("deepseek/deepseek-chat")
-    # => {"input": 0.27, "output": 1.10}  或  None
+    pricing = await get_pricing_by_id("openai/gpt-4o-mini")
+    # => {"input": 0.15, "output": 0.60}  或  None
 """
 
 from __future__ import annotations
@@ -135,7 +135,7 @@ async def get_pricing_by_id(model_id: str) -> dict[str, Any] | None:
 
     Args:
         model_id: 模型标识符，格式 ``provider/model_name``，
-                  例如 ``"deepseek/deepseek-chat"``、
+                  例如 ``"openai/gpt-4o-mini"``、
                   ``"openai/gpt-4o"``。
 
     Returns:

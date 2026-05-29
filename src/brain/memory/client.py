@@ -45,7 +45,7 @@ def _build_embedder_config() -> dict[str, Any]:
         return {
             "provider": "openai",
             "config": {
-                "model": embedding_model or "BAAI/bge-m3",
+                "model": embedding_model or "text-embedding-3-small",
             },
         }
 

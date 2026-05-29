@@ -426,11 +426,11 @@ class ModelGateway:
     用法::
 
         gateway = ModelGateway(
-            fast="deepseek/deepseek-v4-flash",
-            quality="deepseek/deepseek-v4-pro",
+            fast="openai/gpt-4o-mini",
+            quality="openai/gpt-4o",
             multimodal="openai/gpt-4o",
             embedding="openai/text-embedding-3-small",
-            reranker="jina/jina-reranker-v2",
+            reranker="",
         )
         gen = gateway.fast.acompletion(messages=[...])
         resp = await gen

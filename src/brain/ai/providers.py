@@ -1,8 +1,11 @@
 """自定义 LLM 供应商配置。
 
-在网关初始化前调用 ``setup_providers()``，将自定义供应商（如硅基流动）
-注册到 litellm 配置中。网关在发起 LLM 调用时自动解析 ``<provider>/<model>``
-为 litellm 原生模型 ID 并注入 api_base / api_key。
+在网关初始化前调用 ``setup_providers()``，将自定义供应商（如硅基流动、
+DeepSeek 等 OpenAI 兼容 API）注册到 litellm 配置中。网关在发起 LLM 调用时自动解析
+``<provider>/<model>`` 为 litellm 原生模型 ID 并注入 api_base / api_key。
+
+默认情况下所有角色使用 OpenAI 官方模型，只需配置 ``OPENAI_API_KEY`` 即可运行。
+如需切换到其他供应商，修改 ``LLM_GATEWAY_*_MODEL`` 环境变量并配置对应的 API Key。
 
 用法::
 
@@ -113,8 +116,8 @@ def resolve_model(model_id: str) -> tuple[str, dict[str, Any]]:
         # model  = "openai/deepseek-ai/DeepSeek-V3"
         # extra  = {"api_base": "https://api.siliconflow.cn/v1", "api_key": "sk-xxx"}
 
-        model, extra = resolve_model("deepseek/deepseek-chat")
-        # model  = "deepseek/deepseek-chat"
+        model, extra = resolve_model("openai/gpt-4o-mini")
+        # model  = "openai/gpt-4o-mini"
         # extra  = {}
     """
     if "/" not in model_id:

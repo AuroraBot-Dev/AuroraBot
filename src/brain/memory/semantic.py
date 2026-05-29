@@ -28,7 +28,7 @@ class SemanticMemory:
     def extract_and_store(self, text: str, user_id: str) -> None:
         """写策略：智能提炼与向量化 (Write via LLM Extraction)
 
-        调用 mem0 的 add 方法。mem0 会在内部调用大模型(DeepSeek)分析这段文本，
+        调用 mem0 的 add 方法。mem0 会在内部调用大模型分析这段文本，
         如果包含有价值的长期信息，就会将其转换为向量并存入 ChromaDB。
         """
         if not user_id or not str(user_id).strip():

@@ -21,11 +21,11 @@ _MESSAGES: List[Dict[str, str]] = [
     {"role": "user", "content": "你好"},
 ]
 
-_FAST_MODEL = "deepseek/deepseek-chat"
-_QUALITY_MODEL = "deepseek/deepseek-reasoner"
-_MULTIMODAL_MODEL = "deepseek/deepseek-chat"
-_EMBEDDING_MODEL = "siliconflow/BAAI/bge-m3"
-_RERANKER_MODEL = "jina/jina-reranker-v2"
+_FAST_MODEL = "openai/gpt-4o-mini"
+_QUALITY_MODEL = "openai/gpt-4o"
+_MULTIMODAL_MODEL = "openai/gpt-4o"
+_EMBEDDING_MODEL = "openai/text-embedding-3-small"
+_RERANKER_MODEL = ""
 
 
 # ── helpers ──────────────────────────────────────────────────
@@ -117,7 +117,7 @@ class ModelGatewayInitTest(unittest.TestCase):
         self.assertEqual(config[ROLE_QUALITY], _QUALITY_MODEL)
         self.assertEqual(config[ROLE_MULTIMODAL], _MULTIMODAL_MODEL)
         self.assertEqual(config["embedding"], _EMBEDDING_MODEL)
-        self.assertEqual(config["reranker"], _RERANKER_MODEL)
+        self.assertNotIn("reranker", config)
 
     def test_embedding_config_is_plain_string(self) -> None:
         gw = _make_gateway()
@@ -126,7 +126,7 @@ class ModelGatewayInitTest(unittest.TestCase):
 
     def test_reranker_config_is_plain_string(self) -> None:
         gw = _make_gateway()
-        self.assertEqual(gw.reranker, _RERANKER_MODEL)
+        self.assertEqual(gw.reranker, "")
         self.assertIsInstance(gw.reranker, str)
 
     def test_embedding_and_reranker_default_to_empty(self) -> None:
