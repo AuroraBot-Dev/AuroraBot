@@ -193,7 +193,9 @@ class PolarisAgent(Agent):
         group_id = str(payload.get("group_id", "")) if is_group else None
         session_key = self._make_session_key(user_id, is_group, group_id)
 
-        logger.info(f"收到消息 session={session_key} user={user_id} text={input_text}")
+        logger.debug(
+            "收到消息 session=%s user=%s text=%s", session_key, user_id, input_text
+        )
 
         scene_name = "群聊" if is_group else "私聊"
         if is_group:
@@ -222,7 +224,7 @@ class PolarisAgent(Agent):
     # ═══════════════════════════════════════════════════
 
     async def _process_system_event(self, event_type: str, input_text: str) -> None:
-        logger.info(f"处理系统事件 type={event_type} text={input_text}")
+        logger.debug("处理系统事件 type=%s text=%s", event_type, input_text)
         recovery_note = ""
         if event_type.startswith("agent.reply_"):
             recovery_note = (
@@ -263,7 +265,7 @@ class PolarisAgent(Agent):
         group_id = first["group_id"]
         scene_name = first["scene_name"]
 
-        logger.info(f"防抖完成 session={session_key} 合并 {len(entries)} 条到门控")
+        logger.debug("防抖完成 session=%s 合并 %d 条到门控", session_key, len(entries))
 
         recent = (
             self._group_recent[int(group_id or 0)]
@@ -284,10 +286,10 @@ class PolarisAgent(Agent):
                 return
 
         if not should_reply:
-            logger.info(f"门控判定不回复 session={session_key}")
+            logger.debug("门控判定不回复 session=%s", session_key)
             return
 
-        logger.info("门控通过 → 动作规划")
+        logger.debug("门控通过 → 动作规划")
 
         # 【优化】：提前异步发起高级记忆检索任务，利用防抖或准备上下文的时间掩盖 I/O 延迟
         advanced_memory_task = asyncio.create_task(
@@ -424,7 +426,7 @@ class PolarisAgent(Agent):
             )
             return
 
-        logger.info(f"动作生成完成 len={len(raw)} preview={raw}")
+        logger.debug("动作生成完成 len=%d preview=%s", len(raw), raw)
 
         parsed = self._parse_actions(raw)
         if parsed is None:
@@ -461,10 +463,10 @@ class PolarisAgent(Agent):
         if not isinstance(actions, list):
             actions = []
 
-        logger.info(f"思考: {thought}")
+        logger.debug("思考: %s", thought)
 
         if not actions:
-            logger.info(f"无动作 session={session_key}")
+            logger.debug("无动作 session=%s", session_key)
             return
 
         if version > 0 and self._session_versions.get(session_key) != version:
@@ -495,8 +497,10 @@ class PolarisAgent(Agent):
     ) -> str:
         t0 = time.time()
 
-        logger.info(
-            f"[动作规划] step=历史加载 user={user_id} append_user={append_user}"
+        logger.debug(
+            "[动作规划] step=历史加载 user=%s append_user=%s",
+            user_id,
+            append_user,
         )
         if append_user:
             messages = await self._append_user_message(user_id, merged_input)
@@ -510,8 +514,10 @@ class PolarisAgent(Agent):
                         "content": merged_input,
                     }
                 )
-        logger.info(
-            f"[动作规划] step=历史加载 耗时={time.time()-t0:.2f}s len={len(messages)}"
+        logger.debug(
+            "[动作规划] step=历史加载 耗时=%.2fs len=%d",
+            time.time() - t0,
+            len(messages),
         )
 
         if messages and messages[0].get("role") == "system":
@@ -523,18 +529,19 @@ class PolarisAgent(Agent):
         scene_text = self._build_scene_text(session_id, is_group, group_id)
         commands_text = self._build_commands_text()
         memory_text = self._build_memory_text(user_id)
-        logger.info(f"[动作规划] step=上下文构建 耗时={time.time()-t1:.2f}s")
+        logger.debug("[动作规划] step=上下文构建 耗时=%.2fs", time.time() - t1)
 
         t2 = time.time()
         if advanced_memory_task:
-            logger.info(f"[动作规划] step=高级记忆 async_task=开始等待")
+            logger.debug("[动作规划] step=高级记忆 async_task=开始等待")
             try:
                 advanced_memory_text = await asyncio.wait_for(
                     advanced_memory_task,
                     timeout=Config.MEMORY_RETRIEVE_TIMEOUT,
                 )
-                logger.info(
-                    f"[动作规划] step=高级记忆 async_task=完成 耗时={time.time()-t2:.2f}s"
+                logger.debug(
+                    "[动作规划] step=高级记忆 async_task=完成 耗时=%.2fs",
+                    time.time() - t2,
                 )
             except asyncio.TimeoutError:
                 logger.warning(
@@ -573,8 +580,10 @@ class PolarisAgent(Agent):
         messages.append({"role": "user", "content": final_instruction})
 
         t3 = time.time()
-        logger.info(
-            f"[动作规划] step=LLM调用 model={Config.LLM_GATEWAY_QUALITY_MODEL} msg_count={len(messages)} max_tokens=2048"
+        logger.debug(
+            "[动作规划] step=LLM调用 model=%s msg_count=%d max_tokens=2048",
+            Config.LLM_GATEWAY_QUALITY_MODEL,
+            len(messages),
         )
         gen = gateway.quality.acompletion(
             [{"role": "system", "content": combined_memory_text}] + messages,
@@ -583,10 +592,12 @@ class PolarisAgent(Agent):
         )
         await gen
         response = gen.plain()
-        logger.info(
-            f"[动作规划] step=LLM调用 耗时={time.time()-t3:.2f}s len={len(response) if response else 0}"
+        logger.debug(
+            "[动作规划] step=LLM调用 耗时=%.2fs len=%d",
+            time.time() - t3,
+            len(response) if response else 0,
         )
-        logger.info(f"[动作规划] 总耗时={time.time()-t0:.2f}s")
+        logger.debug("[动作规划] 总耗时=%.2fs", time.time() - t0)
         return (response or "").strip()
 
     # ═══════════════════════════════════════════════════
