@@ -59,7 +59,7 @@ class ApplicationHost:
 
     def emit_event(self, event: AppEvent) -> None:
         self._events.append(event)
-        logger.info(f"已推送应用事件: {event.type}")
+        logger.debug("已推送应用事件: %s", event.type)
 
     # 从事件队列中提取事件
     def drain_events(self, limit: int | None = None) -> list[AppEvent]:
@@ -94,7 +94,7 @@ class ApplicationHost:
         spec = self._commands.get(command_name)
         if spec is None:
             raise KeyError(f"Unknown command: {command_name}")
-        logger.info(f"执行命令: {command_name}")
+        logger.debug("执行命令: %s", command_name)
         return await _maybe_await(spec.handler(**kwargs))
 
     async def tick(self) -> None:
@@ -130,4 +130,27 @@ async def _maybe_await(result: Any) -> Any:
     return result
 
 
-app_host = ApplicationHost()
+# ═══════════════════════════════════════════════════════════
+# 模块单例（延迟初始化）
+# ═══════════════════════════════════════════════════════════
+
+_app_host_singleton: ApplicationHost | None = None
+
+
+def get_app_host() -> ApplicationHost:
+    """获取应用宿主单例，首次调用时延迟初始化。"""
+    global _app_host_singleton
+    if _app_host_singleton is None:
+        _app_host_singleton = ApplicationHost()
+    return _app_host_singleton
+
+
+class _AppHostProxy:
+    """兼容直接属性访问的懒加载代理。"""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_app_host(), name)
+
+
+# 全局单例代理，供其它模块直接导入使用
+app_host = _AppHostProxy()

@@ -26,11 +26,23 @@ def apps_root() -> Path:
     return Config.APP_DIR
 
 
+# 发现结果缓存（避免启动流程中多次扫描重复日志）
+_discovery_cache: dict[Path | None, dict[str, DiscoveredApp]] = {}
+
+
 # 发现所有应用
 def discover_apps(root: Path | None = None) -> dict[str, DiscoveredApp]:
     search_root = root or apps_root()
+
+    # 缓存命中 → 静默返回
+    cached = _discovery_cache.get(search_root)
+    if cached is not None:
+        logger.debug("应用发现缓存命中（%d 个应用）", len(cached))
+        return cached
+
     discovered: dict[str, DiscoveredApp] = {}
     if not search_root.exists():
+        _discovery_cache[search_root] = discovered
         return discovered
     for child in sorted(search_root.iterdir(), key=lambda item: item.name):
         # 检查是否为目录且不以 __ 开头
@@ -63,7 +75,8 @@ def discover_apps(root: Path | None = None) -> dict[str, DiscoveredApp]:
             directory=child,
         )
 
-    logger.info(f"在 {search_root} 中发现 {len(discovered)} 个合法应用")
+    _discovery_cache[search_root] = discovered
+    logger.info("在 %s 中发现 %d 个合法应用", search_root, len(discovered))
     return discovered
 
 
