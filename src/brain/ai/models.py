@@ -72,7 +72,7 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:
         if _is_cache_valid():
             return _cache  # type: ignore[return-value]
 
-        logger.info("正在从 models.dev 拉取模型数据库...")
+        logger.debug("正在从 models.dev 拉取模型数据库...")
 
         def _fetch() -> dict[str, Any]:
             req = urllib.request.Request(
@@ -117,7 +117,7 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:
                     _cache[f"{provider_id}/{model_name}"] = cost
 
         _cache_ts = time.monotonic()
-        logger.info("models.dev 缓存已更新（%d 个模型）", len(_cache))
+        logger.debug("models.dev 缓存已更新（%d 个模型）", len(_cache))
         return _cache
 
 
