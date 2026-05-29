@@ -366,7 +366,7 @@ class Agent(Node):
         gen = gateway.fast.acompletion(messages, **kwargs)
         self._current_gen_task = gen
         try:
-            await gen
+            _ = await gen
             return gen.plain()
         finally:
             self._current_gen_task = None
