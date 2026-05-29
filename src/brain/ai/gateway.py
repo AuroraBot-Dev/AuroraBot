@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 # ── LiteLLM 环境抑制（必须在 import litellm 前设置） ──
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "False"
@@ -32,7 +32,7 @@ litellm.suppress_debug_info = True
 from src.utils.log_utils import get_logger
 
 from src.brain.ai.models import get_pricing_by_id
-from src.brain.ai.providers import resolve_model
+from src.brain.ai.providers import missing_credentials_reason, resolve_model
 
 logger = get_logger("Gateway")
 
@@ -43,7 +43,6 @@ logger = get_logger("Gateway")
 ROLE_FAST = "fast"
 ROLE_QUALITY = "quality"
 ROLE_MULTIMODAL = "multimodal"
-ROLE_EMBEDDING = "embedding"
 
 # ═══════════════════════════════════════════════════════════
 # 异常体系
@@ -85,6 +84,8 @@ def _exc_msg() -> str:
 
 def _classify_exception(exc: Exception) -> GatewayError:
     """将 litellm 原始异常转换为带 retryable 标记的 GatewayError。"""
+    if "Missing credentials" in str(exc):
+        return GatewayError(f"LLM 凭证缺失: {exc}", retryable=False)
     if isinstance(exc, litellm.exceptions.AuthenticationError):
         return GatewayError(f"LLM 认证失败: {exc}", retryable=False)
     if isinstance(exc, litellm.exceptions.BadRequestError):
@@ -235,9 +236,6 @@ class ModelCaller:
 
         禁止调用方传入 ``model`` 参数 —— 模型由角色配置统一指定。
         """
-        if self.role == ROLE_EMBEDDING:
-            raise ValueError("Embedding model cannot be used for chat completions.")
-
         if "model" in kwargs:
             raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")
 
@@ -297,12 +295,14 @@ class ModelCaller:
             prompt_tokens = 0
 
             # 解析自定义供应商 → litellm 原生模型 + 额外参数
+            missing_reason = missing_credentials_reason(self.model)
+            if missing_reason is not None:
+                raise GatewayError(missing_reason, retryable=False)
+
             resolved_model, provider_kwargs = resolve_model(self.model)
 
             try:
-                prompt_tokens = token_counter(
-                    model=resolved_model, messages=messages
-                )
+                prompt_tokens = token_counter(model=resolved_model, messages=messages)
             except Exception:
                 pass
 
@@ -420,49 +420,6 @@ class ModelCaller:
 
         return self.tm.create_task(_stream_and_collect())
 
-    async def aembedding(self, input: Union[str, List[str]], **kwargs: Any) -> Any:
-        if self.role != ROLE_EMBEDDING:
-            raise ValueError(
-                f"Model {self.model} with role '{self.role}' does not support embeddings."
-            )
-        if isinstance(input, str):
-            input = [input]
-
-        logger.info(
-            f"LLM 请求: role={self.role} model={self.model} "
-            f"embedding input_count={len(input)}"
-        )
-
-        try:
-            response = await litellm.aembedding(model=self.model, input=input, **kwargs)
-        except Exception as exc:
-            raise _classify_exception(exc) from exc
-
-        cost = 0.0
-        # embedding_cost 在当前 litellm 版本不可用，保留占位
-        # try:
-        #     cost = embedding_cost(embedding_response=response)
-        # except Exception:
-        #     logger.warning("Embedding cost failed", exc_info=True)
-
-        await self.gateway.cost_tracker.add(
-            {
-                "task_id": None,
-                "role": self.role,
-                "model": self.model,
-                "type": "embedding",
-                "status": "completed",
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": 0,
-                "cost": cost,
-            }
-        )
-        logger.info(
-            f"LLM 响应: role={self.role} embedding "
-            f"tokens={response.usage.prompt_tokens} cost=${cost:.6f}"
-        )
-        return response
-
 
 # ═══════════════════════════════════════════════════════════
 # 统一网关
@@ -475,10 +432,11 @@ class ModelGateway:
     用法::
 
         gateway = ModelGateway(
-            fast="deepseek/deepseek-v4-flash",
-            quality="deepseek/deepseek-v4-pro",
+            fast="openai/gpt-4o-mini",
+            quality="openai/gpt-4o",
             multimodal="openai/gpt-4o",
             embedding="openai/text-embedding-3-small",
+            reranker="",
         )
         gen = gateway.fast.acompletion(messages=[...])
         resp = await gen
@@ -486,13 +444,17 @@ class ModelGateway:
     """
 
     def __init__(
-        self, fast: str, quality: str, multimodal: str, embedding: str
+        self,
+        fast: str,
+        quality: str,
+        multimodal: str,
+        embedding: str = "",
+        reranker: str = "",
     ) -> None:
         self._models = {
             ROLE_FAST: fast,
             ROLE_QUALITY: quality,
             ROLE_MULTIMODAL: multimodal,
-            ROLE_EMBEDDING: embedding,
         }
         for role, model in self._models.items():
             if "/" not in model:
@@ -500,6 +462,9 @@ class ModelGateway:
                     f"Model for role '{role}' must be in "
                     f"'provider/model_name' format, got '{model}'"
                 )
+
+        self.embedding = embedding
+        self.reranker = reranker
 
         self.task_manager = TaskManager()
         self.cost_tracker = CostTracker()
@@ -529,10 +494,6 @@ class ModelGateway:
     def multimodal(self) -> ModelCaller:
         return self.use_model(ROLE_MULTIMODAL)
 
-    @property
-    def embedding(self) -> ModelCaller:
-        return self.use_model(ROLE_EMBEDDING)
-
     @staticmethod
     def plain(response: Any) -> str:
         """从 ModelResponse 提取纯文本内容。
@@ -555,7 +516,12 @@ class ModelGateway:
         self.task_manager.abort_all()
 
     def export_config(self) -> dict[str, str]:
-        return {role: caller.model for role, caller in self._callers.items()}
+        config = {role: caller.model for role, caller in self._callers.items()}
+        if self.embedding:
+            config["embedding"] = self.embedding
+        if self.reranker:
+            config["reranker"] = self.reranker
+        return config
 
     def cost_summary(self) -> dict:
         """获取费用分类汇总。"""
@@ -573,7 +539,8 @@ def init_gateway(
     fast: str,
     quality: str,
     multimodal: str,
-    embedding: str,
+    embedding: str = "",
+    reranker: str = "",
 ) -> ModelGateway:
     """初始化模块单例。项目启动时调用一次。"""
     global _singleton
@@ -582,6 +549,7 @@ def init_gateway(
         quality=quality,
         multimodal=multimodal,
         embedding=embedding,
+        reranker=reranker,
     )
     logger.info(f"网关已初始化: {_singleton.export_config()}")
     return _singleton
@@ -604,9 +572,17 @@ def get_gateway() -> ModelGateway:
             quality=Config.LLM_GATEWAY_QUALITY_MODEL,
             multimodal=Config.LLM_GATEWAY_MULTIMODAL_MODEL,
             embedding=Config.LLM_GATEWAY_EMBEDDING_MODEL,
+            reranker=Config.LLM_GATEWAY_RERANKER_MODEL,
         )
     return _singleton
 
 
+class _GatewayProxy:
+    """兼容旧调用方式的懒加载代理。"""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_gateway(), name)
+
+
 # 便捷别名 —— 大多数场景直接 ``from src.brain.ai.gateway import gateway``
-gateway: ModelGateway = get_gateway()
+gateway = _GatewayProxy()

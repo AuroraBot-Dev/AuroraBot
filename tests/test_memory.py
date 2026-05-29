@@ -12,7 +12,8 @@ from unittest.mock import MagicMock, patch
 from src.brain.memory.base import MemoryContext, MemoryItem
 from src.brain.memory.working import WorkingMemory
 from src.brain.memory.episodic import EpisodicMemory
-from src.brain.memory import UnifiedMemoryManager
+from src.brain.memory import UnifiedMemoryManager, get_memory_manager
+from src.brain.memory.semantic import SemanticMemory
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -324,6 +325,11 @@ class EpisodicMemoryTest(unittest.TestCase):
 
 
 class UnifiedMemoryManagerTest(unittest.TestCase):
+    def test_get_memory_manager_returns_singleton(self) -> None:
+        first = get_memory_manager()
+        second = get_memory_manager()
+        self.assertIs(first, second)
+
     def test_process_interaction_writes_to_all_layers(self) -> None:
         mgr = UnifiedMemoryManager()
 
@@ -398,6 +404,38 @@ class UnifiedMemoryManagerTest(unittest.TestCase):
         with patch.object(mgr.semantic, "extract_and_store") as mock_extract:
             mgr._schedule_semantic_extract("test text", "u1")
         mock_extract.assert_called_once_with(text="test text", user_id="u1")
+
+
+class SemanticMemoryTest(unittest.TestCase):
+    def test_extract_and_store_skips_when_credentials_missing(self) -> None:
+        mem = SemanticMemory()
+        with (
+            patch.object(
+                mem,
+                "_missing_credentials_reason",
+                return_value="未配置 OPENAI_API_KEY",
+            ),
+            patch("src.brain.memory.semantic.logger.warning") as mock_warning,
+        ):
+            stored = mem.extract_and_store("hello", "u1")
+
+        self.assertFalse(stored)
+        mock_warning.assert_called_once()
+
+    def test_search_facts_returns_empty_when_credentials_missing(self) -> None:
+        mem = SemanticMemory()
+        with (
+            patch.object(
+                mem,
+                "_missing_credentials_reason",
+                return_value="未配置 OPENAI_API_KEY",
+            ),
+            patch("src.brain.memory.semantic.logger.warning") as mock_warning,
+        ):
+            results = mem.search_facts("hello", "u1")
+
+        self.assertEqual(results, [])
+        mock_warning.assert_called_once()
 
 
 if __name__ == "__main__":

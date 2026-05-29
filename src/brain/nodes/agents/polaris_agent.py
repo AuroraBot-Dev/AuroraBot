@@ -17,7 +17,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Any, TYPE_CHECKING
 
-from src.brain.ai.gateway import gateway
+from src.brain.ai.gateway import GatewayError, gateway
 from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.config import Config
@@ -387,6 +387,26 @@ class PolarisAgent(Agent):
                 recovery_note=recovery_note,
                 advanced_memory_task=advanced_memory_task,
             )
+        except GatewayError as exc:
+            if exc.retryable:
+                logger.exception("LLM 动作生成失败")
+            else:
+                logger.warning(f"LLM 动作生成失败: {exc}")
+            await self._emit_inbox_event(
+                "agent.reply_generation_failed",
+                session_id=session_id,
+                summary="LLM 动作生成失败",
+                payload={
+                    "session_key": session_key,
+                    "merged_input": merged_input,
+                    "is_group": is_group,
+                    "group_id": group_id,
+                    "version": version,
+                    "recovery_depth": recovery_depth,
+                    "reason": str(exc),
+                },
+            )
+            return
         except Exception:
             logger.exception("LLM 动作生成失败")
             await self._emit_inbox_event(

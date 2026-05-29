@@ -18,30 +18,24 @@ from src.brain.ai import models as models_module
 
 # API 结构: { provider_id: { models: { model_name: { id, cost, ... } } } }
 _MOCK_API_RESPONSE: dict = {
-    "deepseek": {
-        "id": "deepseek",
-        "name": "DeepSeek",
-        "models": {
-            "deepseek-chat": {
-                "id": "deepseek-chat",
-                "name": "DeepSeek Chat",
-                "cost": {"input": 0.27, "output": 1.10},
-            },
-            "deepseek-reasoner": {
-                "id": "deepseek-reasoner",
-                "name": "DeepSeek Reasoner",
-                "cost": {"input": 0.14, "output": 0.28, "cache_read": 0.028},
-            },
-        },
-    },
     "openai": {
         "id": "openai",
         "name": "OpenAI",
         "models": {
+            "gpt-4o-mini": {
+                "id": "gpt-4o-mini",
+                "name": "GPT-4o Mini",
+                "cost": {"input": 0.15, "output": 0.60},
+            },
             "gpt-4o": {
                 "id": "gpt-4o",
                 "name": "GPT-4o",
                 "cost": {"input": 2.50, "output": 10.00},
+            },
+            "text-embedding-3-small": {
+                "id": "text-embedding-3-small",
+                "name": "Text Embedding 3 Small",
+                "cost": {"input": 0.02, "output": 0},
             },
         },
     },
@@ -89,13 +83,11 @@ class GetPricingByIdTest(unittest.TestCase):
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(),
             ):
-                pricing = await models_module.get_pricing_by_id(
-                    "deepseek/deepseek-chat"
-                )
+                pricing = await models_module.get_pricing_by_id("openai/gpt-4o-mini")
             self.assertIsNotNone(pricing)
             assert pricing is not None
-            self.assertEqual(pricing["input"], 0.27)
-            self.assertEqual(pricing["output"], 1.10)
+            self.assertEqual(pricing["input"], 0.15)
+            self.assertEqual(pricing["output"], 0.60)
 
         asyncio.run(scenario())
 
@@ -105,19 +97,16 @@ class GetPricingByIdTest(unittest.TestCase):
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(),
             ):
-                pricing = await models_module.get_pricing_by_id(
-                    "nonexistent/model"
-                )
+                pricing = await models_module.get_pricing_by_id("nonexistent/model")
             self.assertIsNone(pricing)
 
         asyncio.run(scenario())
 
     def test_second_call_uses_cache(self) -> None:
         """连续两次查询，只应触发一次 HTTP 请求。"""
+
         async def scenario() -> None:
-            mock_urlopen = MagicMock(
-                return_value=_make_mock_urlopen_response()
-            )
+            mock_urlopen = MagicMock(return_value=_make_mock_urlopen_response())
             with patch("urllib.request.urlopen", mock_urlopen):
                 p1 = await models_module.get_pricing_by_id("openai/gpt-4o")
                 p2 = await models_module.get_pricing_by_id("openai/gpt-4o")
@@ -128,26 +117,25 @@ class GetPricingByIdTest(unittest.TestCase):
 
     def test_returns_pricing_for_multiple_models_from_same_fetch(self) -> None:
         """同一次拉取可查询多个模型。"""
+
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(),
             ):
-                p_deepseek = await models_module.get_pricing_by_id(
-                    "deepseek/deepseek-chat"
+                p_openai_mini = await models_module.get_pricing_by_id(
+                    "openai/gpt-4o-mini"
                 )
-                p_openai = await models_module.get_pricing_by_id(
-                    "openai/gpt-4o"
-                )
+                p_openai = await models_module.get_pricing_by_id("openai/gpt-4o")
                 p_anthropic = await models_module.get_pricing_by_id(
                     "anthropic/claude-sonnet-4-20250514"
                 )
-            self.assertIsNotNone(p_deepseek)
+            self.assertIsNotNone(p_openai_mini)
             self.assertIsNotNone(p_openai)
             self.assertIsNotNone(p_anthropic)
-            assert p_deepseek is not None
+            assert p_openai_mini is not None
             assert p_openai is not None
-            self.assertEqual(p_deepseek["input"], 0.27)
+            self.assertEqual(p_openai_mini["input"], 0.15)
             self.assertEqual(p_openai["input"], 2.50)
 
         asyncio.run(scenario())
@@ -164,10 +152,9 @@ class CacheExpiryTest(unittest.TestCase):
 
     def test_re_fetches_after_ttl(self) -> None:
         """缓存过期后应重新拉取。"""
+
         async def scenario() -> None:
-            mock_urlopen = MagicMock(
-                return_value=_make_mock_urlopen_response()
-            )
+            mock_urlopen = MagicMock(return_value=_make_mock_urlopen_response())
             with patch("urllib.request.urlopen", mock_urlopen):
                 with patch("time.monotonic", return_value=0.0):
                     await models_module.get_pricing_by_id("openai/gpt-4o")
@@ -185,10 +172,9 @@ class CacheExpiryTest(unittest.TestCase):
 
     def test_does_not_refetch_within_ttl(self) -> None:
         """缓存未过期时不重新拉取。"""
+
         async def scenario() -> None:
-            mock_urlopen = MagicMock(
-                return_value=_make_mock_urlopen_response()
-            )
+            mock_urlopen = MagicMock(return_value=_make_mock_urlopen_response())
             with patch("urllib.request.urlopen", mock_urlopen):
                 with patch("time.monotonic", return_value=100.0):
                     await models_module.get_pricing_by_id("openai/gpt-4o")
@@ -214,20 +200,20 @@ class ErrorDegradationTest(unittest.TestCase):
 
     def test_returns_none_on_first_fetch_network_error(self) -> None:
         """首次拉取网络不通 → 返回 None。"""
+
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 side_effect=urllib.error.URLError("connection refused"),
             ):
-                pricing = await models_module.get_pricing_by_id(
-                    "deepseek/deepseek-chat"
-                )
+                pricing = await models_module.get_pricing_by_id("openai/gpt-4o-mini")
             self.assertIsNone(pricing)
 
         asyncio.run(scenario())
 
     def test_uses_stale_cache_on_refetch_failure(self) -> None:
         """已有缓存时，重新拉取失败则降级使用过期缓存。"""
+
         async def scenario() -> None:
             # 第一步：成功拉取填充缓存（时间戳 = 0）
             with patch("time.monotonic", return_value=0.0):
@@ -256,28 +242,26 @@ class ErrorDegradationTest(unittest.TestCase):
 
     def test_returns_none_on_json_decode_error_first_fetch(self) -> None:
         """首次拉取返回非法 JSON → 返回 None。"""
+
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(b"not valid json"),
             ):
-                pricing = await models_module.get_pricing_by_id(
-                    "deepseek/deepseek-chat"
-                )
+                pricing = await models_module.get_pricing_by_id("openai/gpt-4o-mini")
             self.assertIsNone(pricing)
 
         asyncio.run(scenario())
 
     def test_empty_response_returns_none(self) -> None:
         """API 返回空 dict 时，任何查询都返回 None。"""
+
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(b"{}"),
             ):
-                pricing = await models_module.get_pricing_by_id(
-                    "deepseek/deepseek-chat"
-                )
+                pricing = await models_module.get_pricing_by_id("openai/gpt-4o-mini")
             self.assertIsNone(pricing)
 
         asyncio.run(scenario())
@@ -294,18 +278,17 @@ class ConcurrencyTest(unittest.TestCase):
 
     def test_concurrent_calls_fetch_only_once(self) -> None:
         """多个并发查询只触发一次 HTTP 请求。"""
+
         async def scenario() -> None:
             # 用一个慢速 mock 让并发窗口足够大
-            mock_urlopen = MagicMock(
-                return_value=_make_mock_urlopen_response()
-            )
+            mock_urlopen = MagicMock(return_value=_make_mock_urlopen_response())
 
             with patch("urllib.request.urlopen", mock_urlopen):
                 # 同时发起 5 个查询
                 results = await asyncio.gather(
-                    models_module.get_pricing_by_id("deepseek/deepseek-chat"),
+                    models_module.get_pricing_by_id("openai/gpt-4o-mini"),
                     models_module.get_pricing_by_id("openai/gpt-4o"),
-                    models_module.get_pricing_by_id("deepseek/deepseek-chat"),
+                    models_module.get_pricing_by_id("openai/gpt-4o-mini"),
                     models_module.get_pricing_by_id(
                         "anthropic/claude-sonnet-4-20250514"
                     ),
@@ -348,9 +331,7 @@ class EdgeCaseTest(unittest.TestCase):
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
-                return_value=_make_mock_urlopen_response(
-                    json.dumps(no_cost).encode()
-                ),
+                return_value=_make_mock_urlopen_response(json.dumps(no_cost).encode()),
             ):
                 pricing = await models_module.get_pricing_by_id("some/model")
             self.assertIsNone(pricing)
@@ -375,9 +356,7 @@ class EdgeCaseTest(unittest.TestCase):
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
-                return_value=_make_mock_urlopen_response(
-                    json.dumps(mixed).encode()
-                ),
+                return_value=_make_mock_urlopen_response(json.dumps(mixed).encode()),
             ):
                 pricing = await models_module.get_pricing_by_id("valid/model")
             self.assertIsNotNone(pricing)
@@ -403,9 +382,7 @@ class EdgeCaseTest(unittest.TestCase):
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
-                return_value=_make_mock_urlopen_response(
-                    json.dumps(free).encode()
-                ),
+                return_value=_make_mock_urlopen_response(json.dumps(free).encode()),
             ):
                 pricing = await models_module.get_pricing_by_id("free/model")
             self.assertIsNotNone(pricing)
