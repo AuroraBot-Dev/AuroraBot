@@ -10,6 +10,7 @@ from .gateway import (
     get_gateway,
     init_gateway,
 )
+from .models import get_pricing_by_id
 
 __all__ = [
     "CancelledWithPartialResponse",
@@ -21,5 +22,6 @@ __all__ = [
     "TaskManager",
     "gateway",
     "get_gateway",
+    "get_pricing_by_id",
     "init_gateway",
 ]

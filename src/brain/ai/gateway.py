@@ -31,6 +31,8 @@ litellm.suppress_debug_info = True
 
 from src.utils.log_utils import get_logger
 
+from src.brain.ai.models import get_pricing_by_id
+
 logger = get_logger("Gateway")
 
 # ═══════════════════════════════════════════════════════════
@@ -238,19 +240,24 @@ class ModelCaller:
         if "model" in kwargs:
             raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")
 
-        def _safe_cost(response: Any, /) -> float:
-            """安全计算费用，失败时返回 0.0 并记录 warning（不含堆栈）。"""
+        async def _safe_cost(
+            response: Any,
+            prompt_tokens: int = 0,
+            completion_tokens: int = 0,
+        ) -> float:
+            """安全计算费用；litellm 失败时回退到 models.dev 定价。"""
             try:
                 return completion_cost(completion_response=response)
             except Exception:
                 logger.warning(
-                    "Cost calculation failed for model=%s: %s",
+                    "litellm completion_cost failed for model=%s: %s",
                     self.model,
                     _exc_msg(),
                 )
-                return 0.0
+                return await _fallback_cost(prompt_tokens, completion_tokens)
 
-        def _safe_cost_per_token(pt: int, ct: int, /) -> float:
+        async def _safe_cost_per_token(pt: int, ct: int) -> float:
+            """按 token 数计费；litellm 失败时回退到 models.dev 定价。"""
             try:
                 return litellm.cost_per_token(
                     model=self.model,
@@ -259,11 +266,31 @@ class ModelCaller:
                 )
             except Exception:
                 logger.warning(
-                    "cost_per_token failed for model=%s: %s",
+                    "litellm cost_per_token failed for model=%s: %s",
                     self.model,
                     _exc_msg(),
                 )
+                return await _fallback_cost(pt, ct)
+
+        async def _fallback_cost(prompt_tokens: int, completion_tokens: int) -> float:
+            """从 models.dev 拉取定价并计算费用，不可用时返回 0.0。"""
+            pricing = await get_pricing_by_id(self.model)
+            if not pricing:
                 return 0.0
+            input_price = pricing.get("input", 0)
+            output_price = pricing.get("output", 0)
+            cost = (prompt_tokens / 1_000_000) * input_price + (
+                completion_tokens / 1_000_000
+            ) * output_price
+            logger.info(
+                "models.dev fallback cost for model=%s: $%.6f "
+                "(prompt=%d, completion=%d)",
+                self.model,
+                cost,
+                prompt_tokens,
+                completion_tokens,
+            )
+            return cost
 
         async def _stream_and_collect() -> tuple[Any, float]:
             prompt_tokens = 0
@@ -313,7 +340,9 @@ class ModelCaller:
 
             if not is_cancelled:
                 final_response = stream_chunk_builder(chunks, messages=messages)
-                cost = _safe_cost(final_response)
+                pt = final_usage.prompt_tokens if final_usage else 0
+                ct = final_usage.completion_tokens if final_usage else 0
+                cost = await _safe_cost(final_response, pt, ct)
                 await self.gateway.cost_tracker.add(
                     {
                         "task_id": None,
@@ -342,14 +371,21 @@ class ModelCaller:
                 return final_response, cost
             else:
                 if final_usage is not None:
-                    cost = _safe_cost(stream_chunk_builder(chunks, messages=messages))
+                    built = stream_chunk_builder(chunks, messages=messages)
+                    cost = await _safe_cost(
+                        built,
+                        final_usage.prompt_tokens,
+                        final_usage.completion_tokens,
+                    )
                 else:
                     estimated_completion = sum(
                         len(c.choices[0].delta.content or "") // 4
                         for c in chunks
                         if c.choices
                     )
-                    cost = _safe_cost_per_token(prompt_tokens, estimated_completion)
+                    cost = await _safe_cost_per_token(
+                        prompt_tokens, estimated_completion
+                    )
                 try:
                     partial_response = stream_chunk_builder(chunks, messages=messages)
                 except Exception:
