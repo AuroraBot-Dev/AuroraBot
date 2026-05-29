@@ -19,7 +19,7 @@ class SemanticMemory:
     def __init__(self):
         # 延迟初始化 mem0 客户端，避免导入时就进行耗时的初始化和连接操作
         self._client = None
-        logger.info("L3 缓存已启动")
+        logger.debug("L3 缓存已启动")
 
     @property
     def mem0(self):
@@ -56,8 +56,8 @@ class SemanticMemory:
             # mem0 的 add 需要传入特定的 message 格式
             messages = [{"role": "user", "content": text}]
             self.mem0.add(messages, user_id=user_id)
-            logger.info("已成功提取语义记忆")
-            logger.info(f"已尝试从文本中提取语义记忆，User: {user_id}")
+            logger.debug("已成功提取语义记忆")
+            logger.debug("已尝试从文本中提取语义记忆，User: %s", user_id)
             return True
         except Exception as e:
             logger.error(f"提取语义记忆失败: {e}")

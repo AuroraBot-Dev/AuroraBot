@@ -22,7 +22,7 @@ class EpisodicMemory:
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
         # 触发压缩的阈值
         self._COMPRESS_THRESHOLD = 50
-        logger.info("L2 缓存已启动")
+        logger.debug("L2 缓存已启动")
 
     def record_event(self, event_type: str, content: str, user_id: str) -> None:
         """写策略：追加写入 (Append Only)，并在必要时触发压缩。同时防止连续重复写入。"""
@@ -37,8 +37,9 @@ class EpisodicMemory:
                 last_record.get("content") == content
                 and last_record.get("user_id") == user_id
             ):
-                logger.info(
-                    f"拦截到重复的情景记忆写入，已忽略。内容摘要: {content[:10]}..."
+                logger.debug(
+                    "拦截到重复的情景记忆写入，已忽略。内容摘要: %s...",
+                    content[:10],
                 )
                 return
         # ------------------------
@@ -59,7 +60,7 @@ class EpisodicMemory:
         # 模拟 RNN 隐状态更新：如果记录太多，触发折叠压缩
         if len(records) > self._COMPRESS_THRESHOLD:
             records = self._fold_state(records)
-            logger.info("L2 缓存记忆已折叠")
+            logger.debug("L2 缓存记忆已折叠")
         self._save(records)
 
     def _fold_state(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -155,7 +156,7 @@ class EpisodicMemory:
             )
             compressed[0]["content"] = improved
             self._save(compressed)
-            logger.info("已通过 LLM 网关改进情景记忆压缩摘要")
+            logger.debug("已通过 LLM 网关改进情景记忆压缩摘要")
         except Exception:
             logger.exception("改进情景记忆压缩摘要失败，保留基础摘要")
 
