@@ -354,8 +354,7 @@ class ModelCaller:
     async def aembedding(self, input: Union[str, List[str]], **kwargs: Any) -> Any:
         if self.role != ROLE_EMBEDDING:
             raise ValueError(
-                f"Model {self.model} with role '{self.role}' "
-                "does not support embeddings."
+                f"Model {self.model} with role '{self.role}' does not support embeddings."
             )
         if isinstance(input, str):
             input = [input]
@@ -525,9 +524,9 @@ def get_gateway() -> ModelGateway:
     if _singleton is None:
         _singleton = init_gateway(
             fast="deepseek/deepseek-v4-flash",
-            quality="deepseek/deepseek-v4-flash",
+            quality="deepseek/deepseek-v4-pro",
             multimodal="deepseek/deepseek-v4-flash",
-            embedding="openai/text-embedding-3-small",
+            embedding="BAAI/bge-m3",
         )
     return _singleton
 
