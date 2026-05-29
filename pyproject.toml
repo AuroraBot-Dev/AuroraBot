@@ -17,6 +17,7 @@ dependencies = [
     "botocore>=1.43.12",
     "pytest",
     "tiktoken>=0.13.0",
+    "rich>=15.0.0",
 ]
 
 [project.optional-dependencies]
