@@ -304,7 +304,12 @@ class ModelCaller:
             try:
                 prompt_tokens = token_counter(model=resolved_model, messages=messages)
             except Exception:
-                pass
+                # Token 估算失败不应中断主流程；保留默认值 0，并记录调试信息便于排查。
+                logger.debug(
+                    "token_counter failed for model=%s; fallback prompt_tokens=0",
+                    resolved_model,
+                    exc_info=True,
+                )
 
             litellm_kwargs: Dict[str, Any] = {
                 "model": resolved_model,
