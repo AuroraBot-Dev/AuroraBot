@@ -1,3 +1,5 @@
+"""application_host 应用宿主模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
