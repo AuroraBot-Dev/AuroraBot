@@ -61,7 +61,7 @@ class MemoryContextTest(unittest.TestCase):
             ],
         )
         text = ctx.to_prompt_text()
-        self.assertIn("【当前上下文】", text)
+        self.assertIn("[当前上下文]", text)
         self.assertIn("- user: hello", text)
         self.assertIn("- assistant: hi there", text)
 
@@ -73,7 +73,7 @@ class MemoryContextTest(unittest.TestCase):
             ],
         )
         text = ctx.to_prompt_text()
-        self.assertIn("【相关历史事件】", text)
+        self.assertIn("[相关历史事件]", text)
         self.assertIn("chat_user: hello", text)
 
     def test_semantic_facts_only(self) -> None:
@@ -81,7 +81,7 @@ class MemoryContextTest(unittest.TestCase):
             semantic_facts=["用户喜欢 Python", "用户住在北京"],
         )
         text = ctx.to_prompt_text()
-        self.assertIn("【已知事实与偏好】", text)
+        self.assertIn("[已知事实与偏好]", text)
         self.assertIn("用户喜欢 Python", text)
 
     def test_all_three_layers(self) -> None:
@@ -91,9 +91,9 @@ class MemoryContextTest(unittest.TestCase):
             semantic_facts=["偏好: 简洁回复"],
         )
         text = ctx.to_prompt_text()
-        self.assertIn("【当前上下文】", text)
-        self.assertIn("【相关历史事件】", text)
-        self.assertIn("【已知事实与偏好】", text)
+        self.assertIn("[当前上下文]", text)
+        self.assertIn("[相关历史事件]", text)
+        self.assertIn("[已知事实与偏好]", text)
 
     def test_empty_lists_excluded(self) -> None:
         ctx = MemoryContext(
@@ -102,9 +102,9 @@ class MemoryContextTest(unittest.TestCase):
             semantic_facts=[],
         )
         text = ctx.to_prompt_text()
-        self.assertNotIn("【当前上下文】", text)
-        self.assertIn("【相关历史事件】", text)
-        self.assertNotIn("【已知事实与偏好】", text)
+        self.assertNotIn("[当前上下文]", text)
+        self.assertIn("[相关历史事件]", text)
+        self.assertNotIn("[已知事实与偏好]", text)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -332,9 +332,7 @@ class UnifiedMemoryManagerTest(unittest.TestCase):
             patch.object(mgr.episodic, "record_event") as mock_ep_record,
             patch.object(mgr, "_schedule_semantic_extract") as mock_sem_sched,
         ):
-            mgr.process_interaction(
-                content="hello world", role="user", user_id="u1"
-            )
+            mgr.process_interaction(content="hello world", role="user", user_id="u1")
 
         mock_wm_add.assert_called_once_with(content="hello world", role="user")
         mock_ep_record.assert_called_once_with(
@@ -346,9 +344,7 @@ class UnifiedMemoryManagerTest(unittest.TestCase):
         mgr = UnifiedMemoryManager()
 
         with patch.object(mgr, "_schedule_semantic_extract") as mock_sem_sched:
-            mgr.process_interaction(
-                content="bot reply", role="assistant", user_id="u1"
-            )
+            mgr.process_interaction(content="bot reply", role="assistant", user_id="u1")
 
         mock_sem_sched.assert_not_called()
 
@@ -372,9 +368,7 @@ class UnifiedMemoryManagerTest(unittest.TestCase):
                 return_value=["fact: user likes cats"],
             ),
         ):
-            ctx = mgr.retrieve_context(
-                current_query="hello", user_id="u1"
-            )
+            ctx = mgr.retrieve_context(current_query="hello", user_id="u1")
 
         self.assertEqual(len(ctx.working_context), 1)
         self.assertEqual(len(ctx.episodic_events), 1)
@@ -390,9 +384,7 @@ class UnifiedMemoryManagerTest(unittest.TestCase):
             mgr.retrieve_context(current_query="q", user_id="specific_user")
 
         mock_ep.assert_called_once_with(limit=5, user_id="specific_user")
-        mock_sem.assert_called_once_with(
-            query="q", user_id="specific_user"
-        )
+        mock_sem.assert_called_once_with(query="q", user_id="specific_user")
 
     def test_process_interaction_falls_back_to_default_user_id(self) -> None:
         mgr = UnifiedMemoryManager()
