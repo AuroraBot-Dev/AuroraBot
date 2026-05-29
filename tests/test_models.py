@@ -16,31 +16,49 @@ from src.brain.ai import models as models_module
 # 测试数据
 # ═══════════════════════════════════════════════════════════
 
-_MOCK_MODELS: list[dict] = [
-    {
-        "id": "deepseek/deepseek-chat",
-        "name": "DeepSeek Chat",
-        "provider": "deepseek",
-        "pricing": {"input": 0.27, "output": 1.10},
-        "contextWindow": 65536,
+# API 结构: { provider_id: { models: { model_name: { id, cost, ... } } } }
+_MOCK_API_RESPONSE: dict = {
+    "deepseek": {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "models": {
+            "deepseek-chat": {
+                "id": "deepseek-chat",
+                "name": "DeepSeek Chat",
+                "cost": {"input": 0.27, "output": 1.10},
+            },
+            "deepseek-reasoner": {
+                "id": "deepseek-reasoner",
+                "name": "DeepSeek Reasoner",
+                "cost": {"input": 0.14, "output": 0.28, "cache_read": 0.028},
+            },
+        },
     },
-    {
-        "id": "openai/gpt-4o",
-        "name": "GPT-4o",
-        "provider": "openai",
-        "pricing": {"input": 2.50, "output": 10.00},
-        "contextWindow": 128000,
+    "openai": {
+        "id": "openai",
+        "name": "OpenAI",
+        "models": {
+            "gpt-4o": {
+                "id": "gpt-4o",
+                "name": "GPT-4o",
+                "cost": {"input": 2.50, "output": 10.00},
+            },
+        },
     },
-    {
-        "id": "anthropic/claude-sonnet-4-20250514",
-        "name": "Claude Sonnet 4",
-        "provider": "anthropic",
-        "pricing": {"input": 3.00, "output": 15.00},
-        "contextWindow": 200000,
+    "anthropic": {
+        "id": "anthropic",
+        "name": "Anthropic",
+        "models": {
+            "claude-sonnet-4-20250514": {
+                "id": "claude-sonnet-4-20250514",
+                "name": "Claude Sonnet 4",
+                "cost": {"input": 3.00, "output": 15.00},
+            },
+        },
     },
-]
+}
 
-_MOCK_JSON_BYTES = json.dumps(_MOCK_MODELS).encode("utf-8")
+_MOCK_JSON_BYTES = json.dumps(_MOCK_API_RESPONSE).encode("utf-8")
 
 
 def _make_mock_urlopen_response(data: bytes = _MOCK_JSON_BYTES) -> MagicMock:
@@ -250,12 +268,12 @@ class ErrorDegradationTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_empty_array_returns_none_for_any_model(self) -> None:
-        """API 返回空数组时，任何查询都返回 None。"""
+    def test_empty_response_returns_none(self) -> None:
+        """API 返回空 dict 时，任何查询都返回 None。"""
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
-                return_value=_make_mock_urlopen_response(b"[]"),
+                return_value=_make_mock_urlopen_response(b"{}"),
             ):
                 pricing = await models_module.get_pricing_by_id(
                     "deepseek/deepseek-chat"
@@ -313,21 +331,25 @@ class EdgeCaseTest(unittest.TestCase):
     def setUp(self) -> None:
         _reset_cache()
 
-    def test_model_without_pricing_field_returns_none(self) -> None:
-        """模型条目缺少 pricing 字段 → get_pricing_by_id 返回 None。"""
-        models_without_pricing = [
-            {
-                "id": "some/model",
-                "name": "No Pricing Model",
-                "provider": "some",
+    def test_model_without_cost_field_returns_none(self) -> None:
+        """模型条目缺少 cost 字段 → get_pricing_by_id 返回 None。"""
+        no_cost = {
+            "some": {
+                "id": "some",
+                "models": {
+                    "model": {
+                        "id": "model",
+                        "name": "No Cost Model",
+                    }
+                },
             }
-        ]
+        }
 
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(
-                    json.dumps(models_without_pricing).encode()
+                    json.dumps(no_cost).encode()
                 ),
             ):
                 pricing = await models_module.get_pricing_by_id("some/model")
@@ -335,21 +357,26 @@ class EdgeCaseTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_model_without_id_field_is_skipped(self) -> None:
-        """缺少 id 字段的条目被忽略，不影响其他查询。"""
-        models_mixed = [
-            {"name": "No ID", "pricing": {"input": 1.0, "output": 2.0}},
-            {
-                "id": "valid/model",
-                "pricing": {"input": 0.5, "output": 1.5},
+    def test_string_value_provider_is_skipped(self) -> None:
+        """provider value 不是 dict 时被跳过，不影响其他查询。"""
+        mixed = {
+            "string_provider": "not_a_dict",
+            "valid": {
+                "id": "valid",
+                "models": {
+                    "model": {
+                        "id": "model",
+                        "cost": {"input": 0.5, "output": 1.5},
+                    }
+                },
             },
-        ]
+        }
 
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(
-                    json.dumps(models_mixed).encode()
+                    json.dumps(mixed).encode()
                 ),
             ):
                 pricing = await models_module.get_pricing_by_id("valid/model")
@@ -359,20 +386,25 @@ class EdgeCaseTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_pricing_with_zero_values(self) -> None:
-        """免费模型 pricing 为 0 是合法的。"""
-        free_models = [
-            {
-                "id": "free/model",
-                "pricing": {"input": 0.0, "output": 0.0},
+    def test_cost_with_zero_values(self) -> None:
+        """免费模型 cost 为 0 是合法的。"""
+        free = {
+            "free": {
+                "id": "free",
+                "models": {
+                    "model": {
+                        "id": "model",
+                        "cost": {"input": 0.0, "output": 0.0},
+                    }
+                },
             }
-        ]
+        }
 
         async def scenario() -> None:
             with patch(
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(
-                    json.dumps(free_models).encode()
+                    json.dumps(free).encode()
                 ),
             ):
                 pricing = await models_module.get_pricing_by_id("free/model")

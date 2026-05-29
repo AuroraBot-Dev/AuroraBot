@@ -74,10 +74,14 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:
 
         logger.info("正在从 models.dev 拉取模型数据库...")
 
-        def _fetch() -> list[dict[str, Any]]:
+        def _fetch() -> dict[str, Any]:
             req = urllib.request.Request(
                 MODELS_DEV_API,
-                headers={"Accept": "application/json"},
+                headers={
+                    "Accept": "application/json",
+                    # Cloudflare 会拦截 Python 默认的 UA，需要伪装
+                    "User-Agent": "Mozilla/5.0 (compatible; AuroraBot/1.0)",
+                },
             )
             with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SEC) as resp:
                 return json.loads(resp.read())  # type: ignore[no-any-return]
@@ -85,26 +89,35 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:
         try:
             data = await asyncio.to_thread(_fetch)
         except urllib.error.URLError as exc:
-            logger.warning(f"models.dev API 不可达: {exc}")
+            logger.warning("models.dev API 不可达: %s", exc)
             if _cache is not None:
-                logger.info(f"降级使用过期缓存（{len(_cache)} 条记录）")
+                logger.info("降级使用过期缓存（%d 条记录）", len(_cache))
                 return _cache
             return {}
         except Exception:
-            logger.warning(f"models.dev 数据拉取/解析失败: {_exc_msg()}")
+            logger.warning("models.dev 数据拉取/解析失败: %s", _exc_msg())
             if _cache is not None:
                 return _cache
             return {}
 
-        # 以 model id 为键建立索引
+        # API 结构: { provider_id: { models: { model_name: { id, cost, ... } } } }
+        # 构建索引: "provider/model_name" → { input, output, cache_read, ... }
         _cache = {}
-        for model in data:
-            mid = model.get("id")
-            if mid:
-                _cache[mid] = model
+        for provider_id, provider_info in data.items():
+            if not isinstance(provider_info, dict):
+                continue
+            models = provider_info.get("models")
+            if not isinstance(models, dict):
+                continue
+            for model_name, model_info in models.items():
+                if not isinstance(model_info, dict):
+                    continue
+                cost = model_info.get("cost")
+                if isinstance(cost, dict):
+                    _cache[f"{provider_id}/{model_name}"] = cost
 
         _cache_ts = time.monotonic()
-        logger.info(f"models.dev 缓存已更新（{len(_cache)} 个模型）")
+        logger.info("models.dev 缓存已更新（%d 个模型）", len(_cache))
         return _cache
 
 
@@ -139,8 +152,8 @@ async def get_pricing_by_id(model_id: str) -> dict[str, Any] | None:
             output_cost = p.get("output", 0)  # USD / 1M tokens
     """
     models = await _ensure_cache()
-    model = models.get(model_id)
-    if model is None:
-        logger.debug(f"models.dev 中未找到模型: {model_id}")
+    pricing = models.get(model_id)
+    if pricing is None:
+        logger.debug("models.dev 中未找到模型: %s", model_id)
         return None
-    return model.get("pricing")
+    return pricing
