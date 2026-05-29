@@ -16,6 +16,7 @@ import threading
 from types import ModuleType
 from typing import Awaitable, Callable
 
+from src.brain.memory import MemoryContext, memory_manager
 from src.brain.runtime import (
     RuntimeState,
     restart_runtime_components,
@@ -52,13 +53,16 @@ APPS_COMMANDS = ("/apps", "/A")
 COMMANDS_COMMANDS = ("/commands", "/C")
 EVENTS_COMMANDS = ("/events", "/E")
 
+# -- 记忆测试命令 --
+MEMTEST_COMMANDS = ("/memtest", "/mt")
+
 _SELF_MODULE = __name__
 
 _MODULES_TO_RELOAD: list[str] = [
     "src.platform.app_config",
     "src.platform.app_discovery",
     "src.utils.json_utils",
-    "src.brain.ai.llm_gate",
+    "src.brain.ai.gateway",
     "src.brain.prompts",
     "src.brain.kernel.base",
     "src.brain.kernel.circuit",
@@ -298,7 +302,19 @@ async def handle_control_command(
 ) -> RuntimeState | None:
     parsed = _parse_control_command(raw)
     if parsed is None:
-        return runtime
+        text = raw.strip()
+        if not text:
+            return runtime
+        say_spec = next(
+            spec for spec in _console_commands() if spec.names == SAY_COMMANDS
+        )
+        parsed = ParsedConsoleCommand(
+            raw=raw,
+            name=SAY_COMMANDS[0],
+            args=(text,),
+            raw_args=text,
+            spec=say_spec,
+        )
     if runtime is None:
         logger.warning("控制命令已忽略: runtime 尚未初始化")
         return runtime
@@ -688,6 +704,69 @@ async def _handle_apps_command(
     return runtime
 
 
+# -- 记忆测试命令 --
+def _build_memtest_parser() -> _ConsoleArgumentParser:
+    parser = _ConsoleArgumentParser(add_help=False, prog="/memtest")
+    parser.add_argument("subcommand", nargs="?", default="help")
+    parser.add_argument("args", nargs="*", default=[])
+    return parser
+
+
+async def _handle_memtest_command(
+    runtime: RuntimeState,
+    parsed: ParsedConsoleCommand,
+) -> RuntimeState:
+    parser = _build_memtest_parser()
+    try:
+        args = parser.parse_args(list(parsed.args))
+    except ValueError as exc:
+        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
+        return runtime
+
+    sub = (args.subcommand or "help").strip().lower()
+    raw_args = " ".join(args.args) if args.args else ""
+
+    if sub == "help":
+        logger.info(
+            "\n  /memtest query <text>        检索记忆上下文\n"
+            "  /memtest record <text>       记录一条用户交互\n"
+            "  /memtest context [--user-id ID]  查看当前记忆上下文\n"
+        )
+        return runtime
+
+    if sub == "context":
+        user_id = "localhost"
+        ctx: MemoryContext = memory_manager.retrieve_context(
+            current_query="__context_snapshot__", user_id=user_id
+        )
+        prompt_text = ctx.to_prompt_text() if ctx else "(空)"
+        logger.info(f"\n--- 记忆上下文 (user={user_id}) ---\n{prompt_text}")
+        return runtime
+
+    if sub == "query":
+        if not raw_args:
+            logger.warning("query 需要提供查询文本")
+            return runtime
+        user_id = "localhost"
+        ctx = memory_manager.retrieve_context(current_query=raw_args, user_id=user_id)
+        prompt_text = ctx.to_prompt_text() if ctx else "(无匹配记忆)"
+        logger.info(f"\n--- 记忆检索结果 (query={raw_args}) ---\n{prompt_text}")
+        return runtime
+
+    if sub == "record":
+        if not raw_args:
+            logger.warning("record 需要提供记录文本")
+            return runtime
+        memory_manager.process_interaction(
+            content=raw_args, role="user", user_id="localhost"
+        )
+        logger.info(f"已记录交互: {raw_args}")
+        return runtime
+
+    logger.warning(f"未知子命令: {sub}，使用 /memtest help 查看用法")
+    return runtime
+
+
 # ============================================
 # 命令解析器
 # ============================================
@@ -734,7 +813,7 @@ def _console_commands() -> tuple[ConsoleCommand, ...]:
         ConsoleCommand(
             names=COMMANDS_COMMANDS,
             usage="/commands [--detail all|<name>]",
-            description="列出当前可调用命令（--detail 展开 schema：all 或指定命令名）",
+            description="列出当前可调用命令. 指定命令名展开 schema.",
             handler=_handle_commands_command,
         ),
         ConsoleCommand(
@@ -748,6 +827,12 @@ def _console_commands() -> tuple[ConsoleCommand, ...]:
             usage="/stop",
             description="优雅关闭当前进程",
             handler=_handle_stop_command,
+        ),
+        ConsoleCommand(
+            names=MEMTEST_COMMANDS,
+            usage="/memtest <query|record|context> [args...]",
+            description="记忆系统交互测试：query 检索 / record 记录 / context 查看",
+            handler=_handle_memtest_command,
         ),
     )
 

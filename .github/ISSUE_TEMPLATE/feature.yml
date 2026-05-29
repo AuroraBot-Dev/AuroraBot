@@ -1,0 +1,49 @@
+name: 新功能 | Feature Request
+description: 为 AuroraBot 提出新功能或改进建议。| Suggest a new feature or enhancement for AuroraBot.
+title: "[Feature] "
+labels: enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请确认 Issues 列表中无重复的项目。
+        Please make sure that no duplicate issues have already been submitted.
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概述 | Summary
+      description: |
+        请介绍你想加入的新功能或改进。
+        Please describe the new feature or enhancement.
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: 动机 | Motivation
+      description: |
+        请描述该功能解决什么问题，或带来什么价值。
+        Please describe what problem this feature solves or what value it brings.
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 详情 | Details
+      description: |
+        补充描述该功能的具体实现方式或建议。（可选）
+        Describe implementation details or suggestions here. (Optional)
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 涉及模块 | Scope
+      description: |
+        该功能主要涉及哪个子系统？（可选）
+        Which subsystem does this feature mainly involve? (Optional)
+      options:
+        - 认知引擎 / Brain (CortexForge)
+        - 平台层 / Platform
+        - 应用层 / Apps
+        - 记忆系统 / Memory
+        - LLM 网关 / LLM Gateway
+        - 其他 / Other

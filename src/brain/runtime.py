@@ -81,12 +81,12 @@ async def start_runtime(host: ApplicationHost) -> RuntimeState:
 
 async def start_runtime_components(state: RuntimeState) -> RuntimeState:
     _register_builtin_commands(state.host)
-    if Config.RUN_MODE in ["app", "application", "prod"]:
+    if Config.RUN_MODE in ["app", "application", "dev", "prod"]:
         state.app_task = asyncio.create_task(
             run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL)
         )
 
-    if Config.RUN_MODE in ["agent", "core", "prod"]:
+    if Config.RUN_MODE in ["agent", "core", "dev", "prod"]:
         state.circuit = build_circuit(state.host)
         await state.circuit.start()
         state.bridge_task = asyncio.create_task(
