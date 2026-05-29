@@ -299,7 +299,7 @@ class Agent(Node):
         self._host = host
         self._system_prompt = system_prompt
         self._memory = memory
-        self._current_think_task: asyncio.Task[Any] | None = None
+        self._current_gen_task: Any = None  # GenerationTask, 延迟导入避免循环引用
 
     @property
     def type(self) -> str:
@@ -332,30 +332,30 @@ class Agent(Node):
     async def think(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         """调用 LLM 网关进行推理。
 
-        这是一个便捷方法，封装 :func:`src.brain.ai.llm_gate.llm_chat`，
-        并自动在消息列表最前面注入系统提示词。
+        通过 :class:`Gateway <src.brain.ai.gateway.ModelGateway>` 的
+        ``fast`` 角色发起流式对话，自动注入系统提示词。
 
-        LLM 调用被包裹在独立的 :class:`asyncio.Task` 中，外部可通过
-        :meth:`cancel_think` 打断当前推理以节省 token。
+        外部可通过 :meth:`cancel_think` 打断当前推理以节省 token。
 
         Parameters
         ----------
         messages : list[dict[str, str]]
             对话消息列表。
         **kwargs : Any
-            透传给 ``llm_chat`` 的额外参数。
+            透传给 ``ModelCaller.acompletion`` 的额外参数
+            （temperature、max_tokens 等）。
 
         Returns
         -------
         str
-            模型返回的文本。
+            模型返回的纯文本。
 
         Raises
         ------
-        asyncio.CancelledError
+        CancelledWithPartialResponse
             当外部调用 :meth:`cancel_think` 打断请求时抛出。
         """
-        from src.brain.ai.llm_gate import llm_chat
+        from src.brain.ai.gateway import gateway
 
         if self._system_prompt:
             messages = [
@@ -363,28 +363,31 @@ class Agent(Node):
                 *messages,
             ]
 
-        self._current_think_task = asyncio.ensure_future(llm_chat(messages, **kwargs))
+        gen = gateway.fast.acompletion(messages, **kwargs)
+        self._current_gen_task = gen
         try:
-            return await self._current_think_task
+            await gen
+            return gen.plain()
         finally:
-            self._current_think_task = None
+            self._current_gen_task = None
 
     def cancel_think(self) -> bool:
         """打断当前正在进行的 LLM 推理。
 
-        取消 :meth:`think` 内部持有的 asyncio Task。
-        调用后，正在等待 ``think()`` 的协程将收到
-        :class:`asyncio.CancelledError`。
+        通过网关的 :meth:`abort_task <src.brain.ai.gateway.ModelGateway.abort_task>`
+        取消底层流式连接。调用后，正在等待 ``think()`` 的协程将收到
+        :class:`CancelledWithPartialResponse`。
 
         Returns
         -------
         bool
             是否确实取消了一个正在运行的 LLM 请求。
         """
-        task = self._current_think_task
-        if task is not None and not task.done():
-            task.cancel()
-            return True
+        gen = self._current_gen_task
+        if gen is not None and not gen.done():
+            from src.brain.ai.gateway import gateway
+
+            return gateway.abort_task(gen.task_id)
         return False
 
 

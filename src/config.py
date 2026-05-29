@@ -63,8 +63,19 @@ class Config:
     # QUEUES_RESTORE_ON_START: bool = _get_bool("QUEUES_RESTORE_ON_START", True)
     # SESSION_MAX_TOKENS: int = int(os.getenv("SESSION_MAX_TOKENS", "4000"))
 
-    # 模型配置
-    LITELLM_MODEL: str = os.getenv("LITELLM_MODEL", "deepseek/deepseek-v4-flash")
+    # 模型配置 (新统一网关)
+    LLM_GATEWAY_FAST_MODEL: str = os.getenv(
+        "LLM_GATEWAY_FAST_MODEL", "deepseek/deepseek-chat"
+    )
+    LLM_GATEWAY_QUALITY_MODEL: str = os.getenv(
+        "LLM_GATEWAY_QUALITY_MODEL", "deepseek/deepseek-reasoner"
+    )
+    LLM_GATEWAY_MULTIMODAL_MODEL: str = os.getenv(
+        "LLM_GATEWAY_MULTIMODAL_MODEL", "deepseek/deepseek-chat"
+    )
+    LLM_GATEWAY_EMBEDDING_MODEL: str = os.getenv(
+        "LLM_GATEWAY_EMBEDDING_MODEL", "BAAI/bge-m3"
+    )
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-xxx")
     AI_CONTEXT_CHAR_LIMIT: int = int(os.getenv("AI_CONTEXT_CHAR_LIMIT", "6000"))
     LLM_TIMEOUT: float = float(os.getenv("LLM_TIMEOUT", "120"))

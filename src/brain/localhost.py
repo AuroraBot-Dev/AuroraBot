@@ -62,7 +62,7 @@ _MODULES_TO_RELOAD: list[str] = [
     "src.platform.app_config",
     "src.platform.app_discovery",
     "src.utils.json_utils",
-    "src.brain.ai.llm_gate",
+    "src.brain.ai.gateway",
     "src.brain.prompts",
     "src.brain.kernel.base",
     "src.brain.kernel.circuit",

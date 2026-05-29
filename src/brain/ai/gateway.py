@@ -21,7 +21,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 
 # ── LiteLLM 环境抑制（必须在 import litellm 前设置） ──
-os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "False"
 
 import litellm
 from litellm import completion_cost, stream_chunk_builder
@@ -70,6 +70,14 @@ class CancelledWithPartialResponse(asyncio.CancelledError):
         super().__init__()
         self.partial_response = partial_response
         self.cost = cost
+
+
+def _exc_msg() -> str:
+    """返回当前异常的简略消息，不打印堆栈。"""
+    import sys
+
+    e = sys.exc_info()[1]
+    return f"{type(e).__name__}: {e}" if e is not None else "unknown"
 
 
 def _classify_exception(exc: Exception) -> GatewayError:
@@ -230,6 +238,33 @@ class ModelCaller:
         if "model" in kwargs:
             raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")
 
+        def _safe_cost(response: Any, /) -> float:
+            """安全计算费用，失败时返回 0.0 并记录 warning（不含堆栈）。"""
+            try:
+                return completion_cost(completion_response=response)
+            except Exception:
+                logger.warning(
+                    "Cost calculation failed for model=%s: %s",
+                    self.model,
+                    _exc_msg(),
+                )
+                return 0.0
+
+        def _safe_cost_per_token(pt: int, ct: int, /) -> float:
+            try:
+                return litellm.cost_per_token(
+                    model=self.model,
+                    prompt_tokens=pt,
+                    completion_tokens=ct,
+                )
+            except Exception:
+                logger.warning(
+                    "cost_per_token failed for model=%s: %s",
+                    self.model,
+                    _exc_msg(),
+                )
+                return 0.0
+
         async def _stream_and_collect() -> tuple[Any, float]:
             prompt_tokens = 0
             try:
@@ -278,10 +313,7 @@ class ModelCaller:
 
             if not is_cancelled:
                 final_response = stream_chunk_builder(chunks, messages=messages)
-                try:
-                    cost = completion_cost(completion_response=final_response)
-                except Exception:
-                    logger.warning("Cost calculation failed", exc_info=True)
+                cost = _safe_cost(final_response)
                 await self.gateway.cost_tracker.add(
                     {
                         "task_id": None,
@@ -310,22 +342,14 @@ class ModelCaller:
                 return final_response, cost
             else:
                 if final_usage is not None:
-                    cost = completion_cost(
-                        completion_response=stream_chunk_builder(
-                            chunks, messages=messages
-                        )
-                    )
+                    cost = _safe_cost(stream_chunk_builder(chunks, messages=messages))
                 else:
                     estimated_completion = sum(
                         len(c.choices[0].delta.content or "") // 4
                         for c in chunks
                         if c.choices
                     )
-                    cost = litellm.cost_per_token(
-                        model=self.model,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=estimated_completion,
-                    )
+                    cost = _safe_cost_per_token(prompt_tokens, estimated_completion)
                 try:
                     partial_response = stream_chunk_builder(chunks, messages=messages)
                 except Exception:
@@ -519,14 +543,16 @@ def init_gateway(
 
 
 def get_gateway() -> ModelGateway:
-    """获取模块单例。若未初始化则使用默认配置自动初始化。"""
+    """获取模块单例。若未初始化则从 Config 读取默认值自动初始化。"""
     global _singleton
     if _singleton is None:
+        from src.config import Config
+
         _singleton = init_gateway(
-            fast="deepseek/deepseek-v4-flash",
-            quality="deepseek/deepseek-v4-pro",
-            multimodal="deepseek/deepseek-v4-flash",
-            embedding="BAAI/bge-m3",
+            fast=Config.LLM_GATEWAY_FAST_MODEL,
+            quality=Config.LLM_GATEWAY_QUALITY_MODEL,
+            multimodal=Config.LLM_GATEWAY_MULTIMODAL_MODEL,
+            embedding=Config.LLM_GATEWAY_EMBEDDING_MODEL,
         )
     return _singleton
 

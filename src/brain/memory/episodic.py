@@ -120,14 +120,14 @@ class EpisodicMemory:
         end_time: str,
         compressed: list[dict[str, Any]],
     ) -> None:
-        from src.brain.ai.llm_gate import llm_chat
+        from src.brain.ai.gateway import gateway
 
         history_text = "\n".join(
             f"[{r['timestamp']}] {r['type']}: {r['content']}" for r in to_compress
         )
 
         try:
-            llm_summary = await llm_chat(
+            gen = gateway.quality.acompletion(
                 messages=[
                     {
                         "role": "system",
@@ -146,6 +146,8 @@ class EpisodicMemory:
                 temperature=0.5,
                 timeout=Config.LLM_GATE_TIMEOUT,
             )
+            await gen
+            llm_summary = gen.plain()
             improved = (
                 f"【AI提炼的长期背景】{llm_summary.strip()}\n"
                 f"【系统摘要】在 {start_time} 到 {end_time} 期间，"
