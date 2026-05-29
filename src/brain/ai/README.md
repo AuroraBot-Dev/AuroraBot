@@ -66,6 +66,7 @@ LiteLLM 内置定价缺失时自动回退到 [models.dev](https://models.dev) �
 | `CostTracker`    | 按角色/模型分类统计每次调用详情，线程安全                                                                |
 | `GenerationTask` | `await` 获得 ModelResponse，`.plain()` 提取文本，`.cost` 取费用，`.task_id` 可打断                       |
 | `models`         | 从 models.dev 拉取模型定价，作为 litellm 内置定价缺失时的回退数据源                                    |
+| `providers`      | 自定义供应商注册与模型解析，将 ``<provider>/<model>`` 转换为 litellm 原生调用并注入 api_base/api_key   |
 
 ## 核心设计
 
@@ -152,6 +153,46 @@ LLM_GATE_TIMEOUT=30
 ```
 
 **无需配置 `BASE_URL`**，LiteLLM 根据 `provider/model_name` 自动解析端点。只需配置对应 provider 的 API Key（如 `DEEPSEEK_API_KEY`）。
+
+## 自定义供应商（如硅基流动）
+
+`providers.py` 支持将任意 OpenAI 兼容 API 注册为网关供应商，
+使用 ``<provider>/<model>`` 格式的模型 ID，网关自动转换为 litellm 原生调用。
+
+### 内置供应商
+
+| 前缀 | 供应商 | API 地址 | API Key 环境变量 |
+| --- | --- | --- | --- |
+| `siliconflow` | 硅基流动 | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` |
+
+### 使用方式
+
+```ini
+# .env — 将网关角色指向自定义供应商
+LLM_GATEWAY_FAST_MODEL=siliconflow/deepseek-ai/DeepSeek-V3
+LLM_GATEWAY_QUALITY_MODEL=siliconflow/deepseek-ai/DeepSeek-V3
+LLM_GATEWAY_EMBEDDING_MODEL=siliconflow/BAAI/bge-m3
+SILICONFLOW_API_KEY=sk-xxx
+```
+
+网关在初始化时自动调用 ``setup_providers()`` 注册所有内置供应商。
+调用链路中 ``siliconflow/DeepSeek-V3`` 被解析为 ``openai/DeepSeek-V3``
+并自动注入 ``api_base`` 和 ``api_key``。
+
+### 添加自定义供应商
+
+```python
+from src.brain.ai.providers import ProviderConfig, setup_providers
+
+setup_providers(
+    ProviderConfig(
+        prefix="my-provider",
+        litellm_provider="openai",
+        api_base="https://my-api.example.com/v1",
+        api_key_env="MY_API_KEY",
+    )
+)
+```
 
 ## models.dev 定价回退
 

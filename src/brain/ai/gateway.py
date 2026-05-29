@@ -32,6 +32,7 @@ litellm.suppress_debug_info = True
 from src.utils.log_utils import get_logger
 
 from src.brain.ai.models import get_pricing_by_id
+from src.brain.ai.providers import resolve_model
 
 logger = get_logger("Gateway")
 
@@ -294,13 +295,19 @@ class ModelCaller:
 
         async def _stream_and_collect() -> tuple[Any, float]:
             prompt_tokens = 0
+
+            # 解析自定义供应商 → litellm 原生模型 + 额外参数
+            resolved_model, provider_kwargs = resolve_model(self.model)
+
             try:
-                prompt_tokens = token_counter(model=self.model, messages=messages)
+                prompt_tokens = token_counter(
+                    model=resolved_model, messages=messages
+                )
             except Exception:
                 pass
 
             litellm_kwargs: Dict[str, Any] = {
-                "model": self.model,
+                "model": resolved_model,
                 "messages": messages,
                 "max_tokens": max_tokens,
                 "stream": True,
@@ -308,6 +315,8 @@ class ModelCaller:
             }
             if timeout is not None:
                 litellm_kwargs["timeout"] = timeout
+            # 先合并供应商的 api_base / api_key，再合并调用方传入的 kwargs
+            litellm_kwargs.update(provider_kwargs)
             litellm_kwargs.update(kwargs)
 
             logger.info(
@@ -579,10 +588,16 @@ def init_gateway(
 
 
 def get_gateway() -> ModelGateway:
-    """获取模块单例。若未初始化则从 Config 读取默认值自动初始化。"""
+    """获取模块单例。若未初始化则从 Config 读取默认值自动初始化。
+
+    首次调用时自动注册自定义供应商（如硅基流动）。
+    """
     global _singleton
     if _singleton is None:
+        from src.brain.ai.providers import setup_providers
         from src.config import Config
+
+        setup_providers()
 
         _singleton = init_gateway(
             fast=Config.LLM_GATEWAY_FAST_MODEL,

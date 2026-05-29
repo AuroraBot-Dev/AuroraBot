@@ -65,13 +65,13 @@ class Config:
 
     # 模型配置 (新统一网关)
     LLM_GATEWAY_FAST_MODEL: str = os.getenv(
-        "LLM_GATEWAY_FAST_MODEL", "deepseek/deepseek-chat"
+        "LLM_GATEWAY_FAST_MODEL", "deepseek/deepseek-v4-flash"
     )
     LLM_GATEWAY_QUALITY_MODEL: str = os.getenv(
-        "LLM_GATEWAY_QUALITY_MODEL", "deepseek/deepseek-reasoner"
+        "LLM_GATEWAY_QUALITY_MODEL", "deepseek/deepseek-v4-pro"
     )
     LLM_GATEWAY_MULTIMODAL_MODEL: str = os.getenv(
-        "LLM_GATEWAY_MULTIMODAL_MODEL", "deepseek/deepseek-chat"
+        "LLM_GATEWAY_MULTIMODAL_MODEL", "deepseek/deepseek-v4-flash"
     )
     LLM_GATEWAY_EMBEDDING_MODEL: str = os.getenv(
         "LLM_GATEWAY_EMBEDDING_MODEL", "BAAI/bge-m3"
