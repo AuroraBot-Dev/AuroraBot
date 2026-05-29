@@ -14,7 +14,6 @@ from src.brain.ai.gateway import (
     ROLE_FAST,
     ROLE_QUALITY,
     ROLE_MULTIMODAL,
-    ROLE_EMBEDDING,
 )
 
 _MESSAGES: List[Dict[str, str]] = [
@@ -25,7 +24,8 @@ _MESSAGES: List[Dict[str, str]] = [
 _FAST_MODEL = "deepseek/deepseek-chat"
 _QUALITY_MODEL = "deepseek/deepseek-reasoner"
 _MULTIMODAL_MODEL = "deepseek/deepseek-chat"
-_EMBEDDING_MODEL = "BAAI/bge-m3"
+_EMBEDDING_MODEL = "siliconflow/BAAI/bge-m3"
+_RERANKER_MODEL = "jina/jina-reranker-v2"
 
 
 # ── helpers ──────────────────────────────────────────────────
@@ -47,6 +47,7 @@ def _make_gateway() -> ModelGateway:
         quality=_QUALITY_MODEL,
         multimodal=_MULTIMODAL_MODEL,
         embedding=_EMBEDDING_MODEL,
+        reranker=_RERANKER_MODEL,
     )
 
 
@@ -89,10 +90,9 @@ class ModelGatewayInitTest(unittest.TestCase):
     def test_invalid_model_format_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             ModelGateway(
-                fast="gpt4o-mini",  # missing provider/
+                fast="gpt4o-mini",
                 quality=_QUALITY_MODEL,
                 multimodal=_MULTIMODAL_MODEL,
-                embedding=_EMBEDDING_MODEL,
             )
         self.assertIn("provider/model_name", str(ctx.exception))
 
@@ -101,7 +101,6 @@ class ModelGatewayInitTest(unittest.TestCase):
         self.assertIsNotNone(gw.fast)
         self.assertIsNotNone(gw.quality)
         self.assertIsNotNone(gw.multimodal)
-        self.assertIsNotNone(gw.embedding)
 
     def test_fast_model_matches_init(self) -> None:
         gw = _make_gateway()
@@ -117,13 +116,33 @@ class ModelGatewayInitTest(unittest.TestCase):
         self.assertEqual(config[ROLE_FAST], _FAST_MODEL)
         self.assertEqual(config[ROLE_QUALITY], _QUALITY_MODEL)
         self.assertEqual(config[ROLE_MULTIMODAL], _MULTIMODAL_MODEL)
-        self.assertEqual(config[ROLE_EMBEDDING], _EMBEDDING_MODEL)
+        self.assertEqual(config["embedding"], _EMBEDDING_MODEL)
+        self.assertEqual(config["reranker"], _RERANKER_MODEL)
+
+    def test_embedding_config_is_plain_string(self) -> None:
+        gw = _make_gateway()
+        self.assertEqual(gw.embedding, _EMBEDDING_MODEL)
+        self.assertIsInstance(gw.embedding, str)
+
+    def test_reranker_config_is_plain_string(self) -> None:
+        gw = _make_gateway()
+        self.assertEqual(gw.reranker, _RERANKER_MODEL)
+        self.assertIsInstance(gw.reranker, str)
+
+    def test_embedding_and_reranker_default_to_empty(self) -> None:
+        gw = ModelGateway(
+            fast=_FAST_MODEL,
+            quality=_QUALITY_MODEL,
+            multimodal=_MULTIMODAL_MODEL,
+        )
+        self.assertEqual(gw.embedding, "")
+        self.assertEqual(gw.reranker, "")
 
 
 class ModelGatewayUseModelTest(unittest.TestCase):
     def test_valid_roles(self) -> None:
         gw = _make_gateway()
-        for role in (ROLE_FAST, ROLE_QUALITY, ROLE_MULTIMODAL, ROLE_EMBEDDING):
+        for role in (ROLE_FAST, ROLE_QUALITY, ROLE_MULTIMODAL):
             gw.use_model(role)
 
     def test_unknown_role_raises(self) -> None:
@@ -161,12 +180,6 @@ class ModelGatewayPlainTest(unittest.TestCase):
 
 
 class ModelCallerAcompletionTest(unittest.TestCase):
-    def test_embedding_role_rejects_acompletion(self) -> None:
-        gw = _make_gateway()
-        with self.assertRaises(ValueError) as ctx:
-            gw.embedding.acompletion(_MESSAGES)
-        self.assertIn("Embedding", str(ctx.exception))
-
     def test_model_in_kwargs_raises_permission_error(self) -> None:
         gw = _make_gateway()
         with self.assertRaises(PermissionError) as ctx:

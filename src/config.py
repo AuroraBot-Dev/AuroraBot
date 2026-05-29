@@ -42,21 +42,30 @@ class Config:
 
     # 模型配置
     LLM_GATEWAY_FAST_MODEL: str = os.getenv(
-        "LLM_GATEWAY_FAST_MODEL", "deepseek/deepseek-v4-flash"
+        "LLM_GATEWAY_FAST_MODEL",
+        "deepseek/deepseek-v4-flash",
     )
     LLM_GATEWAY_QUALITY_MODEL: str = os.getenv(
-        "LLM_GATEWAY_QUALITY_MODEL", "deepseek/deepseek-v4-pro"
+        "LLM_GATEWAY_QUALITY_MODEL",
+        "deepseek/deepseek-v4-pro",
     )
     LLM_GATEWAY_MULTIMODAL_MODEL: str = os.getenv(
-        "LLM_GATEWAY_MULTIMODAL_MODEL", "deepseek/deepseek-v4-flash"
+        "LLM_GATEWAY_MULTIMODAL_MODEL",
+        "deepseek/deepseek-v4-flash",
     )
     LLM_GATEWAY_EMBEDDING_MODEL: str = os.getenv(
-        "LLM_GATEWAY_EMBEDDING_MODEL", "siliconflow/BAAI/bge-m3"
+        "LLM_GATEWAY_EMBEDDING_MODEL",
+        "siliconflow/BAAI/bge-m3",
+    )
+    LLM_GATEWAY_RERANKER_MODEL: str = os.getenv(
+        "LLM_GATEWAY_RERANKER_MODEL",
+        "",
     )
 
     # 导出密钥
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-xxx")
     SILICONFLOW_API_KEY: str = os.getenv("SILICONFLOW_API_KEY", "sk-xxx")
+    XIAOMI_MIMO_API_KEY: str = os.getenv("XIAOMI_MIMO_API_KEY", "sk-xxx")
 
     # 超时配置
     LLM_GATE_TIMEOUT: float = float(os.getenv("LLM_GATE_TIMEOUT", "30"))
