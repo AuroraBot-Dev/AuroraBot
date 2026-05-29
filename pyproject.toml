@@ -16,6 +16,7 @@ dependencies = [
     "websockets<14.0",
     "botocore>=1.43.12",
     "pytest",
+    "tiktoken>=0.13.0",
 ]
 
 [project.optional-dependencies]

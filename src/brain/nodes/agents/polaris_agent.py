@@ -17,7 +17,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Any, TYPE_CHECKING
 
-from src.brain.ai.llm_gate import llm_chat
+from src.brain.ai.gateway import gateway
 from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.config import Config
@@ -332,12 +332,14 @@ class PolarisAgent(Agent):
             },
         ]
         try:
-            response = await llm_chat(
+            gen = gateway.fast.acompletion(
                 messages,
                 max_tokens=512,
                 temperature=0.0,
                 timeout=Config.LLM_GATE_TIMEOUT,
             )
+            await gen
+            response = gen.plain()
         except Exception:
             logger.exception("门控 LLM 调用失败，默认不回复")
             return False
@@ -552,13 +554,15 @@ class PolarisAgent(Agent):
 
         t3 = time.time()
         logger.info(
-            f"[动作规划] step=LLM调用 model={Config.LITELLM_MODEL} msg_count={len(messages)} max_tokens=2048"
+            f"[动作规划] step=LLM调用 model={Config.LLM_GATEWAY_QUALITY_MODEL} msg_count={len(messages)} max_tokens=2048"
         )
-        response = await llm_chat(
+        gen = gateway.quality.acompletion(
             [{"role": "system", "content": combined_memory_text}] + messages,
             max_tokens=2048,
             temperature=0.0,
         )
+        await gen
+        response = gen.plain()
         logger.info(
             f"[动作规划] step=LLM调用 耗时={time.time()-t3:.2f}s len={len(response) if response else 0}"
         )

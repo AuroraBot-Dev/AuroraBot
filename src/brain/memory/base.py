@@ -34,21 +34,21 @@ class MemoryContext:
 
         # 1. 拼接 L1 工作记忆 (最近的对话)
         if self.working_context:
-            prompt_lines.append("【当前上下文】")
+            prompt_lines.append("[当前上下文]")
             for item in self.working_context:
                 prompt_lines.append(f"- {item.role}: {item.content}")
             prompt_lines.append("")  # 空行分隔
 
         # 2. 拼接 L2 情景记忆 (最近发生的系统事件/日志)
         if self.episodic_events:
-            prompt_lines.append("【相关历史事件】")
+            prompt_lines.append("[相关历史事件]")
             for event in self.episodic_events:
                 prompt_lines.append(f"- {event}")
             prompt_lines.append("")
 
         # 3. 拼接 L3 语义记忆 (长期事实、用户偏好)
         if self.semantic_facts:
-            prompt_lines.append("【已知事实与偏好】")
+            prompt_lines.append("[已知事实与偏好]")
             for fact in self.semantic_facts:
                 prompt_lines.append(f"- {fact}")
             prompt_lines.append("")
