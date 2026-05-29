@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 from src.brain.memory.base import MemoryContext, MemoryItem
 from src.brain.memory.working import WorkingMemory
@@ -65,8 +66,8 @@ class UnifiedMemoryManager:
         except RuntimeError:
             # 没有运行中的事件循环（测试/脚本环境），同步执行
             try:
-                self.semantic.extract_and_store(text=text, user_id=user_id)
-                logger.info("L3 语义提取同步成功")
+                if self.semantic.extract_and_store(text=text, user_id=user_id):
+                    logger.info("L3 语义提取同步成功")
             except Exception:
                 logger.exception("L3 语义提取同步回退失败")
 
@@ -75,8 +76,8 @@ class UnifiedMemoryManager:
         if not user_id:
             user_id = self.init_user_id
         try:
-            self.semantic.extract_and_store(text=text, user_id=user_id)
-            logger.info("L3 语意提取异步任务成功")
+            if self.semantic.extract_and_store(text=text, user_id=user_id):
+                logger.info("L3 语意提取异步任务成功")
         except Exception:
             logger.exception("L3 语义提取异步任务失败")
 
@@ -103,8 +104,32 @@ class UnifiedMemoryManager:
         return ctx
 
 
-# 全局单例，供其它节点和模块直接导入使用
-memory_manager = UnifiedMemoryManager()
+_memory_manager_singleton: UnifiedMemoryManager | None = None
+
+
+def get_memory_manager() -> UnifiedMemoryManager:
+    """获取记忆管理器单例，按需延迟初始化。"""
+    global _memory_manager_singleton
+    if _memory_manager_singleton is None:
+        _memory_manager_singleton = UnifiedMemoryManager()
+    return _memory_manager_singleton
+
+
+class _MemoryManagerProxy:
+    """兼容旧调用方式的懒加载代理。"""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_memory_manager(), name)
+
+
+# 全局单例代理，供其它节点和模块直接导入使用
+memory_manager = _MemoryManagerProxy()
 
 # 暴露给外部方便导入的公共接口
-__all__ = ["UnifiedMemoryManager", "MemoryContext", "MemoryItem", "memory_manager"]
+__all__ = [
+    "UnifiedMemoryManager",
+    "MemoryContext",
+    "MemoryItem",
+    "get_memory_manager",
+    "memory_manager",
+]

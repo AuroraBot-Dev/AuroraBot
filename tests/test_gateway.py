@@ -216,9 +216,15 @@ class GatewayExceptionConversionTest(unittest.TestCase):
         gw = _make_gateway()
 
         async def scenario() -> None:
-            with patch(
-                "litellm.acompletion",
-                new=AsyncMock(side_effect=exc_to_raise),
+            with (
+                patch(
+                    "src.brain.ai.gateway.missing_credentials_reason",
+                    return_value=None,
+                ),
+                patch(
+                    "litellm.acompletion",
+                    new=AsyncMock(side_effect=exc_to_raise),
+                ),
             ):
                 gen = gw.fast.acompletion(_MESSAGES)
                 with self.assertRaises(GatewayError) as ctx:
@@ -319,14 +325,41 @@ class GatewayExceptionConversionTest(unittest.TestCase):
         )
 
         async def scenario() -> None:
-            with patch(
-                "litellm.acompletion",
-                new=AsyncMock(side_effect=original),
+            with (
+                patch(
+                    "src.brain.ai.gateway.missing_credentials_reason",
+                    return_value=None,
+                ),
+                patch(
+                    "litellm.acompletion",
+                    new=AsyncMock(side_effect=original),
+                ),
             ):
                 gen = gw.fast.acompletion(_MESSAGES)
                 with self.assertRaises(GatewayError) as ctx:
                     await gen
             self.assertIs(ctx.exception.__cause__, original)
+
+        asyncio.run(scenario())
+
+    def test_missing_credentials_fails_fast_without_calling_litellm(self) -> None:
+        gw = _make_gateway()
+
+        async def scenario() -> None:
+            with (
+                patch(
+                    "src.brain.ai.gateway.missing_credentials_reason",
+                    return_value="未配置 OPENAI_API_KEY，无法调用模型 openai/gpt-4o-mini",
+                ),
+                patch("litellm.acompletion", new=AsyncMock()) as mock_completion,
+            ):
+                gen = gw.fast.acompletion(_MESSAGES)
+                with self.assertRaises(GatewayError) as ctx:
+                    await gen
+
+            self.assertFalse(ctx.exception.retryable)
+            self.assertIn("未配置 OPENAI_API_KEY", str(ctx.exception))
+            mock_completion.assert_not_awaited()
 
         asyncio.run(scenario())
 

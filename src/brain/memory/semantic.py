@@ -1,7 +1,9 @@
 # L3缓存，mem0层
 from typing import List
 
+from src.brain.ai.providers import missing_credentials_reason
 from src.brain.memory.client import create_memory
+from src.config import Config
 from src.utils.log_utils import get_logger
 
 logger = get_logger("SemanticMemory")
@@ -25,7 +27,17 @@ class SemanticMemory:
             self._client = create_memory()
         return self._client
 
-    def extract_and_store(self, text: str, user_id: str) -> None:
+    def _missing_credentials_reason(self) -> str | None:
+        for model in (
+            Config.LLM_GATEWAY_FAST_MODEL,
+            Config.LLM_GATEWAY_EMBEDDING_MODEL,
+        ):
+            reason = missing_credentials_reason(model)
+            if reason is not None:
+                return reason
+        return None
+
+    def extract_and_store(self, text: str, user_id: str) -> bool:
         """写策略：智能提炼与向量化 (Write via LLM Extraction)
 
         调用 mem0 的 add 方法。mem0 会在内部调用大模型分析这段文本，
@@ -33,17 +45,23 @@ class SemanticMemory:
         """
         if not user_id or not str(user_id).strip():
             logger.warning(f"提取语义记忆跳过：user_id 为空")
-            return
+            return False
 
-        logger.info("已成功提取语义记忆")
+        missing_reason = self._missing_credentials_reason()
+        if missing_reason is not None:
+            logger.warning(f"提取语义记忆跳过：{missing_reason}")
+            return False
 
         try:
             # mem0 的 add 需要传入特定的 message 格式
             messages = [{"role": "user", "content": text}]
             self.mem0.add(messages, user_id=user_id)
+            logger.info("已成功提取语义记忆")
             logger.info(f"已尝试从文本中提取语义记忆，User: {user_id}")
+            return True
         except Exception as e:
             logger.error(f"提取语义记忆失败: {e}")
+            return False
 
     def search_facts(self, query: str, user_id: str) -> List[str]:
         """读策略：语义向量检索 (Semantic Search)
@@ -56,6 +74,11 @@ class SemanticMemory:
 
         query = (query or "").strip()
         if not query:
+            return []
+
+        missing_reason = self._missing_credentials_reason()
+        if missing_reason is not None:
+            logger.warning(f"搜索语义记忆跳过：{missing_reason}")
             return []
 
         try:

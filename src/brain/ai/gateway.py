@@ -32,7 +32,7 @@ litellm.suppress_debug_info = True
 from src.utils.log_utils import get_logger
 
 from src.brain.ai.models import get_pricing_by_id
-from src.brain.ai.providers import resolve_model
+from src.brain.ai.providers import missing_credentials_reason, resolve_model
 
 logger = get_logger("Gateway")
 
@@ -84,6 +84,8 @@ def _exc_msg() -> str:
 
 def _classify_exception(exc: Exception) -> GatewayError:
     """将 litellm 原始异常转换为带 retryable 标记的 GatewayError。"""
+    if "Missing credentials" in str(exc):
+        return GatewayError(f"LLM 凭证缺失: {exc}", retryable=False)
     if isinstance(exc, litellm.exceptions.AuthenticationError):
         return GatewayError(f"LLM 认证失败: {exc}", retryable=False)
     if isinstance(exc, litellm.exceptions.BadRequestError):
@@ -293,6 +295,10 @@ class ModelCaller:
             prompt_tokens = 0
 
             # 解析自定义供应商 → litellm 原生模型 + 额外参数
+            missing_reason = missing_credentials_reason(self.model)
+            if missing_reason is not None:
+                raise GatewayError(missing_reason, retryable=False)
+
             resolved_model, provider_kwargs = resolve_model(self.model)
 
             try:
@@ -571,5 +577,12 @@ def get_gateway() -> ModelGateway:
     return _singleton
 
 
+class _GatewayProxy:
+    """兼容旧调用方式的懒加载代理。"""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_gateway(), name)
+
+
 # 便捷别名 —— 大多数场景直接 ``from src.brain.ai.gateway import gateway``
-gateway: ModelGateway = get_gateway()
+gateway = _GatewayProxy()

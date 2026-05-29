@@ -5,13 +5,13 @@ import yaml
 
 from src.brain.kernel.base import Node
 from src.brain.kernel.circuit import Circuit
-from src.brain.memory import UnifiedMemoryManager
 from src.brain.nodes.agents import *
 from src.brain.nodes.routers import *
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from src.brain.memory import UnifiedMemoryManager
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("NodeFactory")
@@ -116,7 +116,7 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
     """
     topology = _load_topology_config()
     instances: list[Node] = []
-    memory_manager = UnifiedMemoryManager()
+    memory_manager: UnifiedMemoryManager | None = None
 
     for entry in topology:
         node_id = entry["id"]
@@ -128,9 +128,14 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
             continue
 
         node_cls = NODE_REGISTRY[node_type]
-        memory_kw = (
-            {"memory": memory_manager} if node_type in NODE_NEEDS_MEMORY else {}
-        )
+        if node_type in NODE_NEEDS_MEMORY:
+            if memory_manager is None:
+                from src.brain.memory import get_memory_manager
+
+                memory_manager = get_memory_manager()
+            memory_kw = {"memory": memory_manager}
+        else:
+            memory_kw = {}
 
         # 构造 —— 按类型的构造函数签名分发
         if node_type in NODE_ACCEPTS_CONFIG:
