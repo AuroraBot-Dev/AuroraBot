@@ -76,6 +76,8 @@ Push your branch to the remote and open a Pull Request targeting the `dev` branc
 
 Once your PR is merged into `dev`, that branch has served its purpose. **Do not reuse it for further feature development.** You can safely delete it:
 
+If the merge lands on `dev` and `CI` passes, the repository automatically creates the next `vX.Y.Z-alpha.N` tag based on the version in `pyproject.toml` and publishes a corresponding Pre-release. In normal day-to-day development, you usually do not need to create `alpha` tags manually anymore.
+
 ```bash
 git branch -d feat/my-feature
 ```

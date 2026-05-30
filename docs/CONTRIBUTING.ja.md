@@ -76,6 +76,8 @@ git checkout -b feat/my-feature    # または fix/xxx, refact/xxx
 
 PR が `dev` にマージされたら、そのブランチの役割は完了です。**原則として、そのブランチを新機能の開発に再利用しないでください。** 安全に削除できます：
 
+このマージ先が `dev` で、かつ `CI` が成功した場合、リポジトリは `pyproject.toml` のバージョン番号をもとに次の `vX.Y.Z-alpha.N` タグを自動作成し、対応する Pre-release を公開します。日常的な開発では、通常 `alpha` tag を手動で打つ必要はありません。
+
 ```bash
 git branch -d feat/my-feature
 ```
