@@ -22,9 +22,7 @@ class UnifiedMemoryManager:
         self.init_user_id = "aurora"
         logger.info("memory 已启动")
 
-    def initialize_system_prompt(
-        self, user_id: str = "system_user", core_prompt: str = ""
-    ) -> None:
+    def initialize_system_prompt(self, user_id: str = "system_user", core_prompt: str = "") -> None:
         """
         【系统初始化】向 L3 (mem0) 注入基础身份或全局偏好。
         通常在机器人启动时或用户首次注册时调用。
@@ -48,9 +46,7 @@ class UnifiedMemoryManager:
         self.working.add(content=content, role=role)
 
         # 2. 作为一条完整的日志存入情景记忆 (L2: 文件级，较快)
-        self.episodic.record_event(
-            event_type=f"chat_{role}", content=content, user_id=user_id
-        )
+        self.episodic.record_event(event_type=f"chat_{role}", content=content, user_id=user_id)
 
         # 3. 语义提炼 (L3: LLM级，较慢) — 异步执行，不阻塞
         if role == "user":
@@ -92,14 +88,10 @@ class UnifiedMemoryManager:
         ctx.working_context = self.working.get_context()
 
         # L2: 拿最近发生的 5 件事作为短期历史背景
-        ctx.episodic_events = self.episodic.search_recent_events(
-            limit=5, user_id=user_id
-        )
+        ctx.episodic_events = self.episodic.search_recent_events(limit=5, user_id=user_id)
 
         # L3: 利用用户的当前问题去检索相关的深层事实和偏好
-        ctx.semantic_facts = self.semantic.search_facts(
-            query=current_query, user_id=user_id
-        )
+        ctx.semantic_facts = self.semantic.search_facts(query=current_query, user_id=user_id)
 
         return ctx
 

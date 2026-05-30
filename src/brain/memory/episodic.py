@@ -33,10 +33,7 @@ class EpisodicMemory:
         # 我们就认为这是一次重复请求（可能是网络重试或测试脚本跑了多次），直接忽略它。
         if records:
             last_record = records[-1]
-            if (
-                last_record.get("content") == content
-                and last_record.get("user_id") == user_id
-            ):
+            if last_record.get("content") == content and last_record.get("user_id") == user_id:
                 logger.debug(
                     "拦截到重复的情景记忆写入，已忽略。内容摘要: %s...",
                     content[:10],
@@ -44,9 +41,7 @@ class EpisodicMemory:
                 return
         # ------------------------
 
-        item = MemoryItem(
-            content=content, metadata={"type": event_type, "user_id": user_id}
-        )
+        item = MemoryItem(content=content, metadata={"type": event_type, "user_id": user_id})
 
         records.append(
             {
@@ -80,8 +75,7 @@ class EpisodicMemory:
 
         # 先用基础统计生成摘要，保证同步路径不阻塞
         summary_content = (
-            f"【系统摘要】在 {start_time} 到 {end_time} 期间，"
-            f"发生了 {len(to_compress)} 次交互。"
+            f"【系统摘要】在 {start_time} 到 {end_time} 期间，发生了 {len(to_compress)} 次交互。"
         )
 
         summary_record = {
@@ -110,9 +104,7 @@ class EpisodicMemory:
         except RuntimeError:
             return  # 无事件循环（测试/脚本），跳过异步改进
 
-        loop.create_task(
-            self._refine_summary_async(to_compress, start_time, end_time, compressed)
-        )
+        loop.create_task(self._refine_summary_async(to_compress, start_time, end_time, compressed))
 
     async def _refine_summary_async(
         self,
@@ -168,9 +160,7 @@ class EpisodicMemory:
         # 过滤出当前用户相关的事件，以及系统级别的 summary 摘要
         if user_id:
             records = [
-                r
-                for r in records
-                if r.get("user_id") == user_id or r.get("type") == "summary"
+                r for r in records if r.get("user_id") == user_id or r.get("type") == "summary"
             ]
 
         recent = records[-limit:]
@@ -188,6 +178,4 @@ class EpisodicMemory:
 
     def _save(self, data: List[Dict[str, Any]]) -> None:
         """辅助方法：将数据写回文件"""
-        self._file_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        self._file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

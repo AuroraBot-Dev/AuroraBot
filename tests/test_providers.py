@@ -68,9 +68,7 @@ class ResolveModelTest(unittest.TestCase):
     def test_model_with_multiple_slashes(self) -> None:
         """模型名含多个 / （如 siliconflow/deepseek-ai/DeepSeek-V3）。"""
         with patch.dict(os.environ, {"SILICONFLOW_API_KEY": "sk-test"}):
-            model, extra = resolve_model(
-                "siliconflow/deepseek-ai/DeepSeek-V3"
-            )
+            model, extra = resolve_model("siliconflow/deepseek-ai/DeepSeek-V3")
 
         # 第一个 / 之前是前缀，之后全部是模型名
         self.assertEqual(model, "openai/deepseek-ai/DeepSeek-V3")

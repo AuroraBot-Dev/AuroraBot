@@ -42,9 +42,7 @@ class RuntimeTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            with patch(
-                "src.brain.runtime.discover_apps", return_value={"qq": object()}
-            ):
+            with patch("src.brain.runtime.discover_apps", return_value={"qq": object()}):
                 with self.assertRaises(KeyError):
                     await register_selected_apps(host, ["missing"], {})
 
@@ -93,9 +91,7 @@ class RuntimeTest(unittest.TestCase):
                 await start_runtime_components(state)
                 self.assertIn("im.polaris.console.send_message", host.list_commands())
                 await shutdown_runtime(state)
-                self.assertNotIn(
-                    "im.polaris.console.send_message", host.list_commands()
-                )
+                self.assertNotIn("im.polaris.console.send_message", host.list_commands())
 
                 state2 = RuntimeState(host=host, stop_event=asyncio.Event())
                 await start_runtime_components(state2)

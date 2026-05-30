@@ -123,9 +123,7 @@ class GetPricingByIdTest(unittest.TestCase):
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(),
             ):
-                p_openai_mini = await models_module.get_pricing_by_id(
-                    "openai/gpt-4o-mini"
-                )
+                p_openai_mini = await models_module.get_pricing_by_id("openai/gpt-4o-mini")
                 p_openai = await models_module.get_pricing_by_id("openai/gpt-4o")
                 p_anthropic = await models_module.get_pricing_by_id(
                     "anthropic/claude-sonnet-4-20250514"
@@ -289,9 +287,7 @@ class ConcurrencyTest(unittest.TestCase):
                     models_module.get_pricing_by_id("openai/gpt-4o-mini"),
                     models_module.get_pricing_by_id("openai/gpt-4o"),
                     models_module.get_pricing_by_id("openai/gpt-4o-mini"),
-                    models_module.get_pricing_by_id(
-                        "anthropic/claude-sonnet-4-20250514"
-                    ),
+                    models_module.get_pricing_by_id("anthropic/claude-sonnet-4-20250514"),
                     models_module.get_pricing_by_id("openai/gpt-4o"),
                 )
 

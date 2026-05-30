@@ -30,9 +30,7 @@ class ApplicationHost:
         for command_decl in manifest.commands:
             handler = getattr(app, command_decl.name, None)
             if handler is None:
-                raise AttributeError(
-                    f"应用 {manifest.package} 缺少 {command_decl.name} 命令实现"
-                )
+                raise AttributeError(f"应用 {manifest.package} 缺少 {command_decl.name} 命令实现")
             self.register_command(
                 CommandSpec(
                     name=f"{manifest.package}.{command_decl.name}",

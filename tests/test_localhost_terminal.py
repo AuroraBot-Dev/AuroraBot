@@ -113,8 +113,8 @@ class HotReloadTest(unittest.TestCase):
             runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
             with (
-                patch("src.brain.localhost._reload_modules"),
-                patch("src.brain.localhost._reload_package_modules"),
+                patch("src.brain.localhost.reloader._reload_modules"),
+                patch("src.brain.localhost.reloader._reload_package_modules"),
                 patch(
                     "src.platform.app_config.load_apps_config",
                     return_value={"qq": {"enabled": True, "startup": {}}},
@@ -165,8 +165,8 @@ class HotReloadTest(unittest.TestCase):
             runtime = RuntimeState(host=host, stop_event=asyncio.Event())
 
             with (
-                patch("src.brain.localhost._reload_modules"),
-                patch("src.brain.localhost._reload_package_modules"),
+                patch("src.brain.localhost.reloader._reload_modules"),
+                patch("src.brain.localhost.reloader._reload_package_modules"),
                 patch(
                     "src.platform.app_config.load_apps_config",
                     return_value={"qq": {"enabled": True, "startup": {}}},
@@ -181,9 +181,7 @@ class HotReloadTest(unittest.TestCase):
                     "src.platform.app_discovery.instantiate_app",
                     return_value=new_app,
                 ),
-                patch(
-                    "src.brain.runtime.build_circuit", side_effect=RuntimeError("boom")
-                ),
+                patch("src.brain.runtime.build_circuit", side_effect=RuntimeError("boom")),
                 patch.object(Config, "RUN_MODE", "core"),
             ):
                 with self.assertRaises(HotReloadError) as ctx:
@@ -220,7 +218,7 @@ class HotReloadTest(unittest.TestCase):
 
             with (
                 patch(
-                    "src.brain.localhost._reload_modules",
+                    "src.brain.localhost.reloader._reload_modules",
                     side_effect=RuntimeError("reload failed"),
                 ),
                 patch.object(Config, "RUN_MODE", "core"),
@@ -270,13 +268,11 @@ class HotReloadTest(unittest.TestCase):
     def test_handle_control_command_reloads_runtime(self) -> None:
         lock = asyncio.Lock()
         runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
-        updated_runtime = RuntimeState(
-            host=ApplicationHost(), stop_event=asyncio.Event()
-        )
+        updated_runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
 
         async def scenario() -> None:
             with patch(
-                "src.brain.localhost.reload_brain",
+                "src.brain.localhost.commands.core.reload_brain",
                 new=AsyncMock(return_value=updated_runtime),
             ) as mock_reload:
                 result = await handle_control_command(
@@ -296,7 +292,7 @@ class HotReloadTest(unittest.TestCase):
 
         async def scenario() -> None:
             with patch(
-                "src.brain.localhost.reload_brain",
+                "src.brain.localhost.commands.core.reload_brain",
                 new=AsyncMock(side_effect=HotReloadError("boom", runtime=runtime)),
             ):
                 result = await handle_control_command(
@@ -315,7 +311,7 @@ class HotReloadTest(unittest.TestCase):
 
         async def scenario() -> None:
             with patch(
-                "src.brain.localhost.stop_process",
+                "src.brain.localhost.commands.core.stop_process",
                 new=AsyncMock(),
             ) as mock_stop:
                 result = await handle_control_command(
@@ -358,10 +354,8 @@ class HotReloadTest(unittest.TestCase):
         runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
 
         async def scenario() -> None:
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
-                result = await handle_control_command(
-                    "/help", runtime=runtime, lock=lock
-                )
+            with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
+                result = await handle_control_command("/help", runtime=runtime, lock=lock)
 
             self.assertIs(result, runtime)
             self.assertGreaterEqual(mock_debug.call_count, 1)
@@ -410,7 +404,7 @@ class HotReloadTest(unittest.TestCase):
                 )
             )
 
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
+            with patch("src.brain.localhost.commands.invoke.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     '/invoke manual.echo --payload \'{"text":"hello"}\'',
                     runtime=runtime,
@@ -431,10 +425,8 @@ class HotReloadTest(unittest.TestCase):
             tempdirs: list[tempfile.TemporaryDirectory[str]] = []
             old_app = _make_fake_qq_app(tempdirs=tempdirs)
             await host.register(old_app)
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
-                result = await handle_control_command(
-                    "/apps", runtime=runtime, lock=lock
-                )
+            with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
+                result = await handle_control_command("/apps", runtime=runtime, lock=lock)
 
             self.assertIs(result, runtime)
             self.assertGreaterEqual(mock_debug.call_count, 1)
@@ -462,10 +454,8 @@ class HotReloadTest(unittest.TestCase):
                     handler=sample_handler,
                 )
             )
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
-                result = await handle_control_command(
-                    "/commands", runtime=runtime, lock=lock
-                )
+            with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
+                result = await handle_control_command("/commands", runtime=runtime, lock=lock)
 
             self.assertIs(result, runtime)
             self.assertGreaterEqual(mock_debug.call_count, 1)
@@ -497,7 +487,7 @@ class HotReloadTest(unittest.TestCase):
                     handler=sample_handler,
                 )
             )
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
+            with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/commands --detail manual.echo", runtime=runtime, lock=lock
                 )
@@ -528,7 +518,7 @@ class HotReloadTest(unittest.TestCase):
                     handler=sample_handler,
                 )
             )
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
+            with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/commands --detail all", runtime=runtime, lock=lock
                 )
@@ -549,7 +539,7 @@ class HotReloadTest(unittest.TestCase):
         async def scenario() -> None:
             host.emit_event(AppEvent(source="manual.test", type="e1"))
             host.emit_event(AppEvent(source="manual.test", type="e2"))
-            with patch("src.brain.localhost.logger.debug") as mock_debug:
+            with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/events --drain --limit 1",
                     runtime=runtime,
@@ -563,7 +553,7 @@ class HotReloadTest(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_request_process_exit_raises_sigint(self) -> None:
-        with patch("src.brain.localhost.signal.raise_signal") as mock_raise_signal:
+        with patch("src.brain.localhost.reloader.signal.raise_signal") as mock_raise_signal:
             _request_process_exit()
 
         mock_raise_signal.assert_called_once()
@@ -574,10 +564,10 @@ class HotReloadTest(unittest.TestCase):
         async def scenario() -> None:
             with (
                 patch(
-                    "src.brain.localhost.shutdown_runtime",
+                    "src.brain.localhost.reloader.shutdown_runtime",
                     new=AsyncMock(),
                 ) as mock_shutdown,
-                patch("src.brain.localhost.signal.raise_signal") as mock_raise_signal,
+                patch("src.brain.localhost.reloader.signal.raise_signal") as mock_raise_signal,
             ):
                 await stop_process(runtime=runtime)
 

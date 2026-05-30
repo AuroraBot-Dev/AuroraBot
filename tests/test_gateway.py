@@ -376,12 +376,8 @@ class CostTrackerTest(unittest.TestCase):
         tracker = CostTracker()
 
         async def scenario() -> None:
-            await tracker.add(
-                {"role": "fast", "model": "m1", "type": "completion", "cost": 0.01}
-            )
-            await tracker.add(
-                {"role": "fast", "model": "m1", "type": "completion", "cost": 0.02}
-            )
+            await tracker.add({"role": "fast", "model": "m1", "type": "completion", "cost": 0.01})
+            await tracker.add({"role": "fast", "model": "m1", "type": "completion", "cost": 0.02})
             await tracker.add(
                 {"role": "quality", "model": "m2", "type": "completion", "cost": 0.10}
             )

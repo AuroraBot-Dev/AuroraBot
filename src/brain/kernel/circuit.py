@@ -64,8 +64,7 @@ class Circuit:
             self._node_tasks.append(task)
 
         logger.info(
-            f"电路已启动: {len(self._nodes)} 个节点, "
-            f"{', '.join(node.name for node in self._nodes)}"
+            f"电路已启动: {len(self._nodes)} 个节点, {', '.join(node.name for node in self._nodes)}"
         )
 
     async def stop(self) -> None:

@@ -303,9 +303,7 @@ class ApplicationHostExtraTest(unittest.TestCase):
                         commands=["set_alarm"],
                     )
                 )
-                clock_cmds = [
-                    c for c in host.list_commands() if c.startswith("im.polaris.clock")
-                ]
+                clock_cmds = [c for c in host.list_commands() if c.startswith("im.polaris.clock")]
                 self.assertGreater(len(clock_cmds), 0)
 
                 await host.replace_apps(

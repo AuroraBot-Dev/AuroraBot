@@ -86,9 +86,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "watch": entry.get("watch"),  # None = 不覆盖，沿用类默认值
                 "emit": entry.get("emit"),  # None = 不覆盖，沿用类默认值
                 "config": (
-                    entry.get("config", {})
-                    if isinstance(entry.get("config"), dict)
-                    else {}
+                    entry.get("config", {}) if isinstance(entry.get("config"), dict) else {}
                 ),
             }
         )

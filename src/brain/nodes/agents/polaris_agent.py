@@ -61,12 +61,8 @@ class PolarisAgent(Agent):
         self._history_lock = asyncio.Lock()
         self._session_versions: dict[str, int] = {}
         self._pending_inputs: dict[str, list[dict[str, Any]]] = {}
-        self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(
-            lambda: deque()
-        )
-        self._private_recent: dict[str, deque[tuple[float, str]]] = defaultdict(
-            lambda: deque()
-        )
+        self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(lambda: deque())
+        self._private_recent: dict[str, deque[tuple[float, str]]] = defaultdict(lambda: deque())
         self._init_data()
 
     # ═══════════════════════════════════════════════════
@@ -157,9 +153,7 @@ class PolarisAgent(Agent):
         event_type = str(data.get("type", ""))
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         summary = str(data.get("summary", "")).strip()
-        payload = (
-            data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
-        )
+        payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
 
         if event_type == "message.received":
             user_id = str(payload.get("user_id", ""))
@@ -184,24 +178,18 @@ class PolarisAgent(Agent):
     # ═══════════════════════════════════════════════════
 
     def _enqueue_message(self, data: dict[str, Any], input_text: str) -> None:
-        payload = (
-            data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
-        )
+        payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
         user_id = str(payload.get("user_id", ""))
         session_id = str(payload.get("session_id", ""))
         is_group = bool(payload.get("is_group", False))
         group_id = str(payload.get("group_id", "")) if is_group else None
         session_key = self._make_session_key(user_id, is_group, group_id)
 
-        logger.debug(
-            "收到消息 session=%s user=%s text=%s", session_key, user_id, input_text
-        )
+        logger.debug("收到消息 session=%s user=%s text=%s", session_key, user_id, input_text)
 
         scene_name = "群聊" if is_group else "私聊"
         if is_group:
-            self._append_recent_message(
-                self._group_recent[int(group_id or 0)], input_text
-            )
+            self._append_recent_message(self._group_recent[int(group_id or 0)], input_text)
         else:
             self._append_recent_message(self._private_recent[user_id], input_text)
 
@@ -227,9 +215,7 @@ class PolarisAgent(Agent):
         logger.debug("处理系统事件 type=%s text=%s", event_type, input_text)
         recovery_note = ""
         if event_type.startswith("agent.reply_"):
-            recovery_note = (
-                "你上一轮的输出不是有效 JSON。现在重新输出，必须只给 JSON 对象。"
-            )
+            recovery_note = "你上一轮的输出不是有效 JSON。现在重新输出，必须只给 JSON 对象。"
         await self._run_reply_pipeline(
             user_id="system",
             session_key=f"system:{event_type}",
@@ -268,9 +254,7 @@ class PolarisAgent(Agent):
         logger.debug("防抖完成 session=%s 合并 %d 条到门控", session_key, len(entries))
 
         recent = (
-            self._group_recent[int(group_id or 0)]
-            if is_group
-            else self._private_recent[user_id]
+            self._group_recent[int(group_id or 0)] if is_group else self._private_recent[user_id]
         )
         recent_lines = self._get_recent_lines(recent)
 
@@ -278,9 +262,7 @@ class PolarisAgent(Agent):
             should_reply = True
         else:
             try:
-                should_reply = await self._impulse_gate(
-                    scene_name, recent_lines, merged_input
-                )
+                should_reply = await self._impulse_gate(scene_name, recent_lines, merged_input)
             except Exception:
                 logger.exception("门控异常，跳过")
                 return
@@ -431,13 +413,9 @@ class PolarisAgent(Agent):
         parsed = self._parse_actions(raw)
         if parsed is None:
             if raw.strip() and recovery_depth == 0:
-                parsed = self._adapt_plain_text(
-                    raw, user_id, session_id, is_group, group_id
-                )
+                parsed = self._adapt_plain_text(raw, user_id, session_id, is_group, group_id)
                 if parsed is not None:
-                    logger.warning(
-                        f"纯文本兜底发送（JSON 解析失败）session={session_key}"
-                    )
+                    logger.warning(f"纯文本兜底发送（JSON 解析失败）session={session_key}")
         if parsed is None:
             et = "agent.reply_parse_failed" if raw.strip() else "agent.reply_empty"
             summary = "无法解析为结构化动作" if raw.strip() else "返回空响应"
@@ -475,9 +453,7 @@ class PolarisAgent(Agent):
         dispatched = await self._dispatch_actions(actions, session_key, version)
         if dispatched > 0:
             await self._append_assistant_message(raw, user_id)
-            logger.info(
-                f"回复完成 session={session_key} user={user_id} actions={dispatched}"
-            )
+            logger.info(f"回复完成 session={session_key} user={user_id} actions={dispatched}")
 
     # ═══════════════════════════════════════════════════
     # LLM 动作生成
@@ -552,17 +528,11 @@ class PolarisAgent(Agent):
                 logger.exception("[动作规划] step=高级记忆 async_task=异常, 继续无记忆")
                 advanced_memory_text = ""
         else:
-            advanced_memory_text = self._build_advanced_memory_text(
-                user_id, merged_input
-            )
-            logger.info(
-                f"[动作规划] step=高级记忆 sync=完成 耗时={time.time()-t2:.2f}s"
-            )
+            advanced_memory_text = self._build_advanced_memory_text(user_id, merged_input)
+            logger.info(f"[动作规划] step=高级记忆 sync=完成 耗时={time.time() - t2:.2f}s")
 
         combined_memory_text = (
-            f"{memory_text}\n\n{advanced_memory_text}"
-            if advanced_memory_text
-            else memory_text
+            f"{memory_text}\n\n{advanced_memory_text}" if advanced_memory_text else memory_text
         )
 
         action_prompt = prompts.ACTION.fill(
@@ -571,8 +541,7 @@ class PolarisAgent(Agent):
         )
 
         final_instruction = (
-            f"{action_prompt}\n\n"
-            "（只输出 JSON。第一个字符 {，最后一个 }。不要任何其他文字。）"
+            f"{action_prompt}\n\n（只输出 JSON。第一个字符 {{，最后一个 }}。不要任何其他文字。）"
         )
         if recovery_note:
             final_instruction = f"{recovery_note}\n\n{final_instruction}"
@@ -612,7 +581,7 @@ class PolarisAgent(Agent):
     ) -> str:
         stype = "群聊" if is_group else "私聊"
         gid = group_id or "无"
-        return f"会话类型: {stype}\n" f"会话 ID: {session_id}\n" f"群号: {gid}"
+        return f"会话类型: {stype}\n会话 ID: {session_id}\n群号: {gid}"
 
     def _build_commands_text(self) -> str:
         if self._host is None:
@@ -650,9 +619,7 @@ class PolarisAgent(Agent):
         diary_block = "\n".join(diary_lines) if diary_lines else "无"
 
         impression_block = (
-            json.dumps(prioritized, ensure_ascii=False, indent=2)
-            if prioritized
-            else "{}"
+            json.dumps(prioritized, ensure_ascii=False, indent=2) if prioritized else "{}"
         )
         return prompts.MEMORY.fill(
             diary_block=diary_block,
@@ -660,9 +627,7 @@ class PolarisAgent(Agent):
         )
 
     # 获取记忆文本
-    async def _prefetch_advanced_memory(
-        self, current_user_id: str, current_query: str
-    ) -> str:
+    async def _prefetch_advanced_memory(self, current_user_id: str, current_query: str) -> str:
         """异步包装，用于提前发起检索任务"""
         # 如果 retrieve_context 是异步的，这里可以直接 await；
         # 由于当前 retrieve_context 是同步阻塞的，我们将其丢入线程池中运行以防阻塞主事件循环
@@ -671,9 +636,7 @@ class PolarisAgent(Agent):
             None, self._build_advanced_memory_text, current_user_id, current_query
         )
 
-    def _build_advanced_memory_text(
-        self, current_user_id: str, current_query: str
-    ) -> str:
+    def _build_advanced_memory_text(self, current_user_id: str, current_query: str) -> str:
         try:
             from src.brain.memory import memory_manager
 
@@ -800,15 +763,11 @@ class PolarisAgent(Agent):
         try:
             from src.brain.memory import memory_manager
 
-            memory_manager.process_interaction(
-                content=content, role=role, user_id=str(user_id)
-            )
+            memory_manager.process_interaction(content=content, role=role, user_id=str(user_id))
         except Exception as e:
             logger.error(f"写入统一记忆失败 ({role}): {e}")
 
-    async def _append_user_message(
-        self, user_id: str, input_line: str
-    ) -> list[dict[str, Any]]:
+    async def _append_user_message(self, user_id: str, input_line: str) -> list[dict[str, Any]]:
         async with self._history_lock:
             history = self._read_history()
             if (
@@ -833,9 +792,7 @@ class PolarisAgent(Agent):
             recent_start = max(1, len(history) - MESSAGE_WINDOW)
             return history[:1] + history[recent_start:]
 
-    async def _append_assistant_message(
-        self, content: str, user_id: str = "unknown"
-    ) -> None:
+    async def _append_assistant_message(self, content: str, user_id: str = "unknown") -> None:
         async with self._history_lock:
             history = self._read_history()
             history.append({"role": "assistant", "content": content})
@@ -921,9 +878,7 @@ class PolarisAgent(Agent):
             path = diary_dir / f"{target}.json"
             if path.exists():
                 try:
-                    diaries.append(
-                        {"date": target, "content": path.read_text(encoding="utf-8")}
-                    )
+                    diaries.append({"date": target, "content": path.read_text(encoding="utf-8")})
                 except OSError:
                     pass
         return diaries
@@ -958,17 +913,12 @@ class PolarisAgent(Agent):
                     related.add(t)
         for cid, p in impressions.items():
             for row in p.get("relationships", []):
-                if (
-                    isinstance(row, dict)
-                    and str(row.get("target_user_id", "")).strip() == user_key
-                ):
+                if isinstance(row, dict) and str(row.get("target_user_id", "")).strip() == user_key:
                     related.add(str(cid))
         ordered: list[str] = []
         if user_key in impressions:
             ordered.append(user_key)
-        ordered.extend(
-            uid for uid in sorted(related) if uid in impressions and uid != user_key
-        )
+        ordered.extend(uid for uid in sorted(related) if uid in impressions and uid != user_key)
         ordered.extend(uid for uid in sorted(impressions) if uid not in ordered)
         return {uid: impressions[uid] for uid in ordered}
 

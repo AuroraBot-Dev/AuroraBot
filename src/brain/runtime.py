@@ -34,9 +34,7 @@ def _register_builtin_commands(host: ApplicationHost) -> None:
             description="发送消息到本地控制台",
             parameters_schema={
                 "type": "object",
-                "properties": {
-                    "text": {"type": "string", "description": "要发送的消息文本"}
-                },
+                "properties": {"text": {"type": "string", "description": "要发送的消息文本"}},
                 "required": ["text"],
             },
             returns_schema={"type": "object", "properties": {}},

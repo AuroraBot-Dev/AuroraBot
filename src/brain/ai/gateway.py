@@ -282,8 +282,7 @@ class ModelCaller:
                 completion_tokens / 1_000_000
             ) * output_price
             logger.debug(
-                "models.dev fallback cost for model=%s: $%.6f "
-                "(prompt=%d, completion=%d)",
+                "models.dev fallback cost for model=%s: $%.6f (prompt=%d, completion=%d)",
                 self.model,
                 cost,
                 prompt_tokens,
@@ -367,12 +366,8 @@ class ModelCaller:
                         "model": self.model,
                         "type": "completion",
                         "status": "completed",
-                        "prompt_tokens": (
-                            final_usage.prompt_tokens if final_usage else 0
-                        ),
-                        "completion_tokens": (
-                            final_usage.completion_tokens if final_usage else 0
-                        ),
+                        "prompt_tokens": (final_usage.prompt_tokens if final_usage else 0),
+                        "completion_tokens": (final_usage.completion_tokens if final_usage else 0),
                         "cost": cost,
                     }
                 )
@@ -398,13 +393,9 @@ class ModelCaller:
                     )
                 else:
                     estimated_completion = sum(
-                        len(c.choices[0].delta.content or "") // 4
-                        for c in chunks
-                        if c.choices
+                        len(c.choices[0].delta.content or "") // 4 for c in chunks if c.choices
                     )
-                    cost = await _safe_cost_per_token(
-                        prompt_tokens, estimated_completion
-                    )
+                    cost = await _safe_cost_per_token(prompt_tokens, estimated_completion)
                 try:
                     partial_response = stream_chunk_builder(chunks, messages=messages)
                 except Exception:
@@ -419,9 +410,7 @@ class ModelCaller:
                         "status": "cancelled",
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": (
-                            final_usage.completion_tokens
-                            if final_usage
-                            else estimated_completion
+                            final_usage.completion_tokens if final_usage else estimated_completion
                         ),
                         "cost": cost,
                     }
@@ -487,9 +476,7 @@ class ModelGateway:
     def use_model(self, role: str) -> ModelCaller:
         role = role.lower()
         if role not in self._callers:
-            raise ValueError(
-                f"Unknown role '{role}'. " f"Available: {list(self._callers.keys())}"
-            )
+            raise ValueError(f"Unknown role '{role}'. Available: {list(self._callers.keys())}")
         return self._callers[role]
 
     @property

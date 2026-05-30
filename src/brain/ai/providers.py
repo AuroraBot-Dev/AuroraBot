@@ -86,9 +86,7 @@ def setup_providers(*providers: ProviderConfig) -> None:
         # 注册所有内置供应商
         providers = (SILICONFLOW,)
 
-    signature = tuple(
-        (p.prefix, p.litellm_provider, p.api_base, p.api_key_env) for p in providers
-    )
+    signature = tuple((p.prefix, p.litellm_provider, p.api_base, p.api_key_env) for p in providers)
     expected_prefixes = {p.prefix for p in providers}
 
     global _setup_signature

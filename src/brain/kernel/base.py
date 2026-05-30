@@ -169,11 +169,7 @@ class Node:
         优先使用拓扑配置的 :attr:`_config_watch`，
         否则回退到子类的 :attr:`_default_guards`。
         """
-        patterns = (
-            self._config_watch
-            if self._config_watch is not None
-            else self._default_guards
-        )
+        patterns = self._config_watch if self._config_watch is not None else self._default_guards
         return [FilePattern(p) for p in patterns]
 
     @property
@@ -183,11 +179,7 @@ class Node:
         优先使用拓扑配置的 :attr:`_config_emit`，
         否则回退到子类的 :attr:`_default_produces`。
         """
-        paths = (
-            self._config_emit
-            if self._config_emit is not None
-            else self._default_produces
-        )
+        paths = self._config_emit if self._config_emit is not None else self._default_produces
         return [FileDescriptor(p) for p in paths]
 
     def on_event(self, event: FileEvent) -> bool:

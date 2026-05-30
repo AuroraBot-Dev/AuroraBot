@@ -118,13 +118,9 @@ class FileEventBus:
                     node._ready_event.set()
                     hit_any = True
             except Exception:
-                logger.exception(
-                    f"节点 {node.name}({node.id}) on_event 异常: path={event.path}"
-                )
+                logger.exception(f"节点 {node.name}({node.id}) on_event 异常: path={event.path}")
         if not hit_any:
-            logger.debug(
-                f"无节点匹配事件: path={event.path}, change_type={event.change_type}"
-            )
+            logger.debug(f"无节点匹配事件: path={event.path}, change_type={event.change_type}")
 
     def _write_file(
         self,

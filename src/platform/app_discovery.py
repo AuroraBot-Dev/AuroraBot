@@ -134,9 +134,7 @@ def _check_application_class_name(module: ModuleType, candidate: type[Any]) -> b
             f"应用主类 {candidate.__name__} 命名不规范，应为 {module.__name__}Application 类"
         )
         return False
-    logger.error(
-        f"应用主类 {candidate.__name__} 命名不规范，应为 {module.__name__}Application 类"
-    )
+    logger.error(f"应用主类 {candidate.__name__} 命名不规范，应为 {module.__name__}Application 类")
     return False
 
 
@@ -148,10 +146,7 @@ def _filter_startup_kwargs(
 
     signature = inspect.signature(app_class)
     parameters = signature.parameters
-    if any(
-        parameter.kind == inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
-    ):
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
         return dict(startup)
     allowed = {
         name
@@ -164,7 +159,5 @@ def _filter_startup_kwargs(
     }
     unknown = sorted(set(startup) - allowed)
     if unknown:
-        logger.warning(
-            f"应用 {app_class.__name__} 忽略未知启动参数: {', '.join(unknown)}"
-        )
+        logger.warning(f"应用 {app_class.__name__} 忽略未知启动参数: {', '.join(unknown)}")
     return {key: value for key, value in startup.items() if key in allowed}

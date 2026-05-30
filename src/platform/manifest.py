@@ -26,13 +26,9 @@ class CommandDecl:
 
     # 将命令声明转换为参数模式
     def to_parameters_schema(self) -> dict[str, Any]:
-        properties = {
-            name: _schema_from_field(spec) for name, spec in self.parameters.items()
-        }
+        properties = {name: _schema_from_field(spec) for name, spec in self.parameters.items()}
         required = [
-            name
-            for name, spec in self.parameters.items()
-            if bool(spec.get("required", True))
+            name for name, spec in self.parameters.items() if bool(spec.get("required", True))
         ]
         return {"type": "object", "properties": properties, "required": required}
 
@@ -40,9 +36,7 @@ class CommandDecl:
     def to_returns_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
-            "properties": {
-                name: _schema_from_field(spec) for name, spec in self.returns.items()
-            },
+            "properties": {name: _schema_from_field(spec) for name, spec in self.returns.items()},
         }
 
 
@@ -63,11 +57,7 @@ class Manifest:
         raw_commands = payload.get("commands", [])
         if not isinstance(raw_commands, list):
             raw_commands = []
-        commands = [
-            CommandDecl.from_dict(item)
-            for item in raw_commands
-            if isinstance(item, dict)
-        ]
+        commands = [CommandDecl.from_dict(item) for item in raw_commands if isinstance(item, dict)]
         return cls(
             package=str(payload.get("package", "")).strip(),
             name=str(payload.get("name", "")).strip(),
@@ -100,7 +90,5 @@ def _schema_from_field(spec: dict[str, Any]) -> dict[str, Any]:
         schema["description"] = description
     items = spec.get("items")
     if isinstance(items, dict):
-        schema["items"] = _schema_from_field(
-            {str(key): value for key, value in items.items()}
-        )
+        schema["items"] = _schema_from_field({str(key): value for key, value in items.items()})
     return schema
