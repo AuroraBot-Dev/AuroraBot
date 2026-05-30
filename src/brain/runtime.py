@@ -24,7 +24,7 @@ _BUILTIN_CONSOLE_SEND_MESSAGE = "im.polaris.console.send_message"
 
 
 async def _console_print(*, text: str) -> None:
-    pass
+    logger.info(text)
 
 
 def _register_builtin_commands(host: ApplicationHost) -> None:

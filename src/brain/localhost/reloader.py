@@ -36,6 +36,7 @@ _MODULES_TO_RELOAD: list[str] = [
     "src.brain.nodes.event_bridge",
     "src.brain.nodes",
     "src.brain.kernel.node_factory",
+    "src.brain.runtime",
     _SELF_MODULE,
 ]
 
