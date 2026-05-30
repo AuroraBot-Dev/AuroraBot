@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -78,7 +79,18 @@ def discover_apps(root: Path | None = None) -> dict[str, DiscoveredApp]:
         )
 
     _discovery_cache[search_root] = discovered
-    logger.info("在 %s 中发现 %d 个合法应用", search_root, len(discovered))
+    logger.info(
+        "应用发现完成:\n%s",
+        json.dumps(
+            {
+                "search_root": str(search_root),
+                "count": len(discovered),
+                "apps": sorted(discovered.keys()),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
     return discovered
 
 
