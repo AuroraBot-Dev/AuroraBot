@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from src.brain.localhost.utils import _ConsoleArgumentParser
@@ -47,9 +48,15 @@ async def _handle_event_command(
         )
     )
     logger.debug(
-        "已注入事件 type=%s source=%s session=%s",
-        args.event_type,
-        args.source,
-        args.session_id,
+        "已注入事件:\n%s",
+        json.dumps(
+            {
+                "type": args.event_type,
+                "source": args.source,
+                "session": args.session_id,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
     )
     return runtime

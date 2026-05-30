@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 
     from src.platform.application_protocol import ApplicationProtocol
 
-logger = get_logger("ApplicationHost")
+logger = get_logger("AppHost")
 
 
 class ApplicationHost:
@@ -23,6 +24,7 @@ class ApplicationHost:
         self._manifests: dict[str, Manifest] = {}
         self._commands: dict[str, CommandSpec] = {}
         self._events: deque[AppEvent] = deque()
+        self._batching: bool = False
 
     async def register(self, app: ApplicationProtocol) -> None:
         manifest = Manifest.load(app.manifest_path())
@@ -56,7 +58,7 @@ class ApplicationHost:
         await _maybe_await(app.on_start())
         self._apps[manifest.package] = app
         self._manifests[manifest.package] = manifest
-        logger.info(f"已注册应用: {manifest.package}")
+        logger.debug("已注册应用: package=%s", manifest.package)
 
     def register_command(self, spec: CommandSpec) -> None:
         if not spec.name.strip():
@@ -113,8 +115,20 @@ class ApplicationHost:
 
     async def replace_apps(self, apps: Iterable[ApplicationProtocol]) -> None:
         await self.stop_all(clear_events=False)
-        for app in apps:
-            await self.register(app)
+        self._batching = True
+        try:
+            for app in apps:
+                await self.register(app)
+        finally:
+            self._batching = False
+        logger.info(
+            "已注册应用:\n%s",
+            json.dumps(
+                {"apps": list(self._apps.keys())},
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
 
     async def stop_all(self, *, clear_events: bool = True) -> None:
         for package, app in reversed(list(self._apps.items())):

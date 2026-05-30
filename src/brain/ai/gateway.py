@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -282,11 +283,17 @@ class ModelCaller:
             output_price = pricing.get("output", 0)
             cost = (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
             logger.debug(
-                "models.dev fallback cost for model=%s: $%.6f (prompt=%d, completion=%d)",
-                self.model,
-                cost,
-                prompt_tokens,
-                completion_tokens,
+                "models.dev fallback cost:\n%s",
+                json.dumps(
+                    {
+                        "model": self.model,
+                        "cost": cost,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
             )
             return cost
 
@@ -324,12 +331,18 @@ class ModelCaller:
             litellm_kwargs.update(kwargs)
 
             logger.debug(
-                "LLM 请求: role=%s model=%s messages_count=%d max_tokens=%d timeout=%s",
-                self.role,
-                self.model,
-                len(messages),
-                max_tokens,
-                timeout,
+                "LLM 请求:\n%s",
+                json.dumps(
+                    {
+                        "role": self.role,
+                        "model": self.model,
+                        "messages_count": len(messages),
+                        "max_tokens": max_tokens,
+                        "timeout": timeout,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
             )
 
             try:
@@ -371,7 +384,17 @@ class ModelCaller:
                         "cost": cost,
                     }
                 )
-                logger.debug("LLM 响应: role=%s cost=$%.6f", self.role, cost)
+                logger.debug(
+                    "LLM 响应:\n%s",
+                    json.dumps(
+                        {
+                            "role": self.role,
+                            "cost": cost,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                )
                 return final_response, cost
             if final_usage is not None:
                 built = stream_chunk_builder(chunks, messages=messages)

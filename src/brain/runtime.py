@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -70,6 +71,14 @@ async def register_enabled_apps(host: ApplicationHost) -> dict[str, dict[str, An
     Config.ensure_dirs()
     apps_config = load_apps_config()
     await register_selected_apps(host, enabled_app_names(apps_config), apps_config)
+    logger.info(
+        "已注册应用:\n%s",
+        json.dumps(
+            {"apps": host.list_apps()},
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
     return apps_config
 
 

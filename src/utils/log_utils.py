@@ -170,6 +170,28 @@ class DecoratorFactory:
         """创建一个 ERROR 级别的日志装饰器, 用于记录函数调用前的错误信息."""
         return self._create_decorator(logging.ERROR, message_template)
 
+    def exception(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """创建一个 ERROR 级别的日志装饰器，记录函数调用前的异常信息并附带堆栈."""
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            @functools.wraps(func)
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                bound_args = inspect.signature(func).bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                all_args = bound_args.arguments
+                format_dict = {
+                    **all_args,
+                    "func_name": func.__name__,
+                    "args": args,
+                    "kwargs": kwargs,
+                }
+                self._logger.exception(message_template.format(*args, **format_dict))
+                return func(*args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
 
 def get_logger(
     name: str | None = None,
