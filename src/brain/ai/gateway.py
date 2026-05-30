@@ -19,7 +19,7 @@ import asyncio
 import json
 import os
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 # ── LiteLLM 环境抑制（必须在 import litellm 前设置） ──
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "False"
@@ -261,11 +261,14 @@ class ModelCaller:
         async def _safe_cost_per_token(pt: int, ct: int) -> float:
             """按 token 数计费；litellm 失败时回退到 models.dev 定价。"""
             try:
-                return litellm.cost_per_token(
+                cost = litellm.cost_per_token(
                     model=self.model,
                     prompt_tokens=pt,
                     completion_tokens=ct,
                 )
+                if isinstance(cost, tuple):
+                    return float(sum(cost))
+                return float(cost)
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "litellm cost_per_token failed for model=%s: %s",
@@ -352,12 +355,14 @@ class ModelCaller:
             except Exception as exc:
                 raise _classify_exception(exc) from exc
 
+            response_stream = cast("collections.abc.AsyncIterable[Any]", response)
             chunks: list = []
             final_usage: Any = None
             is_cancelled = False
+            estimated_completion = 0
 
             try:
-                async for chunk in response:
+                async for chunk in response_stream:
                     chunks.append(chunk)
                     if hasattr(chunk, "usage") and chunk.usage is not None:
                         final_usage = chunk.usage

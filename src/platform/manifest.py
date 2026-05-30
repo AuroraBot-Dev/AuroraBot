@@ -82,7 +82,7 @@ def _normalize_mapping(raw: object) -> dict[str, dict[str, Any]]:
 
 # 将字段规格转换为JSON模式
 def _schema_from_field(spec: dict[str, Any]) -> dict[str, Any]:
-    schema = {"type": str(spec.get("type", "string"))}
+    schema: dict[str, Any] = {"type": str(spec.get("type", "string"))}
     description = str(spec.get("description", "")).strip()
     if description:
         schema["description"] = description

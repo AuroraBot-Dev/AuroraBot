@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 from collections import deque
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.platform.application_api import PlatformAPI
 from src.platform.contracts import AppEvent, CommandSpec
@@ -173,4 +173,4 @@ class _AppHostProxy:
 
 
 # 全局单例代理，供其它模块直接导入使用
-app_host = _AppHostProxy()
+app_host: ApplicationHost = cast("ApplicationHost", _AppHostProxy())

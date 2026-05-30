@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from src.config import Config
 
@@ -212,7 +212,7 @@ def get_logger(
     if logger.handlers:
         logger.setLevel(level)
         if not hasattr(logger, "decorate"):
-            logger.decorate = DecoratorFactory(logger)
+            cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger
 
     logfile = logfile or DEFAULT_LOGFILE
@@ -227,6 +227,6 @@ def get_logger(
     logger.addHandler(_create_file_handler(logfile, level))
 
     # 将 DecoratorFactory 实例绑定到记录器, 用于创建日志装饰器
-    logger.decorate = DecoratorFactory(logger)
+    cast("Any", logger).decorate = DecoratorFactory(logger)
 
     return logger

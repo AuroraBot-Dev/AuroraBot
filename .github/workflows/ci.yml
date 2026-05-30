@@ -32,6 +32,9 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check src/ tests/
 
+      - name: Pyright type check
+        run: uv run pyright src/
+
   test:
     runs-on: ubuntu-latest
     strategy:
