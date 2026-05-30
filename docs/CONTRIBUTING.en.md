@@ -36,7 +36,7 @@ uv run python bot.py
 | `uv run ruff format src/ tests/` | Format code |
 | `uv run pyright src/`            | Type-check  |
 
-> At minimum, run `pytest` and `ruff check` before submitting a PR to catch obvious regressions.
+> At minimum, run `pytest` and `ruff check` before submitting a PR. The CI pipeline will also automatically run `ruff check` and `ruff format --check` to ensure consistent code style and catch obvious regressions.
 
 ## Contribution Workflow
 

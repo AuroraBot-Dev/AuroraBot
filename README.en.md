@@ -18,6 +18,7 @@
 
 <p align="center">
   <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-Repository-black?logo=github" alt="GitHub" /></a>
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-Documentation-blue?logo=vitepress" alt="Docs" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License" /></a>
 </p>
