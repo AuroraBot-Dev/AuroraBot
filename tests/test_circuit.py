@@ -1,3 +1,5 @@
+"""circuit 循环模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -91,7 +93,11 @@ class FileDescriptorTest(unittest.TestCase):
         self.assertNotEqual(a, b)
 
     def test_hash_set_dedup(self) -> None:
-        s = {FileDescriptor("a.json"), FileDescriptor("a.json"), FileDescriptor("b.json")}
+        s = {
+            FileDescriptor("a.json"),
+            FileDescriptor("a.json"),
+            FileDescriptor("b.json"),
+        }
         self.assertEqual(len(s), 2)
 
 
@@ -335,9 +341,7 @@ class FileEventBusTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         bus = FileEventBus([node])
-        bus.publish(
-            FileEvent(path="inbox/pending/event_msg.json", change_type="write")
-        )
+        bus.publish(FileEvent(path="inbox/pending/event_msg.json", change_type="write"))
 
         async def scenario() -> None:
             dispatch_task = asyncio.create_task(bus.dispatch_forever())

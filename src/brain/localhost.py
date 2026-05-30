@@ -134,7 +134,7 @@ async def _handle_help_command(
         all_commands += (
             f"{spec.usage.ljust(usage_width)}{' ' * gap}{spec.description}\n"
         )
-    logger.info(all_commands)
+    logger.debug(all_commands)
     return runtime
 
 
@@ -319,10 +319,10 @@ async def handle_control_command(
         logger.warning("控制命令已忽略: runtime 尚未初始化")
         return runtime
     if lock.locked():
-        logger.info("已有控制任务在执行，忽略重复指令")
+        logger.debug("已有控制任务在执行，忽略重复指令")
         return runtime
 
-    logger.info(f"执行指令: {parsed.name}")
+    logger.debug("执行指令: %s", parsed.name)
     async with lock:
         try:
             return await parsed.spec.handler(runtime, parsed)
@@ -514,7 +514,7 @@ async def _handle_say_command(
             },
         )
     )
-    logger.info(f"已注入消息: {message}")
+    logger.debug("已注入消息: %s", message)
     return runtime
 
 
@@ -575,8 +575,11 @@ async def _handle_event_command(
             payload=payload,
         )
     )
-    logger.info(
-        f"已注入事件 type={args.event_type} source={args.source} session={args.session_id}",
+    logger.debug(
+        "已注入事件 type=%s source=%s session=%s",
+        args.event_type,
+        args.source,
+        args.session_id,
     )
     return runtime
 
@@ -601,9 +604,9 @@ async def _handle_events_command(
             else runtime.host.peek_events()
         )
     )
-    logger.info(
-        f"当前事件队列:\n"
-        + json.dumps(
+    logger.debug(
+        "当前事件队列:\n%s",
+        json.dumps(
             {"events": [event.to_dict() for event in events]},
             ensure_ascii=False,
             indent=2,
@@ -626,13 +629,14 @@ async def _handle_invoke_command(
 
     payload = parse_json_or_yaml_object(args.payload)
     result = await runtime.host.invoke_command(args.command_name, **payload)
-    logger.info(
-        f"命令执行结果 {args.command_name}:\n"
-        + json.dumps(
+    logger.debug(
+        "命令执行结果 %s:\n%s",
+        args.command_name,
+        json.dumps(
             {"result": json_ready(result)},
             ensure_ascii=False,
             indent=2,
-        )
+        ),
     )
     return runtime
 
@@ -677,9 +681,9 @@ async def _handle_commands_command(
                     "returns_schema": target.returns_schema,
                 }
             }
-    logger.info(
-        f"可用命令:\n"
-        + json.dumps(
+    logger.debug(
+        "可用命令:\n%s",
+        json.dumps(
             payload,
             ensure_ascii=False,
             indent=2,
@@ -693,9 +697,9 @@ async def _handle_apps_command(
     runtime: RuntimeState,
     _parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
-    logger.info(
-        f"已加载应用:\n"
-        + json.dumps(
+    logger.debug(
+        "已加载应用:\n%s",
+        json.dumps(
             {"apps": runtime.host.list_apps()},
             ensure_ascii=False,
             indent=2,
@@ -740,7 +744,7 @@ async def _handle_memtest_command(
             current_query="__context_snapshot__", user_id=user_id
         )
         prompt_text = ctx.to_prompt_text() if ctx else "(空)"
-        logger.info(f"\n--- 记忆上下文 (user={user_id}) ---\n{prompt_text}")
+        logger.debug("\n--- 记忆上下文 (user=%s) ---\n%s", user_id, prompt_text)
         return runtime
 
     if sub == "query":

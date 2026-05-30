@@ -1,5 +1,4 @@
-"""Unit tests for the memory module: MemoryItem, MemoryContext,
-WorkingMemory, EpisodicMemory, and UnifiedMemoryManager."""
+"""memory 内存模块测试。"""
 
 from __future__ import annotations
 

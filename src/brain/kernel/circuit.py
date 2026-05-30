@@ -132,7 +132,7 @@ class Circuit:
                     metadata={"source_node": "circuit_bootstrap"},
                 )
             )
-        logger.info("Heartbeat 初始脉冲已注入")
+        logger.debug("Heartbeat 初始脉冲已注入")
 
     async def apply_update(self, update: FileUpdate, node_id: str = "system") -> None:
         """向电路写入一个文件变更并触发下游事件。

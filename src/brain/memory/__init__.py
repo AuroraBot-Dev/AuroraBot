@@ -67,7 +67,7 @@ class UnifiedMemoryManager:
             # 没有运行中的事件循环（测试/脚本环境），同步执行
             try:
                 if self.semantic.extract_and_store(text=text, user_id=user_id):
-                    logger.info("L3 语义提取同步成功")
+                    logger.debug("L3 语义提取同步成功")
             except Exception:
                 logger.exception("L3 语义提取同步回退失败")
 
@@ -77,7 +77,7 @@ class UnifiedMemoryManager:
             user_id = self.init_user_id
         try:
             if self.semantic.extract_and_store(text=text, user_id=user_id):
-                logger.info("L3 语意提取异步任务成功")
+                logger.debug("L3 语意提取异步任务成功")
         except Exception:
             logger.exception("L3 语义提取异步任务失败")
 

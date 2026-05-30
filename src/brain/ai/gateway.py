@@ -196,7 +196,7 @@ class TaskManager:
         task = self._tasks.get(task_id)
         if task and not task.done():
             task.cancel()
-            logger.info(f"Task {task_id} cancelled")
+            logger.debug("Task %s cancelled", task_id)
             return True
         return False
 
@@ -281,7 +281,7 @@ class ModelCaller:
             cost = (prompt_tokens / 1_000_000) * input_price + (
                 completion_tokens / 1_000_000
             ) * output_price
-            logger.info(
+            logger.debug(
                 "models.dev fallback cost for model=%s: $%.6f "
                 "(prompt=%d, completion=%d)",
                 self.model,
@@ -324,10 +324,13 @@ class ModelCaller:
             litellm_kwargs.update(provider_kwargs)
             litellm_kwargs.update(kwargs)
 
-            logger.info(
-                f"LLM 请求: role={self.role} model={self.model} "
-                f"messages_count={len(messages)} max_tokens={max_tokens} "
-                f"timeout={timeout}"
+            logger.debug(
+                "LLM 请求: role=%s model=%s messages_count=%d max_tokens=%d timeout=%s",
+                self.role,
+                self.model,
+                len(messages),
+                max_tokens,
+                timeout,
             )
 
             try:
@@ -378,9 +381,11 @@ class ModelCaller:
                     if final_response and final_response.choices
                     else "<empty>"
                 )
-                logger.info(
-                    f"LLM 响应: role={self.role} cost=${cost:.6f} "
-                    f"{str(content)[:200] if content else '<empty>'}"
+                logger.debug(
+                    "LLM 响应: role=%s cost=$%.6f %s",
+                    self.role,
+                    cost,
+                    str(content)[:200] if content else "<empty>",
                 )
                 return final_response, cost
             else:

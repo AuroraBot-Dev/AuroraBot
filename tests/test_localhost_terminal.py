@@ -1,3 +1,5 @@
+"""localhost 终端模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -356,13 +358,13 @@ class HotReloadTest(unittest.TestCase):
         runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
 
         async def scenario() -> None:
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/help", runtime=runtime, lock=lock
                 )
 
             self.assertIs(result, runtime)
-            self.assertGreaterEqual(mock_info.call_count, 1)
+            self.assertGreaterEqual(mock_debug.call_count, 1)
 
         asyncio.run(scenario())
 
@@ -408,7 +410,7 @@ class HotReloadTest(unittest.TestCase):
                 )
             )
 
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     '/invoke manual.echo --payload \'{"text":"hello"}\'',
                     runtime=runtime,
@@ -416,7 +418,7 @@ class HotReloadTest(unittest.TestCase):
                 )
 
             self.assertIs(result, runtime)
-            self.assertGreaterEqual(mock_info.call_count, 1)
+            self.assertGreaterEqual(mock_debug.call_count, 1)
 
         asyncio.run(scenario())
 
@@ -429,13 +431,13 @@ class HotReloadTest(unittest.TestCase):
             tempdirs: list[tempfile.TemporaryDirectory[str]] = []
             old_app = _make_fake_qq_app(tempdirs=tempdirs)
             await host.register(old_app)
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/apps", runtime=runtime, lock=lock
                 )
 
             self.assertIs(result, runtime)
-            self.assertGreaterEqual(mock_info.call_count, 1)
+            self.assertGreaterEqual(mock_debug.call_count, 1)
             await host.stop_all()
             for tmp in tempdirs:
                 tmp.cleanup()
@@ -460,13 +462,13 @@ class HotReloadTest(unittest.TestCase):
                     handler=sample_handler,
                 )
             )
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/commands", runtime=runtime, lock=lock
                 )
 
             self.assertIs(result, runtime)
-            self.assertGreaterEqual(mock_info.call_count, 1)
+            self.assertGreaterEqual(mock_debug.call_count, 1)
 
         asyncio.run(scenario())
 
@@ -495,16 +497,16 @@ class HotReloadTest(unittest.TestCase):
                     handler=sample_handler,
                 )
             )
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/commands --detail manual.echo", runtime=runtime, lock=lock
                 )
 
             self.assertIs(result, runtime)
-            rendered = mock_info.call_args[0][0]
-            self.assertIn("manual.echo", rendered)
-            self.assertIn("parameters_schema", rendered)
-            self.assertIn("returns_schema", rendered)
+            raw_output = " ".join(str(a) for a in mock_debug.call_args[0])
+            self.assertIn("manual.echo", raw_output)
+            self.assertIn("parameters_schema", raw_output)
+            self.assertIn("returns_schema", raw_output)
 
         asyncio.run(scenario())
 
@@ -526,16 +528,16 @@ class HotReloadTest(unittest.TestCase):
                     handler=sample_handler,
                 )
             )
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/commands --detail all", runtime=runtime, lock=lock
                 )
 
             self.assertIs(result, runtime)
-            rendered = mock_info.call_args[0][0]
-            self.assertIn("manual.echo", rendered)
-            self.assertIn("parameters_schema", rendered)
-            self.assertIn("returns_schema", rendered)
+            raw_output = " ".join(str(a) for a in mock_debug.call_args[0])
+            self.assertIn("manual.echo", raw_output)
+            self.assertIn("parameters_schema", raw_output)
+            self.assertIn("returns_schema", raw_output)
 
         asyncio.run(scenario())
 
@@ -547,7 +549,7 @@ class HotReloadTest(unittest.TestCase):
         async def scenario() -> None:
             host.emit_event(AppEvent(source="manual.test", type="e1"))
             host.emit_event(AppEvent(source="manual.test", type="e2"))
-            with patch("src.brain.localhost.logger.info") as mock_info:
+            with patch("src.brain.localhost.logger.debug") as mock_debug:
                 result = await handle_control_command(
                     "/events --drain --limit 1",
                     runtime=runtime,
@@ -556,7 +558,7 @@ class HotReloadTest(unittest.TestCase):
 
             self.assertIs(result, runtime)
             self.assertEqual(len(host.peek_events()), 1)
-            self.assertGreaterEqual(mock_info.call_count, 1)
+            self.assertGreaterEqual(mock_debug.call_count, 1)
 
         asyncio.run(scenario())
 

@@ -17,7 +17,7 @@ class WorkingMemory:
         # max_items 控制上下文窗口大小，防止 Token 爆炸
         self.max_items = max_items
         self._items: List[MemoryItem] = []
-        logger.info("L1 缓存已启动")
+        logger.debug("L1 缓存已启动")
 
     def add(self, content: str, role: str = "user", metadata: dict = None) -> None:
         """写策略：直接追加。
@@ -27,16 +27,16 @@ class WorkingMemory:
         self._items.append(item)
         if len(self._items) > self.max_items:
             self._items.pop(0)
-        logger.info("已添加进L1 缓存中")
+        logger.debug("已添加进L1 缓存中")
 
     def get_context(self) -> List[MemoryItem]:
         """读策略：全量读取。
         因为 L1 容量很小，所以直接把整个队列返回。
         """
-        logger.info("已成功读取L1 缓存记忆")
+        logger.debug("已成功读取L1 缓存记忆")
         return self._items
 
     def clear(self) -> None:
         """会话结束、或者切换话题时，可以清空工作记忆"""
-        logger.info("L1 缓存记忆已清空")
+        logger.debug("L1 缓存记忆已清空")
         self._items.clear()
