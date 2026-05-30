@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
@@ -11,6 +11,8 @@ from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.brain.kernel.base import Node
     from src.brain.memory import UnifiedMemoryManager
     from src.platform.application_host import ApplicationHost
@@ -135,12 +137,13 @@ def build_circuit(host: ApplicationHost) -> Circuit:
             memory_kw = {}
 
         # 构造 —— 按类型的构造函数签名分发
+        node_ctor = cast("Callable[..., object]", node_cls)
         if node_type in NODE_ACCEPTS_CONFIG:
-            node = node_cls(node_id, **node_config, **memory_kw)
+            node = cast("Node", node_ctor(node_id, **node_config, **memory_kw))
         elif node_type in NODE_NEEDS_HOST:
-            node = node_cls(node_id, host, **memory_kw)
+            node = cast("Node", node_ctor(node_id, host, **memory_kw))
         else:
-            node = node_cls(node_id, **memory_kw)
+            node = cast("Node", node_ctor(node_id, **memory_kw))
 
         # 覆盖 guards / produces（可选，来自邻接表条目的 watch / emit）
         if entry.get("watch") is not None:

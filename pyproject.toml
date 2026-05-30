@@ -24,6 +24,7 @@ dev = [
     "pyright[nodejs]",
     "ruff",
     "pytest",
+    "pytest-cov",
 ]
 
 [tool.nonebot]
@@ -113,11 +114,11 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
 
-# [tool.pyright]
-# # For Pylance/Pyright configurations, see https://microsoft.github.io/pyright/#/configuration.
-# pythonVersion = "3.12"
-# pythonPlatform = "All"
-# typeCheckingMode = "standard"
+[tool.pyright]
+pythonVersion = "3.12"
+pythonPlatform = "All"
+typeCheckingMode = "standard"
+exclude = ["tests"]
 
 [tool.uv]
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
