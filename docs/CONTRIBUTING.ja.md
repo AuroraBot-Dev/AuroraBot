@@ -29,14 +29,14 @@ uv run python bot.py
 
 ## 開発ツール
 
-| コマンド                         | 用途               |
-| -------------------------------- | ------------------ |
-| `uv run pytest`                  | テスト実行         |
-| `uv run ruff check src/ tests/`  | コードリント       |
-| `uv run ruff format src/ tests/` | コードフォーマット |
-| `uv run pyright src/`            | 型チェック         |
+| コマンド                         | 用途                                   |
+| -------------------------------- | -------------------------------------- |
+| `uv run pytest --cov=src`        | カバレッジ付きでテスト実行             |
+| `uv run ruff check src/ tests/`  | コードリント                           |
+| `uv run ruff format src/ tests/` | コードフォーマット                     |
+| `uv run pyright src/`            | 型チェック（既定では `tests/` を除外） |
 
-> PR を提出する前に、少なくとも `pytest` と `ruff check` を実行することをお勧めします。CI パイプラインでも `ruff check` と `ruff format --check` が自動実行され、一貫したコードスタイルと明らかなリグレッションがないことが確認されます。
+> PR を提出する前に、`uv run pytest --cov=src`、`uv run ruff check src/ tests/`、`uv run pyright src/` を実行することを推奨します。CI パイプラインでも、カバレッジ付きの `pytest`、`ruff check`、`ruff format --check`、`pyright src/` が実行され、コードスタイル・型チェック・基本的な回帰確認がそろうようにしています。
 
 ## コントリビューションフロー
 
