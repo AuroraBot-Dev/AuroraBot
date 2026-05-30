@@ -24,7 +24,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync --locked --dev
+        run: uv sync --locked --group dev
 
       - name: Ruff check
         run: uv run ruff check src/ tests/
@@ -49,7 +49,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync --locked --dev
+        run: uv sync --locked --group dev
 
       - name: Test with pytest
         run: uv run pytest -v

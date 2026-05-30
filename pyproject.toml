@@ -19,7 +19,7 @@ dependencies = [
     "rich>=15.0.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pyright[nodejs]",
     "ruff",
