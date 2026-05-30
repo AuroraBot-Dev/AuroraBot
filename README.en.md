@@ -87,11 +87,11 @@ Cognition doesn't rely on a single "super agent" — instead, multiple `Agent` /
 
 AuroraBot's memory grows structurally:
 
-| Tier | Type | Storage | Purpose |
-|------|------|---------|---------|
-| L1 Working Memory | FIFO in-memory list | Not persisted | Current session context |
-| L2 Episodic Memory | JSON file append | LLM-compressed after 50 entries | Timeline-based archiving |
-| L3 Semantic Memory | ChromaDB vector | Unlimited | Semantic similarity retrieval |
+| Tier               | Type                | Storage                         | Purpose                       |
+| ------------------ | ------------------- | ------------------------------- | ----------------------------- |
+| L1 Working Memory  | FIFO in-memory list | Not persisted                   | Current session context       |
+| L2 Episodic Memory | JSON file append    | LLM-compressed after 50 entries | Timeline-based archiving      |
+| L3 Semantic Memory | ChromaDB vector     | Unlimited                       | Semantic similarity retrieval |
 
 `UnifiedMemoryManager` encapsulates all three tiers behind a unified interface — nodes never need to understand the underlying data flow. Every interaction writes to all three tiers at once, and retrieval merges results across all layers.
 
@@ -111,18 +111,18 @@ This means:
 
 For complete architecture design, usage guides, and development documentation, please **[visit the AuroraBot Documentation 📖](https://www.aurorabot.org/)**:
 
-| Document                                                                                  | Description                                                          |
-| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [Overview](https://www.aurorabot.org/start/overview.html)                                 | A quick introduction to AuroraBot's vision & architecture            |
-| [Getting Started](https://www.aurorabot.org/start/getting-started.html)                   | Run the project from scratch                                         |
-| [Configuration](https://www.aurorabot.org/start/configuration.html)                       | Environment variables, platform config, app config & persona docs    |
-| [System Architecture](https://www.aurorabot.org/architecture/system-overview.html)        | Understand the Apps / Platform / Kernel / Brain layers               |
-| [Cognitive Architecture](https://www.aurorabot.org/architecture/brain-architecture.html)  | File-driven cognitive pipeline and currently enabled topology        |
-| [Node System](https://www.aurorabot.org/architecture/node-system.html)                    | Node / Agent / Router data structures and event bus                  |
-| [Memory System](https://www.aurorabot.org/architecture/memory-system.html)                | L1 / L2 / L3 three-tier unified memory storage and retrieval         |
-| [App Development Guide](https://www.aurorabot.org/develop/app-development.html)           | Develop your own App from structure to lifecycle                     |
-| [Brain Node Development](https://www.aurorabot.org/develop/brain-node-development.html)   | Write Agent / Router nodes                                           |
-| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                                 | Application development toolchain roadmap                            |
+| Document                                                                                 | Description                                                       |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [Overview](https://www.aurorabot.org/start/overview.html)                                | A quick introduction to AuroraBot's vision & architecture         |
+| [Getting Started](https://www.aurorabot.org/start/getting-started.html)                  | Run the project from scratch                                      |
+| [Configuration](https://www.aurorabot.org/start/configuration.html)                      | Environment variables, platform config, app config & persona docs |
+| [System Architecture](https://www.aurorabot.org/architecture/system-overview.html)       | Understand the Apps / Platform / Kernel / Brain layers            |
+| [Cognitive Architecture](https://www.aurorabot.org/architecture/brain-architecture.html) | File-driven cognitive pipeline and currently enabled topology     |
+| [Node System](https://www.aurorabot.org/architecture/node-system.html)                   | Node / Agent / Router data structures and event bus               |
+| [Memory System](https://www.aurorabot.org/architecture/memory-system.html)               | L1 / L2 / L3 three-tier unified memory storage and retrieval      |
+| [App Development Guide](https://www.aurorabot.org/develop/app-development.html)          | Develop your own App from structure to lifecycle                  |
+| [Brain Node Development](https://www.aurorabot.org/develop/brain-node-development.html)  | Write Agent / Router nodes                                        |
+| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                                | Application development toolchain roadmap                         |
 
 ## Open Source Acknowledgments
 
@@ -142,6 +142,18 @@ Special thanks to **[MaiBot](https://github.com/MaiM-with-u/MaiBot)** for provid
 ## License
 
 This project is open-sourced under the [Apache License 2.0](./LICENSE).
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=AuroraBot-Dev%2FAuroraBot&type=date&logscale=&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&theme=dark&logscale&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&logscale&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&logscale&legend=bottom-right" />
+ </picture>
+</a>
 
 ---
 

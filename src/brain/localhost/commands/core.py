@@ -63,11 +63,7 @@ async def _handle_events_command(
     events = (
         runtime.host.drain_events(limit=args.limit)
         if args.drain
-        else (
-            runtime.host.peek_events()[: args.limit]
-            if args.limit is not None
-            else runtime.host.peek_events()
-        )
+        else (runtime.host.peek_events()[: args.limit] if args.limit is not None else runtime.host.peek_events())
     )
     logger.debug(
         "当前事件队列:\n%s",

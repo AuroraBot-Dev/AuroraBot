@@ -3,14 +3,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.brain.kernel.base import FileEvent, FileUpdate, NodeState
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from src.brain.kernel.base import Node
 
 logger = get_logger("FileEventBus")

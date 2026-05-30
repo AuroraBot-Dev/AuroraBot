@@ -17,8 +17,8 @@ from src.brain.localhost import (
     _should_skip_reload,
     handle_control_command,
     reload_brain,
-    stop_process,
     run_console_control_loop,
+    stop_process,
 )
 from src.brain.runtime import RuntimeState
 from src.config import Config
@@ -55,14 +55,14 @@ def _make_fake_qq_app(
         encoding="utf-8",
     )
 
-    async def send_qq_message(self, **_kwargs: object) -> dict[str, object]:
+    async def send_qq_message(self, **_kwargs: object) -> dict[str, object]:  # noqa: ANN001, ARG001
         return {}
 
     attrs = {
-        "manifest_path": lambda self: manifest_path,
-        "on_start": lambda self: None,
-        "on_stop": lambda self: None,
-        "on_tick": lambda self: None,
+        "manifest_path": lambda _self: manifest_path,
+        "on_start": lambda _self: None,
+        "on_stop": lambda _self: None,
+        "on_tick": lambda _self: None,
         "send_qq_message": send_qq_message,
     }
     app_type = type("FakeQQApplication", (), attrs)
@@ -84,7 +84,7 @@ class _FakeCircuit:
         self.is_running = False
 
 
-async def _noop_loop(*_args, **_kwargs) -> None:
+async def _noop_loop(*_args: object, **_kwargs: object) -> None:
     await asyncio.sleep(0)
 
 
@@ -183,17 +183,13 @@ class HotReloadTest(unittest.TestCase):
                 ),
                 patch("src.brain.runtime.build_circuit", side_effect=RuntimeError("boom")),
                 patch.object(Config, "RUN_MODE", "core"),
+                self.assertRaises(HotReloadError) as ctx,
             ):
-                with self.assertRaises(HotReloadError) as ctx:
-                    await reload_brain(runtime=runtime)
+                await reload_brain(runtime=runtime)
 
             self.assertIs(ctx.exception.runtime, runtime)
             self.assertIs(host.get_app("im.polaris.qq"), old_app)
-            send_spec = next(
-                spec
-                for spec in host.list_command_specs()
-                if spec.name == "im.polaris.qq.send_qq_message"
-            )
+            send_spec = next(spec for spec in host.list_command_specs() if spec.name == "im.polaris.qq.send_qq_message")
             self.assertIs(send_spec.handler.__self__, old_app)
             await host.stop_all()
             for tmp in tempdirs:
@@ -222,9 +218,9 @@ class HotReloadTest(unittest.TestCase):
                     side_effect=RuntimeError("reload failed"),
                 ),
                 patch.object(Config, "RUN_MODE", "core"),
+                self.assertRaises(HotReloadError) as ctx,
             ):
-                with self.assertRaises(HotReloadError) as ctx:
-                    await reload_brain(runtime=runtime)
+                await reload_brain(runtime=runtime)
 
             self.assertIs(ctx.exception.runtime, runtime)
             self.assertTrue(old_circuit.is_running)
@@ -243,7 +239,7 @@ class HotReloadTest(unittest.TestCase):
         async def scenario() -> None:
             async def dispatch(command: str) -> None:
                 seen.append(command)
-                raise asyncio.CancelledError()
+                raise asyncio.CancelledError
 
             with self.assertRaises(asyncio.CancelledError):
                 await run_console_control_loop(
@@ -488,9 +484,7 @@ class HotReloadTest(unittest.TestCase):
                 )
             )
             with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
-                result = await handle_control_command(
-                    "/commands --detail manual.echo", runtime=runtime, lock=lock
-                )
+                result = await handle_control_command("/commands --detail manual.echo", runtime=runtime, lock=lock)
 
             self.assertIs(result, runtime)
             raw_output = " ".join(str(a) for a in mock_debug.call_args[0])
@@ -519,9 +513,7 @@ class HotReloadTest(unittest.TestCase):
                 )
             )
             with patch("src.brain.localhost.commands.core.logger.debug") as mock_debug:
-                result = await handle_control_command(
-                    "/commands --detail all", runtime=runtime, lock=lock
-                )
+                result = await handle_control_command("/commands --detail all", runtime=runtime, lock=lock)
 
             self.assertIs(result, runtime)
             raw_output = " ".join(str(a) for a in mock_debug.call_args[0])

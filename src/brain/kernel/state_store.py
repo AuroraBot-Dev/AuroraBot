@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.config import Config
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ── 所有节点共享的常量 ──────────────────────────────
 kernel_data_dir: Path = Config.KERNEL_DATA_DIR

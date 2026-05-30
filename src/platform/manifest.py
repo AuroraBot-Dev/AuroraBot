@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -27,9 +29,7 @@ class CommandDecl:
     # 将命令声明转换为参数模式
     def to_parameters_schema(self) -> dict[str, Any]:
         properties = {name: _schema_from_field(spec) for name, spec in self.parameters.items()}
-        required = [
-            name for name, spec in self.parameters.items() if bool(spec.get("required", True))
-        ]
+        required = [name for name, spec in self.parameters.items() if bool(spec.get("required", True))]
         return {"type": "object", "properties": properties, "required": required}
 
     # 将命令声明转换为返回模式
@@ -76,9 +76,7 @@ def _normalize_mapping(raw: object) -> dict[str, dict[str, Any]]:
     normalized: dict[str, dict[str, Any]] = {}
     for key, value in raw.items():
         if isinstance(value, dict):
-            normalized[str(key)] = {
-                str(item_key): item_value for item_key, item_value in value.items()
-            }
+            normalized[str(key)] = {str(item_key): item_value for item_key, item_value in value.items()}
     return normalized
 
 

@@ -1,6 +1,6 @@
 # L1缓存，内存存储
 
-from typing import List
+
 from src.brain.memory.base import MemoryItem
 from src.utils.log_utils import get_logger
 
@@ -13,13 +13,13 @@ class WorkingMemory:
     主要解决：让大模型知道刚才的上下文是什么。
     """
 
-    def __init__(self, max_items: int = 10):
+    def __init__(self, max_items: int = 10) -> None:
         # max_items 控制上下文窗口大小，防止 Token 爆炸
         self.max_items = max_items
-        self._items: List[MemoryItem] = []
+        self._items: list[MemoryItem] = []
         logger.debug("L1 缓存已启动")
 
-    def add(self, content: str, role: str = "user", metadata: dict = None) -> None:
+    def add(self, content: str, role: str = "user", metadata: dict | None = None) -> None:
         """写策略：直接追加。
         如果超出容量限制，则挤掉最老的一条记忆（FIFO 队列）。
         """
@@ -29,7 +29,7 @@ class WorkingMemory:
             self._items.pop(0)
         logger.debug("已添加进L1 缓存中")
 
-    def get_context(self) -> List[MemoryItem]:
+    def get_context(self) -> list[MemoryItem]:
         """读策略：全量读取。
         因为 L1 容量很小，所以直接把整个队列返回。
         """

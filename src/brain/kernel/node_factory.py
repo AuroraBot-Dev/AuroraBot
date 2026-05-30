@@ -1,25 +1,26 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from src.brain.kernel.base import Node
 from src.brain.kernel.circuit import Circuit
-from src.brain.nodes.agents import *
-from src.brain.nodes.routers import *
+from src.brain.nodes.agents import *  # noqa: F403
+from src.brain.nodes.routers import *  # noqa: F403
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from src.brain.kernel.base import Node
     from src.brain.memory import UnifiedMemoryManager
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("NodeFactory")
 
 # 节点注册表 —— 新节点加在这里
-# kernel-α: 仅注册 PolarisAgent，旧节点类暂存于 nodes-beta
+# kernel-alpha: 仅注册 PolarisAgent，旧节点类暂存于 nodes-beta
 NODE_REGISTRY: dict[str, type[Node]] = {
-    "polaris": PolarisAgent,
+    "polaris": PolarisAgent,  # noqa: F405
 }
 
 # 节点构造时是否需要 host 引用（按 type 判断）
@@ -85,9 +86,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "enabled": bool(entry.get("enabled", True)),
                 "watch": entry.get("watch"),  # None = 不覆盖，沿用类默认值
                 "emit": entry.get("emit"),  # None = 不覆盖，沿用类默认值
-                "config": (
-                    entry.get("config", {}) if isinstance(entry.get("config"), dict) else {}
-                ),
+                "config": (entry.get("config", {}) if isinstance(entry.get("config"), dict) else {}),
             }
         )
     return normalized
@@ -96,7 +95,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ── 电路构建 ──────────────────────────────────────
 
 
-def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
+def build_circuit(host: ApplicationHost) -> Circuit:
     """从 ``topology.yaml`` 读取配置，构造认知拓扑电路。
 
     遍历邻接表条目，逐条实例化节点并注入 ``Circuit``。
@@ -150,9 +149,7 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
             node._config_emit = entry["emit"]
 
         instances.append(node)
-        logger.info(
-            f"节点已装配: {node_id} ({node_cls.__name__}): {node._config_watch} -> {node._config_emit}"
-        )
+        logger.info(f"节点已装配: {node_id} ({node_cls.__name__}): {node._config_watch} -> {node._config_emit}")
 
     if not instances:
         logger.warning("电路没有装配任何节点")

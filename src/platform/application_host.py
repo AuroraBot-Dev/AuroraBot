@@ -1,14 +1,18 @@
 from __future__ import annotations
-from collections import deque
-from collections.abc import Iterable
+
 import inspect
-from typing import Any
+from collections import deque
+from typing import TYPE_CHECKING, Any
 
 from src.platform.application_api import PlatformAPI
-from src.platform.application_protocol import ApplicationProtocol
 from src.platform.contracts import AppEvent, CommandSpec
-from src.platform.manifest import CommandDecl, Manifest
+from src.platform.manifest import Manifest
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from src.platform.application_protocol import ApplicationProtocol
 
 logger = get_logger("ApplicationHost")
 
@@ -23,14 +27,18 @@ class ApplicationHost:
     async def register(self, app: ApplicationProtocol) -> None:
         manifest = Manifest.load(app.manifest_path())
         if not manifest.package:
-            raise ValueError(f"需要在manifest中指定package字段: {app.manifest_path()}")
+            raise ValueError(  # noqa: TRY003
+                f"需要在manifest中指定package字段: {app.manifest_path()}"
+            )
         if manifest.package in self._apps:
             logger.warning(f"应用 {manifest.package} 已注册")
             return
         for command_decl in manifest.commands:
             handler = getattr(app, command_decl.name, None)
             if handler is None:
-                raise AttributeError(f"应用 {manifest.package} 缺少 {command_decl.name} 命令实现")
+                raise AttributeError(  # noqa: TRY003
+                    f"应用 {manifest.package} 缺少 {command_decl.name} 命令实现"
+                )
             self.register_command(
                 CommandSpec(
                     name=f"{manifest.package}.{command_decl.name}",
@@ -91,7 +99,7 @@ class ApplicationHost:
     async def invoke_command(self, command_name: str, **kwargs: Any) -> Any:
         spec = self._commands.get(command_name)
         if spec is None:
-            raise KeyError(f"Unknown command: {command_name}")
+            raise KeyError(f"Unknown command: {command_name}")  # noqa: TRY003
         logger.debug("执行命令: %s", command_name)
         return await _maybe_await(spec.handler(**kwargs))
 
@@ -137,7 +145,7 @@ _app_host_singleton: ApplicationHost | None = None
 
 def get_app_host() -> ApplicationHost:
     """获取应用宿主单例，首次调用时延迟初始化。"""
-    global _app_host_singleton
+    global _app_host_singleton  # noqa: PLW0603
     if _app_host_singleton is None:
         _app_host_singleton = ApplicationHost()
     return _app_host_singleton

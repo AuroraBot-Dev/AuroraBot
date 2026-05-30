@@ -2,9 +2,9 @@ import asyncio
 from typing import Any
 
 from src.brain.memory.base import MemoryContext, MemoryItem
-from src.brain.memory.working import WorkingMemory
 from src.brain.memory.episodic import EpisodicMemory
 from src.brain.memory.semantic import SemanticMemory
+from src.brain.memory.working import WorkingMemory
 from src.utils.log_utils import get_logger
 
 logger = get_logger("UnifiedMemory")
@@ -15,7 +15,7 @@ class UnifiedMemoryManager:
     Agent 节点只通过这个 Manager 与记忆系统交互，无需关心底层 L1/L2/L3 的流转细节。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.working = WorkingMemory()
         self.episodic = EpisodicMemory()
         self.semantic = SemanticMemory()
@@ -28,7 +28,10 @@ class UnifiedMemoryManager:
         通常在机器人启动时或用户首次注册时调用。
         """
         if not core_prompt:
-            core_prompt = "我是AuroraBot，一个拥有三级记忆框架的贴心智能助理。我的设计目标是陪伴并协助用户，通过长短时记忆提供连贯的对话体验。"
+            core_prompt = (
+                "我是AuroraBot，一个拥有三级记忆框架的贴心智能助理。"
+                "我的设计目标是陪伴并协助用户，通过长短时记忆提供连贯的对话体验。"
+            )
 
         # 直接使用 semantic 的 extract_and_store 方法。
         # 内部会依靠 LLM 提炼这段话，如果是全新的事实，会被并入 ChromaDB。
@@ -58,7 +61,7 @@ class UnifiedMemoryManager:
             user_id = self.init_user_id
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self._extract_async(text, user_id))
+            loop.create_task(self._extract_async(text, user_id))  # noqa: RUF006
         except RuntimeError:
             # 没有运行中的事件循环（测试/脚本环境），同步执行
             try:
@@ -101,7 +104,7 @@ _memory_manager_singleton: UnifiedMemoryManager | None = None
 
 def get_memory_manager() -> UnifiedMemoryManager:
     """获取记忆管理器单例，按需延迟初始化。"""
-    global _memory_manager_singleton
+    global _memory_manager_singleton  # noqa: PLW0603
     if _memory_manager_singleton is None:
         _memory_manager_singleton = UnifiedMemoryManager()
     return _memory_manager_singleton
@@ -119,9 +122,9 @@ memory_manager = _MemoryManagerProxy()
 
 # 暴露给外部方便导入的公共接口
 __all__ = [
-    "UnifiedMemoryManager",
     "MemoryContext",
     "MemoryItem",
+    "UnifiedMemoryManager",
     "get_memory_manager",
     "memory_manager",
 ]

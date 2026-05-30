@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -12,6 +11,9 @@ from src.platform.app_discovery import (
     startup_defaults,
 )
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = get_logger("AppConfig")
 

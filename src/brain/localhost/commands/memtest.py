@@ -44,9 +44,7 @@ async def _handle_memtest_command(  # noqa: PLR0911
 
     if sub == "context":
         user_id = "localhost"
-        ctx: MemoryContext = memory_manager.retrieve_context(
-            current_query="__context_snapshot__", user_id=user_id
-        )
+        ctx: MemoryContext = memory_manager.retrieve_context(current_query="__context_snapshot__", user_id=user_id)
         prompt_text = ctx.to_prompt_text() if ctx else "(空)"
         logger.debug("\n--- 记忆上下文 (user=%s) ---\n%s", user_id, prompt_text)
         return runtime

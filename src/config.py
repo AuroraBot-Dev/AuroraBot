@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -12,7 +12,7 @@ if (PROJECT_ROOT / ".env.prod").exists():
     load_dotenv(PROJECT_ROOT / ".env.prod", override=False)
 
 
-def _get_bool(name: str, default: bool) -> bool:
+def _get_bool(name: str, default: bool) -> bool:  # noqa: FBT001
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
 

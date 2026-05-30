@@ -95,20 +95,14 @@ def _reload_modules() -> None:
 
 
 def _reload_package_modules(package_name: str) -> None:
-    names = [
-        name for name in sys.modules if name == package_name or name.startswith(f"{package_name}.")
-    ]
+    names = [name for name in sys.modules if name == package_name or name.startswith(f"{package_name}.")]
     for name in sorted(names, key=lambda item: (item.count("."), item), reverse=True):
         _reload_module(name)
 
 
 async def reload_brain(*, runtime: RuntimeState) -> RuntimeState:
     logger.info("热重载开始 — 冻结运行时...")
-    previous_apps = [
-        app
-        for package in runtime.host.list_apps()
-        if (app := runtime.host.get_app(package)) is not None
-    ]
+    previous_apps = [app for package in runtime.host.list_apps() if (app := runtime.host.get_app(package)) is not None]
     previous_had_app_loop = runtime.app_task is not None
     previous_had_bridge = runtime.bridge_task is not None
     apps_replaced = False
@@ -132,10 +126,7 @@ async def reload_brain(*, runtime: RuntimeState) -> RuntimeState:
         for app_name in enabled_names:
             _reload_package_modules(f"apps.{app_name}")
 
-        new_apps = [
-            instantiate_app(app_name, app_startup(apps_config, app_name))
-            for app_name in enabled_names
-        ]
+        new_apps = [instantiate_app(app_name, app_startup(apps_config, app_name)) for app_name in enabled_names]
         await runtime.host.replace_apps(new_apps)
         apps_replaced = True
 

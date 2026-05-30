@@ -7,7 +7,10 @@
 import functools
 import inspect
 import logging
+from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any
 
 from src.config import Config
 
@@ -38,7 +41,10 @@ MAX_LOGFILE_BACKUPS = 5  # 保留5个备份
 LOG_LEVEL = Config.LOG_LEVEL
 
 
-def _create_stream_handler(level=LOG_LEVEL, formatter=CONSOLE_FORMATTER):
+def _create_stream_handler(
+    level: int | str = LOG_LEVEL,
+    formatter: logging.Formatter = CONSOLE_FORMATTER,
+) -> logging.Handler:
     # 控制台使用 Rich 美化输出；降级到纯文本 StreamHandler 当 rich 不可用时
     try:
         from rich.console import Console
@@ -86,7 +92,7 @@ def _create_stream_handler(level=LOG_LEVEL, formatter=CONSOLE_FORMATTER):
             tracebacks_show_locals=False,
         )
         rh.setFormatter(formatter)
-        return rh
+        return rh  # noqa: TRY300
     except ImportError:
         sh = logging.StreamHandler()
         sh.setLevel(level)
@@ -94,7 +100,11 @@ def _create_stream_handler(level=LOG_LEVEL, formatter=CONSOLE_FORMATTER):
         return sh
 
 
-def _create_file_handler(logfile, level=LOG_LEVEL, formatter=FILE_FORMATTER):
+def _create_file_handler(
+    logfile: str | Path,
+    level: int | str = LOG_LEVEL,
+    formatter: logging.Formatter = FILE_FORMATTER,
+) -> logging.Handler:
     # 使用大小轮转日志文件, 每个文件最大100KB, 保留5个备份
     fh = ConcurrentRotatingFileHandler(
         logfile,
@@ -113,13 +123,15 @@ class DecoratorFactory:
     例如, @logger.decorate.info("Executing {func_name}")
     """
 
-    def __init__(self, logger):
+    def __init__(self, logger: logging.Logger) -> None:
         self._logger = logger
 
-    def _create_decorator(self, level, message_template):
-        def decorator(func):
+    def _create_decorator(
+        self, level: int, message_template: str
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @functools.wraps(func)
-            def wrapper(*args, **kwargs):
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
                 # 绑定参数到函数签名, 并应用默认值
                 bound_args = inspect.signature(func).bind(*args, **kwargs)
                 bound_args.apply_defaults()
@@ -142,24 +154,28 @@ class DecoratorFactory:
 
         return decorator
 
-    def info(self, message_template):
+    def info(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """创建一个 INFO 级别的日志装饰器, 用于记录函数调用前的信息."""
         return self._create_decorator(logging.INFO, message_template)
 
-    def debug(self, message_template):
+    def debug(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """创建一个 DEBUG 级别的日志装饰器, 用于记录函数调用前的调试信息."""
         return self._create_decorator(logging.DEBUG, message_template)
 
-    def warning(self, message_template):
+    def warning(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """创建一个 WARNING 级别的日志装饰器, 用于记录函数调用前的警告信息."""
         return self._create_decorator(logging.WARNING, message_template)
 
-    def error(self, message_template):
+    def error(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """创建一个 ERROR 级别的日志装饰器, 用于记录函数调用前的错误信息."""
         return self._create_decorator(logging.ERROR, message_template)
 
 
-def get_logger(name=None, level=LOG_LEVEL, logfile=None):
+def get_logger(
+    name: str | None = None,
+    level: int | str = LOG_LEVEL,
+    logfile: str | Path | None = None,
+) -> logging.Logger:
     """
     返回配置好的日志记录器
     - name: 日志记录器名称 (默认根记录器) .

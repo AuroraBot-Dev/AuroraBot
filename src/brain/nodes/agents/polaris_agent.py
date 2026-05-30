@@ -1,4 +1,4 @@
-"""kernel-α: AuroraBot PolarisAgent —— 小光的自主认知节点
+"""kernel-alpha: AuroraBot PolarisAgent —— 小光的自主认知节点
 
 Pipeline: 事件收束 → 格式化为文本 → 门控判断 → LLM 动作规划 → 命令派发
 
@@ -11,21 +11,21 @@ Pipeline: 事件收束 → 格式化为文本 → 门控判断 → LLM 动作规
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from src.brain import prompts
 from src.brain.ai.gateway import GatewayError, gateway
 from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.config import Config
+from src.utils.json_utils import parse_llm_json, safe_parse_json_object
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
-from src.utils.json_utils import parse_llm_json, safe_parse_json_object
-
-import src.brain.prompts as prompts
 
 if TYPE_CHECKING:
     from src.platform.application_host import ApplicationHost
@@ -46,7 +46,7 @@ class PolarisAgent(Agent):
     统一经过「格式化 → 门控 → 动作规划 → 命令派发」流水线。
     """
 
-    _default_guards = ["inbox/pending/event_*.json"]
+    _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
 
     def __init__(
         self,
@@ -61,8 +61,8 @@ class PolarisAgent(Agent):
         self._history_lock = asyncio.Lock()
         self._session_versions: dict[str, int] = {}
         self._pending_inputs: dict[str, list[dict[str, Any]]] = {}
-        self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(lambda: deque())
-        self._private_recent: dict[str, deque[tuple[float, str]]] = defaultdict(lambda: deque())
+        self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(deque)
+        self._private_recent: dict[str, deque[tuple[float, str]]] = defaultdict(deque)
         self._init_data()
 
     # ═══════════════════════════════════════════════════
@@ -82,7 +82,7 @@ class PolarisAgent(Agent):
                     history = json.loads(content)
                     is_empty = history == []
                 except json.JSONDecodeError:
-                    logger.error("history.json 格式错误，将重新初始化")
+                    logger.exception("history.json 格式错误，将重新初始化")
                     is_empty = True
         else:
             is_empty = True
@@ -140,7 +140,9 @@ class PolarisAgent(Agent):
             if event_type == "message.received":
                 self._enqueue_message(data, input_text)
             else:
-                asyncio.create_task(self._process_system_event(event_type, input_text))
+                asyncio.create_task(  # noqa: RUF006
+                    self._process_system_event(event_type, input_text)
+                )
 
         return []
 
@@ -205,7 +207,9 @@ class PolarisAgent(Agent):
         self._pending_inputs.setdefault(session_key, []).append(entry)
         version = self._session_versions.get(session_key, 0) + 1
         self._session_versions[session_key] = version
-        asyncio.create_task(self._debounce_and_reply(session_key, version))
+        asyncio.create_task(  # noqa: RUF006
+            self._debounce_and_reply(session_key, version)
+        )
 
     # ═══════════════════════════════════════════════════
     # 系统事件（clock / agent.reply 等）→ 跳过门控
@@ -253,9 +257,7 @@ class PolarisAgent(Agent):
 
         logger.debug("防抖完成 session=%s 合并 %d 条到门控", session_key, len(entries))
 
-        recent = (
-            self._group_recent[int(group_id or 0)] if is_group else self._private_recent[user_id]
-        )
+        recent = self._group_recent[int(group_id or 0)] if is_group else self._private_recent[user_id]
         recent_lines = self._get_recent_lines(recent)
 
         if session_id == "private:localhost":
@@ -274,9 +276,7 @@ class PolarisAgent(Agent):
         logger.debug("门控通过 → 动作规划")
 
         # 【优化】：提前异步发起高级记忆检索任务，利用防抖或准备上下文的时间掩盖 I/O 延迟
-        advanced_memory_task = asyncio.create_task(
-            self._prefetch_advanced_memory(user_id, merged_input)
-        )
+        advanced_memory_task = asyncio.create_task(self._prefetch_advanced_memory(user_id, merged_input))
 
         await self._run_reply_pipeline(
             user_id=user_id,
@@ -337,15 +337,13 @@ class PolarisAgent(Agent):
         content = (text or "").strip()
         if content in ("是", "否"):
             return content == "是"
-        if "是" in content:
-            return True
-        return False
+        return "是" in content
 
     # ═══════════════════════════════════════════════════
     # 回复流水线：LLM 生成 → JSON 解析 → 命令派发
     # ═══════════════════════════════════════════════════
 
-    async def _run_reply_pipeline(
+    async def _run_reply_pipeline(  # noqa: C901, PLR0913
         self,
         *,
         user_id: str,
@@ -411,11 +409,10 @@ class PolarisAgent(Agent):
         logger.debug("动作生成完成 len=%d preview=%s", len(raw), raw)
 
         parsed = self._parse_actions(raw)
-        if parsed is None:
-            if raw.strip() and recovery_depth == 0:
-                parsed = self._adapt_plain_text(raw, user_id, session_id, is_group, group_id)
-                if parsed is not None:
-                    logger.warning(f"纯文本兜底发送（JSON 解析失败）session={session_key}")
+        if parsed is None and raw.strip() and recovery_depth == 0:
+            parsed = self._adapt_plain_text(raw, user_id, session_id, is_group, group_id)
+            if parsed is not None:
+                logger.warning(f"纯文本兜底发送（JSON 解析失败）session={session_key}")
         if parsed is None:
             et = "agent.reply_parse_failed" if raw.strip() else "agent.reply_empty"
             summary = "无法解析为结构化动作" if raw.strip() else "返回空响应"
@@ -459,7 +456,7 @@ class PolarisAgent(Agent):
     # LLM 动作生成
     # ═══════════════════════════════════════════════════
 
-    async def _generate_actions(
+    async def _generate_actions(  # noqa: PLR0913
         self,
         *,
         user_id: str,
@@ -519,7 +516,7 @@ class PolarisAgent(Agent):
                     "[动作规划] step=高级记忆 async_task=完成 耗时=%.2fs",
                     time.time() - t2,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     f"[动作规划] step=高级记忆 async_task=超时({Config.MEMORY_RETRIEVE_TIMEOUT}s), 继续无记忆"
                 )
@@ -531,18 +528,14 @@ class PolarisAgent(Agent):
             advanced_memory_text = self._build_advanced_memory_text(user_id, merged_input)
             logger.info(f"[动作规划] step=高级记忆 sync=完成 耗时={time.time() - t2:.2f}s")
 
-        combined_memory_text = (
-            f"{memory_text}\n\n{advanced_memory_text}" if advanced_memory_text else memory_text
-        )
+        combined_memory_text = f"{memory_text}\n\n{advanced_memory_text}" if advanced_memory_text else memory_text
 
         action_prompt = prompts.ACTION.fill(
             scene=scene_text,
             commands=commands_text,
         )
 
-        final_instruction = (
-            f"{action_prompt}\n\n（只输出 JSON。第一个字符 {{，最后一个 }}。不要任何其他文字。）"
-        )
+        final_instruction = f"{action_prompt}\n\n（只输出 JSON。第一个字符 {{，最后一个 }}。不要任何其他文字。）"
         if recovery_note:
             final_instruction = f"{recovery_note}\n\n{final_instruction}"
 
@@ -555,7 +548,7 @@ class PolarisAgent(Agent):
             len(messages),
         )
         gen = gateway.quality.acompletion(
-            [{"role": "system", "content": combined_memory_text}] + messages,
+            [{"role": "system", "content": combined_memory_text}, *messages],
             max_tokens=2048,
             temperature=0.0,
         )
@@ -576,7 +569,7 @@ class PolarisAgent(Agent):
     @staticmethod
     def _build_scene_text(
         session_id: str,
-        is_group: bool,
+        is_group: bool,  # noqa: FBT001
         group_id: str | None,
     ) -> str:
         stype = "群聊" if is_group else "私聊"
@@ -618,9 +611,7 @@ class PolarisAgent(Agent):
         diary_lines = [f"## {d['date']}\n{d['content']}" for d in diaries]
         diary_block = "\n".join(diary_lines) if diary_lines else "无"
 
-        impression_block = (
-            json.dumps(prioritized, ensure_ascii=False, indent=2) if prioritized else "{}"
-        )
+        impression_block = json.dumps(prioritized, ensure_ascii=False, indent=2) if prioritized else "{}"
         return prompts.MEMORY.fill(
             diary_block=diary_block,
             impression_block=impression_block,
@@ -632,19 +623,15 @@ class PolarisAgent(Agent):
         # 如果 retrieve_context 是异步的，这里可以直接 await；
         # 由于当前 retrieve_context 是同步阻塞的，我们将其丢入线程池中运行以防阻塞主事件循环
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, self._build_advanced_memory_text, current_user_id, current_query
-        )
+        return await loop.run_in_executor(None, self._build_advanced_memory_text, current_user_id, current_query)
 
     def _build_advanced_memory_text(self, current_user_id: str, current_query: str) -> str:
         try:
             from src.brain.memory import memory_manager
 
-            ctx = memory_manager.retrieve_context(
-                current_query=current_query, user_id=current_user_id
-            )
+            ctx = memory_manager.retrieve_context(current_query=current_query, user_id=current_user_id)
             return ctx.to_prompt_text()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"获取高级统一记忆失败: {e}")
             return ""
 
@@ -670,7 +657,7 @@ class PolarisAgent(Agent):
         raw: str,
         user_id: str,
         session_id: str,
-        is_group: bool,
+        is_group: bool,  # noqa: FBT001
         group_id: str | None,
     ) -> dict[str, Any] | None:
         text = raw.strip()
@@ -750,9 +737,7 @@ class PolarisAgent(Agent):
                 logger.exception(f"执行命令 {command} 失败")
 
         if dispatched == 0 and actions:
-            logger.warning(
-                f"actions 中无可执行命令 session={session_key} invalid={invalid} total={len(actions)}"
-            )
+            logger.warning(f"actions 中无可执行命令 session={session_key} invalid={invalid} total={len(actions)}")
         return dispatched
 
     # ═══════════════════════════════════════════════════
@@ -765,16 +750,12 @@ class PolarisAgent(Agent):
 
             memory_manager.process_interaction(content=content, role=role, user_id=str(user_id))
         except Exception as e:
-            logger.error(f"写入统一记忆失败 ({role}): {e}")
+            logger.exception(f"写入统一记忆失败 ({role}): {e}")  # noqa: TRY401
 
     async def _append_user_message(self, user_id: str, input_line: str) -> list[dict[str, Any]]:
         async with self._history_lock:
             history = self._read_history()
-            if (
-                history
-                and history[-1].get("role") == "user"
-                and history[-1].get("name") == str(user_id)
-            ):
+            if history and history[-1].get("role") == "user" and history[-1].get("name") == str(user_id):
                 prev = history[-1].get("content", "")
                 history[-1]["content"] = f"{prev}\n{input_line}" if prev else input_line
             else:
@@ -874,13 +855,11 @@ class PolarisAgent(Agent):
         diary_dir = Config.DATA_DIR / "app_data" / "im_polaris_diary" / "diaries"
         diaries: list[dict[str, str]] = []
         for days_ago in (1, 2):
-            target = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+            target = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")  # noqa: DTZ005
             path = diary_dir / f"{target}.json"
             if path.exists():
-                try:
+                with contextlib.suppress(OSError):
                     diaries.append({"date": target, "content": path.read_text(encoding="utf-8")})
-                except OSError:
-                    pass
         return diaries
 
     def _load_all_impressions(self) -> dict[str, Any]:
@@ -890,9 +869,9 @@ class PolarisAgent(Agent):
             return payload
         for path in sorted(impression_dir.glob("*.json")):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:  # noqa: PTH123
                     payload[path.stem] = json.load(f)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
         return payload
 
@@ -953,5 +932,9 @@ class PolarisAgent(Agent):
         return [line for _, line in recent]
 
     @staticmethod
-    def _make_session_key(user_id: str, is_group: bool, group_id: str | None) -> str:
+    def _make_session_key(
+        user_id: str,
+        is_group: bool,  # noqa: FBT001
+        group_id: str | None,
+    ) -> str:
         return f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"

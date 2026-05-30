@@ -1,7 +1,6 @@
 import asyncio
 import json
-from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 from src.brain.memory.base import MemoryItem
 from src.config import Config
@@ -16,7 +15,7 @@ class EpisodicMemory:
     引入了“滚动压缩”机制防止文件无限膨胀。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # 复用项目现有的数据目录规范，将情景记忆持久化为 JSON 文件
         self._file_path = Config.MEMORY_DATA_DIR / "episodes.json"
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +57,7 @@ class EpisodicMemory:
             logger.debug("L2 缓存记忆已折叠")
         self._save(records)
 
-    def _fold_state(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _fold_state(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """核心压缩逻辑。
 
         先用基础统计生成摘要记录保存，再异步通过统一 LLM 网关改进摘要，
@@ -74,9 +73,7 @@ class EpisodicMemory:
         end_time = to_compress[-1]["timestamp"]
 
         # 先用基础统计生成摘要，保证同步路径不阻塞
-        summary_content = (
-            f"【系统摘要】在 {start_time} 到 {end_time} 期间，发生了 {len(to_compress)} 次交互。"
-        )
+        summary_content = f"【系统摘要】在 {start_time} 到 {end_time} 期间，发生了 {len(to_compress)} 次交互。"
 
         summary_record = {
             "timestamp": end_time,
@@ -84,7 +81,7 @@ class EpisodicMemory:
             "user_id": "system",
             "content": summary_content,
         }
-        compressed = [summary_record] + to_keep
+        compressed = [summary_record, *to_keep]
 
         # 异步通过统一 LLM 网关改进摘要，完成后回写文件
         self._schedule_fold_refinement(to_compress, start_time, end_time, compressed)
@@ -104,7 +101,9 @@ class EpisodicMemory:
         except RuntimeError:
             return  # 无事件循环（测试/脚本），跳过异步改进
 
-        loop.create_task(self._refine_summary_async(to_compress, start_time, end_time, compressed))
+        loop.create_task(  # noqa: RUF006
+            self._refine_summary_async(to_compress, start_time, end_time, compressed)
+        )
 
     async def _refine_summary_async(
         self,
@@ -115,9 +114,7 @@ class EpisodicMemory:
     ) -> None:
         from src.brain.ai.gateway import gateway
 
-        history_text = "\n".join(
-            f"[{r['timestamp']}] {r['type']}: {r['content']}" for r in to_compress
-        )
+        history_text = "\n".join(f"[{r['timestamp']}] {r['type']}: {r['content']}" for r in to_compress)
 
         try:
             gen = gateway.quality.acompletion(
@@ -152,30 +149,28 @@ class EpisodicMemory:
         except Exception:
             logger.exception("改进情景记忆压缩摘要失败，保留基础摘要")
 
-    def search_recent_events(self, limit: int = 5, user_id: str = None) -> List[str]:
+    def search_recent_events(self, limit: int = 5, user_id: str | None = None) -> list[str]:
         """读策略：按时间倒序截取 (Time-based retrieval)
         查询最近发生的事情。如果有 summary 记录，它会自动被包含在内提供长线背景。
         """
         records = self._load()
         # 过滤出当前用户相关的事件，以及系统级别的 summary 摘要
         if user_id:
-            records = [
-                r for r in records if r.get("user_id") == user_id or r.get("type") == "summary"
-            ]
+            records = [r for r in records if r.get("user_id") == user_id or r.get("type") == "summary"]
 
         recent = records[-limit:]
         return [f"[{r['timestamp']}] {r['type']}: {r['content']}" for r in recent]
 
-    def _load(self) -> List[Dict[str, Any]]:
+    def _load(self) -> list[dict[str, Any]]:
         """辅助方法：从文件加载数据"""
         if not self._file_path.exists():
             return []
         try:
             return json.loads(self._file_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001
             # 如果文件损坏，这里简单处理返回空列表，实际工程中可能需要备份和恢复机制
             return []
 
-    def _save(self, data: List[Dict[str, Any]]) -> None:
+    def _save(self, data: list[dict[str, Any]]) -> None:
         """辅助方法：将数据写回文件"""
         self._file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

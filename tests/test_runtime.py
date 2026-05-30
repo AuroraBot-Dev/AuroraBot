@@ -33,7 +33,7 @@ class _FakeCircuit:
         self.is_running = False
 
 
-async def _noop_loop(*_args, **_kwargs) -> None:
+async def _noop_loop(*_args: object, **_kwargs: object) -> None:
     await asyncio.sleep(0)
 
 
@@ -42,9 +42,11 @@ class RuntimeTest(unittest.TestCase):
         host = ApplicationHost()
 
         async def scenario() -> None:
-            with patch("src.brain.runtime.discover_apps", return_value={"qq": object()}):
-                with self.assertRaises(KeyError):
-                    await register_selected_apps(host, ["missing"], {})
+            with (
+                patch("src.brain.runtime.discover_apps", return_value={"qq": object()}),
+                self.assertRaises(KeyError),
+            ):
+                await register_selected_apps(host, ["missing"], {})
 
         asyncio.run(scenario())
 
