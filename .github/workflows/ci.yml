@@ -54,5 +54,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --group dev
 
-      - name: Test with pytest
-        run: uv run pytest -v
+      - name: Test with pytest and coverage
+        run: uv run pytest -v --cov=src
