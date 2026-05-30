@@ -76,6 +76,8 @@ git checkout -b feat/my-feature    # 或 fix/xxx, refact/xxx
 
 PR 合并到 `dev` 后，该分支的使命就完成了。**原则上不再使用该分支继续开发新功能。** 你可以放心删除它：
 
+如果这次合并进入了 `dev`，并且 `CI` 检查通过，仓库会自动基于 `pyproject.toml` 中的版本号创建下一个 `vX.Y.Z-alpha.N` 标签，并触发预发布（Pre-release）。也就是说，日常开发阶段通常不需要再手动打 `alpha` tag。
+
 ```bash
 git branch -d feat/my-feature
 ```
