@@ -53,7 +53,7 @@ def _is_cache_valid() -> bool:
     return _cache is not None and (time.monotonic() - _cache_ts) < CACHE_TTL_SEC
 
 
-async def _ensure_cache() -> dict[str, dict[str, Any]]:
+async def _ensure_cache() -> dict[str, dict[str, Any]]:  # noqa: C901, PLR0911
     """确保缓存可用，必要时从 models.dev 拉取并索引。
 
     特性：
@@ -62,7 +62,7 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:
     - 网络不可达时降级使用过期缓存（如有）
     - 并发安全：双重检查 + asyncio.Lock
     """
-    global _cache, _cache_ts
+    global _cache, _cache_ts  # noqa: PLW0603
 
     if _is_cache_valid():
         return _cache  # type: ignore[return-value]
@@ -94,7 +94,7 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:
                 logger.info("降级使用过期缓存（%d 条记录）", len(_cache))
                 return _cache
             return {}
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("models.dev 数据拉取/解析失败: %s", _exc_msg())
             if _cache is not None:
                 return _cache

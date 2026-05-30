@@ -36,7 +36,7 @@ uv run python bot.py
 | `uv run ruff format src/ tests/` | 代码格式化 |
 | `uv run pyright src/`            | 类型检查   |
 
-> 建议在提交前至少运行 `pytest` 和 `ruff check`，确保没有明显的回归。
+> 建议在提交 PR 前至少运行 `pytest` 和 `ruff check`。CI 流水线也会自动执行 `ruff check` 和 `ruff format --check`，确保代码风格一致、没有明显回归。
 
 ## 贡献流程
 

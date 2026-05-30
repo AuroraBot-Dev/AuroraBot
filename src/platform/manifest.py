@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -26,23 +28,15 @@ class CommandDecl:
 
     # 将命令声明转换为参数模式
     def to_parameters_schema(self) -> dict[str, Any]:
-        properties = {
-            name: _schema_from_field(spec) for name, spec in self.parameters.items()
-        }
-        required = [
-            name
-            for name, spec in self.parameters.items()
-            if bool(spec.get("required", True))
-        ]
+        properties = {name: _schema_from_field(spec) for name, spec in self.parameters.items()}
+        required = [name for name, spec in self.parameters.items() if bool(spec.get("required", True))]
         return {"type": "object", "properties": properties, "required": required}
 
     # 将命令声明转换为返回模式
     def to_returns_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
-            "properties": {
-                name: _schema_from_field(spec) for name, spec in self.returns.items()
-            },
+            "properties": {name: _schema_from_field(spec) for name, spec in self.returns.items()},
         }
 
 
@@ -63,11 +57,7 @@ class Manifest:
         raw_commands = payload.get("commands", [])
         if not isinstance(raw_commands, list):
             raw_commands = []
-        commands = [
-            CommandDecl.from_dict(item)
-            for item in raw_commands
-            if isinstance(item, dict)
-        ]
+        commands = [CommandDecl.from_dict(item) for item in raw_commands if isinstance(item, dict)]
         return cls(
             package=str(payload.get("package", "")).strip(),
             name=str(payload.get("name", "")).strip(),
@@ -86,9 +76,7 @@ def _normalize_mapping(raw: object) -> dict[str, dict[str, Any]]:
     normalized: dict[str, dict[str, Any]] = {}
     for key, value in raw.items():
         if isinstance(value, dict):
-            normalized[str(key)] = {
-                str(item_key): item_value for item_key, item_value in value.items()
-            }
+            normalized[str(key)] = {str(item_key): item_value for item_key, item_value in value.items()}
     return normalized
 
 
@@ -100,7 +88,5 @@ def _schema_from_field(spec: dict[str, Any]) -> dict[str, Any]:
         schema["description"] = description
     items = spec.get("items")
     if isinstance(items, dict):
-        schema["items"] = _schema_from_field(
-            {str(key): value for key, value in items.items()}
-        )
+        schema["items"] = _schema_from_field({str(key): value for key, value in items.items()})
     return schema

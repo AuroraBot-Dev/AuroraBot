@@ -111,7 +111,6 @@ dependencies = [
     { name = "nonebot-adapter-onebot" },
     { name = "nonebot-plugin-localstore" },
     { name = "nonebot2", extra = ["fastapi"] },
-    { name = "pytest" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "tiktoken" },
@@ -121,6 +120,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "pyright", extra = ["nodejs"] },
+    { name = "pytest" },
     { name = "ruff" },
 ]
 
@@ -135,7 +135,7 @@ requires-dist = [
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.5.0,<3.0.0" },
     { name = "pyright", extras = ["nodejs"], marker = "extra == 'dev'" },
-    { name = "pytest" },
+    { name = "pytest", marker = "extra == 'dev'" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", marker = "extra == 'dev'" },

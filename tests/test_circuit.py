@@ -20,7 +20,7 @@ from src.brain.kernel.event_bus import FileEventBus
 class _RecordingNode(Node):
     """测试用 Node：记录 execute 调用次数和收到的 events。"""
 
-    _default_guards = ["inbox/pending/event_*.json"]
+    _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
 
     def __init__(self, node_id: str) -> None:
         super().__init__(node_id)
@@ -43,7 +43,7 @@ class _RecordingNode(Node):
 class _FailingNode(Node):
     """测试用 Node：execute 总是抛异常。"""
 
-    _default_guards = ["inbox/pending/event_*.json"]
+    _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
 
     def __init__(self, node_id: str) -> None:
         super().__init__(node_id)
@@ -227,9 +227,7 @@ class CircuitLifecycleTest(unittest.TestCase):
 
         async def scenario() -> None:
             with self.assertRaises(RuntimeError):
-                circuit.inject_event(
-                    FileEvent(path="inbox/pending/event.json", change_type="write")
-                )
+                circuit.inject_event(FileEvent(path="inbox/pending/event.json", change_type="write"))
 
         asyncio.run(scenario())
 

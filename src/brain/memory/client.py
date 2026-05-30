@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 from typing import Any
 
 from mem0 import Memory
+
+from src.brain.ai.providers import resolve_model, setup_providers
 from src.config import Config
-from src.brain.ai.providers import setup_providers, resolve_model
 
 
 def _build_vector_store_config() -> dict[str, Any]:
@@ -24,7 +26,7 @@ def _build_llm_config(with_model: str = "fast") -> dict[str, Any]:
     elif with_model == "multimodal":
         model = Config.LLM_GATEWAY_MULTIMODAL_MODEL
     else:
-        raise ValueError(f"Unknown model: {with_model}")
+        raise ValueError(f"Unknown model: {with_model}")  # noqa: TRY003
 
     return {
         "provider": Config.MEMORY_MODEL_PROVIDER,

@@ -22,8 +22,8 @@ DeepSeek 等 OpenAI 兼容 API）注册到 litellm 配置中。网关在发起 L
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Any
 
 import litellm
 
@@ -86,12 +86,10 @@ def setup_providers(*providers: ProviderConfig) -> None:
         # 注册所有内置供应商
         providers = (SILICONFLOW,)
 
-    signature = tuple(
-        (p.prefix, p.litellm_provider, p.api_base, p.api_key_env) for p in providers
-    )
+    signature = tuple((p.prefix, p.litellm_provider, p.api_base, p.api_key_env) for p in providers)
     expected_prefixes = {p.prefix for p in providers}
 
-    global _setup_signature
+    global _setup_signature  # noqa: PLW0603
     if _setup_signature == signature and set(_registry) == expected_prefixes:
         return
 
@@ -212,5 +210,5 @@ def _register_pricing_placeholders(provider: ProviderConfig) -> None:
                 }
             }
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.debug("占位定价注册失败（非关键）: %s", provider.prefix)

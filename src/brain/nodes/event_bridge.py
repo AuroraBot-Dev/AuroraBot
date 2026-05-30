@@ -4,8 +4,8 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate
-from src.utils.log_utils import get_logger
 from src.config import Config
+from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.brain.kernel.circuit import Circuit
@@ -62,11 +62,11 @@ async def run_event_bridge(
                         content=event.to_dict(),
                     )
                     await circuit.apply_update(update, node_id="event_bridge")
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("事件桥接异常")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=max(0.05, interval))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
 
     logger.info("事件桥接已停止")

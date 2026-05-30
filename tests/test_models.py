@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 import unittest
-from unittest.mock import MagicMock, patch
-
 import urllib.error
+from unittest.mock import MagicMock, patch
 
 from src.brain.ai import models as models_module
 
@@ -123,13 +121,9 @@ class GetPricingByIdTest(unittest.TestCase):
                 "urllib.request.urlopen",
                 return_value=_make_mock_urlopen_response(),
             ):
-                p_openai_mini = await models_module.get_pricing_by_id(
-                    "openai/gpt-4o-mini"
-                )
+                p_openai_mini = await models_module.get_pricing_by_id("openai/gpt-4o-mini")
                 p_openai = await models_module.get_pricing_by_id("openai/gpt-4o")
-                p_anthropic = await models_module.get_pricing_by_id(
-                    "anthropic/claude-sonnet-4-20250514"
-                )
+                p_anthropic = await models_module.get_pricing_by_id("anthropic/claude-sonnet-4-20250514")
             self.assertIsNotNone(p_openai_mini)
             self.assertIsNotNone(p_openai)
             self.assertIsNotNone(p_anthropic)
@@ -216,23 +210,27 @@ class ErrorDegradationTest(unittest.TestCase):
 
         async def scenario() -> None:
             # 第一步：成功拉取填充缓存（时间戳 = 0）
-            with patch("time.monotonic", return_value=0.0):
-                with patch(
+            with (
+                patch("time.monotonic", return_value=0.0),
+                patch(
                     "urllib.request.urlopen",
                     return_value=_make_mock_urlopen_response(),
-                ):
-                    await models_module.get_pricing_by_id("openai/gpt-4o")
+                ),
+            ):
+                await models_module.get_pricing_by_id("openai/gpt-4o")
 
             # 第二步：过期后拉取失败，应降级使用旧缓存
-            with patch(
-                "time.monotonic",
-                return_value=models_module.CACHE_TTL_SEC + 10,
-            ):
-                with patch(
+            with (
+                patch(
+                    "time.monotonic",
+                    return_value=models_module.CACHE_TTL_SEC + 10,
+                ),
+                patch(
                     "urllib.request.urlopen",
                     side_effect=urllib.error.URLError("timeout"),
-                ):
-                    pricing = await models_module.get_pricing_by_id("openai/gpt-4o")
+                ),
+            ):
+                pricing = await models_module.get_pricing_by_id("openai/gpt-4o")
 
             self.assertIsNotNone(pricing)
             assert pricing is not None
@@ -289,9 +287,7 @@ class ConcurrencyTest(unittest.TestCase):
                     models_module.get_pricing_by_id("openai/gpt-4o-mini"),
                     models_module.get_pricing_by_id("openai/gpt-4o"),
                     models_module.get_pricing_by_id("openai/gpt-4o-mini"),
-                    models_module.get_pricing_by_id(
-                        "anthropic/claude-sonnet-4-20250514"
-                    ),
+                    models_module.get_pricing_by_id("anthropic/claude-sonnet-4-20250514"),
                     models_module.get_pricing_by_id("openai/gpt-4o"),
                 )
 

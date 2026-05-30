@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import asyncio
+import contextlib
 
 from nonebot import get_driver
 
@@ -17,7 +19,7 @@ _reload_lock = asyncio.Lock()
 
 @driver.on_startup
 async def startup_agent() -> None:
-    global _runtime, _console_task
+    global _runtime, _console_task  # noqa: PLW0603
 
     _runtime = await start_runtime(app_host)
     _console_task = asyncio.create_task(
@@ -27,20 +29,18 @@ async def startup_agent() -> None:
 
 
 async def _handle_control_command(raw: str) -> None:
-    global _runtime
+    global _runtime  # noqa: PLW0603
     _runtime = await handle_control_command(raw, runtime=_runtime, lock=_reload_lock)
 
 
 @driver.on_shutdown
 async def shutdown_agent() -> None:
-    global _runtime, _console_task
+    global _runtime, _console_task  # noqa: PLW0603
 
     if _console_task is not None:
         _console_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await _console_task
-        except asyncio.CancelledError:
-            pass
         _console_task = None
 
     if _runtime is None:

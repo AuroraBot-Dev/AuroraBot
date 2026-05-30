@@ -36,7 +36,7 @@ uv run python bot.py
 | `uv run ruff format src/ tests/` | コードフォーマット |
 | `uv run pyright src/`            | 型チェック         |
 
-> PR を提出する前に、少なくとも `pytest` と `ruff check` を実行し、明らかなリグレッションがないことを確認することをお勧めします。
+> PR を提出する前に、少なくとも `pytest` と `ruff check` を実行することをお勧めします。CI パイプラインでも `ruff check` と `ruff format --check` が自動実行され、一貫したコードスタイルと明らかなリグレッションがないことが確認されます。
 
 ## コントリビューションフロー
 
