@@ -85,6 +85,22 @@ nodes:
           hour: 2
           emit: "rhythm/triggers/midnight.json"
 
+  # 记忆沉淀：evening/midnight 触发 → 整理记忆 → 归档 now.md
+  - id: memory_consolidator
+    type: memory_consolidator
+    watch:
+      - "rhythm/triggers/*.json"
+    enabled: false
+
+  # 可观测性：每次心跳统计文件流转
+  - id: metrics_collector
+    type: metrics_collector
+    watch:
+      - "heartbeat/tick.json"
+    emit:
+      - "metrics/status.json"
+    enabled: false
+
   # ═══════════════════════════════════════════════════
   # 拓扑原语（disabled——按需启用）
   # ═══════════════════════════════════════════════════

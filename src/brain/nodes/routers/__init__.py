@@ -5,6 +5,7 @@ from .dead_letter_router import DeadLetterRouter
 from .heartbeat_generator import HeartbeatGenerator
 from .merge_router import MergeRouter
 from .message_preprocessor import MessagePreprocessor
+from .metrics_collector import MetricsCollector
 from .switch_router import SwitchRouter
 from .timer_scheduler import TimerScheduler
 
@@ -15,6 +16,7 @@ __all__ = [
     "HeartbeatGenerator",
     "MergeRouter",
     "MessagePreprocessor",
+    "MetricsCollector",
     "SwitchRouter",
     "TimerScheduler",
 ]

@@ -29,6 +29,9 @@ NODE_REGISTRY: dict[str, type[Node]] = {
     # 节律系统
     "heartbeat_generator": HeartbeatGenerator,  # noqa: F405
     "timer_scheduler": TimerScheduler,  # noqa: F405
+    # 记忆沉淀 & 可观测性
+    "memory_consolidator": MemoryConsolidator,  # noqa: F405
+    "metrics_collector": MetricsCollector,  # noqa: F405
     # 拓扑原语
     "switch_router": SwitchRouter,  # noqa: F405
     "merge_router": MergeRouter,  # noqa: F405
