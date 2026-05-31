@@ -544,11 +544,15 @@ class HotReloadTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_request_process_exit_raises_sigint(self) -> None:
-        with patch("src.brain.localhost.reloader.signal.raise_signal") as mock_raise_signal:
+    def test_request_process_exit_calls_os_exit(self) -> None:
+        with (
+            patch("src.brain.localhost.reloader.signal.raise_signal") as mock_raise_signal,
+            patch("src.brain.localhost.reloader.os._exit") as mock_os_exit,
+        ):
             _request_process_exit()
 
         mock_raise_signal.assert_called_once()
+        mock_os_exit.assert_called_once_with(0)
 
     def test_stop_process_shuts_down_runtime_and_requests_exit(self) -> None:
         runtime = RuntimeState(host=ApplicationHost(), stop_event=asyncio.Event())
@@ -560,11 +564,13 @@ class HotReloadTest(unittest.TestCase):
                     new=AsyncMock(),
                 ) as mock_shutdown,
                 patch("src.brain.localhost.reloader.signal.raise_signal") as mock_raise_signal,
+                patch("src.brain.localhost.reloader.os._exit") as mock_os_exit,
             ):
                 await stop_process(runtime=runtime)
 
             mock_shutdown.assert_awaited_once_with(runtime)
             mock_raise_signal.assert_called_once()
+            mock_os_exit.assert_called_once_with(0)
 
         asyncio.run(scenario())
 

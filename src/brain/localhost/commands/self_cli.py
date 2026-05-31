@@ -27,7 +27,8 @@ async def _handle_stream_command(
         with contextlib.suppress(ValueError):
             n = int(parsed.args[0])
 
-    _stream.read_recent(n)
+    content = _stream.read_recent(n)
+    logger.info(content)
     return runtime
 
 
@@ -36,7 +37,8 @@ async def _handle_state_command(
     _parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
     """查看她当前的自我状态。"""
-    _stream.read_state()
+    content = _stream.read_state()
+    logger.info(content)
     return runtime
 
 
@@ -48,17 +50,19 @@ async def _handle_memories_command(
     memories = _stream.list_memories()
 
     if not memories:
+        logger.info("（暂无持久记忆）")
         return runtime
 
     if parsed.args:
         name = parsed.args[0]
         content = _stream.read_memory(name)
         if content:
-            pass
+            logger.info(content)
         else:
-            pass
+            logger.info(f"未找到记忆: {name}")
     else:
         for name in memories:
             content = _stream.read_memory(name)
-            (content or "")[:80].replace("\n", " ")
+            preview = (content or "")[:80].replace("\n", " ")
+            logger.info(f"  {name}: {preview}...")
     return runtime
