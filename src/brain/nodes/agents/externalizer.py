@@ -73,12 +73,21 @@ class Externalizer(Agent):
             move_to_done(trigger_file, done_dir)
 
             envelope = data.get("envelope", {}) if isinstance(data.get("envelope"), dict) else {}
+            payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
             trace_id = str(envelope.get("trace_id", ""))
+
+            # 提取 Internalizer 传递的原始情景
+            situation = {
+                "session_key": str(payload.get("session_key", "")),
+                "event_type": str(payload.get("event_type", "")),
+                "source": str(payload.get("source", "")),
+                "merged_input": str(payload.get("merged_input", "")),
+            }
 
             logger.debug("外化检查 trace=%s", trace_id)
 
             try:
-                raw = await self._externalize()
+                raw = await self._externalize(situation)
             except Exception:
                 logger.exception("外化 LLM 调用失败")
                 continue
@@ -126,16 +135,32 @@ class Externalizer(Agent):
     # LLM 外化
     # ═══════════════════════════════════════════════════
 
-    async def _externalize(self) -> str:
+    async def _externalize(self, situation: dict[str, str] | None = None) -> str:
         recent = self._stream.read_recent_chars(4000)
         state = self._stream.read_state()
         commands_text = self._build_commands_text()
 
         action_prompt = prompts.EXTERNALIZER.fill(commands=commands_text)
 
+        # 构建情景段落
+        situation_text = ""
+        if situation:
+            parts: list[str] = []
+            if situation.get("session_key"):
+                parts.append(f"会话标识: {situation['session_key']}")
+            if situation.get("source"):
+                parts.append(f"事件来源: {situation['source']}")
+            if situation.get("event_type"):
+                parts.append(f"事件类型: {situation['event_type']}")
+            if situation.get("merged_input"):
+                parts.append(f"原始事件: {situation['merged_input']}")
+            if parts:
+                situation_text = "## 当前情景（用于填写命令参数）\n\n" + "\n".join(parts) + "\n\n"
+
         user_message = (
             f"## 我当前的状态\n\n{state}\n\n"
             f"## 我最近的意识流\n\n{recent}\n\n"
+            f"{situation_text}"
             f"请识别其中的行动意图并转义为命令。如果没有明确的决定，返回空 actions。"
         )
 

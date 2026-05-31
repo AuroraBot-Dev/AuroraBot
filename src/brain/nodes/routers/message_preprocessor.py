@@ -111,6 +111,8 @@ class MessagePreprocessor(Router):
                 return ""
             is_group = bool(payload.get("is_group", False))
             group_id = str(payload.get("group_id", "")) if is_group else None
+            if user_id == "console":
+                return f"{timestamp} 的时候, 本地控制台收到消息: {text}"
             if is_group and group_id:
                 return f"{timestamp} 的时候, {user_id} 在群聊 {group_id} 中说: {text}"
             return f"{timestamp} 的时候, {user_id} 在与你的私聊中说: {text}"
@@ -148,7 +150,14 @@ class MessagePreprocessor(Router):
         elif user_id != "system":
             self._append_recent(self._private_recent[user_id], input_text)
 
-        scene_name = "群聊" if is_group else ("私聊" if user_id != "system" else "系统")
+        if user_id == "console":
+            scene_name = "控制台"
+        elif is_group:
+            scene_name = "群聊"
+        elif user_id != "system":
+            scene_name = "私聊"
+        else:
+            scene_name = "系统"
 
         entry = {
             "user_id": user_id,

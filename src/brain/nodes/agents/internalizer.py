@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 from src.brain import prompts
@@ -89,7 +90,7 @@ class Internalizer(Agent):
             )
 
             try:
-                narrative = await self._internalize(event_text)
+                narrative, state_update = await self._internalize(event_text)
             except Exception:
                 logger.exception("内化 LLM 调用失败，跳过此事件")
                 continue
@@ -98,7 +99,12 @@ class Internalizer(Agent):
                 self._stream.append_experience(narrative)
                 logger.debug("体验已追加到 now.md (%d chars)", len(narrative))
 
+                if state_update:
+                    self._stream.update_state(state_update)
+                    logger.debug("状态已更新到 state.md")
+
                 # 产出触发文件，唤醒 Externalizer
+                # 携带原始情景上下文，供 Externalizer 填写命令参数时使用
                 int_id = next_record_id("int")
                 relative_path = f"pipeline/internalized/int_{int_id}.json"
                 trigger = FileUpdate(
@@ -110,7 +116,13 @@ class Internalizer(Agent):
                             "source_node": self.id,
                             "timestamp": envelope.get("timestamp", ""),
                         },
-                        "payload": {"new_content_length": len(narrative)},
+                        "payload": {
+                            "new_content_length": len(narrative),
+                            "session_key": envelope.get("session_key", ""),
+                            "event_type": payload.get("event_type", ""),
+                            "source": payload.get("source", ""),
+                            "merged_input": payload.get("merged_input", ""),
+                        },
                     },
                 )
                 updates.append(trigger)
@@ -166,10 +178,41 @@ class Internalizer(Agent):
         return "\n".join(lines) if lines else "无可用命令"
 
     # ═══════════════════════════════════════════════════
+    # META 解析
+    # ═══════════════════════════════════════════════════
+
+    _META_RE = re.compile(r"\[META\]\s*\n(.*?)\[/META\]", re.DOTALL)
+
+    @staticmethod
+    def _split_meta(raw: str) -> tuple[str, str | None]:
+        """从 LLM 响应中分离叙事文本和 [META] 状态块。
+
+        Returns
+        -------
+        (narrative, state_update | None)
+        """
+        match = Internalizer._META_RE.search(raw)
+        if not match:
+            return raw, None
+        narrative = raw[: match.start()].strip()
+        state_block = match.group(1).strip()
+        # 构建 state.md 格式
+        lines = ["# 自我状态", ""]
+        for raw_line in state_block.split("\n"):
+            stripped = raw_line.strip()
+            if stripped and ":" in stripped:
+                key, _, value = stripped.partition(":")
+                lines.append(f"- {key.strip()}：{value.strip()}")
+        lines.append("")
+        state_update = "\n".join(lines)
+        return narrative, state_update
+
+    # ═══════════════════════════════════════════════════
     # LLM 内化
     # ═══════════════════════════════════════════════════
 
-    async def _internalize(self, event_text: str) -> str:
+    async def _internalize(self, event_text: str) -> tuple[str, str | None]:
+        """内化事件，返回 (叙事文本, 状态更新文本 | None)。"""
         # 组装上下文
         recent = self._stream.read_recent_chars(3000)
         state = self._stream.read_state()
@@ -201,4 +244,5 @@ class Internalizer(Agent):
         )
         await gen
         response = gen.plain()
-        return (response or "").strip()
+        raw = (response or "").strip()
+        return self._split_meta(raw)

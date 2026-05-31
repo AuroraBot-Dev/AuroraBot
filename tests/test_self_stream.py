@@ -26,7 +26,7 @@ class SelfStreamInitTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             s = SelfStream(base_dir=Path(tmp))
             now = s.read_full()
-            self.assertIn("我刚醒来", now)
+            self.assertIn("就在刚刚", now)
             state = s.read_state()
             self.assertIn("自我状态", state)
 
@@ -122,7 +122,7 @@ class SelfStreamNowTest(unittest.TestCase):
         # 删除 now.md 再读——应返回初始模板
         self.stream.now_path.unlink()
         full = self.stream.read_full()
-        self.assertIn("我刚醒来", full)
+        self.assertIn("就在刚刚", full)
 
 
 class SelfStreamStateTest(unittest.TestCase):
