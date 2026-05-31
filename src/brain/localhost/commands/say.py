@@ -21,17 +21,18 @@ async def _handle_say_command(
         logger.warning(f"控制台命令 {parsed.name} 需要提供消息文本")
         return runtime
 
-    session_id = "private:localhost"
+    session_id = "local:console"
     runtime.host.emit_event(
         AppEvent(
-            source="manual.console",
+            source="console",
             type="message.received",
             session_id=session_id,
             summary=message,
             payload={
                 "session_id": session_id,
+                "session_key": session_id,
                 "text": message,
-                "user_id": "localhost",
+                "user_id": "console",
                 "is_group": False,
                 "group_id": None,
                 "bot_id": "console",

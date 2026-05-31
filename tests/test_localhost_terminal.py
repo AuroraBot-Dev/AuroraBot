@@ -336,12 +336,12 @@ class HotReloadTest(unittest.TestCase):
             events = runtime.host.peek_events()
             self.assertEqual(len(events), 1)
             event = events[0]
-            self.assertEqual(event.source, "manual.console")
+            self.assertEqual(event.source, "console")
             self.assertEqual(event.type, "message.received")
-            self.assertEqual(event.session_id, "private:localhost")
+            self.assertEqual(event.session_id, "local:console")
             self.assertEqual(event.summary, "你好 本地控制台")
             self.assertEqual(event.payload["text"], "你好 本地控制台")
-            self.assertEqual(event.payload["user_id"], "localhost")
+            self.assertEqual(event.payload["user_id"], "console")
 
         asyncio.run(scenario())
 

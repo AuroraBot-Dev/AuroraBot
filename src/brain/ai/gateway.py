@@ -32,9 +32,8 @@ litellm.suppress_debug_info = True
 
 from src.brain.ai.models import get_pricing_by_id
 from src.brain.ai.providers import missing_credentials_reason, resolve_model
-from src.utils.log_utils import get_logger
-
 from src.config import Config
+from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     import collections.abc
@@ -345,7 +344,9 @@ class ModelCaller:
                             "messages_count": len(messages),
                             "max_tokens": max_tokens,
                             "timeout": timeout,
-                            "messages": [{"role": m.get("role", "?"), "content": m.get("content", "<empty>")} for m in messages],
+                            "messages": [
+                                {"role": m.get("role", "?"), "content": m.get("content", "<empty>")} for m in messages
+                            ],
                         },
                         ensure_ascii=False,
                         indent=2,

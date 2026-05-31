@@ -47,6 +47,7 @@ NODE_REGISTRY: dict[str, type[Node]] = {
 # 节点构造时是否需要 host 引用（按 type 判断）
 NODE_NEEDS_HOST: frozenset[str] = frozenset(
     {
+        "internalizer",
         "externalizer",
         "command_dispatcher",
     }
