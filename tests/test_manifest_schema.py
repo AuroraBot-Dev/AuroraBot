@@ -1,8 +1,9 @@
+"""manifest 配置模块测试。"""
+
 from __future__ import annotations
 
-import json
-import unittest
 import tempfile
+import unittest
 from pathlib import Path
 
 import yaml
@@ -132,9 +133,7 @@ class ManifestLoadTest(unittest.TestCase):
             },
             allow_unicode=True,
         )
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", encoding="utf-8", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
             f.write(yaml_content)
             tmp_path = Path(f.name)
 
@@ -152,9 +151,7 @@ class ManifestLoadTest(unittest.TestCase):
             tmp_path.unlink(missing_ok=True)
 
     def test_load_empty_manifest(self) -> None:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", encoding="utf-8", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
             f.write("")
             tmp_path = Path(f.name)
 
@@ -174,9 +171,7 @@ class ManifestLoadTest(unittest.TestCase):
             },
             allow_unicode=True,
         )
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", encoding="utf-8", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
             f.write(yaml_content)
             tmp_path = Path(f.name)
 
@@ -188,9 +183,7 @@ class ManifestLoadTest(unittest.TestCase):
 
     def test_load_invalid_yaml_raises_parser_error(self) -> None:
         """Manifest.load 不吞 YAML 解析异常 — 调用方自行处理。"""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", encoding="utf-8", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
             # 故意写入非法 YAML（缩进不一致）
             f.write("key:\n  sub: a\n sub2: b\n")
             tmp_path = Path(f.name)
@@ -214,9 +207,7 @@ class ManifestLoadTest(unittest.TestCase):
             },
             allow_unicode=True,
         )
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", encoding="utf-8", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
             f.write(yaml_content)
             tmp_path = Path(f.name)
 

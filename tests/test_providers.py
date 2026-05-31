@@ -6,7 +6,6 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.brain.ai import providers as providers_module
 from src.brain.ai.providers import (
     SILICONFLOW,
     ProviderConfig,
@@ -14,7 +13,6 @@ from src.brain.ai.providers import (
     resolve_model,
     setup_providers,
 )
-
 
 # ═══════════════════════════════════════════════════════════
 # resolve_model — 供应商解析
@@ -68,9 +66,7 @@ class ResolveModelTest(unittest.TestCase):
     def test_model_with_multiple_slashes(self) -> None:
         """模型名含多个 / （如 siliconflow/deepseek-ai/DeepSeek-V3）。"""
         with patch.dict(os.environ, {"SILICONFLOW_API_KEY": "sk-test"}):
-            model, extra = resolve_model(
-                "siliconflow/deepseek-ai/DeepSeek-V3"
-            )
+            model, _extra = resolve_model("siliconflow/deepseek-ai/DeepSeek-V3")
 
         # 第一个 / 之前是前缀，之后全部是模型名
         self.assertEqual(model, "openai/deepseek-ai/DeepSeek-V3")

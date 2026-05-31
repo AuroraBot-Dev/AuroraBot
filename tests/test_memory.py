@@ -1,20 +1,17 @@
-"""Unit tests for the memory module: MemoryItem, MemoryContext,
-WorkingMemory, EpisodicMemory, and UnifiedMemoryManager."""
+"""memory 内存模块测试。"""
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from src.brain.memory.base import MemoryContext, MemoryItem
-from src.brain.memory.working import WorkingMemory
-from src.brain.memory.episodic import EpisodicMemory
 from src.brain.memory import UnifiedMemoryManager, get_memory_manager
+from src.brain.memory.base import MemoryContext, MemoryItem
+from src.brain.memory.episodic import EpisodicMemory
 from src.brain.memory.semantic import SemanticMemory
-
+from src.brain.memory.working import WorkingMemory
 
 # ═══════════════════════════════════════════════════════════════
 # MemoryItem
@@ -341,9 +338,7 @@ class UnifiedMemoryManagerTest(unittest.TestCase):
             mgr.process_interaction(content="hello world", role="user", user_id="u1")
 
         mock_wm_add.assert_called_once_with(content="hello world", role="user")
-        mock_ep_record.assert_called_once_with(
-            event_type="chat_user", content="hello world", user_id="u1"
-        )
+        mock_ep_record.assert_called_once_with(event_type="chat_user", content="hello world", user_id="u1")
         mock_sem_sched.assert_called_once_with("hello world", "u1")
 
     def test_process_interaction_schedules_semantic_only_for_user(self) -> None:

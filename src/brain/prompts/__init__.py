@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from pathlib import Path
 
 _PROMPTS_DIR = Path(__file__).parent
@@ -27,4 +28,4 @@ def __getattr__(name: str) -> Prompt:
     filepath = _PROMPTS_DIR / f"{name}.md"
     if filepath.is_file():
         return Prompt(filepath)
-    raise AttributeError(f"module 'src.brain.prompts' has no attribute '{name}'")
+    raise AttributeError(f"module 'src.brain.prompts' has no attribute '{name}'")  # noqa: TRY003

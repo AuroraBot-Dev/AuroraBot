@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from src.brain.kernel.base import FileEvent, FileUpdate, NodeState
 from src.brain.kernel.event_bus import FileEventBus
@@ -11,7 +11,7 @@ from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.kernel.base import FileEvent, Node
+    from src.brain.kernel.base import Node
 
 logger = get_logger("Circuit")
 
@@ -63,10 +63,7 @@ class Circuit:
             task = asyncio.create_task(node.run())
             self._node_tasks.append(task)
 
-        logger.info(
-            f"电路已启动: {len(self._nodes)} 个节点, "
-            f"{', '.join(node.name for node in self._nodes)}"
-        )
+        logger.info(f"电路已启动: {len(self._nodes)} 个节点, {', '.join(node.name for node in self._nodes)}")
 
     async def stop(self) -> None:
         """停止电路。
@@ -132,7 +129,7 @@ class Circuit:
                     metadata={"source_node": "circuit_bootstrap"},
                 )
             )
-        logger.info("Heartbeat 初始脉冲已注入")
+        logger.debug("Heartbeat 初始脉冲已注入")
 
     async def apply_update(self, update: FileUpdate, node_id: str = "system") -> None:
         """向电路写入一个文件变更并触发下游事件。
@@ -155,7 +152,7 @@ class Circuit:
             raise RuntimeError("电路未启动，无法写入文件")
         await self._bus.apply_update(update, node_id)
 
-    async def __aenter__(self) -> Circuit:
+    async def __aenter__(self) -> Self:
         await self.start()
         return self
 

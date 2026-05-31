@@ -1,5 +1,6 @@
 # L3缓存，mem0层
-from typing import List
+
+from typing import Any
 
 from src.brain.ai.providers import missing_credentials_reason
 from src.brain.memory.client import create_memory
@@ -16,13 +17,13 @@ class SemanticMemory:
     主要解决：长期事实、用户偏好、通用经验的提炼与向量检索。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # 延迟初始化 mem0 客户端，避免导入时就进行耗时的初始化和连接操作
         self._client = None
-        logger.info("L3 缓存已启动")
+        logger.debug("L3 缓存已启动")
 
     @property
-    def mem0(self):
+    def mem0(self) -> Any:
         if self._client is None:
             self._client = create_memory()
         return self._client
@@ -44,7 +45,7 @@ class SemanticMemory:
         如果包含有价值的长期信息，就会将其转换为向量并存入 ChromaDB。
         """
         if not user_id or not str(user_id).strip():
-            logger.warning(f"提取语义记忆跳过：user_id 为空")
+            logger.warning("提取语义记忆跳过：user_id 为空")
             return False
 
         missing_reason = self._missing_credentials_reason()
@@ -53,23 +54,23 @@ class SemanticMemory:
             return False
 
         try:
-            # mem0 的 add 需要传入特定的 message 格式
             messages = [{"role": "user", "content": text}]
             self.mem0.add(messages, user_id=user_id)
-            logger.info("已成功提取语义记忆")
-            logger.info(f"已尝试从文本中提取语义记忆，User: {user_id}")
-            return True
-        except Exception as e:
-            logger.error(f"提取语义记忆失败: {e}")
+            logger.debug("已成功提取语义记忆")
+            logger.debug("已尝试从文本中提取语义记忆，User: %s", user_id)
+        except Exception:
+            logger.exception("提取语义记忆失败")
             return False
+        else:
+            return True
 
-    def search_facts(self, query: str, user_id: str) -> List[str]:
+    def search_facts(self, query: str, user_id: str) -> list[str]:
         """读策略：语义向量检索 (Semantic Search)
 
         根据当前任务或问题，去向量库中寻找最相关的长期记忆事实。
         """
         if not user_id or not str(user_id).strip():
-            logger.warning(f"搜索语义记忆跳过：user_id 为空")
+            logger.warning("搜索语义记忆跳过：user_id 为空")
             return []
 
         query = (query or "").strip()
@@ -82,17 +83,13 @@ class SemanticMemory:
             return []
 
         try:
-            # 使用 filters 语法按用户隔离记忆
             hits = self.mem0.search(query, filters={"user_id": user_id})
 
-            results = []
+            results: list[str] = []
             if hits and "results" in hits:
-                for hit in hits["results"]:
-                    # 这里你可以根据需要加入 score (相似度得分) 的阈值判断
-                    # 例如: if hit["score"] > 0.3:
-                    results.append(hit["memory"])
-
-            return results
-        except Exception as e:
-            logger.error(f"搜索语义记忆失败: {e}")
+                results.extend(hit["memory"] for hit in hits["results"])
+        except Exception:
+            logger.exception("搜索语义记忆失败")
             return []
+        else:
+            return results

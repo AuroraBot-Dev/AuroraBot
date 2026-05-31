@@ -29,14 +29,14 @@ uv run python bot.py
 
 ## Development Tools
 
-| Command                          | Purpose     |
-| -------------------------------- | ----------- |
-| `uv run pytest`                  | Run tests   |
-| `uv run ruff check src/ tests/`  | Lint code   |
-| `uv run ruff format src/ tests/` | Format code |
-| `uv run pyright src/`            | Type-check  |
+| Command                          | Purpose                                   |
+| -------------------------------- | ----------------------------------------- |
+| `uv run pytest --cov=src`        | Run tests with coverage                   |
+| `uv run ruff check src/ tests/`  | Lint code                                 |
+| `uv run ruff format src/ tests/` | Format code                               |
+| `uv run pyright src/`            | Type-check (`tests/` excluded by default) |
 
-> At minimum, run `pytest` and `ruff check` before submitting a PR to catch obvious regressions.
+> Before submitting a PR, it is recommended to run `uv run pytest --cov=src`, `uv run ruff check src/ tests/`, and `uv run pyright src/`. The CI pipeline runs coverage-enabled `pytest`, `ruff check`, `ruff format --check`, and `pyright src/` to keep style, type checking, and basic regression checks aligned.
 
 ## Contribution Workflow
 
@@ -75,6 +75,8 @@ Push your branch to the remote and open a Pull Request targeting the `dev` branc
 ### 4. After merge, the branch's mission is complete
 
 Once your PR is merged into `dev`, that branch has served its purpose. **Do not reuse it for further feature development.** You can safely delete it:
+
+If the merge lands on `dev` and `CI` passes, the repository automatically creates the next `vX.Y.Z-alpha.N` tag based on the version in `pyproject.toml` and publishes a corresponding Pre-release. In normal day-to-day development, you usually do not need to create `alpha` tags manually anymore.
 
 ```bash
 git branch -d feat/my-feature

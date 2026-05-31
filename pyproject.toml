@@ -15,14 +15,16 @@ dependencies = [
     "chromadb>=1.5.9",
     "websockets<14.0",
     "botocore>=1.43.12",
-    "pytest",
     "tiktoken>=0.13.0",
+    "rich>=15.0.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pyright[nodejs]",
-    "ruff"
+    "ruff",
+    "pytest",
+    "pytest-cov",
 ]
 
 [tool.nonebot]
@@ -45,7 +47,7 @@ testpaths = ["tests"]
 addopts = "-ra"
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.format]
@@ -112,11 +114,11 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
 
-# [tool.pyright]
-# # For Pylance/Pyright configurations, see https://microsoft.github.io/pyright/#/configuration.
-# pythonVersion = "3.12"
-# pythonPlatform = "All"
-# typeCheckingMode = "standard"
+[tool.pyright]
+pythonVersion = "3.12"
+pythonPlatform = "All"
+typeCheckingMode = "standard"
+exclude = ["tests"]
 
 [tool.uv]
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"

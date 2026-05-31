@@ -1,3 +1,5 @@
+"""application_host 应用宿主额外模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -57,7 +59,7 @@ def _make_fake_app(
         on_start=lambda: None,
         on_stop=lambda: None,
         on_tick=on_tick,
-        **{name: handler for name in commands},
+        **dict.fromkeys(commands, handler),
     )
 
 
@@ -301,9 +303,7 @@ class ApplicationHostExtraTest(unittest.TestCase):
                         commands=["set_alarm"],
                     )
                 )
-                clock_cmds = [
-                    c for c in host.list_commands() if c.startswith("im.polaris.clock")
-                ]
+                clock_cmds = [c for c in host.list_commands() if c.startswith("im.polaris.clock")]
                 self.assertGreater(len(clock_cmds), 0)
 
                 await host.replace_apps(
@@ -315,13 +315,9 @@ class ApplicationHostExtraTest(unittest.TestCase):
                         )
                     ]
                 )
-                clock_cmds_after = [
-                    c for c in host.list_commands() if c.startswith("im.polaris.clock")
-                ]
+                clock_cmds_after = [c for c in host.list_commands() if c.startswith("im.polaris.clock")]
                 self.assertEqual(len(clock_cmds_after), 0)
-                diary_cmds_after = [
-                    c for c in host.list_commands() if c.startswith("im.polaris.diary")
-                ]
+                diary_cmds_after = [c for c in host.list_commands() if c.startswith("im.polaris.diary")]
                 self.assertGreater(len(diary_cmds_after), 0)
             finally:
                 await host.stop_all()

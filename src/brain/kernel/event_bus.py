@@ -3,14 +3,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.brain.kernel.base import FileEvent, FileUpdate, NodeState
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from src.brain.kernel.base import Node
 
 logger = get_logger("FileEventBus")
@@ -118,13 +119,9 @@ class FileEventBus:
                     node._ready_event.set()
                     hit_any = True
             except Exception:
-                logger.exception(
-                    f"节点 {node.name}({node.id}) on_event 异常: path={event.path}"
-                )
+                logger.exception(f"节点 {node.name}({node.id}) on_event 异常: path={event.path}")
         if not hit_any:
-            logger.debug(
-                f"无节点匹配事件: path={event.path}, change_type={event.change_type}"
-            )
+            logger.debug(f"无节点匹配事件: path={event.path}, change_type={event.change_type}")
 
     def _write_file(
         self,

@@ -11,6 +11,30 @@ on:
       - "dev"
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Ruff check
+        run: uv run ruff check src/ tests/
+
+      - name: Ruff format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Pyright type check
+        run: uv run pyright src/
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -28,7 +52,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync --locked --dev
+        run: uv sync --locked --group dev
 
-      - name: Test with pytest
-        run: uv run pytest -v
+      - name: Test with pytest and coverage
+        run: uv run pytest -v --cov=src

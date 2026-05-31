@@ -1,31 +1,41 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
-from src.brain.kernel.base import Node
 from src.brain.kernel.circuit import Circuit
-from src.brain.nodes.agents import *
-from src.brain.nodes.routers import *
+from src.brain.nodes.agents import *  # noqa: F403
+from src.brain.nodes.routers import *  # noqa: F403
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from src.brain.kernel.base import Node
     from src.brain.memory import UnifiedMemoryManager
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("NodeFactory")
 
 # 节点注册表 —— 新节点加在这里
-# kernel-α: 仅注册 PolarisAgent，旧节点类暂存于 nodes-beta
 NODE_REGISTRY: dict[str, type[Node]] = {
-    "polaris": PolarisAgent,
+    # 4 节点认知管线（#54 重构）
+    "message_preprocessor": MessagePreprocessor,  # noqa: F405
+    "impulse_gate": ImpulseGate,  # noqa: F405
+    "action_planner": ActionPlanner,  # noqa: F405
+    "command_dispatcher": CommandDispatcher,  # noqa: F405
+    # 旧单体节点（兼容模式，topology.yaml 中 disabled）
+    "polaris": PolarisAgent,  # noqa: F405
 }
 
 # 节点构造时是否需要 host 引用（按 type 判断）
 NODE_NEEDS_HOST: frozenset[str] = frozenset(
     {
-        "polaris",
+        "impulse_gate",
+        "action_planner",
+        "command_dispatcher",
     }
 )
 
@@ -33,7 +43,21 @@ NODE_NEEDS_HOST: frozenset[str] = frozenset(
 NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset()
 
 # 节点构造时是否注入 UnifiedMemoryManager（按 type 判断）
-NODE_NEEDS_MEMORY: frozenset[str] = frozenset()
+NODE_NEEDS_MEMORY: frozenset[str] = frozenset(
+    {
+        "action_planner",
+    }
+)
+
+# 节点构造时是否注入 SharedPipelineState（按 type 判断）
+NODE_NEEDS_PIPELINE_STATE: frozenset[str] = frozenset(
+    {
+        "message_preprocessor",
+        "impulse_gate",
+        "action_planner",
+        "command_dispatcher",
+    }
+)
 
 
 # ── 拓扑配置加载 ──────────────────────────────────
@@ -85,11 +109,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "enabled": bool(entry.get("enabled", True)),
                 "watch": entry.get("watch"),  # None = 不覆盖，沿用类默认值
                 "emit": entry.get("emit"),  # None = 不覆盖，沿用类默认值
-                "config": (
-                    entry.get("config", {})
-                    if isinstance(entry.get("config"), dict)
-                    else {}
-                ),
+                "config": (entry.get("config", {}) if isinstance(entry.get("config"), dict) else {}),
             }
         )
     return normalized
@@ -98,7 +118,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ── 电路构建 ──────────────────────────────────────
 
 
-def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
+def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: C901, PLR0912
     """从 ``topology.yaml`` 读取配置，构造认知拓扑电路。
 
     遍历邻接表条目，逐条实例化节点并注入 ``Circuit``。
@@ -117,6 +137,15 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
     topology = _load_topology_config()
     instances: list[Node] = []
     memory_manager: UnifiedMemoryManager | None = None
+    pipeline_state = None
+
+    # 检查是否有任何管线节点需要 SharedPipelineState
+    needs_pipeline_state = any(e.get("type") in NODE_NEEDS_PIPELINE_STATE for e in topology if e.get("enabled", True))
+    if needs_pipeline_state:
+        from src.brain.nodes.pipeline_state import SharedPipelineState
+
+        pipeline_state = SharedPipelineState()
+        logger.info("SharedPipelineState 已创建")
 
     for entry in topology:
         node_id = entry["id"]
@@ -138,12 +167,17 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
             memory_kw = {}
 
         # 构造 —— 按类型的构造函数签名分发
+        node_ctor = cast("Callable[..., object]", node_cls)
         if node_type in NODE_ACCEPTS_CONFIG:
-            node = node_cls(node_id, **node_config, **memory_kw)
+            node = cast("Node", node_ctor(node_id, **node_config, **memory_kw))
         elif node_type in NODE_NEEDS_HOST:
-            node = node_cls(node_id, host, **memory_kw)
+            node = cast("Node", node_ctor(node_id, host, **memory_kw))
         else:
-            node = node_cls(node_id, **memory_kw)
+            node = cast("Node", node_ctor(node_id, **memory_kw))
+
+        # 注入 SharedPipelineState
+        if node_type in NODE_NEEDS_PIPELINE_STATE and pipeline_state is not None:
+            node._state = pipeline_state  # type: ignore[reportAttributeAccessIssue]
 
         # 覆盖 guards / produces（可选，来自邻接表条目的 watch / emit）
         if entry.get("watch") is not None:
@@ -152,9 +186,7 @@ def build_circuit(host: ApplicationHost) -> Circuit:  # noqa: F821
             node._config_emit = entry["emit"]
 
         instances.append(node)
-        logger.info(
-            f"节点已装配: {node_id} ({node_cls.__name__}): {node._config_watch} -> {node._config_emit}"
-        )
+        logger.info(f"节点已装配: {node_id} ({node_cls.__name__}): {node._config_watch} -> {node._config_emit}")
 
     if not instances:
         logger.warning("电路没有装配任何节点")

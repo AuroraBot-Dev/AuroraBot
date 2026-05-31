@@ -1,3 +1,5 @@
+"""application_host 应用宿主模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -41,14 +43,14 @@ def _make_fake_app(
         encoding="utf-8",
     )
 
-    async def handler(self, **_kwargs: object) -> dict[str, object]:
+    async def handler(self, **_kwargs: object) -> dict[str, object]:  # noqa: ANN001, ARG001
         return {}
 
     attrs = {
-        "manifest_path": lambda self: manifest_path,
-        "on_start": lambda self: None,
-        "on_stop": lambda self: None,
-        "on_tick": lambda self: None,
+        "manifest_path": lambda _self: manifest_path,
+        "on_start": lambda _self: None,
+        "on_stop": lambda _self: None,
+        "on_tick": lambda _self: None,
         command_name: handler,
     }
     app_type = type("FakeApp", (), attrs)
@@ -107,9 +109,7 @@ class ApplicationHostTest(unittest.TestCase):
                 )
                 await host.register(old_app)
                 old_spec = next(
-                    spec
-                    for spec in host.list_command_specs()
-                    if spec.name == "im.polaris.qq.send_qq_message"
+                    spec for spec in host.list_command_specs() if spec.name == "im.polaris.qq.send_qq_message"
                 )
                 self.assertIs(old_spec.handler.__self__, old_app)
 
@@ -122,9 +122,7 @@ class ApplicationHostTest(unittest.TestCase):
 
                 self.assertIs(host.get_app("im.polaris.qq"), new_app)
                 new_spec = next(
-                    spec
-                    for spec in host.list_command_specs()
-                    if spec.name == "im.polaris.qq.send_qq_message"
+                    spec for spec in host.list_command_specs() if spec.name == "im.polaris.qq.send_qq_message"
                 )
                 self.assertIs(new_spec.handler.__self__, new_app)
             finally:

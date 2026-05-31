@@ -1,0 +1,93 @@
+# 统一行尾策略 - 所有文本文件使用 LF
+* text=auto eol=lf
+
+# 源代码文件 - 明确使用 LF
+*.ts text eol=lf
+*.js text eol=lf
+*.tsx text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.less text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 配置文件
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+*.config.js text eol=lf
+*.config.ts text eol=lf
+tsconfig*.json text eol=lf
+package*.json text eol=lf
+vite.config.* text eol=lf
+
+# 二进制文件 - 明确标记为二进制，不进行行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+
+# Unity 资源文件
+*.fbx binary
+*.anim binary
+*.meta text eol=lf
+*.mat text eol=lf
+*.prefab text eol=lf
+*.unity text eol=lf
+*.asset text eol=lf
+*.controller text eol=lf
+
+# 3D 模型和资源
+*.gltf text eol=lf
+*.glb binary
+*.obj text eol=lf
+*.mtl text eol=lf
+
+# 音频文件
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.m4a binary
+*.flac binary
+
+# 视频文件
+*.mp4 binary
+*.mov binary
+*.avi binary
+
+# 压缩文件
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+
+# 可执行文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.apk binary
+
+# 其他二进制文件
+*.pdf binary
+*.doc binary
+*.docx binary

@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 
-def parse_llm_json(raw: str) -> dict[str, Any] | None:
+def parse_llm_json(raw: str) -> dict[str, Any] | None:  # noqa: C901
     """从 LLM 原始输出中提取 JSON 对象。
 
     依次尝试：
@@ -106,7 +106,7 @@ def safe_parse_json_object(content: str) -> dict[str, Any]:
     left = content.find("{")
     right = content.rfind("}")
     if left == -1 or right == -1 or right <= left:
-        raise ValueError("LLM did not return a JSON object")
+        raise ValueError("LLM did not return a JSON object")  # noqa: TRY003
     return json.loads(content[left : right + 1])
 
 

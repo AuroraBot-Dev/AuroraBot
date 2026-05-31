@@ -1,3 +1,5 @@
+"""circuit 循环模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +20,7 @@ from src.brain.kernel.event_bus import FileEventBus
 class _RecordingNode(Node):
     """测试用 Node：记录 execute 调用次数和收到的 events。"""
 
-    _default_guards = ["inbox/pending/event_*.json"]
+    _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
 
     def __init__(self, node_id: str) -> None:
         super().__init__(node_id)
@@ -41,7 +43,7 @@ class _RecordingNode(Node):
 class _FailingNode(Node):
     """测试用 Node：execute 总是抛异常。"""
 
-    _default_guards = ["inbox/pending/event_*.json"]
+    _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
 
     def __init__(self, node_id: str) -> None:
         super().__init__(node_id)
@@ -91,7 +93,11 @@ class FileDescriptorTest(unittest.TestCase):
         self.assertNotEqual(a, b)
 
     def test_hash_set_dedup(self) -> None:
-        s = {FileDescriptor("a.json"), FileDescriptor("a.json"), FileDescriptor("b.json")}
+        s = {
+            FileDescriptor("a.json"),
+            FileDescriptor("a.json"),
+            FileDescriptor("b.json"),
+        }
         self.assertEqual(len(s), 2)
 
 
@@ -221,9 +227,7 @@ class CircuitLifecycleTest(unittest.TestCase):
 
         async def scenario() -> None:
             with self.assertRaises(RuntimeError):
-                circuit.inject_event(
-                    FileEvent(path="inbox/pending/event.json", change_type="write")
-                )
+                circuit.inject_event(FileEvent(path="inbox/pending/event.json", change_type="write"))
 
         asyncio.run(scenario())
 
@@ -335,9 +339,7 @@ class FileEventBusTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         bus = FileEventBus([node])
-        bus.publish(
-            FileEvent(path="inbox/pending/event_msg.json", change_type="write")
-        )
+        bus.publish(FileEvent(path="inbox/pending/event_msg.json", change_type="write"))
 
         async def scenario() -> None:
             dispatch_task = asyncio.create_task(bus.dispatch_forever())

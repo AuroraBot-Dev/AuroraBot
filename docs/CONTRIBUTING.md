@@ -29,14 +29,14 @@ uv run python bot.py
 
 ## 开发工具
 
-| 命令                             | 用途       |
-| -------------------------------- | ---------- |
-| `uv run pytest`                  | 运行测试   |
-| `uv run ruff check src/ tests/`  | 代码检查   |
-| `uv run ruff format src/ tests/` | 代码格式化 |
-| `uv run pyright src/`            | 类型检查   |
+| 命令                             | 用途                            |
+| -------------------------------- | ------------------------------- |
+| `uv run pytest --cov=src`        | 运行测试并统计覆盖率            |
+| `uv run ruff check src/ tests/`  | 代码检查                        |
+| `uv run ruff format src/ tests/` | 代码格式化                      |
+| `uv run pyright src/`            | 类型检查（默认不检查 `tests/`） |
 
-> 建议在提交前至少运行 `pytest` 和 `ruff check`，确保没有明显的回归。
+> 建议在提交 PR 前至少运行 `uv run pytest --cov=src`、`uv run ruff check src/ tests/` 和 `uv run pyright src/`。CI 流水线会执行带覆盖率的 `pytest`、`ruff check`、`ruff format --check` 与 `pyright src/`，确保代码风格一致、类型检查稳定且没有明显回归。
 
 ## 贡献流程
 
@@ -75,6 +75,8 @@ git checkout -b feat/my-feature    # 或 fix/xxx, refact/xxx
 ### 4. PR 合并后，分支使命结束
 
 PR 合并到 `dev` 后，该分支的使命就完成了。**原则上不再使用该分支继续开发新功能。** 你可以放心删除它：
+
+如果这次合并进入了 `dev`，并且 `CI` 检查通过，仓库会自动基于 `pyproject.toml` 中的版本号创建下一个 `vX.Y.Z-alpha.N` 标签，并触发预发布（Pre-release）。也就是说，日常开发阶段通常不需要再手动打 `alpha` tag。
 
 ```bash
 git branch -d feat/my-feature

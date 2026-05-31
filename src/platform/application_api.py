@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.platform.contracts import AppEvent, CommandSpec
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from src.platform.application_host import ApplicationHost
+    from src.platform.contracts import AppEvent, CommandSpec
     from src.platform.manifest import Manifest
 
 

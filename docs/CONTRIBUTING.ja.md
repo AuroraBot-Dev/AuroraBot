@@ -29,14 +29,14 @@ uv run python bot.py
 
 ## 開発ツール
 
-| コマンド                         | 用途               |
-| -------------------------------- | ------------------ |
-| `uv run pytest`                  | テスト実行         |
-| `uv run ruff check src/ tests/`  | コードリント       |
-| `uv run ruff format src/ tests/` | コードフォーマット |
-| `uv run pyright src/`            | 型チェック         |
+| コマンド                         | 用途                                   |
+| -------------------------------- | -------------------------------------- |
+| `uv run pytest --cov=src`        | カバレッジ付きでテスト実行             |
+| `uv run ruff check src/ tests/`  | コードリント                           |
+| `uv run ruff format src/ tests/` | コードフォーマット                     |
+| `uv run pyright src/`            | 型チェック（既定では `tests/` を除外） |
 
-> PR を提出する前に、少なくとも `pytest` と `ruff check` を実行し、明らかなリグレッションがないことを確認することをお勧めします。
+> PR を提出する前に、`uv run pytest --cov=src`、`uv run ruff check src/ tests/`、`uv run pyright src/` を実行することを推奨します。CI パイプラインでも、カバレッジ付きの `pytest`、`ruff check`、`ruff format --check`、`pyright src/` が実行され、コードスタイル・型チェック・基本的な回帰確認がそろうようにしています。
 
 ## コントリビューションフロー
 
@@ -75,6 +75,8 @@ git checkout -b feat/my-feature    # または fix/xxx, refact/xxx
 ### 4. PR マージ後、ブランチの使命は終了
 
 PR が `dev` にマージされたら、そのブランチの役割は完了です。**原則として、そのブランチを新機能の開発に再利用しないでください。** 安全に削除できます：
+
+このマージ先が `dev` で、かつ `CI` が成功した場合、リポジトリは `pyproject.toml` のバージョン番号をもとに次の `vX.Y.Z-alpha.N` タグを自動作成し、対応する Pre-release を公開します。日常的な開発では、通常 `alpha` tag を手動で打つ必要はありません。
 
 ```bash
 git branch -d feat/my-feature

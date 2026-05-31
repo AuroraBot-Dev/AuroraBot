@@ -1,22 +1,23 @@
+"""gateway 网关模块测试。"""
+
 from __future__ import annotations
 
 import asyncio
 import unittest
-from typing import List, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import litellm.exceptions
 
 from src.brain.ai.gateway import (
+    ROLE_FAST,
+    ROLE_MULTIMODAL,
+    ROLE_QUALITY,
     CancelledWithPartialResponse,
     GatewayError,
     ModelGateway,
-    ROLE_FAST,
-    ROLE_QUALITY,
-    ROLE_MULTIMODAL,
 )
 
-_MESSAGES: List[Dict[str, str]] = [
+_MESSAGES: list[dict[str, str]] = [
     {"role": "system", "content": "你是一个助手。"},
     {"role": "user", "content": "你好"},
 ]
@@ -201,7 +202,7 @@ class GatewayExceptionConversionTest(unittest.TestCase):
     _MOCK_CHUNK.usage.prompt_tokens = 10
     _MOCK_CHUNK.usage.completion_tokens = 5
 
-    def _make_stream(self, exc: Exception) -> AsyncMock:
+    def _make_stream(self, exc: Exception) -> AsyncMock:  # noqa: ARG002
         """创建 mock 流：初始请求成功，但迭代 chunk 时抛出异常。"""
         mock_stream = AsyncMock()
         mock_stream.__aiter__.return_value = [self._MOCK_CHUNK]
@@ -374,15 +375,9 @@ class CostTrackerTest(unittest.TestCase):
         tracker = CostTracker()
 
         async def scenario() -> None:
-            await tracker.add(
-                {"role": "fast", "model": "m1", "type": "completion", "cost": 0.01}
-            )
-            await tracker.add(
-                {"role": "fast", "model": "m1", "type": "completion", "cost": 0.02}
-            )
-            await tracker.add(
-                {"role": "quality", "model": "m2", "type": "completion", "cost": 0.10}
-            )
+            await tracker.add({"role": "fast", "model": "m1", "type": "completion", "cost": 0.01})
+            await tracker.add({"role": "fast", "model": "m1", "type": "completion", "cost": 0.02})
+            await tracker.add({"role": "quality", "model": "m2", "type": "completion", "cost": 0.10})
 
         asyncio.run(scenario())
 

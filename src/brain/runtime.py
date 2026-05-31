@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.brain.kernel.circuit import Circuit
 from src.brain.kernel.node_factory import build_circuit
 from src.brain.nodes import run_event_bridge
 from src.config import Config
 from src.platform.app_config import app_startup, enabled_app_names, load_apps_config
 from src.platform.app_discovery import discover_apps, instantiate_app
-from src.platform.application_host import ApplicationHost
 from src.platform.contracts import CommandSpec
 from src.platform.loop import run_app_loop
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from src.brain.kernel.circuit import Circuit
+    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Runtime")
 
@@ -22,7 +25,7 @@ _BUILTIN_CONSOLE_SEND_MESSAGE = "im.polaris.console.send_message"
 
 
 async def _console_print(*, text: str) -> None:
-    print("\nBot: " + text + "\n")
+    logger.info(text)
 
 
 def _register_builtin_commands(host: ApplicationHost) -> None:
@@ -34,9 +37,7 @@ def _register_builtin_commands(host: ApplicationHost) -> None:
             description="发送消息到本地控制台",
             parameters_schema={
                 "type": "object",
-                "properties": {
-                    "text": {"type": "string", "description": "要发送的消息文本"}
-                },
+                "properties": {"text": {"type": "string", "description": "要发送的消息文本"}},
                 "required": ["text"],
             },
             returns_schema={"type": "object", "properties": {}},
@@ -62,7 +63,7 @@ async def register_selected_apps(
     discovered = discover_apps()
     for name in names:
         if name not in discovered:
-            raise KeyError(f"Unknown application: {name}")
+            raise KeyError(f"Unknown application: {name}")  # noqa: TRY003
         await host.register(instantiate_app(name, app_startup(apps_config, name)))
 
 
@@ -70,6 +71,14 @@ async def register_enabled_apps(host: ApplicationHost) -> dict[str, dict[str, An
     Config.ensure_dirs()
     apps_config = load_apps_config()
     await register_selected_apps(host, enabled_app_names(apps_config), apps_config)
+    logger.info(
+        "已注册应用:\n%s",
+        json.dumps(
+            {"apps": host.list_apps()},
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
     return apps_config
 
 
@@ -82,9 +91,7 @@ async def start_runtime(host: ApplicationHost) -> RuntimeState:
 async def start_runtime_components(state: RuntimeState) -> RuntimeState:
     _register_builtin_commands(state.host)
     if Config.RUN_MODE in ["app", "application", "dev", "prod"]:
-        state.app_task = asyncio.create_task(
-            run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL)
-        )
+        state.app_task = asyncio.create_task(run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL))
 
     if Config.RUN_MODE in ["agent", "core", "dev", "prod"]:
         state.circuit = build_circuit(state.host)
@@ -109,9 +116,7 @@ async def restart_runtime_components(
 ) -> RuntimeState:
     _register_builtin_commands(state.host)
     if start_app_loop:
-        state.app_task = asyncio.create_task(
-            run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL)
-        )
+        state.app_task = asyncio.create_task(run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL))
     else:
         state.app_task = None
 

@@ -1,16 +1,21 @@
 from __future__ import annotations
-from collections import deque
-from collections.abc import Iterable
+
 import inspect
-from typing import Any
+import json
+from collections import deque
+from typing import TYPE_CHECKING, Any, cast
 
 from src.platform.application_api import PlatformAPI
-from src.platform.application_protocol import ApplicationProtocol
 from src.platform.contracts import AppEvent, CommandSpec
-from src.platform.manifest import CommandDecl, Manifest
+from src.platform.manifest import Manifest
 from src.utils.log_utils import get_logger
 
-logger = get_logger("ApplicationHost")
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from src.platform.application_protocol import ApplicationProtocol
+
+logger = get_logger("AppHost")
 
 
 class ApplicationHost:
@@ -19,18 +24,21 @@ class ApplicationHost:
         self._manifests: dict[str, Manifest] = {}
         self._commands: dict[str, CommandSpec] = {}
         self._events: deque[AppEvent] = deque()
+        self._batching: bool = False
 
     async def register(self, app: ApplicationProtocol) -> None:
         manifest = Manifest.load(app.manifest_path())
         if not manifest.package:
-            raise ValueError(f"需要在manifest中指定package字段: {app.manifest_path()}")
+            raise ValueError(  # noqa: TRY003
+                f"需要在manifest中指定package字段: {app.manifest_path()}"
+            )
         if manifest.package in self._apps:
             logger.warning(f"应用 {manifest.package} 已注册")
             return
         for command_decl in manifest.commands:
             handler = getattr(app, command_decl.name, None)
             if handler is None:
-                raise AttributeError(
+                raise AttributeError(  # noqa: TRY003
                     f"应用 {manifest.package} 缺少 {command_decl.name} 命令实现"
                 )
             self.register_command(
@@ -50,7 +58,7 @@ class ApplicationHost:
         await _maybe_await(app.on_start())
         self._apps[manifest.package] = app
         self._manifests[manifest.package] = manifest
-        logger.info(f"已注册应用: {manifest.package}")
+        logger.debug("已注册应用: package=%s", manifest.package)
 
     def register_command(self, spec: CommandSpec) -> None:
         if not spec.name.strip():
@@ -59,7 +67,7 @@ class ApplicationHost:
 
     def emit_event(self, event: AppEvent) -> None:
         self._events.append(event)
-        logger.info(f"已推送应用事件: {event.type}")
+        logger.debug("已推送应用事件: %s", event.type)
 
     # 从事件队列中提取事件
     def drain_events(self, limit: int | None = None) -> list[AppEvent]:
@@ -93,8 +101,8 @@ class ApplicationHost:
     async def invoke_command(self, command_name: str, **kwargs: Any) -> Any:
         spec = self._commands.get(command_name)
         if spec is None:
-            raise KeyError(f"Unknown command: {command_name}")
-        logger.info(f"执行命令: {command_name}")
+            raise KeyError(f"Unknown command: {command_name}")  # noqa: TRY003
+        logger.debug("执行命令: %s", command_name)
         return await _maybe_await(spec.handler(**kwargs))
 
     async def tick(self) -> None:
@@ -107,8 +115,20 @@ class ApplicationHost:
 
     async def replace_apps(self, apps: Iterable[ApplicationProtocol]) -> None:
         await self.stop_all(clear_events=False)
-        for app in apps:
-            await self.register(app)
+        self._batching = True
+        try:
+            for app in apps:
+                await self.register(app)
+        finally:
+            self._batching = False
+        logger.info(
+            "已注册应用:\n%s",
+            json.dumps(
+                {"apps": list(self._apps.keys())},
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
 
     async def stop_all(self, *, clear_events: bool = True) -> None:
         for package, app in reversed(list(self._apps.items())):
@@ -130,4 +150,27 @@ async def _maybe_await(result: Any) -> Any:
     return result
 
 
-app_host = ApplicationHost()
+# ═══════════════════════════════════════════════════════════
+# 模块单例（延迟初始化）
+# ═══════════════════════════════════════════════════════════
+
+_app_host_singleton: ApplicationHost | None = None
+
+
+def get_app_host() -> ApplicationHost:
+    """获取应用宿主单例，首次调用时延迟初始化。"""
+    global _app_host_singleton  # noqa: PLW0603
+    if _app_host_singleton is None:
+        _app_host_singleton = ApplicationHost()
+    return _app_host_singleton
+
+
+class _AppHostProxy:
+    """兼容直接属性访问的懒加载代理。"""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_app_host(), name)
+
+
+# 全局单例代理，供其它模块直接导入使用
+app_host: ApplicationHost = cast("ApplicationHost", _AppHostProxy())

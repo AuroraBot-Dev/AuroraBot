@@ -18,6 +18,7 @@
 
 <p align="center">
   <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-リポジトリ-black?logo=github" alt="GitHub" /></a>
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-ドキュメント-blue?logo=vitepress" alt="Docs" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License" /></a>
 </p>
@@ -142,6 +143,18 @@ AuroraBot は多くの優れたオープンソースプロジェクトの上に�
 ## ライセンス
 
 本プロジェクトは [Apache License 2.0](./LICENSE) の下でオープンソース公開されています。
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=AuroraBot-Dev%2FAuroraBot&type=date&logscale=&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&theme=dark&logscale&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&logscale&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&logscale&legend=bottom-right" />
+ </picture>
+</a>
 
 ---
 

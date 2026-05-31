@@ -1,18 +1,19 @@
 from __future__ import annotations
-from abc import abstractmethod
+
 import asyncio
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from fnmatch import fnmatch
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
 
 if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
     from src.brain.kernel.event_bus import FileEventBus
     from src.brain.memory import UnifiedMemoryManager
+    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("NodeBase")
 
@@ -141,8 +142,8 @@ class Node:
     """
 
     # 子类覆写为静态默认值（拓扑配置通过 _config_watch / _config_emit 动态覆盖）
-    _default_guards: list[str] = []
-    _default_produces: list[str] = []
+    _default_guards: list[str] = []  # noqa: RUF012
+    _default_produces: list[str] = []  # noqa: RUF012
 
     def __init__(self, node_id: str) -> None:
         self.id = node_id
@@ -169,11 +170,7 @@ class Node:
         优先使用拓扑配置的 :attr:`_config_watch`，
         否则回退到子类的 :attr:`_default_guards`。
         """
-        patterns = (
-            self._config_watch
-            if self._config_watch is not None
-            else self._default_guards
-        )
+        patterns = self._config_watch if self._config_watch is not None else self._default_guards
         return [FilePattern(p) for p in patterns]
 
     @property
@@ -183,11 +180,7 @@ class Node:
         优先使用拓扑配置的 :attr:`_config_emit`，
         否则回退到子类的 :attr:`_default_produces`。
         """
-        paths = (
-            self._config_emit
-            if self._config_emit is not None
-            else self._default_produces
-        )
+        paths = self._config_emit if self._config_emit is not None else self._default_produces
         return [FileDescriptor(p) for p in paths]
 
     def on_event(self, event: FileEvent) -> bool:
@@ -263,9 +256,7 @@ class Node:
                     try:
                         await self._bus.apply_update(update, self.id)
                     except Exception:
-                        logger.exception(
-                            f"节点 {self.name}({self.id}) 写文件异常: {update.descriptor.path}"
-                        )
+                        logger.exception(f"节点 {self.name}({self.id}) 写文件异常: {update.descriptor.path}")
 
             self.on_complete()
 
@@ -290,10 +281,10 @@ class Agent(Node):
     def __init__(
         self,
         node_id: str,
-        host: ApplicationHost | None = None,  # noqa: F821
+        host: ApplicationHost | None = None,
         *,
         system_prompt: str = "",
-        memory: UnifiedMemoryManager | None = None,  # noqa: F821
+        memory: UnifiedMemoryManager | None = None,
     ) -> None:
         super().__init__(node_id)
         self._host = host
@@ -306,19 +297,19 @@ class Agent(Node):
         return "agent"
 
     @property
-    def host(self) -> ApplicationHost | None:  # noqa: F821
+    def host(self) -> ApplicationHost | None:
         return self._host
 
     @host.setter
-    def host(self, value: ApplicationHost | None) -> None:  # noqa: F821
+    def host(self, value: ApplicationHost | None) -> None:
         self._host = value
 
     @property
-    def memory(self) -> UnifiedMemoryManager | None:  # noqa: F821
+    def memory(self) -> UnifiedMemoryManager | None:
         return self._memory
 
     @memory.setter
-    def memory(self, value: UnifiedMemoryManager | None) -> None:  # noqa: F821
+    def memory(self, value: UnifiedMemoryManager | None) -> None:
         self._memory = value
 
     @property
@@ -410,9 +401,9 @@ class Router(Node):
     def __init__(
         self,
         node_id: str,
-        host: ApplicationHost | None = None,  # noqa: F821
+        host: ApplicationHost | None = None,
         *,
-        memory: UnifiedMemoryManager | None = None,  # noqa: F821
+        memory: UnifiedMemoryManager | None = None,
     ) -> None:
         super().__init__(node_id)
         self._host = host
@@ -423,15 +414,15 @@ class Router(Node):
         return "router"
 
     @property
-    def host(self) -> ApplicationHost | None:  # noqa: F821
+    def host(self) -> ApplicationHost | None:
         return self._host
 
     @property
-    def memory(self) -> UnifiedMemoryManager | None:  # noqa: F821
+    def memory(self) -> UnifiedMemoryManager | None:
         return self._memory
 
     @memory.setter
-    def memory(self, value: UnifiedMemoryManager | None) -> None:  # noqa: F821
+    def memory(self, value: UnifiedMemoryManager | None) -> None:
         self._memory = value
 
     def on_event(self, event: FileEvent) -> bool:

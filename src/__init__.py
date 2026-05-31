@@ -2,7 +2,7 @@ try:
     import nonebot
 
     nonebot.get_driver()
-except Exception:
+except Exception:  # noqa: BLE001
     pass
 else:
-    from . import main
+    from . import main  # noqa: F401

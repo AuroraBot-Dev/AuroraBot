@@ -11,10 +11,47 @@
 #   config   — 节点类特定参数（可选）
 
 nodes:
-  # ── kernel-α: PolarisAgent（XiaoGuang-Bot 移植） ──
-  # 单体节点，内部处理：消息防抖 → 脉冲门控 → LLM 回复 → QQ 发送
-  # 后台运行日记定时调度器
+  # ═══════════════════════════════════════════════════
+  # 4 节点认知管线（#54 重构）
+  # 外部事件 → MessagePreprocessor → ImpulseGate → ActionPlanner → CommandDispatcher
+  # ═══════════════════════════════════════════════════
+
+  # Step 1: 事件收束 & 消息防抖
+  - id: message_preprocessor
+    type: message_preprocessor
+    watch:
+      - "inbox/pending/event_*.json"
+    emit:
+      - "pipeline/message_queue/*.json"
+
+  # Step 2: LLM 脉冲门控（快速模型）
+  - id: impulse_gate
+    type: impulse_gate
+    watch:
+      - "pipeline/message_queue/*.json"
+    emit:
+      - "pipeline/gate_pass/*.json"
+      - "pipeline/gate_skip/*.json"
+
+  # Step 3: LLM 动作规划（质量模型）
+  - id: action_planner
+    type: action_planner
+    watch:
+      - "pipeline/gate_pass/*.json"
+    emit:
+      - "pipeline/action_queue/*.json"
+
+  # Step 4: 命令派发 & 历史/记忆写入
+  - id: command_dispatcher
+    type: command_dispatcher
+    watch:
+      - "pipeline/action_queue/*.json"
+
+  # ═══════════════════════════════════════════════════
+  # 旧单体节点（保留为禁用兼容模式）
+  # ═══════════════════════════════════════════════════
   - id: polaris
     type: polaris
+    enabled: false
     watch:
       - "inbox/pending/event_*.json"
