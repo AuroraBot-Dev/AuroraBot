@@ -1,8 +1,14 @@
 """MessagePreprocessor —— 事件文件读取 → 格式化 → 防抖合并 → 产出 message_queue。
 
 纯机械 Router 节点，零 LLM 调用。守护 inbox 中所有 event_*.json 文件，
-将事件统一格式化为自然语言文本，按会话分组并入防抖队列，
-防抖结束后产出 ``pipeline/message_queue/*.json`` 供下游 ImpulseGate 消费。
+将**所有事件一视同仁**地格式化为自然语言文本，按会话分组并入防抖队列，
+防抖结束后产出 ``pipeline/message_queue/*.json`` 供 Internalizer 消费。
+
+Kernel-gamma 变更：
+- 移除 SharedPipelineState 依赖——防抖和版本管理自包含。
+- 移除 "用户消息 vs 系统事件" 区分——一切事件走同一条路径。
+- 移除 skip_gate / recovery_note——门控现在是 Pool A 的思考过程。
+- 产出文件使用标准信封格式。
 """
 
 from __future__ import annotations
@@ -10,29 +16,30 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
+from collections import defaultdict, deque
 from typing import TYPE_CHECKING, Any
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate, Router
-from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
+from src.brain.kernel.state_store import kernel_data_dir, move_to_done
 from src.utils.log_utils import get_logger
+from src.utils.time_utils import now_text
 
 if TYPE_CHECKING:
-    from src.brain.nodes.pipeline_state import SharedPipelineState
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("MessagePreprocessor")
 
 REPLY_DEBOUNCE_SECONDS = 2.0
+RECENT_MESSAGE_LIMIT = 6
 
 
 class MessagePreprocessor(Router):
     """事件收束 & 消息防抖节点。
 
-    守护 ``inbox/pending/event_*.json``，读取后格式化为自然语言文本，
-    按会话分组并入防抖队列。防抖结束后将合并文本产出为
+    守护 ``inbox/pending/event_*.json``。所有事件（消息、系统触发、错误恢复）
+    一视同仁：格式化为自然语言文本 → 按会话防抖合并 → 产出标准信封的
     ``pipeline/message_queue/msg_*.json``。
-
-    系统事件（非 message.received）标记 ``skip_gate: true`` 以跳过门控。
     """
 
     _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
@@ -42,22 +49,22 @@ class MessagePreprocessor(Router):
         self,
         node_id: str,
         host: "ApplicationHost | None" = None,
-        *,
-        state: "SharedPipelineState | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
-        self._state = state
+
+        # ── 自包含状态（不与其他节点共享） ──
+        self._session_versions: dict[str, int] = {}
+        self._pending_inputs: dict[str, list[dict[str, Any]]] = {}
+        self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(deque)
+        self._private_recent: dict[str, deque[tuple[float, str]]] = defaultdict(deque)
 
     async def execute(self) -> list[FileUpdate]:
         pending_dir = kernel_data_dir / "inbox" / "pending"
         if not pending_dir.exists():
             return []
 
-        event_files = sorted(
-            pending_dir.glob("event_*.json"),
-            key=lambda p: p.name,
-        )
+        event_files = sorted(pending_dir.glob("event_*.json"), key=lambda p: p.name)
         if not event_files:
             return []
 
@@ -77,16 +84,12 @@ class MessagePreprocessor(Router):
 
             move_to_done(event_file, done_dir)
 
-            event_type = str(data.get("type", ""))
             input_text = self._format_event_as_text(data)
-
             if not input_text:
                 continue
 
-            if event_type == "message.received":
-                self._enqueue_message(data, input_text)
-            else:
-                self._enqueue_system_event(data, event_type, input_text)
+            # 所有事件走同一条路径——不再区分 message / system
+            self._enqueue(data, input_text)
 
         return []
 
@@ -112,36 +115,43 @@ class MessagePreprocessor(Router):
                 return f"{timestamp} 的时候, {user_id} 在群聊 {group_id} 中说: {text}"
             return f"{timestamp} 的时候, {user_id} 在与你的私聊中说: {text}"
 
-        parts = [f"[系统事件] {timestamp} {event_type}"]
+        parts = [f"{timestamp}，发生了一个事件：{event_type}"]
         if summary:
-            parts.append(f"摘要: {summary}")
+            parts.append(summary)
         if payload:
-            parts.append(f"详情: {json.dumps(payload, ensure_ascii=False)}")
+            parts.append(json.dumps(payload, ensure_ascii=False))
         return "\n".join(parts)
 
     # ═══════════════════════════════════════════════════
-    # 消息入队
+    # 统一入队（所有事件类型走同一路径）
     # ═══════════════════════════════════════════════════
 
-    def _enqueue_message(self, data: dict[str, Any], input_text: str) -> None:
-        if self._state is None:
-            logger.warning("SharedPipelineState 未注入，无法处理消息")
-            return
-
+    def _enqueue(self, data: dict[str, Any], input_text: str) -> None:
         payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
-        user_id = str(payload.get("user_id", ""))
+        event_type = str(data.get("type", ""))
+
+        user_id = str(payload.get("user_id", "system"))
         session_id = str(payload.get("session_id", ""))
         is_group = bool(payload.get("is_group", False))
         group_id = str(payload.get("group_id", "")) if is_group else None
-        session_key = self._state.make_session_key(user_id, is_group, group_id)
+        session_key = str(
+            payload.get("session_key")
+            or self._make_session_key(user_id, is_group, group_id)
+        )
 
-        logger.debug("收到消息 session=%s user=%s text=%s", session_key, user_id, input_text)
+        # 会话内去重：系统事件的 session_key 来自 payload
+        if event_type != "message.received" and "session_key" not in (payload or {}):
+            session_key = f"system:{event_type}:{uuid.uuid4().hex[:8]}"
 
-        scene_name = "群聊" if is_group else "私聊"
+        logger.debug("事件入队 session=%s type=%s", session_key, event_type)
+
+        # 更新滑动窗口
         if is_group:
-            self._state.append_recent(self._state.get_group_recent(int(group_id or 0)), input_text)
-        else:
-            self._state.append_recent(self._state.get_private_recent(user_id), input_text)
+            self._append_recent(self._group_recent[int(group_id or 0)], input_text)
+        elif user_id != "system":
+            self._append_recent(self._private_recent[user_id], input_text)
+
+        scene_name = "群聊" if is_group else ("私聊" if user_id != "system" else "系统")
 
         entry = {
             "user_id": user_id,
@@ -152,108 +162,98 @@ class MessagePreprocessor(Router):
             "group_id": group_id,
             "scene_name": scene_name,
         }
-        version = self._state.enqueue_inputs(session_key, [entry])
+
+        self._pending_inputs.setdefault(session_key, []).append(entry)
+        version = self._session_versions.get(session_key, 0) + 1
+        self._session_versions[session_key] = version
+
         asyncio.create_task(  # noqa: RUF006
-            self._debounce_and_produce(session_key, version, skip_gate=False)
+            self._debounce_and_produce(session_key, version)
         )
 
     # ═══════════════════════════════════════════════════
-    # 系统事件入队（跳过门控）
+    # 防抖 → 产出 message_queue 文件（标准信封）
     # ═══════════════════════════════════════════════════
 
-    def _enqueue_system_event(self, data: dict[str, Any], event_type: str, input_text: str) -> None:
-        if self._state is None:
-            logger.warning("SharedPipelineState 未注入，无法处理系统事件")
-            return
-
-        payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
-        session_key = str(payload.get("session_key", f"system:{event_type}"))
-        user_id = str(payload.get("user_id", "system"))
-        session_id = str(payload.get("session_id", ""))
-        is_group = bool(payload.get("is_group", False))
-        group_id = str(payload.get("group_id", "")) if is_group else None
-
-        recovery_note = ""
-        if event_type.startswith("agent.reply_"):
-            recovery_note = "你上一轮的输出不是有效 JSON。现在重新输出，必须只给 JSON 对象。"
-
-        entry = {
-            "user_id": user_id,
-            "session_key": session_key,
-            "session_id": session_id,
-            "input_text": input_text,
-            "is_group": is_group,
-            "group_id": group_id,
-            "scene_name": "系统",
-            "recovery_note": recovery_note,
-        }
-        version = self._state.enqueue_inputs(session_key, [entry])
-        asyncio.create_task(  # noqa: RUF006
-            self._debounce_and_produce(session_key, version, skip_gate=True)
-        )
-
-    # ═══════════════════════════════════════════════════
-    # 防抖 → 产出 message_queue 文件
-    # ═══════════════════════════════════════════════════
-
-    async def _debounce_and_produce(
-        self,
-        session_key: str,
-        version: int,
-        *,
-        skip_gate: bool = False,
-    ) -> None:
+    async def _debounce_and_produce(self, session_key: str, version: int) -> None:
         await asyncio.sleep(REPLY_DEBOUNCE_SECONDS)
 
-        if self._state is None:
+        if self._session_versions.get(session_key) != version:
             return
 
-        if not self._state.is_version_current(session_key, version):
-            return
-
-        entries = self._state.pop_pending_inputs(session_key)
+        entries = self._pending_inputs.pop(session_key, [])
         if not entries:
             return
 
         merged_input = "\n".join(e["input_text"] for e in entries)
         first = entries[0]
-        user_id = first["user_id"]
-        session_id = first["session_id"]
-        is_group = first["is_group"]
-        group_id = first["group_id"]
-        scene_name = first["scene_name"]
-        recovery_note = first.get("recovery_note", "")
 
         logger.debug("防抖完成 session=%s 合并 %d 条 → message_queue", session_key, len(entries))
 
         recent = (
-            self._state.get_group_recent(int(group_id or 0)) if is_group else self._state.get_private_recent(user_id)
+            self._group_recent[int(first["group_id"] or 0)]
+            if first["is_group"]
+            else self._private_recent[first["user_id"]]
         )
-        recent_lines = self._state.get_recent_lines(recent)
+        recent_lines = self._get_recent_lines(recent)
 
-        payload: dict[str, Any] = {
-            "user_id": user_id,
-            "session_key": session_key,
-            "session_id": session_id,
-            "merged_input": merged_input,
-            "is_group": is_group,
-            "group_id": group_id,
-            "scene_name": scene_name,
-            "version": version,
-            "skip_gate": skip_gate,
-            "recent_lines": recent_lines,
+        msg_id = f"msg_{uuid.uuid4().hex[:12]}"
+        trace_id = f"trace_{uuid.uuid4().hex[:12]}"
+        relative_path = f"pipeline/message_queue/{msg_id}.json"
+
+        content = {
+            "envelope": {
+                "id": msg_id,
+                "trace_id": trace_id,
+                "timestamp": now_text(),
+                "source_node": self.id,
+                "session_key": session_key,
+                "session_version": version,
+            },
+            "payload": {
+                "user_id": first["user_id"],
+                "session_id": first["session_id"],
+                "merged_input": merged_input,
+                "is_group": first["is_group"],
+                "group_id": first["group_id"],
+                "scene_name": first["scene_name"],
+                "recent_lines": recent_lines,
+            },
         }
-        if recovery_note:
-            payload["recovery_note"] = recovery_note
 
-        msg_id = next_record_id("msg")
-        relative_path = f"pipeline/message_queue/msg_{msg_id}.json"
         update = FileUpdate(
             descriptor=FileDescriptor(path=relative_path, schema="json"),
-            content=payload,
+            content=content,
         )
 
         if self._bus is not None:
             await self._bus.apply_update(update, self.id)
         else:
             logger.warning("事件总线未注入，无法产出 message_queue")
+
+    # ═══════════════════════════════════════════════════
+    # 滑动窗口工具
+    # ═══════════════════════════════════════════════════
+
+    @staticmethod
+    def _recent_window_seconds() -> float:
+        return float(RECENT_MESSAGE_LIMIT) * 60.0
+
+    def _prune_recent(self, recent: deque[tuple[float, str]], now_ts: float | None = None) -> None:
+        now = time.time() if now_ts is None else now_ts
+        cutoff = now - self._recent_window_seconds()
+        while recent and recent[0][0] < cutoff:
+            recent.popleft()
+
+    def _append_recent(self, recent: deque[tuple[float, str]], msg: str) -> None:
+        now_ts = time.time()
+        self._prune_recent(recent, now_ts)
+        recent.append((now_ts, msg))
+
+    def _get_recent_lines(self, recent: deque[tuple[float, str]]) -> list[str]:
+        self._prune_recent(recent)
+        return [line for _, line in recent]
+
+    @staticmethod
+    def _make_session_key(user_id: str, is_group: bool, group_id: str | None) -> str:  # noqa: FBT001
+        return f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"

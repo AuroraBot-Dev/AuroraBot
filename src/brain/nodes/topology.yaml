@@ -12,11 +12,11 @@
 
 nodes:
   # ═══════════════════════════════════════════════════
-  # 4 节点认知管线（#54 重构）
-  # 外部事件 → MessagePreprocessor → ImpulseGate → ActionPlanner → CommandDispatcher
+  # Kernel-γ 认知管线：两池 + 两转义者
+  # Event → Preprocess → Internalizer → Externalizer → Dispatch
   # ═══════════════════════════════════════════════════
 
-  # Step 1: 事件收束 & 消息防抖
+  # Pool B: 事件收束 & 消息防抖
   - id: message_preprocessor
     type: message_preprocessor
     watch:
@@ -24,32 +24,44 @@ nodes:
     emit:
       - "pipeline/message_queue/*.json"
 
-  # Step 2: LLM 脉冲门控（快速模型）
-  - id: impulse_gate
-    type: impulse_gate
+  # 转义者 B→A: 结构化事件 → 第一人称体验
+  - id: internalizer
+    type: internalizer
     watch:
       - "pipeline/message_queue/*.json"
     emit:
-      - "pipeline/gate_pass/*.json"
-      - "pipeline/gate_skip/*.json"
+      - "pipeline/internalized/*.json"
 
-  # Step 3: LLM 动作规划（质量模型）
-  - id: action_planner
-    type: action_planner
+  # 转义者 A→B: 第一人称决定 → JSON 动作
+  - id: externalizer
+    type: externalizer
     watch:
-      - "pipeline/gate_pass/*.json"
+      - "pipeline/internalized/*.json"
     emit:
       - "pipeline/action_queue/*.json"
 
-  # Step 4: 命令派发 & 历史/记忆写入
+  # Pool B: 命令派发
   - id: command_dispatcher
     type: command_dispatcher
     watch:
       - "pipeline/action_queue/*.json"
 
   # ═══════════════════════════════════════════════════
-  # 旧单体节点（保留为禁用兼容模式）
+  # Kernel-β 旧节点（disabled——门控和规划已吸收到 Pool A）
   # ═══════════════════════════════════════════════════
+  - id: impulse_gate
+    type: impulse_gate
+    enabled: false
+    watch:
+      - "pipeline/message_queue/*.json"
+
+  - id: action_planner
+    type: action_planner
+    enabled: false
+    watch:
+      - "pipeline/gate_pass/*.json"
+
+  # 旧单体节点（保留为禁用兼容模式）
   - id: polaris
     type: polaris
     enabled: false
