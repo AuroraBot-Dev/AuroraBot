@@ -33,8 +33,8 @@ class Config:
 
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-    LLM_GATEWAY_ENABLE_LOGGING_QUERIES: bool = _get_bool("LLM_GATEWAY_ENABLE_LOGGING_QUERIES", False)
-    LLM_GATEWAY_ENABLE_LOGGING_RESPONSES: bool = _get_bool("LLM_GATEWAY_ENABLE_LOGGING_RESPONSES", False)
+    LLM_GATEWAY_ENABLE_LOGGING_QUERIES: bool = _get_bool("LLM_GATEWAY_ENABLE_LOGGING_QUERIES", False)  # noqa: FBT003
+    LLM_GATEWAY_ENABLE_LOGGING_RESPONSES: bool = _get_bool("LLM_GATEWAY_ENABLE_LOGGING_RESPONSES", False)  # noqa: FBT003
 
     # 核心配置
     RUN_MODE: str = os.getenv("RUN_MODE", "prod")
