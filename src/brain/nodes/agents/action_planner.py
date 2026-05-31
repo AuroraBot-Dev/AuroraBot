@@ -20,7 +20,6 @@ from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.nodes.pipeline_state import SharedPipelineState
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("ActionPlanner")
@@ -45,12 +44,10 @@ class ActionPlanner(Agent):
         self,
         node_id: str,
         host: "ApplicationHost | None" = None,
-        *,
-        state: "SharedPipelineState | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
-        self._state = state
+        self._state: Any = None  # Kernel-beta 遗留，gamma 中已移除 SharedPipelineState
 
     async def execute(self) -> list[FileUpdate]:
         gate_dir = kernel_data_dir / "pipeline" / "gate_pass"

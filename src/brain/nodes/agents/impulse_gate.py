@@ -18,7 +18,6 @@ from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.nodes.pipeline_state import SharedPipelineState
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("ImpulseGate")
@@ -46,12 +45,9 @@ class ImpulseGate(Agent):
         self,
         node_id: str,
         host: "ApplicationHost | None" = None,
-        *,
-        state: "SharedPipelineState | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
-        self._state = state
 
     async def execute(self) -> list[FileUpdate]:
         queue_dir = kernel_data_dir / "pipeline" / "message_queue"
@@ -121,7 +117,7 @@ class ImpulseGate(Agent):
         merged_input = str(data.get("merged_input", ""))
 
         recent_text = "\n".join(recent_lines) if recent_lines else "(暂无历史)"
-        soul = self._state.soul if self._state else ""
+        soul = prompts.SOUL.get_content()
 
         messages = [
             {"role": "system", "content": prompts.GATE.get_content()},
