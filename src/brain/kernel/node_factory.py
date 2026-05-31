@@ -26,7 +26,15 @@ NODE_REGISTRY: dict[str, type[Node]] = {
     "internalizer": Internalizer,  # noqa: F405
     "externalizer": Externalizer,  # noqa: F405
     "command_dispatcher": CommandDispatcher,  # noqa: F405
-    # Kernel-β 旧节点（disabled——门控和规划已吸收到 Pool A）
+    # 节律系统
+    "heartbeat_generator": HeartbeatGenerator,  # noqa: F405
+    "timer_scheduler": TimerScheduler,  # noqa: F405
+    # 拓扑原语
+    "switch_router": SwitchRouter,  # noqa: F405
+    "merge_router": MergeRouter,  # noqa: F405
+    "broadcast_router": BroadcastRouter,  # noqa: F405
+    "dead_letter_router": DeadLetterRouter,  # noqa: F405
+    # Kernel-beta 旧节点（disabled）
     "impulse_gate": ImpulseGate,  # noqa: F405
     "action_planner": ActionPlanner,  # noqa: F405
     # 旧单体节点（兼容模式）
@@ -42,7 +50,16 @@ NODE_NEEDS_HOST: frozenset[str] = frozenset(
 )
 
 # 节点构造时是否接收 **config 参数（按 type 判断）
-NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset()
+NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset(
+    {
+        "heartbeat_generator",
+        "timer_scheduler",
+        "switch_router",
+        "merge_router",
+        "broadcast_router",
+        "dead_letter_router",
+    }
+)
 
 # 节点构造时是否注入 UnifiedMemoryManager（按 type 判断）
 NODE_NEEDS_MEMORY: frozenset[str] = frozenset()

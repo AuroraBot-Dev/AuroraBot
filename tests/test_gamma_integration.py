@@ -194,5 +194,95 @@ class CircuitBuildGammaTest(unittest.TestCase):
         self.assertEqual(circuit._nodes[0]._host, host)
 
 
+class RhythmNodeConstructionTest(unittest.TestCase):
+    """节律节点 & 拓扑原语构造测试。"""
+
+    def test_heartbeat_generator_constructs(self) -> None:
+        from src.brain.nodes.routers.heartbeat_generator import HeartbeatGenerator
+
+        node = HeartbeatGenerator("test-hb")
+        self.assertEqual(node.id, "test-hb")
+        self.assertEqual(node._interval, 60.0)
+
+    def test_heartbeat_generator_custom_interval(self) -> None:
+        from src.brain.nodes.routers.heartbeat_generator import HeartbeatGenerator
+
+        node = HeartbeatGenerator("test-hb", interval_sec=30.0)
+        self.assertEqual(node._interval, 30.0)
+
+    def test_heartbeat_on_event_allows_self_trigger(self) -> None:
+        from src.brain.kernel.base import FileEvent
+        from src.brain.nodes.routers.heartbeat_generator import HeartbeatGenerator
+
+        node = HeartbeatGenerator("test-hb")
+        event = FileEvent(
+            path="heartbeat/tick.json",
+            change_type="write",
+            metadata={"source_node": "test-hb"},
+        )
+        # 自触发不被跳过
+        self.assertTrue(node.on_event(event))
+
+    def test_timer_scheduler_constructs(self) -> None:
+        from src.brain.nodes.routers.timer_scheduler import TimerScheduler
+
+        node = TimerScheduler("test-ts")
+        self.assertEqual(len(node._rules), 4)
+
+    def test_switch_router_constructs(self) -> None:
+        from src.brain.nodes.routers.switch_router import SwitchRouter
+
+        routes = [{"condition": "payload.x == 1", "emit": "test/a.json"}, {"default": None, "emit": "test/b.json"}]
+        node = SwitchRouter("test-sw", routes=routes)
+        self.assertEqual(len(node._routes), 2)
+
+    def test_merge_router_constructs(self) -> None:
+        from src.brain.nodes.routers.merge_router import MergeRouter
+
+        node = MergeRouter("test-mr", strategy="all")
+        self.assertEqual(node._strategy, "all")
+
+    def test_broadcast_router_constructs(self) -> None:
+        from src.brain.nodes.routers.broadcast_router import BroadcastRouter
+
+        node = BroadcastRouter("test-br", targets=["a.json", "b.json"])
+        self.assertEqual(len(node._targets), 2)
+
+    def test_dead_letter_router_constructs(self) -> None:
+        from src.brain.nodes.routers.dead_letter_router import DeadLetterRouter
+
+        node = DeadLetterRouter("test-dl", ttl_sec=1800)
+        self.assertEqual(node._ttl_sec, 1800)
+
+
+class CircuitBuildRhythmTest(unittest.TestCase):
+    """build_circuit 包含节律节点测试。"""
+
+    def test_build_circuit_with_heartbeat(self) -> None:
+        host = ApplicationHost()
+        topology = [
+            {"id": "hb", "type": "heartbeat_generator", "enabled": True, "config": {"interval_sec": 60}},
+        ]
+        with patch("src.brain.kernel.node_factory._load_topology_config", return_value=topology):
+            circuit = build_circuit(host)
+        self.assertEqual(len(circuit._nodes), 1)
+        self.assertEqual(circuit._nodes[0]._interval, 60.0)
+
+    def test_build_circuit_with_timer_scheduler(self) -> None:
+        host = ApplicationHost()
+        topology = [
+            {
+                "id": "ts",
+                "type": "timer_scheduler",
+                "enabled": True,
+                "config": {"rules": [{"name": "test", "minute": 30, "emit": "test.json"}]},
+            },
+        ]
+        with patch("src.brain.kernel.node_factory._load_topology_config", return_value=topology):
+            circuit = build_circuit(host)
+        self.assertEqual(len(circuit._nodes), 1)
+        self.assertEqual(len(circuit._nodes[0]._rules), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

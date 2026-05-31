@@ -47,6 +47,56 @@ nodes:
       - "pipeline/action_queue/*.json"
 
   # ═══════════════════════════════════════════════════
+  # 节律环路：心跳 → 调度 → 节律事件（全部通过相同的文件机制）
+  # ═══════════════════════════════════════════════════
+
+  # 周期性心跳（自持振荡，60s 间隔）
+  - id: heartbeat
+    type: heartbeat_generator
+    watch:
+      - "heartbeat/tick.json"
+    emit:
+      - "heartbeat/tick.json"
+    config:
+      interval_sec: 60
+
+  # 心跳 → 节律触发器
+  - id: timer_scheduler
+    type: timer_scheduler
+    watch:
+      - "heartbeat/tick.json"
+    emit:
+      - "rhythm/triggers/*.json"
+    config:
+      rules:
+        - name: hourly
+          minute: 0
+          emit: "rhythm/triggers/hourly.json"
+        - name: morning
+          minute: 0
+          hour: 8
+          emit: "rhythm/triggers/morning.json"
+        - name: evening
+          minute: 0
+          hour: 22
+          emit: "rhythm/triggers/evening.json"
+        - name: midnight
+          minute: 0
+          hour: 2
+          emit: "rhythm/triggers/midnight.json"
+
+  # ═══════════════════════════════════════════════════
+  # 拓扑原语（disabled——按需启用）
+  # ═══════════════════════════════════════════════════
+
+  - id: dead_letter
+    type: dead_letter_router
+    enabled: false
+    config:
+      ttl_sec: 3600
+      scan_interval: 600
+
+  # ═══════════════════════════════════════════════════
   # Kernel-β 旧节点（disabled——门控和规划已吸收到 Pool A）
   # ═══════════════════════════════════════════════════
   - id: impulse_gate
