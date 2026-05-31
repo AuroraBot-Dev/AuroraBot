@@ -134,10 +134,7 @@ class MessagePreprocessor(Router):
         session_id = str(payload.get("session_id", ""))
         is_group = bool(payload.get("is_group", False))
         group_id = str(payload.get("group_id", "")) if is_group else None
-        session_key = str(
-            payload.get("session_key")
-            or self._make_session_key(user_id, is_group, group_id)
-        )
+        session_key = str(payload.get("session_key") or self._make_session_key(user_id, is_group, group_id))
 
         # 会话内去重：系统事件的 session_key 来自 payload
         if event_type != "message.received" and "session_key" not in (payload or {}):

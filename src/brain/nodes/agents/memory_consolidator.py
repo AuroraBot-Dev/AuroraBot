@@ -118,9 +118,7 @@ class MemoryConsolidator(Agent):
         if consolidated:
             date_str = datetime.now().strftime("%Y-%m-%d")  # noqa: DTZ005
             self._stream.archive_today(date_str)
-            self._stream.append_experience(
-                f"我整理了今天的记忆。新的体验已经沉淀下来，now.md 已归档到 {date_str}。"
-            )
+            self._stream.append_experience(f"我整理了今天的记忆。新的体验已经沉淀下来，now.md 已归档到 {date_str}。")
 
         return []
 
@@ -139,9 +137,7 @@ class MemoryConsolidator(Agent):
                 existing_memories[name] = content
 
         memory_list = "\n".join(f"- {n}" for n in existing_memories) or "(无已有记忆)"
-        memory_contents = "\n\n".join(
-            f"## {n}\n{c}" for n, c in existing_memories.items()
-        ) or "(无已有记忆)"
+        memory_contents = "\n\n".join(f"## {n}\n{c}" for n, c in existing_memories.items()) or "(无已有记忆)"
 
         user_message = (
             f"## 今天的体验与思考\n\n{today_stream}\n\n"

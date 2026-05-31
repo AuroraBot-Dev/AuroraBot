@@ -170,9 +170,7 @@ class SelfStream:
         """列出所有记忆文件名（不含 .md 后缀）。"""
         if not self._memories_dir.exists():
             return []
-        return sorted(
-            p.stem for p in self._memories_dir.glob("*.md") if p.is_file()
-        )
+        return sorted(p.stem for p in self._memories_dir.glob("*.md") if p.is_file())
 
     def read_memory(self, name: str) -> str | None:
         """读取指定记忆文件的内容。"""
@@ -244,9 +242,7 @@ class SelfStream:
         """列出所有归档日期。"""
         if not self._archive_dir.exists():
             return []
-        return sorted(
-            p.stem for p in self._archive_dir.glob("*.md") if p.is_file()
-        )
+        return sorted(p.stem for p in self._archive_dir.glob("*.md") if p.is_file())
 
     # ═══════════════════════════════════════════════════
     # diary/ —— 日记

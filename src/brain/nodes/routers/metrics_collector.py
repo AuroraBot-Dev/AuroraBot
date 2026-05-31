@@ -16,7 +16,6 @@ from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Metrics")
