@@ -34,6 +34,8 @@ from src.brain.ai.models import get_pricing_by_id
 from src.brain.ai.providers import missing_credentials_reason, resolve_model
 from src.utils.log_utils import get_logger
 
+from src.config import Config
+
 if TYPE_CHECKING:
     import collections.abc
 
@@ -300,7 +302,7 @@ class ModelCaller:
             )
             return cost
 
-        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0915
+        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0912, PLR0915
             prompt_tokens = 0
 
             # 解析自定义供应商 → litellm 原生模型 + 额外参数
@@ -333,20 +335,37 @@ class ModelCaller:
             litellm_kwargs.update(provider_kwargs)
             litellm_kwargs.update(kwargs)
 
-            logger.debug(
-                "LLM 请求:\n%s",
-                json.dumps(
-                    {
-                        "role": self.role,
-                        "model": self.model,
-                        "messages_count": len(messages),
-                        "max_tokens": max_tokens,
-                        "timeout": timeout,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-            )
+            if Config.LLM_GATEWAY_ENABLE_LOGGING_QUERIES:
+                logger.debug(
+                    "LLM 请求:\n%s",
+                    json.dumps(
+                        {
+                            "role": self.role,
+                            "model": self.model,
+                            "messages_count": len(messages),
+                            "max_tokens": max_tokens,
+                            "timeout": timeout,
+                            "messages": [{"role": m.get("role", "?"), "content": m.get("content", "<empty>")} for m in messages],
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                )
+            else:
+                logger.debug(
+                    "LLM 请求:\n%s",
+                    json.dumps(
+                        {
+                            "role": self.role,
+                            "model": self.model,
+                            "messages_count": len(messages),
+                            "max_tokens": max_tokens,
+                            "timeout": timeout,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                )
 
             try:
                 response = await litellm.acompletion(**litellm_kwargs)
@@ -389,17 +408,39 @@ class ModelCaller:
                         "cost": cost,
                     }
                 )
-                logger.debug(
-                    "LLM 响应:\n%s",
-                    json.dumps(
-                        {
-                            "role": self.role,
-                            "cost": cost,
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
+                response_text = ""
+                try:
+                    if final_response is not None:
+                        content = final_response.choices[0].message.content
+                        response_text = str(content) if content is not None else "<empty>"
+                except (AttributeError, IndexError, TypeError):
+                    pass
+
+                if Config.LLM_GATEWAY_ENABLE_LOGGING_RESPONSES:
+                    logger.debug(
+                        "LLM 响应:\n%s",
+                        json.dumps(
+                            {
+                                "role": self.role,
+                                "cost": cost,
+                                "text": response_text,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                    )
+                else:
+                    logger.debug(
+                        "LLM 响应:\n%s",
+                        json.dumps(
+                            {
+                                "role": self.role,
+                                "cost": cost,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                    )
                 return final_response, cost
             if final_usage is not None:
                 built = stream_chunk_builder(chunks, messages=messages)
