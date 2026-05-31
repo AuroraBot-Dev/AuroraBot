@@ -244,6 +244,8 @@ class Node:
             try:
                 updates = await self.execute()
             except asyncio.CancelledError:
+                if self.state == NodeState.TERMINATED:
+                    return
                 self.on_complete()
                 continue
             except Exception:

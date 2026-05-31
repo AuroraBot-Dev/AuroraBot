@@ -18,6 +18,9 @@ APPS_COMMANDS = ("/apps", "/A")
 COMMANDS_COMMANDS = ("/commands", "/C")
 EVENTS_COMMANDS = ("/events", "/E")
 MEMTEST_COMMANDS = ("/memtest", "/mt")
+SELF_STREAM_COMMANDS = ("/stream",)
+SELF_STATE_COMMANDS = ("/state",)
+SELF_MEMORIES_COMMANDS = ("/memories", "/mem")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +53,11 @@ def _console_commands() -> tuple[ConsoleCommand, ...]:
     from src.brain.localhost.commands.invoke import _handle_invoke_command
     from src.brain.localhost.commands.memtest import _handle_memtest_command
     from src.brain.localhost.commands.say import _handle_say_command
+    from src.brain.localhost.commands.self_cli import (
+        _handle_memories_command,
+        _handle_state_command,
+        _handle_stream_command,
+    )
 
     return (
         ConsoleCommand(
@@ -111,5 +119,23 @@ def _console_commands() -> tuple[ConsoleCommand, ...]:
             usage="/memtest <query|record|context> [args...]",
             description="记忆系统交互测试：query 检索 / record 记录 / context 查看",
             handler=_handle_memtest_command,
+        ),
+        ConsoleCommand(
+            names=SELF_STREAM_COMMANDS,
+            usage="/stream [lines]",
+            description="查看她最近的自我之流 (now.md)",
+            handler=_handle_stream_command,
+        ),
+        ConsoleCommand(
+            names=SELF_STATE_COMMANDS,
+            usage="/state",
+            description="查看她当前的自我状态",
+            handler=_handle_state_command,
+        ),
+        ConsoleCommand(
+            names=SELF_MEMORIES_COMMANDS,
+            usage="/memories [name]",
+            description="列出或查看她的持久记忆",
+            handler=_handle_memories_command,
         ),
     )

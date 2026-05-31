@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import importlib
 import os
 import signal
@@ -159,10 +160,16 @@ async def reload_brain(*, runtime: RuntimeState) -> RuntimeState:
 
 
 def _request_process_exit() -> None:
-    try:
+    """请求进程退出。
+
+    先尝试 SIGINT（Unix 下由 NoneBot driver 捕获后优雅关闭），
+    随后用 ``os._exit(0)`` 硬退出作为兜底（Windows + asyncio 下 SIGINT 不可靠）。
+    """
+    with contextlib.suppress(OSError, ValueError):
         signal.raise_signal(signal.SIGINT)
-    except AttributeError:
-        os.kill(os.getpid(), signal.SIGINT)
+    # 硬兜底：SIGINT 在 Windows asyncio 事件循环中常被吞掉，
+    # shutdown_runtime 已完成所有清理，直接 _exit 是安全的。
+    os._exit(0)
 
 
 async def stop_process(*, runtime: RuntimeState) -> None:

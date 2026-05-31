@@ -1,10 +1,13 @@
-"""CommandDispatcher —— JSON 解析 → 命令派发 → 历史/记忆写入。
+"""CommandDispatcher —— JSON 解析 → 命令派发。
 
 纯机械 Router 节点，零 LLM 调用。读取 ``pipeline/action_queue/*.json``，
-解析 LLM 输出的 JSON 动作列表，通过 ApplicationHost 派发命令，
-并将结果写入对话历史和统一记忆。
+解析 Externalizer 产出的 JSON 动作列表，通过 ApplicationHost 派发命令。
 
-解析失败时写入 inbox 事件自恢复。
+Kernel-gamma 变更：
+- 移除 SharedPipelineState 依赖——节点完全自包含。
+- 移除会话版本号检查——防抖和版本管理由 MessagePreprocessor 自包含处理。
+- 移除历史 append——对话历史现在是 self/stream/now.md 中的自然叙事。
+- 解析失败时写入 inbox 事件自恢复（路径不变）。
 """
 
 from __future__ import annotations
@@ -18,7 +21,6 @@ from src.utils.json_utils import parse_llm_json, safe_parse_json_object
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.nodes.pipeline_state import SharedPipelineState
     from src.platform.application_host import ApplicationHost
 
 logger = get_logger("CommandDispatcher")
@@ -28,7 +30,7 @@ class CommandDispatcher(Router):
     """命令派发节点。
 
     读取 action_queue 文件，解析 JSON 动作列表，通过宿主派发命令。
-    成功后写入对话历史和统一记忆。解析失败时写入 inbox 事件重试。
+    解析失败时写入 inbox 事件自恢复。
     """
 
     _default_guards = ["pipeline/action_queue/*.json"]  # noqa: RUF012
@@ -37,12 +39,9 @@ class CommandDispatcher(Router):
         self,
         node_id: str,
         host: "ApplicationHost | None" = None,
-        *,
-        state: "SharedPipelineState | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
-        self._state = state
 
     async def execute(self) -> list[FileUpdate]:  # noqa: C901, PLR0912, PLR0915
         queue_dir = kernel_data_dir / "pipeline" / "action_queue"
@@ -69,60 +68,63 @@ class CommandDispatcher(Router):
 
             move_to_done(act_file, done_dir)
 
-            user_id = str(data.get("user_id", ""))
-            session_key = str(data.get("session_key", ""))
-            session_id = str(data.get("session_id", ""))
-            merged_input = str(data.get("merged_input", ""))
-            is_group = bool(data.get("is_group", False))
-            group_id = str(data.get("group_id", "")) if data.get("group_id") else None
-            version = int(data.get("version", 0))
-            raw_response = str(data.get("raw_response", ""))
+            # 兼容新旧两种格式：旧格式 payload 在顶层，新格式用 envelope+payload
+            envelope = data.get("envelope", {}) if isinstance(data.get("envelope"), dict) else {}
+            payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
 
-            logger.debug("派发动作 session=%s len=%d", session_key, len(raw_response))
-
-            parsed = self._parse_actions(raw_response)
-            if parsed is None and raw_response.strip():
-                parsed = self._adapt_plain_text(raw_response, user_id, session_id, is_group, group_id)
-                if parsed is not None:
-                    logger.warning("纯文本兜底发送（JSON 解析失败）session=%s", session_key)
-
-            if parsed is None:
-                et = "agent.reply_parse_failed" if raw_response.strip() else "agent.reply_empty"
-                summary = "无法解析为结构化动作" if raw_response.strip() else "返回空响应"
-                logger.warning("%s session=%s", summary, session_key)
-                await self._emit_inbox_event(
-                    et,
-                    session_key=session_key,
-                    merged_input=merged_input,
-                    is_group=is_group,
-                    group_id=group_id,
-                    raw_response=raw_response,
-                    version=version,
-                )
-                continue
-
-            thought = parsed.get("thought", "")
-            actions = parsed.get("actions", [])
+            raw_response = str(payload.get("raw_response", data.get("raw_response", "")))
+            actions = payload.get("actions", data.get("actions", []))
             if not isinstance(actions, list):
                 actions = []
 
-            logger.debug("思考: %s", thought)
+            # fallback：尝试从原始文本解析
+            if not actions and raw_response:
+                parsed = self._parse_actions(raw_response)
+                if parsed is not None:
+                    actions = parsed.get("actions", [])
+                    if not isinstance(actions, list):
+                        actions = []
+
+            # 纯文本兜底
+            if not actions and raw_response.strip():
+                user_id = str(payload.get("user_id", data.get("user_id", envelope.get("session_key", ""))))
+                session_id = str(data.get("session_id", ""))
+                is_group = bool(data.get("is_group", False))
+                group_id = str(data.get("group_id", "")) if data.get("group_id") else None
+                adapted = self._adapt_plain_text(raw_response, user_id, session_id, is_group, group_id)
+                if adapted is not None:
+                    actions = adapted.get("actions", [])
+                    if not isinstance(actions, list):
+                        actions = []
+                    logger.warning("纯文本兜底发送")
 
             if not actions:
-                logger.debug("无动作 session=%s", session_key)
+                session_key = str(envelope.get("session_key", data.get("session_key", "?")))
+                if raw_response.strip():
+                    logger.warning("无法解析为结构化动作 session=%s", session_key)
+                    await self._emit_inbox_event(
+                        "agent.reply_parse_failed",
+                        session_key=session_key,
+                        raw_response=raw_response,
+                    )
+                else:
+                    logger.debug("无动作（空响应）")
                 continue
 
-            # 版本号检查：若会话已产生新版本则放弃过期动作
-            if version > 0 and self._state is not None and not self._state.is_version_current(session_key, version):
-                logger.debug("版本过期，放弃派发 session=%s", session_key)
-                continue
+            session_key = str(envelope.get("session_key", data.get("session_key", "?")))
+            trace_id = str(envelope.get("trace_id", ""))
+            user_id = str(payload.get("user_id", data.get("user_id", "unknown")))
 
-            dispatched = await self._dispatch_actions(actions, session_key, version)
+            dispatched = await self._dispatch_actions(actions)
             if dispatched > 0:
-                if self._state is not None:
-                    await self._state.append_assistant_message(raw_response)
                 self._record_unified_memory(raw_response, "assistant", user_id)
-                logger.info("回复完成 session=%s user=%s actions=%d", session_key, user_id, dispatched)
+                logger.info(
+                    "回复完成 session=%s user=%s actions=%d trace=%s",
+                    session_key,
+                    user_id,
+                    dispatched,
+                    trace_id,
+                )
 
         return []
 
@@ -190,12 +192,7 @@ class CommandDispatcher(Router):
     # 命令派发
     # ═══════════════════════════════════════════════════
 
-    async def _dispatch_actions(
-        self,
-        actions: list[dict[str, Any]],
-        session_key: str,
-        version: int,
-    ) -> int:
+    async def _dispatch_actions(self, actions: list[dict[str, Any]]) -> int:
         dispatched = 0
         invalid = 0
         for action in actions:
@@ -210,11 +207,6 @@ class CommandDispatcher(Router):
             if not isinstance(params, dict):
                 params = {}
 
-            # 版本号检查（逐 action 检查，支持中途过期）
-            if version > 0 and self._state is not None and not self._state.is_version_current(session_key, version):
-                logger.debug("版本过期，中断派发 session=%s", session_key)
-                break
-
             try:
                 if self._host is not None:
                     await self._host.invoke_command(command, **params)
@@ -226,8 +218,7 @@ class CommandDispatcher(Router):
 
         if dispatched == 0 and actions:
             logger.warning(
-                "actions 中无可执行命令 session=%s invalid=%d total=%d",
-                session_key,
+                "actions 中无可执行命令 invalid=%d total=%d",
                 invalid,
                 len(actions),
             )
@@ -246,16 +237,12 @@ class CommandDispatcher(Router):
         except Exception:
             logger.exception("写入统一记忆失败 (%s)", role)
 
-    async def _emit_inbox_event(  # noqa: PLR0913
+    async def _emit_inbox_event(
         self,
         event_type: str,
         *,
         session_key: str,
-        merged_input: str,
-        is_group: bool,
-        group_id: str | None,
         raw_response: str,
-        version: int,
     ) -> None:
         safe_type = str(event_type).replace(".", "_").replace("/", "_")
         event_id = next_record_id("evt")
@@ -268,11 +255,7 @@ class CommandDispatcher(Router):
             "summary": "无法解析为结构化动作" if raw_response.strip() else "返回空响应",
             "payload": {
                 "session_key": session_key,
-                "merged_input": merged_input,
-                "is_group": is_group,
-                "group_id": group_id,
                 "raw_response": raw_response,
-                "version": version,
             },
             "expire_at": None,
             "id": event_id,
