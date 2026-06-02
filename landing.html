@@ -640,6 +640,7 @@
         align-items: start;
       }
       .foot .mark svg.logo-sm {
+        color: var(--brand);
         grid-row: 1 / span 2;
         width: 56px;
         height: 56px;
@@ -814,7 +815,7 @@
           </span>
 
           <span class="hero-links">
-            <button class="theme-toggle" aria-label="切换主题" title="切换明暗主题">
+            <button class="theme-toggle" aria-label="切换主题" title="切换主题">
               <svg
                 class="icon-sun"
                 viewBox="0 0 24 24"
@@ -844,14 +845,20 @@
                 <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
               </svg>
             </button>
-            <a href="https://github.com/AuroraBot-Dev/AuroraBot" target="_blank" rel="noopener" aria-label="GitHub">
+            <a
+              href="https://github.com/AuroraBot-Dev/AuroraBot"
+              target="_blank"
+              rel="noopener"
+              aria-label="GitHub"
+              title="GitHub"
+            >
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path
                   d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
                 />
               </svg>
             </a>
-            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener" aria-label="文档">
+            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener" aria-label="文档" title="文档">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -975,52 +982,51 @@
         </p>
         <ol class="principles">
           <li>
-            <span class="n">1</span
-            ><span class="body"
-              ><b>内驱式决策</b
-              ><span
-                >不等待指令，持续观察环境变化并自主生成行动意图。ImpulseGate 模拟内在冲动，让 Agent
-                保持活跃而不盲动。</span
-              ></span
-            >
+            <span class="n">1</span>
+            <span class="body">
+              <b>内驱式决策</b>
+              <span>
+                不等待指令，持续观察环境变化并自主生成行动意图。ImpulseGate 模拟内在冲动，让 Agent 保持活跃而不盲动。
+              </span>
+            </span>
           </li>
           <li>
-            <span class="n">2</span
-            ><span class="body"
-              ><b>文件驱动认知</b
-              ><span
+            <span class="n">2</span>
+            <span class="body">
+              <b>文件驱动认知</b>
+              <span
                 >所有认知状态通过 FileEventBus 在文件系统中流转——可审计、可调试、可回放。认知拓扑从 topology.yaml
-                中声明。</span
-              ></span
-            >
+                中声明。
+              </span>
+            </span>
           </li>
           <li>
-            <span class="n">3</span
-            ><span class="body"
-              ><b>记忆生长</b
-              ><span
-                >每次交互写入 L1→L2→L3 三层的联合记忆。记忆不是日志——它在 LLM 压缩、语义检索和时效衰减中持续演化。</span
-              ></span
-            >
+            <span class="n">3</span>
+            <span class="body">
+              <b>记忆生长</b>
+              <span>
+                每次交互写入 L1→L2→L3 三层的联合记忆。记忆不是日志——它在 LLM 压缩、语义检索和时效衰减中持续演化。
+              </span>
+            </span>
           </li>
           <li>
-            <span class="n">4</span
-            ><span class="body"
-              ><b>高度解耦</b
-              ><span
-                >应用层、平台层、认知引擎三层独立演进。每个 App 是独立的 Python 包，按需加载、按需启停，互不干扰。</span
-              ></span
-            >
+            <span class="n">4</span>
+            <span class="body">
+              <b>高度解耦</b>
+              <span>
+                应用层、平台层、认知引擎三层独立演进。每个 App 是独立的 Python 包，按需加载、按需启停，互不干扰。
+              </span>
+            </span>
           </li>
           <li>
-            <span class="n">5</span
-            ><span class="body"
-              ><b>模型无关</b
-              ><span
-                >通过 LiteLLM 统一网关抽象所有 LLM 调用。内核节点通过 gateway 接口调用模型，无需关心底层是 OpenAI 还是
-                Anthropic。</span
-              ></span
-            >
+            <span class="n">5</span>
+            <span class="body">
+              <b>模型无关</b>
+              <span>
+                通过 LiteLLM 统一网关抽象所有 LLM 调用。内核节点通过 gateway 接口调用模型，无需关心底层是 OpenAI 还是
+                Anthropic。
+              </span>
+            </span>
           </li>
         </ol>
       </section>
@@ -1032,15 +1038,16 @@
           <h2 class="section-title">一行命令跑起来</h2>
           <p class="section-lede">使用 uv 包管理器，从零到运行只需几分钟。</p>
         </div>
-        <pre class="code"><span class="c"># 克隆仓库</span>
-git clone https://github.com/AuroraBot-Dev/AuroraBot.git
-<span class="k">cd</span> AuroraBot
-
-<span class="c"># 安装依赖（需要 uv）</span>
-uv sync
-
-<span class="c"># 启动 AuroraBot</span>
-uv run python bot.py</pre>
+        <pre class="code">
+          <span class="c"># 克隆仓库</span>
+          git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+          <span class="k">cd</span> 
+          AuroraBot
+          <span class="c"># 安装依赖（需要 uv）</span>
+          uv sync
+          <span class="c"># 启动 AuroraBot</span>
+          uv run python bot.py
+        </pre>
         <div class="metrics" style="margin-top: 32px">
           <div class="metric">
             <span class="metric-value">100+</span><span class="metric-label">LLM 模型支持 (via LiteLLM)</span>
@@ -1129,7 +1136,7 @@ uv run python bot.py</pre>
         <div class="mark">
           <svg class="logo-sm" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg">
             <path
-              fill="#1B365D"
+              fill="currentColor"
               d="M256.5 37.6C265.8 29.8 279.5 30.1 288.4 38.5C300.7 50.1 311.7 62.9 322.3 75.9C335.8 92.4 352 114.2 367.6 140.1C372.8 133.3 377.6 127.3 381.8 122.2C382.9 120.9 384 119.5 385.1 118.1C393 108.3 402.8 96 415.9 96C429.3 96 438.7 107.9 446.7 118.1C448 119.8 449.3 121.4 450.6 122.9C460.9 135.3 474.6 153.2 488.3 175.3C515.5 219.2 543.9 281.7 543.9 351.9C543.9 475.6 443.6 575.9 319.9 575.9C196.2 575.9 96 475.7 96 352C96 260.9 137.1 182 176.5 127C196.4 99.3 216.2 77.1 231.1 61.9C239.3 53.5 247.6 45.2 256.6 37.7zM321.7 480C347 480 369.4 473 390.5 459C432.6 429.6 443.9 370.8 418.6 324.6C414.1 315.6 402.6 315 396.1 322.6L370.9 351.9C364.3 359.5 352.4 359.3 346.2 351.4C328.9 329.3 297.1 289 280.9 268.4C275.5 261.5 265.7 260.4 259.4 266.5C241.1 284.3 207.9 323.3 207.9 370.8C207.9 439.4 258.5 480 321.6 480z"
             />
           </svg>
@@ -1139,10 +1146,10 @@ uv run python bot.py</pre>
         <div class="colophon">
           <div class="links">
             <a href="https://github.com/AuroraBot-Dev/AuroraBot" target="_blank" rel="noopener">GitHub</a> &middot;
-            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener">文档</a> &middot;
-            <a href="https://github.com/AuroraBot-Dev/AuroraBot/blob/main/LICENSE" target="_blank" rel="noopener"
-              >Apache 2.0</a
-            >
+            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener">Document</a> &middot;
+            <a href="https://github.com/AuroraBot-Dev/AuroraBot/blob/main/LICENSE" target="_blank" rel="noopener">
+              Apache 2.0
+            </a>
           </div>
           <p class="ethos">持续观察、自主决策、主动行动——她不是在等待指令，而是在思考自己该做什么。</p>
         </div>
