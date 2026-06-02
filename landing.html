@@ -67,6 +67,69 @@
         --latin-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
       }
 
+      :root[data-theme="dark"] {
+        --parchment: #1a1917;
+        --ivory: #22211e;
+        --warm-sand: #2a2824;
+        --brand: #6b9fd8;
+        --brand-light: #8cb8e6;
+        --brand-tint: #1e2d42;
+        --near-black: #e8e6dd;
+        --dark-warm: #c4c2b9;
+        --olive: #9a978d;
+        --stone: #7a776e;
+        --border: #2a2824;
+        --border-soft: #24221f;
+        --line: #33312c;
+      }
+      :root[data-theme="dark"] .btn-primary {
+        color: #1a1917;
+      }
+      :root[data-theme="dark"] .btn-primary:hover {
+        color: #1a1917;
+      }
+
+      /* Theme toggle */
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid var(--border-soft);
+        background: transparent;
+        color: var(--stone);
+        cursor: pointer;
+        transition:
+          color 0.15s,
+          border-color 0.15s,
+          background 0.15s;
+        padding: 0;
+        margin: 0;
+      }
+      .theme-toggle:hover {
+        color: var(--brand);
+        border-color: var(--line);
+        background: var(--brand-tint);
+      }
+      .theme-toggle svg {
+        width: 16px;
+        height: 16px;
+      }
+      .theme-toggle .icon-sun {
+        display: none;
+      }
+      .theme-toggle .icon-moon {
+        display: block;
+      }
+      :root[data-theme="dark"] .theme-toggle .icon-sun {
+        display: block;
+      }
+      :root[data-theme="dark"] .theme-toggle .icon-moon {
+        display: none;
+      }
+
       * {
         box-sizing: border-box;
       }
@@ -80,7 +143,7 @@
         background: var(--parchment);
         color: var(--near-black);
         font-family: var(--serif);
-        font-size: 15px;
+        font-size: 16px;
         line-height: 1.55;
         letter-spacing: 0.2px;
         -webkit-font-smoothing: antialiased;
@@ -169,7 +232,7 @@
         align-items: center;
         gap: 8px;
         font-family: var(--latin-ui);
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 500;
         letter-spacing: 0.4px;
         text-transform: uppercase;
@@ -190,11 +253,23 @@
       }
       .hero-links a {
         color: var(--stone);
-        display: flex;
+        display: inline-flex;
         align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid var(--border-soft);
+        background: transparent;
+        transition:
+          color 0.15s,
+          border-color 0.15s,
+          background 0.15s;
       }
       .hero-links a:hover {
-        color: var(--dark-warm);
+        color: var(--brand);
+        border-color: var(--line);
+        background: var(--brand-tint);
       }
       .hero-links svg {
         width: 18px;
@@ -267,7 +342,7 @@
       .section-num {
         font-family: var(--latin-ui);
         font-weight: 400;
-        font-size: 13px;
+        font-size: 14px;
         color: var(--brand);
         letter-spacing: 0.4px;
         margin: 0 0 6px;
@@ -284,7 +359,7 @@
       .section-lede {
         font-family: var(--serif);
         font-weight: 400;
-        font-size: 17px;
+        font-size: 18px;
         line-height: 1.55;
         color: var(--olive);
         margin: 14px 0 0;
@@ -344,7 +419,7 @@
         display: block;
         margin-top: 4px;
         font-family: var(--serif);
-        font-size: 13px;
+        font-size: 14px;
         color: var(--olive);
         font-weight: 400;
         font-style: italic;
@@ -401,7 +476,7 @@
         letter-spacing: 0.1px;
       }
       .principles .body span {
-        font-size: 13px;
+        font-size: 14px;
         color: var(--olive);
         line-height: 1.5;
         font-weight: 400;
@@ -464,7 +539,7 @@
       }
       .metric-label {
         font-family: var(--latin-ui);
-        font-size: 13px;
+        font-size: 14px;
         color: var(--stone);
       }
 
@@ -521,14 +596,14 @@
       }
       .faq dd {
         font-family: var(--serif);
-        font-size: 14px;
+        font-size: 15px;
         line-height: 1.55;
         color: var(--olive);
         margin: 0;
       }
       .faq code {
         font-family: var(--mono);
-        font-size: 12px;
+        font-size: 13px;
         color: var(--brand);
         background: var(--brand-tint);
         padding: 1px 6px;
@@ -536,7 +611,7 @@
       }
       .faq-tail {
         font-family: var(--serif);
-        font-size: 13px;
+        font-size: 14px;
         color: var(--stone);
         margin: 28px 0 0;
       }
@@ -554,7 +629,7 @@
         align-items: flex-end;
         gap: 48px;
         font-family: var(--serif);
-        font-size: 13px;
+        font-size: 14px;
         color: var(--stone);
       }
       .foot .mark {
@@ -739,6 +814,36 @@
           </span>
 
           <span class="hero-links">
+            <button class="theme-toggle" aria-label="切换主题" title="切换明暗主题">
+              <svg
+                class="icon-sun"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+              <svg
+                class="icon-moon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+              </svg>
+            </button>
             <a href="https://github.com/AuroraBot-Dev/AuroraBot" target="_blank" rel="noopener" aria-label="GitHub">
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path
@@ -747,10 +852,18 @@
               </svg>
             </a>
             <a href="https://www.aurorabot.org/" target="_blank" rel="noopener" aria-label="文档">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M2 12h20" />
-                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+                <line x1="8" y1="7" x2="16" y2="7" />
+                <line x1="8" y1="11" x2="14" y2="11" />
               </svg>
             </a>
           </span>
@@ -1035,5 +1148,23 @@ uv run python bot.py</pre>
         </div>
       </footer>
     </main>
+    <script>
+      (function () {
+        var btn = document.querySelector(".theme-toggle");
+        if (!btn) return;
+        var stored = localStorage.getItem("theme");
+        if (stored) {
+          document.documentElement.setAttribute("data-theme", stored);
+        } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+        btn.addEventListener("click", function () {
+          var current = document.documentElement.getAttribute("data-theme");
+          var next = current === "dark" ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", next);
+          localStorage.setItem("theme", next);
+        });
+      })();
+    </script>
   </body>
 </html>
