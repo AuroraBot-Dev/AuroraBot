@@ -1,6 +1,6 @@
 [project]
 name = "AuroraBot"
-version = "0.3.0"
+version = "0.4.0"
 description = "AuroraBot 是一个新一代的内驱式、自主决策的智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
