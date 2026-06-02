@@ -1,6 +1,6 @@
 [project]
 name = "AuroraBot"
-version = "0.2.0"
+version = "0.3.0"
 description = "AuroraBot 是一个新一代的内驱式、自主决策的智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
@@ -25,6 +25,7 @@ dev = [
     "ruff",
     "pytest",
     "pytest-cov",
+    "donk>=1.1.0",
 ]
 
 [tool.nonebot]
