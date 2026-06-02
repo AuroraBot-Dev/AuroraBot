@@ -89,47 +89,6 @@
         color: #1a1917;
       }
 
-      /* Theme toggle */
-      .theme-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        border: 1px solid var(--border-soft);
-        background: transparent;
-        color: var(--stone);
-        cursor: pointer;
-        transition:
-          color 0.15s,
-          border-color 0.15s,
-          background 0.15s;
-        padding: 0;
-        margin: 0;
-      }
-      .theme-toggle:hover {
-        color: var(--brand);
-        border-color: var(--line);
-        background: var(--brand-tint);
-      }
-      .theme-toggle svg {
-        width: 16px;
-        height: 16px;
-      }
-      .theme-toggle .icon-sun {
-        display: none;
-      }
-      .theme-toggle .icon-moon {
-        display: block;
-      }
-      :root[data-theme="dark"] .theme-toggle .icon-sun {
-        display: block;
-      }
-      :root[data-theme="dark"] .theme-toggle .icon-moon {
-        display: none;
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -251,8 +210,9 @@
         gap: 12px;
         align-items: center;
       }
-      .hero-links a {
-        color: var(--stone);
+
+      /* unified icon buttons */
+      .hero-icon-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -261,19 +221,38 @@
         border-radius: 50%;
         border: 1px solid var(--border-soft);
         background: transparent;
+        color: var(--stone);
+        cursor: pointer;
         transition:
           color 0.15s,
           border-color 0.15s,
           background 0.15s;
+        padding: 0;
+        margin: 0;
+        font-family: inherit;
+        font-size: inherit;
+        line-height: 1;
       }
-      .hero-links a:hover {
+      .hero-icon-btn:hover {
         color: var(--brand);
         border-color: var(--line);
         background: var(--brand-tint);
       }
-      .hero-links svg {
-        width: 18px;
-        height: 18px;
+      .hero-icon-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+      .hero-icon-btn .icon-sun {
+        display: none;
+      }
+      .hero-icon-btn .icon-moon {
+        display: block;
+      }
+      :root[data-theme="dark"] .hero-icon-btn .icon-sun {
+        display: block;
+      }
+      :root[data-theme="dark"] .hero-icon-btn .icon-moon {
+        display: none;
       }
 
       .hero h1 {
@@ -815,7 +794,7 @@
           </span>
 
           <span class="hero-links">
-            <button class="theme-toggle" aria-label="切换主题" title="切换主题">
+            <button class="hero-icon-btn theme-toggle" aria-label="切换主题" title="切换主题">
               <svg
                 class="icon-sun"
                 viewBox="0 0 24 24"
@@ -845,10 +824,9 @@
                 <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
               </svg>
             </button>
-            <a
-              href="https://github.com/AuroraBot-Dev/AuroraBot"
-              target="_blank"
-              rel="noopener"
+            <button
+              class="hero-icon-btn"
+              data-href="https://github.com/AuroraBot-Dev/AuroraBot"
               aria-label="GitHub"
               title="GitHub"
             >
@@ -857,8 +835,8 @@
                   d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
                 />
               </svg>
-            </a>
-            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener" aria-label="文档" title="文档">
+            </button>
+            <button class="hero-icon-btn" data-href="https://www.aurorabot.org/" aria-label="文档" title="文档">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -872,7 +850,7 @@
                 <line x1="8" y1="7" x2="16" y2="7" />
                 <line x1="8" y1="11" x2="14" y2="11" />
               </svg>
-            </a>
+            </button>
           </span>
         </div>
         <h1>AuroraBot</h1>
@@ -1039,14 +1017,15 @@
           <p class="section-lede">使用 uv 包管理器，从零到运行只需几分钟。</p>
         </div>
         <pre class="code">
-          <span class="c"># 克隆仓库</span>
-          git clone https://github.com/AuroraBot-Dev/AuroraBot.git
-          <span class="k">cd</span> 
-          AuroraBot
-          <span class="c"># 安装依赖（需要 uv）</span>
-          uv sync
-          <span class="c"># 启动 AuroraBot</span>
-          uv run python bot.py
+<span class="c"># 克隆仓库</span>
+git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+<span class="k">cd</span> AuroraBot
+
+<span class="c"># 安装依赖（需要 uv）</span>
+uv sync
+
+<span class="c"># 启动 AuroraBot</span>
+uv run python bot.py
         </pre>
         <div class="metrics" style="margin-top: 32px">
           <div class="metric">
@@ -1157,19 +1136,27 @@
     </main>
     <script>
       (function () {
-        var btn = document.querySelector(".theme-toggle");
-        if (!btn) return;
-        var stored = localStorage.getItem("theme");
-        if (stored) {
-          document.documentElement.setAttribute("data-theme", stored);
-        } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-          document.documentElement.setAttribute("data-theme", "dark");
+        var themeBtn = document.querySelector(".theme-toggle");
+        if (themeBtn) {
+          var stored = localStorage.getItem("theme");
+          if (stored) {
+            document.documentElement.setAttribute("data-theme", stored);
+          } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            document.documentElement.setAttribute("data-theme", "dark");
+          }
+          themeBtn.addEventListener("click", function () {
+            var current = document.documentElement.getAttribute("data-theme");
+            var next = current === "dark" ? "light" : "dark";
+            document.documentElement.setAttribute("data-theme", next);
+            localStorage.setItem("theme", next);
+          });
         }
-        btn.addEventListener("click", function () {
-          var current = document.documentElement.getAttribute("data-theme");
-          var next = current === "dark" ? "light" : "dark";
-          document.documentElement.setAttribute("data-theme", next);
-          localStorage.setItem("theme", next);
+
+        var linkBtns = document.querySelectorAll(".hero-icon-btn[data-href]");
+        linkBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            window.open(b.getAttribute("data-href"), "_blank", "noopener");
+          });
         });
       })();
     </script>
