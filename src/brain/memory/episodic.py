@@ -97,13 +97,11 @@ class EpisodicMemory:
     ) -> None:
         """异步调用 LLM 改进压缩摘要，完成后回写 episodes.json。"""
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             return  # 无事件循环（测试/脚本），跳过异步改进
 
-        loop.create_task(  # noqa: RUF006
-            self._refine_summary_async(to_compress, start_time, end_time, compressed)
-        )
+        asyncio.create_task(self._refine_summary_async(to_compress, start_time, end_time, compressed))  # noqa: RUF006
 
     async def _refine_summary_async(
         self,

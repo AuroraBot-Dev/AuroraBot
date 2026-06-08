@@ -58,6 +58,7 @@ class MessagePreprocessor(Router):
         self._pending_inputs: dict[str, list[dict[str, Any]]] = {}
         self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(deque)
         self._private_recent: dict[str, deque[tuple[float, str]]] = defaultdict(deque)
+        self._debounce_tasks: set[asyncio.Task[None]] = set()
 
     async def execute(self) -> list[FileUpdate]:
         pending_dir = kernel_data_dir / "inbox" / "pending"
@@ -173,9 +174,9 @@ class MessagePreprocessor(Router):
         version = self._session_versions.get(session_key, 0) + 1
         self._session_versions[session_key] = version
 
-        asyncio.create_task(  # noqa: RUF006
-            self._debounce_and_produce(session_key, version)
-        )
+        task = asyncio.create_task(self._debounce_and_produce(session_key, version))
+        self._debounce_tasks.add(task)
+        task.add_done_callback(self._debounce_tasks.discard)
 
     # ═══════════════════════════════════════════════════
     # 防抖 → 产出 message_queue 文件（标准信封）

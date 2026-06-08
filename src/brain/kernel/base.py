@@ -18,8 +18,6 @@ if TYPE_CHECKING:
 logger = get_logger("NodeBase")
 
 
-# 节点状态
-# # 然而我并没有看出哪里用到了. 还得观望观望
 class NodeState(Enum):
     IDLE = auto()
     READY = auto()
@@ -196,6 +194,14 @@ class Node:
         if event.metadata.get("source_node") == self.id:
             return False
         return any(guard.match(event.path) for guard in self.guards)
+
+    def wake(self) -> None:
+        """标记节点为 READY 并唤醒等待中的 ``run()`` 协程。
+
+        供 :class:`FileEventBus` 在事件匹配成功后调用。
+        """
+        self.state = NodeState.READY
+        self._ready_event.set()
 
     @abstractmethod
     async def execute(self) -> list[FileUpdate]:

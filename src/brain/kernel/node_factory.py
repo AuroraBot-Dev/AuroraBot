@@ -5,8 +5,25 @@ from typing import TYPE_CHECKING, Any, cast
 import yaml
 
 from src.brain.kernel.circuit import Circuit
-from src.brain.nodes.agents import *  # noqa: F403
-from src.brain.nodes.routers import *  # noqa: F403
+from src.brain.nodes.agents import (
+    ActionPlanner,
+    Externalizer,
+    ImpulseGate,
+    Internalizer,
+    MemoryConsolidator,
+    PolarisAgent,
+)
+from src.brain.nodes.routers import (
+    BroadcastRouter,
+    CommandDispatcher,
+    DeadLetterRouter,
+    HeartbeatGenerator,
+    MergeRouter,
+    MessagePreprocessor,
+    MetricsCollector,
+    SwitchRouter,
+    TimerScheduler,
+)
 from src.config import Config
 from src.utils.log_utils import get_logger
 
@@ -22,26 +39,26 @@ logger = get_logger("NodeFactory")
 # 节点注册表 —— 新节点加在这里
 NODE_REGISTRY: dict[str, type[Node]] = {
     # Kernel-gamma 认知管线（两池 + 两转义者）
-    "message_preprocessor": MessagePreprocessor,  # noqa: F405
-    "internalizer": Internalizer,  # noqa: F405
-    "externalizer": Externalizer,  # noqa: F405
-    "command_dispatcher": CommandDispatcher,  # noqa: F405
+    "message_preprocessor": MessagePreprocessor,
+    "internalizer": Internalizer,
+    "externalizer": Externalizer,
+    "command_dispatcher": CommandDispatcher,
     # 节律系统
-    "heartbeat_generator": HeartbeatGenerator,  # noqa: F405
-    "timer_scheduler": TimerScheduler,  # noqa: F405
+    "heartbeat_generator": HeartbeatGenerator,
+    "timer_scheduler": TimerScheduler,
     # 记忆沉淀 & 可观测性
-    "memory_consolidator": MemoryConsolidator,  # noqa: F405
-    "metrics_collector": MetricsCollector,  # noqa: F405
+    "memory_consolidator": MemoryConsolidator,
+    "metrics_collector": MetricsCollector,
     # 拓扑原语
-    "switch_router": SwitchRouter,  # noqa: F405
-    "merge_router": MergeRouter,  # noqa: F405
-    "broadcast_router": BroadcastRouter,  # noqa: F405
-    "dead_letter_router": DeadLetterRouter,  # noqa: F405
+    "switch_router": SwitchRouter,
+    "merge_router": MergeRouter,
+    "broadcast_router": BroadcastRouter,
+    "dead_letter_router": DeadLetterRouter,
     # Kernel-beta 旧节点（disabled）
-    "impulse_gate": ImpulseGate,  # noqa: F405
-    "action_planner": ActionPlanner,  # noqa: F405
+    "impulse_gate": ImpulseGate,
+    "action_planner": ActionPlanner,
     # 旧单体节点（兼容模式）
-    "polaris": PolarisAgent,  # noqa: F405
+    "polaris": PolarisAgent,
 }
 
 # 节点构造时是否需要 host 引用（按 type 判断）
