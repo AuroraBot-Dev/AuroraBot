@@ -12,15 +12,15 @@
 
 ## Commands
 
-| Purpose | Command |
-|---|---|
-| Install deps | `uv sync --group dev` |
-| Run | `uv run python bot.py` |
-| Tests | `uv run pytest --cov=src` |
-| Lint | `uv run ruff check src/ tests/` |
-| Format | `uv run ruff format src/ tests/` |
+| Purpose      | Command                                  |
+| ------------ | ---------------------------------------- |
+| Install deps | `uv sync --group dev`                    |
+| Run          | `uv run python bot.py`                   |
+| Tests        | `uv run pytest --cov=src`                |
+| Lint         | `uv run ruff check src/ tests/`          |
+| Format       | `uv run ruff format src/ tests/`         |
 | Format check | `uv run ruff format --check src/ tests/` |
-| Type check | `uv run pyright src/` |
+| Type check   | `uv run pyright src/`                    |
 
 ## Architecture
 
@@ -73,6 +73,7 @@ Nodes communicate exclusively through files (FileEventBus). The topology is decl
 ## Conventions
 
 ### Code style
+
 - **Line length**: 120 (`ruff`), LF endings
 - **Quotes**: double quotes preferred (flake8-quotes `Q` rule active)
 - **Imports**: `from __future__ import annotations` in every file; isort enforced (`I`)
@@ -81,10 +82,12 @@ Nodes communicate exclusively through files (FileEventBus). The topology is decl
 - **Modern Python**: `X | Y` unions, PEP 604; pathlib (`PTH`); simplified constructs (`SIM`)
 
 ### Logging
+
 ```python
 from src.utils.log_utils import get_logger
 logger = get_logger("ModuleName")
 ```
+
 - **ERROR**: functional interruptions, exceptions
 - **WARNING**: recoverable anomalies, config fallbacks
 - **INFO**: lifecycle events only (start/stop, app register, user-visible results). NOT per-request or per-event.
@@ -92,15 +95,18 @@ logger = get_logger("ModuleName")
 - See `LOGGING.md` for the full policy.
 
 ### Singleton pattern
+
 Key services (gateway, memory_manager, app_host) use lazy-init module-level proxies. Init-on-first-access with one INFO line; sub-component init uses DEBUG.
 
 ### Naming & structure
+
 - `src/` is the NoneBot plugin dir (configured in `pyproject.toml`)
 - App packages use `im.polaris.*` namespace (e.g. `im.polaris.qq`, `im.polaris.weather`)
 - Command names: `{package}.{command_name}` (e.g. `im.polaris.qq.send_message`)
 - Test files: `tests/test_*.py`, runnable from project root with `uv run pytest`
 
 ### Git workflow
+
 - Base branch: `dev`
 - Feature branches: `feat/*`, `fix/*`, `refact/*`
 - PR to `dev`, merge once, delete branch
