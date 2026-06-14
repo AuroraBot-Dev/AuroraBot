@@ -37,7 +37,7 @@ auto_install = true   # fetch the runtime when CodeGraph is enabled but missing
 
 [builtin_mcp]
 time_enabled = true   # built-in Time MCP; off until manually enabled
-context7_enabled = false   # built-in Context7 MCP; off until manually enabled
+context7_enabled = true   # built-in Context7 MCP; off until manually enabled
 
 [lsp]
 enabled = true   # language server tools; servers launch lazily when used
