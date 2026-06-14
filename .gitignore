@@ -52,6 +52,7 @@ temp/
 .idea/
 .trae/
 .reasonix/
+.codegragh/
 *.code-workspace
 
 # Project files (others)

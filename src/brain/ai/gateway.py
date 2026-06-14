@@ -120,28 +120,29 @@ class CostTracker:
         async with self._lock:
             self._records.append(record)
 
-    def summary(self) -> dict:
-        total = 0.0
-        by_role: dict[str, dict] = {}
-        by_model: dict[str, dict] = {}
-        for r in self._records:
-            total += r.get("cost", 0.0)
-            role = r["role"]
-            model = r["model"]
-            if role not in by_role:
-                by_role[role] = {"count": 0, "cost": 0.0}
-            by_role[role]["count"] += 1
-            by_role[role]["cost"] += r.get("cost", 0.0)
-            if model not in by_model:
-                by_model[model] = {"count": 0, "cost": 0.0}
-            by_model[model]["count"] += 1
-            by_model[model]["cost"] += r.get("cost", 0.0)
-        return {
-            "total_cost": total,
-            "by_role": by_role,
-            "by_model": by_model,
-            "records": self._records,
-        }
+    async def summary(self) -> dict:
+        async with self._lock:
+            total = 0.0
+            by_role: dict[str, dict] = {}
+            by_model: dict[str, dict] = {}
+            for r in self._records:
+                total += r.get("cost", 0.0)
+                role = r["role"]
+                model = r["model"]
+                if role not in by_role:
+                    by_role[role] = {"count": 0, "cost": 0.0}
+                by_role[role]["count"] += 1
+                by_role[role]["cost"] += r.get("cost", 0.0)
+                if model not in by_model:
+                    by_model[model] = {"count": 0, "cost": 0.0}
+                by_model[model]["count"] += 1
+                by_model[model]["cost"] += r.get("cost", 0.0)
+            return {
+                "total_cost": total,
+                "by_role": by_role,
+                "by_model": by_model,
+                "records": list(self._records),
+            }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -191,9 +192,15 @@ class TaskManager:
 
     def create_task(self, coro: collections.abc.Coroutine[Any, Any, Any]) -> GenerationTask:
         task_id = uuid.uuid4().hex[:8]
-        task = asyncio.create_task(coro)
+
+        async def _run_and_cleanup() -> Any:
+            try:
+                return await coro
+            finally:
+                self._tasks.pop(task_id, None)
+
+        task = asyncio.create_task(_run_and_cleanup())
         self._tasks[task_id] = task
-        task.add_done_callback(lambda _t: self._tasks.pop(task_id, None))
         return GenerationTask(task_id, task)
 
     def abort(self, task_id: str) -> bool:
@@ -573,9 +580,9 @@ class ModelGateway:
             config["reranker"] = self.reranker
         return config
 
-    def cost_summary(self) -> dict:
+    async def cost_summary(self) -> dict:
         """获取费用分类汇总。"""
-        return self.cost_tracker.summary()
+        return await self.cost_tracker.summary()
 
 
 # ═══════════════════════════════════════════════════════════
