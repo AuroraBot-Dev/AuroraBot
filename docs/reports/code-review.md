@@ -215,12 +215,107 @@ if fixed != text:
 
 ---
 
+## 四、Architecture & Refactoring（架构与重构相关）
+
+> 以下为 MCP 化改造评估过程中发现的结构性问题，与代码缺陷无关，但涉及架构演进的痛点。
+
+### 15. 文本 JSON 解析是认知管线的脆弱环节
+
+**涉及文件:** `src/brain/nodes/agents/externalizer.py:191-225`、`src/utils/json_utils.py`
+
+当前 Externalizer 的 LLM 输出到命令执行的路径为：
+
+```
+LLM 文本输出
+  → _parse_actions(JSON 正则提取)
+  → parse_llm_json(JSON 修复递归)
+  → safe_parse_json_object(最后兜底)
+  → _adapt_plain_text(纯文本兜底)
+  → command_dispatcher 再解析一次
+  → host.invoke_command
+```
+
+每一步都可能失败，且多层 fallback 增加了复杂度和不可预测性。`parse_llm_json` 的递归修复（#13）是这一模式脆弱的体现。
+
+**影响:** 即使 LLM 输出了语义正确的动作，也有可能因 JSON 格式问题被丢弃，导致 AuroraBot "想做但说不清"。当前实践中 Externalizer 使用 `temperature=0.0` 缓解此问题，但 temperature 不应被结构性缺陷绑架。
+
+**建议:** 引入 LLM 原生 function calling（MCP 化或直接使用 OpenAI tool_calls），让 LLM 直接输出结构化 `tool_calls`，彻底消除文本 JSON 解析链路。详见 `docs/reports/app-platform-mcp-migration.md`。
+
+---
+
+### 16. Externalizer 与 command_dispatcher 存在双重解析
+
+**涉及文件:**
+
+- `src/brain/nodes/agents/externalizer.py:120-135`（写入 `act_*.json` 时构造 payload）
+- `src/brain/nodes/routers/command_dispatcher.py:43-97`（读取 `act_*.json` 时兼容新旧两种格式）
+
+Externalizer 已经把动作解析为 `{"command": "...", "params": {...}}` 结构，但写入 action_queue 后又由 command_dispatcher 再解析一次。command_dispatcher 还需兼容两种格式（旧版顶层字段 / 新版 envelope+payload），并自行处理 `raw_response` fallback。
+
+**影响:** 两次解析加重了管线的延迟和出错概率，且 command_dispatcher 的格式兼容逻辑无法被 Externalizer 复用。
+
+**建议:** 如果保持文本 JSON 模式，将 command_dispatcher 的解析逻辑上移到 Externalizer，action_queue 文件直接存储已标准化的 CommandSpec，command_dispatcher 只做 `host.invoke_command()`。如果 MCP 化，command_dispatcher 节点可直接移除——LLM 的 tool_calls 由 MCP Client 直接执行。
+
+---
+
+### 17. `_build_commands_text` 三处独立实现且语义不同
+
+**涉及文件:**
+
+- `src/brain/nodes/agents/internalizer.py:189-207`
+- `src/brain/nodes/agents/externalizer.py:203-226`
+- `src/brain/nodes/agents/polaris_agent.py`（~20 行）
+
+三处实现虽结构相似，但格式细节不同（Internalizer 用 markdown 列表，Externalizer 用 JSON 示例段落，PolarisAgent 又是一种变体）。这意味着同样的工具列表以三种形式注入 LLM context，LLM 需要适应三种不同的格式。
+
+**影响:** 维护成本高，且格式一致性问题可能导致 LLM 在不同节点对同一工具的理解偏差。
+
+**建议:** 统一由 `ApplicationHost.build_commands_context()` 生成单一种格式，或由 MCP client 提供标准化的 tool schema。
+
+---
+
+### 18. EventBridge 轮询间隙造成延迟
+
+**文件:** `src/brain/nodes/event_bridge.py:45-72`
+
+```python
+await asyncio.wait_for(stop_event.wait(), timeout=max(0.05, interval))
+```
+
+EventBridge 以定时轮询方式 drain ApplicationHost 的事件队列，默认间隔 1.5s。这意味着外部 QQ 消息到达后，在最坏情况下需等待 1.5s 才进入认知管线。在低负载时此延迟可接受，但在高并发场景下可能积累。
+
+**影响:** 端到端延迟的波动上限为 `interval` 秒，不致命但值得记录。
+
+**建议:** 引入 `asyncio.Event` 唤醒机制——当 `host.emit_event()` 时同时设置一个 `_event_pending` 事件，EventBridge 改为 `asyncio.wait([stop_event, event_pending], timeout=interval)`。
+
+---
+
+### 19. FileEventBus 写锁是全局 asyncio.Lock，不支持终结语义
+
+**文件:** `src/brain/kernel/event_bus.py:99-101`
+
+```python
+def _get_lock(self, path_key: str) -> asyncio.Lock:
+    if path_key not in self._file_locks:
+        self._file_locks[path_key] = asyncio.Lock()
+    return self._file_locks[path_key]
+```
+
+当前每个文件路径只有一把 `asyncio.Lock`，没有读/写区分、没有归档终结语义。如果未来引入文件归档（`move_to_done` 删除源文件）时存在并发读，会出现读已删除文件的风险。详见 `docs/reports/kernel-fs-lock-system.md` 中设计的"两阶段门闩"模式。
+
+**建议:** 如果引入文件归档机制，将 `_file_locks` 从 `asyncio.Lock` 升级为 `TerminableSharedLock`（实现 OPEN/CLOSING/ARCHIVED 三态）。当前系统通过文件名约定（`done/` 子目录 + `move_to_done` rename）避免了部分竞态，但 rename 在跨文件系统时不保证原子性。
+
+---
+
 ## 总结
 
-| 严重级别    | 数量 | 关键主题                                                            |
-| ----------- | ---- | ------------------------------------------------------------------- |
-| Critical    | 3    | 并发安全 (CostTracker, TaskManager)、日志 bug (exception decorator) |
-| Important   | 5    | 启动行为、事件循环阻塞、fire-and-forget 安全                        |
-| Suggestions | 6    | 代码重复、模块副作用、脆弱排序                                      |
+| 严重级别     | 数量 | 关键主题                                                            |
+| ------------ | ---- | ------------------------------------------------------------------- |
+| Critical     | 3    | 并发安全 (CostTracker, TaskManager)、日志 bug (exception decorator) |
+| Important    | 5    | 启动行为、事件循环阻塞、fire-and-forget 安全                        |
+| Suggestions  | 6    | 代码重复、模块副作用、脆弱排序                                      |
+| Architecture | 5    | JSON 解析脆弱、双重解析、命令文本重复、轮询延迟、文件锁语义         |
 
 **整体评价:** 项目架构设计有明确的认知科学隐喻（两池 + 转义者），事件驱动 + 文件持久化的模式使得状态可追溯、可回滚。代码整体质量中上，lint 规则配置全面（ruff + pyright），但并发安全（asyncio + 共享状态）和阻塞 I/O 方面存在一些需要修复的问题。测试覆盖看起来不错（13 个测试文件），建议补上针对并发场景的压力测试。
+
+架构层面，当前认知管线的最大痛点是 LLM 文本输出 → JSON 解析 → 命令派发的脆弱链路。MCP 化改造可系统性解决该问题（详见 `docs/reports/app-platform-mcp-migration.md`）。
