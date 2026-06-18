@@ -272,3 +272,81 @@ class AccessPolicySnapshotTest(unittest.TestCase):
         # 快照不受影响
         self.assertNotIn("math", snapshot.whitelist_modules)
         self.assertNotIn("print", snapshot.whitelist_builtins)
+
+
+# ═══════════════════════════════════════════════════════════════
+# CodeInspector
+# ═══════════════════════════════════════════════════════════════
+
+
+class CodeInspectorDangerousNodeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/sandbox/**"}),
+            whitelist_dirs=frozenset({"data/sandbox/**"}),
+            whitelist_modules=frozenset({"json", "math", "re"}),
+            whitelist_builtins=frozenset({"len", "print", "range", "int", "str"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os", "sys", "subprocess"}),
+            blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__", "globals", "locals"}),
+        )
+        self.policy = AccessPolicy(config)
+        from src.brain.sandbox.inspector import CodeInspector
+
+        self.inspector = CodeInspector(self.policy)
+
+    def test_safe_code_passes(self) -> None:
+        """安全代码应该通过检查。"""
+        code = "x = 1 + 2\nprint(x)\n"
+        violations = self.inspector.inspect(code)
+        self.assertEqual(violations, [])
+
+    def test_delete_statement_rejected(self) -> None:
+        """del 语句应该被拒绝。"""
+        code = "x = 1\ndel x\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any(v.violation_type == "dangerous_operation" for v in violations))
+        self.assertTrue(any("Delete" in (v.node_name or "") for v in violations))
+
+    def test_global_statement_rejected(self) -> None:
+        """global 语句应该被拒绝。"""
+        code = "def f():\n    global x\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any(v.node_name == "Global" for v in violations))
+
+    def test_exec_call_rejected(self) -> None:
+        """exec() 调用应该被拒绝。"""
+        code = 'exec("print(1)")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("exec" in v.detail for v in violations))
+
+    def test_eval_call_rejected(self) -> None:
+        """eval() 调用应该被拒绝。"""
+        code = 'eval("1+1")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("eval" in v.detail for v in violations))
+
+    def test_os_import_rejected(self) -> None:
+        """import os 应该被拒绝。"""
+        code = "import os\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any(v.violation_type == "blacklisted_access" for v in violations))
+
+    def test_subprocess_import_rejected(self) -> None:
+        """import subprocess 应该被拒绝。"""
+        code = "import subprocess\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("subprocess" in v.detail for v in violations))
+
+    def test_import_from_rejected(self) -> None:
+        """from os import system 应该被拒绝。"""
+        code = "from os import system\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("os" in v.detail for v in violations))
+
+    def test_safe_import_allowed(self) -> None:
+        """import json 应该被允许。"""
+        code = "import json\n"
+        violations = self.inspector.inspect(code)
+        self.assertEqual(violations, [])
