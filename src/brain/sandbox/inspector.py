@@ -20,6 +20,18 @@ logger = get_logger("CodeInspector")
 class CodeInspector:
     """基于 Python AST 的代码安全检查器。"""
 
+    # 构造函数 → 返回类型的映射（用于调用链解析）
+    _CONSTRUCTOR_TO_CLASS: ClassVar[dict[str, str]] = {
+        # pathlib concrete paths
+        "Path": "pathlib.Path",
+        "PosixPath": "pathlib.PosixPath",
+        "WindowsPath": "pathlib.WindowsPath",
+        # pathlib pure paths
+        "PurePath": "pathlib.PurePath",
+        "PurePosixPath": "pathlib.PurePosixPath",
+        "PureWindowsPath": "pathlib.PureWindowsPath",
+    }
+
     _DANGEROUS_NODE_TYPES: ClassVar[dict[str, str]] = {
         "Delete": "禁止删除操作（del 语句）",
         "Global": "禁止 global 变量声明",
@@ -44,14 +56,16 @@ class CodeInspector:
         "os.renames": "禁止调用 os.renames()",
         "shutil.rmtree": "禁止调用 shutil.rmtree()",
         "shutil.move": "禁止调用 shutil.move()",
+        # pathlib.Path 方法（通过前缀匹配覆盖所有变体）
         "pathlib.Path.unlink": "禁止调用 Path.unlink()",
         "pathlib.Path.rmdir": "禁止调用 Path.rmdir()",
         "pathlib.Path.rename": "禁止调用 Path.rename()",
         "pathlib.Path.replace": "禁止调用 Path.replace()",
-        "str.format": "禁止调用 str.format()（可利用 {0.__class__.__bases__} 进行属性遍历逃逸）",
-        "operator.attrgetter": "禁止调用 operator.attrgetter()（可动态访问 __class__ 等内部属性）",
         "pathlib.Path.symlink_to": "禁止调用 Path.symlink_to()（可创建符号链接绕过路径检查）",
         "pathlib.Path.hardlink_to": "禁止调用 Path.hardlink_to()（可创建硬链接）",
+        # 其他危险调用
+        "str.format": "禁止调用 str.format()（可利用 {0.__class__.__bases__} 进行属性遍历逃逸）",
+        "operator.attrgetter": "禁止调用 operator.attrgetter()（可动态访问 __class__ 等内部属性）",
         "gc.get_objects": "禁止调用 gc.get_objects()（可遍历所有 Python 对象进行逃逸）",
         "gc.get_referrers": "禁止调用 gc.get_referrers()（可获取引用链进行逃逸）",
         "inspect.currentframe": "禁止调用 inspect.currentframe()（可获取当前帧对象进行逃逸）",
@@ -61,6 +75,16 @@ class CodeInspector:
         "linecache.getlines": "禁止调用 linecache.getlines()（可按文件名读取任意源码文件全部内容）",
         "traceback.extract_stack": "禁止调用 traceback.extract_stack()（可泄露调用栈信息）",
         "traceback.format_stack": "禁止调用 traceback.format_stack()（可泄露调用栈信息）",
+    }
+
+    # 危险调用的前缀匹配规则（用于覆盖类继承体系）
+    _DANGEROUS_CALL_PREFIXES: ClassVar[dict[str, str]] = {
+        "pathlib.Path.": "pathlib.Path 方法禁止调用",
+        "pathlib.PosixPath.": "pathlib.PosixPath 方法禁止调用",
+        "pathlib.WindowsPath.": "pathlib.WindowsPath 方法禁止调用",
+        "pathlib.PurePath.": "pathlib.PurePath 方法禁止调用",
+        "pathlib.PurePosixPath.": "pathlib.PurePosixPath 方法禁止调用",
+        "pathlib.PureWindowsPath.": "pathlib.PureWindowsPath 方法禁止调用",
     }
 
     _DANGEROUS_ATTRS: ClassVar[dict[str, str]] = {
@@ -148,10 +172,11 @@ class CodeInspector:
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 if not self._policy.can_import_module(module):
+                    imported_names = ", ".join(alias.name for alias in node.names)
                     violations.append(
                         SecurityViolation(
                             violation_type="blacklisted_access",
-                            detail=f"禁止 from {module} import",
+                            detail=f"禁止 from {module} import {imported_names}",
                             line=node.lineno,
                             node_name="ImportFrom",
                         )
@@ -159,17 +184,41 @@ class CodeInspector:
         return violations
 
     def _resolve_call_chain(self, node: ast.expr) -> str | None:
-        """解析调用链，如 os.path.join → 'os.path.join'。"""
+        """解析调用链，如 os.path.join → 'os.path.join'。
+
+        支持解析：
+        - 简单名称：os → 'os'
+        - 属性链：os.path.join → 'os.path.join'
+        - 字面量方法：'str'.format() → 'str.format'
+        - 构造函数：Path('x').unlink() → 'pathlib.Path.unlink'
+        """
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Attribute):
             parent = self._resolve_call_chain(node.value)
             if parent is not None:
                 return f"{parent}.{node.attr}"
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return "str"
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name):
+                # 使用构造函数映射表，而非硬编码
+                if func.id in self._CONSTRUCTOR_TO_CLASS:
+                    return self._CONSTRUCTOR_TO_CLASS[func.id]
+            elif isinstance(func, ast.Attribute):
+                chain = self._resolve_call_chain(func)
+                if chain:
+                    return chain
         return None
 
     def _check_calls(self, tree: ast.Module) -> list[SecurityViolation]:
-        """检查所有函数调用，验证是否调用危险函数。"""
+        """检查所有函数调用，验证是否调用危险函数。
+
+        支持两种匹配方式：
+        1. 精确匹配：chain in _DANGEROUS_CALLS
+        2. 前缀匹配：检查 _DANGEROUS_CALL_PREFIXES
+        """
         violations = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -177,6 +226,8 @@ class CodeInspector:
             chain = self._resolve_call_chain(node.func)
             if chain is None:
                 continue
+
+            # 精确匹配
             if chain in self._DANGEROUS_CALLS:
                 violations.append(
                     SecurityViolation(
@@ -186,6 +237,20 @@ class CodeInspector:
                         node_name="Call",
                     )
                 )
+                continue
+
+            # 前缀匹配（用于类继承体系）
+            for prefix, msg in self._DANGEROUS_CALL_PREFIXES.items():
+                if chain.startswith(prefix):
+                    violations.append(
+                        SecurityViolation(
+                            violation_type="dangerous_operation",
+                            detail=f"{msg}: {chain[len(prefix):]}",
+                            line=node.lineno,
+                            node_name="Call",
+                        )
+                    )
+                    break
         return violations
 
     def _check_open_calls(

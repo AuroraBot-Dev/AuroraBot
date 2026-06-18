@@ -350,3 +350,120 @@ class CodeInspectorDangerousNodeTest(unittest.TestCase):
         code = "import json\n"
         violations = self.inspector.inspect(code)
         self.assertEqual(violations, [])
+
+    def test_import_with_alias_rejected(self) -> None:
+        """import os as x 应该被拒绝（别名不影响模块检查）。"""
+        code = "import os as operating_system\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("os" in v.detail for v in violations))
+
+    def test_from_import_with_alias_rejected(self) -> None:
+        """from os import path as p 应该被拒绝。"""
+        code = "from os import path as p\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("os" in v.detail for v in violations))
+
+
+# ═══════════════════════════════════════════════════════════════
+# CodeInspector Advanced Tests
+# ═══════════════════════════════════════════════════════════════
+
+
+class CodeInspectorAdvancedTest(unittest.TestCase):
+    def setUp(self) -> None:
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/sandbox/**"}),
+            whitelist_dirs=frozenset({"data/sandbox/**"}),
+            whitelist_modules=frozenset({"json", "math", "re", "pathlib"}),
+            whitelist_builtins=frozenset({"len", "print", "range", "int", "str", "getattr"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset(
+                {
+                    "os",
+                    "sys",
+                    "subprocess",
+                    "operator",
+                    "gc",
+                    "inspect",
+                    "linecache",
+                    "traceback",
+                }
+            ),
+            blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__", "globals", "locals", "open"}),
+        )
+        self.policy = AccessPolicy(config)
+        from src.brain.sandbox.inspector import CodeInspector
+
+        self.inspector = CodeInspector(self.policy)
+
+    def test_str_format_rejected(self) -> None:
+        code = '"{0.__class__}".format(x)\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("str.format" in v.detail for v in violations))
+
+    def test_subclasses_access_rejected(self) -> None:
+        code = "x.__subclasses__()\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("__subclasses__" in v.detail for v in violations))
+
+    def test_chained_class_access_rejected(self) -> None:
+        code = "[].__class__.__base__.__subclasses__()\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("__class__" in v.detail for v in violations))
+
+    def test_type_introspection_bases_rejected(self) -> None:
+        code = "type(x).__bases__\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("type()" in v.detail for v in violations))
+
+    def test_type_introspection_subclasses_rejected(self) -> None:
+        code = "type(x).__subclasses__()\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("type()" in v.detail for v in violations))
+
+    def test_type_introspection_globals_rejected(self) -> None:
+        code = "type(lambda:0).__globals__\n"
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("type()" in v.detail for v in violations))
+
+    def test_type_call_allowed(self) -> None:
+        code = "t = type(x)\n"
+        violations = self.inspector.inspect(code)
+        type_violations = [v for v in violations if "type()" in v.detail]
+        self.assertEqual(type_violations, [])
+
+    def test_symlink_to_rejected(self) -> None:
+        code = 'from pathlib import Path\nPath("x").symlink_to("y")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("symlink_to" in v.detail for v in violations))
+
+    def test_hardlink_to_rejected(self) -> None:
+        code = 'from pathlib import Path\nPath("x").hardlink_to("y")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("hardlink_to" in v.detail for v in violations))
+
+    def test_getattribute_rejected(self) -> None:
+        code = 'x.__getattribute__("__class__")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("__getattribute__" in v.detail for v in violations))
+
+    def test_attrgetter_rejected(self) -> None:
+        code = 'from operator import attrgetter\nattrgetter("__class__")([])\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("attrgetter" in v.detail for v in violations))
+
+    def test_open_blacklisted_path_rejected(self) -> None:
+        code = 'open("/etc/passwd")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("open" in v.detail for v in violations))
+
+    def test_open_write_outside_rejected(self) -> None:
+        code = 'open("/tmp/x", "w")\n'
+        violations = self.inspector.inspect(code)
+        self.assertTrue(any("open" in v.detail for v in violations))
+
+    def test_syntax_error_returns_no_violations(self) -> None:
+        code = "def f(\n"
+        violations = self.inspector.inspect(code)
+        self.assertEqual(violations, [])
