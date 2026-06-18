@@ -53,6 +53,9 @@ temp/
 .trae/
 .reasonix/
 *.code-workspace
+.claude/
+CLAUDE.md
+graphify-out/
 
 # Project files (others)
 nodes-beta/
