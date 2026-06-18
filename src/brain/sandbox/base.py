@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -23,7 +26,7 @@ class SandboxResult:
     error : str | None
         stderr / 异常信息，语法错误、安全违规、执行异常等。
     artifacts : list[Path]
-        执行产生的文件列表 (CSV、图片等), 输出目录为 SANDBOX_OUTPUT_DIR。    
+        执行产生的文件列表 (CSV、图片等), 输出目录为 SANDBOX_OUTPUT_DIR。
     execution_time : float
         执行耗时 (秒), 从 execute() 调用开始到返回结果。
     """
@@ -63,10 +66,7 @@ class SandboxConfigError(ValueError):
     当 YAML 配置文件缺失 key、key 类型不匹配、或 YAML 语法错误时抛出。
     错误消息明确指出具体问题，便于快速定位修复。
 
-    Examples
-    --------
-    >>> raise SandboxConfigError("配置文件缺失必需的 key: whitelist.files")
-    >>> raise SandboxConfigError("whitelist.modules 类型错误: 期望 list，实际得到 str")
+    Examples:
+        raise SandboxConfigError("配置文件缺失必需的 key: whitelist.files")
+        raise SandboxConfigError("whitelist.modules 类型错误: 期望 list，实际得到 str")
     """
-
-    pass
