@@ -214,3 +214,61 @@ class AccessPolicyTest(unittest.TestCase):
         self.assertFalse(policy.can_use_builtin("exec"))
         self.assertFalse(policy.can_use_builtin("eval"))
         self.assertFalse(policy.can_use_builtin("open"))
+
+
+# ═══════════════════════════════════════════════════════════════
+# AccessPolicySnapshot
+# ═══════════════════════════════════════════════════════════════
+
+
+class AccessPolicySnapshotTest(unittest.TestCase):
+    def test_snapshot_is_immutable(self) -> None:
+        """快照应该是不可变的数据结构。"""
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/**"}),
+            whitelist_dirs=frozenset({"data/**"}),
+            whitelist_modules=frozenset({"json"}),
+            whitelist_builtins=frozenset({"len"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os"}),
+            blacklist_builtins=frozenset({"exec"}),
+        )
+        policy = AccessPolicy(config)
+        snapshot = policy.snapshot()
+        from src.brain.sandbox.policy import AccessPolicySnapshot
+
+        self.assertIsInstance(snapshot, AccessPolicySnapshot)
+        self.assertIsInstance(snapshot.whitelist_modules, frozenset)
+        self.assertIn("json", snapshot.whitelist_modules)
+        self.assertIn("os", snapshot.blacklist_modules)
+
+    def test_snapshot_independent_of_later_config_change(self) -> None:
+        """快照应该独立于后续的配置变更。"""
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/**"}),
+            whitelist_dirs=frozenset({"data/**"}),
+            whitelist_modules=frozenset({"json"}),
+            whitelist_builtins=frozenset({"len"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os"}),
+            blacklist_builtins=frozenset({"exec"}),
+        )
+        policy = AccessPolicy(config)
+        snapshot = policy.snapshot()
+        # 更新配置
+        new_config = SandboxConfig(
+            whitelist_files=frozenset({"data/**"}),
+            whitelist_dirs=frozenset({"data/**"}),
+            whitelist_modules=frozenset({"json", "math"}),
+            whitelist_builtins=frozenset({"len", "print"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os"}),
+            blacklist_builtins=frozenset({"exec"}),
+        )
+        policy.update_config(new_config)
+        # 快照不受影响
+        self.assertNotIn("math", snapshot.whitelist_modules)
+        self.assertNotIn("print", snapshot.whitelist_builtins)

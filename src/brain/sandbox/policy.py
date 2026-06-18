@@ -1,10 +1,11 @@
 """Sandbox 访问策略引擎。
 
-白名单 + 黑名单访问控制，规则优先级：黑名单 > 白名单 > 默认拒绝。
+白名单 + 黑名单访问控制,规则优先级：黑名单 > 白名单 > 默认拒绝。
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,35 @@ if TYPE_CHECKING:
 logger = get_logger("AccessPolicy")
 
 SANDBOX_DIR = Config.SANDBOX_DIR
+
+
+@dataclass(slots=True)
+class AccessPolicySnapshot:
+    """AccessPolicy 的不可变快照，用于单次执行期间保持配置一致性。"""
+
+    whitelist_files: frozenset[str]
+    whitelist_dirs: frozenset[str]
+    whitelist_modules: frozenset[str]
+    whitelist_builtins: frozenset[str]
+    blacklist_files: frozenset[str]
+    blacklist_dirs: frozenset[str]
+    blacklist_modules: frozenset[str]
+    blacklist_builtins: frozenset[str]
+
+    @classmethod
+    def from_policy(cls, policy: AccessPolicy) -> AccessPolicySnapshot:
+        """从 AccessPolicy 创建不可变快照。"""
+        cfg = policy.config
+        return cls(
+            whitelist_files=cfg.whitelist_files,
+            whitelist_dirs=cfg.whitelist_dirs,
+            whitelist_modules=cfg.whitelist_modules,
+            whitelist_builtins=cfg.whitelist_builtins,
+            blacklist_files=cfg.blacklist_files,
+            blacklist_dirs=cfg.blacklist_dirs,
+            blacklist_modules=cfg.blacklist_modules,
+            blacklist_builtins=cfg.blacklist_builtins,
+        )
 
 
 class AccessPolicy:
@@ -91,3 +121,7 @@ class AccessPolicy:
                 return False
         # 读模式检查文件白名单
         return self.can_read_file(path)
+
+    def snapshot(self) -> AccessPolicySnapshot:
+        """创建当前配置的不可变快照。"""
+        return AccessPolicySnapshot.from_policy(self)
