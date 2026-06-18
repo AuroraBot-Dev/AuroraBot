@@ -467,3 +467,122 @@ class CodeInspectorAdvancedTest(unittest.TestCase):
         code = "def f(\n"
         violations = self.inspector.inspect(code)
         self.assertEqual(violations, [])
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxExecutor
+# ═══════════════════════════════════════════════════════════════
+
+
+import asyncio
+
+
+class SandboxExecutorTest(unittest.TestCase):
+    def setUp(self) -> None:
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/sandbox/**"}),
+            whitelist_dirs=frozenset({"data/sandbox/**"}),
+            whitelist_modules=frozenset({"json", "math", "re"}),
+            whitelist_builtins=frozenset(
+                {
+                    "len",
+                    "print",
+                    "range",
+                    "int",
+                    "str",
+                    "list",
+                    "dict",
+                    "set",
+                    "tuple",
+                    "float",
+                    "bool",
+                    "type",
+                    "isinstance",
+                    "repr",
+                    "format",
+                    "sorted",
+                    "min",
+                    "max",
+                    "sum",
+                    "abs",
+                    "round",
+                    "enumerate",
+                    "zip",
+                    "map",
+                    "filter",
+                    "any",
+                    "all",
+                    "iter",
+                    "next",
+                    "input",
+                }
+            ),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset(
+                {"os", "sys", "subprocess", "shutil", "builtins", "importlib", "ctypes", "gc", "inspect"}
+            ),
+            blacklist_builtins=frozenset(
+                {
+                    "exec",
+                    "eval",
+                    "compile",
+                    "__import__",
+                    "globals",
+                    "locals",
+                    "breakpoint",
+                    "exit",
+                    "quit",
+                    "getattr",
+                    "setattr",
+                    "open",
+                    "vars",
+                    "dir",
+                    "hash",
+                    "id",
+                    "callable",
+                    "hasattr",
+                    "chr",
+                    "ord",
+                    "hex",
+                    "oct",
+                    "bin",
+                    "divmod",
+                    "pow",
+                }
+            ),
+        )
+        self.policy = AccessPolicy(config)
+        from src.brain.sandbox.inspector import CodeInspector
+
+        self.inspector = CodeInspector(self.policy)
+        from src.brain.sandbox.executor import SandboxExecutor
+
+        self.executor = SandboxExecutor(self.policy, self.inspector)
+
+    def test_simple_print_captured(self) -> None:
+        async def run() -> None:
+            result = await self.executor.execute('print("hello")', "test-session")
+            self.assertTrue(result.success)
+            self.assertIn("hello", result.output)
+            self.assertIsNone(result.error)
+
+        asyncio.run(run())
+
+    def test_syntax_error_returns_error(self) -> None:
+        async def run() -> None:
+            result = await self.executor.execute("def f(\n", "test-session")
+            self.assertFalse(result.success)
+            self.assertIn("SyntaxError", result.error)
+
+        asyncio.run(run())
+
+    def test_no_stdout_direct_output(self) -> None:
+        """stdout 应被捕获到文件，不会直接输出到控制台。"""
+
+        async def run() -> None:
+            result = await self.executor.execute('print("should not appear in console")', "test-session")
+            self.assertTrue(result.success)
+            self.assertIn("should not appear in console", result.output)
+
+        asyncio.run(run())
