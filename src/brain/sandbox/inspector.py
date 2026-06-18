@@ -245,7 +245,7 @@ class CodeInspector:
                     violations.append(
                         SecurityViolation(
                             violation_type="dangerous_operation",
-                            detail=f"{msg}: {chain[len(prefix):]}",
+                            detail=f"{msg}: {chain[len(prefix) :]}",
                             line=node.lineno,
                             node_name="Call",
                         )

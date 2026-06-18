@@ -99,9 +99,7 @@ class SandboxExecutor:
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
-    def _write_script(
-        self, code: str, safe_builtins_code: str, context_code: str, execution_dir: Path
-    ) -> Path:
+    def _write_script(self, code: str, safe_builtins_code: str, context_code: str, execution_dir: Path) -> Path:
         """生成包装脚本,写入临时 .py 文件。"""
         script_content = (
             "import builtins as _b\n"
@@ -139,9 +137,7 @@ class SandboxExecutor:
 
         return safe_builtins_code, context_code
 
-    async def _run_subprocess(
-        self, script_path: Path, output_dir: Path
-    ) -> tuple[bool, str, str]:
+    async def _run_subprocess(self, script_path: Path, output_dir: Path) -> tuple[bool, str, str]:
         stdout_path = output_dir / "stdout.txt"
         stderr_path = output_dir / "stderr.txt"
 
@@ -167,9 +163,7 @@ class SandboxExecutor:
                 await process.wait()
                 return (
                     False,
-                    stdout_path.read_text(encoding="utf-8", errors="replace")[
-                        : Config.SANDBOX_MAX_OUTPUT_SIZE
-                    ],
+                    stdout_path.read_text(encoding="utf-8", errors="replace")[: Config.SANDBOX_MAX_OUTPUT_SIZE],
                     f"执行超时(超过 {Config.SANDBOX_EXEC_TIMEOUT} 秒)",
                 )
 
