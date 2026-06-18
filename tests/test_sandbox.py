@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import textwrap
 import unittest
@@ -474,9 +475,6 @@ class CodeInspectorAdvancedTest(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════
 
 
-import asyncio
-
-
 class SandboxExecutorTest(unittest.TestCase):
     def setUp(self) -> None:
         config = SandboxConfig(
@@ -691,3 +689,56 @@ class ConfigReloaderTest(unittest.TestCase):
         reloader.check_and_reload()
         # callback 不应被调用（无效配置不触发更新）
         self.assertEqual(len(configs_received), 1)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxManager
+# ═══════════════════════════════════════════════════════════════
+
+from src.brain.sandbox import SandboxManager, SandboxResult
+
+
+class SandboxManagerTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.manager = SandboxManager()
+
+    def test_full_safe_execution(self) -> None:
+        async def run() -> None:
+            result = await self.manager.execute('print("hello world")', "test-safe")
+            self.assertIsInstance(result, SandboxResult)
+            self.assertTrue(result.success)
+            self.assertIn("hello world", result.output)
+
+        asyncio.run(run())
+
+    def test_full_dangerous_rejection(self) -> None:
+        async def run() -> None:
+            result = await self.manager.execute('import os\nos.system("rm -rf /")', "test-danger")
+            self.assertFalse(result.success)
+            self.assertIn("安全违规", result.error)
+
+        asyncio.run(run())
+
+    def test_syntax_error_in_manager(self) -> None:
+        async def run() -> None:
+            result = await self.manager.execute("def f(\n", "test-syntax")
+            self.assertFalse(result.success)
+            self.assertIn("语法错误", result.error)
+
+        asyncio.run(run())
+
+    def test_invalid_session_id(self) -> None:
+        async def run() -> None:
+            result = await self.manager.execute('print("x")', "../../../tmp")
+            self.assertFalse(result.success)
+            self.assertIn("非法字符", result.error)
+
+        asyncio.run(run())
+
+    def test_validate_session_id_valid(self) -> None:
+        # 不应抛出异常
+        SandboxManager._validate_session_id("test-session_123")
+
+    def test_validate_session_id_invalid(self) -> None:
+        with self.assertRaises(ValueError):
+            SandboxManager._validate_session_id("../../../etc")
