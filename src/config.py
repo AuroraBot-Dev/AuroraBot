@@ -76,6 +76,11 @@ class Config:
     MEMORY_COLLECTION_NAME: str = os.getenv("MEMORY_COLLECTION_NAME", "mem_openai")
     MEMORY_MODEL_PROVIDER: str = os.getenv("MEMORY_MODEL_PROVIDER", "litellm")
 
+    # Sandbox 配置
+    SANDBOX_EXEC_TIMEOUT: float = float(os.getenv("SANDBOX_EXEC_TIMEOUT", "30"))
+    SANDBOX_MAX_MEMORY_MB: int = int(os.getenv("SANDBOX_MAX_MEMORY_MB", "256"))
+    SANDBOX_MAX_OUTPUT_SIZE: int = int(os.getenv("SANDBOX_MAX_OUTPUT_SIZE", str(1024 * 1024)))
+
     @staticmethod
     def ensure_dirs() -> None:
         for path in (
