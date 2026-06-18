@@ -586,3 +586,108 @@ class SandboxExecutorTest(unittest.TestCase):
             self.assertIn("should not appear in console", result.output)
 
         asyncio.run(run())
+
+
+# ═══════════════════════════════════════════════════════════════
+# ConfigReloader
+# ═══════════════════════════════════════════════════════════════
+
+
+class ConfigReloaderTest(unittest.TestCase):
+    def test_reload_on_mtime_change(self) -> None:
+        yaml_content = textwrap.dedent("""\
+            whitelist:
+              files: []
+              dirs: []
+              modules: ["json"]
+              builtins: ["len"]
+            blacklist:
+              files: []
+              dirs: []
+              modules: ["os"]
+              builtins: ["exec"]
+        """)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".yaml",
+            delete=False,
+            encoding="utf-8",
+        ) as f:
+            f.write(yaml_content)
+            f.flush()
+            path = Path(f.name)
+
+        configs_received: list[SandboxConfig] = []
+
+        def on_update(cfg: SandboxConfig) -> None:
+            configs_received.append(cfg)
+
+        from src.brain.sandbox.settings import ConfigReloader
+
+        reloader = ConfigReloader(path, callback=on_update)
+        reloader.check_and_reload()
+        self.assertEqual(len(configs_received), 1)
+        self.assertIn("json", configs_received[0].whitelist_modules)
+
+        # 修改文件
+        import time
+
+        time.sleep(0.1)  # 确保 mtime 变化
+        yaml_content2 = textwrap.dedent("""\
+            whitelist:
+              files: []
+              dirs: []
+              modules: ["json", "math"]
+              builtins: ["len", "print"]
+            blacklist:
+              files: []
+              dirs: []
+              modules: ["os"]
+              builtins: ["exec"]
+        """)
+        path.write_text(yaml_content2, encoding="utf-8")
+        reloader.check_and_reload()
+        self.assertEqual(len(configs_received), 2)
+        self.assertIn("math", configs_received[1].whitelist_modules)
+
+    def test_invalid_yaml_keeps_previous_config(self) -> None:
+        yaml_content = textwrap.dedent("""\
+            whitelist:
+              files: []
+              dirs: []
+              modules: ["json"]
+              builtins: ["len"]
+            blacklist:
+              files: []
+              dirs: []
+              modules: ["os"]
+              builtins: ["exec"]
+        """)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".yaml",
+            delete=False,
+            encoding="utf-8",
+        ) as f:
+            f.write(yaml_content)
+            f.flush()
+            path = Path(f.name)
+
+        configs_received: list[SandboxConfig] = []
+        from src.brain.sandbox.settings import ConfigReloader
+
+        def on_config(cfg: SandboxConfig) -> None:
+            configs_received.append(cfg)
+
+        reloader = ConfigReloader(path, callback=on_config)
+        reloader.check_and_reload()
+        self.assertEqual(len(configs_received), 1)
+
+        # 写入无效 YAML
+        import time
+
+        time.sleep(0.1)
+        path.write_text("not: valid: yaml: [", encoding="utf-8")
+        reloader.check_and_reload()
+        # callback 不应被调用（无效配置不触发更新）
+        self.assertEqual(len(configs_received), 1)

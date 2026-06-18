@@ -14,6 +14,7 @@ from src.brain.sandbox.base import SandboxConfigError
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 logger = get_logger("SandboxConfig")
@@ -100,3 +101,35 @@ class SandboxConfig:
             blacklist_modules=bl["modules"],
             blacklist_builtins=bl["builtins"],
         )
+
+
+class ConfigReloader:
+    """YAML 配置热加载器。
+
+    调用方主动触发重载检查，YAML 解析失败时保留上次有效配置。
+    """
+
+    def __init__(self, config_path: Path, callback: Callable[[SandboxConfig], None]) -> None:
+        self._config_path = config_path
+        self._callback = callback
+        self._last_mtime: float = 0.0
+
+    def check_and_reload(self) -> None:
+        """主动检查配置文件是否修改，若修改则重新加载。
+
+        此方法应由调用方在需要时主动调用（如收到 SIGHUP 信号、定时器触发等）。
+
+        回调在同一调用线程中同步执行，因此 callback 内的多步更新
+        （如同时更新 manager config 和 policy）是原子的，不会被中断。
+        如果改为异步或多线程调用，需重新审视此保证。
+        """
+        try:
+            mtime = self._config_path.stat().st_mtime
+            if mtime <= self._last_mtime:
+                return
+            self._last_mtime = mtime
+            new_config = SandboxConfig.from_yaml(self._config_path)
+            self._callback(new_config)
+            logger.info("配置热加载成功")
+        except (SandboxConfigError, yaml.YAMLError) as e:
+            logger.warning(f"YAML 配置解析失败，保留上次有效配置: {e}")
