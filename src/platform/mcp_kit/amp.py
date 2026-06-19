@@ -47,10 +47,7 @@ class AMPHeader:
     """协议版本，固定为 ``amp/1.0``。"""
 
     method: str = "aurora/event"
-    """MCP notification method。
-
-    一期只允许：``aurora/event``、``aurora/log``、``aurora/health``、``aurora/lifecycle``。
-    """
+    """原始信号类别，如 ``aurora/event``、``mcp.notification``、``mcp.tool_result``。"""
 
     message_id: str = ""
     """消息 ID，留空在 build 时自动生成 UUID4。"""
@@ -89,18 +86,6 @@ class AMPEnvelope:
     payload: AMPPayload = field(default_factory=AMPPayload)
 
 
-# ── 允许的 method 值 ──
-
-VALID_METHODS: frozenset[str] = frozenset(
-    {
-        "aurora/event",
-        "aurora/log",
-        "aurora/health",
-        "aurora/lifecycle",
-    }
-)
-
-
 def _now_iso() -> str:
     """返回当前 UTC 时间的 ISO 8601 字符串（带时区）。"""
     return datetime.now(UTC).astimezone().isoformat()
@@ -128,14 +113,14 @@ def build_event_envelope(  # noqa: PLR0913 — 7 个关键字参数是合理的 
         session_id: 可选会话标识。
         summary: 可选人类可读摘要。
         data: 可选结构化数据。
-        method: notification method，默认 ``aurora/event``。
+        method: 原始信号类别，默认 ``aurora/event``。
         expire_at: 可选过期时间 ISO 8601 字符串。
 
     Returns:
         完整 AMPEnvelope。
     """
-    if method not in VALID_METHODS:
-        msg = f"不支持的 method: {method}，允许: {', '.join(sorted(VALID_METHODS))}"
+    if not method.strip():
+        msg = "method 不能为空"
         raise ValueError(msg)
 
     return AMPEnvelope(

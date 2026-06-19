@@ -3,7 +3,7 @@
 > 日期：2026-06-19
 >
 > 结论先行：**建议让 AuroraBot Core 脱离 NoneBot，但不建议立刻让 QQ/OneBot 接入完全脱离 NoneBot。**  
-> 正确方向不是“删掉 NoneBot”，而是把 NoneBot 从主框架降级为一个可选边缘连接器：Core 独立运行，Platform 用 MCP/AMP 连接外围 App，NoneBot 只在需要 QQ/OneBot 生态时作为某个 App/Connector 的实现细节存在。
+> 正确方向不是“删掉 NoneBot”，而是把 NoneBot 从主框架降级为一个可选边缘连接器：Core 独立运行，Platform 用 MCP 连接外围 App，并在 Platform 侧归一化为 AMP 事件；NoneBot 只在需要 QQ/OneBot 生态时作为某个 App/Connector 的实现细节存在。
 
 ---
 
@@ -323,7 +323,7 @@ NapCat / 协议端
 
 缺点：
 
-- 需要定义 connector 到 Core 的 AMP notification / MCP tools。
+- 需要定义 connector 的 MCP tools，以及消息事件到 Platform AMP 归一化层的映射；不应把 AMP 设计成第三方 Server 必须实现的私有协议。
 - 初期多一个进程。
 
 这是推荐路线。
@@ -523,7 +523,7 @@ apps/aurora-app-qq/
 
 目标：
 
-- QQ 接收消息后发送 AMP `message.received`。
+- QQ 接收消息后暴露 `message.received` 业务事件；Aurora 原生 connector 可发送 `aurora/event`，也可由 Platform adapter 映射为 AMP。
 - QQ 发送动作暴露为 MCP Tools。
 - Core 不通过 `get_bot()` / `on_message()` 访问 QQ。
 
@@ -654,7 +654,7 @@ QQ/OneBot 暂时保留 NoneBot connector；
 1. 新增 `src/aurora/main.py` 和 `RuntimeSupervisor` 设计文档。
 2. 将 `src/main.py` 的 NoneBot startup/shutdown 逻辑抽成可复用函数。
 3. 建立 standalone 启动测试：不依赖 NoneBot，只启动 Brain + Platform + localhost。
-4. 设计 `aurora-app-qq-nonebot` connector 的 MCP/AMP 接口。
+4. 设计 `aurora-app-qq-nonebot` connector 的 MCP tools 与事件映射接口。
 5. 把 `nonebot2` 依赖从主依赖移动到 optional dependency 的方案列入迁移计划。
 6. 更新 README 和文档站，把“基于 NoneBot2”改为“可通过 NoneBot connector 接入 QQ/OneBot”。
 
@@ -668,4 +668,3 @@ QQ/OneBot 暂时保留 NoneBot connector；
 - NoneBot 插件加载：<https://nonebot.dev/docs/tutorial/create-plugin>
 - AuroraBot MCP 迁移研究报告：`docs/reports/app-platform-mcp-migration.md`
 - AuroraBot 平台层 MCP 重构指南：`docs/reports/platform-native-mcp-refactor-guide.md`
-

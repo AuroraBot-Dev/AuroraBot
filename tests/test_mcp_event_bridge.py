@@ -150,6 +150,41 @@ class TestRunMcpEventBridge:
         assert content["payload"]["type"] == "diary.written"
 
     @pytest.mark.anyio
+    async def test_receive_aurora_event_params(self) -> None:
+        client_mgr = FakeMcpClientManager()
+        circuit = FakeCircuit()
+        stop_event = asyncio.Event()
+
+        bridge_task = asyncio.create_task(
+            run_mcp_event_bridge(client_mgr, circuit, stop_event)  # type: ignore[arg-type]
+        )
+
+        await asyncio.sleep(0.1)
+
+        await client_mgr._queue.put(
+            (
+                "im.polaris.test",
+                "aurora/event",
+                {
+                    "type": "message.received",
+                    "session_id": "s1",
+                    "summary": "收到消息",
+                    "data": {"text": "hello"},
+                },
+            )
+        )
+
+        await asyncio.sleep(0.2)
+        stop_event.set()
+        await bridge_task
+
+        assert len(circuit.updates) >= 1
+        content = circuit.updates[0][0].content
+        assert content["header"]["method"] == "aurora/event"
+        assert content["header"]["source"]["app"] == "im.polaris.test"
+        assert content["payload"]["type"] == "message.received"
+
+    @pytest.mark.anyio
     async def test_generic_notification_wrapped(self) -> None:
         """普通 MCP notification 被自动包装为 AMP envelope。"""
         client_mgr = FakeMcpClientManager()
@@ -173,7 +208,10 @@ class TestRunMcpEventBridge:
         assert len(circuit.updates) == 1
         update, node_id = circuit.updates[0]
         assert node_id == "mcp_event_bridge"
-        assert "mcp" in update.descriptor.path or "tools" in update.descriptor.path
+        assert "capability_changed" in update.descriptor.path
+        assert update.content["header"]["method"] == "mcp.notification"
+        assert update.content["payload"]["type"] == "capability.changed"
+        assert update.content["payload"]["data"]["method"] == "notifications/tools/list_changed"
 
         stop_event.set()
         await bridge_task

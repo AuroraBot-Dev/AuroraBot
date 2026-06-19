@@ -111,12 +111,32 @@ async def _process_amp_notification(
     params: dict[str, object],
     circuit: Circuit,
 ) -> None:
-    """处理原生 Aurora App 的 AMP envelope 通知。"""
-    try:
-        envelope = parse_amp_envelope(params)
-    except (ValueError, TypeError) as exc:
-        logger.warning("AMP envelope 解析失败 (server: %s): %s", key, exc)
-        return
+    """处理原生 Aurora App 的事件通知。
+
+    兼容两种输入：
+    - 完整 AMP envelope：``{"header": ..., "payload": ...}``
+    - 业务 params：``{"type": "message.received", ...}``，由 Platform 补齐 header
+    """
+    if "header" in params and "payload" in params:
+        try:
+            envelope = parse_amp_envelope(params)
+        except (ValueError, TypeError) as exc:
+            logger.warning("AMP envelope 解析失败 (server: %s): %s", key, exc)
+            return
+    else:
+        event_type = str(params.get("type", "unknown"))
+        data = params.get("data", {})
+        raw_expire_at = params.get("expire_at")
+        expire_at = raw_expire_at if isinstance(raw_expire_at, str) else None
+        envelope = build_event_envelope(
+            source_app=key,
+            event_type=event_type,
+            session_id=str(params.get("session_id", "")),
+            summary=str(params.get("summary", "")),
+            data=data if isinstance(data, dict) else {"value": data},
+            method="aurora/event",
+            expire_at=expire_at,
+        )
 
     safe_type = envelope.payload.type.replace(".", "_").replace("/", "_")
     message_id = envelope.header.message_id or str(uuid.uuid4())
@@ -142,16 +162,18 @@ async def _process_generic_notification(
     circuit: Circuit,
 ) -> None:
     """处理普通 MCP Server 的 notification——由 Host 侧包装为 AMP。"""
-    # 从 notification method 推断事件类型
-    # 例如 "notifications/tools/list_changed" -> "tools.list_changed"
-    event_type = method.replace("/", ".").replace("notifications.", "mcp.")
+    event_type = _event_type_from_mcp_notification(method)
+    data: dict[str, object] = {
+        "method": method,
+        "params": params,
+    }
 
     envelope = build_event_envelope(
         source_app=key,
         event_type=event_type,
         summary=f"MCP notification: {method}",
-        data=params,
-        method="aurora/event",
+        data=data,
+        method="mcp.notification",
     )
 
     safe_type = envelope.payload.type.replace(".", "_").replace("/", "_")
@@ -169,3 +191,15 @@ async def _process_generic_notification(
         await circuit.apply_update(update, node_id="mcp_event_bridge")
     except Exception:
         logger.exception("通用通知桥接写入失败: %s", file_path)
+
+
+def _event_type_from_mcp_notification(method: str) -> str:
+    """将 MCP notification method 映射为稳定事件类型。"""
+    capability_methods = {
+        "notifications/tools/list_changed",
+        "notifications/resources/list_changed",
+        "notifications/prompts/list_changed",
+    }
+    if method in capability_methods:
+        return "capability.changed"
+    return f"mcp.notification.{method.replace('/', '.')}"

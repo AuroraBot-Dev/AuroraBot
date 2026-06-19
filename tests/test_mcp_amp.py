@@ -81,12 +81,20 @@ class TestAMPBuild:
         assert envelope.payload.data == {"user_id": "123", "text": "hello"}
         assert envelope.payload.expire_at == "2026-06-20T12:00:00+08:00"
 
-    def test_invalid_method(self) -> None:
-        with pytest.raises(ValueError, match="不支持的 method"):
+    def test_accepts_mcp_signal_method(self) -> None:
+        envelope = build_event_envelope(
+            source_app="test",
+            event_type="capability.changed",
+            method="mcp.notification",
+        )
+        assert envelope.header.method == "mcp.notification"
+
+    def test_empty_method(self) -> None:
+        with pytest.raises(ValueError, match="method 不能为空"):
             build_event_envelope(
                 source_app="test",
                 event_type="x",
-                method="aurora/invalid",
+                method="",
             )
 
 
