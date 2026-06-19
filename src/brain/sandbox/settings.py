@@ -110,6 +110,7 @@ class ConfigReloader:
     """
 
     def __init__(self, config_path: Path, callback: Callable[[SandboxConfig], None]) -> None:
+        """初始化重载器，绑定 YAML 文件路径和配置变更回调函数。"""
         self._config_path = config_path
         self._callback = callback
         self._last_mtime: float = 0.0

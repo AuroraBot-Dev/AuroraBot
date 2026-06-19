@@ -34,6 +34,7 @@ class SandboxManager:
     """沙箱执行管理器 — 对外唯一门面。"""
 
     def __init__(self) -> None:
+        """初始化沙箱管理器，加载默认配置并组装执行链。"""
         config_path = Path(__file__).parent / "default.yaml"
         self._config = SandboxConfig.from_yaml(config_path)
         self._policy = AccessPolicy(self._config)
@@ -46,17 +47,20 @@ class SandboxManager:
         )
 
     def _on_config_updated(self, new_config: SandboxConfig) -> None:
+        """ConfigReloader 回调：接收新配置并同步更新 AccessPolicy。"""
         self._config = new_config
         self._policy.update_config(new_config)
 
     @staticmethod
     def _validate_session_id(session_id: str) -> None:
+        """校验 session_id 格式，仅允许字母、数字、连字符、下划线。"""
         if not re.fullmatch(r"[a-zA-Z0-9_-]+", session_id):
             msg = f"session_id 包含非法字符: {session_id!r}。仅允许字母、数字、连字符、下划线。"
             raise ValueError(msg)
 
     @staticmethod
     def _format_violations(violations: list[SecurityViolation]) -> str:
+        """将违规列表格式化为人类可读的错误消息字符串。"""
         lines = []
         for v in violations:
             line_info = f" (line {v.line})" if v.line is not None else ""
@@ -136,6 +140,7 @@ _sandbox_singleton: SandboxManager | None = None
 
 
 def get_sandbox_manager() -> SandboxManager:
+    """获取 SandboxManager 单例，首次调用时延迟初始化。"""
     global _sandbox_singleton  # noqa: PLW0603
     if _sandbox_singleton is None:
         _sandbox_singleton = SandboxManager()
@@ -146,6 +151,7 @@ class _SandboxManagerProxy:
     """延迟初始化代理。"""
 
     def __getattr__(self, name: str) -> Any:
+        """将属性访问代理到真实 SandboxManager 单例。"""
         return getattr(get_sandbox_manager(), name)
 
 

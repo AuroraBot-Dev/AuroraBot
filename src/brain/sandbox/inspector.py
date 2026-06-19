@@ -111,6 +111,7 @@ class CodeInspector:
     }
 
     def __init__(self, policy: AccessPolicy) -> None:
+        """初始化检查器，绑定 AccessPolicy 用于 import 和 open 白名单判断。"""
         self._policy = policy
 
     def inspect(self, code: str, policy_snapshot: AccessPolicySnapshot | None = None) -> list[SecurityViolation]:

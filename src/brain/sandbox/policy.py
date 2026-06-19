@@ -60,6 +60,7 @@ class AccessPolicy:
 
     @property
     def config(self) -> SandboxConfig:
+        """返回当前生效的配置对象。"""
         return self._config
 
     def update_config(self, config: SandboxConfig) -> None:

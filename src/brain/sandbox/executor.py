@@ -34,6 +34,7 @@ class SandboxExecutor:
         policy: "AccessPolicy",
         inspector: "CodeInspector",
     ) -> None:
+        """初始化执行器，绑定访问策略和代码检查器。"""
         self._policy = policy
         self._inspector = inspector
 
@@ -44,7 +45,7 @@ class SandboxExecutor:
         context: dict[str, Any] | None = None,
         policy_snapshot: "AccessPolicySnapshot | None" = None,
     ) -> SandboxResult:
-        """执行 Python 代码。"""
+        """执行 Python 代码，并将结果写入 SANDBOX_OUT_DIR。"""
         if not self._check_disk_space():
             return SandboxResult(
                 success=False,
@@ -85,15 +86,18 @@ class SandboxExecutor:
                 logger.warning(f"清理临时目录失败: {execution_dir}")
 
     def _check_disk_space(self, min_mb: int = 100) -> bool:
+        """检查 SANDBOX_DIR 所在磁盘是否还有足够可用空间。"""
         usage = shutil.disk_usage(str(Config.SANDBOX_DIR))
         return usage.free >= min_mb * 1024 * 1024
 
     def _create_sandbox_temp(self, session_id: str) -> Path:
+        """在 SANDBOX_TEMP_DIR 下创建带日期和 session_id 前缀的临时目录。"""
         today = datetime.now(UTC).date().isoformat()
         prefix = f"{today}-{session_id}-"
         return Path(tempfile.mkdtemp(dir=Config.SANDBOX_TEMP_DIR, prefix=prefix))
 
     def _create_output_dir(self, session_id: str) -> Path:
+        """创建 stdout/stderr 重定向文件和产物文件的输出目录。"""
         today = datetime.now(UTC).date().isoformat()
         output_dir = Config.SANDBOX_OUTPUT_DIR / f"{today}-{session_id}"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +142,7 @@ class SandboxExecutor:
         return safe_builtins_code, context_code
 
     async def _run_subprocess(self, script_path: Path, output_dir: Path) -> tuple[bool, str, str]:
+        """启动子进程执行脚本，stdout/stderr 重定向到文件，超时后强制 kill。"""
         stdout_path = output_dir / "stdout.txt"
         stderr_path = output_dir / "stderr.txt"
 
@@ -188,11 +193,13 @@ class SandboxExecutor:
         return artifacts
 
     def read_file(self, path: Path) -> str:
+        """读取文件内容，受限于 AccessPolicy 文件白名单。"""
         if not self._policy.can_read_file(path):
             raise PermissionError("访问被拒绝")
         return path.read_text(encoding="utf-8")
 
     def write_file(self, path: Path, content: str) -> None:
+        """写入文件内容，写模式仅限 SANDBOX_DIR 内。"""
         if not self._policy.can_open_file(path, "w"):
             raise PermissionError("写入被拒绝")
         path.parent.mkdir(parents=True, exist_ok=True)
