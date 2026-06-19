@@ -109,11 +109,31 @@ rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|invo
 
 ---
 
-## Phase 3：
+## Phase 3：迁移 diary 为 MCP Server 样板 ✅
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | 待开始 |
+| 完成日期 | 2026-06-19 |
+| 改动摘要 | 抽取 DiaryService、创建 FastMCP 入口、保留旧 runtime 兼容层 |
+| 验证结果 | ruff ✅, pyright ✅, pytest ✅ (291 passed, 54% cov) |
+
+### 新增/修改文件
+
+| 文件 | 变更 | 职责 |
+|------|------|------|
+| `apps/aurora-app-diary/service.py` | **新增** | 纯业务逻辑，无 PlatformAPI 依赖，可独立单测 |
+| `apps/aurora-app-diary/mcp_server.py` | **新增** | FastMCP 入口，3 个 tool：write/read/list_dates |
+| `apps/aurora-app-diary/runtime.py` | **重写** | 薄兼容层，委托给 DiaryService |
+| `apps/aurora-app-diary/manifest.yaml` | **更新** | 添加 `type: mcp-server` 和 `mcp:` 配置段 |
+| `pyproject.toml` | **更新** | 忽略 apps 目录的 N999 模块名规则 |
+| `tests/test_diary_service.py` | **新增** | 7 个测试 — service 层全覆盖 |
+| `tests/test_diary_mcp_server.py` | **新增** | 2 个测试 — 导入 + stdio tools/list 集成测试 |
+
+### 注意事项
+
+- `mcp_server.py` 通过 `sys.path` 添加项目根目录和 App 目录解决横线目录名的导入问题
+- 旧 `DiaryApplication` 保留为兼容层，旧测试全部通过（无回归）
+- MCP Server 可通过 `uv run python apps/aurora-app-diary/mcp_server.py` 独立启动
 
 ---
 
