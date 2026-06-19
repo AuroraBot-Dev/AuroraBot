@@ -15,9 +15,9 @@ from src.brain.nodes.agents import (
 )
 from src.brain.nodes.routers import (
     BroadcastRouter,
-    CommandDispatcher,
     DeadLetterRouter,
     HeartbeatGenerator,
+    MCPToolDispatcher,
     MergeRouter,
     MessagePreprocessor,
     MetricsCollector,
@@ -32,17 +32,16 @@ if TYPE_CHECKING:
 
     from src.brain.kernel.base import Node
     from src.brain.memory import UnifiedMemoryManager
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("NodeFactory")
 
 # 节点注册表 —— 新节点加在这里
 NODE_REGISTRY: dict[str, type[Node]] = {
-    # Kernel-gamma 认知管线（两池 + 两转义者）
+    # Kernel-gamma 认知管线（两池 + 两转义者 + MCP 工具派发）
     "message_preprocessor": MessagePreprocessor,
     "internalizer": Internalizer,
     "externalizer": Externalizer,
-    "command_dispatcher": CommandDispatcher,
+    "mcp_tool_dispatcher": MCPToolDispatcher,
     # 节律系统
     "heartbeat_generator": HeartbeatGenerator,
     "timer_scheduler": TimerScheduler,
@@ -66,7 +65,7 @@ NODE_NEEDS_HOST: frozenset[str] = frozenset(
     {
         "internalizer",
         "externalizer",
-        "command_dispatcher",
+        "mcp_tool_dispatcher",
     }
 )
 
@@ -144,7 +143,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ── 电路构建 ──────────────────────────────────────
 
 
-def build_circuit(host: ApplicationHost) -> Circuit:
+def build_circuit(host: object | None = None) -> Circuit:
     """从 ``topology.yaml`` 读取配置，构造认知拓扑电路。
 
     遍历邻接表条目，逐条实例化节点并注入 ``Circuit``。
@@ -152,8 +151,8 @@ def build_circuit(host: ApplicationHost) -> Circuit:
 
     Parameters
     ----------
-    host : ApplicationHost
-        应用宿主，注入给需要访问命令/事件的节点。
+    host : object | None
+        上下文对象（可选），注入给需要它的节点。
 
     Returns
     -------

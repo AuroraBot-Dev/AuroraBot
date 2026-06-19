@@ -13,8 +13,6 @@ from src.utils.time_utils import now_text
 if TYPE_CHECKING:
     from src.brain.kernel.event_bus import FileEventBus
     from src.brain.memory import UnifiedMemoryManager
-    from src.platform.application_host import ApplicationHost
-
 logger = get_logger("NodeBase")
 
 
@@ -280,8 +278,8 @@ class Agent(Node):
     ----------
     node_id : str
         节点唯一标识。
-    host : ApplicationHost
-        应用宿主，提供命令调度与事件队列访问能力。
+    host : object | None
+        上下文对象（可选），用于提供命令/工具等信息。
     system_prompt : str
         系统提示词文本，注入到每次 LLM 请求的最前面。
     """
@@ -289,7 +287,7 @@ class Agent(Node):
     def __init__(
         self,
         node_id: str,
-        host: ApplicationHost | None = None,
+        host: object | None = None,
         *,
         system_prompt: str = "",
         memory: UnifiedMemoryManager | None = None,
@@ -305,11 +303,11 @@ class Agent(Node):
         return "agent"
 
     @property
-    def host(self) -> ApplicationHost | None:
+    def host(self) -> object | None:
         return self._host
 
     @host.setter
-    def host(self, value: ApplicationHost | None) -> None:
+    def host(self, value: object | None) -> None:
         self._host = value
 
     @property
@@ -401,15 +399,14 @@ class Router(Node):
     ----------
     node_id : str
         节点唯一标识。
-    host : ApplicationHost, optional
-        部分 Router（如 HeartbeatRouter）可能需要访问宿主能力，
-        若不需要则可为 None。
+    host : object | None
+        上下文对象（可选），部分 Router 可能需要访问宿主能力。
     """
 
     def __init__(
         self,
         node_id: str,
-        host: ApplicationHost | None = None,
+        host: object | None = None,
         *,
         memory: UnifiedMemoryManager | None = None,
     ) -> None:
@@ -422,7 +419,7 @@ class Router(Node):
         return "router"
 
     @property
-    def host(self) -> ApplicationHost | None:
+    def host(self) -> object | None:
         return self._host
 
     @property

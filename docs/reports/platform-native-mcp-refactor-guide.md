@@ -2,388 +2,539 @@
 
 > 用途：本文件作为 DeepSeek 执行平台层重构时的操作准则。
 >
-> 目标：把 `src/platform/` 与 `apps/` 从进程内自定义 App Host 模型，重构为原生兼容 MCP 的 App Server 体系；Brain 的文件驱动认知内核保持现状。
+> 阶段判断：AuroraBot 仍处于 alpha 阶段，**不要求保留旧平台层兼容路径**。
+>
+> 目标：把 `src/platform/` 与 `apps/` 从进程内自定义 App Host 模型，直接重构为原生兼容 MCP 的 Host/Client/App Server 体系；Brain 的文件驱动认知内核保持边界不变。
 >
 > 基准日期：2026-06-19。
 
 ---
 
-## 0. 不可变边界
+## 0. 执行总原则
 
-本次重构只处理 App/Platform 通信层。不要把 Brain 节点、FileEventBus、记忆系统、节律系统改成 MCP Server 或 MCP Tool。
+本指南不是“渐进兼容迁移方案”，而是“alpha 直接替换方案”。
 
-必须保持不变的核心：
+DeepSeek 执行时必须遵守：
 
-- `src/brain/kernel/` 的文件事件总线与 `Circuit` 编排模式。
-- `src/brain/nodes/topology.yaml` 中的认知管线语义：外部事件先进入 `inbox/pending/event_*.json`，再由文件流驱动后续节点。
-- `src/brain/memory/` 的 L1/L2/L3 联合记忆。
-- `heartbeat_generator`、`timer_scheduler` 等自持节律节点。
+1. 不保留旧 `ApplicationHost` / `PlatformAPI` / `ApplicationProtocol` 作为运行路径。
+2. 不保留旧 `CommandSpec` / `AppEvent` 作为平台层核心数据结构。
+3. 不保留旧 `run_app_loop()` / `on_tick()` / `host.drain_events()` 作为事件或生命周期机制。
+4. 不保留 `command_dispatcher` 作为长期节点；工具调用改走 MCP Tool dispatcher。
+5. 不把 AMP 设计成 App 侧私有协议；AMP 是 Platform 侧兼容归一化 envelope。
+6. 不要求主仓库规定 MCP Server 或 App 的代码位置；主仓库只管理连接信息和外围元信息。
+7. 不把 Brain 内部节点 MCP 化；MCP 只用于 App/Platform 外围通信。
+8. 不为了保持历史测试而保留错误抽象；旧测试按目标架构重写或删除。
 
-允许改造的范围：
+允许短期存在的“临时中间态”只限同一提交内辅助重构，不允许作为阶段交付结果。
 
-- `src/platform/`
-- `apps/`
+---
+
+## 1. 不可变边界
+
+本次重构只处理 App/Platform 通信层，以及 Brain 与 Platform 的连接面。不要把 Brain 核心改成 MCP Server 或 MCP Tool。
+
+必须保持的 Brain 哲学：
+
+- 统一事件认知：Brain 只消费统一事件，不区分“用户事件”和“环境事件”的本体层级。
+- 生命体视角：Bot 是持续存在的主体，不是一次请求一次回复的 RPC 服务。
+- 文件驱动可追溯：外部变化先进入 `data/kernel/inbox/pending/event_*.json`，再由 FileEventBus / Circuit 驱动认知流。
+- 节律自持：heartbeat、timer、memory consolidation 等内部节律不由外部 Tool 调用触发。
+
+本次不重写的核心：
+
+- `src/brain/kernel/` 的文件事件总线和 `Circuit` 编排模式。
+- `src/brain/memory/` 的 L1/L2/L3 记忆概念。
+- `src/brain/prompts/` 的人格和认知提示词边界。
+- Brain 的“统一事件入口 -> 认知加工 -> 行动意图”基本方向。
+
+允许修改的连接面：
+
 - `src/brain/runtime.py`
 - `src/brain/nodes/event_bridge.py`
+- `src/brain/nodes/routers/command_dispatcher.py`
+- `src/brain/nodes/routers/message_preprocessor.py`
 - `src/brain/nodes/agents/externalizer.py`
 - `src/brain/nodes/agents/internalizer.py`
-- `src/brain/nodes/routers/command_dispatcher.py`
 - `src/brain/kernel/node_factory.py`
 - `src/brain/nodes/topology.yaml`
-- `src/brain/localhost/commands/` 中依赖旧 `ApplicationHost` 的控制台命令
-- 相关测试
+- `src/brain/localhost/commands/`
 
 不允许的做法：
 
-- 不要手写一套“看起来像 MCP”的 JSON-RPC 协议替代官方 SDK。
-- 不要让 App 继续依赖 `PlatformAPI` 再包装成 MCP Tool，这会把旧耦合带进新架构。
-- 不要一次性删除旧 `ApplicationHost`。必须先提供兼容路径，等 MCP 路径测试通过后再清理。
-- 不要让 MCP Server 直接读写 Brain 的 `data/kernel/` 文件。App 只通过标准 MCP Tools / Resources / Prompts / Notifications 与 Platform 交互；AMP 由 Platform 侧生成或校验，不要求第三方 MCP Server 实现私有协议。
+- 不要手写一套“看起来像 MCP”的 JSON-RPC 替代官方 SDK。
+- 不要让 MCP Server 直接读写 Brain 的 `data/kernel/` 或 `data/memory/`。
+- 不要让 App import `src.platform` 或 `src.brain`。
+- 不要让 App 继续依赖 `PlatformAPI`，再包装成 MCP Tool。
+- 不要把 notification 当成可靠命令调用；有副作用的动作必须走 `tools/call`。
 
 ---
 
-## 1. 当前项目事实
+## 2. 目标架构
 
-当前平台层是进程内 App Host：
+### 2.1 运行时角色
 
-- `src/platform/application_host.py`
-  - 管理 App 注册：`register()` / `replace_apps()` / `stop_all()`
-  - 管理命令注册与派发：`register_command()` / `invoke_command()`
-  - 管理事件队列：`emit_event()` / `drain_events()`
-  - 管理轮询生命周期：`tick()`
-- `src/platform/application_api.py`
-  - 由 `ApplicationHost.register()` 注入到 App 的 `_bind(api)`。
-  - App 用它发事件、注册动态命令、取 app data 目录。
-- `src/platform/application_protocol.py`
-  - 要求 App 实现 `manifest_path()`、`on_start()`、`on_stop()`、`on_tick()`。
-- `src/platform/app_discovery.py`
-  - 扫描 `apps/*/manifest.yaml` 与 `__init__.py`，再通过 Python import 实例化应用类。
-- `src/platform/app_config.py`
-  - 读取 `apps/config.yml`，目前只有 `enabled` 和 `startup`。
-- `src/platform/manifest.py`
-  - 只解析基础 manifest 字段和 `commands`。
+| 角色 | 目标职责 | 不负责 |
+| --- | --- | --- |
+| AuroraBot Core | 启动 Brain、Platform、localhost 控制台 | 直接 import App 业务模块 |
+| Platform | MCP Host 边界、连接管理、权限、工具目录、AMP 归一化 | 认知决策、人格、记忆 |
+| MCPClientManager | 每个 MCP Server 一个 Client session，负责 list/call/notifications | 启停本地进程 |
+| MCPServerKit | 本地 stdio Server 生命周期管理 | tool cache、事件转换 |
+| AMPCompatibilityBridge | 把 MCP 信号归一化为 Brain 统一事件文件 | 判断是否回复、调用 LLM |
+| MCPToolDispatcher | 执行 Brain 产生的工具调用意图 | 自行解析自然语言命令 |
+| App MCP Server | 暴露 Tools / Resources / Prompts / Notifications | 跨 App 编排、读写 Brain |
 
-当前 Brain 侧耦合点：
-
-- `src/brain/runtime.py`
-  - 启动时注册启用 App。
-  - 启动 `run_app_loop()` 调 `host.tick()`。
-  - 启动 `run_event_bridge(host, circuit, ...)`。
-  - 注册内置控制台命令 `im.polaris.console.send_message`。
-- `src/brain/nodes/event_bridge.py`
-  - 定时 `host.drain_events()`，把 `AppEvent` 写为 `inbox/pending/event_*.json`。
-- `src/brain/nodes/agents/externalizer.py`
-  - 用 `_host.list_command_specs()` 拼命令文本。
-  - 生成 `pipeline/action_queue/act_*.json`。
-- `src/brain/nodes/routers/command_dispatcher.py`
-  - 读取 action queue，再调用 `host.invoke_command()`。
-- `src/brain/nodes/agents/internalizer.py`、`action_planner.py`、`polaris_agent.py`
-  - 也有 `_build_commands_text()` 或旧命令调用逻辑，需要后续清理。
-- `src/brain/localhost/commands/invoke.py`、`core.py`、`emit.py`、`say.py`
-  - 依赖 `runtime.host` 的命令列表、命令调用、事件推送。
-
-当前 App：
-
-- `apps/aurora-app-diary`：低复杂度，适合作为第一个 MCP 化样板。
-- `apps/aurora-app-clock`：有定时器和事件上报，适合作为第二个样板。
-- `apps/aurora-app-weather`：有外部 HTTP 请求和可选事件上报，第三个迁移。
-- `apps/aurora-app-qq`：绑定 NoneBot/OneBot 监听，最高风险，最后迁移。
-
----
-
-## 2. 官方 MCP 约束
-
-执行时以官方 MCP 规范为准：
-
-- 最新规范入口：<https://modelcontextprotocol.io/specification/latest>
-- 2026-06-19 核对时，`latest` 指向 `2025-11-25`。
-- 架构：<https://modelcontextprotocol.io/specification/2025-11-25/architecture>
-- 生命周期：<https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle>
-- 传输：<https://modelcontextprotocol.io/specification/2025-11-25/basic/transports>
-- Tools：<https://modelcontextprotocol.io/specification/2025-11-25/server/tools>
-- Resources：<https://modelcontextprotocol.io/specification/2025-11-25/server/resources>
-- Prompts：<https://modelcontextprotocol.io/specification/2025-11-25/server/prompts>
-- Python SDK：<https://github.com/modelcontextprotocol/python-sdk>
-
-本项目对 MCP 的落地解释：
-
-- AuroraBot 主进程是 MCP Host。
-- `src/platform/mcp_kit/client.py` 内的每个连接是一个 MCP Client。
-- 每个 App 是一个 MCP Server 连接对象；它可以是 Aurora 原生 App，也可以是任意现有 MCP 生态 Server。
-- App 命令映射为 MCP Tools。
-- App 上报的标准 MCP notifications、能力变更、工具结果、资源读取结果和生命周期状态，由 Platform 统一归一化为 AMP event 交给 Brain。
-- Aurora 原生 App 可以额外发送 `aurora/event` notification，但这是可选扩展，不是 MCP Server 接入门槛。
-- 日记、配置、运行状态等只读上下文可以逐步映射为 MCP Resources。
-- Prompt Templates 不是第一阶段目标，除非 App 本身确实提供可复用提示模板。
-
-Python SDK 依赖策略：
-
-- 先使用 SDK v1 稳定线：`mcp[cli]>=1.27,<2`。
-- 不要在本次重构中追 v2 alpha，除非项目明确升级 SDK 策略。
-- 使用 `uv add "mcp[cli]>=1.27,<2"` 更新 `pyproject.toml` 和 `uv.lock`。
-
----
-
-## 3. 目标架构
-
-目标模块结构：
+### 2.2 目标模块结构
 
 ```text
 src/platform/
+  __init__.py
+  app_config.py              # 读取 apps/config.yml，只保留 MCP/registry 配置
+  manifest.py                # 外围元信息读取；不再解析 CommandSpec
   mcp_kit/
     __init__.py
-    server_spec.py        # MCPServerSpec 等配置模型
-    manifest.py           # manifest 的 MCP 扩展读取
-    discovery.py          # 扫描 App MCP Server
-    server_kit.py         # 启停/重启/健康状态，不做 tools 派发
-    client_manager.py     # MCP Client session 管理、tools/list、tools/call
-    amp.py                # Aurora Message Protocol envelope
-    tool_schema.py        # MCP Tool 到 LLM tool schema 的转换
-  manifest.py             # 保留旧读取器，或薄封装新读取器
-  app_config.py           # 扩展 mcp 配置
-  app_discovery.py        # 迁移期兼容旧 App 扫描
-  application_host.py     # 迁移期保留，最终删除或降级为 legacy
-  application_api.py      # 迁移期保留，最终删除
-  application_protocol.py # 迁移期保留，最终删除
-  contracts.py            # 保留 AppEvent/CommandSpec 的兼容转换，最终瘦身
+    server_spec.py           # MCPServerSpec / transport config / permissions
+    discovery.py             # 从 config/manifest/registry 合成 MCPServerSpec
+    server_kit.py            # 本地 stdio server spawn/stop/health
+    client_manager.py        # MCP Client session、tools/list、tools/call、notifications
+    amp.py                   # Platform 侧 AMP envelope / normalizer / validator
+    tool_schema.py           # MCP Tool -> LLM tool schema / prompt text
+    permissions.py           # tool/resource 权限和风险等级
+    errors.py                # 平台层异常
 ```
 
-目标数据流：
+必须删除或停止作为运行路径使用：
 
 ```text
-App MCP Server
-  tools/list
-  tools/call
-  resources/list
-  prompts/list
-  notifications/*
-        |
-        v
-MCPClientManager
-  - 缓存 tools
-  - 调用 tools
-  - 读取 resources
-  - 接收标准 notifications
-  - 观察 lifecycle/capability/error 信号
-        |
-        v
-AMP Compatibility Bridge
-  MCP signals -> AMP envelope -> FileUpdate
-        |
-        v
-data/kernel/inbox/pending/event_*.json
-        |
-        v
-Brain FileEventBus pipeline
+src/platform/application_host.py
+src/platform/application_api.py
+src/platform/application_protocol.py
+src/platform/loop.py
+src/platform/contracts.py        # 若仍需要类型，拆到 mcp_kit 内部，不保留旧语义
 ```
 
-迁移期双轨：
+Brain 连接面目标结构：
 
 ```text
-旧轨：ApplicationHost -> CommandSpec/AppEvent -> command_dispatcher/event_bridge
-新轨：MCPServerKit + MCPClientManager -> MCP Tool/Resource/Notification -> AMP compatibility bridge/tool dispatcher
+src/brain/nodes/event_bridge.py
+  run_mcp_event_bridge(...)      # 唯一外部事件桥
+
+src/brain/nodes/routers/mcp_tool_dispatcher.py
+  dispatch MCP tool calls
+
+src/brain/nodes/routers/command_dispatcher.py
+  删除
 ```
 
-只有当新轨覆盖所有启用 App 且测试稳定后，才能删除旧轨。
+App 目标结构不强制位于主仓库内。主仓库内置样例可采用：
+
+```text
+apps/aurora-app-example/
+  manifest.yaml                  # 可选外围元信息
+  mcp_server.py                  # MCP Server 入口
+  service.py                     # 纯业务逻辑
+  config.example.yml             # App 私有配置示例
+  README.md
+```
+
+独立仓库、用户本机任意目录、远程 MCP Server 均可接入。Platform 只依赖连接配置和外围元信息。
+
+### 2.3 目标数据流
+
+外部事件：
+
+```text
+World / Third-party MCP Server / Aurora-native App
+  -> MCP lifecycle / notifications / resources / tool results
+  -> MCPClientManager
+  -> AMPCompatibilityBridge
+  -> data/kernel/inbox/pending/event_<type>_<id>.json
+  -> Brain FileEventBus
+```
+
+行动执行：
+
+```text
+Brain action intent
+  -> MCPToolDispatcher
+  -> MCPClientManager.call_tool(full_tool_name, args)
+  -> target MCP Server
+  -> tool result
+  -> audit file + optional AMP tool.completed/tool.failed event
+```
+
+能力发现：
+
+```text
+apps/config.yml / manifest / registry
+  -> MCPServerSpec
+  -> ServerKit start local stdio server if needed
+  -> ClientManager initialize
+  -> tools/list resources/list prompts/list
+  -> tool schema exposed to Externalizer / LLM gateway
+```
 
 ---
 
-## 4. 分阶段实施总览
+## 3. 删除旧平台层
 
-推荐按 8 个阶段执行，每个阶段必须能独立提交和回滚。
+因为 alpha 阶段不考虑过渡兼容，第一批重构就要移除旧抽象的运行入口。
 
-| 阶段 | 目标 | 主要结果 |
-| --- | --- | --- |
-| Phase 0 | 建基线 | 测试基线、依赖策略、风险列表 |
-| Phase 1 | 引入 MCP 基础设施 | `mcp_kit` 包、AMP 兼容模型、配置模型 |
-| Phase 2 | 实现 MCP Client/Server 管理 | 能启动样板 MCP Server、list/call tool |
-| Phase 3 | 迁移 diary 样板 | 第一个 App 双入口运行 |
-| Phase 4 | 接入 Brain 事件桥 | MCP 标准信号能归一化进入文件总线 |
-| Phase 5 | 接入 Tool 调用链 | Externalizer/控制台可调用 MCP Tool |
-| Phase 6 | 逐个迁移 clock/weather/qq | 所有 App 都有 MCP Server 入口 |
-| Phase 7 | 清理旧平台层 | 移除旧 Host/API/Protocol/command_dispatcher |
+### 3.1 删除对象
 
----
+删除或清空引用：
 
-## 5. Phase 0：建基线
+- `src/platform/application_host.py`
+- `src/platform/application_api.py`
+- `src/platform/application_protocol.py`
+- `src/platform/loop.py`
+- `src/platform/contracts.py`
+- `src/brain/nodes/routers/command_dispatcher.py`
 
-### 5.1 先运行基线检查
+删除 App 侧旧入口：
+
+- `apps/*/runtime.py`
+- App 类中的 `_bind(api)`
+- App 类中的 `on_start()` / `on_stop()` / `on_tick()`
+- App 对 `PlatformAPI.emit_event()`、`register_command()`、`data_dir` 的依赖
+
+删除测试或重写测试：
+
+- `tests/test_application_host*.py`
+- 只验证 `CommandSpec` 的测试
+- 只验证 `AppEvent` 队列的测试
+- 只验证 `command_dispatcher` 调用 `host.invoke_command()` 的测试
+
+### 3.2 搜索并清零旧依赖
 
 执行：
 
 ```powershell
-uv run ruff check src/ tests/
-uv run pyright src/
-uv run pytest --cov=src
+rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|invoke_command|list_command_specs|drain_events|run_app_loop|on_tick|command_dispatcher" src tests apps
 ```
 
-如果当前仓库已有失败项：
+阶段验收时，上述命中只能出现在：
 
-- 记录失败命令、失败测试名和关键错误。
-- 不要在 MCP 重构提交中顺手修无关问题。
-- 后续验收时必须区分“原有失败”和“本阶段新增失败”。
+- 历史文档。
+- changelog / report。
+- 明确标注为删除原因的注释。
 
-### 5.2 建立迁移日志
+不能出现在运行时代码、测试 fixture、拓扑配置中。
 
-新建或更新：
+### 3.3 `src/brain/runtime.py` 目标状态
 
-```text
-docs/reports/platform-native-mcp-progress.md
+`RuntimeState` 不再保存 `host`。
+
+目标字段：
+
+```python
+@dataclass(slots=True)
+class RuntimeState:
+    circuit: Circuit
+    server_kit: MCPServerKit
+    client_manager: MCPClientManager
+    stop_event: asyncio.Event
+    tasks: list[asyncio.Task[None]]
 ```
 
-每阶段写入：
+启动顺序：
 
-- 日期
-- 改动摘要
-- 运行过的验证命令
-- 剩余风险
-- 是否可回滚
+1. `ensure_dirs()`
+2. 读取 `apps/config.yml` / manifest / registry。
+3. 构造 `MCPServerSpec` 列表。
+4. `MCPServerKit.start_all()` 启动本地 stdio Server。
+5. `MCPClientManager.connect_all()` 建立 session。
+6. `MCPClientManager.refresh_capabilities()` 获取 tools/resources/prompts。
+7. 启动 `run_mcp_event_bridge()`。
+8. 启动 Brain `Circuit`。
+9. 启动 localhost 控制台。
 
-### 5.3 搜索旧接口依赖
+关闭顺序：
 
-每次开始阶段前运行：
-
-```powershell
-rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|invoke_command|list_command_specs|drain_events|command_dispatcher|action_queue" src tests apps
-```
-
-把结果按四类归档：
-
-- 需要立即改
-- 迁移期兼容保留
-- 测试需要更新
-- 旧代码最终删除
+1. 停止接收新的外部事件。
+2. 取消或等待正在执行的 tool call。
+3. flush tool result / AMP event audit。
+4. `MCPClientManager.shutdown()`。
+5. `MCPServerKit.stop_all()`。
+6. 停止 Brain runtime。
 
 ---
 
-## 6. Phase 1：新增 MCP 基础设施
+## 4. MCP 规范落地约束
 
-### 6.1 添加依赖
+执行时以官方 MCP 规范为准。
 
-修改 `pyproject.toml`：
+当前文档使用的规范标记：
 
-```toml
-dependencies = [
-    ...
-    "mcp[cli]>=1.27,<2",
-]
-```
+- 规范入口：<https://modelcontextprotocol.io/specification/latest>
+- 本指南编写时使用 `2025-11-25` 规范链接。
+- Python SDK：<https://github.com/modelcontextprotocol/python-sdk>
 
-然后运行：
+实现约束：
+
+- 先使用 SDK v1 稳定线：`mcp[cli]>=1.27,<2`。
+- 第一阶段 transport 只实现 `stdio`。
+- Streamable HTTP 作为第二阶段能力设计接口，但不阻塞本轮重构。
+- 不启用 Roots / Sampling / Elicitation，除非后续安全策略明确授权。
+- stdio Server 的 stdout 只能输出 MCP JSON-RPC；日志走 stderr 或文件。
+
+依赖修改：
 
 ```powershell
+uv add "mcp[cli]>=1.27,<2"
 uv sync --group dev
 ```
 
-注意：如果下载失败，先确认是否是网络或镜像问题，不要手写 SDK stub。
+如果依赖安装失败，记录具体错误，不要写 SDK stub。
 
-### 6.2 新建 `src/platform/mcp_kit/`
+---
 
-新增文件：
+## 5. App 发现与位置无关原则
 
-```text
-src/platform/mcp_kit/__init__.py
-src/platform/mcp_kit/server_spec.py
-src/platform/mcp_kit/amp.py
-src/platform/mcp_kit/tool_schema.py
-src/platform/mcp_kit/manifest.py
-src/platform/mcp_kit/discovery.py
+### 5.1 核心原则
+
+主仓库不规定 App/MCP Server 的代码位置。
+
+Platform 只需要：
+
+- `key`：本地唯一连接名。
+- `package`：全局包名或能力命名空间。
+- `name` / `version` / `description`：外围元信息。
+- `transport`：第一阶段只支持 `stdio`。
+- `command` / `args` / `env` / `cwd`：本地进程启动信息。
+- `endpoint` / `headers`：预留给 Streamable HTTP。
+- `permissions`：工具、资源、通知风险策略。
+
+App 可以位于：
+
+- 主仓库 `apps/` 内。
+- 独立 Git 仓库。
+- 用户本机任意目录。
+- 远程 MCP 服务。
+- in-process adapter，仅限受框架限制时的特例；对 Platform 暴露仍必须是 MCP 语义。
+
+### 5.2 `apps/config.yml` 目标格式
+
+```yaml
+apps:
+  weather:
+    enabled: true
+    package: im.polaris.weather
+    name: Weather
+    version: "1.0.0"
+    transport: stdio
+    command:
+      - uv
+      - run
+      - --project
+      - D:/aurora-app-weather
+      - python
+      - -m
+      - aurora_weather.mcp_server
+    env:
+      AURORA_APP_DATA_DIR: data/app_data/weather
+    startup:
+      default_city: 北京
+      language: zh
+    permissions:
+      tools:
+        im.polaris.weather.get_weather:
+          risk: low
+          enabled: true
 ```
 
-### 6.3 定义 `MCPServerSpec`
+主仓库内置样例也使用同一配置：
+
+```yaml
+apps:
+  diary:
+    enabled: true
+    package: im.polaris.diary
+    transport: stdio
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - apps.aurora-app-diary.mcp_server
+```
+
+### 5.3 `MCPServerSpec`
 
 文件：`src/platform/mcp_kit/server_spec.py`
 
-要求：
-
-- 使用 `@dataclass(slots=True)`。
-- 不使用裸 `Any` 作为公共 API 的核心类型；必要时局部兼容即可。
-- 所有时间字段使用带时区的 ISO 8601 字符串。
-
-建议字段：
+必备字段：
 
 ```python
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from pathlib import Path
-
-
 @dataclass(slots=True)
 class MCPServerSpec:
     key: str
     package: str
     name: str
-    version: str
-    directory: Path
-    transport: str = "stdio"
+    version: str = "0.0.0"
+    description: str = ""
+    transport: Literal["stdio"] = "stdio"
     command: list[str] = field(default_factory=list)
     args: list[str] = field(default_factory=list)
+    cwd: Path | None = None
     env: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     startup: dict[str, object] = field(default_factory=dict)
     health_timeout_seconds: float = 10.0
+    tool_timeout_seconds: float = 30.0
+    permissions: AppPermissionSpec = field(default_factory=AppPermissionSpec)
 ```
+
+校验规则：
+
+- `key` 非空，只能包含字母、数字、`-`、`_`。
+- `package` 必须全局唯一。
+- `enabled=true` 时，stdio `command` 不能为空。
+- `cwd` 如果配置，必须存在。
+- `transport` 遇到非 `stdio` 直接报错，并提示本阶段未实现。
+- `env` 只允许字符串值。
+
+### 5.4 Discovery
+
+文件：`src/platform/mcp_kit/discovery.py`
+
+职责：
+
+- 读取 `apps/config.yml`。
+- 可选读取本地 `apps/*/manifest.yaml`，补充 name/version/description。
+- 将 registry 或远程元信息预留为接口，不要求第一阶段实现。
+- 产出 `list[MCPServerSpec]`。
+
+不再做：
+
+- 不 import `apps/*/__init__.py`。
+- 不实例化 App class。
+- 不扫描 `runtime.py`。
+- 不读取旧 `commands` 作为运行时命令源。
 
 验收：
 
-- `MCPServerSpec` 可以表达当前 `apps/config.yml` 的所有启动参数。
-- `transport` 第一期只允许 `stdio`；遇到其他值要报清晰错误。
+- 仅靠 `apps/config.yml` 可以启动一个主仓库外的 fake MCP Server。
+- 主仓库内 `apps/` 为空时，Platform 仍能通过 config 接入外部 MCP Server。
 
-### 6.4 定义 AMP compatibility envelope
+---
+
+## 6. AMP 兼容归一化层
+
+### 6.1 定位
+
+AMP 是 AuroraBot Platform 内部的统一事件 envelope。
+
+它不是：
+
+- MCP 传输协议。
+- MCP Server 必须实现的私有规范。
+- App 开发者必须导入的 SDK。
+- `aurora/event` notification 的同义词。
+
+它是：
+
+- Brain 的统一事件入口格式。
+- Platform 吸收全 MCP 生态的兼容层。
+- 旧 `AppEvent` 语义的目标替代物。
+- lifecycle、capability、tool result、resource observation、notification、error 的统一审计格式。
+
+### 6.2 Envelope
 
 文件：`src/platform/mcp_kit/amp.py`
 
-AMP 是 AuroraBot Platform 内部的统一事件 envelope，不是新传输协议，也不是要求所有 MCP Server 遵守的私有规范。
-
-它的职责是把全 MCP 生态“吃进来”：
-
-- 标准 `tools/call` 结果可以被包装为 `tool.completed` / `tool.failed`。
-- 标准 `notifications/tools/list_changed`、`notifications/resources/list_changed`、`notifications/prompts/list_changed` 可以被包装为 `capability.changed`。
-- 标准 lifecycle、连接断开、初始化失败、超时、协议错误可以被包装为 `lifecycle.*` 或 `mcp.error`。
-- 标准 resource read/list 结果可以按需包装为 `resource.observed`。
-- Aurora 原生 App 若主动发送 `aurora/event`，Platform 可以直接校验并接入，但第三方 MCP Server 不需要知道 AMP。
-
 必备 dataclass：
 
-- `AMPSource`
-- `AMPHeader`
-- `AMPPayload`
-- `AMPEnvelope`
+```python
+@dataclass(slots=True)
+class AMPSource:
+    app: str
+    instance: str = "default"
+    transport: str = "stdio"
 
-必备函数：
 
-- `build_event_envelope(...) -> AMPEnvelope`
-- `build_from_mcp_signal(...) -> AMPEnvelope`
-- `parse_amp_envelope(raw: object) -> AMPEnvelope`
-- `amp_to_file_event(envelope: AMPEnvelope) -> dict[str, object]`
-- `legacy_app_event_to_amp(event: AppEvent) -> AMPEnvelope`
+@dataclass(slots=True)
+class AMPHeader:
+    protocol: str
+    method: str
+    message_id: str
+    timestamp: str
+    source: AMPSource
+    trace_id: str = ""
 
-Platform 内部标准 envelope：
 
-```json
-{
-	"header": {
-		"protocol": "amp/1.0",
-		"method": "mcp.notification",
-		"message_id": "uuid",
-		"timestamp": "2026-06-19T12:00:00+08:00",
-		"source": {
-      "app": "im.polaris.qq",
-      "instance": "default"
-    }
-  },
-	"payload": {
-		"type": "message.received",
-    "session_id": "group_123456",
-    "summary": "用户发来新消息",
-    "data": {},
-    "expire_at": null
-  }
-}
+@dataclass(slots=True)
+class AMPPayload:
+    type: str
+    session_id: str = ""
+    summary: str = ""
+    data: dict[str, object] = field(default_factory=dict)
+    expire_at: str | None = None
+
+
+@dataclass(slots=True)
+class AMPEnvelope:
+    header: AMPHeader
+    payload: AMPPayload
 ```
 
-Aurora 原生 App 可选地发送同构 payload：
+`header.method` 记录原始信号类别：
+
+- `mcp.lifecycle`
+- `mcp.notification`
+- `mcp.tool_result`
+- `mcp.resource`
+- `mcp.error`
+- `aurora/event`
+
+不要限制为 `aurora/*`。
+
+### 6.3 标准映射
+
+| 输入信号 | AMP `header.method` | AMP `payload.type` |
+| --- | --- | --- |
+| initialize 成功 | `mcp.lifecycle` | `lifecycle.started` |
+| session 断开 | `mcp.lifecycle` | `lifecycle.stopped` |
+| server 进程异常退出 | `mcp.lifecycle` | `lifecycle.crashed` |
+| `notifications/tools/list_changed` | `mcp.notification` | `capability.changed` |
+| `notifications/resources/list_changed` | `mcp.notification` | `capability.changed` |
+| `notifications/prompts/list_changed` | `mcp.notification` | `capability.changed` |
+| 任意第三方 notification | `mcp.notification` | `mcp.notification.<method>` |
+| `tools/call` 成功 | `mcp.tool_result` | `tool.completed` |
+| `tools/call` 失败 | `mcp.tool_result` | `tool.failed` |
+| `resources/read` 被纳入观察 | `mcp.resource` | `resource.observed` |
+| 协议解析/超时/权限失败 | `mcp.error` | `mcp.error` |
+| Aurora 原生 `aurora/event` | `aurora/event` | params 中声明的业务类型 |
+
+### 6.4 必备函数
+
+```python
+def build_event_envelope(...) -> AMPEnvelope: ...
+
+def build_from_mcp_signal(
+    *,
+    server: MCPServerSpec,
+    method: str,
+    signal_type: str,
+    params: Mapping[str, object],
+    summary: str = "",
+) -> AMPEnvelope: ...
+
+def parse_amp_envelope(raw: object) -> AMPEnvelope: ...
+
+def amp_to_file_event(envelope: AMPEnvelope) -> dict[str, object]: ...
+
+def normalize_aurora_event_params(
+    *,
+    server: MCPServerSpec,
+    params: Mapping[str, object],
+) -> AMPEnvelope: ...
+```
+
+不要实现 `legacy_app_event_to_amp()`。alpha 阶段直接删除旧 `AppEvent`。
+
+### 6.5 Aurora 原生事件快捷入口
+
+Aurora 原生 App 可以发送：
 
 ```json
 {
@@ -391,246 +542,239 @@ Aurora 原生 App 可选地发送同构 payload：
   "params": {
     "type": "message.received",
     "session_id": "group_123456",
-    "summary": "用户发来新消息",
-    "data": {}
+    "summary": "收到一条群消息",
+    "data": {
+      "text": "你好"
+    }
   }
 }
 ```
 
-收到这种原生 notification 时，Platform 补齐 `header`、`source`、`message_id`、`timestamp` 后再写入 Brain。对非 Aurora 的 MCP Server，Platform 按 capability、method、tool/resource 名称和返回内容生成等价 envelope。
+Platform 收到后：
 
-约束：
+1. 不信任 App 提供的 `source`。
+2. 用当前 MCP session 的 `MCPServerSpec.package` 填充 `header.source.app`。
+3. 生成 `message_id` 和带时区 `timestamp`。
+4. 校验 `payload.type` 非空。
+5. 写入 Brain inbox。
 
-- `header.protocol` 固定为 `amp/1.0`。
-- `header.method` 记录原始 MCP 信号类别，例如 `mcp.notification`、`mcp.tool_result`、`mcp.resource`、`mcp.lifecycle`、`aurora/event`。
-- `message_id` 用 `uuid.uuid4()` 即可；不要引入额外 UUID7 依赖。
-- `timestamp` 使用项目已有 `src.utils.time_utils`，若该工具不带时区则先修工具或在 AMP 内部使用 `datetime.now(UTC).astimezone()`。
-- 未知字段保留但不参与路由。
-- 解析失败抛 `ValueError`，由接收层记录 WARNING。
-- 不要因为第三方 Server 没有 `aurora/event` 就拒绝接入；只要标准 MCP 初始化和能力发现成功，它就是可用 App。
-
-### 6.5 Tool schema 转换
-
-文件：`src/platform/mcp_kit/tool_schema.py`
-
-必备函数：
-
-- `mcp_tool_to_openai_tool(tool: object, *, server_name: str) -> dict[str, object]`
-- `mcp_tools_to_prompt_text(tools: Sequence[object]) -> str`
-- `normalize_tool_name(server_name: str, tool_name: str) -> str`
-
-命名规则：
-
-- 对外暴露给 LLM 的工具名必须全局唯一。
-- 优先使用 manifest package 前缀：`im.polaris.weather.get_weather`。
-- 如果 MCP Server 返回的 tool 已经带 package 前缀，不重复添加。
-- 如果出现同名冲突，启动阶段直接失败，不允许静默覆盖。
-
-验收：
-
-- 能把旧 `CommandSpec` 的命令文本表达能力完整映射到 MCP Tool schema。
-- Externalizer 迁移前可以继续使用 prompt text；后续再切到结构化 tool calling。
+第三方 MCP Server 没有 `aurora/event` 时，不视为能力缺失。
 
 ---
 
-## 7. Phase 2：MCP ServerKit 与 ClientManager
-
-### 7.1 实现发现逻辑
-
-文件：`src/platform/mcp_kit/discovery.py`
-
-职责：
-
-- 扫描 `apps/*/manifest.yaml`。
-- 支持旧 App：没有 `type: mcp-server` 时仍返回 legacy 信息，但不强制启动 MCP。
-- 支持新 App：有 `type: mcp-server` 或 `mcp:` 段时构造 `MCPServerSpec`。
-- 合并 `apps/config.yml` 的 `enabled`、`startup`、`mcp` 覆盖项。
-
-建议 `apps/config.yml` 新格式：
-
-```yaml
-apps:
-  aurora-app-diary:
-    enabled: true
-    startup: {}
-    mcp:
-      enabled: true
-      transport: stdio
-      command: ["uv", "run", "python", "-m", "apps.aurora-app-diary.mcp_server"]
-      env: {}
-      health_timeout_seconds: 10.0
-```
-
-兼容规则：
-
-- 未配置 `mcp` 的 App 继续走旧 Host。
-- 配置了 `mcp.enabled: true` 但缺少 `mcp_server.py`，启动时报错。
-- 配置了 `mcp.enabled: false` 时，即使 manifest 有 `mcp:` 也不启动新轨。
-
-### 7.2 实现 `MCPServerKit`
+## 7. MCP ServerKit
 
 文件：`src/platform/mcp_kit/server_kit.py`
 
-职责只限进程生命周期：
+### 7.1 职责
 
-- `load_specs()`
-- `start_all()`
-- `start_one(key)`
+`MCPServerKit` 只管理本地 Server 进程：
+
+- `start_all(specs)`
+- `start_one(spec)`
 - `stop_all()`
 - `stop_one(key)`
 - `restart_one(key)`
 - `health_report()`
+- `processes`
 
-不要做：
+不做：
 
-- 不要在 `ServerKit` 里保存 tools。
-- 不要在 `ServerKit` 里实现 `call_tool()`。
-- 不要在 `ServerKit` 里转换 notification。
+- 不调用 tools。
+- 不缓存 tools。
+- 不解析 notification。
+- 不写 Brain inbox。
+- 不做权限判断。
+
+### 7.2 stdio 启动
 
 实现要求：
 
-- 使用 `asyncio.create_subprocess_exec(*command, cwd=..., env=...)`。
-- stdout/stdin 必须留给 MCP transport 使用。
-- stderr 可以采集到日志，注意不要误判 stderr 为启动失败。
-- stop 顺序：关闭 stdin 或终止进程，等待超时，最后 kill。
-- 不要每 tick 重启；只在进程退出或显式 restart 时处理。
+- 使用 `asyncio.create_subprocess_exec()`，不要通过 shell 拼字符串。
+- `stdin` / `stdout` 保留给 MCP transport。
+- `stderr` 异步读取并写 DEBUG/WARNING 日志。
+- `cwd` 使用 `MCPServerSpec.cwd`。
+- `env` 合并当前环境和 spec.env。
+- 进程启动失败时抛出 `MCPServerStartError`。
 
-### 7.3 实现 `MCPClientManager`
+### 7.3 健康状态
+
+状态枚举：
+
+- `configured`
+- `starting`
+- `running`
+- `stopped`
+- `crashed`
+- `failed_to_start`
+
+`health_report()` 返回结构：
+
+```python
+{
+    "weather": {
+        "status": "running",
+        "package": "im.polaris.weather",
+        "pid": 12345,
+        "last_error": "",
+        "started_at": "2026-06-19T12:00:00+08:00",
+    }
+}
+```
+
+进程异常退出时：
+
+- 更新 health。
+- 生成 `lifecycle.crashed` AMP 信号，交给 Platform event queue。
+- 不在 ServerKit 内自动无限重启；重启策略以后单独设计。
+
+---
+
+## 8. MCP ClientManager
 
 文件：`src/platform/mcp_kit/client_manager.py`
 
-职责：
+### 8.1 职责
 
-- 连接每个 MCP Server。
-- 执行 MCP lifecycle：`initialize` -> `notifications/initialized`。
-- 缓存 `tools/list`。
-- 提供 `call_tool(full_tool_name, arguments)`。
-- 接收 MCP notifications，转发给注册的 handler。
-- 暴露 `tools_as_openai_schema()` 和 `tools_as_prompt_text()`。
+`MCPClientManager` 是 AuroraBot Host 中的 MCP Client 管理器：
 
-关键接口：
+- 每个 Server 一个 session。
+- 执行 initialize。
+- 发送 `notifications/initialized`。
+- 获取 `tools/list`、`resources/list`、`prompts/list`。
+- 维护 tool/resource/prompt cache。
+- 执行 `tools/call`。
+- 接收 notifications。
+- 将可观测信号送入 AMP queue。
+
+### 8.2 接口
 
 ```python
 class MCPClientManager:
-    async def connect_all(self) -> None: ...
+    async def connect_all(self, specs: Sequence[MCPServerSpec]) -> None: ...
     async def connect_one(self, spec: MCPServerSpec) -> None: ...
-    async def refresh_tools(self) -> None: ...
-    async def list_tools(self) -> list[object]: ...
-    async def call_tool(self, full_tool_name: str, arguments: dict[str, object]) -> object: ...
-    def add_notification_handler(self, method: str, handler: NotificationHandler) -> None: ...
+    async def refresh_capabilities(self, key: str | None = None) -> None: ...
+    async def list_tools(self) -> list[MCPToolEntry]: ...
+    async def call_tool(self, full_tool_name: str, arguments: dict[str, object]) -> MCPToolResult: ...
+    async def read_resource(self, uri: str) -> MCPResourceResult: ...
+    def tools_as_openai_schema(self) -> list[dict[str, object]]: ...
+    def tools_as_prompt_text(self) -> str: ...
+    @property
+    def amp_queue(self) -> asyncio.Queue[AMPEnvelope]: ...
     async def shutdown(self) -> None: ...
 ```
 
-设计要求：
+### 8.3 Tool 命名
 
-- 每个 MCP Server 一个独立 session。
-- session 之间隔离，不共享 conversation。
-- tool cache 必须带 server key/package。
-- `tools/list_changed` notification 到达时刷新对应 server 的 tools。
-- 调用超时必须可配置，默认 30 秒。
-- MCP 错误要转换为项目内清晰异常，例如 `MCPToolCallError`。
+对 Brain/LLM 暴露的工具名必须全局唯一。
 
-测试样板：
+规则：
 
-- 用一个测试 MCP Server 暴露 `echo` tool。
-- `connect_all()` 后能 list 到 `im.polaris.test.echo`。
-- `call_tool()` 能返回 echo 结果。
-- Server 退出后 `health_report()` 能发现异常。
+1. 如果 MCP Server tool 名已经以 package 开头，直接使用。
+2. 否则使用 `{package}.{tool_name}`。
+3. 冲突时启动失败，不静默覆盖。
+4. tool name 与 server key 的映射必须可反查。
+
+示例：
+
+```text
+get_weather -> im.polaris.weather.get_weather
+send_message -> im.polaris.qq.send_message
+im.polaris.diary.write_diary -> im.polaris.diary.write_diary
+```
+
+### 8.4 Capability refresh
+
+收到以下 notification 时刷新对应 cache：
+
+- `notifications/tools/list_changed`
+- `notifications/resources/list_changed`
+- `notifications/prompts/list_changed`
+
+同时生成 AMP：
+
+```text
+header.method = mcp.notification
+payload.type = capability.changed
+payload.data = {
+  "method": "notifications/tools/list_changed",
+  "server": "weather",
+  "package": "im.polaris.weather"
+}
+```
+
+### 8.5 Tool result 事件
+
+每次 `call_tool()` 后生成审计事件：
+
+- 成功：`payload.type = tool.completed`
+- 失败：`payload.type = tool.failed`
+- 超时：`payload.type = tool.failed`，`data.reason = "timeout"`
+- 权限拒绝：`payload.type = tool.failed`，`data.reason = "permission_denied"`
+
+Tool result 的内容不能作为指令直接注入模型；它是数据。
 
 ---
 
-## 8. Phase 3：迁移 diary 为样板 App
+## 9. 权限与安全
 
-先迁移 `apps/aurora-app-diary`，因为它依赖少、风险低。
+文件：`src/platform/mcp_kit/permissions.py`
 
-### 8.1 拆业务逻辑
+### 9.1 风险等级
 
-新增：
+工具风险等级：
 
-```text
-apps/aurora-app-diary/service.py
-```
+- `low`：只读查询或无外部副作用。
+- `medium`：写入 App 私有状态或轻量外部副作用。
+- `high`：发送消息、操作账户、删除数据、执行支付等外部副作用。
+- `critical`：执行任意命令、读写任意文件、访问 secrets。默认禁止。
 
-把 `runtime.py` 中读写日记文件的逻辑迁到 `DiaryService`。
+第一阶段策略：
 
-要求：
+- `low` / `medium` 默认允许。
+- `high` 需要显式配置 `enabled: true`。
+- `critical` 即使配置也先拒绝，除非专门实现确认机制。
 
-- `service.py` 不 import `PlatformAPI`。
-- `service.py` 不 import MCP SDK。
-- `service.py` 可单独单测。
-- 保留当前 app data 目录行为；如果旧目录来自 `PlatformAPI.data_dir`，新 service 需要从启动参数或环境变量获得 data dir。
+### 9.2 Tool call 前检查
 
-### 8.2 新增 MCP Server 入口
+`MCPToolDispatcher` 调用前检查：
 
-新增：
+- tool 是否存在。
+- server 是否 connected。
+- tool 是否 enabled。
+- risk 是否允许。
+- 参数是否符合 MCP schema。
+- 是否超出 timeout。
 
-```text
-apps/aurora-app-diary/mcp_server.py
-```
+拒绝时返回结构化失败，并写 `tool.failed` AMP 事件。
 
-推荐使用 FastMCP v1 风格：
+### 9.3 禁止默认能力
 
-```python
-from __future__ import annotations
+默认禁用：
 
-from mcp.server.fastmcp import FastMCP
+- MCP Roots
+- MCP Sampling
+- MCP Elicitation
+- 任意文件系统 roots
+- 任意 shell / command executor tool
 
-from .service import DiaryService
-
-mcp = FastMCP("aurora-diary", json_response=True)
-service = DiaryService.from_env()
-
-
-@mcp.tool(name="write_diary")
-async def write_diary(date: str, content: str) -> dict[str, object]:
-    return await service.write_diary(date=date, content=content)
-
-
-@mcp.tool(name="read_diary")
-async def read_diary(date: str) -> dict[str, object]:
-    return await service.read_diary(date=date)
-
-
-@mcp.tool(name="list_dates")
-async def list_dates() -> dict[str, object]:
-    return await service.list_dates()
-
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-```
-
-注意：
-
-- `stdout` 只能输出 MCP JSON-RPC 消息。
-- 普通日志必须走 stderr 或项目日志文件。
-- 工具返回值必须 JSON 可序列化。
-
-### 8.3 保留旧 `runtime.py`
-
-迁移期不要删除 `runtime.py`。
-
-把旧 `DiaryApplication` 改成薄兼容层：
-
-- `_bind(api)` 继续保存旧 API。
-- command 方法调用 `DiaryService`。
-- 事件上报仍可通过旧 `PlatformAPI.emit_event()`。
-
-验收：
-
-- 旧测试 `test_application_host*` 仍通过。
-- 新 MCP 测试通过。
-- 手动运行 diary MCP Server，不向 stdout 打非 MCP 文本。
+除非后续单独做安全设计，否则不要接入。
 
 ---
 
-## 9. Phase 4：MCP 信号接入 AMP Compatibility Bridge
+## 10. Brain 事件桥
 
-### 9.1 修改 `event_bridge`
+文件：`src/brain/nodes/event_bridge.py`
 
-目标：支持旧 Host 和新 MCP 信号双来源，并保证任意标准 MCP Server 不需要实现 Aurora 私有 notification。
+### 10.1 删除旧桥
 
-不要立即删除旧签名。先新增并行函数：
+删除：
+
+- `run_event_bridge(host, circuit, ...)`
+- `host.drain_events()`
+- 旧 `AppEvent.to_dict()` 处理逻辑
+
+保留唯一入口：
 
 ```python
 async def run_mcp_event_bridge(
@@ -641,59 +785,75 @@ async def run_mcp_event_bridge(
     ...
 ```
 
-行为：
+### 10.2 行为
 
-- 注册通用 MCP notification handler，而不是只注册 `aurora/event`。
-- 订阅并转换 lifecycle、capability change、tool result、resource observation、error 等 Platform 可观测信号。
-- Aurora 原生 `aurora/event` notification 直接校验并补齐 envelope。
-- 第三方标准 notification 按 `method` 和 `params` 归一化为 AMP envelope。
-- handler 把 Platform 生成的 AMP envelope 放进 `asyncio.Queue`。
-- bridge 循环从 queue 取消息，写入 `inbox/pending/event_<type>_<message_id>.json`。
-- 文件内容保存完整 AMP envelope。
+`run_mcp_event_bridge()`：
 
-文件名规则：
+1. 从 `client_manager.amp_queue` 消费 `AMPEnvelope`。
+2. 构造文件名：
 
 ```text
 inbox/pending/event_<payload.type with . and / replaced by _>_<header.message_id>.json
 ```
 
-兼容转换：
+3. 写入完整 envelope。
+4. 不调用 LLM。
+5. 不判断是否回复。
+6. 不修改 App 私有状态。
 
-- 旧 `AppEvent.to_dict()` 是扁平结构。
-- 新 AMP 是 `header` + `payload`。
-- 第三方 MCP Server 的原始 notification 可能没有 `payload.type`；Platform 必须给出稳定映射，例如 `mcp.notification.<method>` 或按 adapter 规则映射为业务事件。
-- `message_preprocessor` 如果只支持旧扁平结构，需要先扩展它同时识别两种格式。
-
-### 9.2 扩展 `message_preprocessor`
+### 10.3 `message_preprocessor`
 
 文件：`src/brain/nodes/routers/message_preprocessor.py`
 
-要求：
+目标只支持 AMP envelope，不再支持旧扁平 `AppEvent`。
 
-- 读取旧事件时保持当前行为。
-- 读取 AMP envelope 时从：
-  - `payload.type`
-  - `payload.session_id`
-  - `payload.summary`
-  - `payload.data`
-  - `header.source.app`
-  提取等价字段。
-- 不要把 AMP header 丢掉；写入后续 message queue 时保留 trace 字段。
+读取字段：
+
+- `payload.type`
+- `payload.session_id`
+- `payload.summary`
+- `payload.data`
+- `header.source.app`
+- `header.message_id`
+- `header.timestamp`
+- `header.method`
+
+输出到后续 message queue 时保留 trace：
+
+```json
+{
+  "type": "message.received",
+  "session_id": "group_123",
+  "source": "im.polaris.qq",
+  "text": "...",
+  "trace": {
+    "message_id": "...",
+    "method": "aurora/event",
+    "timestamp": "..."
+  }
+}
+```
 
 验收：
 
-- 构造一个标准 MCP `notifications/tools/list_changed`，最终能生成 `pipeline/message_queue/*.json`。
-- 构造一个 Aurora 原生 `aurora/event` notification，最终能生成 `pipeline/message_queue/*.json`。
-- 接入一个无 AMP 逻辑的 fake MCP Server，完成 initialize、tools/list、tools/call 后仍能产生 lifecycle/tool result 类 AMP 事件。
-- 旧 `host.emit_event(AppEvent(...))` 仍能进入同一管线。
+- `capability.changed` 能进入 inbox，但可以被 preprocessor 标记为系统事件。
+- `message.received` 能被格式化为第一人称可理解文本。
+- `tool.completed` / `tool.failed` 能作为行动反馈事件进入 Brain。
 
 ---
 
-## 10. Phase 5：MCP Tool 调用链
+## 11. Brain 工具调用链
 
-这个阶段要谨慎：先让旧 action_queue 继续存在，再逐步减少文本 JSON 动作依赖。
+### 11.1 删除 `command_dispatcher`
 
-### 10.1 新增 Tool Dispatcher 适配层
+删除：
+
+- `src/brain/nodes/routers/command_dispatcher.py`
+- `topology.yaml` 中的 `command_dispatcher` 节点。
+- `NodeFactory` 对 `command_dispatcher` 的注册。
+- Externalizer 生成旧 `{"command": "...", "params": {...}}` 后再由 command_dispatcher 解析的路径。
+
+### 11.2 新增 `mcp_tool_dispatcher`
 
 新增：
 
@@ -701,227 +861,497 @@ inbox/pending/event_<payload.type with . and / replaced by _>_<header.message_id
 src/brain/nodes/routers/mcp_tool_dispatcher.py
 ```
 
-第一步可以让它替代旧 `command_dispatcher` 的执行部分，但仍读取 `pipeline/action_queue/*.json`：
+职责：
 
-- 解析 `actions[].command`。
-- 如果 command 对应 MCP tool，调用 `MCPClientManager.call_tool()`。
-- 如果 command 只存在旧 Host，调用旧 `host.invoke_command()`。
-- 记录执行结果到 `pipeline/action_queue/done/` 或 `pipeline/tool_results/`。
+- 读取 Brain 产生的 tool intent 文件。
+- 校验 tool 名和参数。
+- 调用 `MCPClientManager.call_tool()`。
+- 写入 tool result audit。
+- 生成 `tool.completed` / `tool.failed` AMP 事件。
 
-这样可以先保留 Externalizer 的 JSON 输出格式，降低一次性切换风险。
+建议输入文件：
 
-### 10.2 修改 Externalizer 的命令上下文来源
+```text
+data/kernel/pipeline/tool_intents/intent_<id>.json
+```
+
+格式：
+
+```json
+{
+  "intent_id": "uuid",
+  "tool": "im.polaris.weather.get_weather",
+  "arguments": {
+    "city": "北京"
+  },
+  "reason": "需要了解当前天气",
+  "trace": {
+    "source_message_id": "..."
+  }
+}
+```
+
+结果文件：
+
+```text
+data/kernel/pipeline/tool_results/result_<intent_id>.json
+```
+
+格式：
+
+```json
+{
+  "intent_id": "uuid",
+  "tool": "im.polaris.weather.get_weather",
+  "ok": true,
+  "result": {},
+  "error": null,
+  "timestamp": "2026-06-19T12:00:00+08:00"
+}
+```
+
+### 11.3 Externalizer
 
 文件：`src/brain/nodes/agents/externalizer.py`
 
-迁移期策略：
+目标：
 
-- 如果注入了 `MCPClientManager`，优先使用 `client_manager.tools_as_prompt_text()`。
-- 否则回退到旧 `_host.list_command_specs()`。
+- 不再读取 `_host.list_command_specs()`。
+- 工具上下文来自 `MCPClientManager.tools_as_openai_schema()` 或 `tools_as_prompt_text()`。
+- 如果当前 `LLMGateway` 尚未支持原生 tool calls，Externalizer 仍可输出 tool intent JSON 文件，但字段必须是 `tool` / `arguments`，不是旧 `command` / `params`。
+- 后续 `LLMGateway` 支持 tool calls 后，直接落到同一 tool intent 格式。
 
-不要在这一步强制改成模型原生 tool_calls，因为当前 `gateway` 可能仍只包装文本补全。先把工具来源标准化，后续再改 LLM gateway。
+### 11.4 localhost 控制台
 
-### 10.3 后续切换为原生 tool_calls
+重写 `src/brain/localhost/commands/`：
 
-当 `src/brain/ai/gateway.py` 支持结构化 tools 后，再做：
+- `invoke`：调用 MCP tool。
+- `say`：调用 QQ/IM connector 的 send tool，或写入本地测试事件。
+- `emit`：写 AMP envelope 到 inbox，用于调试 Brain，不再构造 `AppEvent`。
+- `apps`：列出 MCP Server health 和 capabilities。
+- `tools`：列出当前 tool cache。
 
-- Externalizer 调用 LLM 时传入 MCP tools schema。
-- LLM 返回 tool_calls。
-- `mcp_tool_dispatcher` 或 Externalizer 直接执行 tool_calls。
-- action_queue 文件可以改为审计记录，而不是派发必经队列。
-
-验收：
-
-- `im.polaris.diary.write_diary` 可以经 Externalizer 生成动作并由 MCP 调用成功。
-- `im.polaris.console.send_message` 旧内置命令仍可用，直到它也被迁到 MCP 或专门的 internal tool registry。
+禁止控制台继续访问 `runtime.host`。
 
 ---
 
-## 11. Phase 6：迁移其余 App
+## 12. App 重构规范
 
-### 11.1 clock
+### 12.1 通用结构
 
-目标：
+每个内置 App 采用：
 
-- `service.py` 管理闹钟/计时器状态。
-- `mcp_server.py` 暴露：
-  - `get_current_time`
-  - `set_alarm`
-  - `set_timer`
-  - `list_alarms`
-- 到时提醒作为 Aurora 原生事件源，可以发送 `aurora/event` notification；Platform 仍负责补齐/校验 AMP envelope 后写入 Brain。
+```text
+apps/aurora-app-name/
+  manifest.yaml
+  mcp_server.py
+  service.py
+  config.example.yml
+  README.md
+```
 
-注意：
+`service.py`：
 
-- 旧 `on_tick()` 轮询要改为 server 内部后台 task。
-- FastMCP lifespan 或 server 启动逻辑里创建后台任务。
-- shutdown 时取消任务并保存状态。
+- 只包含业务逻辑。
+- 不 import MCP SDK。
+- 不 import `src.platform`。
+- 不 import `src.brain`。
+- 可单独单测。
+
+`mcp_server.py`：
+
+- 使用官方 SDK / FastMCP。
+- 注册 tools/resources/prompts。
+- 负责把 service 接到 MCP。
+- stdout 不输出日志。
+
+### 12.2 diary
+
+删除：
+
+- `runtime.py`
+- `DiaryApplication`
+- `PlatformAPI` data dir 依赖
+
+新增 tools：
+
+- `im.polaris.diary.write_diary`
+- `im.polaris.diary.read_diary`
+- `im.polaris.diary.list_dates`
+- `im.polaris.diary.search_diary`（可选）
+
+新增 resources：
+
+- `diary://dates`
+- `diary://entry/{date}`
 
 验收：
 
-- `set_timer("1")` 后 1 秒左右收到 `timer.triggered` 事件。
-- 事件经 Platform 归一化后进入 `inbox/pending`。
+- 可以在主仓库外通过 stdio 启动。
+- tools/list 能看到 diary tools。
+- write/read/list 都可通过 `MCPClientManager.call_tool()` 调用。
 
-### 11.2 weather
+### 12.3 clock
 
-目标：
+删除：
 
-- `service.py` 管理城市别名、HTTP 请求、格式化。
-- `mcp_server.py` 暴露 `get_weather`。
-- `emit_event` 仍作为 tool 参数兼容，但默认行为由启动配置控制。
+- `on_tick()` 轮询模型。
+- 旧 Host 事件队列。
 
-注意：
+新增 tools：
 
-- 外部 HTTP timeout 保持当前 `request_timeout_seconds`。
-- 不要在 MCP tool 里直接吞异常；返回 `{ok: false, error: "..."}`，同时 DEBUG 记录异常细节。
+- `im.polaris.clock.get_current_time`
+- `im.polaris.clock.set_alarm`
+- `im.polaris.clock.set_timer`
+- `im.polaris.clock.list_alarms`
+- `im.polaris.clock.cancel_alarm`
+
+事件：
+
+- 到时后可发送 Aurora 原生 `aurora/event`，`type=alarm.triggered` 或 `timer.triggered`。
+- 也可以由 Platform adapter 把标准 notification 映射为上述类型。
+
+验收：
+
+- `set_timer(seconds=1)` 后 inbox 出现 `timer.triggered`。
+- Server shutdown 时取消后台 task 并保存状态。
+
+### 12.4 weather
+
+新增 tools：
+
+- `im.polaris.weather.get_weather`
+- `im.polaris.weather.get_forecast`
+- `im.polaris.weather.set_default_city`
+
+新增 resources：
+
+- `weather://config`
+- `weather://last-report`
+
+规则：
+
+- HTTP timeout 可配置。
+- HTTP 失败返回结构化错误，不退出进程。
+- 不默认主动上报事件；除非配置 polling 或 tool 参数要求。
 
 验收：
 
 - 默认城市北京可查询。
-- 参数 `emit_event=true` 时发送 `weather.reported`。
-- HTTP 失败时不会导致 MCP Server 进程退出。
+- 网络失败生成 `tool.failed`。
+- tool result 不污染 stdout。
 
-### 11.3 qq
+### 12.5 QQ / OneBot / NoneBot connector
 
-这是最高风险项，最后做。
+目标不是立即“消灭 NoneBot”，而是把 NoneBot 降级为可选边缘 connector。
 
-目标：
+新增 App：
 
-- 发送能力暴露为 tools：
-  - `send_qq_message`
-  - `send_qq_private_message`
-  - `at_user_in_group`
-- 接收消息转为 `aurora/event` notification：
-  - `message.received`
+```text
+apps/aurora-app-qq-nonebot/
+  mcp_server.py
+  service.py
+  nonebot_adapter.py
+```
 
-建议策略：
+或独立仓库：
 
-- 第一步保留 NoneBot plugin 在主进程内，只把发送命令 MCP 化。
-- 第二步再评估 QQ App 是否需要独立进程。如果 NoneBot driver 强绑定主进程，则允许 QQ App 作为“in-process MCP server adapter”存在，但接口仍必须是 MCP Tool/notification。
-- 不要为了追求独立进程破坏 NoneBot 的生命周期。
+```text
+aurora-app-qq-nonebot/
+```
+
+目标 tools：
+
+- `im.polaris.qq.send_message`
+- `im.polaris.qq.send_private_message`
+- `im.polaris.qq.send_group_message`
+- `im.polaris.qq.recall_message`
+- `im.polaris.qq.get_group_member_info`
+
+目标事件：
+
+- `message.received`
+- `message.reaction`
+- `session.created`
+- `session.closed`
+- `lifecycle.started`
+- `lifecycle.crashed`
+
+实现路线：
+
+1. Core 不再由 NoneBot 启动。
+2. NoneBot 只存在于 QQ connector 内。
+3. QQ connector 对 Core 暴露 MCP tools 和事件。
+4. 如果 NoneBot 生命周期无法独立进程化，允许 in-process adapter，但必须隔离在 Platform/App 边界，不允许 Brain import NoneBot。
 
 验收：
 
-- 群消息接收仍能进入 `inbox/pending`。
-- 私聊和群聊发送工具能正确调用 OneBot API。
-- 发送失败有结构化错误，不让 Externalizer 误以为已发送。
+- `src/main.py` / Core runtime 不 import `nonebot`。
+- 群消息进入 `inbox/pending/event_message_received_*.json`。
+- 发送消息通过 MCP tool。
+- OneBot API 失败返回结构化错误。
 
 ---
 
-## 12. Phase 7：清理旧平台层
+## 13. Runtime 与入口去 NoneBot 化
 
-只有满足以下条件后才能进入清理：
+本节对应“脱离 NoneBot 框架”的合理边界。
 
-- 所有启用 App 都有 MCP Server 或明确的 in-process MCP adapter。
-- `MCPClientManager.list_tools()` 覆盖旧 `host.list_command_specs()` 的全部命令。
-- `run_mcp_event_bridge()` 覆盖旧 `run_event_bridge(host, ...)` 的事件输入。
-- 控制台命令不再强依赖 `runtime.host.invoke_command()`。
-- 测试覆盖新路径。
+### 13.1 新增 Core 入口
 
-清理顺序：
+新增：
 
-1. `src/brain/runtime.py`
-   - `RuntimeState` 从 `host` 改为 `server_kit` + `client_manager`。
-   - 删除 `run_app_loop()` 启动。
-   - 删除旧 `register_enabled_apps()` 路径。
-2. `src/brain/nodes/topology.yaml`
-   - 移除 `command_dispatcher`。
-   - 如果 `mcp_tool_dispatcher` 已不需要 action_queue，也一起移除对应边。
-3. `src/brain/kernel/node_factory.py`
-   - 移除 `command_dispatcher` registry。
-   - 去掉对 `ApplicationHost` 的必需注入；保留可选 context 对象。
-4. `src/platform/application_api.py`
-   - 删除。
-5. `src/platform/application_protocol.py`
-   - 删除。
-6. `src/platform/loop.py`
-   - 删除。
-7. `src/platform/application_host.py`
-   - 删除，或移动到 `src/platform/legacy/application_host.py` 只供旧测试参考。
-8. `src/platform/contracts.py`
-   - 删除 `CommandSpec`。
-   - `AppEvent` 若仍用于测试 fixture，移动到 AMP 兼容模块。
-9. `apps/*/runtime.py`
-   - 删除或改为导入 `mcp_server.py` 的兼容 shim。
-10. tests
-   - 删除旧 Host 行为测试。
-   - 新增 MCP lifecycle、tools、notification、Brain bridge 集成测试。
+```text
+src/aurora/main.py
+```
+
+职责：
+
+- 初始化配置。
+- 启动 Platform。
+- 启动 Brain。
+- 启动 localhost 控制台。
+- 处理 shutdown。
+
+新增 CLI 或脚本入口：
+
+```text
+aurora-core
+```
+
+或先使用：
+
+```powershell
+uv run python -m src.aurora.main
+```
+
+### 13.2 NoneBot 入口降级
+
+`bot.py` 不再是 Core 唯一入口。
+
+目标：
+
+- `bot.py` 只作为可选 NoneBot 启动器或 QQ connector 的实现细节，不再是 Core 主入口。
+- Core 可以不依赖 NoneBot 独立启动。
+- `nonebot2` 依赖后续移动到 optional dependency，例如 `qq-nonebot` extra。
+
+### 13.3 验收
+
+- 不启动 NoneBot 也能运行 Brain + Platform + localhost。
+- 没有 QQ connector 时，Core 正常运行，只是缺少 QQ tools/events。
+- 启动 QQ connector 后，QQ 能力通过 MCP 出现在 tools/list。
 
 ---
 
-## 13. 测试要求
+## 14. 阶段实施
 
-### 13.1 单元测试
+### Phase 0：切断旧平台层
 
-新增测试文件建议：
+目标：让仓库不再能通过旧 Host 路径运行。
 
-```text
-tests/test_mcp_amp.py
-tests/test_mcp_discovery.py
-tests/test_mcp_server_kit.py
-tests/test_mcp_client_manager.py
-tests/test_mcp_event_bridge.py
-tests/test_mcp_tool_dispatcher.py
+操作：
+
+1. 删除旧 platform 文件。
+2. 删除旧 App `runtime.py`。
+3. 删除 `command_dispatcher`。
+4. 删除旧测试。
+5. 更新 imports。
+6. 运行 `rg` 确认旧符号清零。
+
+验收：
+
+```powershell
+rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|run_app_loop|drain_events|command_dispatcher" src tests apps
 ```
 
-覆盖点：
+无运行时代码命中。
 
-- AMP envelope 序列化/解析。
-- 旧 `AppEvent` 到 AMP 的转换。
-- manifest + config 合并。
-- tool name 前缀和冲突检测。
-- MCP Server 启停和健康状态。
-- tools/list 缓存刷新。
-- tools/call 成功与失败。
-- 标准 MCP notification 和 Aurora 原生 notification 均可写入 FileEventBus。
+### Phase 1：建立 MCP 基础设施
 
-### 13.2 集成测试
+目标：Platform 能发现、启动、连接一个 fake MCP Server。
 
-新增一个测试 MCP App fixture：
+操作：
 
-```text
-tests/fixtures/mcp_echo_server.py
-```
+1. 添加 `mcp[cli]` 依赖。
+2. 新建 `mcp_kit` 包。
+3. 实现 `MCPServerSpec`。
+4. 实现 discovery。
+5. 实现 ServerKit。
+6. 实现 ClientManager initialize / tools/list。
+7. 实现 tool schema adapter。
 
-它必须：
+验收：
 
-- 暴露 `echo` tool。
-- 支持发送标准 MCP notification；可选支持 Aurora 原生 `aurora/event` notification。
-- 能模拟延迟、错误和进程退出。
+- fake server 可启动。
+- `tools/list` 成功。
+- 工具名加 package 前缀。
+- `ruff` / `pyright` / MCP 单测通过。
 
-集成场景：
+### Phase 2：AMP Bridge
 
-- Runtime 启动后连接 echo server。
-- Externalizer 或 dispatcher 能调用 echo tool。
-- echo server 发 notification 后，`inbox/pending/event_*.json` 被写入。
+目标：标准 MCP 信号进入 Brain inbox。
 
-### 13.3 验证命令
+操作：
 
-每阶段至少运行：
+1. 实现 `amp.py`。
+2. `ClientManager` 暴露 `amp_queue`。
+3. notification/lifecycle/tool result/resource/error 统一生成 AMP。
+4. 实现 `run_mcp_event_bridge()`。
+5. `message_preprocessor` 改为只识别 AMP envelope。
+
+验收：
+
+- `notifications/tools/list_changed` -> `capability.changed` 文件。
+- `tools/call` 成功 -> `tool.completed` 文件。
+- `tools/call` 失败 -> `tool.failed` 文件。
+- 第三方 fake MCP Server 不实现 AMP 也能产生事件。
+- Aurora 原生 `aurora/event` 能补齐 header。
+
+### Phase 3：Tool 调用链
+
+目标：Brain 不再通过 `command_dispatcher` 调用 App。
+
+操作：
+
+1. 新增 `mcp_tool_dispatcher`。
+2. 定义 `tool_intents` 和 `tool_results` 文件格式。
+3. Externalizer 改用 MCP tool schema。
+4. localhost `invoke/tools/apps` 改用 ClientManager。
+5. topology 移除旧 action queue 到 command dispatcher 的边。
+
+验收：
+
+- Externalizer 能产生 `tool_intent`。
+- Dispatcher 能调用 fake `echo` tool。
+- tool result 写入文件。
+- tool result 生成 AMP 反馈事件。
+
+### Phase 4：迁移内置 App
+
+顺序：
+
+1. diary
+2. clock
+3. weather
+4. qq-nonebot connector
+
+每个 App 必须：
+
+- 删除 `runtime.py`。
+- 新增 `service.py`。
+- 新增 `mcp_server.py`。
+- 更新 `apps/config.yml`。
+- 增加 MCP integration test。
+
+验收：
+
+- 所有启用 App 都通过 MCP 启动或连接。
+- `apps/` 内没有旧 App class。
+- App 不 import `src.platform` / `src.brain`。
+
+### Phase 5：Core 去 NoneBot 化
+
+目标：AuroraBot Core 独立于 NoneBot 启动。
+
+操作：
+
+1. 新增 `src/aurora/main.py`。
+2. 把 `src/main.py` 中 startup/shutdown 抽成 Core runtime 可调用函数。
+3. 调整 `bot.py` 为可选 launcher。
+4. QQ 接入移动到 connector。
+5. 规划 `nonebot2` optional dependency。
+
+验收：
+
+- `uv run python -m src.aurora.main` 可启动 Core。
+- Core import tree 不依赖 NoneBot。
+- QQ connector 独立提供 MCP tools/events。
+
+### Phase 6：清理与固化
+
+目标：文档、测试、CI 都只承认 MCP 目标架构。
+
+操作：
+
+1. 更新 README / docs。
+2. 删除旧报告中会误导执行的兼容话术，或标注历史。
+3. 更新 CI 测试集。
+4. 全量运行质量检查。
+
+验收：
 
 ```powershell
 uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
 uv run pyright src/
-uv run pytest tests/test_mcp_amp.py tests/test_mcp_discovery.py
-```
-
-涉及 runtime 或 Brain 管线时运行：
-
-```powershell
-uv run pytest tests/test_runtime.py tests/test_gamma_integration.py tests/test_mcp_event_bridge.py
-```
-
-完成阶段后运行全量：
-
-```powershell
 uv run pytest --cov=src
 ```
 
 ---
 
-## 14. 代码风格约束
+## 15. 测试要求
 
-必须遵守仓库现有规则：
+### 15.1 单元测试
+
+新增或保留：
+
+```text
+tests/test_mcp_server_spec.py
+tests/test_mcp_discovery.py
+tests/test_mcp_server_kit.py
+tests/test_mcp_client_manager.py
+tests/test_mcp_amp.py
+tests/test_mcp_event_bridge.py
+tests/test_mcp_tool_dispatcher.py
+tests/test_mcp_permissions.py
+```
+
+覆盖点：
+
+- config -> spec。
+- package 前缀和工具冲突。
+- stdio server 启停。
+- initialize / tools/list / tools/call。
+- capability_changed notification。
+- AMP normalizer。
+- `aurora/event` params 补齐 header。
+- tool.completed / tool.failed。
+- 权限拒绝。
+
+### 15.2 fixture
+
+新增：
+
+```text
+tests/fixtures/mcp_echo_server.py
+tests/fixtures/mcp_event_server.py
+tests/fixtures/mcp_broken_server.py
+```
+
+fixture 能力：
+
+- echo tool。
+- fail tool。
+- slow tool。
+- list_changed notification。
+- optional `aurora/event`。
+- 非法 JSON / 进程退出模拟。
+
+### 15.3 删除旧测试
+
+删除或重写：
+
+- `ApplicationHost` 行为测试。
+- `PlatformAPI` 行为测试。
+- `CommandSpec` 文本拼接测试。
+- `AppEvent` drain 测试。
+- `command_dispatcher` 调用旧 host 测试。
+
+---
+
+## 16. 代码风格约束
+
+遵守仓库现有规则：
 
 - 所有 Python 文件加 `from __future__ import annotations`。
 - 公共函数必须写类型标注。
@@ -937,57 +1367,54 @@ uv run pytest --cov=src
 
 ---
 
-## 15. DeepSeek 执行守则
+## 17. DeepSeek 执行守则
 
 每次执行任务时按这个顺序：
 
-1. 先读本文件和 `docs/reports/app-platform-mcp-migration.md`。
-2. 运行 `rg` 确认当前旧接口依赖，不要只凭文档假设。
-3. 一次只做一个 Phase 或一个 App。
-4. 新增新路径时保留旧路径。
-5. 新路径测试通过后再迁移调用方。
-6. 所有删除动作必须发生在 Phase 7。
-7. 每个提交都要有测试或至少有明确的未运行原因。
-8. 不要引入新全局单例，除非与现有 `get_app_host()` 风格兼容并有懒加载理由。
-9. 不要在 App 的 MCP Server 中读取 Brain 内部文件。
-10. 不要把 notification 当作可靠命令调用；有副作用的动作必须走 tools/call。
-11. 对 QQ App 保守处理，优先 in-process adapter，确认 NoneBot 生命周期后再独立进程化。
-12. 每阶段结束更新 `docs/reports/platform-native-mcp-progress.md`。
+1. 先读本文件。
+2. 运行旧符号 `rg`，确认要删除的依赖位置。
+3. 一次只做一个 Phase。
+4. alpha 阶段不保留旧运行路径。
+5. 删除旧代码后立即更新测试，不为旧测试保留适配层。
+6. 不引入新全局单例；Platform runtime context 显式注入。
+7. 不在 App MCP Server 中读取 Brain 内部文件。
+8. 不把 AMP 当成第三方 MCP Server 必须实现的协议。
+9. 不把 notification 当作命令调用。
+10. QQ/NoneBot 只作为 connector，不作为 Core 框架依赖。
+11. 每阶段结束更新 `docs/reports/platform-native-mcp-progress.md`。
+12. 每阶段结束写清楚运行过的验证命令和剩余风险。
 
 ---
 
-## 16. 阶段验收总表
+## 18. 阶段验收总表
 
 | 阶段 | 必须证明 |
 | --- | --- |
-| Phase 0 | 已记录基线测试结果和旧接口依赖 |
-| Phase 1 | `mcp_kit` 基础模型有单测，ruff/pyright 通过 |
-| Phase 2 | 测试 MCP Server 可启动、连接、list tools、call tool |
-| Phase 3 | diary 旧入口和 MCP 入口都可用 |
-| Phase 4 | 标准 MCP 信号和可选 `aurora/event` 均能写入 `inbox/pending/event_*.json` |
-| Phase 5 | Externalizer/dispatcher 能调用至少一个 MCP Tool |
-| Phase 6 | clock/weather/qq 的 MCP 入口覆盖旧命令能力 |
-| Phase 7 | 旧 `ApplicationHost`/`PlatformAPI`/`command_dispatcher` 被删除或 legacy 化，全量测试通过 |
+| Phase 0 | 旧 Host/API/Protocol/AppEvent/CommandSpec/command_dispatcher 运行路径已删除 |
+| Phase 1 | fake MCP Server 可启动、连接、list tools |
+| Phase 2 | 标准 MCP 信号和可选 `aurora/event` 均能写入 Brain inbox |
+| Phase 3 | Brain tool intent 可调用 MCP Tool，并写入 tool result |
+| Phase 4 | diary/clock/weather/qq 均以 MCP Server 或 connector 方式接入 |
+| Phase 5 | Core 可不依赖 NoneBot 独立启动 |
+| Phase 6 | 文档、测试、CI 均只承认 MCP 目标架构 |
 
 ---
 
-## 17. 最终完成定义
+## 19. 最终完成定义
 
-本重构完成时，项目应满足：
+重构完成时，项目满足：
 
-- `apps/config.yml` 能声明 MCP Server 启动方式。
 - `src/platform/mcp_kit/` 是平台层主入口。
-- App 命令不再通过 `CommandSpec` 注册，而是通过 MCP `tools/list` 暴露。
-- App 命令执行不再通过 `ApplicationHost.invoke_command()`，而是通过 MCP `tools/call`。
-- App 事件不再通过 `ApplicationHost.emit_event()` 队列；Platform 从标准 MCP 信号中生成 AMP envelope，Aurora 原生 `aurora/event` 只是可选快捷入口。
-- Brain 仍然只通过文件总线消费外部事件。
-- `command_dispatcher` 不再是必要节点。
-- QQ、weather、clock、diary 都能以 MCP 方式运行。
-- CI 命令通过：
-
-```powershell
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
-uv run pyright src/
-uv run pytest --cov=src
-```
+- `apps/config.yml` 可以声明主仓库内、主仓库外、本机任意路径的 MCP Server。
+- 主仓库不 import App 业务模块。
+- App 不 import `src.platform` 或 `src.brain`。
+- App 能力通过 MCP `tools/list` / `resources/list` / `prompts/list` 暴露。
+- App 动作通过 MCP `tools/call` 执行。
+- 外部变化通过 Platform 归一化为 AMP envelope 后写入 Brain inbox。
+- 第三方 MCP Server 不需要实现 AMP。
+- Aurora 原生 `aurora/event` 只是可选快捷入口。
+- Brain 仍只通过文件总线消费统一事件。
+- `ApplicationHost`、`PlatformAPI`、`ApplicationProtocol`、`CommandSpec`、`AppEvent`、`command_dispatcher` 不再是运行时代码。
+- Core 可以脱离 NoneBot 启动。
+- QQ/OneBot 通过可选 connector 接入。
+- 全量质量检查通过。
