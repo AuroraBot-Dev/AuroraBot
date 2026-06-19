@@ -756,9 +756,6 @@ class SandboxManagerProxyTest(unittest.TestCase):
 
         proxy = _SandboxManagerProxy()
         self.assertIsInstance(proxy, _SandboxManagerProxy)
-        # can_read 应可调用
-        result = proxy.can_read(Path("/some/path"))
-        self.assertIsInstance(result, bool)
 
     def test_get_sandbox_manager_returns_same_instance(self) -> None:
         """get_sandbox_manager 多次调用应返回同一单例。"""
@@ -767,94 +764,6 @@ class SandboxManagerProxyTest(unittest.TestCase):
         a = get_sandbox_manager()
         b = get_sandbox_manager()
         self.assertIs(a, b)
-
-
-# ═══════════════════════════════════════════════════════════════
-# SandboxManager IO 方法
-# ═══════════════════════════════════════════════════════════════
-
-
-class SandboxManagerIOTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.manager = SandboxManager()
-        # 构建一个文件白名单能匹配 SANDBOX_DIR 的策略，用于 IO 测试
-        from src.config import Config
-
-        sandbox_rel = str(Config.SANDBOX_DIR.relative_to(Config.SANDBOX_DIR.anchor)).replace("\\", "/")
-        self._io_config = SandboxConfig(
-            whitelist_files=frozenset({f"{sandbox_rel}/**"}),
-            whitelist_dirs=frozenset({f"{sandbox_rel}/**"}),
-            whitelist_modules=frozenset({"json"}),
-            whitelist_builtins=frozenset({"print"}),
-            blacklist_files=frozenset(),
-            blacklist_dirs=frozenset(),
-            blacklist_modules=frozenset(),
-            blacklist_builtins=frozenset(),
-        )
-        self._io_policy = AccessPolicy(self._io_config)
-
-    def test_can_import_whitelisted_module(self) -> None:
-        self.assertTrue(self.manager.can_import("json"))
-        self.assertTrue(self.manager.can_import("math"))
-        self.assertTrue(self.manager.can_import("re"))
-
-    def test_can_import_blacklisted_module(self) -> None:
-        self.assertFalse(self.manager.can_import("os"))
-        self.assertFalse(self.manager.can_import("sys"))
-        self.assertFalse(self.manager.can_import("subprocess"))
-
-    def test_can_import_unknown_module(self) -> None:
-        self.assertFalse(self.manager.can_import("nonexistent_module_xyz"))
-
-    def test_can_read_sandbox_file(self) -> None:
-        from src.config import Config
-
-        sandbox_file = Config.SANDBOX_DIR / "test_read.txt"
-        sandbox_file.parent.mkdir(parents=True, exist_ok=True)
-        sandbox_file.write_text("hello", encoding="utf-8")
-        try:
-            self.assertTrue(self._io_policy.can_read_file(sandbox_file))
-        finally:
-            sandbox_file.unlink(missing_ok=True)
-
-    def test_can_read_outside_sandbox(self) -> None:
-        # 白名单只含 SANDBOX_DIR，沙箱外路径应拒绝
-        import sys
-        outside = Path("C:/other_dir/test.txt") if sys.platform == "win32" else Path("/etc/passwd")
-        self.assertFalse(self._io_policy.can_read_file(outside))
-
-    def test_can_write_sandbox_file(self) -> None:
-        from src.config import Config
-
-        sandbox_file = Config.SANDBOX_DIR / "test_write_policy.txt"
-        self.assertTrue(self._io_policy.can_open_file(sandbox_file, "w"))
-        sandbox_file.unlink(missing_ok=True)
-
-    def test_write_and_read_sandbox_file(self) -> None:
-        """通过低层 policy + Path 直接写入再读回。"""
-        from src.config import Config
-
-        sandbox_file = Config.SANDBOX_DIR / "test_rw.txt"
-        try:
-            sandbox_file.parent.mkdir(parents=True, exist_ok=True)
-            sandbox_file.write_text("written content", encoding="utf-8")
-            content = sandbox_file.read_text(encoding="utf-8")
-            self.assertEqual(content, "written content")
-            self.assertTrue(self._io_policy.can_read_file(sandbox_file))
-        finally:
-            sandbox_file.unlink(missing_ok=True)
-
-    def test_write_sandbox_file_creates_parent_dirs(self) -> None:
-        from src.config import Config
-
-        nested = Config.SANDBOX_DIR / "sub" / "deep" / "test.txt"
-        try:
-            nested.parent.mkdir(parents=True, exist_ok=True)
-            nested.write_text("nested", encoding="utf-8")
-            self.assertEqual(nested.read_text(encoding="utf-8"), "nested")
-        finally:
-            import shutil
-            shutil.rmtree(Config.SANDBOX_DIR / "sub", ignore_errors=True)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1162,48 +1071,6 @@ class SandboxEndToEndTest(unittest.TestCase):
             self.assertIn("score=95.5", result.output)
 
         asyncio.run(run())
-
-    def test_e2e_file_write_through_sandbox(self) -> None:
-        """通过低层 SANDBOX_DIR 直接写入文件，再读回。"""
-        from src.config import Config
-
-        path = Config.SANDBOX_DIR / "e2e_rw_test.txt"
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("e2e write content", encoding="utf-8")
-            content = path.read_text(encoding="utf-8")
-            self.assertEqual(content, "e2e write content")
-        finally:
-            path.unlink(missing_ok=True)
-
-    def test_e2e_file_write_and_inspector_pass(self) -> None:
-        """安全检查（inspector）通过 + 文件写入成功 = 完整流程。"""
-        config = SandboxConfig(
-            whitelist_files=frozenset({"data/sandbox/**"}),
-            whitelist_dirs=frozenset({"data/sandbox/**"}),
-            whitelist_modules=frozenset({"json"}),
-            whitelist_builtins=frozenset({"print", "len"}),
-            blacklist_files=frozenset(),
-            blacklist_dirs=frozenset(),
-            blacklist_modules=frozenset({"os"}),
-            blacklist_builtins=frozenset({"exec", "eval"}),
-        )
-        policy = AccessPolicy(config)
-        from src.brain.sandbox.inspector import CodeInspector
-        inspector = CodeInspector(policy)
-
-        safe_code = 'print("safe")'
-        violations = inspector.inspect(safe_code, policy.snapshot())
-        self.assertEqual(violations, [])
-
-        from src.config import Config
-        out_path = Config.SANDBOX_DIR / "e2e_inspect_write.txt"
-        try:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text("e2e write success", encoding="utf-8")
-            self.assertEqual(out_path.read_text(encoding="utf-8"), "e2e write success")
-        finally:
-            out_path.unlink(missing_ok=True)
 
     def test_e2e_callback_receives_result(self) -> None:
         """on_result 回调接收完整 SandboxResult。"""

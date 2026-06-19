@@ -119,18 +119,6 @@ class SandboxManager:
         logger.info(f"代码执行完成: success={result.success}, time={result.execution_time:.2f}s")
         return result
 
-    def can_read(self, path: Path) -> bool:
-        return self._policy.can_read_file(path)
-
-    def can_import(self, module: str) -> bool:
-        return self._policy.can_import_module(module)
-
-    def read_sandbox_file(self, path: Path) -> str:
-        return self._executor.read_file(path)
-
-    def write_sandbox_file(self, path: Path, content: str) -> None:
-        self._executor.write_file(path, content)
-
 
 # ═══════════════════════════════════════════════════════════════
 # 模块单例（延迟初始化）
