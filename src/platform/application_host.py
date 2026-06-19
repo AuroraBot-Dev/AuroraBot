@@ -166,11 +166,16 @@ def get_app_host() -> ApplicationHost:
 
 
 class _AppHostProxy:
-    """兼容直接属性访问的懒加载代理。"""
+    """兼容直接属性访问的懒加载代理。
+
+    所有属性访问通过 :func:`get_app_host` 委托给真正的 ApplicationHost 实例。
+    使用 cast 是为了让类型检查器将 app_host 识别为 ApplicationHost 类型。
+    """
 
     def __getattr__(self, name: str) -> Any:
         return getattr(get_app_host(), name)
 
 
-# 全局单例代理，供其它模块直接导入使用
+# 全局单例代理，供其它模块直接导入使用。
+# 通过 cast 告诉类型检查器这是一个 ApplicationHost，运行时通过 __getattr__ 懒加载委托。
 app_host: ApplicationHost = cast("ApplicationHost", _AppHostProxy())

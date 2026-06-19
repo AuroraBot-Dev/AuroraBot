@@ -381,7 +381,7 @@ class CostTrackerTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
-        s = tracker.summary()
+        s = asyncio.run(tracker.summary())
         self.assertAlmostEqual(s["total_cost"], 0.13)
         self.assertEqual(s["by_role"]["fast"]["count"], 2)
         self.assertEqual(s["by_role"]["quality"]["count"], 1)

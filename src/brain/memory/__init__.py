@@ -60,8 +60,7 @@ class UnifiedMemoryManager:
         if not user_id:
             user_id = self.init_user_id
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._extract_async(text, user_id))  # noqa: RUF006
+            asyncio.get_running_loop()
         except RuntimeError:
             # 没有运行中的事件循环（测试/脚本环境），同步执行
             try:
@@ -69,6 +68,8 @@ class UnifiedMemoryManager:
                     logger.debug("L3 语义提取同步成功")
             except Exception:
                 logger.exception("L3 语义提取同步回退失败")
+        else:
+            asyncio.create_task(self._extract_async(text, user_id))  # noqa: RUF006
 
     async def _extract_async(self, text: str, user_id: str = "aurora") -> None:
         """异步执行 L3 语义提取，异常不影响调用方。"""

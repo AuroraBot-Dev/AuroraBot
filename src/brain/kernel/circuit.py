@@ -53,8 +53,7 @@ class Circuit:
         for node in self._nodes:
             node._bus = self._bus
 
-        dispatch_task = asyncio.create_task(self._bus.dispatch_forever())
-        self._bus._dispatch_task = dispatch_task
+        self._bus.start_dispatch()
 
         # Bootstrap: 创建初始 heartbeat 文件，触发自持振荡回路
         self._bootstrap_heartbeat()
@@ -114,7 +113,7 @@ class Circuit:
         tick_data = {
             "tick_id": "bootstrap",
             "timestamp": time.time(),
-            "interval_sec": 300,
+            "interval_sec": 60,
         }
         tick_path.write_text(
             json.dumps(tick_data, indent=2, ensure_ascii=False),

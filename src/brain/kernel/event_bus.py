@@ -5,7 +5,7 @@ import contextlib
 import json
 from typing import TYPE_CHECKING, Any
 
-from src.brain.kernel.base import FileEvent, FileUpdate, NodeState
+from src.brain.kernel.base import FileEvent, FileUpdate
 from src.config import Config
 from src.utils.log_utils import get_logger
 
@@ -97,6 +97,14 @@ class FileEventBus:
             except Exception:
                 logger.exception(f"事件分发异常: path={event.path}")
 
+    def start_dispatch(self) -> None:
+        """启动事件分发循环（创建 asyncio.Task）。
+
+        调用后 :attr:`_dispatch_task` 持有分发循环的引用，
+        可通过 :meth:`shutdown` 停止。
+        """
+        self._dispatch_task = asyncio.create_task(self.dispatch_forever())
+
     async def shutdown(self) -> None:
         """停止分发循环。"""
         if self._dispatch_task is not None and not self._dispatch_task.done():
@@ -115,8 +123,7 @@ class FileEventBus:
         for node in self._nodes:
             try:
                 if node.on_event(event):
-                    node.state = NodeState.READY
-                    node._ready_event.set()
+                    node.wake()
                     hit_any = True
             except Exception:
                 logger.exception(f"节点 {node.name}({node.id}) on_event 异常: path={event.path}")

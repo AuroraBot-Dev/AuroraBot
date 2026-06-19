@@ -124,7 +124,6 @@ def startup_defaults(app_name: str) -> dict[str, Any]:
     return defaults
 
 
-# ? 所以这个函数到底是干嘛的
 def _resolve_application_class(module: ModuleType) -> type[Any]:
     exports = getattr(module, "__all__", [])
     for name in exports:
@@ -132,22 +131,10 @@ def _resolve_application_class(module: ModuleType) -> type[Any]:
         if inspect.isclass(candidate):
             return candidate
     for _, candidate in inspect.getmembers(module, inspect.isclass):
-        # 检查是否主类是否符合规范
-        if _check_application_class_name(module, candidate):
+        if candidate.__module__.startswith(module.__name__):
             return candidate
 
     raise LookupError(f"在模块 {module.__name__} 中未找到 Application 类")  # noqa: TRY003
-
-
-# FIXME 这个并没有什么卵用. 之后有空删了
-def _check_application_class_name(module: ModuleType, candidate: type[Any]) -> bool:
-    if candidate.__module__.startswith(module.__name__):
-        if candidate.__name__.endswith("Application"):
-            return True
-        logger.error(f"应用主类 {candidate.__name__} 命名不规范，应为 {module.__name__}Application 类")
-        return False
-    logger.error(f"应用主类 {candidate.__name__} 命名不规范，应为 {module.__name__}Application 类")
-    return False
 
 
 # 过滤应用启动参数
