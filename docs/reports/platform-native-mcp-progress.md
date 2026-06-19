@@ -70,11 +70,42 @@ rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|invo
 
 ---
 
-## Phase 2：
+## Phase 2：MCP Client/Server 管理 ✅
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | 待开始 |
+| 完成日期 | 2026-06-19 |
+| 开始日期 | 2026-06-19 |
+| 改动摘要 | 实现 MCPServerKit 和 MCPClientManager |
+| 验证结果 | ruff ✅, pyright ✅, pytest ✅ (282 passed, 54% cov) |
+
+### 新增文件
+
+| 文件 | 职责 |
+|------|------|
+| `src/platform/mcp_kit/server_kit.py` | MCP Server 进程管理器：start/stop/restart/health_check |
+| `src/platform/mcp_kit/client_manager.py` | MCP Client 连接管理器：connect/call_tool/list_tools/notification_registration |
+| `tests/test_mcp_server_kit.py` | 12 个测试：启停、健康检查、工具调用、notification 注册 |
+
+### 关键实现
+
+- `MCPServerKit.start_one()` / `stop_one()` / `restart_one()`：子进程 spawn + SIGTERM 优雅停止 + 超时 SIGKILL
+- `MCPServerKit.health_report()`：running/stopped/crashed 状态映射
+- `MCPServerKit._health_check_loop()`：后台定期检查进程存活
+- `MCPClientManager._run_connection()`：使用 `async with stdio_client()` 正确管理上下文生命周期
+- `MCPClientManager.call_tool()`：支持全名路由（`im.polaris.test.echo`），30s 默认超时
+- `MCPClientManager.refresh_tools()`：tools/list 缓存刷新
+- `MCPClientManager.on_notification()`：Handler 注册/注销（为 Phase 4 预留）
+
+### 注意事项
+
+- Notification 监听尚未实现（MCP SDK v1 无 `incoming_notifications` async generator，需在 Phase 4 改用 message_handler 回调方式）
+- legacy 旧平台层完全保留
+
+### 剩余风险
+
+- Notification 的异步接收需要在 Phase 4 使用底层 message_handler 实现
+- 没有真正的 MCP Server 的集成测试（需要 mcp_echo_server fixture，将在 Phase 3 创建）
 
 ---
 
