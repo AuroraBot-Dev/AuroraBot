@@ -1,4 +1,4 @@
-﻿"""MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
+"""MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
 
 从 ``pipeline/action_queue/*.json`` 读取 Externalizer 产出的行动意图，
 通过 ``MCPClientManager.call_tool()`` 执行工具调用，并将结果写入
@@ -125,12 +125,10 @@ class MCPToolDispatcher(Router):
         logger.info("派发工具调用: %s trace=%s", tool_name, trace_id)
 
         try:
-            result: Any = await self._client_manager.call_tool(tool_name, arguments)
-            status = "completed" if not result.isError else "failed"
-            result_data = {
-                "content": [c.model_dump() if hasattr(c, "model_dump") else c for c in (result.content or [])],
-                "isError": result.isError,
-            }
+            result = await self._client_manager.call_tool(tool_name, arguments)
+            is_error = bool(result.get("is_error", not bool(result.get("ok", False))))
+            status = "failed" if is_error else "completed"
+            result_data = result
         except Exception as exc:
             logger.exception("工具调用失败: %s", tool_name)
             status = "failed"

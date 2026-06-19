@@ -1,4 +1,4 @@
-﻿"""MemoryConsolidator —— 节律驱动的记忆整理与流归档。
+"""MemoryConsolidator —— 节律驱动的记忆整理与流归档。
 
 认知 Agent 节点。由节律事件（rhythm/triggers/*.json）触发，
 读取当前自我之流（now.md），通过 LLM 提取新知识，

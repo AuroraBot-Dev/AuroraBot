@@ -1,16 +1,20 @@
 """日记 MCP Server 入口测试。
 
 测试 FastMCP 的工具注册和 tool 响应格式。
-由于 App 目录名包含横线（``aurora-app-diary``），使用 subprocess 直接运行脚本。
+由于 App 目录名包含横线（``aurora-app-diary``），通过 ``MCPServerKit``
+以脚本入口启动。
 """
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 from pathlib import Path
 
 import pytest
+
+from src.platform.mcp_kit.client_manager import MCPClientManager
+from src.platform.mcp_kit.server_kit import MCPServerKit
+from src.platform.mcp_kit.server_spec import MCPServerSpec
 
 pytestmark = pytest.mark.anyio
 
@@ -31,48 +35,26 @@ class TestDiaryMcpTools:
         mcp = getattr(module, "mcp", None)
         assert mcp is not None, "mcp_server.py 应导出 FastMCP 实例"
 
-    @pytest.mark.xfail(reason="FastMCP stdio 双消息测试需重构为行级读取")
     async def test_tool_list_via_stdio(self) -> None:
-        """通过 stdio 启动 MCP Server，发送 tools/list 请求。"""
-        server_script = str(_PROJECT_ROOT / "apps" / "aurora-app-diary" / "mcp_server.py")
-
-        proc = await asyncio.create_subprocess_exec(
-            "uv",
-            "run",
-            "python",
-            server_script,
-            cwd=str(_PROJECT_ROOT),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        """通过实际 MCP client/server stdio 会话获取工具列表。"""
+        app_dir = _PROJECT_ROOT / "apps" / "aurora-app-diary"
+        spec = MCPServerSpec(
+            key="im.polaris.diary",
+            package="im.polaris.diary",
+            name="日记",
+            directory=app_dir,
+            command=["uv", "run", "python", "mcp_server.py"],
         )
-
-        # 发送初始化请求
-        init_request = (
-            '{"jsonrpc":"2.0","id":1,"method":"initialize",'
-            '"params":{"protocolVersion":"2024-11-05",'
-            '"capabilities":{},"clientInfo":{"name":"test","version":"0.1.0"}}}\n'
-        )
-        list_request = '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
+        server_kit = MCPServerKit()
+        client_manager = MCPClientManager(server_kit)
 
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=(init_request + list_request).encode()),
-                timeout=15.0,
-            )
-        except TimeoutError:
-            proc.kill()
-            stdout, stderr = await proc.communicate()
-            raise
+            await server_kit.start_all([spec])
+            await client_manager.connect_all()
+            tools = client_manager.list_all_tools()["im.polaris.diary"]
+            tool_names = {tool.name for tool in tools}
 
-        output = stdout.decode()
-        err_output = stderr.decode()
-
-        # FastMCP 在 initialize 后会自动发送 initialized notification，
-        # 所以 tools/list 的响应应该在 stdio 中出现
-        assert proc.returncode == 0, (
-            f"Server exited with code {proc.returncode}\nstderr: {err_output[:500]}\nstdout: {output[:500]}"
-        )
-        assert '"write_diary"' in output, f"未找到 write_diary 工具\n输出: {output[:1000]}"
-        assert '"read_diary"' in output
-        assert '"list_dates"' in output
+            assert {"write_diary", "read_diary", "list_dates"} <= tool_names
+        finally:
+            await client_manager.shutdown()
+            await server_kit.stop_all()

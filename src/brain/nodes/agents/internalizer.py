@@ -1,4 +1,4 @@
-﻿"""Internalizer —— 内化者：Pool B JSON 事件 → Pool A 第一人称体验叙事。
+"""Internalizer —— 内化者：Pool B JSON 事件 → Pool A 第一人称体验叙事。
 
 核心认知 Agent。读取 pipeline/message_queue/*.json 中的结构化事件，
 结合当前自我之流（now.md）、自我状态（state.md）和持久记忆（memories/），

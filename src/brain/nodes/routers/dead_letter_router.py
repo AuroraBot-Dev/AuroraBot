@@ -1,4 +1,4 @@
-﻿"""DeadLetterRouter —— 超期文件回收。
+"""DeadLetterRouter —— 超期文件回收。
 
 纯机械 Router 节点。定期扫描 kernel_data_dir 下的所有 done/ 目录和
 pipeline 中间目录，将超过 config.ttl_sec 未被消费的文件移动到

@@ -1,4 +1,4 @@
-﻿"""MetricsCollector —— 文件流转统计。
+"""MetricsCollector —— 文件流转统计。
 
 纯机械 Router 节点。由心跳触发，扫描 kernel_data_dir 下的所有
 pipeline / inbox / rhythm 目录，统计文件数量和最近活动时间，

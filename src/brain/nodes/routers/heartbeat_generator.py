@@ -1,4 +1,4 @@
-﻿"""HeartbeatGenerator —— 周期性心跳脉冲发生器。
+"""HeartbeatGenerator —— 周期性心跳脉冲发生器。
 
 纯机械 Router 节点。不同于 Circuit._bootstrap_heartbeat() 的一次性引导，
 这是一个**持续运行的独立节点**——通过 watch 自身 emit 的文件实现自持振荡。

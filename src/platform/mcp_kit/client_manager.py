@@ -18,13 +18,15 @@ Notification 接收方式：子类化 ``ClientSession``，重写
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
+from mcp import types
 from mcp.client.session import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.shared.message import SessionMessage
 
 from src.utils.log_utils import get_logger
 
@@ -93,11 +95,17 @@ class ClientConnection:
     tools: list[MCPTool] = field(default_factory=list)
     """缓存的 tools 列表。"""
 
-    session: Any = None
+    session: _NotifiableClientSession | None = None
     """MCP ClientSession 对象（运行时赋值）。"""
 
     _run_task: asyncio.Task[None] | None = None
     """后台运行任务。"""
+
+    ready_event: asyncio.Event = field(default_factory=asyncio.Event)
+    """连接初始化完成或失败时置位。"""
+
+    error: BaseException | None = None
+    """初始化或运行期间的最后一次连接错误。"""
 
 
 class MCPClientManager:
@@ -160,25 +168,24 @@ class MCPClientManager:
             await self._connect_one(key, server_proc)
 
     async def _connect_one(self, key: str, server_proc: object) -> None:
-        """异步建立单个连接（启动后台任务管理 stdio 上下文）。"""
+        """建立到 ServerKit 已启动进程的单个 MCP 连接。"""
         from src.platform.mcp_kit.server_kit import ServerProcess
 
         if not isinstance(server_proc, ServerProcess):
             return
 
-        spec = server_proc.spec
         logger.debug("连接 MCP Server: %s", key)
-
-        server_params = StdioServerParameters(
-            command=spec.command[0] if spec.command else "",
-            args=list(spec.command[1:]) + list(spec.args),
-            env={**spec.env} if spec.env else None,
-            cwd=str(spec.directory) if spec.directory and spec.directory != Path() else None,
-        )
 
         conn = ClientConnection(server_key=key)
         self._connections[key] = conn
-        conn._run_task = asyncio.create_task(self._run_connection(key, server_params, conn, spec.name))
+        conn._run_task = asyncio.create_task(
+            self._run_connection(key, server_proc, conn),
+            name=f"mcp-client-{key}",
+        )
+        await conn.ready_event.wait()
+        if conn.error is not None:
+            msg = f"MCP Client 连接失败 ({key}): {conn.error}"
+            raise MCPToolCallError(msg) from conn.error
 
     async def _dispatch_notification(self, key: str, method: str, params: dict[str, object]) -> None:
         """从 ``_NotifiableClientSession`` 接收通知并分派。
@@ -204,44 +211,161 @@ class MCPClientManager:
     async def _run_connection(
         self,
         key: str,
-        server_params: StdioServerParameters,
+        server_proc: Any,
         conn: ClientConnection,
-        name: str,
     ) -> None:
-        """后台运行 stdio Client 上下文管理器。"""
+        """运行已启动 Server 进程的 stdio MCP 会话。"""
         try:
-            async with stdio_client(server_params) as (read_stream, write_stream):
-                session = _NotifiableClientSession(
-                    read_stream,
-                    write_stream,
-                    server_key=key,
-                    notification_dispatcher=self._dispatch_notification,
-                )
-                await session.initialize()
-                conn.session = session
-
-                # 初始获取 tools 列表
-                try:
-                    result = await session.list_tools()
-                    conn.tools = list(result.tools)
-                    logger.debug("已获取 tools (%s): %d tools", key, len(conn.tools))
-                except Exception:
-                    logger.exception("获取 tools 列表失败 (%s)", key)
-
-                logger.info("MCP Client 已连接: %s (%s)", name, key)
-
-                # 保持 context 存活直到停止信号
-                await self._stop_event.wait()
-
+            await self._run_stdio_session(key, server_proc, conn)
         except asyncio.CancelledError:
-            pass
-        except Exception:
+            raise
+        except Exception as exc:
+            conn.error = exc
             logger.exception("连接异常终止 (%s)", key)
         finally:
             conn.session = None
             conn.tools.clear()
-            self._connections.pop(key, None)
-            logger.info("MCP Client 已断开: %s (%s)", name, key)
+            conn.ready_event.set()
+            if self._connections.get(key) is conn:
+                self._connections.pop(key, None)
+            logger.info("MCP Client 已断开: %s (%s)", server_proc.spec.name, key)
+
+    async def _run_stdio_session(
+        self,
+        key: str,
+        server_proc: Any,
+        conn: ClientConnection,
+    ) -> None:
+        """在 ServerKit 管理的单个子进程上运行 MCP session。"""
+        process = self._require_stdio_process(key, server_proc.process)
+        read_sender, read_stream = anyio.create_memory_object_stream[SessionMessage | Exception](0)
+        write_stream, write_receiver = anyio.create_memory_object_stream[SessionMessage](0)
+        reader_task = asyncio.create_task(
+            self._forward_server_messages(process, read_sender),
+            name=f"mcp-stdout-{key}",
+        )
+        writer_task = asyncio.create_task(
+            self._forward_client_messages(process, write_receiver),
+            name=f"mcp-stdin-{key}",
+        )
+
+        try:
+            async with _NotifiableClientSession(
+                read_stream,
+                write_stream,
+                server_key=key,
+                notification_dispatcher=self._dispatch_notification,
+            ) as session:
+                await self._initialize_session(key, server_proc.spec.name, conn, session)
+                await self._wait_for_stop_or_disconnect(key, reader_task)
+        finally:
+            await self._close_stdio_forwarders(
+                process,
+                read_sender,
+                write_receiver,
+                reader_task,
+                writer_task,
+            )
+
+    @staticmethod
+    def _require_stdio_process(key: str, process: asyncio.subprocess.Process) -> asyncio.subprocess.Process:
+        """验证 Server 进程同时提供 stdin 和 stdout 管道。"""
+        if process.stdin is None or process.stdout is None:
+            msg = f"MCP Server {key} 缺少 stdio 管道"
+            raise MCPToolCallError(msg)
+        return process
+
+    async def _initialize_session(
+        self,
+        key: str,
+        server_name: str,
+        conn: ClientConnection,
+        session: _NotifiableClientSession,
+    ) -> None:
+        """完成 MCP 初始化并缓存工具列表。"""
+        await session.initialize()
+        conn.session = session
+        result = await session.list_tools()
+        conn.tools = list(result.tools)
+        logger.debug("已获取 tools (%s): %d tools", key, len(conn.tools))
+        logger.info("MCP Client 已连接: %s (%s)", server_name, key)
+        conn.ready_event.set()
+
+    async def _wait_for_stop_or_disconnect(
+        self,
+        key: str,
+        reader_task: asyncio.Task[None],
+    ) -> None:
+        """等待运行时停止信号或 Server stdout 关闭。"""
+        stop_wait_task = asyncio.create_task(self._stop_event.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {reader_task, stop_wait_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if reader_task in done and not self._stop_event.is_set():
+                await reader_task
+                msg = f"MCP Server {key} 已关闭 stdio 输出"
+                raise MCPToolCallError(msg)
+        finally:
+            if not stop_wait_task.done():
+                stop_wait_task.cancel()
+            await asyncio.gather(stop_wait_task, return_exceptions=True)
+
+    @staticmethod
+    async def _close_stdio_forwarders(
+        process: asyncio.subprocess.Process,
+        read_sender: Any,
+        write_receiver: Any,
+        reader_task: asyncio.Task[None],
+        writer_task: asyncio.Task[None],
+    ) -> None:
+        """关闭 session 管道、转发任务和 Server stdin。"""
+        for task in (reader_task, writer_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(reader_task, writer_task, return_exceptions=True)
+        await read_sender.aclose()
+        await write_receiver.aclose()
+
+        if process.stdin is not None:
+            process.stdin.close()
+            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                await process.stdin.wait_closed()
+
+    async def _forward_server_messages(
+        self,
+        process: asyncio.subprocess.Process,
+        sender: Any,
+    ) -> None:
+        """将 Server stdout 中的 JSON-RPC 行转发到 MCP session。"""
+        assert process.stdout is not None
+
+        try:
+            while line := await process.stdout.readline():
+                try:
+                    message = types.JSONRPCMessage.model_validate_json(line)
+                except Exception as exc:
+                    logger.exception("解析 MCP Server 消息失败")
+                    await sender.send(exc)
+                    continue
+                await sender.send(SessionMessage(message=message))
+        finally:
+            await sender.aclose()
+
+    async def _forward_client_messages(
+        self,
+        process: asyncio.subprocess.Process,
+        receiver: Any,
+    ) -> None:
+        """将 MCP session 消息序列化后写入 Server stdin。"""
+        assert process.stdin is not None
+
+        async with receiver:
+            async for session_message in receiver:
+                payload = session_message.message.model_dump_json(by_alias=True, exclude_none=True)
+                process.stdin.write(f"{payload}\n".encode())
+                await process.stdin.drain()
 
     async def shutdown(self) -> None:
         """关闭所有客户端连接。"""
@@ -331,6 +455,8 @@ class MCPClientManager:
             "ok": not is_error,
             "text": "\n".join(text_parts),
             "is_error": is_error,
+            "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
+            "structured_content": getattr(result, "structuredContent", None),
         }
 
     def tools_as_prompt_text(self) -> str:

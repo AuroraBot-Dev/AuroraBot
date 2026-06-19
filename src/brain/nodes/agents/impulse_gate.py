@@ -1,4 +1,4 @@
-﻿"""ImpulseGate —— LLM 门控节点。
+"""ImpulseGate —— LLM 门控节点。
 
 轻量级 Agent 节点，使用快速模型判断当前消息是否需要完整回复。
 读取 ``pipeline/message_queue/*.json``，产出 ``gate_pass/*`` 或 ``gate_skip/*``。

@@ -61,42 +61,54 @@ async def start_runtime() -> RuntimeState:
     # 读取 MCP Server 配置
     specs = discover_mcp_servers()
     logger.info("发现 %d 个 MCP Server", len(specs))
+    enabled_server_count = sum(spec.enabled for spec in specs)
 
     # 启动本地 stdio Server
     server_kit = MCPServerKit()
-    await server_kit.start_all(specs)
-
-    # 建立 MCP 连接
     client_manager = MCPClientManager(server_kit)
-    await client_manager.connect_all()
-    await client_manager.refresh_tools()
+    circuit: Circuit | None = None
+    state: RuntimeState | None = None
+    try:
+        await server_kit.start_all(specs)
 
-    stop_event = asyncio.Event()
-    state = RuntimeState(
-        server_kit=server_kit,
-        client_manager=client_manager,
-        stop_event=stop_event,
-    )
+        # 建立 MCP 连接
+        await client_manager.connect_all()
+        await client_manager.refresh_tools()
 
-    # 启动事件桥接（MCP -> Brain inbox）
-    circuit = build_circuit(client_manager=client_manager)
-    await circuit.start()
-    state.circuit = circuit
+        stop_event = asyncio.Event()
+        state = RuntimeState(
+            server_kit=server_kit,
+            client_manager=client_manager,
+            stop_event=stop_event,
+        )
 
-    bridge_task = asyncio.create_task(
-        run_mcp_event_bridge(client_manager, circuit, stop_event),
-        name="mcp-event-bridge",
-    )
-    state.tasks.append(bridge_task)
+        # 启动事件桥接（MCP -> Brain inbox）
+        circuit = build_circuit(client_manager=client_manager)
+        await circuit.start()
+        state.circuit = circuit
 
-    # 通知工具列表
-    tools = client_manager.list_all_tools()
-    logger.info(
-        "运行时已启动 — %d 个 MCP Server, %d 个工具可用",
-        len(specs),
-        len(tools),
-    )
+        bridge_task = asyncio.create_task(
+            run_mcp_event_bridge(client_manager, circuit, stop_event),
+            name="mcp-event-bridge",
+        )
+        state.tasks.append(bridge_task)
 
+        tools = client_manager.list_all_tools()
+        tool_count = sum(len(server_tools) for server_tools in tools.values())
+        logger.info(
+            "运行时已启动 — %d 个 MCP Server, %d 个工具可用",
+            enabled_server_count,
+            tool_count,
+        )
+
+    except Exception:
+        if circuit is not None and circuit.is_running:
+            await circuit.stop()
+        await client_manager.shutdown()
+        await server_kit.stop_all()
+        raise
+
+    assert state is not None
     return state
 
 

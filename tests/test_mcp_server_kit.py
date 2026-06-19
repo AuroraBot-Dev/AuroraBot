@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 
+from src.platform.mcp_kit.client_manager import ClientConnection, MCPClientManager
 from src.platform.mcp_kit.server_kit import MCPServerKit
 from src.platform.mcp_kit.server_spec import MCPServerSpec
 
@@ -75,21 +77,18 @@ class TestMCPServerKit:
 class TestMCPClientManager:
     def test_empty_init(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPClientManager
 
         mgr = MCPClientManager(kit)
         assert mgr.connections == {}
 
     def test_list_all_tools_empty(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPClientManager
 
         mgr = MCPClientManager(kit)
         assert mgr.list_all_tools() == {}
 
     def test_tools_as_prompt_text_empty(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPClientManager
 
         mgr = MCPClientManager(kit)
         text = mgr.tools_as_prompt_text()
@@ -97,7 +96,7 @@ class TestMCPClientManager:
 
     def test_call_tool_no_prefix_raises(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPClientManager, MCPToolCallError
+        from src.platform.mcp_kit.client_manager import MCPToolCallError
 
         mgr = MCPClientManager(kit)
 
@@ -109,7 +108,7 @@ class TestMCPClientManager:
 
     def test_call_tool_no_connection(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPClientManager, MCPToolCallError
+        from src.platform.mcp_kit.client_manager import MCPToolCallError
 
         mgr = MCPClientManager(kit)
 
@@ -121,7 +120,6 @@ class TestMCPClientManager:
 
     def test_on_notification_register_and_unregister(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPClientManager
 
         mgr = MCPClientManager(kit)
         called: list[tuple[str, dict[str, object]]] = []
@@ -135,3 +133,22 @@ class TestMCPClientManager:
 
         unregister()
         assert mgr._notification_handlers["aurora/event"] == []
+
+    async def test_call_tool_returns_serializable_result(self) -> None:
+        class FakeSession:
+            async def call_tool(self, _name: str, _arguments: dict[str, object]) -> CallToolResult:
+                return CallToolResult(content=[TextContent(type="text", text="ok")])
+
+        kit = MCPServerKit()
+        mgr = MCPClientManager(kit)
+        mgr._connections["im.polaris.test"] = ClientConnection(
+            server_key="im.polaris.test",
+            session=FakeSession(),  # type: ignore[arg-type]
+        )
+
+        result = await mgr.call_tool("im.polaris.test.echo", {"message": "hello"})
+
+        assert result["ok"] is True
+        assert result["text"] == "ok"
+        assert result["is_error"] is False
+        assert result["content"] == [{"type": "text", "text": "ok", "annotations": None, "meta": None}]

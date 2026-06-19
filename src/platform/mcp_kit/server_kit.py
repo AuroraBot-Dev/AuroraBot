@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import signal
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -88,10 +89,10 @@ class MCPServerKit:
                 *spec.command,
                 *spec.args,
                 cwd=str(spec.directory) if spec.directory else None,
-                env={**dict(spec.env)} if spec.env else None,
+                env={**os.environ, **spec.env},
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                stderr=None,
             )
         except FileNotFoundError as exc:
             msg = f"启动 Server {spec.key} 失败: 命令未找到 {spec.command}"
@@ -145,6 +146,11 @@ class MCPServerKit:
 
         # 优雅停止
         if process.returncode is None:
+            if process.stdin is not None:
+                process.stdin.close()
+                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                    await process.stdin.wait_closed()
+
             if hasattr(signal, "SIGTERM"):
                 with contextlib.suppress(ProcessLookupError):
                     process.send_signal(signal.SIGTERM)  # type: ignore[arg-type]

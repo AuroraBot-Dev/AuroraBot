@@ -198,11 +198,13 @@ class TestRunMcpEventBridge:
         await asyncio.sleep(0.1)
 
         # 放入普通 notification — 应被包装为 AMP
-        await client_mgr._queue.put((
-            "im.polaris.test",
-            "notifications/tools/list_changed",
-            {"changes": ["added echo"]},
-        ))
+        await client_mgr._queue.put(
+            (
+                "im.polaris.test",
+                "notifications/tools/list_changed",
+                {"changes": ["added echo"]},
+            )
+        )
 
         await asyncio.sleep(0.2)
         assert len(circuit.updates) == 1

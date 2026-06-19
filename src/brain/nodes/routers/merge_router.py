@@ -1,4 +1,4 @@
-﻿"""MergeRouter —— 多源汇聚路由。
+"""MergeRouter —— 多源汇聚路由。
 
 纯机械 Router 节点。watch 多个 glob 路径，按 config.strategy 等待条件满足后触发。
 支持 "all"（所有源都有文件）和 "any"（任一源有文件）两种策略。

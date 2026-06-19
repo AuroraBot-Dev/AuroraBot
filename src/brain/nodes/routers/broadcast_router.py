@@ -1,4 +1,4 @@
-﻿"""BroadcastRouter —— 一对多扇出路由。
+"""BroadcastRouter —— 一对多扇出路由。
 
 纯机械 Router 节点。watch 一个 glob，将匹配的每个文件复制到 config.targets
 中列出的所有 emit 路径。

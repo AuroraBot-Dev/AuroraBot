@@ -4,6 +4,9 @@
 - ``apps/`` 目录下的内建 App（有 ``manifest.yaml``），结合 ``apps/config.yml`` 覆盖。
 - ``apps/config.yml`` 中配置了完整 ``command`` 的外部 MCP Server（位置无关）。
 
+``apps/config.yml`` 兼容两种写法：MCP 字段可嵌套在 ``mcp:`` 下，也可直接
+放在应用配置根部。内建 App 优先按目录名匹配，随后按 ``package`` 匹配。
+
 位置无关的外部 MCP Server 示例::
 
   apps:
@@ -53,7 +56,7 @@ def discover_mcp_servers(  # noqa: C901, PLR0912 — 内建扫描 + 外部配置
     """发现所有可用的 MCP Server 配置（内建 + 外部）。
 
     内建：扫描 ``apps/*/manifest.yaml``，合并 ``apps/config.yml`` 覆盖。
-    外部：从 ``apps/config.yml`` 读取无本地目录、但配置了完整 ``mcp.command`` 的条目。
+    外部：从 ``apps/config.yml`` 读取无本地目录、但配置了完整命令的条目。
 
     Args:
         apps_dir: ``apps/`` 目录路径。默认自动查找。
@@ -78,6 +81,7 @@ def discover_mcp_servers(  # noqa: C901, PLR0912 — 内建扫描 + 外部配置
         apps_config = dict(config["apps"])
 
     specs: list[MCPServerSpec] = []
+    matched_config_keys: set[str] = set()
 
     # ── 1. 扫描内建 apps/ 目录 ──
     if apps_dir.exists():
@@ -89,21 +93,22 @@ def discover_mcp_servers(  # noqa: C901, PLR0912 — 内建扫描 + 外部配置
                 # 没有 manifest 的目录可能是外部 Server 的本地数据目录，跳过
                 continue
 
-            spec = _build_spec(entry, manifest_file, apps_config.get(entry.name, {}))
+            config_key, app_cfg = _find_builtin_config(apps_config, entry, manifest_file)
+            if config_key is not None:
+                matched_config_keys.add(config_key)
+
+            spec = _build_spec(entry, manifest_file, app_cfg)
             if spec is not None:
                 specs.append(spec)
 
     # ── 2. 从 config.yml 发现外部 MCP Server ──
-    for key, cfg in apps_config.items():
-        # 跳过已经在 apps/ 目录下有对应内建应用的条目
-        if apps_dir.exists() and (apps_dir / key).is_dir():
+    for key, raw_cfg in apps_config.items():
+        if key in matched_config_keys or not isinstance(raw_cfg, dict):
             continue
 
-        mcp_cfg = cfg.get("mcp", {})
-        if not isinstance(mcp_cfg, dict):
-            continue
-
-        enabled = bool(mcp_cfg.get("enabled", True))
+        cfg = dict(raw_cfg)
+        mcp_cfg = _mcp_config(cfg)
+        enabled = bool(mcp_cfg.get("enabled", cfg.get("enabled", True)))
         if not enabled:
             continue
 
@@ -128,6 +133,33 @@ def discover_mcp_servers(  # noqa: C901, PLR0912 — 内建扫描 + 外部配置
         )
 
     return specs
+
+
+def _find_builtin_config(
+    apps_config: dict[str, Any],
+    app_dir: Path,
+    manifest_path: Path,
+) -> tuple[str | None, dict[str, Any]]:
+    """按目录名或 manifest package 匹配内建 App 配置。"""
+    direct = apps_config.get(app_dir.name)
+    if isinstance(direct, dict):
+        return app_dir.name, dict(direct)
+
+    raw_manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    package = raw_manifest.get("package") if isinstance(raw_manifest, dict) else None
+    if not isinstance(package, str) or not package:
+        return None, {}
+
+    for key, raw_cfg in apps_config.items():
+        if isinstance(raw_cfg, dict) and raw_cfg.get("package") == package:
+            return key, dict(raw_cfg)
+    return None, {}
+
+
+def _mcp_config(app_cfg: dict[str, Any]) -> dict[str, Any]:
+    """返回嵌套 ``mcp`` 配置，或兼容旧版扁平应用配置。"""
+    nested = app_cfg.get("mcp")
+    return dict(nested) if isinstance(nested, dict) else app_cfg
 
 
 def _build_spec(
@@ -162,11 +194,14 @@ def _build_spec(
     mcp_ext = read_mcp_manifest(manifest_path)
 
     # 从 config.yml 获取 MCP 覆盖配置
-    mcp_cfg: dict[str, Any] = {}
-    if isinstance(app_cfg.get("mcp"), dict):
-        mcp_cfg = dict(app_cfg["mcp"])
+    mcp_cfg = _mcp_config(app_cfg)
 
-    mcp_enabled = bool(mcp_cfg.get("enabled", mcp_ext is not None and mcp_ext.server_type == "mcp-server"))
+    mcp_enabled = bool(
+        mcp_cfg.get(
+            "enabled",
+            bool(mcp_cfg.get("command")) or (mcp_ext is not None and mcp_ext.server_type == "mcp-server"),
+        )
+    )
 
     if not mcp_enabled:
         # 不启用 MCP 路径——返回带 legacy 标记的 spec供旧 ApplicationHost 使用

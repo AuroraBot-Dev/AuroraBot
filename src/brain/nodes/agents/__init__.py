@@ -1,4 +1,4 @@
-﻿# Agent 节点——LLM 驱动的认知型节点
+# Agent 节点——LLM 驱动的认知型节点
 from .action_planner import ActionPlanner
 from .externalizer import Externalizer
 from .impulse_gate import ImpulseGate

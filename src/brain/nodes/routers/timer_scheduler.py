@@ -1,4 +1,4 @@
-﻿"""TimerScheduler —— 心跳 → 节律事件触发器。
+"""TimerScheduler —— 心跳 → 节律事件触发器。
 
 纯机械 Router 节点。watch ``heartbeat/tick.json``，
 根据配置中的时间规则，在匹配时产出 ``rhythm/triggers/{name}.json``。

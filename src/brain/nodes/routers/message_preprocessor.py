@@ -1,4 +1,4 @@
-﻿"""MessagePreprocessor —— 事件文件读取 → 格式化 → 防抖合并 → 产出 message_queue。
+"""MessagePreprocessor —— 事件文件读取 → 格式化 → 防抖合并 → 产出 message_queue。
 
 纯机械 Router 节点，零 LLM 调用。守护 inbox 中所有 event_*.json 文件，
 将**所有事件一视同仁**地格式化为自然语言文本，按会话分组并入防抖队列，

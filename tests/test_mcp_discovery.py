@@ -112,12 +112,15 @@ class TestBuildSpec:
 
 class TestDiscoverMCP:
     def test_no_apps_dir(self, tmp_path: Path) -> None:
-        specs = discover_mcp_servers(apps_dir=tmp_path / "nonexistent")
+        specs = discover_mcp_servers(
+            apps_dir=tmp_path / "nonexistent",
+            config_path=tmp_path / "config.yml",
+        )
         assert specs == []
 
     def test_no_manifests(self, tmp_path: Path) -> None:
         (tmp_path / "empty_app").mkdir(parents=True)
-        specs = discover_mcp_servers(apps_dir=tmp_path)
+        specs = discover_mcp_servers(apps_dir=tmp_path, config_path=tmp_path / "config.yml")
         assert specs == []
 
     def test_discover_mcp_app(self, tmp_path: Path) -> None:
@@ -145,3 +148,55 @@ class TestDiscoverMCP:
         assert specs[0].key == "im.polaris.test"
         assert specs[0].transport == "stdio"
         assert specs[0].enabled is True
+
+    def test_matches_builtin_app_by_package_with_flat_config(self, tmp_path: Path) -> None:
+        app_dir = tmp_path / "aurora-app-test"
+        app_dir.mkdir()
+        manifest = app_dir / "manifest.yaml"
+        manifest.write_text(
+            yaml.dump(
+                {
+                    "package": "im.polaris.test",
+                    "name": "测试应用",
+                    "type": "mcp-server",
+                    "mcp": {"entry": "mcp_server.py"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        config_path = tmp_path / "config.yml"
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "apps": {
+                        "test": {
+                            "package": "im.polaris.test",
+                            "enabled": True,
+                            "transport": "stdio",
+                            "command": ["python", "mcp_server.py"],
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        specs = discover_mcp_servers(apps_dir=tmp_path, config_path=config_path)
+
+        assert len(specs) == 1
+        assert specs[0].enabled is True
+        assert specs[0].command == ["python", "mcp_server.py"]
+
+    def test_project_config_enables_all_builtin_mcp_apps(self) -> None:
+        specs = discover_mcp_servers()
+        specs_by_key = {spec.key: spec for spec in specs}
+
+        assert set(specs_by_key) >= {
+            "im.polaris.clock",
+            "im.polaris.diary",
+            "im.polaris.weather",
+        }
+        for key in ("im.polaris.clock", "im.polaris.diary", "im.polaris.weather"):
+            spec = specs_by_key[key]
+            assert spec.enabled is True
+            assert spec.command[-1] == "mcp_server.py"

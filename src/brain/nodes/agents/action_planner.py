@@ -1,4 +1,4 @@
-﻿"""ActionPlanner —— LLM 动作规划节点。
+"""ActionPlanner —— LLM 动作规划节点。
 
 核心 Agent 节点，使用质量模型根据对话上下文生成 JSON 动作列表。
 读取 ``pipeline/gate_pass/*.json``，组装对话历史 + 记忆上下文 + 命令列表，

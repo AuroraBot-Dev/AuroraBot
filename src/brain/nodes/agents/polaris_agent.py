@@ -1,4 +1,4 @@
-﻿"""kernel-alpha: AuroraBot PolarisAgent —— 小光的自主认知节点
+"""kernel-alpha: AuroraBot PolarisAgent —— 小光的自主认知节点
 
 Pipeline: 事件收束 → 格式化为文本 → 门控判断 → LLM 动作规划 → 命令派发
 

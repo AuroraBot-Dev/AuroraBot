@@ -1,4 +1,4 @@
-﻿# Router 节点——纯机械逻辑节点
+# Router 节点——纯机械逻辑节点
 from .broadcast_router import BroadcastRouter
 from .dead_letter_router import DeadLetterRouter
 from .heartbeat_generator import HeartbeatGenerator

@@ -1,4 +1,4 @@
-﻿"""SwitchRouter —— 条件分叉路由。
+"""SwitchRouter —— 条件分叉路由。
 
 纯机械 Router 节点。watch 一个 glob，根据 config.routes 中的条件
 将匹配的文件路由到不同的 emit 路径。

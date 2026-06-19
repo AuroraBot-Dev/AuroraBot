@@ -1,0 +1,75 @@
+apps:
+  clock:
+    enabled: true
+    package: im.polaris.clock
+    name: Clock
+    version: "1.0.0"
+    description: 闹钟、定时器、时间查询
+    mcp:
+      enabled: true
+      transport: stdio
+      command: ["uv", "run", "python", "mcp_server.py"]
+      env:
+        AURORA_APP_DATA_DIR: data/app_data/clock
+    permissions:
+      tools:
+        im.polaris.clock.get_current_time:
+          risk: low
+          enabled: true
+        im.polaris.clock.set_alarm:
+          risk: low
+          enabled: true
+        im.polaris.clock.set_timer:
+          risk: low
+          enabled: true
+
+  diary:
+    enabled: true
+    package: im.polaris.diary
+    name: Diary
+    version: "1.0.0"
+    description: 日记读写与搜索
+    mcp:
+      enabled: true
+      transport: stdio
+      command: ["uv", "run", "python", "mcp_server.py"]
+      env:
+        AURORA_APP_DATA_DIR: data/app_data/diary
+    permissions:
+      tools:
+        im.polaris.diary.write_diary:
+          risk: low
+          enabled: true
+        im.polaris.diary.read_diary:
+          risk: low
+          enabled: true
+        im.polaris.diary.list_dates:
+          risk: low
+          enabled: true
+
+  weather:
+    enabled: true
+    package: im.polaris.weather
+    name: Weather
+    version: "1.0.0"
+    description: 天气查询与预报
+    mcp:
+      enabled: true
+      transport: stdio
+      command: ["uv", "run", "python", "mcp_server.py"]
+      env:
+        AURORA_APP_DATA_DIR: data/app_data/weather
+    startup:
+      default_city: 北京
+      language: zh
+    permissions:
+      tools:
+        im.polaris.weather.get_weather:
+          risk: low
+          enabled: true
+        im.polaris.weather.get_forecast:
+          risk: low
+          enabled: true
+        im.polaris.weather.set_default_city:
+          risk: low
+          enabled: true
