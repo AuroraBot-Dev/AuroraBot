@@ -40,9 +40,9 @@ nodes:
     emit:
       - "pipeline/action_queue/*.json"
 
-  # Pool B: 命令派发
-  - id: command_dispatcher
-    type: command_dispatcher
+  # MCP 工具派发（替代旧 command_dispatcher）
+  - id: mcp_tool_dispatcher
+    type: mcp_tool_dispatcher
     watch:
       - "pipeline/action_queue/*.json"
 

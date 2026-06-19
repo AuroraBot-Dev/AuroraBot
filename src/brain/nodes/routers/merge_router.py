@@ -1,4 +1,4 @@
-"""MergeRouter —— 多源汇聚路由。
+﻿"""MergeRouter —— 多源汇聚路由。
 
 纯机械 Router 节点。watch 多个 glob 路径，按 config.strategy 等待条件满足后触发。
 支持 "all"（所有源都有文件）和 "any"（任一源有文件）两种策略。
@@ -9,14 +9,11 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileEvent, FileUpdate, NodeState, Router
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("MergeRouter")
 
@@ -40,7 +37,7 @@ class MergeRouter(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         *,
         strategy: str = "all",
         match_by: str | None = None,

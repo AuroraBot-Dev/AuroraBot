@@ -1,4 +1,4 @@
-"""Internalizer —— 内化者：Pool B JSON 事件 → Pool A 第一人称体验叙事。
+﻿"""Internalizer —— 内化者：Pool B JSON 事件 → Pool A 第一人称体验叙事。
 
 核心认知 Agent。读取 pipeline/message_queue/*.json 中的结构化事件，
 结合当前自我之流（now.md）、自我状态（state.md）和持久记忆（memories/），
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain import prompts
 from src.brain.ai.gateway import gateway
@@ -19,9 +19,6 @@ from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.brain.nodes.self_stream import SelfStream
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Internalizer")
 
@@ -42,7 +39,7 @@ class Internalizer(Agent):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: object | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
@@ -166,7 +163,7 @@ class Internalizer(Agent):
         if self._host is None:
             return "无可用命令"
         lines: list[str] = []
-        for spec in self._host.list_command_specs():
+        for spec in self._host.list_command_specs():  # type: ignore[attr-defined]
             params = spec.parameters_schema.get("properties", {})
             param_entries = [
                 f"    {pname}: {pschema.get('type', 'string')} — {pschema.get('description', '')}"

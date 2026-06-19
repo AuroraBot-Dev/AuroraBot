@@ -1,10 +1,8 @@
-"""EventBridge — 将 App 事件与 MCP 能力桥接到 Brain 文件总线。
+"""EventBridge — 将 MCP 事件桥接到 Brain 文件总线。
 
-支持双轨运行：
-- ``run_event_bridge()`` — 从旧 ``ApplicationHost`` 的 drain_events 桥接
-- ``run_mcp_event_bridge()`` — 从 MCP Server 的统一事件源桥接
+消费 ``client_manager.notification_queue`` 中的事件，写入
+``inbox/pending/event_*_*.json``。支持两种来源：
 
-事件源包括：
 - 原生 Aurora App 的 ``aurora/event`` notification（可选增强）
 - 普通 MCP Server 的 notification（自动包装为 AMP）
 - 工具调用结果（由 MCPClientManager 在 Host 侧生成 AMP）
@@ -18,51 +16,14 @@ import uuid
 from typing import TYPE_CHECKING
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate
-from src.config import Config
 from src.platform.mcp_kit.amp import amp_to_file_event, build_event_envelope, parse_amp_envelope
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.brain.kernel.circuit import Circuit
-    from src.platform.application_host import ApplicationHost
     from src.platform.mcp_kit.client_manager import MCPClientManager
 
 logger = get_logger("EventBridge")
-
-_DEFAULT_INTERVAL = max(Config.EVENT_BRIDGE_INTERVAL, Config.APP_FRAME_INTERVAL)
-
-
-async def run_event_bridge(
-    host: ApplicationHost,
-    circuit: Circuit,
-    stop_event: asyncio.Event,
-    interval: float = _DEFAULT_INTERVAL,
-) -> None:
-    """将 ApplicationHost 的 AppEvent 桥接到 Circuit 的 FileEvent（旧轨）。
-
-    迁移期保留，直到所有 App 转为 MCP Server。
-    """
-    logger.info("事件桥接已启动 (旧轨)")
-    while not stop_event.is_set():
-        try:
-            events = host.drain_events()
-            if events:
-                logger.debug(f"桥接 {len(events)} 个事件到文件总线 (旧轨)")
-                for event in events:
-                    safe_type = str(event.type).replace(".", "_").replace("/", "_")
-                    file_path = f"inbox/pending/event_{safe_type}_{event.id}.json"
-                    update = FileUpdate(
-                        descriptor=FileDescriptor(path=file_path, schema="json"),
-                        content=event.to_dict(),
-                    )
-                    await circuit.apply_update(update, node_id="event_bridge")
-        except Exception:
-            logger.exception("事件桥接异常 (旧轨)")
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=max(0.05, interval))
-        except TimeoutError:
-            continue
-    logger.info("事件桥接已停止 (旧轨)")
 
 
 async def run_mcp_event_bridge(

@@ -14,9 +14,8 @@ STOP_COMMANDS = ("/stop", "/quit", "/exit", "/q")
 SAY_COMMANDS = ("/say", "/s")
 EVENT_COMMANDS = ("/event", "/e", "/emit")
 INVOKE_COMMANDS = ("/invoke", "/i")
+TOOLS_COMMANDS = ("/tools", "/T")
 APPS_COMMANDS = ("/apps", "/A")
-COMMANDS_COMMANDS = ("/commands", "/C")
-EVENTS_COMMANDS = ("/events", "/E")
 MEMTEST_COMMANDS = ("/memtest", "/mt")
 SELF_STREAM_COMMANDS = ("/stream",)
 SELF_STATE_COMMANDS = ("/state",)
@@ -43,11 +42,10 @@ class ParsedConsoleCommand:
 def _console_commands() -> tuple[ConsoleCommand, ...]:
     from src.brain.localhost.commands.core import (
         _handle_apps_command,
-        _handle_commands_command,
-        _handle_events_command,
         _handle_help_command,
         _handle_reload_command,
         _handle_stop_command,
+        _handle_tools_command,
     )
     from src.brain.localhost.commands.emit import _handle_event_command
     from src.brain.localhost.commands.invoke import _handle_invoke_command
@@ -93,20 +91,14 @@ def _console_commands() -> tuple[ConsoleCommand, ...]:
         ConsoleCommand(
             names=APPS_COMMANDS,
             usage="/apps",
-            description="列出当前已加载应用",
+            description="列出 MCP Server 健康状态",
             handler=_handle_apps_command,
         ),
         ConsoleCommand(
-            names=COMMANDS_COMMANDS,
-            usage="/commands [--detail all|<name>]",
-            description="列出当前可调用命令. 指定命令名展开 schema.",
-            handler=_handle_commands_command,
-        ),
-        ConsoleCommand(
-            names=EVENTS_COMMANDS,
-            usage="/events [--drain] [--limit N]",
-            description="查看或消费当前事件队列",
-            handler=_handle_events_command,
+            names=TOOLS_COMMANDS,
+            usage="/tools",
+            description="列出当前所有可用 MCP 工具",
+            handler=_handle_tools_command,
         ),
         ConsoleCommand(
             names=STOP_COMMANDS,

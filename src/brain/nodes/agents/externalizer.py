@@ -1,4 +1,4 @@
-"""Externalizer —— 外化者：Pool A 第一人称决定 → Pool B JSON 动作。
+﻿"""Externalizer —— 外化者：Pool A 第一人称决定 → Pool B JSON 动作。
 
 核心认知 Agent。读取 pipeline/internalized/*.json 触发信号后，
 扫描自我之流（now.md）中最近的思考，识别明确的行动意图
@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain import prompts
 from src.brain.ai.gateway import gateway
@@ -18,9 +18,6 @@ from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.brain.nodes.self_stream import SelfStream
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Externalizer")
 
@@ -40,7 +37,7 @@ class Externalizer(Agent):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: object | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
@@ -186,7 +183,7 @@ class Externalizer(Agent):
         if self._host is None:
             return "无可用命令"
         lines: list[str] = []
-        for spec in self._host.list_command_specs():
+        for spec in self._host.list_command_specs():  # type: ignore[attr-defined]
             params = spec.parameters_schema.get("properties", {})
             required = spec.parameters_schema.get("required", [])
             param_entries = []

@@ -1,4 +1,4 @@
-"""MemoryConsolidator —— 节律驱动的记忆整理与流归档。
+﻿"""MemoryConsolidator —— 节律驱动的记忆整理与流归档。
 
 认知 Agent 节点。由节律事件（rhythm/triggers/*.json）触发，
 读取当前自我之流（now.md），通过 LLM 提取新知识，
@@ -12,16 +12,13 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.ai.gateway import gateway
 from src.brain.kernel.base import Agent, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done
 from src.brain.nodes.self_stream import SelfStream
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("MemoryConsolidator")
 
@@ -70,7 +67,7 @@ class MemoryConsolidator(Agent):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)

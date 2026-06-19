@@ -65,6 +65,12 @@ NODE_NEEDS_HOST: frozenset[str] = frozenset(
     {
         "internalizer",
         "externalizer",
+    }
+)
+
+# 节点构造时是否需要 client_manager 引用（按 type 判断）
+NODE_NEEDS_CLIENT_MANAGER: frozenset[str] = frozenset(
+    {
         "mcp_tool_dispatcher",
     }
 )
@@ -143,7 +149,10 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ── 电路构建 ──────────────────────────────────────
 
 
-def build_circuit(host: object | None = None) -> Circuit:
+def build_circuit(  # noqa: C901
+    host: object | None = None,
+    client_manager: Any | None = None,
+) -> Circuit:
     """从 ``topology.yaml`` 读取配置，构造认知拓扑电路。
 
     遍历邻接表条目，逐条实例化节点并注入 ``Circuit``。
@@ -153,6 +162,8 @@ def build_circuit(host: object | None = None) -> Circuit:
     ----------
     host : object | None
         上下文对象（可选），注入给需要它的节点。
+    client_manager : MCPClientManager | None
+        MCP 客户端管理器，注入给需要执行工具调用的节点。
 
     Returns
     -------
@@ -186,6 +197,8 @@ def build_circuit(host: object | None = None) -> Circuit:
         node_ctor = cast("Callable[..., object]", node_cls)
         if node_type in NODE_ACCEPTS_CONFIG:
             node = cast("Node", node_ctor(node_id, **node_config, **memory_kw))
+        elif node_type in NODE_NEEDS_CLIENT_MANAGER:
+            node = cast("Node", node_ctor(node_id, client_manager, **memory_kw))
         elif node_type in NODE_NEEDS_HOST:
             node = cast("Node", node_ctor(node_id, host, **memory_kw))
         else:

@@ -1,4 +1,4 @@
-"""HeartbeatGenerator —— 周期性心跳脉冲发生器。
+﻿"""HeartbeatGenerator —— 周期性心跳脉冲发生器。
 
 纯机械 Router 节点。不同于 Circuit._bootstrap_heartbeat() 的一次性引导，
 这是一个**持续运行的独立节点**——通过 watch 自身 emit 的文件实现自持振荡。
@@ -15,14 +15,11 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileEvent, FileUpdate, NodeState, Router
 from src.config import Config
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Heartbeat")
 
@@ -43,7 +40,7 @@ class HeartbeatGenerator(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         *,
         interval_sec: float = 60.0,
         **kwargs: Any,

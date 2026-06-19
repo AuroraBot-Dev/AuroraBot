@@ -1,4 +1,4 @@
-"""ImpulseGate —— LLM 门控节点。
+﻿"""ImpulseGate —— LLM 门控节点。
 
 轻量级 Agent 节点，使用快速模型判断当前消息是否需要完整回复。
 读取 ``pipeline/message_queue/*.json``，产出 ``gate_pass/*`` 或 ``gate_skip/*``。
@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain import prompts
 from src.brain.ai.gateway import gateway
@@ -16,9 +16,6 @@ from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.config import Config
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("ImpulseGate")
 
@@ -44,7 +41,7 @@ class ImpulseGate(Agent):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)

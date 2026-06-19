@@ -1,3 +1,8 @@
+"""AuroraBot — Brain 运行时 Non-Bot 入口。
+
+通过 NoneBot2 的 on_startup/on_shutdown 钩子启动 Brain 运行时。
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +12,6 @@ from nonebot import get_driver
 
 from src.brain.localhost import handle_control_command, run_console_control_loop
 from src.brain.runtime import RuntimeState, shutdown_runtime, start_runtime
-from src.platform.application_host import app_host
 from src.utils.log_utils import get_logger
 
 logger = get_logger("Main")
@@ -21,7 +25,7 @@ _reload_lock = asyncio.Lock()
 async def startup_agent() -> None:
     global _runtime, _console_task  # noqa: PLW0603
 
-    _runtime = await start_runtime(app_host)
+    _runtime = await start_runtime()
     _console_task = asyncio.create_task(
         run_console_control_loop(_handle_control_command),
         name="console-control-loop",

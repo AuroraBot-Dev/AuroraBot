@@ -1,4 +1,4 @@
-"""DeadLetterRouter —— 超期文件回收。
+﻿"""DeadLetterRouter —— 超期文件回收。
 
 纯机械 Router 节点。定期扫描 kernel_data_dir 下的所有 done/ 目录和
 pipeline 中间目录，将超过 config.ttl_sec 未被消费的文件移动到
@@ -22,7 +22,6 @@ from src.utils.log_utils import get_logger
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("DeadLetter")
 
@@ -43,7 +42,7 @@ class DeadLetterRouter(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         *,
         ttl_sec: float = 3600.0,
         scan_interval: float = 600.0,

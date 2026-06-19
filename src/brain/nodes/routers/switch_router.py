@@ -1,4 +1,4 @@
-"""SwitchRouter —— 条件分叉路由。
+﻿"""SwitchRouter —— 条件分叉路由。
 
 纯机械 Router 节点。watch 一个 glob，根据 config.routes 中的条件
 将匹配的文件路由到不同的 emit 路径。
@@ -10,14 +10,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate, Router
 from src.brain.kernel.state_store import OP_FUNCS, kernel_data_dir, resolve_field
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("SwitchRouter")
 
@@ -45,7 +42,7 @@ class SwitchRouter(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         *,
         routes: list[dict[str, Any]] | None = None,
         **kwargs: Any,

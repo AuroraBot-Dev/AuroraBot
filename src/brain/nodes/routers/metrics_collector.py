@@ -1,4 +1,4 @@
-"""MetricsCollector —— 文件流转统计。
+﻿"""MetricsCollector —— 文件流转统计。
 
 纯机械 Router 节点。由心跳触发，扫描 kernel_data_dir 下的所有
 pipeline / inbox / rhythm 目录，统计文件数量和最近活动时间，
@@ -9,14 +9,11 @@ from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate, Router
 from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Metrics")
 
@@ -34,7 +31,7 @@ class MetricsCollector(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)

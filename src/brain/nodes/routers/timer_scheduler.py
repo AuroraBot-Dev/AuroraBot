@@ -1,4 +1,4 @@
-"""TimerScheduler —— 心跳 → 节律事件触发器。
+﻿"""TimerScheduler —— 心跳 → 节律事件触发器。
 
 纯机械 Router 节点。watch ``heartbeat/tick.json``，
 根据配置中的时间规则，在匹配时产出 ``rhythm/triggers/{name}.json``。
@@ -10,13 +10,10 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate, Router
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("TimerScheduler")
 
@@ -54,7 +51,7 @@ class TimerScheduler(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         *,
         rules: list[dict[str, Any]] | None = None,
         **kwargs: Any,

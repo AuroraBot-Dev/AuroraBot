@@ -1,4 +1,4 @@
-"""kernel-alpha: AuroraBot PolarisAgent —— 小光的自主认知节点
+﻿"""kernel-alpha: AuroraBot PolarisAgent —— 小光的自主认知节点
 
 Pipeline: 事件收束 → 格式化为文本 → 门控判断 → LLM 动作规划 → 命令派发
 
@@ -16,7 +16,7 @@ import json
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain import prompts
 from src.brain.ai.gateway import GatewayError, gateway
@@ -26,9 +26,6 @@ from src.config import Config
 from src.utils.json_utils import parse_llm_json, safe_parse_json_object
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("PolarisAgent")
 
@@ -51,7 +48,7 @@ class PolarisAgent(Agent):
     def __init__(
         self,
         node_id: str,
-        host: ApplicationHost | None = None,
+        host: object | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
@@ -580,7 +577,7 @@ class PolarisAgent(Agent):
         if self._host is None:
             return "无可用命令"
         lines: list[str] = []
-        for spec in self._host.list_command_specs():
+        for spec in self._host.list_command_specs():  # type: ignore[attr-defined]
             params = spec.parameters_schema.get("properties", {})
             required = spec.parameters_schema.get("required", [])
             param_entries = []
@@ -729,7 +726,7 @@ class PolarisAgent(Agent):
 
             try:
                 if self._host is not None:
-                    await self._host.invoke_command(command, **params)
+                    await self._host.invoke_command(command, **params)  # type: ignore[attr-defined]
                     dispatched += 1
                 else:
                     logger.warning(f"host 未注入, 无法执行 {command}")

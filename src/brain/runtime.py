@@ -1,163 +1,133 @@
+"""Runtime — AuroraBot Brain 运行时管理。
+
+负责启动、运行、关闭 Brain Circuit、MCP 连接和事件桥接。
+"""
+
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from src.brain.kernel.node_factory import build_circuit
-from src.brain.nodes import run_event_bridge
+from src.brain.nodes import run_mcp_event_bridge
 from src.config import Config
-from src.platform.app_config import app_startup, enabled_app_names, load_apps_config
-from src.platform.app_discovery import discover_apps, instantiate_app
-from src.platform.contracts import CommandSpec
-from src.platform.loop import run_app_loop
+from src.platform.mcp_kit.client_manager import MCPClientManager
+from src.platform.mcp_kit.discovery import discover_mcp_servers
+from src.platform.mcp_kit.server_kit import MCPServerKit
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.brain.kernel.circuit import Circuit
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("Runtime")
-
-_BUILTIN_CONSOLE_SEND_MESSAGE = "im.polaris.console.send_message"
-
-
-async def _console_print(*, text: str) -> None:
-    logger.info(text)
-
-
-def _register_builtin_commands(host: ApplicationHost) -> None:
-    if _BUILTIN_CONSOLE_SEND_MESSAGE in host.list_commands():
-        return
-    host.register_command(
-        CommandSpec(
-            name=_BUILTIN_CONSOLE_SEND_MESSAGE,
-            description="发送消息到本地控制台",
-            parameters_schema={
-                "type": "object",
-                "properties": {"text": {"type": "string", "description": "要发送的消息文本"}},
-                "required": ["text"],
-            },
-            returns_schema={"type": "object", "properties": {}},
-            handler=_console_print,
-        )
-    )
 
 
 @dataclass(slots=True)
 class RuntimeState:
-    host: ApplicationHost
+    """运行时状态。
+
+    Attributes:
+        circuit: 认知拓扑电路实例。
+        server_kit: MCP Server 进程生命周期管理器。
+        client_manager: MCP 客户端连接管理器。
+        stop_event: 停止信号事件。
+        tasks: 后台任务列表。
+    """
+
+    server_kit: MCPServerKit
+    client_manager: MCPClientManager
     stop_event: asyncio.Event
     circuit: Circuit | None = None
-    app_task: asyncio.Task[None] | None = None
-    bridge_task: asyncio.Task[None] | None = None
+    tasks: list[asyncio.Task[Any]] = field(default_factory=list)
 
 
-async def register_selected_apps(
-    host: ApplicationHost,
-    names: list[str],
-    apps_config: dict[str, dict[str, Any]],
-) -> None:
-    discovered = discover_apps()
-    for name in names:
-        if name not in discovered:
-            raise KeyError(f"Unknown application: {name}")  # noqa: TRY003
-        await host.register(instantiate_app(name, app_startup(apps_config, name)))
+async def start_runtime() -> RuntimeState:
+    """启动完整运行时。
 
-
-async def register_enabled_apps(host: ApplicationHost) -> dict[str, dict[str, Any]]:
+    启动顺序：
+    1. ``Config.ensure_dirs()``
+    2. 从 ``apps/config.yml`` 读取 MCP Server 配置。
+    3. 构造 ``MCPServerSpec`` 列表。
+    4. ``MCPServerKit.start_all()`` 启动本地 stdio Server。
+    5. ``MCPClientManager.connect_all()`` 建立 session。
+    6. ``MCPClientManager.refresh_capabilities()`` 获取工具列表。
+    7. 启动 ``run_mcp_event_bridge()``。
+    8. 启动 Brain ``Circuit``。
+    """
     Config.ensure_dirs()
-    apps_config = load_apps_config()
-    await register_selected_apps(host, enabled_app_names(apps_config), apps_config)
-    logger.info(
-        "已注册应用:\n%s",
-        json.dumps(
-            {"apps": host.list_apps()},
-            ensure_ascii=False,
-            indent=2,
-        ),
+
+    # 读取 MCP Server 配置
+    specs = discover_mcp_servers()
+    logger.info("发现 %d 个 MCP Server", len(specs))
+
+    # 启动本地 stdio Server
+    server_kit = MCPServerKit()
+    await server_kit.start_all(specs)
+
+    # 建立 MCP 连接
+    client_manager = MCPClientManager(server_kit)
+    await client_manager.connect_all()
+    await client_manager.refresh_tools()
+
+    stop_event = asyncio.Event()
+    state = RuntimeState(
+        server_kit=server_kit,
+        client_manager=client_manager,
+        stop_event=stop_event,
     )
-    return apps_config
 
+    # 启动事件桥接（MCP -> Brain inbox）
+    circuit = build_circuit(client_manager=client_manager)
+    await circuit.start()
+    state.circuit = circuit
 
-async def start_runtime(host: ApplicationHost) -> RuntimeState:
-    await register_enabled_apps(host)
-    state = RuntimeState(host=host, stop_event=asyncio.Event())
-    return await start_runtime_components(state)
+    bridge_task = asyncio.create_task(
+        run_mcp_event_bridge(client_manager, circuit, stop_event),
+        name="mcp-event-bridge",
+    )
+    state.tasks.append(bridge_task)
 
+    # 通知工具列表
+    tools = client_manager.list_all_tools()
+    logger.info(
+        "运行时已启动 — %d 个 MCP Server, %d 个工具可用",
+        len(specs),
+        len(tools),
+    )
 
-async def start_runtime_components(state: RuntimeState) -> RuntimeState:
-    _register_builtin_commands(state.host)
-    if Config.RUN_MODE in ["app", "application", "dev", "prod"]:
-        state.app_task = asyncio.create_task(run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL))
-
-    if Config.RUN_MODE in ["agent", "core", "dev", "prod"]:
-        state.circuit = build_circuit(state.host)
-        await state.circuit.start()
-        state.bridge_task = asyncio.create_task(
-            run_event_bridge(
-                state.host,
-                state.circuit,
-                state.stop_event,
-                interval=Config.HEARTBEAT_INTERVAL,
-            )
-        )
-
-    return state
-
-
-async def restart_runtime_components(
-    state: RuntimeState,
-    *,
-    start_app_loop: bool,
-    start_bridge: bool,
-) -> RuntimeState:
-    _register_builtin_commands(state.host)
-    if start_app_loop:
-        state.app_task = asyncio.create_task(run_app_loop(state.host, state.stop_event, Config.APP_FRAME_INTERVAL))
-    else:
-        state.app_task = None
-
-    if state.circuit is not None and not state.circuit.is_running:
-        await state.circuit.start()
-
-    if start_bridge and state.circuit is not None:
-        state.bridge_task = asyncio.create_task(
-            run_event_bridge(
-                state.host,
-                state.circuit,
-                state.stop_event,
-                interval=Config.HEARTBEAT_INTERVAL,
-            )
-        )
-    else:
-        state.bridge_task = None
-
-    return state
-
-
-async def stop_runtime_components(state: RuntimeState) -> RuntimeState:
-    if state.bridge_task is not None:
-        state.bridge_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await state.bridge_task
-    state.bridge_task = None
-
-    if state.circuit is not None and state.circuit.is_running:
-        await state.circuit.stop()
-
-    if state.app_task is not None:
-        state.app_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await state.app_task
-    state.app_task = None
     return state
 
 
 async def shutdown_runtime(state: RuntimeState) -> None:
+    """关闭运行时。
+
+    关闭顺序：
+    1. 设置停止信号。
+    2. 取消后台任务。
+    3. 关闭 MCP 客户端连接。
+    4. 停止 MCP Server 进程。
+    5. 停止 Brain Circuit。
+    """
     state.stop_event.set()
-    await stop_runtime_components(state)
-    await state.host.stop_all()
-    logger.info("所有循环已中止")
+
+    # 取消后台任务
+    for task in state.tasks:
+        task.cancel()
+    for task in state.tasks:
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    state.tasks.clear()
+
+    # 停止 Circuit
+    if state.circuit is not None and state.circuit.is_running:
+        await state.circuit.stop()
+
+    # 关闭 MCP 连接
+    await state.client_manager.shutdown()
+
+    # 停止 MCP Server 进程
+    await state.server_kit.stop_all()
+
+    logger.info("运行时已关闭")

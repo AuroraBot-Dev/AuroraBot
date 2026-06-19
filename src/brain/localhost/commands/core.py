@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 from src.brain.localhost.registry import ParsedConsoleCommand, _console_commands
 from src.brain.localhost.reloader import reload_brain, stop_process
-from src.brain.localhost.utils import _ConsoleArgumentParser
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
@@ -42,93 +41,24 @@ async def _handle_stop_command(
     await stop_process(runtime=runtime)
 
 
-def _build_events_parser() -> _ConsoleArgumentParser:
-    parser = _ConsoleArgumentParser(add_help=False, prog="/events")
-    parser.add_argument("--drain", action="store_true")
-    parser.add_argument("--limit", type=int, default=None)
-    return parser
-
-
-async def _handle_events_command(
+async def _handle_tools_command(
     runtime: RuntimeState,
-    parsed: ParsedConsoleCommand,
+    _parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
-    parser = _build_events_parser()
-    try:
-        args = parser.parse_args(list(parsed.args))
-    except ValueError as exc:
-        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
-        return runtime
+    """列出当前所有可用 MCP 工具。"""
+    tools = runtime.client_manager.list_all_tools()
+    payload: dict[str, object] = {}
+    for server_key, server_tools in tools.items():
+        tool_list = []
+        for tool in server_tools:
+            name = getattr(tool, "name", "")
+            description = getattr(tool, "description", "")
+            tool_list.append({"name": f"{server_key}.{name}", "description": description})
+        payload[server_key] = tool_list
 
-    events = (
-        runtime.host.drain_events(limit=args.limit)
-        if args.drain
-        else (runtime.host.peek_events()[: args.limit] if args.limit is not None else runtime.host.peek_events())
-    )
     logger.debug(
-        "当前事件队列:\n%s",
-        json.dumps(
-            {"events": [event.to_dict() for event in events]},
-            ensure_ascii=False,
-            indent=2,
-        ),
-    )
-    return runtime
-
-
-def _build_commands_parser() -> _ConsoleArgumentParser:
-    parser = _ConsoleArgumentParser(add_help=False, prog="/commands")
-    parser.add_argument("--detail")
-    return parser
-
-
-async def _handle_commands_command(
-    runtime: RuntimeState,
-    parsed: ParsedConsoleCommand,
-) -> RuntimeState:
-    parser = _build_commands_parser()
-    try:
-        args = parser.parse_args(list(parsed.args))
-    except ValueError as exc:
-        logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
-        return runtime
-
-    if not args.detail:
-        payload = {"commands": runtime.host.list_commands()}
-    else:
-        specs = runtime.host.list_command_specs()
-        if args.detail == "all":
-            payload = {
-                "commands": [
-                    {
-                        "name": spec.name,
-                        "description": spec.description,
-                        "parameters_schema": spec.parameters_schema,
-                        "returns_schema": spec.returns_schema,
-                    }
-                    for spec in specs
-                ]
-            }
-        else:
-            target = next((spec for spec in specs if spec.name == args.detail), None)
-            if target is None:
-                logger.warning(f"命令 {parsed.name} 未找到: {args.detail}")
-                return runtime
-            payload = {
-                "command": {
-                    "name": target.name,
-                    "description": target.description,
-                    "parameters_schema": target.parameters_schema,
-                    "returns_schema": target.returns_schema,
-                }
-            }
-    logger.debug(
-        "可用命令:\n%s",
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-        ),
+        "可用 MCP 工具:\n%s",
+        json.dumps(payload, ensure_ascii=False, indent=2),
     )
     return runtime
 
@@ -137,12 +67,10 @@ async def _handle_apps_command(
     runtime: RuntimeState,
     _parsed: ParsedConsoleCommand,
 ) -> RuntimeState:
+    """列出 MCP Server 健康状态。"""
+    report = runtime.server_kit.health_report()
     logger.debug(
-        "已加载应用:\n%s",
-        json.dumps(
-            {"apps": runtime.host.list_apps()},
-            ensure_ascii=False,
-            indent=2,
-        ),
+        "MCP Server 状态:\n%s",
+        json.dumps(report, ensure_ascii=False, indent=2),
     )
     return runtime

@@ -1,3 +1,8 @@
+"""Runtime 热重载与进程管理。
+
+提供 ``/reload`` 和 ``/stop`` 控制台命令的实现。
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -7,11 +12,6 @@ import signal
 import sys
 from typing import TYPE_CHECKING
 
-from src.brain.runtime import (
-    restart_runtime_components,
-    shutdown_runtime,
-    stop_runtime_components,
-)
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
@@ -24,20 +24,19 @@ logger = get_logger("Localhost")
 _SELF_MODULE = "src.brain.localhost"
 
 _MODULES_TO_RELOAD: list[str] = [
-    "src.platform.app_config",
-    "src.platform.app_discovery",
     "src.utils.json_utils",
     "src.brain.ai.gateway",
     "src.brain.prompts",
     "src.brain.kernel.base",
     "src.brain.kernel.circuit",
     "src.brain.kernel.state_store",
-    "src.brain.nodes.agents.polaris_agent",
     "src.brain.nodes.agents",
     "src.brain.nodes.event_bridge",
     "src.brain.nodes",
     "src.brain.kernel.node_factory",
     "src.brain.runtime",
+    "src.platform.mcp_kit.client_manager",
+    "src.platform.mcp_kit.server_kit",
     _SELF_MODULE,
 ]
 
@@ -96,83 +95,62 @@ def _reload_modules() -> None:
         _reload_module(name)
 
 
-def _reload_package_modules(package_name: str) -> None:
-    names = [name for name in sys.modules if name == package_name or name.startswith(f"{package_name}.")]
-    for name in sorted(names, key=lambda item: (item.count("."), item), reverse=True):
-        _reload_module(name)
-
-
 async def reload_brain(*, runtime: RuntimeState) -> RuntimeState:
-    logger.info("热重载开始 — 冻结运行时...")
-    previous_apps = [app for package in runtime.host.list_apps() if (app := runtime.host.get_app(package)) is not None]
-    previous_had_app_loop = runtime.app_task is not None
-    previous_had_bridge = runtime.bridge_task is not None
-    apps_replaced = False
+    """热重载运行时：保留 MCP 连接，重建 Circuit。
 
-    try:
-        await stop_runtime_components(runtime)
+    Args:
+        runtime: 当前运行时状态。
 
-        _reload_modules()
+    Returns:
+        新的运行时状态。
+    """
+    logger.info("热重载开始 — 停止 Circuit...")
 
-        from src.brain.runtime import start_runtime_components
-        from src.platform.app_config import (
-            app_startup,
-            enabled_app_names,
-            load_apps_config,
-        )
-        from src.platform.app_discovery import discover_apps, instantiate_app
+    # 停止 Circuit（保留 MCP 连接）
+    if runtime.circuit is not None and runtime.circuit.is_running:
+        await runtime.circuit.stop()
 
-        apps_config = load_apps_config()
-        discovered = discover_apps()
-        enabled_names = [name for name in enabled_app_names(apps_config) if name in discovered]
-        for app_name in enabled_names:
-            _reload_package_modules(f"apps.{app_name}")
+    # 取消后台任务（保留 MCP Client/Server）
+    import asyncio
 
-        new_apps = [instantiate_app(app_name, app_startup(apps_config, app_name)) for app_name in enabled_names]
-        await runtime.host.replace_apps(new_apps)
-        apps_replaced = True
+    for task in runtime.tasks:
+        task.cancel()
+    for task in runtime.tasks:
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    runtime.tasks.clear()
 
-        runtime.circuit = None
-        runtime.app_task = None
-        runtime.bridge_task = None
-        await start_runtime_components(runtime)
-    except Exception as exc:
-        logger.exception("热重载失败，准备回滚到旧运行时")
-        try:
-            if apps_replaced:
-                await runtime.host.replace_apps(previous_apps)
-            runtime.app_task = None
-            runtime.bridge_task = None
-            await restart_runtime_components(
-                runtime,
-                start_app_loop=previous_had_app_loop,
-                start_bridge=previous_had_bridge,
-            )
-        except Exception:
-            logger.exception("热重载回滚失败，运行时可能处于部分可用状态")
-        raise HotReloadError(
-            "热重载失败，已尝试回滚旧运行时",
-            runtime=runtime,
-        ) from exc
+    # 重载模块
+    _reload_modules()
+
+    # 重建 Circuit
+    from src.brain.kernel.node_factory import build_circuit
+    from src.brain.nodes import run_mcp_event_bridge
+
+    runtime.circuit = build_circuit(client_manager=runtime.client_manager)
+    await runtime.circuit.start()
+
+    bridge_task = asyncio.create_task(
+        run_mcp_event_bridge(runtime.client_manager, runtime.circuit, runtime.stop_event),
+        name="mcp-event-bridge",
+    )
+    runtime.tasks.append(bridge_task)
 
     logger.info("热重载完成")
     return runtime
 
 
 def _request_process_exit() -> None:
-    """请求进程退出。
-
-    先尝试 SIGINT（Unix 下由 NoneBot driver 捕获后优雅关闭），
-    随后用 ``os._exit(0)`` 硬退出作为兜底（Windows + asyncio 下 SIGINT 不可靠）。
-    """
+    """请求进程退出。"""
     with contextlib.suppress(OSError, ValueError):
         signal.raise_signal(signal.SIGINT)
-    # 硬兜底：SIGINT 在 Windows asyncio 事件循环中常被吞掉，
-    # shutdown_runtime 已完成所有清理，直接 _exit 是安全的。
     os._exit(0)
 
 
 async def stop_process(*, runtime: RuntimeState) -> None:
+    """停止运行时并退出进程。"""
+    from src.brain.runtime import shutdown_runtime
+
     logger.info("收到停止请求，准备关闭当前进程")
     await shutdown_runtime(runtime)
     sys.stdout.flush()

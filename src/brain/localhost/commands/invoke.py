@@ -1,3 +1,5 @@
+"""控制台 ``/invoke`` 命令——调用 MCP Tool。"""
+
 from __future__ import annotations
 
 import json
@@ -16,7 +18,7 @@ logger = get_logger("Localhost")
 
 def _build_invoke_parser() -> _ConsoleArgumentParser:
     parser = _ConsoleArgumentParser(add_help=False, prog="/invoke")
-    parser.add_argument("command_name")
+    parser.add_argument("tool_name")
     parser.add_argument("--payload", default="")
     return parser
 
@@ -32,15 +34,22 @@ async def _handle_invoke_command(
         logger.warning(f"命令 {parsed.name} 参数错误: {exc}")
         return runtime
 
-    payload = parse_json_or_yaml_object(args.payload)
-    result = await runtime.host.invoke_command(args.command_name, **payload)
-    logger.debug(
-        "命令执行结果 %s:\n%s",
-        args.command_name,
-        json.dumps(
-            {"result": json_ready(result)},
-            ensure_ascii=False,
-            indent=2,
-        ),
-    )
+    arguments = parse_json_or_yaml_object(args.payload)
+    if not isinstance(arguments, dict):
+        arguments = {}
+
+    try:
+        result = await runtime.client_manager.call_tool(args.tool_name, arguments)
+        logger.debug(
+            "工具调用结果 %s:\n%s",
+            args.tool_name,
+            json.dumps(
+                {"result": json_ready(result)},
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+    except Exception:
+        logger.exception("工具调用失败 %s", args.tool_name)
+
     return runtime

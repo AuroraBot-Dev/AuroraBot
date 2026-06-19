@@ -1,5 +1,5 @@
-from .event_bridge import run_event_bridge
+from .event_bridge import run_mcp_event_bridge
 
 __all__ = [
-    "run_event_bridge",
+    "run_mcp_event_bridge",
 ]

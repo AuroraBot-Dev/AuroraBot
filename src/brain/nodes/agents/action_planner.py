@@ -1,4 +1,4 @@
-"""ActionPlanner —— LLM 动作规划节点。
+﻿"""ActionPlanner —— LLM 动作规划节点。
 
 核心 Agent 节点，使用质量模型根据对话上下文生成 JSON 动作列表。
 读取 ``pipeline/gate_pass/*.json``，组装对话历史 + 记忆上下文 + 命令列表，
@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain import prompts
 from src.brain.ai.gateway import GatewayError, gateway
@@ -18,9 +18,6 @@ from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.config import Config
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("ActionPlanner")
 
@@ -43,7 +40,7 @@ class ActionPlanner(Agent):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
@@ -236,7 +233,7 @@ class ActionPlanner(Agent):
         if self._host is None:
             return "无可用命令"
         lines: list[str] = []
-        for spec in self._host.list_command_specs():
+        for spec in self._host.list_command_specs():  # type: ignore[attr-defined]
             params = spec.parameters_schema.get("properties", {})
             required = spec.parameters_schema.get("required", [])
             param_entries = []

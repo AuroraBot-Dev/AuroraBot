@@ -1,4 +1,4 @@
-"""MessagePreprocessor —— 事件文件读取 → 格式化 → 防抖合并 → 产出 message_queue。
+﻿"""MessagePreprocessor —— 事件文件读取 → 格式化 → 防抖合并 → 产出 message_queue。
 
 纯机械 Router 节点，零 LLM 调用。守护 inbox 中所有 event_*.json 文件，
 将**所有事件一视同仁**地格式化为自然语言文本，按会话分组并入防抖队列，
@@ -18,15 +18,12 @@ import json
 import time
 import uuid
 from collections import defaultdict, deque
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate, Router
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done
 from src.utils.log_utils import get_logger
 from src.utils.time_utils import now_text
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("MessagePreprocessor")
 
@@ -48,7 +45,7 @@ class MessagePreprocessor(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: object | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)

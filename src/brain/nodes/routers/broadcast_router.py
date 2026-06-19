@@ -1,4 +1,4 @@
-"""BroadcastRouter —— 一对多扇出路由。
+﻿"""BroadcastRouter —— 一对多扇出路由。
 
 纯机械 Router 节点。watch 一个 glob，将匹配的每个文件复制到 config.targets
 中列出的所有 emit 路径。
@@ -10,14 +10,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.brain.kernel.base import FileDescriptor, FileUpdate, Router
 from src.brain.kernel.state_store import kernel_data_dir
 from src.utils.log_utils import get_logger
-
-if TYPE_CHECKING:
-    from src.platform.application_host import ApplicationHost
 
 logger = get_logger("BroadcastRouter")
 
@@ -41,7 +38,7 @@ class BroadcastRouter(Router):
     def __init__(
         self,
         node_id: str,
-        host: "ApplicationHost | None" = None,
+        host: "object | None" = None,
         *,
         targets: list[str] | None = None,
         **kwargs: Any,
