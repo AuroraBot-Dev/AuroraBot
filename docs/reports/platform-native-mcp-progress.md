@@ -37,14 +37,36 @@ rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|invo
 
 ---
 
-## Phase 1：
+## Phase 1：新增 MCP 基础设施 ✅
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | 待开始 |
-| 开始日期 | — |
-| 改动摘要 | 新增 `mcp_kit` 包、AMP 模型、依赖 |
-| 验证结果 | — |
+| 完成日期 | 2026-06-19 |
+| 开始日期 | 2026-06-19 |
+| 改动摘要 | 新增 `mcp_kit` 包（6 文件）、AMP 模型、mcp SDK 依赖 |
+| 验证结果 | ruff ✅, pyright ✅ (0 errors), pytest ✅ (270 passed, 55% cov) |
+
+### 新增文件
+
+| 文件 | 职责 |
+|------|------|
+| `src/platform/mcp_kit/__init__.py` | 包入口 |
+| `src/platform/mcp_kit/server_spec.py` | MCPServerSpec dataclass + 约束验证 |
+| `src/platform/mcp_kit/amp.py` | AMP envelope：build/parse/convert/legacy 桥接 |
+| `src/platform/mcp_kit/tool_schema.py` | MCP Tool → OpenAI schema / prompt text 转换 |
+| `src/platform/mcp_kit/manifest.py` | manifest.yaml MCP 扩展读取 |
+| `src/platform/mcp_kit/discovery.py` | 扫描 apps/ + config.yml 构建 MCPServerSpec 列表 |
+| `tests/test_mcp_amp.py` | 18 个测试：server_spec、AMP、tool_schema |
+| `tests/test_mcp_discovery.py` | 9 个测试：manifest、_build_spec、discovery |
+
+### 新增依赖
+
+- `mcp[cli]>=1.27,<2` → 已安装 `mcp==1.28.0`
+
+### 剩余风险
+
+- 旧平台层完全保留（双轨并行）
+- MCP Server 进程管理（server_kit.py）和 Client 连接管理（client_manager.py）待 Phase 2
 
 ---
 
