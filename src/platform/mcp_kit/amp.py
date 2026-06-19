@@ -1,8 +1,24 @@
-"""Aurora Message Protocol (AMP) — MCP notification 的 envelope 规范。
+"""Aurora Message Protocol (AMP) — Host-side 事件归一化兼容层。
 
-AMP 不是新传输协议，而是在 MCP notification 通道上定义的
-类型化消息结构。所有 AuroraBot App 与 Brain 的异步通信
-都使用 AMP envelope。
+AMP 不是 MCP Server 需要实现的协议，而是 AuroraBot Platform
+在 Host 侧生成的兼容 envelope，用于：
+
+- 将任意 MCP Server 的 capability、tool result、resource state、
+  notification、lifecycle 事件归一化为 Brain 可理解的统一事件格式。
+- 原生 Aurora App 可以额外使用 ``aurora/event`` notification
+  主动推送事件（可选增强），但不是强制要求。
+
+分层关系::
+
+  任意 MCP Server                      原生 Aurora App
+    tools / resources                      tools + aurora/event
+         |                                      |
+         v                                      v
+  AuroraBot MCP Platform Adapter
+    工具调用结果 / 资源状态 / 通知 / 生命周期
+         |
+         v  (Platform 侧生成 AMP)
+  AMP Envelope → Brain 统一事件认知
 """
 
 from __future__ import annotations
@@ -100,7 +116,11 @@ def build_event_envelope(  # noqa: PLR0913 — 7 个关键字参数是合理的 
     method: str = "aurora/event",
     expire_at: str | None = None,
 ) -> AMPEnvelope:
-    """构建 AMP 事件 envelope。
+    """构建 AMP 事件 envelope（Host 侧调用）。
+
+    此函数由 AuroraBot Platform 在 Host 侧调用，用于将
+    MCP Server 的能力/状态/结果包装为统一事件格式。
+    普通 MCP Server 不需要调用此函数。
 
     Args:
         source_app: 来源 App 的 package 名。
@@ -210,7 +230,10 @@ def amp_to_file_event(envelope: AMPEnvelope) -> dict[str, object]:
 
 
 def legacy_app_event_to_amp(event: object) -> AMPEnvelope:
-    """将旧 AppEvent 转换为 AMPEnvelope。
+    """将旧 AppEvent 转换为 AMPEnvelope（迁移期兼容函数）。
+
+    旧 App 通过 ``ApplicationHost.emit_event()`` 上报的事件，
+    在迁移期仍然需要通过此函数包装为 AMP 格式再进入新管线。
 
     Args:
         event: 旧 AppEvent 对象，需有 ``source``、``type``、``session_id``、

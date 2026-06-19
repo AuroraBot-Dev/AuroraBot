@@ -3,6 +3,8 @@
 > **范围界定**：本次迁移仅涉及 `src/platform/` 和 `apps/` 两层。Brain 核心（FileEventBus、认知管线、记忆系统、节律环路）保持现有架构不变——它们承载着 AuroraBot 的核心设计哲学（文件驱动、异步图计算、可追溯），不应被 MCP 的同步 request/response 模式约束。
 >
 > 日期：2026-06-14
+>
+> 2026-06-19 修正：本文早期把 AMP 表述为“基于 MCP notification 的 App 侧 envelope”。最新方向已调整为：AMP 是 AuroraBot Platform 内部的兼容归一化 envelope，用于把任意标准 MCP Server 的 tools/resources/prompts/notifications/lifecycle/error 等信号统一转成 Brain 事件。第三方 MCP Server 不需要实现 AMP；`aurora/event` 只是 Aurora 原生 App 的可选 notification 扩展。
 
 ---
 
@@ -53,7 +55,7 @@ MCP 协议天然解决了其中的两个核心问题：
 - **Tools** → 命令注册与派发（已高度对齐，`CommandSpec` ≈ `Tool`）
 - **Notifications** → 事件系统（App → Brain 的异步上报）
 
-唯一需要扩展的是：MCP 的通知是结构自由、无类型约束的。我们需要在 MCP notification 基础上定义一套 Aurora 自己的消息 envelope 规范。
+唯一需要补齐的是：MCP 生态输出的信号形态很多，且 notification 的 payload 结构自由。AuroraBot 需要在 Platform 侧定义一套统一 envelope，把标准 MCP 信号归一化为 Brain 可消费的事件，而不是要求所有 MCP Server 实现 Aurora 私有 notification。
 
 ---
 
@@ -151,7 +153,7 @@ class WeatherApplication:
 │  │  - 管理所有 MCP Server 连接                        │   │
 │  │  - tools/list → 注入 LLM context                  │   │
 │  │  - tools/call → dispatch tool_calls               │   │
-│  │  - notifications ← 从 MCP Server 接收事件          │   │
+│  │  - notifications/lifecycle/tool/resource → AMP 事件 │   │
 │  └──┬───────┬───────┬───────┬────────────────────────┘   │
 └─────┼───────┼───────┼───────┼────────────────────────────┘
       │       │       │       │
@@ -171,7 +173,7 @@ class WeatherApplication:
 - `ApplicationHost` → 拆分为 `MCPServerKit`（管理 MCP Server 进程生命周期）+ `MCPClientManager`（在 Brain 侧管理连接）
 - `PlatformAPI` → 消失。App 不再需要反向引用宿主——它们就是独立的 MCP Server
 - `command_dispatcher` Router 节点 → 移除。Brain 直接通过 MCP Client 的 `tools/call` 执行命令
-- EventBridge → 保留，但改为接收 MCP notification 并转为文件事件
+- EventBridge → 保留，但改为接收 Platform 归一化后的 AMP 事件并转为文件事件
 
 ### 3.2 与两套旧方案的差异
 
@@ -180,7 +182,7 @@ class WeatherApplication:
 | Brain 改造 | 全部 Skill 化 | 部分 MCP 化 | **不改造** |
 | App 改造 | Skill 化 | MCP Server | **MCP Server** |
 | Platform | SkillRuntime | 简化 ApplicationHost | **MCPServerKit 包** |
-| 消息协议 | 自定义 | MCP 原生 | **AMP（MCP notification 扩展）** |
+| 消息协议 | 自定义 | MCP 原生 | **AMP（Platform 侧 MCP 兼容 envelope）** |
 | 侵入性 | 高（改 ~20 个类） | 中（改 ~10 个类） | **低（改 ~6 个类）** |
 
 ---
@@ -195,7 +197,7 @@ src/platform/                         →  src/platform/
 ├── application_api.py       (移除)       ├── server_kit.py    ← MCP Server 生命周期管理
 ├── application_protocol.py  (移除)       ├── client.py        ← MCP Client Manager (Brain 侧)
 ├── app_config.py            (改造)       ├── discovery.py     ← 从扫描 runtime.py 改为扫描 MCP 配置
-├── app_discovery.py         (改造)       ├── protocol.py      ← AMP 消息协议 (notification 扩展)
+├── app_discovery.py         (改造)       ├── protocol.py      ← AMP 兼容 envelope
 ├── contracts.py             (改造)       └── manifest.py      ← manifest.yaml 兼容读取 (简化)
 ├── manifest.py              (保留)
 └── loop.py                  (移除)
@@ -283,7 +285,7 @@ class MCPServerKit:
 
     # ── 事件通道 ──
     # ServerKit 不直接暴露 AppEvent 队列 ——
-    # 事件通过 MCP notification 走 MCPClientManager 的通道
+    # 事件由 MCPClientManager/AMPCompatibilityBridge 从标准 MCP 信号中归一化生成
 ```
 
 ### 4.3 MCPClientManager：Brain 侧的连接管理
@@ -318,7 +320,7 @@ class MCPClientManager:
     - 建立与所有 MCP Server 的连接
     - 维护 tools 列表缓存
     - 执行 tools/call
-    - 接收 notifications 并桥接到 EventBridge
+    - 接收 notifications/lifecycle/tool/resource 信号并桥接为 AMP 事件
     - 连接健康监控
 
     Usage::
@@ -377,8 +379,8 @@ class MCPClientManager:
         """注册 notification 处理器。
 
         支持的 method：
-        - ``aurora/event`` → App 向 Brain 上报事件
-        - ``aurora/log``   → App 日志流
+        - ``*`` → 捕获第三方 MCP Server 的标准 notification
+        - ``aurora/event`` → Aurora 原生 App 可选业务事件
         - ``notifications/initialized`` → 连接就绪信号
         """
         ...
@@ -408,7 +410,7 @@ class MCPClientManager:
 
 | 原模块 | 改造 |
 |--------|------|
-| `contracts.py` | AppEvent 数据结构保留，但承载层从 Python dataclass 变更为 AMP notification payload |
+| `contracts.py` | AppEvent 数据结构保留为兼容输入，进入 Brain 前转换为 Platform 侧 AMP envelope |
 | `manifest.py` | 保留 manifest.yaml 读取，但 `commands` 部分变为可选（工具声明由 MCP Server 的 `list_tools` 动态提供） |
 | `app_config.py` | 保留配置加载，新增 MCP Server 进程配置字段（transport, command, env, health_timeout） |
 | `app_discovery.py` | 从"扫描 runtime.py + 导入类"改为"扫描 mcp_server.py + 读取 manifest.yaml" |
@@ -419,30 +421,37 @@ class MCPClientManager:
 
 ### 5.1 设计目标
 
-MCP 协议的 `notifications` 机制提供了基本的异步推送通道，但方法名和 payload 结构完全由实现方定义，缺乏类型约束和互操作性保证。
+MCP 协议已经提供 Tools、Resources、Prompts、Notifications、Lifecycle 等标准能力。AuroraBot 的目标不是在 MCP 之上发明一套私有 App 协议，而是让现有 MCP 生态可以被 Platform 直接接入。
 
-AMP（Aurora Message Protocol）是对 MCP notification 的语义扩展——**定义在 MCP notification 通道上承载的消息类型、envelope 结构和路由规则**。它不是新协议，是 MCP notification 的类型化应用层。
+AMP（Aurora Message Protocol）是 **Platform 侧的兼容归一化 envelope**：
 
-### 5.2 Notification 方法命名空间
+- 对第三方 MCP Server：不要求它们理解 AMP。Platform 根据标准 MCP 信号生成 AMP。
+- 对 Aurora 原生 App：可以选择发送 `aurora/event` notification，以减少 Platform 推断成本。
+- 对 Brain：无论来源是标准 MCP Server、Aurora 原生 App、旧 `AppEvent` 兼容层，最终都只看到统一事件。
 
-```
-aurora/event          → 应用事件（原 AppEvent，App → Brain）
-aurora/event/ack      → 事件确认（Brain → App）
-aurora/command/invoke → 命令调用请求（Brain → App，使用 tools/call 替代，推荐）
-aurora/log            → 应用日志流（App → Brain）
-aurora/health         → 健康检查响应（App → Brain）
-aurora/lifecycle      → 生命周期事件（started, stopping, crashed）
-```
+### 5.2 MCP 信号到 AMP 的映射
+
+| MCP/Platform 信号 | AMP payload.type 示例 | 说明 |
+| --- | --- | --- |
+| `initialize` / connected | `lifecycle.started` | Server 接入成功 |
+| transport closed / process exit | `lifecycle.stopped` / `lifecycle.crashed` | 连接或进程结束 |
+| `notifications/tools/list_changed` | `capability.changed` | 工具目录变化 |
+| `notifications/resources/list_changed` | `capability.changed` | 资源目录变化 |
+| `notifications/prompts/list_changed` | `capability.changed` | Prompt 目录变化 |
+| `tools/call` result | `tool.completed` / `tool.failed` | 工具调用审计事件 |
+| `resources/read` result | `resource.observed` | 资源读取快照，按需进入 Brain |
+| arbitrary notification | `mcp.notification.<method>` | 第三方通知的保守映射 |
+| optional `aurora/event` | App 声明的业务事件类型 | Aurora 原生 App 快捷路径 |
 
 ### 5.3 核心 Envelope 结构
 
-所有 AMP 消息共享统一的 envelope，对齐原 `AppEvent` 的字段：
+所有进入 Brain 的 AMP 消息共享统一 envelope。这个 envelope 可以由 Platform 生成，也可以由 Aurora 原生 App 提供后由 Platform 校验补齐：
 
 ```json
 {
   "header": {
     "protocol": "amp/1.0",
-    "method": "aurora/event",
+    "method": "mcp.notification",
     "message_id": "uuid",
     "timestamp": "2026-06-14T12:00:00+08:00",
     "source": {
@@ -470,10 +479,10 @@ aurora/lifecycle      → 生命周期事件（started, stopping, crashed）
 | 路径 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `header.protocol` | string | 是 | 固定 `"amp/1.0"` |
-| `header.method` | string | 是 | MCP notification method |
+| `header.method` | string | 是 | 原始信号类别，如 `mcp.notification`、`mcp.tool_result`、`mcp.lifecycle`、`aurora/event` |
 | `header.message_id` | string | 是 | UUID7（时间有序），用于去重和回溯 |
 | `header.timestamp` | string | 是 | ISO 8601 + 时区 |
-| `header.source.app` | string | 是 | 原 `AppEvent.source` |
+| `header.source.app` | string | 是 | MCP Server/package 标识 |
 | `header.source.instance` | string | 否 | 多实例时的实例标识 |
 | `payload.type` | string | 是 | 事件类型，点分隔命名，如 `"message.received"` |
 | `payload.session_id` | string | 否 | 会话标识 |
@@ -482,6 +491,8 @@ aurora/lifecycle      → 生命周期事件（started, stopping, crashed）
 | `payload.expire_at` | string | 否 | 过期时间，事件不再有效 |
 
 ### 5.4 入站事件类型（App → Brain）
+
+下列是 Aurora 原生 App 或 Platform adapter 建议使用的业务语义。第三方 MCP Server 不必按此实现；Platform 可用 adapter、配置或保守映射把它们转换到这些类型。
 
 ```
 message.received      ← 接收到新消息（用户发言）
@@ -496,11 +507,15 @@ diary.queried         ← 日记查询完成
 lifecycle.started     ← 应用启动完成
 lifecycle.stopping    ← 应用即将停止
 lifecycle.crashed     ← 应用崩溃
+capability.changed    ← MCP 能力目录变化
+tool.completed        ← 工具调用成功
+tool.failed           ← 工具调用失败
+mcp.error             ← 协议、传输或解析错误
 ```
 
 ### 5.5 EventBridge 适配
 
-原 EventBridge 从 `host.drain_events()` 拉取 `AppEvent` 对象。迁移后改为从 `MCPClientManager` 接收 notification：
+原 EventBridge 从 `host.drain_events()` 拉取 `AppEvent` 对象。迁移后改为从 Platform 的 AMP queue 接收已归一化事件：
 
 ```python
 # src/brain/nodes/event_bridge.py (改造)
@@ -509,10 +524,10 @@ async def run_event_bridge(
     circuit: Circuit,
     stop_event: asyncio.Event,
 ) -> None:
-    # 注册 notification 处理器
+    # MCPClientManager / AMPCompatibilityBridge 已把标准 MCP 信号归一化为 AMP
     queue: asyncio.Queue[dict] = asyncio.Queue()
 
-    mcp_client.on_notification("aurora/event", lambda name, params: queue.put(params))
+    mcp_client.on_amp_event(lambda envelope: queue.put(envelope))
 
     while not stop_event.is_set():
         try:
@@ -520,7 +535,7 @@ async def run_event_bridge(
         except TimeoutError:
             continue
 
-        # 将 AMP notification 转为文件写入（与原逻辑一致）
+        # 将 AMP envelope 转为文件写入（与原逻辑一致）
         envelope = params.get("header", {})
         payload = params.get("payload", {})
         safe_type = str(payload.get("type", "unknown")).replace(".", "_")
@@ -538,6 +553,8 @@ async def run_event_bridge(
 
 - 所有消息带 `header.protocol: "amp/1.0"` 版本标记
 - 接收方按协议版本选择合适的解析器
+- 第三方 MCP Server 没有 `aurora/event` 或 AMP envelope 时，不视为不兼容
+- 旧 `AppEvent` 兼容层也应先转换为 AMP，再进入 Brain
 - 未知字段忽略（forward-compatible）
 - 已知字段缺失时使用默认值
 
@@ -753,7 +770,7 @@ class WeatherApplication:
 
 - Internalizer / Externalizer 从 `_build_commands_text()` 改为 `mgr.tools_as_openai_schema()`
 - Externalizer 从 JSON 文本解析改为接收 `tool_calls` 结构
-- EventBridge 从 `host.drain_events()` 改为 MCP notification 回调
+- EventBridge 从 `host.drain_events()` 改为消费 Platform 侧 AMP queue
 - 移除 `command_dispatcher` Router 节点
 - 更新 `topology.yaml`：移除 `command_dispatcher` 边
 
@@ -793,7 +810,7 @@ class WeatherApplication:
 | **Brain 影响** | **零侵入**——认知管线、记忆系统、节律环路完全不动 |
 | **Platform 变化** | ApplicationHost → MCPServerKit（进程管理）+ MCPClientManager（连接管理） |
 | **App 变化** | 新增 mcp_server.py 入口，业务逻辑抽取为 service.py |
-| **消息协议** | AMP——在 MCP notification 之上定义类型化 envelope，替代裸 AppEvent 推送 |
+| **消息协议** | AMP——Platform 侧 MCP 兼容 envelope，吸收标准 MCP 生态并替代裸 AppEvent 推送 |
 | **最大收益** | 消除 JSON 文本解析脆弱性、标准化工具调用、可独立部署 App |
 | **迁移周期** | 约 6-8 周（分批、可回滚、兼容层并行） |
 | **设计哲学** | 保持 FileEventBus 文件驱动核心不动摇；MCP 仅用于工具/事件的外部通信层 |

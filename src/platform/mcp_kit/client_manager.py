@@ -4,7 +4,12 @@
 - 建立与所有 MCP Server 的 stdio 连接
 - 维护 tools 列表缓存
 - 执行 tools/call
-- 接收 notifications 并桥接到 EventBridge
+- 可选：接收 notifications 并桥接到 EventBridge
+
+Notification 接收是可选增强：
+- 原生 Aurora App 可以主动推送 ``aurora/event`` 通知
+- 普通 MCP Server 不需要实现任何 Aurora 私有协议
+- 对于没有主动事件能力的 MCP Server，它是"可调用/可读取应用"，不是"主动感知源"
 
 Notification 接收方式：子类化 ``ClientSession``，重写
 ``_received_notification`` 方法（这是 MCP SDK 官方推荐的扩展点）。

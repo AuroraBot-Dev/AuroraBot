@@ -150,7 +150,8 @@ class TestRunMcpEventBridge:
         assert content["payload"]["type"] == "diary.written"
 
     @pytest.mark.anyio
-    async def test_skip_non_event_notification(self) -> None:
+    async def test_generic_notification_wrapped(self) -> None:
+        """普通 MCP notification 被自动包装为 AMP envelope。"""
         client_mgr = FakeMcpClientManager()
         circuit = FakeCircuit()
         stop_event = asyncio.Event()
@@ -161,17 +162,18 @@ class TestRunMcpEventBridge:
 
         await asyncio.sleep(0.1)
 
-        # 放入非 aurora/event 的通知（应跳过）
-        await client_mgr._queue.put(
-            (
-                "im.polaris.test",
-                "aurora/log",
-                {"data": "log message"},
-            )
-        )
+        # 放入普通 notification — 应被包装为 AMP
+        await client_mgr._queue.put((
+            "im.polaris.test",
+            "notifications/tools/list_changed",
+            {"changes": ["added echo"]},
+        ))
 
         await asyncio.sleep(0.2)
-        assert len(circuit.updates) == 0
+        assert len(circuit.updates) == 1
+        update, node_id = circuit.updates[0]
+        assert node_id == "mcp_event_bridge"
+        assert "mcp" in update.descriptor.path or "tools" in update.descriptor.path
 
         stop_event.set()
         await bridge_task

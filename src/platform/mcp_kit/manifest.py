@@ -1,6 +1,9 @@
-"""Manifest.yaml 的 MCP 扩展读取。
+"""Manifest.yaml 的 MCP 扩展读取（可选）。
 
 扩展 ``src/platform/manifest.py``，支持 ``type: mcp-server`` 和 ``mcp:`` 段。
+
+所有字段均为可选。不包含 MCP 扩展的 manifest.yaml 仍作为旧 App 配置使用。
+外部 MCP Server（位置无关）只需在 ``apps/config.yml`` 中配置，无需本地 manifest。
 """
 
 from __future__ import annotations

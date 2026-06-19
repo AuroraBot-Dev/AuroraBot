@@ -1,7 +1,22 @@
 """MCP Server 发现逻辑。
 
-扫描 ``apps/*/manifest.yaml``，结合 ``apps/config.yml``，
-构造 ``MCPServerSpec`` 列表。
+扫描策略：
+- ``apps/`` 目录下的内建 App（有 ``manifest.yaml``），结合 ``apps/config.yml`` 覆盖。
+- ``apps/config.yml`` 中配置了完整 ``command`` 的外部 MCP Server（位置无关）。
+
+位置无关的外部 MCP Server 示例::
+
+  apps:
+    my-custom-server:
+      enabled: true
+      package: im.polaris.custom
+      name: 自定义服务
+      mcp:
+        enabled: true
+        transport: stdio
+        command: ["uv", "run", "--project", "/path/to/server", "python", "-m", "mcp_server"]
+        env:
+          DATA_DIR: /home/user/data
 """
 
 from __future__ import annotations
@@ -31,11 +46,14 @@ def _get_project_root() -> Path:
 APPS_DIR_NAME = "apps"
 
 
-def discover_mcp_servers(
+def discover_mcp_servers(  # noqa: C901, PLR0912 — 内建扫描 + 外部配置扫描的两个逻辑块
     apps_dir: Path | None = None,
     config_path: Path | None = None,
 ) -> list[MCPServerSpec]:
-    """扫描 App 目录，发现所有可用的 MCP Server 配置。
+    """发现所有可用的 MCP Server 配置（内建 + 外部）。
+
+    内建：扫描 ``apps/*/manifest.yaml``，合并 ``apps/config.yml`` 覆盖。
+    外部：从 ``apps/config.yml`` 读取无本地目录、但配置了完整 ``mcp.command`` 的条目。
 
     Args:
         apps_dir: ``apps/`` 目录路径。默认自动查找。
@@ -61,20 +79,53 @@ def discover_mcp_servers(
 
     specs: list[MCPServerSpec] = []
 
-    if not apps_dir.exists():
-        return specs
+    # ── 1. 扫描内建 apps/ 目录 ──
+    if apps_dir.exists():
+        for entry in sorted(apps_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            manifest_file = entry / "manifest.yaml"
+            if not manifest_file.exists():
+                # 没有 manifest 的目录可能是外部 Server 的本地数据目录，跳过
+                continue
 
-    for entry in sorted(apps_dir.iterdir()):
-        if not entry.is_dir():
+            spec = _build_spec(entry, manifest_file, apps_config.get(entry.name, {}))
+            if spec is not None:
+                specs.append(spec)
+
+    # ── 2. 从 config.yml 发现外部 MCP Server ──
+    for key, cfg in apps_config.items():
+        # 跳过已经在 apps/ 目录下有对应内建应用的条目
+        if apps_dir.exists() and (apps_dir / key).is_dir():
             continue
 
-        manifest_file = entry / "manifest.yaml"
-        if not manifest_file.exists():
+        mcp_cfg = cfg.get("mcp", {})
+        if not isinstance(mcp_cfg, dict):
             continue
 
-        spec = _build_spec(entry, manifest_file, apps_config.get(entry.name, {}))
-        if spec is not None:
-            specs.append(spec)
+        enabled = bool(mcp_cfg.get("enabled", True))
+        if not enabled:
+            continue
+
+        command = list(mcp_cfg.get("command", []))
+        if not command:
+            continue  # 没有 command 无法启动
+
+        specs.append(
+            MCPServerSpec(
+                key=str(cfg.get("package", key)),
+                package=str(cfg.get("package", key)),
+                name=str(cfg.get("name", key)),
+                version=str(cfg.get("version", "0.1.0")),
+                directory=Path(),
+                transport=str(mcp_cfg.get("transport", "stdio")),
+                command=[str(c) for c in command],
+                args=[str(a) for a in mcp_cfg.get("args", [])],
+                env={str(k): str(v) for k, v in mcp_cfg.get("env", {}).items()},
+                enabled=True,
+                health_timeout_seconds=float(mcp_cfg.get("health_timeout_seconds", 10.0)),
+            )
+        )
 
     return specs
 
@@ -118,8 +169,7 @@ def _build_spec(
     mcp_enabled = bool(mcp_cfg.get("enabled", mcp_ext is not None and mcp_ext.server_type == "mcp-server"))
 
     if not mcp_enabled:
-        # 不启用 MCP 路径，但返回带 legacy 标记的 spec
-        # 供旧 ApplicationHost 使用
+        # 不启用 MCP 路径——返回带 legacy 标记的 spec供旧 ApplicationHost 使用
         return MCPServerSpec(
             key=package or app_dir.name,
             package=package or app_dir.name,
