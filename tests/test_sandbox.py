@@ -21,8 +21,8 @@ class SandboxConfigTest(unittest.TestCase):
     def test_from_yaml_valid(self) -> None:
         yaml_content = textwrap.dedent("""\
             whitelist:
-              files: ["data/**"]
-              dirs: ["data/**"]
+              files: ["PROJECT_DIR/data/**"]
+              dirs: ["PROJECT_DIR/data/**"]
               modules: ["json", "math"]
               builtins: ["len", "print"]
             blacklist:

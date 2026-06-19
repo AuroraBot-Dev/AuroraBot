@@ -6,16 +6,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
 from src.brain.sandbox.base import SandboxConfigError
+from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
 logger = get_logger("SandboxConfig")
 
@@ -46,7 +47,17 @@ def _load_section(raw: dict, section_name: str) -> dict[str, frozenset[str]]:
             raise SandboxConfigError(  # noqa: TRY003
                 f"{section_name}.{key} 类型错误: 期望 list, 实际得到 {type(value).__name__}"
             )
-        result[key] = frozenset(str(item) for item in value)
+        result[key] = frozenset(
+            str(item).replace("PROJECT_DIR", str(Config.PROJECT_ROOT))
+            for item in value
+        )
+        if key in ("files", "dirs"):
+            for pattern in result[key]:
+                if not Path(pattern).is_absolute():
+                    raise SandboxConfigError(
+                        f"{section_name}.{key} 中的路径必须为绝对路径，"
+                        f"禁止相对路径: {pattern!r}（可用 PROJECT_DIR 占位符）"
+                    )
     return result
 
 
