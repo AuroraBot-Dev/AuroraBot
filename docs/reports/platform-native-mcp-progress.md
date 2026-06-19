@@ -137,11 +137,29 @@ rg -n "ApplicationHost|PlatformAPI|ApplicationProtocol|AppEvent|CommandSpec|invo
 
 ---
 
-## Phase 4：
+## Phase 4：MCP notification 接入 EventBridge ✅
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | 待开始 |
+| 完成日期 | 2026-06-19 |
+| 改动摘要 | 低层级 stdio notification 接收 + EventBridge 新轨 + AMP 预处理 |
+| 验证结果 | ruff ✅, pyright ✅, pytest ✅ (296 passed, 54% cov) |
+
+### 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `src/platform/mcp_kit/client_manager.py` | 新增 `_NotifiableClientSession` 子类 + `_dispatch_notification` + `notification_queue` |
+| `src/brain/nodes/event_bridge.py` | 新增 `run_mcp_event_bridge()` 并行函数，旧 `run_event_bridge()` 保留 |
+| `src/brain/nodes/routers/message_preprocessor.py` | 新增 `_extract_event_data()` 静态方法，支持 AMP header+payload 和旧扁平格式 |
+| `tests/test_mcp_event_bridge.py` | 5 个测试：AMP 解析、旧格式兼容、event bridge 队列消费、非事件跳过 |
+
+### 关键实现
+
+- `_NotifiableClientSession` 继承 `ClientSession`，重写 `_received_notification`（MCP SDK 官方扩展点）
+- `run_mcp_event_bridge()` 从 `notification_queue` 消费，写入 `inbox/pending/event_*.json`
+- `_extract_event_data()` 自动检测 AMP 格式（存在 ``header`` 键）和旧扁平格式
+- `_format_event_as_text()` 使用提取后的标准化字段，保持 downstream 兼容
 
 ---
 

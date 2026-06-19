@@ -5,21 +5,26 @@
 - 维护 tools 列表缓存
 - 执行 tools/call
 - 接收 notifications 并桥接到 EventBridge
+
+Notification 接收方式：子类化 ``ClientSession``，重写
+``_received_notification`` 方法（这是 MCP SDK 官方推荐的扩展点）。
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
+    from mcp.types import ServerNotification
     from mcp.types import Tool as MCPTool
 
     from src.platform.mcp_kit.server_kit import MCPServerKit
@@ -32,6 +37,45 @@ class MCPToolCallError(RuntimeError):
 
 
 NotificationHandler = Callable[[str, dict[str, object]], None]
+
+
+class _NotifiableClientSession(ClientSession):
+    """可接收 notification 回调的 ClientSession 子类。
+
+    重写 ``_received_notification``，将通知分发给外部注册的 handlers。
+    """
+
+    def __init__(
+        self,
+        reader: Any,
+        writer: Any,
+        *,
+        server_key: str = "",
+        notification_dispatcher: Callable[[str, str, dict[str, object]], Coroutine[Any, Any, None]] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(reader, writer, **kwargs)
+        self._server_key = server_key
+        self._notification_dispatcher = notification_dispatcher
+
+    async def _received_notification(self, notification: ServerNotification) -> None:
+        """重写父类方法以拦截通知。"""
+        # 先调用父类（处理内置的 LoggingMessageNotification 等）
+        await super()._received_notification(notification)
+
+        # 再分发给自定义 dispatcher
+        if self._notification_dispatcher is not None:
+            method = getattr(notification, "method", "") or ""
+            params: dict[str, object] = {}
+            raw_params = getattr(notification, "params", None)
+            if isinstance(raw_params, dict):
+                params = raw_params
+            elif raw_params is not None and hasattr(raw_params, "model_dump"):
+                params = dict(raw_params.model_dump())
+            elif raw_params is not None and hasattr(raw_params, "__dict__"):
+                params = dict(raw_params.__dict__)
+
+            await self._notification_dispatcher(self._server_key, method, params)
 
 
 @dataclass(slots=True)
@@ -68,11 +112,18 @@ class MCPClientManager:
         self._connections: dict[str, ClientConnection] = {}
         self._stop_event = asyncio.Event()
         self._notification_handlers: dict[str, list[NotificationHandler]] = {}
+        # 通知队列：EventBridge 从此队列消费
+        self._notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue()
 
     @property
     def connections(self) -> dict[str, ClientConnection]:
         """当前连接的映射。"""
         return dict(self._connections)
+
+    @property
+    def notification_queue(self) -> asyncio.Queue[tuple[str, str, dict[str, object]]]:
+        """通知队列，供 EventBridge 消费。"""
+        return self._notification_queue
 
     def on_notification(self, method: str, handler: NotificationHandler) -> Callable[[], None]:
         """注册 notification 处理器。
@@ -124,6 +175,27 @@ class MCPClientManager:
         self._connections[key] = conn
         conn._run_task = asyncio.create_task(self._run_connection(key, server_params, conn, spec.name))
 
+    async def _dispatch_notification(self, key: str, method: str, params: dict[str, object]) -> None:
+        """从 ``_NotifiableClientSession`` 接收通知并分派。
+
+        Args:
+            key: Server key。
+            method: notification method。
+            params: notification 参数。
+        """
+        # 1. 放入队列供 EventBridge 消费
+        await self._notification_queue.put((key, method, params))
+
+        # 2. 分发给注册的同步 handlers
+        handlers = self._notification_handlers.get(method, [])
+        if handlers:
+            logger.debug("通知 %s (server: %s) -> %d handlers", method, key, len(handlers))
+            for handler in handlers:
+                try:
+                    handler(key, params)
+                except Exception:
+                    logger.exception("notification handler 异常: %s", method)
+
     async def _run_connection(
         self,
         key: str,
@@ -131,15 +203,15 @@ class MCPClientManager:
         conn: ClientConnection,
         name: str,
     ) -> None:
-        """后台运行 stdio Client 上下文管理器。
-
-        ``stdio_client`` 是 ``@asynccontextmanager``，必须保持 context 存活。
-        """
+        """后台运行 stdio Client 上下文管理器。"""
         try:
             async with stdio_client(server_params) as (read_stream, write_stream):
-                from mcp.client.session import ClientSession
-
-                session = ClientSession(read_stream, write_stream)
+                session = _NotifiableClientSession(
+                    read_stream,
+                    write_stream,
+                    server_key=key,
+                    notification_dispatcher=self._dispatch_notification,
+                )
                 await session.initialize()
                 conn.session = session
 
@@ -170,7 +242,6 @@ class MCPClientManager:
         """关闭所有客户端连接。"""
         self._stop_event.set()
 
-        # 等待所有连接任务结束
         tasks = []
         for _key, conn in list(self._connections.items()):
             if conn._run_task is not None:
@@ -186,11 +257,7 @@ class MCPClientManager:
     # ── Tool 操作 ──
 
     async def refresh_tools(self, server_key: str | None = None) -> None:
-        """刷新 tools 列表缓存。
-
-        Args:
-            server_key: 可选，只刷新指定 Server 的缓存。
-        """
+        """刷新 tools 列表缓存。"""
         keys = [server_key] if server_key else list(self._connections.keys())
         for key in keys:
             conn = self._connections.get(key)
@@ -199,20 +266,12 @@ class MCPClientManager:
             try:
                 result = await conn.session.list_tools()
                 conn.tools = list(result.tools)
-                logger.debug(
-                    "刷新 tools (%s): %d tools",
-                    key,
-                    len(conn.tools),
-                )
+                logger.debug("刷新 tools (%s): %d tools", key, len(conn.tools))
             except Exception:
                 logger.exception("刷新 tools 失败 (%s)", key)
 
     def list_all_tools(self) -> dict[str, list[MCPTool]]:
-        """列出所有已缓存的工具。
-
-        Returns:
-            ``{server_key: [Tool, ...]}`` 的映射。
-        """
+        """列出所有已缓存的工具。"""
         return {key: list(conn.tools) for key, conn in self._connections.items()}
 
     async def call_tool(
@@ -222,28 +281,13 @@ class MCPClientManager:
         *,
         timeout_seconds: float = 30.0,
     ) -> dict[str, object]:
-        """调用 MCP Tool。
-
-        Args:
-            full_name: 工具全名（带 Server 前缀）。
-            arguments: 工具参数。
-            timeout_seconds: 超时秒数。
-
-        Returns:
-            工具执行结果。
-
-        Raises:
-            MCPToolCallError: 调用失败时。
-        """
-        # 解析 server_key 和 tool_name
+        """调用 MCP Tool。"""
         server_key, _, tool_name = full_name.rpartition(".")
         if not server_key:
             msg = f"工具名缺少前缀: {full_name}"
             raise MCPToolCallError(msg)
 
-        # 尝试从 server_key 查找连接
         conn = self._connections.get(server_key)
-        # 如果找不到，尝试按包名前缀匹配
         if conn is None:
             for ckey, cconn in self._connections.items():
                 if full_name.startswith(ckey):
@@ -256,12 +300,7 @@ class MCPClientManager:
             msg = f"未找到 Server 连接: {server_key}"
             raise MCPToolCallError(msg)
 
-        logger.debug(
-            "调用 tool: %s (server: %s, args: %s)",
-            tool_name,
-            server_key,
-            arguments,
-        )
+        logger.debug("调用 tool: %s (server: %s, args: %s)", tool_name, server_key, arguments)
 
         try:
             result = await asyncio.wait_for(
@@ -275,7 +314,6 @@ class MCPClientManager:
             msg = f"Tool 调用失败 {full_name}: {exc}"
             raise MCPToolCallError(msg) from exc
 
-        # 标准化返回结果
         content = getattr(result, "content", [])
         is_error = getattr(result, "isError", False)
         text_parts: list[str] = []
@@ -291,11 +329,7 @@ class MCPClientManager:
         }
 
     def tools_as_prompt_text(self) -> str:
-        """将所有可用工具转为 prompt text。
-
-        Returns:
-            格式化的工具说明文本。
-        """
+        """将所有可用工具转为 prompt text。"""
         from src.platform.mcp_kit.tool_schema import mcp_tools_to_prompt_text
 
         parts: list[str] = []

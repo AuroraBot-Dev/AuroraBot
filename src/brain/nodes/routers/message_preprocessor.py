@@ -99,11 +99,40 @@ class MessagePreprocessor(Router):
     # ═══════════════════════════════════════════════════
 
     @staticmethod
+    def _extract_event_data(data: dict[str, Any]) -> dict[str, Any]:
+        """从事件数据提取标准字段，支持旧扁平格式和 AMP envelope 格式。
+
+        AMP 格式检测：存在 ``header`` 键。
+        """
+        if "header" in data:
+            # AMP envelope 格式
+            header = data.get("header", {})
+            payload = data.get("payload", {})
+            return {
+                "type": str(payload.get("type", "")),
+                "session_id": str(payload.get("session_id", "")),
+                "summary": str(payload.get("summary", "")),
+                "payload": dict(payload.get("data", {})),
+                "source": str(header.get("source", {}).get("app", "")),
+                "message_id": str(header.get("message_id", "")),
+            }
+        # 旧扁平格式
+        return {
+            "type": str(data.get("type", "")),
+            "session_id": str(data.get("session_id", "")),
+            "summary": str(data.get("summary", "")),
+            "payload": dict(data.get("payload", {})) if isinstance(data.get("payload"), dict) else {},
+            "source": str(data.get("source", "")),
+            "message_id": str(data.get("id", "")),
+        }
+
+    @staticmethod
     def _format_event_as_text(data: dict[str, Any]) -> str:
-        event_type = str(data.get("type", ""))
+        event_data = MessagePreprocessor._extract_event_data(data)
+        event_type = event_data["type"]
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        summary = str(data.get("summary", "")).strip()
-        payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
+        summary = event_data["summary"].strip()
+        payload = event_data["payload"]
 
         if event_type == "message.received":
             user_id = str(payload.get("user_id", ""))
@@ -130,8 +159,9 @@ class MessagePreprocessor(Router):
     # ═══════════════════════════════════════════════════
 
     def _enqueue(self, data: dict[str, Any], input_text: str) -> None:
-        payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
-        event_type = str(data.get("type", ""))
+        event_data = MessagePreprocessor._extract_event_data(data)
+        payload = event_data["payload"]
+        event_type = event_data["type"]
 
         user_id = str(payload.get("user_id", "system"))
         session_id = str(payload.get("session_id", ""))
