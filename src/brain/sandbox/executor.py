@@ -79,11 +79,6 @@ class SandboxExecutor:
                 error="执行过程中发生未预期的错误",
                 execution_time=time.monotonic() - start_time,
             )
-        finally:
-            try:
-                shutil.rmtree(execution_dir, ignore_errors=True)
-            except Exception:  # noqa: BLE001
-                logger.warning(f"清理临时目录失败: {execution_dir}")
 
     def _check_disk_space(self, min_mb: int = 100) -> bool:
         """检查 SANDBOX_DIR 所在磁盘是否还有足够可用空间。"""
