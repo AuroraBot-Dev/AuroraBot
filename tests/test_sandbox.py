@@ -814,6 +814,7 @@ class SandboxManagerCallbackTest(unittest.TestCase):
 
     def test_context_injection(self) -> None:
         """context 参数应注入到执行命名空间中。"""
+
         async def run() -> None:
             result = await self.manager.execute(
                 'print(f"user={user}, score={score}")',
@@ -828,7 +829,7 @@ class SandboxManagerCallbackTest(unittest.TestCase):
 
     def test_execution_time_populated(self) -> None:
         async def run() -> None:
-            result = await self.manager.execute('print(1)', "test-time")
+            result = await self.manager.execute("print(1)", "test-time")
             self.assertGreater(result.execution_time, 0)
 
         asyncio.run(run())
@@ -854,6 +855,7 @@ class SandboxManagerSecurityChainTest(unittest.TestCase):
         )
         self.policy = AccessPolicy(config)
         from src.brain.sandbox.inspector import CodeInspector
+
         self.inspector = CodeInspector(self.policy)
 
     async def _exec(self, code: str, sid: str = "test-sec") -> SandboxResult:
@@ -868,26 +870,26 @@ class SandboxManagerSecurityChainTest(unittest.TestCase):
         asyncio.run(self._assert_blocked('eval("1+1")'))
 
     def test_del_statement_blocked(self) -> None:
-        asyncio.run(self._assert_blocked('x = 1\ndel x'))
+        asyncio.run(self._assert_blocked("x = 1\ndel x"))
 
     def test_global_statement_blocked(self) -> None:
-        asyncio.run(self._assert_blocked('def f():\n    global x'))
+        asyncio.run(self._assert_blocked("def f():\n    global x"))
 
     def test_nonlocal_statement_blocked(self) -> None:
-        asyncio.run(self._assert_blocked('def f():\n    x = 0\n    def g():\n        nonlocal x'))
+        asyncio.run(self._assert_blocked("def f():\n    x = 0\n    def g():\n        nonlocal x"))
 
     def test_subclasses_escape_blocked(self) -> None:
-        asyncio.run(self._assert_blocked('[].__class__.__base__.__subclasses__()'))
+        asyncio.run(self._assert_blocked("[].__class__.__base__.__subclasses__()"))
 
     def test_breakpoint_blocked(self) -> None:
-        asyncio.run(self._assert_blocked('breakpoint()'))
+        asyncio.run(self._assert_blocked("breakpoint()"))
 
     def test_exit_blocked(self) -> None:
-        asyncio.run(self._assert_blocked('exit()'))
+        asyncio.run(self._assert_blocked("exit()"))
 
     def test_safe_code_execution_passes(self) -> None:
         """纯计算代码（无需 import）应成功执行。"""
-        asyncio.run(self._assert_allowed('x = [i**2 for i in range(10)]\nprint(x)'))
+        asyncio.run(self._assert_allowed("x = [i**2 for i in range(10)]\nprint(x)"))
 
     def test_safe_print_execution_passes(self) -> None:
         asyncio.run(self._assert_allowed('print("hello sandbox")'))
@@ -899,7 +901,7 @@ class SandboxManagerSecurityChainTest(unittest.TestCase):
         self.assertTrue(any(v.violation_type == "blacklisted_access" for v in violations))
 
     def test_ast_from_os_import_blocked(self) -> None:
-        violations = self.inspector.inspect('from os import system')
+        violations = self.inspector.inspect("from os import system")
         self.assertTrue(any("os" in v.detail for v in violations))
 
     def test_ast_json_import_allowed(self) -> None:
@@ -908,7 +910,7 @@ class SandboxManagerSecurityChainTest(unittest.TestCase):
         self.assertEqual(violations, [])
 
     def test_ast_math_import_allowed(self) -> None:
-        violations = self.inspector.inspect('import math\nprint(math.pi)')
+        violations = self.inspector.inspect("import math\nprint(math.pi)")
         self.assertEqual(violations, [])
 
     async def _assert_blocked(self, code: str) -> None:
@@ -938,8 +940,17 @@ class SandboxExecutorArtifactTest(unittest.TestCase):
             whitelist_modules=frozenset({"json", "math", "pathlib"}),
             whitelist_builtins=frozenset(
                 {
-                    "len", "print", "range", "int", "str", "list",
-                    "dict", "set", "tuple", "float", "bool",
+                    "len",
+                    "print",
+                    "range",
+                    "int",
+                    "str",
+                    "list",
+                    "dict",
+                    "set",
+                    "tuple",
+                    "float",
+                    "bool",
                 }
             ),
             blacklist_files=frozenset(),
@@ -948,8 +959,8 @@ class SandboxExecutorArtifactTest(unittest.TestCase):
             blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__"}),
         )
         self.policy = AccessPolicy(config)
-        from src.brain.sandbox.inspector import CodeInspector
         from src.brain.sandbox.executor import SandboxExecutor
+        from src.brain.sandbox.inspector import CodeInspector
 
         self.inspector = CodeInspector(self.policy)
         self.executor = SandboxExecutor(self.policy, self.inspector)
@@ -977,6 +988,7 @@ class SandboxExecutorArtifactTest(unittest.TestCase):
             self.assertTrue((output_dir / "result.csv").exists())
         finally:
             import shutil
+
             shutil.rmtree(exec_dir, ignore_errors=True)
             shutil.rmtree(output_dir, ignore_errors=True)
 
@@ -996,6 +1008,7 @@ class SandboxExecutorArtifactTest(unittest.TestCase):
             self.assertEqual(artifacts, [])
         finally:
             import shutil
+
             shutil.rmtree(exec_dir, ignore_errors=True)
             shutil.rmtree(output_dir, ignore_errors=True)
 
@@ -1042,6 +1055,7 @@ class SandboxEndToEndTest(unittest.TestCase):
 
     def test_e2e_syntax_error_rejected(self) -> None:
         """语法错误应在解析阶段被拒绝。"""
+
         async def run() -> None:
             result = await self.manager.execute("def f(\n", "e2e-syntax")
             self.assertFalse(result.success)
@@ -1051,6 +1065,7 @@ class SandboxEndToEndTest(unittest.TestCase):
 
     def test_e2e_invalid_session_id_rejected(self) -> None:
         """非法 session_id 应在最前面被拒绝。"""
+
         async def run() -> None:
             result = await self.manager.execute('print("x")', "../escape")
             self.assertFalse(result.success)
@@ -1060,6 +1075,7 @@ class SandboxEndToEndTest(unittest.TestCase):
 
     def test_e2e_context_injected_and_used(self) -> None:
         """context 注入 → 代码中可访问注入变量。"""
+
         async def run() -> None:
             result = await self.manager.execute(
                 'print(f"user={user}, score={score}")',
@@ -1089,6 +1105,7 @@ class SandboxEndToEndTest(unittest.TestCase):
 
     def test_e2e_multiple_sequential_executions(self) -> None:
         """连续多次执行不同代码，结果互不干扰。"""
+
         async def run() -> None:
             r1 = await self.manager.execute('print("first")', "e2e-seq-1")
             r2 = await self.manager.execute('print("second")', "e2e-seq-2")
