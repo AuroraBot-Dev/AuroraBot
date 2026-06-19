@@ -8,7 +8,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from src.brain.sandbox.base import SandboxConfigError
+from src.brain.sandbox.base import SandboxConfigError, SecurityViolation
 from src.brain.sandbox.policy import AccessPolicy
 from src.brain.sandbox.settings import SandboxConfig
 
@@ -742,3 +742,495 @@ class SandboxManagerTest(unittest.TestCase):
     def test_validate_session_id_invalid(self) -> None:
         with self.assertRaises(ValueError):
             SandboxManager._validate_session_id("../../../etc")
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxManager 懒代理
+# ═══════════════════════════════════════════════════════════════
+
+
+class SandboxManagerProxyTest(unittest.TestCase):
+    def test_proxy_delegates_to_manager(self) -> None:
+        """proxy 的属性访问应代理到真实 SandboxManager。"""
+        from src.brain.sandbox import _SandboxManagerProxy
+
+        proxy = _SandboxManagerProxy()
+        self.assertIsInstance(proxy, _SandboxManagerProxy)
+        # can_read 应可调用
+        result = proxy.can_read(Path("/some/path"))
+        self.assertIsInstance(result, bool)
+
+    def test_get_sandbox_manager_returns_same_instance(self) -> None:
+        """get_sandbox_manager 多次调用应返回同一单例。"""
+        from src.brain.sandbox import get_sandbox_manager
+
+        a = get_sandbox_manager()
+        b = get_sandbox_manager()
+        self.assertIs(a, b)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxManager IO 方法
+# ═══════════════════════════════════════════════════════════════
+
+
+class SandboxManagerIOTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.manager = SandboxManager()
+        # 构建一个文件白名单能匹配 SANDBOX_DIR 的策略，用于 IO 测试
+        from src.config import Config
+
+        sandbox_rel = str(Config.SANDBOX_DIR.relative_to(Config.SANDBOX_DIR.anchor)).replace("\\", "/")
+        self._io_config = SandboxConfig(
+            whitelist_files=frozenset({f"{sandbox_rel}/**"}),
+            whitelist_dirs=frozenset({f"{sandbox_rel}/**"}),
+            whitelist_modules=frozenset({"json"}),
+            whitelist_builtins=frozenset({"print"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset(),
+            blacklist_builtins=frozenset(),
+        )
+        self._io_policy = AccessPolicy(self._io_config)
+
+    def test_can_import_whitelisted_module(self) -> None:
+        self.assertTrue(self.manager.can_import("json"))
+        self.assertTrue(self.manager.can_import("math"))
+        self.assertTrue(self.manager.can_import("re"))
+
+    def test_can_import_blacklisted_module(self) -> None:
+        self.assertFalse(self.manager.can_import("os"))
+        self.assertFalse(self.manager.can_import("sys"))
+        self.assertFalse(self.manager.can_import("subprocess"))
+
+    def test_can_import_unknown_module(self) -> None:
+        self.assertFalse(self.manager.can_import("nonexistent_module_xyz"))
+
+    def test_can_read_sandbox_file(self) -> None:
+        from src.config import Config
+
+        sandbox_file = Config.SANDBOX_DIR / "test_read.txt"
+        sandbox_file.parent.mkdir(parents=True, exist_ok=True)
+        sandbox_file.write_text("hello", encoding="utf-8")
+        try:
+            self.assertTrue(self._io_policy.can_read_file(sandbox_file))
+        finally:
+            sandbox_file.unlink(missing_ok=True)
+
+    def test_can_read_outside_sandbox(self) -> None:
+        # 白名单只含 SANDBOX_DIR，沙箱外路径应拒绝
+        import sys
+        outside = Path("C:/other_dir/test.txt") if sys.platform == "win32" else Path("/etc/passwd")
+        self.assertFalse(self._io_policy.can_read_file(outside))
+
+    def test_can_write_sandbox_file(self) -> None:
+        from src.config import Config
+
+        sandbox_file = Config.SANDBOX_DIR / "test_write_policy.txt"
+        self.assertTrue(self._io_policy.can_open_file(sandbox_file, "w"))
+        sandbox_file.unlink(missing_ok=True)
+
+    def test_write_and_read_sandbox_file(self) -> None:
+        """通过低层 policy + Path 直接写入再读回。"""
+        from src.config import Config
+
+        sandbox_file = Config.SANDBOX_DIR / "test_rw.txt"
+        try:
+            sandbox_file.parent.mkdir(parents=True, exist_ok=True)
+            sandbox_file.write_text("written content", encoding="utf-8")
+            content = sandbox_file.read_text(encoding="utf-8")
+            self.assertEqual(content, "written content")
+            self.assertTrue(self._io_policy.can_read_file(sandbox_file))
+        finally:
+            sandbox_file.unlink(missing_ok=True)
+
+    def test_write_sandbox_file_creates_parent_dirs(self) -> None:
+        from src.config import Config
+
+        nested = Config.SANDBOX_DIR / "sub" / "deep" / "test.txt"
+        try:
+            nested.parent.mkdir(parents=True, exist_ok=True)
+            nested.write_text("nested", encoding="utf-8")
+            self.assertEqual(nested.read_text(encoding="utf-8"), "nested")
+        finally:
+            import shutil
+            shutil.rmtree(Config.SANDBOX_DIR / "sub", ignore_errors=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxManager 执行回调与格式化
+# ═══════════════════════════════════════════════════════════════
+
+
+class SandboxManagerCallbackTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.manager = SandboxManager()
+
+    def test_on_result_callback_called(self) -> None:
+        """on_result 回调应在执行完成后被调用。"""
+        received: list[SandboxResult] = []
+
+        def on_result(r: SandboxResult) -> None:
+            received.append(r)
+
+        async def run() -> None:
+            await self.manager.execute('print("cb")', "test-cb", on_result=on_result)
+
+        asyncio.run(run())
+        self.assertEqual(len(received), 1)
+        self.assertTrue(received[0].success)
+        self.assertIn("cb", received[0].output)
+
+    def test_format_violations_single(self) -> None:
+        v = SecurityViolation(
+            violation_type="dangerous_operation",
+            detail="禁止调用 exec()",
+            line=3,
+            node_name="Call",
+        )
+        result = SandboxManager._format_violations([v])
+        self.assertIn("dangerous_operation", result)
+        self.assertIn("line 3", result)
+        self.assertIn("[Call]", result)
+        self.assertIn("禁止调用 exec()", result)
+
+    def test_format_violations_multiple(self) -> None:
+        v1 = SecurityViolation(violation_type="a", detail="d1", line=None, node_name=None)
+        v2 = SecurityViolation(violation_type="b", detail="d2", line=1, node_name="Import")
+        result = SandboxManager._format_violations([v1, v2])
+        self.assertIn("d1", result)
+        self.assertIn("d2", result)
+        # v1 无 line 和 node_name
+        self.assertNotIn("line None", result)
+
+    def test_context_injection(self) -> None:
+        """context 参数应注入到执行命名空间中。"""
+        async def run() -> None:
+            result = await self.manager.execute(
+                'print(f"user={user}, score={score}")',
+                "test-ctx",
+                context={"user": "Alice", "score": 95.5},
+            )
+            self.assertTrue(result.success, f"Error: {result.error}")
+            self.assertIn("user=Alice", result.output)
+            self.assertIn("score=95.5", result.output)
+
+        asyncio.run(run())
+
+    def test_execution_time_populated(self) -> None:
+        async def run() -> None:
+            result = await self.manager.execute('print(1)', "test-time")
+            self.assertGreater(result.execution_time, 0)
+
+        asyncio.run(run())
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxManager 安全拦截全链路
+# ═══════════════════════════════════════════════════════════════
+
+
+class SandboxManagerSecurityChainTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.manager = SandboxManager()
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/sandbox/**"}),
+            whitelist_dirs=frozenset({"data/sandbox/**"}),
+            whitelist_modules=frozenset({"json", "math", "re"}),
+            whitelist_builtins=frozenset({"len", "print", "range", "int", "str"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os", "sys", "subprocess"}),
+            blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__", "globals", "locals"}),
+        )
+        self.policy = AccessPolicy(config)
+        from src.brain.sandbox.inspector import CodeInspector
+        self.inspector = CodeInspector(self.policy)
+
+    async def _exec(self, code: str, sid: str = "test-sec") -> SandboxResult:
+        return await self.manager.execute(code, sid)
+
+    # ── 运行时拦截（通过 manager.execute 走完整链路）──
+
+    def test_exec_banned(self) -> None:
+        asyncio.run(self._assert_blocked('exec("print(1)")'))
+
+    def test_eval_banned(self) -> None:
+        asyncio.run(self._assert_blocked('eval("1+1")'))
+
+    def test_del_statement_blocked(self) -> None:
+        asyncio.run(self._assert_blocked('x = 1\ndel x'))
+
+    def test_global_statement_blocked(self) -> None:
+        asyncio.run(self._assert_blocked('def f():\n    global x'))
+
+    def test_nonlocal_statement_blocked(self) -> None:
+        asyncio.run(self._assert_blocked('def f():\n    x = 0\n    def g():\n        nonlocal x'))
+
+    def test_subclasses_escape_blocked(self) -> None:
+        asyncio.run(self._assert_blocked('[].__class__.__base__.__subclasses__()'))
+
+    def test_breakpoint_blocked(self) -> None:
+        asyncio.run(self._assert_blocked('breakpoint()'))
+
+    def test_exit_blocked(self) -> None:
+        asyncio.run(self._assert_blocked('exit()'))
+
+    def test_safe_code_execution_passes(self) -> None:
+        """纯计算代码（无需 import）应成功执行。"""
+        asyncio.run(self._assert_allowed('x = [i**2 for i in range(10)]\nprint(x)'))
+
+    def test_safe_print_execution_passes(self) -> None:
+        asyncio.run(self._assert_allowed('print("hello sandbox")'))
+
+    # ── AST 安全检查（通过 inspector 直接测试，不走执行）──
+
+    def test_ast_os_import_blocked(self) -> None:
+        violations = self.inspector.inspect('import os\nprint("hi")')
+        self.assertTrue(any(v.violation_type == "blacklisted_access" for v in violations))
+
+    def test_ast_from_os_import_blocked(self) -> None:
+        violations = self.inspector.inspect('from os import system')
+        self.assertTrue(any("os" in v.detail for v in violations))
+
+    def test_ast_json_import_allowed(self) -> None:
+        """import json 通过 AST 检查（在白名单内）。"""
+        violations = self.inspector.inspect('import json\nprint(json.dumps({"a": 1}))')
+        self.assertEqual(violations, [])
+
+    def test_ast_math_import_allowed(self) -> None:
+        violations = self.inspector.inspect('import math\nprint(math.pi)')
+        self.assertEqual(violations, [])
+
+    async def _assert_blocked(self, code: str) -> None:
+        result = await self._exec(code)
+        self.assertFalse(result.success, f"Expected blocked but succeeded: {result.output}")
+        self.assertTrue(result.error)
+        self.assertTrue(
+            "安全违规" in result.error or "语法错误" in result.error,
+            f"Unexpected error: {result.error}",
+        )
+
+    async def _assert_allowed(self, code: str) -> None:
+        result = await self._exec(code)
+        self.assertTrue(result.success, f"Expected allowed but blocked: {result.error}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# SandboxExecutor 产物收集与磁盘检查
+# ═══════════════════════════════════════════════════════════════
+
+
+class SandboxExecutorArtifactTest(unittest.TestCase):
+    def setUp(self) -> None:
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/sandbox/**"}),
+            whitelist_dirs=frozenset({"data/sandbox/**"}),
+            whitelist_modules=frozenset({"json", "math", "pathlib"}),
+            whitelist_builtins=frozenset(
+                {
+                    "len", "print", "range", "int", "str", "list",
+                    "dict", "set", "tuple", "float", "bool",
+                }
+            ),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os", "sys", "subprocess"}),
+            blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__"}),
+        )
+        self.policy = AccessPolicy(config)
+        from src.brain.sandbox.inspector import CodeInspector
+        from src.brain.sandbox.executor import SandboxExecutor
+
+        self.inspector = CodeInspector(self.policy)
+        self.executor = SandboxExecutor(self.policy, self.inspector)
+
+    def test_artifact_via_file_write(self) -> None:
+        """通过 write_file 在执行目录写文件，collect_artifacts 应收集到。"""
+        from src.config import Config
+
+        # 模拟执行目录下有产物文件
+        exec_dir = Config.SANDBOX_TEMP_DIR / "test-artifact-dir"
+        exec_dir.mkdir(parents=True, exist_ok=True)
+        (exec_dir / "result.csv").write_text("a,b\n1,2", encoding="utf-8")
+        (exec_dir / "script.py").write_text("pass", encoding="utf-8")
+
+        output_dir = Config.SANDBOX_OUTPUT_DIR / "test-artifact-output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            artifacts = self.executor._collect_artifacts(exec_dir, output_dir)
+            names = [p.name for p in artifacts]
+            self.assertIn("result.csv", names)
+            # script.py 不应出现在产物中
+            self.assertNotIn("script.py", names)
+            # 产物已移动到 output_dir
+            self.assertTrue((output_dir / "result.csv").exists())
+        finally:
+            import shutil
+            shutil.rmtree(exec_dir, ignore_errors=True)
+            shutil.rmtree(output_dir, ignore_errors=True)
+
+    def test_disk_space_check_passes(self) -> None:
+        self.assertTrue(self.executor._check_disk_space(min_mb=1))
+
+    def test_collect_artifacts_empty_dir(self) -> None:
+        """空执行目录应返回空列表。"""
+        from src.config import Config
+
+        exec_dir = Config.SANDBOX_TEMP_DIR / "test-empty-artifact"
+        exec_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = Config.SANDBOX_OUTPUT_DIR / "test-empty-output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            artifacts = self.executor._collect_artifacts(exec_dir, output_dir)
+            self.assertEqual(artifacts, [])
+        finally:
+            import shutil
+            shutil.rmtree(exec_dir, ignore_errors=True)
+            shutil.rmtree(output_dir, ignore_errors=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 端到端集成测试：创建 → 安全分析 → 执行 → 结果写入
+# ═══════════════════════════════════════════════════════════════
+
+
+class SandboxEndToEndTest(unittest.TestCase):
+    """完整流程测试：SandboxManager 创建 → 代码安全检查 → 执行 → 结果验证。"""
+
+    def setUp(self) -> None:
+        self.manager = SandboxManager()
+
+    def test_e2e_safe_computation(self) -> None:
+        """安全数学计算：创建 → 检查通过 → 执行成功 → 输出正确。"""
+        code = textwrap.dedent("""\
+            result = sum(i**2 for i in range(10))
+            print(f"sum={result}")
+        """)
+
+        async def run() -> None:
+            result = await self.manager.execute(code, "e2e-calc")
+            self.assertTrue(result.success, f"Error: {result.error}")
+            self.assertIn("sum=285", result.output)
+            self.assertGreater(result.execution_time, 0)
+            self.assertIsNone(result.error)
+
+        asyncio.run(run())
+
+    def test_e2e_dangerous_rejected_before_execution(self) -> None:
+        """危险代码应在安全检查阶段被拒绝，不会实际执行。"""
+        code = 'import os\nos.system("echo PWNED")'
+
+        async def run() -> None:
+            result = await self.manager.execute(code, "e2e-danger")
+            self.assertFalse(result.success)
+            self.assertIn("安全违规", result.error)
+            # 不应有输出（未执行）
+            self.assertEqual(result.output, "")
+
+        asyncio.run(run())
+
+    def test_e2e_syntax_error_rejected(self) -> None:
+        """语法错误应在解析阶段被拒绝。"""
+        async def run() -> None:
+            result = await self.manager.execute("def f(\n", "e2e-syntax")
+            self.assertFalse(result.success)
+            self.assertIn("语法错误", result.error)
+
+        asyncio.run(run())
+
+    def test_e2e_invalid_session_id_rejected(self) -> None:
+        """非法 session_id 应在最前面被拒绝。"""
+        async def run() -> None:
+            result = await self.manager.execute('print("x")', "../escape")
+            self.assertFalse(result.success)
+            self.assertIn("非法字符", result.error)
+
+        asyncio.run(run())
+
+    def test_e2e_context_injected_and_used(self) -> None:
+        """context 注入 → 代码中可访问注入变量。"""
+        async def run() -> None:
+            result = await self.manager.execute(
+                'print(f"user={user}, score={score}")',
+                "e2e-ctx",
+                context={"user": "Alice", "score": 95.5},
+            )
+            self.assertTrue(result.success, f"Error: {result.error}")
+            self.assertIn("user=Alice", result.output)
+            self.assertIn("score=95.5", result.output)
+
+        asyncio.run(run())
+
+    def test_e2e_file_write_through_sandbox(self) -> None:
+        """通过低层 SANDBOX_DIR 直接写入文件，再读回。"""
+        from src.config import Config
+
+        path = Config.SANDBOX_DIR / "e2e_rw_test.txt"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("e2e write content", encoding="utf-8")
+            content = path.read_text(encoding="utf-8")
+            self.assertEqual(content, "e2e write content")
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_e2e_file_write_and_inspector_pass(self) -> None:
+        """安全检查（inspector）通过 + 文件写入成功 = 完整流程。"""
+        config = SandboxConfig(
+            whitelist_files=frozenset({"data/sandbox/**"}),
+            whitelist_dirs=frozenset({"data/sandbox/**"}),
+            whitelist_modules=frozenset({"json"}),
+            whitelist_builtins=frozenset({"print", "len"}),
+            blacklist_files=frozenset(),
+            blacklist_dirs=frozenset(),
+            blacklist_modules=frozenset({"os"}),
+            blacklist_builtins=frozenset({"exec", "eval"}),
+        )
+        policy = AccessPolicy(config)
+        from src.brain.sandbox.inspector import CodeInspector
+        inspector = CodeInspector(policy)
+
+        safe_code = 'print("safe")'
+        violations = inspector.inspect(safe_code, policy.snapshot())
+        self.assertEqual(violations, [])
+
+        from src.config import Config
+        out_path = Config.SANDBOX_DIR / "e2e_inspect_write.txt"
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text("e2e write success", encoding="utf-8")
+            self.assertEqual(out_path.read_text(encoding="utf-8"), "e2e write success")
+        finally:
+            out_path.unlink(missing_ok=True)
+
+    def test_e2e_callback_receives_result(self) -> None:
+        """on_result 回调接收完整 SandboxResult。"""
+        received: list[SandboxResult] = []
+
+        def cb(r: SandboxResult) -> None:
+            received.append(r)
+
+        async def run() -> None:
+            await self.manager.execute('print("callback test")', "e2e-cb", on_result=cb)
+
+        asyncio.run(run())
+        self.assertEqual(len(received), 1)
+        self.assertTrue(received[0].success)
+        self.assertIn("callback test", received[0].output)
+
+    def test_e2e_multiple_sequential_executions(self) -> None:
+        """连续多次执行不同代码，结果互不干扰。"""
+        async def run() -> None:
+            r1 = await self.manager.execute('print("first")', "e2e-seq-1")
+            r2 = await self.manager.execute('print("second")', "e2e-seq-2")
+            r3 = await self.manager.execute('print("third")', "e2e-seq-3")
+            self.assertTrue(r1.success)
+            self.assertIn("first", r1.output)
+            self.assertTrue(r2.success)
+            self.assertIn("second", r2.output)
+            self.assertTrue(r3.success)
+            self.assertIn("third", r3.output)
+
+        asyncio.run(run())
