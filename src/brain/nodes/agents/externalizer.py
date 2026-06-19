@@ -42,6 +42,12 @@ class Externalizer(Agent):
     ) -> None:
         super().__init__(node_id, host=host, **kwargs)
         self._stream = SelfStream()
+        self._client_manager: Any = None
+        if host is not None:
+            from src.platform.mcp_kit.client_manager import MCPClientManager
+
+            if isinstance(host, MCPClientManager):
+                self._client_manager = host
 
     async def execute(self) -> list[FileUpdate]:
         trigger_dir = kernel_data_dir / "pipeline" / "internalized"
@@ -180,31 +186,9 @@ class Externalizer(Agent):
     # ═══════════════════════════════════════════════════
 
     def _build_commands_text(self) -> str:
-        if self._host is None:
-            return "无可用命令"
-        lines: list[str] = []
-        for spec in self._host.list_command_specs():  # type: ignore[attr-defined]
-            params = spec.parameters_schema.get("properties", {})
-            required = spec.parameters_schema.get("required", [])
-            param_entries = []
-            example_params = {}
-            for pname, pschema in params.items():
-                req_mark = " (必填)" if pname in required else ""
-                param_entries.append(
-                    f"    {pname}: {pschema.get('type', 'string')}{req_mark} — {pschema.get('description', '')}"
-                )
-                example_params[pname] = f"<{pschema.get('type', 'string')}>"
-            example_json = json.dumps(
-                {"command": spec.name, "params": example_params},
-                ensure_ascii=False,
-            )
-            lines.append(f"## {spec.name}")
-            lines.append(f"  {spec.description}")
-            lines.append("  参数:")
-            lines.extend(param_entries)
-            lines.append(f"  示例: {example_json}")
-            lines.append("")
-        return "\n".join(lines)
+        if self._client_manager is not None:
+            return self._client_manager.tools_as_prompt_text()
+        return "无可用工具"
 
     @staticmethod
     def _parse_actions(raw: str) -> dict[str, Any] | None:

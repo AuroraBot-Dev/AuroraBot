@@ -108,6 +108,7 @@ class MCPToolDispatcher(Router):
         action: dict[str, Any],
         trace_id: str,
     ) -> FileUpdate | None:
+        # 兼容新旧格式：tool/arguments (新) 和 command/params (旧)
         tool_name = str(action.get("tool", action.get("command", "")))
         arguments = action.get("arguments", action.get("params", {}))
         if not isinstance(arguments, dict):

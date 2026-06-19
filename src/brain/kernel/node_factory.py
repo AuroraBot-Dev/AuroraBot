@@ -72,6 +72,7 @@ NODE_NEEDS_HOST: frozenset[str] = frozenset(
 NODE_NEEDS_CLIENT_MANAGER: frozenset[str] = frozenset(
     {
         "mcp_tool_dispatcher",
+        "externalizer",
     }
 )
 
