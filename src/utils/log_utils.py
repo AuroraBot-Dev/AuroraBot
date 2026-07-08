@@ -16,7 +16,9 @@ from src.config import Config
 
 try:
     from concurrent_log_handler import ConcurrentRotatingFileHandler
-except ModuleNotFoundError:
+except Exception:  # noqa: BLE001 — 回退到标准 RotatingFileHandler 永远安全
+    # ModuleNotFoundError（未安装）、FileNotFoundError（Reasonix 沙箱残留 TMP 环境变量）
+    # 或其他环境问题导致无法加载时，回退到标准 RotatingFileHandler
     ConcurrentRotatingFileHandler = RotatingFileHandler
 
 

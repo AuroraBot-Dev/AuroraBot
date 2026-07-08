@@ -1,4 +1,4 @@
-﻿"""Runtime — AuroraBot Brain 运行时管理。
+"""Runtime — AuroraBot Brain 运行时管理。
 
 负责启动、运行、关闭 Brain Circuit、MCP 连接和事件桥接。
 """

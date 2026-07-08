@@ -1,4 +1,4 @@
-﻿"""MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
+"""MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
 
 从 ``pipeline/action_queue/*.json`` 读取 Externalizer 产出的行动意图，
 通过 ``MCPClientManager.call_tool()`` 执行工具调用，并将结果写入

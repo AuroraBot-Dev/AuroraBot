@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.sandbox.base import SandboxResult
 from src.config import Config
+from src.sandbox.base import SandboxResult
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:

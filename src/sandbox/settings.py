@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from src.sandbox.base import SandboxConfigError
 from src.config import Config
+from src.sandbox.base import SandboxConfigError
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:

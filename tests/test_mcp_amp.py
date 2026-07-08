@@ -1,4 +1,4 @@
-﻿"""MCP 基础设施单元测试。"""
+"""MCP 基础设施单元测试。"""
 
 from __future__ import annotations
 

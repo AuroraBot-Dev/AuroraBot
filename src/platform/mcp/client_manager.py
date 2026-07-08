@@ -1,4 +1,4 @@
-﻿"""MCP Client Manager — Brain 侧的 MCP 连接管理。
+"""MCP Client Manager — Brain 侧的 MCP 连接管理。
 
 负责：
 - 建立与所有 MCP Server 的 stdio 连接

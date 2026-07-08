@@ -1,4 +1,4 @@
-﻿"""MCP ServerKit + ClientManager 单元测试。"""
+"""MCP ServerKit + ClientManager 单元测试。"""
 
 from __future__ import annotations
 

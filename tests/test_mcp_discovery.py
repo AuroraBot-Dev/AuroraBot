@@ -1,4 +1,4 @@
-﻿"""MCP 发现与 manifest 解析单元测试。"""
+"""MCP 发现与 manifest 解析单元测试。"""
 
 from __future__ import annotations
 

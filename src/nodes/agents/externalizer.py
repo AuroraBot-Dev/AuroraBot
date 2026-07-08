@@ -1,4 +1,4 @@
-﻿"""Externalizer —— 外化者：Pool A 第一人称决定 → Pool B JSON 动作。
+"""Externalizer —— 外化者：Pool A 第一人称决定 → Pool B JSON 动作。
 
 核心认知 Agent。读取 pipeline/internalized/*.json 触发信号后，
 扫描自我之流（now.md）中最近的思考，识别明确的行动意图

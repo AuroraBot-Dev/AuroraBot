@@ -1,4 +1,4 @@
-﻿"""EventBridge — 将 MCP 事件桥接到 Brain 文件总线。
+"""EventBridge — 将 MCP 事件桥接到 Brain 文件总线。
 
 消费 ``client_manager.notification_queue`` 中的事件，写入
 ``inbox/pending/event_*_*.json``。支持两种来源：

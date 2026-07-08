@@ -10,7 +10,9 @@ import asyncio
 import contextlib
 import os
 import signal
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.utils.log_utils import get_logger
@@ -19,6 +21,34 @@ if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
 
 logger = get_logger("MCPServerKit")
+
+
+def _ensure_tempdir() -> Path:
+    """确保有一个可用的临时目录。
+
+    在沙箱/受限环境中，系统 TEMP 可能不可写（``os.access`` 返回 True 但
+    实际创建文件失败），导致 ``asyncio.create_subprocess_exec`` 在 Windows
+    上创建命名管道时失败。此函数检测并回退到当前工作目录。
+
+    Returns:
+        可用的临时目录路径。
+    """
+    try:
+        # 尝试在默认 temp 目录创建文件验证可用性
+        d = Path(tempfile.gettempdir())
+        test_file = d / f"_aurora_tmp_test_{os.getpid()}.tmp"
+        test_file.write_text("")
+        test_file.unlink()
+    except (OSError, FileNotFoundError):
+        pass
+    else:
+        return d
+
+    # 回退到 CWD（已验证可写）
+    cwd = Path.cwd()
+    logger.debug("系统 TEMP 不可写，回退使用 CWD: %s", cwd)
+    tempfile.tempdir = str(cwd)
+    return cwd
 
 
 @dataclass(slots=True)
@@ -84,6 +114,8 @@ class MCPServerKit:
             msg = f"Server {spec.key} 没有配置启动命令"
             raise RuntimeError(msg)
 
+        _ensure_tempdir()
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *spec.command,
@@ -95,7 +127,7 @@ class MCPServerKit:
                 stderr=None,
             )
         except FileNotFoundError as exc:
-            msg = f"启动 Server {spec.key} 失败: 命令未找到 {spec.command}"
+            msg = f"启动 Server {spec.key} 失败: 命令或临时目录不可用 {spec.command} — {exc}"
             raise RuntimeError(msg) from exc
         except OSError as exc:
             msg = f"启动 Server {spec.key} 失败: {exc}"
