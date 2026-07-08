@@ -7,11 +7,10 @@
 - **Stack**: Python 3.12, LiteLLM, ChromaDB, mem0, MCP SDK (`mcp[cli]>=1.27`)
 - **Package manager**: `uv` (lockfile `uv.lock`)
 - **Entry points**:
-  - `bot.py` — NoneBot (QQ/OneBot 可选 Connector)
-  - `python -m src.aurora.main` — Core standalone (不依赖 NoneBot)
+  - `bot.py` — Core standalone
 - **Config**: `.env` (loaded by `src/config.py`), `apps/config.yml` (per-app MCP 配置)
-- **CI**: GitHub Actions — `ruff check`, `ruff format --check`, `pyright src/`, `pytest --cov=src`
-- **NoneBot 定位**: Core 不依赖 NoneBot。NoneBot 是 QQ/OneBot 接入的 **可选 Connector**，不是主框架。参见 `docs/reports/nonebot-decoupling-feasibility.md`
+- **CI**: GitHub Actions — `ruff check bot.py src/ tests/`, `ruff format --check bot.py src/ tests/`, `pyright bot.py src/`, `pytest --cov=src`
+- **QQ/OneBot 定位**: 当前仓库不内置 QQ/OneBot Connector；如需接入，应作为外部 MCP App Server 提供。
 - **Runtime version**: `v0.4.0`
 
 ## Commands
@@ -19,18 +18,17 @@
 | Purpose      | Command                                  |
 | ------------ | ---------------------------------------- |
 | Install deps | `uv sync --group dev` (CI: `--locked`)   |
-| Run (NoneBot)| `uv run python bot.py`                   |
-| Run (standalone) | `uv run python -m src.aurora.main`   |
+| Run (standalone) | `uv run python bot.py`              |
 | Tests        | `uv run pytest --cov=src`                |
-| Lint         | `uv run ruff check src/ tests/`          |
-| Format       | `uv run ruff format src/ tests/`         |
-| Format check | `uv run ruff format --check src/ tests/` |
-| Type check   | `uv run pyright src/`                    |
+| Lint         | `uv run ruff check bot.py src/ tests/`          |
+| Format       | `uv run ruff format bot.py src/ tests/`         |
+| Format check | `uv run ruff format --check bot.py src/ tests/` |
+| Type check   | `uv run pyright bot.py src/`                    |
 
 ## Architecture
 
 ```
-bot.py / src/aurora/main.py   → 入口 (NoneBot / standalone)
+bot.py                        → Core standalone 入口
 src/config.py                 → 中央配置 from .env, path constants, ensure_dirs()
 │
 ├── src/brain/                → Cognitive Engine (CortexForge)
@@ -61,10 +59,9 @@ src/config.py                 → 中央配置 from .env, path constants, ensure
 ├── apps/                     → 内建 MCP 应用
 │   ├── aurora-app-diary/     → 日记 (已 MCP 化)
 │   ├── aurora-app-clock/     → 时钟/闹钟/定时器 (已 MCP 化)
-│   ├── aurora-app-weather/   → 天气查询 (已 MCP 化)
-│   └── aurora-app-qq/        → QQ 适配器 (NoneBot 强耦合，建议用户安装)
+│   └── aurora-app-weather/   → 天气查询 (已 MCP 化)
 │
-├── tests/                    → pytest suite (当前 220 tests)
+├── tests/                    → pytest suite (当前 224 tests)
 └── data/                     → Runtime state: kernel/, memory/, app_data/
 ```
 

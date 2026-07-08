@@ -131,11 +131,9 @@ AuroraBot is built upon the shoulders of many outstanding open-source projects:
 
 | Project                                           | Description                         | License                                                                             |
 | ------------------------------------------------- | ----------------------------------- | :---------------------------------------------------------------------------------- |
-| [NoneBot2](https://github.com/nonebot/nonebot2)   | Cross-platform Python bot framework | [MIT License](https://github.com/nonebot/nonebot2/blob/master/LICENSE)              |
 | [LiteLLM](https://github.com/BerriAI/litellm)     | Unified LLM API call layer          | [LICENSE](https://github.com/BerriAI/litellm/blob/litellm_internal_staging/LICENSE) |
 | [mem0](https://github.com/mem0ai/mem0)            | Agent memory infrastructure         | [Apache License 2.0](https://github.com/mem0ai/mem0/blob/main/LICENSE)              |
 | [ChromaDB](https://github.com/chroma-core/chroma) | Open-source vector database         | [Apache License 2.0](https://github.com/chroma-core/chroma/blob/main/LICENSE)       |
-| [OneBot](https://github.com/botuniverse/onebot)   | Unified chatbot interface standard  | [MIT License](https://github.com/botuniverse/onebot/blob/main/LICENSE)              |
 | [VitePress](https://github.com/vuejs/vitepress)   | Documentation site generator        | [MIT License](https://github.com/vuejs/vitepress/blob/main/LICENSE)                 |
 
 Special thanks to **[MaiBot](https://github.com/MaiM-with-u/MaiBot)** for providing architectural inspiration and design references.

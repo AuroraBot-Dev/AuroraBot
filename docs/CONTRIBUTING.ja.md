@@ -32,11 +32,11 @@ uv run python bot.py
 | コマンド                         | 用途                                   |
 | -------------------------------- | -------------------------------------- |
 | `uv run pytest --cov=src`        | カバレッジ付きでテスト実行             |
-| `uv run ruff check src/ tests/`  | コードリント                           |
-| `uv run ruff format src/ tests/` | コードフォーマット                     |
-| `uv run pyright src/`            | 型チェック（既定では `tests/` を除外） |
+| `uv run ruff check bot.py src/ tests/`  | コードリント                           |
+| `uv run ruff format bot.py src/ tests/` | コードフォーマット                     |
+| `uv run pyright bot.py src/`            | 型チェック（既定では `tests/` を除外） |
 
-> PR を提出する前に、`uv run pytest --cov=src`、`uv run ruff check src/ tests/`、`uv run pyright src/` を実行することを推奨します。CI パイプラインでも、カバレッジ付きの `pytest`、`ruff check`、`ruff format --check`、`pyright src/` が実行され、コードスタイル・型チェック・基本的な回帰確認がそろうようにしています。
+> PR を提出する前に、`uv run pytest --cov=src`、`uv run ruff check bot.py src/ tests/`、`uv run pyright bot.py src/` を実行することを推奨します。CI パイプラインでも、カバレッジ付きの `pytest`、`ruff check`、`ruff format --check`、`pyright bot.py src/` が実行され、コードスタイル・型チェック・基本的な回帰確認がそろうようにしています。
 
 ## コントリビューションフロー
 

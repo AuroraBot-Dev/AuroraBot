@@ -15,8 +15,6 @@ from typing import TYPE_CHECKING
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from types import ModuleType
-
     from src.brain.runtime import RuntimeState
 
 logger = get_logger("Localhost")
@@ -40,11 +38,6 @@ _MODULES_TO_RELOAD: list[str] = [
     _SELF_MODULE,
 ]
 
-_MODULES_TO_SKIP_RELOAD: dict[str, str] = {
-    "src.config": "该模块由 NoneBot 插件系统管理",
-    "src.main": "该模块由 NoneBot 插件系统管理",
-}
-
 
 class HotReloadError(RuntimeError):
     def __init__(
@@ -57,28 +50,9 @@ class HotReloadError(RuntimeError):
         self.runtime = runtime
 
 
-def _should_skip_reload(name: str, module: ModuleType) -> str | None:
-    if name in _MODULES_TO_SKIP_RELOAD:
-        return _MODULES_TO_SKIP_RELOAD[name]
-
-    spec = getattr(module, "__spec__", None)
-    loader = getattr(spec, "loader", None)
-    if loader is None:
-        return None
-
-    loader_module = getattr(loader.__class__, "__module__", "")
-    if loader_module.startswith("nonebot.plugin"):
-        return "该模块由 NoneBot 插件加载器管理"
-    return None
-
-
 def _reload_module(name: str) -> None:
     try:
         module = importlib.import_module(name)
-        skip_reason = _should_skip_reload(name, module)
-        if skip_reason is not None:
-            logger.info(f"跳过模块重载 {name}: {skip_reason}")
-            return
         importlib.reload(module)
         logger.info(f"已重载模块 {name}")
     except Exception:

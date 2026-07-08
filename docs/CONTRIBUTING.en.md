@@ -32,11 +32,11 @@ uv run python bot.py
 | Command                          | Purpose                                   |
 | -------------------------------- | ----------------------------------------- |
 | `uv run pytest --cov=src`        | Run tests with coverage                   |
-| `uv run ruff check src/ tests/`  | Lint code                                 |
-| `uv run ruff format src/ tests/` | Format code                               |
-| `uv run pyright src/`            | Type-check (`tests/` excluded by default) |
+| `uv run ruff check bot.py src/ tests/`  | Lint code                                 |
+| `uv run ruff format bot.py src/ tests/` | Format code                               |
+| `uv run pyright bot.py src/`            | Type-check (`tests/` excluded by default) |
 
-> Before submitting a PR, it is recommended to run `uv run pytest --cov=src`, `uv run ruff check src/ tests/`, and `uv run pyright src/`. The CI pipeline runs coverage-enabled `pytest`, `ruff check`, `ruff format --check`, and `pyright src/` to keep style, type checking, and basic regression checks aligned.
+> Before submitting a PR, it is recommended to run `uv run pytest --cov=src`, `uv run ruff check bot.py src/ tests/`, and `uv run pyright bot.py src/`. The CI pipeline runs coverage-enabled `pytest`, `ruff check`, `ruff format --check`, and `pyright bot.py src/` to keep style, type checking, and basic regression checks aligned.
 
 ## Contribution Workflow
 

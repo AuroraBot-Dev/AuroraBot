@@ -131,11 +131,9 @@ AuroraBot は多くの優れたオープンソースプロジェクトの上に�
 
 | プロジェクト                                      | 説明                                               | ライセンス                                                                          |
 | ------------------------------------------------- | -------------------------------------------------- | :---------------------------------------------------------------------------------- |
-| [NoneBot2](https://github.com/nonebot/nonebot2)   | クロスプラットフォーム Python ボットフレームワーク | [MIT License](https://github.com/nonebot/nonebot2/blob/master/LICENSE)              |
 | [LiteLLM](https://github.com/BerriAI/litellm)     | 統合 LLM API コール層                              | [LICENSE](https://github.com/BerriAI/litellm/blob/litellm_internal_staging/LICENSE) |
 | [mem0](https://github.com/mem0ai/mem0)            | エージェント記憶基盤                               | [Apache License 2.0](https://github.com/mem0ai/mem0/blob/main/LICENSE)              |
 | [ChromaDB](https://github.com/chroma-core/chroma) | オープンソースベクトルデータベース                 | [Apache License 2.0](https://github.com/chroma-core/chroma/blob/main/LICENSE)       |
-| [OneBot](https://github.com/botuniverse/onebot)   | 統一チャットボットインターフェース標準             | [MIT License](https://github.com/botuniverse/onebot/blob/main/LICENSE)              |
 | [VitePress](https://github.com/vuejs/vitepress)   | ドキュメントサイトジェネレーター                   | [MIT License](https://github.com/vuejs/vitepress/blob/main/LICENSE)                 |
 
 **[MaiBot](https://github.com/MaiM-with-u/MaiBot)** には、アーキテクチャのインスピレーションと設計参考を提供していただき、特別に感謝いたします。

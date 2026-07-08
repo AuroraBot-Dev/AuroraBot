@@ -32,11 +32,11 @@ uv run python bot.py
 | 命令                             | 用途                            |
 | -------------------------------- | ------------------------------- |
 | `uv run pytest --cov=src`        | 运行测试并统计覆盖率            |
-| `uv run ruff check src/ tests/`  | 代码检查                        |
-| `uv run ruff format src/ tests/` | 代码格式化                      |
-| `uv run pyright src/`            | 类型检查（默认不检查 `tests/`） |
+| `uv run ruff check bot.py src/ tests/`  | 代码检查                        |
+| `uv run ruff format bot.py src/ tests/` | 代码格式化                      |
+| `uv run pyright bot.py src/`            | 类型检查（默认不检查 `tests/`） |
 
-> 建议在提交 PR 前至少运行 `uv run pytest --cov=src`、`uv run ruff check src/ tests/` 和 `uv run pyright src/`。CI 流水线会执行带覆盖率的 `pytest`、`ruff check`、`ruff format --check` 与 `pyright src/`，确保代码风格一致、类型检查稳定且没有明显回归。
+> 建议在提交 PR 前至少运行 `uv run pytest --cov=src`、`uv run ruff check bot.py src/ tests/` 和 `uv run pyright bot.py src/`。CI 流水线会执行带覆盖率的 `pytest`、`ruff check`、`ruff format --check` 与 `pyright bot.py src/`，确保代码风格一致、类型检查稳定且没有明显回归。
 
 ## 贡献流程
 

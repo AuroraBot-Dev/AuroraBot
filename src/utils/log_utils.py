@@ -52,7 +52,7 @@ def _create_stream_handler(
         from rich.theme import Theme
 
         class _BracketRichHandler(RichHandler):
-            """在 Rich 渲染前给 levelname 加方括号，对齐 NoneBot 的 [LEVEL] 风格。"""
+            """在 Rich 渲染前给 levelname 加方括号，保持控制台日志紧凑。"""
 
             def emit(self, record: logging.LogRecord) -> None:
                 original = record.levelname
