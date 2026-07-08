@@ -54,6 +54,9 @@ class Config:
     APP_DATA_DIR = DATA_DIR / "app_data"
     MEMORY_DATA_DIR = DATA_DIR / "memory"
     KERNEL_DATA_DIR = DATA_DIR / "kernel"
+    SANDBOX_DIR = DATA_DIR / "sandbox"
+    SANDBOX_TEMP_DIR = SANDBOX_DIR / "temp"
+    SANDBOX_OUTPUT_DIR = SANDBOX_DIR / "output"
 
     PROMPTS_DIR = SRC_ROOT / "prompts"
     TOPOLOGY_CONFIG = SRC_ROOT / "nodes" / "topology.yaml"
@@ -100,6 +103,11 @@ class Config:
     MEMORY_COLLECTION_NAME: str = os.getenv("MEMORY_COLLECTION_NAME", "mem_openai")
     MEMORY_MODEL_PROVIDER: str = os.getenv("MEMORY_MODEL_PROVIDER", "litellm")
 
+    # Sandbox 配置
+    SANDBOX_EXEC_TIMEOUT: float = float(os.getenv("SANDBOX_EXEC_TIMEOUT", "30"))
+    SANDBOX_MAX_MEMORY_MB: int = int(os.getenv("SANDBOX_MAX_MEMORY_MB", "256"))
+    SANDBOX_MAX_OUTPUT_SIZE: int = int(os.getenv("SANDBOX_MAX_OUTPUT_SIZE", str(1024 * 1024)))
+
     @staticmethod
     def ensure_dirs() -> None:
         for path in (
@@ -110,6 +118,9 @@ class Config:
             Config.PROMPTS_DIR,
             Config.KERNEL_DATA_DIR,
             Config.MEMORY_DATA_DIR,
+            Config.SANDBOX_DIR,
+            Config.SANDBOX_TEMP_DIR,
+            Config.SANDBOX_OUTPUT_DIR,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
