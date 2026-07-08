@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from src.brain.kernel.base import (
+from src.kernel.base import (
     FileDescriptor,
     FileEvent,
     FilePattern,
@@ -13,8 +13,8 @@ from src.brain.kernel.base import (
     Node,
     NodeState,
 )
-from src.brain.kernel.circuit import Circuit
-from src.brain.kernel.event_bus import FileEventBus
+from src.kernel.circuit import Circuit
+from src.kernel.event_bus import FileEventBus
 
 
 class _RecordingNode(Node):

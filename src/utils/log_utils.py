@@ -214,6 +214,8 @@ def get_logger(
     logger = logging.getLogger(name)
     if logger.handlers:
         logger.setLevel(level)
+        for handler in logger.handlers:
+            handler.setLevel(level)
         if not hasattr(logger, "decorate"):
             cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger

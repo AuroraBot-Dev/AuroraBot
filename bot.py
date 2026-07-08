@@ -14,8 +14,8 @@ import contextlib
 import signal
 from typing import TYPE_CHECKING, Any
 
-from src.brain.localhost import handle_control_command, run_console_control_loop
-from src.brain.runtime import RuntimeState, shutdown_runtime, start_runtime
+from src.localhost import handle_control_command, run_console_control_loop
+from src.runtime import RuntimeState, shutdown_runtime, start_runtime
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:

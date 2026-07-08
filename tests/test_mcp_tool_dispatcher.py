@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.brain.nodes.routers.mcp_tool_dispatcher import MCPToolDispatcher
+from src.nodes.routers.mcp_tool_dispatcher import MCPToolDispatcher
 
 pytestmark = pytest.mark.anyio
 

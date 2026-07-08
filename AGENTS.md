@@ -31,18 +31,17 @@
 bot.py                        → Core standalone 入口
 src/config.py                 → 中央配置 from .env, path constants, ensure_dirs()
 │
-├── src/brain/                → Cognitive Engine (CortexForge)
-│   ├── kernel/               → Node/Agent/Router 基类, Circuit, FileEventBus, NodeFactory
-│   ├── memory/               → L1 (working/FIFO), L2 (episodic/JSON), L3 (semantic/ChromaDB)
-│   ├── runtime.py            → 运行时管理：启动/关闭 Circuit + MCP + 事件桥接
-│   ├── nodes/                → 认知节点 (topology.yaml 声明)
-│   │   ├── agents/           → internalizer, externalizer, memory_consolidator 等
-│   │   ├── routers/          → message_preprocessor, mcp_tool_dispatcher, heartbeat 等
-│   │   ├── event_bridge.py   → MCP 事件桥接 (notification → inbox)
-│   │   └── self_stream.py    → 自我意识流 (自由联想引擎)
-│   ├── ai/                   → LLM gateway (LiteLLM), models, providers
-│   ├── prompts/              → 提示词模板
-│   └── localhost/            → 运行时内置交互式控制台
+├── src/runtime.py            → 运行时管理：启动/关闭 Circuit + MCP + 事件桥接
+├── src/kernel/               → Node/Agent/Router 基类, Circuit, FileEventBus, NodeFactory
+├── src/memory/               → L1 (working/FIFO), L2 (episodic/JSON), L3 (semantic/ChromaDB)
+├── src/nodes/                → 认知节点 (topology.yaml 声明)
+│   ├── agents/               → internalizer, externalizer, memory_consolidator 等
+│   ├── routers/              → message_preprocessor, mcp_tool_dispatcher, heartbeat 等
+│   ├── event_bridge.py       → MCP 事件桥接 (notification → inbox)
+│   └── self_stream.py        → 自我意识流 (自由联想引擎)
+├── src/ai/                   → LLM gateway (LiteLLM), models, providers
+├── src/prompts/              → 提示词模板
+├── src/localhost/            → 运行时内置交互式控制台
 │
 ├── src/platform/             → MCP Host Layer (已迁移完成)
 │   └── mcp_kit/              → MCP 平台层
@@ -79,7 +78,7 @@ External event → inbox/pending/event_*.json
   → mcp_tool_dispatcher
 ```
 
-Nodes communicate exclusively through files (FileEventBus). Topology: `src/brain/nodes/topology.yaml`.
+Nodes communicate exclusively through files (FileEventBus). Topology: `src/nodes/topology.yaml`.
 
 ### Runtime 启动顺序
 

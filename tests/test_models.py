@@ -8,7 +8,7 @@ import unittest
 import urllib.error
 from unittest.mock import MagicMock, patch
 
-from src.brain.ai import models as models_module
+from src.ai import models as models_module
 
 # ═══════════════════════════════════════════════════════════
 # 测试数据

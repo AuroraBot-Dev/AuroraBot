@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.brain.ai.providers import (
+from src.ai.providers import (
     SILICONFLOW,
     ProviderConfig,
     _registry,

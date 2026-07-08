@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.brain.nodes.self_stream import SelfStream
+from src.nodes.self_stream import SelfStream
 
 
 class SelfStreamInitTest(unittest.TestCase):

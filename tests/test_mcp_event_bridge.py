@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from src.brain.nodes.event_bridge import run_mcp_event_bridge
-from src.brain.nodes.routers.message_preprocessor import MessagePreprocessor
+from src.nodes.event_bridge import run_mcp_event_bridge
+from src.nodes.routers.message_preprocessor import MessagePreprocessor
 
 # ── _extract_event_data ──
 

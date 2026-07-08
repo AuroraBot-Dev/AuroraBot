@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.brain.memory import UnifiedMemoryManager, get_memory_manager
-from src.brain.memory.base import MemoryContext, MemoryItem
-from src.brain.memory.episodic import EpisodicMemory
-from src.brain.memory.semantic import SemanticMemory
-from src.brain.memory.working import WorkingMemory
+from src.memory import UnifiedMemoryManager, get_memory_manager
+from src.memory.base import MemoryContext, MemoryItem
+from src.memory.episodic import EpisodicMemory
+from src.memory.semantic import SemanticMemory
+from src.memory.working import WorkingMemory
 
 # ═══════════════════════════════════════════════════════════════
 # MemoryItem
@@ -410,7 +410,7 @@ class SemanticMemoryTest(unittest.TestCase):
                 "_missing_credentials_reason",
                 return_value="未配置 OPENAI_API_KEY",
             ),
-            patch("src.brain.memory.semantic.logger.warning") as mock_warning,
+            patch("src.memory.semantic.logger.warning") as mock_warning,
         ):
             stored = mem.extract_and_store("hello", "u1")
 
@@ -425,7 +425,7 @@ class SemanticMemoryTest(unittest.TestCase):
                 "_missing_credentials_reason",
                 return_value="未配置 OPENAI_API_KEY",
             ),
-            patch("src.brain.memory.semantic.logger.warning") as mock_warning,
+            patch("src.memory.semantic.logger.warning") as mock_warning,
         ):
             results = mem.search_facts("hello", "u1")
 

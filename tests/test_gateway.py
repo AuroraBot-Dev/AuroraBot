@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import litellm.exceptions
 
-from src.brain.ai.gateway import (
+from src.ai.gateway import (
     ROLE_FAST,
     ROLE_MULTIMODAL,
     ROLE_QUALITY,
@@ -219,7 +219,7 @@ class GatewayExceptionConversionTest(unittest.TestCase):
         async def scenario() -> None:
             with (
                 patch(
-                    "src.brain.ai.gateway.missing_credentials_reason",
+                    "src.ai.gateway.missing_credentials_reason",
                     return_value=None,
                 ),
                 patch(
@@ -328,7 +328,7 @@ class GatewayExceptionConversionTest(unittest.TestCase):
         async def scenario() -> None:
             with (
                 patch(
-                    "src.brain.ai.gateway.missing_credentials_reason",
+                    "src.ai.gateway.missing_credentials_reason",
                     return_value=None,
                 ),
                 patch(
@@ -349,7 +349,7 @@ class GatewayExceptionConversionTest(unittest.TestCase):
         async def scenario() -> None:
             with (
                 patch(
-                    "src.brain.ai.gateway.missing_credentials_reason",
+                    "src.ai.gateway.missing_credentials_reason",
                     return_value="未配置 OPENAI_API_KEY，无法调用模型 openai/gpt-4o-mini",
                 ),
                 patch("litellm.acompletion", new=AsyncMock()) as mock_completion,
@@ -370,7 +370,7 @@ class GatewayExceptionConversionTest(unittest.TestCase):
 
 class CostTrackerTest(unittest.TestCase):
     def test_summary_aggregates_by_role_and_model(self) -> None:
-        from src.brain.ai.gateway import CostTracker
+        from src.ai.gateway import CostTracker
 
         tracker = CostTracker()
 
@@ -393,7 +393,7 @@ class CostTrackerTest(unittest.TestCase):
 
 class TaskManagerTest(unittest.TestCase):
     def test_create_task_returns_generation_task(self) -> None:
-        from src.brain.ai.gateway import TaskManager
+        from src.ai.gateway import TaskManager
 
         async def scenario() -> None:
             tm = TaskManager()
@@ -410,7 +410,7 @@ class TaskManagerTest(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_abort_nonexistent_returns_false(self) -> None:
-        from src.brain.ai.gateway import TaskManager
+        from src.ai.gateway import TaskManager
 
         async def scenario() -> None:
             tm = TaskManager()
@@ -424,7 +424,7 @@ class TaskManagerTest(unittest.TestCase):
 
 class GenerationTaskTest(unittest.TestCase):
     def test_plain_returns_content(self) -> None:
-        from src.brain.ai.gateway import TaskManager
+        from src.ai.gateway import TaskManager
 
         async def scenario() -> None:
             tm = TaskManager()
@@ -441,7 +441,7 @@ class GenerationTaskTest(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_plain_returns_empty_before_await(self) -> None:
-        from src.brain.ai.gateway import TaskManager
+        from src.ai.gateway import TaskManager
 
         async def scenario() -> None:
             tm = TaskManager()
@@ -458,7 +458,7 @@ class GenerationTaskTest(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_done_returns_true_after_completion(self) -> None:
-        from src.brain.ai.gateway import TaskManager
+        from src.ai.gateway import TaskManager
 
         async def scenario() -> None:
             tm = TaskManager()

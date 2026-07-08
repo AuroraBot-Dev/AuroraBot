@@ -1,15 +1,42 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-load_dotenv(PROJECT_ROOT / ".env")
-if (PROJECT_ROOT / ".env.dev").exists():
-    load_dotenv(PROJECT_ROOT / ".env.dev", override=True)
-if (PROJECT_ROOT / ".env.prod").exists():
-    load_dotenv(PROJECT_ROOT / ".env.prod", override=False)
+_ENV_FILES = (
+    (PROJECT_ROOT / ".env", False),
+    (PROJECT_ROOT / ".env.dev", True),
+    (PROJECT_ROOT / ".env.prod", False),
+)
+_DOTENV_MANAGED_SOURCES: dict[str, str] = dict(globals().get("_DOTENV_MANAGED_SOURCES", {}))
+
+
+def reload_env() -> None:
+    """Reload project dotenv files while preserving external environment precedence."""
+    parsed_files: dict[str, dict[str, str | None]] = {}
+    for path, _override in _ENV_FILES:
+        parsed_files[str(path)] = dict(dotenv_values(path)) if path.exists() else {}
+
+    for key, source in list(_DOTENV_MANAGED_SOURCES.items()):
+        if key not in parsed_files.get(source, {}):
+            os.environ.pop(key, None)
+            del _DOTENV_MANAGED_SOURCES[key]
+
+    for path, override in _ENV_FILES:
+        source = str(path)
+        for key, value in parsed_files[source].items():
+            if value is None:
+                continue
+            if override or key not in os.environ or _DOTENV_MANAGED_SOURCES.get(key) == source:
+                os.environ[key] = value
+                _DOTENV_MANAGED_SOURCES[key] = source
+
+
+reload_env()
 
 
 def _get_bool(name: str, default: bool) -> bool:  # noqa: FBT001
@@ -28,8 +55,8 @@ class Config:
     MEMORY_DATA_DIR = DATA_DIR / "memory"
     KERNEL_DATA_DIR = DATA_DIR / "kernel"
 
-    PROMPTS_DIR = SRC_ROOT / "brain" / "prompts"
-    TOPOLOGY_CONFIG = SRC_ROOT / "brain" / "nodes" / "topology.yaml"
+    PROMPTS_DIR = SRC_ROOT / "prompts"
+    TOPOLOGY_CONFIG = SRC_ROOT / "nodes" / "topology.yaml"
 
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
