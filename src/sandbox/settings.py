@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from src.brain.sandbox.base import SandboxConfigError
+from src.sandbox.base import SandboxConfigError
 from src.config import Config
 from src.utils.log_utils import get_logger
 

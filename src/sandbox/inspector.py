@@ -8,11 +8,11 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING, ClassVar
 
-from src.brain.sandbox.base import SecurityViolation
+from src.sandbox.base import SecurityViolation
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.sandbox.policy import AccessPolicy, AccessPolicySnapshot
+    from src.sandbox.policy import AccessPolicy, AccessPolicySnapshot
 
 logger = get_logger("CodeInspector")
 

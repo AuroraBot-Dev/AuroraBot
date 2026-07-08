@@ -15,13 +15,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.brain.sandbox.base import SandboxResult
+from src.sandbox.base import SandboxResult
 from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.sandbox.inspector import CodeInspector
-    from src.brain.sandbox.policy import AccessPolicy, AccessPolicySnapshot
+    from src.sandbox.inspector import CodeInspector
+    from src.sandbox.policy import AccessPolicy, AccessPolicySnapshot
 
 logger = get_logger("SandboxExecutor")
 

@@ -30,8 +30,8 @@ from typing import Any
 
 import yaml
 
-from src.platform.mcp_kit.manifest import read_mcp_manifest
-from src.platform.mcp_kit.server_spec import MCPServerSpec
+from src.platform.mcp.manifest import read_mcp_manifest
+from src.platform.mcp.server_spec import MCPServerSpec
 
 # 项目根目录（通过 ``APPS_DIR`` 环境变量或相对于此文件向上查找）
 _PROJECT_ROOT: Path | None = None

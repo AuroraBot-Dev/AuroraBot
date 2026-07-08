@@ -8,9 +8,9 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from src.brain.sandbox.base import SandboxConfigError, SecurityViolation
-from src.brain.sandbox.policy import AccessPolicy
-from src.brain.sandbox.settings import SandboxConfig
+from src.sandbox.base import SandboxConfigError, SecurityViolation
+from src.sandbox.policy import AccessPolicy
+from src.sandbox.settings import SandboxConfig
 
 # ═══════════════════════════════════════════════════════════════
 # SandboxConfig
@@ -237,7 +237,7 @@ class AccessPolicySnapshotTest(unittest.TestCase):
         )
         policy = AccessPolicy(config)
         snapshot = policy.snapshot()
-        from src.brain.sandbox.policy import AccessPolicySnapshot
+        from src.sandbox.policy import AccessPolicySnapshot
 
         self.assertIsInstance(snapshot, AccessPolicySnapshot)
         self.assertIsInstance(snapshot.whitelist_modules, frozenset)
@@ -293,7 +293,7 @@ class CodeInspectorDangerousNodeTest(unittest.TestCase):
             blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__", "globals", "locals"}),
         )
         self.policy = AccessPolicy(config)
-        from src.brain.sandbox.inspector import CodeInspector
+        from src.sandbox.inspector import CodeInspector
 
         self.inspector = CodeInspector(self.policy)
 
@@ -394,7 +394,7 @@ class CodeInspectorAdvancedTest(unittest.TestCase):
             blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__", "globals", "locals", "open"}),
         )
         self.policy = AccessPolicy(config)
-        from src.brain.sandbox.inspector import CodeInspector
+        from src.sandbox.inspector import CodeInspector
 
         self.inspector = CodeInspector(self.policy)
 
@@ -551,10 +551,10 @@ class SandboxExecutorTest(unittest.TestCase):
             ),
         )
         self.policy = AccessPolicy(config)
-        from src.brain.sandbox.inspector import CodeInspector
+        from src.sandbox.inspector import CodeInspector
 
         self.inspector = CodeInspector(self.policy)
-        from src.brain.sandbox.executor import SandboxExecutor
+        from src.sandbox.executor import SandboxExecutor
 
         self.executor = SandboxExecutor(self.policy, self.inspector)
 
@@ -620,7 +620,7 @@ class ConfigReloaderTest(unittest.TestCase):
         def on_update(cfg: SandboxConfig) -> None:
             configs_received.append(cfg)
 
-        from src.brain.sandbox.settings import ConfigReloader
+        from src.sandbox.settings import ConfigReloader
 
         reloader = ConfigReloader(path, callback=on_update)
         reloader.check_and_reload()
@@ -672,7 +672,7 @@ class ConfigReloaderTest(unittest.TestCase):
             path = Path(f.name)
 
         configs_received: list[SandboxConfig] = []
-        from src.brain.sandbox.settings import ConfigReloader
+        from src.sandbox.settings import ConfigReloader
 
         def on_config(cfg: SandboxConfig) -> None:
             configs_received.append(cfg)
@@ -695,7 +695,7 @@ class ConfigReloaderTest(unittest.TestCase):
 # SandboxManager
 # ═══════════════════════════════════════════════════════════════
 
-from src.brain.sandbox import SandboxManager, SandboxResult
+from src.sandbox import SandboxManager, SandboxResult
 
 
 class SandboxManagerTest(unittest.TestCase):
@@ -752,14 +752,14 @@ class SandboxManagerTest(unittest.TestCase):
 class SandboxManagerProxyTest(unittest.TestCase):
     def test_proxy_delegates_to_manager(self) -> None:
         """proxy 的属性访问应代理到真实 SandboxManager。"""
-        from src.brain.sandbox import _SandboxManagerProxy
+        from src.sandbox import _SandboxManagerProxy
 
         proxy = _SandboxManagerProxy()
         self.assertIsInstance(proxy, _SandboxManagerProxy)
 
     def test_get_sandbox_manager_returns_same_instance(self) -> None:
         """get_sandbox_manager 多次调用应返回同一单例。"""
-        from src.brain.sandbox import get_sandbox_manager
+        from src.sandbox import get_sandbox_manager
 
         a = get_sandbox_manager()
         b = get_sandbox_manager()
@@ -854,7 +854,7 @@ class SandboxManagerSecurityChainTest(unittest.TestCase):
             blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__", "globals", "locals"}),
         )
         self.policy = AccessPolicy(config)
-        from src.brain.sandbox.inspector import CodeInspector
+        from src.sandbox.inspector import CodeInspector
 
         self.inspector = CodeInspector(self.policy)
 
@@ -959,8 +959,8 @@ class SandboxExecutorArtifactTest(unittest.TestCase):
             blacklist_builtins=frozenset({"exec", "eval", "compile", "__import__"}),
         )
         self.policy = AccessPolicy(config)
-        from src.brain.sandbox.executor import SandboxExecutor
-        from src.brain.sandbox.inspector import CodeInspector
+        from src.sandbox.executor import SandboxExecutor
+        from src.sandbox.inspector import CodeInspector
 
         self.inspector = CodeInspector(self.policy)
         self.executor = SandboxExecutor(self.policy, self.inspector)

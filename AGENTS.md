@@ -42,6 +42,7 @@ src/config.py                 → 中央配置 from .env, path constants, ensure
 ├── src/ai/                   → LLM gateway (LiteLLM), models, providers
 ├── src/prompts/              → 提示词模板
 ├── src/localhost/            → 运行时内置交互式控制台
+├── src/sandbox/              → 代码沙箱执行环境
 │
 ├── src/platform/             → MCP Host Layer (已迁移完成)
 │   └── mcp_kit/              → MCP 平台层

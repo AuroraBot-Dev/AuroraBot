@@ -1,4 +1,4 @@
-"""MCP Client Manager — Brain 侧的 MCP 连接管理。
+﻿"""MCP Client Manager — Brain 侧的 MCP 连接管理。
 
 负责：
 - 建立与所有 MCP Server 的 stdio 连接
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from mcp.types import ServerNotification
     from mcp.types import Tool as MCPTool
 
-    from src.platform.mcp_kit.server_kit import MCPServerKit
+    from src.platform.mcp.server_kit import MCPServerKit
 
 logger = get_logger("MCPClientManager")
 
@@ -169,7 +169,7 @@ class MCPClientManager:
 
     async def _connect_one(self, key: str, server_proc: object) -> None:
         """建立到 ServerKit 已启动进程的单个 MCP 连接。"""
-        from src.platform.mcp_kit.server_kit import ServerProcess
+        from src.platform.mcp.server_kit import ServerProcess
 
         if not isinstance(server_proc, ServerProcess):
             return
@@ -461,7 +461,7 @@ class MCPClientManager:
 
     def tools_as_prompt_text(self) -> str:
         """将所有可用工具转为 prompt text。"""
-        from src.platform.mcp_kit.tool_schema import mcp_tools_to_prompt_text
+        from src.platform.mcp.tool_schema import mcp_tools_to_prompt_text
 
         parts: list[str] = []
         for server_key, tools in self.list_all_tools().items():

@@ -3,7 +3,7 @@
 提供安全的 Python 代码沙箱执行能力。
 用法::
 
-    from src.brain.sandbox import sandbox_manager, SandboxResult
+    from src.sandbox import sandbox_manager, SandboxResult
 
     result = await sandbox_manager.execute("print('hello world')")
     print(result.output)
@@ -17,11 +17,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.brain.sandbox.base import SandboxResult, SecurityViolation
-from src.brain.sandbox.executor import SandboxExecutor
-from src.brain.sandbox.inspector import CodeInspector
-from src.brain.sandbox.policy import AccessPolicy
-from src.brain.sandbox.settings import ConfigReloader, SandboxConfig
+from src.sandbox.base import SandboxResult, SecurityViolation
+from src.sandbox.executor import SandboxExecutor
+from src.sandbox.inspector import CodeInspector
+from src.sandbox.policy import AccessPolicy
+from src.sandbox.settings import ConfigReloader, SandboxConfig
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:

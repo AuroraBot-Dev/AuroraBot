@@ -13,7 +13,7 @@ from src.config import Config
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.brain.sandbox.settings import SandboxConfig
+    from src.sandbox.settings import SandboxConfig
 
 logger = get_logger("AccessPolicy")
 
