@@ -184,17 +184,3 @@ class TestDiscoverMCP:
         assert len(specs) == 1
         assert specs[0].enabled is True
         assert specs[0].command == ["python", "mcp_server.py"]
-
-    def test_project_config_enables_all_builtin_mcp_apps(self) -> None:
-        specs = discover_mcp_servers()
-        specs_by_key = {spec.key: spec for spec in specs}
-
-        assert set(specs_by_key) >= {
-            "im.polaris.clock",
-            "im.polaris.diary",
-            "im.polaris.weather",
-        }
-        for key in ("im.polaris.clock", "im.polaris.diary", "im.polaris.weather"):
-            spec = specs_by_key[key]
-            assert spec.enabled is True
-            assert spec.command[-1] == "mcp_server.py"

@@ -61,7 +61,7 @@ src/config.py                 → 中央配置 from .env, path constants, ensure
 │   ├── aurora-app-clock/     → 时钟/闹钟/定时器 (已 MCP 化)
 │   └── aurora-app-weather/   → 天气查询 (已 MCP 化)
 │
-├── tests/                    → pytest suite (当前 224 tests)
+├── tests/                    → pytest suite (当前 214 tests)
 └── data/                     → Runtime state: kernel/, memory/, app_data/
 ```
 
