@@ -1,4 +1,4 @@
-"""Runtime — AuroraBot Brain 运行时管理。
+﻿"""Runtime — AuroraBot Brain 运行时管理。
 
 负责启动、运行、关闭 Brain Circuit、MCP 连接和事件桥接。
 """
@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Any
 from src.config import Config
 from src.kernel.node_factory import build_circuit
 from src.nodes import run_mcp_event_bridge
-from src.platform.mcp_kit.client_manager import MCPClientManager
-from src.platform.mcp_kit.discovery import discover_mcp_servers
-from src.platform.mcp_kit.server_kit import MCPServerKit
+from src.platform.mcp.client_manager import MCPClientManager
+from src.platform.mcp.discovery import discover_mcp_servers
+from src.platform.mcp.server_kit import MCPServerKit
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:

@@ -1,4 +1,4 @@
-"""MCP 发现与 manifest 解析单元测试。"""
+﻿"""MCP 发现与 manifest 解析单元测试。"""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import pytest
 import yaml
 from yaml.scanner import ScannerError
 
-from src.platform.mcp_kit.discovery import _build_spec, discover_mcp_servers
-from src.platform.mcp_kit.manifest import read_mcp_manifest
+from src.platform.mcp.discovery import _build_spec, discover_mcp_servers
+from src.platform.mcp.manifest import read_mcp_manifest
 
 if TYPE_CHECKING:
     from pathlib import Path

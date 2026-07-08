@@ -1,4 +1,4 @@
-"""EventBridge — 将 MCP 事件桥接到 Brain 文件总线。
+﻿"""EventBridge — 将 MCP 事件桥接到 Brain 文件总线。
 
 消费 ``client_manager.notification_queue`` 中的事件，写入
 ``inbox/pending/event_*_*.json``。支持两种来源：
@@ -16,12 +16,12 @@ import uuid
 from typing import TYPE_CHECKING
 
 from src.kernel.base import FileDescriptor, FileUpdate
-from src.platform.mcp_kit.amp import amp_to_file_event, build_event_envelope, parse_amp_envelope
+from src.platform.amp import amp_to_file_event, build_event_envelope, parse_amp_envelope
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.kernel.circuit import Circuit
-    from src.platform.mcp_kit.client_manager import MCPClientManager
+    from src.platform.mcp.client_manager import MCPClientManager
 
 logger = get_logger("EventBridge")
 

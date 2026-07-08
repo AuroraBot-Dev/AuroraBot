@@ -44,12 +44,12 @@ src/config.py                 → 中央配置 from .env, path constants, ensure
 ├── src/localhost/            → 运行时内置交互式控制台
 ├── src/sandbox/              → 代码沙箱执行环境
 │
-├── src/platform/             → MCP Host Layer (已迁移完成)
-│   └── mcp_kit/              → MCP 平台层
+├── src/platform/             → 全平台兼容层
+│   ├── amp.py                → AMP envelope (共享协议，所有适配器共用)
+│   └── mcp/                  → MCP 协议适配器 (MCP ↔ AMP)
 │       ├── server_spec.py    → MCPServerSpec dataclass
 │       ├── server_kit.py     → MCP Server 进程生命周期管理
 │       ├── client_manager.py → MCP Client 连接 + tools/call + notification
-│       ├── amp.py            → AMP envelope (Host-side 兼容层)
 │       ├── tool_schema.py    → MCP Tool ↔ OpenAI schema 转换
 │       ├── manifest.py       → manifest.yaml MCP 扩展 (可选)
 │       └── discovery.py      → apps/config.yml 读取 + 外部 Server 位置无关配置

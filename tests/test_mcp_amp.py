@@ -1,4 +1,4 @@
-"""MCP 基础设施单元测试。"""
+﻿"""MCP 基础设施单元测试。"""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import uuid
 
 import pytest
 
-from src.platform.mcp_kit.amp import (
+from src.platform.amp import (
     amp_to_file_event,
     build_event_envelope,
     parse_amp_envelope,
 )
-from src.platform.mcp_kit.server_spec import MCPServerSpec
-from src.platform.mcp_kit.tool_schema import (
+from src.platform.mcp.server_spec import MCPServerSpec
+from src.platform.mcp.tool_schema import (
     mcp_tool_to_openai_tool,
     mcp_tools_to_prompt_text,
     normalize_tool_name,

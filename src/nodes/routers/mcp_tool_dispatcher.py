@@ -1,4 +1,4 @@
-"""MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
+﻿"""MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
 
 从 ``pipeline/action_queue/*.json`` 读取 Externalizer 产出的行动意图，
 通过 ``MCPClientManager.call_tool()`` 执行工具调用，并将结果写入
@@ -17,7 +17,7 @@ from src.kernel.state_store import kernel_data_dir, move_to_done
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.platform.mcp_kit.client_manager import MCPClientManager
+    from src.platform.mcp.client_manager import MCPClientManager
 
 logger = get_logger("MCPToolDispatcher")
 

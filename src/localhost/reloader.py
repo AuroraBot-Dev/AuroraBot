@@ -1,4 +1,4 @@
-"""Runtime 热重载与进程管理。
+﻿"""Runtime 热重载与进程管理。
 
 提供 ``/reload`` 和 ``/stop`` 控制台命令的实现。
 """
@@ -83,7 +83,7 @@ async def reload_runtime(*, runtime: RuntimeState) -> RuntimeState:
         from src.config import reload_env
 
         reload_env()
-        from src.platform.mcp_kit.discovery import discover_mcp_servers
+        from src.platform.mcp.discovery import discover_mcp_servers
 
         discover_mcp_servers()
     except Exception as exc:

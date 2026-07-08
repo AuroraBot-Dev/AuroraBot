@@ -1,4 +1,4 @@
-"""MCP ServerKit + ClientManager 单元测试。"""
+﻿"""MCP ServerKit + ClientManager 单元测试。"""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import asyncio
 import pytest
 from mcp.types import CallToolResult, TextContent
 
-from src.platform.mcp_kit.client_manager import ClientConnection, MCPClientManager
-from src.platform.mcp_kit.server_kit import MCPServerKit
-from src.platform.mcp_kit.server_spec import MCPServerSpec
+from src.platform.mcp.client_manager import ClientConnection, MCPClientManager
+from src.platform.mcp.server_kit import MCPServerKit
+from src.platform.mcp.server_spec import MCPServerSpec
 
 pytestmark = pytest.mark.anyio
 
@@ -96,7 +96,7 @@ class TestMCPClientManager:
 
     def test_call_tool_no_prefix_raises(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPToolCallError
+        from src.platform.mcp.client_manager import MCPToolCallError
 
         mgr = MCPClientManager(kit)
 
@@ -108,7 +108,7 @@ class TestMCPClientManager:
 
     def test_call_tool_no_connection(self) -> None:
         kit = MCPServerKit()
-        from src.platform.mcp_kit.client_manager import MCPToolCallError
+        from src.platform.mcp.client_manager import MCPToolCallError
 
         mgr = MCPClientManager(kit)
 
