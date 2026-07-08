@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.brain import prompts
 from src.brain.ai.gateway import gateway
@@ -18,6 +18,9 @@ from src.brain.kernel.base import Agent, FileDescriptor, FileUpdate
 from src.brain.kernel.state_store import kernel_data_dir, move_to_done, next_record_id
 from src.brain.nodes.self_stream import SelfStream
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from src.platform.mcp_kit.client_manager import MCPClientManager
 
 logger = get_logger("Externalizer")
 
@@ -37,17 +40,12 @@ class Externalizer(Agent):
     def __init__(
         self,
         node_id: str,
-        host: object | None = None,
+        client_manager: "MCPClientManager | None" = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
+        super().__init__(node_id, **kwargs)
         self._stream = SelfStream()
-        self._client_manager: Any = None
-        if host is not None:
-            from src.platform.mcp_kit.client_manager import MCPClientManager
-
-            if isinstance(host, MCPClientManager):
-                self._client_manager = host
+        self._client_manager = client_manager
 
     async def execute(self) -> list[FileUpdate]:
         trigger_dir = kernel_data_dir / "pipeline" / "internalized"

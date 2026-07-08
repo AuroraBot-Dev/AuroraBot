@@ -39,12 +39,12 @@ src/config.py                 → 中央配置 from .env, path constants, ensure
 │   ├── runtime.py            → 运行时管理：启动/关闭 Circuit + MCP + 事件桥接
 │   ├── nodes/                → 认知节点 (topology.yaml 声明)
 │   │   ├── agents/           → internalizer, externalizer, memory_consolidator 等
-│   │   ├── routers/          → message_preprocessor, command_dispatcher, heartbeat 等
+│   │   ├── routers/          → message_preprocessor, mcp_tool_dispatcher, heartbeat 等
 │   │   ├── event_bridge.py   → MCP 事件桥接 (notification → inbox)
 │   │   └── self_stream.py    → 自我意识流 (自由联想引擎)
 │   ├── ai/                   → LLM gateway (LiteLLM), models, providers
 │   ├── prompts/              → 提示词模板
-│   └── localhost/            → 交互式控制台 (python -m src.brain.localhost)
+│   └── localhost/            → 运行时内置交互式控制台
 │
 ├── src/platform/             → MCP Host Layer (已迁移完成)
 │   └── mcp_kit/              → MCP 平台层
@@ -79,7 +79,7 @@ External event → inbox/pending/event_*.json
   → message_preprocessor → pipeline/message_queue/*.json
   → internalizer (B→A) → pipeline/internalized/*.json
   → externalizer (A→B) → pipeline/action_queue/*.json
-  → command_dispatcher / mcp_tool_dispatcher
+  → mcp_tool_dispatcher
 ```
 
 Nodes communicate exclusively through files (FileEventBus). Topology: `src/brain/nodes/topology.yaml`.

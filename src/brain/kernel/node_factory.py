@@ -6,12 +6,9 @@ import yaml
 
 from src.brain.kernel.circuit import Circuit
 from src.brain.nodes.agents import (
-    ActionPlanner,
     Externalizer,
-    ImpulseGate,
     Internalizer,
     MemoryConsolidator,
-    PolarisAgent,
 )
 from src.brain.nodes.routers import (
     BroadcastRouter,
@@ -31,7 +28,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from src.brain.kernel.base import Node
-    from src.brain.memory import UnifiedMemoryManager
 
 logger = get_logger("NodeFactory")
 
@@ -53,20 +49,7 @@ NODE_REGISTRY: dict[str, type[Node]] = {
     "merge_router": MergeRouter,
     "broadcast_router": BroadcastRouter,
     "dead_letter_router": DeadLetterRouter,
-    # Kernel-beta 旧节点（disabled）
-    "impulse_gate": ImpulseGate,
-    "action_planner": ActionPlanner,
-    # 旧单体节点（兼容模式）
-    "polaris": PolarisAgent,
 }
-
-# 节点构造时是否需要 host 引用（按 type 判断）
-NODE_NEEDS_HOST: frozenset[str] = frozenset(
-    {
-        "internalizer",
-        "externalizer",
-    }
-)
 
 # 节点构造时是否需要 client_manager 引用（按 type 判断）
 NODE_NEEDS_CLIENT_MANAGER: frozenset[str] = frozenset(
@@ -88,8 +71,44 @@ NODE_ACCEPTS_CONFIG: frozenset[str] = frozenset(
     }
 )
 
-# 节点构造时是否注入 UnifiedMemoryManager（按 type 判断）
-NODE_NEEDS_MEMORY: frozenset[str] = frozenset()
+_DEFAULT_TOPOLOGY: tuple[dict[str, Any], ...] = (
+    {
+        "id": "message_preprocessor",
+        "type": "message_preprocessor",
+        "watch": ["inbox/pending/event_*.json"],
+        "emit": ["pipeline/message_queue/*.json"],
+    },
+    {
+        "id": "internalizer",
+        "type": "internalizer",
+        "watch": ["pipeline/message_queue/*.json"],
+        "emit": ["pipeline/internalized/*.json"],
+    },
+    {
+        "id": "externalizer",
+        "type": "externalizer",
+        "watch": ["pipeline/internalized/*.json"],
+        "emit": ["pipeline/action_queue/*.json"],
+    },
+    {
+        "id": "mcp_tool_dispatcher",
+        "type": "mcp_tool_dispatcher",
+        "watch": ["pipeline/action_queue/*.json"],
+    },
+    {
+        "id": "heartbeat",
+        "type": "heartbeat_generator",
+        "watch": ["heartbeat/tick.json"],
+        "emit": ["heartbeat/tick.json"],
+        "config": {"interval_sec": 60},
+    },
+    {
+        "id": "timer_scheduler",
+        "type": "timer_scheduler",
+        "watch": ["heartbeat/tick.json"],
+        "emit": ["rhythm/triggers/*.json"],
+    },
+)
 
 
 # ── 拓扑配置加载 ──────────────────────────────────
@@ -120,8 +139,8 @@ def _load_topology_config() -> list[dict[str, Any]]:
 
 
 def _default_topology() -> list[dict[str, Any]]:
-    """全量启用所有注册节点，各一个实例（id=类型名）。"""
-    return [{"id": name, "type": name} for name in sorted(NODE_REGISTRY)]
+    """返回可安全启动的最小主路径拓扑。"""
+    return [dict(entry) for entry in _DEFAULT_TOPOLOGY]
 
 
 def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -150,10 +169,7 @@ def _normalize_list(raw_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ── 电路构建 ──────────────────────────────────────
 
 
-def build_circuit(  # noqa: C901
-    host: object | None = None,
-    client_manager: Any | None = None,
-) -> Circuit:
+def build_circuit(client_manager: Any | None = None) -> Circuit:
     """从 ``topology.yaml`` 读取配置，构造认知拓扑电路。
 
     遍历邻接表条目，逐条实例化节点并注入 ``Circuit``。
@@ -161,8 +177,6 @@ def build_circuit(  # noqa: C901
 
     Parameters
     ----------
-    host : object | None
-        上下文对象（可选），注入给需要它的节点。
     client_manager : MCPClientManager | None
         MCP 客户端管理器，注入给需要执行工具调用的节点。
 
@@ -173,7 +187,6 @@ def build_circuit(  # noqa: C901
     """
     topology = _load_topology_config()
     instances: list[Node] = []
-    memory_manager: UnifiedMemoryManager | None = None
 
     for entry in topology:
         node_id = entry["id"]
@@ -185,25 +198,15 @@ def build_circuit(  # noqa: C901
             continue
 
         node_cls = NODE_REGISTRY[node_type]
-        if node_type in NODE_NEEDS_MEMORY:
-            if memory_manager is None:
-                from src.brain.memory import get_memory_manager
-
-                memory_manager = get_memory_manager()
-            memory_kw = {"memory": memory_manager}
-        else:
-            memory_kw = {}
 
         # 构造 —— 按类型的构造函数签名分发
         node_ctor = cast("Callable[..., object]", node_cls)
         if node_type in NODE_ACCEPTS_CONFIG:
-            node = cast("Node", node_ctor(node_id, **node_config, **memory_kw))
+            node = cast("Node", node_ctor(node_id, **node_config))
         elif node_type in NODE_NEEDS_CLIENT_MANAGER:
-            node = cast("Node", node_ctor(node_id, client_manager, **memory_kw))
-        elif node_type in NODE_NEEDS_HOST:
-            node = cast("Node", node_ctor(node_id, host, **memory_kw))
+            node = cast("Node", node_ctor(node_id, client_manager))
         else:
-            node = cast("Node", node_ctor(node_id, **memory_kw))
+            node = cast("Node", node_ctor(node_id))
 
         # 覆盖 guards / produces（可选，来自邻接表条目的 watch / emit）
         if entry.get("watch") is not None:

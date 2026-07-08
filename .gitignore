@@ -57,4 +57,4 @@ temp/
 
 # Project files (others)
 nodes-beta/
-apps/**/data/
+apps/

@@ -39,10 +39,9 @@ class Internalizer(Agent):
     def __init__(
         self,
         node_id: str,
-        host: object | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
+        super().__init__(node_id, **kwargs)
         self._stream = SelfStream()
 
     async def execute(self) -> list[FileUpdate]:
@@ -155,26 +154,6 @@ class Internalizer(Agent):
         return "\n".join(parts) if parts else ""
 
     # ═══════════════════════════════════════════════════
-    # 命令列表
-    # ═══════════════════════════════════════════════════
-
-    def _build_commands_text(self) -> str:
-        """构建可用命令的人类可读列表，注入到内化上下文中。"""
-        if self._host is None:
-            return "无可用命令"
-        lines: list[str] = []
-        for spec in self._host.list_command_specs():  # type: ignore[attr-defined]
-            params = spec.parameters_schema.get("properties", {})
-            param_entries = [
-                f"    {pname}: {pschema.get('type', 'string')} — {pschema.get('description', '')}"
-                for pname, pschema in params.items()
-            ]
-            lines.append(f"- **{spec.name}**: {spec.description}")
-            if param_entries:
-                lines.extend(param_entries)
-        return "\n".join(lines) if lines else "无可用命令"
-
-    # ═══════════════════════════════════════════════════
     # META 解析
     # ═══════════════════════════════════════════════════
 
@@ -214,7 +193,6 @@ class Internalizer(Agent):
         recent = self._stream.read_recent_chars(3000)
         state = self._stream.read_state()
         memories = self._stream.list_memories()
-        commands_text = self._build_commands_text()
 
         memory_context = ""
         if memories:
@@ -224,7 +202,6 @@ class Internalizer(Agent):
             f"## 我当前的状态\n\n{state}\n\n"
             f"## 我最近的意识流\n\n{recent}\n"
             f"{memory_context}\n\n"
-            f"## 我可以调用的能力\n\n{commands_text}\n\n"
             f"## 我刚刚感知到的新事件\n\n{event_text}\n\n"
             f"现在，以第一人称把这个新体验写入我的意识流。"
         )

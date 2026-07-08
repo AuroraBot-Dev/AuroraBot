@@ -242,8 +242,8 @@ pricing = await get_pricing_by_id("openai/gpt-4o")
 | 调用方                                   | 角色      | 场景                       |
 | ---------------------------------------- | --------- | -------------------------- |
 | `Agent.think()`                          | `fast`    | Agent 通用 LLM 推理        |
-| `PolarisAgent._impulse_gate()`           | `fast`    | 消息门控判定（是/否回复）  |
-| `PolarisAgent._generate_actions()`       | `quality` | 动作规划（复杂 JSON 推理） |
+| `Internalizer._internalize()`            | `quality` | 事件内化为第一人称体验     |
+| `Externalizer._externalize()`            | `quality` | 意识流行动意图转工具调用   |
 | `EpisodicMemory._refine_summary_async()` | `quality` | 情景记忆压缩摘要           |
 
 ## 注意事项

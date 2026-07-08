@@ -1,7 +1,7 @@
 """MCP Server 进程生命周期管理器。
 
-替代旧的 ``ApplicationHost`` 的 register/stop/tick 职责。
-不再负责命令注册和派发——这些由 MCP Client 通过 tools/list 动态发现。
+负责本地 stdio MCP Server 的启动、停止、重启和健康检查。
+工具能力由 MCP Client 通过 tools/list 动态发现。
 """
 
 from __future__ import annotations

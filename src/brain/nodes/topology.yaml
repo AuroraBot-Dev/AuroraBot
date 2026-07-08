@@ -40,7 +40,7 @@ nodes:
     emit:
       - "pipeline/action_queue/*.json"
 
-  # MCP 工具派发（替代旧 command_dispatcher）
+  # MCP 工具派发
   - id: mcp_tool_dispatcher
     type: mcp_tool_dispatcher
     watch:
@@ -111,25 +111,3 @@ nodes:
     config:
       ttl_sec: 3600
       scan_interval: 600
-
-  # ═══════════════════════════════════════════════════
-  # Kernel-β 旧节点（disabled——门控和规划已吸收到 Pool A）
-  # ═══════════════════════════════════════════════════
-  - id: impulse_gate
-    type: impulse_gate
-    enabled: false
-    watch:
-      - "pipeline/message_queue/*.json"
-
-  - id: action_planner
-    type: action_planner
-    enabled: false
-    watch:
-      - "pipeline/gate_pass/*.json"
-
-  # 旧单体节点（保留为禁用兼容模式）
-  - id: polaris
-    type: polaris
-    enabled: false
-    watch:
-      - "inbox/pending/event_*.json"

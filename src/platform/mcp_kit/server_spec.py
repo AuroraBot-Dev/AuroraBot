@@ -48,7 +48,7 @@ class MCPServerSpec:
     """是否启用。"""
 
     startup: dict[str, object] = field(default_factory=dict)
-    """启动参数（原旧 App 的 startup 配置）。"""
+    """传递给本地 MCP Server 的启动参数。"""
 
     health_timeout_seconds: float = 10.0
     """健康检查超时秒数。"""

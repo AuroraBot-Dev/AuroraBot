@@ -4,8 +4,8 @@
 - ``apps/`` 目录下的内建 App（有 ``manifest.yaml``），结合 ``apps/config.yml`` 覆盖。
 - ``apps/config.yml`` 中配置了完整 ``command`` 的外部 MCP Server（位置无关）。
 
-``apps/config.yml`` 兼容两种写法：MCP 字段可嵌套在 ``mcp:`` 下，也可直接
-放在应用配置根部。内建 App 优先按目录名匹配，随后按 ``package`` 匹配。
+``apps/config.yml`` 兼容两种 MCP 写法：字段可嵌套在 ``mcp:`` 下，也可直接
+放在配置根部。内建 App 优先按目录名匹配，随后按 ``package`` 匹配。
 
 位置无关的外部 MCP Server 示例::
 
@@ -157,7 +157,7 @@ def _find_builtin_config(
 
 
 def _mcp_config(app_cfg: dict[str, Any]) -> dict[str, Any]:
-    """返回嵌套 ``mcp`` 配置，或兼容旧版扁平应用配置。"""
+    """返回嵌套 ``mcp`` 配置，或扁平 MCP Server 配置。"""
     nested = app_cfg.get("mcp")
     return dict(nested) if isinstance(nested, dict) else app_cfg
 
@@ -196,24 +196,10 @@ def _build_spec(
     # 从 config.yml 获取 MCP 覆盖配置
     mcp_cfg = _mcp_config(app_cfg)
 
-    mcp_enabled = bool(
-        mcp_cfg.get(
-            "enabled",
-            bool(mcp_cfg.get("command")) or (mcp_ext is not None and mcp_ext.server_type == "mcp-server"),
-        )
-    )
+    mcp_enabled = bool(mcp_cfg.get("enabled", bool(mcp_cfg.get("command")) or mcp_ext is not None))
 
     if not mcp_enabled:
-        # 不启用 MCP 路径——返回带 legacy 标记的 spec供旧 ApplicationHost 使用
-        return MCPServerSpec(
-            key=package or app_dir.name,
-            package=package or app_dir.name,
-            name=name,
-            version=version,
-            directory=app_dir,
-            enabled=False,
-            startup=dict(app_cfg.get("startup", {})),
-        )
+        return None
 
     # 构建启动命令
     command: list[str] = []

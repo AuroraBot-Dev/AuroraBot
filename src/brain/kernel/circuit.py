@@ -137,8 +137,8 @@ class Circuit:
         ``change_type="write"`` 的 :class:`FileEvent` 并重新注入总线，
         匹配的节点将被激活。
 
-        这是迁移期事件桥接的主要入口——外部系统（如 ApplicationHost）
-        通过此方法将事件转化为文件，驱动节点图中的下游节点。
+        这是 MCP 事件桥接和控制台命令注入文件变更的入口，
+        写入后会驱动节点图中的下游节点。
 
         Parameters
         ----------

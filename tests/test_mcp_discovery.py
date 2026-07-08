@@ -20,20 +20,19 @@ class TestReadMCPManifest:
         result = read_mcp_manifest(tmp_path / "nonexistent.yaml")
         assert result is None
 
-    def test_legacy_app(self, tmp_path: Path) -> None:
+    def test_non_mcp_manifest(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
         manifest.write_text(
             yaml.dump(
                 {
-                    "package": "im.polaris.legacy",
-                    "name": "旧应用",
+                    "package": "im.polaris.plain",
+                    "name": "普通应用",
                 }
             ),
             encoding="utf-8",
         )
         result = read_mcp_manifest(manifest)
-        assert result is not None
-        assert result.server_type == ""
+        assert result is None
 
     def test_mcp_server(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
@@ -48,16 +47,13 @@ class TestReadMCPManifest:
                         "entry": "mcp_server.py",
                         "command": ["uv", "run", "python"],
                     },
-                    "commands": [{"name": "echo", "description": "回显"}],
                 }
             ),
             encoding="utf-8",
         )
         result = read_mcp_manifest(manifest)
         assert result is not None
-        assert result.server_type == "mcp-server"
         assert result.mcp_entry == "mcp_server.py"
-        assert len(result.commands) == 1
 
     def test_malformed_yaml(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
@@ -70,14 +66,16 @@ class TestReadMCPManifest:
 
 
 class TestBuildSpec:
-    def test_legacy_disabled(self, tmp_path: Path) -> None:
+    def test_disabled_app(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
         manifest.write_text(
             yaml.dump(
                 {
-                    "package": "im.polaris.legacy",
-                    "name": "旧应用",
+                    "package": "im.polaris.test",
+                    "name": "测试应用",
                     "version": "1.0.0",
+                    "type": "mcp-server",
+                    "mcp": {"entry": "mcp_server.py"},
                 }
             ),
             encoding="utf-8",

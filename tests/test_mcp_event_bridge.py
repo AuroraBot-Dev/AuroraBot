@@ -14,21 +14,19 @@ from src.brain.nodes.routers.message_preprocessor import MessagePreprocessor
 
 
 class TestExtractEventData:
-    """测试 ``MessagePreprocessor._extract_event_data`` 的双格式兼容。"""
+    """测试 ``MessagePreprocessor._extract_event_data`` 的 AMP envelope 解析。"""
 
-    def test_legacy_flat_format(self) -> None:
+    def test_non_amp_format_returns_empty_fields(self) -> None:
         data = {
             "type": "message.received",
             "session_id": "sess_1",
             "summary": "用户发言",
             "payload": {"user_id": "u1", "text": "hello", "is_group": True, "group_id": "g1"},
-            "source": "im.polaris.qq",
-            "id": "evt_001",
         }
         result = MessagePreprocessor._extract_event_data(data)
-        assert result["type"] == "message.received"
-        assert result["session_id"] == "sess_1"
-        assert result["payload"]["user_id"] == "u1"
+        assert result["type"] == ""
+        assert result["session_id"] == ""
+        assert result["payload"] == {}
 
     def test_amp_envelope_format(self) -> None:
         data = {

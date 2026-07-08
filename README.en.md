@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <em>A next-generation intrinsically-driven, autonomous decision-making agent framework built on NoneBot2</em>
+  <em>An intrinsically-driven, autonomous decision-making agent framework built on AuroraBot Core + MCP Platform</em>
 </p>
 
 <p align="center">
-  Declarative Cognitive Topology · Three-Tier Unified Memory · Unified LLM Gateway
+  File-Driven Cognitive Engine · Three-Tier Unified Memory · Pluggable MCP App Servers
 </p>
 
 <p align="center">
@@ -29,8 +29,8 @@
 
 AuroraBot is a next-generation **intrinsically-driven, autonomous agent framework**. She consists of two runtime layers plus a cognitive engine:
 
-- **Application Layer (Apps)** — Pluggable sensors and actuators. Each App declares its capabilities via `manifest.yaml` and connects to the outside world through a unified `PlatformAPI`
-- **Platform Layer (Platform)** — `ApplicationHost` manages App registration, lifecycle, and event queues. `PlatformAPI` provides bidirectional communication to each App
+- **Application Layer (Apps)** — Pluggable MCP Server sensors and actuators. Each App declares its capabilities through `manifest.yaml` / `apps/config.yml`
+- **Platform Layer (Platform)** — The MCP Host Layer manages local stdio Server lifecycles, Client connections, tools/call, and notification event bridging
 - **Cognitive Engine (Brain / CortexForge)** — A file-driven cognitive operating system kernel, composed of two subsystems:
   - **kernel**: `Node` / `Agent` / `Router` node network + `FileEventBus` event bus + `Circuit` orchestrator
   - **memory**: L1 working memory / L2 episodic memory / L3 semantic memory, accessed through `UnifiedMemoryManager`
@@ -50,10 +50,10 @@ flowchart LR
 
     subgraph PLATFORM["Platform Layer (Platform)"]
         direction TB
-        HOST["ApplicationHost"]
-        API["PlatformAPI"]
-        EVENTS["Event Queue"]
-        CMDS["Command Registry"]
+        KIT["MCPServerKit"]
+        CLIENT["MCPClientManager"]
+        AMP["AMP envelope"]
+        TOOLS["tools/list + tools/call"]
     end
 
     subgraph BRAIN["Cognitive Engine (CortexForge)"]
@@ -72,13 +72,13 @@ flowchart LR
         GATEWAY["LLM / Embedding Gateway (litellm)"]
     end
 
-    APPS <-->|"AppEvent / invoke_command"| PLATFORM
-    PLATFORM <-->|"Event Bridge"| BRAIN
+    APPS <-->|"stdio MCP / aurora/event"| PLATFORM
+    PLATFORM <-->|"AMP Event Bridge / Tool Calls"| BRAIN
 ```
 
 ### Highly Decoupled App Plugin System
 
-Each App is an independent sensor and actuator. Connecting QQ, timers, file systems, or even external APIs — it only takes one App. Apps declare commands through `manifest.yaml`, interact with the host via `PlatformAPI`, and are enabled on demand.
+Each App is an independent MCP Server. Connecting QQ, timers, file systems, or external APIs only requires one Server. Apps declare startup commands and tool capabilities through `manifest.yaml` and `apps/config.yml`; the Platform connects, discovers, and calls them uniformly.
 
 ### Declarative Cognitive Topology
 
@@ -96,15 +96,15 @@ AuroraBot's memory grows structurally:
 
 `UnifiedMemoryManager` encapsulates all three tiers behind a unified interface — nodes never need to understand the underlying data flow. Every interaction writes to all three tiers at once, and retrieval merges results across all layers.
 
-## MCP Adaptation Container (Planned)
+## MCP App Server System
 
-We are designing an **MCP (Model Context Protocol) Adaptation Container** that allows any MCP server to connect to AuroraBot as an App.
+AuroraBot's App system has moved to the **MCP (Model Context Protocol)** path, allowing any MCP Server to connect to AuroraBot as an App.
 
 This means:
 
 - Any tool conforming to the MCP protocol can become an extension of AuroraBot's capabilities
-- MCP tools will be automatically mapped into commands callable by the kernel
-- The kernel doesn't need to be aware of MCP protocol details — the adaptation container handles it all
+- MCP tools are converted into Brain-visible tool descriptions
+- Brain executes tools through the MCP Client, while events enter the file-driven pipeline as AMP envelopes
 
 > Let the MCP ecosystem become an extension of your capabilities.
 

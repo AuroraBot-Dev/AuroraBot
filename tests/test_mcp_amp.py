@@ -9,7 +9,6 @@ import pytest
 from src.platform.mcp_kit.amp import (
     amp_to_file_event,
     build_event_envelope,
-    legacy_app_event_to_amp,
     parse_amp_envelope,
 )
 from src.platform.mcp_kit.server_spec import MCPServerSpec
@@ -140,23 +139,6 @@ class TestAMPParsing:
         assert parsed.header.message_id == original.header.message_id
         assert parsed.payload.type == "weather.reported"
         assert parsed.payload.data == {"city": "北京", "temp": 22}
-
-
-class TestAMPConversion:
-    def test_legacy_app_event_to_amp(self) -> None:
-        class FakeAppEvent:
-            def __init__(self) -> None:
-                self.source = "im.polaris.test"
-                self.type = "test.event"
-                self.session_id = "sess_1"
-                self.summary = "旧事件"
-                self.data: dict[str, object] = {"old": True}
-
-        event = FakeAppEvent()
-        envelope = legacy_app_event_to_amp(event)
-        assert envelope.header.source.app == "im.polaris.test"
-        assert envelope.payload.type == "test.event"
-        assert envelope.payload.data == {"old": True}
 
 
 # ── Tool schema ──

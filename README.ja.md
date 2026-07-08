@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <em>NoneBot2 ベースの新世代の内発的・自律的意思決定エージェントフレームワーク</em>
+  <em>AuroraBot Core + MCP Platform ベースの内発的・自律的意思決定エージェントフレームワーク</em>
 </p>
 
 <p align="center">
-  宣言的認知トポロジー · 三層連合記憶 · 統一 LLM ゲートウェイ
+  ファイル駆動認知エンジン · 三層連合記憶 · プラグ可能な MCP App Server
 </p>
 
 <p align="center">
@@ -29,8 +29,8 @@
 
 AuroraBot は、次世代の**内発的・自律的意思決定エージェントフレームワーク**です。彼女は 2 つのランタイム層と 1 つの認知エンジンで構成されています：
 
-- **アプリケーション層 (Apps)** — プラグ可能なセンサーとアクチュエーター。各 App は `manifest.yaml` で能力を宣言し、統一された `PlatformAPI` を通じて外部世界と接続
-- **プラットフォーム層 (Platform)** — `ApplicationHost` が App の登録、ライフサイクル、イベントキューを管理。`PlatformAPI` が各 App に双方向通信を提供
+- **アプリケーション層 (Apps)** — プラグ可能な MCP Server センサーとアクチュエーター。各 App は `manifest.yaml` / `apps/config.yml` で能力を宣言
+- **プラットフォーム層 (Platform)** — MCP Host Layer がローカル stdio Server のライフサイクル、Client 接続、tools/call、notification イベント橋接を管理
 - **認知エンジン (Brain / CortexForge)** — ファイル駆動の認知 OS カーネル。2 つのサブシステムで構成：
   - **kernel**: `Node` / `Agent` / `Router` ノードネットワーク + `FileEventBus` イベントバス + `Circuit` オーケストレーター
   - **memory**: L1 作業記憶 / L2 エピソード記憶 / L3 意味記憶、`UnifiedMemoryManager` で統一アクセス
@@ -50,10 +50,10 @@ flowchart LR
 
     subgraph PLATFORM["プラットフォーム層 (Platform)"]
         direction TB
-        HOST["ApplicationHost"]
-        API["PlatformAPI"]
-        EVENTS["イベントキュー"]
-        CMDS["コマンドレジストリ"]
+        KIT["MCPServerKit"]
+        CLIENT["MCPClientManager"]
+        AMP["AMP envelope"]
+        TOOLS["tools/list + tools/call"]
     end
 
     subgraph BRAIN["認知エンジン (CortexForge)"]
@@ -72,13 +72,13 @@ flowchart LR
         GATEWAY["LLM / Embedding ゲートウェイ (litellm)"]
     end
 
-    APPS <-->|"AppEvent / invoke_command"| PLATFORM
-    PLATFORM <-->|"イベントブリッジ"| BRAIN
+    APPS <-->|"stdio MCP / aurora/event"| PLATFORM
+    PLATFORM <-->|"AMP イベントブリッジ / ツール呼び出し"| BRAIN
 ```
 
 ### 高度に分離された App プラグインシステム
 
-各 App は独立したセンサーとアクチュエーターです。QQ、タイマー、ファイルシステム、さらには外部 API への接続も、たった 1 つの App で実現できます。App は `manifest.yaml` でコマンドを宣言し、`PlatformAPI` を通じてホストと連携、必要に応じて有効化されます。
+各 App は独立した MCP Server です。QQ、タイマー、ファイルシステム、外部 API への接続も 1 つの Server で実現できます。App は `manifest.yaml` と `apps/config.yml` で起動コマンドとツール能力を宣言し、Platform が統一的に接続・発見・呼び出しを行います。
 
 ### 宣言的認知トポロジー
 
@@ -96,15 +96,15 @@ AuroraBot の記憶は**構造的に成長**します：
 
 `UnifiedMemoryManager` が三層を統一インターフェースでカプセル化し、ノードは基盤のデータフローを意識する必要がありません。すべての対話が三層に一括書き込みされ、検索時には全層から結果をマージします。
 
-## 計画中の MCP アダプテーションコンテナ
+## MCP App Server 体系
 
-私たちは、任意の MCP サーバーを App として AuroraBot に接続できる **MCP (Model Context Protocol) アダプテーションコンテナ**を設計しています。
+AuroraBot の App 体系は **MCP (Model Context Protocol)** を主経路として採用し、任意の MCP Server を App として接続できます。
 
 これは次のことを意味します：
 
 - MCP プロトコルに準拠するあらゆるツールが AuroraBot の能力拡張になり得る
-- MCP ツールは自動的にカーネルから呼び出し可能なコマンドにマッピングされる
-- カーネルは MCP プロトコルの詳細を意識する必要がなく、アダプテーションコンテナが統一的に処理する
+- MCP ツールは Brain から見えるツール記述へ変換される
+- Brain は MCP Client 経由でツールを呼び出し、イベントは AMP envelope としてファイル駆動パイプラインへ入る
 
 > MCP エコシステムをあなたの能力拡張に。
 

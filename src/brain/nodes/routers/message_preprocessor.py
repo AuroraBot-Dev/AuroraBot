@@ -97,30 +97,33 @@ class MessagePreprocessor(Router):
 
     @staticmethod
     def _extract_event_data(data: dict[str, Any]) -> dict[str, Any]:
-        """从事件数据提取标准字段，支持旧扁平格式和 AMP envelope 格式。
+        """从 AMP envelope 事件数据提取标准字段。
 
-        AMP 格式检测：存在 ``header`` 键。
+        非 AMP 数据返回空字段，由后续格式化流程跳过。
         """
-        if "header" in data:
-            # AMP envelope 格式
-            header = data.get("header", {})
-            payload = data.get("payload", {})
+        header = data.get("header")
+        payload = data.get("payload")
+        if not isinstance(header, dict) or not isinstance(payload, dict):
             return {
-                "type": str(payload.get("type", "")),
-                "session_id": str(payload.get("session_id", "")),
-                "summary": str(payload.get("summary", "")),
-                "payload": dict(payload.get("data", {})),
-                "source": str(header.get("source", {}).get("app", "")),
-                "message_id": str(header.get("message_id", "")),
+                "type": "",
+                "session_id": "",
+                "summary": "",
+                "payload": {},
+                "source": "",
+                "message_id": "",
             }
-        # 旧扁平格式
+
+        source = header.get("source")
+        source_app = source.get("app", "") if isinstance(source, dict) else header.get("source_app", "")
+        raw_payload = payload.get("data", {})
+        event_payload = dict(raw_payload) if isinstance(raw_payload, dict) else {"value": raw_payload}
         return {
-            "type": str(data.get("type", "")),
-            "session_id": str(data.get("session_id", "")),
-            "summary": str(data.get("summary", "")),
-            "payload": dict(data.get("payload", {})) if isinstance(data.get("payload"), dict) else {},
-            "source": str(data.get("source", "")),
-            "message_id": str(data.get("id", "")),
+            "type": str(payload.get("type", "")),
+            "session_id": str(payload.get("session_id", "")),
+            "summary": str(payload.get("summary", "")),
+            "payload": event_payload,
+            "source": str(source_app),
+            "message_id": str(header.get("message_id", "")),
         }
 
     @staticmethod

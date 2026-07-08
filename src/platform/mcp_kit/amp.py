@@ -212,32 +212,3 @@ def amp_to_file_event(envelope: AMPEnvelope) -> dict[str, object]:
             "expire_at": envelope.payload.expire_at,
         },
     }
-
-
-def legacy_app_event_to_amp(event: object) -> AMPEnvelope:
-    """将旧 AppEvent 转换为 AMPEnvelope（迁移期兼容函数）。
-
-    旧 App 通过 ``ApplicationHost.emit_event()`` 上报的事件，
-    在迁移期仍然需要通过此函数包装为 AMP 格式再进入新管线。
-
-    Args:
-        event: 旧 AppEvent 对象，需有 ``source``、``type``、``session_id``、
-               ``summary``、``data`` 属性。
-
-    Returns:
-        转换后的 AMPEnvelope。
-    """
-    source_app = getattr(event, "source", "unknown")
-    event_type = getattr(event, "type", "unknown")
-    session_id = getattr(event, "session_id", "")
-    summary = getattr(event, "summary", "")
-    data = getattr(event, "data", {})
-
-    return build_event_envelope(
-        source_app=str(source_app),
-        event_type=str(event_type),
-        session_id=str(session_id),
-        summary=str(summary),
-        # 旧 AppEvent 使用 ``drain_events``，由旧 host 收集
-        data=dict(data) if isinstance(data, dict) else {},
-    )

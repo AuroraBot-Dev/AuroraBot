@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <em>基于 NoneBot2 的新一代内驱式、自主决策的智能体框架</em>
+  <em>基于 AuroraBot Core + MCP Platform 的内驱式、自主决策智能体框架</em>
 </p>
 
 <p align="center">
-  声明式认知拓扑 · 三级联合记忆 · 统一 LLM 网关
+  文件驱动认知引擎 · 三级联合记忆 · 可插拔 MCP App Server
 </p>
 
 <p align="center">
@@ -29,8 +29,8 @@
 
 AuroraBot 是新一代**内驱式、自主决策的智能体框架**。她由两层运行时 + 一个认知引擎构成：
 
-- **应用层 (Apps)** — 可插拔的感知器与执行器，每个 App 通过 `manifest.yaml` 声明能力，通过统一 `PlatformAPI` 接入外部世界
-- **平台层 (Platform)** — `ApplicationHost` 统一管理 App 的注册、生命周期与事件队列，`PlatformAPI` 向 App 提供双向通信能力
+- **应用层 (Apps)** — 可插拔的 MCP Server 感知器与执行器，每个 App 通过 `manifest.yaml` / `apps/config.yml` 声明能力
+- **平台层 (Platform)** — MCP Host Layer 管理本地 stdio Server 生命周期、Client 连接、tools/call 与 notification 事件桥接
 - **认知引擎 (Brain / CortexForge)** — 文件驱动认知操作系统内核，包含两个子系统：
   - **kernel**：`Node` / `Agent` / `Router` 节点网络 + `FileEventBus` 事件总线 + `Circuit` 编排器
   - **memory**：L1 工作记忆 / L2 情景记忆 / L3 语义记忆，通过 `UnifiedMemoryManager` 统一存取
@@ -50,10 +50,10 @@ flowchart LR
 
     subgraph PLATFORM["平台层 (Platform)"]
         direction TB
-        HOST["ApplicationHost"]
-        API["PlatformAPI"]
-        EVENTS["事件队列"]
-        CMDS["命令注册"]
+        KIT["MCPServerKit"]
+        CLIENT["MCPClientManager"]
+        AMP["AMP envelope"]
+        TOOLS["tools/list + tools/call"]
     end
 
     subgraph BRAIN["认知引擎 (CortexForge)"]
@@ -72,13 +72,13 @@ flowchart LR
         GATEWAY["LLM / Embedding 网关 (litellm)"]
     end
 
-    APPS <-->|"AppEvent / invoke_command"| PLATFORM
-    PLATFORM <-->|"事件桥"| BRAIN
+    APPS <-->|"stdio MCP / aurora/event"| PLATFORM
+    PLATFORM <-->|"AMP 事件桥 / 工具调用"| BRAIN
 ```
 
 ### 高度解耦的 App 插件体系
 
-每个 App 都是独立的感知器与执行器。接入 QQ、定时器、文件系统、甚至外部 API——都只需要一个 App。App 通过 `manifest.yaml` 声明命令，通过 `PlatformAPI` 与宿主交互，按需启用。
+每个 App 都是独立的 MCP Server。接入 QQ、定时器、文件系统、甚至外部 API——都只需要一个 Server。App 通过 `manifest.yaml` 和 `apps/config.yml` 声明启动命令与工具能力，由 Platform 统一连接、发现和调用。
 
 ### 声明式认知拓扑
 
@@ -96,15 +96,15 @@ AuroraBot 的记忆是**结构化地生长**的：
 
 `UnifiedMemoryManager` 封装三层统一入口，节点无需关心底层流转。每次交互一键写入三层，检索时合并返回。
 
-## 计划中的 MCP 适配容器
+## MCP App Server 体系
 
-我们正在设计一个 **MCP (Model Context Protocol) 适配容器**，让任意 MCP 服务器以 App 形态接入 AuroraBot。
+AuroraBot 的 App 体系已迁移到 **MCP (Model Context Protocol)** 主路径，让任意 MCP Server 以 App 形态接入 AuroraBot。
 
 这意味着：
 
 - 任何遵循 MCP 协议的工具都可以成为 AuroraBot 的能力延伸
-- MCP 工具会被自动映射为内核可调用的命令
-- 内核无需感知 MCP 协议细节，由适配容器统一处理
+- MCP 工具会被自动转换为 Brain 可见的工具描述
+- Brain 通过 MCP Client 执行工具调用，事件通过 AMP envelope 进入文件驱动管线
 
 > 让 MCP 生态成为你的能力延伸。
 

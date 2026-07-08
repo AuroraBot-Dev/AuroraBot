@@ -31,7 +31,7 @@ async def run_mcp_event_bridge(
     circuit: Circuit,
     stop_event: asyncio.Event,
 ) -> None:
-    """将 MCP 事件桥接到 Brain 文件总线（新轨）。
+    """将 MCP 事件桥接到 Brain 文件总线。
 
     消费 ``client_manager.notification_queue`` 中的事件，
     支持两种来源：
@@ -46,7 +46,7 @@ async def run_mcp_event_bridge(
         circuit: Node 图电路，通过 ``apply_update`` 注入文件变更。
         stop_event: 停止信号。
     """
-    logger.info("MCP 事件桥接已启动 (新轨)")
+    logger.info("MCP 事件桥接已启动")
 
     while not stop_event.is_set():
         try:
@@ -64,7 +64,7 @@ async def run_mcp_event_bridge(
             # 普通 MCP Server 的 notification——包装为 AMP
             await _process_generic_notification(key, method, params, circuit)
 
-    logger.info("MCP 事件桥接已停止 (新轨)")
+    logger.info("MCP 事件桥接已停止")
 
 
 async def _process_amp_notification(

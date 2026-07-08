@@ -4,7 +4,7 @@
 通过 ``MCPClientManager.call_tool()`` 执行工具调用，并将结果写入
 ``pipeline/tool_results/*.json``。
 
-这是 ``command_dispatcher`` 的 MCP 原生替代。
+所有外部副作用都通过 MCP Client 的 ``tools/call`` 执行。
 """
 
 from __future__ import annotations
@@ -36,16 +36,11 @@ class MCPToolDispatcher(Router):
     def __init__(
         self,
         node_id: str,
-        host: object | None = None,
+        client_manager: MCPClientManager | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
-        self._client_manager: MCPClientManager | None = None
-        if host is not None:
-            from src.platform.mcp_kit.client_manager import MCPClientManager
-
-            if isinstance(host, MCPClientManager):
-                self._client_manager = host
+        super().__init__(node_id, **kwargs)
+        self._client_manager = client_manager
 
     @property
     def client_manager(self) -> MCPClientManager | None:
@@ -108,14 +103,13 @@ class MCPToolDispatcher(Router):
         action: dict[str, Any],
         trace_id: str,
     ) -> FileUpdate | None:
-        # 兼容新旧格式：tool/arguments (新) 和 command/params (旧)
-        tool_name = str(action.get("tool", action.get("command", "")))
-        arguments = action.get("arguments", action.get("params", {}))
+        tool_name = str(action.get("tool", ""))
+        arguments = action.get("arguments", {})
         if not isinstance(arguments, dict):
             arguments = {}
 
         if not tool_name:
-            logger.warning("action 缺少 tool/command 字段")
+            logger.warning("action 缺少 tool 字段")
             return None
 
         if self._client_manager is None:
