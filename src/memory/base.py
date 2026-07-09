@@ -1,3 +1,16 @@
+"""记忆系统的通用数据模型 —— MemoryItem（原子记忆单元）与 MemoryContext（三级记忆汇总上下文）。
+
+用法::
+
+    from src.memory.base import MemoryItem, MemoryContext
+
+    item = MemoryItem(content="Hello", role="user")
+    ctx = MemoryContext()
+    prompt = ctx.to_prompt_text()
+
+作者: `HH <https://github.com/haha-ha-cuo>`_
+"""
+
 from dataclasses import dataclass, field
 from typing import Any
 

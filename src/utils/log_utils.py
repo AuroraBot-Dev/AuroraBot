@@ -1,8 +1,10 @@
-# ------------------------------------------------------------
-# @author: Churk
-# @status: 完成
-# @description: 日志模块
-# ------------------------------------------------------------
+"""日志系统核心模块。
+
+提供统一的日志记录器工厂 ``get_logger()``，支持 Rich 美化控制台输出、
+文件轮转日志、以及 ``DecoratorFactory`` 装饰器注入。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 import functools
 import inspect

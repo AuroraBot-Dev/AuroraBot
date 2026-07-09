@@ -1,3 +1,19 @@
+"""认知拓扑电路编排器 —— 管理节点协程生命周期与文件事件总线的启动/停止。
+
+用法::
+
+    from src.kernel.circuit import Circuit
+
+    circuit = Circuit(nodes)
+    await circuit.start()
+    ...
+    await circuit.stop()
+
+    # 或使用 async context manager
+    async with Circuit(nodes) as circuit:
+        circuit.inject_event(event)
+"""
+
 from __future__ import annotations
 
 import asyncio

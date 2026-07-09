@@ -2,6 +2,8 @@
 
 代码写入临时 .py 文件,在子进程中执行。
 stdout/stderr 重定向到输出文件。
+
+作者: [Wende](https://github.com/dengweitian0-svg)
 """
 
 from __future__ import annotations

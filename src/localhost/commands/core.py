@@ -1,3 +1,8 @@
+"""控制台核心命令处理 —— /help、/reload、/stop、/tools、/apps 的实现。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
+
 from __future__ import annotations
 
 import json

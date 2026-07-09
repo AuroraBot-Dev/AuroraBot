@@ -1,3 +1,15 @@
+"""mem0 客户端工厂模块 —— 负责构建记忆配置并创建 Memory 实例，包含向量存储、LLM、嵌入器的配置组装。
+
+用法::
+
+    from src.memory.client import build_memory_config, create_memory
+
+    config = build_memory_config()
+    memory = create_memory()
+
+作者: `HH <https://github.com/haha-ha-cuo>`_
+"""
+
 from __future__ import annotations
 
 from typing import Any

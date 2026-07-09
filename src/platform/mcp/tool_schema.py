@@ -2,6 +2,8 @@
 
 提供 MCP Tool 到 OpenAI-compatible tool schema 的转换，
 以及到 prompt text 的降级转换，供 Externalizer 迁移期使用。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

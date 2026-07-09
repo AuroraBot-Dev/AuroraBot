@@ -1,3 +1,16 @@
+"""L2 情景记忆 —— 按时间线记录所有事件，持久化为 JSON 文件，带滚动压缩机制防止文件无限膨胀。
+
+用法::
+
+    from src.memory.episodic import EpisodicMemory
+
+    em = EpisodicMemory()
+    em.record_event(event_type="chat_user", content="用户发来消息", user_id="user123")
+    events = em.search_recent_events(limit=5, user_id="user123")
+
+作者: `HH <https://github.com/haha-ha-cuo>`_
+"""
+
 import asyncio
 import json
 from typing import Any

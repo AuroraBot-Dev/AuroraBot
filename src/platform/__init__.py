@@ -6,6 +6,8 @@
 子包：
 - ``amp`` — AMP envelope：共享协议定义与转换工具
 - ``mcp`` — MCP 协议适配器：MCP Server ↔ AMP ↔ Brain
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

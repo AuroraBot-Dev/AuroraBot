@@ -1,5 +1,16 @@
-# L1缓存，内存存储
+"""L1 工作记忆 —— 基于 FIFO 队列的内存级最近对话缓存，容量可控，不持久化。
 
+用法::
+
+    from src.memory.working import WorkingMemory
+
+    wm = WorkingMemory(max_items=10)
+    wm.add(content="你好", role="user")
+    ctx = wm.get_context()
+    wm.clear()
+
+作者: `HH <https://github.com/haha-ha-cuo>`_
+"""
 
 from src.memory.base import MemoryItem
 from src.utils.log_utils import get_logger

@@ -1,4 +1,7 @@
-"""控制台 ``/say`` 命令——向 Brain inbox 注入消息事件。"""
+"""控制台 ``/say`` 命令——向 Brain inbox 注入消息事件。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 from __future__ import annotations
 

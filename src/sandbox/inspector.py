@@ -1,6 +1,8 @@
 """Sandbox AST 安全检查器。
 
 基于 Python 标准库 ast 模块，在代码执行前检测危险操作。
+
+作者: [Wende](https://github.com/dengweitian0-svg)
 """
 
 from __future__ import annotations

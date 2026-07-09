@@ -1,4 +1,7 @@
-"""控制台 ``/invoke`` 命令——调用 MCP Tool。"""
+"""控制台 ``/invoke`` 命令——调用 MCP Tool。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 from __future__ import annotations
 

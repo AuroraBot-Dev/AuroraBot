@@ -1,6 +1,8 @@
 """MCP Server 规范定义。
 
 由一个 App 的 manifest.yaml + apps/config.yml 合并得出完整启动配置。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

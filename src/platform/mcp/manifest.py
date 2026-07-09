@@ -2,6 +2,8 @@
 
 支持 ``type: mcp-server`` 和 ``mcp:`` 段。
 外部 MCP Server（位置无关）只需在 ``apps/config.yml`` 中配置，无需本地 manifest。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

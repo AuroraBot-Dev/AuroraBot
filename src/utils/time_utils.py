@@ -1,3 +1,11 @@
+"""时间处理工具集。
+
+提供本地时区感知的时间解析、格式化与 Unix 时间戳转换，
+统一处理 ``datetime`` 对象与 ISO 8601 字符串之间的互转。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

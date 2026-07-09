@@ -1,4 +1,15 @@
-# L3缓存，mem0层
+"""L3 语义记忆 —— 基于 mem0 实现的知识图谱与长期事实存储，通过 ChromaDB 进行向量检索。
+
+用法::
+
+    from src.memory.semantic import SemanticMemory
+
+    sm = SemanticMemory()
+    sm.extract_and_store(text="用户喜欢蓝色", user_id="user123")
+    facts = sm.search_facts(query="用户喜欢什么颜色", user_id="user123")
+
+作者: `HH <https://github.com/haha-ha-cuo>`_
+"""
 
 from typing import Any
 

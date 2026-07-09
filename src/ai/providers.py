@@ -17,6 +17,8 @@ DeepSeek 等 OpenAI 兼容 API）注册到 litellm 配置中。网关在发起 L
 
     LLM_GATEWAY_FAST_MODEL=siliconflow/deepseek-ai/DeepSeek-V3
     SILICONFLOW_API_KEY=sk-xxx
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

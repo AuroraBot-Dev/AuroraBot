@@ -1,6 +1,8 @@
 """Runtime 热重载与进程管理。
 
 提供 ``/reload`` 和 ``/stop`` 控制台命令的实现。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

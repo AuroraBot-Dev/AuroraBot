@@ -1,3 +1,14 @@
+"""认知拓扑电路的核心抽象 —— Node、Agent、Router 基类以及文件事件/描述符/更新数据类。
+
+用法::
+
+    from src.kernel.base import Node, Agent, Router, FileEvent, FileUpdate, FileDescriptor, FilePattern
+
+    class MyAgent(Agent):
+        async def execute(self) -> list[FileUpdate]:
+            ...
+"""
+
 from __future__ import annotations
 
 import asyncio

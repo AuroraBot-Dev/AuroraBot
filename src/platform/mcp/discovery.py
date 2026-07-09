@@ -20,6 +20,8 @@
         command: ["uv", "run", "--project", "/path/to/server", "python", "-m", "mcp_server"]
         env:
           DATA_DIR: /home/user/data
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

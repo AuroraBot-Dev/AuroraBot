@@ -1,4 +1,7 @@
-"""Pool A CLI 命令：/stream, /state, /memories —— 查看她的自我之流。"""
+"""Pool A CLI 命令：/stream, /state, /memories —— 查看她的自我之流。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 from __future__ import annotations
 

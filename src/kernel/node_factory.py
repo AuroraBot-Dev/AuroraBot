@@ -1,3 +1,13 @@
+"""节点工厂 —— 从 topology.yaml 读取配置并构建 Circuit，管理节点注册表与拓扑归一化。
+
+用法::
+
+    from src.kernel.node_factory import build_circuit
+
+    circuit = build_circuit(client_manager)
+    await circuit.start()
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast

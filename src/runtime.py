@@ -1,6 +1,12 @@
 """Runtime — AuroraBot Brain 运行时管理。
 
 负责启动、运行、关闭 Brain Circuit、MCP 连接和事件桥接。
+
+用法::
+
+    from src.runtime import start_runtime, shutdown_runtime, RuntimeState
+    state = await start_runtime()
+    await shutdown_runtime(state)
 """
 
 from __future__ import annotations

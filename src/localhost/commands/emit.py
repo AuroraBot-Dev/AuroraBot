@@ -1,4 +1,7 @@
-"""控制台 ``/event`` 命令——向 Brain inbox 注入 AMP 事件。"""
+"""控制台 ``/event`` 命令——向 Brain inbox 注入 AMP 事件。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 from __future__ import annotations
 

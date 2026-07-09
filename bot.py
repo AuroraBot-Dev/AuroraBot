@@ -5,6 +5,9 @@
 Usage::
 
     uv run python bot.py
+
+内部通过 ``start_runtime()`` 启动 MCP Server 进程、建立连接、启动 Circuit，
+并发运行 console control loop 和 MCP 事件桥接。SIGINT/SIGTERM 触发优雅关闭。
 """
 
 from __future__ import annotations

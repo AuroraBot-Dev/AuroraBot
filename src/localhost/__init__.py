@@ -1,3 +1,8 @@
+"""本地控制台交互层 —— 热重载、控制命令与交互式 Shell 的公开入口。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
+
 from src.localhost.reloader import (
     HotReloadError,
     _request_process_exit,

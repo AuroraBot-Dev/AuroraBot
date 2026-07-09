@@ -1,3 +1,16 @@
+"""统一联合记忆入口模块 —— 提供 UnifiedMemoryManager 门面及全局单例代理，协调 L1/L2/L3 三层记忆读写。
+
+用法::
+
+    from src.memory import memory_manager, get_memory_manager, MemoryContext, MemoryItem
+
+    mgr = get_memory_manager()
+    mgr.process_interaction(content="你好", role="user", user_id="user123")
+    ctx = mgr.retrieve_context(current_query="最近发生了什么", user_id="user123")
+
+作者: `HH <https://github.com/haha-ha-cuo>`_
+"""
+
 import asyncio
 from typing import Any
 

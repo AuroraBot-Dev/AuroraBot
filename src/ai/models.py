@@ -9,6 +9,8 @@
 
     pricing = await get_pricing_by_id("openai/gpt-4o-mini")
     # => {"input": 0.15, "output": 0.60}  或  None
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

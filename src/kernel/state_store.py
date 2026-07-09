@@ -1,3 +1,15 @@
+"""内核共享文件工具 —— 嵌套字典取值、JSON 列表读写、记录 ID 生成、文件移动等操作。
+
+用法::
+
+    from src.kernel.state_store import kernel_file, load_json_list, save_json_list, resolve_field, move_to_done
+
+    records = load_json_list(kernel_file("inbox/events.json"))
+    text = resolve_field(data, "payload.text")
+    save_json_list(kernel_file("outbox/result.json"), records)
+    move_to_done(source_path, done_dir)
+"""
+
 from __future__ import annotations
 
 import json

@@ -13,6 +13,8 @@ Notification 接收是可选增强：
 
 Notification 接收方式：子类化 ``ClientSession``，重写
 ``_received_notification`` 方法（这是 MCP SDK 官方推荐的扩展点）。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

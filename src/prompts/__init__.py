@@ -1,3 +1,11 @@
+"""提示词模板模块 —— 延迟加载 ``*.md`` 文件并通过 ``__getattr__`` 暴露 ``Prompt`` 对象。
+
+用法::
+
+    from src.prompts import some_template
+    filled = some_template.fill(var1="value1", var2="value2")
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

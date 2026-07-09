@@ -2,6 +2,8 @@
 
 提供高容错的 JSON 提取方法，应对 LLM 在 JSON 前后附
 带说明文字、markdown 代码块等非标准输出。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

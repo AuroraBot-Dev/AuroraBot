@@ -2,6 +2,8 @@
 
 提供沙箱执行结果和安全违规记录的数据结构。
 与 memory/base.py 对齐，使用 @dataclass(slots=True)。
+
+作者: [Wende](https://github.com/dengweitian0-svg)
 """
 
 from __future__ import annotations

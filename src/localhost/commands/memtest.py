@@ -1,3 +1,14 @@
+"""控制台 ``/memtest`` 命令——记忆系统交互测试。
+
+用法::
+
+    /memtest query <text>      检索记忆上下文
+    /memtest record <text>     记录一条用户交互
+    /memtest context           查看当前记忆上下文
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

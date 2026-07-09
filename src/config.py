@@ -1,3 +1,12 @@
+"""中央配置管理 —— 从 ``.env`` 加载环境变量并提供统一访问接口。
+
+用法::
+
+    from src.config import Config
+    Config.LOG_LEVEL
+    Config.ensure_dirs()
+"""
+
 from __future__ import annotations
 
 import os

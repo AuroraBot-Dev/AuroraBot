@@ -7,6 +7,8 @@
 
     result = await sandbox_manager.execute("print('hello world')")
     print(result.output)
+
+作者: [Wende](https://github.com/dengweitian0-svg)
 """
 
 from __future__ import annotations

@@ -1,3 +1,17 @@
+"""控制台命令解析与事件循环 —— 内置交互式 Shell。
+
+用法::
+
+    from src.localhost.shell import handle_control_command, run_console_control_loop
+
+    async def dispatch(raw: str) -> None:
+        await handle_control_command(raw, runtime=rt, lock=lk)
+
+    await run_console_control_loop(dispatch, idle_delay=0.5)
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
+
 from __future__ import annotations
 
 import asyncio

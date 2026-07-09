@@ -1,3 +1,14 @@
+"""基于文件的事件总线 —— 接收 FileEvent 并分发给匹配的 Node，负责 FileUpdate 的带锁落盘。
+
+用法::
+
+    from src.kernel.event_bus import FileEventBus
+
+    bus = FileEventBus(nodes)
+    bus.start_dispatch()
+    bus.publish(event)
+"""
+
 from __future__ import annotations
 
 import asyncio

@@ -19,6 +19,8 @@ AMP 不是 MCP Server 需要实现的协议，而是 AuroraBot Platform
          |
          v  (Platform 侧生成 AMP)
   AMP Envelope → Brain 统一事件认知
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

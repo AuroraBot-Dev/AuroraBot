@@ -1,3 +1,15 @@
+"""控制台命令注册表 —— 命令名称常量、数据结构与命令工厂。
+
+用法::
+
+    from src.localhost.registry import _console_commands, ParsedConsoleCommand
+
+    for spec in _console_commands():
+        print(spec.usage)
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

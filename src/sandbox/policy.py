@@ -1,6 +1,8 @@
 """Sandbox 访问策略引擎。
 
 白名单 + 黑名单访问控制,规则优先级：黑名单 > 白名单 > 默认拒绝。
+
+作者: [Wende](https://github.com/dengweitian0-svg)
 """
 
 from __future__ import annotations

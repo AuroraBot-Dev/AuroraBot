@@ -1,6 +1,8 @@
 """Sandbox 配置管理。
 
 提供 SandboxConfig dataclass 和 YAML 配置加载。
+
+作者: [Wende](https://github.com/dengweitian0-svg)
 """
 
 from __future__ import annotations
