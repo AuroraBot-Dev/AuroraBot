@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from src.config import Config, load_config
@@ -15,8 +16,10 @@ def test_public_config_facade_uses_the_validated_toml_snapshot(project_root: Pat
 
     assert snapshot == load_config(project_root)
     assert project_root / "data" / "kernel" == Config.KERNEL_DATA_DIR
-    assert Config.LLM_GATEWAY_FAST_MODEL == "openai/gpt-4o-mini"
+    assert Config.LLM_GATEWAY_FAST_MODEL == "deepseek/deepseek-v4-flash"
     assert Config.LLM_GATEWAY_MULTIMODAL_MODEL == Config.LLM_GATEWAY_QUALITY_MODEL
+    assert not Config.LLM_GATEWAY_ENABLE_LOGGING_QUERIES
+    assert not Config.LLM_GATEWAY_ENABLE_LOGGING_RESPONSES
 
 
 def test_layered_console_submits_and_processes_a_message(project_root: Path) -> None:
@@ -24,7 +27,7 @@ def test_layered_console_submits_and_processes_a_message(project_root: Path) -> 
     inputs = iter(("/say console hello", "/cycle", "/quit"))
     output: list[str] = []
 
-    run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append)
+    asyncio.run(run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append))
 
     assert any("已投递消息 AMP" in line for line in output)
     assert any("platform_receipts_emitted" in line for line in output)

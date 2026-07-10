@@ -8,7 +8,7 @@ from src.kernel.node import NodeContext
 class DecideNode:
     """Translate a received message into one declared local debug effect."""
 
-    def execute(self, context: NodeContext) -> None:
+    async def execute(self, context: NodeContext) -> None:
         amp = context.amp
         if amp.payload.type != "message.received":
             return

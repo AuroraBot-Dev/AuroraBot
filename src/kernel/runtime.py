@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from threading import RLock
 from typing import Any
 from uuid import uuid4
 
+from jsonschema import ValidationError, validate
+
+from src.ai.contracts import ModelRequest, ModelResult
+from src.ai.vnext import ModelGatewayService
 from src.kernel.events import AmpEnvelope, AmpValidationError, new_amp
 from src.kernel.node import CognitiveNode, NodeContext
 from src.kernel.records import KernelRecord, RecordStatus
@@ -34,9 +38,13 @@ class CycleResult:
 class Kernel:
     """The sole owner of the shared event workspace and record state machine."""
 
-    def __init__(self, configuration: AuroraConfig, nodes: Mapping[str, CognitiveNode]) -> None:
+    def __init__(
+        self, configuration: AuroraConfig, nodes: Mapping[str, CognitiveNode], model_gateway: ModelGatewayService
+    ) -> None:
         self.configuration = configuration
         self._nodes = nodes
+        self._model_gateway = model_gateway
+        self._soul_content = configuration.soul_path.read_text(encoding="utf-8")
         self._workspace = configuration.runtime.workspace
         self._inbox = self._workspace / "inbox"
         self._process = self._workspace / "process"
@@ -46,7 +54,7 @@ class Kernel:
         for directory in (self._inbox, self._process, self._archive, self._record_process, self._record_archive):
             directory.mkdir(parents=True, exist_ok=True)
         self._state_path = self._process / "kernel-state.json"
-        self._lock = RLock()
+        self._lock = asyncio.Lock()
         self._cycle = self._load_cycle()
         configured = {node.id for node in configuration.nodes}
         if not set(nodes) <= configured or configured != set(nodes):
@@ -67,9 +75,9 @@ class Kernel:
     def _persist_cycle(self) -> None:
         atomic_write_json(self._state_path, {"cycle": self._cycle})
 
-    def submit_amp(self, amp: AmpEnvelope) -> None:
+    async def submit_amp(self, amp: AmpEnvelope) -> None:
         """Atomically offer a validated external fact to the next ingress pass."""
-        with self._lock:
+        async with self._lock:
             atomic_write_json(self._inbox / f"{amp.header.message_id}.json", amp.to_dict())
 
     def _record_path(self, record: KernelRecord) -> Path:
@@ -189,6 +197,15 @@ class Kernel:
             if not isinstance(data.get("capability"), str) or not isinstance(data.get("parameters"), dict):
                 raise ValueError("effect.requested requires capability and parameters")
             data = {**data, "request_id": str(uuid4())}
+            capability = data["capability"]
+            assert isinstance(capability, str)
+            descriptor = self.configuration.capability_definitions.get(capability)
+            if descriptor is None:
+                raise ValueError(f"unknown effect capability {capability}")
+            try:
+                validate(data["parameters"], descriptor.parameters_schema)
+            except ValidationError as error:
+                raise ValueError(f"effect parameters do not match {capability} schema: {error.message}") from error
         amp = new_amp(
             event_type=event_type,
             session_id=AmpEnvelope.parse(parent.amp).payload.session_id,
@@ -207,12 +224,12 @@ class Kernel:
                 return node
         raise KeyError(f"unknown node {node_id}")
 
-    def run_cycle(self) -> CycleResult:
+    async def run_cycle(self) -> CycleResult:
         """Consume only records ready at cycle start; child records wait until the next cycle."""
-        with self._lock:
-            return self._run_cycle()
+        async with self._lock:
+            return await self._run_cycle()
 
-    def _run_cycle(self) -> CycleResult:
+    async def _run_cycle(self) -> CycleResult:
         self._cycle += 1
         self._persist_cycle()
         ingested = self.ingest_ready()
@@ -238,17 +255,27 @@ class Kernel:
                     context = NodeContext(
                         record=record,
                         soul_hash=self.configuration.soul_hash,
+                        soul_content=self._soul_content,
                         configuration_snapshot={
                             "node_id": target,
                             "model_roles": sorted(node_config.model_roles),
                             "capabilities": sorted(node_config.capabilities),
+                            "capability_descriptors": [
+                                {
+                                    "id": capability,
+                                    "parameters_schema": self.configuration.capability_definitions[
+                                        capability
+                                    ].parameters_schema,
+                                }
+                                for capability in sorted(node_config.capabilities)
+                            ],
                         },
                         allowed_outputs=node_config.outputs,
                         allowed_capabilities=node_config.capabilities,
                         _publisher=self,
                         _node_id=target,
                     )
-                    self._nodes[target].execute(context)
+                    await self._nodes[target].execute(context)
                 record.transition(RecordStatus.ARCHIVED)
                 self._save_record(record)
                 scheduled.append(record.record_id)
@@ -258,9 +285,48 @@ class Kernel:
                 failed.append(record.record_id)
         return CycleResult(self._cycle, tuple(ingested), tuple(scheduled), tuple(failed))
 
-    def claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[KernelRecord, ...]:
+    async def request_model_from_node(
+        self, parent: KernelRecord, node_id: str, request: ModelRequest
+    ) -> ModelResult:
+        """Run an authorized model capability and retain request/outcome audit records."""
+        request_record = self._create_model_record(parent, node_id, "model.requested", request.to_dict())
+        try:
+            result = await self._model_gateway.complete(request)
+        except Exception as error:
+            request_record.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
+            self._save_record(request_record)
+            failed = self._create_model_record(
+                request_record,
+                node_id,
+                "model.failed",
+                {"error": f"{type(error).__name__}: {error}"},
+            )
+            failed.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
+            self._save_record(failed)
+            raise
+        request_record.transition(RecordStatus.ARCHIVED)
+        self._save_record(request_record)
+        self._create_model_record(request_record, node_id, "model.completed", result.to_dict())
+        return result
+
+    def _create_model_record(
+        self, parent: KernelRecord, node_id: str, event_type: str, data: dict[str, Any]
+    ) -> KernelRecord:
+        amp = new_amp(
+            event_type=event_type,
+            session_id=AmpEnvelope.parse(parent.amp).payload.session_id,
+            summary=event_type,
+            data=data,
+            source_app="kernel.model",
+            source_instance=node_id,
+        )
+        record = KernelRecord.from_amp(amp, available_cycle=self._cycle + 1, parent=parent, producer_node=node_id)
+        self._save_record(record)
+        return record
+
+    async def claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[KernelRecord, ...]:
         """Atomically reserve pending, authorized effects for one Platform adapter."""
-        with self._lock:
+        async with self._lock:
             return self._claim_effect_requests(capabilities)
 
     def _claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[KernelRecord, ...]:

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from src.localhost.runtime import AuroraRuntime
 
-CommandHandler = Callable[[AuroraRuntime, tuple[str, ...]], str]
+CommandHandler = Callable[[AuroraRuntime, tuple[str, ...]], Awaitable[str]]
+
+
+async def quit_command(_runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
+    return "__QUIT__"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,5 +40,5 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
         ),
         ConsoleCommand(("/cycle", "/c"), "/cycle [1-100]", "推进 Kernel 周期", cycle_command),
         ConsoleCommand(("/record",), "/record <record_id>", "查询审计记录", record_command),
-        ConsoleCommand(("/quit", "/exit", "/q"), "/quit", "退出控制台", lambda _runtime, _args: "__QUIT__"),
+        ConsoleCommand(("/quit", "/exit", "/q"), "/quit", "退出控制台", quit_command),
     )

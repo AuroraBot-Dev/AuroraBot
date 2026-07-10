@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 MAX_CONSOLE_CYCLES = 100
 
 
-def help_command(runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
+async def help_command(runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
     """Render the command registry."""
     from src.localhost.registry import command_specs
 
@@ -19,7 +19,7 @@ def help_command(runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
     return "\n".join(f"{spec.usage:<58} {spec.description}" for spec in command_specs())
 
 
-def status_command(runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
+async def status_command(runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
     """Describe the active local runtime without exposing event content."""
     return json.dumps(
         {
@@ -31,7 +31,7 @@ def status_command(runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
     )
 
 
-def cycle_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
+async def cycle_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
     """Advance one or more bounded Kernel cycles."""
     count = 1
     if arguments:
@@ -41,11 +41,11 @@ def cycle_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
             return "用法: /cycle [1-100]"
     if not 1 <= count <= MAX_CONSOLE_CYCLES:
         return "用法: /cycle [1-100]"
-    results = [runtime.run_cycle() for _ in range(count)]
+    results = [await runtime.run_cycle() for _ in range(count)]
     return json.dumps(results, ensure_ascii=False)
 
 
-def record_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
+async def record_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
     """Read one auditable record by ID."""
     if len(arguments) != 1:
         return "用法: /record <record_id>"

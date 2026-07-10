@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from pathlib import Path
 
 import uvicorn
@@ -24,7 +25,7 @@ def main() -> None:
     arguments = parser.parse_args()
     configuration = load_config(arguments.root, arguments.profile)
     if arguments.command == "console":
-        run_console(AuroraRuntime.create(arguments.root, arguments.profile))
+        asyncio.run(run_console(AuroraRuntime.create(arguments.root, arguments.profile)))
         return
     uvicorn.run(
         create_app(arguments.root, arguments.profile),

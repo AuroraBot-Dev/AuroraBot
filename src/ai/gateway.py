@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 import json
 import os
 import uuid
@@ -508,17 +509,24 @@ class ModelGateway:
 
     def __init__(
         self,
-        fast: str,
-        quality: str,
-        multimodal: str,
+        fast: str | None = None,
+        quality: str | None = None,
+        multimodal: str | None = None,
         embedding: str = "",
         reranker: str = "",
+        *,
+        models: Mapping[str, str] | None = None,
     ) -> None:
-        self._models = {
-            ROLE_FAST: fast,
-            ROLE_QUALITY: quality,
-            ROLE_MULTIMODAL: multimodal,
-        }
+        if models is None:
+            if fast is None or quality is None or multimodal is None:
+                raise ValueError("fast, quality and multimodal are required without models")
+            self._models = {
+                ROLE_FAST: fast,
+                ROLE_QUALITY: quality,
+                ROLE_MULTIMODAL: multimodal,
+            }
+        else:
+            self._models = dict(models)
         for role, model in self._models.items():
             if "/" not in model:
                 raise ValueError(  # noqa: TRY003

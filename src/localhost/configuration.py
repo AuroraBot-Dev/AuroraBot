@@ -72,7 +72,25 @@ class NodeConfig:
 class AdapterConfig:
     id: str
     implementation: str
-    capabilities: frozenset[str]
+    capabilities: tuple["CapabilityConfig", ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityConfig:
+    """A Platform effect capability and its JSON Schema input contract."""
+
+    id: str
+    parameters_schema: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelProviderConfig:
+    """A TOML-defined LiteLLM or OpenAI-compatible Provider route."""
+
+    id: str
+    adapter: str
+    secret_env: str
+    base_url: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +99,15 @@ class ModelRoleConfig:
 
     provider: str
     model: str
-    secret_env: str
+    capabilities: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelLoggingConfig:
+    """Opt-in DEBUG logging controls for the retained gateway implementation."""
+
+    log_queries: bool
+    log_responses: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +122,9 @@ class AuroraConfig:
     adapters: tuple[AdapterConfig, ...]
     model_roles: frozenset[str]
     model_definitions: dict[str, ModelRoleConfig]
+    model_providers: dict[str, ModelProviderConfig]
+    capability_definitions: dict[str, CapabilityConfig]
+    model_logging: ModelLoggingConfig
 
 
 def _parse_nodes(
@@ -167,7 +196,7 @@ def _parse_adapters(data: dict[str, Any]) -> tuple[AdapterConfig, ...]:
     for raw in raw_adapters:
         if not isinstance(raw, dict):
             raise ConfigurationError("adapter must be a table")
-        _require_keys(raw, {"id", "enabled", "implementation", "capabilities"}, "adapter")
+        _require_keys(raw, {"id", "enabled", "implementation", "capability"}, "adapter")
         if not isinstance(raw["enabled"], bool):
             raise ConfigurationError("adapter.enabled must be boolean")
         if not raw["enabled"]:
@@ -176,14 +205,26 @@ def _parse_adapters(data: dict[str, Any]) -> tuple[AdapterConfig, ...]:
         if adapter_id in ids:
             raise ConfigurationError(f"duplicate adapter {adapter_id}")
         ids.add(adapter_id)
-        capabilities = raw["capabilities"]
-        if not isinstance(capabilities, list) or not all(isinstance(value, str) for value in capabilities):
-            raise ConfigurationError("adapter.capabilities must contain strings")
+        capabilities = raw["capability"]
+        if not isinstance(capabilities, list):
+            raise ConfigurationError("adapter.capability must be an array")
+        parsed_capabilities: list[CapabilityConfig] = []
+        capability_ids: set[str] = set()
+        for capability in capabilities:
+            if not isinstance(capability, dict):
+                raise ConfigurationError("adapter.capability must be a table")
+            _require_keys(capability, {"id", "parameters_schema"}, "adapter.capability")
+            capability_id = _string(capability["id"], "adapter.capability.id")
+            schema = capability["parameters_schema"]
+            if capability_id in capability_ids or not isinstance(schema, dict):
+                raise ConfigurationError("adapter capability IDs must be unique and schemas must be tables")
+            capability_ids.add(capability_id)
+            parsed_capabilities.append(CapabilityConfig(capability_id, schema))
         adapters.append(
             AdapterConfig(
                 adapter_id,
                 _string(raw["implementation"], "adapter.implementation"),
-                frozenset(capabilities),
+                tuple(parsed_capabilities),
             )
         )
     return tuple(adapters)
@@ -216,7 +257,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     _require_keys(soul_raw, {"path"}, "soul")
     _require_keys(logging_raw, {"level"}, "logging")
     _require_keys(storage_raw, {"data_dir"}, "storage")
-    _require_keys(models_raw, {"roles"}, "models")
+    _require_keys(models_raw, {"roles", "providers", "logging"}, "models")
     debug_port = runtime_raw["debug_port"]
     if not isinstance(debug_port, int) or not 1 <= debug_port <= 65535:
         raise ConfigurationError("runtime.debug_port must be a valid port")
@@ -224,19 +265,48 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
         raise ConfigurationError("production debug API must bind to loopback")
     roles = models_raw["roles"]
-    if not isinstance(roles, dict):
-        raise ConfigurationError("models.roles must be a table")
+    providers = models_raw["providers"]
+    model_logging = models_raw["logging"]
+    if not isinstance(roles, dict) or not isinstance(providers, dict) or not isinstance(model_logging, dict):
+        raise ConfigurationError("models.roles, models.providers and models.logging must be tables")
+    _require_keys(model_logging, {"log_queries", "log_responses"}, "models.logging")
+    if not isinstance(model_logging["log_queries"], bool) or not isinstance(model_logging["log_responses"], bool):
+        raise ConfigurationError("models.logging values must be booleans")
+    model_providers: dict[str, ModelProviderConfig] = {}
+    for provider_id, settings in providers.items():
+        if not isinstance(provider_id, str) or not isinstance(settings, dict):
+            raise ConfigurationError("model provider IDs and settings must be tables")
+        required_keys = {"adapter", "secret_env", "base_url"} if "base_url" in settings else {"adapter", "secret_env"}
+        _require_keys(settings, required_keys, f"models.providers.{provider_id}")
+        adapter = _string(settings["adapter"], f"models.providers.{provider_id}.adapter")
+        if adapter not in {"litellm", "openai_compatible"}:
+            raise ConfigurationError(f"models.providers.{provider_id}.adapter is unsupported")
+        base_url = settings.get("base_url")
+        if base_url is not None:
+            base_url = _string(base_url, f"models.providers.{provider_id}.base_url")
+        if adapter == "openai_compatible" and base_url is None:
+            raise ConfigurationError(f"models.providers.{provider_id}.base_url is required")
+        model_providers[provider_id] = ModelProviderConfig(
+            id=provider_id,
+            adapter=adapter,
+            secret_env=_string(settings["secret_env"], f"models.providers.{provider_id}.secret_env"),
+            base_url=base_url,
+        )
     model_definitions: dict[str, ModelRoleConfig] = {}
     for role, settings in roles.items():
         if not isinstance(settings, dict):
             raise ConfigurationError(f"model role {role} must be a table")
-        _require_keys(settings, {"provider", "model", "secret_env"}, f"models.roles.{role}")
-        for key in settings:
-            _string(settings[key], f"models.roles.{role}.{key}")
+        _require_keys(settings, {"provider", "model", "capabilities"}, f"models.roles.{role}")
+        provider_id = _string(settings["provider"], f"models.roles.{role}.provider")
+        if provider_id not in model_providers:
+            raise ConfigurationError(f"models.roles.{role} references unknown provider")
+        capabilities = settings["capabilities"]
+        if not isinstance(capabilities, list) or not all(isinstance(value, str) for value in capabilities):
+            raise ConfigurationError(f"models.roles.{role}.capabilities must contain strings")
         model_definitions[role] = ModelRoleConfig(
-            provider=_string(settings["provider"], f"models.roles.{role}.provider"),
+            provider=provider_id,
             model=_string(settings["model"], f"models.roles.{role}.model"),
-            secret_env=_string(settings["secret_env"], f"models.roles.{role}.secret_env"),
+            capabilities=frozenset(capabilities),
         )
     soul_path = (root / _string(soul_raw["path"], "soul.path")).resolve()
     try:
@@ -245,9 +315,14 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
     nodes, edges = _parse_nodes(_read_toml(root / "config" / "nodes.toml"), frozenset(roles))
     adapters = _parse_adapters(_read_toml(root / "config" / "apps.toml"))
-    capabilities = frozenset().union(*(adapter.capabilities for adapter in adapters)) if adapters else frozenset()
+    capability_definitions: dict[str, CapabilityConfig] = {}
+    for adapter in adapters:
+        for capability in adapter.capabilities:
+            if capability.id in capability_definitions:
+                raise ConfigurationError(f"duplicate capability {capability.id}")
+            capability_definitions[capability.id] = capability
     for node in nodes:
-        if not node.capabilities <= capabilities:
+        if not node.capabilities <= capability_definitions.keys():
             raise ConfigurationError(f"node {node.id} requests unavailable capabilities")
     return AuroraConfig(
         root=root,
@@ -265,4 +340,10 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         adapters=adapters,
         model_roles=frozenset(roles),
         model_definitions=model_definitions,
+        model_providers=model_providers,
+        capability_definitions=capability_definitions,
+        model_logging=ModelLoggingConfig(
+            log_queries=model_logging["log_queries"],
+            log_responses=model_logging["log_responses"],
+        ),
     )

@@ -2,6 +2,8 @@
 
 基于 [LiteLLM](https://github.com/BerriAI/litellm) 的多角色、流式打断、费用追踪 LLM 网关。
 
+> vNext 规范：新节点必须使用 `src.ai.contracts.ModelRequest` 与 `src.ai.vnext.ModelGatewayService`，并由 Kernel 授权调用。角色、Provider、能力及密钥环境变量名称定义在 `config/aurora.toml`；环境变量不能覆盖结构性配置。本文其余直接访问 `gateway` 与 `LLM_GATEWAY_*` 的示例仅说明提取的兼容实现，不是 vNext 集成方式。
+
 ## 快速开始
 
 ```python
@@ -130,7 +132,9 @@ gateway.export_config()
 # {"fast": "openai/gpt-4o-mini", "quality": "openai/gpt-4o", ...}
 ```
 
-## 环境变量
+## 历史兼容环境变量
+
+以下变量是提取网关的历史兼容入口；vNext 运行图不读取它们选择模型。请改为在 `config/aurora.toml` 的 `models.providers` 与 `models.roles` 中配置路由，且只通过 `secret_env` 引用密钥环境变量。
 
 ```ini
 # fast 角色模型（默认: openai/gpt-4o-mini）

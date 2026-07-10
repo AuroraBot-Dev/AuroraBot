@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from src.localhost.runtime import AuroraRuntime
 
 
-def say_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
+async def say_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
     """Deliver a message without bypassing AMP ingress or Kernel records."""
     message = " ".join(arguments).strip()
     if not message:
@@ -23,4 +23,4 @@ def say_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
         source_app="localhost.console",
         source_instance="default",
     )
-    return f"已投递消息 AMP: {runtime.submit_amp(amp.to_dict())}"
+    return f"已投递消息 AMP: {await runtime.submit_amp(amp.to_dict())}"

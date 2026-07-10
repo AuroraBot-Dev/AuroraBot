@@ -17,6 +17,7 @@ dependencies = [
     "mcp[cli]>=1.27,<2",
     "fastapi>=0.115,<1",
     "uvicorn>=0.34,<1",
+    "jsonschema>=4.23,<5",
 ]
 
 [tool.setuptools.packages.find]
@@ -115,9 +116,11 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 "src/nodes/decide.py" = ["TC001"]
 "src/platform/local.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
 "src/utils/jsonio.py" = ["TC003"]
+"src/ai/vnext.py" = ["TC001", "TRY003"]
 "tests/test_api.py" = ["PLR2004", "TC003"]
 "tests/test_causal_loop.py" = ["TC003"]
 "tests/test_configuration.py" = ["TC003"]
+"tests/test_model_gateway.py" = ["TC003"]
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

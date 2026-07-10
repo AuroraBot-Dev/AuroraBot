@@ -21,15 +21,15 @@ def create_app(root: Path, profile: str | None = None) -> FastAPI:
         return {"status": "ok", "profile": runtime.configuration.runtime.profile}
 
     @app.post("/v1/debug/amp", status_code=status.HTTP_202_ACCEPTED)
-    def submit_amp(value: dict[str, Any]) -> dict[str, str]:
+    async def submit_amp(value: dict[str, Any]) -> dict[str, str]:
         try:
-            return {"message_id": runtime.submit_amp(value)}
+            return {"message_id": await runtime.submit_amp(value)}
         except AmpValidationError as error:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
 
     @app.post("/v1/debug/cycles")
-    def run_cycle() -> dict[str, Any]:
-        return runtime.run_cycle()
+    async def run_cycle() -> dict[str, Any]:
+        return await runtime.run_cycle()
 
     @app.get("/v1/debug/records/{record_id}")
     def get_record(record_id: str) -> dict[str, Any]:

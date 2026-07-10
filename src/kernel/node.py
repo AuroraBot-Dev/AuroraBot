@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from src.ai.contracts import ModelRequest, ModelResult
 from src.kernel.events import AmpEnvelope
 from src.kernel.records import KernelRecord
 
@@ -23,6 +24,10 @@ class EventPublisher(Protocol):
         summary: str,
     ) -> KernelRecord: ...
 
+    async def request_model_from_node(
+        self, parent: KernelRecord, node_id: str, request: ModelRequest
+    ) -> ModelResult: ...
+
 
 @dataclass(frozen=True, slots=True)
 class NodeContext:
@@ -30,6 +35,7 @@ class NodeContext:
 
     record: KernelRecord
     soul_hash: str
+    soul_content: str
     configuration_snapshot: dict[str, Any]
     allowed_outputs: frozenset[str]
     allowed_capabilities: frozenset[str]
@@ -53,8 +59,14 @@ class NodeContext:
             summary,
         )
 
+    async def request_model(self, request: ModelRequest) -> ModelResult:
+        """Request one declared model role through Kernel's auditable capability boundary."""
+        if request.role not in self.configuration_snapshot["model_roles"]:
+            raise NodeContractError(f"{self._node_id} cannot request model role {request.role}")
+        return await self._publisher.request_model_from_node(self.record, self._node_id, request)
+
 
 class CognitiveNode(Protocol):
     """A self-contained cognitive node with no Platform or workspace access."""
 
-    def execute(self, context: NodeContext) -> None: ...
+    async def execute(self, context: NodeContext) -> None: ...

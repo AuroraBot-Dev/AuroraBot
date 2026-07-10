@@ -44,6 +44,8 @@ class Config:
     LLM_GATEWAY_MULTIMODAL_MODEL: str
     LLM_GATEWAY_EMBEDDING_MODEL: str
     LLM_GATEWAY_RERANKER_MODEL: str
+    LLM_GATEWAY_ENABLE_LOGGING_QUERIES: bool
+    LLM_GATEWAY_ENABLE_LOGGING_RESPONSES: bool
     _snapshot: AuroraConfig
 
     @classmethod
@@ -75,6 +77,8 @@ class Config:
         cls.LLM_GATEWAY_MULTIMODAL_MODEL = roles.get("multimodal", cls.LLM_GATEWAY_QUALITY_MODEL)
         cls.LLM_GATEWAY_EMBEDDING_MODEL = roles.get("embedding", _COMPATIBILITY_EMBEDDING_MODEL)
         cls.LLM_GATEWAY_RERANKER_MODEL = roles.get("reranker", "")
+        cls.LLM_GATEWAY_ENABLE_LOGGING_QUERIES = snapshot.model_logging.log_queries
+        cls.LLM_GATEWAY_ENABLE_LOGGING_RESPONSES = snapshot.model_logging.log_responses
         cls.ensure_dirs()
         return snapshot
 

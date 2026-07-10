@@ -18,9 +18,9 @@ class LocalDebugPlatform:
 
     capabilities = frozenset({"debug.echo"})
 
-    def execute_pending_effects(self, kernel: Kernel) -> PlatformRunResult:
+    async def execute_pending_effects(self, kernel: Kernel) -> PlatformRunResult:
         receipts = 0
-        for record in kernel.claim_effect_requests(self.capabilities):
+        for record in await kernel.claim_effect_requests(self.capabilities):
             amp = AmpEnvelope.parse(record.amp)
             data = amp.payload.data
             request_id = data.get("request_id")
@@ -43,7 +43,7 @@ class LocalDebugPlatform:
                     source_app="platform.local",
                     source_instance="debug",
                 )
-                kernel.submit_amp(receipt)
+                await kernel.submit_amp(receipt)
                 kernel.complete_effect(record)
                 receipts += 1
             except Exception as error:  # noqa: BLE001 - Platform failures must return an AMP receipt.
@@ -59,7 +59,7 @@ class LocalDebugPlatform:
                     source_app="platform.local",
                     source_instance="debug",
                 )
-                kernel.submit_amp(receipt)
+                await kernel.submit_amp(receipt)
                 kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
                 receipts += 1
         return PlatformRunResult(receipts)

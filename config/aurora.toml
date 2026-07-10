@@ -17,11 +17,29 @@ level = "INFO"
 data_dir = "data"
 
 [models.roles.fast]
-provider = "openai"
-model = "gpt-4o-mini"
-secret_env = "OPENAI_API_KEY"
+provider = "deepseek"
+model = "deepseek-v4-flash"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
 
 [models.roles.quality]
-provider = "openai"
-model = "gpt-4o"
+provider = "deepseek"
+model = "deepseek-v4-pro"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+
+[models.providers.deepseek]
+adapter = "litellm"
+secret_env = "DEEPSEEK_API_KEY"
+
+[models.providers.openai]
+adapter = "litellm"
 secret_env = "OPENAI_API_KEY"
+
+[models.providers.siliconflow]
+adapter = "openai_compatible"
+base_url = "https://api.siliconflow.cn/v1"
+secret_env = "SILICONFLOW_API_KEY"
+
+[models.logging]
+# 仅影响 DEBUG 日志；默认不记录用户消息、提示词或模型回复正文。
+log_queries = true
+log_responses = true

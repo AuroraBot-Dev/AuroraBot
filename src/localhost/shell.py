@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.localhost.runtime import AuroraRuntime
 
 
-def run_console(
+async def run_console(
     runtime: AuroraRuntime,
     *,
     readline: Callable[[str], str] = input,
@@ -34,7 +34,7 @@ def run_console(
         if command is None:
             output("未知命令；输入 /help 查看命令。")
             continue
-        result = command.handler(runtime, arguments)
+        result = await command.handler(runtime, arguments)
         if result == "__QUIT__":
             return
         output(result)

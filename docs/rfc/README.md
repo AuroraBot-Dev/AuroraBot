@@ -23,6 +23,6 @@
 | [0002](0002-configuration.md) | 已接受 | TOML 主配置与 JSON 数据边界 |
 | [0003](0003-event-contract.md) | 已接受 | AMP、Kernel record、周期与效果回执 |
 | [0004](0004-plugin-contract.md) | 草案 | 节点、平台适配器与应用扩展 |
-| [0005](0005-model-gateway.md) | 草案 | 模型角色、能力协商与原生响应 |
+| [0005](0005-model-gateway.md) | 已接受 | 模型角色、能力协商与原生响应 |
 | [0006](0006-local-debug-api.md) | 已接受 | 本地运行器与开发调试 HTTP API |
 | [0007](0007-local-console-and-compatibility.md) | 已接受 | 本地控制台与提取模块兼容层 |

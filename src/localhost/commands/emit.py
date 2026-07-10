@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from src.localhost.runtime import AuroraRuntime
 
 
-def event_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
+async def event_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
     """Inject a typed AMP event through the same ingress used by the HTTP API."""
     parser = argparse.ArgumentParser(add_help=False, prog="/event")
     parser.add_argument("event_type")
@@ -35,4 +35,4 @@ def event_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
         source_app=parsed.source,
         source_instance="console",
     )
-    return f"已投递 AMP: {runtime.submit_amp(amp.to_dict())}"
+    return f"已投递 AMP: {await runtime.submit_amp(amp.to_dict())}"

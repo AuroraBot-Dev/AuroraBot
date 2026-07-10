@@ -5,4 +5,7 @@
 id = "local.debug"
 enabled = true
 implementation = "src.platform.local:LocalDebugPlatform"
-capabilities = ["debug.echo"]
+
+[[adapter.capability]]
+id = "debug.echo"
+parameters_schema = { type = "object", properties = { text = { type = "string" } }, required = ["text"], additionalProperties = false }
