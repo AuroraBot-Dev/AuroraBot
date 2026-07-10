@@ -1,118 +1,49 @@
-# AuroraBot
+# AuroraBot vNext
 
-基于 NoneBot2 的内驱式、自主决策智能体框架 — 文件驱动认知引擎 + 三级联合记忆 + 可插拔 App 插件体系。
+AuroraBot 正在从冻结的旧系统重建。`legacy/` 保存历史实现与测试，只可作为迁移参考；除非明确要求，不得向其中新增功能或以其架构约束 vNext。
 
-## Project
+## Architecture authority
 
-- **Stack**: Python 3.12, NoneBot2 + OneBot V11, LiteLLM, ChromaDB, mem0
-- **Package manager**: `uv` (lockfile `uv.lock`)
-- **Entry point**: `bot.py` → NoneBot driver → `src/main.py` (startup/shutdown hooks)
-- **Config**: `.env` (loaded by `src/config.py`), `apps/config.yml` (per-app)
-- **CI**: GitHub Actions — `ruff check`, `ruff format --check`, `pyright src/`, `pytest --cov=src`
+- `docs/rfc/` 是 vNext 的唯一设计基准。
+- 已接受 RFC 高于 README、注释、配置样例和现有代码。
+- 影响模块边界、事件、配置、扩展或模型调用契约的改动，必须先更新或新增 RFC。
+- 当前首要目标是 RFC 0001 定义的最小闭环，而不是恢复旧功能。
 
-## Commands
+## Project layout
 
-| Purpose      | Command                                  |
-| ------------ | ---------------------------------------- |
-| Install deps | `uv sync --group dev`                    |
-| Run          | `uv run python bot.py`                   |
-| Tests        | `uv run pytest --cov=src`                |
-| Lint         | `uv run ruff check src/ tests/`          |
-| Format       | `uv run ruff format src/ tests/`         |
-| Format check | `uv run ruff format --check src/ tests/` |
-| Type check   | `uv run pyright src/`                    |
-
-## Architecture
-
-```
-bot.py                   → NoneBot entry, loads pyproject.toml plugins
-src/main.py              → Startup/shutdown: launches runtime + console control loop
-src/config.py            → Central config from .env, path constants, ensure_dirs()
-│
-├── src/brain/           → Cognitive Engine (CortexForge)
-│   ├── kernel/          → Node/Agent/Router base classes, Circuit orchestrator, FileEventBus, NodeFactory
-│   ├── memory/          → UnifiedMemoryManager: L1 (working/FIFO), L2 (episodic/JSON), L3 (semantic/ChromaDB)
-│   ├── nodes/           → Cognitive nodes defined in topology.yaml
-│   │   ├── agents/      → internalizer, externalizer, memory_consolidator, (disabled: action_planner, impulse_gate, polaris)
-│   │   └── routers/     → message_preprocessor, command_dispatcher, heartbeat_generator, timer_scheduler, switch_router, merge_router, broadcast_router, dead_letter_router, metrics_collector
-│   ├── ai/              → LLM gateway (LiteLLM), model definitions, provider registry
-│   ├── prompts/         → Prompt templates (INTERNALIZER.md, EXTERNALIZER.md, SOUL.md, GATE.md, …)
-│   └── localhost/       → Interactive console shell + control commands (say, emit, invoke, memtest)
-│
-├── src/platform/        → Application Host Layer
-│   ├── application_host.py  → App registry, command dispatch, event queue
-│   ├── application_api.py   → PlatformAPI for bidirectional app ↔ host communication
-│   ├── app_discovery.py     → Scans apps/ for manifests
-│   ├── manifest.py          → manifest.yaml parser & schema
-│   └── loop.py              → Async app frame loop (APP_FRAME_INTERVAL)
-│
-├── src/utils/           → log_utils (get_logger, Rich console + rotating file), json_utils, time_utils
-│
-├── apps/                → Pluggable Apps (each has manifest.yaml + runtime.py)
-│   ├── aurora-app-qq/
-│   ├── aurora-app-weather/
-│   ├── aurora-app-clock/
-│   └── aurora-app-diary/
-│
-├── tests/               → pytest suite (test_gateway, test_memory, test_circuit, test_node_factory, …)
-└── data/                → Runtime state: kernel/ (inbox, pipeline, heartbeat, rhythm), memory/ (chroma, episodes)
+```text
+config/       TOML 主配置、领域配置与 profile 覆盖
+docs/rfc/     RFC 0000—0005
+legacy/       冻结的旧实现
+src/kernel/   事件、工作区、图、周期、因果与状态
+src/ai/       宽泛模型网关
+src/localhost/ 本地业务服务与开发者调试接口
+src/dashboard/ Dashboard 的后端路由/API 适配层
+src/platform/ 平台生态适配与 AMP 归一化
+src/apps/     内建原生 AMP-MCP 应用
+src/nodes/    内建、自包含的认知节点
+src/utils/    无上层依赖的通用工具
+tests/        vNext 契约和集成测试
 ```
 
-### Data flow (Kernel-γ pipeline)
+## Hard boundaries
 
-```
-External event → inbox/pending/event_*.json
-  → message_preprocessor → pipeline/message_queue/*.json
-  → internalizer (B→A: JSON → first-person narrative) → pipeline/internalized/*.json
-  → externalizer (A→B: narrative → JSON action) → pipeline/action_queue/*.json
-  → command_dispatcher → PlatformAPI command invocation
-```
+- Kernel 只负责事件、状态、图调度、周期和因果边界；不决定认知内容，也不直接执行平台效果。
+- Node 只能通过 Kernel API 读取上下文、请求声明过的能力并产出事件；不得直接写共享工作区、调用平台 Client 或绕过事件记录。
+- Platform 将外部生态归一化为 AMP 输入，并执行 `effect.requested`；执行结果必须以新的 AMP 事件回到 Kernel。
+- `localhost` 提供业务用例；`dashboard` 只提供路由/API 适配，不能绕过 `localhost` 直接操作 Kernel。
+- `utils` 不得依赖 `kernel`、`ai`、`platform`、`nodes`、`localhost` 或 `dashboard`。
 
-Nodes communicate exclusively through files (FileEventBus). The topology is declared in `src/brain/nodes/topology.yaml` as a graph of `watch` (glob subscriptions) and `emit` (output paths).
+## Workspace and configuration
 
-## Conventions
+- Kernel 工作区固定为 `data/kernel/inbox/`、`process/`、`archive/`。
+- 所有外部事件和运行时记录为 JSON；生产者必须临时写入后原子改名。
+- 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
+- 密钥仅来自环境变量；`.env` 仅是本地开发辅助，不能定义结构或覆盖任意 TOML 值。
 
-### Code style
+## Code conventions
 
-- **Line length**: 120 (`ruff`), LF endings
-- **Quotes**: double quotes preferred (flake8-quotes `Q` rule active)
-- **Imports**: `from __future__ import annotations` in every file; isort enforced (`I`)
-- **Types**: mandatory annotations on public functions (`ANN` rules); `slots=True` on dataclasses; no `Any` annotations (`ANN401` ignored only because suppressed)
-- **No bare except** (`BLE`), no `print` (`T20`), no `datetime.now()` without tz (`DTZ`)
-- **Modern Python**: `X | Y` unions, PEP 604; pathlib (`PTH`); simplified constructs (`SIM`)
-
-### Logging
-
-```python
-from src.utils.log_utils import get_logger
-logger = get_logger("ModuleName")
-```
-
-- **ERROR**: functional interruptions, exceptions
-- **WARNING**: recoverable anomalies, config fallbacks
-- **INFO**: lifecycle events only (start/stop, app register, user-visible results). NOT per-request or per-event.
-- **DEBUG**: everything else — request handling, cache reads, LLM calls, timing, file I/O
-- See `LOGGING.md` for the full policy.
-
-### Singleton pattern
-
-Key services (gateway, memory_manager, app_host) use lazy-init module-level proxies. Init-on-first-access with one INFO line; sub-component init uses DEBUG.
-
-### Naming & structure
-
-- `src/` is the NoneBot plugin dir (configured in `pyproject.toml`)
-- App packages use `im.polaris.*` namespace (e.g. `im.polaris.qq`, `im.polaris.weather`)
-- Command names: `{package}.{command_name}` (e.g. `im.polaris.qq.send_message`)
-- Test files: `tests/test_*.py`, runnable from project root with `uv run pytest`
-
-### Git workflow
-
-- Base branch: `dev`
-- Feature branches: `feat/*`, `fix/*`, `refact/*`
-- PR to `dev`, merge once, delete branch
-- CI auto-tags `vX.Y.Z-alpha.N` on merge to `dev`
-- `main` receives releases only
-
-## Notes
-
--
+- Python 3.12，包管理使用 `uv`。
+- Ruff 行宽 120，LF，双引号；公开 API 提供类型注解，dataclass 优先 `slots=True`。
+- 日志级别与边界见 `LOGGING.md`。
+- 当前没有 vNext 可运行入口；不要把旧 `bot.py` 当作实现目标。
