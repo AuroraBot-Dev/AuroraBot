@@ -1,8 +1,8 @@
-# MCP / 应用扩展声明。
-# 每个应用的启用状态、启动参数和权限将在此配置，运行时数据仍使用 JSON。
+# 应用与平台适配器声明。
+# 安装或发现不代表启用；运行时事件和应用私有载荷仍使用 JSON。
 
 # [[app]]
 # id = "example"
 # enabled = false
 # implementation = "aurora_example.app:plugin"
-
+# adapter = "mcp"

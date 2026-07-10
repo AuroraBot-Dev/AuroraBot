@@ -1,10 +1,13 @@
-# 认知节点拓扑与节点参数。
-# 内置节点与扩展节点均通过此文件显式启用；安装扩展不会自动加入运行时。
+# 认知节点图与节点参数。
+# 内置节点和扩展节点均须显式启用；安装扩展不会自动加入运行时。
 
 # [[node]]
-# id = "example"
-# enabled = false
-# implementation = "aurora_example.node:plugin"
-# inputs = ["input.external"]
-# outputs = ["example.result"]
+# id = "builtin.decide"
+# enabled = true
+# implementation = "aurorabot.nodes.decide:plugin"
+# inputs = ["message.received", "effect.succeeded", "effect.failed"]
+# outputs = ["effect.requested"]
 
+# [[edge]]
+# event_type = "message.received"
+# target = "builtin.decide"

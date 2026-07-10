@@ -1,96 +1,31 @@
-# Contributing Guide
+# Contributing
 
 <a href="./CONTRIBUTING.md">中文</a> | <b>English</b> | <a href="./CONTRIBUTING.ja.md">日本語</a>
 
-Thank you for your interest in AuroraBot! This guide will help you get the project running and walk you through the recommended contribution workflow.
+AuroraBot is in its vNext rebuild phase. The immediate goal is a contractual minimum causal loop, not restoration of every feature in `legacy/`.
 
-## Prerequisites
+## Before contributing
 
-- **Python** ≥ 3.12, < 3.13
-- **uv** (package manager) — [Installation Guide](https://docs.astral.sh/uv/getting-started/installation/)
+- Use Python 3.12 and `uv`.
+- Read `docs/rfc/README.md` and every accepted RFC affected by the change.
+- Treat `legacy/` as historical reference, not as an architectural template.
 
-## Running the Project
+## Rules
+
+1. Update or add an RFC before changing architecture, events, configuration, extensions, or the model-gateway contract.
+2. Add executable tests for every accepted contract.
+3. Do not bypass Kernel event recording to manipulate the workspace; Dashboard must not call Kernel or Platform directly.
+4. Never place secrets in TOML or use JSON as structural configuration.
+5. Until the vNext entry point exists, do not describe `bot.py` as the vNext launch command.
+
+## Checks
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/AuroraBot-Dev/AuroraBot.git
-cd AuroraBot
-
-# 2. Install dependencies (including dev tools)
 uv sync --group dev
-
-# 3. Configure environment variables
-cp .env.example .env
-# Edit .env and fill in the required API keys, etc.
-
-# 4. Launch
-uv run python bot.py
+uv run ruff check bot.py src/ tests/
+uv run ruff format --check bot.py src/ tests/
+uv run pyright bot.py src/
+uv run pytest --cov=src
 ```
 
-## Development Tools
-
-| Command                          | Purpose                                   |
-| -------------------------------- | ----------------------------------------- |
-| `uv run pytest --cov=src`        | Run tests with coverage                   |
-| `uv run ruff check bot.py src/ tests/`  | Lint code                                 |
-| `uv run ruff format bot.py src/ tests/` | Format code                               |
-| `uv run pyright bot.py src/`            | Type-check (`tests/` excluded by default) |
-
-> Before submitting a PR, it is recommended to run `uv run pytest --cov=src`, `uv run ruff check bot.py src/ tests/`, and `uv run pyright bot.py src/`. The CI pipeline runs coverage-enabled `pytest`, `ruff check`, `ruff format --check`, and `pyright bot.py src/` to keep style, type checking, and basic regression checks aligned.
-
-## Contribution Workflow
-
-We follow a lightweight **branch → PR → merge-and-discard** workflow:
-
-```
-dev (latest)
-  │
-  ├── feat/xxx          ← feature branch
-  ├── fix/xxx           ← bugfix branch
-  └── refact/xxx        ← refactoring or optimization branch
-```
-
-### 1. Branch off the latest `dev`
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b feat/my-feature    # or fix/xxx, refact/xxx
-```
-
-> Branch prefix conventions:
->
-> - **feat/** — New feature
-> - **fix/** — Bug fix
-> - **refact/** — Code refactoring or optimization (no behavioral changes)
-
-### 2. Develop on your branch
-
-Commit and iterate freely on your local branch. Keep commit messages clear and concise.
-
-### 3. Submit a PR against the `dev` branch
-
-Push your branch to the remote and open a Pull Request targeting the `dev` branch.
-
-### 4. After merge, the branch's mission is complete
-
-Once your PR is merged into `dev`, that branch has served its purpose. **Do not reuse it for further feature development.** You can safely delete it:
-
-If the merge lands on `dev` and `CI` passes, the repository automatically creates the next `vX.Y.Z-alpha.N` tag based on the version in `pyproject.toml` and publishes a corresponding Pre-release. In normal day-to-day development, you usually do not need to create `alpha` tags manually anymore.
-
-```bash
-git branch -d feat/my-feature
-```
-
-### 5. If additional changes are needed
-
-There are two paths:
-
-- **PR not yet merged** — Mark the PR as **Draft**, continue iterating on the same branch, and switch it back to Ready for review when done.
-- **PR already merged** — Repeat the workflow above: branch off the latest `dev` and create a new `feat/`, `fix/`, or `refact/` branch.
-
-> This approach keeps each branch focused on a single responsibility with a clear lifecycle, avoiding the mess of one branch carrying multiple unrelated changes over time.
-
----
-
-If you have any questions, feel free to open an [Issue](https://github.com/AuroraBot-Dev/AuroraBot/issues).
+Commands will evolve with the vNext implementation. CI and accepted RFCs remain authoritative.
