@@ -58,9 +58,13 @@ class MCPPlatform:
         await self._kit.start_all(local_specs)
         await self._clients.connect_all()
         await self._clients.refresh_tools()
-        for app in self._configuration.apps:
-            if app.transport == "streamable_http":
-                await self._connect_remote(app)
+        remote_tasks = [
+            self._connect_remote(app)
+            for app in self._configuration.apps
+            if app.transport == "streamable_http"
+        ]
+        if remote_tasks:
+            await asyncio.gather(*remote_tasks)
         descriptors = self._discover_capabilities()
         self._configuration.capability_definitions.update(descriptors)
         self._notification_task = asyncio.create_task(
