@@ -1,17 +1,8 @@
-"""认知拓扑电路编排器 —— 管理节点协程生命周期与文件事件总线的启动/停止。
+"""Cognitive topology circuit orchestrator — manages node coroutines and kernel lifecycle.
 
-用法::
-
-    from src.kernel.circuit import Circuit
-
-    circuit = Circuit(nodes)
-    await circuit.start()
-    ...
-    await circuit.stop()
-
-    # 或使用 async context manager
-    async with Circuit(nodes) as circuit:
-        circuit.inject_event(event)
+Acts as a facade over GraphRuntime, FileEventBus, HeartbeatRuntime,
+and the storage layer.  Provides the same external interface as the
+previous circuit for backward compatibility.
 """
 
 from __future__ import annotations
@@ -23,105 +14,153 @@ from typing import TYPE_CHECKING, Self
 
 from src.config import Config
 from src.kernel.base import FileEvent, FileUpdate, NodeState
-from src.kernel.event_bus import FileEventBus
+from src.kernel.locks import LockClient
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.kernel.base import Node
+    from src.kernel.event_bus import FileEventBus
+    from src.kernel.heartbeat import HeartbeatRuntime
+    from src.kernel.metadata import SQLiteMetadataStore
+    from src.kernel.objectstore import FileObjectStore, MemoryObjectStore
 
 logger = get_logger("Circuit")
 
 
 class Circuit:
-    """认知拓扑电路编排器。
+    """Cognitive topology circuit orchestrator.
 
-    管理一个 :class:`FileEventBus` 和一组 :class:`Node` 实例的
-    协程生命周期。每个节点运行独立的 ``run()`` 协程，文件事件
-    通过总线在有环图中流转。
+    Manages a FileEventBus and a set of Node coroutines.
+    Each node runs an independent ``run()`` coroutine; file events
+    flow through the bus in a directed (possibly cyclic) graph.
 
     Parameters
     ----------
     nodes : list[Node]
-        组成电路的所有节点。启动前需已完成子类实例化。
+        All nodes in the circuit.
+    store : SQLiteMetadataStore
+        Metadata store for file state.
+    objects : MemoryObjectStore | FileObjectStore
+        Immutable object store for file content.
+    heartbeat : HeartbeatRuntime
+        Adaptive heartbeat manager.
+    bus : FileEventBus
+        Event bus for dispatching file events.
     """
 
-    def __init__(self, nodes: list[Node]) -> None:
+    def __init__(
+        self,
+        nodes: list[Node],
+        store: SQLiteMetadataStore,
+        objects: MemoryObjectStore | FileObjectStore,
+        heartbeat: HeartbeatRuntime,
+        bus: FileEventBus,
+    ) -> None:
         self._nodes = nodes
-        self._bus: FileEventBus | None = None
+        self._store = store
+        self._objects = objects
+        self._heartbeat = heartbeat
+        self._bus = bus
         self._node_tasks: list[asyncio.Task[None]] = []
 
     @property
     def is_running(self) -> bool:
-        return self._bus is not None
+        return self._bus is not None and self._bus._dispatch_task is not None and not self._bus._dispatch_task.done()
+
+    @property
+    def store(self) -> SQLiteMetadataStore:
+        return self._store
+
+    @property
+    def objects(self) -> MemoryObjectStore | FileObjectStore:
+        return self._objects
+
+    @property
+    def heartbeat(self) -> HeartbeatRuntime:
+        return self._heartbeat
 
     async def start(self) -> None:
-        """启动电路。
+        """Start the circuit.
 
-        创建事件总线并将其注入所有节点，然后并行启动分发循环
-        和每个节点的 ``run()`` 协程。
+        Injects kernel services into all nodes, starts the event bus
+        dispatch loop, bootstraps the heartbeat, and starts all node
+        coroutines.
         """
-        if self._bus is not None:
-            logger.warning("电路已在运行中，忽略重复启动")
+        if self.is_running:
+            logger.warning("Circuit already running, ignoring duplicate start")
             return
 
-        self._bus = FileEventBus(self._nodes)
-
+        # Inject kernel services into nodes
         for node in self._nodes:
             node._bus = self._bus
+            node._store = self._store
+            node._objects = self._objects
+            node._lock_client = LockClient(self._store, node.id)
 
         self._bus.start_dispatch()
 
-        # Bootstrap: 创建初始 heartbeat 文件，触发自持振荡回路
+        # Bootstrap heartbeat: publish initial tick event
         self._bootstrap_heartbeat()
 
         for node in self._nodes:
             task = asyncio.create_task(node.run())
             self._node_tasks.append(task)
 
-        logger.info(f"电路已启动: {len(self._nodes)} 个节点, {', '.join(node.name for node in self._nodes)}")
+        logger.info(
+            "Circuit started: %d nodes, %s",
+            len(self._nodes),
+            ", ".join(f"{node.name}({node.id})" for node in self._nodes),
+        )
 
     async def stop(self) -> None:
-        """停止电路。
+        """Stop the circuit.
 
-        置位所有节点的终止标志并唤醒等待中的协程，
-        逐一取消分发任务和节点任务。
+        Terminates all nodes, cancels coroutines, and shuts down
+        the event bus dispatch loop.
         """
-        if self._bus is None:
+        if not self.is_running:
             return
 
+        # Terminate nodes
         for node in self._nodes:
             node.state = NodeState.TERMINATED
             node._ready_event.set()
 
+        # Shutdown event bus
         await self._bus.shutdown()
 
+        # Cancel node tasks
         for task in self._node_tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*self._node_tasks, return_exceptions=True)
 
         self._node_tasks.clear()
-        self._bus = None
-
-        logger.info("电路已停止")
+        logger.info("Circuit stopped")
 
     def inject_event(self, event: FileEvent) -> None:
-        """向电路注入一个外部文件事件。
+        """Inject an external file event into the circuit.
 
-        调用后，事件进入总线队列，匹配的节点将被激活并开始执行。
-        这是电路的外部入口之一。
-
-        Parameters
-        ----------
-        event : FileEvent
-            要注入的外部事件。
+        The event enters the bus queue; matching nodes are activated.
         """
         if self._bus is None:
-            raise RuntimeError("电路未启动，无法注入事件")
+            msg = "Circuit not started, cannot inject event"
+            raise RuntimeError(msg)
         self._bus.publish(event)
 
+    async def apply_update(self, update: FileUpdate, node_id: str = "system") -> None:
+        """Write a file update and trigger downstream events.
+
+        This is the external entry point for file writes (used by
+        MCP event bridge and console commands).
+        """
+        if self._bus is None:
+            msg = "Circuit not started, cannot apply update"
+            raise RuntimeError(msg)
+        await self._bus.apply_update(update, node_id)
+
     def _bootstrap_heartbeat(self) -> None:
-        """创建初始 heartbeat/tick.json 并注入事件，启动自持振荡回路。"""
+        """Create initial heartbeat tick and inject the first event."""
         heartbeat_dir = Config.KERNEL_DATA_DIR / "heartbeat"
         heartbeat_dir.mkdir(parents=True, exist_ok=True)
         tick_path = heartbeat_dir / "tick.json"
@@ -144,28 +183,7 @@ class Circuit:
                     metadata={"source_node": "circuit_bootstrap"},
                 )
             )
-        logger.debug("Heartbeat 初始脉冲已注入")
-
-    async def apply_update(self, update: FileUpdate, node_id: str = "system") -> None:
-        """向电路写入一个文件变更并触发下游事件。
-
-        将 :class:`FileUpdate` 通过总线落盘，落盘后自动生成
-        ``change_type="write"`` 的 :class:`FileEvent` 并重新注入总线，
-        匹配的节点将被激活。
-
-        这是 MCP 事件桥接和控制台命令注入文件变更的入口，
-        写入后会驱动节点图中的下游节点。
-
-        Parameters
-        ----------
-        update : FileUpdate
-            要落盘的文件变更。
-        node_id : str
-            触发写入的节点标识，默认 ``"system"``。
-        """
-        if self._bus is None:
-            raise RuntimeError("电路未启动，无法写入文件")
-        await self._bus.apply_update(update, node_id)
+        logger.debug("Heartbeat initial pulse injected")
 
     async def __aenter__(self) -> Self:
         await self.start()

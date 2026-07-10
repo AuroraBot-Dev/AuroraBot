@@ -1,9 +1,6 @@
-"""BroadcastRouter —— 一对多扇出路由。
+"""BroadcastRouter — 一对多扇出路由。
 
-纯机械 Router 节点。watch 一个 glob，将匹配的每个文件复制到 config.targets
-中列出的所有 emit 路径。
-
-典型用途：CommandDispatcher 的产出同时触发 Reflector + MoodMonitor。
+纯机械 Router 节点。将匹配的每个文件复制到 config.targets 中的所有 emit 路径。
 """
 
 from __future__ import annotations
@@ -20,30 +17,13 @@ logger = get_logger("BroadcastRouter")
 
 
 class BroadcastRouter(Router):
-    """一对多扇出路由。
+    """一对多扇出路由。"""
 
-    config.targets 格式::
+    _default_guards: list[str] = []
+    _default_produces: list[str] = []
 
-        targets:
-          - "pipeline/dispatch_queue/{filename}"
-          - "reflection/inbox/{filename}"
-          - "history/archive/{filename}"
-
-    每个匹配的文件复制到所有 target 路径。
-    """
-
-    _default_guards: list[str] = []  # noqa: RUF012 — topology config 提供
-    _default_produces: list[str] = []  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        host: "object | None" = None,
-        *,
-        targets: list[str] | None = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
+    def __init__(self, node_id: str, *, targets: list[str] | None = None, **kwargs: Any) -> None:
+        super().__init__(node_id, **kwargs)
         self._targets = targets or []
 
     async def execute(self) -> list[FileUpdate]:
@@ -60,7 +40,6 @@ class BroadcastRouter(Router):
                 except (OSError, json.JSONDecodeError):
                     continue
 
-                # 移除源文件
                 with contextlib.suppress(OSError):
                     file_path.unlink()
 

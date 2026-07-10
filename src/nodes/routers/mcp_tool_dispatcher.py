@@ -1,10 +1,8 @@
 """MCPToolDispatcher — 将 Brain 行动意图转译为 MCP Tool 调用。
 
-从 ``pipeline/action_queue/*.json`` 读取 Externalizer 产出的行动意图，
-通过 ``MCPClientManager.call_tool()`` 执行工具调用，并将结果写入
-``pipeline/tool_results/*.json``。
-
-所有外部副作用都通过 MCP Client 的 ``tools/call`` 执行。
+从 pipeline/action_queue/*.json 读取 Externalizer 产出的行动意图，
+通过 MCPClientManager.call_tool() 执行工具调用，并将结果写入
+pipeline/tool_results/*.json。
 """
 
 from __future__ import annotations
@@ -23,22 +21,12 @@ logger = get_logger("MCPToolDispatcher")
 
 
 class MCPToolDispatcher(Router):
-    """MCP 工具派发器。
+    """MCP 工具派发器。"""
 
-    读取 ``pipeline/action_queue/*.json`` 中 Externalizer 的意图文件，
-    解析其中的 ``tool`` / ``arguments`` 字段，通过 MCPClientManager 调用，
-    并将结果写入 ``pipeline/tool_results/*.json``。
-    """
+    _default_guards = ["pipeline/action_queue/*.json"]
+    _default_produces = ["pipeline/tool_results/*.json"]
 
-    _default_guards = ["pipeline/action_queue/*.json"]  # noqa: RUF012
-    _default_produces = ["pipeline/tool_results/*.json"]  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        client_manager: MCPClientManager | None = None,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, node_id: str, client_manager: MCPClientManager | None = None, **kwargs: Any) -> None:
         super().__init__(node_id, **kwargs)
         self._client_manager = client_manager
 
@@ -50,7 +38,7 @@ class MCPToolDispatcher(Router):
     def client_manager(self, value: MCPClientManager | None) -> None:
         self._client_manager = value
 
-    async def execute(self) -> list[FileUpdate]:  # noqa: C901
+    async def execute(self) -> list[FileUpdate]:
         trigger_dir = kernel_data_dir / "pipeline" / "action_queue"
         if not trigger_dir.exists():
             return []
@@ -98,11 +86,7 @@ class MCPToolDispatcher(Router):
 
         return updates
 
-    async def _dispatch_action(
-        self,
-        action: dict[str, Any],
-        trace_id: str,
-    ) -> FileUpdate | None:
+    async def _dispatch_action(self, action: dict[str, Any], trace_id: str) -> FileUpdate | None:
         tool_name = str(action.get("tool", ""))
         arguments = action.get("arguments", {})
         if not isinstance(arguments, dict):

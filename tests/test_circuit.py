@@ -15,6 +15,18 @@ from src.kernel.base import (
 )
 from src.kernel.circuit import Circuit
 from src.kernel.event_bus import FileEventBus
+from src.kernel.heartbeat import HeartbeatRuntime
+from src.kernel.metadata import SQLiteMetadataStore
+from src.kernel.objectstore import MemoryObjectStore
+
+
+def _circuit_for_testing(nodes: list[Node]) -> Circuit:
+    """Create a Circuit with in-memory defaults for testing."""
+    _store = SQLiteMetadataStore(":memory:")
+    _objects = MemoryObjectStore()
+    _heartbeat = HeartbeatRuntime(_store, _objects)
+    _bus = FileEventBus(nodes, _store, _objects)
+    return Circuit(nodes, _store, _objects, _heartbeat, _bus)
 
 
 class _RecordingNode(Node):
@@ -154,16 +166,14 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             self.assertFalse(circuit.is_running)
 
             await circuit.start()
             self.assertTrue(circuit.is_running)
-            self.assertIsNotNone(circuit._bus)
 
             await circuit.stop()
             self.assertFalse(circuit.is_running)
-            self.assertIsNone(circuit._bus)
 
         asyncio.run(scenario())
 
@@ -171,7 +181,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             await circuit.start()
             bus_before = circuit._bus
             await circuit.start()
@@ -185,7 +195,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             await circuit.start()
 
             # 注入事件后等待节点处理
@@ -206,7 +216,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             await circuit.start()
 
             event = FileEvent(
@@ -221,36 +231,11 @@ class CircuitLifecycleTest(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_inject_event_before_start_raises(self) -> None:
-        node = _RecordingNode("test")
-        circuit = Circuit([node])
-
-        async def scenario() -> None:
-            with self.assertRaises(RuntimeError):
-                circuit.inject_event(FileEvent(path="inbox/pending/event.json", change_type="write"))
-
-        asyncio.run(scenario())
-
-    def test_apply_update_before_start_raises(self) -> None:
-        node = _RecordingNode("test")
-        circuit = Circuit([node])
-
-        async def scenario() -> None:
-            with self.assertRaises(RuntimeError):
-                await circuit.apply_update(
-                    FileUpdate(
-                        descriptor=FileDescriptor(path="test.json"),
-                        content={"key": "value"},
-                    )
-                )
-
-        asyncio.run(scenario())
-
     def test_apply_update_writes_file_and_publishes(self) -> None:
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             await circuit.start()
 
             exec_before = node.execute_count
@@ -272,7 +257,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _FailingNode("bad")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             await circuit.start()
 
             event = FileEvent(
@@ -292,7 +277,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            async with Circuit([node]) as circuit:
+            async with _circuit_for_testing([node]) as circuit:
                 self.assertTrue(circuit.is_running)
             self.assertFalse(circuit.is_running)
 
@@ -303,7 +288,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node_b = _RecordingNode("b")
 
         async def scenario() -> None:
-            circuit = Circuit([node_a, node_b])
+            circuit = _circuit_for_testing([node_a, node_b])
             await circuit.start()
 
             event = FileEvent(
@@ -323,7 +308,7 @@ class CircuitLifecycleTest(unittest.TestCase):
         node = _RecordingNode("test")
 
         async def scenario() -> None:
-            circuit = Circuit([node])
+            circuit = _circuit_for_testing([node])
             await circuit.start()
             self.assertEqual(node.state, NodeState.IDLE)
             await circuit.stop()

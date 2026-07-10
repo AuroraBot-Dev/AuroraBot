@@ -1,8 +1,6 @@
-"""MetricsCollector —— 文件流转统计。
+"""MetricsCollector — 文件流转统计。
 
-纯机械 Router 节点。由心跳触发，扫描 kernel_data_dir 下的所有
-pipeline / inbox / rhythm 目录，统计文件数量和最近活动时间，
-产出 ``metrics/status.json`` 供外部监控使用。
+由心跳触发，扫描 kernel_data_dir 下的目录，统计文件数量和最近活动时间。
 """
 
 from __future__ import annotations
@@ -19,22 +17,13 @@ logger = get_logger("Metrics")
 
 
 class MetricsCollector(Router):
-    """文件流转统计器。
+    """文件流转统计器。"""
 
-    watch ``heartbeat/tick.json``，每次心跳扫描各目录，
-    产出 ``metrics/status.json``。
-    """
+    _default_guards = ["heartbeat/tick.json"]
+    _default_produces = ["metrics/status.json"]
 
-    _default_guards = ["heartbeat/tick.json"]  # noqa: RUF012
-    _default_produces = ["metrics/status.json"]  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        host: "object | None" = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
+    def __init__(self, node_id: str, **kwargs: Any) -> None:
+        super().__init__(node_id, **kwargs)
 
     async def execute(self) -> list[FileUpdate]:
         base = kernel_data_dir
@@ -58,7 +47,6 @@ class MetricsCollector(Router):
         for name, scan_dir in scan_roots.items():
             files = 0
             newest_age: float | None = None
-
             if scan_dir.exists():
                 for f in scan_dir.rglob("*.json"):
                     if "done" in f.parts:

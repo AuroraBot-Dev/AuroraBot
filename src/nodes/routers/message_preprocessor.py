@@ -1,14 +1,8 @@
-"""MessagePreprocessor —— 事件文件读取 → 格式化 → 防抖合并 → 产出 message_queue。
+"""MessagePreprocessor — 事件收束 & 消息防抖节点。
 
 纯机械 Router 节点，零 LLM 调用。守护 inbox 中所有 event_*.json 文件，
-将**所有事件一视同仁**地格式化为自然语言文本，按会话分组并入防抖队列，
-防抖结束后产出 ``pipeline/message_queue/*.json`` 供 Internalizer 消费。
-
-Kernel-gamma 变更：
-- 移除 SharedPipelineState 依赖——防抖和版本管理自包含。
-- 移除 "用户消息 vs 系统事件" 区分——一切事件走同一条路径。
-- 移除 skip_gate / recovery_note——门控现在是 Pool A 的思考过程。
-- 产出文件使用标准信封格式。
+将所有事件格式化为自然语言文本，按会话分组并入防抖队列，
+防抖结束后产出 pipeline/message_queue/*.json 供 Internalizer 消费。
 """
 
 from __future__ import annotations
@@ -32,25 +26,13 @@ RECENT_MESSAGE_LIMIT = 6
 
 
 class MessagePreprocessor(Router):
-    """事件收束 & 消息防抖节点。
+    """事件收束 & 消息防抖节点。"""
 
-    守护 ``inbox/pending/event_*.json``。所有事件（消息、系统触发、错误恢复）
-    一视同仁：格式化为自然语言文本 → 按会话防抖合并 → 产出标准信封的
-    ``pipeline/message_queue/msg_*.json``。
-    """
+    _default_guards = ["inbox/pending/event_*.json"]
+    _default_produces = ["pipeline/message_queue/*.json"]
 
-    _default_guards = ["inbox/pending/event_*.json"]  # noqa: RUF012
-    _default_produces = ["pipeline/message_queue/*.json"]  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        host: object | None = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
-
-        # ── 自包含状态（不与其他节点共享） ──
+    def __init__(self, node_id: str, **kwargs: Any) -> None:
+        super().__init__(node_id, **kwargs)
         self._session_versions: dict[str, int] = {}
         self._pending_inputs: dict[str, list[dict[str, Any]]] = {}
         self._group_recent: dict[int, deque[tuple[float, str]]] = defaultdict(deque)
@@ -86,32 +68,18 @@ class MessagePreprocessor(Router):
             if not input_text:
                 continue
 
-            # 所有事件走同一条路径——不再区分 message / system
             self._enqueue(data, input_text)
 
         return []
 
-    # ═══════════════════════════════════════════════════
-    # 事件 → 自然语言文本
-    # ═══════════════════════════════════════════════════
+    # ── Event formatting ──────────────────────────────
 
     @staticmethod
     def _extract_event_data(data: dict[str, Any]) -> dict[str, Any]:
-        """从 AMP envelope 事件数据提取标准字段。
-
-        非 AMP 数据返回空字段，由后续格式化流程跳过。
-        """
         header = data.get("header")
         payload = data.get("payload")
         if not isinstance(header, dict) or not isinstance(payload, dict):
-            return {
-                "type": "",
-                "session_id": "",
-                "summary": "",
-                "payload": {},
-                "source": "",
-                "message_id": "",
-            }
+            return {"type": "", "session_id": "", "summary": "", "payload": {}, "source": "", "message_id": ""}
 
         source = header.get("source")
         source_app = source.get("app", "") if isinstance(source, dict) else header.get("source_app", "")
@@ -154,9 +122,7 @@ class MessagePreprocessor(Router):
             parts.append(json.dumps(payload, ensure_ascii=False))
         return "\n".join(parts)
 
-    # ═══════════════════════════════════════════════════
-    # 统一入队（所有事件类型走同一路径）
-    # ═══════════════════════════════════════════════════
+    # ── Debounce & produce ───────────────────────────
 
     def _enqueue(self, data: dict[str, Any], input_text: str) -> None:
         event_data = MessagePreprocessor._extract_event_data(data)
@@ -169,13 +135,11 @@ class MessagePreprocessor(Router):
         group_id = str(payload.get("group_id", "")) if is_group else None
         session_key = str(payload.get("session_key") or self._make_session_key(user_id, is_group, group_id))
 
-        # 会话内去重：系统事件的 session_key 来自 payload
         if event_type != "message.received" and "session_key" not in (payload or {}):
             session_key = f"system:{event_type}:{uuid.uuid4().hex[:8]}"
 
         logger.debug("事件入队 session=%s type=%s", session_key, event_type)
 
-        # 更新滑动窗口
         if is_group:
             self._append_recent(self._group_recent[int(group_id or 0)], input_text)
         elif user_id != "system":
@@ -207,10 +171,6 @@ class MessagePreprocessor(Router):
         task = asyncio.create_task(self._debounce_and_produce(session_key, version))
         self._debounce_tasks.add(task)
         task.add_done_callback(self._debounce_tasks.discard)
-
-    # ═══════════════════════════════════════════════════
-    # 防抖 → 产出 message_queue 文件（标准信封）
-    # ═══════════════════════════════════════════════════
 
     async def _debounce_and_produce(self, session_key: str, version: int) -> None:
         await asyncio.sleep(REPLY_DEBOUNCE_SECONDS)
@@ -268,9 +228,7 @@ class MessagePreprocessor(Router):
         else:
             logger.warning("事件总线未注入，无法产出 message_queue")
 
-    # ═══════════════════════════════════════════════════
-    # 滑动窗口工具
-    # ═══════════════════════════════════════════════════
+    # ── Sliding window utils ─────────────────────────
 
     @staticmethod
     def _recent_window_seconds() -> float:
@@ -292,5 +250,5 @@ class MessagePreprocessor(Router):
         return [line for _, line in recent]
 
     @staticmethod
-    def _make_session_key(user_id: str, is_group: bool, group_id: str | None) -> str:  # noqa: FBT001
+    def _make_session_key(user_id: str, is_group: bool, group_id: str | None) -> str:
         return f"group:{group_id}:{user_id}" if is_group else f"private:{user_id}"

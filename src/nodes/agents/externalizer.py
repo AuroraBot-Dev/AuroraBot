@@ -1,10 +1,8 @@
-"""Externalizer —— 外化者：Pool A 第一人称决定 → Pool B JSON 动作。
+"""Externalizer — 外化者：第一人称决定 → 结构化 JSON 动作。
 
 核心认知 Agent。读取 pipeline/internalized/*.json 触发信号后，
-扫描自我之流（now.md）中最近的思考，识别明确的行动意图
-（"我决定..."、"我想..."），转译为结构化 JSON 动作。
-
-这是 Kernel-gamma 的两个转义者之一（A->B）。不是"翻译器"——是**决策 + 行动转义**。
+扫描自我之流（now.md）中最近的思考，识别明确的行动意图，
+转译为结构化 JSON 动作供 MCPToolDispatcher 执行。
 """
 
 from __future__ import annotations
@@ -26,23 +24,12 @@ logger = get_logger("Externalizer")
 
 
 class Externalizer(Agent):
-    """外化者：第一人称决定 → JSON 动作。
+    """外化者：第一人称决定 → JSON 动作。"""
 
-    由 ``pipeline/internalized/*.json`` 触发。读取自我之流中最近的思考，
-    识别明确的行动意图，转译为 JSON 命令。
+    _default_guards = ["pipeline/internalized/*.json"]
+    _default_produces = ["pipeline/action_queue/*.json"]
 
-    如果没有明确的行动意图，不产出任何动作文件。
-    """
-
-    _default_guards = ["pipeline/internalized/*.json"]  # noqa: RUF012
-    _default_produces = ["pipeline/action_queue/*.json"]  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        client_manager: "MCPClientManager | None" = None,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, node_id: str, client_manager: MCPClientManager | None = None, **kwargs: Any) -> None:
         super().__init__(node_id, **kwargs)
         self._stream = SelfStream()
         self._client_manager = client_manager
@@ -77,7 +64,6 @@ class Externalizer(Agent):
             payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
             trace_id = str(envelope.get("trace_id", ""))
 
-            # 提取 Internalizer 传递的原始情景
             situation = {
                 "session_key": str(payload.get("session_key", "")),
                 "event_type": str(payload.get("event_type", "")),
@@ -96,7 +82,6 @@ class Externalizer(Agent):
             if not raw or not raw.strip():
                 continue
 
-            # 解析 JSON
             parsed = self._parse_actions(raw)
             if parsed is None:
                 logger.warning("外化输出无法解析为 JSON: %.200s", raw)
@@ -132,10 +117,6 @@ class Externalizer(Agent):
 
         return updates
 
-    # ═══════════════════════════════════════════════════
-    # LLM 外化
-    # ═══════════════════════════════════════════════════
-
     async def _externalize(self, situation: dict[str, str] | None = None) -> str:
         recent = self._stream.read_recent_chars(4000)
         state = self._stream.read_state()
@@ -143,7 +124,6 @@ class Externalizer(Agent):
 
         action_prompt = prompts.EXTERNALIZER.fill(commands=commands_text)
 
-        # 构建情景段落
         situation_text = ""
         if situation:
             parts: list[str] = []
@@ -178,10 +158,6 @@ class Externalizer(Agent):
         await gen
         response = gen.plain()
         return (response or "").strip()
-
-    # ═══════════════════════════════════════════════════
-    # 命令列表 & JSON 解析
-    # ═══════════════════════════════════════════════════
 
     def _build_commands_text(self) -> str:
         if self._client_manager is not None:

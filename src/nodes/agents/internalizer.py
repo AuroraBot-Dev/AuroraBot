@@ -1,10 +1,8 @@
-"""Internalizer —— 内化者：Pool B JSON 事件 → Pool A 第一人称体验叙事。
+"""Internalizer — 内化者：结构化事件 → 第一人称体验叙事。
 
 核心认知 Agent。读取 pipeline/message_queue/*.json 中的结构化事件，
 结合当前自我之流（now.md）、自我状态（state.md）和持久记忆（memories/），
 通过 LLM 生成第一人称体验叙事，追加到自我之流。
-
-这是 Kernel-gamma 的两个转义者之一（B->A）。不是"翻译器"——是**感知 + 赋予意义**。
 """
 
 from __future__ import annotations
@@ -24,23 +22,12 @@ logger = get_logger("Internalizer")
 
 
 class Internalizer(Agent):
-    """内化者：结构化事件 → 第一人称体验。
+    """内化者：结构化事件 → 第一人称体验。"""
 
-    守护 ``pipeline/message_queue/*.json``。每读到一个事件：
-    1. 读取当前自我之流、状态、相关记忆
-    2. 调用 LLM，以第一人称感知并赋予意义
-    3. 将叙事追加到 self/stream/now.md
-    4. 产出 ``pipeline/internalized/*.json`` 触发 Externalizer
-    """
+    _default_guards = ["pipeline/message_queue/*.json"]
+    _default_produces = ["pipeline/internalized/*.json"]
 
-    _default_guards = ["pipeline/message_queue/*.json"]  # noqa: RUF012
-    _default_produces = ["pipeline/internalized/*.json"]  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, node_id: str, **kwargs: Any) -> None:
         super().__init__(node_id, **kwargs)
         self._stream = SelfStream()
 
@@ -71,7 +58,6 @@ class Internalizer(Agent):
 
             move_to_done(msg_file, done_dir)
 
-            # 提取事件信息
             envelope = data.get("envelope", {}) if isinstance(data.get("envelope"), dict) else {}
             payload = data.get("payload", {}) if isinstance(data.get("payload"), dict) else {}
 
@@ -99,8 +85,6 @@ class Internalizer(Agent):
                     self._stream.update_state(state_update)
                     logger.debug("状态已更新到 state.md")
 
-                # 产出触发文件，唤醒 Externalizer
-                # 携带原始情景上下文，供 Externalizer 填写命令参数时使用
                 int_id = next_record_id("int")
                 relative_path = f"pipeline/internalized/int_{int_id}.json"
                 trigger = FileUpdate(
@@ -125,54 +109,30 @@ class Internalizer(Agent):
 
         return updates
 
-    # ═══════════════════════════════════════════════════
-    # 事件描述构建
-    # ═══════════════════════════════════════════════════
-
     @staticmethod
-    def _build_event_description(
-        envelope: dict[str, Any],
-        payload: dict[str, Any],
-    ) -> str:
-        """从 envelope + payload 构建人类可读的事件描述。"""
+    def _build_event_description(envelope: dict[str, Any], payload: dict[str, Any]) -> str:
         parts: list[str] = []
-
         merged_input = str(payload.get("merged_input", "")).strip()
         if merged_input:
             parts.append(f"新的事件：\n{merged_input}")
             return "\n".join(parts)
-
-        # fallback：从 envelope 构建
         session_key = str(envelope.get("session_key", ""))
         if session_key:
             parts.append(f"会话：{session_key}")
-
         timestamp = str(envelope.get("timestamp", ""))
         if timestamp:
             parts.append(f"时间：{timestamp}")
-
         return "\n".join(parts) if parts else ""
-
-    # ═══════════════════════════════════════════════════
-    # META 解析
-    # ═══════════════════════════════════════════════════
 
     _META_RE = re.compile(r"\[META\]\s*\n(.*?)\[/META\]", re.DOTALL)
 
     @staticmethod
     def _split_meta(raw: str) -> tuple[str, str | None]:
-        """从 LLM 响应中分离叙事文本和 [META] 状态块。
-
-        Returns
-        -------
-        (narrative, state_update | None)
-        """
         match = Internalizer._META_RE.search(raw)
         if not match:
             return raw, None
         narrative = raw[: match.start()].strip()
         state_block = match.group(1).strip()
-        # 构建 state.md 格式
         lines = ["# 自我状态", ""]
         for raw_line in state_block.split("\n"):
             stripped = raw_line.strip()
@@ -183,13 +143,7 @@ class Internalizer(Agent):
         state_update = "\n".join(lines)
         return narrative, state_update
 
-    # ═══════════════════════════════════════════════════
-    # LLM 内化
-    # ═══════════════════════════════════════════════════
-
     async def _internalize(self, event_text: str) -> tuple[str, str | None]:
-        """内化事件，返回 (叙事文本, 状态更新文本 | None)。"""
-        # 组装上下文
         recent = self._stream.read_recent_chars(3000)
         state = self._stream.read_state()
         memories = self._stream.list_memories()

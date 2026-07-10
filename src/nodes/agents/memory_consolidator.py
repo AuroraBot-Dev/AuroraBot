@@ -1,16 +1,14 @@
-"""MemoryConsolidator —— 节律驱动的记忆整理与流归档。
+"""MemoryConsolidator — 节律驱动的记忆整理与流归档。
 
 认知 Agent 节点。由节律事件（rhythm/triggers/*.json）触发，
 读取当前自我之流（now.md），通过 LLM 提取新知识，
 更新 self/memories/*.md，然后将 now.md 归档到 archive/{date}.md。
-
-这是 Kernel-gamma 的记忆沉淀机制——不是"写入数据库"，而是
-"她整理自己的思绪，把体验沉淀为记忆"。
 """
 
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Any
 
@@ -55,22 +53,13 @@ _CONSOLIDATOR_SYSTEM = """你是 Aurora（小光）的记忆整理者。你在�
 
 
 class MemoryConsolidator(Agent):
-    """记忆沉淀节点。
+    """记忆沉淀节点。"""
 
-    由 rhythm/triggers/*.json 触发。读取自我之流，提取新知，
-    更新 memories/，归档 now.md。
-    """
+    _default_guards = ["rhythm/triggers/*.json"]
+    _default_produces: list[str] = []
 
-    _default_guards = ["rhythm/triggers/*.json"]  # noqa: RUF012
-    _default_produces: list[str] = []  # noqa: RUF012
-
-    def __init__(
-        self,
-        node_id: str,
-        host: "object | None" = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(node_id, host=host, **kwargs)
+    def __init__(self, node_id: str, **kwargs: Any) -> None:
+        super().__init__(node_id, **kwargs)
         self._stream = SelfStream()
 
     async def execute(self) -> list[FileUpdate]:
@@ -99,7 +88,6 @@ class MemoryConsolidator(Agent):
             trigger_name = str(data.get("name", ""))
             logger.info("记忆沉淀触发: %s", trigger_name)
 
-            # 只在 evening / midnight 时做完整整理
             if trigger_name not in ("evening", "midnight"):
                 continue
 
@@ -109,11 +97,10 @@ class MemoryConsolidator(Agent):
             except Exception:
                 logger.exception("记忆沉淀失败")
 
-            # 每个周期只处理第一个匹配的触发器
             break
 
         if consolidated:
-            date_str = datetime.now().strftime("%Y-%m-%d")  # noqa: DTZ005
+            date_str = datetime.now().strftime("%Y-%m-%d")
             self._stream.archive_today(date_str)
             self._stream.append_experience(f"我整理了今天的记忆。新的体验已经沉淀下来，now.md 已归档到 {date_str}。")
 
@@ -160,21 +147,16 @@ class MemoryConsolidator(Agent):
             logger.info("无新知识需要沉淀")
             return
 
-        # 解析 LLM 输出的记忆更新
         self._apply_memory_updates(response)
 
     def _apply_memory_updates(self, response: str) -> None:
-        import re
-
         pattern = r"---MEMORY:(.+?)---\n(.*?)---END---"
         matches = re.findall(pattern, response, re.DOTALL)
-
         for raw_name, raw_content in matches:
             name = raw_name.strip()
             content = raw_content.strip()
             if name and content:
                 self._stream.write_memory(name, content)
                 logger.info("记忆已更新: %s (%d chars)", name, len(content))
-
         if not matches:
             logger.debug("LLM 输出中未解析到记忆更新块")

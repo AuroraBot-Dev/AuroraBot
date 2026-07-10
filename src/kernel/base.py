@@ -1,12 +1,10 @@
-"""认知拓扑电路的核心抽象 —— Node、Agent、Router 基类以及文件事件/描述符/更新数据类。
+"""Core abstractions for the AuroraBot cognitive topology circuit.
 
-用法::
+Node, Agent, and Router base classes, plus file event/update/descriptor types.
 
-    from src.kernel.base import Node, Agent, Router, FileEvent, FileUpdate, FileDescriptor, FilePattern
-
-    class MyAgent(Agent):
-        async def execute(self) -> list[FileUpdate]:
-            ...
+All nodes interact with the kernel through the shared metadata store
+(SQLiteMetadataStore) and object store (FileObjectStore), rather than
+direct filesystem operations.
 """
 
 from __future__ import annotations
@@ -23,7 +21,11 @@ from src.utils.time_utils import now_text
 
 if TYPE_CHECKING:
     from src.kernel.event_bus import FileEventBus
+    from src.kernel.locks import LockClient
+    from src.kernel.metadata import SQLiteMetadataStore
+    from src.kernel.objectstore import FileObjectStore, MemoryObjectStore
     from src.memory import UnifiedMemoryManager
+
 logger = get_logger("NodeBase")
 
 
@@ -37,10 +39,15 @@ class NodeState(Enum):
 
 
 class LockPolicy:
-    """文件锁策略常量。
+    """File lock strategy constants.
 
-    除三个固定值外，``locked_by_<node_id>`` 形式的动态锁通过
-    :meth:`locked_by` 静态方法生成。
+    In the new kernel, these map to CAS-based lock operations:
+    - READ_ONLY → LockClient.acquire_read()
+    - WRITE_OVERWRITE → LockClient.acquire_write() + release_write()
+    - APPEND_ONLY → successive object store puts
+
+    LockPolicy is retained for backward compatibility with existing
+    node implementations.
     """
 
     READ_ONLY = "read_only"
@@ -54,14 +61,8 @@ class LockPolicy:
 
 @dataclass(slots=True)
 class FileDescriptor:
-    """文件描述符。
+    """File descriptor — identifies a file by path, schema, and lock strategy."""
 
-    用于唯一标识文件，包含文件路径、数据格式、锁策略等信息。
-    """
-
-    # 文件路径
-    # 文件数据格式
-    # 文件锁策略
     path: str
     schema: str = "json"
     lock: str = LockPolicy.WRITE_OVERWRITE
@@ -77,12 +78,8 @@ class FileDescriptor:
 
 @dataclass(slots=True)
 class FilePattern:
-    """文件模式。
+    """File pattern — matches file paths with glob-style patterns."""
 
-    用于匹配文件路径，支持通配符模式。
-    """
-
-    # 文件路径模式
     pattern: str
 
     def match(self, file_path: str) -> bool:
@@ -91,15 +88,8 @@ class FilePattern:
 
 @dataclass(slots=True)
 class FileEvent:
-    """文件事件。
+    """File event — notifies nodes of file changes."""
 
-    用于通知文件变更，包含文件路径、变更类型、时间戳、版本号、元数据等信息。
-    """
-
-    # 文件路径
-    # 变更类型
-    # 版本号
-    # 元数据
     path: str
     change_type: str
     timestamp: str = field(default_factory=now_text)
@@ -109,61 +99,44 @@ class FileEvent:
 
 @dataclass(slots=True)
 class FileUpdate:
-    """文件更新。
+    """File update — describes a file change to be written."""
 
-    用于描述文件变更，包含文件描述符、变更内容、变更模式等信息。
-    """
-
-    # 文件描述符
-    # 变更内容
-    # 变更模式
     descriptor: FileDescriptor
     content: Any
     mode: str = "overwrite"
 
 
 class Node:
-    """认知拓扑电路中的原子单元。
+    """Atomic unit in the cognitive topology circuit.
 
-    每个 Node 是静态依赖图中的一个顶点：它守护一组文件（guards），
-    当这些文件变更时通过 :class:`FileEvent` 激活，执行认知操作后产出
-    新的文件变更（produces）。
+    Each Node guards a set of files (guards).  When those files change,
+    a FileEvent activates the node, which executes cognitive operations
+    and produces new file changes (produces).
 
-    Node 自身无内部运行内存（LLM 宿主的临时上下文除外），实例可被
-    随时销毁与重建。
-
-    Subclass Hooks
-    --------------
-    子类必须实现：
-    - :meth:`execute` —— 执行认知操作，返回文件变更列表
-    - :meth:`type` —— 返回 ``"agent"`` 或 ``"router"``
-
-    子类应设置：
-    - ``_default_guards`` —— 守护的文件模式列表（类属性）
-    - ``_default_produces`` —— 产出文件路径列表（类属性）
-
-    子类可覆写：
-    - :meth:`guards` / :meth:`produces` —— 仅当默认值依赖实例配置时
-    - :meth:`on_event` —— 自定义事件过滤逻辑
-    - :meth:`on_complete` —— 执行完成后的清理钩子
+    Unlike the old kernel, data reads/writes go through:
+    - ``self._store`` (:class:`SQLiteMetadataStore`) — file metadata
+    - ``self._objects`` (:class:`FileObjectStore`) — file content
+    - ``self._lock`` (:class:`LockClient`) — CAS-based lock operations
     """
 
-    # 子类覆写为静态默认值（拓扑配置通过 _config_watch / _config_emit 动态覆盖）
-    _default_guards: list[str] = []  # noqa: RUF012
-    _default_produces: list[str] = []  # noqa: RUF012
+    _default_guards: list[str] = []
+    _default_produces: list[str] = []
 
     def __init__(self, node_id: str) -> None:
         self.id = node_id
         self.state = NodeState.IDLE
         self._ready_event: asyncio.Event = asyncio.Event()
         self._bus: FileEventBus | None = None
+        self._store: SQLiteMetadataStore | None = None
+        self._objects: MemoryObjectStore | FileObjectStore | None = None
+        self._lock_client: LockClient | None = None
         self._config_watch: list[str] | None = None
         self._config_emit: list[str] | None = None
 
     @property
     @abstractmethod
     def type(self) -> str:
-        """返回 ``"agent"``（LLM 认知型）或 ``"router"``（纯机械型）。"""
+        """Return ``"agent"`` (LLM cognitive) or ``"router"`` (pure logic)."""
         raise NotImplementedError
 
     @property
@@ -172,78 +145,77 @@ class Node:
 
     @property
     def guards(self) -> list[FilePattern]:
-        """守护的文件模式列表。
-
-        优先使用拓扑配置的 :attr:`_config_watch`，
-        否则回退到子类的 :attr:`_default_guards`。
-        """
         patterns = self._config_watch if self._config_watch is not None else self._default_guards
         return [FilePattern(p) for p in patterns]
 
     @property
     def produces(self) -> list[FileDescriptor]:
-        """产出文件描述符列表。
-
-        优先使用拓扑配置的 :attr:`_config_emit`，
-        否则回退到子类的 :attr:`_default_produces`。
-        """
         paths = self._config_emit if self._config_emit is not None else self._default_produces
         return [FileDescriptor(p) for p in paths]
 
-    def on_event(self, event: FileEvent) -> bool:
-        """判断给定事件是否应激活本节点。
+    @property
+    def lock(self) -> LockClient:
+        if self._lock_client is None:
+            msg = f"lock client not injected into node {self.id}"
+            raise RuntimeError(msg)
+        return self._lock_client
 
-        默认实现遍历 :attr:`guards`，匹配第一个命中后返回 ``True``。
-        跳过自身产出的文件事件以防自触发空转。
-        子类可覆写以实现更精细的激活条件（如版本号比对、并发门控）。
+    @property
+    def store(self) -> SQLiteMetadataStore:
+        if self._store is None:
+            msg = f"metadata store not injected into node {self.id}"
+            raise RuntimeError(msg)
+        return self._store
+
+    @property
+    def objects(self) -> MemoryObjectStore | FileObjectStore:
+        if self._objects is None:
+            msg = f"object store not injected into node {self.id}"
+            raise RuntimeError(msg)
+        return self._objects
+
+    def on_event(self, event: FileEvent) -> bool:
+        """Determine whether this node should be activated by the given event.
+
+        Default implementation matches event path against guards.
+        Skips self-produced events to prevent self-triggering.
         """
         if self.state not in (NodeState.IDLE, NodeState.READY):
             return False
-        # 跳过自身产出的文件事件
         if event.metadata.get("source_node") == self.id:
             return False
         return any(guard.match(event.path) for guard in self.guards)
 
     def wake(self) -> None:
-        """标记节点为 READY 并唤醒等待中的 ``run()`` 协程。
-
-        供 :class:`FileEventBus` 在事件匹配成功后调用。
-        """
+        """Mark node as READY and wake the run() coroutine."""
         self.state = NodeState.READY
         self._ready_event.set()
 
     @abstractmethod
     async def execute(self) -> list[FileUpdate]:
-        """执行认知操作。
+        """Execute cognitive operations.
 
-        对于 Agent，此方法通常调用 LLM 并产出结果文件；
-        对于 Router，此方法执行纯机械逻辑后产出文件变更。
+        For Agent, this typically invokes the LLM and produces result files.
+        For Router, this executes pure logic and produces file changes.
 
-        Returns
-        -------
-        list[FileUpdate]
-            本步执行产出的全部文件变更。
+        Returns the list of FileUpdates produced by this execution step.
         """
         raise NotImplementedError
 
     def on_complete(self) -> None:
-        """执行完成后的生命周期钩子。
+        """Lifecycle hook after execution completes.
 
-        默认将状态重置为 ``IDLE``。若执行成功但需保持 ``READY``
-        状态以等待后续事件，子类可覆写此方法。
+        Default resets state to IDLE. Subclasses may override to stay
+        in READY state for subsequent events.
         """
         if self.state != NodeState.ERROR:
             self.state = NodeState.IDLE
 
     async def run(self) -> None:
-        """节点主循环。
+        """Node main loop.
 
-        独立协程，被 :class:`Circuit` 以 ``asyncio.Task`` 托管。
-        在工作流中循环等待 ``_ready_event`` 被事件总线置位，
-        然后执行 :meth:`execute` 并将 :class:`FileUpdate` 通过
-        总线落盘、触发下游节点。
-
-        ``CancelledError`` 将干净终止本循环。
+        Managed as an asyncio.Task by the Circuit.  Waits for the
+        ready event, executes, and persists FileUpdates via the bus.
         """
         while self.state != NodeState.TERMINATED:
             try:
@@ -264,7 +236,7 @@ class Node:
                 self.on_complete()
                 continue
             except Exception:
-                logger.exception(f"节点 {self.name}({self.id}) 执行异常")
+                logger.exception("Node %s(%s) execution error", self.name, self.id)
                 self.state = NodeState.ERROR
                 continue
 
@@ -273,26 +245,21 @@ class Node:
                     try:
                         await self._bus.apply_update(update, self.id)
                     except Exception:
-                        logger.exception(f"节点 {self.name}({self.id}) 写文件异常: {update.descriptor.path}")
+                        logger.exception(
+                            "Node %s(%s) write error: %s",
+                            self.name,
+                            self.id,
+                            update.descriptor.path,
+                        )
 
             self.on_complete()
 
 
 class Agent(Node):
-    """使用 LLM 进行推理的认知型节点。
+    """LLM-driven cognitive node.
 
-    每个 Agent 持有一个应用宿主引用以及一个待注入的系统提示词。
-    执行时调用 LLM，可能异步等待，执行时长不确定。产出为确定性
-    文件，可通过版本控制回滚。
-
-    Parameters
-    ----------
-    node_id : str
-        节点唯一标识。
-    host : object | None
-        上下文对象（可选），用于提供命令/工具等信息。
-    system_prompt : str
-        系统提示词文本，注入到每次 LLM 请求的最前面。
+    Each Agent holds a system prompt and optionally a memory manager
+    and host reference.  Execute invokes the LLM via the gateway.
     """
 
     def __init__(
@@ -307,7 +274,7 @@ class Agent(Node):
         self._host = host
         self._system_prompt = system_prompt
         self._memory = memory
-        self._current_gen_task: Any = None  # GenerationTask, 延迟导入避免循环引用
+        self._current_gen_task: Any = None
 
     @property
     def type(self) -> str:
@@ -338,31 +305,7 @@ class Agent(Node):
         self._system_prompt = value
 
     async def think(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
-        """调用 LLM 网关进行推理。
-
-        通过 :class:`Gateway <src.ai.gateway.ModelGateway>` 的
-        ``fast`` 角色发起流式对话，自动注入系统提示词。
-
-        外部可通过 :meth:`cancel_think` 打断当前推理以节省 token。
-
-        Parameters
-        ----------
-        messages : list[dict[str, str]]
-            对话消息列表。
-        **kwargs : Any
-            透传给 ``ModelCaller.acompletion`` 的额外参数
-            （temperature、max_tokens 等）。
-
-        Returns
-        -------
-        str
-            模型返回的纯文本。
-
-        Raises
-        ------
-        CancelledWithPartialResponse
-            当外部调用 :meth:`cancel_think` 打断请求时抛出。
-        """
+        """Invoke the LLM gateway for reasoning."""
         from src.ai.gateway import gateway
 
         if self._system_prompt:
@@ -380,17 +323,7 @@ class Agent(Node):
             self._current_gen_task = None
 
     def cancel_think(self) -> bool:
-        """打断当前正在进行的 LLM 推理。
-
-        通过网关的 :meth:`abort_task <src.ai.gateway.ModelGateway.abort_task>`
-        取消底层流式连接。调用后，正在等待 ``think()`` 的协程将收到
-        :class:`CancelledWithPartialResponse`。
-
-        Returns
-        -------
-        bool
-            是否确实取消了一个正在运行的 LLM 请求。
-        """
+        """Cancel the current LLM inference if running."""
         gen = self._current_gen_task
         if gen is not None and not gen.done():
             from src.ai.gateway import gateway
@@ -400,18 +333,11 @@ class Agent(Node):
 
 
 class Router(Node):
-    """纯机械反射型节点，零 LLM 调用，执行时间可预测。
+    """Pure logic node — zero LLM calls, predictable execution time.
 
-    子类必须实现 :meth:`execute`，在其中完成纯逻辑运算并返回
-    文件变更列表。Router 是流程控制结构的原生载体：条件分支、
-    多路汇集、循环控制、终止信号等均由 Router 子类实现。
-
-    Parameters
-    ----------
-    node_id : str
-        节点唯一标识。
-    host : object | None
-        上下文对象（可选），部分 Router 可能需要访问宿主能力。
+    Subclasses implement execute() with pure computation and return
+    file changes.  Router is the native carrier for flow control:
+    conditional branches, multi-way merges, cycle control, etc.
     """
 
     def __init__(
@@ -442,9 +368,4 @@ class Router(Node):
         self._memory = value
 
     def on_event(self, event: FileEvent) -> bool:
-        """Router 默认采用与 Node 相同的事件匹配逻辑。
-
-        子类可覆写以实现特殊激活条件，例如 WaitRouter 需等待
-        多个文件到位后才返回 ``True``。
-        """
         return super().on_event(event)

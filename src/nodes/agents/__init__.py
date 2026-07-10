@@ -1,7 +1,8 @@
-# Agent 节点——LLM 驱动的认知型节点
-from .externalizer import Externalizer
-from .internalizer import Internalizer
-from .memory_consolidator import MemoryConsolidator
+"""AuroraBot cognitive agents — LLM-driven nodes for the kernel circuit."""
+
+from src.nodes.agents.externalizer import Externalizer
+from src.nodes.agents.internalizer import Internalizer
+from src.nodes.agents.memory_consolidator import MemoryConsolidator
 
 __all__ = [
     "Externalizer",
