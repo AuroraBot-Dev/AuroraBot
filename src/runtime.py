@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from src.config import Config
-from src.kernel.node_factory import build_circuit
+from src.kernel.factory import build_cognitive_runtime
 from src.nodes import run_mcp_event_bridge
 from src.platform.mcp.client_manager import MCPClientManager
 from src.platform.mcp.discovery import discover_mcp_servers
@@ -25,7 +25,7 @@ from src.platform.mcp.server_kit import MCPServerKit
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
-    from src.kernel.circuit import Circuit
+    from src.kernel.runtime import CognitiveRuntime
 
 logger = get_logger("Runtime")
 
@@ -45,7 +45,7 @@ class RuntimeState:
     server_kit: MCPServerKit
     client_manager: MCPClientManager
     stop_event: asyncio.Event
-    circuit: Circuit | None = None
+    circuit: CognitiveRuntime | None = None
     tasks: list[asyncio.Task[Any]] = field(default_factory=list)
 
 
@@ -72,7 +72,7 @@ async def start_runtime() -> RuntimeState:
     # 启动本地 stdio Server
     server_kit = MCPServerKit()
     client_manager = MCPClientManager(server_kit)
-    circuit: Circuit | None = None
+    circuit: CognitiveRuntime | None = None
     state: RuntimeState | None = None
     try:
         await server_kit.start_all(specs)
@@ -89,7 +89,7 @@ async def start_runtime() -> RuntimeState:
         )
 
         # 启动事件桥接（MCP -> Brain inbox）
-        circuit = build_circuit(client_manager=client_manager)
+        circuit = build_cognitive_runtime(client_manager=client_manager)
         await circuit.start()
         state.circuit = circuit
 

@@ -32,13 +32,10 @@ bot.py                        → Core standalone 入口
 src/config.py                 → 中央配置 from .env, path constants, ensure_dirs()
 │
 ├── src/runtime.py            → 运行时管理：启动/关闭 Circuit + MCP + 事件桥接
-├── src/kernel/               → Node/Agent/Router 基类, Circuit, FileEventBus, NodeFactory
+├── src/kernel/               → immutable events, SQLite/object storage, runtime, capability registry
 ├── src/memory/               → L1 (working/FIFO), L2 (episodic/JSON), L3 (semantic/ChromaDB)
-├── src/nodes/                → 认知节点 (topology.yaml 声明)
-│   ├── agents/               → internalizer, externalizer, memory_consolidator 等
-│   ├── routers/              → message_preprocessor, mcp_tool_dispatcher, heartbeat 等
-│   ├── event_bridge.py       → MCP 事件桥接 (notification → inbox)
-│   └── self_stream.py        → 自我意识流 (自由联想引擎)
+├── src/nodes/                → 自包含认知节点与 MCP event bridge
+│   └── cognitive.py          → attention, Gateway/MCP capability, review, reflection, dream
 ├── src/ai/                   → LLM gateway (LiteLLM), models, providers
 ├── src/prompts/              → 提示词模板
 ├── src/localhost/            → 运行时内置交互式控制台
@@ -72,14 +69,12 @@ src/config.py                 → 中央配置 from .env, path constants, ensure
 ### Data flow (Kernel-γ pipeline)
 
 ```
-External event → inbox/pending/event_*.json
-  → message_preprocessor → pipeline/message_queue/*.json
-  → internalizer (B→A) → pipeline/internalized/*.json
-  → externalizer (A→B) → pipeline/action_queue/*.json
-  → mcp_tool_dispatcher
+External event → input.external → perception → attention → route
+  → low-entropy context | fast response | complex Gateway + MCP capability
+  → review → outbox → effect/reflection/context frame
 ```
 
-Nodes communicate exclusively through files (FileEventBus). Topology: `src/nodes/topology.yaml`.
+Nodes communicate through immutable event files and SQLite metadata. Built-in nodes are in `src/nodes/cognitive.py`.
 
 ### Runtime 启动顺序
 
@@ -90,7 +85,7 @@ start_runtime():
   3. MCPServerKit.start_all()  启动 stdio Server 进程
   4. MCPClientManager.connect_all()  建立 session
   5. MCPClientManager.refresh_tools()  获取工具列表
-  6. build_circuit() + circuit.start()  启动 Brain
+  6. build_cognitive_runtime() + circuit.start()  启动 Brain
   7. run_mcp_event_bridge()  启动 MCP → Brain 事件桥接
 ```
 

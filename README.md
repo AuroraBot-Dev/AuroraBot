@@ -39,6 +39,8 @@ AuroraBot 是新一代**内驱式、自主决策的智能体框架**。她由两
 
 ## 架构概览
 
+> Beta 内核重构：旧的静态 Circuit/拓扑已被事件型认知内核替代。新的 Gateway、MCP、上下文与节律契约见 [Cognitive Kernel Beta](docs/cognitive-kernel-beta.md)。
+
 ```mermaid
 flowchart LR
     subgraph APPS["应用层 (Apps)"]
