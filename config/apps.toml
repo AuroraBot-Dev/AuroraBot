@@ -1,0 +1,8 @@
+# MCP / 应用扩展声明。
+# 每个应用的启用状态、启动参数和权限将在此配置，运行时数据仍使用 JSON。
+
+# [[app]]
+# id = "example"
+# enabled = false
+# implementation = "aurora_example.app:plugin"
+

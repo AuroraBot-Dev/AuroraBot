@@ -1,0 +1,6 @@
+# 开发环境覆盖项。
+# 只写与 config/aurora.toml 不同的值。
+
+[logging]
+level = "DEBUG"
+

@@ -37,12 +37,14 @@ htmlcov/
 coverage.xml
 .pytest_cache/
 
+# OS
+.DS_store
+config.ini
+
 # Project data
 logs/
 data/
 legacy/
-temp.*
-tmp/
 temp/
 
 # IDE / Editor
@@ -57,7 +59,3 @@ temp/
 .claude/
 CLAUDE.md
 graphify-out/
-
-# Project files (others)
-nodes-beta/
-apps/

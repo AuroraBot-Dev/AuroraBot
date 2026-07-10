@@ -1,0 +1,10 @@
+# 认知节点拓扑与节点参数。
+# 内置节点与扩展节点均通过此文件显式启用；安装扩展不会自动加入运行时。
+
+# [[node]]
+# id = "example"
+# enabled = false
+# implementation = "aurora_example.node:plugin"
+# inputs = ["input.external"]
+# outputs = ["example.result"]
+

@@ -1,0 +1,15 @@
+# AuroraBot vNext 的跨环境默认配置。
+# 目前仅作为配置契约骨架；运行时加载器将在 RFC 定稿后实现。
+
+[runtime]
+# profile = "dev"
+
+[logging]
+# level = "INFO"
+
+[storage]
+# data_dir = "data"
+
+[models]
+# 模型名称与凭证环境变量的映射将在此声明；密钥不写入 TOML。
+
