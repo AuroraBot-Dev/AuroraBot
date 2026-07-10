@@ -13,10 +13,11 @@ class PlatformRunResult:
     receipts_emitted: int
 
 
-class LocalDebugPlatform:
-    """Execute only the deterministic ``debug.echo`` capability."""
+class LocalTestPlatform:
+    """Execute the console capability in deterministic localhost tests."""
 
-    capabilities = frozenset({"debug.echo"})
+    def __init__(self, capabilities: frozenset[str] = frozenset()) -> None:
+        self.capabilities = capabilities
 
     async def execute_pending_effects(self, kernel: Kernel) -> PlatformRunResult:
         receipts = 0
@@ -30,18 +31,18 @@ class LocalDebugPlatform:
             try:
                 parameters = data["parameters"]
                 if not isinstance(parameters, dict) or not isinstance(parameters.get("text"), str):
-                    raise ValueError("debug.echo requires string parameters.text")
+                    raise ValueError("im.polaris.console.send_message requires string parameters.text")
                 receipt = new_amp(
                     event_type="effect.succeeded",
                     session_id=amp.payload.session_id,
-                    summary="Local debug effect completed",
+                    summary="Local test effect completed",
                     data={
                         "request_id": request_id,
-                        "capability": "debug.echo",
-                        "result": {"echo": parameters["text"]},
+                        "capability": "im.polaris.console.send_message",
+                        "result": {"text": parameters["text"]},
                     },
                     source_app="platform.local",
-                    source_instance="debug",
+                    source_instance="test",
                 )
                 await kernel.submit_amp(receipt)
                 kernel.complete_effect(record)
@@ -50,14 +51,14 @@ class LocalDebugPlatform:
                 receipt = new_amp(
                     event_type="effect.failed",
                     session_id=amp.payload.session_id,
-                    summary="Local debug effect failed",
+                    summary="Local test effect failed",
                     data={
                         "request_id": request_id,
                         "capability": data.get("capability"),
                         "error": f"{type(error).__name__}: {error}",
                     },
                     source_app="platform.local",
-                    source_instance="debug",
+                    source_instance="test",
                 )
                 await kernel.submit_amp(receipt)
                 kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")

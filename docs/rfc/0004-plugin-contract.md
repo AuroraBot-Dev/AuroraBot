@@ -1,6 +1,6 @@
 # RFC 0004：扩展契约
 
-状态：草案
+状态：已接受
 日期：2026-07-11
 
 ## 目标
@@ -14,11 +14,18 @@
 - 平台适配器负责生态私有协议与 AMP 之间的归一化，以及已授权效果的执行。
 - 原生应用可以实现 AMP-MCP；它们经 Platform 接入，不绕过 Platform 直接影响 Kernel。
 - 每个节点、应用和适配器必须在 TOML 中显式启用；发现或安装不得自动加入运行时。
+- MCP 效果能力使用完整工具名 `<package>.<tool>`。发现的工具必须属于 `apps.toml` 中声明的 package 和 allowlist；Platform 是唯一执行 `effect.requested` 的一层。
+- 运行时 App 配置只来自 TOML。YAML manifest 仅可作为迁移参考，不能参与 vNext 发现、启用或路由。
+- 支持内建 stdio 与外部 HTTPS Streamable HTTP MCP。远程 Bearer token 仅由显式 `auth_env` 引用。
+- 本地交互终端是内建应用 `im.polaris.console`。它以 `im.polaris.console.send_message` 请求文本输出；Platform 将工具结果交给 localhost 输出队列，交互 shell 在周期完成后呈现，Kernel 只保留请求与 AMP 回执。
 
 ## 待定
 
-- Python entry point 组名和 API 版本协商。
-- 扩展权限模型、进程隔离和签名/来源验证。
-- 第三方扩展的配置 schema 与发布兼容性政策。
+- Python entry point 组名和签名/来源验证留给后续 RFC；首版不自动发现第三方 Python 插件。
 
-本 RFC 在待定项完成前不得作为稳定第三方 API。
+## 验收标准
+
+1. Clock MCP 可由 Platform 发现完整工具名并执行 `im.polaris.clock.get_current_time`。
+2. MCP 成功、失败和 Clock 触发通知均以新的 AMP 事实回到 Kernel。
+3. 未声明 package、工具前缀、远程 HTTPS 或认证来源的 App 在启动前失败。
+4. `im.polaris.console.send_message` 的成功调用在本地交互终端输出一次，并保留对应 `effect.succeeded` AMP。

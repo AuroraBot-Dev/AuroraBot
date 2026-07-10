@@ -58,12 +58,13 @@ class ModelDecideNode:
             return
         role = context.configuration_snapshot["model_roles"][0]
         capabilities = context.configuration_snapshot["capability_descriptors"]
+        example_capability = capabilities[0]["id"] if capabilities else "no.capability"
         prompt = {
             "event": amp.to_dict(),
             "allowed_capabilities": capabilities,
             "instruction": (
                 "Return one JSON decision only. To invoke a capability, use "
-                '{"action":"invoke","capability":"debug.echo","parameters":{"text":"..."}}. '
+                f'{{"action":"invoke","capability":"{example_capability}","parameters":{{...}}}}. '
                 'Use {"action":"no_action"} when no declared capability is appropriate.'
             ),
         }

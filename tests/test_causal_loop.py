@@ -19,7 +19,7 @@ def test_message_effect_and_receipt_form_auditable_two_cycle_loop(project_root: 
 
         records = runtime.kernel._records()
         effect = next(record for record in records if record.amp["payload"]["type"] == "effect.requested")
-        assert effect.amp["payload"]["data"]["capability"] == "debug.echo"
+        assert effect.amp["payload"]["data"]["capability"] == "im.polaris.console.send_message"
         assert effect.amp["payload"]["data"]["request_id"]
 
         second = await runtime.run_cycle()

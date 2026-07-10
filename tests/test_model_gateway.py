@@ -105,7 +105,12 @@ def test_model_decide_creates_auditable_model_chain_and_valid_effect(project_roo
         _enable_model_decide(project_root)
         runtime = AuroraRuntime.create(project_root)
         runtime.kernel._model_gateway = _FakeModelGateway(
-            {"kind": "effect", "capability": "debug.echo", "parameters": {"text": "model hello"}, "summary": "echo"}
+            {
+                "kind": "effect",
+                "capability": "im.polaris.console.send_message",
+                "parameters": {"text": "model hello"},
+                "summary": "echo",
+            }
         )
         await runtime.submit_amp(valid_amp())
 
@@ -127,7 +132,11 @@ def test_model_decide_accepts_action_invoke_compatibility_shape(project_root: Pa
         _enable_model_decide(project_root)
         runtime = AuroraRuntime.create(project_root)
         runtime.kernel._model_gateway = _FakeModelGateway(
-            {"action": "invoke", "capability": "debug.echo", "parameters": {"text": "legacy shape"}}
+            {
+                "action": "invoke",
+                "capability": "im.polaris.console.send_message",
+                "parameters": {"text": "legacy shape"},
+            }
         )
         await runtime.submit_amp(valid_amp())
         await runtime.run_cycle()
@@ -145,7 +154,12 @@ def test_invalid_model_effect_parameters_do_not_create_effect(project_root: Path
         _enable_model_decide(project_root)
         runtime = AuroraRuntime.create(project_root)
         runtime.kernel._model_gateway = _FakeModelGateway(
-            {"kind": "effect", "capability": "debug.echo", "parameters": {"text": 1}, "summary": "invalid"}
+            {
+                "kind": "effect",
+                "capability": "im.polaris.console.send_message",
+                "parameters": {"text": 1},
+                "summary": "invalid",
+            }
         )
         await runtime.submit_amp(valid_amp())
         await runtime.run_cycle()

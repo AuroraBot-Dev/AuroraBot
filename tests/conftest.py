@@ -18,7 +18,7 @@ enabled = true
 implementation = "src.nodes.decide:DecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["debug.echo"]
+capabilities = ["im.polaris.console.send_message"]
 model_roles = []
 
 [[node]]
@@ -27,12 +27,26 @@ enabled = false
 implementation = "src.nodes.model_decide:ModelDecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["debug.echo"]
+capabilities = ["im.polaris.console.send_message"]
 model_roles = ["fast"]
 
 [[edge]]
 event_type = "message.received"
 target = "builtin.decide"
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "config" / "apps.toml").write_text(
+        """app = []
+
+[[adapter]]
+id = "local.test"
+enabled = true
+implementation = "src.platform.local:LocalTestPlatform"
+
+[[adapter.capability]]
+id = "im.polaris.console.send_message"
+parameters_schema = { type = "object", properties = { text = { type = "string" } }, required = ["text"], additionalProperties = false }
 """,
         encoding="utf-8",
     )

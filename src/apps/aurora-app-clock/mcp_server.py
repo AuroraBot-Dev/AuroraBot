@@ -20,8 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# 将项目根目录和 App 目录加入 sys.path
-_parent = Path(__file__).resolve().parent.parent.parent
+# 仅将项目根目录加入 sys.path；将 src/ 本身加入会遮蔽标准库 platform。
+_parent = Path(__file__).resolve().parent.parent.parent.parent
 _app_dir = Path(__file__).resolve().parent
 if str(_parent) not in sys.path:
     sys.path.insert(0, str(_parent))
@@ -30,7 +30,7 @@ if str(_app_dir) not in sys.path:
 
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from service import ClockService  # type: ignore[import-untyped]
 
 from src.utils.log_utils import get_logger
@@ -55,7 +55,7 @@ def get_current_time(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
 
 
 @mcp.tool("im.polaris.clock.set_alarm")
-def set_alarm(time_str: str, label: str = "") -> dict[str, Any]:
+async def set_alarm(ctx: Context, time_str: str, label: str = "") -> dict[str, Any]:
     """设置闹钟。
 
     Args:
@@ -66,11 +66,12 @@ def set_alarm(time_str: str, label: str = "") -> dict[str, Any]:
         闹钟信息。
     """
     logger.debug("set_alarm called: time_str=%r, label=%r", time_str, label)
-    return ClockService.set_alarm(time_str, label)
+    await ClockService.initialize(_notifier(ctx))
+    return await ClockService.set_alarm(time_str, label)
 
 
 @mcp.tool("im.polaris.clock.set_timer")
-async def set_timer(seconds: int, label: str = "") -> dict[str, Any]:
+async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, Any]:
     """设置定时器。
 
     Args:
@@ -81,6 +82,7 @@ async def set_timer(seconds: int, label: str = "") -> dict[str, Any]:
         定时器信息。
     """
     logger.debug("set_timer called: seconds=%r, label=%r", seconds, label)
+    await ClockService.initialize(_notifier(ctx))
     return await ClockService.set_timer(seconds, label)
 
 
@@ -107,6 +109,17 @@ def cancel_alarm(alarm_id: str) -> bool:
     """
     logger.debug("cancel_alarm called: alarm_id=%r", alarm_id)
     return ClockService.cancel_alarm(alarm_id)
+
+
+def _notifier(ctx: Context):
+    async def send(event_type: str, data: dict[str, Any]) -> None:
+        await ctx.session.send_log_message(
+            level="info",
+            logger="aurora/event",
+            data={"type": event_type, "data": data},
+        )
+
+    return send
 
 
 if __name__ == "__main__":

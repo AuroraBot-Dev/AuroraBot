@@ -1,11 +1,28 @@
 # 应用与平台适配器声明。
 # 安装或发现不代表启用；运行时事件和应用私有载荷仍使用 JSON。
 
-[[adapter]]
-id = "local.debug"
-enabled = true
-implementation = "src.platform.local:LocalDebugPlatform"
+adapter = []
 
-[[adapter.capability]]
-id = "debug.echo"
-parameters_schema = { type = "object", properties = { text = { type = "string" } }, required = ["text"], additionalProperties = false }
+[[app]]
+package = "im.polaris.console"
+enabled = true
+transport = "stdio"
+working_dir = "src/apps/aurora-app-console"
+command = ["uv", "run", "python", "mcp_server.py"]
+timeout_seconds = 30
+allowed_tools = ["im.polaris.console.send_message"]
+
+[[app]]
+package = "im.polaris.clock"
+enabled = true
+transport = "stdio"
+working_dir = "src/apps/aurora-app-clock"
+command = ["uv", "run", "python", "mcp_server.py"]
+timeout_seconds = 30
+allowed_tools = [
+  "im.polaris.clock.get_current_time",
+  "im.polaris.clock.set_alarm",
+  "im.polaris.clock.set_timer",
+  "im.polaris.clock.list_alarms",
+  "im.polaris.clock.cancel_alarm",
+]

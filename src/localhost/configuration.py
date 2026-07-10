@@ -84,6 +84,20 @@ class CapabilityConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AppConfig:
+    """One explicitly enabled MCP application route."""
+
+    package: str
+    transport: str
+    working_dir: Path | None
+    command: tuple[str, ...]
+    url: str | None
+    auth_env: str | None
+    timeout_seconds: float
+    allowed_tools: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
 class ModelProviderConfig:
     """A TOML-defined LiteLLM or OpenAI-compatible Provider route."""
 
@@ -125,6 +139,7 @@ class AuroraConfig:
     model_providers: dict[str, ModelProviderConfig]
     capability_definitions: dict[str, CapabilityConfig]
     model_logging: ModelLoggingConfig
+    apps: tuple[AppConfig, ...]
 
 
 def _parse_nodes(
@@ -186,8 +201,8 @@ def _parse_nodes(
     return tuple(nodes), {key: tuple(value) for key, value in edges.items()}
 
 
-def _parse_adapters(data: dict[str, Any]) -> tuple[AdapterConfig, ...]:
-    _require_keys(data, {"adapter"}, "apps.toml")
+def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConfig, ...], tuple[AppConfig, ...]]:
+    _require_keys(data, {"adapter", "app"}, "apps.toml")
     raw_adapters = data["adapter"]
     if not isinstance(raw_adapters, list):
         raise ConfigurationError("adapter must be an array")
@@ -227,7 +242,74 @@ def _parse_adapters(data: dict[str, Any]) -> tuple[AdapterConfig, ...]:
                 tuple(parsed_capabilities),
             )
         )
-    return tuple(adapters)
+    raw_apps = data["app"]
+    if not isinstance(raw_apps, list):
+        raise ConfigurationError("app must be an array")
+    apps: list[AppConfig] = []
+    packages: set[str] = set()
+    for raw in raw_apps:
+        if not isinstance(raw, dict):
+            raise ConfigurationError("app must be a table")
+        allowed = {
+            "package",
+            "enabled",
+            "transport",
+            "working_dir",
+            "command",
+            "url",
+            "auth_env",
+            "timeout_seconds",
+            "allowed_tools",
+        }
+        required = {"package", "enabled", "transport", "timeout_seconds", "allowed_tools"}
+        _require_keys(raw, {key for key in allowed if key in raw} | required, "app")
+        if not isinstance(raw["enabled"], bool) or not raw["enabled"]:
+            continue
+        package = _string(raw["package"], "app.package")
+        if package in packages or "." not in package:
+            raise ConfigurationError("app.package must be a unique dotted package name")
+        packages.add(package)
+        transport = _string(raw["transport"], "app.transport")
+        if transport not in {"stdio", "streamable_http"}:
+            raise ConfigurationError("app.transport must be stdio or streamable_http")
+        tools = raw["allowed_tools"]
+        valid_tools = isinstance(tools, list) and all(
+            isinstance(item, str) and item.startswith(f"{package}.") for item in tools
+        )
+        if not valid_tools:
+            raise ConfigurationError("app.allowed_tools must contain full package-prefixed tool names")
+        timeout = raw["timeout_seconds"]
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ConfigurationError("app.timeout_seconds must be positive")
+        command = raw.get("command", [])
+        working_dir = raw.get("working_dir")
+        url = raw.get("url")
+        auth_env = raw.get("auth_env")
+        if transport == "stdio":
+            if not isinstance(command, list) or not command or not all(isinstance(item, str) for item in command):
+                raise ConfigurationError("stdio app.command must be a non-empty string array")
+            if not isinstance(working_dir, str):
+                raise ConfigurationError("stdio app.working_dir is required")
+        else:
+            if not isinstance(url, str) or not url.startswith("https://"):
+                raise ConfigurationError("streamable_http app.url must use HTTPS")
+            if command not in ([], None) or working_dir is not None:
+                raise ConfigurationError("streamable_http app may not declare command or working_dir")
+        if auth_env is not None:
+            auth_env = _string(auth_env, "app.auth_env")
+        apps.append(
+            AppConfig(
+                package=package,
+                transport=transport,
+                working_dir=(root / working_dir).resolve() if isinstance(working_dir, str) else None,
+                command=tuple(command) if isinstance(command, list) else (),
+                url=url if isinstance(url, str) else None,
+                auth_env=auth_env,
+                timeout_seconds=float(timeout),
+                allowed_tools=frozenset(tools),
+            )
+        )
+    return tuple(adapters), tuple(apps)
 
 
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
@@ -314,15 +396,16 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     except FileNotFoundError as error:
         raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
     nodes, edges = _parse_nodes(_read_toml(root / "config" / "nodes.toml"), frozenset(roles))
-    adapters = _parse_adapters(_read_toml(root / "config" / "apps.toml"))
+    adapters, apps = _parse_adapters(_read_toml(root / "config" / "apps.toml"), root)
     capability_definitions: dict[str, CapabilityConfig] = {}
     for adapter in adapters:
         for capability in adapter.capabilities:
             if capability.id in capability_definitions:
                 raise ConfigurationError(f"duplicate capability {capability.id}")
             capability_definitions[capability.id] = capability
+    app_tools = frozenset().union(*(app.allowed_tools for app in apps)) if apps else frozenset()
     for node in nodes:
-        if not node.capabilities <= capability_definitions.keys():
+        if not node.capabilities <= capability_definitions.keys() | app_tools:
             raise ConfigurationError(f"node {node.id} requests unavailable capabilities")
     return AuroraConfig(
         root=root,
@@ -346,4 +429,5 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             log_queries=model_logging["log_queries"],
             log_responses=model_logging["log_responses"],
         ),
+        apps=apps,
     )

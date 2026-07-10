@@ -117,10 +117,14 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 "src/platform/local.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
 "src/utils/jsonio.py" = ["TC003"]
 "src/ai/vnext.py" = ["TC001", "TRY003"]
+"src/apps/aurora-app-clock/service.py" = ["TC003", "TRY003"]
+"src/platform/mcp_platform.py" = ["BLE001", "TC001", "TRY003", "TRY004"]
+"src/platform/mcp/client_manager.py" = ["C901"]
 "tests/test_api.py" = ["PLR2004", "TC003"]
 "tests/test_causal_loop.py" = ["TC003"]
 "tests/test_configuration.py" = ["TC003"]
 "tests/test_model_gateway.py" = ["TC003"]
+"tests/conftest.py" = ["E501"]
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

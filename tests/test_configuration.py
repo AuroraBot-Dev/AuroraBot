@@ -14,8 +14,8 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     assert configuration.runtime.workspace == project_root / "data" / "kernel"
     assert configuration.soul_hash
     assert configuration.edges == {"message.received": ("builtin.decide",)}
-    assert configuration.adapters[0].capabilities[0].id == "debug.echo"
-    assert configuration.capability_definitions["debug.echo"].parameters_schema["type"] == "object"
+    assert configuration.adapters[0].capabilities[0].id == "im.polaris.console.send_message"
+    assert configuration.capability_definitions["im.polaris.console.send_message"].parameters_schema["type"] == "object"
     assert configuration.model_providers["deepseek"].adapter == "litellm"
 
 

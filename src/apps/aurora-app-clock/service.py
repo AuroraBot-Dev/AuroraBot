@@ -13,11 +13,18 @@ with in-memory storage. No MCP or platform imports.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 _BEIJING_TZ = timezone(timedelta(hours=8))
-from typing import Any
 
 from src.utils.log_utils import get_logger
 
@@ -26,6 +33,20 @@ logger = get_logger("aurora-app-clock.service")
 # In-memory storage for alarms and timers
 _alarms: dict[str, dict[str, Any]] = {}
 _tasks: dict[str, asyncio.Task[None]] = {}
+_notify: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None
+
+
+def _state_path() -> Path:
+    base = Path(os.getenv("AURORA_APP_DATA_DIR", "data/app_data")) / "im.polaris.clock"
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "tasks.json"
+
+
+def _save() -> None:
+    path = _state_path()
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(list(_alarms.values()), ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
 
 
 class ClockService:
@@ -45,7 +66,36 @@ class ClockService:
         return datetime.now(tz=_BEIJING_TZ).strftime(fmt)
 
     @staticmethod
-    def set_alarm(time_str: str, label: str = "") -> dict[str, Any]:
+    async def initialize(notifier: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None) -> None:
+        """Restore pending persisted tasks and install the active MCP notification sender."""
+        global _notify  # noqa: PLW0603
+        _notify = notifier
+        path = _state_path()
+        if not path.exists():
+            return
+        try:
+            items = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return
+        if not isinstance(items, list):
+            return
+        now = datetime.now(UTC)
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("trigger_at"), str):
+                continue
+            try:
+                due = datetime.fromisoformat(item["trigger_at"])
+            except ValueError:
+                continue
+            if due <= now:
+                continue
+            task_id = str(item.get("id", ""))
+            if task_id:
+                _alarms[task_id] = item
+                ClockService._schedule(item)
+
+    @staticmethod
+    async def set_alarm(time_str: str, label: str = "") -> dict[str, Any]:
         """Store an alarm in memory and return its info with a unique id.
 
         Args:
@@ -56,13 +106,17 @@ class ClockService:
             Dict with keys: id, time_str, label, type ("alarm").
         """
         alarm_id = uuid.uuid4().hex
+        trigger_at = _parse_alarm_time(time_str)
         alarm: dict[str, Any] = {
             "id": alarm_id,
             "time_str": time_str,
             "label": label,
             "type": "alarm",
+            "trigger_at": trigger_at.isoformat(),
         }
         _alarms[alarm_id] = alarm
+        ClockService._schedule(alarm)
+        _save()
         logger.info("Alarm set: %s", alarm)
         return alarm
 
@@ -85,23 +139,34 @@ class ClockService:
             "seconds": seconds,
             "label": label,
             "type": "timer",
+            "trigger_at": (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat(),
         }
         _alarms[timer_id] = timer
+        ClockService._schedule(timer)
+        _save()
+        logger.info("Timer set: %s", timer)
+        return timer
+
+    @staticmethod
+    def _schedule(item: dict[str, Any]) -> None:
+        task_id = str(item["id"])
+        due = datetime.fromisoformat(str(item["trigger_at"]))
 
         async def _wait() -> None:
             try:
-                await asyncio.sleep(seconds)
-                logger.info("Timer expired: %s", timer)
-            except asyncio.CancelledError:
-                logger.info("Timer cancelled: %s", timer)
+                await asyncio.sleep(max(0.0, (due - datetime.now(UTC)).total_seconds()))
+                event_type = "alarm.triggered" if item.get("type") == "alarm" else "timer.triggered"
+                if _notify is not None:
+                    await _notify(
+                        event_type,
+                        {"id": task_id, "label": item.get("label", ""), "trigger_at": item["trigger_at"]},
+                    )
             finally:
-                _alarms.pop(timer_id, None)
-                _tasks.pop(timer_id, None)
+                _alarms.pop(task_id, None)
+                _tasks.pop(task_id, None)
+                _save()
 
-        task = asyncio.create_task(_wait())
-        _tasks[timer_id] = task
-        logger.info("Timer set: %s", timer)
-        return timer
+        _tasks[task_id] = asyncio.create_task(_wait())
 
     @staticmethod
     def list_alarms() -> list[dict[str, Any]]:
@@ -133,5 +198,21 @@ class ClockService:
 
         _alarms.pop(alarm_id, None)
         _tasks.pop(alarm_id, None)
+        _save()
         logger.info("Alarm/timer cancelled: %s", alarm_id)
         return True
+
+
+def _parse_alarm_time(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+        return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=_BEIJING_TZ).astimezone(UTC)
+    except ValueError:
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})", value.strip())
+        if match is None:
+            raise ValueError("time_str must be ISO-8601 or HH:MM") from None
+        now = datetime.now(_BEIJING_TZ)
+        due = now.replace(hour=int(match.group(1)), minute=int(match.group(2)), second=0, microsecond=0)
+        if due <= now:
+            due += timedelta(days=1)
+        return due.astimezone(UTC)

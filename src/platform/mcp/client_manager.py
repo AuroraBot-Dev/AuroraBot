@@ -74,9 +74,10 @@ class _NotifiableClientSession(ClientSession):
 
         # 再分发给自定义 dispatcher
         if self._notification_dispatcher is not None:
-            method = getattr(notification, "method", "") or ""
+            payload = getattr(notification, "root", notification)
+            method = getattr(payload, "method", "") or ""
             params: dict[str, object] = {}
-            raw_params = getattr(notification, "params", None)
+            raw_params = getattr(payload, "params", None)
             if isinstance(raw_params, dict):
                 params = raw_params
             elif raw_params is not None and hasattr(raw_params, "model_dump"):
@@ -431,6 +432,9 @@ class MCPClientManager:
             msg = f"未找到 Server 连接: {server_key}"
             raise MCPToolCallError(msg)
 
+        discovered_names = {str(getattr(tool, "name", "")) for tool in conn.tools}
+        if full_name in discovered_names:
+            tool_name = full_name
         logger.debug("调用 tool: %s (server: %s, args: %s)", tool_name, server_key, arguments)
 
         try:

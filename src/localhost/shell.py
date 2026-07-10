@@ -38,6 +38,8 @@ async def run_console(
         if result == "__QUIT__":
             return
         output(result)
+        for message in runtime.drain_console_messages():
+            output(f"bot> {message}")
 
 
 def _parse(raw: str, commands: dict[str, ConsoleCommand]) -> tuple[ConsoleCommand | None, tuple[str, ...]]:
