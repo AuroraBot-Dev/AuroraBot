@@ -1,13 +1,15 @@
 # 认知节点图与节点参数。
 # 内置节点和扩展节点均须显式启用；安装扩展不会自动加入运行时。
 
-# [[node]]
-# id = "builtin.decide"
-# enabled = true
-# implementation = "aurorabot.nodes.decide:plugin"
-# inputs = ["message.received", "effect.succeeded", "effect.failed"]
-# outputs = ["effect.requested"]
+[[node]]
+id = "builtin.decide"
+enabled = true
+implementation = "src.nodes.decide:DecideNode"
+inputs = ["message.received"]
+outputs = ["effect.requested"]
+capabilities = ["debug.echo"]
+model_roles = []
 
-# [[edge]]
-# event_type = "message.received"
-# target = "builtin.decide"
+[[edge]]
+event_type = "message.received"
+target = "builtin.decide"

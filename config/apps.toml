@@ -1,8 +1,8 @@
 # 应用与平台适配器声明。
 # 安装或发现不代表启用；运行时事件和应用私有载荷仍使用 JSON。
 
-# [[app]]
-# id = "example"
-# enabled = false
-# implementation = "aurora_example.app:plugin"
-# adapter = "mcp"
+[[adapter]]
+id = "local.debug"
+enabled = true
+implementation = "src.platform.local:LocalDebugPlatform"
+capabilities = ["debug.echo"]

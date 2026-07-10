@@ -47,7 +47,17 @@ extensions/   推荐的第三方节点、平台适配器和应用扩展位置
 
 ## 重建状态
 
-vNext 尚未提供可运行的 Bot 入口。请勿把当前根目录的旧入口文件或 `legacy/` 中的实现视作 vNext 的启动方式；第一个可运行闭环会在 RFC 0001、0002、0003 的契约测试完成后引入。
+vNext 提供仅限本机开发的最小运行入口；请勿使用根目录旧 `bot.py` 或 `legacy/` 中的入口：
+
+```powershell
+# 启动开发调试 HTTP API（默认 http://127.0.0.1:8765）
+uv run python -m src.localhost.cli serve
+
+# 启动分层交互式本地控制台
+uv run python -m src.localhost.cli console
+```
+
+控制台中输入 `/say 你好` 投递消息，输入 `/cycle` 推进一次周期，输入 `/record <record_id>` 查询审计记录，输入 `/help` 查看完整命令集。HTTP API 的具体端点见 RFC 0006。
 
 ## 许可证
 

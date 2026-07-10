@@ -4,6 +4,8 @@
 [runtime]
 profile = "dev"
 workspace = "data/kernel"
+debug_host = "127.0.0.1"
+debug_port = 8765
 
 [soul]
 path = "SOUL.md"

@@ -15,10 +15,9 @@ dependencies = [
     "tiktoken>=0.13.0",
     "rich>=15.0.0",
     "mcp[cli]>=1.27,<2",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
 ]
-
-[project.entry-points."aurorabot.nodes"]
-builtin-perception = "src.nodes.entrypoints:perception"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -105,6 +104,20 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 [tool.ruff.lint.per-file-ignores]
 "apps/*/__init__.py" = ["N999"]
 "src/platform/__init__.py" = ["A005"]
+"src/apps/*/__init__.py" = ["N999"]
+"src/kernel/events.py" = ["PLR0913", "TRY003"]
+"src/kernel/node.py" = ["TC001", "TRY003"]
+"src/kernel/records.py" = ["TC001"]
+"src/kernel/runtime.py" = ["TC001", "TC003", "TRY003", "TRY004", "TRY301"]
+"src/localhost/api.py" = ["TC003"]
+"src/localhost/configuration.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003", "TRY003"]
+"src/localhost/runtime.py" = ["TC003"]
+"src/nodes/decide.py" = ["TC001"]
+"src/platform/local.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
+"src/utils/jsonio.py" = ["TC003"]
+"tests/test_api.py" = ["PLR2004", "TC003"]
+"tests/test_causal_loop.py" = ["TC003"]
+"tests/test_configuration.py" = ["TC003"]
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

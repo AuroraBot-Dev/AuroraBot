@@ -1,0 +1,78 @@
+package: im.polaris.clock
+name: 时钟
+version: 1.2.0
+brain_version: ">=5.0.0"
+type: mcp-server
+app_desc: >-
+  提供时间查询、定时闹钟和倒计时计时器功能。
+
+mcp:
+  transport: stdio
+  entry: mcp_server.py
+  command: ["uv", "run", "python", "mcp_server.py"]
+
+commands:
+  - name: get_current_time
+    description: 获取当前时间。
+    parameters: []
+    returns:
+      current_time:
+        type: string
+        description: 当前时间, 格式 YYYY-MM-DD HH:MM:SS
+
+  - name: set_alarm
+    description: >-
+      设定一个在未来**绝对时间**触发的闹钟。支持一次性或每天重复。
+      时间格式示例: "每天 07:30 叫我起床"、"明天 07:30 开会"、"2026-05-27 14:00 提醒"。
+    parameters:
+      time_text:
+        type: string
+        description: >-
+          绝对时间描述。必须以 "每天" / "明天" / "今天" 开头（可选），然后跟 HH:MM 格式的
+          时间。例如: "每天 07:30 叫我起床" "明天 14:00 开会" "2026-05-27 14:00 提醒"
+        required: true
+    returns:
+      alarm_id:
+        type: string
+        description: 闹钟 ID
+      status:
+        type: string
+        description: 状态
+      trigger_at:
+        type: string
+        description: 触发时间
+      repeat:
+        type: string
+        description: 重复模式, daily 或 none
+
+  - name: set_timer
+    description: >-
+      设定一个**相对时长**的倒计时器，到时提醒。适用于 "X分钟后/小时后做某事" 的场景。
+      例如 "5分钟后翻面"、"30分钟后提醒我休息" 或纯秒数 "300"。
+    parameters:
+      time_text:
+        type: string
+        description: >-
+          相对时长描述。例如: "5分钟后"、"30分钟后提醒我"、"600"
+        required: true
+    returns:
+      timer_id:
+        type: string
+        description: 计时器 ID
+      status:
+        type: string
+        description: 状态
+      seconds:
+        type: number
+        description: 解析得到的秒数
+
+  - name: list_alarms
+    description: 查看所有闹钟和计时器的当前状态。
+    parameters: []
+    returns:
+      items:
+        type: array
+        description: 闹钟和计时器列表, 含 kind/message/status/repeat/remaining_seconds
+      count:
+        type: number
+        description: 总数
