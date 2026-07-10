@@ -1,0 +1,25 @@
+# AuroraBot vNext 的跨环境默认配置。
+# 结构性配置只使用 TOML；密钥由本文件引用的环境变量提供。
+
+[runtime]
+profile = "dev"
+workspace = "data/kernel"
+
+[soul]
+path = "SOUL.md"
+
+[logging]
+level = "INFO"
+
+[storage]
+data_dir = "data"
+
+[models.roles.fast]
+provider = "openai"
+model = "gpt-4o-mini"
+secret_env = "OPENAI_API_KEY"
+
+[models.roles.quality]
+provider = "openai"
+model = "gpt-4o"
+secret_env = "OPENAI_API_KEY"

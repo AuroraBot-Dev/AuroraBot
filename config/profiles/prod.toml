@@ -1,0 +1,5 @@
+# 生产环境覆盖项。
+# 本文件仅覆盖 config/aurora.toml；密钥通过环境变量注入，不写入此文件。
+
+[logging]
+level = "INFO"

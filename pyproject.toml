@@ -17,6 +17,13 @@ dependencies = [
     "mcp[cli]>=1.27,<2",
 ]
 
+[project.entry-points."aurorabot.nodes"]
+builtin-perception = "src.nodes.entrypoints:perception"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
+
 [dependency-groups]
 dev = [
     "pyright[nodejs]",
