@@ -10,9 +10,7 @@ transport = "stdio"
 working_dir = "src/apps/aurora-app-console"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
-allowed_tools = [
-  "org.aurora.console.send_message",
-]
+allowed_tools = ["org.aurora.console.send_message"]
 
 [[app]]
 package = "org.aurora.clock"

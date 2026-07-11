@@ -19,7 +19,7 @@ from src.kernel.events import AmpEnvelope, AmpValidationError, new_amp
 from src.kernel.node import CognitiveNode, NodeContext
 from src.kernel.records import KernelRecord, RecordStatus
 from src.localhost.configuration import AuroraConfig, NodeConfig
-from src.utils.jsonio import atomic_write_json, read_json
+from src.utils.serialization import atomic_write_json, read_json
 
 MAX_HOP = 16
 

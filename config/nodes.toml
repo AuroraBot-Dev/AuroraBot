@@ -7,9 +7,7 @@ enabled = false
 implementation = "src.nodes.decide:DecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = [
-    "org.aurora.console.send_message",
-]
+capabilities = ["org.aurora.console.send_message"]
 model_roles = []
 
 [[edge]]

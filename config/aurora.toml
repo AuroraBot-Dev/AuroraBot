@@ -29,7 +29,13 @@ capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
 [models.roles.multimodal]
 provider = "xiaomi_mimo"
 model = "mimo-v2.5-pro"
-capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "vision"]
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "vision",
+]
 
 [models.roles.embedding]
 provider = "siliconflow"

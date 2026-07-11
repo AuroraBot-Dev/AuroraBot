@@ -18,7 +18,7 @@ from src.ai.contracts import (
 from src.ai.gateway import GatewayError, ModelGateway
 from src.ai.providers import ProviderConfig, setup_providers
 from src.localhost.configuration import AuroraConfig
-from src.utils.json_utils import parse_llm_json
+from src.utils.serialization import extract_json_from_text
 
 
 class ModelGatewayService:
@@ -139,7 +139,7 @@ class ModelGatewayService:
     ) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
         if request.output_schema is None:
             return None, ()
-        parsed = parse_llm_json(text)
+        parsed = extract_json_from_text(text)
         if parsed is None:
             return _invalid_output_result(request, "model output did not contain a JSON object")
         try:
