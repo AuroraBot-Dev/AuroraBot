@@ -22,10 +22,9 @@ AuroraBot は vNext の再構築段階にあります。直近の目標は、`le
 
 ```bash
 uv sync --group dev
-uv run ruff check bot.py src/ tests/
-uv run ruff format --check bot.py src/ tests/
-uv run pyright bot.py src/
-uv run pytest --cov=src
+uv run aurora check
 ```
+
+`ruff check`、`ruff format --check`、`pyright`、`pytest --cov=src` を順に実行するのと同等です。
 
 コマンドは vNext 実装に合わせて更新されます。CI と受理済み RFC が基準です。

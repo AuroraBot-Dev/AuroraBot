@@ -20,9 +20,12 @@ dependencies = [
     "jsonschema>=4.23,<5",
 ]
 
+[project.scripts]
+aurora = "scripts.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src", "src.*"]
+include = ["scripts", "scripts.*"]
 
 [dependency-groups]
 dev = [
@@ -136,5 +139,10 @@ pythonPlatform = "All"
 typeCheckingMode = "standard"
 exclude = ["tests"]
 
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
 [tool.uv]
+package = true
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"

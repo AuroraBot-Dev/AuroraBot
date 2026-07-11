@@ -22,10 +22,9 @@ AuroraBot is in its vNext rebuild phase. The immediate goal is a contractual min
 
 ```bash
 uv sync --group dev
-uv run ruff check bot.py src/ tests/
-uv run ruff format --check bot.py src/ tests/
-uv run pyright bot.py src/
-uv run pytest --cov=src
+uv run aurora check
 ```
+
+Equivalent to running `ruff check`, `ruff format --check`, `pyright`, `pytest --cov=src` in sequence.
 
 Commands will evolve with the vNext implementation. CI and accepted RFCs remain authoritative.
