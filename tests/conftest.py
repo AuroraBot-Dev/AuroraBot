@@ -1,17 +1,69 @@
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 @pytest.fixture
-def project_root(tmp_path: Path) -> Path:
-    source = Path(__file__).parents[1]
-    shutil.copytree(source / "config", tmp_path / "config")
-    shutil.copy2(source / "SOUL.md", tmp_path / "SOUL.md")
-    (tmp_path / "config" / "nodes.toml").write_text(
+def project_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.delenv("AURORA_PROFILE", raising=False)
+    config = tmp_path / "config"
+    prompts = config / "prompts"
+    profiles = config / "profiles"
+    prompts.mkdir(parents=True)
+    profiles.mkdir()
+    (config / "aurora.toml").write_text(
+        """[runtime]
+profile = "test"
+workspace = "data/kernel"
+debug_host = "127.0.0.1"
+debug_port = 8765
+
+[soul]
+path = "config/prompts/SOUL.md"
+
+[logging]
+level = "INFO"
+
+[storage]
+data_dir = "data"
+
+[models.roles.fast]
+provider = "test"
+model = "fast"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+
+[models.roles.quality]
+provider = "test"
+model = "quality"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+
+[models.roles.multimodal]
+provider = "test"
+model = "multimodal"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "vision"]
+
+[models.roles.embedding]
+provider = "test"
+model = "embedding"
+capabilities = ["embedding"]
+
+[models.providers.test]
+adapter = "litellm"
+secret_env = "AURORA_TEST_MODEL_API_KEY"
+
+[models.logging]
+log_queries = false
+log_responses = false
+""",
+        encoding="utf-8",
+    )
+    (prompts / "SOUL.md").write_text("You are the AuroraBot test fixture.", encoding="utf-8")
+    (config / "nodes.toml").write_text(
         """[[node]]
 id = "builtin.decide"
 enabled = true
@@ -36,7 +88,7 @@ target = "builtin.decide"
 """,
         encoding="utf-8",
     )
-    (tmp_path / "config" / "apps.toml").write_text(
+    (config / "apps.toml").write_text(
         """app = []
 
 [[adapter]]

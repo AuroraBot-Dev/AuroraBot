@@ -63,7 +63,7 @@ def test_model_call_without_credential_is_rejected_before_provider_request(
     project_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def scenario() -> None:
-        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.delenv("AURORA_TEST_MODEL_API_KEY", raising=False)
         service = ModelGatewayService(load_configuration(project_root))
         request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),))
         with pytest.raises(ModelGatewayError, match="missing model credential"):

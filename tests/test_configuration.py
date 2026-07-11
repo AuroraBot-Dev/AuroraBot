@@ -10,13 +10,13 @@ from src.localhost.configuration import ConfigurationError, load_configuration
 def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     configuration = load_configuration(project_root)
 
-    assert configuration.runtime.profile == "dev"
+    assert configuration.runtime.profile == "test"
     assert configuration.runtime.workspace == project_root / "data" / "kernel"
     assert configuration.soul_hash
     assert configuration.edges == {"message.received": ("builtin.decide",)}
     assert configuration.adapters[0].capabilities[0].id == "org.aurora.console.send_message"
     assert configuration.capability_definitions["org.aurora.console.send_message"].parameters_schema["type"] == "object"
-    assert configuration.model_providers["deepseek"].adapter == "litellm"
+    assert configuration.model_providers["test"].adapter == "litellm"
 
 
 def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
@@ -28,7 +28,7 @@ def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
 
 
 def test_rejects_unknown_profile_configuration(project_root: Path) -> None:
-    config = project_root / "config" / "profiles" / "dev.toml"
+    config = project_root / "config" / "profiles" / "test.toml"
     config.write_text('[unknown]\nvalue = "not allowed"\n', encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match="unexpected"):

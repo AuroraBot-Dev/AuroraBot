@@ -8,7 +8,7 @@ debug_host = "127.0.0.1"
 debug_port = 8765
 
 [soul]
-path = "SOUL.md"
+path = "config/prompts/SOUL.md"
 
 [logging]
 level = "INFO"
@@ -26,9 +26,23 @@ provider = "deepseek"
 model = "deepseek-v4-pro"
 capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
 
+[models.roles.multimodal]
+provider = "xiaomi_mimo"
+model = "mimo-v2.5-pro"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "vision"]
+
+[models.roles.embedding]
+provider = "siliconflow"
+model = "BAAI/bge-m3"
+capabilities = ["embedding"]
+
 [models.providers.deepseek]
 adapter = "litellm"
 secret_env = "DEEPSEEK_API_KEY"
+
+[models.providers.xiaomi_mimo]
+adapter = "litellm"
+secret_env = "XIAOMI_MIMO_API_KEY"
 
 [models.providers.openai]
 adapter = "litellm"

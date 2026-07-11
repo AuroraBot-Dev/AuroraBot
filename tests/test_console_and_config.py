@@ -16,8 +16,9 @@ def test_public_config_facade_uses_the_validated_toml_snapshot(project_root: Pat
 
     assert snapshot == load_config(project_root)
     assert project_root / "data" / "kernel" == Config.KERNEL_DATA_DIR
-    assert Config.LLM_GATEWAY_FAST_MODEL == "deepseek/deepseek-v4-flash"
-    assert Config.LLM_GATEWAY_MULTIMODAL_MODEL == Config.LLM_GATEWAY_QUALITY_MODEL
+    assert Config.LLM_GATEWAY_FAST_MODEL == "test/fast"
+    assert Config.LLM_GATEWAY_MULTIMODAL_MODEL == "test/multimodal"
+    assert Config.LLM_GATEWAY_EMBEDDING_MODEL == "test/embedding"
     assert snapshot.model_logging.log_queries == Config.LLM_GATEWAY_ENABLE_LOGGING_QUERIES
     assert snapshot.model_logging.log_responses == Config.LLM_GATEWAY_ENABLE_LOGGING_RESPONSES
 
