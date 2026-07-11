@@ -29,8 +29,8 @@ def register(sub: Any) -> None:
 
 def check(args: argparse.Namespace) -> int:
     """执行检查并返回退出码。"""
-    run_lint = not args.test
-    run_test = not args.lint
+    run_lint = args.lint or not args.test
+    run_test = args.test or not args.lint
 
     failed = 0
     if run_lint:

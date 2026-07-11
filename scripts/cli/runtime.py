@@ -33,7 +33,7 @@ def _popen_kwargs() -> dict[str, Any]:
     return kwargs
 
 
-def _kill_tree(proc: subprocess.Popen) -> None:
+def _kill_tree(proc: subprocess.Popen, *, force: bool = False) -> None:
     """Kill a process and all its descendants."""
     if proc.poll() is not None:
         return
@@ -46,7 +46,7 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         )
     else:
         with contextlib.suppress(ProcessLookupError):
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL if force else signal.SIGTERM)
 
 
 @contextlib.contextmanager
@@ -57,7 +57,11 @@ def _background_server() -> Generator[subprocess.Popen]:
         yield proc
     finally:
         _kill_tree(proc)
-        proc.wait()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc, force=True)
+            proc.wait()
 
 
 # ── 子命令注册 ──────────────────────────────────────────────────────────────
