@@ -14,7 +14,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 def run(cmd: list[str]) -> int:
     """运行命令并返回退出码。"""
     console.print(f"\n[bold cyan]>>> {' '.join(cmd)}[/bold cyan]")
-    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT), check=False)
+    try:
+        result = subprocess.run(cmd, cwd=str(PROJECT_ROOT), check=False)
+    except KeyboardInterrupt:
+        return 130
     if result.returncode != 0:
         console.print(f"[bold red]FAILED (exit {result.returncode})[/bold red]")
     return result.returncode
