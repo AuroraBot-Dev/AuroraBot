@@ -9,15 +9,27 @@ if TYPE_CHECKING:
 
 from scripts.cli.utils import console, run
 
+_FIXED_PATHS = ["bot.py", "src/", "tests/", "scripts/"]
+
 _LINT_CMDS = [
-    ["uv", "run", "ruff", "check", "bot.py", "src/", "tests/", "scripts/"],
-    ["uv", "run", "ruff", "format", "--check", "bot.py", "src/", "tests/", "scripts/"],
-    ["uv", "run", "pyright", "bot.py", "src/", "scripts/"],
+    lambda args: ["uv", "run", "ruff", "check", *args_check_flags(args), *_FIXED_PATHS],
+    lambda _args: ["uv", "run", "ruff", "format", "--check", *_FIXED_PATHS],
+    lambda _args: ["uv", "run", "pyright", "bot.py", "src/", "scripts/"],
 ]
 
 _TEST_CMDS = [
-    ["uv", "run", "pytest", "-v", "--cov=src"],
+    lambda _args: ["uv", "run", "pytest", "-v", "--cov=src"],
 ]
+
+
+def args_check_flags(args: argparse.Namespace) -> list[str]:
+    """根据 --fix / --unsafe-fixes 返回 ruff check 的透传参数。"""
+    flags: list[str] = []
+    if args.fix:
+        flags.append("--fix")
+    if args.unsafe_fixes:
+        flags.append("--unsafe-fixes")
+    return flags
 
 
 def register(sub: Any) -> None:
@@ -25,6 +37,8 @@ def register(sub: Any) -> None:
     parser = sub.add_parser("check", help="运行代码质量检查")
     parser.add_argument("--lint", action="store_true", help="仅运行 lint (ruff + pyright)")
     parser.add_argument("--test", action="store_true", help="仅运行 pytest")
+    parser.add_argument("--fix", action="store_true", help="透传 ruff check --fix")
+    parser.add_argument("--unsafe-fixes", action="store_true", help="透传 ruff check --unsafe-fixes")
 
 
 def check(args: argparse.Namespace) -> int:
@@ -34,12 +48,12 @@ def check(args: argparse.Namespace) -> int:
 
     failed = 0
     if run_lint:
-        for cmd in _LINT_CMDS:
-            if run(cmd) != 0:
+        for build in _LINT_CMDS:
+            if run(build(args)) != 0:
                 failed += 1
     if run_test:
-        for cmd in _TEST_CMDS:
-            if run(cmd) != 0:
+        for build in _TEST_CMDS:
+            if run(build(args)) != 0:
                 failed += 1
 
     if failed:
