@@ -50,11 +50,14 @@ extensions/   推荐的第三方节点、平台适配器和应用扩展位置
 vNext 提供仅限本机开发的最小运行入口；请勿使用根目录旧 `bot.py` 或 `legacy/` 中的入口：
 
 ```powershell
-# 启动开发调试 HTTP API（默认 http://127.0.0.1:8765）
-uv run python -m src.localhost.cli serve
+# 同时启动 serve + console（console 前台，serve 后台自动关闭）
+uv run aurora
 
-# 启动分层交互式本地控制台
-uv run python -m src.localhost.cli console
+# 仅启动开发调试 HTTP API（默认 http://127.0.0.1:8765）
+uv run aurora serve
+
+# 仅启动分层交互式本地控制台
+uv run aurora console
 ```
 
 控制台中输入 `/say 你好` 投递消息，输入 `/cycle` 推进一次周期，输入 `/record <record_id>` 查询审计记录，输入 `/help` 查看完整命令集。HTTP API 的具体端点见 RFC 0006。

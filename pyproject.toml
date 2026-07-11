@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-aurora = "scripts.cli:main"
+aurora = "scripts.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
