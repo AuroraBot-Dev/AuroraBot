@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 import json
 import os
 import uuid
@@ -40,6 +39,7 @@ from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     import collections.abc
+    from collections.abc import Mapping
 
 logger = get_logger("Gateway")
 
@@ -251,7 +251,7 @@ class ModelCaller:
         禁止调用方传入 ``model`` 参数 —— 模型由角色配置统一指定。
         """
         if "model" in kwargs:
-            raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")  # noqa: TRY003
+            raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")
 
         async def _safe_cost(
             response: Any,
@@ -529,9 +529,7 @@ class ModelGateway:
             self._models = dict(models)
         for role, model in self._models.items():
             if "/" not in model:
-                raise ValueError(  # noqa: TRY003
-                    f"Model for role '{role}' must be in 'provider/model_name' format, got '{model}'"
-                )
+                raise ValueError(f"Model for role '{role}' must be in 'provider/model_name' format, got '{model}'")
 
         self.embedding = embedding
         self.reranker = reranker
@@ -546,7 +544,7 @@ class ModelGateway:
     def use_model(self, role: str) -> ModelCaller:
         role = role.lower()
         if role not in self._callers:
-            raise ValueError(f"Unknown role '{role}'. Available: {list(self._callers.keys())}")  # noqa: TRY003
+            raise ValueError(f"Unknown role '{role}'. Available: {list(self._callers.keys())}")
         return self._callers[role]
 
     @property

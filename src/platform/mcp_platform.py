@@ -59,17 +59,13 @@ class MCPPlatform:
         await self._clients.connect_all()
         await self._clients.refresh_tools()
         remote_tasks = [
-            self._connect_remote(app)
-            for app in self._configuration.apps
-            if app.transport == "streamable_http"
+            self._connect_remote(app) for app in self._configuration.apps if app.transport == "streamable_http"
         ]
         if remote_tasks:
             await asyncio.gather(*remote_tasks)
         descriptors = self._discover_capabilities()
         self._configuration.capability_definitions.update(descriptors)
-        self._notification_task = asyncio.create_task(
-            self._forward_local_notifications(), name="mcp-notifications"
-        )
+        self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
         self._started = True
 
     def _local_spec(self, app: AppConfig) -> MCPServerSpec:
@@ -157,9 +153,7 @@ class MCPPlatform:
     async def execute_pending_effects(self, kernel: Kernel) -> PlatformRunResult:
         if not self._started:
             return PlatformRunResult(0)
-        capabilities = frozenset(
-            capability for app in self._configuration.apps for capability in app.allowed_tools
-        )
+        capabilities = frozenset(capability for app in self._configuration.apps for capability in app.allowed_tools)
         receipts = 0
         for record in await kernel.claim_effect_requests(capabilities):
             amp = AmpEnvelope.parse(record.amp)

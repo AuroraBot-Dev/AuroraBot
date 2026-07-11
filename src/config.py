@@ -38,6 +38,8 @@ class Config:
     SANDBOX_DIR: Path
     SANDBOX_TEMP_DIR: Path
     SANDBOX_OUTPUT_DIR: Path
+    SANDBOX_EXEC_TIMEOUT: float
+    SANDBOX_MAX_OUTPUT_SIZE: int
     LOG_LEVEL: str
     LLM_GATEWAY_FAST_MODEL: str
     LLM_GATEWAY_QUALITY_MODEL: str
@@ -64,11 +66,10 @@ class Config:
         cls.SANDBOX_DIR = data_dir / "sandbox"
         cls.SANDBOX_TEMP_DIR = cls.SANDBOX_DIR / "temp"
         cls.SANDBOX_OUTPUT_DIR = cls.SANDBOX_DIR / "output"
+        cls.SANDBOX_EXEC_TIMEOUT = 30.0
+        cls.SANDBOX_MAX_OUTPUT_SIZE = 50_000
         cls.LOG_LEVEL = snapshot.logging_level
-        roles = {
-            role: f"{settings.provider}/{settings.model}"
-            for role, settings in snapshot.model_definitions.items()
-        }
+        roles = {role: f"{settings.provider}/{settings.model}" for role, settings in snapshot.model_definitions.items()}
         cls.LLM_GATEWAY_FAST_MODEL = roles.get("fast", "")
         cls.LLM_GATEWAY_QUALITY_MODEL = roles.get("quality", "")
         # RFC 0005 is still a draft, while the extracted gateway requires
@@ -97,5 +98,6 @@ class Config:
             cls.SANDBOX_OUTPUT_DIR,
         ):
             path.mkdir(parents=True, exist_ok=True)
+
 
 Config.reload()

@@ -59,9 +59,7 @@ def test_invalid_inbox_json_is_preserved_as_an_error_record(project_root: Path) 
         result = await runtime.run_cycle()
 
         errors = [
-            record
-            for record in runtime.kernel._records()
-            if record.amp["payload"]["type"] == "system.ingress_rejected"
+            record for record in runtime.kernel._records() if record.amp["payload"]["type"] == "system.ingress_rejected"
         ]
         assert not result["ingested_record_ids"]
         assert len(errors) == 1

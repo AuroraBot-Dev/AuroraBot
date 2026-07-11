@@ -116,6 +116,7 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 "src/nodes/decide.py" = ["TC001"]
 "src/platform/local.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
 "src/utils/jsonio.py" = ["TC003"]
+"src/ai/gateway.py" = ["PLR0913", "TRY003"]
 "src/ai/vnext.py" = ["TC001", "TRY003"]
 "src/apps/aurora-app-clock/service.py" = ["TC003", "TRY003"]
 "src/platform/mcp_platform.py" = ["BLE001", "TC001", "TRY003", "TRY004"]

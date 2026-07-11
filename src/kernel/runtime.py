@@ -143,9 +143,7 @@ class Kernel:
     def ingest_ready(self) -> tuple[str, ...]:
         """Take every completed inbox JSON file into the current cycle."""
         existing_message_ids = {
-            AmpEnvelope.parse(record.amp).header.message_id
-            for record in self._records()
-            if record.amp.get("header")
+            AmpEnvelope.parse(record.amp).header.message_id for record in self._records() if record.amp.get("header")
         }
         ingested: list[str] = []
         for path in sorted(self._inbox.glob("*.json")):
@@ -285,9 +283,7 @@ class Kernel:
                 failed.append(record.record_id)
         return CycleResult(self._cycle, tuple(ingested), tuple(scheduled), tuple(failed))
 
-    async def request_model_from_node(
-        self, parent: KernelRecord, node_id: str, request: ModelRequest
-    ) -> ModelResult:
+    async def request_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> ModelResult:
         """Run an authorized model capability and retain request/outcome audit records."""
         request_record = self._create_model_record(parent, node_id, "model.requested", request.to_dict())
         try:
