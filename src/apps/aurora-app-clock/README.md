@@ -1,6 +1,6 @@
 # 时钟 (aurora-app-clock)
 
-**包名**: `im.polaris.clock`
+**包名**: `org.aurora.clock`
 
 **版本**: 1.2.0
 

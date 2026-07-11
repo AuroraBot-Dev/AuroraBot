@@ -107,7 +107,7 @@ def test_model_decide_creates_auditable_model_chain_and_valid_effect(project_roo
         runtime.kernel._model_gateway = _FakeModelGateway(
             {
                 "kind": "effect",
-                "capability": "im.polaris.console.send_message",
+                "capability": "org.aurora.console.send_message",
                 "parameters": {"text": "model hello"},
                 "summary": "echo",
             }
@@ -134,7 +134,7 @@ def test_model_decide_accepts_action_invoke_compatibility_shape(project_root: Pa
         runtime.kernel._model_gateway = _FakeModelGateway(
             {
                 "action": "invoke",
-                "capability": "im.polaris.console.send_message",
+                "capability": "org.aurora.console.send_message",
                 "parameters": {"text": "legacy shape"},
             }
         )
@@ -156,7 +156,7 @@ def test_invalid_model_effect_parameters_do_not_create_effect(project_root: Path
         runtime.kernel._model_gateway = _FakeModelGateway(
             {
                 "kind": "effect",
-                "capability": "im.polaris.console.send_message",
+                "capability": "org.aurora.console.send_message",
                 "parameters": {"text": 1},
                 "summary": "invalid",
             }

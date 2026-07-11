@@ -15,13 +15,13 @@ def test_console_mcp_tool_delivers_text_to_the_interactive_shell(project_root: P
         f"""adapter = []
 
 [[app]]
-package = "im.polaris.console"
+package = "org.aurora.console"
 enabled = true
 transport = "stdio"
 working_dir = "{app_directory}"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
-allowed_tools = ["im.polaris.console.send_message"]
+allowed_tools = ["org.aurora.console.send_message"]
 """,
         encoding="utf-8",
     )

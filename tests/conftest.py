@@ -18,7 +18,7 @@ enabled = true
 implementation = "src.nodes.decide:DecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["im.polaris.console.send_message"]
+capabilities = ["org.aurora.console.send_message"]
 model_roles = []
 
 [[node]]
@@ -27,7 +27,7 @@ enabled = false
 implementation = "src.nodes.model_decide:ModelDecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["im.polaris.console.send_message"]
+capabilities = ["org.aurora.console.send_message"]
 model_roles = ["fast"]
 
 [[edge]]
@@ -45,7 +45,7 @@ enabled = true
 implementation = "src.platform.local:LocalTestPlatform"
 
 [[adapter.capability]]
-id = "im.polaris.console.send_message"
+id = "org.aurora.console.send_message"
 parameters_schema = { type = "object", properties = { text = { type = "string" } }, required = ["text"], additionalProperties = false }
 """,
         encoding="utf-8",

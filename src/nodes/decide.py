@@ -16,7 +16,7 @@ class DecideNode:
         if not isinstance(text, str):
             text = amp.payload.summary
         context.request_effect(
-            "im.polaris.console.send_message",
+            "org.aurora.console.send_message",
             {"text": text},
             "Send received message through the local console application",
         )

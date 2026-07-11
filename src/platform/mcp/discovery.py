@@ -12,7 +12,7 @@
   apps:
     my-custom-server:
       enabled: true
-      package: im.polaris.custom
+      package: org.aurora.custom
       name: 自定义服务
       mcp:
         enabled: true

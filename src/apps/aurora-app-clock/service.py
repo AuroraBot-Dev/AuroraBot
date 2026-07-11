@@ -37,7 +37,7 @@ _notify: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None
 
 
 def _state_path() -> Path:
-    base = Path(os.getenv("AURORA_APP_DATA_DIR", "data/app_data")) / "im.polaris.clock"
+    base = Path(os.getenv("AURORA_APP_DATA_DIR", "data/app_data")) / "org.aurora.clock"
     base.mkdir(parents=True, exist_ok=True)
     return base / "tasks.json"
 

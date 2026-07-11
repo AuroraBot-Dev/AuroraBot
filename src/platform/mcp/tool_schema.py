@@ -21,11 +21,11 @@ def normalize_tool_name(server_name: str, tool_name: str) -> str:
     前缀，视为已是全名，不重复添加。
 
     Args:
-        server_name: MCP Server 标识（如 ``im.polaris.weather``）。
+        server_name: MCP Server 标识（如 ``org.aurora.weather``）。
         tool_name: 工具名（如 ``get_weather``）。
 
     Returns:
-        标准化后的全名，如 ``im.polaris.weather.get_weather``。
+        标准化后的全名，如 ``org.aurora.weather.get_weather``。
     """
     if "." in tool_name:
         # 假设已经带包名前缀
@@ -66,7 +66,7 @@ def mcp_tools_to_prompt_text(tools: Sequence[object], *, server_prefix: str = ""
 
     Args:
         tools: MCP Tool 对象序列。
-        server_prefix: 前缀，如 ``im.polaris.weather``。
+        server_prefix: 前缀，如 ``org.aurora.weather``。
 
     Returns:
         格式化的工具说明文本。

@@ -23,7 +23,7 @@ class MCPServerSpec:
     """全局唯一标识，优先使用 manifest package 值。"""
 
     package: str
-    """Python 包名，如 ``im.polaris.weather``。"""
+    """Python 包名，如 ``org.aurora.weather``。"""
 
     name: str
     """人类可读名称，如 ``天气应用``。"""

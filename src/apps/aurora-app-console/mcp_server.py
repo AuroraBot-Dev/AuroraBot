@@ -11,7 +11,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("Console")
 
 
-@mcp.tool("im.polaris.console.send_message")
+@mcp.tool("org.aurora.console.send_message")
 def send_message(text: str) -> str:
     """Send one plain-text message to the active local AuroraBot console."""
     return text

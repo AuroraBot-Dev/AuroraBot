@@ -4,25 +4,27 @@
 adapter = []
 
 [[app]]
-package = "im.polaris.console"
+package = "org.aurora.console"
 enabled = true
 transport = "stdio"
 working_dir = "src/apps/aurora-app-console"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
-allowed_tools = ["im.polaris.console.send_message"]
+allowed_tools = [
+  "org.aurora.console.send_message",
+]
 
 [[app]]
-package = "im.polaris.clock"
+package = "org.aurora.clock"
 enabled = true
 transport = "stdio"
 working_dir = "src/apps/aurora-app-clock"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
 allowed_tools = [
-  "im.polaris.clock.get_current_time",
-  "im.polaris.clock.set_alarm",
-  "im.polaris.clock.set_timer",
-  "im.polaris.clock.list_alarms",
-  "im.polaris.clock.cancel_alarm",
+  "org.aurora.clock.get_current_time",
+  "org.aurora.clock.set_alarm",
+  "org.aurora.clock.set_timer",
+  "org.aurora.clock.list_alarms",
+  "org.aurora.clock.cancel_alarm",
 ]

@@ -17,7 +17,7 @@ class _ClockDecisionGateway:
             text="{}",
             data={
                 "kind": "effect",
-                "capability": "im.polaris.clock.get_current_time",
+                "capability": "org.aurora.clock.get_current_time",
                 "parameters": {},
                 "summary": "Get current time",
             },
@@ -33,18 +33,18 @@ def test_clock_mcp_app_completes_a_model_requested_effect(project_root: Path) ->
         f"""adapter = []
 
 [[app]]
-package = "im.polaris.clock"
+package = "org.aurora.clock"
 enabled = true
 transport = "stdio"
 working_dir = "{app_directory}"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
 allowed_tools = [
-  "im.polaris.clock.get_current_time",
-  "im.polaris.clock.set_alarm",
-  "im.polaris.clock.set_timer",
-  "im.polaris.clock.list_alarms",
-  "im.polaris.clock.cancel_alarm",
+  "org.aurora.clock.get_current_time",
+  "org.aurora.clock.set_alarm",
+  "org.aurora.clock.set_timer",
+  "org.aurora.clock.list_alarms",
+  "org.aurora.clock.cancel_alarm",
 ]
 """,
         encoding="utf-8",
@@ -56,7 +56,7 @@ enabled = true
 implementation = "src.nodes.model_decide:ModelDecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["im.polaris.clock.get_current_time"]
+capabilities = ["org.aurora.clock.get_current_time"]
 model_roles = ["fast"]
 
 [[edge]]
@@ -82,12 +82,12 @@ target = "builtin.model_decide"
             )
             result = await runtime.run_cycle()
 
-            assert "im.polaris.clock.get_current_time" in runtime.configuration.capability_definitions
+            assert "org.aurora.clock.get_current_time" in runtime.configuration.capability_definitions
             assert result["platform_receipts_emitted"] == 1
 
             records = runtime.kernel._records()
             effect = next(record for record in records if record.amp["payload"]["type"] == "effect.requested")
-            assert effect.amp["payload"]["data"]["capability"] == "im.polaris.clock.get_current_time"
+            assert effect.amp["payload"]["data"]["capability"] == "org.aurora.clock.get_current_time"
 
             next_cycle = await runtime.run_cycle()
             receipt = runtime.kernel.get_record(next_cycle["ingested_record_ids"][0])
@@ -96,7 +96,7 @@ target = "builtin.model_decide"
             assert receipt.parent_record_id == effect.record_id
 
             timer = await runtime.mcp_platform._call_tool(
-                "im.polaris.clock.set_timer", {"seconds": 1, "label": "test notification"}
+                "org.aurora.clock.set_timer", {"seconds": 1, "label": "test notification"}
             )
             assert timer["ok"] is True
             await asyncio.sleep(1.1)
@@ -104,7 +104,7 @@ target = "builtin.model_decide"
             notification = runtime.kernel.get_record(notification_cycle["ingested_record_ids"][0])
             assert notification is not None
             assert notification.amp["payload"]["type"] == "timer.triggered"
-            assert notification.amp["header"]["source"]["app"] == "im.polaris.clock"
+            assert notification.amp["header"]["source"]["app"] == "org.aurora.clock"
         finally:
             await runtime.shutdown()
 

@@ -1,4 +1,4 @@
-package: im.polaris.clock
+package: org.aurora.clock
 name: 时钟
 version: 1.2.0
 brain_version: ">=5.0.0"

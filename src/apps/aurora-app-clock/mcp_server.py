@@ -8,11 +8,11 @@
 
 暴露工具::
 
-    im.polaris.clock.get_current_time
-    im.polaris.clock.set_alarm
-    im.polaris.clock.set_timer
-    im.polaris.clock.list_alarms
-    im.polaris.clock.cancel_alarm
+    org.aurora.clock.get_current_time
+    org.aurora.clock.set_alarm
+    org.aurora.clock.set_timer
+    org.aurora.clock.list_alarms
+    org.aurora.clock.cancel_alarm
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ logger = get_logger("aurora-app-clock.mcp")
 mcp = FastMCP("Clock")
 
 
-@mcp.tool("im.polaris.clock.get_current_time")
+@mcp.tool("org.aurora.clock.get_current_time")
 def get_current_time(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     """获取当前时间。
 
@@ -54,7 +54,7 @@ def get_current_time(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     return ClockService.get_current_time(fmt)
 
 
-@mcp.tool("im.polaris.clock.set_alarm")
+@mcp.tool("org.aurora.clock.set_alarm")
 async def set_alarm(ctx: Context, time_str: str, label: str = "") -> dict[str, Any]:
     """设置闹钟。
 
@@ -70,7 +70,7 @@ async def set_alarm(ctx: Context, time_str: str, label: str = "") -> dict[str, A
     return await ClockService.set_alarm(time_str, label)
 
 
-@mcp.tool("im.polaris.clock.set_timer")
+@mcp.tool("org.aurora.clock.set_timer")
 async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, Any]:
     """设置定时器。
 
@@ -86,7 +86,7 @@ async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, An
     return await ClockService.set_timer(seconds, label)
 
 
-@mcp.tool("im.polaris.clock.list_alarms")
+@mcp.tool("org.aurora.clock.list_alarms")
 def list_alarms() -> list[dict[str, Any]]:
     """列出所有闹钟和定时器。
 
@@ -97,7 +97,7 @@ def list_alarms() -> list[dict[str, Any]]:
     return ClockService.list_alarms()
 
 
-@mcp.tool("im.polaris.clock.cancel_alarm")
+@mcp.tool("org.aurora.clock.cancel_alarm")
 def cancel_alarm(alarm_id: str) -> bool:
     """取消闹钟或定时器。
 

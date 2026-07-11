@@ -31,14 +31,14 @@ class LocalTestPlatform:
             try:
                 parameters = data["parameters"]
                 if not isinstance(parameters, dict) or not isinstance(parameters.get("text"), str):
-                    raise ValueError("im.polaris.console.send_message requires string parameters.text")
+                    raise ValueError("org.aurora.console.send_message requires string parameters.text")
                 receipt = new_amp(
                     event_type="effect.succeeded",
                     session_id=amp.payload.session_id,
                     summary="Local test effect completed",
                     data={
                         "request_id": request_id,
-                        "capability": "im.polaris.console.send_message",
+                        "capability": "org.aurora.console.send_message",
                         "result": {"text": parameters["text"]},
                     },
                     source_app="platform.local",

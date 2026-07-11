@@ -83,7 +83,7 @@ class AuroraRuntime:
         return messages
 
     def _observe_mcp_result(self, capability: str, result: dict[str, object]) -> None:
-        if capability != "im.polaris.console.send_message" or result.get("ok") is not True:
+        if capability != "org.aurora.console.send_message" or result.get("ok") is not True:
             return
         text = result.get("text")
         if isinstance(text, str) and text:

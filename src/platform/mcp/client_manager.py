@@ -119,7 +119,7 @@ class MCPClientManager:
         mgr = MCPClientManager(server_kit)
         await mgr.connect_all()
         await mgr.refresh_tools()
-        result = await mgr.call_tool("im.polaris.test.echo", {"msg": "hi"})
+        result = await mgr.call_tool("org.aurora.test.echo", {"msg": "hi"})
         await mgr.shutdown()
     """
 

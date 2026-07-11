@@ -7,7 +7,9 @@ enabled = false
 implementation = "src.nodes.decide:DecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["im.polaris.console.send_message"]
+capabilities = [
+    "org.aurora.console.send_message",
+]
 model_roles = []
 
 [[edge]]
@@ -20,5 +22,12 @@ enabled = true
 implementation = "src.nodes.model_decide:ModelDecideNode"
 inputs = ["message.received"]
 outputs = ["effect.requested"]
-capabilities = ["im.polaris.console.send_message", "im.polaris.clock.get_current_time", "im.polaris.clock.set_alarm", "im.polaris.clock.set_timer", "im.polaris.clock.list_alarms", "im.polaris.clock.cancel_alarm"]
+capabilities = [
+    "org.aurora.console.send_message",
+    "org.aurora.clock.get_current_time",
+    "org.aurora.clock.set_alarm",
+    "org.aurora.clock.set_timer",
+    "org.aurora.clock.list_alarms",
+    "org.aurora.clock.cancel_alarm",
+]
 model_roles = ["fast"]
