@@ -52,6 +52,10 @@ class NodeContext:
     def amp(self) -> AmpEnvelope:
         return AmpEnvelope.parse(self.record.amp)
 
+    @property
+    def node_id(self) -> str:
+        return self._node_id
+
     def request_effect(
         self,
         capability: str,

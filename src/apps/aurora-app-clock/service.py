@@ -117,7 +117,7 @@ class ClockService:
         _alarms[alarm_id] = alarm
         ClockService._schedule(alarm)
         _save()
-        logger.info("Alarm set: %s", alarm)
+        logger.info("alarm scheduled alarm_id=%s label_present=%s", alarm_id, bool(label))
         return alarm
 
     @staticmethod
@@ -144,7 +144,7 @@ class ClockService:
         _alarms[timer_id] = timer
         ClockService._schedule(timer)
         _save()
-        logger.info("Timer set: %s", timer)
+        logger.info("timer scheduled timer_id=%s label_present=%s", timer_id, bool(label))
         return timer
 
     @staticmethod
@@ -189,7 +189,7 @@ class ClockService:
             ``True`` if the item was found and cancelled, ``False`` otherwise.
         """
         if alarm_id not in _alarms:
-            logger.warning("Alarm/timer not found: %s", alarm_id)
+            logger.warning("alarm or timer not found item_id=%s", alarm_id)
             return False
 
         task = _tasks.get(alarm_id)
@@ -199,7 +199,7 @@ class ClockService:
         _alarms.pop(alarm_id, None)
         _tasks.pop(alarm_id, None)
         _save()
-        logger.info("Alarm/timer cancelled: %s", alarm_id)
+        logger.info("alarm or timer cancelled item_id=%s", alarm_id)
         return True
 
 

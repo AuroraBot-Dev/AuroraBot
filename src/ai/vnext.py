@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from typing import Any
 
 import litellm
@@ -24,7 +25,10 @@ from src.ai.contracts import (
 from src.ai.gateway import GatewayError, ModelGateway
 from src.ai.providers import ProviderConfig, resolve_model, setup_providers
 from src.localhost.configuration import AuroraConfig, ModelRoleConfig
+from src.utils.log_utils import get_logger
 from src.utils.serialization import extract_json_from_text
+
+logger = get_logger("aurora.model_gateway")
 
 _FORBIDDEN_PARAMETERS = {
     "model",
@@ -71,6 +75,12 @@ class ModelGatewayService:
         if custom_providers:
             setup_providers(*custom_providers)
         self._gateway = ModelGateway(models=self._models)
+        logger.info(
+            "model gateway initialized roles=%d providers=%d responses_roles=%d",
+            len(configuration.model_definitions),
+            len(configuration.model_providers),
+            sum(role.endpoint == "responses" for role in configuration.model_definitions.values()),
+        )
 
     def negotiate(self, request: ModelRequest) -> frozenset[str]:
         role = self._configuration.model_definitions.get(request.role)
@@ -113,17 +123,55 @@ class ModelGatewayService:
         return frozenset(negotiated)
 
     async def complete(self, request: ModelRequest) -> ModelResult:
+        started = time.monotonic()
         negotiated = self.negotiate(request)
         role = self._configuration.model_definitions[request.role]
         provider = self._configuration.model_providers[role.provider]
+        logger.debug(
+            "model gateway request model_role=%s provider=%s endpoint=%s messages=%d tools=%d "
+            "continuation=%s output_schema=%s cancel_policy=%s parameter_keys=%s",
+            request.role,
+            role.provider,
+            role.endpoint,
+            len(request.messages),
+            len(request.tools),
+            request.continuation is not None,
+            request.output_schema is not None,
+            request.cancel_policy,
+            sorted(request.parameters),
+        )
         if not os.getenv(provider.secret_env):
+            logger.warning(
+                "model credential unavailable model_role=%s provider=%s credential_env=%s",
+                request.role,
+                role.provider,
+                provider.secret_env,
+            )
             raise ModelGatewayError(f"missing model credential: {provider.secret_env}")
         if role.endpoint == "responses":
             result = await self._complete_responses(request, role, negotiated)
         else:
             result = await self._complete_chat(request, role, negotiated)
         if request.budget.max_cost_usd is not None and result.cost_usd > request.budget.max_cost_usd:
+            logger.warning(
+                "model cost budget exceeded model_role=%s cost_usd=%.6f limit_usd=%.6f",
+                request.role,
+                result.cost_usd,
+                request.budget.max_cost_usd,
+            )
             raise ModelBudgetError("model cost exceeded max_cost_usd")
+        logger.debug(
+            "model gateway response model_role=%s endpoint=%s prompt_tokens=%d completion_tokens=%d "
+            "cost_usd=%.6f tool_calls=%d finish_reason=%s duration_ms=%.1f",
+            request.role,
+            role.endpoint,
+            result.usage.prompt_tokens,
+            result.usage.completion_tokens,
+            result.cost_usd,
+            len(result.tool_calls),
+            result.finish_reason,
+            (time.monotonic() - started) * 1000,
+        )
         return result
 
     async def _complete_chat(
@@ -203,6 +251,11 @@ class ModelGatewayService:
             )
             if not can_fallback:
                 raise
+            logger.warning(
+                "structured output unsupported; using JSON text fallback model_role=%s error_type=%s",
+                request.role,
+                type(error).__name__,
+            )
             fallback_kwargs = dict(kwargs)
             fallback_kwargs.pop("response_format", None)
             fallback_task = caller.acompletion(
@@ -278,10 +331,16 @@ class ModelGatewayService:
             return None, ()
         parsed = extract_json_from_text(text)
         if parsed is None:
+            logger.warning("model output normalization failed model_role=%s reason=no_json_object", request.role)
             return _invalid_output_result(request, "model output did not contain a JSON object")
         try:
             validate(parsed, request.output_schema)
         except ValidationError as error:
+            logger.warning(
+                "model output normalization failed model_role=%s reason=schema_validation validator=%s",
+                request.role,
+                error.validator,
+            )
             return _invalid_output_result(request, f"model output failed JSON Schema validation: {error.message}")
         mode = "structured_output" if "structured_output" in negotiated else "json_text_fallback"
         return parsed, (f"output mode: {mode}",)

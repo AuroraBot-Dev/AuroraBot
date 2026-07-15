@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import signal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.localhost.runtime import AuroraRuntime
+from src.utils.log_utils import configure_logging, get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-_LOGGER = logging.getLogger("aurora.bot")
+logger = get_logger("aurora.bot")
 
 
 def _resolve_root(root: Path) -> Path:
@@ -38,14 +38,11 @@ def _install_stop_handlers(stop: asyncio.Event) -> tuple[signal.Signals, ...]:
 async def run_bot(root: Path, profile: str | None = None, *, stop_event: asyncio.Event | None = None) -> None:
     """创建唯一的 vNext Runtime，并持续推进认知循环直至停止。"""
     runtime = AuroraRuntime.create(_resolve_root(root), profile)
-    logging.basicConfig(
-        level=runtime.configuration.logging_level.upper(),
-        format="%(asctime)s [%(levelname)s] %(name)s | %(message)s",
-    )
+    configure_logging(runtime.configuration.logging_level)
     stop = stop_event or asyncio.Event()
     installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
-    _LOGGER.info(
-        "AuroraBot vNext loop started (profile=%s, workspace=%s)",
+    logger.info(
+        "headless bot loop started profile=%s workspace=%s",
         runtime.configuration.runtime.profile,
         runtime.configuration.runtime.workspace,
     )
@@ -56,7 +53,7 @@ async def run_bot(root: Path, profile: str | None = None, *, stop_event: asyncio
         for installed_signal in installed_signals:
             loop.remove_signal_handler(installed_signal)
         await runtime.shutdown()
-        _LOGGER.info("AuroraBot vNext loop stopped")
+        logger.info("headless bot loop stopped profile=%s", runtime.configuration.runtime.profile)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

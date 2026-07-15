@@ -616,7 +616,10 @@ def init_gateway(
         embedding=embedding,
         reranker=reranker,
     )
-    logger.info(f"网关已初始化: {_singleton.export_config()}")
+    logger.info(
+        "legacy gateway initialized roles=%s",
+        sorted(role for role, model in _singleton.export_config().items() if model),
+    )
     return _singleton
 
 

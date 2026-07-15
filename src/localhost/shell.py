@@ -7,6 +7,9 @@ import shlex
 from typing import TYPE_CHECKING
 
 from src.localhost.registry import ConsoleCommand, command_specs
+from src.utils.log_utils import get_logger
+
+logger = get_logger("aurora.localhost.console")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,6 +29,7 @@ async def run_console(
     stop = asyncio.Event()
     scheduler = asyncio.create_task(runtime.run_forever(stop), name="aurora-console-scheduler")
     display = asyncio.create_task(_display_messages(runtime, output), name="aurora-console-output")
+    logger.info("developer console started commands=%d", len(commands))
     try:
         while True:
             try:
@@ -37,8 +41,10 @@ async def run_console(
                 continue
             command, arguments = _parse(raw, commands)
             if command is None:
+                logger.debug("console input rejected reason=unknown_or_invalid_command")
                 output("未知命令；输入 /help 查看命令。")
                 continue
+            logger.debug("console command selected command=%s arguments=%d", command.names[0], len(arguments))
             result = await command.handler(runtime, arguments)
             if result == "__QUIT__":
                 return
@@ -49,6 +55,7 @@ async def run_console(
         await asyncio.gather(display, return_exceptions=True)
         await asyncio.gather(scheduler, return_exceptions=True)
         await runtime.shutdown()
+        logger.info("developer console stopped")
 
 
 async def _display_messages(runtime: AuroraRuntime, output: Callable[[str], None]) -> None:

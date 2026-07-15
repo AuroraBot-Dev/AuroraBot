@@ -7,7 +7,10 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from src.kernel.episodes import EpisodeSnapshot, EpisodeStatus
+from src.utils.log_utils import get_logger
 from src.utils.serialization import atomic_write_json, read_json
+
+logger = get_logger("aurora.scheduler")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -49,9 +52,17 @@ class CognitiveScheduler:
                 try:
                     state = SchedulerState(**value)
                     self._roll_day(state)
+                    logger.debug(
+                        "scheduler state restored path=%s next_tick_at=%s interval_s=%.1f calls=%d tokens=%d",
+                        self.path,
+                        state.next_tick_at,
+                        state.current_interval_seconds,
+                        state.autonomous_model_calls,
+                        state.autonomous_tokens,
+                    )
                     return state
                 except (TypeError, ValueError):
-                    pass
+                    logger.warning("invalid scheduler state replaced path=%s", self.path)
         now = self.now()
         state = SchedulerState(
             next_tick_at=(now + timedelta(seconds=self.configuration.idle_initial_seconds)).isoformat(),
@@ -59,6 +70,12 @@ class CognitiveScheduler:
             utc_day=now.date().isoformat(),
         )
         self._save(state)
+        logger.debug(
+            "scheduler state initialized path=%s next_tick_at=%s interval_s=%.1f",
+            self.path,
+            state.next_tick_at,
+            state.current_interval_seconds,
+        )
         return state
 
     def _save(self, state: SchedulerState | None = None) -> None:
@@ -70,16 +87,23 @@ class CognitiveScheduler:
         target = state or self.state
         today = self.now().date().isoformat()
         if target.utc_day != today:
+            previous_day = target.utc_day
             target.utc_day = today
             target.autonomous_model_calls = 0
             target.autonomous_tokens = 0
             target.accounted_episode_ids.clear()
+            logger.info("scheduler daily quota reset previous_day=%s utc_day=%s", previous_day, today)
 
     def on_external_activity(self) -> None:
         self._roll_day()
         self.state.current_interval_seconds = self.configuration.idle_initial_seconds
         self.state.next_tick_at = (self.now() + timedelta(seconds=self.configuration.idle_initial_seconds)).isoformat()
         self._save()
+        logger.debug(
+            "scheduler reset by external activity next_tick_at=%s interval_s=%.1f",
+            self.state.next_tick_at,
+            self.state.current_interval_seconds,
+        )
 
     def can_tick(self, episodes: tuple[EpisodeSnapshot, ...]) -> bool:
         self._roll_day()
@@ -97,6 +121,7 @@ class CognitiveScheduler:
         # Prevent duplicate ticks while the emitted event waits for ingestion.
         self.state.next_tick_at = (self.now() + timedelta(seconds=self.configuration.idle_max_seconds)).isoformat()
         self._save()
+        logger.debug("scheduler tick reserved next_tick_at=%s", self.state.next_tick_at)
 
     def reconcile(self, episodes: tuple[EpisodeSnapshot, ...]) -> None:
         self._roll_day()
@@ -117,6 +142,15 @@ class CognitiveScheduler:
             self.state.current_interval_seconds = interval
             self.state.next_tick_at = (self.now() + timedelta(seconds=interval)).isoformat()
             changed = True
+            logger.info(
+                "autonomous episode accounted episode_id=%s status=%s tool_calls=%d "
+                "next_interval_s=%.1f next_tick_at=%s",
+                episode.episode_id,
+                episode.status,
+                episode.tool_calls,
+                interval,
+                self.state.next_tick_at,
+            )
         if changed:
             self._save()
 
@@ -127,14 +161,35 @@ class CognitiveScheduler:
     def reserve_autonomous_model_call(self) -> bool:
         self._roll_day()
         if self.state.autonomous_model_calls >= self.configuration.autonomous_daily_model_calls:
+            logger.warning(
+                "autonomous model call quota exhausted calls=%d limit=%d",
+                self.state.autonomous_model_calls,
+                self.configuration.autonomous_daily_model_calls,
+            )
             return False
         if self.state.autonomous_tokens >= self.configuration.autonomous_daily_tokens:
+            logger.warning(
+                "autonomous token quota exhausted tokens=%d limit=%d",
+                self.state.autonomous_tokens,
+                self.configuration.autonomous_daily_tokens,
+            )
             return False
         self.state.autonomous_model_calls += 1
         self._save()
+        logger.debug(
+            "autonomous model call reserved calls=%d limit=%d",
+            self.state.autonomous_model_calls,
+            self.configuration.autonomous_daily_model_calls,
+        )
         return True
 
     def record_autonomous_tokens(self, tokens: int) -> None:
         self._roll_day()
         self.state.autonomous_tokens += max(0, tokens)
         self._save()
+        logger.debug(
+            "autonomous tokens recorded delta=%d total=%d limit=%d",
+            max(0, tokens),
+            self.state.autonomous_tokens,
+            self.configuration.autonomous_daily_tokens,
+        )

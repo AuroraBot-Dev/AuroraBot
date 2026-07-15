@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import shutil
+import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -22,9 +24,11 @@ from src.kernel.node import CognitiveNode, NodeContext
 from src.kernel.records import KernelRecord, RecordStatus
 from src.localhost.configuration import AuroraConfig, NodeConfig
 from src.platform.capabilities import CapabilityCatalogSnapshot, CapabilityDescriptor
+from src.utils.log_utils import get_logger
 from src.utils.serialization import atomic_write_json, read_json
 
 MAX_HOP = 16
+logger = get_logger("aurora.kernel")
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +83,13 @@ class Kernel:
         if not set(nodes) <= configured or configured != set(nodes):
             raise ValueError("Kernel nodes must exactly match enabled node configuration")
         self._recover_interrupted_model_requests()
+        logger.info(
+            "kernel initialized workspace=%s cycle=%d nodes=%d capabilities=%d",
+            self._workspace,
+            self._cycle,
+            len(self._nodes),
+            len(self._capability_catalog.capabilities),
+        )
 
     @property
     def cycle(self) -> int:
@@ -93,6 +104,7 @@ class Kernel:
         merged = {item.id: item for item in self._capability_catalog.capabilities}
         merged.update({item.id: item for item in catalog.capabilities})
         self._capability_catalog = CapabilityCatalogSnapshot(tuple(sorted(merged.values(), key=lambda item: item.id)))
+        logger.info("capability catalog installed capabilities=%d", len(self._capability_catalog.capabilities))
 
     def _load_cycle(self) -> int:
         if not self._state_path.exists():
@@ -109,6 +121,12 @@ class Kernel:
         """Atomically offer a validated external fact to the next ingress pass."""
         async with self._lock:
             atomic_write_json(self._inbox / f"{amp.header.message_id}.json", amp.to_dict())
+            logger.debug(
+                "AMP submitted message_id=%s event_type=%s session_id=%s",
+                amp.header.message_id,
+                amp.payload.type,
+                amp.payload.session_id,
+            )
 
     def _record_path(self, record: KernelRecord) -> Path:
         completed = {RecordStatus.ARCHIVED, RecordStatus.ERROR}
@@ -173,6 +191,16 @@ class Kernel:
             transcript=[{"kind": "event", "record_id": record.record_id, "amp": record.amp}],
         )
         self._save_episode(episode)
+        logger.debug(
+            "episode created episode_id=%s record_id=%s autonomous=%s model_budget=%d "
+            "tool_budget=%d duration_budget_s=%.1f",
+            episode.episode_id,
+            record.record_id,
+            autonomous,
+            episode.max_model_calls,
+            episode.max_tool_calls,
+            episode.max_duration_seconds,
+        )
         return episode
 
     def _append_episode_item(self, episode_id: str, item: dict[str, Any]) -> EpisodeSnapshot | None:
@@ -190,6 +218,15 @@ class Kernel:
             return
         episode.touch(status, reason=reason)
         self._save_episode(episode)
+        logger.info(
+            "episode ended episode_id=%s status=%s reason=%s rounds=%d model_calls=%d tool_calls=%d",
+            episode.episode_id,
+            status,
+            reason,
+            episode.round,
+            episode.model_calls,
+            episode.tool_calls,
+        )
 
     def _records(self) -> list[KernelRecord]:
         records: list[KernelRecord] = []
@@ -254,6 +291,12 @@ class Kernel:
         record = KernelRecord.from_amp(amp, available_cycle=self._cycle)
         record.transition(RecordStatus.ERROR, error=error)
         self._save_record(record)
+        logger.warning(
+            "AMP ingress rejected record_id=%s file=%s reason=%s",
+            record.record_id,
+            rejected.name,
+            error,
+        )
         return record
 
     def ingest_ready(self) -> tuple[str, ...]:
@@ -271,6 +314,7 @@ class Kernel:
                 continue
             if amp.header.message_id in existing_message_ids:
                 self._archive_inbox_file(path, "duplicate")
+                logger.warning("duplicate AMP ignored message_id=%s file=%s", amp.header.message_id, path.name)
                 continue
             parent = self._effect_parent(amp)
             autonomous = amp.payload.type == "system.tick"
@@ -296,6 +340,15 @@ class Kernel:
             self._archive_inbox_file(path, "accepted")
             existing_message_ids.add(amp.header.message_id)
             ingested.append(record.record_id)
+            logger.debug(
+                "AMP ingested cycle=%d record_id=%s episode_id=%s event_type=%s parent_record_id=%s priority=%d",
+                self._cycle,
+                record.record_id,
+                record.episode_id,
+                amp.payload.type,
+                record.parent_record_id,
+                record.priority,
+            )
         return tuple(ingested)
 
     def _receipt_resume_node(self, amp: AmpEnvelope, parent: KernelRecord | None) -> str | None:
@@ -380,6 +433,17 @@ class Kernel:
             child.episode_id,
             {"kind": event_type, "record_id": child.record_id, "amp": child.amp},
         )
+        logger.debug(
+            "node event published cycle=%d record_id=%s parent_record_id=%s episode_id=%s "
+            "node_id=%s event_type=%s resume_node_id=%s",
+            self._cycle,
+            child.record_id,
+            parent.record_id,
+            child.episode_id,
+            node_id,
+            event_type,
+            resume_node_id,
+        )
         return child
 
     def _node_configuration(self, node_id: str) -> NodeConfig:
@@ -394,6 +458,7 @@ class Kernel:
             return await self._run_cycle()
 
     async def _run_cycle(self) -> CycleResult:
+        started = time.monotonic()
         self._cycle += 1
         self._persist_cycle()
         ingested = self.ingest_ready()
@@ -405,6 +470,7 @@ class Kernel:
             and AmpEnvelope.parse(record.amp).payload.type not in {"model.requested", "effect.requested"}
         ]
         ready.sort(key=lambda item: (-item.priority, item.created_at, item.record_id))
+        logger.debug("cycle started cycle=%d ingested=%d ready=%d", self._cycle, len(ingested), len(ready))
         scheduled: list[str] = []
         failed: list[str] = []
         for record in ready:
@@ -439,6 +505,17 @@ class Kernel:
                             episode.round += 1
                             episode.touch(EpisodeStatus.ACTIVE, node_id=target)
                             self._save_episode(episode)
+                    logger.debug(
+                        "node scheduled cycle=%d record_id=%s episode_id=%s event_type=%s "
+                        "node_id=%s round=%d advances_round=%s",
+                        self._cycle,
+                        record.record_id,
+                        record.episode_id,
+                        event_type,
+                        target,
+                        record.episode_round,
+                        advances,
+                    )
                     descriptors = [
                         descriptor
                         for capability in sorted(node_config.capabilities)
@@ -468,7 +545,25 @@ class Kernel:
                 record.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
                 self._save_record(record)
                 failed.append(record.record_id)
-        return CycleResult(self._cycle, tuple(ingested), tuple(scheduled), tuple(failed))
+                logger.log(
+                    logging.ERROR,
+                    "node execution failed cycle=%d record_id=%s episode_id=%s event_type=%s error_type=%s",
+                    self._cycle,
+                    record.record_id,
+                    record.episode_id,
+                    event_type,
+                    type(error).__name__,
+                )
+        result = CycleResult(self._cycle, tuple(ingested), tuple(scheduled), tuple(failed))
+        logger.debug(
+            "cycle completed cycle=%d ingested=%d scheduled=%d failed=%d duration_ms=%.1f",
+            self._cycle,
+            len(ingested),
+            len(scheduled),
+            len(failed),
+            (time.monotonic() - started) * 1000,
+        )
+        return result
 
     def defer_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> KernelRecord:
         """Publish a model request for the out-of-cycle dispatcher."""
@@ -490,6 +585,17 @@ class Kernel:
         self._append_episode_item(
             parent.episode_id,
             {"kind": "model.requested", "record_id": record.record_id, "request": request.to_dict()},
+        )
+        logger.debug(
+            "model request queued record_id=%s parent_record_id=%s episode_id=%s node_id=%s "
+            "model_role=%s endpoint=%s tools=%d",
+            record.record_id,
+            parent.record_id,
+            record.episode_id,
+            node_id,
+            request.role,
+            request.response_mode,
+            len(request.tools),
         )
         return record
 
@@ -522,11 +628,27 @@ class Kernel:
             record = candidates[0]
             record.transition(RecordStatus.PROCESSING)
             self._save_record(record)
+            amp = AmpEnvelope.parse(record.amp)
+            logger.debug(
+                "model request claimed record_id=%s episode_id=%s model_role=%s priority=%d",
+                record.record_id,
+                record.episode_id,
+                amp.payload.data.get("role"),
+                record.priority,
+            )
             return record
 
     async def execute_model_request(self, record: KernelRecord) -> KernelRecord:
         """Execute a claimed request without holding the Kernel cycle lock."""
         amp = AmpEnvelope.parse(record.amp)
+        started = time.monotonic()
+        model_role = str(amp.payload.data.get("role", "unknown"))
+        logger.debug(
+            "model request started record_id=%s episode_id=%s model_role=%s",
+            record.record_id,
+            record.episode_id,
+            model_role,
+        )
         try:
             request = ModelRequest.from_dict(amp.payload.data)
             result = await self._model_gateway.complete(request)
@@ -546,6 +668,14 @@ class Kernel:
                     record.episode_id,
                     {"kind": "model.failed", "record_id": failed.record_id, "error": message},
                 )
+                logger.warning(
+                    "model request failed record_id=%s episode_id=%s model_role=%s duration_ms=%.1f error_type=%s",
+                    record.record_id,
+                    record.episode_id,
+                    model_role,
+                    (time.monotonic() - started) * 1000,
+                    type(error).__name__,
+                )
                 return failed
         async with self._lock:
             record.transition(RecordStatus.ARCHIVED)
@@ -560,6 +690,22 @@ class Kernel:
             self._append_episode_item(
                 record.episode_id,
                 {"kind": "model.completed", "record_id": completed.record_id, "result": result.to_dict()},
+            )
+            logger.info(
+                "model request completed record_id=%s completed_record_id=%s episode_id=%s model_role=%s "
+                "model=%s prompt_tokens=%d completion_tokens=%d cost_usd=%.6f tool_calls=%d "
+                "finish_reason=%s duration_ms=%.1f",
+                record.record_id,
+                completed.record_id,
+                record.episode_id,
+                model_role,
+                result.model,
+                result.usage.prompt_tokens,
+                result.usage.completion_tokens,
+                result.cost_usd,
+                len(result.tool_calls),
+                result.finish_reason,
+                (time.monotonic() - started) * 1000,
             )
             return completed
 
@@ -576,6 +722,12 @@ class Kernel:
         )
         status = EpisodeStatus.BUDGET_EXHAUSTED if reason == "autonomous_daily_budget" else EpisodeStatus.CANCELLED
         self._end_episode(record.episode_id, status, reason)
+        logger.warning(
+            "model request cancelled record_id=%s episode_id=%s reason=%s",
+            record.record_id,
+            record.episode_id,
+            reason,
+        )
         return failed
 
     def _recover_interrupted_model_requests(self) -> None:
@@ -594,6 +746,13 @@ class Kernel:
                 "model.failed",
                 {"error": message},
                 resume_node_id=record.resume_node_id,
+            )
+            logger.warning(
+                "interrupted model request recovered record_id=%s episode_id=%s resume_node_id=%s reason=%s",
+                record.record_id,
+                record.episode_id,
+                record.resume_node_id,
+                message,
             )
 
     async def request_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> ModelResult:
@@ -666,12 +825,27 @@ class Kernel:
             record.transition(RecordStatus.PROCESSING)
             self._save_record(record)
             claimed.append(record)
+            logger.debug(
+                "effect request claimed record_id=%s episode_id=%s capability=%s",
+                record.record_id,
+                record.episode_id,
+                capability,
+            )
         return tuple(claimed)
 
     def complete_effect(self, record: KernelRecord, *, error: str | None = None) -> None:
         """Close the source request after Platform has emitted its separate receipt."""
         record.transition(RecordStatus.ERROR if error else RecordStatus.ARCHIVED, error=error)
         self._save_record(record)
+        amp = AmpEnvelope.parse(record.amp)
+        logger.debug(
+            "effect request completed record_id=%s episode_id=%s capability=%s status=%s failed=%s",
+            record.record_id,
+            record.episode_id,
+            amp.payload.data.get("capability"),
+            record.status,
+            error is not None,
+        )
 
     def reset_workspace_for_tests(self) -> None:
         """Remove only this configured workspace; intended for test fixtures."""

@@ -12,10 +12,19 @@ from src.config import load_config
 from src.localhost.api import create_app
 from src.localhost.runtime import AuroraRuntime
 from src.localhost.shell import run_console
+from src.utils.log_utils import get_logger
+
+logger = get_logger("aurora.localhost.cli")
 
 
 async def _run_combined(root: Path, profile: str | None) -> None:
     runtime = AuroraRuntime.create(root, profile)
+    logger.info(
+        "combined localhost mode starting host=%s port=%d profile=%s",
+        runtime.configuration.runtime.debug_host,
+        runtime.configuration.runtime.debug_port,
+        runtime.configuration.runtime.profile,
+    )
     config = uvicorn.Config(
         create_app(root, profile, runtime=runtime, manage_runtime=False),
         host=runtime.configuration.runtime.debug_host,
@@ -29,6 +38,7 @@ async def _run_combined(root: Path, profile: str | None) -> None:
     finally:
         server.should_exit = True
         await asyncio.gather(server_task, return_exceptions=True)
+        logger.info("combined localhost mode stopped")
 
 
 def main() -> None:
@@ -42,11 +52,18 @@ def main() -> None:
     arguments = parser.parse_args()
     configuration = load_config(arguments.root, arguments.profile)
     if arguments.command == "console":
+        logger.info("console mode selected profile=%s", configuration.runtime.profile)
         asyncio.run(run_console(AuroraRuntime.create(arguments.root, arguments.profile)))
         return
     if arguments.command is None:
         asyncio.run(_run_combined(arguments.root, arguments.profile))
         return
+    logger.info(
+        "debug API serve mode selected host=%s port=%d profile=%s",
+        configuration.runtime.debug_host,
+        configuration.runtime.debug_port,
+        configuration.runtime.profile,
+    )
     uvicorn.run(
         create_app(arguments.root, arguments.profile),
         host=configuration.runtime.debug_host,

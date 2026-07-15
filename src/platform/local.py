@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 
 from src.kernel.events import AmpEnvelope, new_amp
 from src.kernel.runtime import Kernel
+from src.utils.log_utils import get_logger
+
+logger = get_logger("aurora.platform.local")
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,11 +27,17 @@ class LocalTestPlatform:
     async def execute_pending_effects(self, kernel: Kernel) -> PlatformRunResult:
         receipts = 0
         for record in await kernel.claim_effect_requests(self.capabilities):
+            started = time.monotonic()
             amp = AmpEnvelope.parse(record.amp)
             data = amp.payload.data
             request_id = data.get("request_id")
             if not isinstance(request_id, str):
                 kernel.complete_effect(record, error="effect.requested lacks request_id")
+                logger.error(
+                    "invalid local effect request record_id=%s episode_id=%s reason=missing_request_id",
+                    record.record_id,
+                    record.episode_id,
+                )
                 continue
             try:
                 parameters = data["parameters"]
@@ -47,6 +58,14 @@ class LocalTestPlatform:
                 await kernel.submit_amp(receipt)
                 kernel.complete_effect(record)
                 receipts += 1
+                logger.info(
+                    "local effect succeeded record_id=%s episode_id=%s request_id=%s capability=%s duration_ms=%.1f",
+                    record.record_id,
+                    record.episode_id,
+                    request_id,
+                    data.get("capability"),
+                    (time.monotonic() - started) * 1000,
+                )
             except Exception as error:  # noqa: BLE001 - Platform failures must return an AMP receipt.
                 receipt = new_amp(
                     event_type="effect.failed",
@@ -63,4 +82,15 @@ class LocalTestPlatform:
                 await kernel.submit_amp(receipt)
                 kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
                 receipts += 1
+                logger.log(
+                    logging.ERROR,
+                    "local effect failed record_id=%s episode_id=%s request_id=%s "
+                    "capability=%s duration_ms=%.1f error_type=%s",
+                    record.record_id,
+                    record.episode_id,
+                    request_id,
+                    data.get("capability"),
+                    (time.monotonic() - started) * 1000,
+                    type(error).__name__,
+                )
         return PlatformRunResult(receipts)

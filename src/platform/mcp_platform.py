@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -18,6 +20,9 @@ from src.platform.local import PlatformRunResult
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
+from src.utils.log_utils import get_logger
+
+logger = get_logger("aurora.platform.mcp")
 
 
 @dataclass(slots=True)
@@ -54,7 +59,9 @@ class MCPPlatform:
 
     async def start(self, kernel: Kernel) -> None:
         if self._started:
+            logger.debug("MCP platform startup skipped reason=already_started")
             return
+        logger.info("MCP platform startup started apps=%d", len(self._configuration.apps))
         self._kernel = kernel
         local_specs = [self._local_spec(app) for app in self._configuration.apps if app.transport == "stdio"]
         await self._kit.start_all(local_specs)
@@ -76,6 +83,12 @@ class MCPPlatform:
         )
         self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
         self._started = True
+        logger.info(
+            "MCP platform startup completed local_apps=%d remote_apps=%d capabilities=%d",
+            sum(app.transport == "stdio" for app in self._configuration.apps),
+            sum(app.transport == "streamable_http" for app in self._configuration.apps),
+            len(self._catalog.capabilities),
+        )
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
@@ -99,8 +112,14 @@ class MCPPlatform:
         assert connection.ready is not None
         await connection.ready.wait()
         if connection.error is not None:
+            logger.error(
+                "remote MCP connection failed package=%s error_type=%s",
+                app.package,
+                type(connection.error).__name__,
+            )
             message = f"MCP HTTP connection failed for {app.package}: {connection.error}"
             raise RuntimeError(message) from connection.error
+        logger.info("remote MCP connection ready package=%s tools=%d", app.package, len(connection.tools or []))
 
     async def _run_remote(self, connection: _RemoteConnection) -> None:
         headers: dict[str, str] = {}
@@ -108,6 +127,11 @@ class MCPPlatform:
             token = os.getenv(connection.app.auth_env)
             if not token:
                 connection.error = RuntimeError(f"missing MCP bearer credential: {connection.app.auth_env}")
+                logger.warning(
+                    "remote MCP credential unavailable package=%s credential_env=%s",
+                    connection.app.package,
+                    connection.app.auth_env,
+                )
                 assert connection.ready is not None
                 connection.ready.set()
                 return
@@ -134,6 +158,11 @@ class MCPPlatform:
                     await self._stop.wait()
         except Exception as error:
             connection.error = error
+            logger.warning(
+                "remote MCP session ended package=%s error_type=%s",
+                connection.app.package,
+                type(error).__name__,
+            )
             if connection.ready is not None and not connection.ready.is_set():
                 connection.ready.set()
         finally:
@@ -161,6 +190,12 @@ class MCPPlatform:
                     dict(schema),
                     configured.result_mode,
                 )
+                logger.debug(
+                    "MCP capability discovered package=%s capability=%s result_mode=%s",
+                    app.package,
+                    name,
+                    configured.result_mode,
+                )
         return CapabilityCatalogSnapshot(tuple(sorted(descriptors.values(), key=lambda item: item.id)))
 
     def _tools_for_app(self, package: str) -> list[object]:
@@ -175,6 +210,7 @@ class MCPPlatform:
         capabilities = frozenset(capability for app in self._configuration.apps for capability in app.allowed_tools)
         receipts = 0
         for record in await kernel.claim_effect_requests(capabilities):
+            started = time.monotonic()
             amp = AmpEnvelope.parse(record.amp)
             data = amp.payload.data
             request_id = data.get("request_id")
@@ -182,7 +218,22 @@ class MCPPlatform:
             parameters = data.get("parameters")
             if not isinstance(request_id, str) or not isinstance(capability, str) or not isinstance(parameters, dict):
                 kernel.complete_effect(record, error="invalid effect.requested payload")
+                logger.error(
+                    "invalid MCP effect request record_id=%s episode_id=%s request_id=%s capability=%s",
+                    record.record_id,
+                    record.episode_id,
+                    request_id,
+                    capability,
+                )
                 continue
+            logger.debug(
+                "MCP effect started record_id=%s episode_id=%s request_id=%s capability=%s parameter_keys=%s",
+                record.record_id,
+                record.episode_id,
+                request_id,
+                capability,
+                sorted(parameters),
+            )
             try:
                 result = await self._call_tool(capability, parameters)
                 if self._tool_result_observer is not None:
@@ -198,6 +249,14 @@ class MCPPlatform:
                 await kernel.submit_amp(receipt)
                 kernel.complete_effect(record)
                 receipts += 1
+                logger.info(
+                    "MCP effect succeeded record_id=%s episode_id=%s request_id=%s capability=%s duration_ms=%.1f",
+                    record.record_id,
+                    record.episode_id,
+                    request_id,
+                    capability,
+                    (time.monotonic() - started) * 1000,
+                )
             except Exception as error:
                 receipt = new_amp(
                     event_type="effect.failed",
@@ -214,6 +273,17 @@ class MCPPlatform:
                 await kernel.submit_amp(receipt)
                 kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
                 receipts += 1
+                logger.log(
+                    logging.ERROR,
+                    "MCP effect failed record_id=%s episode_id=%s request_id=%s "
+                    "capability=%s duration_ms=%.1f error_type=%s",
+                    record.record_id,
+                    record.episode_id,
+                    request_id,
+                    capability,
+                    (time.monotonic() - started) * 1000,
+                    type(error).__name__,
+                )
         return PlatformRunResult(receipts)
 
     async def _call_tool(self, capability: str, parameters: dict[str, object]) -> dict[str, object]:
@@ -244,6 +314,7 @@ class MCPPlatform:
             method = "aurora/event"
             params = payload
         if method != "aurora/event" or self._kernel is None:
+            logger.debug("MCP notification ignored package=%s method=%s", package, method)
             return
         event_type = params.get("type")
         data = params.get("data", {})
@@ -258,8 +329,19 @@ class MCPPlatform:
             source_instance="mcp",
         )
         await self._kernel.submit_amp(event)
+        logger.debug(
+            "MCP event forwarded package=%s method=%s message_id=%s event_type=%s",
+            package,
+            method,
+            event.header.message_id,
+            event_type,
+        )
 
     async def shutdown(self) -> None:
+        if not self._started:
+            logger.debug("MCP platform shutdown skipped reason=not_started")
+        else:
+            logger.info("MCP platform shutdown started remote_connections=%d", len(self._remote))
         self._stop.set()
         if self._notification_task is not None:
             self._notification_task.cancel()
@@ -274,6 +356,8 @@ class MCPPlatform:
         )
         await self._clients.shutdown()
         await self._kit.stop_all()
+        self._started = False
+        logger.info("MCP platform shutdown completed")
 
 
 def _tool_result(result: object) -> dict[str, object]:

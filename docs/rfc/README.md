@@ -1,6 +1,6 @@
-# AuroraBot vNext RFC
+# AuroraBot RFC
 
-本目录是 vNext 的唯一设计基准。RFC 记录可验证的架构决策，不是愿景随笔或旧代码说明。
+本目录是 AuroraBot 的唯一设计基准。RFC 记录可验证的架构决策，不是愿景随笔或实现注释。
 
 ## 规范优先级
 
@@ -10,7 +10,7 @@
 
 - **草案**：正在讨论，不得被实现当作稳定契约。
 - **提议**：已具备完整决策，等待接受。
-- **已接受**：vNext 的规范性基准。
+- **已接受**：AuroraBot 的规范性基准。
 - **已取代**：由后续 RFC 明确取代。
 - **已废弃**：保留历史，不再适用。
 
@@ -25,6 +25,7 @@
 | [0004](0004-plugin-contract.md) | 已接受 | 节点、平台适配器与应用扩展 |
 | [0005](0005-model-gateway.md) | 已接受 | 模型角色、能力协商与原生响应 |
 | [0006](0006-local-debug-api.md) | 已接受 | 本地运行器与开发调试 HTTP API |
-| [0007](0007-local-console-and-compatibility.md) | 已接受 | 本地控制台与提取模块兼容层 |
+| [0007](0007-local-console-and-compatibility.md) | 已接受 | 本地控制台与共享配置门面 |
 | [0008](0008-first-cognitive-loop.md) | 已接受 | 首轮认知图、Episode 与主动节律 |
 | [0009](0009-bot-loop-entry.md) | 已接受 | 常驻无头 Bot 循环入口 |
+| [0010](0010-current-project-baseline.md) | 已接受 | 当前项目基线与历史归档边界 |

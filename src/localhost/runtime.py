@@ -19,6 +19,9 @@ from src.nodes.model_decide import ModelDecideNode
 from src.nodes.native_agent import NativeAgentNode
 from src.platform.local import LocalTestPlatform
 from src.platform.mcp_platform import MCPPlatform
+from src.utils.log_utils import configure_logging, get_logger
+
+logger = get_logger("aurora.runtime")
 
 
 @dataclass(slots=True)
@@ -41,6 +44,7 @@ class AuroraRuntime:
     @classmethod
     def create(cls, root: Path, profile: str | None = None) -> "AuroraRuntime":
         configuration = load_config(root, profile)
+        configure_logging(configuration.logging_level)
         nodes = {
             "builtin.decide": DecideNode(),
             "builtin.model_decide": ModelDecideNode(),
@@ -65,12 +69,24 @@ class AuroraRuntime:
             configuration.runtime.workspace / "process" / "scheduler-state.json",
             configuration.runtime.scheduler,
         )
+        logger.info(
+            "runtime created profile=%s workspace=%s nodes=%d scheduler_enabled=%s",
+            configuration.runtime.profile,
+            configuration.runtime.workspace,
+            len(enabled_nodes),
+            configuration.runtime.scheduler.enabled,
+        )
         return runtime
 
     async def _ensure_started(self) -> None:
         if not self._started:
+            logger.info("platform startup started apps=%d", len(self.configuration.apps))
             await self.mcp_platform.start(self.kernel)
             self._started = True
+            logger.info(
+                "platform startup completed capabilities=%d",
+                len(self.kernel.capability_catalog.capabilities),
+            )
 
     async def submit_amp(self, value: object) -> str:
         await self._ensure_started()
@@ -84,6 +100,12 @@ class AuroraRuntime:
             self._scheduler.on_external_activity()
         await self.kernel.submit_amp(amp)
         self._wake.set()
+        logger.debug(
+            "runtime accepted AMP message_id=%s event_type=%s session_id=%s",
+            amp.header.message_id,
+            amp.payload.type,
+            amp.payload.session_id,
+        )
         return amp.header.message_id
 
     async def run_cycle(self) -> dict[str, Any]:
@@ -97,52 +119,73 @@ class AuroraRuntime:
             self._ensure_model_dispatcher()
             if self._scheduler is not None:
                 self._scheduler.reconcile(self.kernel.episodes())
+            logger.debug(
+                "runtime cycle completed cycle=%d ingested=%d scheduled=%d failed=%d receipts=%d",
+                result.cycle,
+                len(result.ingested_record_ids),
+                len(result.scheduled_record_ids),
+                len(result.failed_record_ids),
+                response["platform_receipts_emitted"],
+            )
             return response
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         """Run the time-driven cognitive loop until explicitly stopped."""
         await self._ensure_started()
         stop = stop_event or asyncio.Event()
-        while not stop.is_set():
-            if self._scheduler is not None:
-                self._scheduler.reconcile(self.kernel.episodes())
-                if self._scheduler.can_tick(self.kernel.episodes()):
-                    tick = new_amp(
-                        event_type="system.tick",
-                        session_id="kernel:autonomy",
-                        summary="Autonomous cognitive tick",
-                        data={"interval_seconds": self._scheduler.state.current_interval_seconds},
-                        source_app="kernel.scheduler",
-                        source_instance="localhost",
+        logger.info("runtime loop started profile=%s", self.configuration.runtime.profile)
+        try:
+            while not stop.is_set():
+                if self._scheduler is not None:
+                    self._scheduler.reconcile(self.kernel.episodes())
+                    if self._scheduler.can_tick(self.kernel.episodes()):
+                        tick = new_amp(
+                            event_type="system.tick",
+                            session_id="kernel:autonomy",
+                            summary="Autonomous cognitive tick",
+                            data={"interval_seconds": self._scheduler.state.current_interval_seconds},
+                            source_app="kernel.scheduler",
+                            source_instance="localhost",
+                        )
+                        await self.kernel.submit_amp(tick)
+                        self._scheduler.mark_tick_emitted()
+                        logger.info(
+                            "autonomous tick emitted message_id=%s interval_s=%.1f",
+                            tick.header.message_id,
+                            self._scheduler.state.current_interval_seconds,
+                        )
+                if self.kernel.has_cycle_work():
+                    await self.run_cycle()
+                    continue
+                if self.kernel.has_pending_model_request():
+                    self._ensure_model_dispatcher()
+                self._wake.clear()
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(
+                        self._wake.wait(),
+                        timeout=self.configuration.runtime.scheduler.scan_seconds,
                     )
-                    await self.kernel.submit_amp(tick)
-                    self._scheduler.mark_tick_emitted()
-            if self.kernel.has_cycle_work():
-                await self.run_cycle()
-                continue
-            if self.kernel.has_pending_model_request():
-                self._ensure_model_dispatcher()
-            self._wake.clear()
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(
-                    self._wake.wait(),
-                    timeout=self.configuration.runtime.scheduler.scan_seconds,
-                )
+        finally:
+            logger.info("runtime loop stopped cycle=%d", self.kernel.cycle)
 
     async def shutdown(self) -> None:
+        logger.info("runtime shutdown started cycle=%d", self.kernel.cycle)
         if self._model_dispatch_task is not None:
             self._model_dispatch_task.cancel()
             await asyncio.gather(self._model_dispatch_task, return_exceptions=True)
         await self.mcp_platform.shutdown()
+        logger.info("runtime shutdown completed cycle=%d", self.kernel.cycle)
 
     def _ensure_model_dispatcher(self) -> None:
         if self._model_dispatch_task is None or self._model_dispatch_task.done():
             self._model_dispatch_task = asyncio.create_task(self._dispatch_models(), name="aurora-model-dispatcher")
+            logger.debug("model dispatcher scheduled")
 
     async def _dispatch_models(self) -> None:
         while True:
             record = await self.kernel.claim_model_request()
             if record is None:
+                logger.debug("model dispatcher idle")
                 return
             self._active_model_record_id = record.record_id
             episode = self.kernel.get_episode(record.episode_id)
@@ -152,6 +195,11 @@ class AuroraRuntime:
                 and self._scheduler is not None
                 and not self._scheduler.reserve_autonomous_model_call()
             ):
+                logger.warning(
+                    "autonomous model quota rejected record_id=%s episode_id=%s",
+                    record.record_id,
+                    record.episode_id,
+                )
                 self.kernel.cancel_model_request(record, "autonomous_daily_budget")
                 self._active_model_record_id = None
                 self._wake.set()
@@ -164,7 +212,18 @@ class AuroraRuntime:
                     if isinstance(usage, dict):
                         tokens = int(usage.get("prompt_tokens", 0) or 0) + int(usage.get("completion_tokens", 0) or 0)
                         self._scheduler.record_autonomous_tokens(tokens)
+                        logger.debug(
+                            "autonomous usage recorded record_id=%s episode_id=%s tokens=%d",
+                            record.record_id,
+                            record.episode_id,
+                            tokens,
+                        )
             except asyncio.CancelledError:
+                logger.warning(
+                    "autonomous model dispatch interrupted record_id=%s episode_id=%s reason=external_activity",
+                    record.record_id,
+                    record.episode_id,
+                )
                 self.kernel.cancel_model_request(record, "external_activity")
                 raise
             finally:
@@ -185,6 +244,13 @@ class AuroraRuntime:
             return
         episode = self.kernel.get_episode(record.episode_id)
         if episode is not None and episode.autonomous:
+            logger.info(
+                "external activity cancelling autonomous model message_id=%s event_type=%s record_id=%s episode_id=%s",
+                amp.header.message_id,
+                amp.payload.type,
+                record.record_id,
+                record.episode_id,
+            )
             self._model_dispatch_task.cancel()
 
     def drain_console_messages(self) -> tuple[str, ...]:
@@ -208,6 +274,7 @@ class AuroraRuntime:
         if isinstance(text, str) and text:
             self._console_messages.append(text)
             self._console_queue.put_nowait(text)
+            logger.debug("console effect observed capability=%s text_length=%d", capability, len(text))
 
     def record(self, record_id: str) -> dict[str, Any] | None:
         record = self.kernel.get_record(record_id)

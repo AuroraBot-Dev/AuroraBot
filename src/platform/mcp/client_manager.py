@@ -435,7 +435,12 @@ class MCPClientManager:
         discovered_names = {str(getattr(tool, "name", "")) for tool in conn.tools}
         if full_name in discovered_names:
             tool_name = full_name
-        logger.debug("调用 tool: %s (server: %s, args: %s)", tool_name, server_key, arguments)
+        logger.debug(
+            "调用 tool: %s (server: %s, argument_keys: %s)",
+            tool_name,
+            server_key,
+            sorted((arguments or {}).keys()),
+        )
 
         try:
             result = await asyncio.wait_for(

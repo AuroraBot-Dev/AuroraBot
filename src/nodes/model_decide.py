@@ -7,6 +7,9 @@ from typing import Any
 
 from src.ai.contracts import ModelGatewayError, ModelMessage, ModelRequest
 from src.kernel.node import NodeContext, NodeContractError
+from src.utils.log_utils import get_logger
+
+logger = get_logger("aurora.node.model_decide")
 
 _DECISION_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -55,6 +58,13 @@ class ModelDecideNode:
     async def execute(self, context: NodeContext) -> None:
         amp = context.amp
         if amp.payload.type != "message.received":
+            logger.debug(
+                "model decide ignored event record_id=%s episode_id=%s node_id=%s event_type=%s",
+                context.record.record_id,
+                context.record.episode_id,
+                context.node_id,
+                amp.payload.type,
+            )
             return
         role = context.configuration_snapshot["model_roles"][0]
         capabilities = context.configuration_snapshot["capability_descriptors"]
@@ -79,12 +89,34 @@ class ModelDecideNode:
             allow_json_text_fallback=True,
             invalid_output_result={"kind": "no_action", "summary": "Model output could not be validated."},
         )
+        logger.debug(
+            "model decide request prepared record_id=%s episode_id=%s node_id=%s model_role=%s capabilities=%d",
+            context.record.record_id,
+            context.record.episode_id,
+            context.node_id,
+            role,
+            len(capabilities),
+        )
         try:
             result = await context.request_model(request)
-        except ModelGatewayError:
+        except ModelGatewayError as error:
+            logger.warning(
+                "model decide request failed record_id=%s episode_id=%s node_id=%s model_role=%s error_type=%s",
+                context.record.record_id,
+                context.record.episode_id,
+                context.node_id,
+                role,
+                type(error).__name__,
+            )
             return
         decision = result.data
         if decision is None or decision.get("kind") == "no_action" or decision.get("action") == "no_action":
+            logger.debug(
+                "model decide selected no action record_id=%s episode_id=%s node_id=%s",
+                context.record.record_id,
+                context.record.episode_id,
+                context.node_id,
+            )
             return
         if decision.get("kind") != "effect" and decision.get("action") != "invoke":
             return
@@ -97,5 +129,21 @@ class ModelDecideNode:
             summary = f"Model requested {capability}"
         try:
             context.request_effect(capability, parameters, summary)
-        except (NodeContractError, ValueError):
+            logger.debug(
+                "model decide selected effect record_id=%s episode_id=%s node_id=%s capability=%s parameter_keys=%s",
+                context.record.record_id,
+                context.record.episode_id,
+                context.node_id,
+                capability,
+                sorted(parameters),
+            )
+        except (NodeContractError, ValueError) as error:
+            logger.warning(
+                "model decide effect rejected record_id=%s episode_id=%s node_id=%s capability=%s error_type=%s",
+                context.record.record_id,
+                context.record.episode_id,
+                context.node_id,
+                capability,
+                type(error).__name__,
+            )
             return

@@ -50,7 +50,7 @@ def get_current_time(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     Returns:
         格式化后的当前时间。
     """
-    logger.debug("get_current_time called with format=%r", fmt)
+    logger.debug("get_current_time called custom_format=%s", fmt is not None)
     return ClockService.get_current_time(fmt)
 
 
@@ -65,7 +65,7 @@ async def set_alarm(ctx: Context, time_str: str, label: str = "") -> dict[str, A
     Returns:
         闹钟信息。
     """
-    logger.debug("set_alarm called: time_str=%r, label=%r", time_str, label)
+    logger.debug("set_alarm called label_length=%d", len(label))
     await ClockService.initialize(_notifier(ctx))
     return await ClockService.set_alarm(time_str, label)
 
@@ -81,7 +81,7 @@ async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, An
     Returns:
         定时器信息。
     """
-    logger.debug("set_timer called: seconds=%r, label=%r", seconds, label)
+    logger.debug("set_timer called label_length=%d", len(label))
     await ClockService.initialize(_notifier(ctx))
     return await ClockService.set_timer(seconds, label)
 

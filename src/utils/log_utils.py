@@ -43,6 +43,8 @@ MAX_LOGFILE_BACKUPS = 5  # 保留5个备份
 
 # 日志级别
 LOG_LEVEL = Config.LOG_LEVEL
+_logging_state: dict[str, int | str] = {"level": LOG_LEVEL}
+_managed_logger_names: set[str] = set()
 
 
 def _create_stream_handler(
@@ -110,6 +112,7 @@ def _create_file_handler(
     formatter: logging.Formatter = FILE_FORMATTER,
 ) -> logging.Handler:
     # 使用大小轮转日志文件, 每个文件最大100KB, 保留5个备份
+    Path(logfile).parent.mkdir(parents=True, exist_ok=True)
     fh = ConcurrentRotatingFileHandler(
         logfile,
         maxBytes=MAX_LOGFILE_SIZE,
@@ -202,7 +205,7 @@ class DecoratorFactory:
 
 def get_logger(
     name: str | None = None,
-    level: int | str = LOG_LEVEL,
+    level: int | str | None = None,
     logfile: str | Path | None = None,
 ) -> logging.Logger:
     """
@@ -215,27 +218,40 @@ def get_logger(
         # 默认使用根包名, 如果无法获取则使用"Default"
         name = __package__ or "Default"
 
+    effective_level = _logging_state["level"] if level is None else level
+    _managed_logger_names.add(name)
+
     logger = logging.getLogger(name)
     if logger.handlers:
-        logger.setLevel(level)
+        logger.setLevel(effective_level)
         for handler in logger.handlers:
-            handler.setLevel(level)
+            handler.setLevel(effective_level)
         if not hasattr(logger, "decorate"):
             cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger
 
     logfile = logfile or DEFAULT_LOGFILE
 
-    logger.setLevel(level)
+    logger.setLevel(effective_level)
     logger.propagate = False
 
     # 配置控制台输出
-    logger.addHandler(_create_stream_handler(level))
+    logger.addHandler(_create_stream_handler(effective_level))
 
     # 配置文件输出
-    logger.addHandler(_create_file_handler(logfile, level))
+    logger.addHandler(_create_file_handler(logfile, effective_level))
 
     # 将 DecoratorFactory 实例绑定到记录器, 用于创建日志装饰器
     cast("Any", logger).decorate = DecoratorFactory(logger)
 
     return logger
+
+
+def configure_logging(level: int | str) -> None:
+    """Apply the validated runtime log level to existing and future Aurora loggers."""
+    _logging_state["level"] = level
+    for name in tuple(_managed_logger_names):
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        for handler in logger.handlers:
+            handler.setLevel(level)
