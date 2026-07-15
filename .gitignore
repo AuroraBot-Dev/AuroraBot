@@ -44,7 +44,6 @@ config.ini
 # Project data
 logs/
 data/
-legacy/
 temp/
 
 # IDE / Editor
