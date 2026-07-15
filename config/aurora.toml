@@ -7,6 +7,26 @@ workspace = "data/kernel"
 debug_host = "127.0.0.1"
 debug_port = 8765
 
+[runtime.scheduler]
+enabled = true
+scan_seconds = 1.0
+idle_initial_seconds = 30.0
+idle_max_seconds = 1800.0
+idle_multiplier = 2.0
+action_cooldown_seconds = 300.0
+autonomous_daily_model_calls = 24
+autonomous_daily_tokens = 100000
+
+[runtime.interactive_episode]
+max_model_calls = 8
+max_tool_calls = 6
+max_duration_seconds = 300.0
+
+[runtime.autonomous_episode]
+max_model_calls = 3
+max_tool_calls = 2
+max_duration_seconds = 120.0
+
 [soul]
 path = "config/prompts/SOUL.md"
 
@@ -19,16 +39,47 @@ data_dir = "data"
 [models.roles.fast]
 provider = "deepseek"
 model = "deepseek-v4-flash"
-capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+endpoint = "chat_completions"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "tools",
+]
 
 [models.roles.quality]
 provider = "deepseek"
 model = "deepseek-v4-pro"
-capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+endpoint = "chat_completions"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "tools",
+    "native_responses",
+    "reasoning",
+]
+
+[models.roles.agent]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+endpoint = "responses"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "tools",
+    "native_responses",
+    "reasoning",
+]
 
 [models.roles.multimodal]
 provider = "xiaomi_mimo"
 model = "mimo-v2.5-pro"
+endpoint = "chat_completions"
 capabilities = [
     "chat",
     "stream",
@@ -40,6 +91,7 @@ capabilities = [
 [models.roles.embedding]
 provider = "siliconflow"
 model = "BAAI/bge-m3"
+endpoint = "chat_completions"
 capabilities = ["embedding"]
 
 [models.providers.deepseek]

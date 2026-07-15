@@ -33,6 +33,9 @@ class KernelRecord:
     retention: str
     created_at: str
     updated_at: str
+    resume_node_id: str | None = None
+    priority: int = 100
+    episode_round: int = 0
 
     @classmethod
     def from_amp(
@@ -42,6 +45,9 @@ class KernelRecord:
         available_cycle: int,
         parent: "KernelRecord | None" = None,
         producer_node: str | None = None,
+        resume_node_id: str | None = None,
+        priority: int = 100,
+        episode_round: int | None = None,
     ) -> "KernelRecord":
         now = datetime.now(UTC).isoformat()
         return cls(
@@ -58,12 +64,18 @@ class KernelRecord:
             retention="standard",
             created_at=now,
             updated_at=now,
+            resume_node_id=resume_node_id,
+            priority=priority,
+            episode_round=parent.episode_round if episode_round is None and parent else (episode_round or 0),
         )
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "KernelRecord":
         value = dict(value)
         value["status"] = RecordStatus(value["status"])
+        value.setdefault("resume_node_id", None)
+        value.setdefault("priority", 100)
+        value.setdefault("episode_round", 0)
         return cls(**value)
 
     def to_dict(self) -> dict[str, Any]:

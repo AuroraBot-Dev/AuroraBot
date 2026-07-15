@@ -26,3 +26,5 @@
 | [0005](0005-model-gateway.md) | 已接受 | 模型角色、能力协商与原生响应 |
 | [0006](0006-local-debug-api.md) | 已接受 | 本地运行器与开发调试 HTTP API |
 | [0007](0007-local-console-and-compatibility.md) | 已接受 | 本地控制台与提取模块兼容层 |
+| [0008](0008-first-cognitive-loop.md) | 已接受 | 首轮认知图、Episode 与主动节律 |
+| [0009](0009-bot-loop-entry.md) | 已接受 | 常驻无头 Bot 循环入口 |

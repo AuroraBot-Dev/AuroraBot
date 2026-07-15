@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi.testclient import TestClient
 
 from src.localhost.api import create_app
 from tests.test_events import valid_amp
+
+if TYPE_CHECKING:
+    import pytest
+
+
+def test_service_starts_without_model_credentials(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AURORA_TEST_MODEL_API_KEY", raising=False)
+
+    with TestClient(create_app(project_root)) as client:
+        assert client.get("/healthz").json()["status"] == "ok"
+        status = client.get("/v1/debug/status")
+
+    assert status.status_code == 200
+    assert status.json()["scheduler"] is not None
 
 
 def test_debug_api_drives_and_queries_the_loop(project_root: Path) -> None:

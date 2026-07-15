@@ -1,25 +1,23 @@
-# 认知节点图与节点参数。
-# 内置节点和扩展节点均须显式启用；安装扩展不会自动加入运行时。
+# RFC 0008 首轮级联认知图。
 
 [[node]]
-id = "builtin.decide"
-enabled = false
-implementation = "src.nodes.decide:DecideNode"
-inputs = ["message.received"]
-outputs = ["effect.requested"]
-capabilities = ["org.aurora.console.send_message"]
-model_roles = []
-
-[[edge]]
-event_type = "message.received"
-target = "builtin.model_decide"
-
-[[node]]
-id = "builtin.model_decide"
+id = "builtin.fast_gate"
 enabled = true
-implementation = "src.nodes.model_decide:ModelDecideNode"
-inputs = ["message.received"]
-outputs = ["effect.requested"]
+implementation = "src.nodes.fast_gate:FastGateNode"
+inputs = [
+    "message.received",
+    "system.tick",
+    "model.completed",
+    "model.failed",
+    "effect.succeeded",
+    "effect.failed",
+]
+outputs = [
+    "model.requested",
+    "effect.requested",
+    "cognition.escalated",
+    "episode.ended",
+]
 capabilities = [
     "org.aurora.console.send_message",
     "org.aurora.clock.get_current_time",
@@ -29,3 +27,58 @@ capabilities = [
     "org.aurora.clock.cancel_alarm",
 ]
 model_roles = ["fast"]
+
+[[node]]
+id = "builtin.native_agent"
+enabled = true
+implementation = "src.nodes.native_agent:NativeAgentNode"
+inputs = [
+    "cognition.escalated",
+    "model.completed",
+    "model.failed",
+    "effect.succeeded",
+    "effect.failed",
+]
+outputs = ["model.requested", "effect.requested", "episode.ended"]
+capabilities = [
+    "org.aurora.console.send_message",
+    "org.aurora.clock.get_current_time",
+    "org.aurora.clock.set_alarm",
+    "org.aurora.clock.set_timer",
+    "org.aurora.clock.list_alarms",
+    "org.aurora.clock.cancel_alarm",
+]
+model_roles = ["agent"]
+
+[[edge]]
+event_type = "message.received"
+target = "builtin.fast_gate"
+
+[[edge]]
+event_type = "system.tick"
+target = "builtin.fast_gate"
+
+[[edge]]
+event_type = "cognition.escalated"
+target = "builtin.native_agent"
+advances_round = true
+
+[[edge]]
+event_type = "model.completed"
+target = "@continuation"
+advances_round = true
+
+[[edge]]
+event_type = "model.failed"
+target = "@continuation"
+advances_round = true
+
+[[edge]]
+event_type = "effect.succeeded"
+target = "@continuation"
+advances_round = true
+
+[[edge]]
+event_type = "effect.failed"
+target = "@continuation"
+advances_round = true

@@ -10,18 +10,19 @@ AuroraBot 正在重建为一个以因果事件为中心的自主智能体框架�
 
 `docs/rfc/` 是 vNext 唯一的架构基准。代码、配置样例、贡献说明与对外文档必须遵从已接受的 RFC；发生冲突时，以 RFC 为准。
 
-vNext 的最小闭环为：
+vNext 的首轮认知闭环为：
 
 ```text
 平台环境事件（AMP JSON）
-  → Kernel 接管、形成周期快照并调度图
-  → builtin.decide 节点
-  → effect.requested
+  → Kernel 接管、形成 Episode 与周期快照
+  → builtin.fast_gate 直接处理或升级 builtin.native_agent
+  → 原生模型 Tool Call → effect.requested
   → 平台执行能力
   → effect.succeeded / effect.failed（下一周期）
 ```
 
-生成文本不是效果。只有平台回写执行结果，因果闭环才完成。
+生成文本不是效果。只有平台回写执行结果，因果闭环才完成；没有外界输入时，Kernel scheduler 也会以
+受预算和退避约束的 `system.tick` 推进自主认知。
 
 ## 目录
 
@@ -44,10 +45,22 @@ extensions/   推荐的第三方节点、平台适配器和应用扩展位置
 - [RFC 0003：事件与因果契约](docs/rfc/0003-event-contract.md)
 - [RFC 0004：扩展契约](docs/rfc/0004-plugin-contract.md)
 - [RFC 0005：模型网关](docs/rfc/0005-model-gateway.md)
+- [RFC 0008：首轮认知图、Episode 与主动节律](docs/rfc/0008-first-cognitive-loop.md)
+- [RFC 0009：常驻 Bot 循环入口](docs/rfc/0009-bot-loop-entry.md)
 
 ## 重建状态
 
-vNext 提供仅限本机开发的最小运行入口；请勿使用根目录旧 `bot.py` 或 `legacy/` 中的入口：
+vNext 现在可以直接进入常驻无头 Bot 循环：
+
+```powershell
+uv run python bot.py
+
+# 可选：选择 config/profiles 下的覆盖配置
+uv run python bot.py --profile prod
+```
+
+该入口只启动一个 `AuroraRuntime`，持续推进 scheduler、Kernel、模型 dispatcher 与 Platform 回执，按
+`Ctrl+C` 后优雅关闭。开发调试仍可使用以下入口：
 
 ```powershell
 # 同时启动 serve + console（console 前台，serve 后台自动关闭）
@@ -60,7 +73,9 @@ uv run aurora serve
 uv run aurora console
 ```
 
-控制台中输入 `/say 你好` 投递消息，输入 `/cycle` 推进一次周期，输入 `/record <record_id>` 查询审计记录，输入 `/help` 查看完整命令集。HTTP API 的具体端点见 RFC 0006。
+`serve`、`console` 和组合入口都会启动主动 scheduler。控制台中输入 `/say 你好` 投递消息，`/cycle`
+可强制推进一个调试周期，`/record <record_id>` 查询审计记录。HTTP API 另提供 scheduler/episode
+只读状态，具体契约见 RFC 0006 与 RFC 0008。
 
 ## 许可证
 

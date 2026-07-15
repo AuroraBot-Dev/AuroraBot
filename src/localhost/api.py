@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +13,31 @@ from src.kernel.events import AmpValidationError
 from src.localhost.runtime import AuroraRuntime
 
 
-def create_app(root: Path, profile: str | None = None) -> FastAPI:
+def create_app(
+    root: Path,
+    profile: str | None = None,
+    *,
+    runtime: AuroraRuntime | None = None,
+    manage_runtime: bool = True,
+) -> FastAPI:
     """Create the developer-only HTTP adapter around a configured local runtime."""
-    runtime = AuroraRuntime.create(root, profile)
-    app = FastAPI(title="AuroraBot local debug API", version="0.4.0")
+    runtime = runtime or AuroraRuntime.create(root, profile)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if not manage_runtime:
+            yield
+            return
+        stop = asyncio.Event()
+        scheduler = asyncio.create_task(runtime.run_forever(stop), name="aurora-cognitive-scheduler")
+        try:
+            yield
+        finally:
+            stop.set()
+            await asyncio.gather(scheduler, return_exceptions=True)
+            await runtime.shutdown()
+
+    app = FastAPI(title="AuroraBot local debug API", version="0.4.0", lifespan=lifespan)
 
     @app.get("/healthz")
     def health() -> dict[str, object]:
@@ -37,5 +60,16 @@ def create_app(root: Path, profile: str | None = None) -> FastAPI:
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
         return record
+
+    @app.get("/v1/debug/status")
+    def get_status() -> dict[str, Any]:
+        return runtime.status()
+
+    @app.get("/v1/debug/episodes/{episode_id}")
+    def get_episode(episode_id: str) -> dict[str, Any]:
+        episode = runtime.episode(episode_id)
+        if episode is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="episode not found")
+        return episode
 
     return app

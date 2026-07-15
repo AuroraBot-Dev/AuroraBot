@@ -14,6 +14,23 @@ from src.localhost.runtime import AuroraRuntime
 from src.localhost.shell import run_console
 
 
+async def _run_combined(root: Path, profile: str | None) -> None:
+    runtime = AuroraRuntime.create(root, profile)
+    config = uvicorn.Config(
+        create_app(root, profile, runtime=runtime, manage_runtime=False),
+        host=runtime.configuration.runtime.debug_host,
+        port=runtime.configuration.runtime.debug_port,
+        log_level=runtime.configuration.logging_level.lower(),
+    )
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve(), name="aurora-debug-api")
+    try:
+        await run_console(runtime)
+    finally:
+        server.should_exit = True
+        await asyncio.gather(server_task, return_exceptions=True)
+
+
 def main() -> None:
     """Start the developer-only loopback HTTP server."""
     parser = argparse.ArgumentParser(description="Run AuroraBot vNext locally")
@@ -26,6 +43,9 @@ def main() -> None:
     configuration = load_config(arguments.root, arguments.profile)
     if arguments.command == "console":
         asyncio.run(run_console(AuroraRuntime.create(arguments.root, arguments.profile)))
+        return
+    if arguments.command is None:
+        asyncio.run(_run_combined(arguments.root, arguments.profile))
         return
     uvicorn.run(
         create_app(arguments.root, arguments.profile),

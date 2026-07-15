@@ -6,26 +6,24 @@ import contextlib
 import os
 import signal
 import subprocess
-import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Generator
+    from typing import Any
 
-from scripts.cli.utils import PROJECT_ROOT, run
 from scripts.cli.utils import console as c
+from scripts.cli.utils import run
 
 _RUN_SERVE = ["uv", "run", "python", "-m", "src.localhost.cli", "serve"]
 _RUN_CONSOLE = ["uv", "run", "python", "-m", "src.localhost.cli", "console"]
+_RUN_COMBINED = ["uv", "run", "python", "-m", "src.localhost.cli"]
 
 
-# ── 进程树管理 ──────────────────────────────────────────────────────────────
-
-
+# RFC 0007 compatibility helpers. The default command no longer uses a second process.
 def _popen_kwargs() -> dict[str, Any]:
-    """返回启动 serve 后台进程的跨平台参数。"""
-    kwargs: dict[str, Any] = {"cwd": str(PROJECT_ROOT), "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    kwargs: dict[str, Any] = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -34,7 +32,6 @@ def _popen_kwargs() -> dict[str, Any]:
 
 
 def _kill_tree(proc: subprocess.Popen, *, force: bool = False) -> None:
-    """Kill a process and all its descendants."""
     if proc.poll() is not None:
         return
     if os.name == "nt":
@@ -51,7 +48,6 @@ def _kill_tree(proc: subprocess.Popen, *, force: bool = False) -> None:
 
 @contextlib.contextmanager
 def _background_server() -> Generator[subprocess.Popen]:
-    """上下文管理器：启动 serve 后台进程，退出时自动杀进程树。"""
     proc = subprocess.Popen(_RUN_SERVE, **_popen_kwargs())
     try:
         yield proc
@@ -87,11 +83,6 @@ def console(_args: argparse.Namespace) -> int:
 
 
 def default(_args: argparse.Namespace) -> int:
-    """同时启动 serve (后台) 和 console (前台)；console 退出后自动关闭 serve。"""
-    c.print("[bold]启动 serve (后台) + console (前台) ...[/bold]\n")
-    with _background_server() as serve_proc:
-        time.sleep(2)
-        if serve_proc.poll() is not None:
-            c.print("[bold red]serve 启动失败[/bold red]")
-            return 1
-        return run(_RUN_CONSOLE)
+    """在一个进程内启动共享 Runtime 的 serve 与 console。"""
+    c.print("[bold]启动单 Runtime serve + console ...[/bold]\n")
+    return run(_RUN_COMBINED)

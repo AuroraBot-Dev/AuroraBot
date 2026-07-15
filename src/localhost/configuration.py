@@ -8,7 +8,7 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 
 class ConfigurationError(ValueError):
@@ -56,6 +56,28 @@ class RuntimeConfig:
     workspace: Path
     debug_host: str
     debug_port: int
+    scheduler: "SchedulerConfig"
+    interactive_budget: "EpisodeBudgetConfig"
+    autonomous_budget: "EpisodeBudgetConfig"
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulerConfig:
+    enabled: bool = True
+    scan_seconds: float = 1.0
+    idle_initial_seconds: float = 30.0
+    idle_max_seconds: float = 1800.0
+    idle_multiplier: float = 2.0
+    action_cooldown_seconds: float = 300.0
+    autonomous_daily_model_calls: int = 24
+    autonomous_daily_tokens: int = 100_000
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeBudgetConfig:
+    max_model_calls: int
+    max_tool_calls: int
+    max_duration_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +103,14 @@ class CapabilityConfig:
 
     id: str
     parameters_schema: dict[str, Any]
+    description: str = ""
+    result_mode: Literal["resume", "terminal"] = "resume"
+
+
+@dataclass(frozen=True, slots=True)
+class AppToolConfig:
+    name: str
+    result_mode: Literal["resume", "terminal"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +124,11 @@ class AppConfig:
     url: str | None
     auth_env: str | None
     timeout_seconds: float
-    allowed_tools: frozenset[str]
+    tools: tuple[AppToolConfig, ...]
+
+    @property
+    def allowed_tools(self) -> frozenset[str]:
+        return frozenset(tool.name for tool in self.tools)
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +148,7 @@ class ModelRoleConfig:
     provider: str
     model: str
     capabilities: frozenset[str]
+    endpoint: str = "chat_completions"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +168,7 @@ class AuroraConfig:
     logging_level: str
     nodes: tuple[NodeConfig, ...]
     edges: dict[str, tuple[str, ...]]
+    advancing_edges: frozenset[tuple[str, str]]
     adapters: tuple[AdapterConfig, ...]
     model_roles: frozenset[str]
     model_definitions: dict[str, ModelRoleConfig]
@@ -144,7 +180,7 @@ class AuroraConfig:
 
 def _parse_nodes(
     data: dict[str, Any], model_roles: frozenset[str]
-) -> tuple[tuple[NodeConfig, ...], dict[str, tuple[str, ...]]]:
+) -> tuple[tuple[NodeConfig, ...], dict[str, tuple[str, ...]], frozenset[tuple[str, str]]]:
     _require_keys(data, {"node", "edge"}, "nodes.toml")
     raw_nodes = data["node"]
     raw_edges = data["edge"]
@@ -189,16 +225,26 @@ def _parse_nodes(
             )
         )
     edges: dict[str, list[str]] = {}
+    advancing_edges: set[tuple[str, str]] = set()
     for raw in raw_edges:
         if not isinstance(raw, dict):
             raise ConfigurationError("edge must be a table")
-        _require_keys(raw, {"event_type", "target"}, "edge")
+        allowed_edge_keys = {"event_type", "target", "advances_round"}
+        if set(raw) - allowed_edge_keys or not {"event_type", "target"} <= set(raw):
+            raise ConfigurationError("edge has unsupported or missing keys")
         event_type = _string(raw["event_type"], "edge.event_type")
         target = _string(raw["target"], "edge.target")
-        if target not in ids:
+        advances_round = raw.get("advances_round", False)
+        if not isinstance(advances_round, bool):
+            raise ConfigurationError("edge.advances_round must be boolean")
+        if target == "@continuation" and not advances_round:
+            raise ConfigurationError("@continuation edge must advance round")
+        if target != "@continuation" and target not in ids:
             raise ConfigurationError(f"edge references disabled or unknown node {target}")
         edges.setdefault(event_type, []).append(target)
-    return tuple(nodes), {key: tuple(value) for key, value in edges.items()}
+        if advances_round:
+            advancing_edges.add((event_type, target))
+    return tuple(nodes), {key: tuple(value) for key, value in edges.items()}, frozenset(advancing_edges)
 
 
 def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConfig, ...], tuple[AppConfig, ...]]:
@@ -228,13 +274,28 @@ def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConf
         for capability in capabilities:
             if not isinstance(capability, dict):
                 raise ConfigurationError("adapter.capability must be a table")
-            _require_keys(capability, {"id", "parameters_schema"}, "adapter.capability")
+            allowed_capability_keys = {"id", "parameters_schema", "description", "result_mode"}
+            if set(capability) - allowed_capability_keys or not {"id", "parameters_schema"} <= set(capability):
+                raise ConfigurationError("adapter.capability has unsupported or missing keys")
             capability_id = _string(capability["id"], "adapter.capability.id")
             schema = capability["parameters_schema"]
             if capability_id in capability_ids or not isinstance(schema, dict):
                 raise ConfigurationError("adapter capability IDs must be unique and schemas must be tables")
             capability_ids.add(capability_id)
-            parsed_capabilities.append(CapabilityConfig(capability_id, schema))
+            result_mode = capability.get("result_mode", "resume")
+            if result_mode not in {"resume", "terminal"}:
+                raise ConfigurationError("adapter.capability.result_mode must be resume or terminal")
+            description = capability.get("description", "")
+            if not isinstance(description, str):
+                raise ConfigurationError("adapter.capability.description must be a string")
+            parsed_capabilities.append(
+                CapabilityConfig(
+                    capability_id,
+                    schema,
+                    description,
+                    cast("Literal['resume', 'terminal']", result_mode),
+                )
+            )
         adapters.append(
             AdapterConfig(
                 adapter_id,
@@ -260,9 +321,11 @@ def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConf
             "auth_env",
             "timeout_seconds",
             "allowed_tools",
+            "tool",
         }
-        required = {"package", "enabled", "transport", "timeout_seconds", "allowed_tools"}
-        _require_keys(raw, {key for key in allowed if key in raw} | required, "app")
+        required = {"package", "enabled", "transport", "timeout_seconds"}
+        if set(raw) - allowed or not required <= set(raw):
+            raise ConfigurationError("app has unsupported or missing keys")
         if not isinstance(raw["enabled"], bool) or not raw["enabled"]:
             continue
         package = _string(raw["package"], "app.package")
@@ -272,12 +335,32 @@ def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConf
         transport = _string(raw["transport"], "app.transport")
         if transport not in {"stdio", "streamable_http"}:
             raise ConfigurationError("app.transport must be stdio or streamable_http")
-        tools = raw["allowed_tools"]
-        valid_tools = isinstance(tools, list) and all(
-            isinstance(item, str) and item.startswith(f"{package}.") for item in tools
-        )
-        if not valid_tools:
-            raise ConfigurationError("app.allowed_tools must contain full package-prefixed tool names")
+        if "tool" in raw and "allowed_tools" in raw:
+            raise ConfigurationError("app must use either tool tables or allowed_tools, not both")
+        parsed_tools: list[AppToolConfig] = []
+        if "tool" in raw:
+            tool_tables = raw["tool"]
+            if not isinstance(tool_tables, list):
+                raise ConfigurationError("app.tool must be an array of tables")
+            for tool in tool_tables:
+                if not isinstance(tool, dict) or set(tool) != {"name", "result_mode"}:
+                    raise ConfigurationError("app.tool must contain name and result_mode")
+                name = _string(tool["name"], "app.tool.name")
+                result_mode = tool["result_mode"]
+                if not name.startswith(f"{package}.") or result_mode not in {"resume", "terminal"}:
+                    raise ConfigurationError("app.tool must use the package prefix and a valid result_mode")
+                parsed_tools.append(AppToolConfig(name, cast("Literal['resume', 'terminal']", result_mode)))
+        else:
+            legacy_tools = raw.get("allowed_tools")
+            valid_tools = isinstance(legacy_tools, list) and all(
+                isinstance(item, str) and item.startswith(f"{package}.") for item in legacy_tools
+            )
+            if not valid_tools:
+                raise ConfigurationError("app tools must contain full package-prefixed tool names")
+            assert isinstance(legacy_tools, list)
+            parsed_tools.extend(AppToolConfig(item, "resume") for item in legacy_tools)
+        if len({tool.name for tool in parsed_tools}) != len(parsed_tools):
+            raise ConfigurationError("app tool names must be unique")
         timeout = raw["timeout_seconds"]
         if not isinstance(timeout, (int, float)) or timeout <= 0:
             raise ConfigurationError("app.timeout_seconds must be positive")
@@ -306,10 +389,75 @@ def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConf
                 url=url if isinstance(url, str) else None,
                 auth_env=auth_env,
                 timeout_seconds=float(timeout),
-                allowed_tools=frozenset(tools),
+                tools=tuple(parsed_tools),
             )
         )
     return tuple(adapters), tuple(apps)
+
+
+def _positive_number(value: object, label: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        raise ConfigurationError(f"{label} must be positive")
+    return float(value)
+
+
+def _parse_scheduler(raw: dict[str, Any]) -> SchedulerConfig:
+    defaults = SchedulerConfig()
+    allowed = {
+        "enabled",
+        "scan_seconds",
+        "idle_initial_seconds",
+        "idle_max_seconds",
+        "idle_multiplier",
+        "action_cooldown_seconds",
+        "autonomous_daily_model_calls",
+        "autonomous_daily_tokens",
+    }
+    if set(raw) - allowed:
+        raise ConfigurationError("runtime.scheduler has unsupported keys")
+    enabled = raw.get("enabled", defaults.enabled)
+    if not isinstance(enabled, bool):
+        raise ConfigurationError("runtime.scheduler.enabled must be boolean")
+    daily_calls = raw.get("autonomous_daily_model_calls", defaults.autonomous_daily_model_calls)
+    daily_tokens = raw.get("autonomous_daily_tokens", defaults.autonomous_daily_tokens)
+    if not isinstance(daily_calls, int) or isinstance(daily_calls, bool) or daily_calls <= 0:
+        raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
+    if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
+        raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
+    initial = _positive_number(raw.get("idle_initial_seconds", defaults.idle_initial_seconds), "idle_initial_seconds")
+    maximum = _positive_number(raw.get("idle_max_seconds", defaults.idle_max_seconds), "idle_max_seconds")
+    if maximum < initial:
+        raise ConfigurationError("idle_max_seconds must be at least idle_initial_seconds")
+    multiplier = _positive_number(raw.get("idle_multiplier", defaults.idle_multiplier), "idle_multiplier")
+    if multiplier <= 1:
+        raise ConfigurationError("idle_multiplier must be greater than one")
+    return SchedulerConfig(
+        enabled=enabled,
+        scan_seconds=_positive_number(raw.get("scan_seconds", defaults.scan_seconds), "scan_seconds"),
+        idle_initial_seconds=initial,
+        idle_max_seconds=maximum,
+        idle_multiplier=multiplier,
+        action_cooldown_seconds=_positive_number(
+            raw.get("action_cooldown_seconds", defaults.action_cooldown_seconds), "action_cooldown_seconds"
+        ),
+        autonomous_daily_model_calls=daily_calls,
+        autonomous_daily_tokens=daily_tokens,
+    )
+
+
+def _parse_episode_budget(
+    raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
+) -> EpisodeBudgetConfig:
+    allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
+    if set(raw) - allowed:
+        raise ConfigurationError(f"runtime.{label} has unsupported keys")
+    calls = raw.get("max_model_calls", default_calls)
+    tools = raw.get("max_tool_calls", default_tools)
+    if not isinstance(calls, int) or isinstance(calls, bool) or calls <= 0:
+        raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
+    if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
+        raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
+    return EpisodeBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
 
 
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
@@ -335,7 +483,18 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     models_raw = merged["models"]
     if not all(isinstance(value, dict) for value in (runtime_raw, soul_raw, logging_raw, storage_raw, models_raw)):
         raise ConfigurationError("aurora top-level sections must be tables")
-    _require_keys(runtime_raw, {"profile", "workspace", "debug_host", "debug_port"}, "runtime")
+    runtime_allowed = {
+        "profile",
+        "workspace",
+        "debug_host",
+        "debug_port",
+        "scheduler",
+        "interactive_episode",
+        "autonomous_episode",
+    }
+    required_runtime = {"profile", "workspace", "debug_host", "debug_port"}
+    if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
+        raise ConfigurationError("runtime has unsupported or missing keys")
     _require_keys(soul_raw, {"path"}, "soul")
     _require_keys(logging_raw, {"level"}, "logging")
     _require_keys(storage_raw, {"data_dir"}, "storage")
@@ -378,24 +537,32 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     for role, settings in roles.items():
         if not isinstance(settings, dict):
             raise ConfigurationError(f"model role {role} must be a table")
-        _require_keys(settings, {"provider", "model", "capabilities"}, f"models.roles.{role}")
+        role_allowed = {"provider", "model", "capabilities", "endpoint"}
+        if set(settings) - role_allowed or not {"provider", "model", "capabilities"} <= set(settings):
+            raise ConfigurationError(f"models.roles.{role} has unsupported or missing keys")
         provider_id = _string(settings["provider"], f"models.roles.{role}.provider")
         if provider_id not in model_providers:
             raise ConfigurationError(f"models.roles.{role} references unknown provider")
         capabilities = settings["capabilities"]
         if not isinstance(capabilities, list) or not all(isinstance(value, str) for value in capabilities):
             raise ConfigurationError(f"models.roles.{role}.capabilities must contain strings")
+        endpoint = settings.get("endpoint", "chat_completions")
+        if endpoint not in {"chat_completions", "responses"}:
+            raise ConfigurationError(f"models.roles.{role}.endpoint is unsupported")
+        if endpoint == "responses" and "native_responses" not in capabilities:
+            raise ConfigurationError(f"models.roles.{role} responses endpoint requires native_responses")
         model_definitions[role] = ModelRoleConfig(
             provider=provider_id,
             model=_string(settings["model"], f"models.roles.{role}.model"),
             capabilities=frozenset(capabilities),
+            endpoint=endpoint,
         )
     soul_path = (root / _string(soul_raw["path"], "soul.path")).resolve()
     try:
         soul_hash = hashlib.sha256(soul_path.read_bytes()).hexdigest()
     except FileNotFoundError as error:
         raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
-    nodes, edges = _parse_nodes(_read_toml(root / "config" / "nodes.toml"), frozenset(roles))
+    nodes, edges, advancing_edges = _parse_nodes(_read_toml(root / "config" / "nodes.toml"), frozenset(roles))
     adapters, apps = _parse_adapters(_read_toml(root / "config" / "apps.toml"), root)
     capability_definitions: dict[str, CapabilityConfig] = {}
     for adapter in adapters:
@@ -407,6 +574,14 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     for node in nodes:
         if not node.capabilities <= capability_definitions.keys() | app_tools:
             raise ConfigurationError(f"node {node.id} requests unavailable capabilities")
+    scheduler_raw = runtime_raw.get("scheduler", {})
+    interactive_raw = runtime_raw.get("interactive_episode", {})
+    autonomous_raw = runtime_raw.get("autonomous_episode", {})
+    if not all(isinstance(item, dict) for item in (scheduler_raw, interactive_raw, autonomous_raw)):
+        raise ConfigurationError("runtime scheduler and episode budgets must be tables")
+    scheduler = _parse_scheduler(scheduler_raw)
+    interactive_budget = _parse_episode_budget(interactive_raw, 8, 6, 300.0, "interactive_episode")
+    autonomous_budget = _parse_episode_budget(autonomous_raw, 3, 2, 120.0, "autonomous_episode")
     return AuroraConfig(
         root=root,
         runtime=RuntimeConfig(
@@ -414,12 +589,16 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             workspace=(root / _string(runtime_raw["workspace"], "runtime.workspace")).resolve(),
             debug_host=debug_host,
             debug_port=debug_port,
+            scheduler=scheduler,
+            interactive_budget=interactive_budget,
+            autonomous_budget=autonomous_budget,
         ),
         soul_path=soul_path,
         soul_hash=soul_hash,
         logging_level=_string(logging_raw["level"], "logging.level"),
         nodes=nodes,
         edges=edges,
+        advancing_edges=advancing_edges,
         adapters=adapters,
         model_roles=frozenset(roles),
         model_definitions=model_definitions,

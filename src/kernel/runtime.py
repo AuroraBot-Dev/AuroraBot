@@ -7,6 +7,7 @@ import os
 import shutil
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -15,10 +16,12 @@ from jsonschema import ValidationError, validate
 
 from src.ai.contracts import ModelRequest, ModelResult
 from src.ai.vnext import ModelGatewayService
+from src.kernel.episodes import EpisodeSnapshot, EpisodeStatus
 from src.kernel.events import AmpEnvelope, AmpValidationError, new_amp
 from src.kernel.node import CognitiveNode, NodeContext
 from src.kernel.records import KernelRecord, RecordStatus
 from src.localhost.configuration import AuroraConfig, NodeConfig
+from src.platform.capabilities import CapabilityCatalogSnapshot, CapabilityDescriptor
 from src.utils.serialization import atomic_write_json, read_json
 
 MAX_HOP = 16
@@ -51,18 +54,45 @@ class Kernel:
         self._archive = self._workspace / "archive"
         self._record_process = self._process / "records"
         self._record_archive = self._archive / "records"
-        for directory in (self._inbox, self._process, self._archive, self._record_process, self._record_archive):
+        self._episode_process = self._process / "episodes"
+        self._episode_archive = self._archive / "episodes"
+        for directory in (
+            self._inbox,
+            self._process,
+            self._archive,
+            self._record_process,
+            self._record_archive,
+            self._episode_process,
+            self._episode_archive,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
         self._state_path = self._process / "kernel-state.json"
         self._lock = asyncio.Lock()
         self._cycle = self._load_cycle()
+        configured_capabilities = tuple(
+            CapabilityDescriptor(item.id, item.description, item.parameters_schema, item.result_mode)
+            for adapter in configuration.adapters
+            for item in adapter.capabilities
+        )
+        self._capability_catalog = CapabilityCatalogSnapshot(configured_capabilities)
         configured = {node.id for node in configuration.nodes}
         if not set(nodes) <= configured or configured != set(nodes):
             raise ValueError("Kernel nodes must exactly match enabled node configuration")
+        self._recover_interrupted_model_requests()
 
     @property
     def cycle(self) -> int:
         return self._cycle
+
+    @property
+    def capability_catalog(self) -> CapabilityCatalogSnapshot:
+        return self._capability_catalog
+
+    def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
+        """Install the startup capability snapshot before cognition begins."""
+        merged = {item.id: item for item in self._capability_catalog.capabilities}
+        merged.update({item.id: item for item in catalog.capabilities})
+        self._capability_catalog = CapabilityCatalogSnapshot(tuple(sorted(merged.values(), key=lambda item: item.id)))
 
     def _load_cycle(self) -> int:
         if not self._state_path.exists():
@@ -91,6 +121,76 @@ class Kernel:
         other_directory = self._record_process if destination.parent == self._record_archive else self._record_archive
         (other_directory / destination.name).unlink(missing_ok=True)
 
+    def _episode_path(self, episode: EpisodeSnapshot) -> Path:
+        directory = self._episode_archive if episode.terminal else self._episode_process
+        return directory / f"{episode.episode_id}.json"
+
+    def _save_episode(self, episode: EpisodeSnapshot) -> None:
+        destination = self._episode_path(episode)
+        atomic_write_json(destination, episode.to_dict())
+        other = self._episode_process if destination.parent == self._episode_archive else self._episode_archive
+        (other / destination.name).unlink(missing_ok=True)
+
+    def get_episode(self, episode_id: str) -> EpisodeSnapshot | None:
+        for directory in (self._episode_process, self._episode_archive):
+            path = directory / f"{episode_id}.json"
+            if path.exists():
+                value = read_json(path)
+                if isinstance(value, dict):
+                    return EpisodeSnapshot.from_dict(value)
+        return None
+
+    def episodes(self) -> tuple[EpisodeSnapshot, ...]:
+        result: list[EpisodeSnapshot] = []
+        for directory in (self._episode_process, self._episode_archive):
+            for path in sorted(directory.glob("*.json")):
+                value = read_json(path)
+                if isinstance(value, dict):
+                    result.append(EpisodeSnapshot.from_dict(value))
+        return tuple(result)
+
+    def _create_episode(self, record: KernelRecord, *, autonomous: bool) -> EpisodeSnapshot:
+        budget = (
+            self.configuration.runtime.autonomous_budget
+            if autonomous
+            else self.configuration.runtime.interactive_budget
+        )
+        now = datetime.now(UTC).isoformat()
+        episode = EpisodeSnapshot(
+            episode_id=record.episode_id,
+            root_record_id=record.record_id,
+            autonomous=autonomous,
+            status=EpisodeStatus.ACTIVE,
+            active_node_id=None,
+            round=0,
+            model_calls=0,
+            tool_calls=0,
+            max_model_calls=budget.max_model_calls,
+            max_tool_calls=budget.max_tool_calls,
+            max_duration_seconds=budget.max_duration_seconds,
+            started_at=now,
+            updated_at=now,
+            transcript=[{"kind": "event", "record_id": record.record_id, "amp": record.amp}],
+        )
+        self._save_episode(episode)
+        return episode
+
+    def _append_episode_item(self, episode_id: str, item: dict[str, Any]) -> EpisodeSnapshot | None:
+        episode = self.get_episode(episode_id)
+        if episode is None:
+            return None
+        episode.transcript.append(item)
+        episode.updated_at = datetime.now(UTC).isoformat()
+        self._save_episode(episode)
+        return episode
+
+    def _end_episode(self, episode_id: str, status: EpisodeStatus, reason: str) -> None:
+        episode = self.get_episode(episode_id)
+        if episode is None or episode.terminal:
+            return
+        episode.touch(status, reason=reason)
+        self._save_episode(episode)
+
     def _records(self) -> list[KernelRecord]:
         records: list[KernelRecord] = []
         for directory in (self._record_process, self._record_archive):
@@ -112,6 +212,22 @@ class Kernel:
                 if isinstance(value, dict):
                     return KernelRecord.from_dict(value)
         return None
+
+    def has_cycle_work(self) -> bool:
+        if any(self._inbox.glob("*.json")):
+            return True
+        return any(
+            record.status == RecordStatus.PENDING
+            and record.available_cycle <= self._cycle + 1
+            and AmpEnvelope.parse(record.amp).payload.type not in {"model.requested", "effect.requested"}
+            for record in self._records()
+        )
+
+    def has_pending_model_request(self) -> bool:
+        return any(
+            record.status == RecordStatus.PENDING and AmpEnvelope.parse(record.amp).payload.type == "model.requested"
+            for record in self._records()
+        )
 
     def _archive_inbox_file(self, source: Path, category: str) -> None:
         destination_dir = self._archive / "inbox" / category
@@ -157,12 +273,41 @@ class Kernel:
                 self._archive_inbox_file(path, "duplicate")
                 continue
             parent = self._effect_parent(amp)
-            record = KernelRecord.from_amp(amp, available_cycle=self._cycle, parent=parent)
+            autonomous = amp.payload.type == "system.tick"
+            resume_node_id = self._receipt_resume_node(amp, parent)
+            record = KernelRecord.from_amp(
+                amp,
+                available_cycle=self._cycle,
+                parent=parent,
+                resume_node_id=resume_node_id,
+                priority=10 if autonomous else 100,
+                episode_round=parent.episode_round if parent else 0,
+            )
             self._save_record(record)
+            if parent is None:
+                self._create_episode(record, autonomous=autonomous)
+            else:
+                self._append_episode_item(
+                    record.episode_id,
+                    {"kind": "effect_receipt", "record_id": record.record_id, "amp": record.amp},
+                )
+                if amp.payload.type == "effect.succeeded" and resume_node_id is None:
+                    self._end_episode(record.episode_id, EpisodeStatus.COMPLETED, "terminal_effect_succeeded")
             self._archive_inbox_file(path, "accepted")
             existing_message_ids.add(amp.header.message_id)
             ingested.append(record.record_id)
         return tuple(ingested)
+
+    def _receipt_resume_node(self, amp: AmpEnvelope, parent: KernelRecord | None) -> str | None:
+        if parent is None or amp.payload.type not in {"effect.succeeded", "effect.failed"}:
+            return None
+        if amp.payload.type == "effect.failed":
+            return parent.resume_node_id
+        capability = amp.payload.data.get("capability")
+        descriptor = self._capability_catalog.by_id.get(capability) if isinstance(capability, str) else None
+        if descriptor is not None and descriptor.result_mode == "terminal":
+            return None
+        return parent.resume_node_id
 
     def _effect_parent(self, amp: AmpEnvelope) -> KernelRecord | None:
         if amp.payload.type not in {"effect.succeeded", "effect.failed"}:
@@ -184,6 +329,7 @@ class Kernel:
         event_type: str,
         data: dict[str, Any],
         summary: str,
+        resume_node_id: str | None = None,
     ) -> KernelRecord:
         """Create a declared child fact that cannot run before the next cycle."""
         node = self._node_configuration(node_id)
@@ -197,13 +343,21 @@ class Kernel:
             data = {**data, "request_id": str(uuid4())}
             capability = data["capability"]
             assert isinstance(capability, str)
-            descriptor = self.configuration.capability_definitions.get(capability)
+            descriptor = self._capability_catalog.by_id.get(capability)
             if descriptor is None:
                 raise ValueError(f"unknown effect capability {capability}")
             try:
                 validate(data["parameters"], descriptor.parameters_schema)
             except ValidationError as error:
                 raise ValueError(f"effect parameters do not match {capability} schema: {error.message}") from error
+            episode = self.get_episode(parent.episode_id)
+            if episode is not None:
+                if not episode.can_request_tool():
+                    self._end_episode(parent.episode_id, EpisodeStatus.BUDGET_EXHAUSTED, "tool_budget_exhausted")
+                    raise RuntimeError("episode tool budget exhausted")
+                episode.tool_calls += 1
+                episode.touch(EpisodeStatus.WAITING_EFFECT, node_id=node_id)
+                self._save_episode(episode)
         amp = new_amp(
             event_type=event_type,
             session_id=AmpEnvelope.parse(parent.amp).payload.session_id,
@@ -212,8 +366,20 @@ class Kernel:
             source_app="kernel.node",
             source_instance=node_id,
         )
-        child = KernelRecord.from_amp(amp, available_cycle=self._cycle + 1, parent=parent, producer_node=node_id)
+        child = KernelRecord.from_amp(
+            amp,
+            available_cycle=self._cycle + 1,
+            parent=parent,
+            producer_node=node_id,
+            resume_node_id=resume_node_id,
+            priority=parent.priority,
+            episode_round=parent.episode_round,
+        )
         self._save_record(child)
+        self._append_episode_item(
+            child.episode_id,
+            {"kind": event_type, "record_id": child.record_id, "amp": child.amp},
+        )
         return child
 
     def _node_configuration(self, node_id: str) -> NodeConfig:
@@ -234,13 +400,21 @@ class Kernel:
         ready = [
             record
             for record in self._records()
-            if record.status == RecordStatus.PENDING and record.available_cycle <= self._cycle
+            if record.status == RecordStatus.PENDING
+            and record.available_cycle <= self._cycle
+            and AmpEnvelope.parse(record.amp).payload.type not in {"model.requested", "effect.requested"}
         ]
+        ready.sort(key=lambda item: (-item.priority, item.created_at, item.record_id))
         scheduled: list[str] = []
         failed: list[str] = []
         for record in ready:
             event_type = AmpEnvelope.parse(record.amp).payload.type
-            targets = self.configuration.edges.get(event_type, ())
+            configured_targets = self.configuration.edges.get(event_type, ())
+            targets = tuple(
+                record.resume_node_id if target == "@continuation" else target
+                for target in configured_targets
+                if target != "@continuation" or record.resume_node_id is not None
+            )
             if not targets:
                 record.transition(RecordStatus.ARCHIVED)
                 self._save_record(record)
@@ -249,7 +423,27 @@ class Kernel:
             self._save_record(record)
             try:
                 for target in targets:
+                    if target is None:
+                        continue
                     node_config = self._node_configuration(target)
+                    episode = self.get_episode(record.episode_id)
+                    if episode is not None and episode.terminal:
+                        continue
+                    advances = (event_type, target) in self.configuration.advancing_edges or (
+                        event_type,
+                        "@continuation",
+                    ) in self.configuration.advancing_edges
+                    if advances:
+                        record.episode_round += 1
+                        if episode is not None:
+                            episode.round += 1
+                            episode.touch(EpisodeStatus.ACTIVE, node_id=target)
+                            self._save_episode(episode)
+                    descriptors = [
+                        descriptor
+                        for capability in sorted(node_config.capabilities)
+                        if (descriptor := self._capability_catalog.by_id.get(capability)) is not None
+                    ]
                     context = NodeContext(
                         record=record,
                         soul_hash=self.configuration.soul_hash,
@@ -258,18 +452,11 @@ class Kernel:
                             "node_id": target,
                             "model_roles": sorted(node_config.model_roles),
                             "capabilities": sorted(node_config.capabilities),
-                            "capability_descriptors": [
-                                {
-                                    "id": capability,
-                                    "parameters_schema": self.configuration.capability_definitions[
-                                        capability
-                                    ].parameters_schema,
-                                }
-                                for capability in sorted(node_config.capabilities)
-                            ],
+                            "capability_descriptors": [descriptor.to_dict() for descriptor in descriptors],
                         },
                         allowed_outputs=node_config.outputs,
                         allowed_capabilities=node_config.capabilities,
+                        episode_snapshot=episode.to_dict() if episode is not None else {},
                         _publisher=self,
                         _node_id=target,
                     )
@@ -277,11 +464,137 @@ class Kernel:
                 record.transition(RecordStatus.ARCHIVED)
                 self._save_record(record)
                 scheduled.append(record.record_id)
-            except Exception as error:  # noqa: BLE001 - node failures must become auditable records.
+            except Exception as error:
                 record.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
                 self._save_record(record)
                 failed.append(record.record_id)
         return CycleResult(self._cycle, tuple(ingested), tuple(scheduled), tuple(failed))
+
+    def defer_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> KernelRecord:
+        """Publish a model request for the out-of-cycle dispatcher."""
+        episode = self.get_episode(parent.episode_id)
+        if episode is not None:
+            if not episode.can_request_model():
+                self._end_episode(parent.episode_id, EpisodeStatus.BUDGET_EXHAUSTED, "model_budget_exhausted")
+                raise RuntimeError("episode model budget exhausted")
+            episode.model_calls += 1
+            episode.touch(EpisodeStatus.WAITING_MODEL, node_id=node_id)
+            self._save_episode(episode)
+        record = self._create_model_record(
+            parent,
+            node_id,
+            "model.requested",
+            request.to_dict(),
+            resume_node_id=node_id,
+        )
+        self._append_episode_item(
+            parent.episode_id,
+            {"kind": "model.requested", "record_id": record.record_id, "request": request.to_dict()},
+        )
+        return record
+
+    def end_episode_from_node(self, parent: KernelRecord, node_id: str, outcome: str, reason: str) -> KernelRecord:
+        status = EpisodeStatus.SILENT if outcome == "silent" else EpisodeStatus.COMPLETED
+        if outcome == "cancelled":
+            status = EpisodeStatus.CANCELLED
+        elif outcome == "error":
+            status = EpisodeStatus.ERROR
+        self._end_episode(parent.episode_id, status, reason)
+        return self.publish_from_node(
+            parent,
+            node_id,
+            "episode.ended",
+            {"outcome": outcome, "reason": reason},
+            f"Episode ended: {outcome}",
+        )
+
+    async def claim_model_request(self) -> KernelRecord | None:
+        async with self._lock:
+            candidates = [
+                record
+                for record in self._records()
+                if record.status == RecordStatus.PENDING
+                and AmpEnvelope.parse(record.amp).payload.type == "model.requested"
+            ]
+            candidates.sort(key=lambda item: (-item.priority, item.created_at, item.record_id))
+            if not candidates:
+                return None
+            record = candidates[0]
+            record.transition(RecordStatus.PROCESSING)
+            self._save_record(record)
+            return record
+
+    async def execute_model_request(self, record: KernelRecord) -> KernelRecord:
+        """Execute a claimed request without holding the Kernel cycle lock."""
+        amp = AmpEnvelope.parse(record.amp)
+        try:
+            request = ModelRequest.from_dict(amp.payload.data)
+            result = await self._model_gateway.complete(request)
+        except Exception as error:
+            async with self._lock:
+                message = f"{type(error).__name__}: {error}"
+                record.transition(RecordStatus.ERROR, error=message)
+                self._save_record(record)
+                failed = self._create_model_record(
+                    record,
+                    record.producer_node or record.resume_node_id or "kernel",
+                    "model.failed",
+                    {"error": message},
+                    resume_node_id=record.resume_node_id,
+                )
+                self._append_episode_item(
+                    record.episode_id,
+                    {"kind": "model.failed", "record_id": failed.record_id, "error": message},
+                )
+                return failed
+        async with self._lock:
+            record.transition(RecordStatus.ARCHIVED)
+            self._save_record(record)
+            completed = self._create_model_record(
+                record,
+                record.producer_node or record.resume_node_id or "kernel",
+                "model.completed",
+                result.to_dict(),
+                resume_node_id=record.resume_node_id,
+            )
+            self._append_episode_item(
+                record.episode_id,
+                {"kind": "model.completed", "record_id": completed.record_id, "result": result.to_dict()},
+            )
+            return completed
+
+    def cancel_model_request(self, record: KernelRecord, reason: str) -> KernelRecord:
+        message = f"cancelled:{reason}"
+        record.transition(RecordStatus.ERROR, error=message)
+        self._save_record(record)
+        failed = self._create_model_record(
+            record,
+            record.producer_node or record.resume_node_id or "kernel",
+            "model.failed",
+            {"error": message},
+            resume_node_id=record.resume_node_id,
+        )
+        status = EpisodeStatus.BUDGET_EXHAUSTED if reason == "autonomous_daily_budget" else EpisodeStatus.CANCELLED
+        self._end_episode(record.episode_id, status, reason)
+        return failed
+
+    def _recover_interrupted_model_requests(self) -> None:
+        for record in self._records():
+            if record.status != RecordStatus.PROCESSING:
+                continue
+            amp = AmpEnvelope.parse(record.amp)
+            if amp.payload.type != "model.requested":
+                continue
+            message = "interrupted_by_restart"
+            record.transition(RecordStatus.ERROR, error=message)
+            self._save_record(record)
+            self._create_model_record(
+                record,
+                record.producer_node or record.resume_node_id or "kernel",
+                "model.failed",
+                {"error": message},
+                resume_node_id=record.resume_node_id,
+            )
 
     async def request_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> ModelResult:
         """Run an authorized model capability and retain request/outcome audit records."""
@@ -306,7 +619,13 @@ class Kernel:
         return result
 
     def _create_model_record(
-        self, parent: KernelRecord, node_id: str, event_type: str, data: dict[str, Any]
+        self,
+        parent: KernelRecord,
+        node_id: str,
+        event_type: str,
+        data: dict[str, Any],
+        *,
+        resume_node_id: str | None = None,
     ) -> KernelRecord:
         amp = new_amp(
             event_type=event_type,
@@ -316,7 +635,15 @@ class Kernel:
             source_app="kernel.model",
             source_instance=node_id,
         )
-        record = KernelRecord.from_amp(amp, available_cycle=self._cycle + 1, parent=parent, producer_node=node_id)
+        record = KernelRecord.from_amp(
+            amp,
+            available_cycle=self._cycle + 1,
+            parent=parent,
+            producer_node=node_id,
+            resume_node_id=resume_node_id,
+            priority=parent.priority,
+            episode_round=parent.episode_round,
+        )
         self._save_record(record)
         return record
 

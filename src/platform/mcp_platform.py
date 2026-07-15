@@ -13,6 +13,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from src.kernel.events import AmpEnvelope, new_amp
 from src.kernel.runtime import Kernel
 from src.localhost.configuration import AppConfig, AuroraConfig, CapabilityConfig
+from src.platform.capabilities import CapabilityCatalogSnapshot, CapabilityDescriptor
 from src.platform.local import PlatformRunResult
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
@@ -45,6 +46,7 @@ class MCPPlatform:
         self._notification_task: asyncio.Task[None] | None = None
         self._kernel: Kernel | None = None
         self._tool_result_observer = tool_result_observer
+        self._catalog = CapabilityCatalogSnapshot()
 
     def set_tool_result_observer(self, observer: ToolResultObserver | None) -> None:
         """Set the localhost-only observer for successfully completed MCP tools."""
@@ -63,10 +65,21 @@ class MCPPlatform:
         ]
         if remote_tasks:
             await asyncio.gather(*remote_tasks)
-        descriptors = self._discover_capabilities()
-        self._configuration.capability_definitions.update(descriptors)
+        self._catalog = self._discover_capabilities()
+        kernel.install_capability_catalog(self._catalog)
+        # Compatibility view for RFC 0007 callers; Kernel uses the immutable catalog above.
+        self._configuration.capability_definitions.update(
+            {
+                item.id: CapabilityConfig(item.id, item.parameters_schema, item.description, item.result_mode)
+                for item in self._catalog.capabilities
+            }
+        )
         self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
         self._started = True
+
+    @property
+    def capability_catalog(self) -> CapabilityCatalogSnapshot:
+        return self._catalog
 
     def _local_spec(self, app: AppConfig) -> MCPServerSpec:
         return MCPServerSpec(
@@ -126,8 +139,8 @@ class MCPPlatform:
         finally:
             connection.session = None
 
-    def _discover_capabilities(self) -> dict[str, CapabilityConfig]:
-        descriptors: dict[str, CapabilityConfig] = {}
+    def _discover_capabilities(self) -> CapabilityCatalogSnapshot:
+        descriptors: dict[str, CapabilityDescriptor] = {}
         for app in self._configuration.apps:
             tools = self._tools_for_app(app.package)
             discovered = {str(getattr(tool, "name", "")): tool for tool in tools}
@@ -141,8 +154,14 @@ class MCPPlatform:
                     raise RuntimeError(f"MCP tool lacks input schema: {name}")
                 if name in descriptors:
                     raise RuntimeError(f"duplicate MCP capability: {name}")
-                descriptors[name] = CapabilityConfig(name, dict(schema))
-        return descriptors
+                configured = next(item for item in app.tools if item.name == name)
+                descriptors[name] = CapabilityDescriptor(
+                    name,
+                    str(getattr(tool, "description", "") or ""),
+                    dict(schema),
+                    configured.result_mode,
+                )
+        return CapabilityCatalogSnapshot(tuple(sorted(descriptors.values(), key=lambda item: item.id)))
 
     def _tools_for_app(self, package: str) -> list[object]:
         remote = self._remote.get(package)
