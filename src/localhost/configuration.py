@@ -81,6 +81,25 @@ class EpisodeBudgetConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class DashboardBotConfig:
+    username: str
+    display_name: str
+    avatar_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardConfig:
+    host: str
+    port: int
+    database_path: Path
+    upload_dir: Path
+    max_upload_bytes: int
+    session_ttl_seconds: int
+    allowed_origins: tuple[str, ...]
+    bot: DashboardBotConfig
+
+
+@dataclass(frozen=True, slots=True)
 class NodeConfig:
     id: str
     implementation: str
@@ -163,6 +182,7 @@ class ModelLoggingConfig:
 class AuroraConfig:
     root: Path
     runtime: RuntimeConfig
+    dashboard: DashboardConfig
     soul_path: Path
     soul_hash: str
     logging_level: str
@@ -320,7 +340,6 @@ def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConf
             "url",
             "auth_env",
             "timeout_seconds",
-            "allowed_tools",
             "tool",
         }
         required = {"package", "enabled", "transport", "timeout_seconds"}
@@ -335,30 +354,18 @@ def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConf
         transport = _string(raw["transport"], "app.transport")
         if transport not in {"stdio", "streamable_http"}:
             raise ConfigurationError("app.transport must be stdio or streamable_http")
-        if "tool" in raw and "allowed_tools" in raw:
-            raise ConfigurationError("app must use either tool tables or allowed_tools, not both")
         parsed_tools: list[AppToolConfig] = []
-        if "tool" in raw:
-            tool_tables = raw["tool"]
-            if not isinstance(tool_tables, list):
-                raise ConfigurationError("app.tool must be an array of tables")
-            for tool in tool_tables:
-                if not isinstance(tool, dict) or set(tool) != {"name", "result_mode"}:
-                    raise ConfigurationError("app.tool must contain name and result_mode")
-                name = _string(tool["name"], "app.tool.name")
-                result_mode = tool["result_mode"]
-                if not name.startswith(f"{package}.") or result_mode not in {"resume", "terminal"}:
-                    raise ConfigurationError("app.tool must use the package prefix and a valid result_mode")
-                parsed_tools.append(AppToolConfig(name, cast("Literal['resume', 'terminal']", result_mode)))
-        else:
-            legacy_tools = raw.get("allowed_tools")
-            valid_tools = isinstance(legacy_tools, list) and all(
-                isinstance(item, str) and item.startswith(f"{package}.") for item in legacy_tools
-            )
-            if not valid_tools:
-                raise ConfigurationError("app tools must contain full package-prefixed tool names")
-            assert isinstance(legacy_tools, list)
-            parsed_tools.extend(AppToolConfig(item, "resume") for item in legacy_tools)
+        tool_tables = raw.get("tool")
+        if not isinstance(tool_tables, list) or not tool_tables:
+            raise ConfigurationError("enabled app.tool must be a non-empty array of tables")
+        for tool in tool_tables:
+            if not isinstance(tool, dict) or set(tool) != {"name", "result_mode"}:
+                raise ConfigurationError("app.tool must contain name and result_mode")
+            name = _string(tool["name"], "app.tool.name")
+            result_mode = tool["result_mode"]
+            if not name.startswith(f"{package}.") or result_mode not in {"resume", "terminal"}:
+                raise ConfigurationError("app.tool must use the package prefix and a valid result_mode")
+            parsed_tools.append(AppToolConfig(name, cast("Literal['resume', 'terminal']", result_mode)))
         if len({tool.name for tool in parsed_tools}) != len(parsed_tools):
             raise ConfigurationError("app tool names must be unique")
         timeout = raw["timeout_seconds"]
@@ -460,11 +467,68 @@ def _parse_episode_budget(
     return EpisodeBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
 
 
+def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
+    _require_keys(
+        raw,
+        {
+            "host",
+            "port",
+            "database_path",
+            "upload_dir",
+            "max_upload_bytes",
+            "session_ttl_seconds",
+            "allowed_origins",
+            "bot",
+        },
+        "dashboard",
+    )
+    host = _string(raw["host"], "dashboard.host")
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise ConfigurationError("dashboard must bind to loopback")
+    port = raw["port"]
+    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+        raise ConfigurationError("dashboard.port must be a valid port")
+    max_upload_bytes = raw["max_upload_bytes"]
+    session_ttl_seconds = raw["session_ttl_seconds"]
+    if not isinstance(max_upload_bytes, int) or isinstance(max_upload_bytes, bool) or max_upload_bytes <= 0:
+        raise ConfigurationError("dashboard.max_upload_bytes must be a positive integer")
+    if not isinstance(session_ttl_seconds, int) or isinstance(session_ttl_seconds, bool) or session_ttl_seconds <= 0:
+        raise ConfigurationError("dashboard.session_ttl_seconds must be a positive integer")
+    origins = raw["allowed_origins"]
+    if not isinstance(origins, list) or not origins or not all(isinstance(item, str) and item for item in origins):
+        raise ConfigurationError("dashboard.allowed_origins must be a non-empty string array")
+    bot_raw = raw["bot"]
+    if not isinstance(bot_raw, dict):
+        raise ConfigurationError("dashboard.bot must be a table")
+    _require_keys(bot_raw, {"username", "display_name", "avatar_url"}, "dashboard.bot")
+    avatar_url = bot_raw["avatar_url"]
+    if not isinstance(avatar_url, str):
+        raise ConfigurationError("dashboard.bot.avatar_url must be a string")
+    database_path = (root / _string(raw["database_path"], "dashboard.database_path")).resolve()
+    upload_dir = (root / _string(raw["upload_dir"], "dashboard.upload_dir")).resolve()
+    if not database_path.is_relative_to(root) or not upload_dir.is_relative_to(root):
+        raise ConfigurationError("dashboard data paths must stay within the project root")
+    return DashboardConfig(
+        host=host,
+        port=port,
+        database_path=database_path,
+        upload_dir=upload_dir,
+        max_upload_bytes=max_upload_bytes,
+        session_ttl_seconds=session_ttl_seconds,
+        allowed_origins=tuple(origins),
+        bot=DashboardBotConfig(
+            username=_string(bot_raw["username"], "dashboard.bot.username"),
+            display_name=_string(bot_raw["display_name"], "dashboard.bot.display_name"),
+            avatar_url=avatar_url or None,
+        ),
+    )
+
+
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     """Load the selected RFC 0002 configuration snapshot."""
     root = root.resolve()
     base = _read_toml(root / "config" / "aurora.toml")
-    _require_keys(base, {"runtime", "soul", "logging", "storage", "models"}, "aurora.toml")
+    _require_keys(base, {"runtime", "dashboard", "soul", "logging", "storage", "models"}, "aurora.toml")
     runtime_raw = base["runtime"]
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError("runtime must be a table")
@@ -475,13 +539,21 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     profile_path = root / "config" / "profiles" / f"{selected_profile}.toml"
     if profile_path.exists():
         merged = _merge(base, _read_toml(profile_path))
-    _require_keys(merged, {"runtime", "soul", "logging", "storage", "models"}, "merged aurora config")
+    _require_keys(
+        merged,
+        {"runtime", "dashboard", "soul", "logging", "storage", "models"},
+        "merged aurora config",
+    )
     runtime_raw = merged["runtime"]
+    dashboard_raw = merged["dashboard"]
     soul_raw = merged["soul"]
     logging_raw = merged["logging"]
     storage_raw = merged["storage"]
     models_raw = merged["models"]
-    if not all(isinstance(value, dict) for value in (runtime_raw, soul_raw, logging_raw, storage_raw, models_raw)):
+    if not all(
+        isinstance(value, dict)
+        for value in (runtime_raw, dashboard_raw, soul_raw, logging_raw, storage_raw, models_raw)
+    ):
         raise ConfigurationError("aurora top-level sections must be tables")
     runtime_allowed = {
         "profile",
@@ -593,6 +665,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,
         ),
+        dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), root),
         soul_path=soul_path,
         soul_hash=soul_hash,
         logging_level=_string(logging_raw["level"], "logging.level"),

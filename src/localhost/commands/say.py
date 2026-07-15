@@ -19,7 +19,7 @@ async def say_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str
         event_type="message.received",
         session_id="local:console",
         summary=message,
-        data={"text": message},
+        data={"text": message, "reply_capability": "org.aurora.console.send_message"},
         source_app="localhost.console",
         source_instance="default",
     )

@@ -49,7 +49,7 @@ enabled = true   # language server tools; servers launch lazily when used
 [skills]
 # paths = ["~/my-skills", "../shared/skills"]   # extra custom skill roots
 # excluded_paths = ["~/.agents/skills"]   # hide convention roots without deleting folders
-# max_depth = 3   # nested scan depth; set 1 for legacy root-only discovery
+# max_depth = 3   # nested scan depth; set 1 for flat root-only discovery
 # disabled_skills = ["review"]   # hide noisy or unwanted skills
 
 [permissions]

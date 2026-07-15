@@ -23,6 +23,20 @@ workspace = "data/kernel"
 debug_host = "127.0.0.1"
 debug_port = 8765
 
+[dashboard]
+host = "127.0.0.1"
+port = 8000
+database_path = "data/dashboard/chat.sqlite3"
+upload_dir = "data/dashboard/uploads"
+max_upload_bytes = 67108864
+session_ttl_seconds = 604800
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+[dashboard.bot]
+username = "aurorabot"
+display_name = "AuroraBot"
+avatar_url = ""
+
 [soul]
 path = "config/prompts/SOUL.md"
 

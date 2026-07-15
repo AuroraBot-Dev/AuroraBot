@@ -12,11 +12,13 @@ from src.ai.vnext import ModelGatewayService
 from src.config import AuroraConfig, load_config
 from src.kernel.events import AmpEnvelope, new_amp
 from src.kernel.runtime import CycleResult, Kernel
+from src.localhost.chat import ChatService
 from src.localhost.scheduler import CognitiveScheduler
 from src.nodes.decide import DecideNode
 from src.nodes.fast_gate import FastGateNode
 from src.nodes.model_decide import ModelDecideNode
 from src.nodes.native_agent import NativeAgentNode
+from src.platform.dashboard import DashboardPlatform
 from src.platform.local import LocalTestPlatform
 from src.platform.mcp_platform import MCPPlatform
 from src.utils.log_utils import configure_logging, get_logger
@@ -32,6 +34,8 @@ class AuroraRuntime:
     kernel: Kernel
     platform: LocalTestPlatform
     mcp_platform: MCPPlatform
+    dashboard_platform: DashboardPlatform
+    chat: ChatService
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _started: bool = field(default=False, init=False, repr=False)
     _console_messages: list[str] = field(default_factory=list, init=False, repr=False)
@@ -58,12 +62,16 @@ class AuroraRuntime:
             if adapter.implementation == "src.platform.local:LocalTestPlatform"
             for capability in adapter.capabilities
         )
+        chat = ChatService(configuration.dashboard)
         runtime = cls(
             configuration,
             Kernel(configuration, enabled_nodes, ModelGatewayService(configuration)),
             LocalTestPlatform(test_capabilities),
             MCPPlatform(configuration),
+            DashboardPlatform(chat.deliver_bot_reply),
+            chat,
         )
+        chat.bind_amp_submitter(runtime.submit_amp)
         runtime.mcp_platform.set_tool_result_observer(runtime._observe_mcp_result)
         runtime._scheduler = CognitiveScheduler(
             configuration.runtime.workspace / "process" / "scheduler-state.json",
@@ -80,6 +88,7 @@ class AuroraRuntime:
 
     async def _ensure_started(self) -> None:
         if not self._started:
+            await self.chat.start()
             logger.info("platform startup started apps=%d", len(self.configuration.apps))
             await self.mcp_platform.start(self.kernel)
             self._started = True
@@ -87,6 +96,10 @@ class AuroraRuntime:
                 "platform startup completed capabilities=%d",
                 len(self.kernel.capability_catalog.capabilities),
             )
+
+    async def start(self) -> None:
+        """Initialize chat and Platform resources without starting the scheduler loop."""
+        await self._ensure_started()
 
     async def submit_amp(self, value: object) -> str:
         await self._ensure_started()
@@ -113,9 +126,12 @@ class AuroraRuntime:
             await self._ensure_started()
             result: CycleResult = await self.kernel.run_cycle()
             platform_result = await self.platform.execute_pending_effects(self.kernel)
+            dashboard_result = await self.dashboard_platform.execute_pending_effects(self.kernel)
             mcp_result = await self.mcp_platform.execute_pending_effects(self.kernel)
             response = result.to_dict()
-            response["platform_receipts_emitted"] = platform_result.receipts_emitted + mcp_result.receipts_emitted
+            response["platform_receipts_emitted"] = (
+                platform_result.receipts_emitted + dashboard_result.receipts_emitted + mcp_result.receipts_emitted
+            )
             self._ensure_model_dispatcher()
             if self._scheduler is not None:
                 self._scheduler.reconcile(self.kernel.episodes())

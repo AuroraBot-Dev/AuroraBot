@@ -21,7 +21,7 @@ _RUN_CONSOLE = ["uv", "run", "python", "-m", "src.localhost.cli", "console"]
 _RUN_COMBINED = ["uv", "run", "python", "-m", "src.localhost.cli"]
 
 
-# RFC 0007 compatibility helpers. The default command no longer uses a second process.
+# Process helpers used by the explicit serve and console subcommands.
 def _popen_kwargs() -> dict[str, Any]:
     kwargs: dict[str, Any] = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if os.name == "nt":

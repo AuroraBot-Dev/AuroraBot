@@ -6,12 +6,16 @@ import pytest
 
 from src.localhost.configuration import ConfigurationError, load_configuration
 
+_DASHBOARD_PORT = 8000
+
 
 def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     configuration = load_configuration(project_root)
 
     assert configuration.runtime.profile == "test"
     assert configuration.runtime.workspace == project_root / "data" / "kernel"
+    assert configuration.dashboard.port == _DASHBOARD_PORT
+    assert configuration.dashboard.database_path == project_root / "data" / "dashboard" / "chat.sqlite3"
     assert configuration.soul_hash
     assert configuration.edges == {"message.received": ("builtin.decide",)}
     assert configuration.adapters[0].capabilities[0].id == "org.aurora.console.send_message"
@@ -25,6 +29,23 @@ def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
 
     with pytest.raises(ConfigurationError, match="loopback"):
         load_configuration(project_root, "prod")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ('[dashboard]\nhost = "127.0.0.1"', '[dashboard]\nhost = "0.0.0.0"', "loopback"),
+        ("port = 8000", "port = 70000", "valid port"),
+        ("max_upload_bytes = 67108864", "max_upload_bytes = 0", "positive integer"),
+        ('database_path = "data/dashboard/chat.sqlite3"', 'database_path = "../chat.sqlite3"', "project root"),
+    ],
+)
+def test_rejects_invalid_dashboard_configuration(project_root: Path, old: str, new: str, message: str) -> None:
+    config = project_root / "config" / "aurora.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match=message):
+        load_configuration(project_root)
 
 
 def test_rejects_unknown_profile_configuration(project_root: Path) -> None:

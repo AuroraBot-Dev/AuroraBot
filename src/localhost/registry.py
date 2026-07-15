@@ -1,4 +1,4 @@
-"""Declarative registry for the layered vNext localhost command shell."""
+"""Declarative registry for the layered localhost command shell."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class ConsoleCommand:
 
 
 def command_specs() -> tuple[ConsoleCommand, ...]:
-    """Return the command set without importing legacy localhost command modules."""
+    """Return the command set exposed by the local developer shell."""
     from src.localhost.commands.core import cycle_command, help_command, record_command, status_command
     from src.localhost.commands.emit import event_command
     from src.localhost.commands.say import say_command

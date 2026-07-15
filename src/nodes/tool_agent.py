@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from src.kernel.node import NodeContext
 
 _ESCALATE_TOOL = "aurora.cognition.escalate"
+_REPLY_CAPABILITIES = {
+    "org.aurora.console.send_message",
+    "org.aurora.dashboard.send_message",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +233,7 @@ class SerialToolAgentNode:
 
     def _tools(self, context: NodeContext) -> tuple[ToolDefinition, ...]:
         descriptors = context.configuration_snapshot.get("capability_descriptors", [])
+        reply_capability = self._reply_capability(context)
         tools = [
             ToolDefinition(
                 str(item["id"]),
@@ -237,6 +242,7 @@ class SerialToolAgentNode:
             )
             for item in descriptors
             if isinstance(item, dict)
+            and (str(item.get("id")) not in _REPLY_CAPABILITIES or str(item.get("id")) == reply_capability)
         ]
         if self.policy.may_escalate:
             tools.append(
@@ -252,3 +258,21 @@ class SerialToolAgentNode:
                 )
             )
         return tuple(tools)
+
+    @staticmethod
+    def _reply_capability(context: NodeContext) -> str:
+        transcript = context.episode_snapshot.get("transcript", [])
+        if isinstance(transcript, list):
+            for item in transcript:
+                if not isinstance(item, dict) or item.get("kind") != "event":
+                    continue
+                amp = item.get("amp")
+                if not isinstance(amp, dict):
+                    continue
+                payload = amp.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                data = payload.get("data")
+                if isinstance(data, dict) and data.get("reply_capability") in _REPLY_CAPABILITIES:
+                    return str(data["reply_capability"])
+        return "org.aurora.console.send_message"

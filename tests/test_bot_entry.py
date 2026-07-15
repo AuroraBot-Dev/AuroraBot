@@ -27,6 +27,9 @@ class FakeRuntime:
     async def shutdown(self) -> None:
         self.shutdown_called = True
 
+    async def start(self) -> None:
+        return None
+
 
 def test_run_bot_enters_loop_and_always_shuts_down(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     runtime = FakeRuntime()
@@ -39,10 +42,38 @@ def test_run_bot_enters_loop_and_always_shuts_down(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(bot.AuroraRuntime, "create", create)
     stop = asyncio.Event()
 
-    asyncio.run(bot.run_bot(tmp_path, "dev", stop_event=stop))
+    asyncio.run(bot.run_bot(tmp_path, "dev", stop_event=stop, headless=True))
 
     assert captured == {"root": tmp_path.resolve(), "profile": "dev"}
     assert runtime.received_stop is stop
+    assert runtime.shutdown_called
+
+
+def test_run_bot_starts_dashboard_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = FakeRuntime()
+    captured: dict[str, object] = {}
+
+    def create(root: Path, profile: str | None) -> FakeRuntime:
+        captured.update(root=root, profile=profile)
+        return runtime
+
+    async def run_dashboard(candidate: FakeRuntime, stop: asyncio.Event) -> None:
+        captured.update(runtime=candidate, stop=stop)
+        stop.set()
+
+    monkeypatch.setattr(bot.AuroraRuntime, "create", create)
+    monkeypatch.setattr(bot, "_run_dashboard", run_dashboard)
+    stop = asyncio.Event()
+
+    asyncio.run(bot.run_bot(tmp_path, stop_event=stop))
+
+    assert captured == {
+        "root": tmp_path.resolve(),
+        "profile": None,
+        "runtime": runtime,
+        "stop": stop,
+    }
+    assert runtime.received_stop is None
     assert runtime.shutdown_called
 
 
@@ -51,3 +82,8 @@ def test_bot_defaults_to_its_project_root() -> None:
 
     assert arguments.root == Path(bot.__file__).resolve().parent
     assert arguments.profile is None
+    assert not arguments.headless
+
+
+def test_bot_accepts_headless_mode() -> None:
+    assert bot._parse_args(["--headless"]).headless

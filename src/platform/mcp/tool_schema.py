@@ -1,7 +1,7 @@
 """MCP Tool schema 转换工具。
 
 提供 MCP Tool 到 OpenAI-compatible tool schema 的转换，
-以及到 prompt text 的降级转换，供 Externalizer 迁移期使用。
+以及用于诊断和文本展示的 prompt text 表示。
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
@@ -62,7 +62,7 @@ def mcp_tool_to_openai_tool(tool: object, *, server_name: str) -> dict[str, obje
 def mcp_tools_to_prompt_text(tools: Sequence[object], *, server_prefix: str = "") -> str:
     """将 MCP Tool 列表转为人类可读的指令文本。
 
-    用于迁移期 Externalizer 还能以 prompt text 方式获得工具上下文。
+    用于调试界面或不发起模型调用的文本展示。
 
     Args:
         tools: MCP Tool 对象序列。

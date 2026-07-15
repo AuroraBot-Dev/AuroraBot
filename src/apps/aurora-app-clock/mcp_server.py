@@ -1,4 +1,4 @@
-"""Clock MCP Server —— 通过 stdio 与 Brain 通信。
+"""Clock MCP Server —— 通过 stdio 与 AuroraBot Platform 通信。
 
 提供时钟、闹钟、定时器等工具。
 所有日志输出走 stderr，stdout 只输出 MCP JSON-RPC 消息。

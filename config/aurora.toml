@@ -1,4 +1,4 @@
-# AuroraBot vNext 的跨环境默认配置。
+# AuroraBot 的跨环境默认配置。
 # 结构性配置只使用 TOML；密钥由本文件引用的环境变量提供。
 
 [runtime]
@@ -26,6 +26,20 @@ max_duration_seconds = 300.0
 max_model_calls = 3
 max_tool_calls = 2
 max_duration_seconds = 120.0
+
+[dashboard]
+host = "127.0.0.1"
+port = 8000
+database_path = "data/dashboard/chat.sqlite3"
+upload_dir = "data/dashboard/uploads"
+max_upload_bytes = 67108864
+session_ttl_seconds = 604800
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+[dashboard.bot]
+username = "aurorabot"
+display_name = "AuroraBot"
+avatar_url = ""
 
 [soul]
 path = "config/prompts/SOUL.md"

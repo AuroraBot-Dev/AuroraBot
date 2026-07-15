@@ -19,13 +19,14 @@
 | RFC | 状态 | 主题 |
 | --- | --- | --- |
 | [0000](0000-rfc-process.md) | 已接受 | RFC 过程与规范语言 |
-| [0001](0001-architecture.md) | 已接受 | 架构边界与最小因果闭环 |
+| [0001](0001-architecture.md) | 已接受 | 架构边界与因果闭环 |
 | [0002](0002-configuration.md) | 已接受 | TOML 主配置与 JSON 数据边界 |
 | [0003](0003-event-contract.md) | 已接受 | AMP、Kernel record、周期与效果回执 |
 | [0004](0004-plugin-contract.md) | 已接受 | 节点、平台适配器与应用扩展 |
 | [0005](0005-model-gateway.md) | 已接受 | 模型角色、能力协商与原生响应 |
-| [0006](0006-local-debug-api.md) | 已接受 | 本地运行器与开发调试 HTTP API |
-| [0007](0007-local-console-and-compatibility.md) | 已接受 | 本地控制台与共享配置门面 |
+| [0006](0006-local-debug-api.md) | 已接受 | 本地运行用例与开发调试 HTTP API |
+| [0007](0007-local-console-and-config-facade.md) | 已接受 | 本地控制台与共享配置门面 |
 | [0008](0008-first-cognitive-loop.md) | 已接受 | 首轮认知图、Episode 与主动节律 |
-| [0009](0009-bot-loop-entry.md) | 已接受 | 常驻无头 Bot 循环入口 |
-| [0010](0010-current-project-baseline.md) | 已接受 | 当前项目基线与历史归档边界 |
+| [0009](0009-bot-loop-entry.md) | 已接受 | 常驻 Bot 组合入口 |
+| [0010](0010-dashboard-chat.md) | 已接受 | Dashboard 聊天适配与本地聊天室 |
+| [0011](0011-current-project-baseline.md) | 已接受 | 当前项目基线与源码归档边界 |

@@ -1,76 +1,32 @@
-# 时钟 (aurora-app-clock)
+# Clock MCP 应用
 
-**包名**: `org.aurora.clock`
+包名：`org.aurora.clock`
 
-**版本**: 1.2.0
+Clock 是内建 stdio MCP 应用，经 Platform 能力目录接入 AuroraBot。启用状态、启动命令、工具 allowlist 与
+`result_mode` 只由根目录 `config/apps.toml` 声明；所有 Clock 工具当前均为 `resume`，执行成功或失败后都会恢复
+发起它的 Episode。
 
-**最低 Brain 版本**: >=5.0.0
+## 工具
 
-提供时间查询、定时闹钟和倒计时计时器功能。
+| 完整工具名 | 参数 | 结果 |
+| --- | --- | --- |
+| `org.aurora.clock.get_current_time` | `fmt: str = "%Y-%m-%d %H:%M:%S"` | 格式化的本地时间字符串 |
+| `org.aurora.clock.set_alarm` | `time_str: str`, `label: str = ""` | 闹钟 ID、触发时间与状态 |
+| `org.aurora.clock.set_timer` | `seconds: int`, `label: str = ""` | 计时器 ID、触发时间与状态 |
+| `org.aurora.clock.list_alarms` | 无 | 当前闹钟和计时器列表 |
+| `org.aurora.clock.cancel_alarm` | `alarm_id: str` | 是否成功取消 |
 
----
+`set_alarm` 的 `time_str` 使用 `HH:MM` 24 小时格式；`set_timer` 的 `seconds` 必须为正整数。闹钟和计时器触发时，
+应用通过 MCP 日志通知发送 `org.aurora.clock.alarm_triggered` 或 `org.aurora.clock.timer_triggered`，Platform 将其
+归一化为新的 AMP 环境事件。
 
-## 指令
+## 本地启动
 
-### `get_current_time` -- 获取当前时间
+通常由 Platform 按 `config/apps.toml` 自动启动。单独调试 stdio server：
 
-无参数。
-
-| 返回字段       | 类型   | 说明                               |
-| -------------- | ------ | ---------------------------------- |
-| `current_time` | string | 当前时间, 格式 YYYY-MM-DD HH:MM:SS |
-
-### `set_alarm` -- 设定闹钟
-
-设定一个在未来**绝对时间**触发的闹钟。支持一次性或每天重复。
-
-| 参数        | 类型   | 必填 | 说明                                                                               |
-| ----------- | ------ | ---- | ---------------------------------------------------------------------------------- |
-| `time_text` | string | 是   | 绝对时间描述, 如 "每天 07:30 叫我起床"、"明天 14:00 开会"、"2026-05-27 14:00 提醒" |
-
-| 返回字段     | 类型   | 说明                        |
-| ------------ | ------ | --------------------------- |
-| `alarm_id`   | string | 闹钟 ID                     |
-| `status`     | string | 状态                        |
-| `trigger_at` | string | 触发时间                    |
-| `repeat`     | string | 重复模式, `daily` 或 `none` |
-
-### `set_timer` -- 设定倒计时
-
-设定一个**相对时长**的倒计时器, 到时提醒。适用于 "X分钟后/小时后做某事" 的场景。
-
-| 参数        | 类型   | 必填 | 说明                                                |
-| ----------- | ------ | ---- | --------------------------------------------------- |
-| `time_text` | string | 是   | 相对时长描述, 如 "5分钟后"、"30分钟后提醒我"、"600" |
-
-| 返回字段   | 类型   | 说明           |
-| ---------- | ------ | -------------- |
-| `timer_id` | string | 计时器 ID      |
-| `status`   | string | 状态           |
-| `seconds`  | number | 解析得到的秒数 |
-
-### `list_alarms` -- 查看所有闹钟/计时器
-
-无参数。
-
-| 返回字段 | 类型   | 说明                                                              |
-| -------- | ------ | ----------------------------------------------------------------- |
-| `items`  | array  | 闹钟和计时器列表, 含 kind/message/status/repeat/remaining_seconds |
-| `count`  | number | 总数                                                              |
-
----
-
-## 使用
-
-在 `config.yml` 的 `apps` 节点下添加或启用 `clock`:
-
-```yaml
-apps:
-  clock:
-    enabled: true
-    startup: {}
-  # //其他应用//
+```powershell
+Set-Location src/apps/aurora-app-clock
+uv run python mcp_server.py
 ```
 
-- `enabled: true` -- 启用该应用
-- `startup: {}` -- 启动参数, 时钟应用无需额外启动配置
+stdout 只用于 MCP JSON-RPC，诊断日志写入 stderr。能力发现结果必须与 TOML allowlist 完全一致，否则运行时启动失败。

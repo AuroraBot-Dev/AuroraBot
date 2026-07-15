@@ -1,6 +1,6 @@
-"""MCP Server 规范定义。
+"""MCP Server 启动规范。
 
-由一个 App 的 manifest.yaml + apps/config.yml 合并得出完整启动配置。
+由已校验的 ``config/apps.toml`` App 配置构造。
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
@@ -15,12 +15,12 @@ from pathlib import Path
 class MCPServerSpec:
     """MCP Server 的完整描述。
 
-    由 manifest.yaml + apps/config.yml 合并得出。
-    transport 第一期只允许 ``stdio``；遇到其他值抛出 ValueError。
+    本地进程管理只接受 ``stdio``；远程 Streamable HTTP 由 ClientManager
+    直接连接，不创建本地 ServerSpec。
     """
 
     key: str
-    """全局唯一标识，优先使用 manifest package 值。"""
+    """全局唯一标识，使用 App package。"""
 
     package: str
     """Python 包名，如 ``org.aurora.weather``。"""
@@ -35,7 +35,7 @@ class MCPServerSpec:
     """App 目录路径。"""
 
     transport: str = "stdio"
-    """传输方式。一期只支持 ``stdio``。"""
+    """本地进程传输方式，只支持 ``stdio``。"""
 
     command: list[str] = field(default_factory=list)
     """启动命令，如 ``["uv", "run", "python", "-m", "apps.aurora-app-diary.mcp_server"]``。"""

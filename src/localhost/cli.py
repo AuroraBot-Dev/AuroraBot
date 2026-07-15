@@ -1,4 +1,4 @@
-"""Local runner command; deliberately separate from the frozen root bot.py."""
+"""Local console and loopback debug API runner."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import uvicorn
 
 from src.config import load_config
-from src.localhost.api import create_app
+from src.dashboard.api import create_app
 from src.localhost.runtime import AuroraRuntime
 from src.localhost.shell import run_console
 from src.utils.log_utils import get_logger
@@ -21,14 +21,14 @@ async def _run_combined(root: Path, profile: str | None) -> None:
     runtime = AuroraRuntime.create(root, profile)
     logger.info(
         "combined localhost mode starting host=%s port=%d profile=%s",
-        runtime.configuration.runtime.debug_host,
-        runtime.configuration.runtime.debug_port,
+        runtime.configuration.dashboard.host,
+        runtime.configuration.dashboard.port,
         runtime.configuration.runtime.profile,
     )
     config = uvicorn.Config(
         create_app(root, profile, runtime=runtime, manage_runtime=False),
-        host=runtime.configuration.runtime.debug_host,
-        port=runtime.configuration.runtime.debug_port,
+        host=runtime.configuration.dashboard.host,
+        port=runtime.configuration.dashboard.port,
         log_level=runtime.configuration.logging_level.lower(),
     )
     server = uvicorn.Server(config)
@@ -43,7 +43,7 @@ async def _run_combined(root: Path, profile: str | None) -> None:
 
 def main() -> None:
     """Start the developer-only loopback HTTP server."""
-    parser = argparse.ArgumentParser(description="Run AuroraBot vNext locally")
+    parser = argparse.ArgumentParser(description="Run AuroraBot locally")
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--profile")
     subcommands = parser.add_subparsers(dest="command")
@@ -60,14 +60,14 @@ def main() -> None:
         return
     logger.info(
         "debug API serve mode selected host=%s port=%d profile=%s",
-        configuration.runtime.debug_host,
-        configuration.runtime.debug_port,
+        configuration.dashboard.host,
+        configuration.dashboard.port,
         configuration.runtime.profile,
     )
     uvicorn.run(
         create_app(arguments.root, arguments.profile),
-        host=configuration.runtime.debug_host,
-        port=configuration.runtime.debug_port,
+        host=configuration.dashboard.host,
+        port=configuration.dashboard.port,
         log_level=configuration.logging_level.lower(),
     )
 

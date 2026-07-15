@@ -1,1 +1,1 @@
-"""AuroraBot vNext packages."""
+"""AuroraBot packages."""

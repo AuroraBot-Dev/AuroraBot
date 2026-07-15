@@ -1,9 +1,8 @@
-"""The single public configuration entry point for AuroraBot vNext.
+"""The public configuration entry point for AuroraBot.
 
 Structural configuration is loaded exclusively from RFC 0002 TOML files.  The
-``Config`` facade retains the small set of path and model aliases needed by
-extracted legacy modules, but those modules are not enabled in the vNext
-runtime unless a later accepted RFC explicitly integrates them.
+``Config`` facade exposes a small read-only set of shared paths and model
+aliases for independent utility and Provider components.
 """
 
 from __future__ import annotations
@@ -13,20 +12,19 @@ from pathlib import Path
 from src.localhost.configuration import AuroraConfig, load_configuration
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_COMPATIBILITY_EMBEDDING_MODEL = "openai/text-embedding-3-small"
+_DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
 
 def load_config(root: Path | None = None, profile: str | None = None) -> AuroraConfig:
-    """Load one validated, immutable vNext configuration snapshot."""
+    """Load one validated, immutable configuration snapshot."""
     return load_configuration(root or PROJECT_ROOT, profile)
 
 
 class Config:
-    """Compatibility facade backed by the validated vNext TOML snapshot.
+    """Read-only facade backed by the validated TOML snapshot.
 
-    New code should accept an :class:`AuroraConfig` snapshot explicitly.  This
-    class exists for extracted code that previously imported ``src.config``;
-    it never reads structural values from environment variables.
+    Domain services should accept an :class:`AuroraConfig` snapshot explicitly.
+    This facade never reads structural values from environment variables.
     """
 
     PROJECT_ROOT: Path
@@ -72,11 +70,9 @@ class Config:
         roles = {role: f"{settings.provider}/{settings.model}" for role, settings in snapshot.model_definitions.items()}
         cls.LLM_GATEWAY_FAST_MODEL = roles.get("fast", "")
         cls.LLM_GATEWAY_QUALITY_MODEL = roles.get("quality", "")
-        # RFC 0005 is still a draft, while the extracted gateway requires
-        # these two legacy roles merely to initialize.  They remain outside
-        # the vNext runtime and must not be treated as declared node access.
+        # Shared aliases do not authorize Node access to undeclared roles.
         cls.LLM_GATEWAY_MULTIMODAL_MODEL = roles.get("multimodal", cls.LLM_GATEWAY_QUALITY_MODEL)
-        cls.LLM_GATEWAY_EMBEDDING_MODEL = roles.get("embedding", _COMPATIBILITY_EMBEDDING_MODEL)
+        cls.LLM_GATEWAY_EMBEDDING_MODEL = roles.get("embedding", _DEFAULT_EMBEDDING_MODEL)
         cls.LLM_GATEWAY_RERANKER_MODEL = roles.get("reranker", "")
         cls.LLM_GATEWAY_ENABLE_LOGGING_QUERIES = snapshot.model_logging.log_queries
         cls.LLM_GATEWAY_ENABLE_LOGGING_RESPONSES = snapshot.model_logging.log_responses
@@ -85,12 +81,12 @@ class Config:
 
     @classmethod
     def snapshot(cls) -> AuroraConfig:
-        """Return the immutable configuration backing this compatibility view."""
+        """Return the immutable configuration backing this shared view."""
         return cls._snapshot
 
     @classmethod
     def ensure_dirs(cls) -> None:
-        """Create non-Kernel compatibility storage directories when needed."""
+        """Create non-Kernel storage directories used by independent components."""
         for path in (
             cls.LOG_DIR,
             cls.APP_DATA_DIR,

@@ -10,18 +10,18 @@
 ## 已确认决策
 
 - 节点必须自包含，声明输入事件、允许输出、所需能力和配置校验规则。
-- 节点只能通过 Kernel 提供的 API 操作；不得直接写工作区、调用平台私有 Client 或依赖 `legacy/`。
+- 节点只能通过 Kernel 提供的 API 操作；不得直接写工作区或调用平台私有 Client。
 - 平台适配器负责生态私有协议与 AMP 之间的归一化，以及已授权效果的执行。
 - 原生应用可以实现 AMP-MCP；它们经 Platform 接入，不绕过 Platform 直接影响 Kernel。
 - 每个节点、应用和适配器必须在 TOML 中显式启用；发现或安装不得自动加入运行时。
 - MCP 效果能力使用完整工具名 `<package>.<tool>`。发现的工具必须属于 `apps.toml` 中声明的 package 和 allowlist；Platform 是唯一执行 `effect.requested` 的一层。
-- 运行时 App 配置只来自 TOML。YAML manifest 仅可作为迁移参考，不能参与 vNext 发现、启用或路由。
+- 运行时 App 配置只来自 TOML；YAML manifest 不参与发现、启用或路由。
 - 支持内建 stdio 与外部 HTTPS Streamable HTTP MCP。远程 Bearer token 仅由显式 `auth_env` 引用。
 - 本地交互终端是内建应用 `org.aurora.console`。它以 `org.aurora.console.send_message` 请求文本输出；Platform 将工具结果交给 localhost 输出队列，交互 shell 在周期完成后呈现，Kernel 只保留请求与 AMP 回执。
 
-## 待定
+## 扩展边界
 
-- Python entry point 组名和签名/来源验证留给后续 RFC；首版不自动发现第三方 Python 插件。
+- 第三方 Python 插件自动发现、entry point 组名和签名/来源验证不属于当前契约，须由后续 RFC 定义。
 
 ## 验收标准
 

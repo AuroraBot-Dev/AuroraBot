@@ -9,8 +9,8 @@ RFC 0001 的单节点最小闭环与 RFC 0005 的规范化模型调用完成了�
 Kernel 周期内等待模型、依赖模型输出 JSON 决策，并且只能由开发者手动推进周期。它不能表达原生
 Tool Call、跨周期工具续跑、复杂度级联或无外界输入时的自主认知。
 
-本 RFC 部分取代 RFC 0001 的“最小运行图”和“周期与自环”首版条款，并取代 RFC 0005 中
-“首版 LiteLLM 适配器拒绝 native”的限制。未被本 RFC 改写的模块边界、AMP、配置、效果和模型
+本 RFC 取代 RFC 0001 的“最小运行图”和“周期与自环”初始条款，并取代 RFC 0005 中
+“LiteLLM 适配器拒绝 native”的限制。未被本 RFC 改写的模块边界、AMP、配置、效果和模型
 审计契约继续有效。
 
 ## 决策
@@ -43,8 +43,8 @@ Kernel 在 `process/episodes/` 维护原子 JSON `EpisodeSnapshot`，包含根�
 model dispatcher 执行请求并发布 `model.completed` 或 `model.failed`。模型调用是 Kernel 授权的内部
 能力，不是 Platform effect。
 
-运行时重启后，遗留的 `PROCESSING model.requested` 必须失败为 `interrupted_by_restart`，默认不重试。
-自主模型请求使用 `on_external_activity` 取消策略；交互请求默认 `never`。全局首版模型并发为一，交互
+运行时重启后，残留的 `PROCESSING model.requested` 必须失败为 `interrupted_by_restart`，默认不重试。
+自主模型请求使用 `on_external_activity` 取消策略；交互请求默认 `never`。全局模型并发为一，交互
 请求优先于自主请求。
 
 ### 双模型通道与 Tool IR
@@ -54,7 +54,7 @@ model dispatcher 执行请求并发布 `model.completed` 或 `model.failed`。�
 
 - `chat_completions` 通道将统一 Tool IR 映射为 Provider 原生 `tools/tool_choice`，并重放 assistant
   Tool Call、推理字段与 tool result。
-- `responses` 通道使用 Provider Responses endpoint。首版 OpenAI 请求使用 `store=false`、
+- `responses` 通道使用 Provider Responses endpoint。OpenAI 请求使用 `store=false`、
   `parallel_tool_calls=false`，并在需要推理连续性时请求 encrypted reasoning；续跑重放完整 output
   items 与 `function_call_output`，不依赖 `previous_response_id`。
 
@@ -117,7 +117,8 @@ model dispatcher 状态；`GET /v1/debug/episodes/{episode_id}` 返回已脱敏 
 5. 重放、重启、非法 Tool Call 或预算耗尽均不会产生重复 Platform 效果。
 6. Chat 与 Responses 通道只持久化规范 JSON，且统一记录用量、费用和诊断。
 
-## 迁移影响
+## 当前默认
 
-`builtin.model_decide` 的 JSON 决策协议保留为兼容候选但不再进入默认图。现有 `allowed_tools` 配置迁移为
-`[[app.tool]]`；现有模型角色必须补充 endpoint。localhost 的组合 CLI 从双进程改为单运行时编排。
+- 默认图只使用 `builtin.fast_gate` 与 `builtin.native_agent`。
+- App allowlist 只接受 `[[app.tool]] name/result_mode`。
+- 模型角色显式声明 endpoint；localhost 组合 CLI 使用单 Runtime 编排。

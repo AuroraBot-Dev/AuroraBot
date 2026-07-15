@@ -617,7 +617,7 @@ def init_gateway(
         reranker=reranker,
     )
     logger.info(
-        "legacy gateway initialized roles=%s",
+        "model execution gateway initialized roles=%s",
         sorted(role for role, model in _singleton.export_config().items() if model),
     )
     return _singleton
@@ -646,7 +646,7 @@ def get_gateway() -> ModelGateway:
 
 
 class _GatewayProxy:
-    """兼容旧调用方式的懒加载代理。
+    """模块级模型网关的懒加载代理。
 
     所有属性访问通过 :func:`get_gateway` 委托给真正的 ModelGateway 实例。
     避免模块级循环导入（gateway ↔ config ↔ providers）。
@@ -658,5 +658,5 @@ class _GatewayProxy:
 
 # 便捷别名 —— 大多数场景直接 ``from src.ai.gateway import gateway``
 # _GatewayProxy 通过 __getattr__ 懒加载委托到 ModelGateway 单例，
-# 类型检查器将此对象视为 Any，实际运行时完全兼容 ModelGateway 接口。
+# 类型检查器将此对象视为 Any，运行时转发完整 ModelGateway 接口。
 gateway = _GatewayProxy()

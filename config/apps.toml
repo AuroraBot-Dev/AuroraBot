@@ -1,7 +1,16 @@
 # 应用与平台适配器声明。
 # 安装或发现不代表启用；运行时事件和应用私有载荷仍使用 JSON。
 
-adapter = []
+[[adapter]]
+id = "dashboard.local"
+enabled = true
+implementation = "src.platform.dashboard:DashboardPlatform"
+
+[[adapter.capability]]
+id = "org.aurora.dashboard.send_message"
+description = "Send one text reply to the Dashboard user who started the current episode."
+result_mode = "terminal"
+parameters_schema = { type = "object", properties = { text = { type = "string", minLength = 1 } }, required = ["text"], additionalProperties = false }
 
 [[app]]
 package = "org.aurora.console"

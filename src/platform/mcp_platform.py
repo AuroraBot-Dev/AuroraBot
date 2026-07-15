@@ -1,4 +1,4 @@
-"""Package-scoped MCP capability discovery and effect execution for vNext."""
+"""Package-scoped MCP capability discovery and effect execution for AuroraBot."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ class MCPPlatform:
             await asyncio.gather(*remote_tasks)
         self._catalog = self._discover_capabilities()
         kernel.install_capability_catalog(self._catalog)
-        # Compatibility view for RFC 0007 callers; Kernel uses the immutable catalog above.
+        # Convenient ID view for callers; Kernel uses the immutable catalog above.
         self._configuration.capability_definitions.update(
             {
                 item.id: CapabilityConfig(item.id, item.parameters_schema, item.description, item.result_mode)

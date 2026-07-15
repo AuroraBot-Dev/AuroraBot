@@ -1,0 +1,215 @@
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+
+from src.ai.contracts import ToolCall
+from src.dashboard.api import create_app
+from src.kernel.episodes import EpisodeStatus
+from src.localhost.runtime import AuroraRuntime
+from tests.test_first_cognitive_loop import _enable_first_loop, _SequenceGateway
+
+
+def _register_and_login(client: TestClient, username: str) -> tuple[int, str]:
+    registered = client.post("/api/auth/register", json={"username": username, "password": "secret"})
+    assert registered.status_code == 200
+    logged_in = client.post("/api/auth/login", json={"username": username, "password": "secret"})
+    assert logged_in.status_code == 200
+    body = logged_in.json()
+    return body["user"]["user_id"], body["access_token"]
+
+
+def test_dashboard_auth_users_and_opaque_session(project_root: Path) -> None:
+    with TestClient(create_app(project_root)) as client:
+        user_id, token = _register_and_login(client, "alice")
+        users = client.get("/api/users", headers={"Authorization": f"Bearer {token}"})
+
+        assert users.status_code == 200, users.text
+        bot = next(item for item in users.json()["users"] if item["is_bot"])
+        assert bot["username"] == "aurorabot"
+        assert bot["online"] is True
+        assert client.post("/api/auth/login", json={"username": "aurorabot", "password": "disabled"}).status_code == 401
+
+        assert client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"}).status_code == 204
+        assert client.get("/api/users", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+        assert user_id > 0
+
+
+def test_websocket_private_message_is_persisted_and_idempotent(project_root: Path) -> None:
+    runtime = AuroraRuntime.create(project_root)
+    with TestClient(create_app(project_root, runtime=runtime)) as client:
+        alice_id, alice_token = _register_and_login(client, "alice")
+        bob_id, bob_token = _register_and_login(client, "bob")
+        event = {
+            "type": "private_message",
+            "client_message_id": str(uuid4()),
+            "receiver_id": bob_id,
+            "message_type": "text",
+            "content": "hello",
+            "attachment_id": None,
+        }
+        headers = {"origin": "http://localhost:5173"}
+        with client.websocket_connect(f"/ws?token={alice_token}", headers=headers) as alice:
+            with client.websocket_connect(f"/ws?token={bob_token}", headers=headers) as bob:
+                assert alice.receive_json()["type"] == "presence"
+                alice.send_json(event)
+                ack = alice.receive_json()
+                delivered = bob.receive_json()
+                assert ack["type"] == "message_ack"
+                assert delivered["message"]["content"] == "hello"
+
+                alice.send_json(event)
+                duplicate_ack = alice.receive_json()
+                assert duplicate_ack["message_id"] == ack["message_id"]
+
+        history = client.get(
+            f"/api/messages/private/{bob_id}",
+            headers={"Authorization": f"Bearer {alice_token}"},
+        ).json()["messages"]
+        assert len(history) == 1
+        assert history[0]["sender_id"] == alice_id
+
+
+def test_bot_text_becomes_amp_and_reply_delivery_is_idempotent(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = AuroraRuntime.create(project_root)
+        await runtime.start()
+        try:
+            user = await runtime.chat.register("alice", "secret")
+            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
+            client_message_id = str(uuid4())
+            message = await runtime.chat.send_private_message(
+                user["user_id"],
+                {
+                    "client_message_id": client_message_id,
+                    "receiver_id": bot["user_id"],
+                    "message_type": "text",
+                    "content": "hello bot",
+                },
+            )
+            inbox = tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
+            assert message["status"] == "saved"
+            assert len(inbox) == 1
+
+            session_id = f"dashboard:user:{user['user_id']}"
+            first = await runtime.chat.deliver_bot_reply(session_id, "hello human", "effect-1")
+            second = await runtime.chat.deliver_bot_reply(session_id, "hello human", "effect-1")
+            assert first["message_id"] == second["message_id"]
+            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            assert [item["content"] for item in history] == ["hello bot", "hello human"]
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_bot_text_completes_dashboard_effect_and_episode(project_root: Path) -> None:
+    async def scenario() -> None:
+        _enable_first_loop(project_root)
+        nodes_path = project_root / "config" / "nodes.toml"
+        nodes_path.write_text(
+            nodes_path.read_text(encoding="utf-8").replace(
+                'capabilities = ["org.aurora.console.send_message"]',
+                'capabilities = ["org.aurora.console.send_message", "org.aurora.dashboard.send_message"]',
+            ),
+            encoding="utf-8",
+        )
+        apps_path = project_root / "config" / "apps.toml"
+        apps_path.write_text(
+            apps_path.read_text(encoding="utf-8")
+            + """
+
+[[adapter]]
+id = "dashboard.local"
+enabled = true
+implementation = "src.platform.dashboard:DashboardPlatform"
+
+[[adapter.capability]]
+id = "org.aurora.dashboard.send_message"
+description = "Publish text to a Dashboard conversation"
+result_mode = "terminal"
+[adapter.capability.parameters_schema]
+type = "object"
+required = ["text"]
+additionalProperties = false
+
+[adapter.capability.parameters_schema.properties.text]
+type = "string"
+""",
+            encoding="utf-8",
+        )
+        runtime = AuroraRuntime.create(project_root)
+        gateway = _SequenceGateway(
+            [ToolCall("call-dashboard", "org.aurora.dashboard.send_message", {"text": "hello human"})]
+        )
+        runtime.kernel._model_gateway = gateway
+        await runtime.start()
+        try:
+            user = await runtime.chat.register("alice", "secret")
+            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
+            await runtime.chat.send_private_message(
+                user["user_id"],
+                {
+                    "client_message_id": str(uuid4()),
+                    "receiver_id": bot["user_id"],
+                    "message_type": "text",
+                    "content": "hello bot",
+                },
+            )
+
+            first = await runtime.run_cycle()
+            assert runtime._model_dispatch_task is not None
+            await runtime._model_dispatch_task
+            second = await runtime.run_cycle()
+            third = await runtime.run_cycle()
+
+            assert second["platform_receipts_emitted"] == 1
+            assert third["ingested_record_ids"]
+            offered_tools = {tool.name for tool in gateway.requests[0].tools}
+            assert "org.aurora.dashboard.send_message" in offered_tools
+            assert "org.aurora.console.send_message" not in offered_tools
+            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            assert [item["content"] for item in history] == ["hello bot", "hello human"]
+            root_record = runtime.kernel.get_record(first["ingested_record_ids"][0])
+            episode = runtime.kernel.get_episode(root_record.episode_id)
+            assert episode is not None
+            assert episode.status == EpisodeStatus.COMPLETED
+            assert episode.termination_reason == "terminal_effect_succeeded"
+
+            await runtime.run_cycle()
+            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            assert [item["content"] for item in history] == ["hello bot", "hello human"]
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_bot_attachment_is_saved_and_gets_deterministic_reply(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = AuroraRuntime.create(project_root)
+        await runtime.start()
+        try:
+            user = await runtime.chat.register("alice", "secret")
+            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
+            attachment = await runtime.chat.upload_attachment(user["user_id"], "note.txt", "text/plain", b"x")
+            await runtime.chat.send_private_message(
+                user["user_id"],
+                {
+                    "client_message_id": str(uuid4()),
+                    "receiver_id": bot["user_id"],
+                    "message_type": "file",
+                    "content": "note.txt",
+                    "attachment_id": attachment["attachment_id"],
+                },
+            )
+            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            assert history[-1]["content"] == "当前暂不支持读取附件。"
+            assert not tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())

@@ -1,1 +1,1 @@
-"""Layered localhost console commands for the vNext developer runtime."""
+"""Layered localhost console commands for the AuroraBot developer runtime."""

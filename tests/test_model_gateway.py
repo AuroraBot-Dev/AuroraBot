@@ -127,7 +127,7 @@ def test_model_decide_creates_auditable_model_chain_and_valid_effect(project_roo
     asyncio.run(scenario())
 
 
-def test_model_decide_accepts_action_invoke_compatibility_shape(project_root: Path) -> None:
+def test_model_decide_accepts_alternate_action_invoke_shape(project_root: Path) -> None:
     async def scenario() -> None:
         _enable_model_decide(project_root)
         runtime = AuroraRuntime.create(project_root)
@@ -135,7 +135,7 @@ def test_model_decide_accepts_action_invoke_compatibility_shape(project_root: Pa
             {
                 "action": "invoke",
                 "capability": "org.aurora.console.send_message",
-                "parameters": {"text": "legacy shape"},
+                "parameters": {"text": "alternate shape"},
             }
         )
         await runtime.submit_amp(valid_amp())
@@ -144,7 +144,7 @@ def test_model_decide_accepts_action_invoke_compatibility_shape(project_root: Pa
         effect = next(
             record for record in runtime.kernel._records() if record.amp["payload"]["type"] == "effect.requested"
         )
-        assert effect.amp["payload"]["data"]["parameters"] == {"text": "legacy shape"}
+        assert effect.amp["payload"]["data"]["parameters"] == {"text": "alternate shape"}
 
     asyncio.run(scenario())
 

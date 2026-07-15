@@ -1,10 +1,10 @@
-"""Aurora Message Protocol (AMP) — Host-side 事件归一化兼容层。
+"""Aurora Message Protocol (AMP) 的 Platform 侧事件归一化工具。
 
 AMP 不是 MCP Server 需要实现的协议，而是 AuroraBot Platform
-在 Host 侧生成的兼容 envelope，用于：
+在 Host 侧生成统一 envelope，用于：
 
 - 将任意 MCP Server 的 capability、tool result、resource state、
-  notification、lifecycle 事件归一化为 Brain 可理解的统一事件格式。
+  notification、lifecycle 事件归一化为 Kernel 接收的统一事件格式。
 - 原生 Aurora App 可以额外使用 ``aurora/event`` notification
   主动推送事件（可选增强），但不是强制要求。
 
@@ -18,7 +18,7 @@ AMP 不是 MCP Server 需要实现的协议，而是 AuroraBot Platform
     工具调用结果 / 资源状态 / 通知 / 生命周期
          |
          v  (Platform 侧生成 AMP)
-  AMP Envelope → Brain 统一事件认知
+  AMP Envelope → Kernel 事件接管与认知图
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """

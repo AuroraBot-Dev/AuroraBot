@@ -21,7 +21,10 @@ transport = "stdio"
 working_dir = "{app_directory}"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
-allowed_tools = ["org.aurora.console.send_message"]
+
+[[app.tool]]
+name = "org.aurora.console.send_message"
+result_mode = "terminal"
 """,
         encoding="utf-8",
     )

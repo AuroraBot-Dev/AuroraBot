@@ -1,54 +1,113 @@
-# AuroraBot vNext
+# AuroraBot
 
 <p align="center">
   <a href="README.md">中文</a> | <a href="README.en.md">English</a> | <b>日本語</b>
 </p>
 
-AuroraBot は、因果イベントを中心にした自律エージェント・フレームワークとして再構築中です。旧実装は `legacy/` に凍結されており、vNext の設計基準ではありません。
+AuroraBot は、因果イベント、グラフ型認知、能動的なリズムを中心とする自律エージェント・フレームワークです。
+環境入力、モデル呼び出し、能力の実行、実行結果を監査可能な記録として残すため、認知 Episode を非同期に停止し、
+確実に再開し、明示的に終了できます。
 
-## 設計の基準
-
-`docs/rfc/` は vNext の唯一の設計基準です。コード、設定例、貢献ガイド、公開文書は、受理済み RFC に従わなければなりません。
-
-最初の因果閉ループは次のとおりです。
+## 認知ループ
 
 ```text
-プラットフォーム環境イベント（AMP JSON）
-  → Kernel の取込み、周期スナップショット、グラフ調停
-  → builtin.decide ノード
+外部 AMP イベント / system.tick
+  → Kernel が有界 Episode と読み取り専用の認知スナップショットを作成
+  → builtin.fast_gate が処理、能力呼び出し、沈黙、または昇格を選択
+  → builtin.native_agent が複雑なタスクと有界ツールループを処理
   → effect.requested
-  → プラットフォーム能力の実行
-  → effect.succeeded / effect.failed（次周期）
+  → Platform が能力を実行
+  → 後続周期の effect receipt が Episode を再開または終了
 ```
 
-生成されたテキスト自体は効果ではありません。プラットフォームが実行結果を返した時点で初めて因果ループが閉じます。
+モデルが生成したテキスト自体は外部効果ではありません。宣言済みの Platform 能力だけが効果を発生させ、モデル呼び出し、
+ツール呼び出し、実行結果、予算変更、終了理由は一つの因果連鎖に記録されます。外部入力または自律 tick ごとに独立した
+Episode を作成します。現在のループは Episode 間の会話履歴を保存せず、長期記憶や sandbox ノードも有効にしません。
 
-## 構成
+外部入力がない場合、永続 scheduler が予算内で `system.tick` を生成します。沈黙が続くと間隔は 30 秒から 30 分まで
+段階的に延びます。外部入力は runtime を即時に起動し、対話 Episode は自律 Episode より優先されます。
+
+## 主な機能
+
+- AMP JSON イベント、Kernel 記録、アトミックな workspace 操作
+- 有界 Episode、動的 continuation edge、予算、キャンセル方針
+- Chat Completions tools と Responses agent に対応するモデル gateway
+- 不変 capability catalog、JSON Schema 引数検証、MCP application
+- scheduler、Kernel、model dispatcher、Platform receipt を一つにまとめる `AuroraRuntime`
+- 因果監査記録と分離された、文脈情報を持つ構造化ログ
+
+## クイックスタート
+
+Python 3.12 と [uv](https://docs.astral.sh/uv/) が必要です。
+
+```powershell
+uv sync --group dev
+Copy-Item .env.example .env
+# 設定した Provider に必要な API キーを .env に追加
+uv run python bot.py
+```
+
+認知ループと `http://127.0.0.1:8000` の Dashboard backend が同時に起動します。独立 frontend は次のように起動します。
+
+```powershell
+Set-Location ..\AuroraChat
+pnpm install
+pnpm run dev
+```
+
+`http://localhost:5173` を開き、登録後に通常ユーザーまたは組み込み AuroraBot と会話できます。
+
+主なエントリポイント：
+
+```powershell
+# Dashboard なしで認知ループのみ実行
+uv run python bot.py --headless --profile prod
+
+# デバッグ API とローカル console を同時に起動
+uv run aurora
+
+# デバッグ API または console を個別に起動
+uv run aurora serve
+uv run aurora console
+
+# プロジェクト品質チェック
+uv run aurora check
+```
+
+console では `/say こんにちは` でメッセージを投入し、`/cycle` でデバッグ周期を一回進め、
+`/record <record_id>` または `/status` で監査・scheduler 状態を確認できます。
+
+## ディレクトリ
 
 ```text
-config/       TOML 設定と profile 上書き
-docs/rfc/     規範的な vNext 設計文書
-legacy/       凍結した旧コードとテスト
-src/          vNext 実装
-tests/        vNext 契約・統合テスト
-extensions/   サードパーティ拡張の推奨配置先
+config/         TOML 設定と profile override
+docs/rfc/       規範的な architecture と公開 contract
+src/kernel/     イベント、workspace、graph、周期、因果、Episode
+src/ai/         モデル role、routing、native tools/Responses、usage 記録
+src/localhost/  chat、scheduler、console の application use case
+src/dashboard/  Dashboard HTTP/WebSocket と debug route adapter
+src/platform/   ecosystem adapter、capability catalog、AMP 正規化
+src/apps/       組み込み native AMP-MCP application
+src/nodes/      組み込み自己完結型 cognitive node
+src/sandbox/    独立 sandbox component。現在の graph では無効
+src/utils/      上位 layer に依存しない共通 utility
+tests/          contract、integration、regression test
 ```
 
-Kernel の管理ワークスペースは `data/kernel/{inbox,process,archive}` です。構造設定には TOML、実行時データには JSON、秘密情報には環境変数を使います。
+Kernel workspace は `data/kernel/{inbox,process,archive}` に固定されています。runtime data は JSON、構造設定は TOML、
+secret は環境変数からのみ供給します。
 
-## RFC
+## ドキュメント
 
-- [RFC 0000: RFC process](docs/rfc/0000-rfc-process.md)
-- [RFC 0001: Architecture baseline](docs/rfc/0001-architecture.md)
-- [RFC 0002: Configuration baseline](docs/rfc/0002-configuration.md)
-- [RFC 0003: Event and causality contract](docs/rfc/0003-event-contract.md)
-- [RFC 0004: Extension contract](docs/rfc/0004-plugin-contract.md)
-- [RFC 0005: Model gateway](docs/rfc/0005-model-gateway.md)
-
-## 再構築の状態
-
-vNext にはまだ実行可能な Bot エントリポイントがありません。ルートの旧エントリポイントや `legacy/` のコードを vNext の起動方法として扱わないでください。
+- [RFC 一覧](docs/rfc/README.md)
+- [RFC 0001：architecture baseline](docs/rfc/0001-architecture.md)
+- [RFC 0008：最初の cognitive graph、Episode、active rhythm](docs/rfc/0008-first-cognitive-loop.md)
+- [RFC 0010：Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
+- [RFC 0011：current project baseline](docs/rfc/0011-current-project-baseline.md)
+- [コントリビューションガイド](docs/CONTRIBUTING.ja.md)
+- [ログ規約](LOGGING.md)
+- [行動規範](CODE_OF_CONDUCT.md)
 
 ## ライセンス
 
-[Apache License 2.0](LICENSE) で提供されます。
+[Apache License 2.0](LICENSE) のもとで公開されています。

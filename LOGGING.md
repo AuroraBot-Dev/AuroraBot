@@ -1,6 +1,6 @@
 # 日志规范
 
-本规范适用于 vNext。日志用于诊断运行时，不替代事件记录、效果回执或审计文件。
+本规范适用于 AuroraBot。日志用于诊断运行时，不替代事件记录、效果回执或审计文件。
 
 | 级别 | 用途 |
 | --- | --- |
@@ -15,7 +15,7 @@
 - 每一条与事件或效果相关的日志应包含稳定的记录 ID；不得只依赖自由文本关联。
 - `effect.requested`、`effect.succeeded` 与 `effect.failed` 的事实记录在 Kernel 工作区，不以日志作为唯一来源。
 - 模型计费、调用参数和原生响应的记录规则由 RFC 0005 定义。
-- vNext 代码统一通过 `src.utils.log_utils.get_logger()` 获取 logger；入口通过
+- 项目代码统一通过 `src.utils.log_utils.get_logger()` 获取 logger；入口通过
   `configure_logging()` 应用 TOML 中的日志级别，不得另行调用 `logging.basicConfig()`。
 - 日志使用稳定的 `key=value` 上下文。适用时至少包含 `cycle`、`record_id`、`episode_id`，并补充
   `node_id`、`model_role`、`capability`、`request_id`、`duration_ms`、`status` 或 `reason`。

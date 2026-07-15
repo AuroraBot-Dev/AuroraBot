@@ -39,13 +39,26 @@ transport = "stdio"
 working_dir = "{app_directory}"
 command = ["uv", "run", "python", "mcp_server.py"]
 timeout_seconds = 30
-allowed_tools = [
-  "org.aurora.clock.get_current_time",
-  "org.aurora.clock.set_alarm",
-  "org.aurora.clock.set_timer",
-  "org.aurora.clock.list_alarms",
-  "org.aurora.clock.cancel_alarm",
-]
+
+[[app.tool]]
+name = "org.aurora.clock.get_current_time"
+result_mode = "resume"
+
+[[app.tool]]
+name = "org.aurora.clock.set_alarm"
+result_mode = "resume"
+
+[[app.tool]]
+name = "org.aurora.clock.set_timer"
+result_mode = "resume"
+
+[[app.tool]]
+name = "org.aurora.clock.list_alarms"
+result_mode = "resume"
+
+[[app.tool]]
+name = "org.aurora.clock.cancel_alarm"
+result_mode = "resume"
 """,
         encoding="utf-8",
     )

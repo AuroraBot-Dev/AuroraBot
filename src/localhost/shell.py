@@ -1,4 +1,4 @@
-"""Interactive console adapter modeled after the former layered localhost shell."""
+"""Interactive console adapter for localhost business commands."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ async def run_console(
     output: Callable[[str], None] = print,
 ) -> None:
     """Run the developer console; bare text is equivalent to ``/say <text>``."""
-    output("AuroraBot vNext local console; 输入 /help 查看命令。")
+    output("AuroraBot local console; 输入 /help 查看命令。")
     commands = {name: command for command in command_specs() for name in command.names}
     stop = asyncio.Event()
     scheduler = asyncio.create_task(runtime.run_forever(stop), name="aurora-console-scheduler")
