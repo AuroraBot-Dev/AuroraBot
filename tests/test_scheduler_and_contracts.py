@@ -141,6 +141,18 @@ def test_scheduler_reconcile_uses_cooldown_and_does_not_double_account(tmp_path:
     assert scheduler.state.accounted_episode_ids == ["episode"]
 
 
+def test_scheduler_does_not_reaccount_terminal_episodes_from_previous_days(tmp_path: Path) -> None:
+    clock = MutableClock()
+    scheduler = CognitiveScheduler(tmp_path / "scheduler.json", SchedulerConfig(), now=clock)
+    completed = episode(clock, status=EpisodeStatus.COMPLETED, tool_calls=1)
+    clock.value += timedelta(days=1)
+
+    scheduler.reconcile((completed,))
+
+    assert scheduler.state.accounted_episode_ids == []
+    assert scheduler.state.current_interval_seconds == 30
+
+
 def test_scheduler_silent_backoff_is_capped(tmp_path: Path) -> None:
     clock = MutableClock()
     scheduler = CognitiveScheduler(

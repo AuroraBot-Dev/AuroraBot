@@ -83,6 +83,7 @@ class Kernel:
         if not set(nodes) <= configured or configured != set(nodes):
             raise ValueError("Kernel nodes must exactly match enabled node configuration")
         self._recover_interrupted_model_requests()
+        self._expire_stale_episodes()
         logger.info(
             "kernel initialized workspace=%s cycle=%d nodes=%d capabilities=%d",
             self._workspace,
@@ -227,6 +228,17 @@ class Kernel:
             episode.model_calls,
             episode.tool_calls,
         )
+
+    def _expire_stale_episodes(self) -> None:
+        """Close non-terminal snapshots that have outlived their configured duration budget."""
+        for episode in self.episodes():
+            if episode.terminal or episode.elapsed_seconds <= episode.max_duration_seconds:
+                continue
+            self._end_episode(
+                episode.episode_id,
+                EpisodeStatus.BUDGET_EXHAUSTED,
+                "duration_budget_exhausted",
+            )
 
     def _records(self) -> list[KernelRecord]:
         records: list[KernelRecord] = []
@@ -459,6 +471,7 @@ class Kernel:
 
     async def _run_cycle(self) -> CycleResult:
         started = time.monotonic()
+        self._expire_stale_episodes()
         self._cycle += 1
         self._persist_cycle()
         ingested = self.ingest_ready()
@@ -484,6 +497,7 @@ class Kernel:
             if not targets:
                 record.transition(RecordStatus.ARCHIVED)
                 self._save_record(record)
+                self._end_episode(record.episode_id, EpisodeStatus.SILENT, "no_route")
                 continue
             record.transition(RecordStatus.PROCESSING)
             self._save_record(record)

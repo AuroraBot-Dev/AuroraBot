@@ -81,6 +81,11 @@ class SerialToolAgentNode:
         }
         if self.policy.may_escalate:
             prompt["instruction"] += " Use aurora.cognition.escalate only when the native agent is necessary."
+        if context.amp.payload.data.get("reply_capability") == "org.aurora.dashboard.send_message":
+            prompt["instruction"] += (
+                " This is a direct private message explicitly addressed to you. "
+                "Normally answer with the available reply tool; choose silence only when it is intentional."
+            )
         tools = self._tools(context)
         logger.debug(
             "initial model request prepared record_id=%s episode_id=%s node_id=%s model_role=%s tools=%d autonomous=%s",

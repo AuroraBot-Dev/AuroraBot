@@ -129,14 +129,17 @@ def create_app(
         file: Annotated[UploadFile, File()],
     ) -> dict[str, Any]:
         try:
+            data = await file.read(runtime.configuration.dashboard.max_upload_bytes + 1)
             return await runtime.chat.upload_attachment(
                 int(user["id"]),
                 file.filename or "file",
                 file.content_type or "application/octet-stream",
-                await file.read(),
+                data,
             )
         except ChatError as error:
             raise _http_error(error) from error
+        finally:
+            await file.close()
 
     @app.get("/api/attachments/{attachment_id}/download")
     async def download_attachment(
@@ -168,7 +171,18 @@ def create_app(
         sender = asyncio.create_task(_send_events(websocket, queue), name=f"dashboard-ws-send-{user_id}")
         try:
             while True:
-                event = await websocket.receive_json()
+                try:
+                    event = await websocket.receive_json()
+                except WebSocketDisconnect:
+                    raise
+                except (TypeError, ValueError):
+                    await websocket.send_json(
+                        {"type": "error", "code": "INVALID_PAYLOAD", "message": "Invalid JSON event"}
+                    )
+                    continue
+                if not isinstance(event, dict):
+                    await websocket.send_json({"type": "error", "code": "INVALID_PAYLOAD", "message": "Invalid event"})
+                    continue
                 if event.get("type") == "ping":
                     await websocket.send_json({"type": "pong", "time": event.get("time")})
                     continue

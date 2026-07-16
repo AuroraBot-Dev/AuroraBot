@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 
 from src.ai.contracts import ModelMessage, ModelRequest, ModelResult
-from src.kernel.episodes import EpisodeStatus
+from src.kernel.episodes import EpisodeSnapshot, EpisodeStatus
 from src.kernel.events import AmpEnvelope, new_amp
 from src.kernel.records import RecordStatus
 from src.localhost.runtime import AuroraRuntime
+from src.utils.serialization import atomic_write_json
 from tests.test_events import valid_amp
 from tests.test_first_cognitive_loop import _enable_first_loop
 
@@ -20,6 +22,64 @@ if TYPE_CHECKING:
 class FailingGateway:
     async def complete(self, _request: ModelRequest) -> ModelResult:
         raise RuntimeError("provider unavailable")
+
+
+def test_unrouted_root_event_ends_episode_silently(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = AuroraRuntime.create(project_root)
+        event = new_amp(
+            event_type="timer.triggered",
+            session_id="clock",
+            summary="timer",
+            data={},
+            source_app="clock",
+            source_instance="test",
+        )
+        try:
+            await runtime.kernel.submit_amp(event)
+            cycle = await runtime.kernel.run_cycle()
+            record = runtime.kernel.get_record(cycle.ingested_record_ids[0])
+            assert record is not None
+            snapshot = runtime.kernel.get_episode(record.episode_id)
+            assert snapshot is not None
+            assert snapshot.status == EpisodeStatus.SILENT
+            assert snapshot.termination_reason == "no_route"
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_stale_episode_is_closed_by_duration_budget(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = AuroraRuntime.create(project_root)
+        timestamp = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
+        snapshot = EpisodeSnapshot(
+            episode_id="stale-episode",
+            root_record_id="missing-root",
+            autonomous=False,
+            status=EpisodeStatus.ACTIVE,
+            active_node_id=None,
+            round=0,
+            model_calls=0,
+            tool_calls=0,
+            max_model_calls=1,
+            max_tool_calls=1,
+            max_duration_seconds=1,
+            started_at=timestamp,
+            updated_at=timestamp,
+        )
+        atomic_write_json(runtime.kernel._episode_process / "stale-episode.json", snapshot.to_dict())
+        try:
+            await runtime.kernel.run_cycle()
+            restored = runtime.kernel.get_episode("stale-episode")
+            assert restored is not None
+            assert restored.status == EpisodeStatus.BUDGET_EXHAUSTED
+            assert restored.termination_reason == "duration_budget_exhausted"
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
 
 
 def test_processing_model_request_becomes_failure_after_restart(project_root: Path) -> None:

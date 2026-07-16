@@ -127,8 +127,11 @@ class CognitiveScheduler:
         self._roll_day()
         changed = False
         accounted = set(self.state.accounted_episode_ids)
+        today = self.now().date()
         for episode in episodes:
             if not episode.autonomous or not episode.terminal or episode.episode_id in accounted:
+                continue
+            if datetime.fromisoformat(episode.updated_at).astimezone(UTC).date() != today:
                 continue
             self.state.accounted_episode_ids.append(episode.episode_id)
             accounted.add(episode.episode_id)

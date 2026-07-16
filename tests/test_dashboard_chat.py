@@ -73,6 +73,41 @@ def test_websocket_private_message_is_persisted_and_idempotent(project_root: Pat
         assert history[0]["sender_id"] == alice_id
 
 
+def test_websocket_rejects_invalid_json_without_dropping_connection(project_root: Path) -> None:
+    with TestClient(create_app(project_root)) as client:
+        _user_id, token = _register_and_login(client, "alice")
+        headers = {"origin": "http://localhost:5173"}
+        with client.websocket_connect(f"/ws?token={token}", headers=headers) as websocket:
+            websocket.send_text("{")
+            invalid_json = websocket.receive_json()
+            assert invalid_json["code"] == "INVALID_PAYLOAD"
+
+            websocket.send_json([])
+            invalid_event = websocket.receive_json()
+            assert invalid_event["code"] == "INVALID_PAYLOAD"
+
+            websocket.send_json({"type": "ping", "time": 42})
+            assert websocket.receive_json() == {"type": "pong", "time": 42}
+
+
+def test_attachment_upload_is_rejected_at_configured_size_limit(project_root: Path) -> None:
+    config = project_root / "config" / "aurora.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("max_upload_bytes = 67108864", "max_upload_bytes = 8"),
+        encoding="utf-8",
+    )
+    with TestClient(create_app(project_root)) as client:
+        _user_id, token = _register_and_login(client, "alice")
+        response = client.post(
+            "/api/attachments",
+            headers={"Authorization": f"Bearer {token}"},
+            files={"file": ("large.txt", b"123456789", "text/plain")},
+        )
+
+    assert response.status_code == 413
+    assert response.headers["X-Aurora-Error"] == "MESSAGE_TOO_LARGE"
+
+
 def test_bot_text_becomes_amp_and_reply_delivery_is_idempotent(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
@@ -171,6 +206,7 @@ type = "string"
             offered_tools = {tool.name for tool in gateway.requests[0].tools}
             assert "org.aurora.dashboard.send_message" in offered_tools
             assert "org.aurora.console.send_message" not in offered_tools
+            assert "direct private message" in gateway.requests[0].messages[-1].content
             history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello human"]
             root_record = runtime.kernel.get_record(first["ingested_record_ids"][0])
