@@ -1,0 +1,126 @@
+"""Model and effect Activity outbox operations."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import uuid4
+
+from src.contracts.agent import ActivityRequest, ActivityStatus
+from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
+
+
+class StoreActivitiesMixin(RuntimeStoreBase):
+    def claim_activities(self, kind: str, limit: int, lease_seconds: float) -> tuple[ActivityRequest, ...]:
+        now_dt = datetime.now(UTC)
+        now = now_dt.isoformat()
+        lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                "WHERE a.kind = ? AND a.status = 'PENDING' AND t.status = 'ACTIVE' "
+                "ORDER BY a.priority DESC, a.created_at LIMIT ?",
+                (kind, limit),
+            ).fetchall()
+            result: list[ActivityRequest] = []
+            for row in rows:
+                connection.execute(
+                    "UPDATE activities SET status = 'PROCESSING', lease_until = ?, updated_at = ? "
+                    "WHERE activity_id = ?",
+                    (lease, now, row["activity_id"]),
+                )
+                updated = connection.execute(
+                    "SELECT * FROM activities WHERE activity_id = ?", (row["activity_id"],)
+                ).fetchone()
+                assert updated is not None
+                result.append(self._activity(updated))
+            return tuple(result)
+
+    def claim_effect_activities(
+        self, capabilities: frozenset[str], limit: int, lease_seconds: float
+    ) -> tuple[ActivityRequest, ...]:
+        now_dt = datetime.now(UTC)
+        now = now_dt.isoformat()
+        lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        with self.transaction() as connection:
+            processing = int(
+                connection.execute(
+                    "SELECT count(*) FROM activities WHERE kind = 'effect' AND status = 'PROCESSING'"
+                ).fetchone()[0]
+            )
+            available = max(0, limit - processing)
+            if available == 0:
+                return ()
+            rows = connection.execute(
+                "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                "WHERE a.kind = 'effect' AND a.status = 'PENDING' AND t.status = 'ACTIVE' "
+                "ORDER BY a.priority DESC, a.created_at"
+            ).fetchall()
+            result: list[ActivityRequest] = []
+            for row in rows:
+                request = json.loads(row["request_json"])
+                if request.get("capability") not in capabilities:
+                    continue
+                connection.execute(
+                    "UPDATE activities SET status = 'PROCESSING', lease_until = ?, updated_at = ? "
+                    "WHERE activity_id = ?",
+                    (lease, now, row["activity_id"]),
+                )
+                updated = connection.execute(
+                    "SELECT * FROM activities WHERE activity_id = ?", (row["activity_id"],)
+                ).fetchone()
+                assert updated is not None
+                result.append(self._activity(updated))
+                if len(result) >= available:
+                    break
+            return tuple(result)
+
+    def complete_model_activity(self, activity_id: str, result: dict[str, Any] | None, error: str | None) -> None:
+        now = utc_now()
+        with self.transaction() as connection:
+            row = connection.execute("SELECT * FROM activities WHERE activity_id = ?", (activity_id,)).fetchone()
+            if row is None or row["status"] not in {ActivityStatus.PROCESSING, ActivityStatus.PENDING}:
+                return
+            status = ActivityStatus.ERROR if error else ActivityStatus.COMPLETED
+            connection.execute(
+                "UPDATE activities SET status = ?, result_json = ?, error = ?, lease_until = NULL, updated_at = ? "
+                "WHERE activity_id = ?",
+                (status, _json(result) if result is not None else None, error, now, activity_id),
+            )
+            message_type = "model.failed" if error else "model.completed"
+            payload = (
+                {"activity_id": activity_id, "error": error}
+                if error
+                else {"activity_id": activity_id, **(result or {})}
+            )
+            self._insert_message(
+                connection,
+                task_id=str(row["task_id"]),
+                target_agent_id=str(row["agent_id"]),
+                message_type=message_type,
+                payload=payload,
+                causation_id=activity_id,
+                correlation_id=str(row["task_id"]),
+                priority=int(row["priority"]),
+                now=now,
+            )
+            connection.execute(
+                "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+                (
+                    str(uuid4()),
+                    row["task_id"],
+                    row["agent_id"],
+                    message_type,
+                    message_type,
+                    _json(payload),
+                    activity_id,
+                    row["task_id"],
+                    now,
+                ),
+            )
+
+    def mark_effect_dispatched(self, activity_id: str, error: str | None = None) -> None:
+        # Dispatch completion is not workflow completion: only the durable AMP
+        # receipt may advance the Agent. This also closes the submit/ingest race.
+        _ = activity_id, error

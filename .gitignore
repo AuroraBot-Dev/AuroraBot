@@ -37,12 +37,13 @@ htmlcov/
 coverage.xml
 .pytest_cache/
 
+# OS
+.DS_store
+config.ini
+
 # Project data
 logs/
 data/
-legacy/
-temp.*
-tmp/
 temp/
 
 # IDE / Editor
@@ -52,8 +53,8 @@ temp/
 .idea/
 .trae/
 .reasonix/
+.codegraph/
 *.code-workspace
-
-# Project files (others)
-nodes-beta/
-apps/
+.claude/
+CLAUDE.md
+graphify-out/

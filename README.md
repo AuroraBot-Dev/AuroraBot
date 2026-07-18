@@ -1,163 +1,114 @@
-<p align="center">
-  <img src="assets/logo.svg" width="120" alt="AuroraBot Logo" />
-</p>
-
-<h1 align="center">AuroraBot</h1>
+# AuroraBot
 
 <p align="center">
   <b>中文</b> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a>
 </p>
 
-<p align="center">
-  <em>基于 NoneBot2 的新一代内驱式、自主决策的智能体框架</em>
-</p>
+AuroraBot 是一个以因果事件、同构 Agent 和主动节律为核心的自主智能体框架。它把环境输入、模型调用、
+能力执行和执行回执都保留为可审计记录，使一次认知过程能够异步暂停、可靠恢复并明确终止。
 
-<p align="center">
-  声明式认知拓扑 · 三级联合记忆 · 统一 LLM 网关
-</p>
+## 认知闭环
 
-<p align="center">
-  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-仓库-black?logo=github" alt="GitHub" /></a>
-  <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-文档站-blue?logo=vitepress" alt="Docs" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License" /></a>
-</p>
-
----
-
-## 她是什么
-
-AuroraBot 是新一代**内驱式、自主决策的智能体框架**。她由两层运行时 + 一个认知引擎构成：
-
-- **应用层 (Apps)** — 可插拔的感知器与执行器，每个 App 通过 `manifest.yaml` 声明能力，通过统一 `PlatformAPI` 接入外部世界
-- **平台层 (Platform)** — `ApplicationHost` 统一管理 App 的注册、生命周期与事件队列，`PlatformAPI` 向 App 提供双向通信能力
-- **认知引擎 (Brain / CortexForge)** — 文件驱动认知操作系统内核，包含两个子系统：
-  - **kernel**：`Node` / `Agent` / `Router` 节点网络 + `FileEventBus` 事件总线 + `Circuit` 编排器
-  - **memory**：L1 工作记忆 / L2 情景记忆 / L3 语义记忆，通过 `UnifiedMemoryManager` 统一存取
-
-> 她不是在"等待指令"，而是在"持续观察、自主决策、主动行动"。
-
-## 架构概览
-
-```mermaid
-flowchart LR
-    subgraph APPS["应用层 (Apps)"]
-        direction TB
-        QQ["QQ 接入"]
-        ALARM["定时提醒"]
-        DIARY["日记"]
-    end
-
-    subgraph PLATFORM["平台层 (Platform)"]
-        direction TB
-        HOST["ApplicationHost"]
-        API["PlatformAPI"]
-        EVENTS["事件队列"]
-        CMDS["命令注册"]
-    end
-
-    subgraph BRAIN["认知引擎 (CortexForge)"]
-        subgraph KERNEL["kernel 子系统"]
-            direction LR
-            CIRCUIT["Circuit 编排器"]
-            BUS["FileEventBus"]
-            NODES["Agent / Router 节点"]
-        end
-        subgraph MEMORY["memory 子系统"]
-            direction LR
-            L1["L1 工作记忆"]
-            L2["L2 情景记忆"]
-            L3["L3 语义记忆"]
-        end
-        GATEWAY["LLM / Embedding 网关 (litellm)"]
-    end
-
-    APPS <-->|"AppEvent / invoke_command"| PLATFORM
-    PLATFORM <-->|"事件桥"| BRAIN
+```text
+外部 AMP 事件 / system.tick
+  → Kernel 创建 Task 与根 Gate Agent
+  → Agent 请求模型 Activity，或有界委派并行子 Agent
+  → 每个子 Agent 完成后回报父 Agent，父 Agent 恢复工作
+  → 普通效果由获授权 Agent 请求，terminal 效果仅允许根 Agent 发布
+  → Platform 执行效果，回执作为新邮箱消息恢复请求方 Agent
 ```
 
-### 高度解耦的 App 插件体系
+模型产生的文本不会直接成为外部输出。只有声明过的 Platform 能力可以产生效果；模型调用、工具调用、
+回执、预算变化和终止原因均进入同一条因果链。整棵监督树共享模型、工具和时间预算；Runtime 为所有 Agent
+投影只读的全局 Brain Context。长期记忆目前只保留 Memory Agent 接入契约，未配置时不会影响普通任务。
 
-每个 App 都是独立的感知器与执行器。接入 QQ、定时器、文件系统、甚至外部 API——都只需要一个 App。App 通过 `manifest.yaml` 声明命令，通过 `PlatformAPI` 与宿主交互，按需启用。
+没有外界输入时，持久化 scheduler 会按预算产生 `system.tick`。连续静默会从 30 秒逐步退避到 30 分钟；
+外部输入立即唤醒运行时，交互 Task 优先于自主 Task。
 
-### 声明式认知拓扑
+## 主要能力
 
-认知不依赖单一"超级 Agent"，而是由多个 `Agent` / `Router` 节点通过 `topology.yaml` 声明式配置邻接关系。节点之间通过 `FileEventBus` 文件事件总线传递状态，形成文件驱动的认知管道。未来开放认知节点插件，供第三方扩展认知能力。
+- AMP JSON 边界、SQLite WAL 运行态和原子归档
+- 持久化邮箱、同构 Agent、监督树、共享预算与取消传播
+- Chat Completions tools 与 Responses agent 双通道模型网关
+- 不可变能力目录、JSON Schema 参数校验和 MCP 应用接入
+- 单进程 `AuroraRuntime`，统一推进 scheduler、Kernel、模型 dispatcher 和 Platform 回执
+- 结构化上下文日志，以及独立于日志的因果审计记录
 
-### 三级联合记忆
+## 快速开始
 
-AuroraBot 的记忆是**结构化地生长**的：
+需要 Python 3.12 和 [uv](https://docs.astral.sh/uv/)。
 
-| 层级        | 类型          | 存储             | 用途           |
-| ----------- | ------------- | ---------------- | -------------- |
-| L1 工作记忆 | FIFO 内存列表 | 不持久化         | 当前会话上下文 |
-| L2 情景记忆 | JSON 文件追加 | 50 条后 LLM 压缩 | 按时间线存档   |
-| L3 语义记忆 | ChromaDB 向量 | 无上限           | 语义相似度检索 |
+```powershell
+uv sync --group dev
+Copy-Item .env.example .env
+# 在 .env 中填写所选 Provider 对应的密钥
+uv run aurora
+```
 
-`UnifiedMemoryManager` 封装三层统一入口，节点无需关心底层流转。每次交互一键写入三层，检索时合并返回。
+默认同时启动认知循环、本地控制台和 `http://127.0.0.1:8000` Dashboard 后端。聊天前端保持在独立 AuroraChat 仓库：
 
-## 计划中的 MCP 适配容器
+```powershell
+Set-Location ..\AuroraChat
+pnpm install
+pnpm run dev
+```
 
-我们正在设计一个 **MCP (Model Context Protocol) 适配容器**，让任意 MCP 服务器以 App 形态接入 AuroraBot。
+浏览器打开 `http://localhost:5173`，注册后即可和普通用户或内建 AuroraBot 联系人聊天。
 
-这意味着：
+常用入口：
 
-- 任何遵循 MCP 协议的工具都可以成为 AuroraBot 的能力延伸
-- MCP 工具会被自动映射为内核可调用的命令
-- 内核无需感知 MCP 协议细节，由适配容器统一处理
+```powershell
+# 仅常驻认知循环，不启动 Dashboard 或 Console
+uv run aurora --profile prod run
 
-> 让 MCP 生态成为你的能力延伸。
+# 同时启动调试 API 与本地控制台
+uv run aurora
 
-## 快速导航
+# 分别启动 Dashboard/API 或控制台
+uv run aurora serve
+uv run aurora console
 
-完整的架构设计、使用指南与开发文档请 **[访问 AuroraBot 文档站 📖](https://www.aurorabot.org/)**：
+# 执行项目质量检查
+uv run aurora check
+```
 
-| 文档                                                                           | 说明                                       |
-| ------------------------------------------------------------------------------ | ------------------------------------------ |
-| [项目总览](https://www.aurorabot.org/start/overview.html)                      | 快速了解 AuroraBot 的定位与架构            |
-| [快速开始](https://www.aurorabot.org/start/getting-started.html)               | 从零把项目跑起来                           |
-| [配置说明](https://www.aurorabot.org/start/configuration.html)                 | 环境变量、平台配置、应用配置与人格文档     |
-| [架构总览](https://www.aurorabot.org/architecture/system-overview.html)        | 理解 Apps / Platform / Kernel / Brain 四层 |
-| [认知引擎架构](https://www.aurorabot.org/architecture/brain-architecture.html) | 文件驱动认知管道与当前启用的认知管线       |
-| [节点系统](https://www.aurorabot.org/architecture/node-system.html)            | Node / Agent / Router 数据结构与事件总线   |
-| [记忆系统](https://www.aurorabot.org/architecture/memory-system.html)          | L1 / L2 / L3 三级联合记忆的存储与检索      |
-| [App 开发指南](https://www.aurorabot.org/develop/app-development.html)         | 从目录结构到生命周期开发 App               |
-| [认知节点开发](https://www.aurorabot.org/develop/brain-node-development.html)  | 编写 Agent / Router 节点                   |
-| [AUR CLI](https://www.aurorabot.org/develop/aur-cli.html)                      | 应用开发工具链路线图                       |
+Console 与 Dashboard 共用斜杠命令：可用 `/say 你好` 投递消息，使用 `/pump` 推进 ready turns，通过
+`/task <task_id>`、`/agent <agent_id>` 和 `/status` 查看状态；`/log off` 可静默终端日志而保留文件日志。
 
-## 开源致谢
+## 目录
 
-AuroraBot 站在众多优秀开源项目的肩膀上构建：
+```text
+config/         TOML 主配置、领域配置与 profile 覆盖
+aurora/         进程 CLI、运行模式与统一生命周期
+docs/rfc/       规范性架构与公共契约
+src/contracts/  配置、AMP、Agent、模型与记忆契约
+src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
+src/agents/     同构 Agent handler 与内建委派能力
+src/ai/         模型角色、路由、原生 tools/Responses 和用量记录
+src/localhost/  本地业务、聊天室、scheduler 与控制台用例
+src/dashboard/  Dashboard HTTP/WebSocket 与调试路由适配层
+src/platform/   Console、Dashboard、MCP 平台适配、能力目录与 AMP 归一化
+src/apps/       内建原生 AMP-MCP 应用
+src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
+src/utils/      无上层依赖的通用工具
+tests/          契约、集成与回归测试
+```
 
-| 项目                                              | 说明                     | 开源协议                                                                            |
-| ------------------------------------------------- | ------------------------ | :---------------------------------------------------------------------------------- |
-| [NoneBot2](https://github.com/nonebot/nonebot2)   | 跨平台 Python 机器人框架 | [MIT License](https://github.com/nonebot/nonebot2/blob/master/LICENSE)              |
-| [LiteLLM](https://github.com/BerriAI/litellm)     | 统一 LLM API 调用层      | [LICENSE](https://github.com/BerriAI/litellm/blob/litellm_internal_staging/LICENSE) |
-| [mem0](https://github.com/mem0ai/mem0)            | 智能体记忆基础设施       | [Apache License 2.0](https://github.com/mem0ai/mem0/blob/main/LICENSE)              |
-| [ChromaDB](https://github.com/chroma-core/chroma) | 开源向量数据库           | [Apache License 2.0](https://github.com/chroma-core/chroma/blob/main/LICENSE)       |
-| [OneBot](https://github.com/botuniverse/onebot)   | 统一聊天机器人接口标准   | [MIT License](https://github.com/botuniverse/onebot/blob/main/LICENSE)              |
-| [VitePress](https://github.com/vuejs/vitepress)   | 文档站生成框架           | [MIT License](https://github.com/vuejs/vitepress/blob/main/LICENSE)                 |
+Kernel 工作区固定为 `data/kernel/{inbox,process,archive}`。外部边界和归档使用 JSON，运行态使用 SQLite WAL，结构性配置使用 TOML，
+密钥只通过环境变量提供。
 
-特别感谢 **[MaiBot](https://github.com/MaiM-with-u/MaiBot)** 为本项目提供架构灵感与设计参考。
+## 文档
+
+- [RFC 索引](docs/rfc/README.md)
+- [RFC 0001：架构基准](docs/rfc/0001-architecture.md)
+- [RFC 0012：同构多 Agent 持久化运行时](docs/rfc/0012-homogeneous-agent-runtime.md)
+- [RFC 0013：统一命令路由与 Aurora 进程入口](docs/rfc/0013-unified-command-routing-and-entry.md)
+- [RFC 0010：Dashboard 聊天适配](docs/rfc/0010-dashboard-chat.md)
+- [RFC 0011：当前项目基线](docs/rfc/0011-current-project-baseline.md)
+- [贡献指南](docs/CONTRIBUTING.md)
+- [日志规范](LOGGING.md)
+- [社区行为准则](CODE_OF_CONDUCT.md)
 
 ## 许可证
 
-本项目使用 [Apache License 2.0](./LICENSE) 协议开源。
-
----
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=AuroraBot-Dev%2FAuroraBot&type=date&logscale=&legend=bottom-right">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&theme=dark&logscale&legend=bottom-right" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&logscale&legend=bottom-right" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AuroraBot-Dev/AuroraBot&type=date&logscale&legend=bottom-right" />
- </picture>
-</a>
-
----
-
-<p align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/JuFireX">JuFireX</a> | <a href="https://github.com/AuroraBot-Dev">AuroraBot-Dev</a></sub>
-</p>
+本项目使用 [Apache License 2.0](LICENSE) 协议。

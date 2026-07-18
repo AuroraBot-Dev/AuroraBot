@@ -1,0 +1,34 @@
+# AuroraBot RFC
+
+本目录是 AuroraBot 的唯一设计基准。RFC 记录可验证的架构决策，不是愿景随笔或实现注释。
+
+## 规范优先级
+
+已接受 RFC 高于 README、注释、配置样例、Issue 模板与实现。若实现与 RFC 冲突，应修正实现；若决策需要改变，应以新的 RFC 取代旧 RFC。
+
+## 状态
+
+- **草案**：正在讨论，不得被实现当作稳定契约。
+- **提议**：已具备完整决策，等待接受。
+- **已接受**：AuroraBot 的规范性基准。
+- **已取代**：由后续 RFC 明确取代。
+- **已废弃**：保留历史，不再适用。
+
+## 索引
+
+| RFC | 状态 | 主题 |
+| --- | --- | --- |
+| [0000](0000-rfc-process.md) | 已接受 | RFC 过程与规范语言 |
+| [0001](0001-architecture.md) | 已接受 | 架构边界与因果闭环 |
+| [0002](0002-configuration.md) | 已接受 | TOML 主配置与 JSON 数据边界 |
+| [0003](0003-event-contract.md) | 已接受 | AMP、Kernel record、周期与效果回执 |
+| [0004](0004-plugin-contract.md) | 已接受 | 节点、平台适配器与应用扩展 |
+| [0005](0005-model-gateway.md) | 已接受 | 模型角色、能力协商与原生响应 |
+| [0006](0006-local-debug-api.md) | 已接受 | 本地运行用例与开发调试 HTTP API |
+| [0007](0007-local-console-and-config-facade.md) | 已接受 | 本地控制台与显式配置快照 |
+| [0008](0008-first-cognitive-loop.md) | 已取代 | 首轮认知图、Episode 与主动节律；由 RFC 0012 取代 |
+| [0009](0009-bot-loop-entry.md) | 已接受 | 常驻 Bot 组合入口 |
+| [0010](0010-dashboard-chat.md) | 已接受 | Dashboard 聊天适配与本地聊天室 |
+| [0011](0011-current-project-baseline.md) | 已接受 | 当前项目基线与源码归档边界 |
+| [0012](0012-homogeneous-agent-runtime.md) | 已接受 | 同构多 Agent 持久化运行时 |
+| [0013](0013-unified-command-routing-and-entry.md) | 已接受 | 统一命令路由与 Aurora 进程入口 |

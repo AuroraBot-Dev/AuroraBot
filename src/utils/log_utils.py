@@ -1,22 +1,25 @@
-# ------------------------------------------------------------
-# @author: Churk
-# @status: 完成
-# @description: 日志模块
-# ------------------------------------------------------------
+"""日志系统核心模块。
+
+提供统一的日志记录器工厂 ``get_logger()``，支持 Rich 美化控制台输出、
+文件轮转日志、以及 ``DecoratorFactory`` 装饰器注入。
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 import functools
 import inspect
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, cast
 
-from src.config import Config
-
 try:
     from concurrent_log_handler import ConcurrentRotatingFileHandler
-except ModuleNotFoundError:
+except Exception:  # noqa: BLE001 — 回退到标准 RotatingFileHandler 永远安全
+    # ModuleNotFoundError（未安装）、FileNotFoundError（Reasonix 沙箱残留 TMP 环境变量）
+    # 或其他环境问题导致无法加载时，回退到标准 RotatingFileHandler
     ConcurrentRotatingFileHandler = RotatingFileHandler
 
 
@@ -33,12 +36,48 @@ FILE_FORMATTER = logging.Formatter(FILE_FORMAT, DATETIME_FORMAT)
 CONSOLE_FORMATTER = logging.Formatter(CONSOLE_FORMAT, DATETIME_FORMAT)
 
 # 日志轮转配置
-DEFAULT_LOGFILE = Config.LOG_DIR / "aurora.log"
 MAX_LOGFILE_SIZE = 102400  # KB
 MAX_LOGFILE_BACKUPS = 5  # 保留5个备份
 
 # 日志级别
-LOG_LEVEL = Config.LOG_LEVEL
+LOG_LEVEL: int | str = logging.INFO
+
+
+@dataclass(slots=True)
+class _LoggingState:
+    console_level: int = logging.INFO
+    file_level: int = logging.INFO
+    console_enabled: bool = True
+    logfile: Path | None = None
+
+
+_logging_state = _LoggingState()
+_managed_logger_names: set[str] = set()
+_MANAGED_FILE_HANDLER = "_aurora_managed_file_handler"
+_MANAGED_CONSOLE_HANDLER = "_aurora_managed_console_handler"
+_EXTERNAL_CONSOLE_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+_OFF_LEVEL = logging.CRITICAL + 1
+
+
+class UnsupportedLoggingLevelError(ValueError):
+    pass
+
+
+def _level_number(level: int | str) -> int:
+    if isinstance(level, int):
+        return level
+    normalized = level.upper()
+    if normalized == "WARN":
+        normalized = "WARNING"
+    value = logging.getLevelNamesMapping().get(normalized)
+    if value is None:
+        raise UnsupportedLoggingLevelError(level)
+    return value
+
+
+def _level_name(level: int) -> str:
+    value = logging.getLevelName(level)
+    return value if isinstance(value, str) else str(level)
 
 
 def _create_stream_handler(
@@ -52,7 +91,7 @@ def _create_stream_handler(
         from rich.theme import Theme
 
         class _BracketRichHandler(RichHandler):
-            """在 Rich 渲染前给 levelname 加方括号，对齐 NoneBot 的 [LEVEL] 风格。"""
+            """在 Rich 渲染前给 levelname 加方括号，保持控制台日志紧凑。"""
 
             def emit(self, record: logging.LogRecord) -> None:
                 original = record.levelname
@@ -92,11 +131,13 @@ def _create_stream_handler(
             tracebacks_show_locals=False,
         )
         rh.setFormatter(formatter)
+        setattr(rh, _MANAGED_CONSOLE_HANDLER, True)
         return rh  # noqa: TRY300
     except ImportError:
         sh = logging.StreamHandler()
         sh.setLevel(level)
         sh.setFormatter(formatter)
+        setattr(sh, _MANAGED_CONSOLE_HANDLER, True)
         return sh
 
 
@@ -106,6 +147,7 @@ def _create_file_handler(
     formatter: logging.Formatter = FILE_FORMATTER,
 ) -> logging.Handler:
     # 使用大小轮转日志文件, 每个文件最大100KB, 保留5个备份
+    Path(logfile).parent.mkdir(parents=True, exist_ok=True)
     fh = ConcurrentRotatingFileHandler(
         logfile,
         maxBytes=MAX_LOGFILE_SIZE,
@@ -171,7 +213,7 @@ class DecoratorFactory:
         return self._create_decorator(logging.ERROR, message_template)
 
     def exception(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """创建一个 ERROR 级别的日志装饰器，记录函数调用前的异常信息并附带堆栈."""
+        """创建一个 ERROR 级别的日志装饰器，记录函数调用异常并附带堆栈."""
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @functools.wraps(func)
@@ -185,8 +227,11 @@ class DecoratorFactory:
                     "args": args,
                     "kwargs": kwargs,
                 }
-                self._logger.exception(message_template.format(*args, **format_dict))
-                return func(*args, **kwargs)
+                try:
+                    return func(*args, **kwargs)
+                except Exception:
+                    self._logger.exception(message_template.format(*args, **format_dict))
+                    raise
 
             return wrapper
 
@@ -195,38 +240,113 @@ class DecoratorFactory:
 
 def get_logger(
     name: str | None = None,
-    level: int | str = LOG_LEVEL,
+    level: int | str | None = None,
     logfile: str | Path | None = None,
 ) -> logging.Logger:
     """
     返回配置好的日志记录器
     - name: 日志记录器名称 (默认根记录器) .
     - level: 日志级别 (默认从配置文件中获取) .
-    - logfile: 日志文件路径. 若为 None 则使用 DEFAULT_LOGFILE .
+    - logfile: 日志文件路径；未显式配置时只写控制台。
     """
     if name is None:
         # 默认使用根包名, 如果无法获取则使用"Default"
         name = __package__ or "Default"
 
+    console_level = _logging_state.console_level if level is None else _level_number(level)
+    file_level = _logging_state.file_level if level is None else _level_number(level)
+    _managed_logger_names.add(name)
+
     logger = logging.getLogger(name)
     if logger.handlers:
-        logger.setLevel(level)
+        _apply_managed_logger(logger)
         if not hasattr(logger, "decorate"):
             cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger
 
-    logfile = logfile or DEFAULT_LOGFILE
+    effective_logfile = logfile if logfile is not None else _logging_state.logfile
 
-    logger.setLevel(level)
+    logger.setLevel(min(console_level, file_level))
     logger.propagate = False
 
     # 配置控制台输出
-    logger.addHandler(_create_stream_handler(level))
+    stream_handler = _create_stream_handler(console_level)
+    if not _logging_state.console_enabled:
+        stream_handler.setLevel(_OFF_LEVEL)
+    logger.addHandler(stream_handler)
 
-    # 配置文件输出
-    logger.addHandler(_create_file_handler(logfile, level))
+    if isinstance(effective_logfile, (str, Path)):
+        file_handler = _create_file_handler(effective_logfile, file_level)
+        setattr(file_handler, _MANAGED_FILE_HANDLER, True)
+        logger.addHandler(file_handler)
 
     # 将 DecoratorFactory 实例绑定到记录器, 用于创建日志装饰器
     cast("Any", logger).decorate = DecoratorFactory(logger)
 
     return logger
+
+
+def _apply_managed_logger(logger: logging.Logger) -> None:
+    active_levels: list[int] = []
+    for handler in logger.handlers:
+        if getattr(handler, _MANAGED_CONSOLE_HANDLER, False):
+            handler_level = _logging_state.console_level if _logging_state.console_enabled else _OFF_LEVEL
+            handler.setLevel(handler_level)
+            if _logging_state.console_enabled:
+                active_levels.append(_logging_state.console_level)
+        elif getattr(handler, _MANAGED_FILE_HANDLER, False):
+            handler.setLevel(_logging_state.file_level)
+            active_levels.append(_logging_state.file_level)
+    logger.setLevel(min(active_levels, default=_OFF_LEVEL))
+
+
+def _apply_external_console_state() -> None:
+    level = _logging_state.console_level if _logging_state.console_enabled else _OFF_LEVEL
+    for name in _EXTERNAL_CONSOLE_LOGGERS:
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        for handler in logger.handlers:
+            if not getattr(handler, _MANAGED_FILE_HANDLER, False):
+                handler.setLevel(level)
+
+
+def configure_logging(level: int | str, logfile: str | Path | None = None) -> None:
+    """Apply one explicit runtime logging snapshot to existing and future loggers."""
+    normalized = _level_number(level)
+    _logging_state.console_level = normalized
+    _logging_state.file_level = normalized
+    _logging_state.console_enabled = True
+    if logfile is not None:
+        _logging_state.logfile = Path(logfile)
+    for name in tuple(_managed_logger_names):
+        logger = logging.getLogger(name)
+        if logfile is not None:
+            for handler in tuple(logger.handlers):
+                if getattr(handler, _MANAGED_FILE_HANDLER, False):
+                    logger.removeHandler(handler)
+                    handler.close()
+            file_handler = _create_file_handler(logfile, normalized)
+            setattr(file_handler, _MANAGED_FILE_HANDLER, True)
+            logger.addHandler(file_handler)
+        _apply_managed_logger(logger)
+    _apply_external_console_state()
+
+
+def configure_console_logging(*, enabled: bool | None = None, level: int | str | None = None) -> None:
+    """Change terminal logging without weakening the configured file audit trail."""
+    if enabled is not None:
+        _logging_state.console_enabled = enabled
+    if level is not None:
+        _logging_state.console_level = _level_number(level)
+    for name in tuple(_managed_logger_names):
+        _apply_managed_logger(logging.getLogger(name))
+    _apply_external_console_state()
+
+
+def console_logging_status() -> dict[str, bool | str]:
+    """Return the ephemeral terminal state and persistent file threshold."""
+    return {
+        "enabled": _logging_state.console_enabled,
+        "console_level": _level_name(_logging_state.console_level).lower(),
+        "file_level": _level_name(_logging_state.file_level).lower(),
+    }

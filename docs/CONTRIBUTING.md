@@ -1,96 +1,66 @@
-# 贡献指南
+# 参与 AuroraBot
 
-<b>中文</b> | <a href="./CONTRIBUTING.en.md">English</a> | <a href="./CONTRIBUTING.ja.md">日本語</a>
+[English](CONTRIBUTING.en.md) | [日本語](CONTRIBUTING.ja.md)
 
-感谢你对 AuroraBot 的关注！这份指南会帮助你快速把项目跑起来，并说明推荐的贡献流程。
+感谢你参与 AuroraBot。项目使用 RFC 固化架构决策，并要求代码、配置、测试和对外描述保持一致。
 
-## 环境要求
+## 开始之前
 
-- **Python** ≥ 3.12, < 3.13
-- **uv**（包管理器）— [安装指南](https://docs.astral.sh/uv/getting-started/installation/)
+需要 Python 3.12、Git 和 [uv](https://docs.astral.sh/uv/)。
 
-## 把项目跑起来
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/AuroraBot-Dev/AuroraBot.git
-cd AuroraBot
-
-# 2. 安装依赖（含开发工具）
+```powershell
+git clone https://github.com/AuroraBot-Tech/AuroraBot.git
+Set-Location AuroraBot
 uv sync --group dev
-
-# 3. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入必需的 API Key 等配置
-
-# 4. 启动
-uv run python bot.py
+Copy-Item .env.example .env
 ```
 
-## 开发工具
+密钥只写入本地 `.env` 或进程环境，禁止提交密钥、真实对话、模型 continuation、工作区事件或运行日志。
 
-| 命令                             | 用途                            |
-| -------------------------------- | ------------------------------- |
-| `uv run pytest --cov=src`        | 运行测试并统计覆盖率            |
-| `uv run ruff check src/ tests/`  | 代码检查                        |
-| `uv run ruff format src/ tests/` | 代码格式化                      |
-| `uv run pyright src/`            | 类型检查（默认不检查 `tests/`） |
+## 设计流程
 
-> 建议在提交 PR 前至少运行 `uv run pytest --cov=src`、`uv run ruff check src/ tests/` 和 `uv run pyright src/`。CI 流水线会执行带覆盖率的 `pytest`、`ruff check`、`ruff format --check` 与 `pyright src/`，确保代码风格一致、类型检查稳定且没有明显回归。
+- `docs/rfc/` 是架构与公共契约的唯一基准。
+- 影响模块边界、AMP/Kernel 事件、配置、扩展协议或模型调用契约的改动，先更新或新增 RFC。
+- 小型缺陷修复、测试补充和不改变语义的重构，可以直接提交代码与验证结果。
+- 文档涉及公共行为时，同一提交内同步更新中文、英文和日文入口。
 
-## 贡献流程
+## 模块边界
 
-我们采用**分支 → PR → 合并即废弃**的轻量流程：
+- Kernel 管理事件、Task/Agent 状态、邮箱、Activity 和因果，不决定认知内容，也不执行平台效果。
+- Agent handler 只读取 `AgentContext` 并返回无副作用的 `AgentDecision`。
+- Platform 归一化 AMP 输入并执行 `effect.requested`，结果必须作为新事件回到 Kernel。
+- `localhost` 承担本地业务用例；`dashboard` 只做路由/API 适配。
+- `utils` 不得依赖任何上层包；共享日志必须通过 `src.utils.log_utils.get_logger()` 获取。
 
-```
-dev（最新）
-  │
-  ├── feat/xxx          ← 新功能分支
-  ├── fix/xxx           ← 修复分支
-  └── refact/xxx        ← 重构或优化代码分支
-```
+## 分支与 Pull Request
 
-### 1. 从最新的 `dev` 分支切出
+1. 从 `dev` 创建短生命周期分支，推荐使用 `feat/`、`fix/` 或 `refact/` 前缀。
+2. 每个 PR 聚焦一个可审查目标，补充或更新对应测试和文档。
+3. PR 合并目标为 `dev`，说明行为变化、验证命令、已知边界以及相关 RFC/Issue。
+4. CI 与评审通过后合并，并删除已完成分支。
 
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b feat/my-feature    # 或 fix/xxx, refact/xxx
-```
+## 验证
 
-> 分支前缀说明：
->
-> - **feat/** — 新功能
-> - **fix/** — Bug 修复
-> - **refact/** — 代码重构或优化（不改变外部行为）
+```powershell
+# 项目统一检查入口
+uv run aurora check
 
-### 2. 在分支上完成开发
-
-在本地分支上自由提交、修改。保持提交信息清晰即可。
-
-### 3. 向 `dev` 分支提交 PR
-
-开发完成后，将你的分支推送到远端，并向 `dev` 分支发起 Pull Request。
-
-### 4. PR 合并后，分支使命结束
-
-PR 合并到 `dev` 后，该分支的使命就完成了。**原则上不再使用该分支继续开发新功能。** 你可以放心删除它：
-
-如果这次合并进入了 `dev`，并且 `CI` 检查通过，仓库会自动基于 `pyproject.toml` 中的版本号创建下一个 `vX.Y.Z-alpha.N` 标签，并触发预发布（Pre-release）。也就是说，日常开发阶段通常不需要再手动打 `alpha` tag。
-
-```bash
-git branch -d feat/my-feature
+# 按需单独执行
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
 ```
 
-### 5. 如果还需要修改
+测试必须离线可重复。模型、时钟和 MCP 使用 fake；测试不得消耗真实额度或依赖公网服务。缺陷修复应先覆盖失败路径，
+事件与效果测试还需验证事务边界、幂等性和因果父子关系。
 
-有两种方式：
+## 提交前检查
 
-- **PR 尚未合并** — 将 PR 标记为 **Draft**，继续在同一个分支上修改，完成后改回 Ready for review。
-- **PR 已合并** — 重复以上流程，从最新的 `dev` 切出新的 `feat/`、`fix/` 或 `refact/` 分支。
+- 没有绕过 Kernel/Platform 边界，也没有将 Provider 私有对象写入工作区。
+- 日志包含定位所需的稳定标识，但不包含密钥、完整提示词、continuation 或敏感载荷。
+- 配置仍以 TOML 为结构来源，密钥仍只由环境变量提供。
+- README、模块文档、配置样例和 RFC 没有互相矛盾。
+- 新行为有测试，且 `uv run aurora check` 通过。
 
-> 这样做的好处是每个分支职责单一、生命周期清晰，不会出现一个分支反复承载多个不相关改动的混乱情况。
-
----
-
-如有任何疑问，欢迎在 [Issues](https://github.com/AuroraBot-Dev/AuroraBot/issues) 中提出。
+提交贡献即表示你同意遵守项目的[社区行为准则](../CODE_OF_CONDUCT.md)。

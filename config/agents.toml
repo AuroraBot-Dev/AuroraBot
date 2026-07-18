@@ -1,0 +1,35 @@
+# RFC 0012 同构 Agent profiles。所有 profile 使用同一 handler，只改变模型与能力策略。
+
+[[agent]]
+id = "builtin.gate"
+implementation = "src.agents.tool_agent:ToolAgent"
+model_role = "fast"
+prompt = "Gate the task, handle it directly when simple, or delegate bounded subtasks when useful."
+capabilities = [
+    "org.aurora.console.send_message",
+    "org.aurora.dashboard.send_message",
+    "org.aurora.clock.get_current_time",
+    "org.aurora.clock.set_alarm",
+    "org.aurora.clock.set_timer",
+    "org.aurora.clock.list_alarms",
+    "org.aurora.clock.cancel_alarm",
+]
+can_delegate = true
+child_profiles = ["builtin.worker"]
+
+[[agent]]
+id = "builtin.worker"
+implementation = "src.agents.tool_agent:ToolAgent"
+model_role = "agent"
+prompt = "Complete the assigned task, use tools when necessary, and report a concise structured result to your parent."
+capabilities = [
+    "org.aurora.console.send_message",
+    "org.aurora.dashboard.send_message",
+    "org.aurora.clock.get_current_time",
+    "org.aurora.clock.set_alarm",
+    "org.aurora.clock.set_timer",
+    "org.aurora.clock.list_alarms",
+    "org.aurora.clock.cancel_alarm",
+]
+can_delegate = true
+child_profiles = ["builtin.worker"]

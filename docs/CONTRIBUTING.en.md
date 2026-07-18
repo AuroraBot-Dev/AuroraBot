@@ -1,96 +1,71 @@
-# Contributing Guide
+# Contributing to AuroraBot
 
-<a href="./CONTRIBUTING.md">中文</a> | <b>English</b> | <a href="./CONTRIBUTING.ja.md">日本語</a>
+[中文](CONTRIBUTING.md) | [日本語](CONTRIBUTING.ja.md)
 
-Thank you for your interest in AuroraBot! This guide will help you get the project running and walk you through the recommended contribution workflow.
+Thank you for contributing to AuroraBot. Architecture decisions are captured in RFCs, and code, configuration, tests,
+and public documentation are expected to stay consistent.
 
-## Prerequisites
+## Getting started
 
-- **Python** ≥ 3.12, < 3.13
-- **uv** (package manager) — [Installation Guide](https://docs.astral.sh/uv/getting-started/installation/)
+Python 3.12, Git, and [uv](https://docs.astral.sh/uv/) are required.
 
-## Running the Project
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/AuroraBot-Dev/AuroraBot.git
-cd AuroraBot
-
-# 2. Install dependencies (including dev tools)
+```powershell
+git clone https://github.com/AuroraBot-Tech/AuroraBot.git
+Set-Location AuroraBot
 uv sync --group dev
-
-# 3. Configure environment variables
-cp .env.example .env
-# Edit .env and fill in the required API keys, etc.
-
-# 4. Launch
-uv run python bot.py
+Copy-Item .env.example .env
 ```
 
-## Development Tools
+Keep secrets in the local `.env` file or process environment. Never commit secrets, real conversations, model
+continuations, workspace events, or runtime logs.
 
-| Command                          | Purpose                                   |
-| -------------------------------- | ----------------------------------------- |
-| `uv run pytest --cov=src`        | Run tests with coverage                   |
-| `uv run ruff check src/ tests/`  | Lint code                                 |
-| `uv run ruff format src/ tests/` | Format code                               |
-| `uv run pyright src/`            | Type-check (`tests/` excluded by default) |
+## Design workflow
 
-> Before submitting a PR, it is recommended to run `uv run pytest --cov=src`, `uv run ruff check src/ tests/`, and `uv run pyright src/`. The CI pipeline runs coverage-enabled `pytest`, `ruff check`, `ruff format --check`, and `pyright src/` to keep style, type checking, and basic regression checks aligned.
+- `docs/rfc/` is the sole baseline for architecture and public contracts.
+- Update or add an RFC before changing module boundaries, AMP/Kernel events, configuration, extension protocols, or
+  model-call contracts.
+- Small bug fixes, test additions, and semantics-preserving refactors can be submitted directly with verification.
+- When documentation changes public behavior, update the Chinese, English, and Japanese entry points together.
 
-## Contribution Workflow
+## Module boundaries
 
-We follow a lightweight **branch → PR → merge-and-discard** workflow:
+- Kernel owns events, Task/Agent state, mailboxes, Activities, and causality. It does not choose cognitive content or
+  execute Platform effects.
+- Agent handlers only read `AgentContext` and return side-effect-free `AgentDecision` values.
+- Platform normalizes AMP input and executes `effect.requested`; each result returns to Kernel as a new event.
+- `localhost` owns local use cases, while `dashboard` only adapts routes and APIs.
+- `utils` cannot depend on upper-layer packages. Shared logging uses `src.utils.log_utils.get_logger()`.
 
-```
-dev (latest)
-  │
-  ├── feat/xxx          ← feature branch
-  ├── fix/xxx           ← bugfix branch
-  └── refact/xxx        ← refactoring or optimization branch
-```
+## Branches and pull requests
 
-### 1. Branch off the latest `dev`
+1. Create a short-lived branch from `dev`; `feat/`, `fix/`, and `refact/` are the recommended prefixes.
+2. Keep each PR focused on one reviewable goal and include the corresponding tests and documentation.
+3. Target `dev` and describe behavior changes, verification commands, known boundaries, and related RFCs or issues.
+4. Merge after CI and review pass, then delete the completed branch.
 
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b feat/my-feature    # or fix/xxx, refact/xxx
-```
+## Verification
 
-> Branch prefix conventions:
->
-> - **feat/** — New feature
-> - **fix/** — Bug fix
-> - **refact/** — Code refactoring or optimization (no behavioral changes)
+```powershell
+# Unified project check
+uv run aurora check
 
-### 2. Develop on your branch
-
-Commit and iterate freely on your local branch. Keep commit messages clear and concise.
-
-### 3. Submit a PR against the `dev` branch
-
-Push your branch to the remote and open a Pull Request targeting the `dev` branch.
-
-### 4. After merge, the branch's mission is complete
-
-Once your PR is merged into `dev`, that branch has served its purpose. **Do not reuse it for further feature development.** You can safely delete it:
-
-If the merge lands on `dev` and `CI` passes, the repository automatically creates the next `vX.Y.Z-alpha.N` tag based on the version in `pyproject.toml` and publishes a corresponding Pre-release. In normal day-to-day development, you usually do not need to create `alpha` tags manually anymore.
-
-```bash
-git branch -d feat/my-feature
+# Individual checks when needed
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
 ```
 
-### 5. If additional changes are needed
+Tests must be deterministic and offline. Use fake models, clocks, and MCP implementations; tests must not consume real
+credits or require public network services. Bug fixes should cover the failing path first. Event and effect tests should
+also verify transaction boundaries, idempotency, and causal parentage.
 
-There are two paths:
+## Before submitting
 
-- **PR not yet merged** — Mark the PR as **Draft**, continue iterating on the same branch, and switch it back to Ready for review when done.
-- **PR already merged** — Repeat the workflow above: branch off the latest `dev` and create a new `feat/`, `fix/`, or `refact/` branch.
+- Kernel and Platform boundaries remain intact, and no Provider-private object is written to the workspace.
+- Logs include stable diagnostic identifiers without secrets, full prompts, continuations, or sensitive payloads.
+- TOML remains the structural source of configuration, and secrets still come only from environment variables.
+- READMEs, module documentation, configuration examples, and RFCs do not contradict one another.
+- New behavior has tests and `uv run aurora check` passes.
 
-> This approach keeps each branch focused on a single responsibility with a clear lifecycle, avoiding the mess of one branch carrying multiple unrelated changes over time.
-
----
-
-If you have any questions, feel free to open an [Issue](https://github.com/AuroraBot-Dev/AuroraBot/issues).
+By contributing, you agree to follow the project's [Code of Conduct](../CODE_OF_CONDUCT.md).
