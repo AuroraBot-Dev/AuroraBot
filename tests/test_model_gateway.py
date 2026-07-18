@@ -5,7 +5,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.ai.contracts import (
+from src.ai.vnext import ModelCapabilityError, ModelGatewayService
+from src.contracts.agent import TaskStatus
+from src.contracts.configuration import load_configuration
+from src.contracts.model import (
     ModelGatewayError,
     ModelMessage,
     ModelRequest,
@@ -13,9 +16,6 @@ from src.ai.contracts import (
     ModelUsage,
     ToolCall,
 )
-from src.ai.vnext import ModelCapabilityError, ModelGatewayService
-from src.kernel.contracts import TaskStatus
-from src.localhost.configuration import load_configuration
 from src.localhost.runtime import AuroraRuntime
 from tests.test_events import valid_amp
 

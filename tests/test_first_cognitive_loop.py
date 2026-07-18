@@ -5,8 +5,7 @@ import json
 from typing import TYPE_CHECKING
 
 from src.agents.tool_agent import MEMORY_QUERY_TOOL, ToolAgent
-from src.ai.contracts import ModelContinuation, ModelResult, ModelUsage, ToolCall
-from src.kernel.contracts import (
+from src.contracts.agent import (
     AgentContext,
     AgentDecision,
     AgentLimits,
@@ -20,7 +19,8 @@ from src.kernel.contracts import (
     TaskBudget,
     TaskStatus,
 )
-from src.kernel.events import AmpEnvelope, new_amp
+from src.contracts.amp import AmpEnvelope, new_amp
+from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
 from src.kernel.runtime import AgentKernel
 
 if TYPE_CHECKING:

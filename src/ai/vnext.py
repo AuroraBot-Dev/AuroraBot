@@ -11,7 +11,10 @@ from typing import Any
 import litellm
 from jsonschema import ValidationError, validate
 
-from src.ai.contracts import (
+from src.ai.gateway import GatewayError, ModelGateway
+from src.ai.providers import ProviderConfig, resolve_model, setup_providers
+from src.contracts.configuration import AuroraConfig, ModelRoleConfig
+from src.contracts.model import (
     ModelBudgetError,
     ModelCapabilityError,
     ModelContinuation,
@@ -22,9 +25,6 @@ from src.ai.contracts import (
     ToolCall,
     ToolDefinition,
 )
-from src.ai.gateway import GatewayError, ModelGateway
-from src.ai.providers import ProviderConfig, resolve_model, setup_providers
-from src.localhost.configuration import AuroraConfig, ModelRoleConfig
 from src.utils.log_utils import get_logger
 from src.utils.serialization import extract_json_from_text
 
@@ -74,7 +74,11 @@ class ModelGatewayService:
         )
         if custom_providers:
             setup_providers(*custom_providers)
-        self._gateway = ModelGateway(models=self._models)
+        self._gateway = ModelGateway(
+            models=self._models,
+            log_queries=configuration.model_logging.log_queries,
+            log_responses=configuration.model_logging.log_responses,
+        )
         logger.info(
             "model gateway initialized roles=%d providers=%d responses_roles=%d",
             len(configuration.model_definitions),
@@ -344,26 +348,6 @@ class ModelGatewayService:
             return _invalid_output_result(request, f"model output failed JSON Schema validation: {error.message}")
         mode = "structured_output" if "structured_output" in negotiated else "json_text_fallback"
         return parsed, (f"output mode: {mode}",)
-
-
-def append_tool_result(
-    continuation: ModelContinuation,
-    call_id: str,
-    result: object,
-    *,
-    is_error: bool,
-) -> ModelContinuation:
-    """Append a normalized tool result in the endpoint's replay shape."""
-    serialized = json.dumps(
-        {"is_error": is_error, "result": result},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    if continuation.channel == "responses":
-        item = {"type": "function_call_output", "call_id": call_id, "output": serialized}
-    else:
-        item = {"role": "tool", "tool_call_id": call_id, "content": serialized}
-    return ModelContinuation(continuation.provider, continuation.channel, (*continuation.items, item))
 
 
 def _provider_tools(

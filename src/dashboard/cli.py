@@ -1,20 +1,24 @@
-"""Local console and loopback debug API runner."""
+"""Dashboard and local-console composition entry point."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import uvicorn
 
-from src.config import load_config
+from src.contracts.configuration import load_configuration
 from src.dashboard.api import create_app
 from src.localhost.runtime import AuroraRuntime
 from src.localhost.shell import run_console
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.localhost.cli")
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 async def _run_combined(root: Path, profile: str | None) -> None:
@@ -41,7 +45,7 @@ async def _run_combined(root: Path, profile: str | None) -> None:
         logger.info("combined localhost mode stopped")
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     """Start the developer-only loopback HTTP server."""
     parser = argparse.ArgumentParser(description="Run AuroraBot locally")
     parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -49,8 +53,8 @@ def main() -> None:
     subcommands = parser.add_subparsers(dest="command")
     subcommands.add_parser("serve", help="启动 loopback 开发调试 HTTP API")
     subcommands.add_parser("console", help="启动分层本地开发控制台")
-    arguments = parser.parse_args()
-    configuration = load_config(arguments.root, arguments.profile)
+    arguments = parser.parse_args(argv)
+    configuration = load_configuration(arguments.root, arguments.profile)
     if arguments.command == "console":
         logger.info("console mode selected profile=%s", configuration.runtime.profile)
         asyncio.run(run_console(AuroraRuntime.create(arguments.root, arguments.profile)))

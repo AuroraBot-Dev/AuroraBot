@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi.testclient import TestClient
 
-from src.localhost.api import create_app
+from src.dashboard.api import create_app
 from tests.test_events import valid_amp
 
 if TYPE_CHECKING:

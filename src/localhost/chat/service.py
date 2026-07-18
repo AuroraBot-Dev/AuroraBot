@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from src.kernel.events import new_amp
+from src.contracts.amp import AmpEnvelope, new_amp
 from src.localhost.chat.security import hash_password, new_token, token_digest, verify_password
 from src.localhost.chat.store import ChatStore
 
 if TYPE_CHECKING:
-    from src.localhost.configuration import DashboardConfig
+    from src.contracts.configuration import DashboardConfig
 
 AmpSubmitter = Callable[[object], Awaitable[str]]
 
@@ -247,7 +247,7 @@ class ChatService:
             if attachment is None:
                 raise ChatError("ATTACHMENT_FORBIDDEN", "Attachment is unavailable", 403)
         is_bot = bool(receiver["is_bot"])
-        amp = (
+        amp_value = (
             new_amp(
                 event_type="message.received",
                 session_id=f"dashboard:user:{sender_id}",
@@ -260,10 +260,17 @@ class ChatService:
                 },
                 source_app="dashboard.chat",
                 source_instance=str(sender_id),
-            )
+            ).to_dict()
             if is_bot and message_type == "text"
             else None
         )
+        if amp_value is not None:
+            # The browser may retry the same client UUID after a transient failure.
+            # A deterministic AMP ID makes that retry safe at the Kernel boundary.
+            amp_value["header"]["message_id"] = str(
+                uuid5(NAMESPACE_URL, f"aurora-dashboard-input:{sender_id}:{client_message_id}")
+            )
+        amp = AmpEnvelope.parse(amp_value) if amp_value is not None else None
         row, created = await asyncio.to_thread(
             self.store.create_message,
             client_message_id=client_message_id,
@@ -278,13 +285,18 @@ class ChatService:
         message_row = await asyncio.to_thread(self.store.message_with_attachment, int(row["id"]))
         assert message_row is not None
         message = self._message(message_row)
-        if not created:
+        if not created and (amp is None or message["status"] == "saved"):
             return message
         if is_bot:
             if amp is None:
                 await self._unsupported_attachment_reply(sender_id, int(row["id"]))
             else:
                 if self._amp_submitter is None:
+                    await asyncio.to_thread(
+                        self.store.execute,
+                        "UPDATE messages SET status = 'failed' WHERE id = ?",
+                        (int(row["id"]),),
+                    )
                     raise ChatError("BOT_UNAVAILABLE", "Bot is unavailable", 503)
                 try:
                     await self._amp_submitter(amp.to_dict())

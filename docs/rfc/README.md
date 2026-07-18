@@ -25,7 +25,7 @@
 | [0004](0004-plugin-contract.md) | 已接受 | 节点、平台适配器与应用扩展 |
 | [0005](0005-model-gateway.md) | 已接受 | 模型角色、能力协商与原生响应 |
 | [0006](0006-local-debug-api.md) | 已接受 | 本地运行用例与开发调试 HTTP API |
-| [0007](0007-local-console-and-config-facade.md) | 已接受 | 本地控制台与共享配置门面 |
+| [0007](0007-local-console-and-config-facade.md) | 已接受 | 本地控制台与显式配置快照 |
 | [0008](0008-first-cognitive-loop.md) | 已取代 | 首轮认知图、Episode 与主动节律；由 RFC 0012 取代 |
 | [0009](0009-bot-loop-entry.md) | 已接受 | 常驻 Bot 组合入口 |
 | [0010](0010-dashboard-chat.md) | 已接受 | Dashboard 聊天适配与本地聊天室 |

@@ -5,16 +5,22 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from src.ai.contracts import ModelContinuation, ModelMessage, ModelRequest, ModelResult, ToolDefinition
-from src.ai.vnext import append_tool_result
-from src.kernel.contracts import (
+from src.contracts.agent import (
     AgentContext,
     AgentDecision,
     Completion,
     DelegationRequest,
     EffectRequest,
 )
-from src.kernel.memory import MemoryFailure, MemoryQuery
+from src.contracts.memory import MemoryFailure, MemoryQuery
+from src.contracts.model import (
+    ModelContinuation,
+    ModelMessage,
+    ModelRequest,
+    ModelResult,
+    ToolDefinition,
+    append_tool_result,
+)
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.agent.tool")
@@ -45,7 +51,21 @@ class ToolAgent:
         if message_type == "model.completed":
             return self._handle_model_result(context)
         if message_type == "model.failed":
-            return AgentDecision(failure=str(context.message.payload.get("error", "model_failed")))
+            error = str(context.message.payload.get("error", "model_failed"))
+            reply_capability = self._reply_capability(context)
+            if context.agent.parent_agent_id is None and reply_capability is not None:
+                logger.warning(
+                    "Root model failed; publishing safe fallback task_id=%s agent_id=%s",
+                    context.task.task_id,
+                    context.agent.agent_id,
+                )
+                return AgentDecision(
+                    effect_request=EffectRequest(
+                        capability=reply_capability,
+                        parameters={"text": "抱歉，我暂时无法完成这次回复。请稍后重试。"},
+                    )
+                )
+            return AgentDecision(failure=error)
         if message_type in {"effect.succeeded", "effect.failed"}:
             return self._resume_effect(context)
         return self._request_model(context)
@@ -65,7 +85,8 @@ class ToolAgent:
             "children": [child.to_dict() for child in context.children],
             "brain_context": context.brain.to_dict(),
             "rules": [
-                "Use tools for external actions. Plain text is not externally published.",
+                "Use tools for external actions. A final plain-text answer is published "
+                "through the current reply channel.",
                 "Delegate only independent, bounded work that materially helps this task.",
                 "A child result is evidence for you to continue working, not the final user response.",
                 "Only the root Agent can publish a terminal external result.",
@@ -96,6 +117,13 @@ class ToolAgent:
             text = result.text.strip()
             if context.agent.parent_agent_id is not None:
                 return AgentDecision(completion=Completion(text or "Subtask completed without a textual result"))
+            reply_capability = self._reply_capability(context)
+            if text and reply_capability is not None:
+                # Providers occasionally ignore tool_choice. Preserve the user-visible
+                # reply without teaching the Agent handler about Dashboard internals.
+                return AgentDecision(
+                    effect_request=EffectRequest(capability=reply_capability, parameters={"text": text})
+                )
             return AgentDecision(completion=Completion("unpublished_text" if text else "no_action", silent=True))
         call = result.tool_calls[0]
         if call.name == DELEGATE_TOOL:

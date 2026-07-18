@@ -13,7 +13,7 @@ RFC 0010 将 HTTP 路由适配归入 `src.dashboard`；localhost 继续拥有调
 
 `src/localhost` 提供唯一的本地运行用例，编排 Kernel、已启用 Node、scheduler 和 Platform。
 `src/dashboard` 使用 FastAPI 暴露开发调试路由，并且只能调用 localhost 公开用例，不得直接操作 Kernel。
-`src.localhost.api` 可以重新导出应用工厂，但不拥有路由业务逻辑。
+应用工厂只由 `src.dashboard.api` 导出；`localhost` 不反向导入或重新导出 Dashboard 路由。
 
 调试服务默认监听 `127.0.0.1`，地址和端口只由 `config/aurora.toml` 的 `runtime.debug_host` 与
 `runtime.debug_port` 定义。生产 profile 不得把该服务暴露到非 loopback 地址。

@@ -83,12 +83,13 @@ Use `/say hello` in the console to submit a message, `/pump` to advance ready tu
 ```text
 config/         TOML configuration and profile overrides
 docs/rfc/       Normative architecture and public contracts
+src/contracts/  Configuration, AMP, Agent, model, and memory contracts
 src/kernel/     Tasks, Agents, mailboxes, Activities, causality, and SQLite runtime state
 src/agents/     Homogeneous Agent handlers and built-in delegation capabilities
 src/ai/         Model roles, routing, native tools/Responses, and usage records
 src/localhost/  Local chat, scheduler, console, and application use cases
 src/dashboard/  Dashboard HTTP/WebSocket and debug route adapters
-src/platform/   Ecosystem adapters, capability catalog, and AMP normalization
+src/platform/   Console, Dashboard, and MCP adapters, capability catalog, and AMP normalization
 src/apps/       Built-in native AMP-MCP applications
 src/sandbox/    Independent sandbox components; not enabled by the current Agent runtime
 src/utils/      Shared utilities with no upper-layer dependencies

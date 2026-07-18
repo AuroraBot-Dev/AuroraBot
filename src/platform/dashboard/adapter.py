@@ -7,9 +7,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from src.kernel.contracts import EffectLease, PlatformRuntimePort
-from src.kernel.events import AmpEnvelope, new_amp
-from src.platform.local import PlatformRunResult
+from src.contracts.agent import EffectLease, PlatformRuntimePort
+from src.contracts.amp import AmpEnvelope, new_amp
+from src.platform.effects import PlatformRunResult
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.platform.dashboard")

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, call
 
 from scripts.cli import check, runtime
 
@@ -29,16 +27,14 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
     ]
 
 
-def test_background_server_force_kills_a_stuck_process(monkeypatch: pytest.MonkeyPatch) -> None:
-    process = Mock()
-    process.wait.side_effect = [subprocess.TimeoutExpired("serve", 5), None]
-    kill_tree = Mock()
+def test_installed_runtime_command_calls_composition_entry_directly(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
 
-    monkeypatch.setattr(runtime.subprocess, "Popen", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(runtime, "_kill_tree", kill_tree)
+    def record(argv: list[str]) -> None:
+        calls.append(argv)
 
-    with runtime._background_server():
-        pass
+    monkeypatch.setattr("src.dashboard.cli.main", record)
+    args = argparse.Namespace(root="C:/aurora", profile="production")
 
-    assert kill_tree.call_args_list == [call(process), call(process, force=True)]
-    assert process.wait.call_args_list == [call(timeout=5), call()]
+    assert runtime.serve(args) == 0
+    assert calls == [["--root", "C:/aurora", "--profile", "production", "serve"]]

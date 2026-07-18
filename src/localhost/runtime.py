@@ -9,10 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.ai.contracts import ModelRequest
 from src.ai.vnext import ModelGatewayService
-from src.config import AuroraConfig, load_config
-from src.kernel.contracts import (
+from src.contracts.agent import (
     AgentHandler,
     AgentLimits,
     AgentProfile,
@@ -21,13 +19,15 @@ from src.kernel.contracts import (
     KernelConfiguration,
     TaskBudget,
 )
-from src.kernel.events import AmpEnvelope, new_amp
+from src.contracts.amp import AmpEnvelope, new_amp
+from src.contracts.configuration import AuroraConfig, load_configuration
+from src.contracts.model import ModelRequest
 from src.kernel.runtime import AgentKernel, PumpResult
 from src.localhost.chat import ChatService
 from src.localhost.scheduler import CognitiveScheduler
+from src.platform.console import ConsolePlatform
 from src.platform.dashboard import DashboardPlatform
-from src.platform.local import LocalTestPlatform
-from src.platform.mcp_platform import MCPPlatform
+from src.platform.mcp import MCPPlatform
 from src.utils.log_utils import configure_logging, get_logger
 
 logger = get_logger("aurora.runtime")
@@ -49,11 +49,12 @@ class AuroraRuntime:
     configuration: AuroraConfig
     kernel: AgentKernel
     model_gateway: ModelGatewayService
-    platform: LocalTestPlatform
+    console_platform: ConsolePlatform
     mcp_platform: MCPPlatform
     dashboard_platform: DashboardPlatform
     chat: ChatService
     _pump_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _started: bool = field(default=False, init=False, repr=False)
     _console_messages: list[str] = field(default_factory=list, init=False, repr=False)
     _console_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue, init=False, repr=False)
@@ -64,8 +65,8 @@ class AuroraRuntime:
 
     @classmethod
     def create(cls, root: Path, profile: str | None = None) -> "AuroraRuntime":
-        configuration = load_config(root, profile)
-        configure_logging(configuration.logging_level)
+        configuration = load_configuration(root, profile)
+        configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
         profiles = tuple(
             AgentProfile(
                 id=item.id,
@@ -121,10 +122,10 @@ class AuroraRuntime:
             )
         )
         kernel.install_capability_catalog(configured_catalog)
-        test_capabilities = frozenset(
+        console_capabilities = frozenset(
             capability.id
             for adapter in configuration.adapters
-            if adapter.implementation == "src.platform.local:LocalTestPlatform"
+            if adapter.implementation == "src.platform.console:ConsolePlatform"
             for capability in adapter.capabilities
         )
         chat = ChatService(configuration.dashboard)
@@ -132,7 +133,7 @@ class AuroraRuntime:
             configuration,
             kernel,
             ModelGatewayService(configuration),
-            LocalTestPlatform(test_capabilities),
+            ConsolePlatform(console_capabilities),
             MCPPlatform(configuration),
             DashboardPlatform(chat.deliver_bot_reply),
             chat,
@@ -148,9 +149,14 @@ class AuroraRuntime:
     async def _ensure_started(self) -> None:
         if self._started:
             return
-        await self.chat.start()
-        await self.mcp_platform.start(self.kernel)
-        self._started = True
+        # Dashboard, console and run_forever may all enter startup concurrently.
+        # Serialize the side effects so SQLite initialization and MCP launch happen once.
+        async with self._start_lock:
+            if self._started:
+                return
+            await self.chat.start()
+            await self.mcp_platform.start(self.kernel)
+            self._started = True
 
     async def start(self) -> None:
         await self._ensure_started()
@@ -174,7 +180,7 @@ class AuroraRuntime:
             await self._ensure_started()
             result: PumpResult = await self.kernel.pump(max_turns)
             local_result, dashboard_result, mcp_result = await asyncio.gather(
-                self.platform.execute_pending_effects(self.kernel),
+                self.console_platform.execute_pending_effects(self.kernel),
                 self.dashboard_platform.execute_pending_effects(self.kernel),
                 self.mcp_platform.execute_pending_effects(self.kernel),
             )

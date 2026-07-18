@@ -17,8 +17,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.config import Config
 from src.sandbox.base import SandboxResult
+from src.sandbox.paths import (
+    SANDBOX_DIR,
+    SANDBOX_EXEC_TIMEOUT,
+    SANDBOX_MAX_OUTPUT_SIZE,
+    SANDBOX_OUTPUT_DIR,
+    SANDBOX_TEMP_DIR,
+)
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
@@ -84,19 +90,20 @@ class SandboxExecutor:
 
     def _check_disk_space(self, min_mb: int = 100) -> bool:
         """检查 SANDBOX_DIR 所在磁盘是否还有足够可用空间。"""
-        usage = shutil.disk_usage(str(Config.SANDBOX_DIR))
+        usage = shutil.disk_usage(str(SANDBOX_DIR))
         return usage.free >= min_mb * 1024 * 1024
 
     def _create_sandbox_temp(self, session_id: str) -> Path:
         """在 SANDBOX_TEMP_DIR 下创建带日期和 session_id 前缀的临时目录。"""
         today = datetime.now(UTC).date().isoformat()
         prefix = f"{today}-{session_id}-"
-        return Path(tempfile.mkdtemp(dir=Config.SANDBOX_TEMP_DIR, prefix=prefix))
+        SANDBOX_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        return Path(tempfile.mkdtemp(dir=SANDBOX_TEMP_DIR, prefix=prefix))
 
     def _create_output_dir(self, session_id: str) -> Path:
         """创建 stdout/stderr 重定向文件和产物文件的输出目录。"""
         today = datetime.now(UTC).date().isoformat()
-        output_dir = Config.SANDBOX_OUTPUT_DIR / f"{today}-{session_id}"
+        output_dir = SANDBOX_OUTPUT_DIR / f"{today}-{session_id}"
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
@@ -153,20 +160,20 @@ class SandboxExecutor:
                 stdout=stdout_file,
                 stderr=stderr_file,
                 stdin=asyncio.subprocess.DEVNULL,
-                cwd=str(Config.SANDBOX_DIR),
+                cwd=str(SANDBOX_DIR),
             )
             try:
                 await asyncio.wait_for(
                     process.wait(),
-                    timeout=Config.SANDBOX_EXEC_TIMEOUT,
+                    timeout=SANDBOX_EXEC_TIMEOUT,
                 )
             except TimeoutError:
                 process.kill()
                 await process.wait()
                 return (
                     False,
-                    stdout_path.read_text(encoding="utf-8", errors="replace")[: Config.SANDBOX_MAX_OUTPUT_SIZE],
-                    f"执行超时(超过 {Config.SANDBOX_EXEC_TIMEOUT} 秒)",
+                    stdout_path.read_text(encoding="utf-8", errors="replace")[:SANDBOX_MAX_OUTPUT_SIZE],
+                    f"执行超时(超过 {SANDBOX_EXEC_TIMEOUT} 秒)",
                 )
 
         stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace")
@@ -174,8 +181,8 @@ class SandboxExecutor:
 
         return (
             process.returncode == 0,
-            stdout_text[: Config.SANDBOX_MAX_OUTPUT_SIZE],
-            stderr_text[: Config.SANDBOX_MAX_OUTPUT_SIZE],
+            stdout_text[:SANDBOX_MAX_OUTPUT_SIZE],
+            stderr_text[:SANDBOX_MAX_OUTPUT_SIZE],
         )
 
     def _collect_artifacts(self, execution_dir: Path, output_dir: Path) -> list[Path]:

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.kernel.events import AmpEnvelope, AmpValidationError
+from src.contracts.amp import AmpEnvelope, AmpValidationError
 
 
 def valid_amp() -> dict[str, object]:

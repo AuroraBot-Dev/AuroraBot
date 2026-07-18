@@ -10,11 +10,10 @@ import functools
 import inspect
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, cast
-
-from src.config import Config
 
 try:
     from concurrent_log_handler import ConcurrentRotatingFileHandler
@@ -37,14 +36,22 @@ FILE_FORMATTER = logging.Formatter(FILE_FORMAT, DATETIME_FORMAT)
 CONSOLE_FORMATTER = logging.Formatter(CONSOLE_FORMAT, DATETIME_FORMAT)
 
 # 日志轮转配置
-DEFAULT_LOGFILE = Config.LOG_DIR / "aurora.log"
 MAX_LOGFILE_SIZE = 102400  # KB
 MAX_LOGFILE_BACKUPS = 5  # 保留5个备份
 
 # 日志级别
-LOG_LEVEL = Config.LOG_LEVEL
-_logging_state: dict[str, int | str] = {"level": LOG_LEVEL}
+LOG_LEVEL: int | str = logging.INFO
+
+
+@dataclass(slots=True)
+class _LoggingState:
+    level: int | str = LOG_LEVEL
+    logfile: Path | None = None
+
+
+_logging_state = _LoggingState()
 _managed_logger_names: set[str] = set()
+_MANAGED_FILE_HANDLER = "_aurora_managed_file_handler"
 
 
 def _create_stream_handler(
@@ -212,13 +219,13 @@ def get_logger(
     返回配置好的日志记录器
     - name: 日志记录器名称 (默认根记录器) .
     - level: 日志级别 (默认从配置文件中获取) .
-    - logfile: 日志文件路径. 若为 None 则使用 DEFAULT_LOGFILE .
+    - logfile: 日志文件路径；未显式配置时只写控制台。
     """
     if name is None:
         # 默认使用根包名, 如果无法获取则使用"Default"
         name = __package__ or "Default"
 
-    effective_level = _logging_state["level"] if level is None else level
+    effective_level = _logging_state.level if level is None else level
     _managed_logger_names.add(name)
 
     logger = logging.getLogger(name)
@@ -230,7 +237,7 @@ def get_logger(
             cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger
 
-    logfile = logfile or DEFAULT_LOGFILE
+    effective_logfile = logfile if logfile is not None else _logging_state.logfile
 
     logger.setLevel(effective_level)
     logger.propagate = False
@@ -238,8 +245,10 @@ def get_logger(
     # 配置控制台输出
     logger.addHandler(_create_stream_handler(effective_level))
 
-    # 配置文件输出
-    logger.addHandler(_create_file_handler(logfile, effective_level))
+    if isinstance(effective_logfile, (str, Path)):
+        file_handler = _create_file_handler(effective_logfile, effective_level)
+        setattr(file_handler, _MANAGED_FILE_HANDLER, True)
+        logger.addHandler(file_handler)
 
     # 将 DecoratorFactory 实例绑定到记录器, 用于创建日志装饰器
     cast("Any", logger).decorate = DecoratorFactory(logger)
@@ -247,11 +256,21 @@ def get_logger(
     return logger
 
 
-def configure_logging(level: int | str) -> None:
-    """Apply the validated runtime log level to existing and future Aurora loggers."""
-    _logging_state["level"] = level
+def configure_logging(level: int | str, logfile: str | Path | None = None) -> None:
+    """Apply one explicit runtime logging snapshot to existing and future loggers."""
+    _logging_state.level = level
+    if logfile is not None:
+        _logging_state.logfile = Path(logfile)
     for name in tuple(_managed_logger_names):
         logger = logging.getLogger(name)
         logger.setLevel(level)
         for handler in logger.handlers:
             handler.setLevel(level)
+        if logfile is not None:
+            for handler in tuple(logger.handlers):
+                if getattr(handler, _MANAGED_FILE_HANDLER, False):
+                    logger.removeHandler(handler)
+                    handler.close()
+            file_handler = _create_file_handler(logfile, level)
+            setattr(file_handler, _MANAGED_FILE_HANDLER, True)
+            logger.addHandler(file_handler)

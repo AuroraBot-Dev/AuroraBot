@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from src.kernel.contracts import TaskState, TaskStatus
+from src.contracts.agent import TaskState, TaskStatus
 from src.utils.log_utils import get_logger
 from src.utils.serialization import atomic_write_json, read_json
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from src.localhost.configuration import SchedulerConfig
+    from src.contracts.configuration import SchedulerConfig
 
 
 @dataclass(slots=True)

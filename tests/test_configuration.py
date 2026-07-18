@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.localhost.configuration import ConfigurationError, load_configuration
+from src.contracts.configuration import ConfigurationError, load_configuration
 
 _DASHBOARD_PORT = 8000
 

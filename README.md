@@ -80,12 +80,13 @@ uv run aurora check
 ```text
 config/         TOML 主配置、领域配置与 profile 覆盖
 docs/rfc/       规范性架构与公共契约
+src/contracts/  配置、AMP、Agent、模型与记忆契约
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
 src/ai/         模型角色、路由、原生 tools/Responses 和用量记录
 src/localhost/  本地业务、聊天室、scheduler 与控制台用例
 src/dashboard/  Dashboard HTTP/WebSocket 与调试路由适配层
-src/platform/   平台生态适配、能力目录与 AMP 归一化
+src/platform/   Console、Dashboard、MCP 平台适配、能力目录与 AMP 归一化
 src/apps/       内建原生 AMP-MCP 应用
 src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
 src/utils/      无上层依赖的通用工具

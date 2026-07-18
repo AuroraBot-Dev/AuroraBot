@@ -11,15 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.config import Config
+from src.sandbox.paths import SANDBOX_DIR
 from src.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.sandbox.settings import SandboxConfig
 
 logger = get_logger("AccessPolicy")
-
-SANDBOX_DIR = Config.SANDBOX_DIR
 
 
 @dataclass(slots=True)

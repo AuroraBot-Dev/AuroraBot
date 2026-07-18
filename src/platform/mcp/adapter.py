@@ -12,11 +12,15 @@ from dataclasses import dataclass
 
 from mcp.client.streamable_http import streamablehttp_client
 
-from src.kernel.contracts import EffectLease, PlatformRuntimePort
-from src.kernel.events import AmpEnvelope, new_amp
-from src.localhost.configuration import AppConfig, AuroraConfig, CapabilityConfig
-from src.platform.capabilities import CapabilityCatalogSnapshot, CapabilityDescriptor
-from src.platform.local import PlatformRunResult
+from src.contracts.agent import (
+    CapabilityCatalogSnapshot,
+    CapabilityDescriptor,
+    EffectLease,
+    PlatformRuntimePort,
+)
+from src.contracts.amp import AmpEnvelope, new_amp
+from src.contracts.configuration import AppConfig, AuroraConfig, CapabilityConfig
+from src.platform.effects import PlatformRunResult
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec

@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from src.ai.contracts import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
-from src.kernel.events import new_amp
+from src.contracts.amp import new_amp
+from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.localhost.runtime import AuroraRuntime
 
 

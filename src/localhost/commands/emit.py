@@ -6,7 +6,7 @@ import argparse
 import json
 from typing import TYPE_CHECKING
 
-from src.kernel.events import new_amp
+from src.contracts.amp import new_amp
 
 if TYPE_CHECKING:
     from src.localhost.runtime import AuroraRuntime

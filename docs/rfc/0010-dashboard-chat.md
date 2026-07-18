@@ -48,5 +48,5 @@ localhost 业务数据，不进入 Kernel 三目录；进入认知边界的事�
 
 ## 当前接口
 
-调试路由由 `src.dashboard` 承载，`src.localhost.api` 提供同一应用工厂的公开导出。Dashboard 前端由独立工程
+调试路由与应用工厂仅由 `src.dashboard` 承载，`localhost` 不提供反向兼容导出。Dashboard 前端由独立工程
 管理，本仓库只维护后端路由/API 适配与 localhost 聊天业务用例。

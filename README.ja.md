@@ -82,12 +82,13 @@ console では `/say こんにちは` でメッセージを投入し、`/pump` �
 ```text
 config/         TOML 設定と profile override
 docs/rfc/       規範的な architecture と公開 contract
+src/contracts/  設定、AMP、Agent、model、memory contract
 src/kernel/     Task、Agent、mailbox、Activity、因果、SQLite runtime state
 src/agents/     同構 Agent handler と組み込み委任能力
 src/ai/         モデル role、routing、native tools/Responses、usage 記録
 src/localhost/  chat、scheduler、console の application use case
 src/dashboard/  Dashboard HTTP/WebSocket と debug route adapter
-src/platform/   ecosystem adapter、capability catalog、AMP 正規化
+src/platform/   Console、Dashboard、MCP adapter、capability catalog、AMP 正規化
 src/apps/       組み込み native AMP-MCP application
 src/sandbox/    独立 sandbox component。現在の Agent runtime では無効
 src/utils/      上位 layer に依存しない共通 utility

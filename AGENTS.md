@@ -15,12 +15,13 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 ```text
 config/         TOML 主配置、领域配置与 profile 覆盖
 docs/rfc/       RFC 0000—0012
+src/contracts/  无上层依赖的配置、AMP、Agent、模型与记忆契约
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
 src/ai/         宽泛模型网关
 src/localhost/  本地业务服务、scheduler 与开发者调试接口
 src/dashboard/  Dashboard 后端路由/API 适配层
-src/platform/   平台生态适配、能力目录与 AMP 归一化
+src/platform/   Console、Dashboard、MCP 平台适配、能力目录与 AMP 归一化
 src/apps/       内建原生 AMP-MCP 应用
 src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
 src/utils/      无上层依赖的通用工具
@@ -34,7 +35,7 @@ tests/          契约、集成与回归测试
   也不得绕过 Activity 与因果记录。
 - Platform 将外部生态归一化为 AMP 输入，并执行 `effect.requested`；执行结果必须以新事件回到 Kernel。
 - `localhost` 提供业务用例；`dashboard` 只提供路由/API 适配，不能绕过 `localhost` 直接操作 Kernel。
-- `utils` 不得依赖 `kernel`、`ai`、`platform`、`nodes`、`localhost` 或 `dashboard`。
+- 依赖方向固定为 `utils/contracts ← kernel/ai/platform/agents ← localhost ← dashboard`。
 
 ## Workspace and configuration
 
@@ -48,5 +49,6 @@ tests/          契约、集成与回归测试
 - `uv run python bot.py` 启动单一常驻 `AuroraRuntime`；`uv run aurora` 提供本地调试组合入口。
 - Python 3.12，包管理使用 `uv`。
 - Ruff 行宽 120，LF，双引号；公开 API 提供类型注解，dataclass 优先 `slots=True`。
+- 主源码文件原则上不超过 500 行；超过时按明确职责拆分，并由边界测试约束。
 - 日志统一使用 `src.utils.log_utils.get_logger()`，级别与字段边界见 `LOGGING.md`。
 - 提交前执行 `uv run aurora check`；按改动风险补充定向测试与完整 `uv run pytest`。

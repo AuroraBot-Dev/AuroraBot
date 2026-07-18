@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
@@ -179,6 +180,22 @@ class ModelContinuation:
         if not isinstance(provider, str) or not valid_items:
             raise ValueError("invalid model continuation")
         return cls(provider, channel, tuple(dict(item) for item in items))
+
+
+def append_tool_result(
+    continuation: ModelContinuation,
+    call_id: str,
+    result: object,
+    *,
+    is_error: bool,
+) -> ModelContinuation:
+    """Append one provider-neutral tool result using the continuation's replay shape."""
+    serialized = json.dumps({"is_error": is_error, "result": result}, ensure_ascii=False, separators=(",", ":"))
+    if continuation.channel == "responses":
+        item = {"type": "function_call_output", "call_id": call_id, "output": serialized}
+    else:
+        item = {"role": "tool", "tool_call_id": call_id, "content": serialized}
+    return ModelContinuation(continuation.provider, continuation.channel, (*continuation.items, item))
 
 
 class ModelGatewayError(RuntimeError):

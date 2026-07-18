@@ -71,6 +71,19 @@ AMP 继续是 Platform、原生 App 与 Kernel 的 UTF-8 JSON 边界，入口仍
 
 Episode 和 cycle 调试 API 不再存在。
 
+### 包边界与 Platform 布局
+
+运行时代码遵循单向依赖：`utils/contracts ← kernel/ai/platform/agents ← localhost ← dashboard`。配置 DTO 与
+模型、AMP、Agent 等稳定契约位于无上层依赖的 `src/contracts`；配置只在组合根显式加载，模块导入不得读取
+项目配置或创建运行目录。
+
+Platform 内每个完整适配器使用独立子包。Console、Dashboard 与 MCP 的公共入口分别为
+`src.platform.console`、`src.platform.dashboard` 和 `src.platform.mcp`；子包拥有自己的效果执行与外部协议代码，
+共享层只保留无平台语义的轻量结果类型，不用继承体系合并不同平台生命周期。
+
+主源码文件以 500 行为可审查性上限；超过时按持久化、入口、查询、执行或协议职责拆分，并由自动测试阻止
+无边界的大文件重新出现。该上限不要求把紧密状态机机械切碎，拆分后的模块仍须拥有清晰名称和单一变更原因。
+
 ### Memory Agent 边界
 
 本 RFC 只定义 `MemoryQuery`、`MemoryResult`、`MemoryProposal` 与 `MemoryFailure`。未配置 Memory Agent 时返回非
@@ -96,3 +109,4 @@ Episode 和 cycle 调试 API 不再存在。
 4. 模型与效果结果准确返回请求 Agent，重启和重放不会产生重复终态效果。
 5. Brain Context 自动反映人格、全局活动和未归属情景，claim 与 TTL 可审计。
 6. Kernel 不依赖 AI、Platform 或 localhost 配置实现。
+7. 安装后的 wheel 可从空工作目录导入并启动 CLI；自动边界测试拒绝反向依赖和包级循环。

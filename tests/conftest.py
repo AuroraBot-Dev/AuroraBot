@@ -124,7 +124,7 @@ child_profiles = ["builtin.worker"]
 [[adapter]]
 id = "local.test"
 enabled = true
-implementation = "src.platform.local:LocalTestPlatform"
+implementation = "src.platform.console:ConsolePlatform"
 
 [[adapter.capability]]
 id = "org.aurora.console.send_message"

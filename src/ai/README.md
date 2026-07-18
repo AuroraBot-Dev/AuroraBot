@@ -6,8 +6,8 @@ Agent handler 不直接访问 Provider client，而是通过 Kernel 创建模型
 
 ## 公共契约
 
-- `src.ai.contracts.ModelRequest`：角色、消息、所需能力、tools、tool choice、continuation、取消策略和受控参数。
-- `src.ai.contracts.ModelResult`：规范化文本、最多一个 tool call、finish reason、用量、费用和 JSON continuation。
+- `src.contracts.model.ModelRequest`：角色、消息、所需能力、tools、tool choice、continuation、取消策略和受控参数。
+- `src.contracts.model.ModelResult`：规范化文本、最多一个 tool call、finish reason、用量、费用和 JSON continuation。
 - `src.ai.vnext.ModelGatewayService`：能力协商、参数校验、双通道调用和统一结果规范化。
 - `src.ai.gateway`：LiteLLM 执行、任务中断、费用追踪和 Provider 适配；是 service 的内部执行设施。
 
@@ -16,10 +16,10 @@ Provider 原生 Python 对象不得落盘。Responses output item、encrypted re
 
 ## 模型通道
 
-| endpoint | 用途 | continuation |
-| --- | --- | --- |
-| `chat_completions` | fast/quality 等聊天与原生 tools | 重放 assistant tool call、可用推理字段和 tool result |
-| `responses` | 需要原生 Responses 的 agent | `store=false`，重放 output item 与 `function_call_output` |
+| endpoint           | 用途                            | continuation                                              |
+| ------------------ | ------------------------------- | --------------------------------------------------------- |
+| `chat_completions` | fast/quality 等聊天与原生 tools | 重放 assistant tool call、可用推理字段和 tool result      |
+| `responses`        | 需要原生 Responses 的 agent     | `store=false`，重放 output item 与 `function_call_output` |
 
 两条通道都设置 `parallel_tool_calls=false`。一步只接受零或一个工具调用，多调用响应会被拒绝，不在 Kernel 中
 隐式并行或 join。

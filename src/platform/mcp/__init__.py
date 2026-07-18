@@ -7,3 +7,7 @@ Tool schema 转换等基础设施。
 """
 
 from __future__ import annotations
+
+from src.platform.mcp.adapter import MCPPlatform
+
+__all__ = ["MCPPlatform"]

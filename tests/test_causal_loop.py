@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from src.kernel.events import AmpEnvelope, new_amp
+from src.contracts.amp import AmpEnvelope, new_amp
 from src.localhost.runtime import AuroraRuntime
 
 

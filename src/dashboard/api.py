@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from src.kernel.events import AmpValidationError
+from src.contracts.amp import AmpValidationError
 from src.localhost.chat import ChatError
 from src.localhost.runtime import AuroraRuntime
 from src.utils.log_utils import get_logger

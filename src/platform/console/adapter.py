@@ -1,26 +1,21 @@
-"""A local Platform adapter used by the first causal-loop integration tests."""
+"""Console Platform adapter for terminal text effects."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
 
-from src.kernel.contracts import EffectLease, PlatformRuntimePort
-from src.kernel.events import AmpEnvelope, new_amp
+from src.contracts.agent import EffectLease, PlatformRuntimePort
+from src.contracts.amp import AmpEnvelope, new_amp
+from src.platform.effects import PlatformRunResult
 from src.utils.log_utils import get_logger
 
-logger = get_logger("aurora.platform.local")
+logger = get_logger("aurora.platform.console")
 
 
-@dataclass(frozen=True, slots=True)
-class PlatformRunResult:
-    receipts_emitted: int
-
-
-class LocalTestPlatform:
-    """Execute the console capability in deterministic localhost tests."""
+class ConsolePlatform:
+    """Execute Console publication effects through the Kernel effect port."""
 
     def __init__(self, capabilities: frozenset[str] = frozenset()) -> None:
         self.capabilities = capabilities

@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from src.kernel.contracts import AgentDecision, Completion, TaskState, TaskStatus
-from src.kernel.memory import MemoryFailure, MemoryProposal, MemoryQuery, MemoryResult
-from src.localhost.configuration import SchedulerConfig
+from src.contracts.agent import AgentDecision, Completion, TaskState, TaskStatus
+from src.contracts.configuration import SchedulerConfig
+from src.contracts.memory import MemoryFailure, MemoryProposal, MemoryQuery, MemoryResult
 from src.localhost.scheduler import CognitiveScheduler
 
 if TYPE_CHECKING:

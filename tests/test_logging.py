@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.ai.contracts import ModelGatewayError, ModelMessage, ModelRequest
 from src.ai.vnext import ModelGatewayService
-from src.localhost.configuration import load_configuration
+from src.contracts.configuration import load_configuration
+from src.contracts.model import ModelGatewayError, ModelMessage, ModelRequest
 from src.localhost.runtime import AuroraRuntime
 from src.utils.log_utils import configure_logging, get_logger
 from tests.test_events import valid_amp
@@ -48,7 +48,7 @@ def test_causal_logs_have_correlation_ids_without_amp_content(project_root: Path
             get_logger("aurora.kernel"),
             get_logger("aurora.runtime"),
             get_logger("aurora.agent.tool"),
-            get_logger("aurora.platform.local"),
+            get_logger("aurora.platform.console"),
         ]
         for item in loggers:
             item.addHandler(handler)
