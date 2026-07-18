@@ -18,7 +18,7 @@ AMP 不是 MCP Server 需要实现的协议，而是 AuroraBot Platform
     工具调用结果 / 资源状态 / 通知 / 生命周期
          |
          v  (Platform 侧生成 AMP)
-  AMP Envelope → Kernel 事件接管与认知图
+  AMP Envelope → Kernel Task/Agent 事件接管
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """

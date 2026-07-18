@@ -224,27 +224,33 @@ def create_app(
         except AmpValidationError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
-    @app.post("/v1/debug/cycles")
-    async def run_cycle() -> dict[str, Any]:
-        return await runtime.run_cycle()
-
-    @app.get("/v1/debug/records/{record_id}")
-    def get_record(record_id: str) -> dict[str, Any]:
-        record = runtime.record(record_id)
-        if record is None:
-            raise HTTPException(status_code=404, detail="record not found")
-        return record
+    @app.post("/v1/debug/pump")
+    async def pump(max_turns: int = 8) -> dict[str, Any]:
+        if not 1 <= max_turns <= 100:  # noqa: PLR2004 - public debug safety bound
+            raise HTTPException(status_code=422, detail="max_turns must be between 1 and 100")
+        return await runtime.pump(max_turns)
 
     @app.get("/v1/debug/status")
     def get_status() -> dict[str, Any]:
         return runtime.status()
 
-    @app.get("/v1/debug/episodes/{episode_id}")
-    def get_episode(episode_id: str) -> dict[str, Any]:
-        episode = runtime.episode(episode_id)
-        if episode is None:
-            raise HTTPException(status_code=404, detail="episode not found")
-        return episode
+    @app.get("/v1/debug/tasks/{task_id}")
+    def get_task(task_id: str) -> dict[str, Any]:
+        task = runtime.task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+
+    @app.get("/v1/debug/agents/{agent_id}")
+    def get_agent(agent_id: str) -> dict[str, Any]:
+        agent = runtime.agent(agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return agent
+
+    @app.get("/v1/debug/brain-context")
+    def get_brain_context() -> dict[str, Any]:
+        return runtime.brain_context()
 
     return app
 

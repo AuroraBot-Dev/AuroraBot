@@ -57,8 +57,9 @@ class RuntimeConfig:
     debug_host: str
     debug_port: int
     scheduler: "SchedulerConfig"
-    interactive_budget: "EpisodeBudgetConfig"
-    autonomous_budget: "EpisodeBudgetConfig"
+    agents: "AgentRuntimeConfig"
+    interactive_budget: "TaskBudgetConfig"
+    autonomous_budget: "TaskBudgetConfig"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +75,7 @@ class SchedulerConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class EpisodeBudgetConfig:
+class TaskBudgetConfig:
     max_model_calls: int
     max_tool_calls: int
     max_duration_seconds: float
@@ -100,13 +101,31 @@ class DashboardConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class NodeConfig:
+class AgentRuntimeConfig:
+    root_profile: str = "builtin.gate"
+    worker_profile: str = "builtin.worker"
+    memory_agent_profile: str | None = None
+    max_active_agents: int = 16
+    max_agents_per_task: int = 8
+    max_depth: int = 3
+    max_children_per_agent: int = 4
+    turn_concurrency: int = 8
+    model_concurrency: int = 4
+    effect_concurrency: int = 8
+    blocking_workers: int = 4
+    lease_seconds: float = 30.0
+    ambient_ttl_seconds: float = 1800.0
+
+
+@dataclass(frozen=True, slots=True)
+class AgentProfileConfig:
     id: str
     implementation: str
-    inputs: frozenset[str]
-    outputs: frozenset[str]
+    model_role: str
+    prompt: str
     capabilities: frozenset[str]
-    model_roles: frozenset[str]
+    can_delegate: bool
+    child_profiles: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,9 +205,7 @@ class AuroraConfig:
     soul_path: Path
     soul_hash: str
     logging_level: str
-    nodes: tuple[NodeConfig, ...]
-    edges: dict[str, tuple[str, ...]]
-    advancing_edges: frozenset[tuple[str, str]]
+    agents: tuple[AgentProfileConfig, ...]
     adapters: tuple[AdapterConfig, ...]
     model_roles: frozenset[str]
     model_definitions: dict[str, ModelRoleConfig]
@@ -198,73 +215,61 @@ class AuroraConfig:
     apps: tuple[AppConfig, ...]
 
 
-def _parse_nodes(
-    data: dict[str, Any], model_roles: frozenset[str]
-) -> tuple[tuple[NodeConfig, ...], dict[str, tuple[str, ...]], frozenset[tuple[str, str]]]:
-    _require_keys(data, {"node", "edge"}, "nodes.toml")
-    raw_nodes = data["node"]
-    raw_edges = data["edge"]
-    if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
-        raise ConfigurationError("node and edge must be arrays")
-    nodes: list[NodeConfig] = []
+def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[AgentProfileConfig, ...]:
+    _require_keys(data, {"agent"}, "agents.toml")
+    raw_agents = data["agent"]
+    if not isinstance(raw_agents, list) or not raw_agents:
+        raise ConfigurationError("agents.toml agent must be a non-empty array")
+    agents: list[AgentProfileConfig] = []
     ids: set[str] = set()
-    for raw in raw_nodes:
+    for raw in raw_agents:
         if not isinstance(raw, dict):
-            raise ConfigurationError("node must be a table")
+            raise ConfigurationError("agent must be a table")
         _require_keys(
             raw,
-            {"id", "enabled", "implementation", "inputs", "outputs", "capabilities", "model_roles"},
-            "node",
+            {
+                "id",
+                "implementation",
+                "model_role",
+                "prompt",
+                "capabilities",
+                "can_delegate",
+                "child_profiles",
+            },
+            "agent",
         )
-        if not isinstance(raw["enabled"], bool):
-            raise ConfigurationError("node.enabled must be boolean")
-        if not raw["enabled"]:
-            continue
-        node_id = _string(raw["id"], "node.id")
-        if node_id in ids:
-            raise ConfigurationError(f"duplicate node {node_id}")
-        ids.add(node_id)
-        fields = {name: raw[name] for name in ("inputs", "outputs", "capabilities", "model_roles")}
-        list_fields_are_invalid = any(
-            not isinstance(item, list) or not all(isinstance(item_value, str) for item_value in item)
-            for item in fields.values()
-        )
-        if list_fields_are_invalid:
-            raise ConfigurationError(f"node {node_id} list fields must contain strings")
-        roles = frozenset(fields["model_roles"])
-        if not roles <= model_roles:
-            raise ConfigurationError(f"node {node_id} references unknown model roles")
-        nodes.append(
-            NodeConfig(
-                id=node_id,
-                implementation=_string(raw["implementation"], "node.implementation"),
-                inputs=frozenset(fields["inputs"]),
-                outputs=frozenset(fields["outputs"]),
-                capabilities=frozenset(fields["capabilities"]),
-                model_roles=roles,
+        agent_id = _string(raw["id"], "agent.id")
+        if agent_id in ids:
+            raise ConfigurationError(f"duplicate Agent profile {agent_id}")
+        ids.add(agent_id)
+        model_role = _string(raw["model_role"], "agent.model_role")
+        if model_role not in model_roles:
+            raise ConfigurationError(f"Agent {agent_id} references unknown model role {model_role}")
+        capabilities = raw["capabilities"]
+        children = raw["child_profiles"]
+        if not isinstance(capabilities, list) or not all(isinstance(item, str) for item in capabilities):
+            raise ConfigurationError(f"Agent {agent_id} capabilities must contain strings")
+        if not isinstance(children, list) or not all(isinstance(item, str) for item in children):
+            raise ConfigurationError(f"Agent {agent_id} child_profiles must contain strings")
+        if not isinstance(raw["can_delegate"], bool):
+            raise ConfigurationError(f"Agent {agent_id} can_delegate must be boolean")
+        agents.append(
+            AgentProfileConfig(
+                id=agent_id,
+                implementation=_string(raw["implementation"], "agent.implementation"),
+                model_role=model_role,
+                prompt=_string(raw["prompt"], "agent.prompt"),
+                capabilities=frozenset(capabilities),
+                can_delegate=raw["can_delegate"],
+                child_profiles=frozenset(children),
             )
         )
-    edges: dict[str, list[str]] = {}
-    advancing_edges: set[tuple[str, str]] = set()
-    for raw in raw_edges:
-        if not isinstance(raw, dict):
-            raise ConfigurationError("edge must be a table")
-        allowed_edge_keys = {"event_type", "target", "advances_round"}
-        if set(raw) - allowed_edge_keys or not {"event_type", "target"} <= set(raw):
-            raise ConfigurationError("edge has unsupported or missing keys")
-        event_type = _string(raw["event_type"], "edge.event_type")
-        target = _string(raw["target"], "edge.target")
-        advances_round = raw.get("advances_round", False)
-        if not isinstance(advances_round, bool):
-            raise ConfigurationError("edge.advances_round must be boolean")
-        if target == "@continuation" and not advances_round:
-            raise ConfigurationError("@continuation edge must advance round")
-        if target != "@continuation" and target not in ids:
-            raise ConfigurationError(f"edge references disabled or unknown node {target}")
-        edges.setdefault(event_type, []).append(target)
-        if advances_round:
-            advancing_edges.add((event_type, target))
-    return tuple(nodes), {key: tuple(value) for key, value in edges.items()}, frozenset(advancing_edges)
+    for agent in agents:
+        if not agent.child_profiles <= ids:
+            raise ConfigurationError(f"Agent {agent.id} references unknown child profiles")
+        if not agent.can_delegate and agent.child_profiles:
+            raise ConfigurationError(f"Agent {agent.id} cannot declare child_profiles when delegation is disabled")
+    return tuple(agents)
 
 
 def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConfig, ...], tuple[AppConfig, ...]]:
@@ -452,9 +457,9 @@ def _parse_scheduler(raw: dict[str, Any]) -> SchedulerConfig:
     )
 
 
-def _parse_episode_budget(
+def _parse_task_budget(
     raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
-) -> EpisodeBudgetConfig:
+) -> TaskBudgetConfig:
     allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
     if set(raw) - allowed:
         raise ConfigurationError(f"runtime.{label} has unsupported keys")
@@ -464,7 +469,30 @@ def _parse_episode_budget(
         raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
     if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
         raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
-    return EpisodeBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
+    return TaskBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
+
+
+def _parse_agent_runtime(raw: dict[str, Any]) -> AgentRuntimeConfig:
+    defaults = AgentRuntimeConfig()
+    allowed = set(AgentRuntimeConfig.__dataclass_fields__)
+    if set(raw) - allowed:
+        raise ConfigurationError("runtime.agents has unsupported keys")
+    values: dict[str, Any] = {}
+    for name in allowed:
+        value = raw.get(name, getattr(defaults, name))
+        if name == "memory_agent_profile":
+            values[name] = None if value is None else _string(value, "runtime.agents.memory_agent_profile")
+        elif name in {"root_profile", "worker_profile"}:
+            values[name] = _string(value, f"runtime.agents.{name}")
+        elif name in {"lease_seconds", "ambient_ttl_seconds"}:
+            values[name] = _positive_number(value, f"runtime.agents.{name}")
+        elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ConfigurationError(f"runtime.agents.{name} must be a positive integer")
+        else:
+            values[name] = value
+    if values["max_depth"] > values["max_agents_per_task"]:
+        raise ConfigurationError("runtime.agents.max_depth cannot exceed max_agents_per_task")
+    return AgentRuntimeConfig(**values)
 
 
 def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
@@ -561,8 +589,9 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         "debug_host",
         "debug_port",
         "scheduler",
-        "interactive_episode",
-        "autonomous_episode",
+        "agents",
+        "interactive_task",
+        "autonomous_task",
     }
     required_runtime = {"profile", "workspace", "debug_host", "debug_port"}
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
@@ -634,7 +663,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         soul_hash = hashlib.sha256(soul_path.read_bytes()).hexdigest()
     except FileNotFoundError as error:
         raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
-    nodes, edges, advancing_edges = _parse_nodes(_read_toml(root / "config" / "nodes.toml"), frozenset(roles))
+    agents = _parse_agents(_read_toml(root / "config" / "agents.toml"), frozenset(roles))
     adapters, apps = _parse_adapters(_read_toml(root / "config" / "apps.toml"), root)
     capability_definitions: dict[str, CapabilityConfig] = {}
     for adapter in adapters:
@@ -643,17 +672,27 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
                 raise ConfigurationError(f"duplicate capability {capability.id}")
             capability_definitions[capability.id] = capability
     app_tools = frozenset().union(*(app.allowed_tools for app in apps)) if apps else frozenset()
-    for node in nodes:
-        if not node.capabilities <= capability_definitions.keys() | app_tools:
-            raise ConfigurationError(f"node {node.id} requests unavailable capabilities")
+    for agent in agents:
+        if not agent.capabilities <= capability_definitions.keys() | app_tools:
+            raise ConfigurationError(f"Agent {agent.id} requests unavailable capabilities")
     scheduler_raw = runtime_raw.get("scheduler", {})
-    interactive_raw = runtime_raw.get("interactive_episode", {})
-    autonomous_raw = runtime_raw.get("autonomous_episode", {})
-    if not all(isinstance(item, dict) for item in (scheduler_raw, interactive_raw, autonomous_raw)):
-        raise ConfigurationError("runtime scheduler and episode budgets must be tables")
+    agents_raw = runtime_raw.get("agents", {})
+    interactive_raw = runtime_raw.get("interactive_task", {})
+    autonomous_raw = runtime_raw.get("autonomous_task", {})
+    if not all(isinstance(item, dict) for item in (scheduler_raw, agents_raw, interactive_raw, autonomous_raw)):
+        raise ConfigurationError("runtime scheduler, Agents and Task budgets must be tables")
     scheduler = _parse_scheduler(scheduler_raw)
-    interactive_budget = _parse_episode_budget(interactive_raw, 8, 6, 300.0, "interactive_episode")
-    autonomous_budget = _parse_episode_budget(autonomous_raw, 3, 2, 120.0, "autonomous_episode")
+    agent_runtime = _parse_agent_runtime(agents_raw)
+    if agent_runtime.root_profile not in {agent.id for agent in agents}:
+        raise ConfigurationError("runtime.agents.root_profile is not configured")
+    if agent_runtime.worker_profile not in {agent.id for agent in agents}:
+        raise ConfigurationError("runtime.agents.worker_profile is not configured")
+    if agent_runtime.memory_agent_profile is not None and agent_runtime.memory_agent_profile not in {
+        agent.id for agent in agents
+    }:
+        raise ConfigurationError("runtime.agents.memory_agent_profile is not configured")
+    interactive_budget = _parse_task_budget(interactive_raw, 8, 6, 300.0, "interactive_task")
+    autonomous_budget = _parse_task_budget(autonomous_raw, 3, 2, 120.0, "autonomous_task")
     return AuroraConfig(
         root=root,
         runtime=RuntimeConfig(
@@ -662,6 +701,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             debug_host=debug_host,
             debug_port=debug_port,
             scheduler=scheduler,
+            agents=agent_runtime,
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,
         ),
@@ -669,9 +709,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         soul_path=soul_path,
         soul_hash=soul_hash,
         logging_level=_string(logging_raw["level"], "logging.level"),
-        nodes=nodes,
-        edges=edges,
-        advancing_edges=advancing_edges,
+        agents=agents,
         adapters=adapters,
         model_roles=frozenset(roles),
         model_definitions=model_definitions,

@@ -47,6 +47,7 @@ def test_causal_logs_have_correlation_ids_without_amp_content(project_root: Path
         loggers = [
             get_logger("aurora.kernel"),
             get_logger("aurora.runtime"),
+            get_logger("aurora.agent.tool"),
             get_logger("aurora.platform.local"),
         ]
         for item in loggers:
@@ -56,7 +57,7 @@ def test_causal_logs_have_correlation_ids_without_amp_content(project_root: Path
         amp["payload"]["data"] = {"text": "TOP-SECRET-CONTENT"}
         try:
             await runtime.submit_amp(amp)
-            await runtime.run_cycle()
+            await runtime.pump()
         finally:
             for item in loggers:
                 item.removeHandler(handler)
@@ -65,9 +66,8 @@ def test_causal_logs_have_correlation_ids_without_amp_content(project_root: Path
 
         messages = "\n".join(record.getMessage() for record in handler.records)
         assert "TOP-SECRET-CONTENT" not in messages
-        assert "record_id=" in messages
-        assert "episode_id=" in messages
-        assert "cycle=" in messages
+        assert "task_id=" in messages
+        assert "agent_id=" in messages
 
     asyncio.run(scenario())
 

@@ -8,7 +8,7 @@ implementation = "src.platform.dashboard:DashboardPlatform"
 
 [[adapter.capability]]
 id = "org.aurora.dashboard.send_message"
-description = "Send one text reply to the Dashboard user who started the current episode."
+description = "Send one text reply to the Dashboard user who started the current Task."
 result_mode = "terminal"
 parameters_schema = { type = "object", properties = { text = { type = "string", minLength = 1 } }, required = ["text"], additionalProperties = false }
 

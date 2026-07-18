@@ -1,8 +1,8 @@
 # 模型网关
 
 `src.ai` 统一 AuroraBot 的模型角色、Provider 路由、原生工具调用、Responses continuation、用量、费用、超时与取消。
-认知 Node 不直接访问 Provider client，而是通过 Kernel 发布 `model.requested`；周期外 dispatcher 调用
-`ModelGatewayService`，再以 `model.completed` 或 `model.failed` 恢复 Episode。
+Agent handler 不直接访问 Provider client，而是通过 Kernel 创建模型 Activity；异步 dispatcher 调用
+`ModelGatewayService`，再以 `model.completed` 或 `model.failed` 邮箱消息恢复请求方 Agent。
 
 ## 公共契约
 
@@ -29,20 +29,20 @@ Provider 原生 Python 对象不得落盘。Responses output item、encrypted re
 角色和 Provider 只在 `config/aurora.toml` 的 `[models.roles.*]`、`[models.providers.*]` 中声明。角色包括模型、
 Provider、endpoint 和能力；密钥字段只保存环境变量名。具体模型由 TOML 决定，代码和文档不建立第二套默认值。
 
-调用参数不能覆盖 `model`、密钥、Provider 地址、tools、存储或并行策略。Node 还必须在 `nodes.toml` 声明可使用的
+调用参数不能覆盖 `model`、密钥、Provider 地址、tools、存储或并行策略。Agent profile 还必须在 `agents.toml` 声明使用的
 模型角色；Kernel 会在创建请求前校验授权。工具参数在生成 `effect.requested` 前再次按不可变能力目录的 JSON Schema
 校验。
 
 ## 调用生命周期
 
 ```text
-Node → model.requested → dispatcher → ModelGatewayService
+Agent → model Activity → dispatcher → ModelGatewayService
                                       ├─ Chat Completions tools
                                       └─ Responses agent
    ← model.completed / model.failed ← normalized result
 ```
 
-模型网络等待不占用 Kernel 周期锁。重启时残留请求会转为 `interrupted_by_restart`，默认不静默重试。全局模型并发、
+模型网络等待不占用 Agent turn。重启时残留请求会转为 `interrupted_by_restart`，默认不静默重试。全局模型并发、
 交互优先级和自主请求取消由 `AuroraRuntime` 管理。
 
 ## 费用与日志

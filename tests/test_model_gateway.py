@@ -5,8 +5,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.ai.contracts import ModelGatewayError, ModelMessage, ModelRequest, ModelResult, ModelUsage
+from src.ai.contracts import (
+    ModelGatewayError,
+    ModelMessage,
+    ModelRequest,
+    ModelResult,
+    ModelUsage,
+    ToolCall,
+)
 from src.ai.vnext import ModelCapabilityError, ModelGatewayService
+from src.kernel.contracts import TaskStatus
 from src.localhost.configuration import load_configuration
 from src.localhost.runtime import AuroraRuntime
 from tests.test_events import valid_amp
@@ -18,24 +26,15 @@ if TYPE_CHECKING:
 def test_gateway_negotiates_declared_role_capabilities(project_root: Path) -> None:
     service = ModelGatewayService(load_configuration(project_root))
     request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),), output_schema={"type": "object"})
-
-    negotiated = service.negotiate(request)
-
-    assert {"chat", "structured_output"} <= negotiated
+    assert {"chat", "structured_output"} <= service.negotiate(request)
     with pytest.raises(ModelCapabilityError, match="native"):
         service.negotiate(ModelRequest(role="fast", messages=(), response_mode="native"))
 
 
 def test_json_text_fallback_normalizes_valid_json(project_root: Path) -> None:
     service = ModelGatewayService(load_configuration(project_root))
-    request = ModelRequest(
-        role="fast",
-        messages=(),
-        output_schema={"type": "object", "required": ["kind"]},
-    )
-
+    request = ModelRequest(role="fast", messages=(), output_schema={"type": "object", "required": ["kind"]})
     data, diagnostics = service._normalize_output('{"kind":"no_action"}', request, frozenset({"json_text_fallback"}))
-
     assert data == {"kind": "no_action"}
     assert diagnostics == ("output mode: json_text_fallback",)
 
@@ -45,17 +44,11 @@ def test_invalid_model_json_returns_configured_no_action(project_root: Path) -> 
     request = ModelRequest(
         role="fast",
         messages=(),
-        output_schema={
-            "type": "object",
-            "properties": {"kind": {"const": "no_action"}, "summary": {"type": "string"}},
-            "required": ["kind", "summary"],
-        },
-        invalid_output_result={"kind": "no_action", "summary": "invalid output"},
+        output_schema={"type": "object", "required": ["kind"]},
+        invalid_output_result={"kind": "no_action"},
     )
-
     data, diagnostics = service._normalize_output("not JSON", request, frozenset({"json_text_fallback"}))
-
-    assert data == {"kind": "no_action", "summary": "invalid output"}
+    assert data == {"kind": "no_action"}
     assert "no_action" in diagnostics[-1]
 
 
@@ -65,108 +58,67 @@ def test_model_call_without_credential_is_rejected_before_provider_request(
     async def scenario() -> None:
         monkeypatch.delenv("AURORA_TEST_MODEL_API_KEY", raising=False)
         service = ModelGatewayService(load_configuration(project_root))
-        request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),))
         with pytest.raises(ModelGatewayError, match="missing model credential"):
-            await service.complete(request)
+            await service.complete(ModelRequest(role="fast", messages=(ModelMessage("user", "test"),)))
 
     asyncio.run(scenario())
 
 
-class _FakeModelGateway:
-    def __init__(self, decision: dict[str, object] | None) -> None:
-        self.decision = decision
+class _ToolGateway:
+    def __init__(self, arguments: dict[str, object]) -> None:
+        self.arguments = arguments
+        self.requests: list[ModelRequest] = []
 
-    async def complete(self, _request: ModelRequest) -> ModelResult:
+    async def complete(self, request: ModelRequest) -> ModelResult:
+        self.requests.append(request)
         return ModelResult(
-            model="openai/fake",
-            negotiated_capabilities=frozenset({"chat", "structured_output"}),
-            response_mode="normalized",
-            text="{}",
-            data=self.decision,
+            model="fake",
+            negotiated_capabilities=frozenset({"chat", "tools"}),
+            response_mode=request.response_mode,
+            text="",
+            data=None,
             usage=ModelUsage(),
-            cost_usd=0.0,
+            cost_usd=0,
+            tool_calls=(ToolCall("call", "org.aurora.console.send_message", self.arguments),),
+            finish_reason="tool_calls",
         )
 
 
-def _enable_model_decide(project_root: Path) -> None:
-    nodes = project_root / "config" / "nodes.toml"
-    content = nodes.read_text(encoding="utf-8")
-    content = content.replace('id = "builtin.decide"\nenabled = true', 'id = "builtin.decide"\nenabled = false')
-    content = content.replace(
-        'id = "builtin.model_decide"\nenabled = false', 'id = "builtin.model_decide"\nenabled = true'
-    )
-    content = content.replace('[[edge]]\nevent_type = "message.received"\ntarget = "builtin.decide"\n', "")
-    content += '\n[[edge]]\nevent_type = "message.received"\ntarget = "builtin.model_decide"\n'
-    nodes.write_text(content, encoding="utf-8")
-
-
-def test_model_decide_creates_auditable_model_chain_and_valid_effect(project_root: Path) -> None:
+def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project_root: Path) -> None:
     async def scenario() -> None:
-        _enable_model_decide(project_root)
         runtime = AuroraRuntime.create(project_root)
-        runtime.kernel._model_gateway = _FakeModelGateway(
-            {
-                "kind": "effect",
-                "capability": "org.aurora.console.send_message",
-                "parameters": {"text": "model hello"},
-                "summary": "echo",
-            }
-        )
+        gateway = _ToolGateway({"text": "model hello"})
+        runtime.model_gateway = gateway
         await runtime.submit_amp(valid_amp())
-
-        result = await runtime.run_cycle()
-
-        assert result["platform_receipts_emitted"] == 1
-        records = runtime.kernel._records()
-        requested = next(record for record in records if record.amp["payload"]["type"] == "model.requested")
-        completed = next(record for record in records if record.amp["payload"]["type"] == "model.completed")
-        effect = next(record for record in records if record.amp["payload"]["type"] == "effect.requested")
-        assert completed.parent_record_id == requested.record_id
-        assert effect.amp["payload"]["data"]["parameters"] == {"text": "model hello"}
+        first = await runtime.pump()
+        assert runtime._model_dispatch_task is not None
+        await runtime._model_dispatch_task
+        second = await runtime.pump()
+        third = await runtime.pump()
+        task_id = first["ingested_task_ids"][0]
+        detail = runtime.task(task_id)
+        assert detail is not None
+        assert any(event["type"] == "model.completed" for event in detail["events"])
+        assert any(event["type"] == "agent.effect" for event in detail["events"])
+        assert second["platform_receipts_emitted"] == 1
+        assert third["ingested_task_ids"]
+        assert runtime.kernel.get_task(task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
+        await runtime.shutdown()
 
     asyncio.run(scenario())
 
 
-def test_model_decide_accepts_alternate_action_invoke_shape(project_root: Path) -> None:
+def test_invalid_effect_arguments_fail_agent_without_platform_call(project_root: Path) -> None:
     async def scenario() -> None:
-        _enable_model_decide(project_root)
         runtime = AuroraRuntime.create(project_root)
-        runtime.kernel._model_gateway = _FakeModelGateway(
-            {
-                "action": "invoke",
-                "capability": "org.aurora.console.send_message",
-                "parameters": {"text": "alternate shape"},
-            }
-        )
+        runtime.model_gateway = _ToolGateway({"text": 1})
         await runtime.submit_amp(valid_amp())
-        await runtime.run_cycle()
-
-        effect = next(
-            record for record in runtime.kernel._records() if record.amp["payload"]["type"] == "effect.requested"
-        )
-        assert effect.amp["payload"]["data"]["parameters"] == {"text": "alternate shape"}
-
-    asyncio.run(scenario())
-
-
-def test_invalid_model_effect_parameters_do_not_create_effect(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_model_decide(project_root)
-        runtime = AuroraRuntime.create(project_root)
-        runtime.kernel._model_gateway = _FakeModelGateway(
-            {
-                "kind": "effect",
-                "capability": "org.aurora.console.send_message",
-                "parameters": {"text": 1},
-                "summary": "invalid",
-            }
-        )
-        await runtime.submit_amp(valid_amp())
-        await runtime.run_cycle()
-
-        effects = [
-            record for record in runtime.kernel._records() if record.amp["payload"]["type"] == "effect.requested"
-        ]
-        assert not effects
+        await runtime.pump()
+        assert runtime._model_dispatch_task is not None
+        await runtime._model_dispatch_task
+        result = await runtime.pump()
+        assert result["failed_message_ids"]
+        assert result["platform_receipts_emitted"] == 0
+        await runtime.shutdown()
 
     asyncio.run(scenario())

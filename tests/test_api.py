@@ -29,9 +29,9 @@ def test_debug_api_drives_and_queries_the_loop(project_root: Path) -> None:
     submitted = client.post("/v1/debug/amp", json=valid_amp())
     assert submitted.status_code == 202
 
-    first = client.post("/v1/debug/cycles").json()
-    assert first["platform_receipts_emitted"] == 1
-    record_id = first["scheduled_record_ids"][0]
-    record = client.get(f"/v1/debug/records/{record_id}")
-    assert record.status_code == 200
-    assert record.json()["status"] == "ARCHIVED"
+    first = client.post("/v1/debug/pump?max_turns=1").json()
+    task_id = first["ingested_task_ids"][0]
+    task = client.get(f"/v1/debug/tasks/{task_id}")
+    assert task.status_code == 200
+    assert task.json()["task"]["status"] == "ACTIVE"
+    assert client.get("/v1/debug/brain-context").status_code == 200

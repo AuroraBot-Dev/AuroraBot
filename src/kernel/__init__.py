@@ -1,5 +1,5 @@
-"""Event, workspace, scheduling, and causal-boundary primitives."""
+"""Durable Task, Agent, mailbox, Activity and causal-boundary primitives."""
 
-from src.kernel.runtime import CycleResult, Kernel
+from src.kernel.runtime import AgentKernel, PumpResult
 
-__all__ = ["CycleResult", "Kernel"]
+__all__ = ["AgentKernel", "PumpResult"]

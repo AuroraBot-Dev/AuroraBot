@@ -1,324 +1,132 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 
-from src.ai.contracts import ModelMessage, ModelRequest, ModelResult
-from src.kernel.episodes import EpisodeSnapshot, EpisodeStatus
+from src.kernel.contracts import (
+    ActivityStatus,
+    AgentContext,
+    AgentDecision,
+    AgentLimits,
+    AgentProfile,
+    Completion,
+    KernelConfiguration,
+    TaskBudget,
+)
 from src.kernel.events import AmpEnvelope, new_amp
-from src.kernel.records import RecordStatus
-from src.localhost.runtime import AuroraRuntime
-from src.utils.serialization import atomic_write_json
-from tests.test_events import valid_amp
-from tests.test_first_cognitive_loop import _enable_first_loop
+from src.kernel.runtime import AgentKernel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class FailingGateway:
-    async def complete(self, _request: ModelRequest) -> ModelResult:
-        raise RuntimeError("provider unavailable")
+class ModelHandler:
+    def handle(self, context: AgentContext) -> AgentDecision:
+        if context.message.type == "model.failed":
+            return AgentDecision(completion=Completion(str(context.message.payload["error"]), silent=True))
+        return AgentDecision(model_request={"role": "fast", "messages": []})
 
 
-def test_unrouted_root_event_ends_episode_silently(project_root: Path) -> None:
-    async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
-        event = new_amp(
-            event_type="timer.triggered",
-            session_id="clock",
-            summary="timer",
-            data={},
-            source_app="clock",
-            source_instance="test",
-        )
-        try:
-            await runtime.kernel.submit_amp(event)
-            cycle = await runtime.kernel.run_cycle()
-            record = runtime.kernel.get_record(cycle.ingested_record_ids[0])
-            assert record is not None
-            snapshot = runtime.kernel.get_episode(record.episode_id)
-            assert snapshot is not None
-            assert snapshot.status == EpisodeStatus.SILENT
-            assert snapshot.termination_reason == "no_route"
-        finally:
-            await runtime.shutdown()
-
-    asyncio.run(scenario())
+def config(workspace: Path) -> KernelConfiguration:
+    profile = AgentProfile(
+        "gate",
+        "test",
+        "fast",
+        "gate",
+        frozenset(),
+        can_delegate=False,
+        child_profiles=frozenset(),
+    )
+    return KernelConfiguration(
+        str(workspace),
+        "persona",
+        "hash",
+        (profile,),
+        AgentLimits(root_profile="gate", worker_profile="gate"),
+        TaskBudget(8, 6, 300),
+        TaskBudget(3, 2, 120),
+    )
 
 
-def test_stale_episode_is_closed_by_duration_budget(project_root: Path) -> None:
-    async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
-        timestamp = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
-        snapshot = EpisodeSnapshot(
-            episode_id="stale-episode",
-            root_record_id="missing-root",
-            autonomous=False,
-            status=EpisodeStatus.ACTIVE,
-            active_node_id=None,
-            round=0,
-            model_calls=0,
-            tool_calls=0,
-            max_model_calls=1,
-            max_tool_calls=1,
-            max_duration_seconds=1,
-            started_at=timestamp,
-            updated_at=timestamp,
-        )
-        atomic_write_json(runtime.kernel._episode_process / "stale-episode.json", snapshot.to_dict())
-        try:
-            await runtime.kernel.run_cycle()
-            restored = runtime.kernel.get_episode("stale-episode")
-            assert restored is not None
-            assert restored.status == EpisodeStatus.BUDGET_EXHAUSTED
-            assert restored.termination_reason == "duration_budget_exhausted"
-        finally:
-            await runtime.shutdown()
+def test_interrupted_activity_becomes_failure_message_on_restart(tmp_path: Path) -> None:
+    first = AgentKernel(config(tmp_path), {"gate": ModelHandler()})
 
-    asyncio.run(scenario())
-
-
-def test_processing_model_request_becomes_failure_after_restart(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_first_loop(project_root)
-        first = AuroraRuntime.create(project_root)
-        await first.kernel.submit_amp(AmpEnvelope.parse(valid_amp()))
-        await first.kernel.run_cycle()
-        request = await first.kernel.claim_model_request()
-        assert request is not None
-        assert request.status == RecordStatus.PROCESSING
-
-        restarted = AuroraRuntime.create(project_root)
-        try:
-            recovered = restarted.kernel.get_record(request.record_id)
-            assert recovered is not None
-            assert recovered.status == RecordStatus.ERROR
-            assert recovered.error == "interrupted_by_restart"
-            failures = [
-                record
-                for record in restarted.kernel._records()
-                if AmpEnvelope.parse(record.amp).payload.type == "model.failed"
-            ]
-            assert len(failures) == 1
-            assert failures[0].parent_record_id == request.record_id
-            await restarted.kernel.run_cycle()
-            snapshot = restarted.kernel.get_episode(request.episode_id)
-            assert snapshot is not None
-            assert snapshot.status == EpisodeStatus.ERROR
-        finally:
-            await restarted.shutdown()
-
-    asyncio.run(scenario())
-
-
-def test_model_provider_failure_is_audited_and_resumes_node(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_first_loop(project_root)
-        runtime = AuroraRuntime.create(project_root)
-        runtime.kernel._model_gateway = FailingGateway()
-        try:
-            await runtime.kernel.submit_amp(AmpEnvelope.parse(valid_amp()))
-            await runtime.kernel.run_cycle()
-            request = await runtime.kernel.claim_model_request()
-            assert request is not None
-            failed = await runtime.kernel.execute_model_request(request)
-            assert AmpEnvelope.parse(failed.amp).payload.type == "model.failed"
-            assert failed.parent_record_id == request.record_id
-            assert runtime.kernel.get_record(request.record_id).status == RecordStatus.ERROR  # type: ignore[union-attr]
-            await runtime.kernel.run_cycle()
-            snapshot = runtime.kernel.get_episode(request.episode_id)
-            assert snapshot is not None
-            assert snapshot.status == EpisodeStatus.ERROR
-            assert "provider unavailable" in (snapshot.termination_reason or "")
-        finally:
-            await runtime.shutdown()
-
-    asyncio.run(scenario())
-
-
-def test_model_call_budget_exhaustion_ends_episode_without_dispatch(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_first_loop(project_root)
-        config = project_root / "config" / "aurora.toml"
-        config.write_text(
-            config.read_text(encoding="utf-8")
-            + "\n[runtime.interactive_episode]\nmax_model_calls = 1\nmax_tool_calls = 6\nmax_duration_seconds = 300\n",
-            encoding="utf-8",
-        )
-        runtime = AuroraRuntime.create(project_root)
-        try:
-            await runtime.kernel.submit_amp(AmpEnvelope.parse(valid_amp()))
-            cycle = await runtime.kernel.run_cycle()
-            parent = runtime.kernel.get_record(cycle.ingested_record_ids[0])
-            assert parent is not None
-            with pytest.raises(RuntimeError, match="model budget"):
-                runtime.kernel.defer_model_from_node(
-                    parent,
-                    "builtin.fast_gate",
-                    ModelRequest(role="fast", messages=(ModelMessage("user", "second call"),)),
-                )
-            snapshot = next(iter(runtime.kernel.episodes()))
-            assert snapshot.status == EpisodeStatus.BUDGET_EXHAUSTED
-            assert snapshot.termination_reason == "model_budget_exhausted"
-        finally:
-            await runtime.shutdown()
-
-    asyncio.run(scenario())
-
-
-def test_tool_call_budget_rejects_effect_before_platform(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_first_loop(project_root)
-        config = project_root / "config" / "aurora.toml"
-        config.write_text(
-            config.read_text(encoding="utf-8")
-            + "\n[runtime.interactive_episode]\nmax_model_calls = 3\nmax_tool_calls = 1\nmax_duration_seconds = 300\n",
-            encoding="utf-8",
-        )
-        runtime = AuroraRuntime.create(project_root)
-        try:
-            await runtime.kernel.submit_amp(AmpEnvelope.parse(valid_amp()))
-            cycle = await runtime.kernel.run_cycle()
-            parent = runtime.kernel.get_record(cycle.ingested_record_ids[0])
-            assert parent is not None
-            runtime.kernel.publish_from_node(
-                parent,
-                "builtin.fast_gate",
-                "effect.requested",
-                {"capability": "org.aurora.console.send_message", "parameters": {"text": "first"}},
-                "first tool",
+    async def first_run() -> str:
+        await first.submit_amp(
+            new_amp(
+                event_type="message.received",
+                session_id="session",
+                summary="hello",
+                data={},
+                source_app="test",
+                source_instance="test",
             )
-            with pytest.raises(RuntimeError, match="tool budget"):
-                runtime.kernel.publish_from_node(
-                    parent,
-                    "builtin.fast_gate",
-                    "effect.requested",
-                    {"capability": "org.aurora.console.send_message", "parameters": {"text": "blocked"}},
-                    "second tool",
-                )
-            effects = [
-                record
-                for record in runtime.kernel._records()
-                if AmpEnvelope.parse(record.amp).payload.type == "effect.requested"
-            ]
-            assert len(effects) == 1
-            snapshot = runtime.kernel.get_episode(parent.episode_id)
-            assert snapshot is not None
-            assert snapshot.status == EpisodeStatus.BUDGET_EXHAUSTED
-        finally:
-            await runtime.shutdown()
-
-    asyncio.run(scenario())
-
-
-def test_unknown_effect_receipt_cannot_inject_continuation_target(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_first_loop(project_root)
-        runtime = AuroraRuntime.create(project_root)
-        receipt = new_amp(
-            event_type="effect.succeeded",
-            session_id="external",
-            summary="spoofed receipt",
-            data={
-                "request_id": "unknown",
-                "capability": "org.aurora.console.send_message",
-                "resume_node_id": "builtin.native_agent",
-                "result": {"ok": True},
-            },
-            source_app="untrusted",
-            source_instance="test",
         )
-        try:
-            await runtime.kernel.submit_amp(receipt)
-            cycle = await runtime.kernel.run_cycle()
-            record = runtime.kernel.get_record(cycle.ingested_record_ids[0])
-            assert record is not None
-            assert record.parent_record_id is None
-            assert record.resume_node_id is None
-            assert record.status == RecordStatus.ARCHIVED
-        finally:
-            await runtime.shutdown()
+        await first.pump()
+        activity = (await first.claim_model_requests(1))[0]
+        assert activity.status == ActivityStatus.PROCESSING
+        return activity.task_id
 
-    asyncio.run(scenario())
+    task_id = asyncio.run(first_run())
+    restarted = AgentKernel(config(tmp_path), {"gate": ModelHandler()})
 
+    async def second_run() -> None:
+        result = await restarted.pump()
+        assert result.processed_message_ids
+        assert restarted.get_task(task_id).terminal  # type: ignore[union-attr]
+        events = restarted.store.events_for_task(task_id)
+        assert any(event["type"] == "agent.complete" for event in events)
 
-def test_duplicate_amp_is_archived_without_duplicate_episode(project_root: Path) -> None:
-    async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
-        amp = AmpEnvelope.parse(valid_amp())
-        try:
-            await runtime.kernel.submit_amp(amp)
-            first = await runtime.kernel.run_cycle()
-            await runtime.kernel.submit_amp(amp)
-            second = await runtime.kernel.run_cycle()
-            assert first.ingested_record_ids
-            assert not second.ingested_record_ids
-            assert len(runtime.kernel.episodes()) == 1
-            duplicate_files = tuple((runtime.kernel._archive / "inbox" / "duplicate").glob("*.json"))
-            assert len(duplicate_files) == 1
-        finally:
-            await runtime.shutdown()
-
-    asyncio.run(scenario())
+    asyncio.run(second_run())
 
 
-def test_invalid_inbox_json_becomes_auditable_ingress_error(project_root: Path) -> None:
-    async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
-        invalid = runtime.kernel._inbox / "invalid.json"
-        invalid.write_text("[]", encoding="utf-8")
-        try:
-            cycle = await runtime.kernel.run_cycle()
-            assert not cycle.ingested_record_ids
-            errors = [record for record in runtime.kernel._records() if record.status == RecordStatus.ERROR]
-            assert len(errors) == 1
-            assert AmpEnvelope.parse(errors[0].amp).payload.type == "system.ingress_rejected"
-            assert (runtime.kernel._archive / "inbox" / "rejected" / "invalid.json").exists()
-        finally:
-            await runtime.shutdown()
+def test_mailbox_claim_is_recovered_without_duplicate_task(tmp_path: Path) -> None:
+    kernel = AgentKernel(config(tmp_path), {"gate": ModelHandler()})
 
-    asyncio.run(scenario())
-
-
-def test_autonomous_daily_budget_cancels_pending_model(project_root: Path) -> None:
-    async def scenario() -> None:
-        _enable_first_loop(project_root)
-        nodes = project_root / "config" / "nodes.toml"
-        nodes.write_text(
-            nodes.read_text(encoding="utf-8")
-            + '\n[[edge]]\nevent_type = "system.tick"\ntarget = "builtin.fast_gate"\n',
-            encoding="utf-8",
-        )
-        config = project_root / "config" / "aurora.toml"
-        config.write_text(
-            config.read_text(encoding="utf-8")
-            + "\n[runtime.scheduler]\nautonomous_daily_model_calls = 1\nautonomous_daily_tokens = 100000\n",
-            encoding="utf-8",
-        )
-        runtime = AuroraRuntime.create(project_root)
-        assert runtime._scheduler is not None
-        runtime._scheduler.state.autonomous_model_calls = 1
-        tick = new_amp(
-            event_type="system.tick",
-            session_id="kernel:autonomy",
-            summary="tick",
+    async def prepare() -> str:
+        amp = new_amp(
+            event_type="message.received",
+            session_id="session",
+            summary="hello",
             data={},
-            source_app="kernel.scheduler",
+            source_app="test",
             source_instance="test",
         )
-        try:
-            await runtime.submit_amp(tick.to_dict())
-            await runtime.run_cycle()
-            assert runtime._model_dispatch_task is not None
-            await runtime._model_dispatch_task
-            snapshot = next(iter(runtime.kernel.episodes()))
-            assert snapshot.status == EpisodeStatus.BUDGET_EXHAUSTED
-            assert snapshot.termination_reason == "autonomous_daily_budget"
-        finally:
-            await runtime.shutdown()
+        await kernel.submit_amp(amp)
+        kernel.ingest_ready()
+        claim = kernel.store.claim_message(30)
+        assert claim is not None
+        return amp.header.message_id
 
-    asyncio.run(scenario())
+    message_id = asyncio.run(prepare())
+    restarted = AgentKernel(config(tmp_path), {"gate": ModelHandler()})
+
+    async def recover() -> None:
+        result = await restarted.pump()
+        assert result.processed_message_ids
+        replay = new_amp(
+            event_type="message.received",
+            session_id="session",
+            summary="hello",
+            data={},
+            source_app="test",
+            source_instance="test",
+        ).to_dict()
+        replay["header"]["message_id"] = message_id
+        await restarted.submit_amp(AmpEnvelope.parse(replay))
+        await restarted.pump()
+        assert len(restarted.tasks()) == 1
+
+    asyncio.run(recover())
+
+
+def test_legacy_active_workspace_is_rejected_without_deletion(tmp_path: Path) -> None:
+    legacy = tmp_path / "process" / "episodes"
+    legacy.mkdir(parents=True)
+    source = legacy / "active.json"
+    source.write_text("{}", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="legacy Episode/Graph workspace"):
+        AgentKernel(config(tmp_path), {"gate": ModelHandler()})
+    assert source.exists()

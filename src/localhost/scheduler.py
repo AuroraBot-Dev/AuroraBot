@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from src.kernel.episodes import EpisodeSnapshot, EpisodeStatus
+from src.kernel.contracts import TaskState, TaskStatus
 from src.utils.log_utils import get_logger
 from src.utils.serialization import atomic_write_json, read_json
 
@@ -26,7 +26,7 @@ class SchedulerState:
     utc_day: str
     autonomous_model_calls: int = 0
     autonomous_tokens: int = 0
-    accounted_episode_ids: list[str] = field(default_factory=list)
+    accounted_task_ids: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -91,7 +91,7 @@ class CognitiveScheduler:
             target.utc_day = today
             target.autonomous_model_calls = 0
             target.autonomous_tokens = 0
-            target.accounted_episode_ids.clear()
+            target.accounted_task_ids.clear()
             logger.info("scheduler daily quota reset previous_day=%s utc_day=%s", previous_day, today)
 
     def on_external_activity(self) -> None:
@@ -105,11 +105,11 @@ class CognitiveScheduler:
             self.state.current_interval_seconds,
         )
 
-    def can_tick(self, episodes: tuple[EpisodeSnapshot, ...]) -> bool:
+    def can_tick(self, tasks: tuple[TaskState, ...]) -> bool:
         self._roll_day()
         if not self.configuration.enabled:
             return False
-        if any(episode.autonomous and not episode.terminal for episode in episodes):
+        if any(task.autonomous and not task.terminal for task in tasks):
             return False
         if self.state.autonomous_model_calls >= self.configuration.autonomous_daily_model_calls:
             return False
@@ -123,19 +123,19 @@ class CognitiveScheduler:
         self._save()
         logger.debug("scheduler tick reserved next_tick_at=%s", self.state.next_tick_at)
 
-    def reconcile(self, episodes: tuple[EpisodeSnapshot, ...]) -> None:
+    def reconcile(self, tasks: tuple[TaskState, ...]) -> None:
         self._roll_day()
         changed = False
-        accounted = set(self.state.accounted_episode_ids)
+        accounted = set(self.state.accounted_task_ids)
         today = self.now().date()
-        for episode in episodes:
-            if not episode.autonomous or not episode.terminal or episode.episode_id in accounted:
+        for task in tasks:
+            if not task.autonomous or not task.terminal or task.task_id in accounted:
                 continue
-            if datetime.fromisoformat(episode.updated_at).astimezone(UTC).date() != today:
+            if datetime.fromisoformat(task.updated_at).astimezone(UTC).date() != today:
                 continue
-            self.state.accounted_episode_ids.append(episode.episode_id)
-            accounted.add(episode.episode_id)
-            if episode.status == EpisodeStatus.COMPLETED or episode.tool_calls > 0:
+            self.state.accounted_task_ids.append(task.task_id)
+            accounted.add(task.task_id)
+            if task.status == TaskStatus.COMPLETED or task.tool_calls > 0:
                 interval = self.configuration.action_cooldown_seconds
             else:
                 interval = min(
@@ -146,11 +146,10 @@ class CognitiveScheduler:
             self.state.next_tick_at = (self.now() + timedelta(seconds=interval)).isoformat()
             changed = True
             logger.info(
-                "autonomous episode accounted episode_id=%s status=%s tool_calls=%d "
-                "next_interval_s=%.1f next_tick_at=%s",
-                episode.episode_id,
-                episode.status,
-                episode.tool_calls,
+                "autonomous Task accounted task_id=%s status=%s tool_calls=%d next_interval_s=%.1f next_tick_at=%s",
+                task.task_id,
+                task.status,
+                task.tool_calls,
                 interval,
                 self.state.next_tick_at,
             )

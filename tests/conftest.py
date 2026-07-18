@@ -23,6 +23,20 @@ workspace = "data/kernel"
 debug_host = "127.0.0.1"
 debug_port = 8765
 
+[runtime.agents]
+root_profile = "builtin.gate"
+worker_profile = "builtin.worker"
+max_active_agents = 16
+max_agents_per_task = 8
+max_depth = 3
+max_children_per_agent = 4
+turn_concurrency = 8
+model_concurrency = 4
+effect_concurrency = 8
+blocking_workers = 4
+lease_seconds = 30.0
+ambient_ttl_seconds = 1800.0
+
 [dashboard]
 host = "127.0.0.1"
 port = 8000
@@ -49,7 +63,13 @@ data_dir = "data"
 [models.roles.fast]
 provider = "test"
 model = "fast"
-capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools"]
+
+[models.roles.agent]
+provider = "test"
+model = "agent"
+endpoint = "responses"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses"]
 
 [models.roles.quality]
 provider = "test"
@@ -77,28 +97,24 @@ log_responses = false
         encoding="utf-8",
     )
     (prompts / "SOUL.md").write_text("You are the AuroraBot test fixture.", encoding="utf-8")
-    (config / "nodes.toml").write_text(
-        """[[node]]
-id = "builtin.decide"
-enabled = true
-implementation = "src.nodes.decide:DecideNode"
-inputs = ["message.received"]
-outputs = ["effect.requested"]
+    (config / "agents.toml").write_text(
+        """[[agent]]
+id = "builtin.gate"
+implementation = "src.agents.tool_agent:ToolAgent"
+model_role = "fast"
+prompt = "Gate and complete the task."
 capabilities = ["org.aurora.console.send_message"]
-model_roles = []
+can_delegate = true
+child_profiles = ["builtin.worker"]
 
-[[node]]
-id = "builtin.model_decide"
-enabled = false
-implementation = "src.nodes.model_decide:ModelDecideNode"
-inputs = ["message.received"]
-outputs = ["effect.requested"]
+[[agent]]
+id = "builtin.worker"
+implementation = "src.agents.tool_agent:ToolAgent"
+model_role = "agent"
+prompt = "Complete the delegated task and report to the parent."
 capabilities = ["org.aurora.console.send_message"]
-model_roles = ["fast"]
-
-[[edge]]
-event_type = "message.received"
-target = "builtin.decide"
+can_delegate = true
+child_profiles = ["builtin.worker"]
 """,
         encoding="utf-8",
     )
@@ -112,6 +128,7 @@ implementation = "src.platform.local:LocalTestPlatform"
 
 [[adapter.capability]]
 id = "org.aurora.console.send_message"
+result_mode = "terminal"
 parameters_schema = { type = "object", properties = { text = { type = "string" } }, required = ["text"], additionalProperties = false }
 """,
         encoding="utf-8",

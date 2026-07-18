@@ -29,9 +29,9 @@ workspace event、runtime log をコミットしてはいけません。
 
 ## Module boundary
 
-- Kernel は event、state、graph scheduling、cycle、causality を管理し、認知内容の選択や Platform effect の実行は
+- Kernel は event、Task/Agent state、mailbox、Activity、causality を管理し、認知内容の選択や Platform effect の実行は
   行いません。
-- Node は Kernel API だけを通じて snapshot を読み、宣言済み能力を要求し、event を生成します。
+- Agent handler は `AgentContext` を読み、副作用のない `AgentDecision` だけを返します。
 - Platform は AMP input を正規化して `effect.requested` を実行し、結果を新しい event として Kernel に返します。
 - `localhost` はローカル use case を担当し、`dashboard` は route/API adapter に限定されます。
 - `utils` は上位 package に依存できません。共通ログは `src.utils.log_utils.get_logger()` を使用します。
@@ -57,7 +57,7 @@ uv run pyright
 ```
 
 テストは offline で再現可能にしてください。model、clock、MCP には fake を使用し、実際の利用枠や公開 network service に
-依存してはいけません。不具合修正では失敗経路を先にテストし、event/effect のテストでは cycle boundary、idempotency、
+依存してはいけません。不具合修正では失敗経路を先にテストし、event/effect のテストでは transaction boundary、idempotency、
 causal parentage も確認します。
 
 ## 提出前チェック

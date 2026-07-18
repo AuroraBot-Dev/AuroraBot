@@ -24,7 +24,7 @@ class ConsoleCommand:
 
 def command_specs() -> tuple[ConsoleCommand, ...]:
     """Return the command set exposed by the local developer shell."""
-    from src.localhost.commands.core import cycle_command, help_command, record_command, status_command
+    from src.localhost.commands.core import agent_command, help_command, pump_command, status_command, task_command
     from src.localhost.commands.emit import event_command
     from src.localhost.commands.say import say_command
 
@@ -38,7 +38,8 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
             "投递任意 AMP 事件",
             event_command,
         ),
-        ConsoleCommand(("/cycle", "/c"), "/cycle [1-100]", "推进 Kernel 周期", cycle_command),
-        ConsoleCommand(("/record",), "/record <record_id>", "查询审计记录", record_command),
+        ConsoleCommand(("/pump", "/p"), "/pump [1-100]", "推进 Agent turns", pump_command),
+        ConsoleCommand(("/task",), "/task <task_id>", "查询 Task 与监督树", task_command),
+        ConsoleCommand(("/agent",), "/agent <agent_id>", "查询 Agent 与邮箱", agent_command),
         ConsoleCommand(("/quit", "/exit", "/q"), "/quit", "退出控制台", quit_command),
     )

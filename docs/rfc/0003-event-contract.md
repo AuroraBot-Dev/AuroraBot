@@ -2,6 +2,10 @@
 
 状态：已接受
 日期：2026-07-11
+修订：2026-07-19
+
+RFC 0012 取代本文的 Kernel record、全局周期和 Episode 推进条款。AMP 信封、因果标识与效果回执边界继续有效；
+Kernel 内部事实改由 SQLite WAL 中的 `causal_events`、邮箱和 Activity 保存。
 
 ## 决策
 

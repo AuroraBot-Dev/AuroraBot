@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 from mcp.client.streamable_http import streamablehttp_client
 
+from src.kernel.contracts import EffectLease, PlatformRuntimePort
 from src.kernel.events import AmpEnvelope, new_amp
-from src.kernel.runtime import Kernel
 from src.localhost.configuration import AppConfig, AuroraConfig, CapabilityConfig
 from src.platform.capabilities import CapabilityCatalogSnapshot, CapabilityDescriptor
 from src.platform.local import PlatformRunResult
@@ -49,7 +49,7 @@ class MCPPlatform:
         self._started = False
         self._stop = asyncio.Event()
         self._notification_task: asyncio.Task[None] | None = None
-        self._kernel: Kernel | None = None
+        self._kernel: PlatformRuntimePort | None = None
         self._tool_result_observer = tool_result_observer
         self._catalog = CapabilityCatalogSnapshot()
 
@@ -57,7 +57,7 @@ class MCPPlatform:
         """Set the localhost-only observer for successfully completed MCP tools."""
         self._tool_result_observer = observer
 
-    async def start(self, kernel: Kernel) -> None:
+    async def start(self, kernel: PlatformRuntimePort) -> None:
         if self._started:
             logger.debug("MCP platform startup skipped reason=already_started")
             return
@@ -204,87 +204,88 @@ class MCPPlatform:
             return remote.tools or []
         return list(self._clients.list_all_tools().get(package, []))
 
-    async def execute_pending_effects(self, kernel: Kernel) -> PlatformRunResult:
+    async def execute_pending_effects(self, kernel: PlatformRuntimePort) -> PlatformRunResult:
         if not self._started:
             return PlatformRunResult(0)
         capabilities = frozenset(capability for app in self._configuration.apps for capability in app.allowed_tools)
-        receipts = 0
-        for record in await kernel.claim_effect_requests(capabilities):
-            started = time.monotonic()
-            amp = AmpEnvelope.parse(record.amp)
-            data = amp.payload.data
-            request_id = data.get("request_id")
-            capability = data.get("capability")
-            parameters = data.get("parameters")
-            if not isinstance(request_id, str) or not isinstance(capability, str) or not isinstance(parameters, dict):
-                kernel.complete_effect(record, error="invalid effect.requested payload")
-                logger.error(
-                    "invalid MCP effect request record_id=%s episode_id=%s request_id=%s capability=%s",
-                    record.record_id,
-                    record.episode_id,
-                    request_id,
-                    capability,
-                )
-                continue
-            logger.debug(
-                "MCP effect started record_id=%s episode_id=%s request_id=%s capability=%s parameter_keys=%s",
+        records = await kernel.claim_effect_requests(capabilities)
+        completed = await asyncio.gather(*(self._execute_one(kernel, record) for record in records))
+        return PlatformRunResult(sum(completed))
+
+    async def _execute_one(self, kernel: PlatformRuntimePort, record: EffectLease) -> int:
+        started = time.monotonic()
+        amp = AmpEnvelope.parse(record.amp)
+        data = amp.payload.data
+        request_id = data.get("request_id")
+        capability = data.get("capability")
+        parameters = data.get("parameters")
+        if not isinstance(request_id, str) or not isinstance(capability, str) or not isinstance(parameters, dict):
+            await kernel.complete_effect(record, error="invalid effect.requested payload")
+            logger.error(
+                "invalid MCP effect request activity_id=%s task_id=%s request_id=%s capability=%s",
                 record.record_id,
-                record.episode_id,
+                record.task_id,
                 request_id,
                 capability,
-                sorted(parameters),
             )
-            try:
-                result = await self._call_tool(capability, parameters)
-                if self._tool_result_observer is not None:
-                    self._tool_result_observer(capability, result)
-                receipt = new_amp(
-                    event_type="effect.succeeded",
-                    session_id=amp.payload.session_id,
-                    summary=f"MCP capability completed: {capability}",
-                    data={"request_id": request_id, "capability": capability, "result": result},
-                    source_app="platform.mcp",
-                    source_instance=capability.rpartition(".")[0],
-                )
-                await kernel.submit_amp(receipt)
-                kernel.complete_effect(record)
-                receipts += 1
-                logger.info(
-                    "MCP effect succeeded record_id=%s episode_id=%s request_id=%s capability=%s duration_ms=%.1f",
-                    record.record_id,
-                    record.episode_id,
-                    request_id,
-                    capability,
-                    (time.monotonic() - started) * 1000,
-                )
-            except Exception as error:
-                receipt = new_amp(
-                    event_type="effect.failed",
-                    session_id=amp.payload.session_id,
-                    summary=f"MCP capability failed: {capability}",
-                    data={
-                        "request_id": request_id,
-                        "capability": capability,
-                        "error": f"{type(error).__name__}: {error}",
-                    },
-                    source_app="platform.mcp",
-                    source_instance=capability.rpartition(".")[0],
-                )
-                await kernel.submit_amp(receipt)
-                kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
-                receipts += 1
-                logger.log(
-                    logging.ERROR,
-                    "MCP effect failed record_id=%s episode_id=%s request_id=%s "
-                    "capability=%s duration_ms=%.1f error_type=%s",
-                    record.record_id,
-                    record.episode_id,
-                    request_id,
-                    capability,
-                    (time.monotonic() - started) * 1000,
-                    type(error).__name__,
-                )
-        return PlatformRunResult(receipts)
+            return 0
+        logger.debug(
+            "MCP effect started activity_id=%s task_id=%s request_id=%s capability=%s parameter_keys=%s",
+            record.record_id,
+            record.task_id,
+            request_id,
+            capability,
+            sorted(parameters),
+        )
+        try:
+            result = await self._call_tool(capability, parameters)
+            if self._tool_result_observer is not None:
+                self._tool_result_observer(capability, result)
+            receipt = new_amp(
+                event_type="effect.succeeded",
+                session_id=amp.payload.session_id,
+                summary=f"MCP capability completed: {capability}",
+                data={"request_id": request_id, "capability": capability, "result": result},
+                source_app="platform.mcp",
+                source_instance=capability.rpartition(".")[0],
+            )
+            await kernel.submit_amp(receipt)
+            await kernel.complete_effect(record)
+            logger.info(
+                "MCP effect succeeded activity_id=%s task_id=%s request_id=%s capability=%s duration_ms=%.1f",
+                record.record_id,
+                record.task_id,
+                request_id,
+                capability,
+                (time.monotonic() - started) * 1000,
+            )
+        except Exception as error:
+            receipt = new_amp(
+                event_type="effect.failed",
+                session_id=amp.payload.session_id,
+                summary=f"MCP capability failed: {capability}",
+                data={
+                    "request_id": request_id,
+                    "capability": capability,
+                    "error": f"{type(error).__name__}: {error}",
+                },
+                source_app="platform.mcp",
+                source_instance=capability.rpartition(".")[0],
+            )
+            await kernel.submit_amp(receipt)
+            await kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
+            logger.log(
+                logging.ERROR,
+                "MCP effect failed activity_id=%s task_id=%s request_id=%s "
+                "capability=%s duration_ms=%.1f error_type=%s",
+                record.record_id,
+                record.task_id,
+                request_id,
+                capability,
+                (time.monotonic() - started) * 1000,
+                type(error).__name__,
+            )
+        return 1
 
     async def _call_tool(self, capability: str, parameters: dict[str, object]) -> dict[str, object]:
         package, _, _tool = capability.rpartition(".")

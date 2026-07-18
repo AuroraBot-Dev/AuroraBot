@@ -17,7 +17,9 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     assert configuration.dashboard.port == _DASHBOARD_PORT
     assert configuration.dashboard.database_path == project_root / "data" / "dashboard" / "chat.sqlite3"
     assert configuration.soul_hash
-    assert configuration.edges == {"message.received": ("builtin.decide",)}
+    assert {agent.id for agent in configuration.agents} == {"builtin.gate", "builtin.worker"}
+    assert configuration.runtime.agents.root_profile == "builtin.gate"
+    assert configuration.runtime.agents.memory_agent_profile is None
     assert configuration.adapters[0].capabilities[0].id == "org.aurora.console.send_message"
     assert configuration.capability_definitions["org.aurora.console.send_message"].parameters_schema["type"] == "object"
     assert configuration.model_providers["test"].adapter == "litellm"
@@ -56,14 +58,30 @@ def test_rejects_unknown_profile_configuration(project_root: Path) -> None:
         load_configuration(project_root)
 
 
-def test_continuation_edge_must_advance_episode_round(project_root: Path) -> None:
-    nodes = project_root / "config" / "nodes.toml"
-    nodes.write_text(
-        nodes.read_text(encoding="utf-8") + '\n[[edge]]\nevent_type = "model.completed"\ntarget = "@continuation"\n',
+def test_agent_child_profile_must_exist(project_root: Path) -> None:
+    agents = project_root / "config" / "agents.toml"
+    agents.write_text(
+        agents.read_text(encoding="utf-8").replace(
+            'child_profiles = ["builtin.worker"]', 'child_profiles = ["missing"]', 1
+        ),
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="advance round"):
+    with pytest.raises(ConfigurationError, match="unknown child profiles"):
+        load_configuration(project_root)
+
+
+def test_memory_agent_profile_is_optional_but_must_exist(project_root: Path) -> None:
+    config = project_root / "config" / "aurora.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            'worker_profile = "builtin.worker"',
+            'worker_profile = "builtin.worker"\nmemory_agent_profile = "missing"',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match="memory_agent_profile"):
         load_configuration(project_root)
 
 
@@ -71,8 +89,8 @@ def test_rejects_invalid_capability_result_mode(project_root: Path) -> None:
     apps = project_root / "config" / "apps.toml"
     apps.write_text(
         apps.read_text(encoding="utf-8").replace(
-            'parameters_schema = { type = "object",',
-            'result_mode = "sometimes"\nparameters_schema = { type = "object",',
+            'result_mode = "terminal"',
+            'result_mode = "sometimes"',
         ),
         encoding="utf-8",
     )
@@ -89,12 +107,12 @@ def test_rejects_invalid_capability_result_mode(project_root: Path) -> None:
         ("runtime.scheduler", "autonomous_daily_tokens = false", "positive integer"),
         ("runtime.scheduler", "idle_initial_seconds = 60\nidle_max_seconds = 30", "at least"),
         ("runtime.scheduler", "idle_multiplier = 1", "greater than one"),
-        ("runtime.interactive_episode", "max_model_calls = 0", "max_model_calls must be positive"),
-        ("runtime.interactive_episode", "max_tool_calls = false", "max_tool_calls must be positive"),
-        ("runtime.autonomous_episode", "max_duration_seconds = 0", "must be positive"),
+        ("runtime.interactive_task", "max_model_calls = 0", "max_model_calls must be positive"),
+        ("runtime.interactive_task", "max_tool_calls = false", "max_tool_calls must be positive"),
+        ("runtime.autonomous_task", "max_duration_seconds = 0", "must be positive"),
     ],
 )
-def test_rejects_invalid_scheduler_and_episode_budgets(project_root: Path, table: str, body: str, message: str) -> None:
+def test_rejects_invalid_scheduler_and_task_budgets(project_root: Path, table: str, body: str, message: str) -> None:
     config = project_root / "config" / "aurora.toml"
     config.write_text(config.read_text(encoding="utf-8") + f"\n[{table}]\n{body}\n", encoding="utf-8")
 
@@ -127,8 +145,11 @@ def test_rejects_invalid_runtime_and_model_configuration(project_root: Path, old
 def test_responses_role_requires_native_responses_capability(project_root: Path) -> None:
     config = project_root / "config" / "aurora.toml"
     config.write_text(
-        config.read_text(encoding="utf-8") + '\n[models.roles.agent]\nprovider = "test"\nmodel = "agent"\n'
-        'endpoint = "responses"\ncapabilities = ["chat"]\n',
+        config.read_text(encoding="utf-8").replace(
+            'capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses"]',
+            'capabilities = ["chat"]',
+            1,
+        ),
         encoding="utf-8",
     )
 
@@ -136,10 +157,10 @@ def test_responses_role_requires_native_responses_capability(project_root: Path)
         load_configuration(project_root)
 
 
-def test_node_cannot_request_unavailable_capability(project_root: Path) -> None:
-    nodes = project_root / "config" / "nodes.toml"
-    nodes.write_text(
-        nodes.read_text(encoding="utf-8").replace(
+def test_agent_cannot_request_unavailable_capability(project_root: Path) -> None:
+    agents = project_root / "config" / "agents.toml"
+    agents.write_text(
+        agents.read_text(encoding="utf-8").replace(
             'capabilities = ["org.aurora.console.send_message"]',
             'capabilities = ["org.aurora.missing"]',
             1,

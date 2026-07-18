@@ -25,7 +25,7 @@ def test_public_config_facade_uses_the_validated_toml_snapshot(project_root: Pat
 
 def test_layered_console_submits_and_processes_a_message(project_root: Path) -> None:
     runtime = AuroraRuntime.create(project_root)
-    inputs = iter(("/say console hello", "/cycle", "/quit"))
+    inputs = iter(("/say console hello", "/pump", "/quit"))
     output: list[str] = []
 
     asyncio.run(run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append))

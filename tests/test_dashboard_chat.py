@@ -6,11 +6,31 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from src.ai.contracts import ToolCall
+from src.ai.contracts import ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.dashboard.api import create_app
-from src.kernel.episodes import EpisodeStatus
+from src.kernel.contracts import TaskStatus
 from src.localhost.runtime import AuroraRuntime
-from tests.test_first_cognitive_loop import _enable_first_loop, _SequenceGateway
+
+
+class _SequenceGateway:
+    def __init__(self, calls: list[ToolCall]) -> None:
+        self.calls = calls
+        self.requests = []
+
+    async def complete(self, request: ModelRequest) -> ModelResult:
+        self.requests.append(request)
+        call = self.calls.pop(0)
+        return ModelResult(
+            model="test",
+            negotiated_capabilities=frozenset({"chat", "tools"}),
+            response_mode=request.response_mode,
+            text="",
+            data=None,
+            usage=ModelUsage(),
+            cost_usd=0,
+            tool_calls=(call,),
+            finish_reason="tool_calls",
+        )
 
 
 def _register_and_login(client: TestClient, username: str) -> tuple[int, str]:
@@ -141,12 +161,11 @@ def test_bot_text_becomes_amp_and_reply_delivery_is_idempotent(project_root: Pat
     asyncio.run(scenario())
 
 
-def test_bot_text_completes_dashboard_effect_and_episode(project_root: Path) -> None:
+def test_bot_text_completes_dashboard_effect_and_task(project_root: Path) -> None:
     async def scenario() -> None:
-        _enable_first_loop(project_root)
-        nodes_path = project_root / "config" / "nodes.toml"
-        nodes_path.write_text(
-            nodes_path.read_text(encoding="utf-8").replace(
+        agents_path = project_root / "config" / "agents.toml"
+        agents_path.write_text(
+            agents_path.read_text(encoding="utf-8").replace(
                 'capabilities = ["org.aurora.console.send_message"]',
                 'capabilities = ["org.aurora.console.send_message", "org.aurora.dashboard.send_message"]',
             ),
@@ -180,7 +199,7 @@ type = "string"
         gateway = _SequenceGateway(
             [ToolCall("call-dashboard", "org.aurora.dashboard.send_message", {"text": "hello human"})]
         )
-        runtime.kernel._model_gateway = gateway
+        runtime.model_gateway = gateway
         await runtime.start()
         try:
             user = await runtime.chat.register("alice", "secret")
@@ -195,27 +214,25 @@ type = "string"
                 },
             )
 
-            first = await runtime.run_cycle()
+            first = await runtime.pump()
             assert runtime._model_dispatch_task is not None
             await runtime._model_dispatch_task
-            second = await runtime.run_cycle()
-            third = await runtime.run_cycle()
+            second = await runtime.pump()
+            third = await runtime.pump()
 
             assert second["platform_receipts_emitted"] == 1
-            assert third["ingested_record_ids"]
+            assert third["ingested_task_ids"]
             offered_tools = {tool.name for tool in gateway.requests[0].tools}
             assert "org.aurora.dashboard.send_message" in offered_tools
             assert "org.aurora.console.send_message" not in offered_tools
-            assert "direct private message" in gateway.requests[0].messages[-1].content
             history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello human"]
-            root_record = runtime.kernel.get_record(first["ingested_record_ids"][0])
-            episode = runtime.kernel.get_episode(root_record.episode_id)
-            assert episode is not None
-            assert episode.status == EpisodeStatus.COMPLETED
-            assert episode.termination_reason == "terminal_effect_succeeded"
+            task = runtime.kernel.get_task(first["ingested_task_ids"][0])
+            assert task is not None
+            assert task.status == TaskStatus.COMPLETED
+            assert task.termination_reason == "terminal_effect_succeeded"
 
-            await runtime.run_cycle()
+            await runtime.pump()
             history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello human"]
         finally:

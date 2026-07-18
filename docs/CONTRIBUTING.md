@@ -26,8 +26,8 @@ Copy-Item .env.example .env
 
 ## 模块边界
 
-- Kernel 管理事件、状态、图调度、周期和因果，不决定认知内容，也不执行平台效果。
-- Node 只通过 Kernel API 读取快照、请求声明能力并产出事件。
+- Kernel 管理事件、Task/Agent 状态、邮箱、Activity 和因果，不决定认知内容，也不执行平台效果。
+- Agent handler 只读取 `AgentContext` 并返回无副作用的 `AgentDecision`。
 - Platform 归一化 AMP 输入并执行 `effect.requested`，结果必须作为新事件回到 Kernel。
 - `localhost` 承担本地业务用例；`dashboard` 只做路由/API 适配。
 - `utils` 不得依赖任何上层包；共享日志必须通过 `src.utils.log_utils.get_logger()` 获取。
@@ -53,7 +53,7 @@ uv run pyright
 ```
 
 测试必须离线可重复。模型、时钟和 MCP 使用 fake；测试不得消耗真实额度或依赖公网服务。缺陷修复应先覆盖失败路径，
-事件与效果测试还需验证周期边界、幂等性和因果父子关系。
+事件与效果测试还需验证事务边界、幂等性和因果父子关系。
 
 ## 提交前检查
 

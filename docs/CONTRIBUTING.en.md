@@ -29,9 +29,9 @@ continuations, workspace events, or runtime logs.
 
 ## Module boundaries
 
-- Kernel owns events, state, graph scheduling, cycles, and causality. It does not choose cognitive content or execute
-  Platform effects.
-- Nodes read snapshots, request declared capabilities, and emit events only through the Kernel API.
+- Kernel owns events, Task/Agent state, mailboxes, Activities, and causality. It does not choose cognitive content or
+  execute Platform effects.
+- Agent handlers only read `AgentContext` and return side-effect-free `AgentDecision` values.
 - Platform normalizes AMP input and executes `effect.requested`; each result returns to Kernel as a new event.
 - `localhost` owns local use cases, while `dashboard` only adapts routes and APIs.
 - `utils` cannot depend on upper-layer packages. Shared logging uses `src.utils.log_utils.get_logger()`.
@@ -58,7 +58,7 @@ uv run pyright
 
 Tests must be deterministic and offline. Use fake models, clocks, and MCP implementations; tests must not consume real
 credits or require public network services. Bug fixes should cover the failing path first. Event and effect tests should
-also verify cycle boundaries, idempotency, and causal parentage.
+also verify transaction boundaries, idempotency, and causal parentage.
 
 ## Before submitting
 

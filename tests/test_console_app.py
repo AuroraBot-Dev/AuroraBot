@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from src.ai.contracts import ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.kernel.events import new_amp
 from src.localhost.runtime import AuroraRuntime
 from src.localhost.shell import run_console
@@ -31,6 +32,22 @@ result_mode = "terminal"
 
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
+
+        class Gateway:
+            async def complete(self, request: ModelRequest) -> ModelResult:
+                return ModelResult(
+                    model="test",
+                    negotiated_capabilities=frozenset({"chat", "tools"}),
+                    response_mode=request.response_mode,
+                    text="",
+                    data=None,
+                    usage=ModelUsage(),
+                    cost_usd=0,
+                    tool_calls=(ToolCall("call", "org.aurora.console.send_message", {"text": "来自 bot 的消息"}),),
+                    finish_reason="tool_calls",
+                )
+
+        runtime.model_gateway = Gateway()
         output: list[str] = []
         try:
             await runtime.submit_amp(
@@ -43,7 +60,10 @@ result_mode = "terminal"
                     source_instance="console",
                 ).to_dict()
             )
-            result = await runtime.run_cycle()
+            await runtime.pump()
+            assert runtime._model_dispatch_task is not None
+            await runtime._model_dispatch_task
+            result = await runtime.pump()
             assert result["platform_receipts_emitted"] == 1
             inputs = iter(("/status", "/quit"))
             await run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append)

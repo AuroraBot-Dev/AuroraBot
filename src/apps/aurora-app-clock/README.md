@@ -4,7 +4,7 @@
 
 Clock 是内建 stdio MCP 应用，经 Platform 能力目录接入 AuroraBot。启用状态、启动命令、工具 allowlist 与
 `result_mode` 只由根目录 `config/apps.toml` 声明；所有 Clock 工具当前均为 `resume`，执行成功或失败后都会恢复
-发起它的 Episode。
+发起它的 Agent。
 
 ## 工具
 

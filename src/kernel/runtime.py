@@ -1,4 +1,4 @@
-"""Kernel ingestion, causal records, graph scheduling, and cycle execution."""
+"""RFC 0012 durable homogeneous-Agent scheduler and causal boundary."""
 
 from __future__ import annotations
 
@@ -6,279 +6,118 @@ import asyncio
 import logging
 import os
 import shutil
-import time
-from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from jsonschema import ValidationError, validate
 
-from src.ai.contracts import ModelRequest, ModelResult
-from src.ai.vnext import ModelGatewayService
-from src.kernel.episodes import EpisodeSnapshot, EpisodeStatus
+from src.kernel.contracts import (
+    ActivityRequest,
+    AgentContext,
+    AgentDecision,
+    AgentHandler,
+    AgentInstance,
+    AgentLimits,
+    BrainContextSnapshot,
+    CapabilityCatalogSnapshot,
+    EffectLease,
+    KernelConfiguration,
+    TaskState,
+)
 from src.kernel.events import AmpEnvelope, AmpValidationError, new_amp
-from src.kernel.node import CognitiveNode, NodeContext
-from src.kernel.records import KernelRecord, RecordStatus
-from src.localhost.configuration import AuroraConfig, NodeConfig
-from src.platform.capabilities import CapabilityCatalogSnapshot, CapabilityDescriptor
+from src.kernel.store import SQLiteRuntimeStore, utc_now
 from src.utils.log_utils import get_logger
 from src.utils.serialization import atomic_write_json, read_json
 
-MAX_HOP = 16
 logger = get_logger("aurora.kernel")
 
 
 @dataclass(frozen=True, slots=True)
-class CycleResult:
-    cycle: int
-    ingested_record_ids: tuple[str, ...]
-    scheduled_record_ids: tuple[str, ...]
-    failed_record_ids: tuple[str, ...]
+class PumpResult:
+    ingested_task_ids: tuple[str, ...]
+    processed_message_ids: tuple[str, ...]
+    failed_message_ids: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-class Kernel:
-    """The sole owner of the shared event workspace and record state machine."""
+class AgentKernel:
+    """Owns durable Task/Agent state while delegating all cognition and external I/O."""
 
-    def __init__(
-        self, configuration: AuroraConfig, nodes: Mapping[str, CognitiveNode], model_gateway: ModelGatewayService
-    ) -> None:
+    def __init__(self, configuration: KernelConfiguration, handlers: dict[str, AgentHandler]) -> None:
         self.configuration = configuration
-        self._nodes = nodes
-        self._model_gateway = model_gateway
-        self._soul_content = configuration.soul_path.read_text(encoding="utf-8")
-        self._workspace = configuration.runtime.workspace
+        self._profiles = {profile.id: profile for profile in configuration.profiles}
+        if set(self._profiles) != set(handlers):
+            raise ValueError("Agent handlers must exactly match configured profiles")
+        if configuration.limits.root_profile not in self._profiles:
+            raise ValueError("root Agent profile is not configured")
+        self._handlers = handlers
+        self._workspace = Path(configuration.workspace)
         self._inbox = self._workspace / "inbox"
         self._process = self._workspace / "process"
         self._archive = self._workspace / "archive"
-        self._record_process = self._process / "records"
-        self._record_archive = self._archive / "records"
-        self._episode_process = self._process / "episodes"
-        self._episode_archive = self._archive / "episodes"
-        for directory in (
-            self._inbox,
-            self._process,
-            self._archive,
-            self._record_process,
-            self._record_archive,
-            self._episode_process,
-            self._episode_archive,
-        ):
+        self._task_archive = self._archive / "tasks"
+        for directory in (self._inbox, self._process, self._archive, self._task_archive):
             directory.mkdir(parents=True, exist_ok=True)
-        self._state_path = self._process / "kernel-state.json"
-        self._lock = asyncio.Lock()
-        self._cycle = self._load_cycle()
-        configured_capabilities = tuple(
-            CapabilityDescriptor(item.id, item.description, item.parameters_schema, item.result_mode)
-            for adapter in configuration.adapters
-            for item in adapter.capabilities
+        self._reject_active_legacy_workspace()
+        self._store_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aurora-sqlite-writer")
+        self._turn_executor = ThreadPoolExecutor(
+            max_workers=configuration.limits.turn_concurrency,
+            thread_name_prefix="aurora-agent-turn",
         )
-        self._capability_catalog = CapabilityCatalogSnapshot(configured_capabilities)
-        configured = {node.id for node in configuration.nodes}
-        if not set(nodes) <= configured or configured != set(nodes):
-            raise ValueError("Kernel nodes must exactly match enabled node configuration")
-        self._recover_interrupted_model_requests()
-        self._expire_stale_episodes()
+        self._blocking_executor = ThreadPoolExecutor(
+            max_workers=configuration.limits.blocking_workers,
+            thread_name_prefix="aurora-blocking",
+        )
+        self.store = SQLiteRuntimeStore(self._process / "runtime.sqlite3")
+        self._store_executor.submit(self.store.initialize).result()
+        self._capability_catalog = CapabilityCatalogSnapshot()
+        self._lock = asyncio.Lock()
         logger.info(
-            "kernel initialized workspace=%s cycle=%d nodes=%d capabilities=%d",
+            "Agent Kernel initialized workspace=%s profiles=%d active_tasks=%d",
             self._workspace,
-            self._cycle,
-            len(self._nodes),
-            len(self._capability_catalog.capabilities),
+            len(self._profiles),
+            self.store.counts()["active_tasks"],
         )
 
+    def _reject_active_legacy_workspace(self) -> None:
+        legacy = []
+        for name in ("records", "episodes"):
+            directory = self._process / name
+            if directory.exists() and any(directory.rglob("*.json")):
+                legacy.append(str(directory))
+        if legacy:
+            raise RuntimeError(
+                "legacy Episode/Graph workspace contains active data; "
+                "select a clean runtime.workspace before starting: " + ", ".join(legacy)
+            )
+
     @property
-    def cycle(self) -> int:
-        return self._cycle
+    def limits(self) -> AgentLimits:
+        return self.configuration.limits
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
         return self._capability_catalog
 
     def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
-        """Install the startup capability snapshot before cognition begins."""
         merged = {item.id: item for item in self._capability_catalog.capabilities}
         merged.update({item.id: item for item in catalog.capabilities})
         self._capability_catalog = CapabilityCatalogSnapshot(tuple(sorted(merged.values(), key=lambda item: item.id)))
-        logger.info("capability catalog installed capabilities=%d", len(self._capability_catalog.capabilities))
-
-    def _load_cycle(self) -> int:
-        if not self._state_path.exists():
-            return 0
-        value = read_json(self._state_path)
-        if not isinstance(value, dict) or not isinstance(value.get("cycle"), int):
-            raise RuntimeError("invalid persisted Kernel state")
-        return value["cycle"]
-
-    def _persist_cycle(self) -> None:
-        atomic_write_json(self._state_path, {"cycle": self._cycle})
 
     async def submit_amp(self, amp: AmpEnvelope) -> None:
-        """Atomically offer a validated external fact to the next ingress pass."""
         async with self._lock:
-            atomic_write_json(self._inbox / f"{amp.header.message_id}.json", amp.to_dict())
-            logger.debug(
-                "AMP submitted message_id=%s event_type=%s session_id=%s",
-                amp.header.message_id,
-                amp.payload.type,
-                amp.payload.session_id,
+            await self._blocking_call(
+                atomic_write_json,
+                self._inbox / f"{amp.header.message_id}.json",
+                amp.to_dict(),
             )
 
-    def _record_path(self, record: KernelRecord) -> Path:
-        completed = {RecordStatus.ARCHIVED, RecordStatus.ERROR}
-        directory = self._record_archive if record.status in completed else self._record_process
-        return directory / f"{record.record_id}.json"
-
-    def _save_record(self, record: KernelRecord) -> None:
-        destination = self._record_path(record)
-        atomic_write_json(destination, record.to_dict())
-        other_directory = self._record_process if destination.parent == self._record_archive else self._record_archive
-        (other_directory / destination.name).unlink(missing_ok=True)
-
-    def _episode_path(self, episode: EpisodeSnapshot) -> Path:
-        directory = self._episode_archive if episode.terminal else self._episode_process
-        return directory / f"{episode.episode_id}.json"
-
-    def _save_episode(self, episode: EpisodeSnapshot) -> None:
-        destination = self._episode_path(episode)
-        atomic_write_json(destination, episode.to_dict())
-        other = self._episode_process if destination.parent == self._episode_archive else self._episode_archive
-        (other / destination.name).unlink(missing_ok=True)
-
-    def get_episode(self, episode_id: str) -> EpisodeSnapshot | None:
-        for directory in (self._episode_process, self._episode_archive):
-            path = directory / f"{episode_id}.json"
-            if path.exists():
-                value = read_json(path)
-                if isinstance(value, dict):
-                    return EpisodeSnapshot.from_dict(value)
-        return None
-
-    def episodes(self) -> tuple[EpisodeSnapshot, ...]:
-        result: list[EpisodeSnapshot] = []
-        for directory in (self._episode_process, self._episode_archive):
-            for path in sorted(directory.glob("*.json")):
-                value = read_json(path)
-                if isinstance(value, dict):
-                    result.append(EpisodeSnapshot.from_dict(value))
-        return tuple(result)
-
-    def _create_episode(self, record: KernelRecord, *, autonomous: bool) -> EpisodeSnapshot:
-        budget = (
-            self.configuration.runtime.autonomous_budget
-            if autonomous
-            else self.configuration.runtime.interactive_budget
-        )
-        now = datetime.now(UTC).isoformat()
-        episode = EpisodeSnapshot(
-            episode_id=record.episode_id,
-            root_record_id=record.record_id,
-            autonomous=autonomous,
-            status=EpisodeStatus.ACTIVE,
-            active_node_id=None,
-            round=0,
-            model_calls=0,
-            tool_calls=0,
-            max_model_calls=budget.max_model_calls,
-            max_tool_calls=budget.max_tool_calls,
-            max_duration_seconds=budget.max_duration_seconds,
-            started_at=now,
-            updated_at=now,
-            transcript=[{"kind": "event", "record_id": record.record_id, "amp": record.amp}],
-        )
-        self._save_episode(episode)
-        logger.debug(
-            "episode created episode_id=%s record_id=%s autonomous=%s model_budget=%d "
-            "tool_budget=%d duration_budget_s=%.1f",
-            episode.episode_id,
-            record.record_id,
-            autonomous,
-            episode.max_model_calls,
-            episode.max_tool_calls,
-            episode.max_duration_seconds,
-        )
-        return episode
-
-    def _append_episode_item(self, episode_id: str, item: dict[str, Any]) -> EpisodeSnapshot | None:
-        episode = self.get_episode(episode_id)
-        if episode is None:
-            return None
-        episode.transcript.append(item)
-        episode.updated_at = datetime.now(UTC).isoformat()
-        self._save_episode(episode)
-        return episode
-
-    def _end_episode(self, episode_id: str, status: EpisodeStatus, reason: str) -> None:
-        episode = self.get_episode(episode_id)
-        if episode is None or episode.terminal:
-            return
-        episode.touch(status, reason=reason)
-        self._save_episode(episode)
-        logger.info(
-            "episode ended episode_id=%s status=%s reason=%s rounds=%d model_calls=%d tool_calls=%d",
-            episode.episode_id,
-            status,
-            reason,
-            episode.round,
-            episode.model_calls,
-            episode.tool_calls,
-        )
-
-    def _expire_stale_episodes(self) -> None:
-        """Close non-terminal snapshots that have outlived their configured duration budget."""
-        for episode in self.episodes():
-            if episode.terminal or episode.elapsed_seconds <= episode.max_duration_seconds:
-                continue
-            self._end_episode(
-                episode.episode_id,
-                EpisodeStatus.BUDGET_EXHAUSTED,
-                "duration_budget_exhausted",
-            )
-
-    def _records(self) -> list[KernelRecord]:
-        records: list[KernelRecord] = []
-        for directory in (self._record_process, self._record_archive):
-            for path in sorted(directory.glob("*.json")):
-                try:
-                    value = read_json(path)
-                    if not isinstance(value, dict):
-                        raise ValueError("record root is not an object")
-                    records.append(KernelRecord.from_dict(value))
-                except (OSError, ValueError, KeyError, TypeError) as error:
-                    raise RuntimeError(f"invalid Kernel record at {path}: {error}") from error
-        return records
-
-    def get_record(self, record_id: str) -> KernelRecord | None:
-        for directory in (self._record_process, self._record_archive):
-            path = directory / f"{record_id}.json"
-            if path.exists():
-                value = read_json(path)
-                if isinstance(value, dict):
-                    return KernelRecord.from_dict(value)
-        return None
-
-    def has_cycle_work(self) -> bool:
-        if any(self._inbox.glob("*.json")):
-            return True
-        return any(
-            record.status == RecordStatus.PENDING
-            and record.available_cycle <= self._cycle + 1
-            and AmpEnvelope.parse(record.amp).payload.type not in {"model.requested", "effect.requested"}
-            for record in self._records()
-        )
-
-    def has_pending_model_request(self) -> bool:
-        return any(
-            record.status == RecordStatus.PENDING and AmpEnvelope.parse(record.amp).payload.type == "model.requested"
-            for record in self._records()
-        )
-
-    def _archive_inbox_file(self, source: Path, category: str) -> None:
+    def _archive_inbox(self, source: Path, category: str) -> None:
         destination_dir = self._archive / "inbox" / category
         destination_dir.mkdir(parents=True, exist_ok=True)
         destination = destination_dir / source.name
@@ -286,581 +125,433 @@ class Kernel:
             destination = destination_dir / f"{source.stem}-{os.urandom(4).hex()}{source.suffix}"
         source.replace(destination)
 
-    def _write_ingress_error(self, source: Path, error: str) -> KernelRecord:
-        rejected_dir = self._archive / "inbox" / "rejected"
-        rejected_dir.mkdir(parents=True, exist_ok=True)
-        rejected = rejected_dir / source.name
-        if source.exists():
-            source.replace(rejected)
-        amp = new_amp(
-            event_type="system.ingress_rejected",
-            session_id="kernel",
-            summary="Rejected invalid AMP ingress",
-            data={"file": rejected.name, "reason": error},
-            source_app="kernel",
-            source_instance="ingress",
-        )
-        record = KernelRecord.from_amp(amp, available_cycle=self._cycle)
-        record.transition(RecordStatus.ERROR, error=error)
-        self._save_record(record)
-        logger.warning(
-            "AMP ingress rejected record_id=%s file=%s reason=%s",
-            record.record_id,
-            rejected.name,
-            error,
-        )
-        return record
-
     def ingest_ready(self) -> tuple[str, ...]:
-        """Take every completed inbox JSON file into the current cycle."""
-        existing_message_ids = {
-            AmpEnvelope.parse(record.amp).header.message_id for record in self._records() if record.amp.get("header")
-        }
         ingested: list[str] = []
         for path in sorted(self._inbox.glob("*.json")):
             try:
-                raw = read_json(path)
-                amp = AmpEnvelope.parse(raw)
+                amp = AmpEnvelope.parse(read_json(path))
             except (OSError, ValueError, TypeError, AmpValidationError) as error:
-                self._write_ingress_error(path, str(error))
+                logger.warning("AMP ingress rejected file=%s reason=%s", path.name, error)
+                self._archive_inbox(path, "rejected")
                 continue
-            if amp.header.message_id in existing_message_ids:
-                self._archive_inbox_file(path, "duplicate")
-                logger.warning("duplicate AMP ignored message_id=%s file=%s", amp.header.message_id, path.name)
+            data = amp.payload.data
+            if amp.payload.type in {"effect.succeeded", "effect.failed"}:
+                request_id = data.get("request_id")
+                capability = data.get("capability")
+                descriptor = self._capability_catalog.by_id.get(capability) if isinstance(capability, str) else None
+                message_id = None
+                if isinstance(request_id, str):
+                    message_id = self.store.ingest_activity_receipt(
+                        external_message_id=amp.header.message_id,
+                        request_id=request_id,
+                        event_type=amp.payload.type,
+                        summary=amp.payload.summary,
+                        payload=data,
+                        terminal=descriptor is not None and descriptor.result_mode == "terminal",
+                    )
+                if message_id is None:
+                    self.store.add_situation(
+                        amp.header.source["app"],
+                        amp.payload.type,
+                        amp.payload.summary,
+                        amp.to_dict(),
+                        100,
+                        self.limits.ambient_ttl_seconds,
+                    )
+                else:
+                    ingested.append(message_id)
+                self._archive_inbox(path, "accepted")
                 continue
-            parent = self._effect_parent(amp)
-            autonomous = amp.payload.type == "system.tick"
-            resume_node_id = self._receipt_resume_node(amp, parent)
-            record = KernelRecord.from_amp(
-                amp,
-                available_cycle=self._cycle,
-                parent=parent,
-                resume_node_id=resume_node_id,
-                priority=10 if autonomous else 100,
-                episode_round=parent.episode_round if parent else 0,
-            )
-            self._save_record(record)
-            if parent is None:
-                self._create_episode(record, autonomous=autonomous)
-            else:
-                self._append_episode_item(
-                    record.episode_id,
-                    {"kind": "effect_receipt", "record_id": record.record_id, "amp": record.amp},
+            if data.get("ambient") is True:
+                situation_id = self.store.add_situation(
+                    amp.header.source["app"],
+                    amp.payload.type,
+                    amp.payload.summary,
+                    amp.to_dict(),
+                    10 if amp.payload.type == "system.tick" else 100,
+                    self.limits.ambient_ttl_seconds,
                 )
-                if amp.payload.type == "effect.succeeded" and resume_node_id is None:
-                    self._end_episode(record.episode_id, EpisodeStatus.COMPLETED, "terminal_effect_succeeded")
-            self._archive_inbox_file(path, "accepted")
-            existing_message_ids.add(amp.header.message_id)
-            ingested.append(record.record_id)
-            logger.debug(
-                "AMP ingested cycle=%d record_id=%s episode_id=%s event_type=%s parent_record_id=%s priority=%d",
-                self._cycle,
-                record.record_id,
-                record.episode_id,
-                amp.payload.type,
-                record.parent_record_id,
-                record.priority,
+                ingested.append(situation_id)
+                self._archive_inbox(path, "accepted")
+                continue
+            autonomous = amp.payload.type == "system.tick"
+            budget = self.configuration.autonomous_budget if autonomous else self.configuration.interactive_budget
+            task = self.store.create_task(
+                external_message_id=amp.header.message_id,
+                session_id=amp.payload.session_id,
+                summary=amp.payload.summary,
+                payload={"amp": amp.to_dict()},
+                autonomous=autonomous,
+                root_profile=self.limits.root_profile,
+                budget=budget,
+                priority=10 if autonomous else 100,
             )
+            self._archive_inbox(path, "accepted" if task is not None else "duplicate")
+            if task is not None:
+                ingested.append(task.task_id)
         return tuple(ingested)
 
-    def _receipt_resume_node(self, amp: AmpEnvelope, parent: KernelRecord | None) -> str | None:
-        if parent is None or amp.payload.type not in {"effect.succeeded", "effect.failed"}:
-            return None
-        if amp.payload.type == "effect.failed":
-            return parent.resume_node_id
-        capability = amp.payload.data.get("capability")
-        descriptor = self._capability_catalog.by_id.get(capability) if isinstance(capability, str) else None
-        if descriptor is not None and descriptor.result_mode == "terminal":
-            return None
-        return parent.resume_node_id
-
-    def _effect_parent(self, amp: AmpEnvelope) -> KernelRecord | None:
-        if amp.payload.type not in {"effect.succeeded", "effect.failed"}:
-            return None
-        request_id = amp.payload.data.get("request_id")
-        if not isinstance(request_id, str):
-            return None
-        for candidate in self._records():
-            candidate_amp = AmpEnvelope.parse(candidate.amp)
-            is_request = candidate_amp.payload.type == "effect.requested"
-            if is_request and candidate_amp.payload.data.get("request_id") == request_id:
-                return candidate
-        return None
-
-    def publish_from_node(
-        self,
-        parent: KernelRecord,
-        node_id: str,
-        event_type: str,
-        data: dict[str, Any],
-        summary: str,
-        resume_node_id: str | None = None,
-    ) -> KernelRecord:
-        """Create a declared child fact that cannot run before the next cycle."""
-        node = self._node_configuration(node_id)
-        if event_type not in node.outputs:
-            raise PermissionError(f"node {node_id} cannot publish {event_type}")
-        if parent.hop >= MAX_HOP:
-            raise RuntimeError(f"causal hop limit {MAX_HOP} reached")
-        if event_type == "effect.requested":
-            if not isinstance(data.get("capability"), str) or not isinstance(data.get("parameters"), dict):
-                raise ValueError("effect.requested requires capability and parameters")
-            data = {**data, "request_id": str(uuid4())}
-            capability = data["capability"]
-            assert isinstance(capability, str)
-            descriptor = self._capability_catalog.by_id.get(capability)
-            if descriptor is None:
-                raise ValueError(f"unknown effect capability {capability}")
-            try:
-                validate(data["parameters"], descriptor.parameters_schema)
-            except ValidationError as error:
-                raise ValueError(f"effect parameters do not match {capability} schema: {error.message}") from error
-            episode = self.get_episode(parent.episode_id)
-            if episode is not None:
-                if not episode.can_request_tool():
-                    self._end_episode(parent.episode_id, EpisodeStatus.BUDGET_EXHAUSTED, "tool_budget_exhausted")
-                    raise RuntimeError("episode tool budget exhausted")
-                episode.tool_calls += 1
-                episode.touch(EpisodeStatus.WAITING_EFFECT, node_id=node_id)
-                self._save_episode(episode)
-        amp = new_amp(
-            event_type=event_type,
-            session_id=AmpEnvelope.parse(parent.amp).payload.session_id,
-            summary=summary,
-            data=data,
-            source_app="kernel.node",
-            source_instance=node_id,
+    def brain_context(self) -> BrainContextSnapshot:
+        tasks = self.store.tasks(active_only=True)
+        agents = self.store.agents(active_only=True)
+        latest_activity = {}
+        for task in tasks:
+            events = self.store.events_for_task(task.task_id)
+            latest_activity[task.task_id] = events[-1]["summary"] if events else task.root_summary
+        return BrainContextSnapshot(
+            persona={"content": self.configuration.soul_content, "hash": self.configuration.soul_hash},
+            active_tasks=tuple(
+                {
+                    "task_id": task.task_id,
+                    "session_id": task.session_id,
+                    "summary": task.root_summary,
+                    "latest_activity": latest_activity[task.task_id],
+                    "status": task.status,
+                    "model_calls": task.model_calls,
+                    "tool_calls": task.tool_calls,
+                    "updated_at": task.updated_at,
+                }
+                for task in tasks
+            ),
+            active_agents=tuple(
+                {
+                    "agent_id": agent.agent_id,
+                    "task_id": agent.task_id,
+                    "parent_agent_id": agent.parent_agent_id,
+                    "profile_id": agent.profile_id,
+                    "assignment": agent.assignment,
+                    "status": agent.status,
+                    "last_summary": agent.last_summary,
+                    "updated_at": agent.updated_at,
+                }
+                for agent in agents
+            ),
+            ambient_situations=self.store.situations(),
+            generated_at=utc_now(),
         )
-        child = KernelRecord.from_amp(
-            amp,
-            available_cycle=self._cycle + 1,
-            parent=parent,
-            producer_node=node_id,
-            resume_node_id=resume_node_id,
-            priority=parent.priority,
-            episode_round=parent.episode_round,
-        )
-        self._save_record(child)
-        self._append_episode_item(
-            child.episode_id,
-            {"kind": event_type, "record_id": child.record_id, "amp": child.amp},
-        )
-        logger.debug(
-            "node event published cycle=%d record_id=%s parent_record_id=%s episode_id=%s "
-            "node_id=%s event_type=%s resume_node_id=%s",
-            self._cycle,
-            child.record_id,
-            parent.record_id,
-            child.episode_id,
-            node_id,
-            event_type,
-            resume_node_id,
-        )
-        return child
 
-    def _node_configuration(self, node_id: str) -> NodeConfig:
-        for node in self.configuration.nodes:
-            if node.id == node_id:
-                return node
-        raise KeyError(f"unknown node {node_id}")
-
-    async def run_cycle(self) -> CycleResult:
-        """Consume only records ready at cycle start; child records wait until the next cycle."""
+    async def pump(self, max_turns: int | None = None) -> PumpResult:
+        """Ingest ready AMP files and process a bounded set of independent Agent turns."""
+        limit = max_turns or self.limits.turn_concurrency
+        if limit <= 0:
+            raise ValueError("max_turns must be positive")
         async with self._lock:
-            return await self._run_cycle()
-
-    async def _run_cycle(self) -> CycleResult:
-        started = time.monotonic()
-        self._expire_stale_episodes()
-        self._cycle += 1
-        self._persist_cycle()
-        ingested = self.ingest_ready()
-        ready = [
-            record
-            for record in self._records()
-            if record.status == RecordStatus.PENDING
-            and record.available_cycle <= self._cycle
-            and AmpEnvelope.parse(record.amp).payload.type not in {"model.requested", "effect.requested"}
-        ]
-        ready.sort(key=lambda item: (-item.priority, item.created_at, item.record_id))
-        logger.debug("cycle started cycle=%d ingested=%d ready=%d", self._cycle, len(ingested), len(ready))
-        scheduled: list[str] = []
+            await self._store_call(self.store.expire_tasks)
+            await self._store_call(self.store.expire_situations)
+            ingested = await self._store_call(self.ingest_ready)
+            claims = await self._store_call(self._claim_messages, limit)
+        if not claims:
+            await self._blocking_call(self._archive_terminal_tasks)
+            return PumpResult(ingested, (), ())
+        loop = asyncio.get_running_loop()
+        decisions = await asyncio.gather(
+            *(loop.run_in_executor(self._turn_executor, self._handle_claim, claim) for claim in claims),
+            return_exceptions=True,
+        )
+        processed: list[str] = []
         failed: list[str] = []
-        for record in ready:
-            event_type = AmpEnvelope.parse(record.amp).payload.type
-            configured_targets = self.configuration.edges.get(event_type, ())
-            targets = tuple(
-                record.resume_node_id if target == "@continuation" else target
-                for target in configured_targets
-                if target != "@continuation" or record.resume_node_id is not None
-            )
-            if not targets:
-                record.transition(RecordStatus.ARCHIVED)
-                self._save_record(record)
-                self._end_episode(record.episode_id, EpisodeStatus.SILENT, "no_route")
-                continue
-            record.transition(RecordStatus.PROCESSING)
-            self._save_record(record)
+        for claim, result in zip(claims, decisions, strict=True):
+            message, agent, _task = claim
             try:
-                for target in targets:
-                    if target is None:
-                        continue
-                    node_config = self._node_configuration(target)
-                    episode = self.get_episode(record.episode_id)
-                    if episode is not None and episode.terminal:
-                        continue
-                    advances = (event_type, target) in self.configuration.advancing_edges or (
-                        event_type,
-                        "@continuation",
-                    ) in self.configuration.advancing_edges
-                    if advances:
-                        record.episode_round += 1
-                        if episode is not None:
-                            episode.round += 1
-                            episode.touch(EpisodeStatus.ACTIVE, node_id=target)
-                            self._save_episode(episode)
-                    logger.debug(
-                        "node scheduled cycle=%d record_id=%s episode_id=%s event_type=%s "
-                        "node_id=%s round=%d advances_round=%s",
-                        self._cycle,
-                        record.record_id,
-                        record.episode_id,
-                        event_type,
-                        target,
-                        record.episode_round,
-                        advances,
-                    )
-                    descriptors = [
-                        descriptor
-                        for capability in sorted(node_config.capabilities)
-                        if (descriptor := self._capability_catalog.by_id.get(capability)) is not None
-                    ]
-                    context = NodeContext(
-                        record=record,
-                        soul_hash=self.configuration.soul_hash,
-                        soul_content=self._soul_content,
-                        configuration_snapshot={
-                            "node_id": target,
-                            "model_roles": sorted(node_config.model_roles),
-                            "capabilities": sorted(node_config.capabilities),
-                            "capability_descriptors": [descriptor.to_dict() for descriptor in descriptors],
-                        },
-                        allowed_outputs=node_config.outputs,
-                        allowed_capabilities=node_config.capabilities,
-                        episode_snapshot=episode.to_dict() if episode is not None else {},
-                        _publisher=self,
-                        _node_id=target,
-                    )
-                    await self._nodes[target].execute(context)
-                record.transition(RecordStatus.ARCHIVED)
-                self._save_record(record)
-                scheduled.append(record.record_id)
+                if isinstance(result, BaseException):
+                    raise result
+                await self._store_call(self._apply_authorized_decision, message, agent, result)
+                processed.append(message.message_id)
             except Exception as error:
-                record.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
-                self._save_record(record)
-                failed.append(record.record_id)
                 logger.log(
                     logging.ERROR,
-                    "node execution failed cycle=%d record_id=%s episode_id=%s event_type=%s error_type=%s",
-                    self._cycle,
-                    record.record_id,
-                    record.episode_id,
-                    event_type,
+                    "Agent turn failed task_id=%s agent_id=%s message_id=%s error_type=%s",
+                    agent.task_id,
+                    agent.agent_id,
+                    message.message_id,
                     type(error).__name__,
                 )
-        result = CycleResult(self._cycle, tuple(ingested), tuple(scheduled), tuple(failed))
-        logger.debug(
-            "cycle completed cycle=%d ingested=%d scheduled=%d failed=%d duration_ms=%.1f",
-            self._cycle,
-            len(ingested),
-            len(scheduled),
-            len(failed),
-            (time.monotonic() - started) * 1000,
-        )
-        return result
+                try:
+                    await self._store_call(self._apply_failure, message, agent, f"{type(error).__name__}: {error}")
+                except Exception:
+                    await self._store_call(self.store.fail_message, message.message_id, agent.agent_id, str(error))
+                failed.append(message.message_id)
+        await self._blocking_call(self._archive_terminal_tasks)
+        return PumpResult(ingested, tuple(processed), tuple(failed))
 
-    def defer_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> KernelRecord:
-        """Publish a model request for the out-of-cycle dispatcher."""
-        episode = self.get_episode(parent.episode_id)
-        if episode is not None:
-            if not episode.can_request_model():
-                self._end_episode(parent.episode_id, EpisodeStatus.BUDGET_EXHAUSTED, "model_budget_exhausted")
-                raise RuntimeError("episode model budget exhausted")
-            episode.model_calls += 1
-            episode.touch(EpisodeStatus.WAITING_MODEL, node_id=node_id)
-            self._save_episode(episode)
-        record = self._create_model_record(
-            parent,
-            node_id,
-            "model.requested",
-            request.to_dict(),
-            resume_node_id=node_id,
-        )
-        self._append_episode_item(
-            parent.episode_id,
-            {"kind": "model.requested", "record_id": record.record_id, "request": request.to_dict()},
-        )
-        logger.debug(
-            "model request queued record_id=%s parent_record_id=%s episode_id=%s node_id=%s "
-            "model_role=%s endpoint=%s tools=%d",
-            record.record_id,
-            parent.record_id,
-            record.episode_id,
-            node_id,
-            request.role,
-            request.response_mode,
-            len(request.tools),
-        )
-        return record
+    async def _store_call(self, function: Any, *args: Any, **kwargs: Any) -> Any:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._store_executor, partial(function, *args, **kwargs))
 
-    def end_episode_from_node(self, parent: KernelRecord, node_id: str, outcome: str, reason: str) -> KernelRecord:
-        status = EpisodeStatus.SILENT if outcome == "silent" else EpisodeStatus.COMPLETED
-        if outcome == "cancelled":
-            status = EpisodeStatus.CANCELLED
-        elif outcome == "error":
-            status = EpisodeStatus.ERROR
-        self._end_episode(parent.episode_id, status, reason)
-        return self.publish_from_node(
-            parent,
-            node_id,
-            "episode.ended",
-            {"outcome": outcome, "reason": reason},
-            f"Episode ended: {outcome}",
+    async def _blocking_call(self, function: Any, *args: Any, **kwargs: Any) -> Any:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._blocking_executor, partial(function, *args, **kwargs))
+
+    def _claim_messages(self, limit: int) -> tuple[Any, ...]:
+        claims = []
+        for _ in range(limit):
+            claimed = self.store.claim_message(self.limits.lease_seconds)
+            if claimed is None:
+                break
+            claims.append(claimed)
+        return tuple(claims)
+
+    def _handle_claim(self, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
+        message, agent, task = claim
+        profile = self._profiles[agent.profile_id]
+        descriptors = tuple(
+            descriptor
+            for capability in sorted(profile.capabilities)
+            if (descriptor := self._capability_catalog.by_id.get(capability)) is not None
+            and (agent.parent_agent_id is None or descriptor.result_mode != "terminal")
+        )
+        context = AgentContext(
+            task=task,
+            agent=agent,
+            message=message,
+            children=self.store.children(agent.agent_id),
+            profile=profile,
+            capabilities=descriptors,
+            brain=self.brain_context(),
+            memory_agent_profile=self.limits.memory_agent_profile,
+        )
+        return self._handlers[agent.profile_id].handle(context)
+
+    def _apply_failure(self, message: Any, agent: AgentInstance, error: str) -> None:
+        action = {"kind": "fail", "summary": error, "error": error, "claims": []}
+        self.store.apply_decision(
+            message=message,
+            agent=agent,
+            action=action,
+            state_patch={},
+            limits=self._limit_dict(),
+            priority=message.priority,
         )
 
-    async def claim_model_request(self) -> KernelRecord | None:
-        async with self._lock:
-            candidates = [
-                record
-                for record in self._records()
-                if record.status == RecordStatus.PENDING
-                and AmpEnvelope.parse(record.amp).payload.type == "model.requested"
-            ]
-            candidates.sort(key=lambda item: (-item.priority, item.created_at, item.record_id))
-            if not candidates:
-                return None
-            record = candidates[0]
-            record.transition(RecordStatus.PROCESSING)
-            self._save_record(record)
-            amp = AmpEnvelope.parse(record.amp)
-            logger.debug(
-                "model request claimed record_id=%s episode_id=%s model_role=%s priority=%d",
-                record.record_id,
-                record.episode_id,
-                amp.payload.data.get("role"),
-                record.priority,
+    def _apply_authorized_decision(self, message: Any, agent: AgentInstance, decision: AgentDecision) -> None:
+        profile = self._profiles[agent.profile_id]
+        action: dict[str, Any]
+        if decision.model_request is not None:
+            request_role = decision.model_request.get("role")
+            if request_role != profile.model_role:
+                raise PermissionError(f"Agent {agent.agent_id} cannot request model role {request_role}")
+            action = {"kind": "model", "request": decision.model_request, "summary": "model.requested"}
+        elif decision.effect_request is not None:
+            effect = decision.effect_request
+            if effect.capability not in profile.capabilities:
+                raise PermissionError(f"Agent {agent.agent_id} cannot request {effect.capability}")
+            descriptor = self._capability_catalog.by_id.get(effect.capability)
+            if descriptor is None:
+                raise ValueError(f"unknown effect capability {effect.capability}")
+            if agent.parent_agent_id is not None and descriptor.result_mode == "terminal":
+                raise PermissionError("only the root Agent may request terminal effects")
+            try:
+                validate(effect.parameters, descriptor.parameters_schema)
+            except ValidationError as error:
+                raise ValueError(f"effect parameters do not match {effect.capability}: {error.message}") from error
+            task = self.store.get_task(agent.task_id)
+            assert task is not None
+            action = {
+                "kind": "effect",
+                "summary": f"effect.requested:{effect.capability}",
+                "request": {
+                    "capability": effect.capability,
+                    "parameters": effect.parameters,
+                    "tool_call_id": effect.tool_call_id,
+                    "continuation": effect.continuation,
+                    "session_id": task.session_id,
+                },
+            }
+        elif decision.delegations:
+            if not profile.can_delegate:
+                raise PermissionError(f"Agent profile {profile.id} cannot delegate")
+            requests = []
+            for delegation in decision.delegations:
+                child_profile = delegation.profile_id or self.limits.worker_profile
+                if child_profile not in profile.child_profiles or child_profile not in self._profiles:
+                    raise PermissionError(f"Agent profile {profile.id} cannot create {child_profile}")
+                requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
+            action = {"kind": "delegate", "requests": requests, "summary": f"delegated {len(requests)} child Agent(s)"}
+        elif decision.completion is not None:
+            action = {
+                "kind": "complete",
+                "summary": decision.completion.summary,
+                "artifacts": list(decision.completion.artifacts),
+                "silent": decision.completion.silent,
+            }
+        elif decision.wait_for_children:
+            active_child = any(not child.terminal for child in self.store.children(agent.agent_id))
+            if not active_child and not self.store.has_pending_child_reports(agent.agent_id):
+                raise ValueError("Agent cannot wait without active children")
+            action = {"kind": "wait", "summary": "waiting for child Agents"}
+        elif decision.failure is not None:
+            action = {"kind": "fail", "summary": decision.failure, "error": decision.failure}
+        else:
+            raise ValueError("unsupported Agent decision")
+        action["claims"] = list(decision.claims)
+        self.store.apply_decision(
+            message=message,
+            agent=agent,
+            action=action,
+            state_patch=decision.state_patch,
+            limits=self._limit_dict(),
+            priority=message.priority,
+        )
+
+    def _limit_dict(self) -> dict[str, int]:
+        return {
+            "max_active_agents": self.limits.max_active_agents,
+            "max_agents_per_task": self.limits.max_agents_per_task,
+            "max_depth": self.limits.max_depth,
+            "max_children_per_agent": self.limits.max_children_per_agent,
+        }
+
+    def has_work(self) -> bool:
+        counts = self.store.counts()
+        return any(self._inbox.glob("*.json")) or counts["pending_messages"] > 0
+
+    def has_pending_model_requests(self) -> bool:
+        with self.store.connect() as connection:
+            return bool(
+                connection.execute(
+                    "SELECT 1 FROM activities WHERE kind = 'model' AND status = 'PENDING' LIMIT 1"
+                ).fetchone()
             )
-            return record
 
-    async def execute_model_request(self, record: KernelRecord) -> KernelRecord:
-        """Execute a claimed request without holding the Kernel cycle lock."""
-        amp = AmpEnvelope.parse(record.amp)
-        started = time.monotonic()
-        model_role = str(amp.payload.data.get("role", "unknown"))
-        logger.debug(
-            "model request started record_id=%s episode_id=%s model_role=%s",
-            record.record_id,
-            record.episode_id,
-            model_role,
-        )
-        try:
-            request = ModelRequest.from_dict(amp.payload.data)
-            result = await self._model_gateway.complete(request)
-        except Exception as error:
-            async with self._lock:
-                message = f"{type(error).__name__}: {error}"
-                record.transition(RecordStatus.ERROR, error=message)
-                self._save_record(record)
-                failed = self._create_model_record(
-                    record,
-                    record.producer_node or record.resume_node_id or "kernel",
-                    "model.failed",
-                    {"error": message},
-                    resume_node_id=record.resume_node_id,
-                )
-                self._append_episode_item(
-                    record.episode_id,
-                    {"kind": "model.failed", "record_id": failed.record_id, "error": message},
-                )
-                logger.warning(
-                    "model request failed record_id=%s episode_id=%s model_role=%s duration_ms=%.1f error_type=%s",
-                    record.record_id,
-                    record.episode_id,
-                    model_role,
-                    (time.monotonic() - started) * 1000,
-                    type(error).__name__,
-                )
-                return failed
-        async with self._lock:
-            record.transition(RecordStatus.ARCHIVED)
-            self._save_record(record)
-            completed = self._create_model_record(
-                record,
-                record.producer_node or record.resume_node_id or "kernel",
-                "model.completed",
-                result.to_dict(),
-                resume_node_id=record.resume_node_id,
-            )
-            self._append_episode_item(
-                record.episode_id,
-                {"kind": "model.completed", "record_id": completed.record_id, "result": result.to_dict()},
-            )
-            logger.info(
-                "model request completed record_id=%s completed_record_id=%s episode_id=%s model_role=%s "
-                "model=%s prompt_tokens=%d completion_tokens=%d cost_usd=%.6f tool_calls=%d "
-                "finish_reason=%s duration_ms=%.1f",
-                record.record_id,
-                completed.record_id,
-                record.episode_id,
-                model_role,
-                result.model,
-                result.usage.prompt_tokens,
-                result.usage.completion_tokens,
-                result.cost_usd,
-                len(result.tool_calls),
-                result.finish_reason,
-                (time.monotonic() - started) * 1000,
-            )
-            return completed
+    async def claim_model_requests(self, limit: int) -> tuple[ActivityRequest, ...]:
+        return await self._store_call(self.store.claim_activities, "model", limit, self.limits.lease_seconds)
 
-    def cancel_model_request(self, record: KernelRecord, reason: str) -> KernelRecord:
-        message = f"cancelled:{reason}"
-        record.transition(RecordStatus.ERROR, error=message)
-        self._save_record(record)
-        failed = self._create_model_record(
-            record,
-            record.producer_node or record.resume_node_id or "kernel",
-            "model.failed",
-            {"error": message},
-            resume_node_id=record.resume_node_id,
-        )
-        status = EpisodeStatus.BUDGET_EXHAUSTED if reason == "autonomous_daily_budget" else EpisodeStatus.CANCELLED
-        self._end_episode(record.episode_id, status, reason)
-        logger.warning(
-            "model request cancelled record_id=%s episode_id=%s reason=%s",
-            record.record_id,
-            record.episode_id,
-            reason,
-        )
-        return failed
+    async def complete_model(self, activity: ActivityRequest, result: dict[str, Any] | None, error: str | None) -> None:
+        await self._store_call(self.store.complete_model_activity, activity.activity_id, result, error)
 
-    def _recover_interrupted_model_requests(self) -> None:
-        for record in self._records():
-            if record.status != RecordStatus.PROCESSING:
+    async def claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[EffectLease, ...]:
+        activities = await self._store_call(
+            self.store.claim_effect_activities,
+            capabilities,
+            self.limits.effect_concurrency,
+            self.limits.lease_seconds,
+        )
+        leases = []
+        for activity in activities:
+            request = activity.request
+            amp = new_amp(
+                event_type="effect.requested",
+                session_id=str(request["session_id"]),
+                summary=f"Agent requested {request['capability']}",
+                data={
+                    "request_id": activity.idempotency_key,
+                    "capability": request["capability"],
+                    "parameters": request["parameters"],
+                    "tool_call_id": request.get("tool_call_id"),
+                },
+                source_app="kernel.agent",
+                source_instance=activity.agent_id,
+            )
+            leases.append(EffectLease(activity.activity_id, activity.task_id, activity.agent_id, amp.to_dict()))
+        return tuple(leases)
+
+    async def complete_effect(self, lease: EffectLease, *, error: str | None = None) -> None:
+        await self._store_call(self.store.mark_effect_dispatched, lease.activity_id, error)
+
+    def tasks(self) -> tuple[TaskState, ...]:
+        return self.store.tasks()
+
+    def get_task(self, task_id: str) -> TaskState | None:
+        return self.store.get_task(task_id)
+
+    def get_agent(self, agent_id: str) -> AgentInstance | None:
+        return self.store.get_agent(agent_id)
+
+    def task_detail(self, task_id: str) -> dict[str, Any] | None:
+        task = self.store.get_task(task_id)
+        if task is None:
+            return None
+        agents = [agent.to_dict() for agent in self.store.agents() if agent.task_id == task_id]
+        nodes = {item["agent_id"]: {**item, "children": []} for item in agents}
+        roots = []
+        for item in nodes.values():
+            parent_id = item["parent_agent_id"]
+            if parent_id is None or parent_id not in nodes:
+                roots.append(item)
+            else:
+                nodes[parent_id]["children"].append(item)
+        events = self.store.events_for_task(task_id)
+        return {
+            "task": task.to_dict(),
+            "budget": {
+                "model_calls": task.model_calls,
+                "max_model_calls": task.max_model_calls,
+                "tool_calls": task.tool_calls,
+                "max_tool_calls": task.max_tool_calls,
+                "max_duration_seconds": task.max_duration_seconds,
+            },
+            "supervision_tree": roots,
+            "agents": agents,
+            "causal_summary": tuple(
+                {
+                    "event_id": event["event_id"],
+                    "agent_id": event["agent_id"],
+                    "type": event["type"],
+                    "summary": event["summary"],
+                    "causation_id": event["causation_id"],
+                    "created_at": event["created_at"],
+                }
+                for event in events
+            ),
+            "events": events,
+        }
+
+    def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
+        agent = self.store.get_agent(agent_id)
+        if agent is None:
+            return None
+        messages = self.store.messages_for_agent(agent_id)
+        return {
+            "agent": agent.to_dict(),
+            "children": [item.to_dict() for item in self.store.children(agent_id)],
+            "messages": tuple(
+                {
+                    "message_id": message["message_id"],
+                    "task_id": message["task_id"],
+                    "type": message["type"],
+                    "payload_keys": sorted(message["payload"]),
+                    "causation_id": message["causation_id"],
+                    "correlation_id": message["correlation_id"],
+                    "priority": message["priority"],
+                    "status": message["status"],
+                    "created_at": message["created_at"],
+                }
+                for message in messages
+            ),
+        }
+
+    def status(self) -> dict[str, Any]:
+        return {**self.store.counts(), "brain_context_generated_at": self.brain_context().generated_at}
+
+    async def cancel_task(self, task_id: str, reason: str) -> None:
+        await self._store_call(self.store.cancel_task, task_id, reason)
+        await self._blocking_call(self._archive_terminal_tasks)
+
+    async def cancel_autonomous_tasks(self, reason: str) -> tuple[str, ...]:
+        cancelled = []
+        for task in self.store.tasks(active_only=True):
+            if task.autonomous:
+                await self._store_call(self.store.cancel_task, task.task_id, reason)
+                cancelled.append(task.task_id)
+        await self._blocking_call(self._archive_terminal_tasks)
+        return tuple(cancelled)
+
+    def _archive_terminal_tasks(self) -> None:
+        for task in self.store.tasks():
+            if not task.terminal:
                 continue
-            amp = AmpEnvelope.parse(record.amp)
-            if amp.payload.type != "model.requested":
+            destination = self._task_archive / f"{task.task_id}.json"
+            if destination.exists():
                 continue
-            message = "interrupted_by_restart"
-            record.transition(RecordStatus.ERROR, error=message)
-            self._save_record(record)
-            self._create_model_record(
-                record,
-                record.producer_node or record.resume_node_id or "kernel",
-                "model.failed",
-                {"error": message},
-                resume_node_id=record.resume_node_id,
-            )
-            logger.warning(
-                "interrupted model request recovered record_id=%s episode_id=%s resume_node_id=%s reason=%s",
-                record.record_id,
-                record.episode_id,
-                record.resume_node_id,
-                message,
-            )
-
-    async def request_model_from_node(self, parent: KernelRecord, node_id: str, request: ModelRequest) -> ModelResult:
-        """Run an authorized model capability and retain request/outcome audit records."""
-        request_record = self._create_model_record(parent, node_id, "model.requested", request.to_dict())
-        try:
-            result = await self._model_gateway.complete(request)
-        except Exception as error:
-            request_record.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
-            self._save_record(request_record)
-            failed = self._create_model_record(
-                request_record,
-                node_id,
-                "model.failed",
-                {"error": f"{type(error).__name__}: {error}"},
-            )
-            failed.transition(RecordStatus.ERROR, error=f"{type(error).__name__}: {error}")
-            self._save_record(failed)
-            raise
-        request_record.transition(RecordStatus.ARCHIVED)
-        self._save_record(request_record)
-        self._create_model_record(request_record, node_id, "model.completed", result.to_dict())
-        return result
-
-    def _create_model_record(
-        self,
-        parent: KernelRecord,
-        node_id: str,
-        event_type: str,
-        data: dict[str, Any],
-        *,
-        resume_node_id: str | None = None,
-    ) -> KernelRecord:
-        amp = new_amp(
-            event_type=event_type,
-            session_id=AmpEnvelope.parse(parent.amp).payload.session_id,
-            summary=event_type,
-            data=data,
-            source_app="kernel.model",
-            source_instance=node_id,
-        )
-        record = KernelRecord.from_amp(
-            amp,
-            available_cycle=self._cycle + 1,
-            parent=parent,
-            producer_node=node_id,
-            resume_node_id=resume_node_id,
-            priority=parent.priority,
-            episode_round=parent.episode_round,
-        )
-        self._save_record(record)
-        return record
-
-    async def claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[KernelRecord, ...]:
-        """Atomically reserve pending, authorized effects for one Platform adapter."""
-        async with self._lock:
-            return self._claim_effect_requests(capabilities)
-
-    def _claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[KernelRecord, ...]:
-        claimed: list[KernelRecord] = []
-        for record in self._records():
-            if record.status != RecordStatus.PENDING:
-                continue
-            amp = AmpEnvelope.parse(record.amp)
-            if amp.payload.type != "effect.requested":
-                continue
-            capability = amp.payload.data.get("capability")
-            if capability not in capabilities:
-                continue
-            record.transition(RecordStatus.PROCESSING)
-            self._save_record(record)
-            claimed.append(record)
-            logger.debug(
-                "effect request claimed record_id=%s episode_id=%s capability=%s",
-                record.record_id,
-                record.episode_id,
-                capability,
-            )
-        return tuple(claimed)
-
-    def complete_effect(self, record: KernelRecord, *, error: str | None = None) -> None:
-        """Close the source request after Platform has emitted its separate receipt."""
-        record.transition(RecordStatus.ERROR if error else RecordStatus.ARCHIVED, error=error)
-        self._save_record(record)
-        amp = AmpEnvelope.parse(record.amp)
-        logger.debug(
-            "effect request completed record_id=%s episode_id=%s capability=%s status=%s failed=%s",
-            record.record_id,
-            record.episode_id,
-            amp.payload.data.get("capability"),
-            record.status,
-            error is not None,
-        )
+            detail = self.task_detail(task.task_id)
+            if detail is not None:
+                atomic_write_json(destination, detail)
 
     def reset_workspace_for_tests(self) -> None:
-        """Remove only this configured workspace; intended for test fixtures."""
+        self.shutdown()
         shutil.rmtree(self._workspace)
+
+    def shutdown(self) -> None:
+        self._turn_executor.shutdown(wait=True, cancel_futures=True)
+        self._blocking_executor.shutdown(wait=True, cancel_futures=True)
+        self._store_executor.shutdown(wait=True, cancel_futures=True)
