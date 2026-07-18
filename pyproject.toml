@@ -22,11 +22,11 @@ dependencies = [
 ]
 
 [project.scripts]
-aurora = "scripts.cli.main:main"
+aurora = "aurora.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src", "src.*", "scripts", "scripts.*"]
+include = ["aurora", "aurora.*", "src", "src.*"]
 
 [dependency-groups]
 dev = [
@@ -148,7 +148,7 @@ keep-runtime-typing = true
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["bot.py", "scripts", "src"]
+include = ["aurora", "src"]
 exclude = [".venv", "tests"]
 
 [build-system]

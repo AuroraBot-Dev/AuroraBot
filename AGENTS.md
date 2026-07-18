@@ -5,7 +5,7 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 
 ## Architecture authority
 
-- `docs/rfc/` 是唯一设计基准，RFC 0012 定义当前运行时基线。
+- `docs/rfc/` 是唯一设计基准，RFC 0012 定义 Agent 运行时，RFC 0013 定义命令与进程入口。
 - 已接受 RFC 高于 README、注释、配置样例和现有代码。
 - 影响模块边界、事件、配置、扩展或模型调用契约的改动，必须先更新或新增 RFC。
 - 当前 Agent 闭环以 RFC 0012 为准；RFC 0001 提供稳定的模块与因果边界。
@@ -14,7 +14,8 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 
 ```text
 config/         TOML 主配置、领域配置与 profile 覆盖
-docs/rfc/       RFC 0000—0012
+aurora/         唯一进程 CLI、运行模式与生命周期组合
+docs/rfc/       RFC 0000—0013
 src/contracts/  无上层依赖的配置、AMP、Agent、模型与记忆契约
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
@@ -35,7 +36,7 @@ tests/          契约、集成与回归测试
   也不得绕过 Activity 与因果记录。
 - Platform 将外部生态归一化为 AMP 输入，并执行 `effect.requested`；执行结果必须以新事件回到 Kernel。
 - `localhost` 提供业务用例；`dashboard` 只提供路由/API 适配，不能绕过 `localhost` 直接操作 Kernel。
-- 依赖方向固定为 `utils/contracts ← kernel/ai/platform/agents ← localhost ← dashboard`。
+- 依赖方向固定为 `utils/contracts ← kernel/ai/platform/agents ← localhost ← dashboard ← aurora`；`src` 不得反向导入进程组合层。
 
 ## Workspace and configuration
 
@@ -46,7 +47,7 @@ tests/          契约、集成与回归测试
 
 ## Runtime and quality
 
-- `uv run python bot.py` 启动单一常驻 `AuroraRuntime`；`uv run aurora` 提供本地调试组合入口。
+- `uv run aurora` 启动 Runtime、Dashboard 与 Console；`run`、`serve`、`console` 选择独立组合。
 - Python 3.12，包管理使用 `uv`。
 - Ruff 行宽 120，LF，双引号；公开 API 提供类型注解，dataclass 优先 `slots=True`。
 - 主源码文件原则上不超过 500 行；超过时按明确职责拆分，并由边界测试约束。

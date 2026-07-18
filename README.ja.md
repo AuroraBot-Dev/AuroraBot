@@ -44,10 +44,10 @@ Python 3.12 と [uv](https://docs.astral.sh/uv/) が必要です。
 uv sync --group dev
 Copy-Item .env.example .env
 # 設定した Provider に必要な API キーを .env に追加
-uv run python bot.py
+uv run aurora
 ```
 
-認知ループと `http://127.0.0.1:8000` の Dashboard backend が同時に起動します。独立 frontend は次のように起動します。
+認知ループ、local Console、`http://127.0.0.1:8000` の Dashboard backend が起動します。
 
 ```powershell
 Set-Location ..\AuroraChat
@@ -60,8 +60,8 @@ pnpm run dev
 主なエントリポイント：
 
 ```powershell
-# Dashboard なしで認知ループのみ実行
-uv run python bot.py --headless --profile prod
+# Dashboard と Console なしで認知ループのみ実行
+uv run aurora --profile prod run
 
 # デバッグ API とローカル console を同時に起動
 uv run aurora
@@ -74,13 +74,14 @@ uv run aurora console
 uv run aurora check
 ```
 
-console では `/say こんにちは` でメッセージを投入し、`/pump` で ready turn を進め、
-`/task <task_id>`、`/agent <agent_id>` または `/status` で監督ツリーと scheduler 状態を確認できます。
+Console と Dashboard は slash command を共有します。`/say`、`/pump`、`/task`、`/agent`、`/status` を利用でき、
+`/log off` は file log を維持したまま terminal log を停止します。
 
 ## ディレクトリ
 
 ```text
 config/         TOML 設定と profile override
+aurora/         process CLI、runtime mode、統一 lifecycle
 docs/rfc/       規範的な architecture と公開 contract
 src/contracts/  設定、AMP、Agent、model、memory contract
 src/kernel/     Task、Agent、mailbox、Activity、因果、SQLite runtime state
@@ -103,6 +104,7 @@ runtime state は SQLite WAL、構造設定は TOML、secret は環境変数か�
 - [RFC 一覧](docs/rfc/README.md)
 - [RFC 0001：architecture baseline](docs/rfc/0001-architecture.md)
 - [RFC 0012：同構 multi-Agent durable runtime](docs/rfc/0012-homogeneous-agent-runtime.md)
+- [RFC 0013：統一 command routing と Aurora process entry](docs/rfc/0013-unified-command-routing-and-entry.md)
 - [RFC 0010：Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
 - [RFC 0011：current project baseline](docs/rfc/0011-current-project-baseline.md)
 - [コントリビューションガイド](docs/CONTRIBUTING.ja.md)

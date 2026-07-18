@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from pathlib import Path
+from threading import Event
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
@@ -12,6 +15,21 @@ from src.contracts.model import ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.dashboard.api import create_app
 from src.localhost.chat import ChatError
 from src.localhost.runtime import AuroraRuntime
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from src.localhost.command_types import CommandResult, RuntimeInput
+
+
+@contextmanager
+def _client(project_root: Path, runtime: AuroraRuntime | None = None) -> Iterator[TestClient]:
+    candidate = runtime or AuroraRuntime.create(project_root)
+    try:
+        with TestClient(create_app(candidate)) as client:
+            yield client
+    finally:
+        asyncio.run(candidate.shutdown())
 
 
 class _SequenceGateway:
@@ -99,7 +117,7 @@ def _register_and_login(client: TestClient, username: str) -> tuple[int, str]:
 
 
 def test_dashboard_auth_users_and_opaque_session(project_root: Path) -> None:
-    with TestClient(create_app(project_root)) as client:
+    with _client(project_root) as client:
         user_id, token = _register_and_login(client, "alice")
         users = client.get("/api/users", headers={"Authorization": f"Bearer {token}"})
 
@@ -116,7 +134,7 @@ def test_dashboard_auth_users_and_opaque_session(project_root: Path) -> None:
 
 def test_websocket_private_message_is_persisted_and_idempotent(project_root: Path) -> None:
     runtime = AuroraRuntime.create(project_root)
-    with TestClient(create_app(project_root, runtime=runtime)) as client:
+    with _client(project_root, runtime) as client:
         alice_id, alice_token = _register_and_login(client, "alice")
         bob_id, bob_token = _register_and_login(client, "bob")
         event = {
@@ -150,7 +168,7 @@ def test_websocket_private_message_is_persisted_and_idempotent(project_root: Pat
 
 
 def test_websocket_rejects_invalid_json_without_dropping_connection(project_root: Path) -> None:
-    with TestClient(create_app(project_root)) as client:
+    with _client(project_root) as client:
         _user_id, token = _register_and_login(client, "alice")
         headers = {"origin": "http://localhost:5173"}
         with client.websocket_connect(f"/ws?token={token}", headers=headers) as websocket:
@@ -166,13 +184,57 @@ def test_websocket_rejects_invalid_json_without_dropping_connection(project_root
             assert websocket.receive_json() == {"type": "pong", "time": 42}
 
 
+def test_dashboard_runtime_commands_ack_before_reply_and_are_idempotent(project_root: Path) -> None:
+    runtime = AuroraRuntime.create(project_root)
+    stopped = Event()
+    runtime.bind_stop_requester(stopped.set)
+    with _client(project_root, runtime) as client:
+        user_id, token = _register_and_login(client, "alice")
+        users = client.get("/api/users", headers={"Authorization": f"Bearer {token}"}).json()["users"]
+        bot_id = next(item["user_id"] for item in users if item["is_bot"])
+        headers = {"origin": "http://localhost:5173"}
+        event = {
+            "type": "private_message",
+            "client_message_id": str(uuid4()),
+            "receiver_id": bot_id,
+            "message_type": "text",
+            "content": "/status",
+            "attachment_id": None,
+        }
+        with client.websocket_connect(f"/ws?token={token}", headers=headers) as websocket:
+            websocket.send_json(event)
+            first_ack = websocket.receive_json()
+            first_reply = websocket.receive_json()
+            assert first_ack["type"] == "message_ack"
+            assert first_reply["type"] == "private_message"
+            assert runtime.kernel.tasks() == ()
+
+            websocket.send_json(event)
+            duplicate_ack = websocket.receive_json()
+            duplicate_reply = websocket.receive_json()
+            assert duplicate_ack["message_id"] == first_ack["message_id"]
+            assert duplicate_reply["message"]["message_id"] == first_reply["message"]["message_id"]
+
+            websocket.send_json({**event, "client_message_id": str(uuid4()), "content": "/quit"})
+            assert websocket.receive_json()["type"] == "message_ack"
+            assert websocket.receive_json()["message"]["content"] == "Aurora 正在退出。"
+            assert stopped.wait(timeout=1)
+
+        history = client.get(
+            f"/api/messages/private/{bot_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()["messages"]
+        assert sum(item["content"] == "/status" for item in history) == 1
+        assert user_id > 0
+
+
 def test_attachment_upload_is_rejected_at_configured_size_limit(project_root: Path) -> None:
     config = project_root / "config" / "aurora.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace("max_upload_bytes = 67108864", "max_upload_bytes = 8"),
         encoding="utf-8",
     )
-    with TestClient(create_app(project_root)) as client:
+    with _client(project_root) as client:
         _user_id, token = _register_and_login(client, "alice")
         response = client.post(
             "/api/attachments",
@@ -231,14 +293,14 @@ def test_failed_dashboard_amp_submission_can_retry_idempotently(project_root: Pa
                 "content": "retry me",
             }
 
-            async def fail_once(_value: object) -> str:
+            async def fail_once(_value: RuntimeInput) -> CommandResult:
                 raise OSError
 
-            runtime.chat.bind_amp_submitter(fail_once)
+            runtime.chat.bind_input_dispatcher(fail_once)
             with pytest.raises(ChatError, match="Bot is unavailable"):
                 await runtime.chat.send_private_message(user["user_id"], event)
 
-            runtime.chat.bind_amp_submitter(runtime.submit_amp)
+            runtime.chat.bind_input_dispatcher(runtime.route_input)
             retried = await runtime.chat.send_private_message(user["user_id"], event)
             assert retried["status"] == "saved"
             assert len(tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))) == 1

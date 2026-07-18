@@ -2,7 +2,7 @@
 
 状态：已接受
 日期：2026-07-11
-修订：2026-07-19
+修订：2026-07-19（运行时命令条款由 RFC 0013 扩展）
 
 ## 背景
 
@@ -19,11 +19,12 @@ Dashboard 用例。不得在 import-time 调用加载、reload、创建目录或
 
 ### 本地控制台
 
-`src/localhost` 提供分层开发控制台：`registry` 声明命令、`commands` 执行业务用例、`shell` 负责交互。
-它与 scheduler、模型 dispatcher 和 Platform 共享同一个 `AuroraRuntime`。
+`src/localhost` 提供传输无关的运行时输入路由：`registry` 声明命令、`commands` 执行业务用例、`router` 统一解析，
+`shell` 只负责 Console 交互。Dashboard 与 Console 共享同一命令目录和 `AuroraRuntime`。
 
 控制台可投递 AMP、通过 `/pump` 推进有限 ready turn，并查询 Task、Agent 与 scheduler 状态，但不得直接写
-Kernel 记录或调用 Platform 私有 client。裸文本等价于 `/say`；新增命令必须继续通过 localhost 业务用例维护边界。
+Kernel 记录或调用 Platform 私有 client。普通文本进入与 `/say` 相同的会话 ingress，但不伪装成命令；新增命令必须
+继续通过 localhost 业务用例维护边界。具体斜杠协议、Dashboard 复用和进程控制以 RFC 0013 为准。
 
 ## 验收标准
 

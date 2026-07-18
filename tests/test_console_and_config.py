@@ -21,11 +21,17 @@ def test_configuration_is_an_explicit_immutable_snapshot(project_root: Path) -> 
 
 
 def test_layered_console_submits_and_processes_a_message(project_root: Path) -> None:
-    runtime = AuroraRuntime.create(project_root)
-    inputs = iter(("/say console hello", "/pump", "/quit"))
-    output: list[str] = []
+    async def scenario() -> list[str]:
+        runtime = AuroraRuntime.create(project_root)
+        inputs = iter(("/say console hello", "/pump", "/quit"))
+        output: list[str] = []
+        try:
+            await run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append)
+            return output
+        finally:
+            await runtime.shutdown()
 
-    asyncio.run(run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append))
+    output = asyncio.run(scenario())
 
     assert any("已投递消息 AMP" in line for line in output)
     assert any("platform_receipts_emitted" in line for line in output)

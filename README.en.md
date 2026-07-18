@@ -45,10 +45,10 @@ Python 3.12 and [uv](https://docs.astral.sh/uv/) are required.
 uv sync --group dev
 Copy-Item .env.example .env
 # Add the API keys required by your configured providers to .env
-uv run python bot.py
+uv run aurora
 ```
 
-This starts both the cognitive loop and the Dashboard backend at `http://127.0.0.1:8000`. Run the separate UI with:
+This starts the cognitive loop, local Console, and Dashboard backend at `http://127.0.0.1:8000`. Run the UI with:
 
 ```powershell
 Set-Location ..\AuroraChat
@@ -61,13 +61,13 @@ Open `http://localhost:5173`, register, and chat with another user or the built-
 Common entry points:
 
 ```powershell
-# Cognitive loop only, without Dashboard
-uv run python bot.py --headless --profile prod
+# Cognitive loop only, without Dashboard or Console
+uv run aurora --profile prod run
 
 # Debug API and local console together
 uv run aurora
 
-# Debug API or console separately
+# Dashboard/API or Console separately
 uv run aurora serve
 uv run aurora console
 
@@ -75,13 +75,14 @@ uv run aurora console
 uv run aurora check
 ```
 
-Use `/say hello` in the console to submit a message, `/pump` to advance ready turns, and `/task <task_id>`,
-`/agent <agent_id>`, or `/status` to inspect the supervision tree and scheduler.
+Console and Dashboard share slash commands. Use `/say hello`, `/pump`, `/task <task_id>`, `/agent <agent_id>`, or
+`/status`; `/log off` silences terminal logs while file logging continues.
 
 ## Layout
 
 ```text
 config/         TOML configuration and profile overrides
+aurora/         Process CLI, runtime modes, and unified lifecycle
 docs/rfc/       Normative architecture and public contracts
 src/contracts/  Configuration, AMP, Agent, model, and memory contracts
 src/kernel/     Tasks, Agents, mailboxes, Activities, causality, and SQLite runtime state
@@ -104,6 +105,7 @@ runtime state uses SQLite WAL, structural configuration uses TOML, and secrets c
 - [RFC index](docs/rfc/README.md)
 - [RFC 0001: Architecture baseline](docs/rfc/0001-architecture.md)
 - [RFC 0012: Homogeneous multi-Agent durable runtime](docs/rfc/0012-homogeneous-agent-runtime.md)
+- [RFC 0013: Unified command routing and Aurora process entry](docs/rfc/0013-unified-command-routing-and-entry.md)
 - [RFC 0010: Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
 - [RFC 0011: Current project baseline](docs/rfc/0011-current-project-baseline.md)
 - [Contributing guide](docs/CONTRIBUTING.en.md)

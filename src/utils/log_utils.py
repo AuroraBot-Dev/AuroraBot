@@ -45,13 +45,39 @@ LOG_LEVEL: int | str = logging.INFO
 
 @dataclass(slots=True)
 class _LoggingState:
-    level: int | str = LOG_LEVEL
+    console_level: int = logging.INFO
+    file_level: int = logging.INFO
+    console_enabled: bool = True
     logfile: Path | None = None
 
 
 _logging_state = _LoggingState()
 _managed_logger_names: set[str] = set()
 _MANAGED_FILE_HANDLER = "_aurora_managed_file_handler"
+_MANAGED_CONSOLE_HANDLER = "_aurora_managed_console_handler"
+_EXTERNAL_CONSOLE_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+_OFF_LEVEL = logging.CRITICAL + 1
+
+
+class UnsupportedLoggingLevelError(ValueError):
+    pass
+
+
+def _level_number(level: int | str) -> int:
+    if isinstance(level, int):
+        return level
+    normalized = level.upper()
+    if normalized == "WARN":
+        normalized = "WARNING"
+    value = logging.getLevelNamesMapping().get(normalized)
+    if value is None:
+        raise UnsupportedLoggingLevelError(level)
+    return value
+
+
+def _level_name(level: int) -> str:
+    value = logging.getLevelName(level)
+    return value if isinstance(value, str) else str(level)
 
 
 def _create_stream_handler(
@@ -105,11 +131,13 @@ def _create_stream_handler(
             tracebacks_show_locals=False,
         )
         rh.setFormatter(formatter)
+        setattr(rh, _MANAGED_CONSOLE_HANDLER, True)
         return rh  # noqa: TRY300
     except ImportError:
         sh = logging.StreamHandler()
         sh.setLevel(level)
         sh.setFormatter(formatter)
+        setattr(sh, _MANAGED_CONSOLE_HANDLER, True)
         return sh
 
 
@@ -225,28 +253,30 @@ def get_logger(
         # 默认使用根包名, 如果无法获取则使用"Default"
         name = __package__ or "Default"
 
-    effective_level = _logging_state.level if level is None else level
+    console_level = _logging_state.console_level if level is None else _level_number(level)
+    file_level = _logging_state.file_level if level is None else _level_number(level)
     _managed_logger_names.add(name)
 
     logger = logging.getLogger(name)
     if logger.handlers:
-        logger.setLevel(effective_level)
-        for handler in logger.handlers:
-            handler.setLevel(effective_level)
+        _apply_managed_logger(logger)
         if not hasattr(logger, "decorate"):
             cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger
 
     effective_logfile = logfile if logfile is not None else _logging_state.logfile
 
-    logger.setLevel(effective_level)
+    logger.setLevel(min(console_level, file_level))
     logger.propagate = False
 
     # 配置控制台输出
-    logger.addHandler(_create_stream_handler(effective_level))
+    stream_handler = _create_stream_handler(console_level)
+    if not _logging_state.console_enabled:
+        stream_handler.setLevel(_OFF_LEVEL)
+    logger.addHandler(stream_handler)
 
     if isinstance(effective_logfile, (str, Path)):
-        file_handler = _create_file_handler(effective_logfile, effective_level)
+        file_handler = _create_file_handler(effective_logfile, file_level)
         setattr(file_handler, _MANAGED_FILE_HANDLER, True)
         logger.addHandler(file_handler)
 
@@ -256,21 +286,67 @@ def get_logger(
     return logger
 
 
+def _apply_managed_logger(logger: logging.Logger) -> None:
+    active_levels: list[int] = []
+    for handler in logger.handlers:
+        if getattr(handler, _MANAGED_CONSOLE_HANDLER, False):
+            handler_level = _logging_state.console_level if _logging_state.console_enabled else _OFF_LEVEL
+            handler.setLevel(handler_level)
+            if _logging_state.console_enabled:
+                active_levels.append(_logging_state.console_level)
+        elif getattr(handler, _MANAGED_FILE_HANDLER, False):
+            handler.setLevel(_logging_state.file_level)
+            active_levels.append(_logging_state.file_level)
+    logger.setLevel(min(active_levels, default=_OFF_LEVEL))
+
+
+def _apply_external_console_state() -> None:
+    level = _logging_state.console_level if _logging_state.console_enabled else _OFF_LEVEL
+    for name in _EXTERNAL_CONSOLE_LOGGERS:
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        for handler in logger.handlers:
+            if not getattr(handler, _MANAGED_FILE_HANDLER, False):
+                handler.setLevel(level)
+
+
 def configure_logging(level: int | str, logfile: str | Path | None = None) -> None:
     """Apply one explicit runtime logging snapshot to existing and future loggers."""
-    _logging_state.level = level
+    normalized = _level_number(level)
+    _logging_state.console_level = normalized
+    _logging_state.file_level = normalized
+    _logging_state.console_enabled = True
     if logfile is not None:
         _logging_state.logfile = Path(logfile)
     for name in tuple(_managed_logger_names):
         logger = logging.getLogger(name)
-        logger.setLevel(level)
-        for handler in logger.handlers:
-            handler.setLevel(level)
         if logfile is not None:
             for handler in tuple(logger.handlers):
                 if getattr(handler, _MANAGED_FILE_HANDLER, False):
                     logger.removeHandler(handler)
                     handler.close()
-            file_handler = _create_file_handler(logfile, level)
+            file_handler = _create_file_handler(logfile, normalized)
             setattr(file_handler, _MANAGED_FILE_HANDLER, True)
             logger.addHandler(file_handler)
+        _apply_managed_logger(logger)
+    _apply_external_console_state()
+
+
+def configure_console_logging(*, enabled: bool | None = None, level: int | str | None = None) -> None:
+    """Change terminal logging without weakening the configured file audit trail."""
+    if enabled is not None:
+        _logging_state.console_enabled = enabled
+    if level is not None:
+        _logging_state.console_level = _level_number(level)
+    for name in tuple(_managed_logger_names):
+        _apply_managed_logger(logging.getLogger(name))
+    _apply_external_console_state()
+
+
+def console_logging_status() -> dict[str, bool | str]:
+    """Return the ephemeral terminal state and persistent file threshold."""
+    return {
+        "enabled": _logging_state.console_enabled,
+        "console_level": _level_name(_logging_state.console_level).lower(),
+        "file_level": _level_name(_logging_state.file_level).lower(),
+    }

@@ -1,26 +1,26 @@
-"""Console shorthand for a local ``message.received`` AMP event."""
+"""Implementation of the ``/say`` conversation command."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.amp import new_amp
+from src.localhost.command_types import CommandResult
 
 if TYPE_CHECKING:
-    from src.localhost.runtime import AuroraRuntime
+    import argparse
+
+    from src.localhost.command_types import CommandContext
+
+NAMES = ("/say", "/s")
+USAGE = "/say <message>"
+DESCRIPTION = "投递 message.received AMP"
 
 
-async def say_command(runtime: AuroraRuntime, arguments: tuple[str, ...]) -> str:
-    """Deliver a message without bypassing AMP ingress or Kernel records."""
-    message = " ".join(arguments).strip()
-    if not message:
-        return "用法: /say <message>"
-    amp = new_amp(
-        event_type="message.received",
-        session_id="local:console",
-        summary=message,
-        data={"text": message, "reply_capability": "org.aurora.console.send_message"},
-        source_app="localhost.console",
-        source_instance="default",
-    )
-    return f"已投递消息 AMP: {await runtime.submit_amp(amp.to_dict())}"
+def configure(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("message", nargs="+")
+
+
+async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
+    message = " ".join(arguments.message).strip()
+    task_id = await context.runtime.submit_conversation(context.request.with_text(message), message)
+    return CommandResult(ok=True, text=f"已投递消息 AMP: {task_id}", task_id=task_id, publish_reply=False)

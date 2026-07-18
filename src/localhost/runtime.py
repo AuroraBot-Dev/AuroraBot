@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from uuid import NAMESPACE_URL, uuid5
 
 from src.ai.vnext import ModelGatewayService
 from src.contracts.agent import (
@@ -24,6 +26,7 @@ from src.contracts.configuration import AuroraConfig, load_configuration
 from src.contracts.model import ModelRequest
 from src.kernel.runtime import AgentKernel, PumpResult
 from src.localhost.chat import ChatService
+from src.localhost.router import CommandRouter
 from src.localhost.scheduler import CognitiveScheduler
 from src.platform.console import ConsolePlatform
 from src.platform.dashboard import DashboardPlatform
@@ -31,6 +34,9 @@ from src.platform.mcp import MCPPlatform
 from src.utils.log_utils import configure_logging, get_logger
 
 logger = get_logger("aurora.runtime")
+
+if TYPE_CHECKING:
+    from src.localhost.command_types import CommandResult, RuntimeInput
 
 
 def _load_handler(specification: str) -> AgentHandler:
@@ -55,13 +61,17 @@ class AuroraRuntime:
     chat: ChatService
     _pump_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _shutdown_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _started: bool = field(default=False, init=False, repr=False)
+    _closed: bool = field(default=False, init=False, repr=False)
     _console_messages: list[str] = field(default_factory=list, init=False, repr=False)
     _console_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue, init=False, repr=False)
     _model_dispatch_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _model_activity_tasks: dict[asyncio.Task[None], str] = field(default_factory=dict, init=False, repr=False)
     _wake: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False)
     _scheduler: CognitiveScheduler | None = field(default=None, init=False, repr=False)
+    _command_router: CommandRouter = field(init=False, repr=False)
+    _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
 
     @classmethod
     def create(cls, root: Path, profile: str | None = None) -> "AuroraRuntime":
@@ -138,7 +148,8 @@ class AuroraRuntime:
             DashboardPlatform(chat.deliver_bot_reply),
             chat,
         )
-        chat.bind_amp_submitter(runtime.submit_amp)
+        runtime._command_router = CommandRouter(runtime)
+        chat.bind_input_dispatcher(runtime.route_input)
         runtime.mcp_platform.set_tool_result_observer(runtime._observe_mcp_result)
         runtime._scheduler = CognitiveScheduler(
             configuration.runtime.workspace / "process" / "scheduler-state.json",
@@ -174,6 +185,40 @@ class AuroraRuntime:
         await self.kernel.submit_amp(amp)
         self._wake.set()
         return amp.header.message_id
+
+    async def submit_conversation(self, request: RuntimeInput, text: str) -> str:
+        """Normalize one transport message into the shared AMP ingress."""
+        data = dict(request.data)
+        data.update({"text": text, "reply_capability": request.reply_capability})
+        if request.actor_id is not None:
+            data["actor_id"] = request.actor_id
+        amp = new_amp(
+            event_type="message.received",
+            session_id=request.session_id,
+            summary=text,
+            data=data,
+            source_app=request.source_app,
+            source_instance=request.source_instance,
+        ).to_dict()
+        if request.idempotency_key is not None:
+            amp["header"]["message_id"] = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    f"aurora-runtime-input:{request.origin}:{request.source_instance}:{request.idempotency_key}",
+                )
+            )
+        return await self.submit_amp(amp)
+
+    async def route_input(self, request: RuntimeInput) -> CommandResult:
+        await self._ensure_started()
+        return await self._command_router.route(request)
+
+    def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
+        self._stop_requester = requester
+
+    def request_shutdown(self) -> None:
+        if self._stop_requester is not None:
+            self._stop_requester()
 
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
@@ -261,16 +306,23 @@ class AuroraRuntime:
             self._scheduler.record_autonomous_tokens(result.usage.prompt_tokens + result.usage.completion_tokens)
 
     async def shutdown(self) -> None:
-        if self._model_dispatch_task is not None:
-            self._model_dispatch_task.cancel()
-        for task in tuple(self._model_activity_tasks):
-            task.cancel()
-        await asyncio.gather(
-            *(tuple(self._model_activity_tasks) + ((self._model_dispatch_task,) if self._model_dispatch_task else ())),
-            return_exceptions=True,
-        )
-        await self.mcp_platform.shutdown()
-        self.kernel.shutdown()
+        async with self._shutdown_lock:
+            if self._closed:
+                return
+            self._closed = True
+            if self._model_dispatch_task is not None:
+                self._model_dispatch_task.cancel()
+            for task in tuple(self._model_activity_tasks):
+                task.cancel()
+            await asyncio.gather(
+                *(
+                    tuple(self._model_activity_tasks)
+                    + ((self._model_dispatch_task,) if self._model_dispatch_task else ())
+                ),
+                return_exceptions=True,
+            )
+            await self.mcp_platform.shutdown()
+            self.kernel.shutdown()
 
     def drain_console_messages(self) -> tuple[str, ...]:
         messages = tuple(self._console_messages)

@@ -2,7 +2,6 @@
 
 import asyncio
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
@@ -34,28 +33,14 @@ def _http_error(error: ChatError) -> HTTPException:
 
 
 def create_app(
-    root: Path,
-    profile: str | None = None,
-    *,
-    runtime: AuroraRuntime | None = None,
-    manage_runtime: bool = True,
+    runtime: AuroraRuntime,
 ) -> FastAPI:
-    runtime = runtime or AuroraRuntime.create(root, profile)
-
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        if not manage_runtime:
-            await runtime.start()
-            yield
-            return
-        stop = asyncio.Event()
-        scheduler = asyncio.create_task(runtime.run_forever(stop), name="aurora-dashboard-runtime")
-        try:
-            yield
-        finally:
-            stop.set()
-            await asyncio.gather(scheduler, return_exceptions=True)
-            await runtime.shutdown()
+        # The aurora composition root owns scheduling and shutdown; the adapter only
+        # makes an injected Runtime ready for request handling.
+        await runtime.start()
+        yield
 
     app = FastAPI(title="AuroraBot Dashboard API", version="0.5.0", lifespan=lifespan)
     app.add_middleware(
@@ -191,6 +176,7 @@ def create_app(
                     continue
                 try:
                     message = await runtime.chat.send_private_message(user_id, event)
+                    post_ack = message.pop("_post_ack", None)
                     await websocket.send_json(
                         {
                             "type": "message_ack",
@@ -201,6 +187,15 @@ def create_app(
                             "message": message,
                         }
                     )
+                    if isinstance(post_ack, dict):
+                        reply = post_ack.get("reply")
+                        if isinstance(reply, dict):
+                            reply_event = {"type": "private_message", "message": reply}
+                            # Direct delivery fixes the ack-before-reply ordering for this socket.
+                            await websocket.send_json(reply_event)
+                            await runtime.chat.publish(user_id, reply_event, exclude_queue=queue)
+                        if post_ack.get("control") == "shutdown_process":
+                            runtime.request_shutdown()
                 except ChatError as error:
                     await websocket.send_json(
                         {

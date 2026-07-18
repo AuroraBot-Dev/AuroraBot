@@ -2,6 +2,7 @@
 
 状态：已接受
 日期：2026-07-15
+修订：2026-07-19（入口与斜杠命令以 RFC 0013 为准）
 
 ## 背景
 
@@ -17,14 +18,15 @@ RFC 0009 提供常驻无头循环；AuroraBot 还需要一个使用 Vue、HTTP�
 `src.localhost` 公开用例。账号、会话、消息、附件、历史查询、Bot 投递和回复持久化属于 localhost。
 Dashboard 不得直接读写 Kernel、工作区或 Platform client。
 
-`bot.py` 默认在同一进程内启动唯一 `AuroraRuntime`、认知循环和 Dashboard Uvicorn server；
-`--headless` 保留无 HTTP 的常驻模式。Dashboard 固定为 loopback 服务，地址、端口、SQLite、上传限制、
+`aurora serve` 在同一进程内启动唯一 `AuroraRuntime`、认知循环和 Dashboard Uvicorn server；Dashboard 固定为
+loopback 服务，地址、端口、SQLite、上传限制、
 会话期限、允许 Origin 与 Bot 身份均来自 TOML。
 
 聊天室保留注册、登录、一对一私聊、历史、增量同步、在线状态和附件。登录令牌为随机 opaque bearer
 token，服务端只持久化令牌摘要。内建 Bot 用户不可登录或删除，身份由 TOML 配置且启动时幂等创建。
 
-发给普通用户的消息只经过聊天室用例。发给 Bot 的文本先持久化，再成为普通 `message.received` AMP；
+发给普通用户的消息只经过聊天室用例。发给 Bot 的普通文本先持久化，再成为 `message.received` AMP；以 `/` 开头
+的文本进入 RFC 0013 的确定性命令路由；
 session 使用 `dashboard:user:<id>`。根事件声明回复能力，Node 只能看到与当前输入通道对应的发布工具。
 Dashboard 回复效果成功后才持久化 Bot 消息并通过 WebSocket 推送。当前每条用户消息是独立 Episode，
 不注入跨消息历史。发给 Bot 的附件只持久化，并产生确定性的“不支持读取附件”回复，不调用模型。
@@ -43,7 +45,7 @@ localhost 业务数据，不进入 Kernel 三目录；进入认知边界的事�
 1. 两个用户可经 HTTP/WS 注册、登录、私聊、查询历史并恢复增量消息。
 2. 文本发给 Bot 后形成 AMP、独立 episode、回复效果、持久化消息和 WS 推送的可审计闭环。
 3. 重放客户端消息或效果请求不重复入库、调用模型或推送回复。
-4. `bot.py` 默认共享单 Runtime 启动 Dashboard，`--headless` 不启动 HTTP，退出时完整关闭资源。
+4. `aurora serve` 共享单 Runtime 启动 Dashboard，退出时完整关闭资源。
 5. Dashboard 路由不导入或直接调用 Kernel；localhost 聊天用例不依赖 FastAPI。
 
 ## 当前接口

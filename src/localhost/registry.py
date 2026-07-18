@@ -1,17 +1,15 @@
-"""Declarative registry for the layered localhost command shell."""
+"""Declarative catalog for transport-neutral runtime commands."""
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from src.localhost.runtime import AuroraRuntime
+from src.localhost.command_types import CommandContext, CommandResult
 
-CommandHandler = Callable[[AuroraRuntime, tuple[str, ...]], Awaitable[str]]
-
-
-async def quit_command(_runtime: AuroraRuntime, _arguments: tuple[str, ...]) -> str:
-    return "__QUIT__"
+CommandHandler = Callable[[CommandContext, argparse.Namespace], Awaitable[CommandResult]]
+CommandConfigurator = Callable[[argparse.ArgumentParser], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,27 +17,48 @@ class ConsoleCommand:
     names: tuple[str, ...]
     usage: str
     description: str
+    configure: CommandConfigurator
     handler: CommandHandler
 
 
 def command_specs() -> tuple[ConsoleCommand, ...]:
-    """Return the command set exposed by the local developer shell."""
-    from src.localhost.commands.core import agent_command, help_command, pump_command, status_command, task_command
-    from src.localhost.commands.emit import event_command
-    from src.localhost.commands.say import say_command
+    """Return the command set shared by Console and Dashboard input."""
+    from src.localhost.commands import (
+        agent,
+        event,
+        log,
+        pump,
+        say,
+        status,
+        task,
+    )
+    from src.localhost.commands import (
+        help as help_command,
+    )
+    from src.localhost.commands import (
+        quit as quit_command,
+    )
 
     return (
-        ConsoleCommand(("/help", "/h"), "/help", "显示可用命令", help_command),
-        ConsoleCommand(("/status",), "/status", "显示本地运行器状态", status_command),
-        ConsoleCommand(("/say", "/s"), "/say <message>", "投递 message.received AMP", say_command),
         ConsoleCommand(
-            ("/event", "/e"),
-            "/event <type> [--source APP] [--session ID] [--summary TEXT] [--data JSON]",
-            "投递任意 AMP 事件",
-            event_command,
+            help_command.NAMES,
+            help_command.USAGE,
+            help_command.DESCRIPTION,
+            help_command.configure,
+            help_command.handle,
         ),
-        ConsoleCommand(("/pump", "/p"), "/pump [1-100]", "推进 Agent turns", pump_command),
-        ConsoleCommand(("/task",), "/task <task_id>", "查询 Task 与监督树", task_command),
-        ConsoleCommand(("/agent",), "/agent <agent_id>", "查询 Agent 与邮箱", agent_command),
-        ConsoleCommand(("/quit", "/exit", "/q"), "/quit", "退出控制台", quit_command),
+        ConsoleCommand(status.NAMES, status.USAGE, status.DESCRIPTION, status.configure, status.handle),
+        ConsoleCommand(say.NAMES, say.USAGE, say.DESCRIPTION, say.configure, say.handle),
+        ConsoleCommand(event.NAMES, event.USAGE, event.DESCRIPTION, event.configure, event.handle),
+        ConsoleCommand(pump.NAMES, pump.USAGE, pump.DESCRIPTION, pump.configure, pump.handle),
+        ConsoleCommand(task.NAMES, task.USAGE, task.DESCRIPTION, task.configure, task.handle),
+        ConsoleCommand(agent.NAMES, agent.USAGE, agent.DESCRIPTION, agent.configure, agent.handle),
+        ConsoleCommand(log.NAMES, log.USAGE, log.DESCRIPTION, log.configure, log.handle),
+        ConsoleCommand(
+            quit_command.NAMES,
+            quit_command.USAGE,
+            quit_command.DESCRIPTION,
+            quit_command.configure,
+            quit_command.handle,
+        ),
     )

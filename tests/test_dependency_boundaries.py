@@ -73,10 +73,44 @@ def test_configuration_has_no_import_time_reload_facade() -> None:
 
 
 def test_source_files_stay_within_the_reviewable_size_limit() -> None:
-    source_root = Path(__file__).parents[1] / "src"
+    project_root = Path(__file__).parents[1]
     oversized = {}
-    for path in source_root.rglob("*.py"):
-        line_count = len(path.read_text(encoding="utf-8").splitlines())
-        if line_count > _MAX_SOURCE_LINES:
-            oversized[str(path.relative_to(source_root))] = line_count
+    for source_root in (project_root / "src", project_root / "aurora"):
+        for path in source_root.rglob("*.py"):
+            line_count = len(path.read_text(encoding="utf-8").splitlines())
+            if line_count > _MAX_SOURCE_LINES:
+                oversized[str(path.relative_to(project_root))] = line_count
     assert not oversized, f"split source files over 500 lines by responsibility: {oversized}"
+
+
+def test_src_never_imports_the_process_composition_package() -> None:
+    source_root = Path(__file__).parents[1] / "src"
+    violations = []
+    for path in source_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = (alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                names = (node.module,)
+            else:
+                continue
+            if any(name == "aurora" or name.startswith("aurora.") for name in names):
+                violations.append(f"{path.relative_to(source_root)}:{node.lineno}")
+    assert not violations, f"src must not import the process composition package: {violations}"
+
+
+def test_command_packages_are_strictly_one_file_per_canonical_command() -> None:
+    project_root = Path(__file__).parents[1]
+    from aurora.registry import COMMAND_MODULES
+    from src.localhost.registry import command_specs
+
+    cli_files = {path.stem for path in (project_root / "aurora" / "commands").glob("*.py")} - {"__init__"}
+    runtime_files = {path.stem for path in (project_root / "src" / "localhost" / "commands").glob("*.py")} - {
+        "__init__"
+    }
+
+    assert cli_files == {module.NAME for module in COMMAND_MODULES}
+    assert runtime_files == {spec.names[0].removeprefix("/") for spec in command_specs()}
+    assert not (project_root / "bot.py").exists()
+    assert not (project_root / "scripts").exists()

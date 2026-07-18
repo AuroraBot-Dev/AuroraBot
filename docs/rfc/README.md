@@ -31,3 +31,4 @@
 | [0010](0010-dashboard-chat.md) | 已接受 | Dashboard 聊天适配与本地聊天室 |
 | [0011](0011-current-project-baseline.md) | 已接受 | 当前项目基线与源码归档边界 |
 | [0012](0012-homogeneous-agent-runtime.md) | 已接受 | 同构多 Agent 持久化运行时 |
+| [0013](0013-unified-command-routing-and-entry.md) | 已接受 | 统一命令路由与 Aurora 进程入口 |

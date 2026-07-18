@@ -42,10 +42,10 @@ AuroraBot 是一个以因果事件、同构 Agent 和主动节律为核心的自
 uv sync --group dev
 Copy-Item .env.example .env
 # 在 .env 中填写所选 Provider 对应的密钥
-uv run python bot.py
+uv run aurora
 ```
 
-默认同时启动认知循环和 `http://127.0.0.1:8000` Dashboard 后端。聊天前端保持在独立 AuroraChat 仓库：
+默认同时启动认知循环、本地控制台和 `http://127.0.0.1:8000` Dashboard 后端。聊天前端保持在独立 AuroraChat 仓库：
 
 ```powershell
 Set-Location ..\AuroraChat
@@ -58,13 +58,13 @@ pnpm run dev
 常用入口：
 
 ```powershell
-# 仅常驻认知循环，不启动 Dashboard
-uv run python bot.py --headless --profile prod
+# 仅常驻认知循环，不启动 Dashboard 或 Console
+uv run aurora --profile prod run
 
 # 同时启动调试 API 与本地控制台
 uv run aurora
 
-# 分别启动调试 API 或控制台
+# 分别启动 Dashboard/API 或控制台
 uv run aurora serve
 uv run aurora console
 
@@ -72,13 +72,14 @@ uv run aurora console
 uv run aurora check
 ```
 
-控制台可用 `/say 你好` 投递消息，使用 `/pump` 推进 ready turns，并通过 `/task <task_id>`、
-`/agent <agent_id>` 和 `/status` 查看监督树与调度状态。
+Console 与 Dashboard 共用斜杠命令：可用 `/say 你好` 投递消息，使用 `/pump` 推进 ready turns，通过
+`/task <task_id>`、`/agent <agent_id>` 和 `/status` 查看状态；`/log off` 可静默终端日志而保留文件日志。
 
 ## 目录
 
 ```text
 config/         TOML 主配置、领域配置与 profile 覆盖
+aurora/         进程 CLI、运行模式与统一生命周期
 docs/rfc/       规范性架构与公共契约
 src/contracts/  配置、AMP、Agent、模型与记忆契约
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
@@ -101,6 +102,7 @@ Kernel 工作区固定为 `data/kernel/{inbox,process,archive}`。外部边界�
 - [RFC 索引](docs/rfc/README.md)
 - [RFC 0001：架构基准](docs/rfc/0001-architecture.md)
 - [RFC 0012：同构多 Agent 持久化运行时](docs/rfc/0012-homogeneous-agent-runtime.md)
+- [RFC 0013：统一命令路由与 Aurora 进程入口](docs/rfc/0013-unified-command-routing-and-entry.md)
 - [RFC 0010：Dashboard 聊天适配](docs/rfc/0010-dashboard-chat.md)
 - [RFC 0011：当前项目基线](docs/rfc/0011-current-project-baseline.md)
 - [贡献指南](docs/CONTRIBUTING.md)
