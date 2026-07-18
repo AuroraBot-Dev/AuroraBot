@@ -326,7 +326,7 @@ class ChatService:
             await asyncio.to_thread(
                 self.store.execute,
                 "UPDATE messages SET status = 'saved', amp_message_id = ? WHERE id = ?",
-                (routed.task_id, row_id),
+                (routed.message_id, row_id),
             )
             message["status"] = "saved"
             if reply is not None:

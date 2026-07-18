@@ -22,5 +22,10 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
     message = " ".join(arguments.message).strip()
-    task_id = await context.runtime.submit_conversation(context.request.with_text(message), message)
-    return CommandResult(ok=True, text=f"已投递消息 AMP: {task_id}", task_id=task_id, publish_reply=False)
+    message_id = await context.runtime.submit_conversation(context.request.with_text(message), message)
+    return CommandResult(
+        ok=True,
+        text=f"已投递消息 AMP: {message_id}",
+        message_id=message_id,
+        publish_reply=False,
+    )

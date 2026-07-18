@@ -41,5 +41,5 @@ async def handle(context: CommandContext, arguments: argparse.Namespace) -> Comm
         source_app=arguments.source or context.request.source_app,
         source_instance=context.request.source_instance,
     )
-    task_id = await context.runtime.submit_amp(amp.to_dict())
-    return CommandResult(ok=True, text=f"已投递 AMP: {task_id}", task_id=task_id)
+    message_id = await context.runtime.submit_amp(amp.to_dict())
+    return CommandResult(ok=True, text=f"已投递 AMP: {message_id}", message_id=message_id)

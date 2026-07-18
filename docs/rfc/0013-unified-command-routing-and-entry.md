@@ -17,7 +17,8 @@ Dashboard 自有 CLI；Dashboard 应用工厂只接受注入的 Runtime。
 
 `src.localhost` 拥有唯一运行时输入路由。首个非空字符为 `/` 的文本经一次 shlex 分词和公共命令 parser 后调用
 确定性业务用例；其他文本进入 `message.received` AMP。Console 与 Dashboard 使用相同的 `RuntimeInput`、命令目录
-和 `CommandResult`。除 `/say` 外，命令不创建 Agent Task。每个 canonical 命令在 `commands/` 中恰有一个同名文件，
+和 `CommandResult`。`CommandResult.message_id` 表示已接受的入口 AMP ID；Task 由 Kernel 异步接管后另行分配
+`task_id`，两者不得混用。除 `/say` 外，命令不创建 Agent Task。每个 canonical 命令在 `commands/` 中恰有一个同名文件，
 别名不创建重复实现。
 
 Dashboard 处于单租户可信人格域，开放全部运行时命令。命令消息和结果继续进入聊天室持久化；同一客户端 UUID

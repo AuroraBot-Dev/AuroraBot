@@ -52,8 +52,13 @@ class CommandRouter:
         return await command.handler(CommandContext(self._runtime, request), arguments)
 
     async def _conversation(self, request: RuntimeInput, text: str) -> CommandResult:
-        task_id = await self._runtime.submit_conversation(request, text)
-        return CommandResult(ok=True, text=f"已投递消息 AMP: {task_id}", task_id=task_id, publish_reply=False)
+        message_id = await self._runtime.submit_conversation(request, text)
+        return CommandResult(
+            ok=True,
+            text=f"已投递消息 AMP: {message_id}",
+            message_id=message_id,
+            publish_reply=False,
+        )
 
     @staticmethod
     def _parse(command: ConsoleCommand, arguments: tuple[str, ...]) -> argparse.Namespace:
