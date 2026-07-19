@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from prompt_toolkit.input import DummyInput
+from prompt_toolkit.output import DummyOutput
+
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.localhost.ports import EffectExecutionRequest, EffectExecutorBinding
 from src.localhost.runtime import AuroraRuntime
 from src.platform.console import CONSOLE_SEND_CAPABILITY, CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
-from src.platform.console.shell import run_console
+from src.platform.console.shell import _PromptReader, run_console
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,6 +33,15 @@ def test_console_platform_owns_successful_effect_output() -> None:
         assert console.drain_messages() == ("two",)
 
     asyncio.run(scenario())
+
+
+def test_console_prompt_keeps_session_command_history() -> None:
+    reader = _PromptReader(input_stream=DummyInput(), output_stream=DummyOutput())
+
+    reader.session.history.append_string("/status")
+    reader.session.history.append_string("/help")
+
+    assert list(reader.session.history.get_strings()) == ["/status", "/help"]
 
 
 def test_console_executor_delivers_text_to_the_interactive_shell(project_root: Path) -> None:
@@ -79,9 +91,15 @@ def test_console_executor_delivers_text_to_the_interactive_shell(project_root: P
             await runtime._model_dispatch_task
             result = await runtime.pump()
             assert result["effect_receipts_emitted"] == 1
-            inputs = iter(("/status", "/quit"))
-            await run_console(runtime, console, readline=lambda _prompt: next(inputs), output=output.append)
+            inputs = iter(("/cls", "/status", "/quit"))
+            await run_console(
+                runtime,
+                console,
+                readline=lambda _prompt: next(inputs),
+                output=output.append,
+            )
             assert "Bot> 来自 bot 的消息" in output
+            assert "\033[2J\033[H" in output
         finally:
             await runtime.shutdown()
 

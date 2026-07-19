@@ -27,10 +27,10 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
 
     assert check.execute(arguments) == 0
     assert commands == [
-        ["uv", "run", "ruff", "check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "ruff", "format", "--check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "pyright", "aurora/", "src/"],
-        ["uv", "run", "pytest", "-v", "--cov=src", "--cov=aurora"],
+        ["uv", "run", "--no-sync", "ruff", "check", "aurora/", "src/", "tests/"],
+        ["uv", "run", "--no-sync", "ruff", "format", "--check", "aurora/", "src/", "tests/"],
+        ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
+        ["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"],
     ]
 
 
@@ -105,9 +105,9 @@ def test_check_does_not_enter_runtime_composition(monkeypatch: pytest.MonkeyPatc
 
     assert run(["--root", str(tmp_path), "check", "--lint"]) == 0
     assert commands == [
-        ["uv", "run", "ruff", "check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "ruff", "format", "--check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "pyright", "aurora/", "src/"],
+        ["uv", "run", "--no-sync", "ruff", "check", "aurora/", "src/", "tests/"],
+        ["uv", "run", "--no-sync", "ruff", "format", "--check", "aurora/", "src/", "tests/"],
+        ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
     ]
 
 

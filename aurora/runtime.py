@@ -256,6 +256,8 @@ def _dashboard_server(chat: ChatService, runtime: AuroraRuntime) -> uvicorn.Serv
             host=dashboard.host,
             port=dashboard.port,
             log_level=runtime.configuration.logging_level.lower(),
+            log_config=None,
+            access_log=False,
         )
     )
 

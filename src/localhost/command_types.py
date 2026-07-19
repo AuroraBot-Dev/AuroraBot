@@ -17,6 +17,7 @@ class InputOrigin(StrEnum):
 
 class CommandControl(StrEnum):
     NONE = "none"
+    CLEAR_CONSOLE = "clear_console"
     SHUTDOWN_PROCESS = "shutdown_process"
 
 

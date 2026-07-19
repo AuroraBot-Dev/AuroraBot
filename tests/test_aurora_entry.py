@@ -230,6 +230,16 @@ def test_preference_defaults_and_explicit_selection_are_independent() -> None:
     assert runtime_composition._selected_platforms(frozenset({"dashboard"}), preference) == frozenset({"dashboard"})
 
 
+def test_dashboard_server_does_not_replace_aurora_logging(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = FakeRuntime(tmp_path, [])
+    monkeypatch.setattr("aurora.runtime.create_app", lambda *_args, **_kwargs: object())
+
+    server = runtime_composition._dashboard_server(object(), runtime)  # type: ignore[arg-type]
+
+    assert server.config.log_config is None
+    assert server.config.access_log is False
+
+
 def test_platform_start_failure_rolls_back_before_runtime(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

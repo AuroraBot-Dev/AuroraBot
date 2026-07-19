@@ -136,7 +136,7 @@ package = "org.aurora.clock"
 enabled = true
 transport = "stdio"
 working_dir = "{app_directory}"
-command = ["uv", "run", "python", "mcp_server.py"]
+command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
 timeout_seconds = 30
 
 [[app.tool]]

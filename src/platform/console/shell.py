@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import threading
+import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.shortcuts import clear as clear_terminal
 
 from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
 from src.utils.log_utils import get_logger
@@ -14,6 +19,9 @@ logger = get_logger("aurora.platform.console")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from prompt_toolkit.input import Input
+    from prompt_toolkit.output import Output
 
     from src.localhost.ports import ConsoleControlPort
     from src.platform.console.adapter import ConsolePlatform
@@ -25,89 +33,99 @@ class _ReadResult:
     closed: bool = False
 
 
+class _PromptReader:
+    def __init__(self, *, input_stream: Input | None = None, output_stream: Output | None = None) -> None:
+        self.session: PromptSession[str] = PromptSession(
+            history=InMemoryHistory(),
+            enable_history_search=True,
+            input=input_stream,
+            output=output_stream,
+        )
+
+    async def read(self) -> str:
+        return await self.session.prompt_async("Aurora> ")
+
+
 async def run_console(
     control: ConsoleControlPort,
     console: ConsolePlatform,
     *,
     stop_event: asyncio.Event | None = None,
-    readline: Callable[[str], str] = input,
+    readline: Callable[[str], str] | None = None,
     output: Callable[[str], None] = print,
 ) -> None:
     """Route Console input without owning the shared process lifecycle."""
     stop = stop_event or asyncio.Event()
     output("AuroraBot local console; 输入 /help 查看命令。")
-    reads: asyncio.Queue[_ReadResult] = asyncio.Queue()
-    reader_closed = threading.Event()
-    _start_reader(readline, reads, reader_closed)
+    prompt_reader = _PromptReader() if readline is None else None
     display = asyncio.create_task(_display_messages(console, output), name="aurora-console-output")
     read_task: asyncio.Task[_ReadResult] | None = None
     stop_task: asyncio.Task[bool] | None = None
     logger.info("developer console started")
     try:
-        while not stop.is_set():
-            read_task = asyncio.create_task(reads.get(), name="aurora-console-read")
-            stop_task = asyncio.create_task(stop.wait(), name="aurora-console-stop")
-            done, pending = await asyncio.wait({read_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            if read_task in pending:
-                await asyncio.gather(read_task, return_exceptions=True)
-            if stop_task in pending:
-                await asyncio.gather(stop_task, return_exceptions=True)
-            if stop_task in done and stop.is_set():
-                return
-            result = read_task.result()
-            if result.closed:
-                output("")
-                control.request_shutdown()
-                return
-            raw = (result.text or "").strip()
-            if not raw:
-                continue
-            routed = await control.route_input(
-                RuntimeInput(
-                    text=raw,
-                    origin=InputOrigin.CONSOLE,
-                    session_id="local:console",
-                    source_app="platform.console",
-                    source_instance="default",
-                    reply_capability="org.aurora.console.send_message",
+        terminal_context = patch_stdout(raw=True) if prompt_reader is not None else contextlib.nullcontext()
+        with terminal_context:
+            while not stop.is_set():
+                read_task = asyncio.create_task(_read_input(prompt_reader, readline), name="aurora-console-read")
+                stop_task = asyncio.create_task(stop.wait(), name="aurora-console-stop")
+                done, pending = await asyncio.wait({read_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+                for task in pending:
+                    task.cancel()
+                if read_task in pending:
+                    await asyncio.gather(read_task, return_exceptions=True)
+                if stop_task in pending:
+                    await asyncio.gather(stop_task, return_exceptions=True)
+                if stop_task in done and stop.is_set():
+                    return
+                result = read_task.result()
+                if result.closed:
+                    output("")
+                    control.request_shutdown()
+                    return
+                raw = (result.text or "").strip()
+                if not raw:
+                    continue
+                routed = await control.route_input(
+                    RuntimeInput(
+                        text=raw,
+                        origin=InputOrigin.CONSOLE,
+                        session_id="local:console",
+                        source_app="platform.console",
+                        source_instance="default",
+                        reply_capability="org.aurora.console.send_message",
+                    )
                 )
-            )
-            if routed.text is not None:
-                output(routed.text)
-            if routed.control is CommandControl.SHUTDOWN_PROCESS:
-                control.request_shutdown()
-                return
+                if routed.control is CommandControl.CLEAR_CONSOLE:
+                    _clear_console(prompt_reader, output)
+                    continue
+                if routed.text is not None:
+                    output(routed.text)
+                if routed.control is CommandControl.SHUTDOWN_PROCESS:
+                    control.request_shutdown()
+                    return
     finally:
-        reader_closed.set()
         await _cancel_tasks(read_task, stop_task, display)
         logger.info("developer console stopped")
 
 
-def _start_reader(
-    readline: Callable[[str], str],
-    queue: asyncio.Queue[_ReadResult],
-    closed: threading.Event,
-) -> None:
-    loop = asyncio.get_running_loop()
+async def _read_input(
+    prompt_reader: _PromptReader | None,
+    readline: Callable[[str], str] | None,
+) -> _ReadResult:
+    try:
+        if prompt_reader is not None:
+            return _ReadResult(await prompt_reader.read())
+        assert readline is not None
+        return _ReadResult(await asyncio.to_thread(readline, "Aurora> "))
+    except (EOFError, KeyboardInterrupt, StopIteration):
+        return _ReadResult(None, closed=True)
 
-    def worker() -> None:
-        while not closed.is_set():
-            try:
-                result = _ReadResult(readline("Aurora> "))
-            except (EOFError, KeyboardInterrupt, StopIteration):
-                result = _ReadResult(None, closed=True)
-            if closed.is_set():
-                return
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, result)
-            except RuntimeError:
-                return
-            if result.closed:
-                return
 
-    threading.Thread(target=worker, name="aurora-console-reader", daemon=True).start()
+def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], None]) -> None:
+    if prompt_reader is not None:
+        clear_terminal()
+    else:
+        output("\033[2J\033[H")
 
 
 async def _display_messages(console: ConsolePlatform, output: Callable[[str], None]) -> None:

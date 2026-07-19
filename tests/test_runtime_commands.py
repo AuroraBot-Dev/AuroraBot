@@ -47,6 +47,8 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             missing_agent = await runtime.route_input(_input("/agent missing"))
             bare = await runtime.route_input(_input("hello world"))
             quoted = await runtime.route_input(_input('/say "quoted message"'))
+            clear = await runtime.route_input(_input("/clear"))
+            clear_alias = await runtime.route_input(_input("/cls"))
             quitting = await runtime.route_input(_input("/q"))
 
             assert status.ok and status.data is not None
@@ -61,6 +63,8 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             assert not missing_task.ok and not missing_agent.ok
             assert bare.message_id is not None and not bare.publish_reply
             assert quoted.message_id is not None and not quoted.publish_reply
+            assert clear.control is CommandControl.CLEAR_CONSOLE and not clear.publish_reply
+            assert clear_alias.control is CommandControl.CLEAR_CONSOLE and not clear_alias.publish_reply
             assert quitting.control is CommandControl.SHUTDOWN_PROCESS
             assert (
                 len(tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json")))
