@@ -74,8 +74,9 @@ class MCPServerKit:
         await kit.stop_all()
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, terminal_logs: bool = True) -> None:
         self._processes: dict[str, ServerProcess] = {}
+        self._terminal_logs = terminal_logs
 
     @property
     def processes(self) -> dict[str, ServerProcess]:
@@ -228,15 +229,19 @@ class MCPServerKit:
 
     # ── 健康检查 ──
 
-    @staticmethod
-    async def _forward_stderr(key: str, process: asyncio.subprocess.Process) -> None:
-        """Drain child diagnostics through managed logging instead of the terminal."""
+    async def _forward_stderr(self, key: str, process: asyncio.subprocess.Process) -> None:
+        """Drain child diagnostics to file and optionally to the managed terminal."""
         if process.stderr is None:
             return
         while chunk := await process.stderr.read(4096):
             for message in chunk.decode(errors="replace").splitlines():
                 if message:
-                    logger.info("MCP Server stderr key=%s | %s", key, message)
+                    logger.info(
+                        "MCP Server stderr key=%s | %s",
+                        key,
+                        message,
+                        extra={"aurora_terminal": self._terminal_logs},
+                    )
 
     def health_report(self) -> dict[str, str]:
         """返回所有 Server 的健康状态。

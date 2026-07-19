@@ -1,4 +1,4 @@
-"""SQLite persistence owned by localhost chat use cases."""
+"""SQLite persistence owned by the Dashboard Platform."""
 
 from __future__ import annotations
 

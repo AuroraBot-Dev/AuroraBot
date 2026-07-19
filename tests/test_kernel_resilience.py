@@ -223,8 +223,7 @@ def test_late_effect_receipt_cannot_resurrect_a_cancelled_task(tmp_path: Path) -
         )
         result = await kernel.pump()
         task_id = result.ingested_task_ids[0]
-        lease = (await kernel.claim_effect_requests(frozenset({"test.reply"})))[0]
-        request = AmpEnvelope.parse(lease.amp).payload.data
+        lease = (await kernel.claim_effect_requests())[0]
         await kernel.cancel_task(task_id, "test_cancel")
         await kernel.submit_amp(
             new_amp(
@@ -232,7 +231,7 @@ def test_late_effect_receipt_cannot_resurrect_a_cancelled_task(tmp_path: Path) -
                 session_id="session",
                 summary="late",
                 data={
-                    "request_id": request["request_id"],
+                    "request_id": lease.request_id,
                     "capability": "test.reply",
                     "result": {"ok": True},
                 },

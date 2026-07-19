@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -37,9 +36,7 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                 result.append(self._activity(updated))
             return tuple(result)
 
-    def claim_effect_activities(
-        self, capabilities: frozenset[str], limit: int, lease_seconds: float
-    ) -> tuple[ActivityRequest, ...]:
+    def claim_effect_activities(self, limit: int, lease_seconds: float) -> tuple[ActivityRequest, ...]:
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
         lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
@@ -59,9 +56,6 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             ).fetchall()
             result: list[ActivityRequest] = []
             for row in rows:
-                request = json.loads(row["request_json"])
-                if request.get("capability") not in capabilities:
-                    continue
                 connection.execute(
                     "UPDATE activities SET status = 'PROCESSING', lease_until = ?, updated_at = ? "
                     "WHERE activity_id = ?",
@@ -119,8 +113,3 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                     now,
                 ),
             )
-
-    def mark_effect_dispatched(self, activity_id: str, error: str | None = None) -> None:
-        # Dispatch completion is not workflow completion: only the durable AMP
-        # receipt may advance the Agent. This also closes the submit/ingest race.
-        _ = activity_id, error

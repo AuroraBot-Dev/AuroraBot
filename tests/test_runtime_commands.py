@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from src.contracts.configuration import load_configuration
 from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
 from src.localhost.runtime import AuroraRuntime
 from src.utils.log_utils import configure_logging, get_logger
@@ -27,7 +28,9 @@ def _input(text: str) -> RuntimeInput:
 
 def test_runtime_router_separates_commands_from_conversation(project_root: Path) -> None:
     async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
+        configuration = load_configuration(project_root)
+        configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
+        runtime = AuroraRuntime.create(project_root, configuration=configuration)
         try:
             before = len(runtime.kernel.tasks())
             status = await runtime.route_input(_input("/status"))
@@ -80,7 +83,9 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
 def test_log_command_only_mutes_terminal_handlers(project_root: Path) -> None:
     async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
+        configuration = load_configuration(project_root)
+        configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
+        runtime = AuroraRuntime.create(project_root, configuration=configuration)
         try:
             result = await runtime.route_input(_input("/log off --level debug"))
             assert result.data == {"enabled": False, "console_level": "debug", "file_level": "info"}

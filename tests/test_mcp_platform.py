@@ -1,15 +1,36 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.contracts.amp import new_amp
+import pytest
+
+from src.contracts.amp import AmpEnvelope, new_amp
+from src.contracts.configuration import load_configuration
 from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
+from src.localhost.ports import EffectExecutionRequest, EffectExecutorBinding
 from src.localhost.runtime import AuroraRuntime
+from src.platform.mcp import MCPPlatform
+from src.utils.log_utils import configure_console_logging, configure_logging
 
 if TYPE_CHECKING:
-    import pytest
+    from src.platform.mcp.server_spec import MCPServerSpec
+
+
+@dataclass(slots=True)
+class _Ingress:
+    values: list[object] = field(default_factory=list)
+
+    async def submit_amp(self, value: object) -> str:
+        self.values.append(value)
+        return AmpEnvelope.parse(value).header.message_id
+
+
+class _StartupError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("startup failed")
 
 
 class _ClockGateway:
@@ -37,6 +58,72 @@ class _ClockGateway:
         )
 
 
+def test_mcp_tool_is_error_returns_failed_effect_outcome(
+    project_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        platform = MCPPlatform(load_configuration(project_root))
+
+        async def call_tool(_capability: str, _parameters: dict[str, object]) -> dict[str, object]:
+            return {"is_error": True, "text": "tool rejected request"}
+
+        monkeypatch.setattr(platform, "_call_tool", call_tool)
+        platform._started = True
+        outcome = await platform.execute_effect(EffectExecutionRequest("request", "session", "test.tool", {}))
+
+        assert outcome.succeeded is False
+        assert outcome.error is not None and "tool rejected request" in outcome.error
+        await platform.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_mcp_notification_uses_external_ingress(project_root: Path) -> None:
+    async def scenario() -> None:
+        ingress = _Ingress()
+        platform = MCPPlatform(load_configuration(project_root))
+        platform._ingress = ingress
+
+        await platform._handle_notification(
+            "org.example.app",
+            "aurora/event",
+            {"type": "example.changed", "summary": "changed", "data": {"value": 1}},
+        )
+
+        event = AmpEnvelope.parse(ingress.values[0])
+        assert event.payload.type == "example.changed"
+        assert event.header.source["app"] == "org.example.app"
+
+    asyncio.run(scenario())
+
+
+def test_mcp_start_failure_rolls_back_started_resources(project_root: Path) -> None:
+    async def scenario() -> None:
+        ingress = _Ingress()
+        platform = MCPPlatform(load_configuration(project_root))
+
+        class FailingKit:
+            stopped = False
+
+            async def start_all(self, _specs: list[MCPServerSpec]) -> None:
+                raise _StartupError
+
+            async def stop_all(self) -> None:
+                self.stopped = True
+
+        kit = FailingKit()
+        platform._kit = kit  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="startup failed"):
+            await platform.start(ingress)
+
+        assert kit.stopped is True
+        assert platform._ingress is None
+
+    asyncio.run(scenario())
+
+
 def test_clock_mcp_activity_receipt_resumes_requesting_agent(
     project_root: Path,
     capfd: pytest.CaptureFixture[str],
@@ -44,9 +131,7 @@ def test_clock_mcp_activity_receipt_resumes_requesting_agent(
     source_root = Path(__file__).parents[1]
     app_directory = (source_root / "src" / "apps" / "aurora-app-clock").as_posix()
     (project_root / "config" / "apps.toml").write_text(
-        f"""adapter = []
-
-[[app]]
+        f"""[[app]]
 package = "org.aurora.clock"
 enabled = true
 transport = "stdio"
@@ -86,10 +171,22 @@ result_mode = "resume"
     )
 
     async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root, console_logging=False)
+        configuration = load_configuration(project_root)
+        configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
+        configure_console_logging(enabled=False)
+        runtime = AuroraRuntime.create(project_root, configuration=configuration, executor_bindings=None)
+        platform = MCPPlatform(runtime.configuration)
         gateway = _ClockGateway()
         runtime.model_gateway = gateway
         try:
+            catalog = await platform.start(runtime)
+            assert catalog is platform.capability_catalog
+            runtime.bind_effect_executors(
+                tuple(
+                    EffectExecutorBinding(capability, platform, "platform.mcp", "org.aurora.clock")
+                    for capability in catalog.capabilities
+                )
+            )
             await runtime.submit_amp(
                 new_amp(
                     event_type="message.received",
@@ -104,7 +201,7 @@ result_mode = "resume"
             assert runtime._model_dispatch_task is not None
             await runtime._model_dispatch_task
             second = await runtime.pump()
-            assert second["platform_receipts_emitted"] == 1
+            assert second["effect_receipts_emitted"] == 1
             await runtime.pump()
             assert runtime._model_dispatch_task is not None
             await runtime._model_dispatch_task
@@ -116,6 +213,7 @@ result_mode = "resume"
             assert gateway.calls == expected_calls
             assert fourth["processed_message_ids"]
         finally:
+            await platform.shutdown()
             await runtime.shutdown()
 
     asyncio.run(scenario())

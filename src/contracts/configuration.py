@@ -6,8 +6,10 @@ import copy
 import hashlib
 import os
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal, cast
 
 
@@ -15,14 +17,24 @@ class ConfigurationError(ValueError):
     """Raised before startup for invalid structural configuration."""
 
 
-def _read_toml(path: Path) -> dict[str, Any]:
+@dataclass(frozen=True, slots=True)
+class ConfigurationSource:
+    """Auditable identity of one file used to build a configuration snapshot."""
+
+    path: Path
+    sha256: str
+
+
+def _read_toml_snapshot(path: Path) -> tuple[dict[str, Any], ConfigurationSource]:
+    path = path.resolve()
     try:
-        with path.open("rb") as handle:
-            return tomllib.load(handle)
+        content = path.read_bytes()
+        data = tomllib.loads(content.decode("utf-8"))
     except FileNotFoundError as error:
         raise ConfigurationError(f"configuration file does not exist: {path}") from error
-    except tomllib.TOMLDecodeError as error:
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise ConfigurationError(f"invalid TOML in {path}: {error}") from error
+    return data, ConfigurationSource(path=path, sha256=hashlib.sha256(content).hexdigest())
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -129,23 +141,6 @@ class AgentProfileConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class AdapterConfig:
-    id: str
-    implementation: str
-    capabilities: tuple["CapabilityConfig", ...]
-
-
-@dataclass(frozen=True, slots=True)
-class CapabilityConfig:
-    """A Platform effect capability and its JSON Schema input contract."""
-
-    id: str
-    parameters_schema: dict[str, Any]
-    description: str = ""
-    result_mode: Literal["resume", "terminal"] = "resume"
-
-
-@dataclass(frozen=True, slots=True)
 class AppToolConfig:
     name: str
     result_mode: Literal["resume", "terminal"]
@@ -200,17 +195,16 @@ class ModelLoggingConfig:
 @dataclass(frozen=True, slots=True)
 class AuroraConfig:
     root: Path
+    sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
     dashboard: DashboardConfig
     soul_path: Path
     soul_hash: str
     logging_level: str
     agents: tuple[AgentProfileConfig, ...]
-    adapters: tuple[AdapterConfig, ...]
     model_roles: frozenset[str]
-    model_definitions: dict[str, ModelRoleConfig]
-    model_providers: dict[str, ModelProviderConfig]
-    capability_definitions: dict[str, CapabilityConfig]
+    model_definitions: Mapping[str, ModelRoleConfig]
+    model_providers: Mapping[str, ModelProviderConfig]
     model_logging: ModelLoggingConfig
     apps: tuple[AppConfig, ...]
 
@@ -305,10 +299,11 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentRuntimeConfig:
 
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     """Load the selected RFC 0002 configuration snapshot."""
-    from src.contracts.configuration_sections import _parse_adapters, _parse_agents, _parse_dashboard
+    from src.contracts.configuration_sections import _parse_agents, _parse_apps, _parse_dashboard
 
     root = root.resolve()
-    base = _read_toml(root / "config" / "aurora.toml")
+    base, base_source = _read_toml_snapshot(root / "config" / "aurora.toml")
+    sources = [base_source]
     _require_keys(base, {"runtime", "dashboard", "soul", "logging", "storage", "models"}, "aurora.toml")
     runtime_raw = base["runtime"]
     if not isinstance(runtime_raw, dict):
@@ -319,7 +314,9 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     merged = base
     profile_path = root / "config" / "profiles" / f"{selected_profile}.toml"
     if profile_path.exists():
-        merged = _merge(base, _read_toml(profile_path))
+        profile_data, profile_source = _read_toml_snapshot(profile_path)
+        merged = _merge(base, profile_data)
+        sources.append(profile_source)
     _require_keys(
         merged,
         {"runtime", "dashboard", "soul", "logging", "storage", "models"},
@@ -416,18 +413,12 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         soul_hash = hashlib.sha256(soul_path.read_bytes()).hexdigest()
     except FileNotFoundError as error:
         raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
-    agents = _parse_agents(_read_toml(root / "config" / "agents.toml"), frozenset(roles))
-    adapters, apps = _parse_adapters(_read_toml(root / "config" / "apps.toml"), root)
-    capability_definitions: dict[str, CapabilityConfig] = {}
-    for adapter in adapters:
-        for capability in adapter.capabilities:
-            if capability.id in capability_definitions:
-                raise ConfigurationError(f"duplicate capability {capability.id}")
-            capability_definitions[capability.id] = capability
-    app_tools = frozenset().union(*(app.allowed_tools for app in apps)) if apps else frozenset()
-    for agent in agents:
-        if not agent.capabilities <= capability_definitions.keys() | app_tools:
-            raise ConfigurationError(f"Agent {agent.id} requests unavailable capabilities")
+    agents_data, agents_source = _read_toml_snapshot(root / "config" / "agents.toml")
+    apps_data, apps_source = _read_toml_snapshot(root / "config" / "apps.toml")
+    sources.extend((agents_source, apps_source))
+    agents = _parse_agents(agents_data, frozenset(roles))
+    _require_keys(apps_data, {"app"}, "apps.toml")
+    apps = _parse_apps(apps_data["app"], root)
     scheduler_raw = runtime_raw.get("scheduler", {})
     agents_raw = runtime_raw.get("agents", {})
     interactive_raw = runtime_raw.get("interactive_task", {})
@@ -446,11 +437,16 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         raise ConfigurationError("runtime.agents.memory_agent_profile is not configured")
     interactive_budget = _parse_task_budget(interactive_raw, 8, 6, 300.0, "interactive_task")
     autonomous_budget = _parse_task_budget(autonomous_raw, 3, 2, 120.0, "autonomous_task")
+    workspace = (root / _string(runtime_raw["workspace"], "runtime.workspace")).resolve()
+    expected_workspace = (root / "data" / "kernel").resolve()
+    if workspace != expected_workspace:
+        raise ConfigurationError("runtime.workspace must be data/kernel")
     return AuroraConfig(
         root=root,
+        sources=tuple(sources),
         runtime=RuntimeConfig(
             profile=selected_profile,
-            workspace=(root / _string(runtime_raw["workspace"], "runtime.workspace")).resolve(),
+            workspace=workspace,
             debug_host=debug_host,
             debug_port=debug_port,
             scheduler=scheduler,
@@ -463,11 +459,9 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         soul_hash=soul_hash,
         logging_level=_string(logging_raw["level"], "logging.level"),
         agents=agents,
-        adapters=adapters,
         model_roles=frozenset(roles),
-        model_definitions=model_definitions,
-        model_providers=model_providers,
-        capability_definitions=capability_definitions,
+        model_definitions=MappingProxyType(model_definitions),
+        model_providers=MappingProxyType(model_providers),
         model_logging=ModelLoggingConfig(
             log_queries=model_logging["log_queries"],
             log_responses=model_logging["log_responses"],

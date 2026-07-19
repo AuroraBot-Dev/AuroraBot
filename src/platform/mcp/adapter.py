@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import os
-import time
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from mcp.client.streamable_http import streamablehttp_client
@@ -15,12 +12,10 @@ from mcp.client.streamable_http import streamablehttp_client
 from src.contracts.agent import (
     CapabilityCatalogSnapshot,
     CapabilityDescriptor,
-    EffectLease,
-    PlatformRuntimePort,
 )
-from src.contracts.amp import AmpEnvelope, new_amp
-from src.contracts.configuration import AppConfig, AuroraConfig, CapabilityConfig
-from src.platform.effects import PlatformRunResult
+from src.contracts.amp import new_amp
+from src.contracts.configuration import AppConfig, AuroraConfig
+from src.localhost.ports import EffectExecutionRequest, EffectOutcome, ExternalAmpIngressPort
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
@@ -39,60 +34,54 @@ class _RemoteConnection:
     task: asyncio.Task[None] | None = None
 
 
-ToolResultObserver = Callable[[str, dict[str, object]], None]
-
-
 class MCPPlatform:
     """Own enabled MCP app sessions, discover their package-scoped tools, and execute effects."""
 
-    def __init__(self, configuration: AuroraConfig, *, tool_result_observer: ToolResultObserver | None = None) -> None:
+    def __init__(self, configuration: AuroraConfig, *, terminal_logs: bool = True) -> None:
         self._configuration = configuration
-        self._kit = MCPServerKit()
+        self._kit = MCPServerKit(terminal_logs=terminal_logs)
         self._clients = MCPClientManager(self._kit)
         self._remote: dict[str, _RemoteConnection] = {}
         self._started = False
+        self._shutdown_complete = False
+        self._shutdown_lock = asyncio.Lock()
         self._stop = asyncio.Event()
         self._notification_task: asyncio.Task[None] | None = None
-        self._kernel: PlatformRuntimePort | None = None
-        self._tool_result_observer = tool_result_observer
+        self._ingress: ExternalAmpIngressPort | None = None
         self._catalog = CapabilityCatalogSnapshot()
 
-    def set_tool_result_observer(self, observer: ToolResultObserver | None) -> None:
-        """Set the localhost-only observer for successfully completed MCP tools."""
-        self._tool_result_observer = observer
-
-    async def start(self, kernel: PlatformRuntimePort) -> None:
+    async def start(self, ingress: ExternalAmpIngressPort) -> CapabilityCatalogSnapshot:
         if self._started:
             logger.debug("MCP platform startup skipped reason=already_started")
-            return
+            return self._catalog
+        if self._shutdown_complete:
+            raise RuntimeError("MCP platform cannot restart after shutdown")
         logger.info("MCP platform startup started apps=%d", len(self._configuration.apps))
-        self._kernel = kernel
-        local_specs = [self._local_spec(app) for app in self._configuration.apps if app.transport == "stdio"]
-        await self._kit.start_all(local_specs)
-        await self._clients.connect_all()
-        await self._clients.refresh_tools()
-        remote_tasks = [
-            self._connect_remote(app) for app in self._configuration.apps if app.transport == "streamable_http"
-        ]
-        if remote_tasks:
-            await asyncio.gather(*remote_tasks)
-        self._catalog = self._discover_capabilities()
-        kernel.install_capability_catalog(self._catalog)
-        # Convenient ID view for callers; Kernel uses the immutable catalog above.
-        self._configuration.capability_definitions.update(
-            {
-                item.id: CapabilityConfig(item.id, item.parameters_schema, item.description, item.result_mode)
-                for item in self._catalog.capabilities
-            }
-        )
-        self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
-        self._started = True
+        self._ingress = ingress
+        try:
+            startup_timeout = max((app.timeout_seconds for app in self._configuration.apps), default=30.0)
+            local_specs = [self._local_spec(app) for app in self._configuration.apps if app.transport == "stdio"]
+            await self._kit.start_all(local_specs)
+            await asyncio.wait_for(self._clients.connect_all(), timeout=startup_timeout)
+            await asyncio.wait_for(self._clients.refresh_tools(), timeout=startup_timeout)
+            remote_tasks = [
+                self._connect_remote(app) for app in self._configuration.apps if app.transport == "streamable_http"
+            ]
+            if remote_tasks:
+                await asyncio.wait_for(asyncio.gather(*remote_tasks), timeout=startup_timeout)
+            self._catalog = self._discover_capabilities()
+            self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
+            self._started = True
+        except BaseException:
+            await self.shutdown()
+            raise
         logger.info(
             "MCP platform startup completed local_apps=%d remote_apps=%d capabilities=%d",
             sum(app.transport == "stdio" for app in self._configuration.apps),
             sum(app.transport == "streamable_http" for app in self._configuration.apps),
             len(self._catalog.capabilities),
         )
+        return self._catalog
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
@@ -208,88 +197,40 @@ class MCPPlatform:
             return remote.tools or []
         return list(self._clients.list_all_tools().get(package, []))
 
-    async def execute_pending_effects(self, kernel: PlatformRuntimePort) -> PlatformRunResult:
+    async def execute_effect(self, request: EffectExecutionRequest) -> EffectOutcome:
         if not self._started:
-            return PlatformRunResult(0)
-        capabilities = frozenset(capability for app in self._configuration.apps for capability in app.allowed_tools)
-        records = await kernel.claim_effect_requests(capabilities)
-        completed = await asyncio.gather(*(self._execute_one(kernel, record) for record in records))
-        return PlatformRunResult(sum(completed))
-
-    async def _execute_one(self, kernel: PlatformRuntimePort, record: EffectLease) -> int:
-        started = time.monotonic()
-        amp = AmpEnvelope.parse(record.amp)
-        data = amp.payload.data
-        request_id = data.get("request_id")
-        capability = data.get("capability")
-        parameters = data.get("parameters")
-        if not isinstance(request_id, str) or not isinstance(capability, str) or not isinstance(parameters, dict):
-            await kernel.complete_effect(record, error="invalid effect.requested payload")
-            logger.error(
-                "invalid MCP effect request activity_id=%s task_id=%s request_id=%s capability=%s",
-                record.record_id,
-                record.task_id,
-                request_id,
-                capability,
+            return EffectOutcome(
+                succeeded=False,
+                summary="MCP capability unavailable",
+                error="MCP platform is not started",
             )
-            return 0
+        capability = request.capability
         logger.debug(
-            "MCP effect started activity_id=%s task_id=%s request_id=%s capability=%s parameter_keys=%s",
-            record.record_id,
-            record.task_id,
-            request_id,
+            "MCP effect started request_id=%s capability=%s parameter_keys=%s",
+            request.request_id,
             capability,
-            sorted(parameters),
+            sorted(request.parameters),
         )
         try:
-            result = await self._call_tool(capability, parameters)
-            if self._tool_result_observer is not None:
-                self._tool_result_observer(capability, result)
-            receipt = new_amp(
-                event_type="effect.succeeded",
-                session_id=amp.payload.session_id,
+            result = await self._call_tool(capability, request.parameters)
+            _require_successful_tool_result(result)
+            return EffectOutcome(
+                succeeded=True,
                 summary=f"MCP capability completed: {capability}",
-                data={"request_id": request_id, "capability": capability, "result": result},
-                source_app="platform.mcp",
-                source_instance=capability.rpartition(".")[0],
-            )
-            await kernel.submit_amp(receipt)
-            await kernel.complete_effect(record)
-            logger.info(
-                "MCP effect succeeded activity_id=%s task_id=%s request_id=%s capability=%s duration_ms=%.1f",
-                record.record_id,
-                record.task_id,
-                request_id,
-                capability,
-                (time.monotonic() - started) * 1000,
+                result=result,
             )
         except Exception as error:
-            receipt = new_amp(
-                event_type="effect.failed",
-                session_id=amp.payload.session_id,
-                summary=f"MCP capability failed: {capability}",
-                data={
-                    "request_id": request_id,
-                    "capability": capability,
-                    "error": f"{type(error).__name__}: {error}",
-                },
-                source_app="platform.mcp",
-                source_instance=capability.rpartition(".")[0],
-            )
-            await kernel.submit_amp(receipt)
-            await kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
-            logger.log(
-                logging.ERROR,
-                "MCP effect failed activity_id=%s task_id=%s request_id=%s "
-                "capability=%s duration_ms=%.1f error_type=%s",
-                record.record_id,
-                record.task_id,
-                request_id,
+            logger.exception(
+                "MCP effect failed request_id=%s capability=%s error_type=%s",
+                request.request_id,
                 capability,
-                (time.monotonic() - started) * 1000,
                 type(error).__name__,
             )
-        return 1
+            return EffectOutcome(
+                succeeded=False,
+                summary=f"MCP capability failed: {capability}",
+                error=f"{type(error).__name__}: {error}",
+            )
 
     async def _call_tool(self, capability: str, parameters: dict[str, object]) -> dict[str, object]:
         package, _, _tool = capability.rpartition(".")
@@ -318,7 +259,7 @@ class MCPPlatform:
                 return
             method = "aurora/event"
             params = payload
-        if method != "aurora/event" or self._kernel is None:
+        if method != "aurora/event" or self._ingress is None:
             logger.debug("MCP notification ignored package=%s method=%s", package, method)
             return
         event_type = params.get("type")
@@ -333,7 +274,7 @@ class MCPPlatform:
             source_app=package,
             source_instance="mcp",
         )
-        await self._kernel.submit_amp(event)
+        await self._ingress.submit_amp(event.to_dict())
         logger.debug(
             "MCP event forwarded package=%s method=%s message_id=%s event_type=%s",
             package,
@@ -343,26 +284,31 @@ class MCPPlatform:
         )
 
     async def shutdown(self) -> None:
-        if not self._started:
-            logger.debug("MCP platform shutdown skipped reason=not_started")
-        else:
-            logger.info("MCP platform shutdown started remote_connections=%d", len(self._remote))
-        self._stop.set()
-        if self._notification_task is not None:
-            self._notification_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._notification_task
-        for connection in self._remote.values():
-            if connection.task is not None:
-                connection.task.cancel()
-        await asyncio.gather(
-            *(connection.task for connection in self._remote.values() if connection.task is not None),
-            return_exceptions=True,
-        )
-        await self._clients.shutdown()
-        await self._kit.stop_all()
-        self._started = False
-        logger.info("MCP platform shutdown completed")
+        async with self._shutdown_lock:
+            if self._shutdown_complete:
+                return
+            if not self._started:
+                logger.debug("MCP platform shutdown skipped reason=not_started")
+            else:
+                logger.info("MCP platform shutdown started remote_connections=%d", len(self._remote))
+            self._stop.set()
+            if self._notification_task is not None:
+                self._notification_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._notification_task
+            for connection in self._remote.values():
+                if connection.task is not None:
+                    connection.task.cancel()
+            await asyncio.gather(
+                *(connection.task for connection in self._remote.values() if connection.task is not None),
+                return_exceptions=True,
+            )
+            await self._clients.shutdown()
+            await self._kit.stop_all()
+            self._started = False
+            self._ingress = None
+            self._shutdown_complete = True
+            logger.info("MCP platform shutdown completed")
 
 
 def _tool_result(result: object) -> dict[str, object]:
@@ -373,3 +319,10 @@ def _tool_result(result: object) -> dict[str, object]:
         "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
         "structured_content": getattr(result, "structuredContent", None),
     }
+
+
+def _require_successful_tool_result(result: dict[str, object]) -> None:
+    if result.get("is_error") is not True:
+        return
+    detail = result.get("text") or result.get("content") or "MCP tool returned isError"
+    raise MCPToolCallError(str(detail))

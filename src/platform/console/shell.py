@@ -1,21 +1,22 @@
-"""Interactive Console adapter for the shared runtime input router."""
+"""Interactive shell for the native Console Platform."""
 
 from __future__ import annotations
 
 import asyncio
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
-from src.utils.log_utils import configure_console_logging, get_logger
+from src.utils.log_utils import get_logger
 
-logger = get_logger("aurora.localhost.console")
+logger = get_logger("aurora.platform.console")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.localhost.runtime import AuroraRuntime
+    from src.localhost.ports import ConsoleControlPort
+    from src.platform.console.adapter import ConsolePlatform
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,20 +26,22 @@ class _ReadResult:
 
 
 async def run_console(
-    runtime: AuroraRuntime,
+    control: ConsoleControlPort,
+    console: ConsolePlatform,
     *,
     stop_event: asyncio.Event | None = None,
     readline: Callable[[str], str] = input,
     output: Callable[[str], None] = print,
 ) -> None:
-    """Route Console input without owning the shared Runtime lifecycle."""
+    """Route Console input without owning the shared process lifecycle."""
     stop = stop_event or asyncio.Event()
-    configure_console_logging(enabled=False)
     output("AuroraBot local console; 输入 /help 查看命令。")
     reads: asyncio.Queue[_ReadResult] = asyncio.Queue()
     reader_closed = threading.Event()
     _start_reader(readline, reads, reader_closed)
-    display = asyncio.create_task(_display_messages(runtime, output), name="aurora-console-output")
+    display = asyncio.create_task(_display_messages(console, output), name="aurora-console-output")
+    read_task: asyncio.Task[_ReadResult] | None = None
+    stop_task: asyncio.Task[bool] | None = None
     logger.info("developer console started")
     try:
         while not stop.is_set():
@@ -56,17 +59,17 @@ async def run_console(
             result = read_task.result()
             if result.closed:
                 output("")
-                runtime.request_shutdown()
+                control.request_shutdown()
                 return
             raw = (result.text or "").strip()
             if not raw:
                 continue
-            routed = await runtime.route_input(
+            routed = await control.route_input(
                 RuntimeInput(
                     text=raw,
                     origin=InputOrigin.CONSOLE,
                     session_id="local:console",
-                    source_app="localhost.console",
+                    source_app="platform.console",
                     source_instance="default",
                     reply_capability="org.aurora.console.send_message",
                 )
@@ -74,12 +77,11 @@ async def run_console(
             if routed.text is not None:
                 output(routed.text)
             if routed.control is CommandControl.SHUTDOWN_PROCESS:
-                runtime.request_shutdown()
+                control.request_shutdown()
                 return
     finally:
         reader_closed.set()
-        display.cancel()
-        await asyncio.gather(display, return_exceptions=True)
+        await _cancel_tasks(read_task, stop_task, display)
         logger.info("developer console stopped")
 
 
@@ -108,6 +110,13 @@ def _start_reader(
     threading.Thread(target=worker, name="aurora-console-reader", daemon=True).start()
 
 
-async def _display_messages(runtime: AuroraRuntime, output: Callable[[str], None]) -> None:
+async def _display_messages(console: ConsolePlatform, output: Callable[[str], None]) -> None:
     while True:
-        output(f"Bot> {await runtime.next_console_message()}")
+        output(f"Bot> {await console.next_message()}")
+
+
+async def _cancel_tasks(*tasks: asyncio.Task[Any] | None) -> None:
+    active = [task for task in tasks if task is not None]
+    for task in active:
+        task.cancel()
+    await asyncio.gather(*active, return_exceptions=True)

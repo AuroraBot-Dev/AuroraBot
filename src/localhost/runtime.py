@@ -1,4 +1,4 @@
-"""Composition root for the RFC 0012 durable homogeneous-Agent runtime."""
+"""Localhost application runtime for the RFC 0012 homogeneous-Agent loop."""
 
 from __future__ import annotations
 
@@ -16,8 +16,6 @@ from src.contracts.agent import (
     AgentHandler,
     AgentLimits,
     AgentProfile,
-    CapabilityCatalogSnapshot,
-    CapabilityDescriptor,
     KernelConfiguration,
     TaskBudget,
 )
@@ -25,18 +23,16 @@ from src.contracts.amp import AmpEnvelope, new_amp
 from src.contracts.configuration import AuroraConfig, load_configuration
 from src.contracts.model import ModelRequest
 from src.kernel.runtime import AgentKernel, PumpResult
-from src.localhost.chat import ChatService
+from src.localhost.effect_dispatcher import EffectDispatcher
 from src.localhost.router import CommandRouter
 from src.localhost.scheduler import CognitiveScheduler
-from src.platform.console import ConsolePlatform
-from src.platform.dashboard import DashboardPlatform
-from src.platform.mcp import MCPPlatform
-from src.utils.log_utils import configure_console_logging, configure_logging, get_logger
+from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.runtime")
 
 if TYPE_CHECKING:
     from src.localhost.command_types import CommandResult, RuntimeInput
+    from src.localhost.ports import EffectExecutorBinding
 
 
 def _load_handler(specification: str) -> AgentHandler:
@@ -55,22 +51,15 @@ class AuroraRuntime:
     configuration: AuroraConfig
     kernel: AgentKernel
     model_gateway: ModelGatewayService
-    console_platform: ConsolePlatform
-    mcp_platform: MCPPlatform
-    dashboard_platform: DashboardPlatform
-    chat: ChatService
     _pump_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
-    _start_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _shutdown_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
-    _started: bool = field(default=False, init=False, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
-    _console_messages: list[str] = field(default_factory=list, init=False, repr=False)
-    _console_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue, init=False, repr=False)
     _model_dispatch_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _model_activity_tasks: dict[asyncio.Task[None], str] = field(default_factory=dict, init=False, repr=False)
     _wake: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False)
     _scheduler: CognitiveScheduler | None = field(default=None, init=False, repr=False)
     _command_router: CommandRouter = field(init=False, repr=False)
+    _effect_dispatcher: EffectDispatcher = field(init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
 
     @classmethod
@@ -79,11 +68,10 @@ class AuroraRuntime:
         root: Path,
         profile: str | None = None,
         *,
-        console_logging: bool = True,
+        configuration: AuroraConfig | None = None,
+        executor_bindings: tuple[EffectExecutorBinding, ...] | None = (),
     ) -> "AuroraRuntime":
-        configuration = load_configuration(root, profile)
-        configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
-        configure_console_logging(enabled=console_logging)
+        configuration = configuration or load_configuration(root, profile)
         profiles = tuple(
             AgentProfile(
                 id=item.id,
@@ -131,56 +119,22 @@ class AuroraRuntime:
         )
         handlers = {profile.id: _load_handler(profile.implementation) for profile in profiles}
         kernel = AgentKernel(kernel_config, handlers)
-        configured_catalog = CapabilityCatalogSnapshot(
-            tuple(
-                CapabilityDescriptor(item.id, item.description, item.parameters_schema, item.result_mode)
-                for adapter in configuration.adapters
-                for item in adapter.capabilities
-            )
-        )
-        kernel.install_capability_catalog(configured_catalog)
-        console_capabilities = frozenset(
-            capability.id
-            for adapter in configuration.adapters
-            if adapter.implementation == "src.platform.console:ConsolePlatform"
-            for capability in adapter.capabilities
-        )
-        chat = ChatService(configuration.dashboard)
         runtime = cls(
             configuration,
             kernel,
             ModelGatewayService(configuration),
-            ConsolePlatform(console_capabilities),
-            MCPPlatform(configuration),
-            DashboardPlatform(chat.deliver_bot_reply),
-            chat,
         )
         runtime._command_router = CommandRouter(runtime)
-        chat.bind_input_dispatcher(runtime.route_input)
-        runtime.mcp_platform.set_tool_result_observer(runtime._observe_mcp_result)
+        runtime._effect_dispatcher = EffectDispatcher(kernel, runtime)
         runtime._scheduler = CognitiveScheduler(
             configuration.runtime.workspace / "process" / "scheduler-state.json",
             configuration.runtime.scheduler,
         )
+        if executor_bindings is not None:
+            runtime.bind_effect_executors(executor_bindings)
         return runtime
 
-    async def _ensure_started(self) -> None:
-        if self._started:
-            return
-        # Dashboard, console and run_forever may all enter startup concurrently.
-        # Serialize the side effects so SQLite initialization and MCP launch happen once.
-        async with self._start_lock:
-            if self._started:
-                return
-            await self.chat.start()
-            await self.mcp_platform.start(self.kernel)
-            self._started = True
-
-    async def start(self) -> None:
-        await self._ensure_started()
-
     async def submit_amp(self, value: object) -> str:
-        await self._ensure_started()
         amp = AmpEnvelope.parse(value)
         if amp.payload.type not in {"system.tick", "effect.succeeded", "effect.failed"}:
             cancelled = set(await self.kernel.cancel_autonomous_tasks("external_activity"))
@@ -217,11 +171,14 @@ class AuroraRuntime:
         return await self.submit_amp(amp)
 
     async def route_input(self, request: RuntimeInput) -> CommandResult:
-        await self._ensure_started()
         return await self._command_router.route(request)
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
         self._stop_requester = requester
+
+    def bind_effect_executors(self, bindings: tuple[EffectExecutorBinding, ...]) -> None:
+        catalog = self._effect_dispatcher.bind(bindings)
+        self.kernel.install_capability_catalog(catalog)
 
     def request_shutdown(self) -> None:
         if self._stop_requester is not None:
@@ -229,24 +186,16 @@ class AuroraRuntime:
 
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
-            await self._ensure_started()
             result: PumpResult = await self.kernel.pump(max_turns)
-            local_result, dashboard_result, mcp_result = await asyncio.gather(
-                self.console_platform.execute_pending_effects(self.kernel),
-                self.dashboard_platform.execute_pending_effects(self.kernel),
-                self.mcp_platform.execute_pending_effects(self.kernel),
-            )
+            receipts_emitted = await self._effect_dispatcher.dispatch_pending_effects()
             response = result.to_dict()
-            response["platform_receipts_emitted"] = (
-                local_result.receipts_emitted + dashboard_result.receipts_emitted + mcp_result.receipts_emitted
-            )
+            response["effect_receipts_emitted"] = receipts_emitted
             self._ensure_model_dispatcher()
             if self._scheduler is not None:
                 self._scheduler.reconcile(self.kernel.tasks())
             return response
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
-        await self._ensure_started()
         stop = stop_event or asyncio.Event()
         while not stop.is_set():
             if self._scheduler is not None:
@@ -328,29 +277,7 @@ class AuroraRuntime:
                 ),
                 return_exceptions=True,
             )
-            await self.mcp_platform.shutdown()
             self.kernel.shutdown()
-
-    def drain_console_messages(self) -> tuple[str, ...]:
-        messages = tuple(self._console_messages)
-        self._console_messages.clear()
-        while not self._console_queue.empty():
-            self._console_queue.get_nowait()
-        return messages
-
-    async def next_console_message(self) -> str:
-        message = await self._console_queue.get()
-        if message in self._console_messages:
-            self._console_messages.remove(message)
-        return message
-
-    def _observe_mcp_result(self, capability: str, result: dict[str, object]) -> None:
-        if capability != "org.aurora.console.send_message" or result.get("ok") is not True:
-            return
-        text = result.get("text")
-        if isinstance(text, str) and text:
-            self._console_messages.append(text)
-            self._console_queue.put_nowait(text)
 
     def status(self) -> dict[str, Any]:
         return {

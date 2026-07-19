@@ -12,21 +12,40 @@ from fastapi.testclient import TestClient
 
 from src.contracts.agent import TaskStatus
 from src.contracts.model import ModelRequest, ModelResult, ModelUsage, ToolCall
-from src.dashboard.api import create_app
-from src.localhost.chat import ChatError
+from src.localhost.ports import EffectExecutorBinding
 from src.localhost.runtime import AuroraRuntime
+from src.platform.dashboard import DASHBOARD_REPLY_DESCRIPTOR, ChatError, ChatService, DashboardPlatform, create_app
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from src.localhost.command_types import CommandResult, RuntimeInput
+    from src.localhost.ports import InteractiveInputPort
+
+
+async def _started_chat(
+    runtime: AuroraRuntime,
+    input_port: InteractiveInputPort | None = None,
+) -> ChatService:
+    chat = ChatService(runtime.configuration.dashboard, input_port or runtime)
+    await chat.start()
+    return chat
 
 
 @contextmanager
 def _client(project_root: Path, runtime: AuroraRuntime | None = None) -> Iterator[TestClient]:
     candidate = runtime or AuroraRuntime.create(project_root)
+    chat = asyncio.run(_started_chat(candidate))
     try:
-        with TestClient(create_app(candidate)) as client:
+        with TestClient(
+            create_app(
+                chat,
+                candidate,
+                candidate,
+                candidate.configuration.dashboard,
+                profile=candidate.configuration.runtime.profile,
+            )
+        ) as client:
             yield client
     finally:
         asyncio.run(candidate.shutdown())
@@ -81,30 +100,34 @@ def _enable_dashboard_reply(project_root: Path) -> None:
         ),
         encoding="utf-8",
     )
-    apps_path = project_root / "config" / "apps.toml"
-    apps_path.write_text(
-        apps_path.read_text(encoding="utf-8")
-        + """
 
-[[adapter]]
-id = "dashboard.local"
-enabled = true
-implementation = "src.platform.dashboard:DashboardPlatform"
 
-[[adapter.capability]]
-id = "org.aurora.dashboard.send_message"
-description = "Publish text to a Dashboard conversation"
-result_mode = "terminal"
-[adapter.capability.parameters_schema]
-type = "object"
-required = ["text"]
-additionalProperties = false
-
-[adapter.capability.parameters_schema.properties.text]
-type = "string"
-""",
-        encoding="utf-8",
+def _runtime_with_dashboard_effect(project_root: Path) -> tuple[AuroraRuntime, ChatService]:
+    runtime = AuroraRuntime.create(project_root, executor_bindings=None)
+    chat = ChatService(runtime.configuration.dashboard, runtime)
+    runtime.bind_effect_executors(
+        (
+            EffectExecutorBinding(
+                DASHBOARD_REPLY_DESCRIPTOR,
+                DashboardPlatform(chat.deliver_bot_reply),
+                "platform.dashboard",
+                "test",
+            ),
+        )
     )
+    return runtime, chat
+
+
+class _FailOnceInput:
+    def __init__(self, delegate: AuroraRuntime) -> None:
+        self._delegate = delegate
+        self._failed = False
+
+    async def route_input(self, request: RuntimeInput) -> CommandResult:
+        if not self._failed:
+            self._failed = True
+            raise OSError
+        return await self._delegate.route_input(request)
 
 
 def _register_and_login(client: TestClient, username: str) -> tuple[int, str]:
@@ -130,6 +153,16 @@ def test_dashboard_auth_users_and_opaque_session(project_root: Path) -> None:
         assert client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"}).status_code == 204
         assert client.get("/api/users", headers={"Authorization": f"Bearer {token}"}).status_code == 401
         assert user_id > 0
+
+
+def test_runtime_construction_does_not_create_dashboard_storage(project_root: Path) -> None:
+    runtime = AuroraRuntime.create(project_root)
+    try:
+        assert not runtime.configuration.dashboard.database_path.exists()
+        assert not runtime.configuration.dashboard.upload_dir.exists()
+        assert not hasattr(runtime, "chat")
+    finally:
+        asyncio.run(runtime.shutdown())
 
 
 def test_websocket_private_message_is_persisted_and_idempotent(project_root: Path) -> None:
@@ -249,12 +282,12 @@ def test_attachment_upload_is_rejected_at_configured_size_limit(project_root: Pa
 def test_bot_text_becomes_amp_and_reply_delivery_is_idempotent(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
-        await runtime.start()
+        chat = await _started_chat(runtime)
         try:
-            user = await runtime.chat.register("alice", "secret")
-            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
+            user = await chat.register("alice", "secret")
+            bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             client_message_id = str(uuid4())
-            message = await runtime.chat.send_private_message(
+            message = await chat.send_private_message(
                 user["user_id"],
                 {
                     "client_message_id": client_message_id,
@@ -268,10 +301,10 @@ def test_bot_text_becomes_amp_and_reply_delivery_is_idempotent(project_root: Pat
             assert len(inbox) == 1
 
             session_id = f"dashboard:user:{user['user_id']}"
-            first = await runtime.chat.deliver_bot_reply(session_id, "hello human", "effect-1")
-            second = await runtime.chat.deliver_bot_reply(session_id, "hello human", "effect-1")
+            first = await chat.deliver_bot_reply(session_id, "hello human", "effect-1")
+            second = await chat.deliver_bot_reply(session_id, "hello human", "effect-1")
             assert first["message_id"] == second["message_id"]
-            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello human"]
         finally:
             await runtime.shutdown()
@@ -282,10 +315,10 @@ def test_bot_text_becomes_amp_and_reply_delivery_is_idempotent(project_root: Pat
 def test_failed_dashboard_amp_submission_can_retry_idempotently(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
-        await runtime.start()
+        chat = await _started_chat(runtime, _FailOnceInput(runtime))
         try:
-            user = await runtime.chat.register("alice", "secret")
-            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
+            user = await chat.register("alice", "secret")
+            bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             event = {
                 "client_message_id": str(uuid4()),
                 "receiver_id": bot["user_id"],
@@ -293,15 +326,10 @@ def test_failed_dashboard_amp_submission_can_retry_idempotently(project_root: Pa
                 "content": "retry me",
             }
 
-            async def fail_once(_value: RuntimeInput) -> CommandResult:
-                raise OSError
-
-            runtime.chat.bind_input_dispatcher(fail_once)
             with pytest.raises(ChatError, match="Bot is unavailable"):
-                await runtime.chat.send_private_message(user["user_id"], event)
+                await chat.send_private_message(user["user_id"], event)
 
-            runtime.chat.bind_input_dispatcher(runtime.route_input)
-            retried = await runtime.chat.send_private_message(user["user_id"], event)
+            retried = await chat.send_private_message(user["user_id"], event)
             assert retried["status"] == "saved"
             assert len(tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))) == 1
         finally:
@@ -313,16 +341,16 @@ def test_failed_dashboard_amp_submission_can_retry_idempotently(project_root: Pa
 def test_bot_text_completes_dashboard_effect_and_task(project_root: Path) -> None:
     async def scenario() -> None:
         _enable_dashboard_reply(project_root)
-        runtime = AuroraRuntime.create(project_root)
+        runtime, chat = _runtime_with_dashboard_effect(project_root)
         gateway = _SequenceGateway(
             [ToolCall("call-dashboard", "org.aurora.dashboard.send_message", {"text": "hello human"})]
         )
         runtime.model_gateway = gateway
-        await runtime.start()
+        await chat.start()
         try:
-            user = await runtime.chat.register("alice", "secret")
-            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
-            await runtime.chat.send_private_message(
+            user = await chat.register("alice", "secret")
+            bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
+            await chat.send_private_message(
                 user["user_id"],
                 {
                     "client_message_id": str(uuid4()),
@@ -338,12 +366,12 @@ def test_bot_text_completes_dashboard_effect_and_task(project_root: Path) -> Non
             second = await runtime.pump()
             third = await runtime.pump()
 
-            assert second["platform_receipts_emitted"] == 1
+            assert second["effect_receipts_emitted"] == 1
             assert third["ingested_task_ids"]
             offered_tools = {tool.name for tool in gateway.requests[0].tools}
             assert "org.aurora.dashboard.send_message" in offered_tools
             assert "org.aurora.console.send_message" not in offered_tools
-            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello human"]
             task = runtime.kernel.get_task(first["ingested_task_ids"][0])
             assert task is not None
@@ -351,7 +379,7 @@ def test_bot_text_completes_dashboard_effect_and_task(project_root: Path) -> Non
             assert task.termination_reason == "terminal_effect_succeeded"
 
             await runtime.pump()
-            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello human"]
         finally:
             await runtime.shutdown()
@@ -362,15 +390,15 @@ def test_bot_text_completes_dashboard_effect_and_task(project_root: Path) -> Non
 def test_run_forever_delivers_plain_model_text_to_dashboard(project_root: Path) -> None:
     async def scenario() -> None:
         _enable_dashboard_reply(project_root)
-        runtime = AuroraRuntime.create(project_root)
+        runtime, chat = _runtime_with_dashboard_effect(project_root)
         runtime.model_gateway = _TextGateway("plain provider reply")
-        await runtime.start()
+        await chat.start()
         stop = asyncio.Event()
         runner = asyncio.create_task(runtime.run_forever(stop))
         try:
-            user = await runtime.chat.register("alice", "secret")
-            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
-            await runtime.chat.send_private_message(
+            user = await chat.register("alice", "secret")
+            bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
+            await chat.send_private_message(
                 user["user_id"],
                 {
                     "client_message_id": str(uuid4()),
@@ -382,7 +410,7 @@ def test_run_forever_delivers_plain_model_text_to_dashboard(project_root: Path) 
 
             async with asyncio.timeout(5):
                 while True:
-                    history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+                    history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
                     tasks = runtime.kernel.tasks()
                     if len(history) == 2 and tasks and tasks[0].status == TaskStatus.COMPLETED:
                         break
@@ -401,12 +429,12 @@ def test_run_forever_delivers_plain_model_text_to_dashboard(project_root: Path) 
 def test_bot_attachment_is_saved_and_gets_deterministic_reply(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
-        await runtime.start()
+        chat = await _started_chat(runtime)
         try:
-            user = await runtime.chat.register("alice", "secret")
-            bot = next(item for item in await runtime.chat.list_users(user["user_id"]) if item["is_bot"])
-            attachment = await runtime.chat.upload_attachment(user["user_id"], "note.txt", "text/plain", b"x")
-            await runtime.chat.send_private_message(
+            user = await chat.register("alice", "secret")
+            bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
+            attachment = await chat.upload_attachment(user["user_id"], "note.txt", "text/plain", b"x")
+            await chat.send_private_message(
                 user["user_id"],
                 {
                     "client_message_id": str(uuid4()),
@@ -416,7 +444,7 @@ def test_bot_attachment_is_saved_and_gets_deterministic_reply(project_root: Path
                     "attachment_id": attachment["attachment_id"],
                 },
             )
-            history = await runtime.chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
             assert history[-1]["content"] == "当前暂不支持读取附件。"
             assert not tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
         finally:

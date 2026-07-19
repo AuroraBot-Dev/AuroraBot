@@ -96,6 +96,21 @@ log_responses = false
 """,
         encoding="utf-8",
     )
+    (config / "preference.toml").write_text(
+        """[platform.console]
+enabled = true
+terminal_logs = false
+
+[platform.dashboard]
+enabled = true
+open_browser = false
+
+[platform.mcp]
+enabled = true
+terminal_logs = true
+""",
+        encoding="utf-8",
+    )
     (prompts / "SOUL.md").write_text("You are the AuroraBot test fixture.", encoding="utf-8")
     (config / "agents.toml").write_text(
         """[[agent]]
@@ -120,16 +135,6 @@ child_profiles = ["builtin.worker"]
     )
     (config / "apps.toml").write_text(
         """app = []
-
-[[adapter]]
-id = "local.test"
-enabled = true
-implementation = "src.platform.console:ConsolePlatform"
-
-[[adapter.capability]]
-id = "org.aurora.console.send_message"
-result_mode = "terminal"
-parameters_schema = { type = "object", properties = { text = { type = "string" } }, required = ["text"], additionalProperties = false }
 """,
         encoding="utf-8",
     )

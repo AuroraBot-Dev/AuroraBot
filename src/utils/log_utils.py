@@ -57,6 +57,12 @@ _MANAGED_FILE_HANDLER = "_aurora_managed_file_handler"
 _MANAGED_CONSOLE_HANDLER = "_aurora_managed_console_handler"
 _EXTERNAL_CONSOLE_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
 _OFF_LEVEL = logging.CRITICAL + 1
+_TERMINAL_RECORD_ATTRIBUTE = "aurora_terminal"
+
+
+class _TerminalVisibilityFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return bool(getattr(record, _TERMINAL_RECORD_ATTRIBUTE, True))
 
 
 class UnsupportedLoggingLevelError(ValueError):
@@ -131,12 +137,14 @@ def _create_stream_handler(
             tracebacks_show_locals=False,
         )
         rh.setFormatter(formatter)
+        rh.addFilter(_TerminalVisibilityFilter())
         setattr(rh, _MANAGED_CONSOLE_HANDLER, True)
         return rh  # noqa: TRY300
     except ImportError:
         sh = logging.StreamHandler()
         sh.setLevel(level)
         sh.setFormatter(formatter)
+        sh.addFilter(_TerminalVisibilityFilter())
         setattr(sh, _MANAGED_CONSOLE_HANDLER, True)
         return sh
 

@@ -33,6 +33,8 @@ def test_installed_wheel_starts_from_an_empty_directory(tmp_path: Path) -> None:
     assert "src/dashboard/cli.py" not in names
     assert "src/localhost/commands/core.py" not in names
     assert "src/localhost/commands/emit.py" not in names
+    for removed_command in ("console", "dev", "run", "serve"):
+        assert f"aurora/commands/{removed_command}.py" not in names
 
     installed = tmp_path / "installed"
     subprocess.run(
@@ -71,6 +73,26 @@ def test_installed_wheel_starts_from_an_empty_directory(tmp_path: Path) -> None:
     )
     assert "AuroraBot CLI" in help_result.stdout
 
+    check_help = subprocess.run(
+        [sys.executable, "-m", "aurora", "check", "--help"],
+        cwd=empty,
+        env=clean_env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "--lint" in check_help.stdout
+
+    check_result = subprocess.run(
+        [sys.executable, "-m", "aurora", "--root", str(project_root), "check", "--lint"],
+        cwd=empty,
+        env=clean_env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "All checks passed" in check_result.stdout
+
     script = installed / "bin" / ("aurora.exe" if os.name == "nt" else "aurora")
     assert script.is_file()
     script_help = subprocess.run(
@@ -82,3 +104,13 @@ def test_installed_wheel_starts_from_an_empty_directory(tmp_path: Path) -> None:
         text=True,
     )
     assert "AuroraBot CLI" in script_help.stdout
+
+    script_check_help = subprocess.run(
+        [str(script), "check", "--help"],
+        cwd=empty,
+        env=clean_env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "--test" in script_check_help.stdout

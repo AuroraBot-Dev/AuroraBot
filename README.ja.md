@@ -47,7 +47,8 @@ Copy-Item .env.example .env
 uv run aurora
 ```
 
-認知ループ、local Console、`http://127.0.0.1:8000` の Dashboard backend が起動します。
+既定の Platform 構成は `config/preference.toml` から読み込まれます。リポジトリの既定値では Console、Dashboard、
+MCP が起動します。
 
 ```powershell
 Set-Location ..\AuroraChat
@@ -60,15 +61,15 @@ pnpm run dev
 主なエントリポイント：
 
 ```powershell
-# Dashboard と Console なしで認知ループのみ実行
-uv run aurora --profile prod run
+# 外部 Platform なしで認知ループのみ実行
+uv run aurora --profile prod --headless
 
-# デバッグ API とローカル console を同時に起動
+# preference.toml の既定 Platform 構成を使用
 uv run aurora
 
-# デバッグ API または console を個別に起動
-uv run aurora serve
-uv run aurora console
+# 明示フラグは既定値に追加されず、正確な Platform 集合を構成
+uv run aurora --dashboard --mcp
+uv run aurora --console
 
 # プロジェクト品質チェック
 uv run aurora check
@@ -80,16 +81,15 @@ Console と Dashboard は slash command を共有します。`/say`、`/pump`、
 ## ディレクトリ
 
 ```text
-config/         TOML 設定と profile override
-aurora/         process CLI、runtime mode、統一 lifecycle
+config/         core TOML、Platform preference、domain 設定、profile override
+aurora/         process CLI、Platform composition、統一 lifecycle
 docs/rfc/       規範的な architecture と公開 contract
 src/contracts/  設定、AMP、Agent、model、memory contract
 src/kernel/     Task、Agent、mailbox、Activity、因果、SQLite runtime state
 src/agents/     同構 Agent handler と組み込み委任能力
 src/ai/         モデル role、routing、native tools/Responses、usage 記録
-src/localhost/  chat、scheduler、console の application use case
-src/dashboard/  Dashboard HTTP/WebSocket と debug route adapter
-src/platform/   Console、Dashboard、MCP adapter、capability catalog、AMP 正規化
+src/localhost/  統一 ingress、effect dispatch、scheduler、developer use case
+src/platform/   Console、Dashboard、MCP の protocol、persistence、effect adapter
 src/apps/       組み込み native AMP-MCP application
 src/sandbox/    独立 sandbox component。現在の Agent runtime では無効
 src/utils/      上位 layer に依存しない共通 utility
@@ -105,6 +105,7 @@ runtime state は SQLite WAL、構造設定は TOML、secret は環境変数か�
 - [RFC 0001：architecture baseline](docs/rfc/0001-architecture.md)
 - [RFC 0012：同構 multi-Agent durable runtime](docs/rfc/0012-homogeneous-agent-runtime.md)
 - [RFC 0013：統一 command routing と Aurora process entry](docs/rfc/0013-unified-command-routing-and-entry.md)
+- [RFC 0014：並列 Platform composition と preference](docs/rfc/0014-parallel-platform-composition-and-preferences.md)
 - [RFC 0010：Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
 - [RFC 0011：current project baseline](docs/rfc/0011-current-project-baseline.md)
 - [コントリビューションガイド](docs/CONTRIBUTING.ja.md)

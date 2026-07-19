@@ -45,7 +45,8 @@ Copy-Item .env.example .env
 uv run aurora
 ```
 
-默认同时启动认知循环、本地控制台和 `http://127.0.0.1:8000` Dashboard 后端。聊天前端保持在独立 AuroraChat 仓库：
+默认平台组合来自 `config/preference.toml`；仓库默认同时启动本地 Console、Dashboard 后端和 MCP。聊天前端保持在
+独立 AuroraChat 仓库：
 
 ```powershell
 Set-Location ..\AuroraChat
@@ -58,15 +59,15 @@ pnpm run dev
 常用入口：
 
 ```powershell
-# 仅常驻认知循环，不启动 Dashboard 或 Console
-uv run aurora --profile prod run
+# 仅常驻认知循环，不启动外部平台
+uv run aurora --profile prod --headless
 
-# 同时启动调试 API 与本地控制台
+# 使用 preference.toml 中的默认平台组合
 uv run aurora
 
-# 分别启动 Dashboard/API 或控制台
-uv run aurora serve
-uv run aurora console
+# 显式参数形成精确平台集合，不与默认组合叠加
+uv run aurora --dashboard --mcp
+uv run aurora --console
 
 # 执行项目质量检查
 uv run aurora check
@@ -78,16 +79,15 @@ Console 与 Dashboard 共用斜杠命令：可用 `/say 你好` 投递消息，�
 ## 目录
 
 ```text
-config/         TOML 主配置、领域配置与 profile 覆盖
-aurora/         进程 CLI、运行模式与统一生命周期
+config/         核心 TOML、平台偏好、领域配置与 profile 覆盖
+aurora/         进程 CLI、平台组合与统一生命周期
 docs/rfc/       规范性架构与公共契约
 src/contracts/  配置、AMP、Agent、模型与记忆契约
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
 src/ai/         模型角色、路由、原生 tools/Responses 和用量记录
-src/localhost/  本地业务、聊天室、scheduler 与控制台用例
-src/dashboard/  Dashboard HTTP/WebSocket 与调试路由适配层
-src/platform/   Console、Dashboard、MCP 平台适配、能力目录与 AMP 归一化
+src/localhost/  统一输入、效果调度、scheduler 与开发者用例
+src/platform/   Console、Dashboard、MCP 的协议、持久化与效果适配
 src/apps/       内建原生 AMP-MCP 应用
 src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
 src/utils/      无上层依赖的通用工具
@@ -103,6 +103,7 @@ Kernel 工作区固定为 `data/kernel/{inbox,process,archive}`。外部边界�
 - [RFC 0001：架构基准](docs/rfc/0001-architecture.md)
 - [RFC 0012：同构多 Agent 持久化运行时](docs/rfc/0012-homogeneous-agent-runtime.md)
 - [RFC 0013：统一命令路由与 Aurora 进程入口](docs/rfc/0013-unified-command-routing-and-entry.md)
+- [RFC 0014：并行平台组合与偏好配置](docs/rfc/0014-parallel-platform-composition-and-preferences.md)
 - [RFC 0010：Dashboard 聊天适配](docs/rfc/0010-dashboard-chat.md)
 - [RFC 0011：当前项目基线](docs/rfc/0011-current-project-baseline.md)
 - [贡献指南](docs/CONTRIBUTING.md)

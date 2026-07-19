@@ -27,7 +27,7 @@ from src.contracts.agent import (
     KernelConfiguration,
     TaskState,
 )
-from src.contracts.amp import AmpEnvelope, AmpValidationError, new_amp
+from src.contracts.amp import AmpEnvelope, AmpValidationError
 from src.kernel.debug import agent_detail as build_agent_detail
 from src.kernel.debug import reject_active_legacy_workspace
 from src.kernel.debug import task_detail as build_task_detail
@@ -78,7 +78,7 @@ class AgentKernel:
         )
         self.store = SQLiteRuntimeStore(self._process / "runtime.sqlite3")
         self._store_executor.submit(self.store.initialize).result()
-        self._capability_catalog = CapabilityCatalogSnapshot()
+        self._capability_catalog: CapabilityCatalogSnapshot | None = None
         self._lock = asyncio.Lock()
         logger.info(
             "Agent Kernel initialized workspace=%s profiles=%d active_tasks=%d",
@@ -93,12 +93,12 @@ class AgentKernel:
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
-        return self._capability_catalog
+        return self._capability_catalog or CapabilityCatalogSnapshot()
 
     def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
-        merged = {item.id: item for item in self._capability_catalog.capabilities}
-        merged.update({item.id: item for item in catalog.capabilities})
-        self._capability_catalog = CapabilityCatalogSnapshot(tuple(sorted(merged.values(), key=lambda item: item.id)))
+        if self._capability_catalog is not None:
+            raise RuntimeError("capability catalog is already installed")
+        self._capability_catalog = catalog
 
     async def submit_amp(self, amp: AmpEnvelope) -> None:
         async with self._lock:
@@ -286,7 +286,7 @@ class AgentKernel:
         descriptors = tuple(
             descriptor
             for capability in sorted(profile.capabilities)
-            if (descriptor := self._capability_catalog.by_id.get(capability)) is not None
+            if (descriptor := self.capability_catalog.by_id.get(capability)) is not None
             and (agent.parent_agent_id is None or descriptor.result_mode != "terminal")
         )
         context = AgentContext(
@@ -324,7 +324,7 @@ class AgentKernel:
             effect = decision.effect_request
             if effect.capability not in profile.capabilities:
                 raise PermissionError(f"Agent {agent.agent_id} cannot request {effect.capability}")
-            descriptor = self._capability_catalog.by_id.get(effect.capability)
+            descriptor = self.capability_catalog.by_id.get(effect.capability)
             if descriptor is None:
                 raise ValueError(f"unknown effect capability {effect.capability}")
             if agent.parent_agent_id is not None and descriptor.result_mode == "terminal":
@@ -414,34 +414,27 @@ class AgentKernel:
     async def complete_model(self, activity: ActivityRequest, result: dict[str, Any] | None, error: str | None) -> None:
         await self._store_call(self.store.complete_model_activity, activity.activity_id, result, error)
 
-    async def claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[EffectLease, ...]:
+    async def claim_effect_requests(self) -> tuple[EffectLease, ...]:
         activities = await self._store_call(
             self.store.claim_effect_activities,
-            capabilities,
             self.limits.effect_concurrency,
             self.limits.lease_seconds,
         )
         leases = []
         for activity in activities:
             request = activity.request
-            amp = new_amp(
-                event_type="effect.requested",
-                session_id=str(request["session_id"]),
-                summary=f"Agent requested {request['capability']}",
-                data={
-                    "request_id": activity.idempotency_key,
-                    "capability": request["capability"],
-                    "parameters": request["parameters"],
-                    "tool_call_id": request.get("tool_call_id"),
-                },
-                source_app="kernel.agent",
-                source_instance=activity.agent_id,
+            leases.append(
+                EffectLease(
+                    activity_id=activity.activity_id,
+                    task_id=activity.task_id,
+                    agent_id=activity.agent_id,
+                    request_id=activity.idempotency_key,
+                    session_id=str(request["session_id"]),
+                    capability=str(request["capability"]),
+                    parameters=dict(request["parameters"]),
+                )
             )
-            leases.append(EffectLease(activity.activity_id, activity.task_id, activity.agent_id, amp.to_dict()))
         return tuple(leases)
-
-    async def complete_effect(self, lease: EffectLease, *, error: str | None = None) -> None:
-        await self._store_call(self.store.mark_effect_dispatched, lease.activity_id, error)
 
     def tasks(self) -> tuple[TaskState, ...]:
         return self.store.tasks()

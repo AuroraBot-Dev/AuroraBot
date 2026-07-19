@@ -10,6 +10,7 @@ from src.ai.vnext import ModelGatewayService
 from src.contracts.configuration import load_configuration
 from src.contracts.model import ModelGatewayError, ModelMessage, ModelRequest
 from src.localhost.runtime import AuroraRuntime
+from src.utils import log_utils
 from src.utils.log_utils import configure_logging, get_logger
 from tests.test_events import valid_amp
 
@@ -24,6 +25,23 @@ class RecordHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.records.append(record)
+
+
+def test_mcp_child_diagnostics_can_skip_terminal_without_skipping_file(tmp_path: Path) -> None:
+    terminal = log_utils._create_stream_handler()
+    logfile = tmp_path / "mcp.log"
+    file_handler = log_utils._create_file_handler(logfile)
+    record = logging.LogRecord("MCPServerKit", logging.INFO, __file__, 1, "child diagnostic", (), None)
+    record.aurora_terminal = False
+    try:
+        assert terminal.filter(record) is False
+        assert file_handler.filter(record)
+        file_handler.handle(record)
+    finally:
+        terminal.close()
+        file_handler.close()
+
+    assert "child diagnostic" in logfile.read_text(encoding="utf-8")
 
 
 def test_runtime_configuration_updates_existing_and_future_utils_loggers() -> None:

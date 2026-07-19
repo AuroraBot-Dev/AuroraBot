@@ -48,7 +48,8 @@ Copy-Item .env.example .env
 uv run aurora
 ```
 
-This starts the cognitive loop, local Console, and Dashboard backend at `http://127.0.0.1:8000`. Run the UI with:
+The default Platform set comes from `config/preference.toml`. The repository defaults enable Console, Dashboard, and
+MCP. Run the separate Dashboard UI with:
 
 ```powershell
 Set-Location ..\AuroraChat
@@ -61,15 +62,15 @@ Open `http://localhost:5173`, register, and chat with another user or the built-
 Common entry points:
 
 ```powershell
-# Cognitive loop only, without Dashboard or Console
-uv run aurora --profile prod run
+# Cognitive loop only, without an external Platform
+uv run aurora --profile prod --headless
 
-# Debug API and local console together
+# Use the default Platform set from preference.toml
 uv run aurora
 
-# Dashboard/API or Console separately
-uv run aurora serve
-uv run aurora console
+# Explicit flags form the exact Platform set; they do not extend the defaults
+uv run aurora --dashboard --mcp
+uv run aurora --console
 
 # Project quality checks
 uv run aurora check
@@ -81,16 +82,15 @@ Console and Dashboard share slash commands. Use `/say hello`, `/pump`, `/task <t
 ## Layout
 
 ```text
-config/         TOML configuration and profile overrides
-aurora/         Process CLI, runtime modes, and unified lifecycle
+config/         Core TOML, Platform preferences, domain configuration, and profile overrides
+aurora/         Process CLI, Platform composition, and unified lifecycle
 docs/rfc/       Normative architecture and public contracts
 src/contracts/  Configuration, AMP, Agent, model, and memory contracts
 src/kernel/     Tasks, Agents, mailboxes, Activities, causality, and SQLite runtime state
 src/agents/     Homogeneous Agent handlers and built-in delegation capabilities
 src/ai/         Model roles, routing, native tools/Responses, and usage records
-src/localhost/  Local chat, scheduler, console, and application use cases
-src/dashboard/  Dashboard HTTP/WebSocket and debug route adapters
-src/platform/   Console, Dashboard, and MCP adapters, capability catalog, and AMP normalization
+src/localhost/  Unified ingress, effect dispatch, scheduler, and developer use cases
+src/platform/   Console, Dashboard, and MCP protocols, persistence, and effect adapters
 src/apps/       Built-in native AMP-MCP applications
 src/sandbox/    Independent sandbox components; not enabled by the current Agent runtime
 src/utils/      Shared utilities with no upper-layer dependencies
@@ -106,6 +106,7 @@ runtime state uses SQLite WAL, structural configuration uses TOML, and secrets c
 - [RFC 0001: Architecture baseline](docs/rfc/0001-architecture.md)
 - [RFC 0012: Homogeneous multi-Agent durable runtime](docs/rfc/0012-homogeneous-agent-runtime.md)
 - [RFC 0013: Unified command routing and Aurora process entry](docs/rfc/0013-unified-command-routing-and-entry.md)
+- [RFC 0014: Parallel Platform composition and preferences](docs/rfc/0014-parallel-platform-composition-and-preferences.md)
 - [RFC 0010: Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
 - [RFC 0011: Current project baseline](docs/rfc/0011-current-project-baseline.md)
 - [Contributing guide](docs/CONTRIBUTING.en.md)
