@@ -2,65 +2,95 @@
 
 [English](CONTRIBUTING.en.md) | [日本語](CONTRIBUTING.ja.md)
 
-感谢你参与 AuroraBot。项目使用 RFC 固化架构决策，并要求代码、配置、测试和对外描述保持一致。
+AuroraBot 希望探索的不只是“如何接入一个模型”，而是一个 Agent 如何持续工作、可靠行动，并让人理解她为什么这样做。
+无论你带来一个缺陷修复、一段更自然的介绍、一个 MCP 应用，还是一项运行时改进，都欢迎参与。
 
-## 开始之前
+## 找到适合你的入口
+
+- **第一次贡献**：修正文档、补充测试，或选择边界清晰的小问题。
+- **应用开发者**：从内建 Clock 应用出发，为 AuroraBot 接入新的 MCP 能力。
+- **运行时开发者**：改进 Agent、Kernel、模型网关、Platform 或本地交互体验。
+- **设计参与者**：对公共契约和模块边界提出 RFC，并通过可执行验收标准推动讨论。
+
+如果还不确定从哪里开始，可以先在 Discussion 或 Issue 中描述你希望改善的使用体验。
+
+## 准备开发环境
 
 需要 Python 3.12、Git 和 [uv](https://docs.astral.sh/uv/)。
 
 ```powershell
-git clone https://github.com/AuroraBot-Tech/AuroraBot.git
+git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 Set-Location AuroraBot
 uv sync --group dev
 Copy-Item .env.example .env
+
+# 需要实际运行模型时，在 .env 中填写密钥并显式加载
+uv run --env-file .env aurora --console --mcp
 ```
 
-密钥只写入本地 `.env` 或进程环境，禁止提交密钥、真实对话、模型 continuation、工作区事件或运行日志。
+仅运行测试和静态检查不需要真实模型密钥。密钥只写入本地 `.env` 或进程环境；不要提交密钥、真实对话、模型
+continuation、工作区事件、上传文件或运行日志。
 
-## 设计流程
+## 在改动之前
 
-- `docs/rfc/` 是架构与公共契约的唯一基准。
-- 影响模块边界、AMP/Kernel 事件、配置、扩展协议或模型调用契约的改动，先更新或新增 RFC。
-- 小型缺陷修复、测试补充和不改变语义的重构，可以直接提交代码与验证结果。
-- 文档涉及公共行为时，同一提交内同步更新中文、英文和日文入口。
+AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `docs/rfc/` 中的 RFC：
 
-## 模块边界
+- 模块职责或依赖方向；
+- AMP、Task、Agent、Activity 或效果事件契约；
+- TOML 配置、扩展协议或模型调用契约；
+- 会改变平台组合、进程入口或持久化语义的行为。
 
-- Kernel 管理事件、Task/Agent 状态、邮箱、Activity 和因果，不决定认知内容，也不执行平台效果。
-- Agent handler 只读取 `AgentContext` 并返回无副作用的 `AgentDecision`。
-- Platform 归一化 AMP 输入并执行 `effect.requested`，结果必须作为新事件回到 Kernel。
-- `localhost` 承担本地业务用例；`dashboard` 只做路由/API 适配。
-- `utils` 不得依赖任何上层包；共享日志必须通过 `src.utils.log_utils.get_logger()` 获取。
+小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、
+英文和日文入口。
 
-## 分支与 Pull Request
+当前运行时以 [RFC 0012](rfc/0012-homogeneous-agent-runtime.md) 为准；平台组合、偏好配置和入口以
+[RFC 0014](rfc/0014-parallel-platform-composition-and-preferences.md) 为准。更早的 RFC 只在未被后续决策取代的范围内有效。
 
-1. 从 `dev` 创建短生命周期分支，推荐使用 `feat/`、`fix/` 或 `refact/` 前缀。
-2. 每个 PR 聚焦一个可审查目标，补充或更新对应测试和文档。
-3. PR 合并目标为 `dev`，说明行为变化、验证命令、已知边界以及相关 RFC/Issue。
-4. CI 与评审通过后合并，并删除已完成分支。
+## 保持闭环完整
+
+贡献代码时，请守住几条能让 AuroraBot 可靠工作的边界：
+
+- Agent handler 读取 `AgentContext` 并返回 `AgentDecision`，不直接调用 Provider 或平台 Client。
+- 外部效果由 Platform 执行，并把 outcome 作为新事件送回运行时；模型普通文本不是效果。
+- Kernel 管理事件、状态、邮箱、Activity 和因果记录，不决定具体的认知内容。
+- 结构配置继续使用 TOML，密钥继续只来自环境变量。
+- 共享日志通过 `src.utils.log_utils.get_logger()` 获取，不记录完整提示词、continuation 或敏感载荷。
+
+更完整的维护者边界见仓库根目录 `AGENTS.md`。
+
+## 提交你的改进
+
+1. 从 `dev` 创建短生命周期分支，推荐 `feat/`、`fix/` 或 `refact/` 前缀。
+2. 让每个 Pull Request 聚焦一个可审查目标，并补充对应测试和文档。
+3. 合并目标设为 `dev`，说明使用体验或行为变化、验证命令、已知边界和相关 RFC/Issue。
+4. 等待 CI 与评审通过后合并，并删除已经完成的分支。
 
 ## 验证
 
-```powershell
-# 项目统一检查入口
-uv run aurora check
+提交前运行统一检查：
 
-# 按需单独执行
+```powershell
+uv run aurora check
+```
+
+需要缩小范围时，可以分别运行：
+
+```powershell
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 ```
 
-测试必须离线可重复。模型、时钟和 MCP 使用 fake；测试不得消耗真实额度或依赖公网服务。缺陷修复应先覆盖失败路径，
-事件与效果测试还需验证事务边界、幂等性和因果父子关系。
+测试必须离线、确定且可重复。模型、时钟和 MCP 使用 fake，不消耗真实额度或依赖公网服务。缺陷修复应覆盖原始失败路径；
+事件与效果测试还应验证事务边界、幂等性和因果父子关系。
 
-## 提交前检查
+## 提交前自查
 
-- 没有绕过 Kernel/Platform 边界，也没有将 Provider 私有对象写入工作区。
-- 日志包含定位所需的稳定标识，但不包含密钥、完整提示词、continuation 或敏感载荷。
-- 配置仍以 TOML 为结构来源，密钥仍只由环境变量提供。
-- README、模块文档、配置样例和 RFC 没有互相矛盾。
-- 新行为有测试，且 `uv run aurora check` 通过。
+- 使用者能从文档或测试看懂改动带来的行为差异。
+- 新行为没有绕过 Agent、Kernel 和 Platform 之间的闭环。
+- 配置、README、模块文档、测试和 RFC 没有互相矛盾。
+- 日志和测试夹具不包含真实密钥、会话或私人数据。
+- `uv run aurora check` 已通过，或 Pull Request 清楚解释了未运行的部分。
 
 提交贡献即表示你同意遵守项目的[社区行为准则](../CODE_OF_CONDUCT.md)。

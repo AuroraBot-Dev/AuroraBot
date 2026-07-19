@@ -1,117 +1,132 @@
-# AuroraBot
+<p align="center">
+  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+</p>
+
+<h1 align="center">AuroraBot</h1>
 
 <p align="center">
   <a href="README.md">中文</a> | <a href="README.en.md">English</a> | <b>日本語</b>
 </p>
 
-AuroraBot は、因果イベント、同構 Agent、能動的なリズムを中心とする自律エージェント・フレームワークです。
-環境入力、モデル呼び出し、能力の実行、実行結果を監査可能な記録として残すため、Task を非同期に停止し、
-確実に再開し、明示的に終了できます。
+<p align="center">
+  <em>能動的なリズムで動き続け、すべての行動の経緯をたどれる自律エージェント・フレームワーク。</em>
+</p>
 
-## 認知ループ
+<p align="center">因果イベント · 同構 Agent · 能動的なリズム</p>
 
-```text
-外部 AMP イベント / system.tick
-  → Kernel が Task と root Gate Agent を作成
-  → Agent が model Activity を要求、または有界な並列 child Agent に委任
-  → 各 child Agent が親へ完了報告し、親 Agent が直ちに再開
-  → 通常 effect は許可済み Agent、terminal effect は root Agent のみが要求
-  → Platform receipt が要求元 Agent の mailbox message として戻る
-```
+<p align="center">
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-AuroraBot-181717?logo=github" alt="GitHub" /></a>
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
+  <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
+</p>
 
-モデルが生成したテキスト自体は外部効果ではありません。宣言済みの Platform 能力だけが効果を発生させ、モデル呼び出し、
-ツール呼び出し、実行結果、予算変更、終了理由は一つの因果連鎖に記録されます。外部入力または自律 tick ごとに独立した
-Task を作成します。監督ツリー全体で model、tool、時間の budget を共有し、Runtime は全 Agent に読み取り専用の
-global Brain Context を投影します。長期記憶は現在、任意の Memory Agent contract のみを公開します。
+## AuroraBot とは
 
-外部入力がない場合、永続 scheduler が予算内で `system.tick` を生成します。沈黙が続くと間隔は 30 秒から 30 分まで
-段階的に延びます。外部入力は runtime を即時に起動し、対話 Task は自律 Task より優先されます。
+AuroraBot は、開発者向けのオープンソース自律エージェント・フレームワークです。エージェントを独立した問答の
+繰り返しとして扱うのではなく、環境の変化、モデルの判断、能力の呼び出し、行動の結果を、停止・再開・振り返りが
+できる一続きの経験として扱います。
 
-## 主な機能
+誰も話しかけていない時でも、AuroraBot は自分のリズムで目を覚まし、今行動すべきかを判断できます。仕事が複雑に
+なれば、同構 Agent が範囲を限定して協力します。外部世界へ作用する時は、宣言され、許可された能力だけが実際の
+効果を生みます。
 
-- AMP JSON boundary、SQLite WAL runtime state、atomic archive
-- 永続 mailbox、同構 Agent、監督ツリー、共有 budget、cancel propagation
-- Chat Completions tools と Responses agent に対応するモデル gateway
-- 不変 capability catalog、JSON Schema 引数検証、MCP application
-- scheduler、Kernel、model dispatcher、Platform receipt を一つにまとめる `AuroraRuntime`
-- 因果監査記録と分離された、文脈情報を持つ構造化ログ
+> 彼女は指示を待つのではなく、観察し、判断し、行動し続けます。
+
+## 何を作れるのか
+
+- **自ら目を覚ます Agent**：永続 scheduler が予算内で自律的な時刻を作り、外部メッセージが来れば対話 Task を
+  すぐに優先します。
+- **複雑な仕事の自然な分担**：Agent は簡単な依頼を直接処理し、必要なら限定された子 Task に委任して、結果が
+  戻ったところから再開します。
+- **現実世界につながる能力**：MCP application で時刻、リマインダー、その他の tool を追加し、利用前に権限と
+  引数を検証します。
+- **複数の出会い方**：ローカル Console、独立した Dashboard UI、または headless runtime から利用できます。
+- **理解できる行動履歴**：入力、モデル呼び出し、tool request、receipt、終了理由が一つの因果記録につながります。
+
+このリポジトリには、時刻、アラーム、タイマーを扱う Clock MCP application が含まれます。すぐ使える能力であると
+同時に、新しい application を追加するための最小例でもあります。
+
+## 一つの体験から見る仕組み
+
+「午後7時に会議を知らせて」と話した時、AuroraBot はモデルの文章を実行済みの行動として扱いません。
+
+1. メッセージが環境イベントになり、独立した Task を起動します。
+2. root Agent が依頼を理解し、許可済みの Clock 能力を選びます。
+3. Clock が構造化された receipt を返し、リマインダーが実際に設定されたことを確認します。
+4. 時刻になると Clock が新しい環境イベントを作り、AuroraBot を再び起動します。
+5. AuroraBot が現在の Platform を通してリマインダーを届けます。
+
+このループが、AuroraBot と単純な「入力からテキストを返す」ラッパーとの違いです。モデルが判断し、runtime が
+行動を確実に発生させます。
 
 ## クイックスタート
 
-Python 3.12 と [uv](https://docs.astral.sh/uv/) が必要です。
+Python 3.12、Git、[uv](https://docs.astral.sh/uv/) が必要です。現在はソースからの実行をサポートしています。
 
 ```powershell
-uv sync --group dev
+git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+Set-Location AuroraBot
+uv sync --no-dev
 Copy-Item .env.example .env
-# 設定した Provider に必要な API キーを .env に追加
-uv run aurora
+
+# 既定設定に必要な DEEPSEEK_API_KEY を .env に追加
+uv run --no-dev --env-file .env aurora --console --mcp
 ```
 
-既定の Platform 構成は `config/preference.toml` から読み込まれます。リポジトリの既定値では Console、Dashboard、
-MCP が起動します。
+起動後はそのままメッセージを入力できます。`/help` で command を確認し、`/status` で状態を表示できます。
+
+### 実行方法を選ぶ
 
 ```powershell
-Set-Location ..\AuroraChat
-pnpm install
-pnpm run dev
+# config/preference.toml を使用：既定では Console、Dashboard backend、MCP
+uv run --no-dev --env-file .env aurora
+
+# ローカル Console のみ起動
+uv run --no-dev --env-file .env aurora --console
+
+# 外部 Platform なしで Kernel と能動的なリズムを実行
+uv run --no-dev --env-file .env aurora --headless
 ```
 
-`http://localhost:5173` を開き、登録後に通常ユーザーまたは組み込み AuroraBot と会話できます。
+`--console`、`--dashboard`、`--mcp` のいずれかを指定すると、それらが正確な Platform 集合になり、既定値には
+追加されません。Dashboard UI は別プロジェクトです。このリポジトリにはローカル backend と chat bridge があり、
+browser UI は含まれません。
 
-主なエントリポイント：
+## 自分の Agent にする
 
-```powershell
-# 外部 Platform なしで認知ループのみ実行
-uv run aurora --profile prod --headless
+よく使うカスタマイズ項目は、役割ごとに分かれた設定ファイルにあります。
 
-# preference.toml の既定 Platform 構成を使用
-uv run aurora
+| 変更したいもの | 最初に見る場所 |
+| --- | --- |
+| persona、話し方、会話の境界 | `config/prompts/SOUL.md` |
+| model role と Provider | `config/aurora.toml` |
+| 既定で起動する Platform | `config/preference.toml` |
+| Agent の model、能力、委任範囲 | `config/agents.toml` |
+| ローカルまたはリモート MCP application | `config/apps.toml` |
 
-# 明示フラグは既定値に追加されず、正確な Platform 集合を構成
-uv run aurora --dashboard --mcp
-uv run aurora --console
+構造設定には TOML を使い、secret は環境変数からのみ読み取ります。拡張 application が Kernel に直接触れる必要は
+ありません。[拡張ガイド](extensions/README.md)と組み込みの
+[Clock application](src/apps/aurora-app-clock/README.md)から始められます。
 
-# プロジェクト品質チェック
-uv run aurora check
-```
+## 現在の段階
 
-Console と Dashboard は slash command を共有します。`/say`、`/pump`、`/task`、`/agent`、`/status` を利用でき、
-`/log off` は file log を維持したまま terminal log を停止します。
+AuroraBot `0.4` は、ローカルでの体験、runtime の研究、拡張開発を目的とした developer preview です。組み込みの
+長期記憶、添付ファイル理解、Agent sandbox tool、本番向け multi-tenant 保証はまだ提供していません。Dashboard の
+debug endpoint もローカルマシンの境界内だけで利用してください。
 
-## ディレクトリ
+未完成の roadmap を現在の能力として見せることはしません。現在の公開動作は、accepted RFC とテストが定義します。
 
-```text
-config/         core TOML、Platform preference、domain 設定、profile override
-aurora/         process CLI、Platform composition、統一 lifecycle
-docs/rfc/       規範的な architecture と公開 contract
-src/contracts/  設定、AMP、Agent、model、memory contract
-src/kernel/     Task、Agent、mailbox、Activity、因果、SQLite runtime state
-src/agents/     同構 Agent handler と組み込み委任能力
-src/ai/         モデル role、routing、native tools/Responses、usage 記録
-src/localhost/  統一 ingress、effect dispatch、scheduler、developer use case
-src/platform/   Console、Dashboard、MCP の protocol、persistence、effect adapter
-src/apps/       組み込み native AMP-MCP application
-src/sandbox/    独立 sandbox component。現在の Agent runtime では無効
-src/utils/      上位 layer に依存しない共通 utility
-tests/          contract、integration、regression test
-```
+## さらに読む
 
-Kernel workspace は `data/kernel/{inbox,process,archive}` に固定されています。外部 boundary と archive は JSON、
-runtime state は SQLite WAL、構造設定は TOML、secret は環境変数からのみ供給します。
+- [コントリビューションガイド](docs/CONTRIBUTING.ja.md)：開発環境を準備して改善を提出する
+- [AuroraBot の拡張](extensions/README.md)：MCP application と Agent profile を接続する
+- [モデル gateway](src/ai/README.md)：model role、能力、endpoint を理解する
+- [RFC 読み方ガイド](docs/rfc/README.md)：現在有効な設計判断を確認する
+- [ログ規約](LOGGING.md)：diagnostics、privacy、audit の境界
+- [行動規範](CODE_OF_CONDUCT.md)：歓迎されるオープンソース・コミュニティを維持する
 
-## ドキュメント
+## オープンソース
 
-- [RFC 一覧](docs/rfc/README.md)
-- [RFC 0001：architecture baseline](docs/rfc/0001-architecture.md)
-- [RFC 0012：同構 multi-Agent durable runtime](docs/rfc/0012-homogeneous-agent-runtime.md)
-- [RFC 0013：統一 command routing と Aurora process entry](docs/rfc/0013-unified-command-routing-and-entry.md)
-- [RFC 0014：並列 Platform composition と preference](docs/rfc/0014-parallel-platform-composition-and-preferences.md)
-- [RFC 0010：Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
-- [RFC 0011：current project baseline](docs/rfc/0011-current-project-baseline.md)
-- [コントリビューションガイド](docs/CONTRIBUTING.ja.md)
-- [ログ規約](LOGGING.md)
-- [行動規範](CODE_OF_CONDUCT.md)
-
-## ライセンス
-
-[Apache License 2.0](LICENSE) のもとで公開されています。
+AuroraBot は [Apache License 2.0](LICENSE) で公開されています。優れた Agent framework は、すべての人のためにあると
+私たちは考えています。

@@ -1,7 +1,7 @@
 [project]
 name = "AuroraBot"
 version = "0.4.0"
-description = "AuroraBot 是一个新一代的内驱式、自主决策的智能体框架。"
+description = "拥有主动节律、可持续工作且行动可追溯的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
