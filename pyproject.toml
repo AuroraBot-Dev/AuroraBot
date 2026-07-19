@@ -19,6 +19,7 @@ dependencies = [
     "uvicorn>=0.34,<1",
     "jsonschema>=4.23,<5",
     "python-multipart>=0.0.9",
+    "prompt-toolkit>=3.0,<4",
 ]
 
 [project.scripts]
@@ -119,13 +120,15 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 "src/contracts/configuration*.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003", "TRY003"]
 "src/kernel/runtime.py" = ["BLE001", "C901", "PLR0912", "PLR0913", "TC001", "TC003", "TRY003", "TRY004", "TRY301"]
 "src/kernel/store*.py" = ["C901", "PLR0912", "PLR0913", "PLR0915", "TC001", "TC003", "TRY003"]
-"src/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
-"src/localhost/chat/service.py" = ["C901", "PLR0912", "PLR2004", "TC001", "TRY003"]
-"src/localhost/chat/store.py" = ["PLR0913", "TC003", "TRY300"]
+"src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
+"src/platform/dashboard/service.py" = ["C901", "PLR0912", "PLR2004", "TC001", "TRY003"]
+"src/platform/dashboard/store.py" = ["PLR0913", "TC003", "TRY300"]
 "src/localhost/runtime.py" = ["BLE001", "TC003", "TRY003"]
+"src/localhost/effect_dispatcher.py" = ["BLE001", "TRY003"]
 "src/localhost/scheduler.py" = ["TRY300"]
 "src/agents/tool_agent.py" = ["C901", "PLR0911", "PLR2004", "TC001"]
 "src/platform/console/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
+"src/platform/console/shell.py" = ["C901", "PLR0912", "TC003"]
 "src/platform/dashboard/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
 "src/utils/jsonio.py" = ["TC003"]
 "src/ai/execution.py" = ["PLR0913", "TRY003"]

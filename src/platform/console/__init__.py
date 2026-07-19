@@ -1,5 +1,5 @@
 """Console Platform public API."""
 
-from src.platform.console.adapter import ConsolePlatform
+from src.platform.console.adapter import CONSOLE_SEND_CAPABILITY, CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 
-__all__ = ["ConsolePlatform"]
+__all__ = ["CONSOLE_SEND_CAPABILITY", "CONSOLE_SEND_DESCRIPTOR", "ConsolePlatform"]

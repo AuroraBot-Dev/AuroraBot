@@ -1,93 +1,63 @@
-"""Console Platform adapter for terminal text effects."""
+"""Console Platform executor for terminal text effects."""
 
 from __future__ import annotations
 
 import asyncio
-import logging
-import time
 
-from src.contracts.agent import EffectLease, PlatformRuntimePort
-from src.contracts.amp import AmpEnvelope, new_amp
-from src.platform.effects import PlatformRunResult
-from src.utils.log_utils import get_logger
+from src.contracts.agent import CapabilityDescriptor
+from src.localhost.ports import EffectExecutionRequest, EffectOutcome
 
-logger = get_logger("aurora.platform.console")
+CONSOLE_SEND_CAPABILITY = "org.aurora.console.send_message"
+CONSOLE_SEND_DESCRIPTOR = CapabilityDescriptor(
+    id=CONSOLE_SEND_CAPABILITY,
+    description="Send one text reply to the active Console session.",
+    parameters_schema={
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+        "additionalProperties": False,
+    },
+    result_mode="terminal",
+)
 
 
 class ConsolePlatform:
-    """Execute Console publication effects through the Kernel effect port."""
+    """Own Console output and execute effects without accessing Kernel state."""
 
-    def __init__(self, capabilities: frozenset[str] = frozenset()) -> None:
-        self.capabilities = capabilities
+    def __init__(self) -> None:
+        self._messages: list[str] = []
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
 
-    async def execute_pending_effects(self, kernel: PlatformRuntimePort) -> PlatformRunResult:
-        records = await kernel.claim_effect_requests(self.capabilities)
-        completed = await asyncio.gather(*(self._execute_one(kernel, record) for record in records))
-        return PlatformRunResult(sum(completed))
+    async def execute_effect(self, request: EffectExecutionRequest) -> EffectOutcome:
+        if request.capability != CONSOLE_SEND_CAPABILITY:
+            return EffectOutcome(
+                succeeded=False,
+                summary="Console message delivery failed",
+                error=f"unsupported Console capability: {request.capability}",
+            )
+        text = request.parameters.get("text")
+        if not isinstance(text, str):
+            return EffectOutcome(
+                succeeded=False,
+                summary="Console message delivery failed",
+                error="org.aurora.console.send_message requires string parameters.text",
+            )
+        self._messages.append(text)
+        self._queue.put_nowait(text)
+        return EffectOutcome(
+            succeeded=True,
+            summary="Console message delivered",
+            result={"text": text},
+        )
 
-    async def _execute_one(self, kernel: PlatformRuntimePort, record: EffectLease) -> int:
-        started = time.monotonic()
-        amp = AmpEnvelope.parse(record.amp)
-        data = amp.payload.data
-        request_id = data.get("request_id")
-        if not isinstance(request_id, str):
-            await kernel.complete_effect(record, error="effect.requested lacks request_id")
-            logger.error(
-                "invalid local effect request activity_id=%s task_id=%s reason=missing_request_id",
-                record.record_id,
-                record.task_id,
-            )
-            return 0
-        try:
-            parameters = data["parameters"]
-            if not isinstance(parameters, dict) or not isinstance(parameters.get("text"), str):
-                raise ValueError("org.aurora.console.send_message requires string parameters.text")
-            receipt = new_amp(
-                event_type="effect.succeeded",
-                session_id=amp.payload.session_id,
-                summary="Local test effect completed",
-                data={
-                    "request_id": request_id,
-                    "capability": "org.aurora.console.send_message",
-                    "result": {"text": parameters["text"]},
-                },
-                source_app="platform.local",
-                source_instance="test",
-            )
-            await kernel.submit_amp(receipt)
-            await kernel.complete_effect(record)
-            logger.info(
-                "local effect succeeded activity_id=%s task_id=%s request_id=%s capability=%s duration_ms=%.1f",
-                record.record_id,
-                record.task_id,
-                request_id,
-                data.get("capability"),
-                (time.monotonic() - started) * 1000,
-            )
-        except Exception as error:  # noqa: BLE001 - Platform failures must return an AMP receipt.
-            receipt = new_amp(
-                event_type="effect.failed",
-                session_id=amp.payload.session_id,
-                summary="Local test effect failed",
-                data={
-                    "request_id": request_id,
-                    "capability": data.get("capability"),
-                    "error": f"{type(error).__name__}: {error}",
-                },
-                source_app="platform.local",
-                source_instance="test",
-            )
-            await kernel.submit_amp(receipt)
-            await kernel.complete_effect(record, error=f"{type(error).__name__}: {error}")
-            logger.log(
-                logging.ERROR,
-                "local effect failed activity_id=%s task_id=%s request_id=%s "
-                "capability=%s duration_ms=%.1f error_type=%s",
-                record.record_id,
-                record.task_id,
-                request_id,
-                data.get("capability"),
-                (time.monotonic() - started) * 1000,
-                type(error).__name__,
-            )
-        return 1
+    async def next_message(self) -> str:
+        message = await self._queue.get()
+        self._messages.remove(message)
+        return message
+
+    def drain_messages(self) -> tuple[str, ...]:
+        messages = tuple(self._messages)
+        self._messages.clear()
+        while not self._queue.empty():
+            self._queue.get_nowait()
+        return messages

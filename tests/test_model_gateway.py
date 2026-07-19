@@ -22,7 +22,9 @@ from src.contracts.model import (
     ToolCall,
     ToolDefinition,
 )
+from src.localhost.ports import EffectExecutorBinding
 from src.localhost.runtime import AuroraRuntime
+from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from tests.test_events import valid_amp
 
 if TYPE_CHECKING:
@@ -293,9 +295,25 @@ class _ToolGateway:
         )
 
 
+def _runtime_with_console(project_root: Path) -> AuroraRuntime:
+    runtime = AuroraRuntime.create(project_root, executor_bindings=None)
+    console = ConsolePlatform()
+    runtime.bind_effect_executors(
+        (
+            EffectExecutorBinding(
+                CONSOLE_SEND_DESCRIPTOR,
+                console,
+                "platform.console",
+                "test",
+            ),
+        )
+    )
+    return runtime
+
+
 def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project_root: Path) -> None:
     async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
+        runtime = _runtime_with_console(project_root)
         gateway = _ToolGateway({"text": "model hello"})
         runtime.model_gateway = gateway
         await runtime.submit_amp(valid_amp())
@@ -309,7 +327,7 @@ def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project
         assert detail is not None
         assert any(event["type"] == "model.completed" for event in detail["events"])
         assert any(event["type"] == "agent.effect" for event in detail["events"])
-        assert second["platform_receipts_emitted"] == 1
+        assert second["effect_receipts_emitted"] == 1
         assert third["ingested_task_ids"]
         assert runtime.kernel.get_task(task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
         await runtime.shutdown()
@@ -319,7 +337,7 @@ def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project
 
 def test_invalid_effect_arguments_fail_agent_without_platform_call(project_root: Path) -> None:
     async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
+        runtime = _runtime_with_console(project_root)
         runtime.model_gateway = _ToolGateway({"text": 1})
         await runtime.submit_amp(valid_amp())
         await runtime.pump()
@@ -327,7 +345,7 @@ def test_invalid_effect_arguments_fail_agent_without_platform_call(project_root:
         await runtime._model_dispatch_task
         result = await runtime.pump()
         assert result["failed_message_ids"]
-        assert result["platform_receipts_emitted"] == 0
+        assert result["effect_receipts_emitted"] == 0
         await runtime.shutdown()
 
     asyncio.run(scenario())

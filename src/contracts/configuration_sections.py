@@ -1,14 +1,12 @@
-"""Parsers for independently declared Agent, Platform and Dashboard sections."""
+"""Parsers for independently declared Agent, MCP App and Dashboard sections."""
 
 from pathlib import Path
 from typing import Any, Literal, cast
 
 from src.contracts.configuration import (
-    AdapterConfig,
     AgentProfileConfig,
     AppConfig,
     AppToolConfig,
-    CapabilityConfig,
     ConfigurationError,
     DashboardBotConfig,
     DashboardConfig,
@@ -66,63 +64,6 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
     return tuple(agents)
 
 
-def _parse_adapters(data: dict[str, Any], root: Path) -> tuple[tuple[AdapterConfig, ...], tuple[AppConfig, ...]]:
-    _require_keys(data, {"adapter", "app"}, "apps.toml")
-    raw_adapters = data["adapter"]
-    if not isinstance(raw_adapters, list):
-        raise ConfigurationError("adapter must be an array")
-    adapters: list[AdapterConfig] = []
-    ids: set[str] = set()
-    for raw in raw_adapters:
-        if not isinstance(raw, dict):
-            raise ConfigurationError("adapter must be a table")
-        _require_keys(raw, {"id", "enabled", "implementation", "capability"}, "adapter")
-        if not isinstance(raw["enabled"], bool):
-            raise ConfigurationError("adapter.enabled must be boolean")
-        if not raw["enabled"]:
-            continue
-        adapter_id = _string(raw["id"], "adapter.id")
-        if adapter_id in ids:
-            raise ConfigurationError(f"duplicate adapter {adapter_id}")
-        ids.add(adapter_id)
-        capabilities = raw["capability"]
-        if not isinstance(capabilities, list):
-            raise ConfigurationError("adapter.capability must be an array")
-        parsed_capabilities: list[CapabilityConfig] = []
-        capability_ids: set[str] = set()
-        for capability in capabilities:
-            if not isinstance(capability, dict):
-                raise ConfigurationError("adapter.capability must be a table")
-            allowed_keys = {"id", "parameters_schema", "description", "result_mode"}
-            if set(capability) - allowed_keys or not {"id", "parameters_schema"} <= set(capability):
-                raise ConfigurationError("adapter.capability has unsupported or missing keys")
-            capability_id = _string(capability["id"], "adapter.capability.id")
-            schema = capability["parameters_schema"]
-            if capability_id in capability_ids or not isinstance(schema, dict):
-                raise ConfigurationError("adapter capability IDs must be unique and schemas must be tables")
-            capability_ids.add(capability_id)
-            result_mode = capability.get("result_mode", "resume")
-            description = capability.get("description", "")
-            if result_mode not in {"resume", "terminal"}:
-                raise ConfigurationError("adapter.capability.result_mode must be resume or terminal")
-            if not isinstance(description, str):
-                raise ConfigurationError("adapter.capability.description must be a string")
-            parsed_capabilities.append(
-                CapabilityConfig(
-                    capability_id,
-                    schema,
-                    description,
-                    cast("Literal['resume', 'terminal']", result_mode),
-                )
-            )
-        adapters.append(
-            AdapterConfig(
-                adapter_id, _string(raw["implementation"], "adapter.implementation"), tuple(parsed_capabilities)
-            )
-        )
-    return tuple(adapters), _parse_apps(data["app"], root)
-
-
 def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
     if not isinstance(raw_apps, list):
         raise ConfigurationError("app must be an array")
@@ -144,7 +85,10 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
         }
         if set(raw) - allowed or not {"package", "enabled", "transport", "timeout_seconds"} <= set(raw):
             raise ConfigurationError("app has unsupported or missing keys")
-        if not isinstance(raw["enabled"], bool) or not raw["enabled"]:
+        enabled = raw["enabled"]
+        if not isinstance(enabled, bool):
+            raise ConfigurationError("app.enabled must be boolean")
+        if not enabled:
             continue
         package = _string(raw["package"], "app.package")
         if package in packages or "." not in package:
@@ -155,7 +99,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
             raise ConfigurationError("app.transport must be stdio or streamable_http")
         parsed_tools = _parse_app_tools(raw.get("tool"), package)
         timeout = raw["timeout_seconds"]
-        if not isinstance(timeout, (int, float)) or timeout <= 0:
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
             raise ConfigurationError("app.timeout_seconds must be positive")
         command = raw.get("command", [])
         working_dir = raw.get("working_dir")
@@ -244,6 +188,11 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
     upload_dir = (root / _string(raw["upload_dir"], "dashboard.upload_dir")).resolve()
     if not database_path.is_relative_to(root) or not upload_dir.is_relative_to(root):
         raise ConfigurationError("dashboard data paths must stay within the project root")
+    kernel_workspace = (root / "data" / "kernel").resolve()
+    if database_path.is_relative_to(kernel_workspace) or upload_dir.is_relative_to(kernel_workspace):
+        raise ConfigurationError("dashboard data paths must not overlap the Kernel workspace")
+    if database_path.is_relative_to(upload_dir):
+        raise ConfigurationError("dashboard database must not be stored in the upload directory")
     return DashboardConfig(
         host,
         port,

@@ -10,10 +10,9 @@ _LAYER_RULES = {
     "utils": frozenset({"utils"}),
     "kernel": frozenset({"contracts", "utils", "kernel"}),
     "ai": frozenset({"contracts", "utils", "ai"}),
-    "platform": frozenset({"contracts", "utils", "platform"}),
+    "platform": frozenset({"contracts", "utils", "localhost", "platform"}),
     "agents": frozenset({"contracts", "utils", "agents"}),
-    "localhost": frozenset({"contracts", "utils", "kernel", "ai", "platform", "agents", "localhost"}),
-    "dashboard": frozenset({"contracts", "utils", "localhost", "dashboard"}),
+    "localhost": frozenset({"contracts", "utils", "kernel", "ai", "agents", "localhost"}),
 }
 _MAX_SOURCE_LINES = 500
 
@@ -110,7 +109,10 @@ def test_command_packages_are_strictly_one_file_per_canonical_command() -> None:
         "__init__"
     }
 
+    assert tuple(module.NAME for module in COMMAND_MODULES) == ("check",)
+    assert tuple(module.__name__ for module in COMMAND_MODULES) == ("aurora.commands.check",)
     assert cli_files == {module.NAME for module in COMMAND_MODULES}
     assert runtime_files == {spec.names[0].removeprefix("/") for spec in command_specs()}
+    assert not {"dev", "run", "serve", "console"} & cli_files
     assert not (project_root / "bot.py").exists()
     assert not (project_root / "scripts").exists()

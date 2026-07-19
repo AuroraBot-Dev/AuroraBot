@@ -1,4 +1,4 @@
-"""Framework-free chat application service and Bot causal bridge."""
+"""Dashboard chat service, persistence orchestration, and Bot causal bridge."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import asyncio
 import contextlib
 import os
 import sqlite3
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from src.localhost.chat.routing import (
+from src.localhost.command_types import CommandControl, CommandResult
+from src.platform.dashboard.routing import (
     PrivateMessageInput,
     command_reply_id,
     dashboard_input,
@@ -20,14 +20,12 @@ from src.localhost.chat.routing import (
     is_quit_command,
     message_matches,
 )
-from src.localhost.chat.security import hash_password, new_token, token_digest, verify_password
-from src.localhost.chat.store import ChatStore
-from src.localhost.command_types import CommandControl, CommandResult, RuntimeInput
+from src.platform.dashboard.security import hash_password, new_token, token_digest, verify_password
+from src.platform.dashboard.store import ChatStore
 
 if TYPE_CHECKING:
     from src.contracts.configuration import DashboardConfig
-
-InputDispatcher = Callable[[RuntimeInput], Awaitable[CommandResult]]
+    from src.localhost.ports import InteractiveInputPort
 
 _MESSAGE_TYPES = {"text", "image", "file", "audio", "video"}
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "text/")
@@ -47,15 +45,12 @@ class ChatError(RuntimeError):
 
 
 class ChatService:
-    def __init__(self, configuration: DashboardConfig) -> None:
+    def __init__(self, configuration: DashboardConfig, input_port: InteractiveInputPort) -> None:
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
-        self._input_dispatcher: InputDispatcher | None = None
+        self._input_port = input_port
         self._subscribers: dict[int, set[asyncio.Queue[dict[str, Any]]]] = {}
         self._bot_id: int | None = None
-
-    def bind_input_dispatcher(self, dispatcher: InputDispatcher) -> None:
-        self._input_dispatcher = dispatcher
 
     async def start(self) -> None:
         await asyncio.to_thread(self.store.initialize)
@@ -317,11 +312,8 @@ class ChatService:
         if not created and is_command and not is_conversation_command(parsed.content or ""):
             # The outcome of an interrupted command is unknown, so it cannot be replayed safely.
             return
-        if self._input_dispatcher is None:
-            await asyncio.to_thread(self.store.execute, "UPDATE messages SET status = 'failed' WHERE id = ?", (row_id,))
-            raise ChatError("BOT_UNAVAILABLE", "Bot is unavailable", 503)
         try:
-            routed = await self._input_dispatcher(dashboard_input(sender_id, parsed))
+            routed = await self._input_port.route_input(dashboard_input(sender_id, parsed))
             reply = await self._persist_command_reply(sender_id, parsed.client_message_id, routed)
             await asyncio.to_thread(
                 self.store.execute,

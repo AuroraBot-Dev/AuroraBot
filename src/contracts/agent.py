@@ -268,11 +268,10 @@ class EffectLease:
     activity_id: str
     task_id: str
     agent_id: str
-    amp: dict[str, Any]
-
-    @property
-    def record_id(self) -> str:
-        return self.activity_id
+    request_id: str
+    session_id: str
+    capability: str
+    parameters: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,18 +303,7 @@ class AgentHandler(Protocol):
 
 
 class EffectQueue(Protocol):
-    async def claim_effect_requests(self, capabilities: frozenset[str]) -> tuple[EffectLease, ...]: ...
-
-    async def complete_effect(self, lease: EffectLease, *, error: str | None = None) -> None: ...
-
-
-class PlatformRuntimePort(EffectQueue, Protocol):
-    @property
-    def capability_catalog(self) -> CapabilityCatalogSnapshot: ...
-
-    def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None: ...
-
-    async def submit_amp(self, amp: Any) -> None: ...
+    async def claim_effect_requests(self) -> tuple[EffectLease, ...]: ...
 
 
 class ModelActivityQueue(Protocol):

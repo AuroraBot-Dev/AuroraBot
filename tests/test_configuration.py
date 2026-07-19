@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
 
 from src.contracts.configuration import ConfigurationError, load_configuration
+from src.contracts.configuration_preferences import load_preference
 
 _DASHBOARD_PORT = 8000
 
@@ -20,9 +23,57 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     assert {agent.id for agent in configuration.agents} == {"builtin.gate", "builtin.worker"}
     assert configuration.runtime.agents.root_profile == "builtin.gate"
     assert configuration.runtime.agents.memory_agent_profile is None
-    assert configuration.adapters[0].capabilities[0].id == "org.aurora.console.send_message"
-    assert configuration.capability_definitions["org.aurora.console.send_message"].parameters_schema["type"] == "object"
+    assert configuration.apps == ()
     assert configuration.model_providers["test"].adapter == "litellm"
+    source_paths = {source.path for source in configuration.sources}
+    assert source_paths == {
+        project_root / "config" / "aurora.toml",
+        project_root / "config" / "agents.toml",
+        project_root / "config" / "apps.toml",
+    }
+    aurora_source = next(source for source in configuration.sources if source.path.name == "aurora.toml")
+    assert aurora_source.sha256 == hashlib.sha256(aurora_source.path.read_bytes()).hexdigest()
+    with pytest.raises(TypeError):
+        configuration.model_definitions["missing"] = configuration.model_definitions["fast"]  # type: ignore[index]
+
+
+def test_loads_independent_immutable_preference_snapshot(project_root: Path) -> None:
+    preference = load_preference(project_root)
+
+    assert preference.platform.console.enabled is True
+    assert preference.platform.console.terminal_logs is False
+    assert preference.platform.dashboard.enabled is True
+    assert preference.platform.dashboard.open_browser is False
+    assert preference.platform.mcp.enabled is True
+    assert preference.platform.mcp.terminal_logs is True
+    assert preference.source.path == project_root / "config" / "preference.toml"
+    assert preference.source.sha256 == hashlib.sha256(preference.source.path.read_bytes()).hexdigest()
+    assert not hasattr(preference, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        preference.platform.console.enabled = False
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ("terminal_logs = true", "terminal_logs = true\nextra = false", "unexpected"),
+        ("open_browser = false\n", "", "missing"),
+        ("terminal_logs = false", 'terminal_logs = "false"', "must be boolean"),
+    ],
+)
+def test_rejects_invalid_preference_schema(project_root: Path, old: str, new: str, message: str) -> None:
+    preference = project_root / "config" / "preference.toml"
+    preference.write_text(preference.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match=message):
+        load_preference(project_root)
+
+
+def test_preference_file_is_required(project_root: Path) -> None:
+    (project_root / "config" / "preference.toml").unlink()
+
+    with pytest.raises(ConfigurationError, match="does not exist"):
+        load_preference(project_root)
 
 
 def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
@@ -40,6 +91,12 @@ def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
         ("port = 8000", "port = 70000", "valid port"),
         ("max_upload_bytes = 67108864", "max_upload_bytes = 0", "positive integer"),
         ('database_path = "data/dashboard/chat.sqlite3"', 'database_path = "../chat.sqlite3"', "project root"),
+        (
+            'database_path = "data/dashboard/chat.sqlite3"',
+            'database_path = "data/kernel/process/runtime.sqlite3"',
+            "Kernel workspace",
+        ),
+        ('upload_dir = "data/dashboard/uploads"', 'upload_dir = "data/kernel/inbox"', "Kernel workspace"),
     ],
 )
 def test_rejects_invalid_dashboard_configuration(project_root: Path, old: str, new: str, message: str) -> None:
@@ -55,6 +112,17 @@ def test_rejects_unknown_profile_configuration(project_root: Path) -> None:
     config.write_text('[unknown]\nvalue = "not allowed"\n', encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match="unexpected"):
+        load_configuration(project_root)
+
+
+def test_kernel_workspace_is_fixed(project_root: Path) -> None:
+    config = project_root / "config" / "aurora.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace('workspace = "data/kernel"', 'workspace = "data/other"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match="must be data/kernel"):
         load_configuration(project_root)
 
 
@@ -88,10 +156,18 @@ def test_memory_agent_profile_is_optional_but_must_exist(project_root: Path) -> 
 def test_rejects_invalid_capability_result_mode(project_root: Path) -> None:
     apps = project_root / "config" / "apps.toml"
     apps.write_text(
-        apps.read_text(encoding="utf-8").replace(
-            'result_mode = "terminal"',
-            'result_mode = "sometimes"',
-        ),
+        """[[app]]
+package = "org.example.test"
+enabled = true
+transport = "stdio"
+working_dir = "."
+command = ["python", "server.py"]
+timeout_seconds = 30
+
+[[app.tool]]
+name = "org.example.test.run"
+result_mode = "sometimes"
+""",
         encoding="utf-8",
     )
 
@@ -157,7 +233,7 @@ def test_responses_role_requires_native_responses_capability(project_root: Path)
         load_configuration(project_root)
 
 
-def test_agent_cannot_request_unavailable_capability(project_root: Path) -> None:
+def test_agent_capabilities_are_authorization_limits_not_startup_availability(project_root: Path) -> None:
     agents = project_root / "config" / "agents.toml"
     agents.write_text(
         agents.read_text(encoding="utf-8").replace(
@@ -168,5 +244,40 @@ def test_agent_cannot_request_unavailable_capability(project_root: Path) -> None
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="unavailable capabilities"):
+    configuration = load_configuration(project_root)
+
+    assert "org.aurora.missing" in configuration.agents[0].capabilities
+
+
+def test_apps_rejects_removed_adapter_section(project_root: Path) -> None:
+    apps = project_root / "config" / "apps.toml"
+    apps.write_text("app = []\nadapter = []\n", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match=r"unexpected.*adapter"):
+        load_configuration(project_root)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (("enabled", '"false"', "must be boolean"), ("timeout_seconds", "true", "must be positive")),
+)
+def test_apps_rejects_invalid_scalar_types(project_root: Path, field: str, value: str, message: str) -> None:
+    apps = project_root / "config" / "apps.toml"
+    apps.write_text(
+        f"""[[app]]
+package = "org.example.test"
+enabled = {value if field == "enabled" else "true"}
+transport = "stdio"
+working_dir = "."
+command = ["python", "server.py"]
+timeout_seconds = {value if field == "timeout_seconds" else "30"}
+
+[[app.tool]]
+name = "org.example.test.run"
+result_mode = "resume"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match=message):
         load_configuration(project_root)

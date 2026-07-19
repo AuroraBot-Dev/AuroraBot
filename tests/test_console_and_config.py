@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING
 
 from src.contracts.configuration import load_configuration
 from src.localhost.runtime import AuroraRuntime
-from src.localhost.shell import run_console
+from src.platform.console import ConsolePlatform
+from src.platform.console.shell import run_console
+from src.utils.log_utils import configure_console_logging, configure_logging
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,16 +24,26 @@ def test_configuration_is_an_explicit_immutable_snapshot(project_root: Path) -> 
 
 def test_layered_console_submits_and_processes_a_message(project_root: Path) -> None:
     async def scenario() -> list[str]:
-        runtime = AuroraRuntime.create(project_root)
-        inputs = iter(("/say console hello", "/pump", "/quit"))
+        configuration = load_configuration(project_root)
+        configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
+        configure_console_logging(enabled=False)
+        runtime = AuroraRuntime.create(project_root, configuration=configuration)
+        console = ConsolePlatform()
+        inputs = iter(("/log", "/say console hello", "/pump", "/quit"))
         output: list[str] = []
         try:
-            await run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append)
+            await run_console(
+                runtime,
+                console,
+                readline=lambda _prompt: next(inputs),
+                output=output.append,
+            )
             return output
         finally:
             await runtime.shutdown()
 
     output = asyncio.run(scenario())
 
+    assert any('"enabled": false' in line for line in output)
     assert any("已投递消息 AMP" in line for line in output)
-    assert any("platform_receipts_emitted" in line for line in output)
+    assert any("effect_receipts_emitted" in line for line in output)

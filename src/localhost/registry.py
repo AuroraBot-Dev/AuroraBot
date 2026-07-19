@@ -25,6 +25,7 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
     """Return the command set shared by Console and Dashboard input."""
     from src.localhost.commands import (
         agent,
+        clear,
         event,
         log,
         pump,
@@ -54,6 +55,7 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
         ConsoleCommand(task.NAMES, task.USAGE, task.DESCRIPTION, task.configure, task.handle),
         ConsoleCommand(agent.NAMES, agent.USAGE, agent.DESCRIPTION, agent.configure, agent.handle),
         ConsoleCommand(log.NAMES, log.USAGE, log.DESCRIPTION, log.configure, log.handle),
+        ConsoleCommand(clear.NAMES, clear.USAGE, clear.DESCRIPTION, clear.configure, clear.handle),
         ConsoleCommand(
             quit_command.NAMES,
             quit_command.USAGE,

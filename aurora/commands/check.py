@@ -34,13 +34,13 @@ def execute(arguments: argparse.Namespace) -> int:
             flags.append("--unsafe-fixes")
         commands.extend(
             (
-                ["uv", "run", "ruff", "check", *flags, *_PATHS],
-                ["uv", "run", "ruff", "format", "--check", *_PATHS],
-                ["uv", "run", "pyright", "aurora/", "src/"],
+                ["uv", "run", "--no-sync", "ruff", "check", *flags, *_PATHS],
+                ["uv", "run", "--no-sync", "ruff", "format", "--check", *_PATHS],
+                ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
             )
         )
     if run_test:
-        commands.append(["uv", "run", "pytest", "-v", "--cov=src", "--cov=aurora"])
+        commands.append(["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"])
     failures = sum(run_process(command, arguments.root) != 0 for command in commands)
     if failures:
         console.print(f"\n[bold red]{failures} check(s) failed[/bold red]")

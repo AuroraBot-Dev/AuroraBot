@@ -200,14 +200,13 @@ def test_terminal_effect_receipt_completes_root_task_once(tmp_path: Path) -> Non
     async def scenario() -> None:
         await kernel.submit_amp(input_amp())
         await kernel.pump()
-        lease = (await kernel.claim_effect_requests(frozenset({"reply"})))[0]
-        effect = AmpEnvelope.parse(lease.amp)
+        lease = (await kernel.claim_effect_requests())[0]
         receipt = new_amp(
             event_type="effect.succeeded",
             session_id="session",
             summary="delivered",
             data={
-                "request_id": effect.payload.data["request_id"],
+                "request_id": lease.request_id,
                 "capability": "reply",
                 "result": {"ok": True},
             },
