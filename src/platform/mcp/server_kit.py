@@ -60,6 +60,7 @@ class ServerProcess:
     spec: MCPServerSpec
     process: asyncio.subprocess.Process
     health_task: asyncio.Task[None] | None = None
+    stderr_task: asyncio.Task[None] | None = None
 
 
 class MCPServerKit:
@@ -126,7 +127,7 @@ class MCPServerKit:
                 env={**os.environ, **spec.env},
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=None,
+                stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError as exc:
             msg = f"启动 Server {spec.key} 失败: 命令或临时目录不可用 {spec.command} — {exc}"
@@ -137,6 +138,10 @@ class MCPServerKit:
 
         server_proc = ServerProcess(spec=spec, process=process)
         self._processes[spec.key] = server_proc
+        server_proc.stderr_task = asyncio.create_task(
+            self._forward_stderr(spec.key, process),
+            name=f"mcp-stderr-{spec.key}",
+        )
 
         # 启动健康检查任务
         server_proc.health_task = asyncio.create_task(self._health_check_loop(spec.key, server_proc))
@@ -197,6 +202,9 @@ class MCPServerKit:
                     process.kill()
                 await process.wait()
 
+        if server_proc.stderr_task is not None:
+            await server_proc.stderr_task
+
         del self._processes[key]
         logger.info("MCP Server %s 已停止", key)
 
@@ -219,6 +227,16 @@ class MCPServerKit:
         return await self.start_one(spec)
 
     # ── 健康检查 ──
+
+    @staticmethod
+    async def _forward_stderr(key: str, process: asyncio.subprocess.Process) -> None:
+        """Drain child diagnostics through managed logging instead of the terminal."""
+        if process.stderr is None:
+            return
+        while chunk := await process.stderr.read(4096):
+            for message in chunk.decode(errors="replace").splitlines():
+                if message:
+                    logger.info("MCP Server stderr key=%s | %s", key, message)
 
     def health_report(self) -> dict[str, str]:
         """返回所有 Server 的健康状态。

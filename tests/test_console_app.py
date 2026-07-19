@@ -67,7 +67,7 @@ result_mode = "terminal"
             assert result["platform_receipts_emitted"] == 1
             inputs = iter(("/status", "/quit"))
             await run_console(runtime, readline=lambda _prompt: next(inputs), output=output.append)
-            assert "bot> 来自 bot 的消息" in output
+            assert "Bot> 来自 bot 的消息" in output
         finally:
             await runtime.shutdown()
 

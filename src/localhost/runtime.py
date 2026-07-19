@@ -31,7 +31,7 @@ from src.localhost.scheduler import CognitiveScheduler
 from src.platform.console import ConsolePlatform
 from src.platform.dashboard import DashboardPlatform
 from src.platform.mcp import MCPPlatform
-from src.utils.log_utils import configure_logging, get_logger
+from src.utils.log_utils import configure_console_logging, configure_logging, get_logger
 
 logger = get_logger("aurora.runtime")
 
@@ -74,9 +74,16 @@ class AuroraRuntime:
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
 
     @classmethod
-    def create(cls, root: Path, profile: str | None = None) -> "AuroraRuntime":
+    def create(
+        cls,
+        root: Path,
+        profile: str | None = None,
+        *,
+        console_logging: bool = True,
+    ) -> "AuroraRuntime":
         configuration = load_configuration(root, profile)
         configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
+        configure_console_logging(enabled=console_logging)
         profiles = tuple(
             AgentProfile(
                 id=item.id,

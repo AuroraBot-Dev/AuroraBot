@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.localhost.runtime import AuroraRuntime
+
+if TYPE_CHECKING:
+    import pytest
 
 
 class _ClockGateway:
@@ -33,7 +37,10 @@ class _ClockGateway:
         )
 
 
-def test_clock_mcp_activity_receipt_resumes_requesting_agent(project_root: Path) -> None:
+def test_clock_mcp_activity_receipt_resumes_requesting_agent(
+    project_root: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
     source_root = Path(__file__).parents[1]
     app_directory = (source_root / "src" / "apps" / "aurora-app-clock").as_posix()
     (project_root / "config" / "apps.toml").write_text(
@@ -79,7 +86,7 @@ result_mode = "resume"
     )
 
     async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
+        runtime = AuroraRuntime.create(project_root, console_logging=False)
         gateway = _ClockGateway()
         runtime.model_gateway = gateway
         try:
@@ -112,3 +119,7 @@ result_mode = "resume"
             await runtime.shutdown()
 
     asyncio.run(scenario())
+    captured = capfd.readouterr()
+    assert "Agent Kernel initialized" not in captured.err
+    assert "Processing request of type ListToolsRequest" not in captured.err
+    assert "Starting Clock MCP server" in (project_root / "logs" / "aurora.log").read_text(encoding="utf-8")

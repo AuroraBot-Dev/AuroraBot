@@ -18,7 +18,8 @@
 - 项目代码统一通过 `src.utils.log_utils.get_logger()` 获取 logger；入口通过
   `configure_logging()` 应用 TOML 中的日志级别，不得另行调用 `logging.basicConfig()`。
 - `/log [on|off] [--level LEVEL]` 只控制当前进程的终端 handler；文件日志继续按 TOML 级别记录，且运行时调整
-  不写回配置、不跨重启持久化。
+  不写回配置、不跨重启持久化。交互式 Console 在 Runtime 初始化前默认为 `/log off`，可用 `/log on` 恢复终端
+  日志；stdio MCP 子进程的 stderr 通过父进程 logger 记录，同样服从该终端开关。
 - 日志使用稳定的 `key=value` 上下文。适用时至少包含 `task_id`、`agent_id`、`message_id`，并补充
   `activity_id`、`model_role`、`capability`、`request_id`、`duration_ms`、`status` 或 `reason`。
 - `INFO` 记录生命周期和结果摘要，`DEBUG` 记录调度细节；循环空转、inbox 扫描和状态文件写入不得在

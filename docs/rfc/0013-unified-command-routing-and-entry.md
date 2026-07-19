@@ -27,7 +27,9 @@ stop event，并优雅停止整个进程。
 
 `/log [on|off] [--level LEVEL]` 只修改当前进程的终端 handler。关闭终端日志不关闭文件日志，文件级别始终来自
 启动时的 TOML 快照；终端开关和级别不写回配置、不跨重启持久化，并同时作用于现有、未来 Aurora logger 与
-Uvicorn 终端日志。
+Uvicorn 终端日志。交互式 Console 启动时默认执行等价于 `/log off` 的进程内设置，用户可用 `/log on` 恢复；
+该设置必须在 Runtime 初始化前生效。本地 stdio MCP 子进程的 stderr 经父进程受控 logger 写入诊断日志，不得绕过
+终端开关；不包含 Console 的运行模式仍使用 TOML 日志级别。
 
 ## 验收标准
 

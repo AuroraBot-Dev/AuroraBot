@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
-from src.utils.log_utils import get_logger
+from src.utils.log_utils import configure_console_logging, get_logger
 
 logger = get_logger("aurora.localhost.console")
 
@@ -33,6 +33,7 @@ async def run_console(
 ) -> None:
     """Route Console input without owning the shared Runtime lifecycle."""
     stop = stop_event or asyncio.Event()
+    configure_console_logging(enabled=False)
     output("AuroraBot local console; 输入 /help 查看命令。")
     reads: asyncio.Queue[_ReadResult] = asyncio.Queue()
     reader_closed = threading.Event()
@@ -92,7 +93,7 @@ def _start_reader(
     def worker() -> None:
         while not closed.is_set():
             try:
-                result = _ReadResult(readline("aurora> "))
+                result = _ReadResult(readline("Aurora> "))
             except (EOFError, KeyboardInterrupt, StopIteration):
                 result = _ReadResult(None, closed=True)
             if closed.is_set():
@@ -109,4 +110,4 @@ def _start_reader(
 
 async def _display_messages(runtime: AuroraRuntime, output: Callable[[str], None]) -> None:
     while True:
-        output(f"bot> {await runtime.next_console_message()}")
+        output(f"Bot> {await runtime.next_console_message()}")

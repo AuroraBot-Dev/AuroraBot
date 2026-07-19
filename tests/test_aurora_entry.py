@@ -34,8 +34,8 @@ def test_runtime_host_enters_loop_and_shuts_down_once(monkeypatch: pytest.Monkey
     runtime = FakeRuntime()
     captured: dict[str, object] = {}
 
-    def create(root: Path, profile: str | None) -> FakeRuntime:
-        captured.update(root=root, profile=profile)
+    def create(root: Path, profile: str | None, *, console_logging: bool) -> FakeRuntime:
+        captured.update(root=root, profile=profile, console_logging=console_logging)
         return runtime
 
     monkeypatch.setattr("aurora.runtime.AuroraRuntime.create", create)
@@ -43,7 +43,7 @@ def test_runtime_host_enters_loop_and_shuts_down_once(monkeypatch: pytest.Monkey
 
     asyncio.run(run_runtime(tmp_path, "dev", RUN, stop_event=stop))
 
-    assert captured == {"root": tmp_path.resolve(), "profile": "dev"}
+    assert captured == {"root": tmp_path.resolve(), "profile": "dev", "console_logging": True}
     assert runtime.received_stop is stop
     assert runtime.shutdown_calls == 1
 
@@ -68,7 +68,8 @@ def test_runtime_modes_start_only_selected_surfaces(
         async def serve(self) -> None:
             return None
 
-    def create(_root: Path, _profile: str | None) -> FakeRuntime:
+    def create(_root: Path, _profile: str | None, *, console_logging: bool) -> FakeRuntime:
+        calls["console_logging"] = int(console_logging)
         return runtime
 
     def make_server(_runtime: FakeRuntime) -> Server:
@@ -87,5 +88,9 @@ def test_runtime_modes_start_only_selected_surfaces(
 
     asyncio.run(run_runtime(tmp_path, None, mode, stop_event=stop))
 
-    assert calls == {"dashboard": dashboard_count, "console": console_count}
+    assert calls == {
+        "dashboard": dashboard_count,
+        "console": console_count,
+        "console_logging": int(not mode.console),
+    }
     assert runtime.shutdown_calls == 1

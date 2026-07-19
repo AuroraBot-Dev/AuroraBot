@@ -42,7 +42,7 @@ async def run_runtime(
 ) -> None:
     """Run one selected surface composition around exactly one Runtime."""
     resolved_root = await asyncio.to_thread(root.resolve)
-    runtime = AuroraRuntime.create(resolved_root, profile)
+    runtime = AuroraRuntime.create(resolved_root, profile, console_logging=not mode.console)
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
     installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
