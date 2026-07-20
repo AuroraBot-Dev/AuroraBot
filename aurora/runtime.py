@@ -121,7 +121,10 @@ async def _start_platforms(
     resources: AsyncExitStack,
 ) -> tuple[ConsolePlatform | None, uvicorn.Server | None]:
     console_platform = (
-        ConsolePlatform(runtime.configuration.root / "data" / "platform" / "console" / "runtime.sqlite3")
+        ConsolePlatform(
+            runtime.configuration.root / "data" / "platform" / "console" / "runtime.sqlite3",
+            reply_route_ttl_seconds=runtime.configuration.communication.reply_route_ttl_seconds,
+        )
         if "console" in selected
         else None
     )
@@ -244,7 +247,11 @@ def _task_failure(
 
 
 async def _create_dashboard(runtime: AuroraRuntime) -> tuple[DashboardPlatform, uvicorn.Server]:
-    chat = ChatService(runtime.configuration.dashboard, runtime)
+    chat = ChatService(
+        runtime.configuration.dashboard,
+        runtime,
+        reply_route_ttl_seconds=runtime.configuration.communication.reply_route_ttl_seconds,
+    )
     await chat.start()
     return DashboardPlatform(chat), _dashboard_server(chat, runtime)
 

@@ -11,11 +11,10 @@ if TYPE_CHECKING:
     import argparse
 
 NAME = "donk"
-_HELP = "pyproject.toml 版本管理（封装 donk CLI）"
 
 
 def register(subparsers: Any) -> None:
-    parser = subparsers.add_parser(NAME, help=_HELP)
+    parser = subparsers.add_parser(NAME, help="自动版本管理")
     sub = parser.add_subparsers(dest="donk_command", required=True)
     sub.add_parser("show", help="显示当前版本号")
     sub.add_parser("major", help="升级主版本号")
@@ -33,9 +32,9 @@ def execute(arguments: argparse.Namespace) -> int:
     version = _read_version(arguments.root)
     if subcommand == "show":
         if version:
-            console.print(f"[bold cyan]当前版本:[/bold cyan] [bold green]{version}[/bold green]")
+            console.print(f"[bold green]当前版本:[/bold green] [bold cyan]{version}[/bold cyan]")
     elif version:
-        console.print(f"[bold green]版本已更新为 [bold cyan]{version}[/bold cyan][/bold green]")
+        console.print(f"[bold green]版本已更新为:[/bold green] [bold cyan]{version}[/bold cyan]")
     return 0
 
 
