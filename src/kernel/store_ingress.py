@@ -31,6 +31,8 @@ class StoreIngressMixin(RuntimeStoreBase):
         root_profile: str,
         budget: TaskBudget,
         priority: int,
+        audience_ref: str = "system.local",
+        reply_grant: dict[str, str] | None = None,
     ) -> TaskState | None:
         now = utc_now()
         task_id = str(uuid4())
@@ -43,12 +45,16 @@ class StoreIngressMixin(RuntimeStoreBase):
             if duplicate is not None:
                 return None
             connection.execute(
-                "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
+                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
+                "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
+                "started_at, updated_at, termination_reason) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
                 (
                     task_id,
                     agent_id,
                     external_message_id,
                     session_id,
+                    audience_ref,
                     summary,
                     int(autonomous),
                     TaskStatus.ACTIVE,
@@ -59,6 +65,19 @@ class StoreIngressMixin(RuntimeStoreBase):
                     now,
                 ),
             )
+            if reply_grant is not None:
+                connection.execute(
+                    "INSERT INTO reply_grants (endpoint_id, route_ref, task_id, capability_id, audience_ref, "
+                    "operation, expires_at, status) VALUES (?, ?, ?, ?, ?, 'reply', ?, 'ACTIVE')",
+                    (
+                        reply_grant["endpoint_id"],
+                        reply_grant["route_ref"],
+                        task_id,
+                        reply_grant["capability_id"],
+                        audience_ref,
+                        reply_grant["expires_at"],
+                    ),
+                )
             connection.execute(
                 "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, 0, '{}', ?, ?, ?)",
                 (agent_id, task_id, root_profile, summary, AgentStatus.READY, now, now, summary),
@@ -208,7 +227,9 @@ class StoreIngressMixin(RuntimeStoreBase):
                 "AND busy.status = 'PROCESSING') "
                 "AND ((a.status = 'READY') "
                 "OR (a.status = 'WAITING_MODEL' AND m.type IN ('model.completed', 'model.failed')) "
-                "OR (a.status = 'WAITING_EFFECT' AND m.type IN ('effect.succeeded', 'effect.failed')) "
+                "OR (a.status = 'WAITING_EFFECT' AND m.type IN ("
+                "'effect.succeeded', 'effect.failed', 'publication.succeeded', "
+                "'publication.failed', 'publication.delivery_unknown')) "
                 "OR (a.status = 'WAITING_CHILDREN' AND m.type IN ('child.completed', 'child.failed'))) "
                 "ORDER BY m.priority DESC, m.created_at, m.message_id LIMIT 1",
                 (now,),

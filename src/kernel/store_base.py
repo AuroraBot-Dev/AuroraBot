@@ -21,7 +21,7 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
-from src.kernel.store_schema import _ACTIVE_ACTIVITY_INDEX, _SCHEMA, _SCHEMA_VERSION
+from src.kernel.store_schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V3, _SCHEMA, _SCHEMA_VERSION
 
 
 def utc_now() -> str:
@@ -64,10 +64,20 @@ class RuntimeStoreBase:
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, _SCHEMA_VERSION}:
+            elif int(row["version"]) not in {1, 2, _SCHEMA_VERSION}:
                 raise RuntimeError("unsupported Agent runtime database schema")
-            # Version 2 makes the single-active-turn rule durable instead of relying
-            # only on scheduler timing. Existing v1 stores can migrate in place.
+            version = int(row["version"]) if row is not None else _SCHEMA_VERSION
+            if version < _SCHEMA_VERSION:
+                task_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(tasks)")}
+                if "audience_ref" not in task_columns:
+                    connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'system.local'")
+                activity_sql = str(
+                    connection.execute(
+                        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'"
+                    ).fetchone()["sql"]
+                )
+                if "publication" not in activity_sql:
+                    connection.executescript(_ACTIVITIES_V3)
             connection.execute(_ACTIVE_ACTIVITY_INDEX)
             connection.execute("UPDATE schema_meta SET version = ?", (_SCHEMA_VERSION,))
             connection.commit()
@@ -82,7 +92,9 @@ class RuntimeStoreBase:
                 "UPDATE agents SET status = 'READY', updated_at = ? WHERE status = 'RUNNING'",
                 (now,),
             )
-            interrupted = connection.execute("SELECT * FROM activities WHERE status = 'PROCESSING'").fetchall()
+            interrupted = connection.execute(
+                "SELECT * FROM activities WHERE status = 'PROCESSING' AND kind != 'publication'"
+            ).fetchall()
             for row in interrupted:
                 connection.execute(
                     "UPDATE activities SET status = 'ERROR', lease_until = NULL, error = ?, updated_at = ? "
@@ -104,6 +116,11 @@ class RuntimeStoreBase:
                     priority=int(row["priority"]),
                     now=now,
                 )
+            connection.execute(
+                "UPDATE activities SET lease_until = NULL, updated_at = ? "
+                "WHERE status = 'PROCESSING' AND kind = 'publication'",
+                (now,),
+            )
 
     @staticmethod
     def _task(row: sqlite3.Row) -> TaskState:
@@ -112,6 +129,7 @@ class RuntimeStoreBase:
             root_agent_id=str(row["root_agent_id"]),
             root_message_id=str(row["root_message_id"]),
             session_id=str(row["session_id"]),
+            audience_ref=str(row["audience_ref"]),
             root_summary=str(row["root_summary"]),
             autonomous=bool(row["autonomous"]),
             status=TaskStatus(row["status"]),

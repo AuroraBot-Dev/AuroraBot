@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
@@ -21,19 +20,30 @@ from src.contracts.agent import (
     AgentHandler,
     AgentInstance,
     AgentLimits,
+    AgentProfile,
     BrainContextSnapshot,
     CapabilityCatalogSnapshot,
+    DestinationGrant,
     EffectLease,
     KernelConfiguration,
+    PublicationLease,
     TaskState,
 )
-from src.contracts.amp import AmpEnvelope, AmpValidationError
+from src.contracts.amp import AmpEnvelope
+from src.kernel.brain import build_brain_context
 from src.kernel.debug import agent_detail as build_agent_detail
 from src.kernel.debug import reject_active_legacy_workspace
 from src.kernel.debug import task_detail as build_task_detail
-from src.kernel.store import SQLiteRuntimeStore, utc_now
+from src.kernel.publication import (
+    authorize_publication,
+    effective_descriptors,
+    publication_lease,
+    validate_destination_grants,
+)
+from src.kernel.runtime_ingress import ingest_ready as ingest_runtime_ready
+from src.kernel.store import SQLiteRuntimeStore
 from src.utils.log_utils import get_logger
-from src.utils.serialization import atomic_write_json, read_json
+from src.utils.serialization import atomic_write_json
 
 logger = get_logger("aurora.kernel")
 
@@ -51,7 +61,15 @@ class PumpResult:
 class AgentKernel:
     """Owns durable Task/Agent state while delegating all cognition and external I/O."""
 
-    def __init__(self, configuration: KernelConfiguration, handlers: dict[str, AgentHandler]) -> None:
+    def __init__(
+        self,
+        configuration: KernelConfiguration,
+        handlers: dict[str, AgentHandler],
+        *,
+        destination_grants: tuple[DestinationGrant, ...] = (),
+        reply_route_ttl_seconds: float = 3600.0,
+        publication_configuration_hash: str = "",
+    ) -> None:
         self.configuration = configuration
         self._profiles = {profile.id: profile for profile in configuration.profiles}
         if set(self._profiles) != set(handlers):
@@ -79,6 +97,15 @@ class AgentKernel:
         self.store = SQLiteRuntimeStore(self._process / "runtime.sqlite3")
         self._store_executor.submit(self.store.initialize).result()
         self._capability_catalog: CapabilityCatalogSnapshot | None = None
+        self._destination_grants = validate_destination_grants(destination_grants)
+        self._destination_grants_installed = bool(destination_grants)
+        if reply_route_ttl_seconds <= 0:
+            raise ValueError("reply_route_ttl_seconds must be positive")
+        self._reply_route_ttl_seconds = reply_route_ttl_seconds
+        grant_hashes = {grant.configuration_hash for grant in destination_grants}
+        self._publication_configuration_hash = publication_configuration_hash or (
+            next(iter(grant_hashes)) if len(grant_hashes) == 1 else ""
+        )
         self._lock = asyncio.Lock()
         logger.info(
             "Agent Kernel initialized workspace=%s profiles=%d active_tasks=%d",
@@ -100,6 +127,12 @@ class AgentKernel:
             raise RuntimeError("capability catalog is already installed")
         self._capability_catalog = catalog
 
+    def install_destination_grants(self, grants: tuple[DestinationGrant, ...]) -> None:
+        if self._destination_grants_installed:
+            raise RuntimeError("destination grants are already installed")
+        self._destination_grants = validate_destination_grants(grants)
+        self._destination_grants_installed = True
+
     async def submit_amp(self, amp: AmpEnvelope) -> None:
         async with self._lock:
             await self._blocking_call(
@@ -108,115 +141,17 @@ class AgentKernel:
                 amp.to_dict(),
             )
 
-    def _archive_inbox(self, source: Path, category: str) -> None:
-        destination_dir = self._archive / "inbox" / category
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        destination = destination_dir / source.name
-        if destination.exists():
-            destination = destination_dir / f"{source.stem}-{os.urandom(4).hex()}{source.suffix}"
-        source.replace(destination)
-
     def ingest_ready(self) -> tuple[str, ...]:
-        ingested: list[str] = []
-        for path in sorted(self._inbox.glob("*.json")):
-            try:
-                amp = AmpEnvelope.parse(read_json(path))
-            except (OSError, ValueError, TypeError, AmpValidationError) as error:
-                logger.warning("AMP ingress rejected file=%s reason=%s", path.name, error)
-                self._archive_inbox(path, "rejected")
-                continue
-            data = amp.payload.data
-            if amp.payload.type in {"effect.succeeded", "effect.failed"}:
-                request_id = data.get("request_id")
-                matched = False
-                message_id = None
-                if isinstance(request_id, str):
-                    matched, message_id = self.store.ingest_activity_receipt(
-                        external_message_id=amp.header.message_id,
-                        request_id=request_id,
-                        event_type=amp.payload.type,
-                        summary=amp.payload.summary,
-                        payload=data,
-                    )
-                if not matched:
-                    self.store.add_situation(
-                        amp.header.source["app"],
-                        amp.payload.type,
-                        amp.payload.summary,
-                        amp.to_dict(),
-                        100,
-                        self.limits.ambient_ttl_seconds,
-                    )
-                else:
-                    ingested.append(message_id or amp.header.message_id)
-                self._archive_inbox(path, "accepted")
-                continue
-            if data.get("ambient") is True:
-                situation_id = self.store.add_situation(
-                    amp.header.source["app"],
-                    amp.payload.type,
-                    amp.payload.summary,
-                    amp.to_dict(),
-                    10 if amp.payload.type == "system.tick" else 100,
-                    self.limits.ambient_ttl_seconds,
-                )
-                ingested.append(situation_id)
-                self._archive_inbox(path, "accepted")
-                continue
-            autonomous = amp.payload.type == "system.tick"
-            budget = self.configuration.autonomous_budget if autonomous else self.configuration.interactive_budget
-            task = self.store.create_task(
-                external_message_id=amp.header.message_id,
-                session_id=amp.payload.session_id,
-                summary=amp.payload.summary,
-                payload={"amp": amp.to_dict()},
-                autonomous=autonomous,
-                root_profile=self.limits.root_profile,
-                budget=budget,
-                priority=10 if autonomous else 100,
-            )
-            self._archive_inbox(path, "accepted" if task is not None else "duplicate")
-            if task is not None:
-                ingested.append(task.task_id)
-        return tuple(ingested)
+        return ingest_runtime_ready(self)
 
-    def brain_context(self) -> BrainContextSnapshot:
-        tasks = self.store.tasks(active_only=True)
-        agents = self.store.agents(active_only=True)
-        latest_activity = {}
-        for task in tasks:
-            events = self.store.events_for_task(task.task_id)
-            latest_activity[task.task_id] = events[-1]["summary"] if events else task.root_summary
-        return BrainContextSnapshot(
-            persona={"content": self.configuration.soul_content, "hash": self.configuration.soul_hash},
-            active_tasks=tuple(
-                {
-                    "task_id": task.task_id,
-                    "session_id": task.session_id,
-                    "summary": task.root_summary,
-                    "latest_activity": latest_activity[task.task_id],
-                    "status": task.status,
-                    "model_calls": task.model_calls,
-                    "tool_calls": task.tool_calls,
-                    "updated_at": task.updated_at,
-                }
-                for task in tasks
-            ),
-            active_agents=tuple(
-                {
-                    "agent_id": agent.agent_id,
-                    "task_id": agent.task_id,
-                    "parent_agent_id": agent.parent_agent_id,
-                    "profile_id": agent.profile_id,
-                    "assignment": agent.assignment,
-                    "status": agent.status,
-                    "last_summary": agent.last_summary,
-                    "updated_at": agent.updated_at,
-                }
-                for agent in agents
-            ),
-            ambient_situations=self.store.situations(),
-            generated_at=utc_now(),
+    def brain_context(
+        self, audience_ref: str = "system.local", current_task_id: str | None = None
+    ) -> BrainContextSnapshot:
+        return build_brain_context(
+            self.store,
+            self.configuration,
+            audience_ref=audience_ref,
+            current_task_id=current_task_id,
         )
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
@@ -283,11 +218,14 @@ class AgentKernel:
     def _handle_claim(self, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
         message, agent, task = claim
         profile = self._profiles[agent.profile_id]
-        descriptors = tuple(
-            descriptor
-            for capability in sorted(profile.capabilities)
-            if (descriptor := self.capability_catalog.by_id.get(capability)) is not None
-            and (agent.parent_agent_id is None or descriptor.result_mode != "terminal")
+        reply_capabilities = frozenset(grant["capability_id"] for grant in self.store.active_reply_grants(task.task_id))
+        descriptors = effective_descriptors(
+            profile=profile,
+            catalog=self.capability_catalog,
+            agent=agent,
+            task=task,
+            reply_capability_ids=reply_capabilities,
+            destination_grants=self._destination_grants,
         )
         context = AgentContext(
             task=task,
@@ -296,7 +234,7 @@ class AgentKernel:
             children=self.store.children(agent.agent_id),
             profile=profile,
             capabilities=descriptors,
-            brain=self.brain_context(),
+            brain=self.brain_context(task.audience_ref, task.task_id),
             memory_agent_profile=self.limits.memory_agent_profile,
         )
         return self._handlers[agent.profile_id].handle(context)
@@ -327,8 +265,10 @@ class AgentKernel:
             descriptor = self.capability_catalog.by_id.get(effect.capability)
             if descriptor is None:
                 raise ValueError(f"unknown effect capability {effect.capability}")
-            if agent.parent_agent_id is not None and descriptor.result_mode == "terminal":
-                raise PermissionError("only the root Agent may request terminal effects")
+            if descriptor.kind != "effect":
+                raise PermissionError("Publication capabilities require a PublicationRequest")
+            if agent.parent_agent_id is not None and (descriptor.root_only or descriptor.result_mode == "terminal"):
+                raise PermissionError("only the root Agent may request root-only effects")
             try:
                 validate(effect.parameters, descriptor.parameters_schema)
             except ValidationError as error:
@@ -347,6 +287,8 @@ class AgentKernel:
                     "session_id": task.session_id,
                 },
             }
+        elif decision.publication_request is not None:
+            action = self._authorize_publication(agent, profile, decision)
         elif decision.delegations:
             if not profile.can_delegate:
                 raise PermissionError(f"Agent profile {profile.id} cannot delegate")
@@ -383,6 +325,28 @@ class AgentKernel:
             priority=message.priority,
         )
 
+    def _authorize_publication(
+        self, agent: AgentInstance, profile: AgentProfile, decision: AgentDecision
+    ) -> dict[str, Any]:
+        publication = decision.publication_request
+        assert publication is not None
+        reply_grant = (
+            self.store.reply_grant(agent.task_id, publication.route_ref) if publication.route_ref is not None else None
+        )
+        task = self.store.get_task(agent.task_id)
+        assert task is not None
+        return authorize_publication(
+            publication=publication,
+            task=task,
+            agent=agent,
+            profile=profile,
+            catalog=self.capability_catalog,
+            reply_grant=reply_grant,
+            destination_grants=self._destination_grants,
+            root_amp=self.store.root_amp(task.task_id),
+            configuration_hash=self._publication_configuration_hash,
+        )
+
     def _limit_dict(self) -> dict[str, int]:
         return {
             "max_active_agents": self.limits.max_active_agents,
@@ -394,7 +358,11 @@ class AgentKernel:
     def has_work(self) -> bool:
         counts = self.store.counts()
         return (
-            any(self._inbox.glob("*.json")) or counts["pending_messages"] > 0 or counts["pending_effect_activities"] > 0
+            any(self._inbox.glob("*.json"))
+            or counts["pending_messages"] > 0
+            or counts["pending_effect_activities"] > 0
+            or counts["pending_publication_activities"] > 0
+            or counts["processing_publication_activities"] > 0
         )
 
     def has_pending_effect_requests(self) -> bool:
@@ -435,6 +403,18 @@ class AgentKernel:
                 )
             )
         return tuple(leases)
+
+    async def claim_publication_requests(self) -> tuple[PublicationLease, ...]:
+        activities = await self._store_call(
+            self.store.claim_publication_activities,
+            self.limits.effect_concurrency,
+            self.limits.lease_seconds,
+        )
+        return tuple(publication_lease(activity) for activity in activities)
+
+    async def publication_recovery_requests(self) -> tuple[PublicationLease, ...]:
+        activities = await self._store_call(self.store.publication_recovery_activities)
+        return tuple(publication_lease(activity) for activity in activities)
 
     def tasks(self) -> tuple[TaskState, ...]:
         return self.store.tasks()

@@ -15,8 +15,22 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import new_amp
 from src.contracts.configuration import AppConfig, AuroraConfig
-from src.localhost.ports import EffectExecutionRequest, EffectOutcome, ExternalAmpIngressPort
+from src.localhost.ports import (
+    EffectExecutionRequest,
+    EffectOutcome,
+    ExternalAmpIngressPort,
+    PublicationExecutionRequest,
+    PublicationOutcome,
+)
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
+from src.platform.mcp.communication import (
+    RAW_PUBLICATION_SCHEMA,
+    CanonicalInboundMessage,
+    CommunicationNotificationError,
+    publication_descriptor_schema,
+)
+from src.platform.mcp.publication import MCPPublicationService
+from src.platform.mcp.publication_ledger import MCPPublicationLedger
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
 from src.utils.log_utils import get_logger
@@ -48,12 +62,16 @@ class MCPPlatform:
         self._stop = asyncio.Event()
         self._notification_task: asyncio.Task[None] | None = None
         self._ingress: ExternalAmpIngressPort | None = None
+        self._effect_catalog = CapabilityCatalogSnapshot()
+        self._publication_catalog = CapabilityCatalogSnapshot()
         self._catalog = CapabilityCatalogSnapshot()
+        self._ledger: MCPPublicationLedger | None = None
+        self._publications: MCPPublicationService | None = None
 
     async def start(self, ingress: ExternalAmpIngressPort) -> CapabilityCatalogSnapshot:
         if self._started:
             logger.debug("MCP platform startup skipped reason=already_started")
-            return self._catalog
+            return self.capability_catalog
         if self._shutdown_complete:
             raise RuntimeError("MCP platform cannot restart after shutdown")
         logger.info("MCP platform startup started apps=%d", len(self._configuration.apps))
@@ -69,7 +87,15 @@ class MCPPlatform:
             ]
             if remote_tasks:
                 await asyncio.wait_for(asyncio.gather(*remote_tasks), timeout=startup_timeout)
-            self._catalog = self._discover_capabilities()
+            self._effect_catalog, self._publication_catalog = self._discover_capabilities()
+            self._catalog = CapabilityCatalogSnapshot(
+                self._effect_catalog.capabilities + self._publication_catalog.capabilities
+            )
+            if any(app.kind == "communication" for app in self._configuration.apps):
+                self._ledger = MCPPublicationLedger(
+                    self._configuration.root / "data" / "platform" / "mcp" / "publications.sqlite3"
+                )
+                self._publications = MCPPublicationService(self._configuration, self._ledger, self._call_tool)
             self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
             self._started = True
         except BaseException:
@@ -79,13 +105,21 @@ class MCPPlatform:
             "MCP platform startup completed local_apps=%d remote_apps=%d capabilities=%d",
             sum(app.transport == "stdio" for app in self._configuration.apps),
             sum(app.transport == "streamable_http" for app in self._configuration.apps),
-            len(self._catalog.capabilities),
+            len(self.capability_catalog.capabilities),
         )
-        return self._catalog
+        return self.capability_catalog
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
         return self._catalog
+
+    @property
+    def effect_catalog(self) -> CapabilityCatalogSnapshot:
+        return self._effect_catalog
+
+    @property
+    def publication_catalog(self) -> CapabilityCatalogSnapshot:
+        return self._publication_catalog
 
     def _local_spec(self, app: AppConfig) -> MCPServerSpec:
         return MCPServerSpec(
@@ -161,8 +195,9 @@ class MCPPlatform:
         finally:
             connection.session = None
 
-    def _discover_capabilities(self) -> CapabilityCatalogSnapshot:
-        descriptors: dict[str, CapabilityDescriptor] = {}
+    def _discover_capabilities(self) -> tuple[CapabilityCatalogSnapshot, CapabilityCatalogSnapshot]:
+        effect_descriptors: dict[str, CapabilityDescriptor] = {}
+        publication_descriptors: dict[str, CapabilityDescriptor] = {}
         for app in self._configuration.apps:
             tools = self._tools_for_app(app.package)
             discovered = {str(getattr(tool, "name", "")): tool for tool in tools}
@@ -174,22 +209,37 @@ class MCPPlatform:
                 schema = getattr(tool, "inputSchema", None)
                 if not isinstance(schema, dict):
                     raise RuntimeError(f"MCP tool lacks input schema: {name}")
-                if name in descriptors:
-                    raise RuntimeError(f"duplicate MCP capability: {name}")
                 configured = next(item for item in app.tools if item.name == name)
-                descriptors[name] = CapabilityDescriptor(
-                    name,
-                    str(getattr(tool, "description", "") or ""),
-                    dict(schema),
-                    configured.result_mode,
+                if configured.kind == "effect":
+                    if name in effect_descriptors:
+                        raise RuntimeError(f"duplicate MCP effect capability: {name}")
+                    effect_descriptors[name] = CapabilityDescriptor(
+                        name,
+                        str(getattr(tool, "description", "") or ""),
+                        dict(schema),
+                        "resume",
+                    )
+                    continue
+                if app.kind != "communication" or schema != RAW_PUBLICATION_SCHEMA:
+                    raise RuntimeError(f"MCP publication tool has non-canonical input schema: {name}")
+            raw_descriptions = {
+                str(getattr(tool, "name", "")): str(getattr(tool, "description", "") or "") for tool in tools
+            }
+            for publication in app.publications:
+                if publication.capability in publication_descriptors:
+                    raise RuntimeError(f"duplicate MCP publication capability: {publication.capability}")
+                publication_descriptors[publication.capability] = CapabilityDescriptor(
+                    id=publication.capability,
+                    description=raw_descriptions[publication.tool],
+                    parameters_schema=publication_descriptor_schema(publication.operation),
+                    kind="publication",
+                    endpoint=app.package,
+                    operation=publication.operation,
+                    root_only=True,
                 )
-                logger.debug(
-                    "MCP capability discovered package=%s capability=%s result_mode=%s",
-                    app.package,
-                    name,
-                    configured.result_mode,
-                )
-        return CapabilityCatalogSnapshot(tuple(sorted(descriptors.values(), key=lambda item: item.id)))
+        effects = tuple(sorted(effect_descriptors.values(), key=lambda item: item.id))
+        publications = tuple(sorted(publication_descriptors.values(), key=lambda item: item.id))
+        return CapabilityCatalogSnapshot(effects), CapabilityCatalogSnapshot(publications)
 
     def _tools_for_app(self, package: str) -> list[object]:
         remote = self._remote.get(package)
@@ -232,8 +282,26 @@ class MCPPlatform:
                 error=f"{type(error).__name__}: {error}",
             )
 
+    async def execute_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
+        if not self._started or self._publications is None:
+            return PublicationOutcome(
+                "failed",
+                "MCP Publication unavailable",
+                error="MCP platform is not started for a communication App",
+            )
+        return await self._publications.execute(request)
+
+    async def recover_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
+        if self._publications is None:
+            return PublicationOutcome(
+                "failed",
+                "MCP Publication was interrupted before dispatch",
+                error="interrupted_before_dispatch",
+            )
+        return await self._publications.recover(request)
+
     async def _call_tool(self, capability: str, parameters: dict[str, object]) -> dict[str, object]:
-        package, _, _tool = capability.rpartition(".")
+        package = self._package_for_tool(capability)
         remote = self._remote.get(package)
         if remote is not None:
             if remote.session is None:
@@ -247,10 +315,19 @@ class MCPPlatform:
     def _app_timeout(self, package: str) -> float:
         return next(app.timeout_seconds for app in self._configuration.apps if app.package == package)
 
+    def _package_for_tool(self, tool_name: str) -> str:
+        matches = [app.package for app in self._configuration.apps if tool_name.startswith(f"{app.package}.")]
+        if not matches:
+            raise MCPToolCallError(f"MCP tool is outside configured package namespaces: {tool_name}")
+        return max(matches, key=len)
+
     async def _forward_local_notifications(self) -> None:
         while not self._stop.is_set():
             package, method, params = await self._clients.notification_queue.get()
-            await self._handle_notification(package, method, params)
+            try:
+                await self._handle_notification(package, method, params)
+            except Exception:
+                logger.exception("MCP notification worker rejected an event package=%s method=%s", package, method)
 
     async def _handle_notification(self, package: str, method: str, params: dict[str, object]) -> None:
         if method == "notifications/message" and params.get("logger") == "aurora/event":
@@ -262,18 +339,41 @@ class MCPPlatform:
         if method != "aurora/event" or self._ingress is None:
             logger.debug("MCP notification ignored package=%s method=%s", package, method)
             return
-        event_type = params.get("type")
-        data = params.get("data", {})
-        if not isinstance(event_type, str) or not isinstance(data, dict):
+        app = next((item for item in self._configuration.apps if item.package == package), None)
+        if app is None:
+            logger.warning("MCP notification rejected from unknown package=%s", package)
             return
-        event = new_amp(
-            event_type=event_type,
-            session_id=str(params.get("session_id", package)),
-            summary=str(params.get("summary", event_type)),
-            data=data,
-            source_app=package,
-            source_instance="mcp",
-        )
+        event_type = params.get("type")
+        if event_type == "message.received":
+            if app.kind != "communication" or self._ledger is None:
+                logger.warning("MCP message.received rejected from utility package=%s", package)
+                return
+            try:
+                inbound = CanonicalInboundMessage.parse(package, params)
+            except CommunicationNotificationError as error:
+                logger.warning("malformed MCP communication notification package=%s error=%s", package, error)
+                return
+            observed = self._ledger.observe_delivery(package, inbound.external_message_id, inbound.origin_delivery_id)
+            if observed is not None:
+                if not observed:
+                    self._quarantine(inbound, "origin_delivery_id does not match local delivery")
+                return
+            if inbound.authored_by_self:
+                self._quarantine(inbound, "self-authored message has no local delivery record")
+                return
+            event = inbound.to_amp()
+        else:
+            data = params.get("data", {})
+            if not isinstance(event_type, str) or not event_type or not isinstance(data, dict):
+                return
+            event = new_amp(
+                event_type=event_type,
+                session_id=str(params.get("session_id", package)),
+                summary=str(params.get("summary", event_type)),
+                data=data,
+                source_app=package,
+                source_instance=f"mcp:{package}",
+            )
         await self._ingress.submit_amp(event.to_dict())
         logger.debug(
             "MCP event forwarded package=%s method=%s message_id=%s event_type=%s",
@@ -281,6 +381,23 @@ class MCPPlatform:
             method,
             event.header.message_id,
             event_type,
+        )
+
+    def _quarantine(self, inbound: CanonicalInboundMessage, reason: str) -> None:
+        assert self._ledger is not None
+        self._ledger.quarantine(
+            endpoint_id=inbound.endpoint_id,
+            external_event_id=inbound.external_event_id,
+            external_message_id=inbound.external_message_id,
+            origin_delivery_id=inbound.origin_delivery_id,
+            authored_by_self=inbound.authored_by_self,
+            reason=reason,
+        )
+        logger.warning(
+            "MCP inbound communication quarantined package=%s external_event_id=%s reason=%s",
+            inbound.endpoint_id,
+            inbound.external_event_id,
+            reason,
         )
 
     async def shutdown(self) -> None:
@@ -305,6 +422,10 @@ class MCPPlatform:
             )
             await self._clients.shutdown()
             await self._kit.stop_all()
+            if self._ledger is not None:
+                self._ledger.close()
+                self._ledger = None
+                self._publications = None
             self._started = False
             self._ingress = None
             self._shutdown_complete = True

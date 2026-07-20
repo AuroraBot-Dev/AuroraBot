@@ -173,4 +173,14 @@ class StoreQueriesMixin(RuntimeStoreBase):
                         "SELECT count(*) FROM activities WHERE kind = 'effect' AND status = 'PROCESSING'"
                     ).fetchone()[0]
                 ),
+                "pending_publication_activities": int(
+                    connection.execute(
+                        "SELECT count(*) FROM activities WHERE kind = 'publication' AND status = 'PENDING'"
+                    ).fetchone()[0]
+                ),
+                "processing_publication_activities": int(
+                    connection.execute(
+                        "SELECT count(*) FROM activities WHERE kind = 'publication' AND status = 'PROCESSING'"
+                    ).fetchone()[0]
+                ),
             }

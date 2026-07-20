@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -13,6 +14,7 @@ from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, Mo
 from src.localhost.ports import EffectExecutionRequest, EffectExecutorBinding
 from src.localhost.runtime import AuroraRuntime
 from src.platform.mcp import MCPPlatform
+from src.platform.mcp.client_manager import ClientConnection, MCPClientManager, MCPToolCallError
 from src.utils.log_utils import configure_console_logging, configure_logging
 
 if TYPE_CHECKING:
@@ -80,6 +82,23 @@ def test_mcp_tool_is_error_returns_failed_effect_outcome(
 
 
 def test_mcp_notification_uses_external_ingress(project_root: Path) -> None:
+    (project_root / "config" / "apps.toml").write_text(
+        """[[app]]
+package = "org.example.app"
+kind = "utility"
+enabled = true
+transport = "stdio"
+working_dir = "."
+command = ["python", "server.py"]
+timeout_seconds = 30
+
+[[app.tool]]
+name = "org.example.app.read"
+kind = "effect"
+""",
+        encoding="utf-8",
+    )
+
     async def scenario() -> None:
         ingress = _Ingress()
         platform = MCPPlatform(load_configuration(project_root))
@@ -94,6 +113,26 @@ def test_mcp_notification_uses_external_ingress(project_root: Path) -> None:
         event = AmpEnvelope.parse(ingress.values[0])
         assert event.payload.type == "example.changed"
         assert event.header.source["app"] == "org.example.app"
+
+        await platform._handle_notification(
+            "org.example.app",
+            "aurora/event",
+            {"type": "message.received", "summary": "spoofed", "data": {"text": "ignored"}},
+        )
+        assert len(ingress.values) == 1
+
+    asyncio.run(scenario())
+
+
+def test_mcp_client_package_prefix_requires_dot_boundary() -> None:
+    async def scenario() -> None:
+        manager = MCPClientManager(SimpleNamespace())  # type: ignore[arg-type]
+        connection = ClientConnection("org.example")
+        connection.session = SimpleNamespace()  # type: ignore[assignment]
+        manager._connections["org.example"] = connection
+
+        with pytest.raises(MCPToolCallError, match=r"org\.examplex"):
+            await manager.call_tool("org.examplex.run")
 
     asyncio.run(scenario())
 
@@ -133,6 +172,7 @@ def test_clock_mcp_activity_receipt_resumes_requesting_agent(
     (project_root / "config" / "apps.toml").write_text(
         f"""[[app]]
 package = "org.aurora.clock"
+kind = "utility"
 enabled = true
 transport = "stdio"
 working_dir = "{app_directory}"
@@ -141,23 +181,23 @@ timeout_seconds = 30
 
 [[app.tool]]
 name = "org.aurora.clock.get_current_time"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.set_alarm"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.set_timer"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.list_alarms"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.cancel_alarm"
-result_mode = "resume"
+kind = "effect"
 """,
         encoding="utf-8",
     )
@@ -181,6 +221,7 @@ result_mode = "resume"
         try:
             catalog = await platform.start(runtime)
             assert catalog is platform.capability_catalog
+            assert not (project_root / "data" / "platform" / "mcp" / "publications.sqlite3").exists()
             runtime.bind_effect_executors(
                 tuple(
                     EffectExecutorBinding(capability, platform, "platform.mcp", "org.aurora.clock")

@@ -42,6 +42,10 @@ max_model_calls = 3
 max_tool_calls = 2
 max_duration_seconds = 120.0
 
+[communication]
+reply_route_ttl_seconds = 3600.0
+relay_hop_limit = 1
+
 [dashboard]
 host = "127.0.0.1"
 port = 8000
@@ -50,6 +54,9 @@ upload_dir = "data/dashboard/uploads"
 max_upload_bytes = 67108864
 session_ttl_seconds = 604800
 allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+[dashboard.owner]
+username = "owner"
 
 [dashboard.bot]
 username = "aurorabot"

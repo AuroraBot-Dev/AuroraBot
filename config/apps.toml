@@ -3,6 +3,7 @@
 
 [[app]]
 package = "org.aurora.clock"
+kind = "utility"
 enabled = true
 transport = "stdio"
 working_dir = "src/apps/aurora-app-clock"
@@ -11,20 +12,20 @@ timeout_seconds = 30
 
 [[app.tool]]
 name = "org.aurora.clock.get_current_time"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.set_alarm"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.set_timer"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.list_alarms"
-result_mode = "resume"
+kind = "effect"
 
 [[app.tool]]
 name = "org.aurora.clock.cancel_alarm"
-result_mode = "resume"
+kind = "effect"

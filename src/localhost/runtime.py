@@ -8,7 +8,7 @@ import importlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from src.ai.vnext import ModelGatewayService
@@ -16,6 +16,8 @@ from src.contracts.agent import (
     AgentHandler,
     AgentLimits,
     AgentProfile,
+    CapabilityCatalogSnapshot,
+    DestinationGrant,
     KernelConfiguration,
     TaskBudget,
 )
@@ -24,6 +26,7 @@ from src.contracts.configuration import AuroraConfig, load_configuration
 from src.contracts.model import ModelRequest
 from src.kernel.runtime import AgentKernel, PumpResult
 from src.localhost.effect_dispatcher import EffectDispatcher
+from src.localhost.publication_dispatcher import PublicationDispatcher
 from src.localhost.router import CommandRouter
 from src.localhost.scheduler import CognitiveScheduler
 from src.utils.log_utils import get_logger
@@ -32,7 +35,7 @@ logger = get_logger("aurora.runtime")
 
 if TYPE_CHECKING:
     from src.localhost.command_types import CommandResult, RuntimeInput
-    from src.localhost.ports import EffectExecutorBinding
+    from src.localhost.ports import EffectExecutorBinding, PublicationExecutorBinding
 
 
 def _load_handler(specification: str) -> AgentHandler:
@@ -60,6 +63,7 @@ class AuroraRuntime:
     _scheduler: CognitiveScheduler | None = field(default=None, init=False, repr=False)
     _command_router: CommandRouter = field(init=False, repr=False)
     _effect_dispatcher: EffectDispatcher = field(init=False, repr=False)
+    _publication_dispatcher: PublicationDispatcher = field(init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
 
     @classmethod
@@ -70,6 +74,7 @@ class AuroraRuntime:
         *,
         configuration: AuroraConfig | None = None,
         executor_bindings: tuple[EffectExecutorBinding, ...] | None = (),
+        publication_bindings: tuple[PublicationExecutorBinding, ...] | None = (),
     ) -> "AuroraRuntime":
         configuration = configuration or load_configuration(root, profile)
         profiles = tuple(
@@ -118,7 +123,35 @@ class AuroraRuntime:
             ),
         )
         handlers = {profile.id: _load_handler(profile.implementation) for profile in profiles}
-        kernel = AgentKernel(kernel_config, handlers)
+        communication = getattr(configuration, "communication", None)
+        destination_grants = tuple(
+            DestinationGrant(
+                alias=destination.alias,
+                endpoint_id=app.package,
+                capability_id=destination.capability,
+                operation=cast(
+                    "Literal['relay', 'proactive_send']",
+                    next(
+                        publication.operation
+                        for publication in app.publications
+                        if publication.capability == destination.capability
+                    ),
+                ),
+                allowed_source_audiences=frozenset(destination.allowed_source_audiences),
+                target_audience_ref=destination.target_audience_ref,
+                configuration_hash=configuration.apps_configuration_hash,
+                description=destination.description,
+            )
+            for app in configuration.apps
+            for destination in app.destinations
+        )
+        kernel = AgentKernel(
+            kernel_config,
+            handlers,
+            destination_grants=destination_grants,
+            reply_route_ttl_seconds=getattr(communication, "reply_route_ttl_seconds", 3600.0),
+            publication_configuration_hash=configuration.apps_configuration_hash,
+        )
         runtime = cls(
             configuration,
             kernel,
@@ -126,17 +159,26 @@ class AuroraRuntime:
         )
         runtime._command_router = CommandRouter(runtime)
         runtime._effect_dispatcher = EffectDispatcher(kernel, runtime)
+        runtime._publication_dispatcher = PublicationDispatcher(kernel, runtime)
         runtime._scheduler = CognitiveScheduler(
             configuration.runtime.workspace / "process" / "scheduler-state.json",
             configuration.runtime.scheduler,
         )
-        if executor_bindings is not None:
-            runtime.bind_effect_executors(executor_bindings)
+        if executor_bindings is not None and publication_bindings is not None:
+            runtime.bind_platform_executors(executor_bindings, publication_bindings)
         return runtime
 
     async def submit_amp(self, value: object) -> str:
         amp = AmpEnvelope.parse(value)
-        if amp.payload.type not in {"system.tick", "effect.succeeded", "effect.failed"}:
+        receipt_types = {
+            "system.tick",
+            "effect.succeeded",
+            "effect.failed",
+            "publication.succeeded",
+            "publication.failed",
+            "publication.delivery_unknown",
+        }
+        if amp.payload.type not in receipt_types:
             cancelled = set(await self.kernel.cancel_autonomous_tasks("external_activity"))
             for task, task_id in tuple(self._model_activity_tasks.items()):
                 if task_id in cancelled:
@@ -150,7 +192,7 @@ class AuroraRuntime:
     async def submit_conversation(self, request: RuntimeInput, text: str) -> str:
         """Normalize one transport message into the shared AMP ingress."""
         data = dict(request.data)
-        data.update({"text": text, "reply_capability": request.reply_capability})
+        data["text"] = text
         if request.actor_id is not None:
             data["actor_id"] = request.actor_id
         amp = new_amp(
@@ -176,9 +218,20 @@ class AuroraRuntime:
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
         self._stop_requester = requester
 
+    def bind_platform_executors(
+        self,
+        effect_bindings: tuple[EffectExecutorBinding, ...],
+        publication_bindings: tuple[PublicationExecutorBinding, ...],
+    ) -> None:
+        effects = self._effect_dispatcher.bind(effect_bindings)
+        publications = self._publication_dispatcher.bind(publication_bindings)
+        self.kernel.install_capability_catalog(
+            CapabilityCatalogSnapshot(effects.capabilities + publications.capabilities)
+        )
+
     def bind_effect_executors(self, bindings: tuple[EffectExecutorBinding, ...]) -> None:
-        catalog = self._effect_dispatcher.bind(bindings)
-        self.kernel.install_capability_catalog(catalog)
+        """Bind deferred Dashboard/MCP effects while those adapters await Publication migration."""
+        self.bind_platform_executors(bindings, ())
 
     def request_shutdown(self) -> None:
         if self._stop_requester is not None:
@@ -187,9 +240,13 @@ class AuroraRuntime:
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
             result: PumpResult = await self.kernel.pump(max_turns)
+            recoveries_emitted = await self._publication_dispatcher.recover_processing_publications()
             receipts_emitted = await self._effect_dispatcher.dispatch_pending_effects()
+            publication_receipts = await self._publication_dispatcher.dispatch_pending_publications()
             response = result.to_dict()
             response["effect_receipts_emitted"] = receipts_emitted
+            response["publication_recovery_receipts_emitted"] = recoveries_emitted
+            response["publication_receipts_emitted"] = publication_receipts
             self._ensure_model_dispatcher()
             if self._scheduler is not None:
                 self._scheduler.reconcile(self.kernel.tasks())

@@ -233,11 +233,13 @@ class CommunicationContext:
     conversation_ref: str | None = None
     actor_ref: str | None = None
     reply_route_ref: str | None = None
+    authored_by_self: bool | None = None
+    origin_delivery_id: str | None = None
 
     @classmethod
     def from_dict(cls, value: object, *, require_message_fields: bool = False) -> "CommunicationContext":
         if not isinstance(value, dict):
-            raise ValueError("communication context must be an object")
+            raise TypeError("communication context must be an object")
         allowed = {
             "endpoint_id",
             "external_event_id",
@@ -246,6 +248,8 @@ class CommunicationContext:
             "actor_ref",
             "audience_ref",
             "reply_route_ref",
+            "authored_by_self",
+            "origin_delivery_id",
         }
         if set(value) - allowed:
             raise ValueError("communication context contains unsupported fields")
@@ -255,13 +259,19 @@ class CommunicationContext:
             raise ValueError("communication endpoint_id must be a non-empty string")
         if not isinstance(audience_ref, str) or not audience_ref:
             raise ValueError("communication audience_ref must be a non-empty string")
-        optional: dict[str, str | None] = {}
-        for name in allowed - {"endpoint_id", "audience_ref"}:
+        optional: dict[str, Any] = {}
+        string_fields = allowed - {"endpoint_id", "audience_ref", "authored_by_self"}
+        for name in string_fields:
             item = value.get(name)
             if item is not None and (not isinstance(item, str) or not item):
                 raise ValueError(f"communication {name} must be a non-empty string or null")
             optional[name] = item
-        if require_message_fields and any(optional[name] is None for name in allowed - {"endpoint_id", "audience_ref"}):
+        authored_by_self = value.get("authored_by_self")
+        if authored_by_self is not None and not isinstance(authored_by_self, bool):
+            raise ValueError("communication authored_by_self must be boolean or null")
+        optional["authored_by_self"] = authored_by_self
+        required_message_fields = string_fields - {"origin_delivery_id"}
+        if require_message_fields and any(optional[name] is None for name in required_message_fields):
             raise ValueError("message.received communication context requires all fields")
         return cls(endpoint_id=endpoint_id, audience_ref=audience_ref, **optional)
 
@@ -419,6 +429,7 @@ class PublicationLease:
     source_endpoint_id: str | None = None
     source_external_event_id: str | None = None
     hop_count: int = 0
+    configuration_hash: str = ""
 
 
 @dataclass(frozen=True, slots=True)

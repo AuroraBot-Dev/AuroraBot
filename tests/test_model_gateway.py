@@ -22,9 +22,9 @@ from src.contracts.model import (
     ToolCall,
     ToolDefinition,
 )
-from src.localhost.ports import EffectExecutorBinding
+from src.localhost.ports import PublicationExecutorBinding
 from src.localhost.runtime import AuroraRuntime
-from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
+from src.platform.console import CONSOLE_AUDIENCE, CONSOLE_ENDPOINT, CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from tests.test_events import valid_amp
 
 if TYPE_CHECKING:
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 _CHAT_COST = 0.125
 _NATIVE_COST = 0.25
 _EXPECTED_FALLBACK_CALLS = 2
+_PROVIDER_UNAVAILABLE = "provider unavailable"
 
 
 def test_gateway_negotiates_declared_role_capabilities(project_root: Path) -> None:
@@ -295,28 +296,103 @@ class _ToolGateway:
         )
 
 
-def _runtime_with_console(project_root: Path) -> AuroraRuntime:
-    runtime = AuroraRuntime.create(project_root, executor_bindings=None)
+class _PlainTextGateway:
+    async def complete(self, request: ModelRequest) -> ModelResult:
+        return ModelResult(
+            model="fake",
+            negotiated_capabilities=frozenset({"chat", "tools"}),
+            response_mode=request.response_mode,
+            text="plain reply",
+            data=None,
+            usage=ModelUsage(),
+            cost_usd=0,
+            finish_reason="stop",
+        )
+
+
+class _FailingToolGateway:
+    async def complete(self, _request: ModelRequest) -> ModelResult:
+        raise RuntimeError(_PROVIDER_UNAVAILABLE)
+
+
+def _runtime_with_console(project_root: Path) -> tuple[AuroraRuntime, ConsolePlatform]:
+    runtime = AuroraRuntime.create(project_root, executor_bindings=None, publication_bindings=None)
     console = ConsolePlatform()
-    runtime.bind_effect_executors(
+    runtime.bind_platform_executors(
+        (),
         (
-            EffectExecutorBinding(
+            PublicationExecutorBinding(
                 CONSOLE_SEND_DESCRIPTOR,
+                console,
                 console,
                 "platform.console",
                 "test",
             ),
-        )
+        ),
     )
-    return runtime
+    return runtime, console
+
+
+def _console_amp(console: ConsolePlatform) -> dict[str, object]:
+    amp = valid_amp()
+    header = amp["header"]
+    payload = amp["payload"]
+    assert isinstance(header, dict) and isinstance(payload, dict)
+    event_id = str(header["message_id"])
+    route_ref = f"route:{event_id}"
+    console.register_reply_route(route_ref, event_id)
+    data = payload["data"]
+    assert isinstance(data, dict)
+    data["communication"] = {
+        "endpoint_id": CONSOLE_ENDPOINT,
+        "external_event_id": event_id,
+        "external_message_id": f"message:{event_id}",
+        "conversation_ref": "console.local:owner",
+        "actor_ref": "owner.local",
+        "audience_ref": CONSOLE_AUDIENCE,
+        "reply_route_ref": route_ref,
+    }
+    return amp
+
+
+@pytest.mark.parametrize(
+    ("gateway", "expected"),
+    (
+        (_PlainTextGateway(), "plain reply"),
+        (_FailingToolGateway(), "抱歉，我暂时无法完成这次回复。请稍后重试。"),
+    ),
+)
+def test_plain_text_and_model_failure_use_the_single_reply_publication(
+    project_root: Path,
+    gateway: object,
+    expected: str,
+) -> None:
+    async def scenario() -> None:
+        runtime, console = _runtime_with_console(project_root)
+        runtime.model_gateway = gateway  # type: ignore[assignment]
+        try:
+            await runtime.submit_amp(_console_amp(console))
+            await runtime.pump()
+            assert runtime._model_dispatch_task is not None
+            await runtime._model_dispatch_task
+            published = await runtime.pump()
+            assert published["publication_receipts_emitted"] == 1
+            await runtime.pump()
+            assert console.drain_messages() == (expected,)
+            assert runtime.kernel.tasks()[0].status == TaskStatus.COMPLETED
+        finally:
+            await runtime.shutdown()
+            console.close()
+
+    asyncio.run(scenario())
 
 
 def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project_root: Path) -> None:
     async def scenario() -> None:
-        runtime = _runtime_with_console(project_root)
+        runtime, console = _runtime_with_console(project_root)
         gateway = _ToolGateway({"text": "model hello"})
         runtime.model_gateway = gateway
-        await runtime.submit_amp(valid_amp())
+        await runtime.submit_amp(_console_amp(console))
         first = await runtime.pump()
         assert runtime._model_dispatch_task is not None
         await runtime._model_dispatch_task
@@ -326,26 +402,28 @@ def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project
         detail = runtime.task(task_id)
         assert detail is not None
         assert any(event["type"] == "model.completed" for event in detail["events"])
-        assert any(event["type"] == "agent.effect" for event in detail["events"])
-        assert second["effect_receipts_emitted"] == 1
+        assert any(event["type"] == "agent.publication" for event in detail["events"])
+        assert second["publication_receipts_emitted"] == 1
         assert third["ingested_task_ids"]
         assert runtime.kernel.get_task(task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
         await runtime.shutdown()
+        console.close()
 
     asyncio.run(scenario())
 
 
-def test_invalid_effect_arguments_fail_agent_without_platform_call(project_root: Path) -> None:
+def test_invalid_publication_arguments_fail_agent_without_platform_call(project_root: Path) -> None:
     async def scenario() -> None:
-        runtime = _runtime_with_console(project_root)
+        runtime, console = _runtime_with_console(project_root)
         runtime.model_gateway = _ToolGateway({"text": 1})
-        await runtime.submit_amp(valid_amp())
+        await runtime.submit_amp(_console_amp(console))
         await runtime.pump()
         assert runtime._model_dispatch_task is not None
         await runtime._model_dispatch_task
         result = await runtime.pump()
-        assert result["failed_message_ids"]
-        assert result["effect_receipts_emitted"] == 0
+        assert runtime.kernel.tasks()[0].status == TaskStatus.ERROR
+        assert result["publication_receipts_emitted"] == 0
         await runtime.shutdown()
+        console.close()
 
     asyncio.run(scenario())
