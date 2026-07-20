@@ -6,6 +6,8 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from src.platform.dashboard.security import new_token
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
@@ -153,13 +155,28 @@ class ChatStore:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
-            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            if version > len(_MIGRATIONS):
-                raise RuntimeError(f"Dashboard database schema {version} is newer than this runtime")  # noqa: TRY003
-            for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
-                connection.executescript(
-                    f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
-                )
+            connection.executescript(_SCHEMA)
+        token_path = self.database_path.parent / "Token.txt"
+        if not token_path.exists():
+            token_path.write_text(new_token())
+
+    def get_bootstrap_token(self) -> str:
+        token_path = self.database_path.parent / "Token.txt"
+        return token_path.read_text().strip()
+
+    def ensure_admin(self) -> sqlite3.Row:
+        now = _now()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO users(username, password_hash, display_name, is_bot, created_at, updated_at)
+                VALUES (?, ?, ?, 0, ?, ?)
+                """,
+                ("admin", "bootstrap", "Administrator", now, now),
+            )
+            row = connection.execute("SELECT * FROM users WHERE username = ?", ("admin",)).fetchone()
+            assert row is not None
+            return row
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
         with self.connect() as connection:
