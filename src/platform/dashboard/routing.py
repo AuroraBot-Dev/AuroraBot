@@ -46,14 +46,16 @@ def message_matches(message: dict[str, Any], parsed: PrivateMessageInput) -> boo
     )
 
 
-def dashboard_input(parsed: PrivateMessageInput, communication: dict[str, str]) -> RuntimeInput:
+def dashboard_input(parsed: PrivateMessageInput, communication: dict[str, str] | None) -> RuntimeInput:
+    data: dict[str, Any] = {"chat_message_id": parsed.client_message_id}
+    if communication is not None:
+        data["communication"] = communication
     return RuntimeInput(
         text=parsed.content or "",
         origin=InputOrigin.DASHBOARD,
         session_id="dashboard:owner",
         source_app="dashboard.chat",
         source_instance="local",
-        reply_capability="org.aurora.dashboard.send_message",
         idempotency_key=parsed.client_message_id,
-        data={"chat_message_id": parsed.client_message_id, "communication": communication},
+        data=data,
     )

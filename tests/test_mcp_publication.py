@@ -18,6 +18,8 @@ from src.platform.mcp.publication_ledger import MCPPublicationLedger
 if TYPE_CHECKING:
     from pathlib import Path
 
+EXPECTED_QUARANTINES = 2
+
 
 def _write_communication_apps(project_root: Path) -> None:
     (project_root / "config" / "apps.toml").write_text(
@@ -236,6 +238,10 @@ def test_mcp_publication_three_states_recovery_and_idempotency(project_root: Pat
         assert failed.status == "failed" and "connector rejected" in (failed.error or "")
         assert unknown.status == "delivery_unknown"
         assert (await service.recover(accepted_request)).status == "accepted"
+        stale_recovery = await service.recover(
+            replace(accepted_request, capability="removed.capability", configuration_hash="old-snapshot")
+        )
+        assert stale_recovery.status == "accepted"
         assert (await service.recover(failed_request)).status == "failed"
         assert (await service.recover(unknown_request)).status == "delivery_unknown"
         missing = await service.recover(replace(unknown_request, request_id="not-dispatched"))
@@ -256,6 +262,14 @@ def test_mcp_publication_three_states_recovery_and_idempotency(project_root: Pat
         }
         columns = {row["name"] for row in ledger._database.execute("PRAGMA table_info(publications)").fetchall()}
         assert "address_ref" not in columns and "route_ref" not in columns and "token" not in columns
+
+        same_audience = replace(
+            _request(configuration.apps_configuration_hash, request_id="delivery-loop"),
+            source_audience_ref="com.example.discord:dev",
+        )
+        rejected_loop = await service.execute(same_audience)
+        assert rejected_loop.status == "failed"
+        assert rejected_loop.error == "relay target audience must differ from its source audience"
 
     try:
         asyncio.run(scenario())
@@ -290,8 +304,25 @@ def test_mcp_inbound_delivery_observation_and_self_authored_quarantine(project_r
             _notification(
                 external_event_id="loop-event",
                 external_message_id="external-loop-message",
-                authored_by_self=False,
+                authored_by_self=True,
                 origin_delivery_id="delivery-1",
+            ),
+        )
+        ledger.record_started(
+            "delivery-started",
+            "digest",
+            "com.example.discord",
+            "com.example.discord.relay",
+            "com.example.discord.publish",
+        )
+        await platform._handle_notification(
+            "com.example.discord",
+            "aurora/event",
+            _notification(
+                external_event_id="started-event",
+                external_message_id="external-started-message",
+                authored_by_self=False,
+                origin_delivery_id="delivery-started",
             ),
         )
         await platform._handle_notification(
@@ -327,10 +358,13 @@ def test_mcp_inbound_delivery_observation_and_self_authored_quarantine(project_r
         amp = AmpEnvelope.parse(ingress.values[0])
         communication = amp.payload.data["communication"]
         assert communication["endpoint_id"] == "com.example.discord"
+        assert "authored_by_self" not in communication
+        assert "origin_delivery_id" not in communication
         assert amp.header.source["instance"] == "mcp:com.example.discord"
         assert amp.payload.session_id == communication["audience_ref"]
         quarantines = ledger._database.execute("SELECT reason FROM inbound_quarantine").fetchall()
-        assert len(quarantines) == 1
+        assert len(quarantines) == EXPECTED_QUARANTINES
+        assert any("started" in str(row["reason"]) for row in quarantines)
         observed = ledger._database.execute(
             "SELECT delivery_observed_at FROM publications WHERE request_id = 'delivery-1'"
         ).fetchone()

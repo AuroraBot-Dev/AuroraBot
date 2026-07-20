@@ -346,7 +346,7 @@ def _source_audience_pattern(value: object, label: str) -> str:
     if any(character.isspace() for character in audience):
         raise ConfigurationError(f"{label} contains an invalid audience pattern")
     if audience == "*":
-        return audience
+        raise ConfigurationError(f"{label} must be exact or use a final :* wildcard")
     if "*" not in audience:
         return audience
     if audience.count("*") != 1 or not audience.endswith(":*"):

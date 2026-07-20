@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 from src.localhost.ports import PublicationExecutionRequest, PublicationOutcome
@@ -37,7 +36,13 @@ class MCPPublicationService:
             return _failed("MCP Publication rejected", f"unknown publication capability: {request.capability}")
         app, publication = binding
         arguments, error = self._canonical_arguments(request, app, publication)
-        digest = _request_digest(arguments if arguments is not None else asdict(request))
+        digest = _request_digest(
+            endpoint_id=app.package,
+            capability=request.capability,
+            raw_tool=publication.tool,
+            destination_alias=request.destination,
+            arguments=arguments,
+        )
         state, existing = self._ledger.record_started(
             request.request_id,
             digest,
@@ -92,17 +97,7 @@ class MCPPublicationService:
         record = self._ledger.get(request.request_id)
         if record is None:
             return _failed("MCP Publication was interrupted before dispatch", "interrupted_before_dispatch")
-        expected = self._expected_digest(request)
-        if expected is not None and expected != record.request_digest:
-            return _failed("MCP Publication recovery rejected", "delivery_id request digest mismatch")
         return _record_outcome(record)
-
-    def _expected_digest(self, request: PublicationExecutionRequest) -> str | None:
-        binding = self._bindings.get(request.capability)
-        if binding is None:
-            return None
-        arguments, _error = self._canonical_arguments(request, *binding)
-        return _request_digest(arguments if arguments is not None else asdict(request))
 
     def _canonical_arguments(
         self,
@@ -126,6 +121,8 @@ class MCPPublicationService:
                 return None, "publication destination alias or binding is invalid"
             if destination.target_audience_ref != request.target_audience_ref:
                 return None, "publication target audience does not match destination"
+            if request.operation == "relay" and request.source_audience_ref == request.target_audience_ref:
+                return None, "relay target audience must differ from its source audience"
             if not _source_allowed(destination.allowed_source_audiences, request.source_audience_ref):
                 return None, "publication source audience is not allowed"
             expected_hops = 1 if request.operation == "relay" else 0
@@ -172,8 +169,22 @@ def _source_allowed(patterns: tuple[str, ...], audience_ref: str) -> bool:
     )
 
 
-def _request_digest(arguments: dict[str, Any]) -> str:
-    canonical = json.dumps(arguments, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+def _request_digest(
+    *,
+    endpoint_id: str,
+    capability: str,
+    raw_tool: str,
+    destination_alias: str | None,
+    arguments: dict[str, Any] | None,
+) -> str:
+    value = {
+        "endpoint_id": endpoint_id,
+        "capability": capability,
+        "raw_tool": raw_tool,
+        "destination_alias": destination_alias,
+        "canonical_arguments": arguments,
+    }
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 

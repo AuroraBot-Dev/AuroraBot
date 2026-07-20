@@ -43,7 +43,6 @@ class ActivityStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
-ResultMode = Literal["resume", "terminal"]
 CapabilityKind = Literal["effect", "publication"]
 PublicationOperation = Literal["reply", "relay", "proactive_send"]
 PublicationCompletionMode = Literal["continue", "complete_on_success"]
@@ -54,7 +53,6 @@ class CapabilityDescriptor:
     id: str
     description: str
     parameters_schema: dict[str, Any]
-    result_mode: ResultMode = "resume"
     kind: CapabilityKind = "effect"
     endpoint: str | None = None
     operation: PublicationOperation | None = None
@@ -72,8 +70,6 @@ class CapabilityCatalogSnapshot:
         identifiers = [item.id for item in self.capabilities]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("capability IDs must be unique")
-        if any(item.result_mode not in {"resume", "terminal"} for item in self.capabilities):
-            raise ValueError("capability result_mode must be resume or terminal")
         for item in self.capabilities:
             if item.kind not in {"effect", "publication"}:
                 raise ValueError("capability kind must be effect or publication")
@@ -82,8 +78,6 @@ class CapabilityCatalogSnapshot:
                     raise ValueError("publication capability requires endpoint and operation")
                 if not item.root_only:
                     raise ValueError("publication capability must be root_only")
-                if item.result_mode != "resume":
-                    raise ValueError("publication capability does not use effect result_mode")
             elif item.endpoint is not None or item.operation is not None:
                 raise ValueError("effect capability cannot declare a publication endpoint or operation")
 
@@ -233,8 +227,6 @@ class CommunicationContext:
     conversation_ref: str | None = None
     actor_ref: str | None = None
     reply_route_ref: str | None = None
-    authored_by_self: bool | None = None
-    origin_delivery_id: str | None = None
 
     @classmethod
     def from_dict(cls, value: object, *, require_message_fields: bool = False) -> "CommunicationContext":
@@ -248,8 +240,6 @@ class CommunicationContext:
             "actor_ref",
             "audience_ref",
             "reply_route_ref",
-            "authored_by_self",
-            "origin_delivery_id",
         }
         if set(value) - allowed:
             raise ValueError("communication context contains unsupported fields")
@@ -260,18 +250,13 @@ class CommunicationContext:
         if not isinstance(audience_ref, str) or not audience_ref:
             raise ValueError("communication audience_ref must be a non-empty string")
         optional: dict[str, Any] = {}
-        string_fields = allowed - {"endpoint_id", "audience_ref", "authored_by_self"}
+        string_fields = allowed - {"endpoint_id", "audience_ref"}
         for name in string_fields:
             item = value.get(name)
             if item is not None and (not isinstance(item, str) or not item):
                 raise ValueError(f"communication {name} must be a non-empty string or null")
             optional[name] = item
-        authored_by_self = value.get("authored_by_self")
-        if authored_by_self is not None and not isinstance(authored_by_self, bool):
-            raise ValueError("communication authored_by_self must be boolean or null")
-        optional["authored_by_self"] = authored_by_self
-        required_message_fields = string_fields - {"origin_delivery_id"}
-        if require_message_fields and any(optional[name] is None for name in required_message_fields):
+        if require_message_fields and any(optional[name] is None for name in string_fields):
             raise ValueError("message.received communication context requires all fields")
         return cls(endpoint_id=endpoint_id, audience_ref=audience_ref, **optional)
 

@@ -93,10 +93,12 @@ def test_dispatcher_emits_deterministic_three_state_receipts_and_recovers_once()
         assert catalog.capabilities == (DESCRIPTOR,)
         assert await dispatcher.recover_processing_publications() == 1
         assert await dispatcher.recover_processing_publications() == 0
+        queue.recoveries = (_lease("later-recovery"),)
+        assert await dispatcher.recover_processing_publications() == 1
         assert await dispatcher.dispatch_pending_publications() == 1
 
         recovery = AmpEnvelope.parse(ingress.values[0])
-        accepted = AmpEnvelope.parse(ingress.values[1])
+        accepted = AmpEnvelope.parse(ingress.values[2])
         assert recovery.payload.type == "publication.delivery_unknown"
         assert recovery.payload.data["error"] == "dispatch outcome unavailable"
         assert accepted.payload.type == "publication.succeeded"
@@ -123,6 +125,20 @@ def test_dispatcher_turns_an_unavailable_executor_into_a_failed_receipt() -> Non
         assert await dispatcher.dispatch_pending_publications() == 1
         receipt = AmpEnvelope.parse(ingress.values[0])
         assert receipt.payload.type == "publication.failed"
+        assert receipt.payload.data["error"] == f"unavailable Publication capability: {CAPABILITY}"
+
+    asyncio.run(scenario())
+
+
+def test_recovery_without_an_executor_is_delivery_unknown() -> None:
+    async def scenario() -> None:
+        ingress = _Ingress()
+        dispatcher = PublicationDispatcher(_Queue(recoveries=(_lease("missing-recovery"),)), ingress)
+        dispatcher.bind(())
+
+        assert await dispatcher.recover_processing_publications() == 1
+        receipt = AmpEnvelope.parse(ingress.values[0])
+        assert receipt.payload.type == "publication.delivery_unknown"
         assert receipt.payload.data["error"] == f"unavailable Publication capability: {CAPABILITY}"
 
     asyncio.run(scenario())

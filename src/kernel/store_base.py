@@ -21,7 +21,13 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
-from src.kernel.store_schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V3, _SCHEMA, _SCHEMA_VERSION
+from src.kernel.store_schema import (
+    _ACTIVE_ACTIVITY_INDEX,
+    _ACTIVITIES_V3,
+    _REPLY_ROUTE_INDEX,
+    _SCHEMA,
+    _SCHEMA_VERSION,
+)
 
 
 def utc_now() -> str:
@@ -64,13 +70,18 @@ class RuntimeStoreBase:
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, 2, _SCHEMA_VERSION}:
+            elif int(row["version"]) not in {1, 2, 3, _SCHEMA_VERSION}:
                 raise RuntimeError("unsupported Agent runtime database schema")
             version = int(row["version"]) if row is not None else _SCHEMA_VERSION
             if version < _SCHEMA_VERSION:
                 task_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(tasks)")}
                 if "audience_ref" not in task_columns:
-                    connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'system.local'")
+                    connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT ''")
+                    connection.execute("UPDATE tasks SET audience_ref = 'legacy.task:' || task_id")
+                situation_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(situations)")}
+                if "audience_ref" not in situation_columns:
+                    connection.execute("ALTER TABLE situations ADD COLUMN audience_ref TEXT NOT NULL DEFAULT ''")
+                    connection.execute("UPDATE situations SET audience_ref = 'legacy.situation:' || situation_id")
                 activity_sql = str(
                     connection.execute(
                         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'"
@@ -79,6 +90,7 @@ class RuntimeStoreBase:
                 if "publication" not in activity_sql:
                     connection.executescript(_ACTIVITIES_V3)
             connection.execute(_ACTIVE_ACTIVITY_INDEX)
+            connection.execute(_REPLY_ROUTE_INDEX)
             connection.execute("UPDATE schema_meta SET version = ?", (_SCHEMA_VERSION,))
             connection.commit()
         self.recover_interrupted()

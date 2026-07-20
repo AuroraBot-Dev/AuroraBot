@@ -31,7 +31,13 @@ _ALLOWED_MIME_TYPES = {
 
 
 class ChatService:
-    def __init__(self, configuration: DashboardConfig, input_port: InteractiveInputPort) -> None:
+    def __init__(
+        self,
+        configuration: DashboardConfig,
+        input_port: InteractiveInputPort,
+        *,
+        reply_route_ttl_seconds: float = 3600.0,
+    ) -> None:
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
         self._subscribers: dict[int, set[asyncio.Queue[dict[str, Any]]]] = {}
@@ -42,6 +48,7 @@ class ChatService:
             input_port,
             lambda: self.bot_id,
             self.publish,
+            reply_route_ttl_seconds=reply_route_ttl_seconds,
         )
 
     async def start(self) -> None:
@@ -262,6 +269,8 @@ class ChatService:
             raise ChatError("INVALID_PAYLOAD", "Message payload is invalid")
         if bool(receiver["is_bot"]):
             await self._communication.require_owner(sender_id)
+            if message_type != "text":
+                raise ChatError("BOT_ATTACHMENT_UNSUPPORTED", "Bot does not accept attachments")
         attachment_id = await self._validate_attachment(sender_id, event.get("attachment_id"))
         return PrivateMessageInput(
             client_message_id=client_message_id,

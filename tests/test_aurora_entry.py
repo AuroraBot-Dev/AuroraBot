@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+REPLY_ROUTE_TTL_SECONDS = 3600.0
+
 
 class FakeRuntime:
     def __init__(self, root: Path, events: list[object]) -> None:
@@ -22,6 +24,7 @@ class FakeRuntime:
             logging_level="INFO",
             runtime=SimpleNamespace(profile="test"),
             dashboard=SimpleNamespace(host="127.0.0.1", port=8000),
+            communication=SimpleNamespace(reply_route_ttl_seconds=REPLY_ROUTE_TTL_SECONDS),
             apps=(),
         )
         self.events = events
@@ -92,14 +95,22 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
     preference = _preference(frozenset({"console", "dashboard", "mcp"}))
 
     class FakeConsole:
-        def __init__(self, _ledger_path: Path) -> None:
+        def __init__(self, _ledger_path: Path, *, reply_route_ttl_seconds: float) -> None:
+            assert reply_route_ttl_seconds == REPLY_ROUTE_TTL_SECONDS
             events.append("console-constructed")
 
         def close(self) -> None:
             pass
 
     class FakeChat:
-        def __init__(self, _configuration: object, _input_port: object) -> None:
+        def __init__(
+            self,
+            _configuration: object,
+            _input_port: object,
+            *,
+            reply_route_ttl_seconds: float,
+        ) -> None:
+            assert reply_route_ttl_seconds == REPLY_ROUTE_TTL_SECONDS
             events.append("dashboard-db-constructed")
 
         async def start(self) -> None:
@@ -126,7 +137,6 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
                         "org.example.mcp.echo",
                         "",
                         {"type": "object"},
-                        "resume",
                     ),
                     CapabilityDescriptor(
                         "org.example.mcp.reply",

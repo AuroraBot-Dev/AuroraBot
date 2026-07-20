@@ -44,6 +44,14 @@ class StoreIngressMixin(RuntimeStoreBase):
             ).fetchone()
             if duplicate is not None:
                 return None
+            if (
+                reply_grant is not None
+                and connection.execute(
+                    "SELECT 1 FROM reply_grants WHERE endpoint_id = ? AND route_ref = ?",
+                    (reply_grant["endpoint_id"], reply_grant["route_ref"]),
+                ).fetchone()
+            ):
+                raise ValueError("communication reply route is already bound to another Task")
             connection.execute(
                 "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
                 "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
@@ -171,27 +179,18 @@ class StoreIngressMixin(RuntimeStoreBase):
                     row["activity_id"],
                 ),
             )
-            terminal = request.get("result_mode") == "terminal"
-            message_id: str | None = None
-            if not (terminal and event_type == "effect.succeeded"):
-                message_payload = {**payload, "activity_id": row["activity_id"], "request": request}
-                message_id = self._insert_message(
-                    connection,
-                    task_id=str(row["task_id"]),
-                    target_agent_id=str(row["agent_id"]),
-                    message_type=event_type,
-                    payload=message_payload,
-                    causation_id=str(row["activity_id"]),
-                    correlation_id=str(row["task_id"]),
-                    priority=int(row["priority"]),
-                    now=now,
-                )
-            if terminal and event_type == "effect.succeeded":
-                connection.execute(
-                    "UPDATE agents SET status = 'COMPLETED', last_summary = ?, updated_at = ? WHERE agent_id = ?",
-                    (summary, now, row["agent_id"]),
-                )
-                self._end_task(connection, str(row["task_id"]), TaskStatus.COMPLETED, "terminal_effect_succeeded", now)
+            message_payload = {**payload, "activity_id": row["activity_id"], "request": request}
+            message_id = self._insert_message(
+                connection,
+                task_id=str(row["task_id"]),
+                target_agent_id=str(row["agent_id"]),
+                message_type=event_type,
+                payload=message_payload,
+                causation_id=str(row["activity_id"]),
+                correlation_id=str(row["task_id"]),
+                priority=int(row["priority"]),
+                now=now,
+            )
             connection.execute(
                 "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (

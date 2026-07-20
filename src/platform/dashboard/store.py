@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -124,7 +124,14 @@ CREATE TABLE dashboard_publications (
 );
 """
 
-_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2)
+_MIGRATION_3 = """
+ALTER TABLE dashboard_reply_routes ADD COLUMN expires_at TEXT;
+UPDATE dashboard_reply_routes
+SET expires_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE expires_at IS NULL;
+"""
+
+_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3)
 
 
 def _now() -> str:
@@ -265,14 +272,17 @@ class ChatStore:
         owner_user_id: int,
         conversation_ref: str,
         actor_ref: str,
+        reply_route_ttl_seconds: float,
     ) -> sqlite3.Row:
+        now = datetime.now(UTC)
         with self.connect() as connection:
+            connection.execute("DELETE FROM dashboard_reply_routes WHERE expires_at <= ?", (now.isoformat(),))
             connection.execute(
                 """
                 INSERT OR IGNORE INTO dashboard_reply_routes(
                     route_ref, external_event_id, external_message_id, owner_user_id,
-                    conversation_ref, actor_ref, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    conversation_ref, actor_ref, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     route_ref,
@@ -281,7 +291,8 @@ class ChatStore:
                     owner_user_id,
                     conversation_ref,
                     actor_ref,
-                    _now(),
+                    now.isoformat(),
+                    (now + timedelta(seconds=reply_route_ttl_seconds)).isoformat(),
                 ),
             )
             row = connection.execute(

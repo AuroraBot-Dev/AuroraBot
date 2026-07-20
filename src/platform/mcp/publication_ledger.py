@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 class PublicationRecord:
     request_id: str
     request_digest: str
+    endpoint_id: str
     status: str
     summary: str | None
     external_message_id: str | None
@@ -84,7 +85,7 @@ class MCPPublicationLedger:
     def get(self, request_id: str) -> PublicationRecord | None:
         row = self._database.execute(
             """
-            SELECT request_id, request_digest, status, summary, external_message_id, error
+            SELECT request_id, request_digest, endpoint_id, status, summary, external_message_id, error
             FROM publications WHERE request_id = ?
             """,
             (request_id,),
@@ -94,6 +95,7 @@ class MCPPublicationLedger:
         return PublicationRecord(
             request_id=str(row["request_id"]),
             request_digest=str(row["request_digest"]),
+            endpoint_id=str(row["endpoint_id"]),
             status=str(row["status"]),
             summary=str(row["summary"]) if row["summary"] is not None else None,
             external_message_id=(str(row["external_message_id"]) if row["external_message_id"] is not None else None),
@@ -128,25 +130,41 @@ class MCPPublicationLedger:
 
     def observe_delivery(
         self, endpoint_id: str, external_message_id: str, origin_delivery_id: str | None
-    ) -> str | None:
-        row = self._database.execute(
-            """
-            SELECT request_id FROM publications
-            WHERE endpoint_id = ? AND external_message_id = ? AND status = 'ACCEPTED'
-            """,
-            (endpoint_id, external_message_id),
-        ).fetchone()
-        if row is None:
-            return None
-        request_id = str(row["request_id"])
-        if origin_delivery_id is not None and origin_delivery_id != request_id:
-            return ""
+    ) -> tuple[str, str | None]:
+        if origin_delivery_id is not None:
+            row = self._database.execute(
+                """
+                SELECT request_id, endpoint_id, status, external_message_id
+                FROM publications WHERE request_id = ?
+                """,
+                (origin_delivery_id,),
+            ).fetchone()
+            if row is None:
+                return "quarantine", "origin_delivery_id is unknown"
+            if str(row["status"]) != "ACCEPTED":
+                return "quarantine", f"origin delivery is {str(row['status']).lower()}"
+            if str(row["endpoint_id"]) != endpoint_id:
+                return "quarantine", "origin delivery endpoint does not match notification"
+            if row["external_message_id"] != external_message_id:
+                return "quarantine", "origin delivery external message ID does not match notification"
+            request_id = origin_delivery_id
+        else:
+            row = self._database.execute(
+                """
+                SELECT request_id FROM publications
+                WHERE endpoint_id = ? AND external_message_id = ? AND status = 'ACCEPTED'
+                """,
+                (endpoint_id, external_message_id),
+            ).fetchone()
+            if row is None:
+                return "unmatched", None
+            request_id = str(row["request_id"])
         self._database.execute(
             "UPDATE publications SET delivery_observed_at = ? WHERE request_id = ?",
             (datetime.now(UTC).isoformat(), request_id),
         )
         self._database.commit()
-        return request_id
+        return "observed", request_id
 
     def quarantine(
         self,

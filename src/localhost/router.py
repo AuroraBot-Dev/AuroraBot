@@ -65,3 +65,16 @@ class CommandRouter:
         parser = _CommandParser(add_help=False, prog=command.names[0])
         command.configure(parser)
         return parser.parse_args(arguments)
+
+
+def is_conversation_input(value: str) -> bool:
+    raw = value.strip()
+    if not raw:
+        return False
+    if not raw.startswith("/"):
+        return True
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        return False
+    return len(tokens) > 1 and tokens[0].lower() in {"/say", "/s"}

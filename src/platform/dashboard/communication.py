@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
 from src.localhost.command_types import CommandControl
 from src.localhost.ports import PublicationExecutionRequest, PublicationOutcome
+from src.localhost.router import is_conversation_input
 from src.platform.dashboard.adapter import (
     DASHBOARD_AUDIENCE,
     DASHBOARD_ENDPOINT,
@@ -42,19 +44,23 @@ class ChatError(RuntimeError):
 class DashboardCommunication:
     """Keep Dashboard user IDs and delivery state inside the Platform boundary."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         configuration: DashboardConfig,
         store: ChatStore,
         input_port: InteractiveInputPort,
         bot_id: Callable[[], int],
         publish: Publish,
+        reply_route_ttl_seconds: float,
     ) -> None:
+        if reply_route_ttl_seconds <= 0:
+            raise ValueError("reply_route_ttl_seconds must be positive")  # noqa: TRY003
         self._configuration = configuration
         self._store = store
         self._input_port = input_port
         self._bot_id = bot_id
         self._publish = publish
+        self._reply_route_ttl_seconds = reply_route_ttl_seconds
 
     async def require_owner(self, user_id: int) -> None:
         owner = await asyncio.to_thread(
@@ -75,14 +81,15 @@ class DashboardCommunication:
         created: bool,
     ) -> None:
         if parsed.message_type != "text":
-            await self._direct_reply(sender_id, "当前暂不支持读取附件。", f"attachment-unsupported:{row_id}")
-            return
+            raise ChatError("BOT_ATTACHMENT_UNSUPPORTED", "Bot does not accept attachments")
         content = parsed.content or ""
         is_command = content.lstrip().startswith("/")
         if not created and is_command and not is_conversation_command(content):
             return
         try:
-            communication = await self._register_context(sender_id, parsed.client_message_id)
+            communication = None
+            if is_conversation_input(content):
+                communication = await self._register_context(sender_id, parsed.client_message_id)
             routed = await self._input_port.route_input(dashboard_input(parsed, communication))
             reply = await self._persist_command_reply(
                 sender_id,
@@ -205,6 +212,7 @@ class DashboardCommunication:
             owner_user_id=owner_user_id,
             conversation_ref=conversation_ref,
             actor_ref=actor_ref,
+            reply_route_ttl_seconds=self._reply_route_ttl_seconds,
         )
         return {
             "endpoint_id": DASHBOARD_ENDPOINT,
@@ -232,13 +240,19 @@ class DashboardCommunication:
             error = "Dashboard Publication route is missing"
         if error is not None:
             return None, error
+        now = datetime.now(UTC).isoformat()
+        await asyncio.to_thread(
+            self._store.execute,
+            "DELETE FROM dashboard_reply_routes WHERE expires_at <= ?",
+            (now,),
+        )
         route = await asyncio.to_thread(
             self._store.fetch_one,
             """
             SELECT r.* FROM dashboard_reply_routes r JOIN users u ON u.id = r.owner_user_id
-            WHERE r.route_ref = ? AND u.username = ? AND u.is_bot = 0
+            WHERE r.route_ref = ? AND r.expires_at > ? AND u.username = ? AND u.is_bot = 0
             """,
-            (request.route_ref, self._configuration.owner_username),
+            (request.route_ref, now, self._configuration.owner_username),
         )
         if route is None:
             return None, "Dashboard reply route is unknown"
@@ -265,23 +279,6 @@ class DashboardCommunication:
             attachment_id=None,
         )
         return self._message(row)
-
-    async def _direct_reply(self, receiver_id: int, text: str, stable_id: str) -> dict[str, Any]:
-        await self.require_owner(receiver_id)
-        client_message_id = str(uuid5(NAMESPACE_URL, f"aurora-dashboard-direct:{stable_id}"))
-        row, created = await asyncio.to_thread(
-            self._store.create_message,
-            client_message_id=client_message_id,
-            sender_id=self._bot_id(),
-            receiver_id=receiver_id,
-            message_type="text",
-            content=text,
-            attachment_id=None,
-        )
-        message = self._message(row)
-        if created:
-            await self._publish(receiver_id, {"type": "private_message", "message": message})
-        return message
 
     @staticmethod
     def _publication_query() -> str:

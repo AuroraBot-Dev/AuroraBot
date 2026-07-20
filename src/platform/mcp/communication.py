@@ -122,8 +122,6 @@ class CanonicalInboundMessage:
                     "actor_ref": self.actor_ref,
                     "audience_ref": self.audience_ref,
                     "reply_route_ref": self.reply_route_ref,
-                    "authored_by_self": self.authored_by_self,
-                    "origin_delivery_id": self.origin_delivery_id,
                 },
             },
             source_app=self.endpoint_id,

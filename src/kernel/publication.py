@@ -34,6 +34,31 @@ class PublicationAuthorizationError(PermissionError):
     """A Publication request is outside the Agent's effective grants."""
 
 
+def validate_publication_receipt(event_type: str, payload: dict[str, Any]) -> str:
+    if event_type not in {
+        "publication.succeeded",
+        "publication.failed",
+        "publication.delivery_unknown",
+    }:
+        raise PublicationContractError(f"unsupported publication receipt {event_type}")
+    for field in ("request_id", "capability", "endpoint_id", "operation"):
+        value = payload.get(field)
+        if not isinstance(value, str) or not value:
+            raise PublicationContractError(f"publication receipt requires non-empty {field}")
+    if payload["operation"] not in {"reply", "relay", "proactive_send"}:
+        raise PublicationContractError("publication receipt operation is invalid")
+    if event_type == "publication.succeeded":
+        result = payload.get("result")
+        external_message_id = result.get("external_message_id") if isinstance(result, dict) else None
+        if not isinstance(external_message_id, str) or not external_message_id:
+            raise PublicationContractError("publication success requires non-empty external_message_id")
+    else:
+        error = payload.get("error")
+        if not isinstance(error, str) or not error:
+            raise PublicationContractError("publication failure requires a non-empty error")
+    return str(payload["request_id"])
+
+
 def communication_ingress(
     *,
     event_type: str,
@@ -76,6 +101,10 @@ def validate_destination_grants(grants: tuple[DestinationGrant, ...]) -> dict[st
             raise PublicationContractError("destination grant operation must be relay or proactive_send")
         if not all((grant.endpoint_id, grant.capability_id, grant.target_audience_ref, grant.configuration_hash)):
             raise PublicationContractError("destination grant fields must be non-empty")
+        if not grant.allowed_source_audiences or any(
+            not _valid_source_audience_pattern(pattern) for pattern in grant.allowed_source_audiences
+        ):
+            raise PublicationContractError("destination source audiences must be exact or use a final :* wildcard")
         result[grant.alias] = grant
     return result
 
@@ -95,7 +124,7 @@ def effective_descriptors(  # noqa: PLR0913
         if descriptor is None:
             continue
         if descriptor.kind == "effect":
-            if agent.parent_agent_id is None or (descriptor.result_mode != "terminal" and not descriptor.root_only):
+            if agent.parent_agent_id is None or not descriptor.root_only:
                 descriptors.append(descriptor)
             continue
         if agent.parent_agent_id is not None or not descriptor.root_only:
@@ -116,7 +145,7 @@ def effective_descriptors(  # noqa: PLR0913
     return tuple(descriptors)
 
 
-def authorize_publication(  # noqa: C901, PLR0913
+def authorize_publication(  # noqa: C901, PLR0912, PLR0913
     *,
     publication: PublicationRequest,
     task: TaskState,
@@ -150,6 +179,8 @@ def authorize_publication(  # noqa: C901, PLR0913
         capability_id = grant.capability_id
         endpoint_id = grant.endpoint_id
         target_audience = grant.target_audience_ref
+        if publication.operation == "relay" and target_audience == task.audience_ref:
+            raise PublicationAuthorizationError("relay target audience must differ from its source audience")
     if capability_id not in profile.capabilities:
         raise PublicationAuthorizationError(f"Agent profile {profile.id} cannot request {capability_id}")
     descriptor = catalog.by_id.get(capability_id)
@@ -215,9 +246,15 @@ def publication_lease(activity: ActivityRequest) -> PublicationLease:
 
 def source_allowed(grant: DestinationGrant, audience_ref: str) -> bool:
     return any(
-        pattern in {"*", audience_ref} or (pattern.endswith(":*") and audience_ref.startswith(pattern[:-1]))
+        pattern == audience_ref or (pattern.endswith(":*") and audience_ref.startswith(pattern[:-1]))
         for pattern in grant.allowed_source_audiences
     )
+
+
+def _valid_source_audience_pattern(pattern: str) -> bool:
+    if not pattern or pattern == "*" or any(character.isspace() for character in pattern):
+        return False
+    return "*" not in pattern or (pattern.count("*") == 1 and pattern.endswith(":*") and bool(pattern[:-2]))
 
 
 def _destination_tool_schema(descriptor: CapabilityDescriptor, aliases: list[str]) -> dict[str, Any]:

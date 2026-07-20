@@ -160,9 +160,9 @@ class AgentKernel:
         if limit <= 0:
             raise ValueError("max_turns must be positive")
         async with self._lock:
+            ingested = await self._store_call(self.ingest_ready)
             await self._store_call(self.store.expire_tasks)
             await self._store_call(self.store.expire_situations)
-            ingested = await self._store_call(self.ingest_ready)
             claims = await self._store_call(self._claim_messages, limit)
         if not claims:
             await self._blocking_call(self._archive_terminal_tasks)
@@ -267,7 +267,7 @@ class AgentKernel:
                 raise ValueError(f"unknown effect capability {effect.capability}")
             if descriptor.kind != "effect":
                 raise PermissionError("Publication capabilities require a PublicationRequest")
-            if agent.parent_agent_id is not None and (descriptor.root_only or descriptor.result_mode == "terminal"):
+            if agent.parent_agent_id is not None and descriptor.root_only:
                 raise PermissionError("only the root Agent may request root-only effects")
             try:
                 validate(effect.parameters, descriptor.parameters_schema)
@@ -280,7 +280,6 @@ class AgentKernel:
                 "summary": f"effect.requested:{effect.capability}",
                 "request": {
                     "capability": effect.capability,
-                    "result_mode": descriptor.result_mode,
                     "parameters": effect.parameters,
                     "tool_call_id": effect.tool_call_id,
                     "continuation": effect.continuation,
@@ -360,9 +359,8 @@ class AgentKernel:
         return (
             any(self._inbox.glob("*.json"))
             or counts["pending_messages"] > 0
-            or counts["pending_effect_activities"] > 0
-            or counts["pending_publication_activities"] > 0
-            or counts["processing_publication_activities"] > 0
+            or self.store.has_claimable_external_activity(self.limits.effect_concurrency)
+            or self.store.has_recoverable_publication()
         )
 
     def has_pending_effect_requests(self) -> bool:

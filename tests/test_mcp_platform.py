@@ -119,6 +119,33 @@ kind = "effect"
             "aurora/event",
             {"type": "message.received", "summary": "spoofed", "data": {"text": "ignored"}},
         )
+        await platform._handle_notification(
+            "org.example.app",
+            "aurora/event",
+            {
+                "type": "effect.succeeded",
+                "summary": "spoofed receipt",
+                "data": {"request_id": "forged"},
+            },
+        )
+        await platform._handle_notification(
+            "org.example.app",
+            "aurora/event",
+            {
+                "type": "example.changed",
+                "summary": "spoofed communication",
+                "data": {"communication": {"reply_route_ref": "forged"}},
+            },
+        )
+        await platform._handle_notification(
+            "org.example.app",
+            "aurora/event",
+            {
+                "type": "publication.succeeded",
+                "summary": "spoofed publication receipt",
+                "data": {"request_id": "forged"},
+            },
+        )
         assert len(ingress.values) == 1
 
     asyncio.run(scenario())
@@ -159,6 +186,111 @@ def test_mcp_start_failure_rolls_back_started_resources(project_root: Path) -> N
 
         assert kit.stopped is True
         assert platform._ingress is None
+
+    asyncio.run(scenario())
+
+
+def test_remote_communication_notification_is_accepted_during_startup_and_ledger_closes_on_failure(  # noqa: C901
+    project_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (project_root / "config" / "apps.toml").write_text(
+        """[[app]]
+package = "com.example.remote"
+kind = "communication"
+enabled = true
+transport = "streamable_http"
+url = "https://example.test/mcp"
+timeout_seconds = 30
+
+[[app.tool]]
+name = "com.example.remote.publish"
+kind = "publication"
+
+[[app.publication]]
+capability = "com.example.remote.reply"
+tool = "com.example.remote.publish"
+operation = "reply"
+""",
+        encoding="utf-8",
+    )
+
+    class TrackingLedger:
+        instance: TrackingLedger | None = None
+
+        def __init__(self, _path: Path) -> None:
+            self.closed = False
+            TrackingLedger.instance = self
+
+        def observe_delivery(
+            self, _endpoint_id: str, _external_message_id: str, _origin_delivery_id: str | None
+        ) -> tuple[str, None]:
+            return "unmatched", None
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeKit:
+        stopped = False
+
+        async def start_all(self, _specs: object) -> None:
+            pass
+
+        async def stop_all(self) -> None:
+            self.stopped = True
+
+    class FakeClients:
+        notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue()
+        stopped = False
+
+        async def connect_all(self) -> None:
+            pass
+
+        async def refresh_tools(self) -> None:
+            pass
+
+        async def shutdown(self) -> None:
+            self.stopped = True
+
+    async def scenario() -> None:
+        ingress = _Ingress()
+        platform = MCPPlatform(load_configuration(project_root))
+        kit = FakeKit()
+        clients = FakeClients()
+        platform._kit = kit  # type: ignore[assignment]
+        platform._clients = clients  # type: ignore[assignment]
+
+        async def fail_after_notification(_app: object) -> None:
+            await platform._handle_notification(
+                "com.example.remote",
+                "aurora/event",
+                {
+                    "type": "message.received",
+                    "external_event_id": "event-during-startup",
+                    "external_message_id": "message-during-startup",
+                    "conversation_ref": "private-conversation",
+                    "actor_ref": "private-actor",
+                    "reply_route_ref": "private-route",
+                    "authored_by_self": False,
+                    "origin_delivery_id": None,
+                    "summary": "Early message",
+                    "data": {"text": "arrived during startup"},
+                },
+            )
+            raise _StartupError
+
+        monkeypatch.setattr("src.platform.mcp.adapter.MCPPublicationLedger", TrackingLedger)
+        monkeypatch.setattr(platform, "_connect_remote", fail_after_notification)
+
+        with pytest.raises(RuntimeError, match="startup failed"):
+            await platform.start(ingress)
+
+        assert len(ingress.values) == 1
+        event = AmpEnvelope.parse(ingress.values[0])
+        assert event.payload.type == "message.received"
+        assert TrackingLedger.instance is not None and TrackingLedger.instance.closed
+        assert platform._ledger is None and platform._publications is None
+        assert kit.stopped and clients.stopped
 
     asyncio.run(scenario())
 

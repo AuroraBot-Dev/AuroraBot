@@ -278,16 +278,15 @@ def test_loads_strict_communication_app_configuration(project_root: Path) -> Non
     assert app.destinations[0].allowed_source_audiences == ("owner.local", "com.example.qq:*")
 
 
-def test_communication_destination_accepts_global_source_audience_wildcard(project_root: Path) -> None:
+def test_communication_destination_rejects_global_source_audience_wildcard(project_root: Path) -> None:
     apps = project_root / "config" / "apps.toml"
     apps.write_text(
         _COMMUNICATION_APP.replace('["owner.local", "com.example.qq:*"]', '["*"]'),
         encoding="utf-8",
     )
 
-    destination = load_configuration(project_root).apps[0].destinations[0]
-
-    assert destination.allowed_source_audiences == ("*",)
+    with pytest.raises(ConfigurationError, match="exact or use a final"):
+        load_configuration(project_root)
 
 
 @pytest.mark.parametrize(

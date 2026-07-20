@@ -123,7 +123,6 @@ class AuroraRuntime:
             ),
         )
         handlers = {profile.id: _load_handler(profile.implementation) for profile in profiles}
-        communication = getattr(configuration, "communication", None)
         destination_grants = tuple(
             DestinationGrant(
                 alias=destination.alias,
@@ -149,7 +148,7 @@ class AuroraRuntime:
             kernel_config,
             handlers,
             destination_grants=destination_grants,
-            reply_route_ttl_seconds=getattr(communication, "reply_route_ttl_seconds", 3600.0),
+            reply_route_ttl_seconds=configuration.communication.reply_route_ttl_seconds,
             publication_configuration_hash=configuration.apps_configuration_hash,
         )
         runtime = cls(
@@ -239,8 +238,11 @@ class AuroraRuntime:
 
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
-            result: PumpResult = await self.kernel.pump(max_turns)
             recoveries_emitted = await self._publication_dispatcher.recover_processing_publications()
+            # Recovery can produce an accepted receipt for a Task whose duration
+            # elapsed while the process was stopped. Ingest that fact before
+            # applying timeout policy so confirmed delivery wins the race.
+            result: PumpResult = await self.kernel.pump(max_turns)
             receipts_emitted = await self._effect_dispatcher.dispatch_pending_effects()
             publication_receipts = await self._publication_dispatcher.dispatch_pending_publications()
             response = result.to_dict()

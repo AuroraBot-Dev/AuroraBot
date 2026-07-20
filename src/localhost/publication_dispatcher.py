@@ -30,7 +30,6 @@ class PublicationDispatcher:
         self._queue = queue
         self._ingress = ingress
         self._bindings: dict[str, PublicationExecutorBinding] | None = None
-        self._recovery_complete = False
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
@@ -62,11 +61,8 @@ class PublicationDispatcher:
     async def recover_processing_publications(self) -> int:
         if self._bindings is None:
             raise PublicationBindingError("Publication executors have not been bound")
-        if self._recovery_complete:
-            return 0
         leases = await self._queue.publication_recovery_requests()
         await self._dispatch_many(leases, recovery=True)
-        self._recovery_complete = True
         return len(leases)
 
     async def dispatch_pending_publications(self) -> int:
@@ -92,8 +88,9 @@ class PublicationDispatcher:
         binding = self._bindings.get(lease.capability)
         request = _execution_request(lease)
         if binding is None or binding.capability.endpoint != lease.endpoint_id:
+            status = "delivery_unknown" if recovery else "failed"
             outcome = PublicationOutcome(
-                "failed",
+                status,
                 f"No active Publication executor for {lease.capability}",
                 error=f"unavailable Publication capability: {lease.capability}",
             )

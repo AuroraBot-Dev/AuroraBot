@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import sqlite3
+from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import NAMESPACE_URL, uuid5
 
@@ -35,7 +39,10 @@ CONSOLE_SEND_DESCRIPTOR = CapabilityDescriptor(
 class ConsolePlatform:
     """Own Console routes, output, and durable Publication dispatch state."""
 
-    def __init__(self, ledger_path: Path | None = None) -> None:
+    def __init__(self, ledger_path: Path | None = None, *, reply_route_ttl_seconds: float = 3600.0) -> None:
+        if reply_route_ttl_seconds <= 0:
+            raise ValueError("reply_route_ttl_seconds must be positive")
+        self._reply_route_ttl_seconds = reply_route_ttl_seconds
         if ledger_path is not None:
             ledger_path.parent.mkdir(parents=True, exist_ok=True)
         self._database = sqlite3.connect(str(ledger_path) if ledger_path is not None else ":memory:")
@@ -45,11 +52,13 @@ class ConsolePlatform:
             PRAGMA journal_mode = WAL;
             CREATE TABLE IF NOT EXISTS reply_routes (
                 route_ref TEXT PRIMARY KEY,
-                external_event_id TEXT NOT NULL UNIQUE
+                external_event_id TEXT NOT NULL UNIQUE,
+                expires_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS publications (
                 request_id TEXT PRIMARY KEY,
                 text TEXT NOT NULL,
+                request_digest TEXT NOT NULL,
                 status TEXT NOT NULL CHECK(status IN ('dispatch_started', 'accepted', 'failed')),
                 summary TEXT,
                 external_message_id TEXT,
@@ -57,27 +66,41 @@ class ConsolePlatform:
             );
             """
         )
+        columns = {str(row["name"]) for row in self._database.execute("PRAGMA table_info(reply_routes)")}
+        if "expires_at" not in columns:
+            self._database.execute("ALTER TABLE reply_routes ADD COLUMN expires_at TEXT")
+            self._database.execute(
+                "UPDATE reply_routes SET expires_at = ? WHERE expires_at IS NULL",
+                (datetime.now(UTC).isoformat(),),
+            )
+            self._database.commit()
+        publication_columns = {str(row["name"]) for row in self._database.execute("PRAGMA table_info(publications)")}
+        if "request_digest" not in publication_columns:
+            self._database.execute("ALTER TABLE publications ADD COLUMN request_digest TEXT")
+            self._database.commit()
         self._messages: list[str] = []
         self._queue: asyncio.Queue[str] = asyncio.Queue()
 
     def register_reply_route(self, route_ref: str, external_event_id: str) -> None:
         """Persist the fixed Console route before its ingress AMP is submitted."""
+        now = datetime.now(UTC)
+        self._cleanup_reply_routes(now)
         self._database.execute(
-            "INSERT OR IGNORE INTO reply_routes(route_ref, external_event_id) VALUES (?, ?)",
-            (route_ref, external_event_id),
+            "INSERT OR IGNORE INTO reply_routes(route_ref, external_event_id, expires_at) VALUES (?, ?, ?)",
+            (route_ref, external_event_id, (now + timedelta(seconds=self._reply_route_ttl_seconds)).isoformat()),
         )
         self._database.commit()
 
     async def execute_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
-        previous = self._publication_outcome(request.request_id)
+        previous = self._publication_outcome(request)
         if previous is not None:
             return previous
         error = self._validate(request)
         if error is not None:
             return self._record_failure(request, error)
         self._database.execute(
-            "INSERT INTO publications(request_id, text, status) VALUES (?, ?, 'dispatch_started')",
-            (request.request_id, request.text),
+            "INSERT INTO publications(request_id, text, request_digest, status) VALUES (?, ?, ?, 'dispatch_started')",
+            (request.request_id, request.text, _request_digest(request)),
         )
         self._database.commit()
 
@@ -93,7 +116,7 @@ class ConsolePlatform:
         return PublicationOutcome("accepted", summary, external_message_id=external_message_id)
 
     async def recover_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
-        outcome = self._publication_outcome(request.request_id)
+        outcome = self._publication_outcome(request)
         if outcome is not None:
             return outcome
         return PublicationOutcome(
@@ -102,10 +125,25 @@ class ConsolePlatform:
             error="interrupted_before_dispatch",
         )
 
-    def _publication_outcome(self, request_id: str) -> PublicationOutcome | None:
-        row = self._database.execute("SELECT * FROM publications WHERE request_id = ?", (request_id,)).fetchone()
+    def _publication_outcome(self, request: PublicationExecutionRequest) -> PublicationOutcome | None:
+        row = self._database.execute(
+            "SELECT * FROM publications WHERE request_id = ?", (request.request_id,)
+        ).fetchone()
         if row is None:
             return None
+        stored_digest = row["request_digest"]
+        if stored_digest is None:
+            return PublicationOutcome(
+                "delivery_unknown",
+                "Console reply predates request identity tracking",
+                error="legacy_publication_request_identity_unknown",
+            )
+        if stored_digest != _request_digest(request):
+            return PublicationOutcome(
+                "failed",
+                "Console Publication idempotency conflict",
+                error="idempotency conflict: request ID was reused with a different request",
+            )
         status = str(row["status"])
         if status == "dispatch_started":
             return PublicationOutcome(
@@ -130,16 +168,24 @@ class ConsolePlatform:
             return "Console Publication text must be non-empty"
         if request.target_audience_ref != CONSOLE_AUDIENCE or request.route_ref is None:
             return "Console Publication route is invalid"
+        now = datetime.now(UTC)
+        self._cleanup_reply_routes(now)
         route = self._database.execute(
-            "SELECT 1 FROM reply_routes WHERE route_ref = ?", (request.route_ref,)
+            "SELECT 1 FROM reply_routes WHERE route_ref = ? AND expires_at > ?",
+            (request.route_ref, now.isoformat()),
         ).fetchone()
         return None if route is not None else "Console reply route is unknown"
+
+    def _cleanup_reply_routes(self, now: datetime) -> None:
+        self._database.execute("DELETE FROM reply_routes WHERE expires_at <= ?", (now.isoformat(),))
+        self._database.commit()
 
     def _record_failure(self, request: PublicationExecutionRequest, error: str) -> PublicationOutcome:
         summary = "Console reply failed"
         self._database.execute(
-            "INSERT INTO publications(request_id, text, status, summary, error) VALUES (?, ?, 'failed', ?, ?)",
-            (request.request_id, request.text, summary, error),
+            "INSERT INTO publications(request_id, text, request_digest, status, summary, error) "
+            "VALUES (?, ?, ?, 'failed', ?, ?)",
+            (request.request_id, request.text, _request_digest(request), summary, error),
         )
         self._database.commit()
         return PublicationOutcome("failed", summary, error=error)
@@ -158,3 +204,8 @@ class ConsolePlatform:
 
     def close(self) -> None:
         self._database.close()
+
+
+def _request_digest(request: PublicationExecutionRequest) -> str:
+    canonical = json.dumps(asdict(request), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()

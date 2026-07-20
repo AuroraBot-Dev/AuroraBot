@@ -37,6 +37,11 @@ from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.platform.mcp")
 
+_INTERNAL_RECEIPT_TYPES = {
+    "effect.succeeded",
+    "effect.failed",
+}
+
 
 @dataclass(slots=True)
 class _RemoteConnection:
@@ -77,6 +82,11 @@ class MCPPlatform:
         logger.info("MCP platform startup started apps=%d", len(self._configuration.apps))
         self._ingress = ingress
         try:
+            if any(app.kind == "communication" for app in self._configuration.apps):
+                self._ledger = MCPPublicationLedger(
+                    self._configuration.root / "data" / "platform" / "mcp" / "publications.sqlite3"
+                )
+                self._publications = MCPPublicationService(self._configuration, self._ledger, self._call_tool)
             startup_timeout = max((app.timeout_seconds for app in self._configuration.apps), default=30.0)
             local_specs = [self._local_spec(app) for app in self._configuration.apps if app.transport == "stdio"]
             await self._kit.start_all(local_specs)
@@ -91,11 +101,6 @@ class MCPPlatform:
             self._catalog = CapabilityCatalogSnapshot(
                 self._effect_catalog.capabilities + self._publication_catalog.capabilities
             )
-            if any(app.kind == "communication" for app in self._configuration.apps):
-                self._ledger = MCPPublicationLedger(
-                    self._configuration.root / "data" / "platform" / "mcp" / "publications.sqlite3"
-                )
-                self._publications = MCPPublicationService(self._configuration, self._ledger, self._call_tool)
             self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
             self._started = True
         except BaseException:
@@ -217,7 +222,6 @@ class MCPPlatform:
                         name,
                         str(getattr(tool, "description", "") or ""),
                         dict(schema),
-                        "resume",
                     )
                     continue
                 if app.kind != "communication" or schema != RAW_PUBLICATION_SCHEMA:
@@ -329,7 +333,9 @@ class MCPPlatform:
             except Exception:
                 logger.exception("MCP notification worker rejected an event package=%s method=%s", package, method)
 
-    async def _handle_notification(self, package: str, method: str, params: dict[str, object]) -> None:
+    async def _handle_notification(  # noqa: PLR0912
+        self, package: str, method: str, params: dict[str, object]
+    ) -> None:
         if method == "notifications/message" and params.get("logger") == "aurora/event":
             payload = params.get("data")
             if not isinstance(payload, dict):
@@ -344,6 +350,11 @@ class MCPPlatform:
             logger.warning("MCP notification rejected from unknown package=%s", package)
             return
         event_type = params.get("type")
+        if event_type in _INTERNAL_RECEIPT_TYPES or (
+            isinstance(event_type, str) and event_type.startswith("publication.")
+        ):
+            logger.warning("MCP notification rejected internal receipt package=%s event_type=%s", package, event_type)
+            return
         if event_type == "message.received":
             if app.kind != "communication" or self._ledger is None:
                 logger.warning("MCP message.received rejected from utility package=%s", package)
@@ -353,10 +364,13 @@ class MCPPlatform:
             except CommunicationNotificationError as error:
                 logger.warning("malformed MCP communication notification package=%s error=%s", package, error)
                 return
-            observed = self._ledger.observe_delivery(package, inbound.external_message_id, inbound.origin_delivery_id)
-            if observed is not None:
-                if not observed:
-                    self._quarantine(inbound, "origin_delivery_id does not match local delivery")
+            observation, detail = self._ledger.observe_delivery(
+                package, inbound.external_message_id, inbound.origin_delivery_id
+            )
+            if observation == "observed":
+                return
+            if observation == "quarantine":
+                self._quarantine(inbound, detail or "inbound delivery metadata conflicts with local ledger")
                 return
             if inbound.authored_by_self:
                 self._quarantine(inbound, "self-authored message has no local delivery record")
@@ -365,6 +379,13 @@ class MCPPlatform:
         else:
             data = params.get("data", {})
             if not isinstance(event_type, str) or not event_type or not isinstance(data, dict):
+                return
+            if _contains_communication_route(data):
+                logger.warning(
+                    "MCP non-message notification rejected communication route package=%s event_type=%s",
+                    package,
+                    event_type,
+                )
                 return
             event = new_amp(
                 event_type=event_type,
@@ -447,3 +468,13 @@ def _require_successful_tool_result(result: dict[str, object]) -> None:
         return
     detail = result.get("text") or result.get("content") or "MCP tool returned isError"
     raise MCPToolCallError(str(detail))
+
+
+def _contains_communication_route(value: object) -> bool:
+    if isinstance(value, dict):
+        if any(key in {"communication", "reply_route", "reply_route_ref"} for key in value):
+            return True
+        return any(_contains_communication_route(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_communication_route(item) for item in value)
+    return False

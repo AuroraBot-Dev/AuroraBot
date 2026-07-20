@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from prompt_toolkit.input import DummyInput
 from prompt_toolkit.output import DummyOutput
 
-from src.contracts.agent import TaskStatus
+from src.contracts.agent import AgentDecision, PublicationRequest, TaskStatus
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.localhost.ports import PublicationExecutionRequest, PublicationExecutorBinding
+from src.localhost.publication_dispatcher import _execution_request
 from src.localhost.runtime import AuroraRuntime
 from src.platform.console import (
     CONSOLE_AUDIENCE,
@@ -49,10 +52,21 @@ def test_console_publication_is_idempotent_and_recoverable(tmp_path: Path) -> No
         request = _publication("request-1", "route", "one")
         first = await console.execute_publication(request)
         duplicate = await console.execute_publication(request)
+        conflicts = (
+            await console.execute_publication(replace(request, text="different")),
+            await console.execute_publication(replace(request, route_ref="different-route")),
+            await console.execute_publication(replace(request, capability="different.capability")),
+            await console.execute_publication(replace(request, endpoint_id="different.endpoint")),
+            await console.execute_publication(replace(request, operation="relay")),
+        )
         missing = await console.recover_publication(_publication("missing", "route", "two"))
 
         assert first.status == duplicate.status == "accepted"
         assert first.external_message_id == duplicate.external_message_id
+        assert all(
+            outcome.status == "failed" and outcome.error is not None and "idempotency conflict" in outcome.error
+            for outcome in conflicts
+        )
         assert missing.status == "failed" and missing.error == "interrupted_before_dispatch"
         assert await console.next_message() == "one"
         assert console.drain_messages() == ()
@@ -64,6 +78,160 @@ def test_console_publication_is_idempotent_and_recoverable(tmp_path: Path) -> No
         assert recovered.external_message_id == first.external_message_id
         assert restarted.drain_messages() == ()
         restarted.close()
+
+    asyncio.run(scenario())
+
+
+def test_console_reply_route_expires_and_is_cleaned(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        console = ConsolePlatform(tmp_path / "console-expiry.sqlite3", reply_route_ttl_seconds=0.001)
+        console.register_reply_route("route", "event")
+        await asyncio.sleep(0.01)
+
+        outcome = await console.execute_publication(_publication("expired", "route", "late"))
+
+        assert outcome.status == "failed" and outcome.error == "Console reply route is unknown"
+        assert console._database.execute("SELECT COUNT(*) FROM reply_routes").fetchone()[0] == 0
+        console.close()
+
+    asyncio.run(scenario())
+
+
+def test_console_legacy_publication_recovers_as_unknown(tmp_path: Path) -> None:
+    ledger = tmp_path / "legacy-console.sqlite3"
+    with sqlite3.connect(ledger) as database:
+        database.executescript(
+            """
+            CREATE TABLE reply_routes (
+                route_ref TEXT PRIMARY KEY,
+                external_event_id TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE publications (
+                request_id TEXT PRIMARY KEY,
+                text TEXT NOT NULL,
+                status TEXT NOT NULL,
+                summary TEXT,
+                external_message_id TEXT,
+                error TEXT
+            );
+            INSERT INTO publications VALUES (
+                'legacy-request', 'one', 'accepted', 'Console reply accepted', 'legacy-message', NULL
+            );
+            """
+        )
+
+    async def scenario() -> None:
+        console = ConsolePlatform(ledger)
+        try:
+            outcome = await console.recover_publication(_publication("legacy-request", "route", "one"))
+            assert outcome.status == "delivery_unknown"
+            assert outcome.error == "legacy_publication_request_identity_unknown"
+        finally:
+            console.close()
+
+    asyncio.run(scenario())
+
+
+def test_runtime_recovers_accepted_publication_before_task_timeout(project_root: Path, tmp_path: Path) -> None:
+    async def scenario() -> None:
+        ledger = tmp_path / "console-recovery.sqlite3"
+        route_ref = "restart-route"
+        event_id = str(uuid4())
+        task_id = ""
+
+        runtime = AuroraRuntime.create(project_root, executor_bindings=None, publication_bindings=None)
+        console = ConsolePlatform(ledger)
+        console.register_reply_route(route_ref, event_id)
+        runtime.bind_platform_executors(
+            (),
+            (
+                PublicationExecutorBinding(
+                    CONSOLE_SEND_DESCRIPTOR,
+                    console,
+                    console,
+                    "platform.console",
+                    "test",
+                ),
+            ),
+        )
+
+        class Handler:
+            def handle(self, _context: object) -> AgentDecision:
+                return AgentDecision(
+                    publication_request=PublicationRequest(
+                        "reply",
+                        "accepted before restart",
+                        "complete_on_success",
+                        route_ref=route_ref,
+                    )
+                )
+
+        runtime.kernel._handlers[runtime.kernel.limits.root_profile] = Handler()  # type: ignore[assignment]
+        await runtime.kernel.submit_amp(
+            new_amp(
+                event_type="message.received",
+                session_id="test:console",
+                summary="restart",
+                data={
+                    "communication": {
+                        "endpoint_id": CONSOLE_ENDPOINT,
+                        "external_event_id": event_id,
+                        "external_message_id": str(uuid4()),
+                        "conversation_ref": "console.local:owner",
+                        "actor_ref": "owner.local",
+                        "audience_ref": CONSOLE_AUDIENCE,
+                        "reply_route_ref": route_ref,
+                    }
+                },
+                source_app="platform.console",
+                source_instance="test",
+            )
+        )
+        await runtime.kernel.pump()
+        lease = (await runtime.kernel.claim_publication_requests())[0]
+        task_id = lease.task_id
+        assert (await console.execute_publication(_execution_request(lease))).status == "accepted"
+        with runtime.kernel.store.transaction() as database:
+            database.execute("UPDATE tasks SET started_at = '2000-01-01T00:00:00+00:00' WHERE task_id = ?", (task_id,))
+        await runtime.shutdown()
+        console.close()
+
+        restarted = AuroraRuntime.create(project_root, executor_bindings=None, publication_bindings=None)
+        recovered_console = ConsolePlatform(ledger)
+        restarted.bind_platform_executors(
+            (),
+            (
+                PublicationExecutorBinding(
+                    CONSOLE_SEND_DESCRIPTOR,
+                    recovered_console,
+                    recovered_console,
+                    "platform.console",
+                    "test",
+                ),
+            ),
+        )
+        try:
+            result = await restarted.pump()
+            assert result["publication_recovery_receipts_emitted"] == 1
+            assert restarted.kernel.get_task(task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
+        finally:
+            await restarted.shutdown()
+            recovered_console.close()
+
+    asyncio.run(scenario())
+
+
+def test_console_deterministic_commands_do_not_register_reply_routes(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = AuroraRuntime.create(project_root)
+        console = ConsolePlatform()
+        inputs = iter(("/status", "/quit"))
+        try:
+            await run_console(runtime, console, readline=lambda _prompt: next(inputs), output=lambda _text: None)
+            assert console._database.execute("SELECT COUNT(*) FROM reply_routes").fetchone()[0] == 0
+        finally:
+            await runtime.shutdown()
+            console.close()
 
     asyncio.run(scenario())
 

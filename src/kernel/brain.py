@@ -44,6 +44,8 @@ def build_brain_context(
         task_projections.append(projection)
     agent_projections: list[dict[str, Any]] = []
     for agent in agents:
+        if agent.task_id != current_task_id and task_audiences.get(agent.task_id) != audience_ref:
+            continue
         projection = {
             "agent_id": agent.agent_id,
             "task_id": agent.task_id,
@@ -52,13 +54,21 @@ def build_brain_context(
             "status": agent.status,
             "updated_at": agent.updated_at,
         }
-        if agent.task_id == current_task_id or task_audiences.get(agent.task_id) == audience_ref:
-            projection.update({"assignment": agent.assignment, "last_summary": agent.last_summary})
+        projection.update({"assignment": agent.assignment, "last_summary": agent.last_summary})
         agent_projections.append(projection)
+    situations = tuple(
+        situation
+        for situation in store.situations()
+        if situation["audience_ref"] == audience_ref or _system_audience(str(situation["audience_ref"]))
+    )
     return BrainContextSnapshot(
         persona={"content": configuration.soul_content, "hash": configuration.soul_hash},
         active_tasks=tuple(task_projections),
         active_agents=tuple(agent_projections),
-        ambient_situations=store.situations(),
+        ambient_situations=situations,
         generated_at=utc_now(),
     )
+
+
+def _system_audience(audience_ref: str) -> bool:
+    return audience_ref == "system.local" or audience_ref.endswith(":system")

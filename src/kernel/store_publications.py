@@ -76,8 +76,8 @@ class StorePublicationsMixin(RuntimeStoreBase):
             request = json.loads(row["request_json"])
             for key in ("capability", "endpoint_id", "operation"):
                 supplied = payload.get(key)
-                if supplied is not None and supplied != request.get(key):
-                    return False, None
+                if supplied != request.get(key):
+                    raise ValueError(f"publication receipt {key} does not match its request")
             if row["status"] != ActivityStatus.PROCESSING or row["task_status"] != TaskStatus.ACTIVE:
                 self._record_publication_event(
                     connection,
@@ -96,7 +96,7 @@ class StorePublicationsMixin(RuntimeStoreBase):
                 (
                     ActivityStatus.COMPLETED if succeeded else ActivityStatus.ERROR,
                     _json(payload.get("result")) if succeeded else None,
-                    payload.get("error") or ("delivery_unknown" if event_type.endswith("delivery_unknown") else None),
+                    payload.get("error") if not succeeded else None,
                     now,
                     row["activity_id"],
                 ),

@@ -236,13 +236,15 @@ def test_dashboard_store_applies_reply_route_and_publication_migration(tmp_path:
     store.initialize()
 
     with sqlite3.connect(database) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         message_columns = {row[1] for row in connection.execute("PRAGMA table_info(messages)")}
+        route_columns = {row[1] for row in connection.execute("PRAGMA table_info(dashboard_reply_routes)")}
         preserved = connection.execute("SELECT content FROM messages WHERE id = 1").fetchone()
     assert {"dashboard_reply_routes", "dashboard_publications"} <= tables
     assert "source_publication_request_id" in message_columns
     assert "source_effect_request_id" not in message_columns
+    assert "expires_at" in route_columns
     assert preserved == ("preserved",)
 
 
@@ -394,6 +396,10 @@ def test_dashboard_runtime_commands_ack_before_reply_and_are_idempotent(project_
             assert websocket.receive_json()["message"]["content"] == "Aurora 正在退出。"
             assert stopped.wait(timeout=1)
 
+        with sqlite3.connect(runtime.configuration.dashboard.database_path) as connection:
+            route_count = connection.execute("SELECT COUNT(*) FROM dashboard_reply_routes").fetchone()[0]
+        assert route_count == 0
+
         history = client.get(
             f"/api/messages/private/{bot_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -519,6 +525,45 @@ def test_dashboard_publication_is_idempotent_and_recoverable(project_root: Path)
             history = await chat.private_history(owner["user_id"], bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello owner"]
             await chat.unsubscribe(owner["user_id"], queue)
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_dashboard_reply_route_expires_and_is_cleaned(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = AuroraRuntime.create(project_root)
+        chat = ChatService(
+            runtime.configuration.dashboard,
+            runtime,
+            reply_route_ttl_seconds=0.001,
+        )
+        await chat.start()
+        try:
+            owner = await chat.register("alice", "secret")
+            bot = next(item for item in await chat.list_users(owner["user_id"]) if item["is_bot"])
+            await chat.send_private_message(
+                owner["user_id"],
+                {
+                    "client_message_id": str(uuid4()),
+                    "receiver_id": bot["user_id"],
+                    "message_type": "text",
+                    "content": "short lived",
+                },
+            )
+            route = await asyncio.to_thread(chat.store.fetch_one, "SELECT route_ref FROM dashboard_reply_routes")
+            assert route is not None
+            await asyncio.sleep(0.01)
+
+            outcome = await chat.execute_publication(_publication("expired", str(route["route_ref"]), "late"))
+
+            assert outcome.status == "failed" and outcome.error == "Dashboard reply route is unknown"
+            remaining = await asyncio.to_thread(
+                chat.store.fetch_one,
+                "SELECT COUNT(*) AS count FROM dashboard_reply_routes",
+            )
+            assert remaining is not None and int(remaining["count"]) == 0
         finally:
             await runtime.shutdown()
 
@@ -655,7 +700,7 @@ def test_run_forever_delivers_plain_model_text_to_dashboard(project_root: Path) 
     asyncio.run(scenario())
 
 
-def test_bot_attachment_is_saved_and_gets_deterministic_reply(project_root: Path) -> None:
+def test_bot_attachment_is_deterministically_rejected(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
         chat = await _started_chat(runtime)
@@ -663,18 +708,20 @@ def test_bot_attachment_is_saved_and_gets_deterministic_reply(project_root: Path
             user = await chat.register("alice", "secret")
             bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             attachment = await chat.upload_attachment(user["user_id"], "note.txt", "text/plain", b"x")
-            await chat.send_private_message(
-                user["user_id"],
-                {
-                    "client_message_id": str(uuid4()),
-                    "receiver_id": bot["user_id"],
-                    "message_type": "file",
-                    "content": "note.txt",
-                    "attachment_id": attachment["attachment_id"],
-                },
-            )
+            with pytest.raises(ChatError) as rejected:
+                await chat.send_private_message(
+                    user["user_id"],
+                    {
+                        "client_message_id": str(uuid4()),
+                        "receiver_id": bot["user_id"],
+                        "message_type": "file",
+                        "content": "note.txt",
+                        "attachment_id": attachment["attachment_id"],
+                    },
+                )
+            assert rejected.value.code == "BOT_ATTACHMENT_UNSUPPORTED"
             history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
-            assert history[-1]["content"] == "当前暂不支持读取附件。"
+            assert history == []
             assert not tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
         finally:
             await runtime.shutdown()
