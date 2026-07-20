@@ -8,12 +8,12 @@ body:
       value: |
         提交前请确认：
 
-        * 该问题确实是 **AuroraBot 框架本身的错误**，而**不是 LLM / 模型服务 / 上游适配器（如 OneBot）的问题**。
+        * 该问题确实是 **AuroraBot 框架本身的错误**，而**不是 LLM / 模型服务 / 外部 MCP Server 的问题**。
         * 你使用的是**最新版本**的 AuroraBot。请先检查是否有可用的更新。
 
         Before submitting, please confirm:
 
-        * The issue is indeed **a bug in the AuroraBot framework itself**, not an issue with the LLM / model service / upstream adapter (e.g., OneBot).
+        * The issue is indeed **a bug in the AuroraBot framework itself**, not an issue with the LLM, model service, or external MCP Server.
         * You are using the **latest version** of AuroraBot. Please check for available updates first.
   - type: textarea
     id: bug-description
@@ -61,10 +61,10 @@ body:
       label: 日志 / 错误信息 | Logs / Error Output
       description: |
         请粘贴相关的日志输出或 Python Traceback。
-        **请注意：日志是诊断问题的重要依据，请务必上传！**
+        请先移除密钥、完整提示词、真实对话、continuation 和其他敏感载荷。
 
         Please paste the relevant log output or Python traceback.
-        **ATTENTION: Logs are the key to resolving the bug. Please upload them!**
+        Remove secrets, full prompts, real conversations, continuations, and other sensitive payloads first.
       render: text
     validations:
       required: true
@@ -79,7 +79,9 @@ body:
         - OS:
         - Python 版本 | Python Version:
         - AuroraBot 版本 | AuroraBot Version:
-        - 使用的 LLM 网关 | LLM Gateway (e.g., OpenAI / DeepSeek / ...):
-        - 使用的适配器 | Adapter (e.g., OneBot V11 / ...):
+        - 使用的模型角色与 Provider | Model Role and Provider:
+        - 启动的平台 | Platforms (Console / Dashboard / MCP / Headless):
+        - 使用的 profile | Profile:
+        - 相关 MCP 应用 | Related MCP Applications:
     validations:
       required: true
