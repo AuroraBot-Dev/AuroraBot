@@ -6,6 +6,8 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from src.platform.dashboard.security import new_token
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
@@ -85,6 +87,8 @@ class ChatStore:
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(_SCHEMA)
+        token_path = self.database_path.parent / "Token.txt"
+        token_path.write_text(new_token())
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
         with self.connect() as connection:

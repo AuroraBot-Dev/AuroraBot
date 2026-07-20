@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+
 from src.localhost.command_types import CommandControl, CommandResult
 from src.platform.dashboard.routing import (
     PrivateMessageInput,
@@ -22,6 +23,9 @@ from src.platform.dashboard.routing import (
 )
 from src.platform.dashboard.security import hash_password, new_token, token_digest, verify_password
 from src.platform.dashboard.store import ChatStore
+from src.utils.log_utils import get_logger
+
+logger = get_logger("aurora.dashboard.service")
 
 if TYPE_CHECKING:
     from src.contracts.configuration import DashboardConfig
@@ -54,6 +58,9 @@ class ChatService:
 
     async def start(self) -> None:
         await asyncio.to_thread(self.store.initialize)
+        token_path = self.configuration.database_path.parent / "Token.txt"
+        token = (await asyncio.to_thread(token_path.read_text)).strip()
+        logger.info("dashboard access token: [bold cyan]%s[/bold cyan]", token)
         bot = await asyncio.to_thread(
             self.store.ensure_bot,
             self.configuration.bot.username,
@@ -61,6 +68,7 @@ class ChatService:
             self.configuration.bot.avatar_url,
         )
         self._bot_id = int(bot["id"])
+        
 
     @property
     def bot_id(self) -> int:
@@ -476,6 +484,7 @@ class ChatService:
             "created_at": str(row["created_at"]),
             "status": str(row["status"]),
         }
+
 
     @staticmethod
     def _atomic_write(path: Path, data: bytes) -> None:

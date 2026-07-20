@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from src.contracts.amp import AmpValidationError
 from src.contracts.configuration import DashboardConfig
 from src.localhost.ports import DashboardControlPort, DashboardDebugPort
+from src.platform.dashboard.security import new_token
 from src.platform.dashboard.service import ChatError, ChatService
 from src.utils.log_utils import get_logger
 
@@ -18,8 +19,7 @@ logger = get_logger("aurora.dashboard.api")
 
 
 class Credentials(BaseModel):
-    username: str
-    password: str
+    token_login: str
 
 
 def _bearer(authorization: str | None) -> str:
@@ -60,19 +60,20 @@ def create_app(
     def health() -> dict[str, object]:
         return {"ok": True, "status": "ok", "profile": profile}
 
-    @app.post("/api/auth/register")
-    async def register(payload: Credentials) -> dict[str, Any]:
-        try:
-            return await chat.register(payload.username, payload.password)
-        except ChatError as error:
-            raise _http_error(error) from error
-
     @app.post("/api/auth/login")
     async def login(payload: Credentials) -> dict[str, Any]:
-        try:
-            return await chat.login(payload.username, payload.password)
-        except ChatError as error:
-            raise _http_error(error) from error
+        data_dir = configuration.database_path.parent
+        bootstrap = (await asyncio.to_thread((data_dir / "Token.txt").read_text)).strip()
+        if payload.token_login.strip() != bootstrap:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        session_path = data_dir / "session_token.txt"
+        if await asyncio.to_thread(session_path.exists):
+            session_token = (await asyncio.to_thread(session_path.read_text)).strip()
+        else:
+            session_token = new_token()
+            await asyncio.to_thread(session_path.write_text, session_token)
+            logger.info("session token saved to %s", session_path)
+        return {"access_token": session_token, "token_type": "bearer"}
 
     @app.post("/api/auth/logout", status_code=204)
     async def logout(authorization: Annotated[str | None, Header()] = None) -> None:
