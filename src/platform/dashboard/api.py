@@ -1,8 +1,6 @@
 """FastAPI adapter for Dashboard-owned chat and localhost debug ports."""
 
 import asyncio
-import secrets
-from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
@@ -13,11 +11,7 @@ from pydantic import BaseModel
 from src.contracts.amp import AmpValidationError
 from src.contracts.configuration import DashboardConfig
 from src.localhost.ports import DashboardControlPort, DashboardDebugPort
-from src.platform.dashboard.security import new_token, token_digest
 from src.platform.dashboard.service import ChatError, ChatService
-from src.utils.log_utils import get_logger
-
-logger = get_logger("aurora.dashboard.api")
 
 
 class Credentials(BaseModel):
@@ -64,28 +58,10 @@ def create_app(
 
     @app.post("/api/auth/login")
     async def login(payload: Credentials) -> dict[str, Any]:
-        data_dir = configuration.database_path.parent
         try:
-            bootstrap = (await asyncio.to_thread((data_dir / "Token.txt").read_text)).strip()
-        except FileNotFoundError as err:
-            raise HTTPException(status_code=503, detail="Bootstrap token not initialized") from err
-        if not secrets.compare_digest(payload.token_login.strip(), bootstrap):
-            raise HTTPException(status_code=401, detail="Invalid token")
-        admin = await asyncio.to_thread(chat.store.ensure_admin)
-        now = datetime.now(UTC)
-        session_token = new_token()
-        await asyncio.to_thread(
-            chat.store.execute,
-            "INSERT INTO sessions(token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-            (
-                token_digest(session_token),
-                int(admin["id"]),
-                (now + timedelta(seconds=configuration.session_ttl_seconds)).isoformat(),
-                now.isoformat(),
-            ),
-        )
-        logger.info("session token saved to %s", session_token)
-        return {"access_token": session_token, "token_type": "bearer", "user": chat._user(admin)}
+            return await chat.login(payload.token_login)
+        except ChatError as error:
+            raise _http_error(error) from error
 
     @app.post("/api/auth/logout", status_code=204)
     async def logout(authorization: Annotated[str | None, Header()] = None) -> None:

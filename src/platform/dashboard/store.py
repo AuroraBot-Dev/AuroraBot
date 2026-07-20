@@ -133,7 +133,12 @@ SET expires_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
 WHERE expires_at IS NULL;
 """
 
-_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3)
+_MIGRATION_4 = """
+ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0 CHECK (is_owner IN (0, 1));
+CREATE UNIQUE INDEX idx_users_single_owner ON users(is_owner) WHERE is_owner = 1;
+"""
+
+_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4)
 
 
 def _now() -> str:
@@ -155,28 +160,50 @@ class ChatStore:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
-            connection.executescript(_SCHEMA)
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if version > len(_MIGRATIONS):
+                raise RuntimeError(f"Dashboard database schema {version} is newer than this runtime")  # noqa: TRY003
+            for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
+                connection.executescript(
+                    f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
+                )
         token_path = self.database_path.parent / "Token.txt"
-        if not token_path.exists():
-            token_path.write_text(new_token())
+        try:
+            with token_path.open("x", encoding="utf-8") as token_file:
+                token_file.write(new_token())
+        except FileExistsError:
+            pass
 
-    def get_bootstrap_token(self) -> str:
-        token_path = self.database_path.parent / "Token.txt"
-        return token_path.read_text().strip()
+    def bootstrap_token(self) -> str:
+        token = (self.database_path.parent / "Token.txt").read_text(encoding="utf-8").strip()
+        if not token:
+            raise RuntimeError("Dashboard bootstrap token is empty")  # noqa: TRY003
+        return token
 
-    def ensure_admin(self) -> sqlite3.Row:
+    def ensure_owner(self, username: str) -> sqlite3.Row:
         now = _now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            owner = connection.execute("SELECT * FROM users WHERE is_owner = 1").fetchone()
+            if owner is not None:
+                if str(owner["username"]) != username:
+                    raise RuntimeError(  # noqa: TRY003
+                        f"Dashboard owner is already bound to {owner['username']!s}"
+                    )
+                connection.commit()
+                return owner
             connection.execute(
                 """
-                INSERT OR IGNORE INTO users(username, password_hash, display_name, is_bot, created_at, updated_at)
-                VALUES (?, ?, ?, 0, ?, ?)
+                INSERT INTO users(username, password_hash, display_name, is_bot, is_owner, created_at, updated_at)
+                VALUES (?, 'disabled', ?, 0, 1, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET is_owner = 1, is_bot = 0, updated_at = excluded.updated_at
                 """,
-                ("admin", "bootstrap", "Administrator", now, now),
+                (username, username, now, now),
             )
-            row = connection.execute("SELECT * FROM users WHERE username = ?", ("admin",)).fetchone()
-            assert row is not None
-            return row
+            owner = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+            connection.commit()
+            assert owner is not None
+            return owner
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
         with self.connect() as connection:
@@ -209,20 +236,6 @@ class ChatStore:
                 (username, display_name, avatar_url, now, now),
             )
             row = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-            assert row is not None
-            return row
-
-    def create_user(self, username: str, password_hash: str) -> sqlite3.Row:
-        now = _now()
-        with self.connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO users(username, password_hash, display_name, is_bot, created_at, updated_at)
-                VALUES (?, ?, ?, 0, ?, ?)
-                """,
-                (username, password_hash, username, now, now),
-            )
-            row = connection.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
             assert row is not None
             return row
 

@@ -4,6 +4,7 @@ import asyncio
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from src.contracts.agent import TaskStatus
 from src.contracts.model import ModelRequest, ModelResult, ModelUsage, ToolCall
@@ -26,6 +28,7 @@ from src.platform.dashboard import (
     DashboardPlatform,
     create_app,
 )
+from src.platform.dashboard.security import token_digest
 from src.platform.dashboard.store import ChatStore
 
 if TYPE_CHECKING:
@@ -42,6 +45,12 @@ async def _started_chat(
     chat = ChatService(runtime.configuration.dashboard, input_port or runtime)
     await chat.start()
     return chat
+
+
+async def _owner(chat: ChatService) -> dict[str, object]:
+    row = await asyncio.to_thread(chat.store.fetch_one, "SELECT * FROM users WHERE id = ?", (chat.owner_id,))
+    assert row is not None
+    return chat._user(row)
 
 
 @contextmanager
@@ -160,7 +169,7 @@ class _FailOnceInput:
 
 
 def _login(client: TestClient, project_root: Path) -> tuple[int, str]:
-    token = (project_root / "data" / "dashboard" / "Token.txt").read_text().strip()
+    token = (project_root / "data" / "dashboard" / "Token.txt").read_text(encoding="utf-8").strip()
     logged_in = client.post("/api/auth/login", json={"token_login": token})
     assert logged_in.status_code == 200
     body = logged_in.json()
@@ -173,9 +182,11 @@ def test_dashboard_auth_users_and_opaque_session(project_root: Path) -> None:
         users = client.get("/api/users", headers={"Authorization": f"Bearer {token}"})
 
         assert users.status_code == 200, users.text
-        bot = next(item for item in users.json()["users"] if item["is_bot"])
+        assert len(users.json()["users"]) == 1
+        bot = users.json()["users"][0]
         assert bot["username"] == "aurorabot"
         assert bot["online"] is True
+        assert client.post("/api/auth/register", json={"username": "bob", "password": "secret"}).status_code == 404
         assert client.post("/api/auth/login", json={"token_login": "wrong"}).status_code == 401
 
         assert client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"}).status_code == 204
@@ -235,26 +246,45 @@ def test_dashboard_store_applies_reply_route_and_publication_migration(tmp_path:
     store.initialize()
 
     with sqlite3.connect(database) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         message_columns = {row[1] for row in connection.execute("PRAGMA table_info(messages)")}
         route_columns = {row[1] for row in connection.execute("PRAGMA table_info(dashboard_reply_routes)")}
+        user_columns = {row[1] for row in connection.execute("PRAGMA table_info(users)")}
         preserved = connection.execute("SELECT content FROM messages WHERE id = 1").fetchone()
     assert {"dashboard_reply_routes", "dashboard_publications"} <= tables
     assert "source_publication_request_id" in message_columns
     assert "source_effect_request_id" not in message_columns
     assert "expires_at" in route_columns
+    assert "is_owner" in user_columns
     assert preserved == ("preserved",)
+    token = store.bootstrap_token()
+    store.initialize()
+    assert store.bootstrap_token() == token
+
+    owner = store.ensure_owner("alice")
+    assert int(owner["is_owner"]) == 1
+    with pytest.raises(RuntimeError, match="already bound"):
+        store.ensure_owner("bob")
 
 
-def test_only_registered_owner_can_send_any_bot_input(project_root: Path) -> None:
+def test_only_configured_owner_can_send_any_bot_input(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = AuroraRuntime.create(project_root)
         stopped = Event()
         runtime.bind_stop_requester(stopped.set)
         chat = await _started_chat(runtime)
         try:
-            bob = await chat.register("bob", "secret")
+            now = datetime.now(UTC).isoformat()
+            bob_id = await asyncio.to_thread(
+                chat.store.execute,
+                """
+                INSERT INTO users(username, password_hash, display_name, is_bot, is_owner, created_at, updated_at)
+                VALUES ('bob', 'disabled', 'Bob', 0, 0, ?, ?)
+                """,
+                (now, now),
+            )
+            bob = {"user_id": bob_id}
             bot = next(item for item in await chat.list_users(bob["user_id"]) if item["is_bot"])
             attachment = await chat.upload_attachment(bob["user_id"], "note.txt", "text/plain", b"x")
             events = (
@@ -290,9 +320,9 @@ def test_only_registered_owner_can_send_any_bot_input(project_root: Path) -> Non
                 is None
             )
 
-            owner = await chat.register("alice", "secret")
+            owner = await _owner(chat)
             accepted = await chat.send_private_message(
-                owner["user_id"],
+                int(owner["user_id"]),
                 {
                     "client_message_id": str(uuid4()),
                     "receiver_id": bot["user_id"],
@@ -307,11 +337,39 @@ def test_only_registered_owner_can_send_any_bot_input(project_root: Path) -> Non
     asyncio.run(scenario())
 
 
-def test_websocket_private_message_is_persisted_and_idempotent(project_root: Path) -> None:
+def test_legacy_user_session_is_rejected_and_hidden(project_root: Path) -> None:
     runtime = AuroraRuntime.create(project_root)
     with _client(project_root, runtime) as client:
-        alice_id, alice_token = _register_and_login(client, "alice")
-        bob_id, bob_token = _register_and_login(client, "bob")
+        _owner_id, owner_token = _login(client, project_root)
+        now = datetime.now(UTC)
+        legacy_token = "legacy-session"
+        with sqlite3.connect(runtime.configuration.dashboard.database_path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO users(username, password_hash, display_name, is_bot, is_owner, created_at, updated_at)
+                VALUES ('bob', 'disabled', 'Bob', 0, 0, ?, ?)
+                """,
+                (now.isoformat(), now.isoformat()),
+            )
+            bob_id = int(cursor.lastrowid)
+            connection.execute(
+                "INSERT INTO sessions(token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                (
+                    token_digest(legacy_token),
+                    bob_id,
+                    (now + timedelta(hours=1)).isoformat(),
+                    now.isoformat(),
+                ),
+            )
+
+        assert client.get("/api/users", headers={"Authorization": f"Bearer {legacy_token}"}).status_code == 401
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                f"/ws?token={legacy_token}",
+                headers={"origin": "http://localhost:5173"},
+            ):
+                pass
+
         event = {
             "type": "private_message",
             "client_message_id": str(uuid4()),
@@ -321,25 +379,14 @@ def test_websocket_private_message_is_persisted_and_idempotent(project_root: Pat
             "attachment_id": None,
         }
         headers = {"origin": "http://localhost:5173"}
-        with client.websocket_connect(f"/ws?token={alice_token}", headers=headers) as alice:
-            with client.websocket_connect(f"/ws?token={bob_token}", headers=headers) as bob:
-                assert alice.receive_json()["type"] == "presence"
-                alice.send_json(event)
-                ack = alice.receive_json()
-                delivered = bob.receive_json()
-                assert ack["type"] == "message_ack"
-                assert delivered["message"]["content"] == "hello"
+        with client.websocket_connect(f"/ws?token={owner_token}", headers=headers) as owner:
+            owner.send_json(event)
+            rejected = owner.receive_json()
+            assert rejected["type"] == "error"
+            assert rejected["code"] == "RECEIVER_NOT_FOUND"
 
-                alice.send_json(event)
-                duplicate_ack = alice.receive_json()
-                assert duplicate_ack["message_id"] == ack["message_id"]
-
-        history = client.get(
-            f"/api/messages/private/{bob_id}",
-            headers={"Authorization": f"Bearer {alice_token}"},
-        ).json()["messages"]
-        assert len(history) == 1
-        assert history[0]["sender_id"] == alice_id
+        users = client.get("/api/users", headers={"Authorization": f"Bearer {owner_token}"}).json()["users"]
+        assert all(item["username"] != "bob" for item in users)
 
 
 def test_websocket_rejects_invalid_json_without_dropping_connection(project_root: Path) -> None:
@@ -430,11 +477,11 @@ def test_owner_text_persists_complete_communication_route_before_amp(project_roo
         runtime = AuroraRuntime.create(project_root)
         chat = await _started_chat(runtime)
         try:
-            user = chat._user(await asyncio.to_thread(chat.store.ensure_admin))
+            user = await _owner(chat)
             bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             client_message_id = str(uuid4())
             message = await chat.send_private_message(
-                user["user_id"],
+                int(user["user_id"]),
                 {
                     "client_message_id": client_message_id,
                     "receiver_id": bot["user_id"],
@@ -466,7 +513,7 @@ def test_owner_text_persists_complete_communication_route_before_amp(project_roo
                 (communication["reply_route_ref"],),
             )
             assert route is not None
-            assert int(route["owner_user_id"]) == user["user_id"]
+            assert int(route["owner_user_id"]) == int(user["user_id"])
         finally:
             await runtime.shutdown()
 
@@ -479,10 +526,10 @@ def test_dashboard_publication_is_idempotent_and_recoverable(project_root: Path)
         chat = await _started_chat(runtime)
         platform = DashboardPlatform(chat)
         try:
-            owner = await chat.register("alice", "secret")
+            owner = await _owner(chat)
             bot = next(item for item in await chat.list_users(owner["user_id"]) if item["is_bot"])
             await chat.send_private_message(
-                owner["user_id"],
+                int(owner["user_id"]),
                 {
                     "client_message_id": str(uuid4()),
                     "receiver_id": bot["user_id"],
@@ -493,7 +540,7 @@ def test_dashboard_publication_is_idempotent_and_recoverable(project_root: Path)
             route = await asyncio.to_thread(chat.store.fetch_one, "SELECT route_ref FROM dashboard_reply_routes")
             assert route is not None
             request = _publication("publication-1", str(route["route_ref"]), "hello owner")
-            queue = await chat.subscribe(owner["user_id"])
+            queue = await chat.subscribe(int(owner["user_id"]))
 
             first = await platform.execute_publication(request)
             pushed = queue.get_nowait()
@@ -521,9 +568,9 @@ def test_dashboard_publication_is_idempotent_and_recoverable(project_root: Path)
             assert queue.empty()
             assert missing.status == "failed" and missing.error == "interrupted_before_dispatch"
             assert unknown.status == "delivery_unknown"
-            history = await chat.private_history(owner["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(int(owner["user_id"]), bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "hello owner"]
-            await chat.unsubscribe(owner["user_id"], queue)
+            await chat.unsubscribe(int(owner["user_id"]), queue)
         finally:
             await runtime.shutdown()
 
@@ -540,10 +587,10 @@ def test_dashboard_reply_route_expires_and_is_cleaned(project_root: Path) -> Non
         )
         await chat.start()
         try:
-            owner = await chat.register("alice", "secret")
+            owner = await _owner(chat)
             bot = next(item for item in await chat.list_users(owner["user_id"]) if item["is_bot"])
             await chat.send_private_message(
-                owner["user_id"],
+                int(owner["user_id"]),
                 {
                     "client_message_id": str(uuid4()),
                     "receiver_id": bot["user_id"],
@@ -574,7 +621,7 @@ def test_failed_dashboard_amp_submission_can_retry_idempotently(project_root: Pa
         runtime = AuroraRuntime.create(project_root)
         chat = await _started_chat(runtime, _FailOnceInput(runtime))
         try:
-            user = chat._user(await asyncio.to_thread(chat.store.ensure_admin))
+            user = await _owner(chat)
             bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             event = {
                 "client_message_id": str(uuid4()),
@@ -584,9 +631,9 @@ def test_failed_dashboard_amp_submission_can_retry_idempotently(project_root: Pa
             }
 
             with pytest.raises(ChatError, match="Bot is unavailable"):
-                await chat.send_private_message(user["user_id"], event)
+                await chat.send_private_message(int(user["user_id"]), event)
 
-            retried = await chat.send_private_message(user["user_id"], event)
+            retried = await chat.send_private_message(int(user["user_id"]), event)
             assert retried["status"] == "saved"
             assert len(tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))) == 1
         finally:
@@ -616,10 +663,10 @@ def test_dashboard_task_can_publish_twice_then_complete(project_root: Path) -> N
         runtime.model_gateway = gateway
         await chat.start()
         try:
-            user = chat._user(await asyncio.to_thread(chat.store.ensure_admin))
+            user = await _owner(chat)
             bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             await chat.send_private_message(
-                user["user_id"],
+                int(user["user_id"]),
                 {
                     "client_message_id": str(uuid4()),
                     "receiver_id": bot["user_id"],
@@ -644,7 +691,7 @@ def test_dashboard_task_can_publish_twice_then_complete(project_root: Path) -> N
             offered_tools = {tool.name for tool in gateway.requests[0].tools}
             assert DASHBOARD_REPLY_CAPABILITY in offered_tools
             assert "org.aurora.console.send_message" not in offered_tools
-            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(int(user["user_id"]), bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "first reply", "second reply"]
             task = runtime.kernel.get_task(first["ingested_task_ids"][0])
             assert task is not None
@@ -652,7 +699,7 @@ def test_dashboard_task_can_publish_twice_then_complete(project_root: Path) -> N
             assert task.termination_reason == "publication_succeeded"
 
             await runtime.pump()
-            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(int(user["user_id"]), bot["user_id"], None, 30)
             assert [item["content"] for item in history] == ["hello bot", "first reply", "second reply"]
         finally:
             await runtime.shutdown()
@@ -669,10 +716,10 @@ def test_run_forever_delivers_plain_model_text_to_dashboard(project_root: Path) 
         stop = asyncio.Event()
         runner = asyncio.create_task(runtime.run_forever(stop))
         try:
-            user = chat._user(await asyncio.to_thread(chat.store.ensure_admin))
+            user = await _owner(chat)
             bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
             await chat.send_private_message(
-                user["user_id"],
+                int(user["user_id"]),
                 {
                     "client_message_id": str(uuid4()),
                     "receiver_id": bot["user_id"],
@@ -683,7 +730,7 @@ def test_run_forever_delivers_plain_model_text_to_dashboard(project_root: Path) 
 
             async with asyncio.timeout(5):
                 while True:
-                    history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
+                    history = await chat.private_history(int(user["user_id"]), bot["user_id"], None, 30)
                     tasks = runtime.kernel.tasks()
                     if len(history) == 2 and tasks and tasks[0].status == TaskStatus.COMPLETED:
                         break
@@ -704,12 +751,12 @@ def test_bot_attachment_is_deterministically_rejected(project_root: Path) -> Non
         runtime = AuroraRuntime.create(project_root)
         chat = await _started_chat(runtime)
         try:
-            user = chat._user(await asyncio.to_thread(chat.store.ensure_admin))
+            user = await _owner(chat)
             bot = next(item for item in await chat.list_users(user["user_id"]) if item["is_bot"])
-            attachment = await chat.upload_attachment(user["user_id"], "note.txt", "text/plain", b"x")
+            attachment = await chat.upload_attachment(int(user["user_id"]), "note.txt", "text/plain", b"x")
             with pytest.raises(ChatError) as rejected:
                 await chat.send_private_message(
-                    user["user_id"],
+                    int(user["user_id"]),
                     {
                         "client_message_id": str(uuid4()),
                         "receiver_id": bot["user_id"],
@@ -719,7 +766,7 @@ def test_bot_attachment_is_deterministically_rejected(project_root: Path) -> Non
                     },
                 )
             assert rejected.value.code == "BOT_ATTACHMENT_UNSUPPORTED"
-            history = await chat.private_history(user["user_id"], bot["user_id"], None, 30)
+            history = await chat.private_history(int(user["user_id"]), bot["user_id"], None, 30)
             assert history == []
             assert not tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
         finally:
