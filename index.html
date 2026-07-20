@@ -1,33 +1,20 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-i18n-loading>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f3f0e8" />
-    <meta
-      name="description"
-      content="AuroraBot 是让 Agent 拥有自己生活的开源自主智能体框架，以事件平权、同构协作和主动节律为核心。"
-    />
-    <meta property="og:title" content="AuroraBot · 让 Agent 拥有自己的生活" />
-    <meta property="og:description" content="用户消息只是环境变化的一种。让 Agent 持续存在，自主判断，并可靠行动。" />
+    <meta name="description" data-i18n-attr="content:meta.description" />
+    <meta property="og:title" data-i18n-attr="content:meta.ogTitle" />
+    <meta property="og:description" data-i18n-attr="content:meta.ogDescription" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.aurorabot.org/" />
-    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale" data-i18n-attr="content:meta.ogLocale" />
     <meta name="twitter:card" content="summary_large_image" />
-    <title>AuroraBot · 让 Agent 拥有自己的生活</title>
+    <title data-i18n="meta.title"></title>
     <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
     <link rel="canonical" href="https://www.aurorabot.org/" />
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "SoftwareSourceCode",
-        "name": "AuroraBot",
-        "description": "让 Agent 拥有自己生活的开源自主智能体框架。",
-        "codeRepository": "https://github.com/AuroraBot-Dev/AuroraBot",
-        "programmingLanguage": "Python",
-        "license": "https://www.apache.org/licenses/LICENSE-2.0"
-      }
-    </script>
+    <script id="structured-data" type="application/ld+json"></script>
     <style>
       @import url("assets/index.css");
     </style>
@@ -35,14 +22,14 @@
   <body>
     <div class="shell">
       <header class="topbar">
-        <a class="brand" href="#top" aria-label="AuroraBot 首页">
+        <a class="brand" href="#top" data-i18n-attr="aria-label:header.homeLabel">
           <img src="assets/logo.svg" alt="" />
-          <span>AuroraBot</span>
+          <span data-i18n="common.brand"></span>
         </a>
-        <nav class="topnav" aria-label="主导航">
-          <a href="#meet">她是什么</a>
-          <a href="#ways">使用方式</a>
-          <a href="#start">快速开始</a>
+        <nav class="topnav" data-i18n-attr="aria-label:header.navLabel">
+          <a href="#meet" data-i18n="header.about"></a>
+          <a href="#ways" data-i18n="header.ways"></a>
+          <a href="#start" data-i18n="header.start"></a>
         </nav>
         <div class="top-actions">
           <a
@@ -50,10 +37,13 @@
             href="https://github.com/AuroraBot-Dev/AuroraBot"
             target="_blank"
             rel="noopener noreferrer"
+            data-i18n="header.githubVersion"
+          ></a>
+          <button
+            class="icon-button theme-toggle"
+            type="button"
+            data-i18n-attr="aria-label:header.themeLabel,title:header.themeLabel"
           >
-            GitHub · v0.4
-          </a>
-          <button class="icon-button theme-toggle" type="button" aria-label="切换明暗主题" title="切换明暗主题">
             <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.7 8.7 0 1 0 20.5 14.2Z" />
             </svg>
@@ -70,53 +60,54 @@
       <main id="top">
         <section class="hero" aria-labelledby="hero-title">
           <div>
-            <p class="kicker">Open-source autonomous agent framework</p>
-            <h1 id="hero-title">一个有自己生活的 <em>Agent。</em></h1>
-            <p class="hero-lede">
-              AuroraBot
-              是开源自主智能体运行时。她持续感知环境，在自己的节律中思考和工作；你的消息很重要，但只是她所处世界发生的一种变化。
-            </p>
-            <ul class="hero-points" aria-label="核心特性">
-              <li>事件平权</li>
-              <li>同构协作</li>
-              <li>主动节律</li>
+            <p class="kicker" data-i18n="hero.kicker"></p>
+            <h1 id="hero-title"><span data-i18n="hero.title"></span><em data-i18n="hero.titleAccent"></em></h1>
+            <p class="hero-lede" data-i18n="hero.description"></p>
+            <ul class="hero-points" data-i18n-attr="aria-label:hero.featuresLabel">
+              <li data-i18n="hero.featureEquality" data-i18n-attr="data-marker:common.marker"></li>
+              <li data-i18n="hero.featureCollaboration" data-i18n-attr="data-marker:common.marker"></li>
+              <li data-i18n="hero.featureRhythm" data-i18n-attr="data-marker:common.marker"></li>
             </ul>
             <div class="actions">
-              <a class="button primary" href="#start">开始体验</a>
-              <a class="button secondary" href="https://www.aurorabot.org/" target="_blank" rel="noopener noreferrer">
-                阅读文档
-              </a>
+              <a class="button primary" href="#start" data-i18n="hero.startAction"></a>
+              <a
+                class="button secondary"
+                href="https://www.aurorabot.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="hero.docsAction"
+              ></a>
             </div>
           </div>
 
-          <aside class="thought-card" aria-label="AuroraBot 处理环境变化的示意">
+          <aside class="thought-card" data-i18n-attr="aria-label:hero.processAria">
             <div class="trace-head">
-              <span class="trace-label">Aurora / Life Process</span>
-              <span class="live">自主生活中</span>
+              <span class="trace-label" data-i18n="hero.processLabel"></span>
+              <span class="live" data-i18n="hero.status"></span>
             </div>
             <ol class="trace">
               <li>
                 <span class="trace-dot" aria-hidden="true"></span>
                 <div>
-                  <time>EVENT · ENVIRONMENT</time>
-                  <strong>世界发生了变化</strong>
-                  <p>消息、时间、应用事件和行动回执进入同一入口。</p>
+                  <time data-i18n="hero.eventMeta"></time>
+                  <strong data-i18n="hero.eventTitle"></strong>
+                  <p data-i18n="hero.eventDescription"></p>
                 </div>
               </li>
               <li>
                 <span class="trace-dot" aria-hidden="true"></span>
                 <div>
-                  <time>CONTEXT · PERCEPTION</time>
-                  <strong>理解变化意味着什么</strong>
-                  <p>结合当前任务、自身状态、权限和环境上下文进行判断。</p>
+                  <time data-i18n="hero.contextMeta"></time>
+                  <strong data-i18n="hero.contextTitle"></strong>
+                  <p data-i18n="hero.contextDescription"></p>
                 </div>
               </li>
               <li>
                 <span class="trace-dot" aria-hidden="true"></span>
                 <div>
-                  <time>DECISION · NEXT STEP</time>
-                  <strong>决定回应、行动或保持安静</strong>
-                  <p>需要改变环境时，通过已授权能力执行并等待回执。</p>
+                  <time data-i18n="hero.decisionMeta"></time>
+                  <strong data-i18n="hero.decisionTitle"></strong>
+                  <p data-i18n="hero.decisionDescription"></p>
                 </div>
               </li>
             </ol>
@@ -125,185 +116,245 @@
 
         <section class="section" id="meet" aria-labelledby="meet-title">
           <div class="section-heading">
-            <span class="section-index">01 · 遇见 Aurora</span>
+            <span class="section-index" data-i18n="philosophy.index"></span>
             <div>
-              <h2 id="meet-title">对话只是环境的一部分。</h2>
-              <p class="section-copy">
-                AuroraBot
-                不以聊天窗口为世界中心。她有持续状态、未完成的工作和自己的节律，也会平等看待来自人、时间、应用与其他
-                Agent 的变化。
-              </p>
+              <h2 id="meet-title" data-i18n="philosophy.title"></h2>
+              <p class="section-copy" data-i18n="philosophy.description"></p>
             </div>
           </div>
           <div class="pillars">
             <article class="pillar">
-              <span class="pillar-number">I / LIFE</span>
-              <h3>她有自己的生活</h3>
-              <p>没有消息时，时间和工作仍在继续。主动节律让 Agent 在预算内自行判断是否需要思考和行动。</p>
+              <span class="pillar-number" data-i18n="philosophy.lifeMeta"></span>
+              <h3 data-i18n="philosophy.lifeTitle"></h3>
+              <p data-i18n="philosophy.lifeDescription"></p>
             </article>
             <article class="pillar">
-              <span class="pillar-number">II / EQUALITY</span>
-              <h3>变化先被理解</h3>
-              <p>用户消息不会直接成为最高指令。Agent 先理解事件，再根据上下文决定回应、委派、行动或保持安静。</p>
+              <span class="pillar-number" data-i18n="philosophy.equalityMeta"></span>
+              <h3 data-i18n="philosophy.equalityTitle"></h3>
+              <p data-i18n="philosophy.equalityDescription"></p>
             </article>
             <article class="pillar">
-              <span class="pillar-number">III / CONTROL</span>
-              <h3>自主，但不失控</h3>
-              <p>模型只负责判断。外部行动经过能力授权、参数校验和 Platform 执行，结果再回到因果链中。</p>
+              <span class="pillar-number" data-i18n="philosophy.controlMeta"></span>
+              <h3 data-i18n="philosophy.controlTitle"></h3>
+              <p data-i18n="philosophy.controlDescription"></p>
             </article>
           </div>
-          <p class="capability-summary">
-            在这一设计下，AuroraBot 提供持续任务、多 Agent 协作、可替换模型、MCP 能力、Platform
-            组合、持久化状态与因果记录。它们服务于同一件事：让 Agent 不只会聊天，也能长期、可靠地生活在环境中。
-          </p>
+          <p class="capability-summary" data-i18n="philosophy.capabilitySummary"></p>
         </section>
 
         <section class="section" id="ways" aria-labelledby="ways-title">
           <div class="section-heading">
-            <span class="section-index">02 · 接入方式</span>
+            <span class="section-index" data-i18n="ways.index"></span>
             <div>
-              <h2 id="ways-title">一个 Runtime，多种连接方式。</h2>
-              <p class="section-copy">Platform 负责连接不同环境，Agent 在所有入口中使用同一套认知与行动闭环。</p>
+              <h2 id="ways-title" data-i18n="ways.title"></h2>
+              <p class="section-copy" data-i18n="ways.description"></p>
             </div>
           </div>
           <div class="ways">
-            <article class="way" data-letter="C">
-              <span class="card-kicker">Console</span>
-              <h3>本地 Console</h3>
-              <p>用于直接交互、状态查询和开发调试，是当前最简单的运行入口。</p>
+            <article class="way" data-i18n-attr="data-letter:ways.consoleLetter">
+              <span class="card-kicker" data-i18n="ways.consoleLabel"></span>
+              <h3 data-i18n="ways.consoleTitle"></h3>
+              <p data-i18n="ways.consoleDescription"></p>
             </article>
-            <article class="way" data-letter="D">
-              <span class="card-kicker">Dashboard</span>
-              <h3>Dashboard 接入</h3>
-              <p>提供本地聊天后端、账户、会话和 WebSocket 桥接；浏览器前端由独立项目提供。</p>
+            <article class="way" data-i18n-attr="data-letter:ways.dashboardLetter">
+              <span class="card-kicker" data-i18n="ways.dashboardLabel"></span>
+              <h3 data-i18n="ways.dashboardTitle"></h3>
+              <p data-i18n="ways.dashboardDescription"></p>
             </article>
-            <article class="way" data-letter="M">
-              <span class="card-kicker">MCP & Headless</span>
-              <h3>MCP 与 Headless</h3>
-              <p>通过 MCP 连接外部能力，或以无界面方式把 AuroraBot 组合进自己的运行环境。</p>
+            <article class="way" data-i18n-attr="data-letter:ways.mcpLetter">
+              <span class="card-kicker" data-i18n="ways.mcpLabel"></span>
+              <h3 data-i18n="ways.mcpTitle"></h3>
+              <p data-i18n="ways.mcpDescription"></p>
             </article>
           </div>
         </section>
 
         <section class="section" id="start" aria-labelledby="start-title">
           <div class="section-heading">
-            <span class="section-index">03 · 开始</span>
+            <span class="section-index" data-i18n="start.index"></span>
             <div>
-              <h2 id="start-title">从源码运行。</h2>
-              <p class="section-copy">需要 Python 3.12、Git、uv，以及默认模型配置对应的 API Key。</p>
+              <h2 id="start-title" data-i18n="start.title"></h2>
+              <p class="section-copy" data-i18n="start.description"></p>
             </div>
           </div>
           <div class="start-grid">
             <div class="terminal">
               <div class="terminal-bar">
-                <span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span>PowerShell</span>
-                <button class="copy-button" type="button" data-copy-target="quick-command">复制</button>
+                <div style="display: flex; align-items: center">
+                  <span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span data-i18n="start.terminal" style="margin-left: 1em"></span>
+                </div>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy-target="quick-command"
+                  data-i18n="start.copy"
+                ></button>
               </div>
-              <pre id="quick-command"><span class="comment"># 获取项目并安装运行依赖</span>
-<span class="command">git clone</span> https://github.com/AuroraBot-Dev/AuroraBot.git
-<span class="command">Set-Location</span> AuroraBot
-<span class="command">uv sync</span> --no-dev
-<span class="command">Copy-Item</span> .env.example .env
+              <pre id="quick-command">
+<span class="comment" data-i18n="start.installComment"></span>
+<span class="command" data-i18n="start.cloneCommand"></span>
+<span class="command" data-i18n="start.directoryCommand"></span>
+<span class="command" data-i18n="start.syncCommand"></span>
+<span class="command" data-i18n="start.envCommand"></span>
 
-<span class="comment"># 填写 DEEPSEEK_API_KEY 后，启动 Console 与 MCP 应用</span>
-<span class="command">uv run</span> --no-dev --env-file .env aurora --console --mcp</pre>
+<span class="comment" data-i18n="start.runComment"></span>
+<span class="command" data-i18n="start.runCommand"></span></pre>
             </div>
             <aside class="preview-note">
-              <span class="card-kicker">Developer Preview · 0.4</span>
-              <h3>当前为 0.4 开发者预览。</h3>
-              <p>
-                适合本地体验、运行时研究和扩展开发。内建长期记忆、附件理解、Agent 沙箱工具和生产级多租户保证尚未提供。
-              </p>
-              <a href="https://www.aurorabot.org/" target="_blank" rel="noopener noreferrer"> 查看当前边界 </a>
+              <span class="card-kicker" data-i18n="start.previewLabel"></span>
+              <h3 data-i18n="start.previewTitle"></h3>
+              <p data-i18n="start.previewDescription"></p>
+              <a
+                href="https://www.aurorabot.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="start.boundaries"
+              ></a>
             </aside>
           </div>
         </section>
 
         <section class="section" aria-labelledby="faq-title">
           <div class="section-heading">
-            <span class="section-index">04 · 常见问题</span>
+            <span class="section-index" data-i18n="faq.index"></span>
             <div>
-              <h2 id="faq-title">常见问题。</h2>
+              <h2 id="faq-title" data-i18n="faq.title"></h2>
             </div>
           </div>
           <dl class="faq">
             <div>
-              <dt>AuroraBot 与普通 ChatBot 有什么不同？</dt>
-              <dd>
-                AuroraBot 把聊天视为环境的一部分，而不是全部。她还管理主动节律、持续任务、Agent 协作和外部效果回执。
-              </dd>
+              <dt data-i18n="faq.differenceQuestion"></dt>
+              <dd data-i18n="faq.differenceAnswer"></dd>
             </div>
             <div>
-              <dt>平等看待消息，是不是意味着不听用户的？</dt>
-              <dd>不是。交互任务仍可优先调度。平等指消息先作为事件被理解，而不是未经判断就成为不可拒绝的系统命令。</dd>
+              <dt data-i18n="faq.equalityQuestion"></dt>
+              <dd data-i18n="faq.equalityAnswer"></dd>
             </div>
             <div>
-              <dt>现在已经有长期记忆吗？</dt>
-              <dd>还没有。当前版本保留可选 Memory Agent 契约，但不把依赖包或聊天记录宣传成已经接入的长期记忆。</dd>
+              <dt data-i18n="faq.memoryQuestion"></dt>
+              <dd data-i18n="faq.memoryAnswer"></dd>
             </div>
             <div>
-              <dt>可以使用哪些模型？</dt>
-              <dd>
-                模型角色与 Provider 由 TOML 配置。网关支持 Chat Completions tools 和 Responses
-                两种通道，并在调用前协商能力。
-              </dd>
+              <dt data-i18n="faq.modelsQuestion"></dt>
+              <dd data-i18n="faq.modelsAnswer"></dd>
             </div>
             <div>
-              <dt>如何增加自己的工具？</dt>
-              <dd>实现 stdio 或 HTTPS MCP Server，在 apps.toml 声明工具，再在 agents.toml 中授予需要它的 Agent。</dd>
+              <dt data-i18n="faq.toolsQuestion"></dt>
+              <dd data-i18n="faq.toolsAnswer"></dd>
             </div>
             <div>
-              <dt>Dashboard 是完整网页应用吗？</dt>
-              <dd>本仓库包含本地后端与聊天桥接，不包含浏览器 UI。前端由独立项目维护，Console 是当前最短体验路径。</dd>
+              <dt data-i18n="faq.dashboardQuestion"></dt>
+              <dd data-i18n="faq.dashboardAnswer"></dd>
             </div>
           </dl>
         </section>
 
         <section class="community" aria-labelledby="community-title">
           <div>
-            <p class="kicker">Apache 2.0 · Open source</p>
-            <h2 id="community-title">一起开发 AuroraBot。</h2>
-            <p>项目以 Apache License 2.0 开源，欢迎阅读代码、提交改进或接入新的能力。</p>
+            <p class="kicker" data-i18n="community.kicker"></p>
+            <h2 id="community-title" data-i18n="community.title"></h2>
+            <p data-i18n="community.description"></p>
           </div>
           <a
             class="button primary"
             href="https://github.com/AuroraBot-Dev/AuroraBot"
             target="_blank"
             rel="noopener noreferrer"
-          >
-            在 GitHub 上探索
-          </a>
+            data-i18n="community.action"
+          ></a>
         </section>
       </main>
 
       <footer>
         <div class="footer-mark">
           <img src="assets/logo.svg" alt="" />
-          <span>AuroraBot</span>
+          <span data-i18n="common.brand"></span>
         </div>
         <div class="footer-copy">
           <div class="footer-links">
-            <a href="https://github.com/AuroraBot-Dev/AuroraBot" target="_blank" rel="noopener noreferrer"> GitHub </a>
-            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener noreferrer"> 文档 </a>
+            <a
+              href="https://github.com/AuroraBot-Dev/AuroraBot"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-i18n="common.github"
+            ></a>
+            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener noreferrer" data-i18n="common.docs"></a>
             <a
               href="https://github.com/AuroraBot-Dev/AuroraBot/blob/dev/LICENSE"
               target="_blank"
               rel="noopener noreferrer"
-            >
-              Apache 2.0
-            </a>
+              data-i18n="common.license"
+            ></a>
           </div>
-          <span>一个有自己生活的 Agent。</span>
+          <span data-i18n="footer.tagline"></span>
         </div>
       </footer>
     </div>
 
     <script>
       (function () {
+        var DEFAULT_LOCALE = "zh-CN";
         var root = document.documentElement;
         var themeButton = document.querySelector(".theme-toggle");
         var storedTheme = localStorage.getItem("aurora-theme");
+        var activeMessages = null;
+
+        function messageAt(messages, path) {
+          return path.split(".").reduce(function (value, segment) {
+            return value && value[segment];
+          }, messages);
+        }
+
+        function applyMessages(messages) {
+          activeMessages = messages;
+          root.lang = messages.meta.locale;
+          root.dir = messages.meta.direction;
+
+          document.querySelectorAll("[data-i18n]").forEach(function (element) {
+            element.textContent = messageAt(messages, element.getAttribute("data-i18n"));
+          });
+
+          document.querySelectorAll("[data-i18n-attr]").forEach(function (element) {
+            element
+              .getAttribute("data-i18n-attr")
+              .split(",")
+              .forEach(function (binding) {
+                var separator = binding.indexOf(":");
+                var attribute = binding.slice(0, separator);
+                var key = binding.slice(separator + 1);
+                element.setAttribute(attribute, messageAt(messages, key));
+              });
+          });
+
+          document.getElementById("structured-data").textContent = JSON.stringify(messages.meta.schema);
+          root.removeAttribute("data-i18n-loading");
+          window.dispatchEvent(new CustomEvent("aurora:locale-changed", { detail: { locale: messages.meta.locale } }));
+        }
+
+        function normalizeLocale(locale) {
+          return String(locale || DEFAULT_LOCALE).replace(/[^A-Za-z0-9-]/g, "") || DEFAULT_LOCALE;
+        }
+
+        function loadLocale(locale) {
+          var normalized = normalizeLocale(locale);
+          return fetch("assets/i18n/" + normalized + ".json")
+            .then(function (response) {
+              if (!response.ok) throw new Error(String(response.status));
+              return response.json();
+            })
+            .then(function (messages) {
+              applyMessages(messages);
+              return messages;
+            });
+        }
+
+        window.AuroraI18n = {
+          load: function (locale) {
+            localStorage.setItem("aurora-locale", normalizeLocale(locale));
+            return loadLocale(locale);
+          },
+        };
 
         if (storedTheme === "dark" || storedTheme === "light") {
           root.setAttribute("data-theme", storedTheme);
@@ -320,14 +371,23 @@
         document.querySelectorAll("[data-copy-target]").forEach(function (button) {
           button.addEventListener("click", function () {
             var target = document.getElementById(button.getAttribute("data-copy-target"));
-            if (!target || !navigator.clipboard) return;
+            if (!target || !navigator.clipboard || !activeMessages) return;
             navigator.clipboard.writeText(target.innerText).then(function () {
-              button.textContent = "已复制";
+              button.textContent = messageAt(activeMessages, "start.copied");
               window.setTimeout(function () {
-                button.textContent = "复制";
+                button.textContent = messageAt(activeMessages, "start.copy");
               }, 1600);
             });
           });
+        });
+
+        var requestedLocale =
+          new URLSearchParams(window.location.search).get("lang") ||
+          localStorage.getItem("aurora-locale") ||
+          DEFAULT_LOCALE;
+        loadLocale(requestedLocale).catch(function () {
+          if (requestedLocale !== DEFAULT_LOCALE) return loadLocale(DEFAULT_LOCALE);
+          root.removeAttribute("data-i18n-loading");
         });
       })();
     </script>

@@ -39,6 +39,10 @@ html {
   scroll-behavior: smooth;
 }
 
+html[data-i18n-loading] body {
+  opacity: 0;
+}
+
 body {
   margin: 0;
   background:
@@ -230,7 +234,7 @@ h1 em {
 .hero-points li::before {
   margin-right: 8px;
   color: var(--copper);
-  content: "✦";
+  content: attr(data-marker);
 }
 
 .actions {
