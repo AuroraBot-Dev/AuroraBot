@@ -11,6 +11,35 @@ from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreActivitiesMixin(RuntimeStoreBase):
+    def has_claimable_external_activity(self, limit: int) -> bool:
+        with self.connect() as connection:
+            processing = int(
+                connection.execute(
+                    "SELECT count(*) FROM activities WHERE kind IN ('effect', 'publication') AND status = 'PROCESSING'"
+                ).fetchone()[0]
+            )
+            if processing >= limit:
+                return False
+            return bool(
+                connection.execute(
+                    "SELECT 1 FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                    "WHERE a.kind IN ('effect', 'publication') AND a.status = 'PENDING' "
+                    "AND t.status = 'ACTIVE' LIMIT 1"
+                ).fetchone()
+            )
+
+    def has_recoverable_publication(self) -> bool:
+        now = utc_now()
+        with self.connect() as connection:
+            return bool(
+                connection.execute(
+                    "SELECT 1 FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                    "WHERE a.kind = 'publication' AND a.status = 'PROCESSING' "
+                    "AND (a.lease_until IS NULL OR a.lease_until <= ?) AND t.status = 'ACTIVE' LIMIT 1",
+                    (now,),
+                ).fetchone()
+            )
+
     def claim_activities(self, kind: str, limit: int, lease_seconds: float) -> tuple[ActivityRequest, ...]:
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
@@ -43,7 +72,7 @@ class StoreActivitiesMixin(RuntimeStoreBase):
         with self.transaction() as connection:
             processing = int(
                 connection.execute(
-                    "SELECT count(*) FROM activities WHERE kind = 'effect' AND status = 'PROCESSING'"
+                    "SELECT count(*) FROM activities WHERE kind IN ('effect', 'publication') AND status = 'PROCESSING'"
                 ).fetchone()[0]
             )
             available = max(0, limit - processing)
@@ -69,6 +98,51 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                 if len(result) >= available:
                     break
             return tuple(result)
+
+    def claim_publication_activities(self, limit: int, lease_seconds: float) -> tuple[ActivityRequest, ...]:
+        now_dt = datetime.now(UTC)
+        now = now_dt.isoformat()
+        lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
+        with self.transaction() as connection:
+            processing = int(
+                connection.execute(
+                    "SELECT count(*) FROM activities WHERE kind IN ('effect', 'publication') AND status = 'PROCESSING'"
+                ).fetchone()[0]
+            )
+            available = max(0, limit - processing)
+            if available == 0:
+                return ()
+            rows = connection.execute(
+                "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                "WHERE a.kind = 'publication' AND a.status = 'PENDING' AND t.status = 'ACTIVE' "
+                "ORDER BY a.priority DESC, a.created_at LIMIT ?",
+                (available,),
+            ).fetchall()
+            result: list[ActivityRequest] = []
+            for row in rows:
+                connection.execute(
+                    "UPDATE activities SET status = 'PROCESSING', lease_until = ?, updated_at = ? "
+                    "WHERE activity_id = ?",
+                    (lease, now, row["activity_id"]),
+                )
+                updated = connection.execute(
+                    "SELECT * FROM activities WHERE activity_id = ?", (row["activity_id"],)
+                ).fetchone()
+                assert updated is not None
+                result.append(self._activity(updated))
+            return tuple(result)
+
+    def publication_recovery_activities(self) -> tuple[ActivityRequest, ...]:
+        now = utc_now()
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                "WHERE a.kind = 'publication' AND a.status = 'PROCESSING' "
+                "AND (a.lease_until IS NULL OR a.lease_until <= ?) "
+                "AND t.status = 'ACTIVE' ORDER BY a.priority DESC, a.created_at",
+                (now,),
+            ).fetchall()
+            return tuple(self._activity(row) for row in rows)
 
     def complete_model_activity(self, activity_id: str, result: dict[str, Any] | None, error: str | None) -> None:
         now = utc_now()

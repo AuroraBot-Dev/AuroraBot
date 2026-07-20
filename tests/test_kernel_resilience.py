@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,7 +22,8 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import AmpEnvelope, new_amp
 from src.kernel.runtime import AgentKernel
-from src.kernel.store import utc_now
+from src.kernel.store import SQLiteRuntimeStore, utc_now
+from src.kernel.store_schema import _SCHEMA, _SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,7 +85,7 @@ def effect_kernel(workspace: Path) -> AgentKernel:
     )
     kernel = AgentKernel(configuration, {"gate": EffectHandler()})
     kernel.install_capability_catalog(
-        CapabilityCatalogSnapshot((CapabilityDescriptor("test.reply", "reply", {"type": "object"}, "terminal"),))
+        CapabilityCatalogSnapshot((CapabilityDescriptor("test.reply", "reply", {"type": "object"}),))
     )
     return kernel
 
@@ -276,3 +278,41 @@ def test_pending_effect_is_work_after_restart(tmp_path: Path) -> None:
         assert restarted.has_work()
     finally:
         restarted.shutdown()
+
+
+def test_v3_audience_migration_isolates_each_legacy_task_and_situation(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    legacy_schema = _SCHEMA.replace("    audience_ref TEXT NOT NULL,\n", "").replace(
+        "    PRIMARY KEY (task_id, endpoint_id, route_ref),\n    UNIQUE (endpoint_id, route_ref)\n",
+        "    PRIMARY KEY (task_id, endpoint_id, route_ref)\n",
+    )
+    with sqlite3.connect(database) as connection:
+        connection.executescript(legacy_schema)
+        connection.execute("INSERT INTO schema_meta(version) VALUES (3)")
+        for index in range(2):
+            task_id = f"task-{index}"
+            connection.execute(
+                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, root_summary, autonomous, "
+                "status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, started_at, "
+                "updated_at, termination_reason) VALUES (?, ?, ?, 'legacy', 'legacy', 0, 'ACTIVE', 0, 0, 1, 1, "
+                "300, ?, ?, NULL)",
+                (task_id, f"agent-{index}", f"message-{index}", utc_now(), utc_now()),
+            )
+            connection.execute(
+                "INSERT INTO situations (situation_id, source, type, summary, payload_json, priority, status, "
+                "claimed_by_agent_id, expires_at, created_at, updated_at) VALUES (?, 'legacy', 'external', "
+                "'legacy', '{}', 1, 'OPEN', NULL, ?, ?, ?)",
+                (f"situation-{index}", "2999-01-01T00:00:00+00:00", utc_now(), utc_now()),
+            )
+
+    store = SQLiteRuntimeStore(database)
+    store.initialize()
+    tasks = store.tasks()
+    situations = store.situations()
+    assert {task.audience_ref for task in tasks} == {"legacy.task:task-0", "legacy.task:task-1"}
+    assert {item["audience_ref"] for item in situations} == {
+        "legacy.situation:situation-0",
+        "legacy.situation:situation-1",
+    }
+    with store.connect() as connection:
+        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == _SCHEMA_VERSION

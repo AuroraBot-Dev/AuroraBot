@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置与数据根目录")
-    parser.add_argument("--profile", help="config/profiles 下的配置 profile")
+    parser.add_argument("--profile", type=str, default="prod", help="配置运行档案")
     parser.add_argument("--console", action="store_true", help="启用 Console 平台")
     parser.add_argument("--dashboard", action="store_true", help="启用 Dashboard 平台")
     parser.add_argument("--mcp", action="store_true", help="启用 MCP 平台")

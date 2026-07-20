@@ -43,7 +43,9 @@ class ActivityStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
-ResultMode = Literal["resume", "terminal"]
+CapabilityKind = Literal["effect", "publication"]
+PublicationOperation = Literal["reply", "relay", "proactive_send"]
+PublicationCompletionMode = Literal["continue", "complete_on_success"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +53,10 @@ class CapabilityDescriptor:
     id: str
     description: str
     parameters_schema: dict[str, Any]
-    result_mode: ResultMode = "resume"
+    kind: CapabilityKind = "effect"
+    endpoint: str | None = None
+    operation: PublicationOperation | None = None
+    root_only: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -65,8 +70,16 @@ class CapabilityCatalogSnapshot:
         identifiers = [item.id for item in self.capabilities]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("capability IDs must be unique")
-        if any(item.result_mode not in {"resume", "terminal"} for item in self.capabilities):
-            raise ValueError("capability result_mode must be resume or terminal")
+        for item in self.capabilities:
+            if item.kind not in {"effect", "publication"}:
+                raise ValueError("capability kind must be effect or publication")
+            if item.kind == "publication":
+                if not item.endpoint or item.operation not in {"reply", "relay", "proactive_send"}:
+                    raise ValueError("publication capability requires endpoint and operation")
+                if not item.root_only:
+                    raise ValueError("publication capability must be root_only")
+            elif item.endpoint is not None or item.operation is not None:
+                raise ValueError("effect capability cannot declare a publication endpoint or operation")
 
     @property
     def by_id(self) -> MappingProxyType[str, CapabilityDescriptor]:
@@ -138,6 +151,7 @@ class TaskState:
     max_duration_seconds: float
     started_at: str
     updated_at: str
+    audience_ref: str = "system.local"
     termination_reason: str | None = None
 
     @property
@@ -205,6 +219,108 @@ class EffectRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class CommunicationContext:
+    endpoint_id: str
+    audience_ref: str
+    external_event_id: str | None = None
+    external_message_id: str | None = None
+    conversation_ref: str | None = None
+    actor_ref: str | None = None
+    reply_route_ref: str | None = None
+
+    @classmethod
+    def from_dict(cls, value: object, *, require_message_fields: bool = False) -> "CommunicationContext":
+        if not isinstance(value, dict):
+            raise TypeError("communication context must be an object")
+        allowed = {
+            "endpoint_id",
+            "external_event_id",
+            "external_message_id",
+            "conversation_ref",
+            "actor_ref",
+            "audience_ref",
+            "reply_route_ref",
+        }
+        if set(value) - allowed:
+            raise ValueError("communication context contains unsupported fields")
+        endpoint_id = value.get("endpoint_id")
+        audience_ref = value.get("audience_ref")
+        if not isinstance(endpoint_id, str) or not endpoint_id:
+            raise ValueError("communication endpoint_id must be a non-empty string")
+        if not isinstance(audience_ref, str) or not audience_ref:
+            raise ValueError("communication audience_ref must be a non-empty string")
+        optional: dict[str, Any] = {}
+        string_fields = allowed - {"endpoint_id", "audience_ref"}
+        for name in string_fields:
+            item = value.get(name)
+            if item is not None and (not isinstance(item, str) or not item):
+                raise ValueError(f"communication {name} must be a non-empty string or null")
+            optional[name] = item
+        if require_message_fields and any(optional[name] is None for name in string_fields):
+            raise ValueError("message.received communication context requires all fields")
+        return cls(endpoint_id=endpoint_id, audience_ref=audience_ref, **optional)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class DestinationGrant:
+    alias: str
+    endpoint_id: str
+    capability_id: str
+    operation: Literal["relay", "proactive_send"]
+    allowed_source_audiences: frozenset[str]
+    target_audience_ref: str
+    configuration_hash: str
+    description: str = ""
+    target_audience_label: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "alias": self.alias,
+            "endpoint_id": self.endpoint_id,
+            "capability_id": self.capability_id,
+            "operation": self.operation,
+            "allowed_source_audiences": sorted(self.allowed_source_audiences),
+            "target_audience_ref": self.target_audience_ref,
+            "configuration_hash": self.configuration_hash,
+            "description": self.description,
+            "target_audience_label": self.target_audience_label,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationRequest:
+    operation: PublicationOperation
+    text: str
+    completion_mode: PublicationCompletionMode
+    route_ref: str | None = None
+    destination: str | None = None
+    reason: str | None = None
+    tool_call_id: str | None = None
+    continuation: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.operation not in {"reply", "relay", "proactive_send"}:
+            raise ValueError("unsupported publication operation")
+        if not self.text:
+            raise ValueError("publication text must be non-empty")
+        if self.completion_mode not in {"continue", "complete_on_success"}:
+            raise ValueError("unsupported publication completion mode")
+        if self.operation == "reply":
+            if not self.route_ref or self.destination is not None:
+                raise ValueError("reply publication requires route_ref and forbids destination")
+        elif not self.destination or self.route_ref is not None:
+            raise ValueError("relay/proactive publication requires destination and forbids route_ref")
+        if self.operation == "proactive_send" and not self.reason:
+            raise ValueError("proactive_send publication requires reason")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class Completion:
     summary: str
     artifacts: tuple[dict[str, Any], ...] = ()
@@ -227,6 +343,7 @@ class ChildResult:
 class AgentDecision:
     model_request: dict[str, Any] | None = None
     effect_request: EffectRequest | None = None
+    publication_request: PublicationRequest | None = None
     delegations: tuple[DelegationRequest, ...] = ()
     claims: tuple[str, ...] = ()
     completion: Completion | None = None
@@ -239,6 +356,7 @@ class AgentDecision:
             (
                 self.model_request is not None,
                 self.effect_request is not None,
+                self.publication_request is not None,
                 bool(self.delegations),
                 self.completion is not None,
                 self.wait_for_children,
@@ -254,7 +372,7 @@ class ActivityRequest:
     activity_id: str
     task_id: str
     agent_id: str
-    kind: Literal["model", "effect"]
+    kind: Literal["model", "effect", "publication"]
     request: dict[str, Any]
     status: ActivityStatus
     priority: int
@@ -272,6 +390,31 @@ class EffectLease:
     session_id: str
     capability: str
     parameters: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationLease:
+    activity_id: str
+    task_id: str
+    agent_id: str
+    request_id: str
+    capability: str
+    endpoint_id: str
+    operation: PublicationOperation
+    text: str
+    completion_mode: PublicationCompletionMode
+    source_audience_ref: str
+    target_audience_ref: str
+    root_message_id: str
+    route_ref: str | None = None
+    destination: str | None = None
+    reason: str | None = None
+    tool_call_id: str | None = None
+    continuation: dict[str, Any] | None = None
+    source_endpoint_id: str | None = None
+    source_external_event_id: str | None = None
+    hop_count: int = 0
+    configuration_hash: str = ""
 
 
 @dataclass(frozen=True, slots=True)

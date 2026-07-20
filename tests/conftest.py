@@ -37,6 +37,10 @@ blocking_workers = 4
 lease_seconds = 30.0
 ambient_ttl_seconds = 1800.0
 
+[communication]
+reply_route_ttl_seconds = 3600.0
+relay_hop_limit = 1
+
 [dashboard]
 host = "127.0.0.1"
 port = 8000
@@ -45,6 +49,9 @@ upload_dir = "data/dashboard/uploads"
 max_upload_bytes = 67108864
 session_ttl_seconds = 604800
 allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+[dashboard.owner]
+username = "alice"
 
 [dashboard.bot]
 username = "aurorabot"

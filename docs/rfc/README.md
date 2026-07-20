@@ -52,3 +52,5 @@ RFC 应描述可验证的决定，而不是只写愿景。完整格式、状态�
 | [0012](0012-homogeneous-agent-runtime.md) | 已接受 | 当前同构多 Agent 持久化运行时 |
 | [0013](0013-unified-command-routing-and-entry.md) | 已接受 | 统一命令路由；进程入口由 RFC 0014 更新 |
 | [0014](0014-parallel-platform-composition-and-preferences.md) | 已接受 | 当前并行平台组合与偏好配置 |
+| [0015](0015-agent-publication-and-communication-boundary.md) | 已接受 | Agent 发布、通信授权与 Task 完成解耦 |
+| [0016](0016-mcp-communication-app-contract.md) | 已接受 | MCP 通信 App、消息入口与跨平台投递契约 |

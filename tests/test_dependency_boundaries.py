@@ -109,8 +109,8 @@ def test_command_packages_are_strictly_one_file_per_canonical_command() -> None:
         "__init__"
     }
 
-    assert tuple(module.NAME for module in COMMAND_MODULES) == ("check",)
-    assert tuple(module.__name__ for module in COMMAND_MODULES) == ("aurora.commands.check",)
+    assert tuple(module.NAME for module in COMMAND_MODULES) == ("check", "donk")
+    assert tuple(module.__name__ for module in COMMAND_MODULES) == ("aurora.commands.check", "aurora.commands.donk")
     assert cli_files == {module.NAME for module in COMMAND_MODULES}
     assert runtime_files == {spec.names[0].removeprefix("/") for spec in command_specs()}
     assert not {"dev", "run", "serve", "console"} & cli_files

@@ -31,6 +31,8 @@ class StoreIngressMixin(RuntimeStoreBase):
         root_profile: str,
         budget: TaskBudget,
         priority: int,
+        audience_ref: str = "system.local",
+        reply_grant: dict[str, str] | None = None,
     ) -> TaskState | None:
         now = utc_now()
         task_id = str(uuid4())
@@ -42,13 +44,25 @@ class StoreIngressMixin(RuntimeStoreBase):
             ).fetchone()
             if duplicate is not None:
                 return None
+            if (
+                reply_grant is not None
+                and connection.execute(
+                    "SELECT 1 FROM reply_grants WHERE endpoint_id = ? AND route_ref = ?",
+                    (reply_grant["endpoint_id"], reply_grant["route_ref"]),
+                ).fetchone()
+            ):
+                raise ValueError("communication reply route is already bound to another Task")
             connection.execute(
-                "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
+                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
+                "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
+                "started_at, updated_at, termination_reason) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
                 (
                     task_id,
                     agent_id,
                     external_message_id,
                     session_id,
+                    audience_ref,
                     summary,
                     int(autonomous),
                     TaskStatus.ACTIVE,
@@ -59,6 +73,19 @@ class StoreIngressMixin(RuntimeStoreBase):
                     now,
                 ),
             )
+            if reply_grant is not None:
+                connection.execute(
+                    "INSERT INTO reply_grants (endpoint_id, route_ref, task_id, capability_id, audience_ref, "
+                    "operation, expires_at, status) VALUES (?, ?, ?, ?, ?, 'reply', ?, 'ACTIVE')",
+                    (
+                        reply_grant["endpoint_id"],
+                        reply_grant["route_ref"],
+                        task_id,
+                        reply_grant["capability_id"],
+                        audience_ref,
+                        reply_grant["expires_at"],
+                    ),
+                )
             connection.execute(
                 "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, 0, '{}', ?, ?, ?)",
                 (agent_id, task_id, root_profile, summary, AgentStatus.READY, now, now, summary),
@@ -152,27 +179,18 @@ class StoreIngressMixin(RuntimeStoreBase):
                     row["activity_id"],
                 ),
             )
-            terminal = request.get("result_mode") == "terminal"
-            message_id: str | None = None
-            if not (terminal and event_type == "effect.succeeded"):
-                message_payload = {**payload, "activity_id": row["activity_id"], "request": request}
-                message_id = self._insert_message(
-                    connection,
-                    task_id=str(row["task_id"]),
-                    target_agent_id=str(row["agent_id"]),
-                    message_type=event_type,
-                    payload=message_payload,
-                    causation_id=str(row["activity_id"]),
-                    correlation_id=str(row["task_id"]),
-                    priority=int(row["priority"]),
-                    now=now,
-                )
-            if terminal and event_type == "effect.succeeded":
-                connection.execute(
-                    "UPDATE agents SET status = 'COMPLETED', last_summary = ?, updated_at = ? WHERE agent_id = ?",
-                    (summary, now, row["agent_id"]),
-                )
-                self._end_task(connection, str(row["task_id"]), TaskStatus.COMPLETED, "terminal_effect_succeeded", now)
+            message_payload = {**payload, "activity_id": row["activity_id"], "request": request}
+            message_id = self._insert_message(
+                connection,
+                task_id=str(row["task_id"]),
+                target_agent_id=str(row["agent_id"]),
+                message_type=event_type,
+                payload=message_payload,
+                causation_id=str(row["activity_id"]),
+                correlation_id=str(row["task_id"]),
+                priority=int(row["priority"]),
+                now=now,
+            )
             connection.execute(
                 "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -208,7 +226,9 @@ class StoreIngressMixin(RuntimeStoreBase):
                 "AND busy.status = 'PROCESSING') "
                 "AND ((a.status = 'READY') "
                 "OR (a.status = 'WAITING_MODEL' AND m.type IN ('model.completed', 'model.failed')) "
-                "OR (a.status = 'WAITING_EFFECT' AND m.type IN ('effect.succeeded', 'effect.failed')) "
+                "OR (a.status = 'WAITING_EFFECT' AND m.type IN ("
+                "'effect.succeeded', 'effect.failed', 'publication.succeeded', "
+                "'publication.failed', 'publication.delivery_unknown')) "
                 "OR (a.status = 'WAITING_CHILDREN' AND m.type IN ('child.completed', 'child.failed'))) "
                 "ORDER BY m.priority DESC, m.created_at, m.message_id LIMIT 1",
                 (now,),

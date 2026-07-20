@@ -1,50 +1,42 @@
-"""In-process Platform executor for Dashboard reply effects."""
+"""In-process Dashboard Publication executor and recovery adapter."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING
 
 from src.contracts.agent import CapabilityDescriptor
-from src.localhost.ports import EffectExecutionRequest, EffectOutcome
+from src.localhost.ports import PublicationExecutionRequest, PublicationOutcome
 
+if TYPE_CHECKING:
+    from src.platform.dashboard.service import ChatService
+
+DASHBOARD_ENDPOINT = "dashboard.local"
+DASHBOARD_AUDIENCE = "owner.local"
 DASHBOARD_REPLY_CAPABILITY = "org.aurora.dashboard.send_message"
 DASHBOARD_REPLY_DESCRIPTOR = CapabilityDescriptor(
     id=DASHBOARD_REPLY_CAPABILITY,
-    description="Send one text reply to the Dashboard user who started the current Task.",
+    description="Reply to the owner through the local Dashboard.",
     parameters_schema={
         "type": "object",
         "properties": {"text": {"type": "string", "minLength": 1}},
         "required": ["text"],
         "additionalProperties": False,
     },
-    result_mode="terminal",
+    kind="publication",
+    endpoint=DASHBOARD_ENDPOINT,
+    operation="reply",
+    root_only=True,
 )
-ReplySink = Callable[[str, str, str], Awaitable[dict[str, Any]]]
 
 
 class DashboardPlatform:
-    """Deliver one Dashboard publication effect through an injected sink."""
+    """Expose Dashboard-owned delivery and durable recovery to localhost."""
 
-    def __init__(self, sink: ReplySink) -> None:
-        self._sink = sink
+    def __init__(self, chat: ChatService) -> None:
+        self._chat = chat
 
-    async def execute_effect(self, request: EffectExecutionRequest) -> EffectOutcome:
-        try:
-            if request.capability != DASHBOARD_REPLY_CAPABILITY:
-                raise ValueError(f"unsupported Dashboard capability: {request.capability}")
-            text = request.parameters.get("text")
-            if not isinstance(text, str) or not text:
-                raise ValueError("dashboard reply text is invalid")
-            message = await self._sink(request.session_id, text, request.request_id)
-            return EffectOutcome(
-                succeeded=True,
-                summary="Dashboard reply delivered",
-                result={"message_id": message["message_id"]},
-            )
-        except Exception as error:  # noqa: BLE001 - external sink failures are structured outcomes.
-            return EffectOutcome(
-                succeeded=False,
-                summary="Dashboard reply failed",
-                error=f"{type(error).__name__}: {error}",
-            )
+    async def execute_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
+        return await self._chat.execute_publication(request)
+
+    async def recover_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
+        return await self._chat.recover_publication(request)

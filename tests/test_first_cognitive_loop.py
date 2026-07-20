@@ -114,13 +114,12 @@ def test_child_reports_resume_parent_one_by_one(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_child_terminal_effect_is_rejected_but_resume_effect_is_allowed(tmp_path: Path) -> None:
+def test_child_root_only_effect_is_rejected(tmp_path: Path) -> None:
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:
             if context.agent.parent_agent_id is None:
                 return AgentDecision(delegations=(DelegationRequest("use a tool"),))
-            capability = "reply" if context.message.type == "agent.assigned" else "clock"
-            return AgentDecision(effect_request=EffectRequest(capability, {"text": "hello"}))
+            return AgentDecision(effect_request=EffectRequest("reply", {"text": "hello"}))
 
     kernel = AgentKernel(configuration(tmp_path, profiles()), {"gate": Handler(), "worker": Handler()})
     kernel.install_capability_catalog(
@@ -128,25 +127,14 @@ def test_child_terminal_effect_is_rejected_but_resume_effect_is_allowed(tmp_path
             (
                 CapabilityDescriptor(
                     "reply",
-                    "terminal reply",
+                    "root-only effect",
                     {
                         "type": "object",
                         "properties": {"text": {"type": "string"}},
                         "required": ["text"],
                         "additionalProperties": False,
                     },
-                    "terminal",
-                ),
-                CapabilityDescriptor(
-                    "clock",
-                    "resume tool",
-                    {
-                        "type": "object",
-                        "properties": {"text": {"type": "string"}},
-                        "required": ["text"],
-                        "additionalProperties": False,
-                    },
-                    "resume",
+                    root_only=True,
                 ),
             )
         )
@@ -163,9 +151,11 @@ def test_child_terminal_effect_is_rejected_but_resume_effect_is_allowed(tmp_path
     asyncio.run(scenario())
 
 
-def test_terminal_effect_receipt_completes_root_task_once(tmp_path: Path) -> None:
+def test_effect_success_restores_root_before_explicit_completion(tmp_path: Path) -> None:
     class Handler:
-        def handle(self, _context: AgentContext) -> AgentDecision:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "effect.succeeded":
+                return AgentDecision(completion=Completion("effect handled"))
             return AgentDecision(effect_request=EffectRequest("reply", {"text": "hello"}))
 
     gate = AgentProfile(
@@ -184,14 +174,13 @@ def test_terminal_effect_receipt_completes_root_task_once(tmp_path: Path) -> Non
             (
                 CapabilityDescriptor(
                     "reply",
-                    "terminal reply",
+                    "ordinary effect",
                     {
                         "type": "object",
                         "properties": {"text": {"type": "string"}},
                         "required": ["text"],
                         "additionalProperties": False,
                     },
-                    "terminal",
                 ),
             )
         )
@@ -214,6 +203,12 @@ def test_terminal_effect_receipt_completes_root_task_once(tmp_path: Path) -> Non
             source_instance="test",
         )
         await kernel.submit_amp(receipt)
+        kernel.ingest_ready()
+        assert kernel.tasks()[0].status == TaskStatus.ACTIVE
+        assert any(
+            message["type"] == "effect.succeeded"
+            for message in kernel.store.messages_for_agent(kernel.tasks()[0].root_agent_id)
+        )
         await kernel.pump()
         assert kernel.tasks()[0].status == TaskStatus.COMPLETED
         await kernel.submit_amp(receipt)
@@ -230,7 +225,7 @@ def test_brain_context_is_runtime_owned_global_projection(tmp_path: Path) -> Non
 
     gate, worker = profiles()
     kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": Handler(), "worker": Handler()})
-    kernel.store.add_situation("clock", "clock.alarm", "wake up", {"ambient": True}, 10, 1800)
+    kernel.store.add_situation("clock", "clock.alarm", "wake up", {"ambient": True}, 10, 1800, "clock:system")
 
     async def scenario() -> None:
         await kernel.submit_amp(input_amp())

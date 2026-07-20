@@ -4,8 +4,9 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from src.contracts.configuration import load_configuration
+from src.localhost.ports import PublicationExecutorBinding
 from src.localhost.runtime import AuroraRuntime
-from src.platform.console import ConsolePlatform
+from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from src.platform.console.shell import run_console
 from src.utils.log_utils import configure_console_logging, configure_logging
 
@@ -27,8 +28,25 @@ def test_layered_console_submits_and_processes_a_message(project_root: Path) -> 
         configuration = load_configuration(project_root)
         configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
         configure_console_logging(enabled=False)
-        runtime = AuroraRuntime.create(project_root, configuration=configuration)
+        runtime = AuroraRuntime.create(
+            project_root,
+            configuration=configuration,
+            executor_bindings=None,
+            publication_bindings=None,
+        )
         console = ConsolePlatform()
+        runtime.bind_platform_executors(
+            (),
+            (
+                PublicationExecutorBinding(
+                    CONSOLE_SEND_DESCRIPTOR,
+                    console,
+                    console,
+                    "platform.console",
+                    "test",
+                ),
+            ),
+        )
         inputs = iter(("/log", "/say console hello", "/pump", "/quit"))
         output: list[str] = []
         try:
@@ -41,6 +59,7 @@ def test_layered_console_submits_and_processes_a_message(project_root: Path) -> 
             return output
         finally:
             await runtime.shutdown()
+            console.close()
 
     output = asyncio.run(scenario())
 

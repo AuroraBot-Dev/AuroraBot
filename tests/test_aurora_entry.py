@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+REPLY_ROUTE_TTL_SECONDS = 3600.0
+
 
 class FakeRuntime:
     def __init__(self, root: Path, events: list[object]) -> None:
@@ -22,6 +24,7 @@ class FakeRuntime:
             logging_level="INFO",
             runtime=SimpleNamespace(profile="test"),
             dashboard=SimpleNamespace(host="127.0.0.1", port=8000),
+            communication=SimpleNamespace(reply_route_ttl_seconds=REPLY_ROUTE_TTL_SECONDS),
             apps=(),
         )
         self.events = events
@@ -29,9 +32,15 @@ class FakeRuntime:
         self.shutdown_calls = 0
         self.stop_requester: Callable[[], None] | None = None
         self.bound_effects: tuple[object, ...] | None = None
+        self.bound_publications: tuple[object, ...] | None = None
 
-    def bind_effect_executors(self, bindings: tuple[object, ...]) -> None:
-        self.bound_effects = bindings
+    def bind_platform_executors(
+        self,
+        effect_bindings: tuple[object, ...],
+        publication_bindings: tuple[object, ...],
+    ) -> None:
+        self.bound_effects = effect_bindings
+        self.bound_publications = publication_bindings
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
         self.stop_requester = requester
@@ -86,21 +95,29 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
     preference = _preference(frozenset({"console", "dashboard", "mcp"}))
 
     class FakeConsole:
-        def __init__(self) -> None:
+        def __init__(self, _ledger_path: Path, *, reply_route_ttl_seconds: float) -> None:
+            assert reply_route_ttl_seconds == REPLY_ROUTE_TTL_SECONDS
             events.append("console-constructed")
 
+        def close(self) -> None:
+            pass
+
     class FakeChat:
-        def __init__(self, _configuration: object, _input_port: object) -> None:
+        def __init__(
+            self,
+            _configuration: object,
+            _input_port: object,
+            *,
+            reply_route_ttl_seconds: float,
+        ) -> None:
+            assert reply_route_ttl_seconds == REPLY_ROUTE_TTL_SECONDS
             events.append("dashboard-db-constructed")
 
         async def start(self) -> None:
             events.append("dashboard-db-started")
 
-        async def deliver_bot_reply(self, _session_id: str, _text: str, _request_id: str) -> dict[str, str]:
-            return {"message_id": "message-id"}
-
     class FakeDashboard:
-        def __init__(self, _sink: object) -> None:
+        def __init__(self, _chat: object) -> None:
             events.append("dashboard-constructed")
 
     class FakeServer:
@@ -120,10 +137,20 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
                         "org.example.mcp.echo",
                         "",
                         {"type": "object"},
-                        "resume",
+                    ),
+                    CapabilityDescriptor(
+                        "org.example.mcp.reply",
+                        "",
+                        {"type": "object"},
+                        kind="publication",
+                        endpoint="org.example.mcp",
+                        operation="reply",
+                        root_only=True,
                     ),
                 )
             )
+            self.effect_catalog = CapabilityCatalogSnapshot((self.capability_catalog.capabilities[0],))
+            self.publication_catalog = CapabilityCatalogSnapshot((self.capability_catalog.capabilities[1],))
 
         async def start(self, ingress: object) -> CapabilityCatalogSnapshot:
             assert ingress is runtime
@@ -139,6 +166,7 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
         *,
         configuration: object,
         executor_bindings: object,
+        publication_bindings: object,
     ) -> FakeRuntime:
         assert events[:4] == [
             "core-loaded",
@@ -150,6 +178,7 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
         assert profile == "profile"
         assert configuration is runtime.configuration
         assert executor_bindings is None
+        assert publication_bindings is None
         events.append("runtime-constructed")
         return runtime
 
@@ -207,17 +236,25 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
     assert runtime.received_stop is stop
     assert runtime.shutdown_calls == 1
     assert runtime.bound_effects is not None
-    assert {binding.source_app for binding in runtime.bound_effects} == {f"platform.{name}" for name in selected}
+    assert runtime.bound_publications is not None
+    assert {binding.source_app for binding in runtime.bound_effects} == {
+        "platform.mcp" for name in selected if name == "mcp"
+    }
+    assert {binding.source_app for binding in runtime.bound_publications} == (
+        {f"platform.{name}" for name in selected & {"console", "dashboard", "mcp"}}
+    )
     expected_capabilities = {
         capability
         for platform, capability in (
             ("console", "org.aurora.console.send_message"),
             ("dashboard", "org.aurora.dashboard.send_message"),
             ("mcp", "org.example.mcp.echo"),
+            ("mcp", "org.example.mcp.reply"),
         )
         if platform in selected
     }
-    assert {binding.capability.id for binding in runtime.bound_effects} == expected_capabilities
+    all_bindings = runtime.bound_effects + runtime.bound_publications
+    assert {binding.capability.id for binding in all_bindings} == expected_capabilities
     if "mcp" in selected:
         assert events.index("mcp-shutdown") < events.index("runtime-shutdown")
 
