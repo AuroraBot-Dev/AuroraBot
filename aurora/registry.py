@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from aurora.commands import check
+from aurora.commands import check, donk
 
-COMMAND_MODULES = (check,)
+COMMAND_MODULES = (check, donk)
 
 
 def register_commands(subparsers: Any) -> None:
