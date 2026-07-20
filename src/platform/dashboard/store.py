@@ -6,6 +6,9 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from rich.console import Console
+from rich.panel import Panel
+
 from src.platform.dashboard.security import new_token
 
 if TYPE_CHECKING:
@@ -140,9 +143,21 @@ CREATE UNIQUE INDEX idx_users_single_owner ON users(is_owner) WHERE is_owner = 1
 
 _MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4)
 
+console = Console(highlight=False)
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _print_token(token: str) -> None:
+    content = (
+        f"[bold yellow]Token:[/bold yellow] [bold green]{token}[/bold green]\n\n"
+        "[dim]请妥善保管 Token。\n"
+        "你也可以在 [bold]data/dashboard/Token.txt[/bold] 查看你的 Token。\n"
+        "如果不慎泄露，请删除 Token.txt 以重新生成。[/dim]"
+    )
+    console.print(Panel(content, title="Dashboard Auth"))
 
 
 class ChatStore:
@@ -170,7 +185,9 @@ class ChatStore:
         token_path = self.database_path.parent / "Token.txt"
         try:
             with token_path.open("x", encoding="utf-8") as token_file:
-                token_file.write(new_token())
+                t = new_token()
+                token_file.write(t)
+                _print_token(t)
         except FileExistsError:
             pass
 

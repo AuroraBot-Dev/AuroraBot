@@ -56,7 +56,10 @@ class ChatService:
 
     async def start(self) -> None:
         await asyncio.to_thread(self.store.initialize)
-        owner = await asyncio.to_thread(self.store.ensure_owner, self.configuration.owner_username)
+        owner = await asyncio.to_thread(
+            self.store.ensure_owner,
+            self.configuration.owner_username,
+        )
         bot = await asyncio.to_thread(
             self.store.ensure_bot,
             self.configuration.bot.username,
