@@ -14,11 +14,12 @@ _PATHS = ["aurora/", "src/", "tests/"]
 
 
 def register(subparsers: Any) -> None:
-    parser = subparsers.add_parser(NAME, help="运行代码质量检查")
-    parser.add_argument("--lint", action="store_true", help="仅运行 Ruff 与 Pyright")
-    parser.add_argument("--test", action="store_true", help="仅运行 pytest")
-    parser.add_argument("--fix", action="store_true", help="透传 Ruff --fix")
-    parser.add_argument("--unsafe-fixes", action="store_true", help="透传 Ruff --unsafe-fixes")
+    parser = subparsers.add_parser(NAME, help="代码质量检查")
+    parser.add_argument("--lint", action="store_true", help="运行 ruff 与 pyright")
+    parser.add_argument("--test", action="store_true", help="运行 pytest")
+    parser.add_argument("--fix", action="store_true", help="允许 ruff check --fix")
+    parser.add_argument("--unsafe-fixes", action="store_true", help="允许 ruff check --unsafe-fixes")
+    parser.add_argument("--check", action="store_true", help="预览 ruff format")
     parser.set_defaults(executor=execute)
 
 
@@ -27,15 +28,18 @@ def execute(arguments: argparse.Namespace) -> int:
     run_test = arguments.test or not arguments.lint
     commands: list[list[str]] = []
     if run_lint:
-        flags = []
+        flags_check = []
+        flags_format = []
         if arguments.fix:
-            flags.append("--fix")
+            flags_check.append("--fix")
         if arguments.unsafe_fixes:
-            flags.append("--unsafe-fixes")
+            flags_check.append("--unsafe-fixes")
+        if arguments.check:
+            flags_format.append("--check")
         commands.extend(
             (
-                ["uv", "run", "--no-sync", "ruff", "check", *flags, *_PATHS],
-                ["uv", "run", "--no-sync", "ruff", "format", "--check", *_PATHS],
+                ["uv", "run", "--no-sync", "ruff", "check", *flags_check, *_PATHS],
+                ["uv", "run", "--no-sync", "ruff", "format", *flags_format, *_PATHS],
                 ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
             )
         )
@@ -45,5 +49,5 @@ def execute(arguments: argparse.Namespace) -> int:
     if failures:
         console.print(f"\n[bold red]{failures} check(s) failed[/bold red]")
     else:
-        console.print("\n[bold green]All checks passed[/bold green]")
+        console.print("\n[bold green]All checks passed![/bold green]")
     return 1 if failures else 0

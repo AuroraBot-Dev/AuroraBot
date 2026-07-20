@@ -26,6 +26,9 @@ Clock 是 AuroraBot 内建的 stdio MCP 应用。它让 Agent 能够查询当前
 根目录 `config/apps.toml` 已经声明 Clock 的启动命令和工具 allowlist，`config/agents.toml` 则把这些能力授予内建
 Agent。启动 Console 与 MCP 后，可以直接用自然语言提出需求：
 
+Clock 声明为 `kind = "utility"`，五个工具均声明为 `kind = "effect"`。effect 完成后固定恢复请求 Agent；配置不再使用
+`result_mode`。
+
 ```powershell
 uv run --env-file .env aurora --console --mcp
 ```

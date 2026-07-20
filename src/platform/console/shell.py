@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -13,6 +14,8 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
 from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
+from src.localhost.router import is_conversation_input
+from src.platform.console.adapter import CONSOLE_AUDIENCE, CONSOLE_ENDPOINT
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.platform.console")
@@ -85,6 +88,23 @@ async def run_console(
                 raw = (result.text or "").strip()
                 if not raw:
                     continue
+                external_event_id = str(uuid4())
+                external_message_id = str(uuid5(NAMESPACE_URL, f"aurora-console-message:{external_event_id}"))
+                route_ref = str(uuid5(NAMESPACE_URL, f"aurora-console-route:{external_event_id}"))
+                communication: dict[str, object] = {}
+                if is_conversation_input(raw):
+                    console.register_reply_route(route_ref, external_event_id)
+                    communication = {
+                        "communication": {
+                            "endpoint_id": CONSOLE_ENDPOINT,
+                            "external_event_id": external_event_id,
+                            "external_message_id": external_message_id,
+                            "conversation_ref": "console.local:owner",
+                            "actor_ref": "owner.local",
+                            "audience_ref": CONSOLE_AUDIENCE,
+                            "reply_route_ref": route_ref,
+                        }
+                    }
                 routed = await control.route_input(
                     RuntimeInput(
                         text=raw,
@@ -92,7 +112,8 @@ async def run_console(
                         session_id="local:console",
                         source_app="platform.console",
                         source_instance="default",
-                        reply_capability="org.aurora.console.send_message",
+                        idempotency_key=external_event_id,
+                        data=communication,
                     )
                 )
                 if routed.control is CommandControl.CLEAR_CONSOLE:

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
 
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
+    CapabilityDescriptor,
     Completion,
     DelegationRequest,
     EffectRequest,
+    PublicationRequest,
 )
 from src.contracts.memory import MemoryFailure, MemoryQuery
 from src.contracts.model import (
@@ -29,10 +32,6 @@ DELEGATE_TOOL = "aurora.agent.delegate"
 WAIT_TOOL = "aurora.agent.wait"
 CLAIM_TOOL = "aurora.situation.claim"
 MEMORY_QUERY_TOOL = "aurora.memory.query"
-_REPLY_CAPABILITIES = {
-    "org.aurora.console.send_message",
-    "org.aurora.dashboard.send_message",
-}
 
 
 class ToolAgent:
@@ -52,26 +51,26 @@ class ToolAgent:
             return self._handle_model_result(context)
         if message_type == "model.failed":
             error = str(context.message.payload.get("error", "model_failed"))
-            reply_capability = self._reply_capability(context)
-            if context.agent.parent_agent_id is None and reply_capability is not None:
+            reply = self._safe_reply(context, "抱歉，我暂时无法完成这次回复。请稍后重试。")
+            if reply is not None:
                 logger.warning(
                     "Root model failed; publishing safe fallback task_id=%s agent_id=%s",
                     context.task.task_id,
                     context.agent.agent_id,
                 )
-                return AgentDecision(
-                    effect_request=EffectRequest(
-                        capability=reply_capability,
-                        parameters={"text": "抱歉，我暂时无法完成这次回复。请稍后重试。"},
-                    )
-                )
+                return AgentDecision(publication_request=reply)
             return AgentDecision(failure=error)
         if message_type in {"effect.succeeded", "effect.failed"}:
             return self._resume_effect(context)
+        if message_type in {
+            "publication.succeeded",
+            "publication.failed",
+            "publication.delivery_unknown",
+        }:
+            return self._resume_publication(context)
         return self._request_model(context)
 
     def _request_model(self, context: AgentContext) -> AgentDecision:
-        reply_capability = self._reply_capability(context)
         prompt = {
             "profile_instruction": context.profile.prompt,
             "task": context.task.to_dict(),
@@ -89,12 +88,10 @@ class ToolAgent:
                 "through the current reply channel.",
                 "Delegate only independent, bounded work that materially helps this task.",
                 "A child result is evidence for you to continue working, not the final user response.",
-                "Only the root Agent can publish a terminal external result.",
+                "Only the root Agent can publish. Set complete_task=false when more work or another reply follows.",
             ],
         }
-        state_patch: dict[str, Any] = {}
-        if reply_capability is not None:
-            state_patch["reply_capability"] = reply_capability
+        state_patch = self._initial_reply_route_patch(context)
         request = ModelRequest(
             role=context.profile.model_role,
             messages=(
@@ -103,7 +100,7 @@ class ToolAgent:
             ),
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="native" if context.profile.model_role == "agent" else "normalized",
-            tools=self._tools(context, reply_capability),
+            tools=self._tools(context),
             parallel_tool_calls=False,
             cancel_policy="on_external_activity" if context.task.autonomous else "never",
         )
@@ -117,13 +114,9 @@ class ToolAgent:
             text = result.text.strip()
             if context.agent.parent_agent_id is not None:
                 return AgentDecision(completion=Completion(text or "Subtask completed without a textual result"))
-            reply_capability = self._reply_capability(context)
-            if text and reply_capability is not None:
-                # Providers occasionally ignore tool_choice. Preserve the user-visible
-                # reply without teaching the Agent handler about Dashboard internals.
-                return AgentDecision(
-                    effect_request=EffectRequest(capability=reply_capability, parameters={"text": text})
-                )
+            reply = self._safe_reply(context, text) if text else None
+            if reply is not None:
+                return AgentDecision(publication_request=reply)
             return AgentDecision(completion=Completion("unpublished_text" if text else "no_action", silent=True))
         call = result.tool_calls[0]
         if call.name == DELEGATE_TOOL:
@@ -145,6 +138,13 @@ class ToolAgent:
             return self._handle_situation_claim(context, result)
         if call.name == MEMORY_QUERY_TOOL:
             return self._handle_memory_query(context, result)
+        return self._capability_decision(context, result)
+
+    def _capability_decision(self, context: AgentContext, result: ModelResult) -> AgentDecision:
+        call = result.tool_calls[0]
+        descriptor = next((item for item in context.capabilities if item.id == call.name), None)
+        if descriptor is not None and descriptor.kind == "publication":
+            return self._publication_decision(context, result, descriptor)
         return AgentDecision(
             effect_request=EffectRequest(
                 capability=call.name,
@@ -216,24 +216,42 @@ class ToolAgent:
         model_request = self._continuation_request(context, continuation)
         return AgentDecision(model_request=model_request.to_dict())
 
+    def _resume_publication(self, context: AgentContext) -> AgentDecision:
+        request = context.message.payload.get("request")
+        if not isinstance(request, dict):
+            return AgentDecision(failure="Publication receipt lacks original request")
+        raw_continuation = request.get("continuation")
+        call_id = request.get("tool_call_id")
+        if not isinstance(raw_continuation, dict) or not isinstance(call_id, str):
+            return self._request_model(context)
+        continuation = ModelContinuation.from_dict(raw_continuation)
+        status = {
+            "publication.succeeded": "accepted",
+            "publication.failed": "failed",
+            "publication.delivery_unknown": "delivery_unknown",
+        }[context.message.type]
+        output: dict[str, object] = {"status": status}
+        if status == "accepted":
+            output["result"] = context.message.payload.get("result", {})
+        else:
+            output["error"] = context.message.payload.get("error", status)
+        continuation = append_tool_result(continuation, call_id, output, is_error=status != "accepted")
+        return AgentDecision(model_request=self._continuation_request(context, continuation).to_dict())
+
     def _continuation_request(self, context: AgentContext, continuation: ModelContinuation) -> ModelRequest:
         return ModelRequest(
             role=context.profile.model_role,
             messages=(),
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="native" if context.profile.model_role == "agent" else "normalized",
-            tools=self._tools(context, self._reply_capability(context)),
+            tools=self._tools(context),
             continuation=continuation,
             parallel_tool_calls=False,
             cancel_policy="on_external_activity" if context.task.autonomous else "never",
         )
 
-    def _tools(self, context: AgentContext, reply_capability: str | None) -> tuple[ToolDefinition, ...]:
-        tools = [
-            ToolDefinition(item.id, item.description, item.parameters_schema)
-            for item in context.capabilities
-            if item.id not in _REPLY_CAPABILITIES or item.id == reply_capability
-        ]
+    def _tools(self, context: AgentContext) -> tuple[ToolDefinition, ...]:
+        tools = [self._capability_tool(item) for item in context.capabilities]
         if context.profile.can_delegate:
             tools.append(
                 ToolDefinition(
@@ -301,16 +319,119 @@ class ToolAgent:
         )
         return tuple(tools)
 
+    def _publication_decision(
+        self,
+        context: AgentContext,
+        result: ModelResult,
+        descriptor: CapabilityDescriptor,
+    ) -> AgentDecision:
+        call = result.tool_calls[0]
+        text = call.arguments.get("text")
+        complete_task = call.arguments.get("complete_task", True)
+        if not isinstance(text, str) or not text or not isinstance(complete_task, bool):
+            return AgentDecision(failure="Publication text or complete_task is invalid")
+        completion_mode = "complete_on_success" if complete_task else "continue"
+        continuation = result.continuation.to_dict() if result.continuation is not None else None
+        if descriptor.operation == "reply":
+            route_ref = self._reply_route(context, descriptor.id, descriptor.endpoint)
+            if route_ref is None:
+                return AgentDecision(failure="Publication reply route is unavailable")
+            publication = PublicationRequest(
+                "reply",
+                text,
+                completion_mode,
+                route_ref=route_ref,
+                tool_call_id=call.call_id,
+                continuation=continuation,
+            )
+        else:
+            assert descriptor.operation is not None
+            destination = call.arguments.get("destination")
+            reason = call.arguments.get("reason")
+            if not isinstance(destination, str):
+                return AgentDecision(failure="Publication destination is invalid")
+            if descriptor.operation == "proactive_send" and not isinstance(reason, str):
+                return AgentDecision(failure="proactive_send reason is invalid")
+            publication = PublicationRequest(
+                descriptor.operation,
+                text,
+                completion_mode,
+                destination=destination,
+                reason=reason if isinstance(reason, str) else None,
+                tool_call_id=call.call_id,
+                continuation=continuation,
+            )
+        return AgentDecision(publication_request=publication)
+
+    def _safe_reply(self, context: AgentContext, text: str) -> PublicationRequest | None:
+        descriptors = [
+            item for item in context.capabilities if item.kind == "publication" and item.operation == "reply"
+        ]
+        if context.agent.parent_agent_id is not None or len(descriptors) != 1:
+            return None
+        descriptor = descriptors[0]
+        route_ref = self._reply_route(context, descriptor.id, descriptor.endpoint)
+        if route_ref is None:
+            return None
+        return PublicationRequest("reply", text, "complete_on_success", route_ref=route_ref)
+
     @staticmethod
-    def _reply_capability(context: AgentContext) -> str | None:
-        persisted = context.agent.state.get("reply_capability")
-        if isinstance(persisted, str):
-            return persisted
+    def _capability_tool(descriptor: CapabilityDescriptor) -> ToolDefinition:
+        if descriptor.kind != "publication":
+            return ToolDefinition(descriptor.id, descriptor.description, descriptor.parameters_schema)
+        schema = deepcopy(descriptor.parameters_schema)
+        raw_properties = schema.get("properties")
+        properties = dict(raw_properties) if isinstance(raw_properties, dict) else {}
+        schema["properties"] = properties
+        properties["complete_task"] = {
+            "type": "boolean",
+            "description": "True to complete the Task after accepted delivery; false to continue afterward.",
+            "default": True,
+        }
+        raw_required = schema.get("required")
+        required = list(raw_required) if isinstance(raw_required, list) else []
+        if "text" not in required:
+            required.append("text")
+        schema["required"] = required
+        return ToolDefinition(descriptor.id, descriptor.description, schema)
+
+    def _initial_reply_route_patch(self, context: AgentContext) -> dict[str, Any]:
+        if context.message.type != "task.started":
+            return {}
+        replies = [item for item in context.capabilities if item.kind == "publication" and item.operation == "reply"]
+        if len(replies) != 1:
+            return {}
+        descriptor = replies[0]
+        route_ref = self._task_started_route(context, descriptor.endpoint)
+        if route_ref is None:
+            return {}
+        return {
+            "publication_reply_route": {
+                "capability": descriptor.id,
+                "endpoint_id": descriptor.endpoint,
+                "route_ref": route_ref,
+            }
+        }
+
+    def _reply_route(self, context: AgentContext, capability: str, endpoint: str | None) -> str | None:
+        persisted = context.agent.state.get("publication_reply_route")
+        if isinstance(persisted, dict) and (
+            persisted.get("capability") == capability and persisted.get("endpoint_id") == endpoint
+        ):
+            route_ref = persisted.get("route_ref")
+            if isinstance(route_ref, str) and route_ref:
+                return route_ref
+        if context.message.type == "task.started":
+            return self._task_started_route(context, endpoint)
+        return None
+
+    @staticmethod
+    def _task_started_route(context: AgentContext, endpoint: str | None) -> str | None:
         amp = context.message.payload.get("amp")
-        if not isinstance(amp, dict):
+        payload = amp.get("payload") if isinstance(amp, dict) else None
+        data = payload.get("data") if isinstance(payload, dict) else None
+        communication = data.get("communication") if isinstance(data, dict) else None
+        if not isinstance(communication, dict) or communication.get("endpoint_id") != endpoint:
             return None
-        payload = amp.get("payload")
-        if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
-            return None
-        capability = payload["data"].get("reply_capability")
-        return capability if capability in _REPLY_CAPABILITIES else None
+        route_ref = communication.get("reply_route_ref")
+        return route_ref if isinstance(route_ref, str) and route_ref else None

@@ -94,6 +94,12 @@ class TaskBudgetConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CommunicationConfig:
+    reply_route_ttl_seconds: float
+    relay_hop_limit: Literal[1]
+
+
+@dataclass(frozen=True, slots=True)
 class DashboardBotConfig:
     username: str
     display_name: str
@@ -109,6 +115,7 @@ class DashboardConfig:
     max_upload_bytes: int
     session_ttl_seconds: int
     allowed_origins: tuple[str, ...]
+    owner_username: str
     bot: DashboardBotConfig
 
 
@@ -143,7 +150,24 @@ class AgentProfileConfig:
 @dataclass(frozen=True, slots=True)
 class AppToolConfig:
     name: str
-    result_mode: Literal["resume", "terminal"]
+    kind: Literal["effect", "publication"]
+
+
+@dataclass(frozen=True, slots=True)
+class AppPublicationConfig:
+    capability: str
+    tool: str
+    operation: Literal["reply", "relay", "proactive_send"]
+
+
+@dataclass(frozen=True, slots=True)
+class AppDestinationConfig:
+    alias: str
+    description: str
+    capability: str
+    address_ref: str
+    allowed_source_audiences: tuple[str, ...]
+    target_audience_ref: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +175,7 @@ class AppConfig:
     """One explicitly enabled MCP application route."""
 
     package: str
+    kind: Literal["utility", "communication"]
     transport: str
     working_dir: Path | None
     command: tuple[str, ...]
@@ -158,6 +183,8 @@ class AppConfig:
     auth_env: str | None
     timeout_seconds: float
     tools: tuple[AppToolConfig, ...]
+    publications: tuple[AppPublicationConfig, ...]
+    destinations: tuple[AppDestinationConfig, ...]
 
     @property
     def allowed_tools(self) -> frozenset[str]:
@@ -197,6 +224,7 @@ class AuroraConfig:
     root: Path
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
+    communication: CommunicationConfig
     dashboard: DashboardConfig
     soul_path: Path
     soul_hash: str
@@ -207,6 +235,7 @@ class AuroraConfig:
     model_providers: Mapping[str, ModelProviderConfig]
     model_logging: ModelLoggingConfig
     apps: tuple[AppConfig, ...]
+    apps_configuration_hash: str
 
 
 def _positive_number(value: object, label: str) -> float:
@@ -274,37 +303,24 @@ def _parse_task_budget(
     return TaskBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
 
 
-def _parse_agent_runtime(raw: dict[str, Any]) -> AgentRuntimeConfig:
-    defaults = AgentRuntimeConfig()
-    allowed = set(AgentRuntimeConfig.__dataclass_fields__)
-    if set(raw) - allowed:
-        raise ConfigurationError("runtime.agents has unsupported keys")
-    values: dict[str, Any] = {}
-    for name in allowed:
-        value = raw.get(name, getattr(defaults, name))
-        if name == "memory_agent_profile":
-            values[name] = None if value is None else _string(value, "runtime.agents.memory_agent_profile")
-        elif name in {"root_profile", "worker_profile"}:
-            values[name] = _string(value, f"runtime.agents.{name}")
-        elif name in {"lease_seconds", "ambient_ttl_seconds"}:
-            values[name] = _positive_number(value, f"runtime.agents.{name}")
-        elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-            raise ConfigurationError(f"runtime.agents.{name} must be a positive integer")
-        else:
-            values[name] = value
-    if values["max_depth"] > values["max_agents_per_task"]:
-        raise ConfigurationError("runtime.agents.max_depth cannot exceed max_agents_per_task")
-    return AgentRuntimeConfig(**values)
-
-
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     """Load the selected RFC 0002 configuration snapshot."""
-    from src.contracts.configuration_sections import _parse_agents, _parse_apps, _parse_dashboard
+    from src.contracts.configuration_sections import (
+        _parse_agent_runtime,
+        _parse_agents,
+        _parse_apps,
+        _parse_communication,
+        _parse_dashboard,
+    )
 
     root = root.resolve()
     base, base_source = _read_toml_snapshot(root / "config" / "aurora.toml")
     sources = [base_source]
-    _require_keys(base, {"runtime", "dashboard", "soul", "logging", "storage", "models"}, "aurora.toml")
+    _require_keys(
+        base,
+        {"runtime", "communication", "dashboard", "soul", "logging", "storage", "models"},
+        "aurora.toml",
+    )
     runtime_raw = base["runtime"]
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError("runtime must be a table")
@@ -319,10 +335,11 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         sources.append(profile_source)
     _require_keys(
         merged,
-        {"runtime", "dashboard", "soul", "logging", "storage", "models"},
+        {"runtime", "communication", "dashboard", "soul", "logging", "storage", "models"},
         "merged aurora config",
     )
     runtime_raw = merged["runtime"]
+    communication_raw = merged["communication"]
     dashboard_raw = merged["dashboard"]
     soul_raw = merged["soul"]
     logging_raw = merged["logging"]
@@ -330,7 +347,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     models_raw = merged["models"]
     if not all(
         isinstance(value, dict)
-        for value in (runtime_raw, dashboard_raw, soul_raw, logging_raw, storage_raw, models_raw)
+        for value in (runtime_raw, communication_raw, dashboard_raw, soul_raw, logging_raw, storage_raw, models_raw)
     ):
         raise ConfigurationError("aurora top-level sections must be tables")
     runtime_allowed = {
@@ -454,6 +471,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,
         ),
+        communication=_parse_communication(cast("dict[str, Any]", communication_raw)),
         dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), root),
         soul_path=soul_path,
         soul_hash=soul_hash,
@@ -467,4 +485,5 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             log_responses=model_logging["log_responses"],
         ),
         apps=apps,
+        apps_configuration_hash=apps_source.sha256,
     )

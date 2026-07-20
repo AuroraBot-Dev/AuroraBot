@@ -421,8 +421,8 @@ class MCPClientManager:
 
         conn = self._connections.get(server_key)
         if conn is None:
-            for ckey, cconn in self._connections.items():
-                if full_name.startswith(ckey):
+            for ckey, cconn in sorted(self._connections.items(), key=lambda item: len(item[0]), reverse=True):
+                if full_name.startswith(f"{ckey}."):
                     conn = cconn
                     tool_name = full_name[len(ckey) + 1 :]
                     server_key = ckey

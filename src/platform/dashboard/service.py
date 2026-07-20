@@ -9,23 +9,16 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from uuid import UUID, uuid4
 
-from src.localhost.command_types import CommandControl, CommandResult
-from src.platform.dashboard.routing import (
-    PrivateMessageInput,
-    command_reply_id,
-    dashboard_input,
-    is_conversation_command,
-    is_quit_command,
-    message_matches,
-)
+from src.platform.dashboard.communication import ChatError, DashboardCommunication
+from src.platform.dashboard.routing import PrivateMessageInput, is_conversation_command, message_matches
 from src.platform.dashboard.security import hash_password, new_token, token_digest, verify_password
 from src.platform.dashboard.store import ChatStore
 
 if TYPE_CHECKING:
     from src.contracts.configuration import DashboardConfig
-    from src.localhost.ports import InteractiveInputPort
+    from src.localhost.ports import InteractiveInputPort, PublicationExecutionRequest, PublicationOutcome
 
 _MESSAGE_TYPES = {"text", "image", "file", "audio", "video"}
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "text/")
@@ -37,20 +30,26 @@ _ALLOWED_MIME_TYPES = {
 }
 
 
-class ChatError(RuntimeError):
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
-        super().__init__(message)
-        self.code = code
-        self.status_code = status_code
-
-
 class ChatService:
-    def __init__(self, configuration: DashboardConfig, input_port: InteractiveInputPort) -> None:
+    def __init__(
+        self,
+        configuration: DashboardConfig,
+        input_port: InteractiveInputPort,
+        *,
+        reply_route_ttl_seconds: float = 3600.0,
+    ) -> None:
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
-        self._input_port = input_port
         self._subscribers: dict[int, set[asyncio.Queue[dict[str, Any]]]] = {}
         self._bot_id: int | None = None
+        self._communication = DashboardCommunication(
+            configuration,
+            self.store,
+            input_port,
+            lambda: self.bot_id,
+            self.publish,
+            reply_route_ttl_seconds=reply_route_ttl_seconds,
+        )
 
     async def start(self) -> None:
         await asyncio.to_thread(self.store.initialize)
@@ -238,7 +237,7 @@ class ChatService:
             raise ChatError("IDEMPOTENCY_CONFLICT", "client_message_id was already used", 409)
         if not created and message["status"] == "saved":
             if is_command and not is_conversation_command(parsed.content or ""):
-                await self._attach_existing_command_reply(
+                await self._communication.attach_existing_command_reply(
                     message,
                     sender_id,
                     parsed.client_message_id,
@@ -246,7 +245,7 @@ class ChatService:
                 )
             return message
         if parsed.is_bot:
-            await self._handle_bot_input(sender_id, int(row["id"]), parsed, message, created=created)
+            await self._communication.handle_bot_input(sender_id, int(row["id"]), parsed, message, created=created)
         else:
             await self.publish(parsed.receiver_id, {"type": "private_message", "message": message})
         return message
@@ -268,6 +267,10 @@ class ChatService:
             or (message_type != "text" and event.get("attachment_id") is None)
         ):
             raise ChatError("INVALID_PAYLOAD", "Message payload is invalid")
+        if bool(receiver["is_bot"]):
+            await self._communication.require_owner(sender_id)
+            if message_type != "text":
+                raise ChatError("BOT_ATTACHMENT_UNSUPPORTED", "Bot does not accept attachments")
         attachment_id = await self._validate_attachment(sender_id, event.get("attachment_id"))
         return PrivateMessageInput(
             client_message_id=client_message_id,
@@ -296,105 +299,11 @@ class ChatService:
             raise ChatError("ATTACHMENT_FORBIDDEN", "Attachment is unavailable", 403)
         return attachment_id
 
-    async def _handle_bot_input(
-        self,
-        sender_id: int,
-        row_id: int,
-        parsed: PrivateMessageInput,
-        message: dict[str, Any],
-        *,
-        created: bool,
-    ) -> None:
-        if parsed.message_type != "text":
-            await self._unsupported_attachment_reply(sender_id, row_id)
-            return
-        is_command = (parsed.content or "").lstrip().startswith("/")
-        if not created and is_command and not is_conversation_command(parsed.content or ""):
-            # The outcome of an interrupted command is unknown, so it cannot be replayed safely.
-            return
-        try:
-            routed = await self._input_port.route_input(dashboard_input(sender_id, parsed))
-            reply = await self._persist_command_reply(sender_id, parsed.client_message_id, routed)
-            await asyncio.to_thread(
-                self.store.execute,
-                "UPDATE messages SET status = 'saved', amp_message_id = ? WHERE id = ?",
-                (routed.message_id, row_id),
-            )
-            message["status"] = "saved"
-            if reply is not None:
-                message["_post_ack"] = {"reply": reply, "control": routed.control}
-        except Exception as error:
-            await asyncio.to_thread(self.store.execute, "UPDATE messages SET status = 'failed' WHERE id = ?", (row_id,))
-            raise ChatError("BOT_UNAVAILABLE", "Bot is unavailable", 503) from error
+    async def execute_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
+        return await self._communication.execute_publication(request)
 
-    async def _persist_command_reply(
-        self,
-        receiver_id: int,
-        source_client_message_id: str,
-        result: CommandResult,
-    ) -> dict[str, Any] | None:
-        if not result.publish_reply or result.text is None:
-            return None
-        reply_client_id = command_reply_id(receiver_id, source_client_message_id)
-        row, _created = await asyncio.to_thread(
-            self.store.create_message,
-            client_message_id=reply_client_id,
-            sender_id=self.bot_id,
-            receiver_id=receiver_id,
-            message_type="text",
-            content=result.text,
-            attachment_id=None,
-        )
-        message_row = await asyncio.to_thread(self.store.message_with_attachment, int(row["id"]))
-        assert message_row is not None
-        return self._message(message_row)
-
-    async def _attach_existing_command_reply(
-        self,
-        message: dict[str, Any],
-        receiver_id: int,
-        source_client_message_id: str,
-        content: str,
-    ) -> None:
-        reply_client_id = command_reply_id(receiver_id, source_client_message_id)
-        row = await asyncio.to_thread(
-            self.store.fetch_one,
-            "SELECT id FROM messages WHERE sender_id = ? AND client_message_id = ?",
-            (self.bot_id, reply_client_id),
-        )
-        if row is None:
-            return
-        message_row = await asyncio.to_thread(self.store.message_with_attachment, int(row["id"]))
-        assert message_row is not None
-        control = CommandControl.SHUTDOWN_PROCESS if is_quit_command(content) else CommandControl.NONE
-        message["_post_ack"] = {"reply": self._message(message_row), "control": control}
-
-    async def deliver_bot_reply(self, session_id: str, text: str, effect_request_id: str) -> dict[str, Any]:
-        prefix = "dashboard:user:"
-        if not session_id.startswith(prefix):
-            raise ValueError("dashboard reply session is invalid")
-        try:
-            receiver_id = int(session_id.removeprefix(prefix))
-        except ValueError as error:
-            raise ValueError("dashboard reply user is invalid") from error
-        await self._require_user(receiver_id)
-        client_message_id = str(uuid5(NAMESPACE_URL, f"aurora-dashboard:{effect_request_id}"))
-        row, created = await asyncio.to_thread(
-            self.store.create_message,
-            client_message_id=client_message_id,
-            sender_id=self.bot_id,
-            receiver_id=receiver_id,
-            message_type="text",
-            content=text,
-            attachment_id=None,
-            source_effect_request_id=effect_request_id,
-        )
-        message_row = await asyncio.to_thread(self.store.message_with_attachment, int(row["id"]))
-        assert message_row is not None
-        message = self._message(message_row)
-        if created:
-            await self.publish(receiver_id, {"type": "private_message", "message": message})
-        return message
+    async def recover_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
+        return await self._communication.recover_publication(request)
 
     async def subscribe(self, user_id: int) -> asyncio.Queue[dict[str, Any]]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
@@ -428,14 +337,6 @@ class ChatService:
         for user_id in tuple(self._subscribers):
             if user_id != exclude:
                 await self.publish(user_id, event)
-
-    async def _unsupported_attachment_reply(self, receiver_id: int, message_id: int) -> None:
-        effect_id = f"attachment-unsupported:{message_id}"
-        await self.deliver_bot_reply(
-            f"dashboard:user:{receiver_id}",
-            "当前暂不支持读取附件。",
-            effect_id,
-        )
 
     async def _require_user(self, user_id: int) -> dict[str, Any]:
         row = await asyncio.to_thread(self.store.fetch_one, "SELECT * FROM users WHERE id = ?", (user_id,))

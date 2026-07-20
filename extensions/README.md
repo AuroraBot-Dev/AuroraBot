@@ -13,8 +13,8 @@ Python 插件；所有扩展都必须通过 TOML 显式声明，这让启动结�
 MCP 应用最接近 AuroraBot 的“感知器与执行器”：它可以提供工具，也可以在环境发生变化时发回事件。
 
 1. 实现一个 stdio 或 HTTPS Streamable HTTP MCP Server。
-2. 在 `config/apps.toml` 中声明 package、transport、启动方式和超时。
-3. 为每个允许使用的工具写出完整名称和 `result_mode`。
+2. 在 `config/apps.toml` 中声明 package、`kind`、transport、启动方式和超时。
+3. 为每个允许使用的工具写出完整名称，并将普通工具声明为 `kind = "effect"`。
 4. 在 `config/agents.toml` 中把工具名称授予需要它的 Agent profile。
 5. 使用 `uv run --env-file .env aurora --console --mcp` 启动并验证完整闭环。
 
@@ -22,6 +22,13 @@ MCP 应用最接近 AuroraBot 的“感知器与执行器”：它可以提供�
 
 AuroraBot 会在启动时发现工具，并要求发现结果与 TOML allowlist 一致。模型只有在 Agent 获得授权后才能请求工具；参数
 还会经过 JSON Schema 校验。执行结果由 Platform 转换成回执，再交还原先等待的 Agent。
+
+普通工具 App 使用 `kind = "utility"`。受信任的消息连接器使用 `kind = "communication"`，其 publication 工具还须
+通过 `[[app.publication]]` 固定到 reply、relay 或 proactive_send operation；可发送目标由
+`[[app.destination]]` 的 alias、capability 与 audience allowlist 显式约束。旧的 `app.tool.result_mode` 不再接受。
+communication App 的 `message.received` 必须提供稳定 external event/message ID、conversation、actor、reply route、
+self-authored 标记及纯文本 data；MCP Platform 会覆盖 endpoint，并先用本地 Publication ledger 做回环核对。raw
+publication 工具不会暴露给模型，模型只看到配置生成的 capability 与 destination alias。
 
 ## 定义一个 Agent profile
 

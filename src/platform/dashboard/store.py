@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-_SCHEMA = """
+_MIGRATION_1 = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS messages (
     attachment_id INTEGER,
     status TEXT NOT NULL,
     amp_message_id TEXT UNIQUE,
-    source_effect_request_id TEXT UNIQUE,
+    source_publication_request_id TEXT UNIQUE,
     created_at TEXT NOT NULL,
     FOREIGN KEY(sender_id) REFERENCES users(id),
     FOREIGN KEY(receiver_id) REFERENCES users(id),
@@ -63,6 +63,75 @@ CREATE INDEX IF NOT EXISTS idx_messages_receiver_sender_id
 CREATE INDEX IF NOT EXISTS idx_messages_sync
     ON messages(id, sender_id, receiver_id);
 """
+
+_MIGRATION_2 = """
+ALTER TABLE messages RENAME TO messages_legacy;
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_message_id TEXT NOT NULL,
+    sender_id INTEGER NOT NULL,
+    receiver_id INTEGER NOT NULL,
+    message_type TEXT NOT NULL,
+    content TEXT,
+    attachment_id INTEGER,
+    status TEXT NOT NULL,
+    amp_message_id TEXT UNIQUE,
+    source_publication_request_id TEXT UNIQUE,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(sender_id) REFERENCES users(id),
+    FOREIGN KEY(receiver_id) REFERENCES users(id),
+    FOREIGN KEY(attachment_id) REFERENCES attachments(id),
+    UNIQUE(sender_id, client_message_id)
+);
+INSERT INTO messages(
+    id, client_message_id, sender_id, receiver_id, message_type, content,
+    attachment_id, status, amp_message_id, created_at
+)
+SELECT
+    id, client_message_id, sender_id, receiver_id, message_type, content,
+    attachment_id, status, amp_message_id, created_at
+FROM messages_legacy;
+DROP TABLE messages_legacy;
+CREATE INDEX idx_messages_sender_receiver_id
+    ON messages(sender_id, receiver_id, id);
+CREATE INDEX idx_messages_receiver_sender_id
+    ON messages(receiver_id, sender_id, id);
+CREATE INDEX idx_messages_sync
+    ON messages(id, sender_id, receiver_id);
+CREATE TABLE dashboard_reply_routes (
+    route_ref TEXT PRIMARY KEY,
+    external_event_id TEXT NOT NULL UNIQUE,
+    external_message_id TEXT NOT NULL UNIQUE,
+    owner_user_id INTEGER NOT NULL,
+    conversation_ref TEXT NOT NULL,
+    actor_ref TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(owner_user_id) REFERENCES users(id)
+);
+CREATE TABLE dashboard_publications (
+    request_id TEXT PRIMARY KEY,
+    route_ref TEXT,
+    capability TEXT NOT NULL,
+    endpoint_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('dispatch_started', 'accepted', 'failed')),
+    summary TEXT,
+    external_message_id TEXT UNIQUE,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
+_MIGRATION_3 = """
+ALTER TABLE dashboard_reply_routes ADD COLUMN expires_at TEXT;
+UPDATE dashboard_reply_routes
+SET expires_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE expires_at IS NULL;
+"""
+
+_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3)
 
 
 def _now() -> str:
@@ -84,7 +153,13 @@ class ChatStore:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
-            connection.executescript(_SCHEMA)
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if version > len(_MIGRATIONS):
+                raise RuntimeError(f"Dashboard database schema {version} is newer than this runtime")  # noqa: TRY003
+            for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
+                connection.executescript(
+                    f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
+                )
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
         with self.connect() as connection:
@@ -145,7 +220,7 @@ class ChatStore:
         attachment_id: int | None,
         status: str = "saved",
         amp_message_id: str | None = None,
-        source_effect_request_id: str | None = None,
+        source_publication_request_id: str | None = None,
     ) -> tuple[sqlite3.Row, bool]:
         now = _now()
         with self.connect() as connection:
@@ -154,7 +229,7 @@ class ChatStore:
                     """
                     INSERT INTO messages(
                         client_message_id, sender_id, receiver_id, message_type, content, attachment_id,
-                        status, amp_message_id, source_effect_request_id, created_at
+                        status, amp_message_id, source_publication_request_id, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -166,7 +241,7 @@ class ChatStore:
                         attachment_id,
                         status,
                         amp_message_id,
-                        source_effect_request_id,
+                        source_publication_request_id,
                         now,
                     ),
                 )
@@ -179,14 +254,111 @@ class ChatStore:
                     "SELECT * FROM messages WHERE sender_id = ? AND client_message_id = ?",
                     (sender_id, client_message_id),
                 ).fetchone()
-                if row is None and source_effect_request_id is not None:
+                if row is None and source_publication_request_id is not None:
                     row = connection.execute(
-                        "SELECT * FROM messages WHERE source_effect_request_id = ?",
-                        (source_effect_request_id,),
+                        "SELECT * FROM messages WHERE source_publication_request_id = ?",
+                        (source_publication_request_id,),
                     ).fetchone()
                 if row is None:
                     raise
                 return row, False
+
+    def register_reply_route(
+        self,
+        *,
+        route_ref: str,
+        external_event_id: str,
+        external_message_id: str,
+        owner_user_id: int,
+        conversation_ref: str,
+        actor_ref: str,
+        reply_route_ttl_seconds: float,
+    ) -> sqlite3.Row:
+        now = datetime.now(UTC)
+        with self.connect() as connection:
+            connection.execute("DELETE FROM dashboard_reply_routes WHERE expires_at <= ?", (now.isoformat(),))
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO dashboard_reply_routes(
+                    route_ref, external_event_id, external_message_id, owner_user_id,
+                    conversation_ref, actor_ref, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    route_ref,
+                    external_event_id,
+                    external_message_id,
+                    owner_user_id,
+                    conversation_ref,
+                    actor_ref,
+                    now.isoformat(),
+                    (now + timedelta(seconds=reply_route_ttl_seconds)).isoformat(),
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM dashboard_reply_routes WHERE external_event_id = ?",
+                (external_event_id,),
+            ).fetchone()
+            connection.commit()
+            assert row is not None
+            if (
+                str(row["route_ref"]) != route_ref
+                or str(row["external_message_id"]) != external_message_id
+                or int(row["owner_user_id"]) != owner_user_id
+            ):
+                raise ValueError(  # noqa: TRY003
+                    "Dashboard external event route conflicts with its persisted binding"
+                )
+            return row
+
+    def start_publication(
+        self,
+        *,
+        request_id: str,
+        route_ref: str | None,
+        capability: str,
+        endpoint_id: str,
+        operation: str,
+        text: str,
+    ) -> tuple[sqlite3.Row, bool]:
+        now = _now()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO dashboard_publications(
+                    request_id, route_ref, capability, endpoint_id, operation, text,
+                    status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'dispatch_started', ?, ?)
+                """,
+                (request_id, route_ref, capability, endpoint_id, operation, text, now, now),
+            )
+            row = connection.execute(
+                "SELECT * FROM dashboard_publications WHERE request_id = ?",
+                (request_id,),
+            ).fetchone()
+            connection.commit()
+            assert row is not None
+            return row, cursor.rowcount == 1
+
+    def finish_publication(
+        self,
+        request_id: str,
+        *,
+        status: str,
+        summary: str,
+        external_message_id: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE dashboard_publications
+                SET status = ?, summary = ?, external_message_id = ?, error = ?, updated_at = ?
+                WHERE request_id = ?
+                """,
+                (status, summary, external_message_id, error, _now(), request_id),
+            )
+            connection.commit()
 
     def message_with_attachment(self, message_id: int) -> sqlite3.Row | None:
         return self.fetch_one(

@@ -77,7 +77,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     status = AgentStatus.WAITING_MODEL
                     created.append(activity_id)
-            elif kind == "effect":
+            elif kind in {"effect", "publication"}:
                 if int(task_row["tool_calls"]) >= int(task_row["max_tool_calls"]):
                     self._end_task(connection, agent.task_id, TaskStatus.BUDGET_EXHAUSTED, "tool_budget_exhausted", now)
                     status = AgentStatus.CANCELLED
@@ -86,8 +86,18 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     request_id = str(uuid4())
                     request = {**action["request"], "request_id": request_id}
                     connection.execute(
-                        "INSERT INTO activities VALUES (?, ?, ?, 'effect', ?, 'PENDING', ?, ?, NULL, ?, ?, NULL, NULL)",
-                        (activity_id, agent.task_id, agent.agent_id, _json(request), priority, request_id, now, now),
+                        "INSERT INTO activities VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, NULL, ?, ?, NULL, NULL)",
+                        (
+                            activity_id,
+                            agent.task_id,
+                            agent.agent_id,
+                            kind,
+                            _json(request),
+                            priority,
+                            request_id,
+                            now,
+                            now,
+                        ),
                     )
                     connection.execute(
                         "UPDATE tasks SET tool_calls = tool_calls + 1, updated_at = ? WHERE task_id = ?",
@@ -234,6 +244,10 @@ class StoreDecisionsMixin(RuntimeStoreBase):
             "UPDATE activities SET status = 'CANCELLED', updated_at = ?, lease_until = NULL WHERE task_id = ? "
             "AND status IN ('PENDING', 'PROCESSING')",
             (now, task_id),
+        )
+        connection.execute(
+            "UPDATE reply_grants SET status = 'REVOKED' WHERE task_id = ? AND status = 'ACTIVE'",
+            (task_id,),
         )
 
     def cancel_task(self, task_id: str, reason: str) -> None:

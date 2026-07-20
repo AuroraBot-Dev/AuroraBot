@@ -1,6 +1,6 @@
 [project]
 name = "AuroraBot"
-version = "0.4.0"
+version = "0.4.1"
 description = "拥有主动节律、可持续工作且行动可追溯的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
@@ -125,6 +125,7 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 "src/platform/dashboard/store.py" = ["PLR0913", "TC003", "TRY300"]
 "src/localhost/runtime.py" = ["BLE001", "TC003", "TRY003"]
 "src/localhost/effect_dispatcher.py" = ["BLE001", "TRY003"]
+"src/localhost/publication_dispatcher.py" = ["BLE001", "TRY003"]
 "src/localhost/scheduler.py" = ["TRY300"]
 "src/agents/tool_agent.py" = ["C901", "PLR0911", "PLR2004", "TC001"]
 "src/platform/console/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
@@ -135,8 +136,11 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 "src/ai/gateway.py" = ["PLR0913", "TRY003"]
 "src/ai/vnext.py" = ["C901", "PLR0912", "TC001", "TRY003"]
 "src/apps/aurora-app-clock/service.py" = ["TC003", "TRY003"]
-"src/platform/mcp/adapter.py" = ["BLE001", "TC001", "TRY003", "TRY004"]
+"src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY003", "TRY004"]
 "src/platform/mcp/client_manager.py" = ["C901"]
+"src/platform/mcp/communication.py" = ["TRY003"]
+"src/platform/mcp/publication.py" = ["BLE001", "C901", "PLR0911"]
+"src/platform/mcp/publication_ledger.py" = ["PLR0913"]
 "tests/test_api.py" = ["PLR2004", "TC003"]
 "tests/test_causal_loop.py" = ["TC003"]
 "tests/test_configuration.py" = ["TC003"]

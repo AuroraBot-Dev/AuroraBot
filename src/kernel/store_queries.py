@@ -92,6 +92,7 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return tuple(
                 {
                     "situation_id": row["situation_id"],
+                    "audience_ref": row["audience_ref"],
                     "source": row["source"],
                     "type": row["type"],
                     "summary": row["summary"],
@@ -112,15 +113,25 @@ class StoreQueriesMixin(RuntimeStoreBase):
             )
 
     def add_situation(
-        self, source: str, event_type: str, summary: str, payload: dict[str, Any], priority: int, ttl_seconds: float
+        self,
+        source: str,
+        event_type: str,
+        summary: str,
+        payload: dict[str, Any],
+        priority: int,
+        ttl_seconds: float,
+        audience_ref: str,
     ) -> str:
         now_dt = datetime.now(UTC)
         situation_id = str(uuid4())
         with self.transaction() as connection:
             connection.execute(
-                "INSERT INTO situations VALUES (?, ?, ?, ?, ?, ?, 'OPEN', NULL, ?, ?, ?)",
+                "INSERT INTO situations (situation_id, audience_ref, source, type, summary, payload_json, priority, "
+                "status, claimed_by_agent_id, expires_at, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, ?, ?, ?)",
                 (
                     situation_id,
+                    audience_ref,
                     source,
                     event_type,
                     summary,
@@ -171,6 +182,16 @@ class StoreQueriesMixin(RuntimeStoreBase):
                 "processing_effect_activities": int(
                     connection.execute(
                         "SELECT count(*) FROM activities WHERE kind = 'effect' AND status = 'PROCESSING'"
+                    ).fetchone()[0]
+                ),
+                "pending_publication_activities": int(
+                    connection.execute(
+                        "SELECT count(*) FROM activities WHERE kind = 'publication' AND status = 'PENDING'"
+                    ).fetchone()[0]
+                ),
+                "processing_publication_activities": int(
+                    connection.execute(
+                        "SELECT count(*) FROM activities WHERE kind = 'publication' AND status = 'PROCESSING'"
                     ).fetchone()[0]
                 ),
             }

@@ -22,7 +22,6 @@ def _input(text: str) -> RuntimeInput:
         session_id="test:console",
         source_app="tests.console",
         source_instance="commands",
-        reply_capability="org.aurora.console.send_message",
     )
 
 

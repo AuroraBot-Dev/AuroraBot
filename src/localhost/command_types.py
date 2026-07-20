@@ -30,7 +30,6 @@ class RuntimeInput:
     session_id: str
     source_app: str
     source_instance: str
-    reply_capability: str
     actor_id: str | None = None
     idempotency_key: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
@@ -42,7 +41,6 @@ class RuntimeInput:
             session_id=self.session_id,
             source_app=self.source_app,
             source_instance=self.source_instance,
-            reply_capability=self.reply_capability,
             actor_id=self.actor_id,
             idempotency_key=self.idempotency_key,
             data=dict(self.data),

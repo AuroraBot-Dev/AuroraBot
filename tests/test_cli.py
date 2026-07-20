@@ -23,12 +23,12 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
         return 0
 
     monkeypatch.setattr(check, "run_process", record)
-    arguments = argparse.Namespace(root=tmp_path, lint=True, test=True, fix=False, unsafe_fixes=False)
+    arguments = argparse.Namespace(root=tmp_path, lint=True, test=True, fix=False, unsafe_fixes=False, check=False)
 
     assert check.execute(arguments) == 0
     assert commands == [
         ["uv", "run", "--no-sync", "ruff", "check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "--no-sync", "ruff", "format", "--check", "aurora/", "src/", "tests/"],
+        ["uv", "run", "--no-sync", "ruff", "format", "aurora/", "src/", "tests/"],
         ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
         ["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"],
     ]
@@ -106,7 +106,7 @@ def test_check_does_not_enter_runtime_composition(monkeypatch: pytest.MonkeyPatc
     assert run(["--root", str(tmp_path), "check", "--lint"]) == 0
     assert commands == [
         ["uv", "run", "--no-sync", "ruff", "check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "--no-sync", "ruff", "format", "--check", "aurora/", "src/", "tests/"],
+        ["uv", "run", "--no-sync", "ruff", "format", "aurora/", "src/", "tests/"],
         ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
     ]
 
