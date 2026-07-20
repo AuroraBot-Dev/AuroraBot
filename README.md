@@ -1,115 +1,128 @@
-# AuroraBot
+<p align="center">
+  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+</p>
+
+<h1 align="center">AuroraBot</h1>
 
 <p align="center">
   <b>中文</b> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a>
 </p>
 
-AuroraBot 是一个以因果事件、同构 Agent 和主动节律为核心的自主智能体框架。它把环境输入、模型调用、
-能力执行和执行回执都保留为可审计记录，使一次认知过程能够异步暂停、可靠恢复并明确终止。
+<p align="center">
+  <em>让 Agent 拥有自己的生活。</em>
+</p>
 
-## 认知闭环
+<p align="center">事件平权 · 同构协作 · 主动节律</p>
 
-```text
-外部 AMP 事件 / system.tick
-  → Kernel 创建 Task 与根 Gate Agent
-  → Agent 请求模型 Activity，或有界委派并行子 Agent
-  → 每个子 Agent 完成后回报父 Agent，父 Agent 恢复工作
-  → 普通效果由获授权 Agent 请求，terminal 效果仅允许根 Agent 发布
-  → Platform 执行效果，回执作为新邮箱消息恢复请求方 Agent
-```
+<p align="center">
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-AuroraBot-181717?logo=github" alt="GitHub" /></a>
+  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-aurorabot.org-315b7d" alt="Documentation" /></a>
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
+  <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
+</p>
 
-模型产生的文本不会直接成为外部输出。只有声明过的 Platform 能力可以产生效果；模型调用、工具调用、
-回执、预算变化和终止原因均进入同一条因果链。整棵监督树共享模型、工具和时间预算；Runtime 为所有 Agent
-投影只读的全局 Brain Context。长期记忆目前只保留 Memory Agent 接入契约，未配置时不会影响普通任务。
+## 她是什么
 
-没有外界输入时，持久化 scheduler 会按预算产生 `system.tick`。连续静默会从 30 秒逐步退避到 30 分钟；
-外部输入立即唤醒运行时，交互 Task 优先于自主 Task。
+AuroraBot 是一个面向开发者的开源自主智能体框架。我们想做的不是一个能力更多的聊天机器人，而是一个能够持续存在、形成自己的节律，并在环境中自主判断和行动的 Agent。
+
+我们习惯称她为“她”。这不只是文案风格：AuroraBot 的目标不是制造一个随叫随到的工具人，而是为数字生命提供一套可以生活的运行环境。她可以有自己的人格、状态和边界，也可以在需要时与人和外部世界建立联系。
+
+## 设计哲学
+
+### 一个有自己生活的智能体
+
+对 AuroraBot 来说，对话不是世界的全部。即使没有人发送消息，时间仍在流逝，应用仍会产生事件，尚未完成的工作仍可继续。主动节律让她能够在预算和边界内自行判断是否需要思考或行动，而不是永远停在输入框后面。
+
+### 平等看待环境变化
+
+用户消息、时间变化、应用事件、子 Agent 结果和行动回执，本质上都是外部世界发生的变化。它们通过同一套事件入口进入认知过程，不会因为来自用户，就自动变成不可质疑的最高指令。
+
+“平等”不表示没有优先级。交互任务可以优先调度，权限与安全规则也始终有效；它强调的是 Agent 先理解发生了什么，再结合上下文决定回应、行动、委派或保持安静。
+
+### 判断与行动分开
+
+模型负责理解和决策，但普通模型文本不能直接改变环境。外部行动必须经过已声明的能力、参数校验和 Platform 执行，结果再作为新事件回到 Agent。这样，自主并不意味着不可控。
 
 ## 主要能力
 
-- AMP JSON 边界、SQLite WAL 运行态和原子归档
-- 持久化邮箱、同构 Agent、监督树、共享预算与取消传播
-- Chat Completions tools 与 Responses agent 双通道模型网关
-- 不可变能力目录、JSON Schema 参数校验和 MCP 应用接入
-- 单进程 `AuroraRuntime`，统一推进 scheduler、Kernel、模型 dispatcher 和 Platform 回执
-- 结构化上下文日志，以及独立于日志的因果审计记录
+- **主动运行**：持久化 scheduler 按节律和预算产生自主任务，外部输入到来时及时切回交互工作。
+- **持续任务**：任务可以异步等待模型、工具和子 Agent，在结果返回后恢复，并有明确的预算与终态。
+- **多 Agent 协作**：同构 Agent 通过有界委派组成监督树，简单工作直接完成，复杂工作可以并行拆分。
+- **连接外部世界**：Console、Dashboard 和 MCP Platform 将不同来源统一为事件，并提供经过授权的环境能力。
+- **可替换模型**：模型角色、Provider、Chat Completions 与 Responses 通道由配置选择，不绑定单一模型服务。
+- **可追溯行动**：输入、模型调用、能力请求、执行结果和终止原因处于同一条因果记录中。
+- **人格与能力可配置**：SOUL、Agent profile、模型角色、平台组合和 MCP 应用各自拥有清晰配置入口。
 
 ## 快速开始
 
-需要 Python 3.12 和 [uv](https://docs.astral.sh/uv/)。
+需要 Python 3.12、Git 和 [uv](https://docs.astral.sh/uv/)。当前推荐从源码运行。
 
 ```powershell
-uv sync --group dev
+git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+Set-Location AuroraBot
+uv sync --no-dev
 Copy-Item .env.example .env
-# 在 .env 中填写所选 Provider 对应的密钥
-uv run aurora
+
+# 在 .env 中填写默认配置所需的 DEEPSEEK_API_KEY
+uv run --no-dev --env-file .env aurora --console --mcp
 ```
 
-默认平台组合来自 `config/preference.toml`；仓库默认同时启动本地 Console、Dashboard 后端和 MCP。聊天前端保持在
-独立 AuroraChat 仓库：
+启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
 
 ```powershell
-Set-Location ..\AuroraChat
-pnpm install
-pnpm run dev
+# 使用 config/preference.toml 中的默认平台组合
+uv run --no-dev --env-file .env aurora
+
+# 只启动本地 Console
+uv run --no-dev --env-file .env aurora --console
+
+# 不启动外部平台
+uv run --no-dev --env-file .env aurora --headless
 ```
 
-浏览器打开 `http://localhost:5173`，注册后即可和普通用户或内建 AuroraBot 联系人聊天。
+显式提供 `--console`、`--dashboard` 或 `--mcp` 时，它们组成精确的平台集合，不与默认值叠加。Dashboard 浏览器前端由独立项目提供，本仓库包含本地后端和聊天桥接。
 
-常用入口：
+## 定制与扩展
 
-```powershell
-# 仅常驻认知循环，不启动外部平台
-uv run aurora --profile prod --headless
+| 想改变什么                   | 从哪里开始               |
+| ---------------------------- | ------------------------ |
+| 人格、语气与表达边界         | `config/prompts/SOUL.md` |
+| 模型角色与 Provider          | `config/aurora.toml`     |
+| 默认启动的平台               | `config/preference.toml` |
+| Agent 的模型、能力与委派范围 | `config/agents.toml`     |
+| 本地或远程 MCP 应用          | `config/apps.toml`       |
 
-# 使用 preference.toml 中的默认平台组合
-uv run aurora
+结构配置使用 TOML，密钥只从环境变量读取。扩展可以从[扩展指南](extensions/README.md)和内建[Clock 应用](src/apps/aurora-app-clock/README.md)开始。
 
-# 显式参数形成精确平台集合，不与默认组合叠加
-uv run aurora --dashboard --mcp
-uv run aurora --console
+## 当前阶段
 
-# 执行项目质量检查
-uv run aurora check
-```
-
-Console 与 Dashboard 共用斜杠命令：可用 `/say 你好` 投递消息，使用 `/pump` 推进 ready turns，通过
-`/task <task_id>`、`/agent <agent_id>` 和 `/status` 查看状态；`/log off` 可静默终端日志而保留文件日志。
-
-## 目录
-
-```text
-config/         核心 TOML、平台偏好、领域配置与 profile 覆盖
-aurora/         进程 CLI、平台组合与统一生命周期
-docs/rfc/       规范性架构与公共契约
-src/contracts/  配置、AMP、Agent、模型与记忆契约
-src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
-src/agents/     同构 Agent handler 与内建委派能力
-src/ai/         模型角色、路由、原生 tools/Responses 和用量记录
-src/localhost/  统一输入、效果调度、scheduler 与开发者用例
-src/platform/   Console、Dashboard、MCP 的协议、持久化与效果适配
-src/apps/       内建原生 AMP-MCP 应用
-src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
-src/utils/      无上层依赖的通用工具
-tests/          契约、集成与回归测试
-```
-
-Kernel 工作区固定为 `data/kernel/{inbox,process,archive}`。外部边界和归档使用 JSON，运行态使用 SQLite WAL，结构性配置使用 TOML，
-密钥只通过环境变量提供。
+AuroraBot `0.4` 是开发者预览，适合本地体验、框架研究和扩展开发。当前版本尚未提供内建长期记忆、附件理解、Agent 沙箱工具或面向公网的多租户部署保证。我们会明确区分当前能力与路线图，公共行为以已接受 RFC 和测试为准。
 
 ## 文档
 
-- [RFC 索引](docs/rfc/README.md)
-- [RFC 0001：架构基准](docs/rfc/0001-architecture.md)
-- [RFC 0012：同构多 Agent 持久化运行时](docs/rfc/0012-homogeneous-agent-runtime.md)
-- [RFC 0013：统一命令路由与 Aurora 进程入口](docs/rfc/0013-unified-command-routing-and-entry.md)
-- [RFC 0014：并行平台组合与偏好配置](docs/rfc/0014-parallel-platform-composition-and-preferences.md)
-- [RFC 0010：Dashboard 聊天适配](docs/rfc/0010-dashboard-chat.md)
-- [RFC 0011：当前项目基线](docs/rfc/0011-current-project-baseline.md)
+- [AuroraBot 文档站](https://www.aurorabot.org/)
 - [贡献指南](docs/CONTRIBUTING.md)
+- [扩展 AuroraBot](extensions/README.md)
+- [模型网关](src/ai/README.md)
+- [RFC 阅读指南](docs/rfc/README.md)
 - [日志规范](LOGGING.md)
 - [社区行为准则](CODE_OF_CONDUCT.md)
 
+## 开源致谢
+
+AuroraBot 使用了许多优秀的开源项目：
+
+| 项目                                                                                                                   | 在 AuroraBot 中的用途            |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | 模型 Provider 接入与调用基础设施 |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP 应用和工具协议               |
+| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Dashboard 本地服务               |
+| [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console 与终端体验               |
+| [jsonschema](https://github.com/python-jsonschema/jsonschema)                                                          | 能力参数校验                     |
+
+也感谢其他开源 Agent/Bot 项目对这个领域的探索。特别感谢 [MaiBot](https://github.com/MaiM-with-u/MaiBot)，其“数字生命”理念为 AuroraBot 的早期思考提供了重要启发。
+
 ## 许可证
 
-本项目使用 [Apache License 2.0](LICENSE) 协议。
+本项目以 [Apache License 2.0](LICENSE) 协议开源。

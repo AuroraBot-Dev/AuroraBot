@@ -13,8 +13,8 @@ body:
     attributes:
       label: 概述 | Summary
       description: |
-        请介绍你想加入的新功能或改进。
-        Please describe the new feature or enhancement.
+        请先介绍你希望改善的使用体验，而不是只描述内部实现。
+        Start with the user experience you want to improve, rather than only an internal implementation.
     validations:
       required: true
   - type: textarea
@@ -31,8 +31,8 @@ body:
     attributes:
       label: 详情 | Details
       description: |
-        补充描述该功能的具体实现方式或建议。（可选）
-        Describe implementation details or suggestions here. (Optional)
+        补充一个具体使用场景、预期交互或实现建议。（可选）
+        Add a concrete scenario, expected interaction, or implementation suggestion. (Optional)
   - type: dropdown
     id: scope
     attributes:
@@ -41,9 +41,11 @@ body:
         该功能主要涉及哪个子系统？（可选）
         Which subsystem does this feature mainly involve? (Optional)
       options:
-        - 认知引擎 / Brain (CortexForge)
-        - 平台层 / Platform
-        - 应用层 / Apps
-        - 记忆系统 / Memory
-        - LLM 网关 / LLM Gateway
+        - Agent runtime / Agents
+        - Kernel / Causality / Storage
+        - Model Gateway / AI
+        - Console / Dashboard / Localhost
+        - MCP Platform / Applications
+        - Contracts / Configuration
+        - Documentation / Landing Page
         - 其他 / Other

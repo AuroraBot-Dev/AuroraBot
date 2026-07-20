@@ -1,32 +1,44 @@
-# Clock MCP 应用
+# Clock：让 AuroraBot 感知时间
+
+Clock 是 AuroraBot 内建的 stdio MCP 应用。它让 Agent 能够查询当前时间、设置闹钟和倒计时，并在时间到达时主动产生
+新的环境事件。除了直接使用，它也是开发 MCP 应用时最小、完整的参考。
 
 包名：`org.aurora.clock`
 
-Clock 是内建 stdio MCP 应用，经 Platform 能力目录接入 AuroraBot。启用状态、启动命令、工具 allowlist 与
-`result_mode` 只由根目录 `config/apps.toml` 声明；所有 Clock 工具当前均为 `resume`，执行成功或失败后都会恢复
-发起它的 Agent。
+## 可以做什么
 
-## 工具
-
-| 完整工具名 | 参数 | 结果 |
+| 工具 | 用途 | 主要参数 |
 | --- | --- | --- |
-| `org.aurora.clock.get_current_time` | `fmt: str = "%Y-%m-%d %H:%M:%S"` | 格式化的本地时间字符串 |
-| `org.aurora.clock.set_alarm` | `time_str: str`, `label: str = ""` | 闹钟 ID、触发时间与状态 |
-| `org.aurora.clock.set_timer` | `seconds: int`, `label: str = ""` | 计时器 ID、触发时间与状态 |
-| `org.aurora.clock.list_alarms` | 无 | 当前闹钟和计时器列表 |
-| `org.aurora.clock.cancel_alarm` | `alarm_id: str` | 是否成功取消 |
+| `org.aurora.clock.get_current_time` | 获取 UTC+8 当前时间 | `fmt`：`strftime` 格式 |
+| `org.aurora.clock.set_alarm` | 设置一次性闹钟 | `time_str`：ISO-8601 或 `HH:MM`；`label` |
+| `org.aurora.clock.set_timer` | 设置倒计时 | `seconds`；`label` |
+| `org.aurora.clock.list_alarms` | 列出等待中的闹钟与计时器 | 无 |
+| `org.aurora.clock.cancel_alarm` | 按 ID 取消任务 | `alarm_id` |
 
-`set_alarm` 的 `time_str` 使用 `HH:MM` 24 小时格式；`set_timer` 的 `seconds` 必须为正整数。闹钟和计时器触发时，
-应用通过 MCP 日志通知发送 `org.aurora.clock.alarm_triggered` 或 `org.aurora.clock.timer_triggered`，Platform 将其
-归一化为新的 AMP 环境事件。
+`HH:MM` 按 UTC+8 解释；如果当天时间已经过去，会安排到下一天。当前版本不解析“明天早上”一类自然语言，也不支持
+重复闹钟。调用方应传入正数倒计时。
 
-## 本地启动
+闹钟和计时器保存在 `data/app_data/org.aurora.clock/tasks.json`。应用重启后会恢复尚未到期的任务；到点时产生
+`alarm.triggered` 或 `timer.triggered`，MCP Platform 再把它归一化成 AuroraBot 可以处理的 AMP 环境事件。
 
-通常由 Platform 按 `config/apps.toml` 自动启动。单独调试 stdio server：
+## 在 AuroraBot 中使用
+
+根目录 `config/apps.toml` 已经声明 Clock 的启动命令和工具 allowlist，`config/agents.toml` 则把这些能力授予内建
+Agent。启动 Console 与 MCP 后，可以直接用自然语言提出需求：
+
+```powershell
+uv run --env-file .env aurora --console --mcp
+```
+
+例如输入“十分钟后提醒我休息”。模型负责把需求转换成结构化工具参数，Clock 负责可靠计时，Platform 回执让 Agent
+知道操作是否真正成功。
+
+## 单独调试
 
 ```powershell
 Set-Location src/apps/aurora-app-clock
 uv run python mcp_server.py
 ```
 
-stdout 只用于 MCP JSON-RPC，诊断日志写入 stderr。能力发现结果必须与 TOML allowlist 完全一致，否则运行时启动失败。
+stdio MCP Server 的 stdout 只用于 JSON-RPC，诊断日志写入 stderr。运行时发现的工具必须与 `config/apps.toml` 中的
+allowlist 完全一致，否则 AuroraBot 会拒绝启动这项应用，避免能力配置与实际实现悄悄漂移。

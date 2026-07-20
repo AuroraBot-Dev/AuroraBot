@@ -1,44 +1,395 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-i18n-loading>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="AuroraBot：以因果事件、图式认知和主动节律为核心的自主智能体框架。"
-    />
-    <title>AuroraBot</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f3f0e8" />
+    <meta name="description" data-i18n-attr="content:meta.description" />
+    <meta property="og:title" data-i18n-attr="content:meta.ogTitle" />
+    <meta property="og:description" data-i18n-attr="content:meta.ogDescription" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.aurorabot.org/" />
+    <meta property="og:locale" data-i18n-attr="content:meta.ogLocale" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title data-i18n="meta.title"></title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+    <link rel="canonical" href="https://www.aurorabot.org/" />
+    <script id="structured-data" type="application/ld+json"></script>
     <style>
-      :root {
-        color-scheme: dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      body {
-        align-items: center;
-        background: #111827;
-        color: #e5e7eb;
-        display: flex;
-        justify-content: center;
-        margin: 0;
-        min-height: 100vh;
-      }
-      main {
-        max-width: 44rem;
-        padding: 2rem;
-      }
-      h1 { color: #f9fafb; }
-      code { color: #a5b4fc; }
-      a { color: #93c5fd; }
+      @import url("assets/index.css");
     </style>
   </head>
   <body>
-    <main>
-      <h1>AuroraBot</h1>
-      <p>以因果事件、图式认知和主动节律为核心的自主智能体框架。</p>
-      <p>
-        阅读 <a href="README.md">项目说明</a>与
-        <a href="docs/rfc/README.md"><code>RFC</code></a>，了解认知闭环、运行入口和扩展契约。
-      </p>
-    </main>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="#top" data-i18n-attr="aria-label:header.homeLabel">
+          <img src="assets/logo.svg" alt="" />
+          <span data-i18n="common.brand"></span>
+        </a>
+        <nav class="topnav" data-i18n-attr="aria-label:header.navLabel">
+          <a href="#meet" data-i18n="header.about"></a>
+          <a href="#ways" data-i18n="header.ways"></a>
+          <a href="#start" data-i18n="header.start"></a>
+        </nav>
+        <div class="top-actions">
+          <a
+            class="github-label"
+            href="https://github.com/AuroraBot-Dev/AuroraBot"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-i18n="header.githubVersion"
+          ></a>
+          <button
+            class="icon-button theme-toggle"
+            type="button"
+            data-i18n-attr="aria-label:header.themeLabel,title:header.themeLabel"
+          >
+            <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.7 8.7 0 1 0 20.5 14.2Z" />
+            </svg>
+            <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="top">
+        <section class="hero" aria-labelledby="hero-title">
+          <div>
+            <p class="kicker" data-i18n="hero.kicker"></p>
+            <h1 id="hero-title"><span data-i18n="hero.title"></span><em data-i18n="hero.titleAccent"></em></h1>
+            <p class="hero-lede" data-i18n="hero.description"></p>
+            <ul class="hero-points" data-i18n-attr="aria-label:hero.featuresLabel">
+              <li data-i18n="hero.featureEquality" data-i18n-attr="data-marker:common.marker"></li>
+              <li data-i18n="hero.featureCollaboration" data-i18n-attr="data-marker:common.marker"></li>
+              <li data-i18n="hero.featureRhythm" data-i18n-attr="data-marker:common.marker"></li>
+            </ul>
+            <div class="actions">
+              <a class="button primary" href="#start" data-i18n="hero.startAction"></a>
+              <a
+                class="button secondary"
+                href="https://www.aurorabot.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="hero.docsAction"
+              ></a>
+            </div>
+          </div>
+
+          <aside class="thought-card" data-i18n-attr="aria-label:hero.processAria">
+            <div class="trace-head">
+              <span class="trace-label" data-i18n="hero.processLabel"></span>
+              <span class="live" data-i18n="hero.status"></span>
+            </div>
+            <ol class="trace">
+              <li>
+                <span class="trace-dot" aria-hidden="true"></span>
+                <div>
+                  <time data-i18n="hero.eventMeta"></time>
+                  <strong data-i18n="hero.eventTitle"></strong>
+                  <p data-i18n="hero.eventDescription"></p>
+                </div>
+              </li>
+              <li>
+                <span class="trace-dot" aria-hidden="true"></span>
+                <div>
+                  <time data-i18n="hero.contextMeta"></time>
+                  <strong data-i18n="hero.contextTitle"></strong>
+                  <p data-i18n="hero.contextDescription"></p>
+                </div>
+              </li>
+              <li>
+                <span class="trace-dot" aria-hidden="true"></span>
+                <div>
+                  <time data-i18n="hero.decisionMeta"></time>
+                  <strong data-i18n="hero.decisionTitle"></strong>
+                  <p data-i18n="hero.decisionDescription"></p>
+                </div>
+              </li>
+            </ol>
+          </aside>
+        </section>
+
+        <section class="section" id="meet" aria-labelledby="meet-title">
+          <div class="section-heading">
+            <span class="section-index" data-i18n="philosophy.index"></span>
+            <div>
+              <h2 id="meet-title" data-i18n="philosophy.title"></h2>
+              <p class="section-copy" data-i18n="philosophy.description"></p>
+            </div>
+          </div>
+          <div class="pillars">
+            <article class="pillar">
+              <span class="pillar-number" data-i18n="philosophy.lifeMeta"></span>
+              <h3 data-i18n="philosophy.lifeTitle"></h3>
+              <p data-i18n="philosophy.lifeDescription"></p>
+            </article>
+            <article class="pillar">
+              <span class="pillar-number" data-i18n="philosophy.equalityMeta"></span>
+              <h3 data-i18n="philosophy.equalityTitle"></h3>
+              <p data-i18n="philosophy.equalityDescription"></p>
+            </article>
+            <article class="pillar">
+              <span class="pillar-number" data-i18n="philosophy.controlMeta"></span>
+              <h3 data-i18n="philosophy.controlTitle"></h3>
+              <p data-i18n="philosophy.controlDescription"></p>
+            </article>
+          </div>
+          <p class="capability-summary" data-i18n="philosophy.capabilitySummary"></p>
+        </section>
+
+        <section class="section" id="ways" aria-labelledby="ways-title">
+          <div class="section-heading">
+            <span class="section-index" data-i18n="ways.index"></span>
+            <div>
+              <h2 id="ways-title" data-i18n="ways.title"></h2>
+              <p class="section-copy" data-i18n="ways.description"></p>
+            </div>
+          </div>
+          <div class="ways">
+            <article class="way" data-i18n-attr="data-letter:ways.consoleLetter">
+              <span class="card-kicker" data-i18n="ways.consoleLabel"></span>
+              <h3 data-i18n="ways.consoleTitle"></h3>
+              <p data-i18n="ways.consoleDescription"></p>
+            </article>
+            <article class="way" data-i18n-attr="data-letter:ways.dashboardLetter">
+              <span class="card-kicker" data-i18n="ways.dashboardLabel"></span>
+              <h3 data-i18n="ways.dashboardTitle"></h3>
+              <p data-i18n="ways.dashboardDescription"></p>
+            </article>
+            <article class="way" data-i18n-attr="data-letter:ways.mcpLetter">
+              <span class="card-kicker" data-i18n="ways.mcpLabel"></span>
+              <h3 data-i18n="ways.mcpTitle"></h3>
+              <p data-i18n="ways.mcpDescription"></p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="start" aria-labelledby="start-title">
+          <div class="section-heading">
+            <span class="section-index" data-i18n="start.index"></span>
+            <div>
+              <h2 id="start-title" data-i18n="start.title"></h2>
+              <p class="section-copy" data-i18n="start.description"></p>
+            </div>
+          </div>
+          <div class="start-grid">
+            <div class="terminal">
+              <div class="terminal-bar">
+                <div style="display: flex; align-items: center">
+                  <span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span data-i18n="start.terminal" style="margin-left: 1em"></span>
+                </div>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy-target="quick-command"
+                  data-i18n="start.copy"
+                ></button>
+              </div>
+              <pre id="quick-command">
+<span class="comment" data-i18n="start.installComment"></span>
+<span class="command" data-i18n="start.cloneCommand"></span>
+<span class="command" data-i18n="start.directoryCommand"></span>
+<span class="command" data-i18n="start.syncCommand"></span>
+<span class="command" data-i18n="start.envCommand"></span>
+
+<span class="comment" data-i18n="start.runComment"></span>
+<span class="command" data-i18n="start.runCommand"></span></pre>
+            </div>
+            <aside class="preview-note">
+              <span class="card-kicker" data-i18n="start.previewLabel"></span>
+              <h3 data-i18n="start.previewTitle"></h3>
+              <p data-i18n="start.previewDescription"></p>
+              <a
+                href="https://www.aurorabot.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="start.boundaries"
+              ></a>
+            </aside>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="faq-title">
+          <div class="section-heading">
+            <span class="section-index" data-i18n="faq.index"></span>
+            <div>
+              <h2 id="faq-title" data-i18n="faq.title"></h2>
+            </div>
+          </div>
+          <dl class="faq">
+            <div>
+              <dt data-i18n="faq.differenceQuestion"></dt>
+              <dd data-i18n="faq.differenceAnswer"></dd>
+            </div>
+            <div>
+              <dt data-i18n="faq.equalityQuestion"></dt>
+              <dd data-i18n="faq.equalityAnswer"></dd>
+            </div>
+            <div>
+              <dt data-i18n="faq.memoryQuestion"></dt>
+              <dd data-i18n="faq.memoryAnswer"></dd>
+            </div>
+            <div>
+              <dt data-i18n="faq.modelsQuestion"></dt>
+              <dd data-i18n="faq.modelsAnswer"></dd>
+            </div>
+            <div>
+              <dt data-i18n="faq.toolsQuestion"></dt>
+              <dd data-i18n="faq.toolsAnswer"></dd>
+            </div>
+            <div>
+              <dt data-i18n="faq.dashboardQuestion"></dt>
+              <dd data-i18n="faq.dashboardAnswer"></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="community" aria-labelledby="community-title">
+          <div>
+            <p class="kicker" data-i18n="community.kicker"></p>
+            <h2 id="community-title" data-i18n="community.title"></h2>
+            <p data-i18n="community.description"></p>
+          </div>
+          <a
+            class="button primary"
+            href="https://github.com/AuroraBot-Dev/AuroraBot"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-i18n="community.action"
+          ></a>
+        </section>
+      </main>
+
+      <footer>
+        <div class="footer-mark">
+          <img src="assets/logo.svg" alt="" />
+          <span data-i18n="common.brand"></span>
+        </div>
+        <div class="footer-copy">
+          <div class="footer-links">
+            <a
+              href="https://github.com/AuroraBot-Dev/AuroraBot"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-i18n="common.github"
+            ></a>
+            <a href="https://www.aurorabot.org/" target="_blank" rel="noopener noreferrer" data-i18n="common.docs"></a>
+            <a
+              href="https://github.com/AuroraBot-Dev/AuroraBot/blob/dev/LICENSE"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-i18n="common.license"
+            ></a>
+          </div>
+          <span data-i18n="footer.tagline"></span>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        var DEFAULT_LOCALE = "zh-CN";
+        var root = document.documentElement;
+        var themeButton = document.querySelector(".theme-toggle");
+        var storedTheme = localStorage.getItem("aurora-theme");
+        var activeMessages = null;
+
+        function messageAt(messages, path) {
+          return path.split(".").reduce(function (value, segment) {
+            return value && value[segment];
+          }, messages);
+        }
+
+        function applyMessages(messages) {
+          activeMessages = messages;
+          root.lang = messages.meta.locale;
+          root.dir = messages.meta.direction;
+
+          document.querySelectorAll("[data-i18n]").forEach(function (element) {
+            element.textContent = messageAt(messages, element.getAttribute("data-i18n"));
+          });
+
+          document.querySelectorAll("[data-i18n-attr]").forEach(function (element) {
+            element
+              .getAttribute("data-i18n-attr")
+              .split(",")
+              .forEach(function (binding) {
+                var separator = binding.indexOf(":");
+                var attribute = binding.slice(0, separator);
+                var key = binding.slice(separator + 1);
+                element.setAttribute(attribute, messageAt(messages, key));
+              });
+          });
+
+          document.getElementById("structured-data").textContent = JSON.stringify(messages.meta.schema);
+          root.removeAttribute("data-i18n-loading");
+          window.dispatchEvent(new CustomEvent("aurora:locale-changed", { detail: { locale: messages.meta.locale } }));
+        }
+
+        function normalizeLocale(locale) {
+          return String(locale || DEFAULT_LOCALE).replace(/[^A-Za-z0-9-]/g, "") || DEFAULT_LOCALE;
+        }
+
+        function loadLocale(locale) {
+          var normalized = normalizeLocale(locale);
+          return fetch("assets/i18n/" + normalized + ".json")
+            .then(function (response) {
+              if (!response.ok) throw new Error(String(response.status));
+              return response.json();
+            })
+            .then(function (messages) {
+              applyMessages(messages);
+              return messages;
+            });
+        }
+
+        window.AuroraI18n = {
+          load: function (locale) {
+            localStorage.setItem("aurora-locale", normalizeLocale(locale));
+            return loadLocale(locale);
+          },
+        };
+
+        if (storedTheme === "dark" || storedTheme === "light") {
+          root.setAttribute("data-theme", storedTheme);
+        } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+          root.setAttribute("data-theme", "dark");
+        }
+
+        themeButton.addEventListener("click", function () {
+          var nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+          root.setAttribute("data-theme", nextTheme);
+          localStorage.setItem("aurora-theme", nextTheme);
+        });
+
+        document.querySelectorAll("[data-copy-target]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            var target = document.getElementById(button.getAttribute("data-copy-target"));
+            if (!target || !navigator.clipboard || !activeMessages) return;
+            navigator.clipboard.writeText(target.innerText).then(function () {
+              button.textContent = messageAt(activeMessages, "start.copied");
+              window.setTimeout(function () {
+                button.textContent = messageAt(activeMessages, "start.copy");
+              }, 1600);
+            });
+          });
+        });
+
+        var requestedLocale =
+          new URLSearchParams(window.location.search).get("lang") ||
+          localStorage.getItem("aurora-locale") ||
+          DEFAULT_LOCALE;
+        loadLocale(requestedLocale).catch(function () {
+          if (requestedLocale !== DEFAULT_LOCALE) return loadLocale(DEFAULT_LOCALE);
+          root.removeAttribute("data-i18n-loading");
+        });
+      })();
+    </script>
   </body>
 </html>

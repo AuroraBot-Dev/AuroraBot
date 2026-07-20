@@ -1,118 +1,126 @@
-# AuroraBot
+<p align="center">
+  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+</p>
+
+<h1 align="center">AuroraBot</h1>
 
 <p align="center">
   <a href="README.md">中文</a> | <b>English</b> | <a href="README.ja.md">日本語</a>
 </p>
 
-AuroraBot is an autonomous-agent framework built around causal events, homogeneous Agents, and an active rhythm.
-Environment input, model calls, capability execution, and receipts are recorded so a Task can pause
-asynchronously, resume reliably, and terminate explicitly.
+<p align="center"><em>Give an Agent a life of its own.</em></p>
 
-## Cognitive loop
+<p align="center">Event equality · Homogeneous collaboration · Active rhythm</p>
 
-```text
-External AMP event / system.tick
-  → Kernel creates a Task and root Gate Agent
-  → an Agent requests a model Activity or delegates bounded parallel child Agents
-  → each child reports completion to its parent, which resumes immediately
-  → authorized Agents request ordinary effects; only the root may publish terminal effects
-  → Platform receipts return as mailbox messages to the requesting Agent
-```
+<p align="center">
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-AuroraBot-181717?logo=github" alt="GitHub" /></a>
+  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-aurorabot.org-315b7d" alt="Documentation" /></a>
+  <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
+  <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
+</p>
 
-Model text is not an external effect. Only declared Platform capabilities can produce effects, while every model call,
-tool call, receipt, budget change, and termination reason remains in one causal chain. Each external input or autonomous
-tick creates an independent Task. The supervision tree shares model, tool, and time budgets. Runtime projects a global,
-read-only Brain Context for every Agent. Long-term memory currently exposes only an optional Memory Agent contract.
+## What is AuroraBot?
 
-When no external input arrives, the persistent scheduler emits budgeted `system.tick` events. Repeated silent Tasks
-back off from 30 seconds to 30 minutes. External input wakes the runtime immediately, and interactive Tasks take
-priority over autonomous work.
+AuroraBot is an open-source autonomous-agent framework for developers. Our goal is not simply a chatbot with more features, but an Agent that persists, develops its own rhythm, and can judge and act within an environment.
+
+We refer to the Agent as “she.” This is more than a writing style: AuroraBot is not designed as an on-demand tool that exists only when called. It provides a runtime in which a digital life can have a persona, state, boundaries, and its own work while still forming meaningful connections with people and the outside world.
+
+## Design philosophy
+
+### An Agent with a life of its own
+
+Conversation is not the whole world. Time continues, applications emit events, and unfinished work can progress even when nobody sends a message. An active rhythm lets the Agent decide, within explicit budgets and boundaries, whether a moment calls for thought or action.
+
+### Treat environmental changes equally
+
+User messages, the passage of time, application events, child-Agent results, and effect receipts are all changes in the outside world. They enter cognition through the same event boundary. A message does not become an unquestionable highest-priority command merely because it came from a user.
+
+Equality does not mean the absence of scheduling priorities. Interactive work can run first, and authorization and safety rules still apply. It means the Agent understands what happened before deciding whether to respond, act, delegate, or remain quiet.
+
+### Separate judgment from action
+
+Models interpret and decide, but ordinary model text cannot directly change the environment. External actions pass through declared capabilities, argument validation, and Platform execution. Outcomes then return to the Agent as new events. Autonomy does not have to mean loss of control.
 
 ## Highlights
 
-- AMP JSON boundaries, SQLite WAL runtime state, and atomic archives
-- Durable mailboxes, homogeneous Agents, supervision trees, shared budgets, and cancellation propagation
-- A model gateway supporting both Chat Completions tools and a Responses agent
-- Immutable capability catalogs, JSON Schema argument validation, and MCP applications
-- One-process `AuroraRuntime` for the scheduler, Kernel, model dispatcher, and Platform receipts
-- Context-rich structured logs backed by separate causal audit records
+- **Active runtime:** a durable scheduler creates budgeted autonomous Tasks and yields promptly to external interaction.
+- **Continuing Tasks:** work can await models, capabilities, and child Agents, then resume with explicit budgets and terminal states.
+- **Multi-Agent collaboration:** homogeneous Agents form bounded supervision trees and can split complex work concurrently.
+- **Connections to the world:** Console, Dashboard, and MCP Platforms normalize inputs and expose authorized capabilities.
+- **Replaceable models:** model roles, Providers, Chat Completions, and Responses are selected through configuration.
+- **Traceable action:** inputs, model calls, capability requests, outcomes, and termination reasons share one causal record.
+- **Configurable identity and ability:** SOUL, Agent profiles, model roles, Platforms, and MCP applications have focused entry points.
 
 ## Quick start
 
-Python 3.12 and [uv](https://docs.astral.sh/uv/) are required.
+You need Python 3.12, Git, and [uv](https://docs.astral.sh/uv/). Running from source is currently recommended.
 
 ```powershell
-uv sync --group dev
+git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+Set-Location AuroraBot
+uv sync --no-dev
 Copy-Item .env.example .env
-# Add the API keys required by your configured providers to .env
-uv run aurora
+
+# Add the DEEPSEEK_API_KEY required by the default configuration to .env
+uv run --no-dev --env-file .env aurora --console --mcp
 ```
 
-The default Platform set comes from `config/preference.toml`. The repository defaults enable Console, Dashboard, and
-MCP. Run the separate Dashboard UI with:
+Type a message after startup, use `/help` to discover commands, or `/status` to inspect the runtime.
 
 ```powershell
-Set-Location ..\AuroraChat
-pnpm install
-pnpm run dev
+# Use the default Platform set from config/preference.toml
+uv run --no-dev --env-file .env aurora
+
+# Start only the local Console
+uv run --no-dev --env-file .env aurora --console
+
+# Run without an external Platform
+uv run --no-dev --env-file .env aurora --headless
 ```
 
-Open `http://localhost:5173`, register, and chat with another user or the built-in AuroraBot contact.
+When any of `--console`, `--dashboard`, or `--mcp` is present, those flags form the exact Platform set rather than extending the defaults. The Dashboard browser UI is maintained separately; this repository contains its local backend and chat bridge.
 
-Common entry points:
+## Customize and extend
 
-```powershell
-# Cognitive loop only, without an external Platform
-uv run aurora --profile prod --headless
+| What you want to change                           | Start here               |
+| ------------------------------------------------- | ------------------------ |
+| Persona, voice, and conversational boundaries     | `config/prompts/SOUL.md` |
+| Model roles and Providers                         | `config/aurora.toml`     |
+| Platforms enabled by default                      | `config/preference.toml` |
+| Agent models, capabilities, and delegation limits | `config/agents.toml`     |
+| Local or remote MCP applications                  | `config/apps.toml`       |
 
-# Use the default Platform set from preference.toml
-uv run aurora
+Structural configuration uses TOML, and secrets come only from environment variables. Start with the [extension guide](extensions/README.md) and the built-in [Clock application](src/apps/aurora-app-clock/README.md).
 
-# Explicit flags form the exact Platform set; they do not extend the defaults
-uv run aurora --dashboard --mcp
-uv run aurora --console
+## Current stage
 
-# Project quality checks
-uv run aurora check
-```
-
-Console and Dashboard share slash commands. Use `/say hello`, `/pump`, `/task <task_id>`, `/agent <agent_id>`, or
-`/status`; `/log off` silences terminal logs while file logging continues.
-
-## Layout
-
-```text
-config/         Core TOML, Platform preferences, domain configuration, and profile overrides
-aurora/         Process CLI, Platform composition, and unified lifecycle
-docs/rfc/       Normative architecture and public contracts
-src/contracts/  Configuration, AMP, Agent, model, and memory contracts
-src/kernel/     Tasks, Agents, mailboxes, Activities, causality, and SQLite runtime state
-src/agents/     Homogeneous Agent handlers and built-in delegation capabilities
-src/ai/         Model roles, routing, native tools/Responses, and usage records
-src/localhost/  Unified ingress, effect dispatch, scheduler, and developer use cases
-src/platform/   Console, Dashboard, and MCP protocols, persistence, and effect adapters
-src/apps/       Built-in native AMP-MCP applications
-src/sandbox/    Independent sandbox components; not enabled by the current Agent runtime
-src/utils/      Shared utilities with no upper-layer dependencies
-tests/          Contract, integration, and regression tests
-```
-
-The Kernel workspace is fixed at `data/kernel/{inbox,process,archive}`. External boundaries and archives use JSON,
-runtime state uses SQLite WAL, structural configuration uses TOML, and secrets come only from environment variables.
+AuroraBot `0.4` is a developer preview for local exploration, runtime research, and extension development. It does not yet ship built-in long-term memory, attachment understanding, an Agent sandbox tool, or production-grade multi-tenant guarantees. Current capability and roadmap remain clearly separated; accepted RFCs and tests define public behavior.
 
 ## Documentation
 
-- [RFC index](docs/rfc/README.md)
-- [RFC 0001: Architecture baseline](docs/rfc/0001-architecture.md)
-- [RFC 0012: Homogeneous multi-Agent durable runtime](docs/rfc/0012-homogeneous-agent-runtime.md)
-- [RFC 0013: Unified command routing and Aurora process entry](docs/rfc/0013-unified-command-routing-and-entry.md)
-- [RFC 0014: Parallel Platform composition and preferences](docs/rfc/0014-parallel-platform-composition-and-preferences.md)
-- [RFC 0010: Dashboard chat adapter](docs/rfc/0010-dashboard-chat.md)
-- [RFC 0011: Current project baseline](docs/rfc/0011-current-project-baseline.md)
+- [AuroraBot documentation](https://www.aurorabot.org/)
 - [Contributing guide](docs/CONTRIBUTING.en.md)
+- [Extending AuroraBot](extensions/README.md)
+- [Model gateway](src/ai/README.md)
+- [RFC reading guide](docs/rfc/README.md)
 - [Logging policy](LOGGING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
+## Open-source acknowledgements
+
+AuroraBot uses many excellent open-source projects:
+
+| Project                                                                                                                | Use in AuroraBot                                   |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider integration and call infrastructure |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP applications and tool protocol                 |
+| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Local Dashboard service                            |
+| [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console and terminal experience                    |
+| [jsonschema](https://github.com/python-jsonschema/jsonschema)                                                          | Capability argument validation                     |
+
+Thanks also to the other open-source Agent and Bot projects exploring this field. Special thanks to [MaiBot](https://github.com/MaiM-with-u/MaiBot), whose idea of "digital life" was an important influence on AuroraBot's early thinking.
+
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+This project is open source under the [Apache License 2.0](LICENSE).
