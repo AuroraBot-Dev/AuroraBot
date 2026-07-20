@@ -65,7 +65,7 @@ class DashboardCommunication:
     async def require_owner(self, user_id: int) -> None:
         owner = await asyncio.to_thread(
             self._store.fetch_one,
-            "SELECT id FROM users WHERE id = ? AND username = ? AND is_bot = 0",
+            "SELECT id FROM users WHERE id = ? AND username = ? AND is_owner = 1 AND is_bot = 0",
             (user_id, self._configuration.owner_username),
         )
         if owner is None:
@@ -250,7 +250,7 @@ class DashboardCommunication:
             self._store.fetch_one,
             """
             SELECT r.* FROM dashboard_reply_routes r JOIN users u ON u.id = r.owner_user_id
-            WHERE r.route_ref = ? AND r.expires_at > ? AND u.username = ? AND u.is_bot = 0
+            WHERE r.route_ref = ? AND r.expires_at > ? AND u.username = ? AND u.is_owner = 1 AND u.is_bot = 0
             """,
             (request.route_ref, now, self._configuration.owner_username),
         )

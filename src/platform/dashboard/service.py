@@ -5,25 +5,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from src.localhost.command_types import CommandControl, CommandResult
-from src.platform.dashboard.routing import (
-    PrivateMessageInput,
-    command_reply_id,
-    dashboard_input,
-    is_conversation_command,
-    is_quit_command,
-    message_matches,
-)
-from src.platform.dashboard.security import new_token, token_digest, verify_password
+from src.platform.dashboard.communication import ChatError, DashboardCommunication
+from src.platform.dashboard.routing import PrivateMessageInput, is_conversation_command, message_matches
+from src.platform.dashboard.security import new_token, token_digest
 from src.platform.dashboard.store import ChatStore
-from src.utils.log_utils import get_logger
-
-logger = get_logger("aurora.dashboard.service")
 
 if TYPE_CHECKING:
     import sqlite3
@@ -52,6 +43,7 @@ class ChatService:
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
         self._subscribers: dict[int, set[asyncio.Queue[dict[str, Any]]]] = {}
+        self._owner_id: int | None = None
         self._bot_id: int | None = None
         self._communication = DashboardCommunication(
             configuration,
@@ -64,23 +56,24 @@ class ChatService:
 
     async def start(self) -> None:
         await asyncio.to_thread(self.store.initialize)
-        try:
-            token = (await asyncio.to_thread((self.configuration.database_path.parent / "Token.txt").read_text)).strip()
-        except FileNotFoundError:
-            token = await asyncio.to_thread(self.store.get_bootstrap_token)
-        try:
-            from rich.console import Console
-
-            Console(stderr=True).print(f"bootstrap token: [bold cyan]{token}[/bold cyan]")
-        except ImportError:
-            logger.info("dashboard access token: %s", token)
+        owner = await asyncio.to_thread(
+            self.store.ensure_owner,
+            self.configuration.owner_username,
+        )
         bot = await asyncio.to_thread(
             self.store.ensure_bot,
             self.configuration.bot.username,
             self.configuration.bot.display_name,
             self.configuration.bot.avatar_url,
         )
+        self._owner_id = int(owner["id"])
         self._bot_id = int(bot["id"])
+
+    @property
+    def owner_id(self) -> int:
+        if self._owner_id is None:
+            raise RuntimeError("chat service has not started")
+        return self._owner_id
 
     @property
     def bot_id(self) -> int:
@@ -88,14 +81,17 @@ class ChatService:
             raise RuntimeError("chat service has not started")
         return self._bot_id
 
-    async def login(self, username: str, password: str) -> dict[str, Any]:
+    async def login(self, bootstrap_token: str) -> dict[str, Any]:
+        expected = await asyncio.to_thread(self.store.bootstrap_token)
+        if not secrets.compare_digest(bootstrap_token.strip(), expected):
+            raise ChatError("UNAUTHORIZED", "Invalid token", 401)
         row = await asyncio.to_thread(
             self.store.fetch_one,
-            "SELECT * FROM users WHERE username = ?",
-            (username.strip(),),
+            "SELECT * FROM users WHERE id = ? AND is_owner = 1 AND is_bot = 0",
+            (self.owner_id,),
         )
-        if row is None or bool(row["is_bot"]) or not verify_password(password, str(row["password_hash"])):
-            raise ChatError("UNAUTHORIZED", "Invalid credentials", 401)
+        if row is None:
+            raise ChatError("UNAUTHORIZED", "Owner is unavailable", 401)
         token = new_token()
         now = datetime.now(UTC)
         await asyncio.to_thread(
@@ -118,9 +114,9 @@ class ChatService:
             self.store.fetch_one,
             """
             SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-            WHERE s.token_hash = ? AND s.expires_at > ? AND u.is_bot = 0
+            WHERE s.token_hash = ? AND s.expires_at > ? AND u.id = ? AND u.is_owner = 1 AND u.is_bot = 0
             """,
-            (token_digest(token), datetime.now(UTC).isoformat()),
+            (token_digest(token), datetime.now(UTC).isoformat(), self.owner_id),
         )
         if row is None:
             raise ChatError("UNAUTHORIZED", "Unauthorized", 401)
@@ -129,7 +125,7 @@ class ChatService:
     async def list_users(self, current_user_id: int) -> list[dict[str, Any]]:
         rows = await asyncio.to_thread(
             self.store.fetch_all,
-            "SELECT * FROM users WHERE id != ? ORDER BY is_bot DESC, username",
+            "SELECT * FROM users WHERE id != ? AND is_bot = 1 ORDER BY username",
             (current_user_id,),
         )
         return [self._user(row) for row in rows]
@@ -350,7 +346,11 @@ class ChatService:
                 await self.publish(user_id, event)
 
     async def _require_user(self, user_id: int) -> dict[str, Any]:
-        row = await asyncio.to_thread(self.store.fetch_one, "SELECT * FROM users WHERE id = ?", (user_id,))
+        row = await asyncio.to_thread(
+            self.store.fetch_one,
+            "SELECT * FROM users WHERE id = ? AND is_bot = 1",
+            (user_id,),
+        )
         if row is None:
             raise ChatError("RECEIVER_NOT_FOUND", "Receiver does not exist", 404)
         return dict(row)

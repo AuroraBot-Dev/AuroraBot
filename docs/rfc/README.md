@@ -54,3 +54,4 @@ RFC 应描述可验证的决定，而不是只写愿景。完整格式、状态�
 | [0014](0014-parallel-platform-composition-and-preferences.md) | 已接受 | 当前并行平台组合与偏好配置 |
 | [0015](0015-agent-publication-and-communication-boundary.md) | 已接受 | Agent 发布、通信授权与 Task 完成解耦 |
 | [0016](0016-mcp-communication-app-contract.md) | 已接受 | MCP 通信 App、消息入口与跨平台投递契约 |
+| [0017](0017-dashboard-single-owner-token-auth.md) | 已接受 | Dashboard 单 Owner 与 bootstrap token 鉴权 |
