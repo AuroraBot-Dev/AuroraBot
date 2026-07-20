@@ -88,7 +88,26 @@ class ChatStore:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(_SCHEMA)
         token_path = self.database_path.parent / "Token.txt"
-        token_path.write_text(new_token())
+        if not token_path.exists():
+            token_path.write_text(new_token())
+
+    def get_bootstrap_token(self) -> str:
+        token_path = self.database_path.parent / "Token.txt"
+        return token_path.read_text().strip()
+
+    def ensure_admin(self) -> sqlite3.Row:
+        now = _now()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO users(username, password_hash, display_name, is_bot, created_at, updated_at)
+                VALUES (?, ?, ?, 0, ?, ?)
+                """,
+                ("admin", "bootstrap", "Administrator", now, now),
+            )
+            row = connection.execute("SELECT * FROM users WHERE username = ?", ("admin",)).fetchone()
+            assert row is not None
+            return row
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
         with self.connect() as connection:

@@ -132,7 +132,7 @@ def _create_stream_handler(
             omit_repeated_times=False,
             show_level=True,
             show_path=False,
-            markup=True,
+            markup=False,
             rich_tracebacks=True,
             tracebacks_show_locals=False,
         )

@@ -5,12 +5,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
-
 
 from src.localhost.command_types import CommandControl, CommandResult
 from src.platform.dashboard.routing import (
@@ -21,13 +19,15 @@ from src.platform.dashboard.routing import (
     is_quit_command,
     message_matches,
 )
-from src.platform.dashboard.security import hash_password, new_token, token_digest, verify_password
+from src.platform.dashboard.security import new_token, token_digest, verify_password
 from src.platform.dashboard.store import ChatStore
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.dashboard.service")
 
 if TYPE_CHECKING:
+    import sqlite3
+
     from src.contracts.configuration import DashboardConfig
     from src.localhost.ports import InteractiveInputPort
 
@@ -58,9 +58,16 @@ class ChatService:
 
     async def start(self) -> None:
         await asyncio.to_thread(self.store.initialize)
-        token_path = self.configuration.database_path.parent / "Token.txt"
-        token = (await asyncio.to_thread(token_path.read_text)).strip()
-        logger.info("dashboard access token: [bold cyan]%s[/bold cyan]", token)
+        try:
+            token = (await asyncio.to_thread((self.configuration.database_path.parent / "Token.txt").read_text)).strip()
+        except FileNotFoundError:
+            token = await asyncio.to_thread(self.store.get_bootstrap_token)
+        try:
+            from rich.console import Console
+
+            Console(stderr=True).print(f"bootstrap token: [bold cyan]{token}[/bold cyan]")
+        except ImportError:
+            logger.info("dashboard access token: %s", token)
         bot = await asyncio.to_thread(
             self.store.ensure_bot,
             self.configuration.bot.username,
@@ -68,23 +75,12 @@ class ChatService:
             self.configuration.bot.avatar_url,
         )
         self._bot_id = int(bot["id"])
-        
 
     @property
     def bot_id(self) -> int:
         if self._bot_id is None:
             raise RuntimeError("chat service has not started")
         return self._bot_id
-
-    async def register(self, username: str, password: str) -> dict[str, Any]:
-        normalized = username.strip()
-        if not normalized or len(normalized) > 64 or not password:
-            raise ChatError("INVALID_PAYLOAD", "Username and password are required")
-        try:
-            row = await asyncio.to_thread(self.store.create_user, normalized, hash_password(password))
-        except sqlite3.IntegrityError as error:
-            raise ChatError("USERNAME_EXISTS", "Username already exists", 409) from error
-        return self._user(row)
 
     async def login(self, username: str, password: str) -> dict[str, Any]:
         row = await asyncio.to_thread(
@@ -484,7 +480,6 @@ class ChatService:
             "created_at": str(row["created_at"]),
             "status": str(row["status"]),
         }
-
 
     @staticmethod
     def _atomic_write(path: Path, data: bytes) -> None:
