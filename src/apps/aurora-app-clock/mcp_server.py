@@ -11,6 +11,8 @@
     get_current_time
     set_alarm
     set_timer
+    start_heartbeat
+    sleep
     list_alarms
     cancel_alarm
 """
@@ -84,6 +86,26 @@ async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, An
     logger.debug("set_timer called label_length=%d", len(label))
     await ClockService.initialize(_notifier(ctx))
     return await ClockService.set_timer(seconds, label)
+
+
+@mcp.tool("start_heartbeat")
+async def start_heartbeat(ctx: Context) -> dict[str, Any]:
+    """启动或恢复内建自主心跳。
+
+    此工具由 Aurora 的 MCP Platform 在 Clock 启动后调用。已有心跳会被恢复而不是重置。
+    """
+    await ClockService.initialize(_notifier(ctx))
+    return ClockService.start_heartbeat()
+
+
+@mcp.tool("sleep")
+async def sleep(ctx: Context, seconds: int) -> dict[str, Any]:
+    """把下一次自主心跳安排在一段安静休息后。
+
+    实际时长会限制在部署配置的心跳边界内；普通闹钟和外部消息仍可提前带来新的事实。
+    """
+    await ClockService.initialize(_notifier(ctx))
+    return ClockService.sleep(seconds)
 
 
 @mcp.tool("list_alarms")

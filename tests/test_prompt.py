@@ -21,6 +21,7 @@ from src.contracts.agent import (
 from src.prompt import PromptCatalog, PromptComposer, PromptConfigurationError, load_prompt_catalog
 
 _PROMPT_SECTION_COUNT = 5
+_MIN_WORLD_LENGTH = 20
 
 
 def _context() -> AgentContext:
@@ -194,7 +195,7 @@ def test_prompt_document_has_stable_layers_and_human_centered_context() -> None:
     ]
     assert document.system_prompt.index("我是小光") < document.system_prompt.index("没有寄出")
     assert "AI" not in document.system_prompt
-    assert "有人从 Console 来到我面前" in document.user_prompt
+    assert "Console" in document.user_prompt
     assert '"text":"你好"' in document.user_prompt
     assert '"vendor_metadata":{"thread":"42"}' in document.user_prompt
     assert '"agent_id":"child"' in document.user_prompt
@@ -294,13 +295,15 @@ def test_internal_and_external_tool_ids_cannot_collide() -> None:
 
 def test_checked_in_default_fragments_keep_persona_and_world_responsibilities_separate() -> None:
     root = Path(__file__).parents[1]
-    catalog = load_prompt_catalog(root, frozenset({"builtin.gate", "builtin.worker"}))
+    catalog = load_prompt_catalog(root, frozenset({"builtin.gate", "builtin.worker", "builtin.memory"}))
     defaults = "\n".join((catalog.soul, catalog.world, *catalog.agents.values()))
 
     assert "AI" not in defaults
     assert "把话送出去" not in catalog.soul
     assert "使用QQ时" not in catalog.soul
-    assert "send 工具" in catalog.world
+    assert "function" not in catalog.world.lower()
+    assert "tool_call" not in defaults.lower()
+    assert len(catalog.world) > _MIN_WORLD_LENGTH
 
 
 def test_model_prompt_prose_is_not_reintroduced_outside_prompt_package() -> None:

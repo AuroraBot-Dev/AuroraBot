@@ -12,6 +12,7 @@ Clock 是 AuroraBot 内建的 stdio MCP 应用。它让 Agent 能够查询当前
 | `org.aurora.clock.get_current_time` | `get_current_time` | 获取 UTC+8 当前时间 | `fmt`：`strftime` 格式 |
 | `org.aurora.clock.set_alarm` | `set_alarm` | 设置一次性闹钟 | `time_str`：ISO-8601 或 `HH:MM`；`label` |
 | `org.aurora.clock.set_timer` | `set_timer` | 设置倒计时 | `seconds`；`label` |
+| `org.aurora.clock.sleep` | `sleep` | 调节下一次自主心跳 | `seconds` |
 | `org.aurora.clock.list_alarms` | `list_alarms` | 列出等待中的闹钟与计时器 | 无 |
 | `org.aurora.clock.cancel_alarm` | `cancel_alarm` | 按 ID 取消任务 | `alarm_id` |
 
@@ -20,6 +21,10 @@ Clock 是 AuroraBot 内建的 stdio MCP 应用。它让 Agent 能够查询当前
 
 闹钟和计时器保存在 `data/app_data/org.aurora.clock/tasks.json`。应用重启后会恢复尚未到期的任务；到点时产生
 `alarm.triggered` 或 `timer.triggered`，MCP Platform 再把它归一化成 AuroraBot 可以处理的 AMP 环境事件。
+
+Clock 被 MCP Platform 启动时会建立一个持久化 fallback heartbeat。它到点时通过同一 notification 机制产生
+`system.tick`；Agent 可以调用 `sleep` 替换下一次醒来时间，实际间隔由 `runtime.autonomy` 的 heartbeat 边界限制。
+未启动 MCP Platform 时不会产生自主 tick，适合手动调试。
 
 ## 在 AuroraBot 中使用
 

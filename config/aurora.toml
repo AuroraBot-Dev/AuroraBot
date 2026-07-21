@@ -10,7 +10,7 @@ debug_port = 8765
 [runtime.agents]
 root_profile = "builtin.gate"
 worker_profile = "builtin.worker"
-# memory_agent_profile = "builtin.memory"  # Optional; omit for non-fatal memory.unavailable.
+memory_agent_profile = "builtin.memory"
 max_active_agents = 16
 max_agents_per_task = 8
 max_depth = 3
@@ -22,13 +22,11 @@ blocking_workers = 4
 lease_seconds = 30.0
 ambient_ttl_seconds = 1800.0
 
-[runtime.scheduler]
-enabled = true
+[runtime.autonomy]
 scan_seconds = 1.0
-idle_initial_seconds = 30.0
-idle_max_seconds = 1800.0
-idle_multiplier = 2.0
-action_cooldown_seconds = 300.0
+heartbeat_initial_seconds = 30.0
+heartbeat_min_seconds = 30.0
+heartbeat_max_seconds = 1800.0
 autonomous_daily_model_calls = 24
 autonomous_daily_tokens = 100000
 

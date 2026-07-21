@@ -68,20 +68,18 @@ class RuntimeConfig:
     workspace: Path
     debug_host: str
     debug_port: int
-    scheduler: "SchedulerConfig"
+    autonomy: "AutonomyConfig"
     agents: "AgentRuntimeConfig"
     interactive_budget: "TaskBudgetConfig"
     autonomous_budget: "TaskBudgetConfig"
 
 
 @dataclass(frozen=True, slots=True)
-class SchedulerConfig:
-    enabled: bool = True
+class AutonomyConfig:
     scan_seconds: float = 1.0
-    idle_initial_seconds: float = 30.0
-    idle_max_seconds: float = 1800.0
-    idle_multiplier: float = 2.0
-    action_cooldown_seconds: float = 300.0
+    heartbeat_initial_seconds: float = 30.0
+    heartbeat_min_seconds: float = 30.0
+    heartbeat_max_seconds: float = 1800.0
     autonomous_daily_model_calls: int = 24
     autonomous_daily_tokens: int = 100_000
 
@@ -202,45 +200,42 @@ def _positive_number(value: object, label: str) -> float:
     return float(value)
 
 
-def _parse_scheduler(raw: dict[str, Any]) -> SchedulerConfig:
-    defaults = SchedulerConfig()
+def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
+    defaults = AutonomyConfig()
     allowed = {
-        "enabled",
         "scan_seconds",
-        "idle_initial_seconds",
-        "idle_max_seconds",
-        "idle_multiplier",
-        "action_cooldown_seconds",
+        "heartbeat_initial_seconds",
+        "heartbeat_min_seconds",
+        "heartbeat_max_seconds",
         "autonomous_daily_model_calls",
         "autonomous_daily_tokens",
     }
     if set(raw) - allowed:
-        raise ConfigurationError("runtime.scheduler has unsupported keys")
-    enabled = raw.get("enabled", defaults.enabled)
-    if not isinstance(enabled, bool):
-        raise ConfigurationError("runtime.scheduler.enabled must be boolean")
+        raise ConfigurationError("runtime.autonomy has unsupported keys")
     daily_calls = raw.get("autonomous_daily_model_calls", defaults.autonomous_daily_model_calls)
     daily_tokens = raw.get("autonomous_daily_tokens", defaults.autonomous_daily_tokens)
     if not isinstance(daily_calls, int) or isinstance(daily_calls, bool) or daily_calls <= 0:
         raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
     if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
         raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
-    initial = _positive_number(raw.get("idle_initial_seconds", defaults.idle_initial_seconds), "idle_initial_seconds")
-    maximum = _positive_number(raw.get("idle_max_seconds", defaults.idle_max_seconds), "idle_max_seconds")
-    if maximum < initial:
-        raise ConfigurationError("idle_max_seconds must be at least idle_initial_seconds")
-    multiplier = _positive_number(raw.get("idle_multiplier", defaults.idle_multiplier), "idle_multiplier")
-    if multiplier <= 1:
-        raise ConfigurationError("idle_multiplier must be greater than one")
-    return SchedulerConfig(
-        enabled=enabled,
+    minimum = _positive_number(
+        raw.get("heartbeat_min_seconds", defaults.heartbeat_min_seconds), "heartbeat_min_seconds"
+    )
+    maximum = _positive_number(
+        raw.get("heartbeat_max_seconds", defaults.heartbeat_max_seconds), "heartbeat_max_seconds"
+    )
+    if maximum < minimum:
+        raise ConfigurationError("heartbeat_max_seconds must be at least heartbeat_min_seconds")
+    initial = _positive_number(
+        raw.get("heartbeat_initial_seconds", defaults.heartbeat_initial_seconds), "heartbeat_initial_seconds"
+    )
+    if not minimum <= initial <= maximum:
+        raise ConfigurationError("heartbeat_initial_seconds must be within heartbeat bounds")
+    return AutonomyConfig(
         scan_seconds=_positive_number(raw.get("scan_seconds", defaults.scan_seconds), "scan_seconds"),
-        idle_initial_seconds=initial,
-        idle_max_seconds=maximum,
-        idle_multiplier=multiplier,
-        action_cooldown_seconds=_positive_number(
-            raw.get("action_cooldown_seconds", defaults.action_cooldown_seconds), "action_cooldown_seconds"
-        ),
+        heartbeat_initial_seconds=initial,
+        heartbeat_min_seconds=minimum,
+        heartbeat_max_seconds=maximum,
         autonomous_daily_model_calls=daily_calls,
         autonomous_daily_tokens=daily_tokens,
     )
@@ -307,7 +302,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         "workspace",
         "debug_host",
         "debug_port",
-        "scheduler",
+        "autonomy",
         "agents",
         "interactive_task",
         "autonomous_task",
@@ -382,13 +377,13 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     agents = _parse_agents(agents_data, frozenset(roles))
     _require_keys(apps_data, {"app"}, "apps.toml")
     apps = _parse_apps(apps_data["app"], root)
-    scheduler_raw = runtime_raw.get("scheduler", {})
+    autonomy_raw = runtime_raw.get("autonomy", {})
     agents_raw = runtime_raw.get("agents", {})
     interactive_raw = runtime_raw.get("interactive_task", {})
     autonomous_raw = runtime_raw.get("autonomous_task", {})
-    if not all(isinstance(item, dict) for item in (scheduler_raw, agents_raw, interactive_raw, autonomous_raw)):
-        raise ConfigurationError("runtime scheduler, Agents and Task budgets must be tables")
-    scheduler = _parse_scheduler(scheduler_raw)
+    if not all(isinstance(item, dict) for item in (autonomy_raw, agents_raw, interactive_raw, autonomous_raw)):
+        raise ConfigurationError("runtime autonomy, Agents and Task budgets must be tables")
+    autonomy = _parse_autonomy(autonomy_raw)
     agent_runtime = _parse_agent_runtime(agents_raw)
     if agent_runtime.root_profile not in {agent.id for agent in agents}:
         raise ConfigurationError("runtime.agents.root_profile is not configured")
@@ -412,7 +407,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             workspace=workspace,
             debug_host=debug_host,
             debug_port=debug_port,
-            scheduler=scheduler,
+            autonomy=autonomy,
             agents=agent_runtime,
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,

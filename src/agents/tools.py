@@ -15,12 +15,14 @@ DELEGATE_TOOL = "aurora.agent.delegate"
 WAIT_TOOL = "aurora.agent.wait"
 CLAIM_TOOL = "aurora.situation.claim"
 MEMORY_QUERY_TOOL = "aurora.memory.query"
+MEMORY_REMEMBER_TOOL = "aurora.memory.remember"
 
 _INTERNAL_TOOL_DESCRIPTIONS = {
     DELEGATE_TOOL: "把一至四件彼此独立的工作托付给子 Agent；他们完成后会回来告诉我结果。",
     WAIT_TOOL: "手头暂无其他事情时，安静等待仍在工作的子 Agent 回来。",
     CLAIM_TOOL: "认领我愿意接住的未分配情境。",
     MEMORY_QUERY_TOOL: "向记忆 Agent 询问过去留下的线索；没有配置记忆 Agent 时会平静地返回不可用。",
+    MEMORY_REMEMBER_TOOL: "把现在知道的重要事情记下来，下次需要的时候可以从记忆里找回来。",
 }
 COMPLETE_TASK_DESCRIPTION = "这次投递成功后，为我当前这段工作画上句点。"
 _DUPLICATE_TOOL_IDS = "model Tool IDs must be unique"
@@ -112,6 +114,28 @@ def build_tool_definitions(context: AgentContext) -> tuple[ToolDefinition, ...]:
             },
         )
     )
+    if context.memory_agent_profile is not None:
+        tools.append(
+            ToolDefinition(
+                MEMORY_REMEMBER_TOOL,
+                _INTERNAL_TOOL_DESCRIPTIONS[MEMORY_REMEMBER_TOOL],
+                {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string", "description": "我想要记住的事情。"},
+                        "importance": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                            "default": 0.5,
+                            "description": "这件事的重要性，1为最重要。",
+                        },
+                    },
+                    "required": ["content"],
+                    "additionalProperties": False,
+                },
+            )
+        )
     names = [tool.name for tool in tools]
     if len(names) != len(set(names)):
         duplicates = sorted({name for name in names if names.count(name) > 1})

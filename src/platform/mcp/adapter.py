@@ -69,6 +69,7 @@ class MCPPlatform:
             if remote_tasks:
                 await asyncio.wait_for(asyncio.gather(*remote_tasks), timeout=startup_timeout)
             self._catalog = self._discover_capabilities()
+            await self._start_builtin_heartbeat()
             self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
             self._started = True
         except BaseException:
@@ -93,15 +94,35 @@ class MCPPlatform:
         return package
 
     def _local_spec(self, app: AppConfig) -> MCPServerSpec:
+        environment = {"AURORA_APP_DATA_DIR": str(self._configuration.root / "data" / "app_data")}
+        if app.package == "org.aurora.clock":
+            autonomy = self._configuration.runtime.autonomy
+            environment.update(
+                {
+                    "AURORA_CLOCK_HEARTBEAT_INITIAL_SECONDS": str(autonomy.heartbeat_initial_seconds),
+                    "AURORA_CLOCK_HEARTBEAT_MIN_SECONDS": str(autonomy.heartbeat_min_seconds),
+                    "AURORA_CLOCK_HEARTBEAT_MAX_SECONDS": str(autonomy.heartbeat_max_seconds),
+                }
+            )
         return MCPServerSpec(
             key=app.package,
             package=app.package,
             name=app.package,
             directory=app.working_dir or self._configuration.root,
             command=list(app.command),
-            env={"AURORA_APP_DATA_DIR": str(self._configuration.root / "data" / "app_data")},
+            env=environment,
             health_timeout_seconds=app.timeout_seconds,
         )
+
+    async def _start_builtin_heartbeat(self) -> None:
+        capability = "org.aurora.clock.start_heartbeat"
+        binding = self._tool_bindings.get(capability)
+        if binding is None:
+            return
+        package, raw_name = binding
+        result = await self._call_tool(package, raw_name, {})
+        if result.get("is_error") is True:
+            raise RuntimeError("Clock heartbeat startup was rejected")
 
     async def _connect_remote(self, app: AppConfig) -> None:
         connection = _RemoteConnection(app=app, ready=asyncio.Event())

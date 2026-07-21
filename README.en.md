@@ -44,7 +44,7 @@ Models interpret and decide, but ordinary model text cannot directly change the 
 
 ## Highlights
 
-- **Active runtime:** a durable scheduler creates budgeted autonomous Tasks and yields promptly to external interaction.
+- **Active runtime:** the built-in Clock MCP persists a heartbeat that creates budgeted autonomous Tasks and yields promptly to external interaction.
 - **Continuing Tasks:** work can await models, capabilities, and child Agents, then resume with explicit budgets and terminal states.
 - **Multi-Agent collaboration:** homogeneous Agents form bounded supervision trees and can split complex work concurrently.
 - **Connections to the world:** Console, Dashboard, and MCP Platforms normalize inputs and expose authorized capabilities.

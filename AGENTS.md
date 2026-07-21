@@ -21,7 +21,7 @@ src/prompt/     提示词目录、分层 DTO 与模型上下文呈现
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
 src/ai/         宽泛模型网关
-src/localhost/  统一输入、效果调度、scheduler 与开发者调试接口
+src/localhost/  统一输入、效果调度、自主额度与开发者调试接口
 src/platform/   Console、Dashboard、MCP 的协议、持久化、能力与效果适配
 src/apps/       内建原生 AMP-MCP 应用
 src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用

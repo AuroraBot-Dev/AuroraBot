@@ -92,6 +92,29 @@ def test_start_with_no_configured_apps_has_empty_catalog(project_root: Path) -> 
     asyncio.run(scenario())
 
 
+def test_clock_heartbeat_starts_after_builtin_tool_discovery(project_root: Path) -> None:
+    _write_apps(project_root, "org.aurora.clock")
+
+    async def scenario() -> None:
+        platform = MCPPlatform(load_configuration(project_root))
+        platform._kit = _FakeKit()  # type: ignore[assignment]
+        platform._clients = _FakeClients({"org.aurora.clock": [_tool("start_heartbeat")]})  # type: ignore[assignment]
+        calls: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def call_tool(package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:
+            calls.append((package, raw_name, parameters))
+            return {"is_error": False}
+
+        platform._call_tool = call_tool  # type: ignore[method-assign]
+        try:
+            await platform.start(_Ingress())
+            assert calls == [("org.aurora.clock", "start_heartbeat", {})]
+        finally:
+            await platform.shutdown()
+
+    asyncio.run(scenario())
+
+
 def test_discovery_prefixes_every_raw_name_and_isolates_servers(project_root: Path) -> None:
     _write_apps(project_root, "com.example.alpha", "com.example.beta")
     schema = {"type": "object", "properties": {"text": {"type": "string"}}}
@@ -243,6 +266,7 @@ timeout_seconds = 30
         try:
             catalog = await platform.start(_Ingress())
             assert "org.aurora.clock.get_current_time" in catalog.by_id
+            assert "org.aurora.clock.sleep" in catalog.by_id
             raw_tools = platform._clients.list_all_tools()["org.aurora.clock"]
             assert all(tool.description for tool in raw_tools)
             assert platform._tool_bindings["org.aurora.clock.get_current_time"] == (
@@ -253,6 +277,10 @@ timeout_seconds = 30
                 ToolExecutionRequest("clock-request", "clock-session", "org.aurora.clock.get_current_time", {})
             )
             assert outcome.status == "succeeded"
+            rest = await platform.execute_tool(
+                ToolExecutionRequest("sleep-request", "clock-session", "org.aurora.clock.sleep", {"seconds": 60})
+            )
+            assert rest.status == "succeeded"
         finally:
             await platform.shutdown()
 

@@ -34,6 +34,7 @@ logger = get_logger("aurora-app-clock.service")
 _alarms: dict[str, dict[str, Any]] = {}
 _tasks: dict[str, asyncio.Task[None]] = {}
 _notify: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None
+_HEARTBEAT_ID = "aurora-heartbeat"
 
 
 def _state_path() -> Path:
@@ -87,12 +88,33 @@ class ClockService:
                 due = datetime.fromisoformat(item["trigger_at"])
             except ValueError:
                 continue
-            if due <= now:
+            if due <= now and item.get("type") != "heartbeat":
                 continue
             task_id = str(item.get("id", ""))
             if task_id:
                 _alarms[task_id] = item
                 ClockService._schedule(item)
+
+    @staticmethod
+    def start_heartbeat() -> dict[str, Any]:
+        """Restore an existing heartbeat or create the fallback heartbeat for this process."""
+        existing = _alarms.get(_HEARTBEAT_ID)
+        if existing is not None:
+            return existing
+        interval = _heartbeat_initial_seconds()
+        return ClockService._schedule_heartbeat(interval, interval)
+
+    @staticmethod
+    def sleep(seconds: int) -> dict[str, Any]:
+        """Replace the fallback heartbeat with the Agent-selected next wake time."""
+        if seconds <= 0:
+            raise ValueError("seconds must be positive")
+        fallback = _heartbeat_initial_seconds()
+        existing = _alarms.get(_HEARTBEAT_ID)
+        if existing is not None:
+            fallback = _positive_number(existing.get("fallback_seconds"), fallback)
+        interval = min(_heartbeat_max_seconds(), max(_heartbeat_min_seconds(), float(seconds)))
+        return ClockService._schedule_heartbeat(interval, fallback)
 
     @staticmethod
     async def set_alarm(time_str: str, label: str = "") -> dict[str, Any]:
@@ -150,21 +172,35 @@ class ClockService:
     @staticmethod
     def _schedule(item: dict[str, Any]) -> None:
         task_id = str(item["id"])
+        existing = _tasks.get(task_id)
+        if existing is not None and not existing.done():
+            return
         due = datetime.fromisoformat(str(item["trigger_at"]))
 
         async def _wait() -> None:
+            emitted = False
             try:
                 await asyncio.sleep(max(0.0, (due - datetime.now(UTC)).total_seconds()))
-                event_type = "alarm.triggered" if item.get("type") == "alarm" else "timer.triggered"
+                event_type = {
+                    "alarm": "alarm.triggered",
+                    "timer": "timer.triggered",
+                    "heartbeat": "system.tick",
+                }.get(str(item.get("type")), "timer.triggered")
                 if _notify is not None:
-                    await _notify(
-                        event_type,
-                        {"id": task_id, "label": item.get("label", ""), "trigger_at": item["trigger_at"]},
-                    )
+                    data = {"id": task_id, "label": item.get("label", ""), "trigger_at": item["trigger_at"]}
+                    if item.get("type") == "heartbeat":
+                        data["interval_seconds"] = item["seconds"]
+                    await _notify(event_type, data)
+                    emitted = True
             finally:
-                _alarms.pop(task_id, None)
-                _tasks.pop(task_id, None)
-                _save()
+                if _tasks.get(task_id) is asyncio.current_task():
+                    _alarms.pop(task_id, None)
+                    _tasks.pop(task_id, None)
+                    if item.get("type") == "heartbeat" and emitted:
+                        fallback = _positive_number(item.get("fallback_seconds"), _heartbeat_initial_seconds())
+                        ClockService._schedule_heartbeat(fallback, fallback)
+                    else:
+                        _save()
 
         _tasks[task_id] = asyncio.create_task(_wait())
 
@@ -175,7 +211,7 @@ class ClockService:
         Returns:
             List of alarm/timer dicts currently stored in memory.
         """
-        return list(_alarms.values())
+        return [item for item in _alarms.values() if item.get("type") != "heartbeat"]
 
     @staticmethod
     def cancel_alarm(alarm_id: str) -> bool:
@@ -202,6 +238,26 @@ class ClockService:
         logger.info("alarm or timer cancelled item_id=%s", alarm_id)
         return True
 
+    @staticmethod
+    def _schedule_heartbeat(seconds: float, fallback_seconds: float) -> dict[str, Any]:
+        existing = _tasks.get(_HEARTBEAT_ID)
+        if existing is not None and not existing.done():
+            existing.cancel()
+        _tasks.pop(_HEARTBEAT_ID, None)
+        _alarms.pop(_HEARTBEAT_ID, None)
+        heartbeat: dict[str, Any] = {
+            "id": _HEARTBEAT_ID,
+            "seconds": seconds,
+            "fallback_seconds": fallback_seconds,
+            "type": "heartbeat",
+            "trigger_at": (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat(),
+        }
+        _alarms[_HEARTBEAT_ID] = heartbeat
+        ClockService._schedule(heartbeat)
+        _save()
+        logger.info("heartbeat scheduled interval_s=%.1f", seconds)
+        return heartbeat
+
 
 def _parse_alarm_time(value: str) -> datetime:
     try:
@@ -216,3 +272,30 @@ def _parse_alarm_time(value: str) -> datetime:
         if due <= now:
             due += timedelta(days=1)
         return due.astimezone(UTC)
+
+
+def _positive_number(value: object, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    if not isinstance(value, (int, float, str)):
+        return default
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _heartbeat_initial_seconds() -> float:
+    return _positive_number(os.getenv("AURORA_CLOCK_HEARTBEAT_INITIAL_SECONDS"), 30.0)
+
+
+def _heartbeat_min_seconds() -> float:
+    return _positive_number(os.getenv("AURORA_CLOCK_HEARTBEAT_MIN_SECONDS"), 30.0)
+
+
+def _heartbeat_max_seconds() -> float:
+    return max(
+        _heartbeat_min_seconds(),
+        _positive_number(os.getenv("AURORA_CLOCK_HEARTBEAT_MAX_SECONDS"), 1800.0),
+    )

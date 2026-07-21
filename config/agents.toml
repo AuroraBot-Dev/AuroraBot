@@ -15,3 +15,10 @@ model_role = "agent"
 capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
+
+[[agent]]
+id = "builtin.memory"
+implementation = "src.agents.memory_agent:MemoryAgent"
+model_role = "fast"
+capabilities = ["*"]
+can_delegate = false

@@ -24,11 +24,11 @@ from src.contracts.amp import AmpEnvelope, new_amp
 from src.contracts.configuration import AuroraConfig, load_configuration
 from src.contracts.model import ModelRequest
 from src.kernel.runtime import AgentKernel, PumpResult
+from src.localhost.autonomy import AutonomyQuota
 from src.localhost.router import CommandRouter
-from src.localhost.scheduler import CognitiveScheduler
 from src.localhost.tool_dispatcher import ToolDispatcher
+from src.memory.service import MemoryService
 from src.prompt import PromptComposer, load_prompt_catalog
-from src.prompt.text import AUTONOMOUS_TICK_SUMMARY
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.runtime")
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from src.localhost.ports import ToolExecutorBinding
 
 
-def _load_handler(specification: str, composer: PromptComposer) -> AgentHandler:
+def _load_handler(specification: str, composer: PromptComposer, memory_service: Any = None) -> AgentHandler:
     module_name, separator, attribute = specification.partition(":")
     if not separator:
         raise ValueError(f"Agent implementation must use module:attribute syntax: {specification}")
@@ -47,6 +47,9 @@ def _load_handler(specification: str, composer: PromptComposer) -> AgentHandler:
     installer = getattr(handler, "install_prompt_composer", None)
     if callable(installer):
         installer(composer)
+    mem_installer = getattr(handler, "install_memory_service", None)
+    if callable(mem_installer):
+        mem_installer(memory_service)
     if not callable(getattr(handler, "handle", None)):
         raise TypeError(f"Agent implementation does not provide handle(): {specification}")
     return handler
@@ -63,7 +66,7 @@ class AuroraRuntime:
     _model_dispatch_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _model_activity_tasks: dict[asyncio.Task[None], str] = field(default_factory=dict, init=False, repr=False)
     _wake: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False)
-    _scheduler: CognitiveScheduler | None = field(default=None, init=False, repr=False)
+    _autonomy_quota: AutonomyQuota = field(init=False, repr=False)
     _command_router: CommandRouter = field(init=False, repr=False)
     _tool_dispatcher: ToolDispatcher = field(init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
@@ -121,8 +124,9 @@ class AuroraRuntime:
             ),
         )
         catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
-        composer = PromptComposer(catalog)
-        handlers = {profile.id: _load_handler(profile.implementation, composer) for profile in profiles}
+        memory_service = MemoryService(configuration, configuration.root / "data", configuration.runtime.workspace)
+        composer = PromptComposer(catalog, memory=memory_service)
+        handlers = {profile.id: _load_handler(profile.implementation, composer, memory_service) for profile in profiles}
         kernel = AgentKernel(kernel_config, handlers)
         runtime = cls(
             configuration,
@@ -131,9 +135,9 @@ class AuroraRuntime:
         )
         runtime._command_router = CommandRouter(runtime)
         runtime._tool_dispatcher = ToolDispatcher(kernel, kernel)
-        runtime._scheduler = CognitiveScheduler(
-            configuration.runtime.workspace / "process" / "scheduler-state.json",
-            configuration.runtime.scheduler,
+        runtime._autonomy_quota = AutonomyQuota(
+            configuration.runtime.workspace / "process" / "autonomy-quota.json",
+            configuration.runtime.autonomy,
         )
         if tool_bindings is not None:
             runtime.bind_tool_executors(tool_bindings)
@@ -148,8 +152,6 @@ class AuroraRuntime:
             for task, task_id in tuple(self._model_activity_tasks.items()):
                 if task_id in cancelled:
                     task.cancel()
-            if self._scheduler is not None:
-                self._scheduler.on_external_activity()
         await self.kernel.submit_amp(amp)
         self._wake.set()
         return amp.header.message_id
@@ -200,26 +202,11 @@ class AuroraRuntime:
             response["tool_recovery_receipts_emitted"] = recoveries_emitted
             response["tool_receipts_emitted"] = receipts_emitted
             self._ensure_model_dispatcher()
-            if self._scheduler is not None:
-                self._scheduler.reconcile(self.kernel.tasks())
             return response
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         stop = stop_event or asyncio.Event()
         while not stop.is_set():
-            if self._scheduler is not None:
-                self._scheduler.reconcile(self.kernel.tasks())
-                if self._scheduler.can_tick(self.kernel.tasks()):
-                    tick = new_amp(
-                        event_type="system.tick",
-                        session_id="kernel:autonomy",
-                        summary=AUTONOMOUS_TICK_SUMMARY,
-                        data={"interval_seconds": self._scheduler.state.current_interval_seconds},
-                        source_app="kernel.scheduler",
-                        source_instance="localhost",
-                    )
-                    await self.kernel.submit_amp(tick)
-                    self._scheduler.mark_tick_emitted()
             if self.kernel.has_work():
                 await self.pump()
                 continue
@@ -229,7 +216,7 @@ class AuroraRuntime:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
                     self._wake.wait(),
-                    timeout=self.configuration.runtime.scheduler.scan_seconds,
+                    timeout=self.configuration.runtime.autonomy.scan_seconds,
                 )
 
     def _ensure_model_dispatcher(self) -> None:
@@ -254,7 +241,7 @@ class AuroraRuntime:
         task = self.kernel.get_task(activity.task_id)
         if task is None or task.terminal:
             return
-        if task.autonomous and self._scheduler is not None and not self._scheduler.reserve_autonomous_model_call():
+        if task.autonomous and not self._autonomy_quota.reserve_model_call():
             await self.kernel.complete_model(activity, None, "autonomous_daily_budget")
             await self.kernel.cancel_task(task.task_id, "autonomous_daily_budget")
             return
@@ -267,8 +254,8 @@ class AuroraRuntime:
             await self.kernel.complete_model(activity, None, f"{type(error).__name__}: {error}")
             return
         await self.kernel.complete_model(activity, result.to_dict(), None)
-        if task.autonomous and self._scheduler is not None:
-            self._scheduler.record_autonomous_tokens(result.usage.prompt_tokens + result.usage.completion_tokens)
+        if task.autonomous:
+            self._autonomy_quota.record_tokens(result.usage.prompt_tokens + result.usage.completion_tokens)
 
     async def shutdown(self) -> None:
         async with self._shutdown_lock:
@@ -291,7 +278,7 @@ class AuroraRuntime:
     def status(self) -> dict[str, Any]:
         return {
             **self.kernel.status(),
-            "scheduler": self._scheduler.status() if self._scheduler is not None else None,
+            "autonomy_quota": self._autonomy_quota.status(),
             "model_dispatch_active": self._model_dispatch_task is not None and not self._model_dispatch_task.done(),
             "active_model_activities": len(self._model_activity_tasks),
         }

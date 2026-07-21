@@ -21,8 +21,9 @@ class MissingAgentPromptError(ValueError):
 class PromptComposer:
     """The only assembly boundary for project-authored model input."""
 
-    def __init__(self, catalog: PromptCatalog) -> None:
+    def __init__(self, catalog: PromptCatalog, memory: Any = None) -> None:
         self._catalog = catalog
+        self._memory = memory
 
     @property
     def catalog(self) -> PromptCatalog:
@@ -53,6 +54,12 @@ class PromptComposer:
         situations = _situations(context)
         if situations:
             user.append(PromptSection("situations", situations))
+        recent = _recall_recent_events(self._memory)
+        if recent:
+            user.append(PromptSection("recent_events", recent))
+        recalled = _recall_semantic_facts(self._memory, context)
+        if recalled:
+            user.append(PromptSection("related_memories", recalled))
         tools = _tool_hints(context.capabilities)
         if tools:
             user.append(PromptSection("available_tools", tools))
@@ -153,3 +160,25 @@ def _external(value: object) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     encoded = encoded.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
     return f'<external-data encoding="json">\n{encoded}\n</external-data>'
+
+
+def _recall_recent_events(memory: Any) -> str:
+    if memory is None or not getattr(memory, "available", False):
+        return ""
+    events = memory.recall_recent_events(limit=10)
+    if not events:
+        return ""
+    lines = [f"- [{event['created_at']}] {event['type']}: {event['summary']}" for event in events]
+    return "[ 最近事件 ]\n" + "\n".join(lines)
+
+
+def _recall_semantic_facts(memory: Any, context: AgentContext) -> str:
+    if memory is None or not getattr(memory, "available", False):
+        return ""
+    query = context.task.root_summary
+    if not query.strip():
+        return ""
+    facts = memory.search(query, limit=5)
+    if not facts:
+        return ""
+    return f"[ 相关记忆 ]\n{_external(facts)}"

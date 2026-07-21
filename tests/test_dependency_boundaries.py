@@ -8,12 +8,13 @@ import pytest
 _LAYER_RULES = {
     "contracts": frozenset({"contracts"}),
     "utils": frozenset({"utils"}),
+    "memory": frozenset({"contracts", "utils", "memory"}),
     "kernel": frozenset({"contracts", "utils", "kernel"}),
     "ai": frozenset({"contracts", "utils", "prompt", "ai"}),
     "prompt": frozenset({"contracts", "prompt"}),
     "platform": frozenset({"contracts", "utils", "localhost", "platform"}),
     "agents": frozenset({"contracts", "utils", "agents", "prompt"}),
-    "localhost": frozenset({"contracts", "utils", "kernel", "ai", "agents", "localhost", "prompt"}),
+    "localhost": frozenset({"contracts", "utils", "memory", "kernel", "ai", "agents", "localhost", "prompt"}),
 }
 _MAX_SOURCE_LINES = 500
 

@@ -10,6 +10,7 @@ RFC 保存 AuroraBot 已经作出的设计决定。它们不是认识项目的�
 3. [RFC 0012](0012-homogeneous-agent-runtime.md) 定义继续有效的 Task、同构 Agent、邮箱、监督树与预算。
 4. [RFC 0014](0014-parallel-platform-composition-and-preferences.md) 定义当前进程入口、Platform 组合、偏好配置与包位置。
 5. [RFC 0001](0001-architecture.md) 提供仍然稳定的因果边界与依赖方向。
+6. [RFC 0020](0020-mcp-owned-autonomous-heartbeat.md) 定义内建 MCP 所有的自主心跳与 Runtime 配额边界。
 6. 其余 RFC 用于追溯具体契约；若内容与后续 RFC 冲突，以编号更高且明确取代它的已接受 RFC 为准。
 
 特别注意：RFC 0009、0010、0011 和 0013 记录了演进过程中的重要决定，但其中的旧 CLI、旧包位置或旧运行时术语可能
@@ -59,3 +60,4 @@ RFC 应描述可验证的决定，而不是只写愿景。完整格式、状态�
 | [0017](0017-dashboard-single-owner-token-auth.md)             | 已接受 | Dashboard 单 Owner 与 bootstrap token 鉴权               |
 | [0018](0018-thin-platform-and-unified-tools.md)               | 已接受 | 薄 Platform、统一 Tool 与第三方 MCP 零惯例接入           |
 | [0019](0019-centralized-layered-prompt-assembly.md)           | 已接受 | 集中式分层提示词目录、装配与边界                         |
+| [0020](0020-mcp-owned-autonomous-heartbeat.md)                | 已接受 | 内建 MCP 所有的自主心跳与 Runtime 配额边界               |

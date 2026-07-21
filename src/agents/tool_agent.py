@@ -8,6 +8,7 @@ from src.agents.tools import (
     CLAIM_TOOL,
     DELEGATE_TOOL,
     MEMORY_QUERY_TOOL,
+    MEMORY_REMEMBER_TOOL,
     WAIT_TOOL,
     build_tool_definitions,
     uses_runtime_complete_task,
@@ -113,6 +114,8 @@ class ToolAgent:
             return self._handle_situation_claim(context, result)
         if call.name == MEMORY_QUERY_TOOL:
             return self._handle_memory_query(context, result)
+        if call.name == MEMORY_REMEMBER_TOOL:
+            return self._handle_memory_remember(context, result)
         descriptor = next((item for item in context.capabilities if item.id == call.name), None)
         if descriptor is None:
             return AgentDecision(failure=f"unknown Tool capability {call.name}")
@@ -180,6 +183,27 @@ class ToolAgent:
             {"ok": False, **MemoryFailure().to_dict()},
             is_error=False,
         )
+        request = self._continuation_request(context, continuation)
+        return AgentDecision(model_request=request.to_dict())
+
+    def _handle_memory_remember(self, context: AgentContext, result: ModelResult) -> AgentDecision:
+        call = result.tool_calls[0]
+        content = call.arguments.get("content")
+        if not isinstance(content, str) or not content.strip():
+            return AgentDecision(failure="memory.remember content must be a non-empty string")
+        if context.memory_agent_profile is not None:
+            return AgentDecision(
+                delegations=(
+                    DelegationRequest(
+                        json.dumps({"type": "memory.proposal", "content": content}, ensure_ascii=False),
+                        context.memory_agent_profile,
+                    ),
+                )
+            )
+        continuation = result.continuation
+        if continuation is None:
+            return AgentDecision(completion=Completion("remembered", silent=True))
+        continuation = append_tool_result(continuation, call.call_id, {"ok": True, "stored": False}, is_error=False)
         request = self._continuation_request(context, continuation)
         return AgentDecision(model_request=request.to_dict())
 

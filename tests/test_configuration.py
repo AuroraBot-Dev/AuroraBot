@@ -281,17 +281,16 @@ def test_disabled_app_is_strictly_validated_but_excluded_from_snapshot(project_r
 @pytest.mark.parametrize(
     ("table", "body", "message"),
     [
-        ("runtime.scheduler", 'enabled = "yes"', "enabled must be boolean"),
-        ("runtime.scheduler", "autonomous_daily_model_calls = 0", "positive integer"),
-        ("runtime.scheduler", "autonomous_daily_tokens = false", "positive integer"),
-        ("runtime.scheduler", "idle_initial_seconds = 60\nidle_max_seconds = 30", "at least"),
-        ("runtime.scheduler", "idle_multiplier = 1", "greater than one"),
+        ("runtime.autonomy", "autonomous_daily_model_calls = 0", "positive integer"),
+        ("runtime.autonomy", "autonomous_daily_tokens = false", "positive integer"),
+        ("runtime.autonomy", "heartbeat_min_seconds = 60\nheartbeat_max_seconds = 30", "at least"),
+        ("runtime.autonomy", "heartbeat_initial_seconds = 5\nheartbeat_min_seconds = 30", "within heartbeat bounds"),
         ("runtime.interactive_task", "max_model_calls = 0", "max_model_calls must be positive"),
         ("runtime.interactive_task", "max_tool_calls = false", "max_tool_calls must be positive"),
         ("runtime.autonomous_task", "max_duration_seconds = 0", "must be positive"),
     ],
 )
-def test_rejects_invalid_scheduler_and_task_budgets(project_root: Path, table: str, body: str, message: str) -> None:
+def test_rejects_invalid_autonomy_and_task_budgets(project_root: Path, table: str, body: str, message: str) -> None:
     config = project_root / "config" / "aurora.toml"
     config.write_text(config.read_text(encoding="utf-8") + f"\n[{table}]\n{body}\n", encoding="utf-8")
 

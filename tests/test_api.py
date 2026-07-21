@@ -36,7 +36,7 @@ def test_service_starts_without_model_credentials(project_root: Path, monkeypatc
     asyncio.run(runtime.shutdown())
 
     assert status.status_code == 200
-    assert status.json()["scheduler"] is not None
+    assert status.json()["autonomy_quota"] is not None
 
 
 def test_debug_api_drives_and_queries_the_loop(project_root: Path) -> None:
