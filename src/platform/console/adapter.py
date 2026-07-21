@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 CONSOLE_SEND_CAPABILITY = "org.aurora.console.send"
 CONSOLE_SEND_DESCRIPTOR = CapabilityDescriptor(
     id=CONSOLE_SEND_CAPABILITY,
-    description="Send text to the owner through the local Console.",
+    description="Send text through the local Console.",
     parameters_schema={
         "type": "object",
         "properties": {"text": {"type": "string", "minLength": 1}},

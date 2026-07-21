@@ -67,7 +67,7 @@ def _message_text(context: AgentContext) -> str:
     if amp is not None:
         payload = amp.get("payload")
         if isinstance(payload, dict):
-            return f"对方送来的完整内容：\n{_external(payload)}"
+            return f"收到的完整内容：\n{_external(payload)}"
     if context.message.type.startswith("tool."):
         status = context.message.type.removeprefix("tool.")
         request = context.message.payload.get("request")
@@ -80,9 +80,9 @@ def _message_text(context: AgentContext) -> str:
         outcome = {"request": request_fact, outcome_key: context.message.payload.get(outcome_key)}
         return f"刚才的工具返回了 {status}：\n{_external(outcome)}"
     if context.message.type.startswith("child."):
-        return f"子 Agent 带回了结果：\n{_external(context.message.payload)}"
+        return f"子代理返回了结果：\n{_external(context.message.payload)}"
     value = context.task.root_summary if context.message.type == "task.started" else context.agent.assignment
-    return f"这次来到面前的内容：\n{_external(value)}"
+    return f"收到消息：\n{_external(value)}"
 
 
 def _source_note(context: AgentContext) -> str:
@@ -100,7 +100,7 @@ def _source_note(context: AgentContext) -> str:
     username = data.get("sender_username") if isinstance(data, dict) else None
     if isinstance(username, str):
         facts["sender_username"] = username
-    introduction = f"有人从 {label} 来到我面前。" if label is not None else "这件事有明确的外部来源。"
+    introduction = f"[ {label} ]" if label is not None else "[ 未知来源 ]"
     return f"{introduction}\n{_external(facts)}"
 
 
@@ -133,7 +133,7 @@ def _current_work(context: AgentContext) -> str:
 def _situations(context: AgentContext) -> str:
     if not context.brain.ambient_situations:
         return ""
-    introduction = "周围还有这些尚未被接住的事情；认领时要使用其中的 situation_id："
+    introduction = "我有这些事要做；认领时要使用其中的 situation_id："
     return f"{introduction}\n{_external(context.brain.ambient_situations)}"
 
 
@@ -141,7 +141,7 @@ def _tool_hints(capabilities: tuple[CapabilityDescriptor, ...]) -> str:
     if not capabilities:
         return ""
     facts = tuple({"id": item.id, "description": item.description} for item in capabilities)
-    return f"这些通往外界的方式此刻可以使用：\n{_external(facts)}"
+    return f"这些能力此刻可以使用：\n{_external(facts)}"
 
 
 def _amp(context: AgentContext) -> dict[str, Any] | None:

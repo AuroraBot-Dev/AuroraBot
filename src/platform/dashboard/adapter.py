@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 DASHBOARD_SEND_CAPABILITY = "org.aurora.dashboard.send"
 DASHBOARD_SEND_DESCRIPTOR = CapabilityDescriptor(
     id=DASHBOARD_SEND_CAPABILITY,
-    description="Send text to the configured Dashboard owner.",
+    description="Send text through the configured Dashboard.",
     parameters_schema={
         "type": "object",
         "properties": {"text": {"type": "string", "minLength": 1}},
