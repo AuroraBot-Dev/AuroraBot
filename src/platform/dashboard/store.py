@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -141,7 +141,31 @@ ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0 CHECK (is_owner
 CREATE UNIQUE INDEX idx_users_single_owner ON users(is_owner) WHERE is_owner = 1;
 """
 
-_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4)
+_MIGRATION_5 = """
+ALTER TABLE messages RENAME COLUMN source_publication_request_id TO source_tool_request_id;
+DROP TABLE dashboard_reply_routes;
+ALTER TABLE dashboard_publications RENAME TO dashboard_publications_legacy;
+CREATE TABLE dashboard_tool_requests (
+    request_id TEXT PRIMARY KEY,
+    request_digest TEXT,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('dispatch_started', 'succeeded', 'failed')),
+    summary TEXT,
+    external_message_id TEXT UNIQUE,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+INSERT INTO dashboard_tool_requests(
+    request_id, text, status, summary, external_message_id, error, created_at, updated_at
+)
+SELECT request_id, text, CASE status WHEN 'accepted' THEN 'succeeded' ELSE status END,
+       summary, external_message_id, error, created_at, updated_at
+FROM dashboard_publications_legacy;
+DROP TABLE dashboard_publications_legacy;
+"""
+
+_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4, _MIGRATION_5)
 
 console = Console(highlight=False)
 
@@ -267,7 +291,7 @@ class ChatStore:
         attachment_id: int | None,
         status: str = "saved",
         amp_message_id: str | None = None,
-        source_publication_request_id: str | None = None,
+        source_tool_request_id: str | None = None,
     ) -> tuple[sqlite3.Row, bool]:
         now = _now()
         with self.connect() as connection:
@@ -276,7 +300,7 @@ class ChatStore:
                     """
                     INSERT INTO messages(
                         client_message_id, sender_id, receiver_id, message_type, content, attachment_id,
-                        status, amp_message_id, source_publication_request_id, created_at
+                        status, amp_message_id, source_tool_request_id, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -288,7 +312,7 @@ class ChatStore:
                         attachment_id,
                         status,
                         amp_message_id,
-                        source_publication_request_id,
+                        source_tool_request_id,
                         now,
                     ),
                 )
@@ -301,111 +325,14 @@ class ChatStore:
                     "SELECT * FROM messages WHERE sender_id = ? AND client_message_id = ?",
                     (sender_id, client_message_id),
                 ).fetchone()
-                if row is None and source_publication_request_id is not None:
+                if row is None and source_tool_request_id is not None:
                     row = connection.execute(
-                        "SELECT * FROM messages WHERE source_publication_request_id = ?",
-                        (source_publication_request_id,),
+                        "SELECT * FROM messages WHERE source_tool_request_id = ?",
+                        (source_tool_request_id,),
                     ).fetchone()
                 if row is None:
                     raise
                 return row, False
-
-    def register_reply_route(
-        self,
-        *,
-        route_ref: str,
-        external_event_id: str,
-        external_message_id: str,
-        owner_user_id: int,
-        conversation_ref: str,
-        actor_ref: str,
-        reply_route_ttl_seconds: float,
-    ) -> sqlite3.Row:
-        now = datetime.now(UTC)
-        with self.connect() as connection:
-            connection.execute("DELETE FROM dashboard_reply_routes WHERE expires_at <= ?", (now.isoformat(),))
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO dashboard_reply_routes(
-                    route_ref, external_event_id, external_message_id, owner_user_id,
-                    conversation_ref, actor_ref, created_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    route_ref,
-                    external_event_id,
-                    external_message_id,
-                    owner_user_id,
-                    conversation_ref,
-                    actor_ref,
-                    now.isoformat(),
-                    (now + timedelta(seconds=reply_route_ttl_seconds)).isoformat(),
-                ),
-            )
-            row = connection.execute(
-                "SELECT * FROM dashboard_reply_routes WHERE external_event_id = ?",
-                (external_event_id,),
-            ).fetchone()
-            connection.commit()
-            assert row is not None
-            if (
-                str(row["route_ref"]) != route_ref
-                or str(row["external_message_id"]) != external_message_id
-                or int(row["owner_user_id"]) != owner_user_id
-            ):
-                raise ValueError(  # noqa: TRY003
-                    "Dashboard external event route conflicts with its persisted binding"
-                )
-            return row
-
-    def start_publication(
-        self,
-        *,
-        request_id: str,
-        route_ref: str | None,
-        capability: str,
-        endpoint_id: str,
-        operation: str,
-        text: str,
-    ) -> tuple[sqlite3.Row, bool]:
-        now = _now()
-        with self.connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT OR IGNORE INTO dashboard_publications(
-                    request_id, route_ref, capability, endpoint_id, operation, text,
-                    status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'dispatch_started', ?, ?)
-                """,
-                (request_id, route_ref, capability, endpoint_id, operation, text, now, now),
-            )
-            row = connection.execute(
-                "SELECT * FROM dashboard_publications WHERE request_id = ?",
-                (request_id,),
-            ).fetchone()
-            connection.commit()
-            assert row is not None
-            return row, cursor.rowcount == 1
-
-    def finish_publication(
-        self,
-        request_id: str,
-        *,
-        status: str,
-        summary: str,
-        external_message_id: str | None = None,
-        error: str | None = None,
-    ) -> None:
-        with self.connect() as connection:
-            connection.execute(
-                """
-                UPDATE dashboard_publications
-                SET status = ?, summary = ?, external_message_id = ?, error = ?, updated_at = ?
-                WHERE request_id = ?
-                """,
-                (status, summary, external_message_id, error, _now(), request_id),
-            )
-            connection.commit()
 
     def message_with_attachment(self, message_id: int) -> sqlite3.Row | None:
         return self.fetch_one(

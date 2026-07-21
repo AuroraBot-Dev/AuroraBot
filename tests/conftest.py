@@ -32,14 +32,10 @@ max_depth = 3
 max_children_per_agent = 4
 turn_concurrency = 8
 model_concurrency = 4
-effect_concurrency = 8
+tool_concurrency = 8
 blocking_workers = 4
 lease_seconds = 30.0
 ambient_ttl_seconds = 1800.0
-
-[communication]
-reply_route_ttl_seconds = 3600.0
-relay_hop_limit = 1
 
 [dashboard]
 host = "127.0.0.1"
@@ -125,7 +121,7 @@ id = "builtin.gate"
 implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "fast"
 prompt = "Gate and complete the task."
-capabilities = ["org.aurora.console.send_message"]
+capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
 
@@ -134,7 +130,7 @@ id = "builtin.worker"
 implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "agent"
 prompt = "Complete the delegated task and report to the parent."
-capabilities = ["org.aurora.console.send_message"]
+capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
 """,

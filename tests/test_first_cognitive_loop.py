@@ -4,6 +4,8 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 from src.agents.tool_agent import MEMORY_QUERY_TOOL, ToolAgent
 from src.contracts.agent import (
     AgentContext,
@@ -14,10 +16,10 @@ from src.contracts.agent import (
     CapabilityDescriptor,
     Completion,
     DelegationRequest,
-    EffectRequest,
     KernelConfiguration,
     TaskBudget,
     TaskStatus,
+    ToolRequest,
 )
 from src.contracts.amp import AmpEnvelope, new_amp
 from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
@@ -114,27 +116,36 @@ def test_child_reports_resume_parent_one_by_one(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_child_root_only_effect_is_rejected(tmp_path: Path) -> None:
+def test_child_uses_package_wildcard_capability(tmp_path: Path) -> None:
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:
             if context.agent.parent_agent_id is None:
                 return AgentDecision(delegations=(DelegationRequest("use a tool"),))
-            return AgentDecision(effect_request=EffectRequest("reply", {"text": "hello"}))
+            return AgentDecision(tool_request=ToolRequest("test.reply", {"text": "hello"}))
 
-    kernel = AgentKernel(configuration(tmp_path, profiles()), {"gate": Handler(), "worker": Handler()})
+    gate, worker = profiles()
+    wildcard_worker = AgentProfile(
+        worker.id,
+        worker.implementation,
+        worker.model_role,
+        worker.prompt,
+        frozenset({"test.*"}),
+        worker.can_delegate,
+        worker.child_profiles,
+    )
+    kernel = AgentKernel(configuration(tmp_path, (gate, wildcard_worker)), {"gate": Handler(), "worker": Handler()})
     kernel.install_capability_catalog(
         CapabilityCatalogSnapshot(
             (
                 CapabilityDescriptor(
-                    "reply",
-                    "root-only effect",
+                    "test.reply",
+                    "ordinary Tool",
                     {
                         "type": "object",
                         "properties": {"text": {"type": "string"}},
                         "required": ["text"],
                         "additionalProperties": False,
                     },
-                    root_only=True,
                 ),
             )
         )
@@ -143,20 +154,20 @@ def test_child_root_only_effect_is_rejected(tmp_path: Path) -> None:
     async def scenario() -> None:
         await kernel.submit_amp(input_amp())
         await kernel.pump()
-        rejected = await kernel.pump()
-        assert rejected.failed_message_ids
+        accepted = await kernel.pump()
+        assert accepted.failed_message_ids == ()
         child = next(agent for agent in kernel.store.agents() if agent.parent_agent_id is not None)
-        assert child.status.value == "FAILED"
+        assert child.status.value == "WAITING_TOOL"
 
     asyncio.run(scenario())
 
 
-def test_effect_success_restores_root_before_explicit_completion(tmp_path: Path) -> None:
+def test_tool_success_restores_root_before_explicit_completion(tmp_path: Path) -> None:
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:
-            if context.message.type == "effect.succeeded":
-                return AgentDecision(completion=Completion("effect handled"))
-            return AgentDecision(effect_request=EffectRequest("reply", {"text": "hello"}))
+            if context.message.type == "tool.succeeded":
+                return AgentDecision(completion=Completion("Tool handled"))
+            return AgentDecision(tool_request=ToolRequest("reply", {"text": "hello"}))
 
     gate = AgentProfile(
         "gate",
@@ -189,31 +200,114 @@ def test_effect_success_restores_root_before_explicit_completion(tmp_path: Path)
     async def scenario() -> None:
         await kernel.submit_amp(input_amp())
         await kernel.pump()
-        lease = (await kernel.claim_effect_requests())[0]
-        receipt = new_amp(
-            event_type="effect.succeeded",
-            session_id="session",
+        lease = (await kernel.claim_tool_requests())[0]
+        await kernel.complete_tool(
+            request_id=lease.request_id,
+            capability="reply",
+            status="succeeded",
             summary="delivered",
-            data={
-                "request_id": lease.request_id,
-                "capability": "reply",
-                "result": {"ok": True},
-            },
+            result={"ok": True},
+            error=None,
             source_app="platform.test",
             source_instance="test",
         )
-        await kernel.submit_amp(receipt)
-        kernel.ingest_ready()
         assert kernel.tasks()[0].status == TaskStatus.ACTIVE
         assert any(
-            message["type"] == "effect.succeeded"
+            message["type"] == "tool.succeeded"
             for message in kernel.store.messages_for_agent(kernel.tasks()[0].root_agent_id)
         )
         await kernel.pump()
         assert kernel.tasks()[0].status == TaskStatus.COMPLETED
-        await kernel.submit_amp(receipt)
+        await kernel.complete_tool(
+            request_id=lease.request_id,
+            capability="reply",
+            status="succeeded",
+            summary="delivered",
+            result={"ok": True},
+            error=None,
+            source_app="platform.test",
+            source_instance="test",
+        )
         await kernel.pump()
         assert len(kernel.tasks()) == 1
+        with pytest.raises(ValueError, match="invalid Tool outcome"):
+            await kernel.complete_tool(
+                request_id=lease.request_id,
+                capability="reply",
+                status="forged",
+                summary="invalid",
+                result=None,
+                error=None,
+                source_app="test",
+                source_instance="test",
+            )
+
+    asyncio.run(scenario())
+
+
+def test_succeeded_complete_tool_finishes_root_task(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, _context: AgentContext) -> AgentDecision:
+            return AgentDecision(tool_request=ToolRequest("reply", {"text": "done"}, complete_task=True))
+
+    gate, worker = profiles()
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": Handler(), "worker": Handler()})
+    kernel.install_capability_catalog(
+        CapabilityCatalogSnapshot((CapabilityDescriptor("reply", "reply", {"type": "object"}),))
+    )
+
+    async def scenario() -> None:
+        await kernel.submit_amp(input_amp())
+        await kernel.pump()
+        lease = (await kernel.claim_tool_requests())[0]
+        await kernel.complete_tool(
+            request_id=lease.request_id,
+            capability=lease.capability,
+            status="succeeded",
+            summary="delivered",
+            result={},
+            error=None,
+            source_app="test",
+            source_instance="test",
+        )
+        assert kernel.tasks()[0].status == TaskStatus.COMPLETED
+
+    asyncio.run(scenario())
+
+
+def test_succeeded_complete_tool_finishes_child_and_reports_parent(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.agent.parent_agent_id is None:
+                return AgentDecision(delegations=(DelegationRequest("send"),))
+            return AgentDecision(tool_request=ToolRequest("reply", {"text": "done"}, complete_task=True))
+
+    gate, worker = profiles()
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": Handler(), "worker": Handler()})
+    kernel.install_capability_catalog(
+        CapabilityCatalogSnapshot((CapabilityDescriptor("reply", "reply", {"type": "object"}),))
+    )
+
+    async def scenario() -> None:
+        await kernel.submit_amp(input_amp())
+        await kernel.pump()
+        await kernel.pump()
+        lease = (await kernel.claim_tool_requests())[0]
+        await kernel.complete_tool(
+            request_id=lease.request_id,
+            capability=lease.capability,
+            status="succeeded",
+            summary="child delivered",
+            result={},
+            error=None,
+            source_app="test",
+            source_instance="test",
+        )
+        child = kernel.get_agent(lease.agent_id)
+        assert child is not None and child.status.value == "COMPLETED"
+        assert kernel.tasks()[0].status == TaskStatus.ACTIVE
+        parent_messages = kernel.store.messages_for_agent(kernel.tasks()[0].root_agent_id)
+        assert any(message["type"] == "child.completed" for message in parent_messages)
 
     asyncio.run(scenario())
 
@@ -225,7 +319,7 @@ def test_brain_context_is_runtime_owned_global_projection(tmp_path: Path) -> Non
 
     gate, worker = profiles()
     kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": Handler(), "worker": Handler()})
-    kernel.store.add_situation("clock", "clock.alarm", "wake up", {"ambient": True}, 10, 1800, "clock:system")
+    kernel.store.add_situation("clock", "clock.alarm", "wake up", {"ambient": True}, 10, 1800)
 
     async def scenario() -> None:
         await kernel.submit_amp(input_amp())
@@ -269,3 +363,137 @@ def test_unconfigured_memory_agent_returns_nonfatal_tool_result(tmp_path: Path) 
         assert tool_output["result"]["ok"] is False
 
     asyncio.run(scenario())
+
+
+def test_tool_agent_reserves_complete_task_and_starts_new_turn_without_continuation(tmp_path: Path) -> None:
+    gate = AgentProfile(
+        id="gate",
+        implementation="test",
+        model_role="fast",
+        prompt="gate",
+        capabilities=frozenset({"tools.*"}),
+        can_delegate=False,
+        child_profiles=frozenset(),
+    )
+    worker = profiles()[1]
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": ToolAgent(), "worker": ToolAgent()})
+    descriptor = CapabilityDescriptor(
+        "tools.echo",
+        "echo",
+        {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+    )
+    kernel.install_capability_catalog(CapabilityCatalogSnapshot((descriptor,)))
+
+    async def scenario() -> None:
+        await kernel.submit_amp(input_amp())
+        await kernel.pump()
+        model = (await kernel.claim_model_requests(1))[0]
+        schema = next(item for item in model.request["tools"] if item["name"] == "tools.echo")["parameters_schema"]
+        assert schema["properties"]["complete_task"]["default"] is False
+        result = ModelResult(
+            model="test",
+            negotiated_capabilities=frozenset({"chat", "tools"}),
+            response_mode="normalized",
+            text="",
+            data=None,
+            usage=ModelUsage(),
+            cost_usd=0,
+            tool_calls=(ToolCall("call", "tools.echo", {"text": "hello", "complete_task": False}),),
+            finish_reason="tool_calls",
+            continuation=None,
+        )
+        await kernel.complete_model(model, result.to_dict(), None)
+        await kernel.pump()
+        lease = (await kernel.claim_tool_requests())[0]
+        assert lease.parameters == {"text": "hello"}
+        await kernel.complete_tool(
+            request_id=lease.request_id,
+            capability=lease.capability,
+            status="succeeded",
+            summary="echoed",
+            result={},
+            error=None,
+            source_app="test",
+            source_instance="test",
+        )
+        await kernel.pump()
+        resumed = (await kernel.claim_model_requests(1))[0]
+        assert resumed.request["continuation"] is None
+        assert resumed.request["messages"]
+
+    asyncio.run(scenario())
+
+
+def test_tool_agent_preserves_third_party_complete_task_parameter(tmp_path: Path) -> None:
+    gate = AgentProfile(
+        id="gate",
+        implementation="test",
+        model_role="fast",
+        prompt="gate",
+        capabilities=frozenset({"tools.*"}),
+        can_delegate=False,
+        child_profiles=frozenset(),
+    )
+    worker = profiles()[1]
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": ToolAgent(), "worker": ToolAgent()})
+    raw_schema = {
+        "type": "object",
+        "properties": {"complete_task": {"type": "string", "enum": ["vendor-value"]}},
+        "required": ["complete_task"],
+        "additionalProperties": False,
+    }
+    descriptor = CapabilityDescriptor("tools.vendor", "vendor", raw_schema)
+    kernel.install_capability_catalog(CapabilityCatalogSnapshot((descriptor,)))
+
+    async def scenario() -> None:
+        await kernel.submit_amp(input_amp())
+        await kernel.pump()
+        model = (await kernel.claim_model_requests(1))[0]
+        tool = next(item for item in model.request["tools"] if item["name"] == "tools.vendor")
+        assert tool["parameters_schema"] == raw_schema
+        result = ModelResult(
+            model="test",
+            negotiated_capabilities=frozenset({"chat", "tools"}),
+            response_mode="normalized",
+            text="",
+            data=None,
+            usage=ModelUsage(),
+            cost_usd=0,
+            tool_calls=(ToolCall("call", "tools.vendor", {"complete_task": "vendor-value"}),),
+            finish_reason="tool_calls",
+            continuation=None,
+        )
+        await kernel.complete_model(model, result.to_dict(), None)
+        await kernel.pump()
+        lease = (await kernel.claim_tool_requests())[0]
+        assert lease.parameters == {"complete_task": "vendor-value"}
+        with kernel.store.connect() as connection:
+            request = json.loads(
+                connection.execute(
+                    "SELECT request_json FROM activities WHERE activity_id = ?", (lease.activity_id,)
+                ).fetchone()[0]
+            )
+        assert request["complete_task"] is False
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {
+            "$ref": "#/$defs/input",
+            "$defs": {"input": {"type": "object", "properties": {"complete_task": {"type": "string"}}}},
+        },
+        {"allOf": [{"type": "object", "properties": {"complete_task": {"type": "integer"}}}]},
+        {"type": "object", "patternProperties": {"^complete_.*$": {"type": "string"}}},
+    ],
+)
+def test_tool_agent_does_not_override_composed_vendor_complete_task(schema: dict[str, object]) -> None:
+    descriptor = CapabilityDescriptor("tools.vendor", "vendor", schema)
+    assert ToolAgent._capability_tool(descriptor).parameters_schema == schema

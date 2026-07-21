@@ -7,13 +7,13 @@ Clock 是 AuroraBot 内建的 stdio MCP 应用。它让 Agent 能够查询当前
 
 ## 可以做什么
 
-| 工具 | 用途 | 主要参数 |
-| --- | --- | --- |
-| `org.aurora.clock.get_current_time` | 获取 UTC+8 当前时间 | `fmt`：`strftime` 格式 |
-| `org.aurora.clock.set_alarm` | 设置一次性闹钟 | `time_str`：ISO-8601 或 `HH:MM`；`label` |
-| `org.aurora.clock.set_timer` | 设置倒计时 | `seconds`；`label` |
-| `org.aurora.clock.list_alarms` | 列出等待中的闹钟与计时器 | 无 |
-| `org.aurora.clock.cancel_alarm` | 按 ID 取消任务 | `alarm_id` |
+| Aurora Tool ID | MCP raw 工具名 | 用途 | 主要参数 |
+| --- | --- | --- | --- |
+| `org.aurora.clock.get_current_time` | `get_current_time` | 获取 UTC+8 当前时间 | `fmt`：`strftime` 格式 |
+| `org.aurora.clock.set_alarm` | `set_alarm` | 设置一次性闹钟 | `time_str`：ISO-8601 或 `HH:MM`；`label` |
+| `org.aurora.clock.set_timer` | `set_timer` | 设置倒计时 | `seconds`；`label` |
+| `org.aurora.clock.list_alarms` | `list_alarms` | 列出等待中的闹钟与计时器 | 无 |
+| `org.aurora.clock.cancel_alarm` | `cancel_alarm` | 按 ID 取消任务 | `alarm_id` |
 
 `HH:MM` 按 UTC+8 解释；如果当天时间已经过去，会安排到下一天。当前版本不解析“明天早上”一类自然语言，也不支持
 重复闹钟。调用方应传入正数倒计时。
@@ -23,11 +23,9 @@ Clock 是 AuroraBot 内建的 stdio MCP 应用。它让 Agent 能够查询当前
 
 ## 在 AuroraBot 中使用
 
-根目录 `config/apps.toml` 已经声明 Clock 的启动命令和工具 allowlist，`config/agents.toml` 则把这些能力授予内建
-Agent。启动 Console 与 MCP 后，可以直接用自然语言提出需求：
-
-Clock 声明为 `kind = "utility"`，五个工具均声明为 `kind = "effect"`。effect 完成后固定恢复请求 Agent；配置不再使用
-`result_mode`。
+根目录 `config/apps.toml` 只声明 Clock 的 package、启动命令和超时。MCP Platform 启动 Server 后通过标准
+`tools/list` 动态发现全部工具，不需要 Clock kind 或工具 allowlist。内建 Agent profile 使用 `*`，因此可以使用活动
+catalog 中发现的 Clock 工具。启动 Console 与 MCP 后，可以直接用自然语言提出需求：
 
 ```powershell
 uv run --env-file .env aurora --console --mcp
@@ -43,5 +41,5 @@ Set-Location src/apps/aurora-app-clock
 uv run python mcp_server.py
 ```
 
-stdio MCP Server 的 stdout 只用于 JSON-RPC，诊断日志写入 stderr。运行时发现的工具必须与 `config/apps.toml` 中的
-allowlist 完全一致，否则 AuroraBot 会拒绝启动这项应用，避免能力配置与实际实现悄悄漂移。
+stdio MCP Server 的 stdout 只用于 JSON-RPC，诊断日志写入 stderr。工具名称、说明和输入 schema 由 Server 的
+`tools/list` 响应提供；AuroraBot 使用配置的 `org.aurora.clock` package 生成内部 Tool ID。

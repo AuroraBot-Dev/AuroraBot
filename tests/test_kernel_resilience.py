@@ -15,10 +15,10 @@ from src.contracts.agent import (
     CapabilityCatalogSnapshot,
     CapabilityDescriptor,
     Completion,
-    EffectRequest,
     KernelConfiguration,
     TaskBudget,
     TaskStatus,
+    ToolRequest,
 )
 from src.contracts.amp import AmpEnvelope, new_amp
 from src.kernel.runtime import AgentKernel
@@ -36,11 +36,11 @@ class ModelHandler:
         return AgentDecision(model_request={"role": "fast", "messages": []})
 
 
-class EffectHandler:
+class ToolHandler:
     def handle(self, context: AgentContext) -> AgentDecision:
-        if context.message.type == "effect.failed":
-            return AgentDecision(completion=Completion("effect failed", silent=True))
-        return AgentDecision(effect_request=EffectRequest("test.reply", {"text": "hello"}))
+        if context.message.type in {"tool.failed", "tool.unknown"}:
+            return AgentDecision(completion=Completion("Tool failed", silent=True))
+        return AgentDecision(tool_request=ToolRequest("test.reply", {"text": "hello"}))
 
 
 def config(workspace: Path) -> KernelConfiguration:
@@ -64,7 +64,7 @@ def config(workspace: Path) -> KernelConfiguration:
     )
 
 
-def effect_kernel(workspace: Path) -> AgentKernel:
+def tool_kernel(workspace: Path) -> AgentKernel:
     profile = AgentProfile(
         "gate",
         "test",
@@ -83,7 +83,7 @@ def effect_kernel(workspace: Path) -> AgentKernel:
         TaskBudget(8, 6, 300),
         TaskBudget(3, 2, 120),
     )
-    kernel = AgentKernel(configuration, {"gate": EffectHandler()})
+    kernel = AgentKernel(configuration, {"gate": ToolHandler()})
     kernel.install_capability_catalog(
         CapabilityCatalogSnapshot((CapabilityDescriptor("test.reply", "reply", {"type": "object"}),))
     )
@@ -209,8 +209,8 @@ def test_waiting_model_agent_does_not_claim_an_unrelated_message(tmp_path: Path)
         kernel.shutdown()
 
 
-def test_late_effect_receipt_cannot_resurrect_a_cancelled_task(tmp_path: Path) -> None:
-    kernel = effect_kernel(tmp_path)
+def test_late_tool_receipt_cannot_resurrect_a_cancelled_task(tmp_path: Path) -> None:
+    kernel = tool_kernel(tmp_path)
 
     async def scenario() -> None:
         await kernel.submit_amp(
@@ -225,27 +225,23 @@ def test_late_effect_receipt_cannot_resurrect_a_cancelled_task(tmp_path: Path) -
         )
         result = await kernel.pump()
         task_id = result.ingested_task_ids[0]
-        lease = (await kernel.claim_effect_requests())[0]
+        lease = (await kernel.claim_tool_requests())[0]
         await kernel.cancel_task(task_id, "test_cancel")
-        await kernel.submit_amp(
-            new_amp(
-                event_type="effect.succeeded",
-                session_id="session",
-                summary="late",
-                data={
-                    "request_id": lease.request_id,
-                    "capability": "test.reply",
-                    "result": {"ok": True},
-                },
-                source_app="test.platform",
-                source_instance="test",
-            )
+        await kernel.complete_tool(
+            request_id=lease.request_id,
+            capability="test.reply",
+            status="succeeded",
+            summary="late",
+            result={"ok": True},
+            error=None,
+            source_app="test.platform",
+            source_instance="test",
         )
         await kernel.pump()
 
         task = kernel.get_task(task_id)
         assert task is not None and task.status == TaskStatus.CANCELLED
-        assert any(event["type"] == "effect.receipt_ignored" for event in kernel.store.events_for_task(task_id))
+        assert any(event["type"] == "tool.receipt_ignored" for event in kernel.store.events_for_task(task_id))
         assert not kernel.store.situations()
 
     try:
@@ -254,8 +250,8 @@ def test_late_effect_receipt_cannot_resurrect_a_cancelled_task(tmp_path: Path) -
         kernel.shutdown()
 
 
-def test_pending_effect_is_work_after_restart(tmp_path: Path) -> None:
-    first = effect_kernel(tmp_path)
+def test_pending_tool_is_work_after_restart(tmp_path: Path) -> None:
+    first = tool_kernel(tmp_path)
 
     async def prepare() -> None:
         await first.submit_amp(
@@ -272,15 +268,89 @@ def test_pending_effect_is_work_after_restart(tmp_path: Path) -> None:
 
     asyncio.run(prepare())
     first.shutdown()
-    restarted = effect_kernel(tmp_path)
+    restarted = tool_kernel(tmp_path)
     try:
-        assert restarted.has_pending_effect_requests()
+        assert restarted.has_pending_tool_requests()
         assert restarted.has_work()
     finally:
         restarted.shutdown()
 
 
-def test_v3_audience_migration_isolates_each_legacy_task_and_situation(tmp_path: Path) -> None:
+def test_legacy_processing_effect_recovers_as_tool_unknown(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    legacy_schema = _SCHEMA.replace("kind IN ('model', 'tool')", "kind IN ('model', 'effect', 'publication')")
+    now = utc_now()
+    with sqlite3.connect(database) as connection:
+        connection.executescript(legacy_schema)
+        connection.execute("INSERT INTO schema_meta(version) VALUES (4)")
+        connection.execute(
+            "INSERT INTO tasks VALUES ('task', 'agent', 'root', 'session', 'legacy', 'summary', 0, "
+            "'ACTIVE', 0, 1, 2, 2, 300, ?, ?, NULL)",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO agents VALUES ('agent', 'task', NULL, 'gate', 0, 'work', 'WAITING_EFFECT', "
+            "0, '{}', ?, ?, 'work')",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO activities VALUES ('activity', 'task', 'agent', 'effect', "
+            '\'{"capability":"legacy.send","parameters":{},"session_id":"session"}\', '
+            "'PROCESSING', 100, 'request', ?, ?, ?, NULL, NULL)",
+            (now, now, now),
+        )
+
+    store = SQLiteRuntimeStore(database)
+    store.initialize()
+    messages = store.messages_for_agent("agent")
+    assert messages[0]["type"] == "tool.unknown"
+    with store.connect() as connection:
+        activity = connection.execute("SELECT kind, status FROM activities").fetchone()
+        assert tuple(activity) == ("tool", "ERROR")
+
+
+def test_legacy_pending_publication_and_mailbox_receipt_are_safely_migrated(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    legacy_schema = _SCHEMA.replace("kind IN ('model', 'tool')", "kind IN ('model', 'effect', 'publication')")
+    now = utc_now()
+    with sqlite3.connect(database) as connection:
+        connection.executescript(legacy_schema)
+        connection.execute("INSERT INTO schema_meta(version) VALUES (4)")
+        connection.execute(
+            "INSERT INTO tasks VALUES ('task', 'agent', 'root', 'session', 'legacy', 'summary', 0, "
+            "'ACTIVE', 0, 1, 2, 2, 300, ?, ?, NULL)",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO agents VALUES ('agent', 'task', NULL, 'gate', 0, 'work', 'WAITING_EFFECT', "
+            "0, '{}', ?, ?, 'work')",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO activities VALUES ('activity', 'task', 'agent', 'publication', "
+            "'{}', 'PENDING', 100, 'request', NULL, ?, ?, NULL, NULL)",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO mailbox (message_id, task_id, target_agent_id, type, payload_json, causation_id, "
+            "correlation_id, priority, status, available_at, lease_until, attempts, created_at, completed_at) "
+            "VALUES ('receipt', 'task', 'agent', 'publication.succeeded', '{}', 'activity', 'task', 100, "
+            "'PENDING', ?, NULL, 0, ?, NULL)",
+            (now, now),
+        )
+
+    store = SQLiteRuntimeStore(database)
+    store.initialize()
+    with store.connect() as connection:
+        activity = connection.execute("SELECT kind, status FROM activities").fetchone()
+        message_types = {row[0] for row in connection.execute("SELECT type FROM mailbox")}
+        agent_status = connection.execute("SELECT status FROM agents").fetchone()[0]
+    assert tuple(activity) == ("tool", "ERROR")
+    assert message_types == {"tool.succeeded", "tool.unknown"}
+    assert agent_status == "WAITING_TOOL"
+
+
+def test_v3_store_without_legacy_columns_remains_compatible(tmp_path: Path) -> None:
     database = tmp_path / "runtime.sqlite3"
     legacy_schema = _SCHEMA.replace("    audience_ref TEXT NOT NULL,\n", "").replace(
         "    PRIMARY KEY (task_id, endpoint_id, route_ref),\n    UNIQUE (endpoint_id, route_ref)\n",
@@ -309,10 +379,12 @@ def test_v3_audience_migration_isolates_each_legacy_task_and_situation(tmp_path:
     store.initialize()
     tasks = store.tasks()
     situations = store.situations()
-    assert {task.audience_ref for task in tasks} == {"legacy.task:task-0", "legacy.task:task-1"}
-    assert {item["audience_ref"] for item in situations} == {
-        "legacy.situation:situation-0",
-        "legacy.situation:situation-1",
-    }
+    expected_records = 2
+    assert len(tasks) == expected_records
+    assert len(situations) == expected_records
+    assert all("audience_ref" not in task.to_dict() for task in tasks)
+    assert all("audience_ref" not in item for item in situations)
     with store.connect() as connection:
         assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == _SCHEMA_VERSION
+        assert {row[0] for row in connection.execute("SELECT audience_ref FROM tasks")} == {"global"}
+        assert {row[0] for row in connection.execute("SELECT audience_ref FROM situations")} == {"global"}

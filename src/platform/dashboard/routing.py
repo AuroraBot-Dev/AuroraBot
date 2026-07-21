@@ -46,10 +46,8 @@ def message_matches(message: dict[str, Any], parsed: PrivateMessageInput) -> boo
     )
 
 
-def dashboard_input(parsed: PrivateMessageInput, communication: dict[str, str] | None) -> RuntimeInput:
-    data: dict[str, Any] = {"chat_message_id": parsed.client_message_id}
-    if communication is not None:
-        data["communication"] = communication
+def dashboard_input(parsed: PrivateMessageInput) -> RuntimeInput:
+    data: dict[str, Any] = {"chat_message_id": parsed.client_message_id, "channel": "owner_bot_chat"}
     return RuntimeInput(
         text=parsed.content or "",
         origin=InputOrigin.DASHBOARD,

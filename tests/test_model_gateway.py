@@ -22,9 +22,9 @@ from src.contracts.model import (
     ToolCall,
     ToolDefinition,
 )
-from src.localhost.ports import PublicationExecutorBinding
+from src.localhost.ports import ToolExecutorBinding
 from src.localhost.runtime import AuroraRuntime
-from src.platform.console import CONSOLE_AUDIENCE, CONSOLE_ENDPOINT, CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
+from src.platform.console import CONSOLE_SEND_CAPABILITY, CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from tests.test_events import valid_amp
 
 if TYPE_CHECKING:
@@ -154,7 +154,7 @@ def test_chat_completion_maps_tools_usage_and_continuation(project_root: Path, m
             output_schema={"type": "object", "required": ["kind"]},
             tools=(
                 ToolDefinition(
-                    "org.aurora.console.send_message",
+                    CONSOLE_SEND_CAPABILITY,
                     "Send text",
                     {"type": "object", "properties": {"text": {"type": "string"}}},
                 ),
@@ -166,7 +166,7 @@ def test_chat_completion_maps_tools_usage_and_continuation(project_root: Path, m
         assert result.data == {"kind": "done"}
         assert result.usage == ModelUsage(prompt_tokens=11, completion_tokens=7)
         assert result.cost_usd == _CHAT_COST
-        assert result.tool_calls == (ToolCall("provider-call", "org.aurora.console.send_message", {"text": "hello"}),)
+        assert result.tool_calls == (ToolCall("provider-call", CONSOLE_SEND_CAPABILITY, {"text": "hello"}),)
         assert result.continuation is not None
         assert result.continuation.channel == "chat_completions"
         assert caller.calls[0][1]["parallel_tool_calls"] is False
@@ -291,7 +291,7 @@ class _ToolGateway:
             data=None,
             usage=ModelUsage(),
             cost_usd=0,
-            tool_calls=(ToolCall("call", "org.aurora.console.send_message", self.arguments),),
+            tool_calls=(ToolCall("call", CONSOLE_SEND_CAPABILITY, self.arguments),),
             finish_reason="tool_calls",
         )
 
@@ -316,81 +316,36 @@ class _FailingToolGateway:
 
 
 def _runtime_with_console(project_root: Path) -> tuple[AuroraRuntime, ConsolePlatform]:
-    runtime = AuroraRuntime.create(project_root, executor_bindings=None, publication_bindings=None)
+    runtime = AuroraRuntime.create(project_root, tool_bindings=None)
     console = ConsolePlatform()
-    runtime.bind_platform_executors(
-        (),
+    runtime.bind_tool_executors(
         (
-            PublicationExecutorBinding(
+            ToolExecutorBinding(
                 CONSOLE_SEND_DESCRIPTOR,
-                console,
                 console,
                 "platform.console",
                 "test",
+                console,
             ),
         ),
     )
     return runtime, console
 
 
-def _console_amp(console: ConsolePlatform) -> dict[str, object]:
+def _console_amp(_console: ConsolePlatform) -> dict[str, object]:
     amp = valid_amp()
-    header = amp["header"]
     payload = amp["payload"]
-    assert isinstance(header, dict) and isinstance(payload, dict)
-    event_id = str(header["message_id"])
-    route_ref = f"route:{event_id}"
-    console.register_reply_route(route_ref, event_id)
+    assert isinstance(payload, dict)
     data = payload["data"]
     assert isinstance(data, dict)
-    data["communication"] = {
-        "endpoint_id": CONSOLE_ENDPOINT,
-        "external_event_id": event_id,
-        "external_message_id": f"message:{event_id}",
-        "conversation_ref": "console.local:owner",
-        "actor_ref": "owner.local",
-        "audience_ref": CONSOLE_AUDIENCE,
-        "reply_route_ref": route_ref,
-    }
+    data["channel"] = "local_console"
     return amp
 
 
-@pytest.mark.parametrize(
-    ("gateway", "expected"),
-    (
-        (_PlainTextGateway(), "plain reply"),
-        (_FailingToolGateway(), "抱歉，我暂时无法完成这次回复。请稍后重试。"),
-    ),
-)
-def test_plain_text_and_model_failure_use_the_single_reply_publication(
-    project_root: Path,
-    gateway: object,
-    expected: str,
-) -> None:
+def test_model_activity_runs_outside_kernel_and_creates_auditable_tool(project_root: Path) -> None:
     async def scenario() -> None:
         runtime, console = _runtime_with_console(project_root)
-        runtime.model_gateway = gateway  # type: ignore[assignment]
-        try:
-            await runtime.submit_amp(_console_amp(console))
-            await runtime.pump()
-            assert runtime._model_dispatch_task is not None
-            await runtime._model_dispatch_task
-            published = await runtime.pump()
-            assert published["publication_receipts_emitted"] == 1
-            await runtime.pump()
-            assert console.drain_messages() == (expected,)
-            assert runtime.kernel.tasks()[0].status == TaskStatus.COMPLETED
-        finally:
-            await runtime.shutdown()
-            console.close()
-
-    asyncio.run(scenario())
-
-
-def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project_root: Path) -> None:
-    async def scenario() -> None:
-        runtime, console = _runtime_with_console(project_root)
-        gateway = _ToolGateway({"text": "model hello"})
+        gateway = _ToolGateway({"text": "model hello", "complete_task": True})
         runtime.model_gateway = gateway
         await runtime.submit_amp(_console_amp(console))
         first = await runtime.pump()
@@ -402,9 +357,9 @@ def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project
         detail = runtime.task(task_id)
         assert detail is not None
         assert any(event["type"] == "model.completed" for event in detail["events"])
-        assert any(event["type"] == "agent.publication" for event in detail["events"])
-        assert second["publication_receipts_emitted"] == 1
-        assert third["ingested_task_ids"]
+        assert any(event["type"] == "agent.tool" for event in detail["events"])
+        assert second["tool_receipts_emitted"] == 1
+        assert third["ingested_task_ids"] == ()
         assert runtime.kernel.get_task(task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
         await runtime.shutdown()
         console.close()
@@ -412,7 +367,7 @@ def test_model_activity_runs_outside_kernel_and_creates_auditable_effect(project
     asyncio.run(scenario())
 
 
-def test_invalid_publication_arguments_fail_agent_without_platform_call(project_root: Path) -> None:
+def test_invalid_tool_arguments_fail_agent_without_platform_call(project_root: Path) -> None:
     async def scenario() -> None:
         runtime, console = _runtime_with_console(project_root)
         runtime.model_gateway = _ToolGateway({"text": 1})
@@ -422,7 +377,7 @@ def test_invalid_publication_arguments_fail_agent_without_platform_call(project_
         await runtime._model_dispatch_task
         result = await runtime.pump()
         assert runtime.kernel.tasks()[0].status == TaskStatus.ERROR
-        assert result["publication_receipts_emitted"] == 0
+        assert result["tool_receipts_emitted"] == 0
         await runtime.shutdown()
         console.close()
 

@@ -14,11 +14,11 @@ import uvicorn
 
 from src.contracts.configuration import load_configuration
 from src.contracts.configuration_preferences import PreferenceConfig, load_preference
-from src.localhost.ports import EffectExecutorBinding, PublicationExecutorBinding
+from src.localhost.ports import ToolExecutorBinding
 from src.localhost.runtime import AuroraRuntime
 from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from src.platform.console.shell import run_console
-from src.platform.dashboard import DASHBOARD_REPLY_DESCRIPTOR, ChatService, DashboardPlatform, create_app
+from src.platform.dashboard import DASHBOARD_SEND_DESCRIPTOR, ChatService, DashboardPlatform, create_app
 from src.platform.mcp import MCPPlatform
 from src.utils.log_utils import configure_console_logging, configure_logging, get_logger
 
@@ -71,8 +71,7 @@ async def run_runtime(
         resolved_root,
         profile,
         configuration=configuration,
-        executor_bindings=None,
-        publication_bindings=None,
+        tool_bindings=None,
     )
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
@@ -121,10 +120,7 @@ async def _start_platforms(
     resources: AsyncExitStack,
 ) -> tuple[ConsolePlatform | None, uvicorn.Server | None]:
     console_platform = (
-        ConsolePlatform(
-            runtime.configuration.root / "data" / "platform" / "console" / "runtime.sqlite3",
-            reply_route_ttl_seconds=runtime.configuration.communication.reply_route_ttl_seconds,
-        )
+        ConsolePlatform(runtime.configuration.root / "data" / "platform" / "console" / "runtime.sqlite3")
         if "console" in selected
         else None
     )
@@ -142,7 +138,7 @@ async def _start_platforms(
         )
         resources.push_async_callback(mcp_platform.shutdown)
         await mcp_platform.start(runtime)
-    _bind_platform_executors(runtime, console_platform, dashboard_platform, mcp_platform)
+    _bind_platform_tools(runtime, console_platform, dashboard_platform, mcp_platform)
     return console_platform, server
 
 
@@ -247,11 +243,7 @@ def _task_failure(
 
 
 async def _create_dashboard(runtime: AuroraRuntime) -> tuple[DashboardPlatform, uvicorn.Server]:
-    chat = ChatService(
-        runtime.configuration.dashboard,
-        runtime,
-        reply_route_ttl_seconds=runtime.configuration.communication.reply_route_ttl_seconds,
-    )
+    chat = ChatService(runtime.configuration.dashboard, runtime)
     await chat.start()
     return DashboardPlatform(chat), _dashboard_server(chat, runtime)
 
@@ -283,55 +275,44 @@ def _open_dashboard_browser(configuration: DashboardConfig) -> None:
     webbrowser.open(f"http://{host}:{configuration.port}")
 
 
-def _bind_platform_executors(
+def _bind_platform_tools(
     runtime: AuroraRuntime,
     console_platform: ConsolePlatform | None,
     dashboard_platform: DashboardPlatform | None,
     mcp_platform: MCPPlatform | None,
 ) -> None:
-    effect_bindings = []
-    publication_bindings = []
+    tool_bindings = []
     if console_platform is not None:
-        publication_bindings.append(
-            PublicationExecutorBinding(
+        tool_bindings.append(
+            ToolExecutorBinding(
                 CONSOLE_SEND_DESCRIPTOR,
-                console_platform,
                 console_platform,
                 source_app="platform.console",
                 source_instance="local",
+                recovery=console_platform,
             )
         )
     if dashboard_platform is not None:
-        publication_bindings.append(
-            PublicationExecutorBinding(
-                DASHBOARD_REPLY_DESCRIPTOR,
-                dashboard_platform,
+        tool_bindings.append(
+            ToolExecutorBinding(
+                DASHBOARD_SEND_DESCRIPTOR,
                 dashboard_platform,
                 source_app="platform.dashboard",
                 source_instance="local",
+                recovery=dashboard_platform,
             )
         )
     if mcp_platform is not None:
-        effect_bindings.extend(
-            EffectExecutorBinding(
+        tool_bindings.extend(
+            ToolExecutorBinding(
                 capability,
                 mcp_platform,
                 source_app="platform.mcp",
-                source_instance=capability.id.rpartition(".")[0],
+                source_instance=mcp_platform.source_instance_for(capability.id),
             )
-            for capability in mcp_platform.effect_catalog.capabilities
+            for capability in mcp_platform.capability_catalog.capabilities
         )
-        publication_bindings.extend(
-            PublicationExecutorBinding(
-                capability,
-                mcp_platform,
-                mcp_platform,
-                source_app="platform.mcp",
-                source_instance=capability.endpoint or "mcp",
-            )
-            for capability in mcp_platform.publication_catalog.capabilities
-        )
-    runtime.bind_platform_executors(tuple(effect_bindings), tuple(publication_bindings))
+    runtime.bind_tool_executors(tuple(tool_bindings))
 
 
 def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:

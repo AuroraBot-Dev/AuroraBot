@@ -3,29 +3,8 @@
 
 [[app]]
 package = "org.aurora.clock"
-kind = "utility"
 enabled = true
 transport = "stdio"
 working_dir = "src/apps/aurora-app-clock"
 command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
 timeout_seconds = 30
-
-[[app.tool]]
-name = "org.aurora.clock.get_current_time"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.set_alarm"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.set_timer"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.list_alarms"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.cancel_alarm"
-kind = "effect"

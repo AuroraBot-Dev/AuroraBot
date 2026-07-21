@@ -119,7 +119,7 @@ class MCPClientManager:
         mgr = MCPClientManager(server_kit)
         await mgr.connect_all()
         await mgr.refresh_tools()
-        result = await mgr.call_tool("org.aurora.test.echo", {"msg": "hi"})
+        result = await mgr.call_tool("org.aurora.test", "echo", {"msg": "hi"})
         await mgr.shutdown()
     """
 
@@ -408,50 +408,34 @@ class MCPClientManager:
 
     async def call_tool(
         self,
-        full_name: str,
+        server_key: str,
+        raw_name: str,
         arguments: dict[str, object] | None = None,
         *,
         timeout_seconds: float = 30.0,
     ) -> dict[str, object]:
-        """调用 MCP Tool。"""
-        server_key, _, tool_name = full_name.rpartition(".")
-        if not server_key:
-            msg = f"工具名缺少前缀: {full_name}"
-            raise MCPToolCallError(msg)
-
+        """按连接 key 调用 Server 暴露的原始 Tool 名。"""
         conn = self._connections.get(server_key)
-        if conn is None:
-            for ckey, cconn in sorted(self._connections.items(), key=lambda item: len(item[0]), reverse=True):
-                if full_name.startswith(f"{ckey}."):
-                    conn = cconn
-                    tool_name = full_name[len(ckey) + 1 :]
-                    server_key = ckey
-                    break
-
         if conn is None or conn.session is None:
             msg = f"未找到 Server 连接: {server_key}"
             raise MCPToolCallError(msg)
-
-        discovered_names = {str(getattr(tool, "name", "")) for tool in conn.tools}
-        if full_name in discovered_names:
-            tool_name = full_name
         logger.debug(
             "调用 tool: %s (server: %s, argument_keys: %s)",
-            tool_name,
+            raw_name,
             server_key,
             sorted((arguments or {}).keys()),
         )
 
         try:
             result = await asyncio.wait_for(
-                conn.session.call_tool(tool_name, arguments or {}),
+                conn.session.call_tool(raw_name, arguments or {}),
                 timeout=timeout_seconds,
             )
         except TimeoutError:
-            msg = f"Tool 调用超时: {full_name}"
+            msg = f"Tool 调用超时: {server_key}.{raw_name}"
             raise MCPToolCallError(msg) from None
         except Exception as exc:
-            msg = f"Tool 调用失败 {full_name}: {exc}"
+            msg = f"Tool 调用失败 {server_key}.{raw_name}: {exc}"
             raise MCPToolCallError(msg) from exc
 
         content = getattr(result, "content", [])
@@ -469,15 +453,3 @@ class MCPClientManager:
             "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
             "structured_content": getattr(result, "structuredContent", None),
         }
-
-    def tools_as_prompt_text(self) -> str:
-        """将所有可用工具转为 prompt text。"""
-        from src.platform.mcp.tool_schema import mcp_tools_to_prompt_text
-
-        parts: list[str] = []
-        for server_key, tools in self.list_all_tools().items():
-            text = mcp_tools_to_prompt_text(tools, server_prefix=server_key)
-            if text.strip():
-                parts.append(text)
-
-        return "\n\n".join(parts) if parts else "（暂无可用工具）"

@@ -1,51 +1,24 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 
 import pytest
 
-from src.contracts.configuration import ConfigurationError, load_configuration
+from src.contracts.configuration import AppConfig, ConfigurationError, load_configuration
 from src.contracts.configuration_preferences import load_preference
 
 _DASHBOARD_PORT = 8000
-_REPLY_ROUTE_TTL_SECONDS = 3600.0
+_APP_TIMEOUT_SECONDS = 30.0
 
-_COMMUNICATION_APP = """[[app]]
-package = "com.example.discord"
-kind = "communication"
+_STDIO_APP = """[[app]]
+package = "com.example.tools"
 enabled = true
 transport = "stdio"
 working_dir = "."
 command = ["python", "server.py"]
 timeout_seconds = 30
-
-[[app.tool]]
-name = "com.example.discord.publish"
-kind = "publication"
-
-[[app.tool]]
-name = "com.example.discord.inspect"
-kind = "effect"
-
-[[app.publication]]
-capability = "com.example.discord.reply"
-tool = "com.example.discord.publish"
-operation = "reply"
-
-[[app.publication]]
-capability = "com.example.discord.relay"
-tool = "com.example.discord.publish"
-operation = "relay"
-
-[[app.destination]]
-alias = "discord.dev"
-description = "Discord development channel"
-capability = "com.example.discord.relay"
-address_ref = "channel:configured-opaque-id"
-allowed_source_audiences = ["owner.local", "com.example.qq:*"]
-target_audience_ref = "com.example.discord:dev"
 """
 
 
@@ -54,18 +27,24 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
 
     assert configuration.runtime.profile == "test"
     assert configuration.runtime.workspace == project_root / "data" / "kernel"
-    assert configuration.communication.reply_route_ttl_seconds == _REPLY_ROUTE_TTL_SECONDS
-    assert configuration.communication.relay_hop_limit == 1
     assert configuration.dashboard.port == _DASHBOARD_PORT
     assert configuration.dashboard.database_path == project_root / "data" / "dashboard" / "chat.sqlite3"
     assert configuration.dashboard.owner_username == "alice"
     assert configuration.soul_hash
-    apps_source = next(source for source in configuration.sources if source.path.name == "apps.toml")
-    assert configuration.apps_configuration_hash == apps_source.sha256
     assert {agent.id for agent in configuration.agents} == {"builtin.gate", "builtin.worker"}
     assert configuration.runtime.agents.root_profile == "builtin.gate"
     assert configuration.runtime.agents.memory_agent_profile is None
     assert configuration.apps == ()
+    assert not hasattr(configuration, "apps_configuration_hash")
+    assert {field.name for field in fields(AppConfig)} == {
+        "package",
+        "transport",
+        "working_dir",
+        "command",
+        "url",
+        "auth_env",
+        "timeout_seconds",
+    }
     assert configuration.model_providers["test"].adapter == "litellm"
     source_paths = {source.path for source in configuration.sources}
     assert source_paths == {
@@ -152,26 +131,6 @@ def test_rejects_invalid_dashboard_configuration(project_root: Path, old: str, n
 @pytest.mark.parametrize(
     ("old", "new", "message"),
     [
-        ("reply_route_ttl_seconds = 3600.0", "reply_route_ttl_seconds = 0", "must be positive"),
-        ("reply_route_ttl_seconds = 3600.0", "reply_route_ttl_seconds = true", "must be positive"),
-        ("reply_route_ttl_seconds = 3600.0", "reply_route_ttl_seconds = nan", "must be positive"),
-        ("reply_route_ttl_seconds = 3600.0", "reply_route_ttl_seconds = inf", "must be positive"),
-        ("relay_hop_limit = 1", "relay_hop_limit = 2", "must be 1"),
-        ("relay_hop_limit = 1", "relay_hop_limit = true", "must be 1"),
-        ("relay_hop_limit = 1", "relay_hop_limit = 1\nunknown = true", "unexpected"),
-    ],
-)
-def test_rejects_invalid_communication_configuration(project_root: Path, old: str, new: str, message: str) -> None:
-    config = project_root / "config" / "aurora.toml"
-    config.write_text(config.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
-
-    with pytest.raises(ConfigurationError, match=message):
-        load_configuration(project_root)
-
-
-@pytest.mark.parametrize(
-    ("old", "new", "message"),
-    [
         ('username = "alice"', 'username = ""', "non-empty string"),
         ('username = "alice"', 'username = " alice"', "leading or trailing whitespace"),
         ('username = "alice"', 'username = "alice "', "leading or trailing whitespace"),
@@ -233,132 +192,89 @@ def test_memory_agent_profile_is_optional_but_must_exist(project_root: Path) -> 
         load_configuration(project_root)
 
 
-def test_rejects_removed_app_tool_result_mode(project_root: Path) -> None:
+def test_loads_stdio_app_without_tool_allowlist(project_root: Path) -> None:
+    apps = project_root / "config" / "apps.toml"
+    apps.write_text(_STDIO_APP, encoding="utf-8")
+
+    app = load_configuration(project_root).apps[0]
+
+    assert app.package == "com.example.tools"
+    assert app.transport == "stdio"
+    assert app.working_dir == project_root
+    assert app.command == ("python", "server.py")
+    assert app.url is None
+    assert app.auth_env is None
+    assert app.timeout_seconds == _APP_TIMEOUT_SECONDS
+
+
+def test_loads_streamable_http_app(project_root: Path) -> None:
     apps = project_root / "config" / "apps.toml"
     apps.write_text(
         """[[app]]
-package = "org.example.test"
-kind = "utility"
+package = "com.example.remote"
 enabled = true
-transport = "stdio"
-working_dir = "."
-command = ["python", "server.py"]
-timeout_seconds = 30
-
-[[app.tool]]
-name = "org.example.test.run"
-kind = "effect"
-result_mode = "sometimes"
+transport = "streamable_http"
+url = "https://example.com/mcp"
+auth_env = "EXAMPLE_MCP_TOKEN"
+timeout_seconds = 10
 """,
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="result_mode"):
-        load_configuration(project_root)
+    app = load_configuration(project_root).apps[0]
+
+    assert app.url == "https://example.com/mcp"
+    assert app.auth_env == "EXAMPLE_MCP_TOKEN"
+    assert app.working_dir is None
+    assert app.command == ()
 
 
-def test_loads_strict_communication_app_configuration(project_root: Path) -> None:
-    apps = project_root / "config" / "apps.toml"
-    apps.write_text(_COMMUNICATION_APP, encoding="utf-8")
-
-    configuration = load_configuration(project_root)
-
-    assert len(configuration.apps) == 1
-    app = configuration.apps[0]
-    assert app.kind == "communication"
-    assert [(tool.name, tool.kind) for tool in app.tools] == [
-        ("com.example.discord.publish", "publication"),
-        ("com.example.discord.inspect", "effect"),
-    ]
-    assert [(publication.capability, publication.tool, publication.operation) for publication in app.publications] == [
-        ("com.example.discord.reply", "com.example.discord.publish", "reply"),
-        ("com.example.discord.relay", "com.example.discord.publish", "relay"),
-    ]
-    assert app.destinations[0].alias == "discord.dev"
-    assert app.destinations[0].allowed_source_audiences == ("owner.local", "com.example.qq:*")
-
-
-def test_communication_destination_rejects_global_source_audience_wildcard(project_root: Path) -> None:
+@pytest.mark.parametrize("removed_field", ["kind", "tool", "publication", "destination"])
+def test_apps_reject_removed_fields(project_root: Path, removed_field: str) -> None:
     apps = project_root / "config" / "apps.toml"
     apps.write_text(
-        _COMMUNICATION_APP.replace('["owner.local", "com.example.qq:*"]', '["*"]'),
+        _STDIO_APP.replace("enabled = true", f'enabled = true\n{removed_field} = "removed"'),
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="exact or use a final"):
+    with pytest.raises(ConfigurationError, match="unsupported"):
         load_configuration(project_root)
 
 
 @pytest.mark.parametrize(
-    ("old", "new", "message"),
+    ("source", "message"),
     [
-        ('kind = "communication"', 'kind = "service"', "app.kind"),
-        ('kind = "publication"', 'kind = "other"', "tool.kind"),
-        ('operation = "relay"', 'operation = "reply"', "exactly one reply"),
-        ('operation = "relay"', 'operation = "broadcast"', "operation"),
         (
-            'tool = "com.example.discord.publish"\noperation = "relay"',
-            'tool = "com.example.discord.inspect"\noperation = "relay"',
-            "publication tool",
+            _STDIO_APP.replace('command = ["python", "server.py"]', "command = []"),
+            "non-empty string array",
         ),
         (
-            'capability = "com.example.discord.relay"\naddress_ref',
-            'capability = "com.example.discord.reply"\naddress_ref',
-            "relay or proactive_send",
+            _STDIO_APP.replace('working_dir = "."\n', ""),
+            "working_dir is required",
         ),
-        ('alias = "discord.dev"', 'alias = "chat.dev"', "final segment"),
-        ('"com.example.qq:*"', '"com.example.*:conversation"', "wildcard"),
         (
-            'target_audience_ref = "com.example.discord:dev"',
-            'target_audience_ref = "com.example.discord:*"',
-            "exact audience",
+            _STDIO_APP.replace('transport = "stdio"', 'transport = "streamable_http"'),
+            "must use HTTPS",
         ),
     ],
 )
-def test_rejects_invalid_communication_app_configuration(project_root: Path, old: str, new: str, message: str) -> None:
+def test_rejects_invalid_app_connection_shape(project_root: Path, source: str, message: str) -> None:
     apps = project_root / "config" / "apps.toml"
-    apps.write_text(_COMMUNICATION_APP.replace(old, new, 1), encoding="utf-8")
+    apps.write_text(source, encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match=message):
         load_configuration(project_root)
 
 
-def test_rejects_duplicate_publication_capability(project_root: Path) -> None:
-    apps = project_root / "config" / "apps.toml"
-    apps.write_text(
-        _COMMUNICATION_APP.replace(
-            'capability = "com.example.discord.relay"\ntool =',
-            'capability = "com.example.discord.reply"\ntool =',
-            1,
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ConfigurationError, match="duplicate app capability"):
-        load_configuration(project_root)
-
-
 def test_disabled_app_is_strictly_validated_but_excluded_from_snapshot(project_root: Path) -> None:
     apps = project_root / "config" / "apps.toml"
-    disabled = """[[app]]
-package = "org.example.disabled"
-kind = "utility"
-enabled = false
-transport = "stdio"
-working_dir = "."
-command = ["python", "server.py"]
-timeout_seconds = 30
-
-[[app.tool]]
-name = "org.example.disabled.run"
-kind = "effect"
-"""
+    disabled = _STDIO_APP.replace("enabled = true", "enabled = false")
     apps.write_text(disabled, encoding="utf-8")
 
     assert load_configuration(project_root).apps == ()
 
-    apps.write_text(disabled.replace('kind = "effect"', 'kind = "publication"'), encoding="utf-8")
-    with pytest.raises(ConfigurationError, match="utility app tools"):
+    apps.write_text(disabled.replace('command = ["python", "server.py"]', "command = []"), encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="non-empty string array"):
         load_configuration(project_root)
 
 
@@ -424,7 +340,7 @@ def test_agent_capabilities_are_authorization_limits_not_startup_availability(pr
     agents = project_root / "config" / "agents.toml"
     agents.write_text(
         agents.read_text(encoding="utf-8").replace(
-            'capabilities = ["org.aurora.console.send_message"]',
+            'capabilities = ["*"]',
             'capabilities = ["org.aurora.missing"]',
             1,
         ),
@@ -434,6 +350,29 @@ def test_agent_capabilities_are_authorization_limits_not_startup_availability(pr
     configuration = load_configuration(project_root)
 
     assert "org.aurora.missing" in configuration.agents[0].capabilities
+
+
+@pytest.mark.parametrize("capability", ["org.aurora.clock.get_time", "org.aurora.clock.*", "*"])
+def test_agent_capability_patterns_are_supported(project_root: Path, capability: str) -> None:
+    agents = project_root / "config" / "agents.toml"
+    agents.write_text(
+        agents.read_text(encoding="utf-8").replace('capabilities = ["*"]', f'capabilities = ["{capability}"]', 1),
+        encoding="utf-8",
+    )
+
+    assert capability in load_configuration(project_root).agents[0].capabilities
+
+
+@pytest.mark.parametrize("capability", ["org.*.clock", "org.aurora.clock*", "org aurora.clock", "single"])
+def test_agent_capability_patterns_reject_invalid_shapes(project_root: Path, capability: str) -> None:
+    agents = project_root / "config" / "agents.toml"
+    agents.write_text(
+        agents.read_text(encoding="utf-8").replace('capabilities = ["*"]', f'capabilities = ["{capability}"]', 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match="capability"):
+        load_configuration(project_root)
 
 
 def test_apps_rejects_removed_adapter_section(project_root: Path) -> None:
@@ -446,23 +385,23 @@ def test_apps_rejects_removed_adapter_section(project_root: Path) -> None:
 
 @pytest.mark.parametrize(
     ("field", "value", "message"),
-    (("enabled", '"false"', "must be boolean"), ("timeout_seconds", "true", "must be positive")),
+    (
+        ("enabled", '"false"', "must be boolean"),
+        ("timeout_seconds", "true", "must be positive"),
+        ("timeout_seconds", "nan", "must be positive"),
+        ("timeout_seconds", "inf", "must be positive"),
+    ),
 )
 def test_apps_rejects_invalid_scalar_types(project_root: Path, field: str, value: str, message: str) -> None:
     apps = project_root / "config" / "apps.toml"
     apps.write_text(
         f"""[[app]]
 package = "org.example.test"
-kind = "utility"
 enabled = {value if field == "enabled" else "true"}
 transport = "stdio"
 working_dir = "."
 command = ["python", "server.py"]
 timeout_seconds = {value if field == "timeout_seconds" else "30"}
-
-[[app.tool]]
-name = "org.example.test.run"
-kind = "effect"
 """,
         encoding="utf-8",
     )

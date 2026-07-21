@@ -23,8 +23,7 @@ from src.contracts.agent import (
 )
 from src.kernel.store_schema import (
     _ACTIVE_ACTIVITY_INDEX,
-    _ACTIVITIES_V3,
-    _REPLY_ROUTE_INDEX,
+    _ACTIVITIES_V5,
     _SCHEMA,
     _SCHEMA_VERSION,
 )
@@ -70,27 +69,37 @@ class RuntimeStoreBase:
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, 2, 3, _SCHEMA_VERSION}:
+            elif int(row["version"]) not in {1, 2, 3, 4, _SCHEMA_VERSION}:
                 raise RuntimeError("unsupported Agent runtime database schema")
             version = int(row["version"]) if row is not None else _SCHEMA_VERSION
             if version < _SCHEMA_VERSION:
                 task_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(tasks)")}
                 if "audience_ref" not in task_columns:
-                    connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT ''")
-                    connection.execute("UPDATE tasks SET audience_ref = 'legacy.task:' || task_id")
+                    connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'global'")
                 situation_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(situations)")}
                 if "audience_ref" not in situation_columns:
-                    connection.execute("ALTER TABLE situations ADD COLUMN audience_ref TEXT NOT NULL DEFAULT ''")
-                    connection.execute("UPDATE situations SET audience_ref = 'legacy.situation:' || situation_id")
+                    connection.execute("ALTER TABLE situations ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'global'")
                 activity_sql = str(
                     connection.execute(
                         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'"
                     ).fetchone()["sql"]
                 )
-                if "publication" not in activity_sql:
-                    connection.executescript(_ACTIVITIES_V3)
+                if "'tool'" not in activity_sql:
+                    connection.executescript(_ACTIVITIES_V5)
+                connection.execute("UPDATE agents SET status = 'WAITING_TOOL' WHERE status = 'WAITING_EFFECT'")
+                connection.execute(
+                    "UPDATE mailbox SET type = CASE type "
+                    "WHEN 'effect.succeeded' THEN 'tool.succeeded' "
+                    "WHEN 'effect.failed' THEN 'tool.failed' "
+                    "WHEN 'effect.delivery_unknown' THEN 'tool.unknown' "
+                    "WHEN 'effect.unknown' THEN 'tool.unknown' "
+                    "WHEN 'publication.succeeded' THEN 'tool.succeeded' "
+                    "WHEN 'publication.failed' THEN 'tool.failed' "
+                    "WHEN 'publication.delivery_unknown' THEN 'tool.unknown' "
+                    "WHEN 'publication.unknown' THEN 'tool.unknown' "
+                    "ELSE type END"
+                )
             connection.execute(_ACTIVE_ACTIVITY_INDEX)
-            connection.execute(_REPLY_ROUTE_INDEX)
             connection.execute("UPDATE schema_meta SET version = ?", (_SCHEMA_VERSION,))
             connection.commit()
         self.recover_interrupted()
@@ -105,7 +114,9 @@ class RuntimeStoreBase:
                 (now,),
             )
             interrupted = connection.execute(
-                "SELECT * FROM activities WHERE status = 'PROCESSING' AND kind != 'publication'"
+                "SELECT * FROM activities WHERE "
+                "(status = 'PROCESSING' AND kind = 'model') OR "
+                "(status IN ('PENDING', 'PROCESSING') AND json_extract(request_json, '$.legacy_kind') IS NOT NULL)"
             ).fetchall()
             for row in interrupted:
                 connection.execute(
@@ -117,7 +128,7 @@ class RuntimeStoreBase:
                     connection,
                     task_id=str(row["task_id"]),
                     target_agent_id=str(row["agent_id"]),
-                    message_type=f"{row['kind']}.failed",
+                    message_type="model.failed" if row["kind"] == "model" else "tool.unknown",
                     payload={
                         "activity_id": row["activity_id"],
                         "error": "interrupted_by_restart",
@@ -130,7 +141,7 @@ class RuntimeStoreBase:
                 )
             connection.execute(
                 "UPDATE activities SET lease_until = NULL, updated_at = ? "
-                "WHERE status = 'PROCESSING' AND kind = 'publication'",
+                "WHERE status = 'PROCESSING' AND kind = 'tool'",
                 (now,),
             )
 
@@ -141,7 +152,6 @@ class RuntimeStoreBase:
             root_agent_id=str(row["root_agent_id"]),
             root_message_id=str(row["root_message_id"]),
             session_id=str(row["session_id"]),
-            audience_ref=str(row["audience_ref"]),
             root_summary=str(row["root_summary"]),
             autonomous=bool(row["autonomous"]),
             status=TaskStatus(row["status"]),

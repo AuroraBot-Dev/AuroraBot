@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     import sqlite3
 
     from src.contracts.configuration import DashboardConfig
-    from src.localhost.ports import InteractiveInputPort, PublicationExecutionRequest, PublicationOutcome
+    from src.localhost.ports import InteractiveInputPort, ToolExecutionRequest, ToolOutcome
 
 _MESSAGE_TYPES = {"text", "image", "file", "audio", "video"}
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "text/")
@@ -37,8 +37,6 @@ class ChatService:
         self,
         configuration: DashboardConfig,
         input_port: InteractiveInputPort,
-        *,
-        reply_route_ttl_seconds: float = 3600.0,
     ) -> None:
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
@@ -51,7 +49,6 @@ class ChatService:
             input_port,
             lambda: self.bot_id,
             self.publish,
-            reply_route_ttl_seconds=reply_route_ttl_seconds,
         )
 
     async def start(self) -> None:
@@ -306,11 +303,11 @@ class ChatService:
             raise ChatError("ATTACHMENT_FORBIDDEN", "Attachment is unavailable", 403)
         return attachment_id
 
-    async def execute_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
-        return await self._communication.execute_publication(request)
+    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
+        return await self._communication.execute_tool(request)
 
-    async def recover_publication(self, request: PublicationExecutionRequest) -> PublicationOutcome:
-        return await self._communication.recover_publication(request)
+    async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
+        return await self._communication.recover_tool(request)
 
     async def subscribe(self, user_id: int) -> asyncio.Queue[dict[str, Any]]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()

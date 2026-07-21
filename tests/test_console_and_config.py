@@ -4,7 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from src.contracts.configuration import load_configuration
-from src.localhost.ports import PublicationExecutorBinding
+from src.localhost.ports import ToolExecutorBinding
 from src.localhost.runtime import AuroraRuntime
 from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from src.platform.console.shell import run_console
@@ -31,19 +31,17 @@ def test_layered_console_submits_and_processes_a_message(project_root: Path) -> 
         runtime = AuroraRuntime.create(
             project_root,
             configuration=configuration,
-            executor_bindings=None,
-            publication_bindings=None,
+            tool_bindings=None,
         )
         console = ConsolePlatform()
-        runtime.bind_platform_executors(
-            (),
+        runtime.bind_tool_executors(
             (
-                PublicationExecutorBinding(
+                ToolExecutorBinding(
                     CONSOLE_SEND_DESCRIPTOR,
-                    console,
                     console,
                     "platform.console",
                     "test",
+                    console,
                 ),
             ),
         )
@@ -65,4 +63,4 @@ def test_layered_console_submits_and_processes_a_message(project_root: Path) -> 
 
     assert any('"enabled": false' in line for line in output)
     assert any("已投递消息 AMP" in line for line in output)
-    assert any("effect_receipts_emitted" in line for line in output)
+    assert any("tool_receipts_emitted" in line for line in output)

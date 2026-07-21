@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS activities (
     activity_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
     agent_id TEXT NOT NULL REFERENCES agents(agent_id),
-    kind TEXT NOT NULL CHECK (kind IN ('model', 'effect', 'publication')),
+    kind TEXT NOT NULL CHECK (kind IN ('model', 'tool')),
     request_json TEXT NOT NULL,
     status TEXT NOT NULL,
     priority INTEGER NOT NULL,
@@ -72,19 +72,6 @@ CREATE TABLE IF NOT EXISTS activities (
     error TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_activities_ready ON activities(kind, status, priority DESC, created_at);
-CREATE TABLE IF NOT EXISTS reply_grants (
-    endpoint_id TEXT NOT NULL,
-    route_ref TEXT NOT NULL,
-    task_id TEXT NOT NULL REFERENCES tasks(task_id),
-    capability_id TEXT NOT NULL,
-    audience_ref TEXT NOT NULL,
-    operation TEXT NOT NULL CHECK (operation = 'reply'),
-    expires_at TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
-    PRIMARY KEY (task_id, endpoint_id, route_ref),
-    UNIQUE (endpoint_id, route_ref)
-);
-CREATE INDEX IF NOT EXISTS idx_reply_grants_task ON reply_grants(task_id, status, expires_at);
 CREATE TABLE IF NOT EXISTS causal_events (
     event_id TEXT PRIMARY KEY,
     task_id TEXT,
@@ -115,24 +102,20 @@ CREATE TABLE IF NOT EXISTS situations (
 CREATE INDEX IF NOT EXISTS idx_situations_open ON situations(status, expires_at, priority DESC);
 """
 
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 _ACTIVE_ACTIVITY_INDEX = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
     "ON activities(agent_id) WHERE status IN ('PENDING', 'PROCESSING')"
 )
-_REPLY_ROUTE_INDEX = (
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_reply_grants_endpoint_route ON reply_grants(endpoint_id, route_ref)"
-)
-
-_ACTIVITIES_V3 = """
+_ACTIVITIES_V5 = """
 DROP INDEX IF EXISTS idx_activities_one_active_per_agent;
 DROP INDEX IF EXISTS idx_activities_ready;
-ALTER TABLE activities RENAME TO activities_v2;
+ALTER TABLE activities RENAME TO activities_v4;
 CREATE TABLE activities (
     activity_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
     agent_id TEXT NOT NULL REFERENCES agents(agent_id),
-    kind TEXT NOT NULL CHECK (kind IN ('model', 'effect', 'publication')),
+    kind TEXT NOT NULL CHECK (kind IN ('model', 'tool')),
     request_json TEXT NOT NULL,
     status TEXT NOT NULL,
     priority INTEGER NOT NULL,
@@ -143,7 +126,13 @@ CREATE TABLE activities (
     result_json TEXT,
     error TEXT
 );
-INSERT INTO activities SELECT * FROM activities_v2;
-DROP TABLE activities_v2;
+INSERT INTO activities
+SELECT activity_id, task_id, agent_id,
+       CASE WHEN kind = 'model' THEN 'model' ELSE 'tool' END,
+       CASE WHEN kind = 'model' THEN request_json
+            ELSE json_set(request_json, '$.legacy_kind', kind) END,
+       status, priority, idempotency_key, lease_until, created_at, updated_at, result_json, error
+FROM activities_v4;
+DROP TABLE activities_v4;
 CREATE INDEX idx_activities_ready ON activities(kind, status, priority DESC, created_at);
 """

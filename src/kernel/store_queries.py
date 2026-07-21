@@ -92,7 +92,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return tuple(
                 {
                     "situation_id": row["situation_id"],
-                    "audience_ref": row["audience_ref"],
                     "source": row["source"],
                     "type": row["type"],
                     "summary": row["summary"],
@@ -120,7 +119,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
         payload: dict[str, Any],
         priority: int,
         ttl_seconds: float,
-        audience_ref: str,
     ) -> str:
         now_dt = datetime.now(UTC)
         situation_id = str(uuid4())
@@ -131,7 +129,7 @@ class StoreQueriesMixin(RuntimeStoreBase):
                 "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, ?, ?, ?)",
                 (
                     situation_id,
-                    audience_ref,
+                    "global",
                     source,
                     event_type,
                     summary,
@@ -174,24 +172,14 @@ class StoreQueriesMixin(RuntimeStoreBase):
                         "SELECT count(*) FROM activities WHERE kind = 'model' AND status = 'PROCESSING'"
                     ).fetchone()[0]
                 ),
-                "pending_effect_activities": int(
+                "pending_tool_activities": int(
                     connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'effect' AND status = 'PENDING'"
+                        "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PENDING'"
                     ).fetchone()[0]
                 ),
-                "processing_effect_activities": int(
+                "processing_tool_activities": int(
                     connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'effect' AND status = 'PROCESSING'"
-                    ).fetchone()[0]
-                ),
-                "pending_publication_activities": int(
-                    connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'publication' AND status = 'PENDING'"
-                    ).fetchone()[0]
-                ),
-                "processing_publication_activities": int(
-                    connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'publication' AND status = 'PROCESSING'"
+                        "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PROCESSING'"
                     ).fetchone()[0]
                 ),
             }
