@@ -44,7 +44,7 @@ class _PromptReader:
         )
 
     async def read(self) -> str:
-        return await self.session.prompt_async("Aurora> ")
+        return await self.session.prompt_async("You> ")
 
 
 async def run_console(
@@ -119,7 +119,7 @@ async def _read_input(
         if prompt_reader is not None:
             return _ReadResult(await prompt_reader.read())
         assert readline is not None
-        return _ReadResult(await asyncio.to_thread(readline, "Aurora> "))
+        return _ReadResult(await asyncio.to_thread(readline, "You> "))
     except (EOFError, KeyboardInterrupt, StopIteration):
         return _ReadResult(None, closed=True)
 
