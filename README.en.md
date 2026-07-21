@@ -85,7 +85,7 @@ When any of `--console`, `--dashboard`, or `--mcp` is present, those flags form 
 
 | What you want to change                           | Start here               |
 | ------------------------------------------------- | ------------------------ |
-| Persona, voice, and conversational boundaries     | `config/prompts/SOUL.md` |
+| SOUL, world, and Agent prompt fragments            | `config/prompts.toml`    |
 | Model roles and Providers                         | `config/aurora.toml`     |
 | Platforms enabled by default                      | `config/preference.toml` |
 | Agent models, capabilities, and delegation limits | `config/agents.toml`     |

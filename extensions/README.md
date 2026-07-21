@@ -30,7 +30,7 @@ Agent profile 在 `config/agents.toml` 中显式配置，包括：
 
 - 唯一 `id` 和 handler implementation；
 - 使用的模型角色；
-- 角色提示词和能力策略；
+- 能力策略；角色提示词由同 ID 的 `config/prompts.toml` 条目声明；
 - 是否允许委派，以及允许创建哪些 child profile。
 
 当前内建 profile 使用同一种 `ToolAgent` handler，通过不同模型和能力策略承担不同角色。新增 profile 不等于新增一种

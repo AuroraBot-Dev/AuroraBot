@@ -86,7 +86,7 @@ Dashboard の browser UI は別プロジェクトで、本リポジトリには�
 
 | 変更したいもの                         | 最初に見る場所           |
 | -------------------------------------- | ------------------------ |
-| persona、話し方、会話の境界            | `config/prompts/SOUL.md` |
+| SOUL、世界、Agent prompt fragment       | `config/prompts.toml`    |
 | model role と Provider                 | `config/aurora.toml`     |
 | 既定で起動する Platform                | `config/preference.toml` |
 | Agent の model、能力、委任範囲         | `config/agents.toml`     |

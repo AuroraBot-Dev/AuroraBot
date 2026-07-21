@@ -48,15 +48,12 @@ def config(workspace: Path) -> KernelConfiguration:
         "gate",
         "test",
         "fast",
-        "gate",
         frozenset(),
         can_delegate=False,
         child_profiles=frozenset(),
     )
     return KernelConfiguration(
         str(workspace),
-        "persona",
-        "hash",
         (profile,),
         AgentLimits(root_profile="gate", worker_profile="gate"),
         TaskBudget(8, 6, 300),
@@ -69,15 +66,12 @@ def tool_kernel(workspace: Path) -> AgentKernel:
         "gate",
         "test",
         "fast",
-        "gate",
         frozenset({"test.reply"}),
         can_delegate=False,
         child_profiles=frozenset(),
     )
     configuration = KernelConfiguration(
         str(workspace),
-        "persona",
-        "hash",
         (profile,),
         AgentLimits(root_profile="gate", worker_profile="gate"),
         TaskBudget(8, 6, 300),

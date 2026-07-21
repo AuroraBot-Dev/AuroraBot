@@ -25,6 +25,7 @@ from src.contracts.model import (
     ToolCall,
     ToolDefinition,
 )
+from src.prompt.text import STRUCTURED_OUTPUT_NAME
 from src.utils.log_utils import get_logger
 from src.utils.serialization import extract_json_from_text
 
@@ -197,7 +198,7 @@ class ModelGatewayService:
         if request.output_schema is not None and "structured_output" in negotiated:
             kwargs["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"name": "aurora_result", "schema": request.output_schema},
+                "json_schema": {"name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema},
             }
         caller = self._gateway.use_model(request.role)
         try:
@@ -297,7 +298,7 @@ class ModelGatewayService:
             kwargs["include"] = ["reasoning.encrypted_content"]
         if request.output_schema is not None:
             kwargs["text"] = {
-                "format": {"type": "json_schema", "name": "aurora_result", "schema": request.output_schema}
+                "format": {"type": "json_schema", "name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema}
             }
         try:
             response = await litellm.aresponses(**kwargs)
@@ -360,10 +361,14 @@ def _provider_tools(
         if alias in aliases:
             raise ModelCapabilityError("tool alias collision")
         aliases[alias] = tool.name
-        description = f"Aurora capability {tool.name}. {tool.description}".strip()
         if responses:
             definitions.append(
-                {"type": "function", "name": alias, "description": description, "parameters": tool.parameters_schema}
+                {
+                    "type": "function",
+                    "name": alias,
+                    "description": tool.description,
+                    "parameters": tool.parameters_schema,
+                }
             )
         else:
             definitions.append(
@@ -371,7 +376,7 @@ def _provider_tools(
                     "type": "function",
                     "function": {
                         "name": alias,
-                        "description": description,
+                        "description": tool.description,
                         "parameters": tool.parameters_schema,
                     },
                 }

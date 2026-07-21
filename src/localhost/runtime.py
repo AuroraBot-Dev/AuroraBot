@@ -27,6 +27,8 @@ from src.kernel.runtime import AgentKernel, PumpResult
 from src.localhost.router import CommandRouter
 from src.localhost.scheduler import CognitiveScheduler
 from src.localhost.tool_dispatcher import ToolDispatcher
+from src.prompt import PromptComposer, load_prompt_catalog
+from src.prompt.text import AUTONOMOUS_TICK_SUMMARY
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.runtime")
@@ -36,12 +38,15 @@ if TYPE_CHECKING:
     from src.localhost.ports import ToolExecutorBinding
 
 
-def _load_handler(specification: str) -> AgentHandler:
+def _load_handler(specification: str, composer: PromptComposer) -> AgentHandler:
     module_name, separator, attribute = specification.partition(":")
     if not separator:
         raise ValueError(f"Agent implementation must use module:attribute syntax: {specification}")
     implementation = getattr(importlib.import_module(module_name), attribute)
     handler = implementation()
+    installer = getattr(handler, "install_prompt_composer", None)
+    if callable(installer):
+        installer(composer)
     if not callable(getattr(handler, "handle", None)):
         raise TypeError(f"Agent implementation does not provide handle(): {specification}")
     return handler
@@ -78,7 +83,6 @@ class AuroraRuntime:
                 id=item.id,
                 implementation=item.implementation,
                 model_role=item.model_role,
-                prompt=item.prompt,
                 capabilities=item.capabilities,
                 can_delegate=item.can_delegate,
                 child_profiles=item.child_profiles,
@@ -103,8 +107,6 @@ class AuroraRuntime:
         )
         kernel_config = KernelConfiguration(
             workspace=str(configuration.runtime.workspace),
-            soul_content=configuration.soul_path.read_text(encoding="utf-8"),
-            soul_hash=configuration.soul_hash,
             profiles=profiles,
             limits=limits,
             interactive_budget=TaskBudget(
@@ -118,7 +120,9 @@ class AuroraRuntime:
                 configuration.runtime.autonomous_budget.max_duration_seconds,
             ),
         )
-        handlers = {profile.id: _load_handler(profile.implementation) for profile in profiles}
+        catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
+        composer = PromptComposer(catalog)
+        handlers = {profile.id: _load_handler(profile.implementation, composer) for profile in profiles}
         kernel = AgentKernel(kernel_config, handlers)
         runtime = cls(
             configuration,
@@ -209,7 +213,7 @@ class AuroraRuntime:
                     tick = new_amp(
                         event_type="system.tick",
                         session_id="kernel:autonomy",
-                        summary="Autonomous cognitive tick",
+                        summary=AUTONOMOUS_TICK_SUMMARY,
                         data={"interval_seconds": self._scheduler.state.current_interval_seconds},
                         source_app="kernel.scheduler",
                         source_instance="localhost",

@@ -54,9 +54,6 @@ username = "aurorabot"
 display_name = "AuroraBot"
 avatar_url = ""
 
-[soul]
-path = "config/prompts/SOUL.md"
-
 [logging]
 level = "INFO"
 
@@ -115,12 +112,27 @@ terminal_logs = true
         encoding="utf-8",
     )
     (prompts / "SOUL.md").write_text("You are the AuroraBot test fixture.", encoding="utf-8")
+    (prompts / "WORLD.md").write_text("Words reach people only after they are sent.", encoding="utf-8")
+    agent_prompts = prompts / "agents"
+    agent_prompts.mkdir()
+    (agent_prompts / "gate.md").write_text("Listen first, then decide how to help.", encoding="utf-8")
+    (agent_prompts / "worker.md").write_text("Finish the entrusted work and bring back the result.", encoding="utf-8")
+    (config / "prompts.toml").write_text(
+        """[system]
+soul = "prompts/SOUL.md"
+world = "prompts/WORLD.md"
+
+[agent]
+"builtin.gate" = "prompts/agents/gate.md"
+"builtin.worker" = "prompts/agents/worker.md"
+""",
+        encoding="utf-8",
+    )
     (config / "agents.toml").write_text(
         """[[agent]]
 id = "builtin.gate"
 implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "fast"
-prompt = "Gate and complete the task."
 capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
@@ -129,7 +141,6 @@ child_profiles = ["builtin.worker"]
 id = "builtin.worker"
 implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "agent"
-prompt = "Complete the delegated task and report to the parent."
 capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker"]

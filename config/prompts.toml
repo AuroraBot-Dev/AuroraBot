@@ -1,0 +1,7 @@
+[system]
+soul = "prompts/SOUL.md"
+world = "prompts/WORLD.md"
+
+[agent]
+"builtin.gate" = "prompts/agents/gate.md"
+"builtin.worker" = "prompts/agents/worker.md"

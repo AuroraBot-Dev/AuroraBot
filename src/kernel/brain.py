@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.contracts.agent import BrainContextSnapshot, KernelConfiguration
+from src.contracts.agent import BrainContextSnapshot
 from src.kernel.store import SQLiteRuntimeStore, utc_now
 
 
-def build_brain_context(
-    store: SQLiteRuntimeStore,
-    configuration: KernelConfiguration,
-) -> BrainContextSnapshot:
+def build_brain_context(store: SQLiteRuntimeStore) -> BrainContextSnapshot:
     tasks = store.tasks(active_only=True)
     agents = store.agents(active_only=True)
     task_projections: list[dict[str, Any]] = []
@@ -45,7 +42,6 @@ def build_brain_context(
         agent_projections.append(projection)
     situations = store.situations()
     return BrainContextSnapshot(
-        persona={"content": configuration.soul_content, "hash": configuration.soul_hash},
         active_tasks=tuple(task_projections),
         active_agents=tuple(agent_projections),
         ambient_situations=situations,

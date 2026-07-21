@@ -170,6 +170,7 @@ def test_chat_completion_maps_tools_usage_and_continuation(project_root: Path, m
         assert result.continuation is not None
         assert result.continuation.channel == "chat_completions"
         assert caller.calls[0][1]["parallel_tool_calls"] is False
+        assert caller.calls[0][1]["tools"][0]["function"]["description"] == "Send text"
         assert "response_format" in caller.calls[0][1]
 
     asyncio.run(scenario())
@@ -251,6 +252,7 @@ def test_responses_completion_maps_native_tool_calls_and_provider_errors(
         assert result.cost_usd == _NATIVE_COST
         assert result.continuation is not None and result.continuation.channel == "responses"
         assert captured[0]["store"] is False
+        assert captured[0]["tools"][0]["description"] == "Work"
 
         provider_error = OSError("provider down")
 

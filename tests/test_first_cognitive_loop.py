@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.agents.tool_agent import MEMORY_QUERY_TOOL, ToolAgent
+from src.agents.tool_agent import ToolAgent
+from src.agents.tools import (
+    MEMORY_QUERY_TOOL,
+    capability_tool_definition,
+)
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
@@ -24,6 +28,7 @@ from src.contracts.agent import (
 from src.contracts.amp import AmpEnvelope, new_amp
 from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
 from src.kernel.runtime import AgentKernel
+from src.prompt import PromptCatalog, PromptComposer
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -32,8 +37,6 @@ if TYPE_CHECKING:
 def configuration(workspace: Path, profiles: tuple[AgentProfile, ...]) -> KernelConfiguration:
     return KernelConfiguration(
         workspace=str(workspace),
-        soul_content="A shared persona",
-        soul_hash="hash",
         profiles=profiles,
         limits=AgentLimits(
             root_profile="gate",
@@ -54,7 +57,6 @@ def profiles() -> tuple[AgentProfile, ...]:
             "gate",
             "test",
             "fast",
-            "gate",
             frozenset({"reply"}),
             can_delegate=True,
             child_profiles=frozenset({"worker"}),
@@ -63,12 +65,26 @@ def profiles() -> tuple[AgentProfile, ...]:
             "worker",
             "test",
             "agent",
-            "worker",
             frozenset({"reply", "clock"}),
             can_delegate=True,
             child_profiles=frozenset({"worker"}),
         ),
     )
+
+
+def prompt_composer() -> PromptComposer:
+    return PromptComposer(
+        PromptCatalog.create(
+            soul="A shared persona",
+            world="Words reach people only after they are sent.",
+            agents={"gate": "Handle the task.", "worker": "Complete the entrusted work."},
+        )
+    )
+
+
+def tool_agents() -> dict[str, ToolAgent]:
+    composer = prompt_composer()
+    return {"gate": ToolAgent(composer=composer), "worker": ToolAgent(composer=composer)}
 
 
 def input_amp(message_id: str = "00000000-0000-4000-8000-000000000001") -> AmpEnvelope:
@@ -128,7 +144,6 @@ def test_child_uses_package_wildcard_capability(tmp_path: Path) -> None:
         worker.id,
         worker.implementation,
         worker.model_role,
-        worker.prompt,
         frozenset({"test.*"}),
         worker.can_delegate,
         worker.child_profiles,
@@ -173,7 +188,6 @@ def test_tool_success_restores_root_before_explicit_completion(tmp_path: Path) -
         "gate",
         "test",
         "fast",
-        "gate",
         frozenset({"reply"}),
         can_delegate=False,
         child_profiles=frozenset(),
@@ -325,7 +339,6 @@ def test_brain_context_is_runtime_owned_global_projection(tmp_path: Path) -> Non
         await kernel.submit_amp(input_amp())
         await kernel.pump()
         snapshot = kernel.brain_context()
-        assert snapshot.persona["content"] == "A shared persona"
         assert snapshot.active_tasks[0]["summary"] == "root task"
         assert snapshot.active_agents
         assert snapshot.ambient_situations[0]["summary"] == "wake up"
@@ -335,7 +348,7 @@ def test_brain_context_is_runtime_owned_global_projection(tmp_path: Path) -> Non
 
 def test_unconfigured_memory_agent_returns_nonfatal_tool_result(tmp_path: Path) -> None:
     gate, worker = profiles()
-    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": ToolAgent(), "worker": ToolAgent()})
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), tool_agents())
 
     async def scenario() -> None:
         await kernel.submit_amp(input_amp())
@@ -370,13 +383,12 @@ def test_tool_agent_reserves_complete_task_and_starts_new_turn_without_continuat
         id="gate",
         implementation="test",
         model_role="fast",
-        prompt="gate",
         capabilities=frozenset({"tools.*"}),
         can_delegate=False,
         child_profiles=frozenset(),
     )
     worker = profiles()[1]
-    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": ToolAgent(), "worker": ToolAgent()})
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), tool_agents())
     descriptor = CapabilityDescriptor(
         "tools.echo",
         "echo",
@@ -434,13 +446,12 @@ def test_tool_agent_preserves_third_party_complete_task_parameter(tmp_path: Path
         id="gate",
         implementation="test",
         model_role="fast",
-        prompt="gate",
         capabilities=frozenset({"tools.*"}),
         can_delegate=False,
         child_profiles=frozenset(),
     )
     worker = profiles()[1]
-    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), {"gate": ToolAgent(), "worker": ToolAgent()})
+    kernel = AgentKernel(configuration(tmp_path, (gate, worker)), tool_agents())
     raw_schema = {
         "type": "object",
         "properties": {"complete_task": {"type": "string", "enum": ["vendor-value"]}},
@@ -496,4 +507,19 @@ def test_tool_agent_preserves_third_party_complete_task_parameter(tmp_path: Path
 )
 def test_tool_agent_does_not_override_composed_vendor_complete_task(schema: dict[str, object]) -> None:
     descriptor = CapabilityDescriptor("tools.vendor", "vendor", schema)
-    assert ToolAgent._capability_tool(descriptor).parameters_schema == schema
+    assert capability_tool_definition(descriptor).parameters_schema == schema
+
+
+def test_composed_closed_schema_is_not_broken_by_complete_task_injection() -> None:
+    schema = {
+        "allOf": [
+            {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "additionalProperties": False,
+            }
+        ]
+    }
+    descriptor = CapabilityDescriptor("tools.closed", "closed", schema)
+
+    assert capability_tool_definition(descriptor).parameters_schema == schema

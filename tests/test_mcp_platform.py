@@ -243,6 +243,8 @@ timeout_seconds = 30
         try:
             catalog = await platform.start(_Ingress())
             assert "org.aurora.clock.get_current_time" in catalog.by_id
+            raw_tools = platform._clients.list_all_tools()["org.aurora.clock"]
+            assert all(tool.description for tool in raw_tools)
             assert platform._tool_bindings["org.aurora.clock.get_current_time"] == (
                 "org.aurora.clock",
                 "get_current_time",

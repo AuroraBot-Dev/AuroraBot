@@ -99,7 +99,6 @@ class AgentProfile:
     id: str
     implementation: str
     model_role: str
-    prompt: str
     capabilities: frozenset[str]
     can_delegate: bool
     child_profiles: frozenset[str]
@@ -108,8 +107,6 @@ class AgentProfile:
 @dataclass(frozen=True, slots=True)
 class KernelConfiguration:
     workspace: str
-    soul_content: str
-    soul_hash: str
     profiles: tuple[AgentProfile, ...]
     limits: AgentLimits
     interactive_budget: TaskBudget
@@ -271,7 +268,6 @@ class ToolLease:
 
 @dataclass(frozen=True, slots=True)
 class BrainContextSnapshot:
-    persona: dict[str, str]
     active_tasks: tuple[dict[str, Any], ...]
     active_agents: tuple[dict[str, Any], ...]
     ambient_situations: tuple[dict[str, Any], ...]

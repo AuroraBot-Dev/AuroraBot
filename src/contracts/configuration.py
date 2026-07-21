@@ -135,7 +135,6 @@ class AgentProfileConfig:
     id: str
     implementation: str
     model_role: str
-    prompt: str
     capabilities: frozenset[str]
     can_delegate: bool
     child_profiles: frozenset[str]
@@ -188,8 +187,6 @@ class AuroraConfig:
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
     dashboard: DashboardConfig
-    soul_path: Path
-    soul_hash: str
     logging_level: str
     agents: tuple[AgentProfileConfig, ...]
     model_roles: frozenset[str]
@@ -278,7 +275,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     sources = [base_source]
     _require_keys(
         base,
-        {"runtime", "dashboard", "soul", "logging", "storage", "models"},
+        {"runtime", "dashboard", "logging", "storage", "models"},
         "aurora.toml",
     )
     runtime_raw = base["runtime"]
@@ -295,19 +292,15 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         sources.append(profile_source)
     _require_keys(
         merged,
-        {"runtime", "dashboard", "soul", "logging", "storage", "models"},
+        {"runtime", "dashboard", "logging", "storage", "models"},
         "merged aurora config",
     )
     runtime_raw = merged["runtime"]
     dashboard_raw = merged["dashboard"]
-    soul_raw = merged["soul"]
     logging_raw = merged["logging"]
     storage_raw = merged["storage"]
     models_raw = merged["models"]
-    if not all(
-        isinstance(value, dict)
-        for value in (runtime_raw, dashboard_raw, soul_raw, logging_raw, storage_raw, models_raw)
-    ):
+    if not all(isinstance(value, dict) for value in (runtime_raw, dashboard_raw, logging_raw, storage_raw, models_raw)):
         raise ConfigurationError("aurora top-level sections must be tables")
     runtime_allowed = {
         "profile",
@@ -322,7 +315,6 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     required_runtime = {"profile", "workspace", "debug_host", "debug_port"}
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
         raise ConfigurationError("runtime has unsupported or missing keys")
-    _require_keys(soul_raw, {"path"}, "soul")
     _require_keys(logging_raw, {"level"}, "logging")
     _require_keys(storage_raw, {"data_dir"}, "storage")
     _require_keys(models_raw, {"roles", "providers", "logging"}, "models")
@@ -384,11 +376,6 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             capabilities=frozenset(capabilities),
             endpoint=endpoint,
         )
-    soul_path = (root / _string(soul_raw["path"], "soul.path")).resolve()
-    try:
-        soul_hash = hashlib.sha256(soul_path.read_bytes()).hexdigest()
-    except FileNotFoundError as error:
-        raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
     agents_data, agents_source = _read_toml_snapshot(root / "config" / "agents.toml")
     apps_data, apps_source = _read_toml_snapshot(root / "config" / "apps.toml")
     sources.extend((agents_source, apps_source))
@@ -431,8 +418,6 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             autonomous_budget=autonomous_budget,
         ),
         dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), root),
-        soul_path=soul_path,
-        soul_hash=soul_hash,
         logging_level=_string(logging_raw["level"], "logging.level"),
         agents=agents,
         model_roles=frozenset(roles),

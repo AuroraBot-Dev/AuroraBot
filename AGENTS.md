@@ -5,18 +5,19 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 
 ## Architecture authority
 
-- `docs/rfc/` 是唯一设计基准，RFC 0012 定义 Agent 运行时，RFC 0014 定义平台组合、偏好配置与进程入口。
+- `docs/rfc/` 是唯一设计基准，RFC 0012 定义 Agent 运行时，RFC 0014 定义平台组合与进程入口，RFC 0019 定义提示词装配。
 - 已接受 RFC 高于 README、注释、配置样例和现有代码。
 - 影响模块边界、事件、配置、扩展或模型调用契约的改动，必须先更新或新增 RFC。
-- 当前 Agent 闭环以 RFC 0012 为准；RFC 0001 提供稳定的模块与因果边界。
+- 当前 Agent 闭环以 RFC 0012、0018 和 0019 为准；RFC 0001 提供稳定的模块与因果边界。
 
 ## Project layout
 
 ```text
 config/         TOML 核心配置、平台偏好、领域配置与 profile 覆盖
 aurora/         唯一进程 CLI、平台选择与生命周期组合
-docs/rfc/       RFC 0000—0014
+docs/rfc/       已接受 RFC 与阅读索引
 src/contracts/  无上层依赖的配置、AMP、Agent、模型与记忆契约
+src/prompt/     提示词目录、分层 DTO 与模型上下文呈现
 src/kernel/     Task、Agent、邮箱、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
 src/ai/         宽泛模型网关
@@ -35,7 +36,8 @@ tests/          契约、集成与回归测试
   也不得绕过 Activity 与因果记录。
 - Platform 将外部生态归一化为 AMP 输入并执行环境效果；只依赖 localhost 窄端口，不得直接操作 Kernel。
 - localhost 统一领取和路由效果、持久化 Platform outcome，并提供 Console、Dashboard 共用的输入与命令用例。
-- 依赖方向固定为 `utils/contracts ← kernel/ai/agents ← localhost ← platform ← aurora`；`src` 不得反向导入进程组合层。
+- 依赖方向固定为 `utils/contracts ← prompt ← kernel/ai/agents/localhost/platform ← aurora`；Kernel 不依赖 prompt，
+  `src` 不得反向导入进程组合层。
 
 ## Workspace and configuration
 

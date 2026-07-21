@@ -127,7 +127,7 @@ class AgentKernel:
         return ingest_runtime_ready(self)
 
     def brain_context(self) -> BrainContextSnapshot:
-        return build_brain_context(self.store, self.configuration)
+        return build_brain_context(self.store)
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
         """Ingest ready AMP files and process a bounded set of independent Agent turns."""

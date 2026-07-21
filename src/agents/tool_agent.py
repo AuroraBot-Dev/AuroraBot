@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
-import re
-from copy import deepcopy
 
+from src.agents.tools import (
+    CLAIM_TOOL,
+    DELEGATE_TOOL,
+    MEMORY_QUERY_TOOL,
+    WAIT_TOOL,
+    build_tool_definitions,
+    uses_runtime_complete_task,
+)
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
@@ -17,24 +23,29 @@ from src.contracts.agent import (
 from src.contracts.memory import MemoryFailure, MemoryQuery
 from src.contracts.model import (
     ModelContinuation,
-    ModelMessage,
     ModelRequest,
     ModelResult,
-    ToolDefinition,
     append_tool_result,
 )
+from src.prompt import PromptComposer
+from src.prompt.text import EMPTY_CHILD_COMPLETION, NO_ACTION_COMPLETION
 from src.utils.log_utils import get_logger
 
 logger = get_logger("aurora.agent.tool")
-
-DELEGATE_TOOL = "aurora.agent.delegate"
-WAIT_TOOL = "aurora.agent.wait"
-CLAIM_TOOL = "aurora.situation.claim"
-MEMORY_QUERY_TOOL = "aurora.memory.query"
+_COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
+_COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
 
 
 class ToolAgent:
     """A deterministic state-machine adapter around provider-native Tool IR."""
+
+    def __init__(self, *, composer: PromptComposer | None = None) -> None:
+        self._composer = composer
+
+    def install_prompt_composer(self, composer: PromptComposer) -> None:
+        if self._composer is not None:
+            raise RuntimeError(_COMPOSER_ALREADY_INSTALLED)
+        self._composer = composer
 
     def handle(self, context: AgentContext) -> AgentDecision:
         message_type = context.message.type
@@ -56,38 +67,22 @@ class ToolAgent:
         return self._request_model(context)
 
     def _request_model(self, context: AgentContext) -> AgentDecision:
-        prompt = {
-            "profile_instruction": context.profile.prompt,
-            "task": context.task.to_dict(),
-            "agent": {
-                "agent_id": context.agent.agent_id,
-                "parent_agent_id": context.agent.parent_agent_id,
-                "assignment": context.agent.assignment,
-                "depth": context.agent.depth,
-            },
-            "message": context.message.to_dict(),
-            "children": [child.to_dict() for child in context.children],
-            "brain_context": context.brain.to_dict(),
-            "rules": [
-                "Use the available tools for external actions.",
-                "Delegate only independent, bounded work that materially helps this task.",
-                "A child result is evidence for you to continue working, not the final user response.",
-                "Set complete_task=true only when this Tool success should finish your current work.",
-            ],
-        }
+        composer = self._require_composer()
         request = ModelRequest(
             role=context.profile.model_role,
-            messages=(
-                ModelMessage("system", context.brain.persona["content"]),
-                ModelMessage("user", json.dumps(prompt, ensure_ascii=False)),
-            ),
+            messages=composer.request_messages(context),
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="native" if context.profile.model_role == "agent" else "normalized",
-            tools=self._tools(context),
+            tools=build_tool_definitions(context),
             parallel_tool_calls=False,
             cancel_policy="on_external_activity" if context.task.autonomous else "never",
         )
         return AgentDecision(model_request=request.to_dict())
+
+    def _require_composer(self) -> PromptComposer:
+        if self._composer is None:
+            raise RuntimeError(_COMPOSER_REQUIRED)
+        return self._composer
 
     def _handle_model_result(self, context: AgentContext) -> AgentDecision:
         result = ModelResult.from_dict(context.message.payload)
@@ -96,8 +91,8 @@ class ToolAgent:
         if not result.tool_calls:
             text = result.text.strip()
             if context.agent.parent_agent_id is not None:
-                return AgentDecision(completion=Completion(text or "Subtask completed without a textual result"))
-            return AgentDecision(completion=Completion(text or "no_action", silent=not bool(text)))
+                return AgentDecision(completion=Completion(text or EMPTY_CHILD_COMPLETION))
+            return AgentDecision(completion=Completion(text or NO_ACTION_COMPLETION, silent=not bool(text)))
         call = result.tool_calls[0]
         if call.name == DELEGATE_TOOL:
             raw_tasks = call.arguments.get("tasks")
@@ -127,7 +122,7 @@ class ToolAgent:
         call = result.tool_calls[0]
         parameters = dict(call.arguments)
         complete_task = False
-        if not self._defines_complete_task(descriptor):
+        if uses_runtime_complete_task(descriptor):
             complete_task = parameters.pop("complete_task", False)
             if not isinstance(complete_task, bool):
                 return AgentDecision(failure="complete_task must be a boolean")
@@ -213,129 +208,8 @@ class ToolAgent:
             messages=(),
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="native" if context.profile.model_role == "agent" else "normalized",
-            tools=self._tools(context),
+            tools=build_tool_definitions(context),
             continuation=continuation,
             parallel_tool_calls=False,
             cancel_policy="on_external_activity" if context.task.autonomous else "never",
         )
-
-    def _tools(self, context: AgentContext) -> tuple[ToolDefinition, ...]:
-        tools = [self._capability_tool(item) for item in context.capabilities]
-        if context.profile.can_delegate:
-            tools.append(
-                ToolDefinition(
-                    DELEGATE_TOOL,
-                    "Create one to four bounded child Agents that report each result back to you.",
-                    {
-                        "type": "object",
-                        "properties": {
-                            "tasks": {
-                                "type": "array",
-                                "minItems": 1,
-                                "maxItems": 4,
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "instruction": {"type": "string"},
-                                        "profile": {"type": "string"},
-                                    },
-                                    "required": ["instruction"],
-                                    "additionalProperties": False,
-                                },
-                            }
-                        },
-                        "required": ["tasks"],
-                        "additionalProperties": False,
-                    },
-                )
-            )
-        if any(not child.terminal for child in context.children):
-            tools.append(
-                ToolDefinition(
-                    WAIT_TOOL,
-                    "Wait for remaining active child Agents without performing another action.",
-                    {"type": "object", "properties": {}, "additionalProperties": False},
-                )
-            )
-        if context.brain.ambient_situations:
-            tools.append(
-                ToolDefinition(
-                    CLAIM_TOOL,
-                    "Claim unassigned situations that this Agent will handle.",
-                    {
-                        "type": "object",
-                        "properties": {"situation_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1}},
-                        "required": ["situation_ids"],
-                        "additionalProperties": False,
-                    },
-                )
-            )
-        tools.append(
-            ToolDefinition(
-                MEMORY_QUERY_TOOL,
-                "Query the dedicated Memory Agent. If none is configured, returns memory.unavailable without failing.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "scope": {"type": "string", "default": "global"},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 32, "default": 8},
-                    },
-                    "required": ["query"],
-                    "additionalProperties": False,
-                },
-            )
-        )
-        return tuple(tools)
-
-    @staticmethod
-    def _capability_tool(descriptor: CapabilityDescriptor) -> ToolDefinition:
-        schema = deepcopy(descriptor.parameters_schema)
-        if ToolAgent._defines_complete_task(descriptor):
-            return ToolDefinition(descriptor.id, descriptor.description, schema)
-        raw_properties = schema.get("properties")
-        properties = dict(raw_properties) if isinstance(raw_properties, dict) else {}
-        schema["properties"] = properties
-        properties["complete_task"] = {
-            "type": "boolean",
-            "description": "Complete this Agent's current work after the Tool succeeds.",
-            "default": False,
-        }
-        return ToolDefinition(descriptor.id, descriptor.description, schema)
-
-    @staticmethod
-    def _defines_complete_task(descriptor: CapabilityDescriptor) -> bool:
-        return _schema_defines_complete_task(descriptor.parameters_schema, descriptor.parameters_schema, set())
-
-
-def _schema_defines_complete_task(schema: object, root: dict[str, object], seen: set[int]) -> bool:
-    if not isinstance(schema, dict) or id(schema) in seen:
-        return False
-    seen.add(id(schema))
-    properties = schema.get("properties")
-    if isinstance(properties, dict) and "complete_task" in properties:
-        return True
-    patterns = schema.get("patternProperties")
-    if isinstance(patterns, dict):
-        for pattern in patterns:
-            try:
-                if re.search(str(pattern), "complete_task"):
-                    return True
-            except re.error:
-                continue
-    reference = schema.get("$ref")
-    if isinstance(reference, str) and reference.startswith("#/"):
-        target: object = root
-        for raw_part in reference[2:].split("/"):
-            part = raw_part.replace("~1", "/").replace("~0", "~")
-            if not isinstance(target, dict) or part not in target:
-                target = None
-                break
-            target = target[part]
-        if _schema_defines_complete_task(target, root, seen):
-            return True
-    for keyword in ("allOf", "anyOf", "oneOf"):
-        branches = schema.get(keyword)
-        if isinstance(branches, list) and any(_schema_defines_complete_task(branch, root, seen) for branch in branches):
-            return True
-    return False

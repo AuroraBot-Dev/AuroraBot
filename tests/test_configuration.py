@@ -30,8 +30,8 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     assert configuration.dashboard.port == _DASHBOARD_PORT
     assert configuration.dashboard.database_path == project_root / "data" / "dashboard" / "chat.sqlite3"
     assert configuration.dashboard.owner_username == "alice"
-    assert configuration.soul_hash
     assert {agent.id for agent in configuration.agents} == {"builtin.gate", "builtin.worker"}
+    assert all(not hasattr(agent, "prompt") for agent in configuration.agents)
     assert configuration.runtime.agents.root_profile == "builtin.gate"
     assert configuration.runtime.agents.memory_agent_profile is None
     assert configuration.apps == ()

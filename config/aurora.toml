@@ -59,9 +59,6 @@ username = "aurorabot"
 display_name = "AuroraBot"
 avatar_url = ""
 
-[soul]
-path = "config/prompts/SOUL.md"
-
 [logging]
 level = "INFO"
 

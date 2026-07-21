@@ -29,7 +29,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
             raise ConfigurationError("agent must be a table")
         _require_keys(
             raw,
-            {"id", "implementation", "model_role", "prompt", "capabilities", "can_delegate", "child_profiles"},
+            {"id", "implementation", "model_role", "capabilities", "can_delegate", "child_profiles"},
             "agent",
         )
         agent_id = _string(raw["id"], "agent.id")
@@ -54,7 +54,6 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
                 id=agent_id,
                 implementation=_string(raw["implementation"], "agent.implementation"),
                 model_role=model_role,
-                prompt=_string(raw["prompt"], "agent.prompt"),
                 capabilities=frozenset(capabilities),
                 can_delegate=raw["can_delegate"],
                 child_profiles=frozenset(children),
