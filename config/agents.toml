@@ -22,3 +22,4 @@ implementation = "src.agents.memory_agent:MemoryAgent"
 model_role = "fast"
 capabilities = ["*"]
 can_delegate = false
+child_profiles = []

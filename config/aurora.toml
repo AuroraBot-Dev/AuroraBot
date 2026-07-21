@@ -1,12 +1,13 @@
-# AuroraBot 的跨环境默认配置。
-# 结构性配置只使用 TOML；密钥由本文件引用的环境变量提供。
+# AuroraBot 配置
 
+# 运行时配置
 [runtime]
 profile = "prod"
 workspace = "data/kernel"
 debug_host = "127.0.0.1"
 debug_port = 8765
 
+# 代理配置
 [runtime.agents]
 root_profile = "builtin.gate"
 worker_profile = "builtin.worker"
@@ -22,6 +23,7 @@ blocking_workers = 4
 lease_seconds = 30.0
 ambient_ttl_seconds = 1800.0
 
+# 自主配置
 [runtime.autonomy]
 scan_seconds = 1.0
 heartbeat_initial_seconds = 30.0
@@ -30,21 +32,26 @@ heartbeat_max_seconds = 1800.0
 autonomous_daily_model_calls = 24
 autonomous_daily_tokens = 100000
 
+# 交互任务配置
 [runtime.interactive_task]
 max_model_calls = 8
 max_tool_calls = 6
 max_duration_seconds = 300.0
 
+# 自主任务配置
 [runtime.autonomous_task]
 max_model_calls = 3
 max_tool_calls = 2
 max_duration_seconds = 120.0
 
+# 平台配置
+
+# 面板配置
 [dashboard]
 host = "127.0.0.1"
 port = 8000
-database_path = "data/dashboard/chat.sqlite3"
-upload_dir = "data/dashboard/uploads"
+database_path = "data/platform/dashboard/chat.sqlite3"
+upload_dir = "data/platform/dashboard/uploads"
 max_upload_bytes = 67108864
 session_ttl_seconds = 604800
 allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -139,6 +146,5 @@ base_url = "https://api.siliconflow.cn/v1"
 secret_env = "SILICONFLOW_API_KEY"
 
 [models.logging]
-# 仅影响 DEBUG 日志；默认不记录用户消息、提示词或模型回复正文。
 log_queries = false
 log_responses = false
