@@ -48,12 +48,15 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
     assert configuration.model_providers["test"].adapter == "litellm"
     source_paths = {source.path for source in configuration.sources}
     assert source_paths == {
-        project_root / "config" / "aurora.toml",
+        project_root / "config" / "runtime.toml",
+        project_root / "config" / "platforms.toml",
+        project_root / "config" / "models.toml",
+        project_root / "config" / "logging.toml",
         project_root / "config" / "agents.toml",
         project_root / "config" / "apps.toml",
     }
-    aurora_source = next(source for source in configuration.sources if source.path.name == "aurora.toml")
-    assert aurora_source.sha256 == hashlib.sha256(aurora_source.path.read_bytes()).hexdigest()
+    runtime_source = next(source for source in configuration.sources if source.path.name == "runtime.toml")
+    assert runtime_source.sha256 == hashlib.sha256(runtime_source.path.read_bytes()).hexdigest()
     with pytest.raises(TypeError):
         configuration.model_definitions["missing"] = configuration.model_definitions["fast"]  # type: ignore[index]
 
@@ -99,7 +102,7 @@ def test_preference_file_is_required(project_root: Path) -> None:
 
 def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
     config = project_root / "config" / "profiles" / "prod.toml"
-    config.write_text('[runtime]\ndebug_host = "0.0.0.0"\n\n[logging]\nlevel = "INFO"\n', encoding="utf-8")
+    config.write_text('[runtime]\ndebug_host = "0.0.0.0"\n', encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match="loopback"):
         load_configuration(project_root, "prod")
@@ -121,7 +124,7 @@ def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
     ],
 )
 def test_rejects_invalid_dashboard_configuration(project_root: Path, old: str, new: str, message: str) -> None:
-    config = project_root / "config" / "aurora.toml"
+    config = project_root / "config" / "platforms.toml"
     config.write_text(config.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match=message):
@@ -139,7 +142,7 @@ def test_rejects_invalid_dashboard_configuration(project_root: Path, old: str, n
     ],
 )
 def test_rejects_invalid_dashboard_owner_configuration(project_root: Path, old: str, new: str, message: str) -> None:
-    config = project_root / "config" / "aurora.toml"
+    config = project_root / "config" / "platforms.toml"
     config.write_text(config.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match=message):
@@ -155,7 +158,7 @@ def test_rejects_unknown_profile_configuration(project_root: Path) -> None:
 
 
 def test_kernel_workspace_is_fixed(project_root: Path) -> None:
-    config = project_root / "config" / "aurora.toml"
+    config = project_root / "config" / "runtime.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace('workspace = "data/kernel"', 'workspace = "data/other"'),
         encoding="utf-8",
@@ -179,7 +182,7 @@ def test_agent_child_profile_must_exist(project_root: Path) -> None:
 
 
 def test_memory_agent_profile_is_optional_but_must_exist(project_root: Path) -> None:
-    config = project_root / "config" / "aurora.toml"
+    config = project_root / "config" / "runtime.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace(
             'worker_profile = "builtin.worker"',
@@ -291,7 +294,7 @@ def test_disabled_app_is_strictly_validated_but_excluded_from_snapshot(project_r
     ],
 )
 def test_rejects_invalid_autonomy_and_task_budgets(project_root: Path, table: str, body: str, message: str) -> None:
-    config = project_root / "config" / "aurora.toml"
+    config = project_root / "config" / "runtime.toml"
     config.write_text(config.read_text(encoding="utf-8") + f"\n[{table}]\n{body}\n", encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match=message):
@@ -299,21 +302,24 @@ def test_rejects_invalid_autonomy_and_task_budgets(project_root: Path, table: st
 
 
 @pytest.mark.parametrize(
-    ("old", "new", "message"),
+    ("old", "new", "message", "config_file"),
     [
-        ("debug_port = 8765", "debug_port = 70000", "valid port"),
-        ("log_queries = false", 'log_queries = "false"', "must be booleans"),
-        ('adapter = "litellm"', 'adapter = "unknown"', "unsupported"),
-        ('provider = "test"', 'provider = "missing"', "unknown provider"),
+        ("debug_port = 8765", "debug_port = 70000", "valid port", "runtime.toml"),
+        ("log_queries = false", 'log_queries = "false"', "must be booleans", "models.toml"),
+        ('adapter = "litellm"', 'adapter = "unknown"', "unsupported", "models.toml"),
+        ('provider = "test"', 'provider = "missing"', "unknown provider", "models.toml"),
         (
             'capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]',
             'capabilities = "chat"',
             "contain strings",
+            "models.toml",
         ),
     ],
 )
-def test_rejects_invalid_runtime_and_model_configuration(project_root: Path, old: str, new: str, message: str) -> None:
-    config = project_root / "config" / "aurora.toml"
+def test_rejects_invalid_runtime_and_model_configuration(
+    project_root: Path, old: str, new: str, message: str, config_file: str
+) -> None:
+    config = project_root / "config" / config_file
     config.write_text(config.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match=message):
@@ -321,7 +327,7 @@ def test_rejects_invalid_runtime_and_model_configuration(project_root: Path, old
 
 
 def test_responses_role_requires_native_responses_capability(project_root: Path) -> None:
-    config = project_root / "config" / "aurora.toml"
+    config = project_root / "config" / "models.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace(
             'capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses"]',

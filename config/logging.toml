@@ -1,0 +1,7 @@
+# 日志配置
+
+[logging]
+level = "INFO"
+
+[storage]
+data_dir = "data"

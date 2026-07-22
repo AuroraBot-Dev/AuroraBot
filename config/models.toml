@@ -1,0 +1,80 @@
+# 模型配置
+
+[models.roles.fast]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+endpoint = "chat_completions"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "tools",
+]
+
+[models.roles.quality]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+endpoint = "chat_completions"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "tools",
+    "native_responses",
+    "reasoning",
+]
+
+[models.roles.agent]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+endpoint = "responses"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "tools",
+    "native_responses",
+    "reasoning",
+]
+
+[models.roles.multimodal]
+provider = "xiaomi_mimo"
+model = "mimo-v2.5-pro"
+endpoint = "chat_completions"
+capabilities = [
+    "chat",
+    "stream",
+    "structured_output",
+    "json_text_fallback",
+    "vision",
+]
+
+[models.roles.embedding]
+provider = "siliconflow"
+model = "BAAI/bge-m3"
+endpoint = "chat_completions"
+capabilities = ["embedding"]
+
+[models.providers.deepseek]
+adapter = "litellm"
+secret_env = "DEEPSEEK_API_KEY"
+
+[models.providers.xiaomi_mimo]
+adapter = "litellm"
+secret_env = "XIAOMI_MIMO_API_KEY"
+
+[models.providers.openai]
+adapter = "litellm"
+secret_env = "OPENAI_API_KEY"
+
+[models.providers.siliconflow]
+adapter = "openai_compatible"
+base_url = "https://api.siliconflow.cn/v1"
+secret_env = "SILICONFLOW_API_KEY"
+
+[models.logging]
+log_queries = false
+log_responses = false

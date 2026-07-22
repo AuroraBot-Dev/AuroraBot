@@ -16,7 +16,9 @@ def project_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     profiles = config / "profiles"
     prompts.mkdir(parents=True)
     profiles.mkdir()
-    (config / "aurora.toml").write_text(
+
+    # 运行时配置
+    (config / "runtime.toml").write_text(
         """[runtime]
 profile = "test"
 workspace = "data/kernel"
@@ -36,8 +38,13 @@ tool_concurrency = 8
 blocking_workers = 4
 lease_seconds = 30.0
 ambient_ttl_seconds = 1800.0
+""",
+        encoding="utf-8",
+    )
 
-[dashboard]
+    # 平台配置
+    (config / "platforms.toml").write_text(
+        """[dashboard]
 host = "127.0.0.1"
 port = 8000
 database_path = "data/dashboard/chat.sqlite3"
@@ -53,14 +60,13 @@ username = "alice"
 username = "aurorabot"
 display_name = "AuroraBot"
 avatar_url = ""
+""",
+        encoding="utf-8",
+    )
 
-[logging]
-level = "INFO"
-
-[storage]
-data_dir = "data"
-
-[models.roles.fast]
+    # 模型配置
+    (config / "models.toml").write_text(
+        """[models.roles.fast]
 provider = "test"
 model = "fast"
 capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools"]
@@ -96,6 +102,18 @@ log_responses = false
 """,
         encoding="utf-8",
     )
+
+    # 日志和存储配置
+    (config / "logging.toml").write_text(
+        """[logging]
+level = "INFO"
+
+[storage]
+data_dir = "data"
+""",
+        encoding="utf-8",
+    )
+
     (config / "preference.toml").write_text(
         """[platform.console]
 enabled = true

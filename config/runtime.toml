@@ -1,0 +1,44 @@
+# 运行时配置
+
+[runtime]
+profile = "prod"
+workspace = "data/kernel"
+debug_host = "127.0.0.1"
+debug_port = 8765
+
+# 代理配置
+[runtime.agents]
+root_profile = "builtin.gate"
+worker_profile = "builtin.worker"
+memory_agent_profile = "builtin.memory"
+max_active_agents = 16
+max_agents_per_task = 8
+max_depth = 3
+max_children_per_agent = 4
+turn_concurrency = 8
+model_concurrency = 4
+tool_concurrency = 8
+blocking_workers = 4
+lease_seconds = 30.0
+ambient_ttl_seconds = 1800.0
+
+# 自主配置
+[runtime.autonomy]
+scan_seconds = 1.0
+heartbeat_initial_seconds = 30.0
+heartbeat_min_seconds = 30.0
+heartbeat_max_seconds = 1800.0
+autonomous_daily_model_calls = 24
+autonomous_daily_tokens = 100000
+
+# 交互任务配置
+[runtime.interactive_task]
+max_model_calls = 8
+max_tool_calls = 6
+max_duration_seconds = 300.0
+
+# 自主任务配置
+[runtime.autonomous_task]
+max_model_calls = 3
+max_tool_calls = 2
+max_duration_seconds = 120.0

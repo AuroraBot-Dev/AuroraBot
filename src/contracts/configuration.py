@@ -266,37 +266,39 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     )
 
     root = root.resolve()
-    base, base_source = _read_toml_snapshot(root / "config" / "aurora.toml")
-    sources = [base_source]
-    _require_keys(
-        base,
-        {"runtime", "dashboard", "logging", "storage", "models"},
-        "aurora.toml",
-    )
-    runtime_raw = base["runtime"]
+    config_dir = root / "config"
+    sources: list[ConfigurationSource] = []
+
+    # 加载运行时配置
+    runtime_data, runtime_source = _read_toml_snapshot(config_dir / "runtime.toml")
+    sources.append(runtime_source)
+    runtime_raw = runtime_data.get("runtime", {})
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError("runtime must be a table")
+
+    # 确定profile
     selected_profile = profile or os.environ.get("AURORA_PROFILE") or runtime_raw.get("profile")
     if not isinstance(selected_profile, str) or not selected_profile:
         raise ConfigurationError("no profile selected")
-    merged = base
-    profile_path = root / "config" / "profiles" / f"{selected_profile}.toml"
+
+    # 合并profile覆盖
+    merged_runtime = runtime_data
+    profile_path = config_dir / "profiles" / f"{selected_profile}.toml"
     if profile_path.exists():
         profile_data, profile_source = _read_toml_snapshot(profile_path)
-        merged = _merge(base, profile_data)
+        # 验证profile只包含runtime.toml中允许的配置项
+        allowed_profile_keys = {"runtime"}
+        unexpected_keys = set(profile_data) - allowed_profile_keys
+        if unexpected_keys:
+            raise ConfigurationError(f"profile has unexpected keys: {sorted(unexpected_keys)}")
+        merged_runtime = _merge(runtime_data, profile_data)
         sources.append(profile_source)
-    _require_keys(
-        merged,
-        {"runtime", "dashboard", "logging", "storage", "models"},
-        "merged aurora config",
-    )
-    runtime_raw = merged["runtime"]
-    dashboard_raw = merged["dashboard"]
-    logging_raw = merged["logging"]
-    storage_raw = merged["storage"]
-    models_raw = merged["models"]
-    if not all(isinstance(value, dict) for value in (runtime_raw, dashboard_raw, logging_raw, storage_raw, models_raw)):
-        raise ConfigurationError("aurora top-level sections must be tables")
+
+    runtime_raw = merged_runtime.get("runtime", {})
+    if not isinstance(runtime_raw, dict):
+        raise ConfigurationError("runtime must be a table")
+
+    # 验证运行时配置
     runtime_allowed = {
         "profile",
         "workspace",
@@ -310,15 +312,33 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     required_runtime = {"profile", "workspace", "debug_host", "debug_port"}
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
         raise ConfigurationError("runtime has unsupported or missing keys")
+
+    # 加载平台配置
+    platforms_data, platforms_source = _read_toml_snapshot(config_dir / "platforms.toml")
+    sources.append(platforms_source)
+    dashboard_raw = platforms_data.get("dashboard", {})
+    if not isinstance(dashboard_raw, dict):
+        raise ConfigurationError("dashboard must be a table")
+
+    # 加载模型配置
+    models_data, models_source = _read_toml_snapshot(config_dir / "models.toml")
+    sources.append(models_source)
+    models_raw = models_data.get("models", {})
+    if not isinstance(models_raw, dict):
+        raise ConfigurationError("models must be a table")
+    _require_keys(models_raw, {"roles", "providers", "logging"}, "models")
+
+    # 加载日志和存储配置
+    logging_data, logging_source = _read_toml_snapshot(config_dir / "logging.toml")
+    sources.append(logging_source)
+    logging_raw = logging_data.get("logging", {})
+    storage_raw = logging_data.get("storage", {})
+    if not isinstance(logging_raw, dict) or not isinstance(storage_raw, dict):
+        raise ConfigurationError("logging and storage must be tables")
     _require_keys(logging_raw, {"level"}, "logging")
     _require_keys(storage_raw, {"data_dir"}, "storage")
-    _require_keys(models_raw, {"roles", "providers", "logging"}, "models")
-    debug_port = runtime_raw["debug_port"]
-    if not isinstance(debug_port, int) or not 1 <= debug_port <= 65535:
-        raise ConfigurationError("runtime.debug_port must be a valid port")
-    debug_host = _string(runtime_raw["debug_host"], "runtime.debug_host")
-    if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
-        raise ConfigurationError("production debug API must bind to loopback")
+
+    # 解析模型配置
     roles = models_raw["roles"]
     providers = models_raw["providers"]
     model_logging = models_raw["logging"]
@@ -327,6 +347,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     _require_keys(model_logging, {"log_queries", "log_responses"}, "models.logging")
     if not isinstance(model_logging["log_queries"], bool) or not isinstance(model_logging["log_responses"], bool):
         raise ConfigurationError("models.logging values must be booleans")
+
     model_providers: dict[str, ModelProviderConfig] = {}
     for provider_id, settings in providers.items():
         if not isinstance(provider_id, str) or not isinstance(settings, dict):
@@ -347,6 +368,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             secret_env=_string(settings["secret_env"], f"models.providers.{provider_id}.secret_env"),
             base_url=base_url,
         )
+
     model_definitions: dict[str, ModelRoleConfig] = {}
     for role, settings in roles.items():
         if not isinstance(settings, dict):
@@ -371,18 +393,32 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             capabilities=frozenset(capabilities),
             endpoint=endpoint,
         )
-    agents_data, agents_source = _read_toml_snapshot(root / "config" / "agents.toml")
-    apps_data, apps_source = _read_toml_snapshot(root / "config" / "apps.toml")
+
+    # 加载代理和应用配置
+    agents_data, agents_source = _read_toml_snapshot(config_dir / "agents.toml")
+    apps_data, apps_source = _read_toml_snapshot(config_dir / "apps.toml")
     sources.extend((agents_source, apps_source))
     agents = _parse_agents(agents_data, frozenset(roles))
     _require_keys(apps_data, {"app"}, "apps.toml")
     apps = _parse_apps(apps_data["app"], root)
+
+    # 解析运行时子配置
     autonomy_raw = runtime_raw.get("autonomy", {})
     agents_raw = runtime_raw.get("agents", {})
     interactive_raw = runtime_raw.get("interactive_task", {})
     autonomous_raw = runtime_raw.get("autonomous_task", {})
     if not all(isinstance(item, dict) for item in (autonomy_raw, agents_raw, interactive_raw, autonomous_raw)):
         raise ConfigurationError("runtime autonomy, Agents and Task budgets must be tables")
+
+    # 验证调试端口和主机
+    debug_port = runtime_raw["debug_port"]
+    if not isinstance(debug_port, int) or not 1 <= debug_port <= 65535:
+        raise ConfigurationError("runtime.debug_port must be a valid port")
+    debug_host = _string(runtime_raw["debug_host"], "runtime.debug_host")
+    if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
+        raise ConfigurationError("production debug API must bind to loopback")
+
+    # 解析子配置
     autonomy = _parse_autonomy(autonomy_raw)
     agent_runtime = _parse_agent_runtime(agents_raw)
     if agent_runtime.root_profile not in {agent.id for agent in agents}:
@@ -395,10 +431,13 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         raise ConfigurationError("runtime.agents.memory_agent_profile is not configured")
     interactive_budget = _parse_task_budget(interactive_raw, 8, 6, 300.0, "interactive_task")
     autonomous_budget = _parse_task_budget(autonomous_raw, 3, 2, 120.0, "autonomous_task")
+
+    # 验证工作区
     workspace = (root / _string(runtime_raw["workspace"], "runtime.workspace")).resolve()
     expected_workspace = (root / "data" / "kernel").resolve()
     if workspace != expected_workspace:
         raise ConfigurationError("runtime.workspace must be data/kernel")
+
     return AuroraConfig(
         root=root,
         sources=tuple(sources),
