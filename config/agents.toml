@@ -4,7 +4,7 @@ implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "fast"
 capabilities = ["*"]
 can_delegate = true
-child_profiles = ["builtin.worker"]
+child_profiles = ["builtin.worker", "builtin.memory"]
 
 [[agent]]
 id = "builtin.worker"
@@ -12,7 +12,7 @@ implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "agent"
 capabilities = ["*"]
 can_delegate = true
-child_profiles = ["builtin.worker"]
+child_profiles = ["builtin.worker", "builtin.memory"]
 
 [[agent]]
 id = "builtin.memory"
