@@ -1,6 +1,3 @@
-# MCP 应用声明。安装或发现不代表启用。
-# 运行时事件和应用私有载荷仍使用 JSON。
-
 [[app]]
 package = "org.aurora.clock"
 enabled = true

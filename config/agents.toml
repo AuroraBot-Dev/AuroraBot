@@ -1,5 +1,3 @@
-# RFC 0012 同构 Agent profiles。所有 profile 使用同一 handler，只改变模型与能力策略。
-
 [[agent]]
 id = "builtin.gate"
 implementation = "src.agents.tool_agent:ToolAgent"
