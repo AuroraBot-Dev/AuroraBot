@@ -109,6 +109,9 @@ class _FakeMemoryService:
     def recall_recent_events(self, limit: int = 10) -> list[dict[str, str]]:
         return self._events[:limit] if self._available else []
 
+    def recall_conversation(self, limit: int = 8) -> list[dict[str, str | None]]:  # noqa: ARG002
+        return []
+
 
 class TestMemoryService:
     def test_disabled_service_returns_empty(self) -> None:

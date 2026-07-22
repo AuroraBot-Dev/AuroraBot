@@ -120,3 +120,47 @@ class MemoryService:
         finally:
             if conn is not None:
                 conn.close()
+
+    def recall_conversation(self, limit: int = 8) -> list[dict[str, str | None]]:
+        if not self._db_path.exists():
+            return []
+        conn = None
+        try:
+            conn = sqlite3.connect(str(self._db_path))
+            conn.row_factory = sqlite3.Row
+            started = {
+                row["task_id"]: row["summary"]
+                for row in conn.execute(
+                    "SELECT task_id, summary FROM causal_events "
+                    "WHERE type = 'task.started' AND summary != 'system.tick' "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit * 2,),
+                ).fetchall()
+            }
+            if not started:
+                return []
+            placeholders = ",".join("?" for _ in started)
+            rows = conn.execute(
+                f"SELECT task_id, summary FROM causal_events "
+                f"WHERE type = 'agent.complete' AND task_id IN ({placeholders}) "
+                f"ORDER BY created_at ASC",
+                tuple(started.keys()),
+            ).fetchall()
+            completed: dict[str, str] = {}
+            for row in rows:
+                summary = row["summary"]
+                if isinstance(summary, str) and summary.strip():
+                    completed[row["task_id"]] = summary
+            conversation: list[dict[str, str | None]] = []
+            for task_id, user_msg in started.items():
+                turn: dict[str, str | None] = {"user": user_msg}
+                turn["bot"] = completed.get(task_id)
+                conversation.append(turn)
+            conversation.reverse()
+            return conversation[-limit:]
+        except Exception:
+            logger.warning("recall_conversation failed")
+            return []
+        finally:
+            if conn is not None:
+                conn.close()

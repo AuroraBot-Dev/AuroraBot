@@ -57,6 +57,9 @@ class PromptComposer:
         recent = _recall_recent_events(self._memory)
         if recent:
             user.append(PromptSection("recent_events", recent))
+        conversation = _recall_conversation(self._memory)
+        if conversation:
+            user.append(PromptSection("recent_conversation", conversation))
         recalled = _recall_semantic_facts(self._memory, context)
         if recalled:
             user.append(PromptSection("related_memories", recalled))
@@ -182,3 +185,22 @@ def _recall_semantic_facts(memory: Any, context: AgentContext) -> str:
     if not facts:
         return ""
     return f"[ 相关记忆 ]\n{_external(facts)}"
+
+
+def _recall_conversation(memory: Any) -> str:
+    if memory is None or not getattr(memory, "available", False):
+        return ""
+    turns = memory.recall_conversation(limit=8)
+    if not turns:
+        return ""
+    lines: list[str] = []
+    for turn in turns:
+        user_msg = turn.get("user", "")
+        bot_msg = turn.get("bot")
+        if isinstance(user_msg, str) and user_msg.strip():
+            lines.append(f"用户：{user_msg}")
+        if isinstance(bot_msg, str) and bot_msg.strip():
+            lines.append(f"Aurora：{bot_msg}")
+    if not lines:
+        return ""
+    return "[ 最近对话 ]\n" + "\n".join(lines)
