@@ -16,6 +16,7 @@ from src.contracts.agent import (
     AgentHandler,
     AgentLimits,
     AgentProfile,
+    Capability,
     CapabilityCatalogSnapshot,
     KernelConfiguration,
     TaskBudget,
@@ -38,7 +39,12 @@ if TYPE_CHECKING:
     from src.localhost.ports import ToolExecutorBinding
 
 
-def _load_handler(specification: str, composer: PromptComposer, memory_service: Any = None) -> AgentHandler:
+def _load_handler(
+    specification: str,
+    composer: PromptComposer,
+    memory_service: Any = None,
+    capabilities: tuple[Capability, ...] = (),
+) -> AgentHandler:
     module_name, separator, attribute = specification.partition(":")
     if not separator:
         raise ValueError(f"Agent implementation must use module:attribute syntax: {specification}")
@@ -50,9 +56,33 @@ def _load_handler(specification: str, composer: PromptComposer, memory_service: 
     mem_installer = getattr(handler, "install_memory_service", None)
     if callable(mem_installer):
         mem_installer(memory_service)
+    cap_installer = getattr(handler, "install_capabilities", None)
+    if callable(cap_installer):
+        cap_installer(capabilities)
     if not callable(getattr(handler, "handle", None)):
         raise TypeError(f"Agent implementation does not provide handle(): {specification}")
     return handler
+
+
+def _build_capabilities(
+    *,
+    memory_service: Any = None,
+    memory_agent_profile: str | None = None,
+) -> tuple[Capability, ...]:
+    from src.agents.capabilities.claim import ClaimCapability
+    from src.agents.capabilities.delegate import DelegationCapability
+    from src.agents.capabilities.memory import MemoryCapability
+    from src.agents.capabilities.wait import WaitCapability
+
+    return (
+        DelegationCapability(),
+        WaitCapability(),
+        ClaimCapability(),
+        MemoryCapability(
+            memory_service=memory_service,
+            agent_profile=memory_agent_profile,
+        ),
+    )
 
 
 @dataclass(slots=True)
@@ -126,7 +156,14 @@ class AuroraRuntime:
         catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
         memory_service = MemoryService(configuration, configuration.root / "data", configuration.runtime.workspace)
         composer = PromptComposer(catalog, memory=memory_service)
-        handlers = {profile.id: _load_handler(profile.implementation, composer, memory_service) for profile in profiles}
+        capabilities = _build_capabilities(
+            memory_service=memory_service,
+            memory_agent_profile=runtime_agents.memory_agent_profile,
+        )
+        handlers = {
+            profile.id: _load_handler(profile.implementation, composer, memory_service, capabilities)
+            for profile in profiles
+        }
         kernel = AgentKernel(kernel_config, handlers)
         runtime = cls(
             configuration,

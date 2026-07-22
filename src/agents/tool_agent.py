@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import json
+from typing import TYPE_CHECKING
 
 from src.agents.tools import (
-    CLAIM_TOOL,
-    DELEGATE_TOOL,
-    MEMORY_QUERY_TOOL,
-    MEMORY_REMEMBER_TOOL,
-    WAIT_TOOL,
-    build_tool_definitions,
+    capability_tool_definition,
     uses_runtime_complete_task,
 )
 from src.contracts.agent import (
@@ -18,35 +13,74 @@ from src.contracts.agent import (
     AgentDecision,
     CapabilityDescriptor,
     Completion,
-    DelegationRequest,
     ToolRequest,
 )
-from src.contracts.memory import MemoryFailure, MemoryQuery
 from src.contracts.model import (
     ModelContinuation,
     ModelRequest,
     ModelResult,
+    ToolCall,
+    ToolDefinition,
     append_tool_result,
 )
 from src.prompt import PromptComposer
 from src.prompt.text import EMPTY_CHILD_COMPLETION, NO_ACTION_COMPLETION
 from src.utils.log_utils import get_logger
 
+if TYPE_CHECKING:
+    from src.contracts.agent import Capability
+
 logger = get_logger("aurora.agent.tool")
 _COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
 _COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
+_CAPABILITIES_ALREADY_INSTALLED = "capabilities are already installed"
+_DUPLICATE_TOOL_IDS = "model Tool IDs must be unique"
+
+
+def _collect_tool_definitions(
+    context: AgentContext,
+    capabilities: tuple[Capability, ...],
+) -> tuple[ToolDefinition, ...]:
+    tools: list[ToolDefinition] = [capability_tool_definition(item) for item in context.capabilities]
+    for cap in capabilities:
+        tools.extend(cap.tool_definitions(context))
+    names = [tool.name for tool in tools]
+    if len(names) != len(set(names)):
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        message = f"{_DUPLICATE_TOOL_IDS}: {duplicates}"
+        raise ValueError(message)
+    return tuple(tools)
 
 
 class ToolAgent:
     """A deterministic state-machine adapter around provider-native Tool IR."""
 
-    def __init__(self, *, composer: PromptComposer | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        composer: PromptComposer | None = None,
+        capabilities: tuple[Capability, ...] = (),
+    ) -> None:
         self._composer = composer
+        self._capabilities = capabilities
+        self._dispatch: dict[str, Capability] = {}
+        if capabilities:
+            self._install_capabilities(capabilities)
 
     def install_prompt_composer(self, composer: PromptComposer) -> None:
         if self._composer is not None:
             raise RuntimeError(_COMPOSER_ALREADY_INSTALLED)
         self._composer = composer
+
+    def install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
+        if self._capabilities or self._dispatch:
+            raise RuntimeError(_CAPABILITIES_ALREADY_INSTALLED)
+        self._install_capabilities(capabilities)
+
+    def _install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
+        self._capabilities = capabilities
+        for cap in capabilities:
+            self._dispatch.update(dict.fromkeys(cap.tool_names, cap))
 
     def handle(self, context: AgentContext) -> AgentDecision:
         message_type = context.message.type
@@ -74,7 +108,7 @@ class ToolAgent:
             messages=composer.request_messages(context),
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="native" if context.profile.model_role == "agent" else "normalized",
-            tools=build_tool_definitions(context),
+            tools=_collect_tool_definitions(context, self._capabilities),
             parallel_tool_calls=False,
             cancel_policy="on_external_activity" if context.task.autonomous else "never",
         )
@@ -94,31 +128,18 @@ class ToolAgent:
             if context.agent.parent_agent_id is not None:
                 return AgentDecision(completion=Completion(text or EMPTY_CHILD_COMPLETION))
             return AgentDecision(completion=Completion(text or NO_ACTION_COMPLETION, silent=not bool(text)))
-        call = result.tool_calls[0]
-        if call.name == DELEGATE_TOOL:
-            raw_tasks = call.arguments.get("tasks")
-            if not isinstance(raw_tasks, list) or not raw_tasks or len(raw_tasks) > 4:
-                return AgentDecision(failure="delegate.tasks must contain one to four tasks")
-            delegations: list[DelegationRequest] = []
-            for raw in raw_tasks:
-                if not isinstance(raw, dict) or not isinstance(raw.get("instruction"), str):
-                    return AgentDecision(failure="delegate task instruction is invalid")
-                profile_id = raw.get("profile")
-                if profile_id is not None and not isinstance(profile_id, str):
-                    return AgentDecision(failure="delegate task profile is invalid")
-                delegations.append(DelegationRequest(raw["instruction"], profile_id))
-            return AgentDecision(delegations=tuple(delegations))
-        if call.name == WAIT_TOOL:
-            return AgentDecision(wait_for_children=True)
-        if call.name == CLAIM_TOOL:
-            return self._handle_situation_claim(context, result)
-        if call.name == MEMORY_QUERY_TOOL:
-            return self._handle_memory_query(context, result)
-        if call.name == MEMORY_REMEMBER_TOOL:
-            return self._handle_memory_remember(context, result)
-        descriptor = next((item for item in context.capabilities if item.id == call.name), None)
+        raw = result.tool_calls[0]
+        tool_call = ToolCall(raw.call_id, raw.name, raw.arguments)
+        tools = _collect_tool_definitions(context, self._capabilities)
+        capability = self._dispatch.get(raw.name)
+        if capability is not None:
+            decision = capability.handle_tool(tool_call, context, result.continuation, tools)
+            if decision is not None:
+                return decision
+            return AgentDecision(failure=f"capability {raw.name} returned no decision")
+        descriptor = next((item for item in context.capabilities if item.id == raw.name), None)
         if descriptor is None:
-            return AgentDecision(failure=f"unknown Tool capability {call.name}")
+            return AgentDecision(failure=f"unknown Tool capability {raw.name}")
         return self._capability_decision(result, descriptor)
 
     def _capability_decision(self, result: ModelResult, descriptor: CapabilityDescriptor) -> AgentDecision:
@@ -139,74 +160,6 @@ class ToolAgent:
             )
         )
 
-    def _handle_situation_claim(self, context: AgentContext, result: ModelResult) -> AgentDecision:
-        call = result.tool_calls[0]
-        raw_ids = call.arguments.get("situation_ids")
-        if not isinstance(raw_ids, list) or not all(isinstance(item, str) for item in raw_ids):
-            return AgentDecision(failure="situation_ids must contain strings")
-        continuation = result.continuation
-        if continuation is None:
-            return AgentDecision(failure="situation claim requires model continuation")
-        continuation = append_tool_result(
-            continuation,
-            call.call_id,
-            {"claimed": raw_ids},
-            is_error=False,
-        )
-        request = self._continuation_request(context, continuation)
-        return AgentDecision(model_request=request.to_dict(), claims=tuple(raw_ids))
-
-    def _handle_memory_query(self, context: AgentContext, result: ModelResult) -> AgentDecision:
-        call = result.tool_calls[0]
-        query = call.arguments.get("query")
-        scope = call.arguments.get("scope", "global")
-        limit = call.arguments.get("limit", 8)
-        valid_limit = isinstance(limit, int) and not isinstance(limit, bool) and 1 <= limit <= 32
-        if not isinstance(query, str) or not isinstance(scope, str) or not valid_limit:
-            return AgentDecision(failure="memory query is invalid")
-        memory_query = MemoryQuery(query, scope, limit)
-        if context.memory_agent_profile is not None:
-            return AgentDecision(
-                delegations=(
-                    DelegationRequest(
-                        json.dumps({"type": "memory.query", **memory_query.to_dict()}, ensure_ascii=False),
-                        context.memory_agent_profile,
-                    ),
-                )
-            )
-        continuation = result.continuation
-        if continuation is None:
-            return AgentDecision(failure="memory query requires model continuation")
-        continuation = append_tool_result(
-            continuation,
-            call.call_id,
-            {"ok": False, **MemoryFailure().to_dict()},
-            is_error=False,
-        )
-        request = self._continuation_request(context, continuation)
-        return AgentDecision(model_request=request.to_dict())
-
-    def _handle_memory_remember(self, context: AgentContext, result: ModelResult) -> AgentDecision:
-        call = result.tool_calls[0]
-        content = call.arguments.get("content")
-        if not isinstance(content, str) or not content.strip():
-            return AgentDecision(failure="memory.remember content must be a non-empty string")
-        if context.memory_agent_profile is not None:
-            return AgentDecision(
-                delegations=(
-                    DelegationRequest(
-                        json.dumps({"type": "memory.proposal", "content": content}, ensure_ascii=False),
-                        context.memory_agent_profile,
-                    ),
-                )
-            )
-        continuation = result.continuation
-        if continuation is None:
-            return AgentDecision(completion=Completion("remembered", silent=True))
-        continuation = append_tool_result(continuation, call.call_id, {"ok": True, "stored": False}, is_error=False)
-        request = self._continuation_request(context, continuation)
-        return AgentDecision(model_request=request.to_dict())
-
     def _resume_tool(self, context: AgentContext) -> AgentDecision:
         request = context.message.payload.get("request")
         if not isinstance(request, dict):
@@ -217,7 +170,7 @@ class ToolAgent:
             return self._request_model(context)
         continuation = ModelContinuation.from_dict(raw_continuation)
         status = context.message.type.removeprefix("tool.")
-        output = {"status": status}
+        output: dict[str, object] = {"status": status}
         if status == "succeeded":
             output["result"] = context.message.payload.get("result", {})
         else:
@@ -232,7 +185,7 @@ class ToolAgent:
             messages=(),
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="native" if context.profile.model_role == "agent" else "normalized",
-            tools=build_tool_definitions(context),
+            tools=_collect_tool_definitions(context, self._capabilities),
             continuation=continuation,
             parallel_tool_calls=False,
             cancel_policy="on_external_activity" if context.task.autonomous else "never",

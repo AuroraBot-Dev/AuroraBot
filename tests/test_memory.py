@@ -7,8 +7,8 @@ import sqlite3
 from dataclasses import replace
 from pathlib import Path  # noqa: TC003
 
+from src.agents.capabilities.memory import MEMORY_QUERY_TOOL, MEMORY_REMEMBER_TOOL, MemoryCapability
 from src.agents.memory_agent import MemoryAgent
-from src.agents.tools import MEMORY_QUERY_TOOL, MEMORY_REMEMBER_TOOL, build_tool_definitions
 from src.contracts.agent import (
     AgentContext,
     AgentInstance,
@@ -39,7 +39,7 @@ def _gate_profile() -> AgentProfile:
     )
 
 
-def _dummy_context(memory_agent_profile: str | None = None) -> AgentContext:
+def _dummy_context() -> AgentContext:
     task = TaskState(
         task_id="t1",
         root_agent_id="a1",
@@ -88,7 +88,7 @@ def _dummy_context(memory_agent_profile: str | None = None) -> AgentContext:
     capabilities: tuple[CapabilityDescriptor, ...] = (
         CapabilityDescriptor("org.aurora.console.send", "Send text", {"type": "object", "properties": {}}),
     )
-    return AgentContext(task, agent, message, (), profile, capabilities, brain, memory_agent_profile)
+    return AgentContext(task, agent, message, (), profile, capabilities, brain)
 
 
 class _FakeMemoryService:
@@ -218,26 +218,26 @@ class TestPromptComposerMemory:
 
 class TestMemoryTools:
     def test_memory_query_tool_always_present(self) -> None:
-        context = _dummy_context()
-        tools = build_tool_definitions(context)
+        cap = MemoryCapability()
+        tools = cap.tool_definitions(_dummy_context())
         names = [t.name for t in tools]
         assert MEMORY_QUERY_TOOL in names
 
     def test_memory_remember_tool_when_profile_configured(self) -> None:
-        context = _dummy_context(memory_agent_profile="builtin.memory")
-        tools = build_tool_definitions(context)
+        cap = MemoryCapability(agent_profile="builtin.memory")
+        tools = cap.tool_definitions(_dummy_context())
         names = [t.name for t in tools]
         assert MEMORY_REMEMBER_TOOL in names
 
     def test_memory_remember_tool_absent_when_no_profile(self) -> None:
-        context = _dummy_context()
-        tools = build_tool_definitions(context)
+        cap = MemoryCapability()
+        tools = cap.tool_definitions(_dummy_context())
         names = [t.name for t in tools]
         assert MEMORY_REMEMBER_TOOL not in names
 
     def test_memory_remember_tool_has_content_param(self) -> None:
-        context = _dummy_context(memory_agent_profile="builtin.memory")
-        tools = build_tool_definitions(context)
+        cap = MemoryCapability(agent_profile="builtin.memory")
+        tools = cap.tool_definitions(_dummy_context())
         remember_tool = next(t for t in tools if t.name == MEMORY_REMEMBER_TOOL)
         assert "content" in remember_tool.parameters_schema["required"]
         assert "importance" in remember_tool.parameters_schema["properties"]

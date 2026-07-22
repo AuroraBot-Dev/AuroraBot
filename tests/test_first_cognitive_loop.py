@@ -6,9 +6,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from src.agents.capabilities.claim import ClaimCapability
+from src.agents.capabilities.delegate import DelegationCapability
+from src.agents.capabilities.memory import MEMORY_QUERY_TOOL, MemoryCapability
+from src.agents.capabilities.wait import WaitCapability
 from src.agents.tool_agent import ToolAgent
 from src.agents.tools import (
-    MEMORY_QUERY_TOOL,
     capability_tool_definition,
 )
 from src.contracts.agent import (
@@ -84,7 +87,16 @@ def prompt_composer() -> PromptComposer:
 
 def tool_agents() -> dict[str, ToolAgent]:
     composer = prompt_composer()
-    return {"gate": ToolAgent(composer=composer), "worker": ToolAgent(composer=composer)}
+    capabilities = (
+        DelegationCapability(),
+        WaitCapability(),
+        ClaimCapability(),
+        MemoryCapability(),
+    )
+    return {
+        "gate": ToolAgent(composer=composer, capabilities=capabilities),
+        "worker": ToolAgent(composer=composer, capabilities=capabilities),
+    }
 
 
 def input_amp(message_id: str = "00000000-0000-4000-8000-000000000001") -> AmpEnvelope:

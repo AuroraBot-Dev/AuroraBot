@@ -206,7 +206,6 @@ class AgentKernel:
             profile=profile,
             capabilities=descriptors,
             brain=self.brain_context(),
-            memory_agent_profile=self.limits.memory_agent_profile,
         )
         return self._handlers[agent.profile_id].handle(context)
 

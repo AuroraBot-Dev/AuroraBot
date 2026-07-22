@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+
+if TYPE_CHECKING:
+    from src.contracts.model import ModelContinuation, ToolCall, ToolDefinition
 
 
 class TaskStatus(StrEnum):
@@ -286,11 +289,27 @@ class AgentContext:
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
     brain: BrainContextSnapshot
-    memory_agent_profile: str | None = None
 
 
 class AgentHandler(Protocol):
     def handle(self, context: AgentContext) -> AgentDecision: ...
+
+
+class Capability(Protocol):
+    """Bot 自身能力：声明工具、按上下文决定展示、处理模型工具调用。"""
+
+    @property
+    def tool_names(self) -> frozenset[str]: ...
+
+    def tool_definitions(self, context: AgentContext) -> tuple["ToolDefinition", ...]: ...
+
+    def handle_tool(
+        self,
+        call: "ToolCall",
+        context: AgentContext,
+        continuation: "ModelContinuation | None" = None,
+        tools: tuple["ToolDefinition", ...] = (),
+    ) -> AgentDecision | None: ...
 
 
 class ToolQueue(Protocol):

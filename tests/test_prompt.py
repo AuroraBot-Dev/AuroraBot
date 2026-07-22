@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.tools import COMPLETE_TASK_DESCRIPTION, DELEGATE_TOOL, build_tool_definitions
+from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
+from src.agents.tool_agent import _collect_tool_definitions
+from src.agents.tools import COMPLETE_TASK_DESCRIPTION
 from src.contracts.agent import (
     AgentContext,
     AgentInstance,
@@ -275,7 +277,12 @@ def test_empty_soul_keeps_world_and_agent_layers() -> None:
 
 
 def test_agent_tool_owner_preserves_external_description() -> None:
-    tools = {tool.name: tool for tool in build_tool_definitions(_context())}
+    from src.agents.capabilities.claim import ClaimCapability
+    from src.agents.capabilities.memory import MemoryCapability
+    from src.agents.capabilities.wait import WaitCapability
+
+    caps = (DelegationCapability(), WaitCapability(), ClaimCapability(), MemoryCapability())
+    tools = {tool.name: tool for tool in _collect_tool_definitions(_context(), caps)}
 
     assert DELEGATE_TOOL in tools
     assert "托付" in tools[DELEGATE_TOOL].description
@@ -287,10 +294,11 @@ def test_agent_tool_owner_preserves_external_description() -> None:
 
 def test_internal_and_external_tool_ids_cannot_collide() -> None:
     context = _context()
+    caps = (DelegationCapability(),)
     collision = CapabilityDescriptor(DELEGATE_TOOL, "external collision", {"type": "object"})
 
     with pytest.raises(ValueError, match="Tool IDs must be unique"):
-        build_tool_definitions(replace(context, capabilities=(*context.capabilities, collision)))
+        _collect_tool_definitions(replace(context, capabilities=(*context.capabilities, collision)), caps)
 
 
 def test_checked_in_default_fragments_keep_persona_and_world_responsibilities_separate() -> None:
