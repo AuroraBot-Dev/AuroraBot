@@ -1,7 +1,7 @@
 [[agent]]
 id = "builtin.gate"
 implementation = "src.agents.tool_agent:ToolAgent"
-model_role = "fast"
+model_role = "agent"
 capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker", "builtin.memory"]
