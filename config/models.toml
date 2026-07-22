@@ -1,3 +1,23 @@
+# 供应商配置
+
+[models.providers.deepseek]
+adapter = "litellm"
+secret_env = "DEEPSEEK_API_KEY"
+
+[models.providers.xiaomi_mimo]
+adapter = "litellm"
+secret_env = "XIAOMI_MIMO_API_KEY"
+
+[models.providers.openai]
+adapter = "litellm"
+secret_env = "OPENAI_API_KEY"
+
+[models.providers.siliconflow]
+adapter = "openai_compatible"
+base_url = "https://api.siliconflow.cn/v1"
+secret_env = "SILICONFLOW_API_KEY"
+
+
 # 模型配置
 
 [models.roles.fast]
@@ -57,23 +77,6 @@ provider = "siliconflow"
 model = "BAAI/bge-m3"
 endpoint = "chat_completions"
 capabilities = ["embedding"]
-
-[models.providers.deepseek]
-adapter = "litellm"
-secret_env = "DEEPSEEK_API_KEY"
-
-[models.providers.xiaomi_mimo]
-adapter = "litellm"
-secret_env = "XIAOMI_MIMO_API_KEY"
-
-[models.providers.openai]
-adapter = "litellm"
-secret_env = "OPENAI_API_KEY"
-
-[models.providers.siliconflow]
-adapter = "openai_compatible"
-base_url = "https://api.siliconflow.cn/v1"
-secret_env = "SILICONFLOW_API_KEY"
 
 [models.logging]
 log_queries = false

@@ -4,7 +4,7 @@ terminal_logs = false
 
 [platform.dashboard]
 enabled = true
-open_browser = true
+open_browser = false
 
 [platform.mcp]
 enabled = true
