@@ -29,8 +29,6 @@ class CommandRouter:
 
     async def route(self, request: RuntimeInput) -> CommandResult:
         raw = request.text.strip()
-        if not raw:
-            return CommandResult(ok=False, text="消息不能为空")
         if not raw.startswith("/"):
             return await self._conversation(request, raw)
         return await self._command(request, raw)
@@ -53,28 +51,10 @@ class CommandRouter:
 
     async def _conversation(self, request: RuntimeInput, text: str) -> CommandResult:
         message_id = await self._runtime.submit_conversation(request, text)
-        return CommandResult(
-            ok=True,
-            text=f"已投递消息 AMP: {message_id}",
-            message_id=message_id,
-            publish_reply=False,
-        )
+        return CommandResult(ok=True, text=None, message_id=message_id, publish_reply=False)
 
     @staticmethod
     def _parse(command: ConsoleCommand, arguments: tuple[str, ...]) -> argparse.Namespace:
         parser = _CommandParser(add_help=False, prog=command.names[0])
         command.configure(parser)
         return parser.parse_args(arguments)
-
-
-def is_conversation_input(value: str) -> bool:
-    raw = value.strip()
-    if not raw:
-        return False
-    if not raw.startswith("/"):
-        return True
-    try:
-        tokens = shlex.split(raw)
-    except ValueError:
-        return False
-    return len(tokens) > 1 and tokens[0].lower() in {"/say", "/s"}

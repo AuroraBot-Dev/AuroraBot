@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.localhost.command_types import CommandResult
+from src.utils.log_utils import console_logging_status
 
 if TYPE_CHECKING:
     import argparse
@@ -23,9 +24,5 @@ def configure(parser: argparse.ArgumentParser) -> None:
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
     message = " ".join(arguments.message).strip()
     message_id = await context.runtime.submit_conversation(context.request.with_text(message), message)
-    return CommandResult(
-        ok=True,
-        text=f"已投递消息 AMP: {message_id}",
-        message_id=message_id,
-        publish_reply=False,
-    )
+    ack = f"已投递消息 AMP: {message_id}" if console_logging_status()["enabled"] else None
+    return CommandResult(ok=True, text=ack, message_id=message_id, publish_reply=False)

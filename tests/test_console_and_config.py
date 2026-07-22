@@ -62,5 +62,5 @@ def test_layered_console_submits_and_processes_a_message(project_root: Path) -> 
     output = asyncio.run(scenario())
 
     assert any('"enabled": false' in line for line in output)
-    assert any("已投递消息 AMP" in line for line in output)
+    assert any("processed_message_ids" in line for line in output)
     assert any("tool_receipts_emitted" in line for line in output)
