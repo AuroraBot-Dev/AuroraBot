@@ -90,6 +90,7 @@ class AuroraRuntime:
     configuration: AuroraConfig
     kernel: AgentKernel
     model_gateway: ModelGatewayService
+    _memory_service: MemoryService | None = field(default=None, init=False, repr=False)
     _pump_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _shutdown_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
@@ -172,6 +173,7 @@ class AuroraRuntime:
         )
         runtime._command_router = CommandRouter(runtime)
         runtime._tool_dispatcher = ToolDispatcher(kernel, kernel)
+        runtime._memory_service = memory_service
         runtime._autonomy_quota = AutonomyQuota(
             configuration.runtime.workspace / "process" / "autonomy-quota.json",
             configuration.runtime.autonomy,
@@ -239,6 +241,8 @@ class AuroraRuntime:
             response["tool_recovery_receipts_emitted"] = recoveries_emitted
             response["tool_receipts_emitted"] = receipts_emitted
             self._ensure_model_dispatcher()
+            if self._memory_service is not None:
+                await asyncio.to_thread(self._memory_service.auto_remember_completed_tasks)
             return response
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:

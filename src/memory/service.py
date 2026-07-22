@@ -164,3 +164,41 @@ class MemoryService:
         finally:
             if conn is not None:
                 conn.close()
+
+    def auto_remember_completed_tasks(self) -> int:
+        if not self._available or not self._db_path.exists():
+            return 0
+        conn = None
+        try:
+            conn = sqlite3.connect(str(self._db_path))
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT e1.task_id, e1.summary AS user_msg, e2.summary AS bot_msg "
+                "FROM causal_events e1 "
+                "LEFT JOIN causal_events e2 ON e1.task_id = e2.task_id AND e2.type = 'agent.complete' "
+                "WHERE e1.type = 'task.started' AND e1.summary != 'system.tick' "
+                "ORDER BY e1.created_at DESC LIMIT 6"
+            ).fetchall()
+        except Exception:
+            logger.warning("auto_remember_completed_tasks query failed")
+            return 0
+        finally:
+            if conn is not None:
+                conn.close()
+        remembered = 0
+        for row in rows:
+            user_msg = row["user_msg"]
+            bot_msg = row["bot_msg"]
+            if not isinstance(user_msg, str) or not user_msg.strip():
+                continue
+            content = f"用户：{user_msg}"
+            if isinstance(bot_msg, str) and bot_msg.strip():
+                stripped = bot_msg.strip()
+                if stripped.startswith("{") and '"operation"' in stripped:
+                    continue
+                content += f"\nAurora：{stripped}"
+            if self.add(content):
+                remembered += 1
+        if remembered:
+            logger.debug("auto-remembered %d completed tasks", remembered)
+        return remembered
