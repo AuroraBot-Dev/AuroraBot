@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING
 
 import uvicorn
 
-from src.contracts.configuration import load_configuration
-from src.contracts.configuration_preferences import PreferenceConfig, load_preference
+from src.contracts.configuration import PlatformPreference, load_configuration
 from src.localhost.ports import ToolExecutorBinding
 from src.localhost.runtime import AuroraRuntime
 from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
@@ -62,10 +61,9 @@ async def run_runtime(
     """Run one exact Platform composition around one shared Runtime and stop event."""
     resolved_root = await asyncio.to_thread(root.resolve)
     configuration = await asyncio.to_thread(load_configuration, resolved_root, profile)
-    preference = await asyncio.to_thread(load_preference, resolved_root)
-    selected = _selected_platforms(platforms, preference)
+    selected = _selected_platforms(platforms, configuration.preference)
     configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
-    configure_console_logging(enabled=preference.platform.console.terminal_logs if "console" in selected else True)
+    configure_console_logging(enabled=configuration.preference.console.terminal_logs if "console" in selected else True)
 
     runtime = AuroraRuntime.create(
         resolved_root,
@@ -80,7 +78,7 @@ async def run_runtime(
         resources.push_async_callback(runtime.shutdown)
         installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
         try:
-            started = await _start_platforms_until_stop(runtime, preference, selected, resources, stop)
+            started = await _start_platforms_until_stop(runtime, configuration.preference, selected, resources, stop)
             if started is not None:
                 console_platform, server = started
                 logger.info(
@@ -93,7 +91,7 @@ async def run_runtime(
                     stop,
                     console_platform,
                     server,
-                    open_browser=preference.platform.dashboard.open_browser,
+                    open_browser=configuration.preference.dashboard.open_browser,
                 )
         finally:
             runtime.bind_stop_requester(None)
@@ -103,19 +101,19 @@ async def run_runtime(
         raise failure
 
 
-def _selected_platforms(platforms: frozenset[str] | None, preference: PreferenceConfig) -> frozenset[str]:
+def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPreference) -> frozenset[str]:
     if platforms is not None:
         unknown = platforms - PLATFORM_NAMES
         if unknown:
             message = f"unknown platforms: {sorted(unknown)}"
             raise ValueError(message)
         return platforms
-    return frozenset(name for name in PLATFORM_NAMES if getattr(preference.platform, name).enabled)
+    return frozenset(name for name in PLATFORM_NAMES if getattr(preference, name).enabled)
 
 
 async def _start_platforms(
     runtime: AuroraRuntime,
-    preference: PreferenceConfig,
+    preference: PlatformPreference,
     selected: frozenset[str],
     resources: AsyncExitStack,
 ) -> tuple[ConsolePlatform | None, uvicorn.Server | None]:
@@ -134,7 +132,7 @@ async def _start_platforms(
     if "mcp" in selected:
         mcp_platform = MCPPlatform(
             runtime.configuration,
-            terminal_logs=preference.platform.mcp.terminal_logs,
+            terminal_logs=preference.mcp.terminal_logs,
         )
         resources.push_async_callback(mcp_platform.shutdown)
         await mcp_platform.start(runtime)
@@ -144,7 +142,7 @@ async def _start_platforms(
 
 async def _start_platforms_until_stop(
     runtime: AuroraRuntime,
-    preference: PreferenceConfig,
+    preference: PlatformPreference,
     selected: frozenset[str],
     resources: AsyncExitStack,
     stop: asyncio.Event,

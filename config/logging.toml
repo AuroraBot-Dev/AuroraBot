@@ -1,7 +1,10 @@
-# 日志配置
+# 日志与存储配置
 
+# 运行时日志：文件名固定为 logs/aurora.log
 [logging]
+# 日志级别：DEBUG / INFO / WARNING / ERROR
 level = "INFO"
 
+# 数据目录基路径，所有平台和 Kernel 数据相对于此路径
 [storage]
 data_dir = "data"

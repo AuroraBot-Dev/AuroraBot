@@ -1,19 +1,45 @@
-# 平台配置
+# 平台配置 — 启用状态、本地体验偏好与各平台私有服务器配置
 
-# 面板配置
-[dashboard]
+# Console：本地 stdin/终端交互
+[platform.console]
+# 是否在默认组合中启用此平台
+enabled = true
+# 是否在终端输出运行时日志（仍写入文件）
+terminal_logs = false
+
+# Dashboard：Web 面板，同时承载偏好与服务器配置
+[platform.dashboard]
+enabled = true
+# 启动后是否自动打开浏览器
+open_browser = false
+# HTTP 绑定地址（生产只允许 loopback）
 host = "127.0.0.1"
+# HTTP 端口（1–65535）
 port = 8000
+# 聊天持久化 SQLite 路径（相对于项目根）
 database_path = "data/platform/dashboard/chat.sqlite3"
+# 附件上传目录（相对于项目根）
 upload_dir = "data/platform/dashboard/uploads"
+# 上传文件最大字节数
 max_upload_bytes = 67108864
+# 会话超时（秒）
 session_ttl_seconds = 604800
+# 允许的跨域来源
 allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-[dashboard.owner]
+# Dashboard Owner：具备 full 权限的唯一用户
+[platform.dashboard.owner]
 username = "admin"
 
-[dashboard.bot]
+# Dashboard Bot：Aurora 自己的身份
+[platform.dashboard.bot]
 username = "aurorabot"
 display_name = "AuroraBot"
+# 头像 URL，空字符串表示无头像
 avatar_url = ""
+
+# MCP：模型上下文协议，子进程与远程服务管理
+[platform.mcp]
+enabled = true
+# 是否在终端输出 MCP 子进程诊断（stdin/stdout 不受影响）
+terminal_logs = true

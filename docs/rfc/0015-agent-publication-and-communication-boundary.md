@@ -256,7 +256,7 @@ provenance 记录不可变 source endpoint、source event、destination endpoint
 - `config/aurora.toml` 的 `[dashboard.owner]` 必须声明稳定 `username`。该规范化用户名只能绑定一个 Dashboard 账号；
   未注册时 Dashboard 可以运行但不能产生 Bot ingress，绑定后不得重命名或删除。Bot publication 固定投递该 owner。
 - MCP communication endpoint、publication 工具与 destination alias 的严格配置由 RFC 0016 定义。
-- `config/preference.toml` 仍只选择 Platform 启动和本地体验，不得授权 route、destination、actor 或跨平台发送。
+- `config/platforms.toml` 中的 `[platform.*]` section 仍只选择 Platform 启动和本地体验，不得授权 route、destination、actor 或跨平台发送。
 - 未知 endpoint、operation、route、destination alias 或策略键必须确定性失败。
 
 ## 与既有 RFC 的关系

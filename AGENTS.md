@@ -44,7 +44,7 @@ tests/          契约、集成与回归测试
 - Kernel 工作区固定为 `data/kernel/inbox/`、`process/`、`archive/`。
 - 外部 AMP 与终态 Task 归档使用 JSON，生产者必须先写临时文件再原子改名；运行态使用 SQLite WAL。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
-- `config/aurora.toml` 与 `config/preference.toml` 分别形成核心配置和平台偏好快照，不得跨文件任意覆盖。
+- `config/aurora.toml` 与 `config/platforms.toml` 分别形成核心配置和平台偏好快照，不得跨文件任意覆盖。
 - 密钥仅来自环境变量；`.env` 只用于本地开发，不能定义结构或覆盖任意 TOML 值。
 
 ## Runtime and quality

@@ -13,6 +13,7 @@
 
 ```text
 config/aurora.toml          全局默认：运行时、SOUL、存储、日志、模型角色
+config/platforms.toml       平台默认组合、本地体验偏好与平台私有配置
 config/apps.toml            内建与外部应用、平台适配器及启用状态
 config/nodes.toml           图实例、边和节点参数
 config/profiles/<name>.toml 仅覆盖 aurora.toml 的环境差异

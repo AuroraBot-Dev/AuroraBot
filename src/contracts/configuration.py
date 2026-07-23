@@ -56,6 +56,18 @@ def _require_keys(value: dict[str, Any], keys: set[str], label: str) -> None:
         raise ConfigurationError(f"{label} has unexpected {sorted(unexpected)} or missing {sorted(missing)} keys")
 
 
+def _require_subset(data: dict[str, Any], required: set[str], label: str) -> None:
+    missing = required - set(data)
+    if missing:
+        raise ConfigurationError(f"{label} is missing required keys: {sorted(missing)}")
+
+
+def _table(value: object, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ConfigurationError(f"{label} must be a table")
+    return value
+
+
 def _string(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise ConfigurationError(f"{label} must be a non-empty string")
@@ -180,12 +192,39 @@ class ModelLoggingConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsolePreference:
+    enabled: bool
+    terminal_logs: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardPreference:
+    enabled: bool
+    open_browser: bool
+
+
+@dataclass(frozen=True, slots=True)
+class McpPreference:
+    enabled: bool
+    terminal_logs: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformPreference:
+    console: ConsolePreference
+    dashboard: DashboardPreference
+    mcp: McpPreference
+
+
+@dataclass(frozen=True, slots=True)
 class AuroraConfig:
     root: Path
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
     dashboard: DashboardConfig
+    preference: PlatformPreference
     logging_level: str
+    storage_data_dir: Path
     agents: tuple[AgentProfileConfig, ...]
     model_roles: frozenset[str]
     model_definitions: Mapping[str, ModelRoleConfig]
@@ -200,69 +239,16 @@ def _positive_number(value: object, label: str) -> float:
     return float(value)
 
 
-def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
-    defaults = AutonomyConfig()
-    allowed = {
-        "scan_seconds",
-        "heartbeat_initial_seconds",
-        "heartbeat_min_seconds",
-        "heartbeat_max_seconds",
-        "autonomous_daily_model_calls",
-        "autonomous_daily_tokens",
-    }
-    if set(raw) - allowed:
-        raise ConfigurationError("runtime.autonomy has unsupported keys")
-    daily_calls = raw.get("autonomous_daily_model_calls", defaults.autonomous_daily_model_calls)
-    daily_tokens = raw.get("autonomous_daily_tokens", defaults.autonomous_daily_tokens)
-    if not isinstance(daily_calls, int) or isinstance(daily_calls, bool) or daily_calls <= 0:
-        raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
-    if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
-        raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
-    minimum = _positive_number(
-        raw.get("heartbeat_min_seconds", defaults.heartbeat_min_seconds), "heartbeat_min_seconds"
-    )
-    maximum = _positive_number(
-        raw.get("heartbeat_max_seconds", defaults.heartbeat_max_seconds), "heartbeat_max_seconds"
-    )
-    if maximum < minimum:
-        raise ConfigurationError("heartbeat_max_seconds must be at least heartbeat_min_seconds")
-    initial = _positive_number(
-        raw.get("heartbeat_initial_seconds", defaults.heartbeat_initial_seconds), "heartbeat_initial_seconds"
-    )
-    if not minimum <= initial <= maximum:
-        raise ConfigurationError("heartbeat_initial_seconds must be within heartbeat bounds")
-    return AutonomyConfig(
-        scan_seconds=_positive_number(raw.get("scan_seconds", defaults.scan_seconds), "scan_seconds"),
-        heartbeat_initial_seconds=initial,
-        heartbeat_min_seconds=minimum,
-        heartbeat_max_seconds=maximum,
-        autonomous_daily_model_calls=daily_calls,
-        autonomous_daily_tokens=daily_tokens,
-    )
-
-
-def _parse_task_budget(
-    raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
-) -> TaskBudgetConfig:
-    allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
-    if set(raw) - allowed:
-        raise ConfigurationError(f"runtime.{label} has unsupported keys")
-    calls = raw.get("max_model_calls", default_calls)
-    tools = raw.get("max_tool_calls", default_tools)
-    if not isinstance(calls, int) or isinstance(calls, bool) or calls <= 0:
-        raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
-    if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
-        raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
-    return TaskBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
-
-
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     """Load the selected RFC 0002 configuration snapshot."""
     from src.contracts.configuration_sections import (
         _parse_agent_runtime,
         _parse_agents,
         _parse_apps,
+        _parse_autonomy,
         _parse_dashboard,
+        _parse_preference,
+        _parse_task_budget,
     )
 
     root = root.resolve()
@@ -316,9 +302,13 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     # 加载平台配置
     platforms_data, platforms_source = _read_toml_snapshot(config_dir / "platforms.toml")
     sources.append(platforms_source)
-    dashboard_raw = platforms_data.get("dashboard", {})
+    platform_raw = platforms_data.get("platform")
+    if not isinstance(platform_raw, dict):
+        raise ConfigurationError("platforms.toml must contain a [platform] table")
+    dashboard_raw = platform_raw.get("dashboard")
     if not isinstance(dashboard_raw, dict):
-        raise ConfigurationError("dashboard must be a table")
+        raise ConfigurationError("platform.dashboard must be a table")
+    preference = _parse_preference(platform_raw)
 
     # 加载模型配置
     models_data, models_source = _read_toml_snapshot(config_dir / "models.toml")
@@ -452,7 +442,9 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             autonomous_budget=autonomous_budget,
         ),
         dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), root),
+        preference=preference,
         logging_level=_string(logging_raw["level"], "logging.level"),
+        storage_data_dir=(root / _string(storage_raw["data_dir"], "storage.data_dir")).resolve(),
         agents=agents,
         model_roles=frozenset(roles),
         model_definitions=MappingProxyType(model_definitions),

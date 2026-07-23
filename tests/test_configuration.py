@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from src.contracts.configuration import AppConfig, ConfigurationError, load_configuration
-from src.contracts.configuration_preferences import load_preference
 
 _DASHBOARD_PORT = 8000
 _APP_TIMEOUT_SECONDS = 30.0
@@ -62,42 +61,43 @@ def test_loads_deterministic_configuration_snapshot(project_root: Path) -> None:
 
 
 def test_loads_independent_immutable_preference_snapshot(project_root: Path) -> None:
-    preference = load_preference(project_root)
+    preference = load_configuration(project_root).preference
 
-    assert preference.platform.console.enabled is True
-    assert preference.platform.console.terminal_logs is False
-    assert preference.platform.dashboard.enabled is True
-    assert preference.platform.dashboard.open_browser is False
-    assert preference.platform.mcp.enabled is True
-    assert preference.platform.mcp.terminal_logs is True
-    assert preference.source.path == project_root / "config" / "preference.toml"
-    assert preference.source.sha256 == hashlib.sha256(preference.source.path.read_bytes()).hexdigest()
+    assert preference.console.enabled is True
+    assert preference.console.terminal_logs is False
+    assert preference.dashboard.enabled is True
+    assert preference.dashboard.open_browser is False
+    assert preference.mcp.enabled is True
+    assert preference.mcp.terminal_logs is True
     assert not hasattr(preference, "__dict__")
     with pytest.raises(FrozenInstanceError):
-        preference.platform.console.enabled = False
+        preference.console.enabled = False  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(
     ("old", "new", "message"),
     [
-        ("terminal_logs = true", "terminal_logs = true\nextra = false", "unexpected"),
+        ("enabled = true\n", "", "missing required keys"),
         ("open_browser = false\n", "", "missing"),
         ("terminal_logs = false", 'terminal_logs = "false"', "must be boolean"),
     ],
 )
 def test_rejects_invalid_preference_schema(project_root: Path, old: str, new: str, message: str) -> None:
-    preference = project_root / "config" / "preference.toml"
-    preference.write_text(preference.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
+    config = project_root / "config" / "platforms.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(ConfigurationError, match=message):
-        load_preference(project_root)
+        load_configuration(project_root)
 
 
-def test_preference_file_is_required(project_root: Path) -> None:
-    (project_root / "config" / "preference.toml").unlink()
+def test_preference_platform_table_is_required(project_root: Path) -> None:
+    config = project_root / "config" / "platforms.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("[platform.console]", "[platform.removed]", 1), encoding="utf-8"
+    )
 
-    with pytest.raises(ConfigurationError, match="does not exist"):
-        load_preference(project_root)
+    with pytest.raises(ConfigurationError, match="missing"):
+        load_configuration(project_root)
 
 
 def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
@@ -111,7 +111,7 @@ def test_rejects_non_loopback_production_debug_host(project_root: Path) -> None:
 @pytest.mark.parametrize(
     ("old", "new", "message"),
     [
-        ('[dashboard]\nhost = "127.0.0.1"', '[dashboard]\nhost = "0.0.0.0"', "loopback"),
+        ('host = "127.0.0.1"', 'host = "0.0.0.0"', "loopback"),
         ("port = 8000", "port = 70000", "valid port"),
         ("max_upload_bytes = 67108864", "max_upload_bytes = 0", "positive integer"),
         ('database_path = "data/dashboard/chat.sqlite3"', 'database_path = "../chat.sqlite3"', "project root"),

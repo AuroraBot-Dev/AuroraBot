@@ -18,7 +18,7 @@
 - 项目代码统一通过 `src.utils.log_utils.get_logger()` 获取 logger；入口通过
   `configure_logging()` 应用 TOML 中的日志级别，不得另行调用 `logging.basicConfig()`。
 - `/log [on|off] [--level LEVEL]` 只控制当前进程的终端 handler；文件日志继续按 `aurora.toml` 级别记录，且运行时
-  调整不写回配置、不跨重启持久化。Console 启动默认来自 `preference.toml` 的 `platform.console.terminal_logs`。
+  调整不写回配置、不跨重启持久化。Console 启动默认来自 `platforms.toml` 的 `platform.console.terminal_logs`。
 - stdio MCP 子进程 stderr 通过父进程 logger 记录；`platform.mcp.terminal_logs` 可单独阻止这些诊断进入终端，
   但不影响文件日志。全局终端日志关闭时，该平台偏好不会重新开启终端输出。
 - 日志使用稳定的 `key=value` 上下文。适用时至少包含 `task_id`、`agent_id`、`message_id`，并补充

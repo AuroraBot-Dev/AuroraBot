@@ -1,7 +1,13 @@
+# 提示词装配 — 片段路径映射
+
+# 系统层：对所有 Agent 可见的公共文本
 [system]
+# 核心人格与行为准则
 soul = "prompts/SOUL.md"
+# 项目、团队与环境上下文
 world = "prompts/WORLD.md"
 
+# Agent 层：按 profile id 映射到专用提示词片段
 [agent]
 "builtin.gate" = "prompts/agents/gate.md"
 "builtin.worker" = "prompts/agents/worker.md"

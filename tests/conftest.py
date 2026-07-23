@@ -42,9 +42,15 @@ ambient_ttl_seconds = 1800.0
         encoding="utf-8",
     )
 
-    # 平台配置
+    # 平台配置（含偏好与平台私有配置）
     (config / "platforms.toml").write_text(
-        """[dashboard]
+        """[platform.console]
+enabled = true
+terminal_logs = false
+
+[platform.dashboard]
+enabled = true
+open_browser = false
 host = "127.0.0.1"
 port = 8000
 database_path = "data/dashboard/chat.sqlite3"
@@ -53,13 +59,17 @@ max_upload_bytes = 67108864
 session_ttl_seconds = 604800
 allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-[dashboard.owner]
+[platform.dashboard.owner]
 username = "alice"
 
-[dashboard.bot]
+[platform.dashboard.bot]
 username = "aurorabot"
 display_name = "AuroraBot"
 avatar_url = ""
+
+[platform.mcp]
+enabled = true
+terminal_logs = true
 """,
         encoding="utf-8",
     )
@@ -114,21 +124,6 @@ data_dir = "data"
         encoding="utf-8",
     )
 
-    (config / "preference.toml").write_text(
-        """[platform.console]
-enabled = true
-terminal_logs = false
-
-[platform.dashboard]
-enabled = true
-open_browser = false
-
-[platform.mcp]
-enabled = true
-terminal_logs = true
-""",
-        encoding="utf-8",
-    )
     (prompts / "SOUL.md").write_text("You are the AuroraBot test fixture.", encoding="utf-8")
     (prompts / "WORLD.md").write_text("Words reach people only after they are sent.", encoding="utf-8")
     agent_prompts = prompts / "agents"

@@ -25,16 +25,19 @@ notification 则可以绕过 localhost ingress 直接投递 Kernel。这些路�
 
 ```text
 config/aurora.toml          Kernel、Agent 运行限制、scheduler、SOUL、存储、日志、模型与平台安全约束
-config/preference.toml      平台默认组合与平台私有的本地体验偏好
+config/platforms.toml       平台默认组合、本地体验偏好与平台私有配置
 config/agents.toml          Agent profile、授权能力与委派边界
 config/apps.toml            MCP App、transport、工具 allowlist 与启用状态
 config/profiles/<name>.toml 仅覆盖 aurora.toml 的环境差异
 ```
 
-`aurora.toml` 与 `preference.toml` 必须解析为两个独立、不可变且可追踪来源的配置快照，不得递归合并为一个任意
+`aurora.toml` 与 `platforms.toml` 必须解析为两个独立、不可变且可追踪来源的配置快照，不得递归合并为一个任意
 覆盖树。profile 只覆盖 `aurora.toml`；环境变量除 `AURORA_PROFILE` 和密钥注入外不得覆盖任一 TOML 字段。
 
-`preference.toml` 初始拥有以下严格键：
+`platforms.toml` 包含两类配置：以 `[platform.*]` 命名的平台启用与本地体验偏好，以及以 `[dashboard]` 等命名的
+平台私有安全与持久化配置。
+
+`[platform.*]` 初始拥有以下形状（dashboard 同时承载本地偏好与服务器私有配置）：
 
 ```toml
 [platform.console]
@@ -44,18 +47,33 @@ terminal_logs = false
 [platform.dashboard]
 enabled = true
 open_browser = false
+host = "127.0.0.1"
+port = 8000
+database_path = "data/platform/dashboard/chat.sqlite3"
+upload_dir = "data/platform/dashboard/uploads"
+max_upload_bytes = 67108864
+session_ttl_seconds = 604800
+allowed_origins = ["http://localhost:5173"]
+
+[platform.dashboard.owner]
+username = "admin"
+
+[platform.dashboard.bot]
+username = "aurorabot"
+display_name = "AuroraBot"
+avatar_url = ""
 
 [platform.mcp]
 enabled = true
 terminal_logs = true
 ```
 
-平台 preference 只控制启动选择和本地呈现。Dashboard host、port、allowed origins、数据库与上传路径，Kernel
-workspace，文件日志级别，MCP command、timeout、认证和能力声明仍属于核心或领域配置，不得移入 preference。
-新增 preference 键必须有明确类型、默认值和所属平台；未知键必须在启动前失败。
+`[platform.*]` 只控制启动选择和本地呈现。Dashboard host、port、allowed origins、数据库与上传路径，Kernel
+workspace，文件日志级别，MCP command、timeout、认证和能力声明仍属于核心或领域配置，使用各自独立 section。
+新增 `[platform.*]` 键必须有明确类型、默认值和所属平台；未知键必须在启动前失败。
 
 `terminal_logs` 是启动默认值，不是持久化的当前会话状态。运行时 `/log on|off` 仍只修改当前进程，不回写
-`preference.toml`。Console 的 `terminal_logs` 控制进程启动时的全局终端日志开关；MCP 的 `terminal_logs` 进一步
+`platforms.toml`。Console 的 `terminal_logs` 控制进程启动时的全局终端日志开关；MCP 的 `terminal_logs` 进一步
 控制 MCP 子进程诊断是否可进入已开启的终端 handler，文件诊断不受影响。
 
 ### 平台选择 CLI
@@ -70,7 +88,7 @@ aurora check
 
 `--root` 与 `--profile` 继续选择配置上下文。平台选择规则必须确定且只解析一次：
 
-1. 未出现平台选择参数时，使用 `preference.toml` 的三个 `enabled` 值。
+1. 未出现平台选择参数时，使用 `platforms.toml` 中 `[platform.*]` 的三个 `enabled` 值。
 2. 出现任意 `--console`、`--dashboard` 或 `--mcp` 时，启动集合恰好是显式列出的平台，不与默认集合叠加。
 3. `--headless` 表示空平台集合，并与三个平台参数互斥。
 4. `check` 保留为非运行时质量命令，不得创建 Runtime 或平台资源。
@@ -149,14 +167,14 @@ Agent profile 中声明的 capability 是授权上限，不代表对应平台必
 `aurora` 根据解析后的平台集合只构造所选适配器。禁用的平台不得初始化数据库、打开 socket、启动 reader thread、
 创建 MCP 子进程或注册活动 capability。平台启动失败必须进入共享关闭路径，已经启动的平台按逆序释放资源。
 
-AuroraRuntime 不得加载 `preference.toml`、解析 CLI、选择平台、配置终端日志或构造具体平台。它接收已验证的核心
+AuroraRuntime 不得加载 `platforms.toml`、解析 CLI、选择平台、配置终端日志或构造具体平台。它接收已验证的核心
 配置以及通过 localhost 端口注入的活动平台能力。日志 bootstrap 必须在可能产生日志的 Runtime 和平台构造之前由
 `aurora` 完成。
 
 ## 约束与非目标
 
-- 平台选择在进程启动时固定；本 RFC 不提供运行中热启停或动态重载 preference。
-- `preference.toml` 不保存 PID、租约、会话命令状态或其他运行数据。
+- 平台选择在进程启动时固定；本 RFC 不提供运行中热启停或动态重载 platform preference。
+- `platforms.toml` 中的 `[platform.*]` section 不保存 PID、租约、会话命令状态或其他运行数据。
 - 本 RFC 不改变 Kernel 的 `data/kernel/{inbox,process,archive}` 工作区和 SQLite WAL 契约。
 - 本 RFC 不定义第三方 Python 平台插件发现；三个内建平台仍由 `aurora` 显式构造。
 - 本 RFC 不允许 preference 改写安全、审计、存储、模型、Agent 或 MCP 能力契约。
@@ -167,7 +185,8 @@ AuroraRuntime 不得加载 `preference.toml`、解析 CLI、选择平台、配�
 本 RFC 部分取代以下已接受决策，未提及的条款继续有效：
 
 - 取代 RFC 0001 和 RFC 0012 中 `platform <- localhost <- dashboard` 的包方向及独立 `src.dashboard` 布局。
-- 取代 RFC 0002 的配置文件清单，增加独立 `preference.toml`，但保留 TOML、profile、密钥和来源审计规则。
+- 取代 RFC 0002 的配置文件清单，将偏好配置整合入 `platforms.toml`，同时新增独立的 `platforms.toml`，
+  但保留 TOML、profile、密钥和来源审计规则。
 - 取代 RFC 0004 将本地 Console 实现为 `org.aurora.console` MCP App 的决定。
 - 取代 RFC 0006、RFC 0007 和 RFC 0010 对 Console shell、Dashboard API 与聊天用例包位置的决定。
 - 取代 RFC 0009 和 RFC 0013 的 `dev`、`run`、`serve`、`console` 固定运行模式与子命令。
@@ -176,7 +195,7 @@ AuroraRuntime 不得加载 `preference.toml`、解析 CLI、选择平台、配�
 
 ## 验收标准
 
-1. `config/aurora.toml` 与 `config/preference.toml` 分别产生严格、不可变且可追踪来源的配置快照，不能跨文件任意覆盖。
+1. `config/aurora.toml` 与 `config/platforms.toml` 分别产生严格、不可变且可追踪来源的配置快照，不能跨文件任意覆盖。
 2. 无平台参数时使用 preference 默认；显式平台参数形成精确集合；`--headless` 形成空集合；旧运行时子命令不存在。
 3. 任意平台组合只创建一个 Runtime/Kernel，并且禁用平台不产生线程、socket、数据库或子进程副作用。
 4. `src.dashboard` 不存在，Dashboard 后端、聊天持久化和效果执行完整位于 `src.platform.dashboard`。

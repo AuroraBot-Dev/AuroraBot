@@ -1,7 +1,17 @@
+# MCP 应用配置
+# 每个 [[app]] 定义一个 MCP 服务（内建或远程）
+
+# 内建 Clock 应用：提供时间查询与定时能力
 [[app]]
+# 唯一命名空间标识
 package = "org.aurora.clock"
+# true=启用，false=禁用但保留定义
 enabled = true
+# 传输方式：stdio（子进程）或 streamable_http（远程）
 transport = "stdio"
+# stdio 模式下的工作目录（相对于项目根）
 working_dir = "src/apps/aurora-app-clock"
+# stdio 启动命令
 command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
+# 工具调用超时（秒）
 timeout_seconds = 30

@@ -8,13 +8,77 @@ from src.contracts.configuration import (
     AgentProfileConfig,
     AgentRuntimeConfig,
     AppConfig,
+    AutonomyConfig,
     ConfigurationError,
+    ConsolePreference,
     DashboardBotConfig,
     DashboardConfig,
+    DashboardPreference,
+    McpPreference,
+    PlatformPreference,
+    TaskBudgetConfig,
     _positive_number,
     _require_keys,
+    _require_subset,
     _string,
+    _table,
 )
+
+
+def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
+    defaults = AutonomyConfig()
+    allowed = {
+        "scan_seconds",
+        "heartbeat_initial_seconds",
+        "heartbeat_min_seconds",
+        "heartbeat_max_seconds",
+        "autonomous_daily_model_calls",
+        "autonomous_daily_tokens",
+    }
+    if set(raw) - allowed:
+        raise ConfigurationError("runtime.autonomy has unsupported keys")
+    daily_calls = raw.get("autonomous_daily_model_calls", defaults.autonomous_daily_model_calls)
+    daily_tokens = raw.get("autonomous_daily_tokens", defaults.autonomous_daily_tokens)
+    if not isinstance(daily_calls, int) or isinstance(daily_calls, bool) or daily_calls <= 0:
+        raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
+    if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
+        raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
+    minimum = _positive_number(
+        raw.get("heartbeat_min_seconds", defaults.heartbeat_min_seconds), "heartbeat_min_seconds"
+    )
+    maximum = _positive_number(
+        raw.get("heartbeat_max_seconds", defaults.heartbeat_max_seconds), "heartbeat_max_seconds"
+    )
+    if maximum < minimum:
+        raise ConfigurationError("heartbeat_max_seconds must be at least heartbeat_min_seconds")
+    initial = _positive_number(
+        raw.get("heartbeat_initial_seconds", defaults.heartbeat_initial_seconds), "heartbeat_initial_seconds"
+    )
+    if not minimum <= initial <= maximum:
+        raise ConfigurationError("heartbeat_initial_seconds must be within heartbeat bounds")
+    return AutonomyConfig(
+        scan_seconds=_positive_number(raw.get("scan_seconds", defaults.scan_seconds), "scan_seconds"),
+        heartbeat_initial_seconds=initial,
+        heartbeat_min_seconds=minimum,
+        heartbeat_max_seconds=maximum,
+        autonomous_daily_model_calls=daily_calls,
+        autonomous_daily_tokens=daily_tokens,
+    )
+
+
+def _parse_task_budget(
+    raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
+) -> TaskBudgetConfig:
+    allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
+    if set(raw) - allowed:
+        raise ConfigurationError(f"runtime.{label} has unsupported keys")
+    calls = raw.get("max_model_calls", default_calls)
+    tools = raw.get("max_tool_calls", default_tools)
+    if not isinstance(calls, int) or isinstance(calls, bool) or calls <= 0:
+        raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
+    if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
+        raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
+    return TaskBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
 
 
 def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[AgentProfileConfig, ...]:
@@ -183,6 +247,8 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
     _require_keys(
         raw,
         {
+            "enabled",
+            "open_browser",
             "host",
             "port",
             "database_path",
@@ -193,7 +259,7 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
             "owner",
             "bot",
         },
-        "dashboard",
+        "platform.dashboard",
     )
     host = _string(raw["host"], "dashboard.host")
     port = raw["port"]
@@ -249,5 +315,35 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
             username=bot_username,
             display_name=_string(bot_raw["display_name"], "dashboard.bot.display_name"),
             avatar_url=avatar_url or None,
+        ),
+    )
+
+
+def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
+    _require_keys(platform, {"console", "dashboard", "mcp"}, "platform")
+    console = _table(platform["console"], "platform.console")
+    dashboard = _table(platform["dashboard"], "platform.dashboard")
+    mcp = _table(platform["mcp"], "platform.mcp")
+    _require_subset(console, {"enabled", "terminal_logs"}, "platform.console")
+    _require_subset(dashboard, {"enabled", "open_browser"}, "platform.dashboard")
+    _require_subset(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
+
+    def _bool(value: object, label: str) -> bool:
+        if not isinstance(value, bool):
+            raise ConfigurationError(f"{label} must be boolean")
+        return value
+
+    return PlatformPreference(
+        console=ConsolePreference(
+            enabled=_bool(console["enabled"], "platform.console.enabled"),
+            terminal_logs=_bool(console["terminal_logs"], "platform.console.terminal_logs"),
+        ),
+        dashboard=DashboardPreference(
+            enabled=_bool(dashboard["enabled"], "platform.dashboard.enabled"),
+            open_browser=_bool(dashboard["open_browser"], "platform.dashboard.open_browser"),
+        ),
+        mcp=McpPreference(
+            enabled=_bool(mcp["enabled"], "platform.mcp.enabled"),
+            terminal_logs=_bool(mcp["terminal_logs"], "platform.mcp.terminal_logs"),
         ),
     )

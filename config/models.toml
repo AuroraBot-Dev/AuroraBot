@@ -1,5 +1,6 @@
-# 供应商配置
+# 模型配置 — Provider 连接、角色映射与诊断开关
 
+# Provider 定义：密钥仅存于环境变量，TOML 只声明变量名
 [models.providers.deepseek]
 adapter = "litellm"
 secret_env = "DEEPSEEK_API_KEY"
@@ -18,8 +19,7 @@ base_url = "https://api.siliconflow.cn/v1"
 secret_env = "SILICONFLOW_API_KEY"
 
 
-# 模型配置
-
+# Role 定义：每个 role 绑定一个 provider 的具体 model
 [models.roles.fast]
 provider = "deepseek"
 model = "deepseek-v4-flash"
@@ -78,6 +78,7 @@ model = "BAAI/bge-m3"
 endpoint = "chat_completions"
 capabilities = ["embedding"]
 
+# 模型诊断：控制 DEBUG 日志中对查询和响应的记录
 [models.logging]
 log_queries = false
 log_responses = false

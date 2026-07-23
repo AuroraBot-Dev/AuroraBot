@@ -71,7 +71,7 @@ uv run --no-dev --env-file .env aurora --console --mcp
 启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
 
 ```powershell
-# 使用 config/preference.toml 中的默认平台组合
+# 使用 config/platforms.toml 中的默认平台组合
 uv run --no-dev --env-file .env aurora
 
 # 只启动本地 Console
@@ -89,7 +89,7 @@ uv run --no-dev --env-file .env aurora --headless
 | ---------------------------- | ------------------------ |
 | SOUL、世界说明与 Agent 提示词 | `config/prompts.toml`    |
 | 模型角色与 Provider          | `config/aurora.toml`     |
-| 默认启动的平台               | `config/preference.toml` |
+| 默认启动的平台               | `config/platforms.toml`  |
 | Agent 的模型、能力与委派范围 | `config/agents.toml`     |
 | 本地或远程 MCP 应用          | `config/apps.toml`       |
 

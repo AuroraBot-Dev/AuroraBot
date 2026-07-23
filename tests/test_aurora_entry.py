@@ -22,6 +22,11 @@ class FakeRuntime:
             logging_level="INFO",
             runtime=SimpleNamespace(profile="test"),
             dashboard=SimpleNamespace(host="127.0.0.1", port=8000),
+            preference=SimpleNamespace(
+                console=SimpleNamespace(enabled=True, terminal_logs=False),
+                dashboard=SimpleNamespace(enabled=True, open_browser=False),
+                mcp=SimpleNamespace(enabled=True, terminal_logs=False),
+            ),
             apps=(),
         )
         self.events = events
@@ -55,11 +60,9 @@ def _preference(
     open_browser: bool = True,
 ) -> SimpleNamespace:
     return SimpleNamespace(
-        platform=SimpleNamespace(
-            console=SimpleNamespace(enabled="console" in enabled, terminal_logs=console_logs),
-            dashboard=SimpleNamespace(enabled="dashboard" in enabled, open_browser=open_browser),
-            mcp=SimpleNamespace(enabled="mcp" in enabled, terminal_logs=mcp_logs),
-        )
+        console=SimpleNamespace(enabled="console" in enabled, terminal_logs=console_logs),
+        dashboard=SimpleNamespace(enabled="dashboard" in enabled, open_browser=open_browser),
+        mcp=SimpleNamespace(enabled="mcp" in enabled, terminal_logs=mcp_logs),
     )
 
 
@@ -84,6 +87,14 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
     events: list[object] = []
     runtime = FakeRuntime(tmp_path.resolve(), events)
     preference = _preference(frozenset({"console", "dashboard", "mcp"}))
+    runtime.configuration = SimpleNamespace(
+        root=tmp_path.resolve(),
+        logging_level="INFO",
+        runtime=SimpleNamespace(profile="test"),
+        dashboard=SimpleNamespace(host="127.0.0.1", port=8000),
+        preference=preference,
+        apps=(),
+    )
 
     class FakeConsole:
         def __init__(self, _ledger_path: Path) -> None:
@@ -148,9 +159,8 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
         configuration: object,
         tool_bindings: object,
     ) -> FakeRuntime:
-        assert events[:4] == [
+        assert events[:3] == [
             "core-loaded",
-            "preference-loaded",
             "logging",
             ("terminal", "console" not in selected),
         ]
@@ -173,10 +183,6 @@ def test_runtime_composes_each_exact_platform_set_without_disabled_side_effects(
     monkeypatch.setattr(
         "aurora.runtime.load_configuration",
         lambda _root, _profile: events.append("core-loaded") or runtime.configuration,
-    )
-    monkeypatch.setattr(
-        "aurora.runtime.load_preference",
-        lambda _root: events.append("preference-loaded") or preference,
     )
     monkeypatch.setattr("aurora.runtime.configure_logging", lambda _level, _path: events.append("logging"))
     monkeypatch.setattr(
@@ -258,7 +264,6 @@ def test_platform_start_failure_rolls_back_before_runtime(
 ) -> None:
     events: list[object] = []
     runtime = FakeRuntime(tmp_path.resolve(), events)
-    preference = _preference(frozenset({"mcp"}))
 
     class FailingMcp:
         capability_catalog = CapabilityCatalogSnapshot()
@@ -275,7 +280,6 @@ def test_platform_start_failure_rolls_back_before_runtime(
             events.append("mcp-shutdown")
 
     monkeypatch.setattr("aurora.runtime.load_configuration", lambda _root, _profile: runtime.configuration)
-    monkeypatch.setattr("aurora.runtime.load_preference", lambda _root: preference)
     monkeypatch.setattr("aurora.runtime.configure_logging", lambda _level, _path: None)
 
     def configure_console(*, enabled: bool) -> None:

@@ -69,7 +69,7 @@ uv run --no-dev --env-file .env aurora --console --mcp
 起動後はメッセージを入力できます。`/help` で command、`/status` で runtime state を確認できます。
 
 ```powershell
-# config/preference.toml の既定 Platform 構成を使用
+# config/platforms.toml の既定 Platform 構成を使用
 uv run --no-dev --env-file .env aurora
 
 # ローカル Console のみ起動
@@ -88,7 +88,7 @@ Dashboard の browser UI は別プロジェクトで、本リポジトリには�
 | -------------------------------------- | ------------------------ |
 | SOUL、世界、Agent prompt fragment       | `config/prompts.toml`    |
 | model role と Provider                 | `config/aurora.toml`     |
-| 既定で起動する Platform                | `config/preference.toml` |
+| 既定で起動する Platform                | `config/platforms.toml` |
 | Agent の model、能力、委任範囲         | `config/agents.toml`     |
 | ローカルまたはリモート MCP application | `config/apps.toml`       |
 
