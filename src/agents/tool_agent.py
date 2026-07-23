@@ -1,4 +1,4 @@
-"""One serial tool-capable handler shared by every RFC 0012 Agent profile."""
+"""所有 RFC 0012 Agent profile 共享的串行工具型 handler。"""
 
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ def _collect_tool_definitions(
     context: AgentContext,
     capabilities: tuple[Capability, ...],
 ) -> tuple[ToolDefinition, ...]:
+    """收集所有工具定义：运行时 Capability + 内建 Capability，并检查名称唯一性。"""
     tools: list[ToolDefinition] = [capability_tool_definition(item) for item in context.capabilities]
     for cap in capabilities:
         tools.extend(cap.tool_definitions(context))
@@ -53,7 +54,7 @@ def _collect_tool_definitions(
 
 
 class ToolAgent:
-    """A deterministic state-machine adapter around provider-native Tool IR."""
+    """围绕提供商原生 Tool IR 的确定性状态机适配器。"""
 
     def __init__(
         self,
@@ -61,6 +62,12 @@ class ToolAgent:
         composer: PromptComposer | None = None,
         capabilities: tuple[Capability, ...] = (),
     ) -> None:
+        """初始化 ToolAgent。
+
+        Args:
+            composer: 提示词装配器，可通过 install_prompt_composer 延后注入。
+            capabilities: 内建 Capability 元组。
+        """
         self._composer = composer
         self._capabilities = capabilities
         self._dispatch: dict[str, Capability] = {}
@@ -68,21 +75,25 @@ class ToolAgent:
             self._install_capabilities(capabilities)
 
     def install_prompt_composer(self, composer: PromptComposer) -> None:
+        """安装提示词装配器，仅可调用一次。"""
         if self._composer is not None:
             raise RuntimeError(_COMPOSER_ALREADY_INSTALLED)
         self._composer = composer
 
     def install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
+        """安装额外 Capability，仅可调用一次。"""
         if self._capabilities or self._dispatch:
             raise RuntimeError(_CAPABILITIES_ALREADY_INSTALLED)
         self._install_capabilities(capabilities)
 
     def _install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
+        """将 Capability 安装到内部调度表。"""
         self._capabilities = capabilities
         for cap in capabilities:
             self._dispatch.update(dict.fromkeys(cap.tool_names, cap))
 
     def handle(self, context: AgentContext) -> AgentDecision:
+        """Agent 入口：根据消息类型路由到对应的处理阶段。"""
         message_type = context.message.type
         logger.debug(
             "Agent turn entered task_id=%s agent_id=%s profile=%s message_type=%s depth=%d",
@@ -102,6 +113,7 @@ class ToolAgent:
         return self._request_model(context)
 
     def _request_model(self, context: AgentContext) -> AgentDecision:
+        """构造模型请求，包含提示词消息与工具定义。"""
         composer = self._require_composer()
         request = ModelRequest(
             role=context.profile.model_role,
@@ -115,11 +127,13 @@ class ToolAgent:
         return AgentDecision(model_request=request.to_dict())
 
     def _require_composer(self) -> PromptComposer:
+        """获取已安装的提示词装配器，未安装时抛出异常。"""
         if self._composer is None:
             raise RuntimeError(_COMPOSER_REQUIRED)
         return self._composer
 
     def _handle_model_result(self, context: AgentContext) -> AgentDecision:
+        """处理模型返回结果：纯文本完成或工具调用分发。"""
         result = ModelResult.from_dict(context.message.payload)
         if len(result.tool_calls) > 1:
             return AgentDecision(failure="parallel_tool_calls_rejected")
@@ -143,6 +157,7 @@ class ToolAgent:
         return self._capability_decision(result, descriptor)
 
     def _capability_decision(self, result: ModelResult, descriptor: CapabilityDescriptor) -> AgentDecision:
+        """将模型工具调用转换为对应 Capability 的工具请求决策。"""
         call = result.tool_calls[0]
         parameters = dict(call.arguments)
         complete_task = False
@@ -161,6 +176,7 @@ class ToolAgent:
         )
 
     def _resume_tool(self, context: AgentContext) -> AgentDecision:
+        """工具执行完成后恢复：将结果附着到延续并构造新的模型请求。"""
         request = context.message.payload.get("request")
         if not isinstance(request, dict):
             return AgentDecision(failure="Tool receipt lacks original request")
@@ -180,6 +196,7 @@ class ToolAgent:
         return AgentDecision(model_request=model_request.to_dict())
 
     def _continuation_request(self, context: AgentContext, continuation: ModelContinuation) -> ModelRequest:
+        """基于工具执行延续构造后续模型请求。"""
         return ModelRequest(
             role=context.profile.model_role,
             messages=(),

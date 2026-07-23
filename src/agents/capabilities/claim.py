@@ -1,4 +1,4 @@
-"""Capability that lets the model claim ambient situations via aurora.situation.claim."""
+"""让模型通过 aurora.situation.claim 认领未分配情境的 Capability。"""
 
 from __future__ import annotations
 
@@ -39,16 +39,24 @@ class ClaimCapability:
     """模型通过 aurora.situation.claim 认领未分配的情景事件。"""
 
     def __init__(self, *, composer: object = None) -> None:
+        """初始化 ClaimCapability。
+
+        Args:
+            composer: 提示词装配器，可通过 install_prompt_composer 延后注入。
+        """
         self._composer = composer
 
     def install_prompt_composer(self, composer: object) -> None:
+        """安装提示词装配器。"""
         self._composer = composer
 
     @property
     def tool_names(self) -> frozenset[str]:
+        """返回此 Capability 注册的工具名称集合。"""
         return frozenset({CLAIM_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:
+        """仅在存在未分配情境时提供认领工具定义。"""
         if not context.brain.ambient_situations:
             return ()
         return (ToolDefinition(CLAIM_TOOL, _CLAIM_DESCRIPTION, _CLAIM_SCHEMA),)
@@ -60,6 +68,7 @@ class ClaimCapability:
         continuation: object = None,
         tools: tuple[object, ...] = (),
     ) -> AgentDecision | None:
+        """处理情境认领工具调用，验证 ID 并返回认领决策。"""
         if call.name != CLAIM_TOOL:
             return None
         raw_ids = call.arguments.get("situation_ids")
@@ -79,6 +88,7 @@ class ClaimCapability:
     def _continuation_request(
         self, context: AgentContext, continuation: ModelContinuation, tools: tuple[object, ...]
     ) -> ModelRequest:
+        """基于工具执行延续构造后续模型请求。"""
         return ModelRequest(
             role=context.profile.model_role,
             messages=(),

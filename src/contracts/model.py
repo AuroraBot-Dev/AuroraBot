@@ -170,6 +170,8 @@ class ToolCall:
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
+    """工具执行结果：调用 ID、结果数据和错误标记。"""
+
     call_id: str
     result: dict[str, Any]
     is_error: bool = False
@@ -177,7 +179,7 @@ class ToolResult:
 
 @dataclass(frozen=True, slots=True)
 class ModelContinuation:
-    """Serializable replay state owned by one model endpoint."""
+    """可序列化的模型端点重放状态。"""
 
     provider: str
     channel: Literal["chat_completions", "responses"]
@@ -188,6 +190,7 @@ class ModelContinuation:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ModelContinuation":
+        """从持久化字典反序列化，校验 channel 和 items 合法性。"""
         channel = value.get("channel")
         if channel not in {"chat_completions", "responses"}:
             raise ValueError("invalid continuation channel")
@@ -206,7 +209,7 @@ def append_tool_result(
     *,
     is_error: bool,
 ) -> ModelContinuation:
-    """Append one provider-neutral tool result using the continuation's replay shape."""
+    """将一条工具结果追加到延续状态中（按通道格式化）。"""
     serialized = json.dumps({"is_error": is_error, "result": result}, ensure_ascii=False, separators=(",", ":"))
     if continuation.channel == "responses":
         item = {"type": "function_call_output", "call_id": call_id, "output": serialized}
@@ -216,12 +219,12 @@ def append_tool_result(
 
 
 class ModelGatewayError(RuntimeError):
-    """A safe, auditable model capability or execution failure."""
+    """安全、可审计的模型能力或执行失败。"""
 
 
 class ModelCapabilityError(ModelGatewayError):
-    """The selected role or Provider cannot satisfy a request before invocation."""
+    """选定的角色或 Provider 无法在调用前满足请求。"""
 
 
 class ModelBudgetError(ModelGatewayError):
-    """A completed model call exceeded its declared cost budget."""
+    """模型调用超出声明的成本预算。"""

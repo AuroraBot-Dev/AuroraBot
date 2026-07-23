@@ -1,4 +1,4 @@
-"""Capability that provides aurora.memory.query and aurora.memory.remember tools."""
+"""提供 aurora.memory.query 和 aurora.memory.remember 工具的 Capability。"""
 
 from __future__ import annotations
 
@@ -62,14 +62,22 @@ class MemoryCapability:
     """模型通过 aurora.memory.query/remember 读写长期记忆。"""
 
     def __init__(self, *, memory_service: Any = None, agent_profile: str | None = None) -> None:
+        """初始化 MemoryCapability。
+
+        Args:
+            memory_service: 记忆服务实例。
+            agent_profile: 记忆 Agent 的 profile ID，存在时启用 remember 工具并走委派路径。
+        """
         self._memory = memory_service
         self._agent_profile = agent_profile
 
     @property
     def tool_names(self) -> frozenset[str]:
+        """返回此 Capability 注册的工具名称集合。"""
         return frozenset({MEMORY_QUERY_TOOL, MEMORY_REMEMBER_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:  # noqa: ARG002
+        """返回记忆工具定义，remember 工具仅在配置了 agent_profile 时提供。"""
         tools = [ToolDefinition(MEMORY_QUERY_TOOL, _QUERY_DESCRIPTION, _QUERY_SCHEMA)]
         if self._agent_profile is not None:
             tools.append(ToolDefinition(MEMORY_REMEMBER_TOOL, _REMEMBER_DESCRIPTION, _REMEMBER_SCHEMA))
@@ -82,6 +90,7 @@ class MemoryCapability:
         continuation: object = None,
         tools: tuple[object, ...] = (),
     ) -> AgentDecision | None:
+        """根据工具名称分发到查询或记忆处理。"""
         if call.name == MEMORY_QUERY_TOOL:
             return self._handle_query(call, context, continuation, tools)
         if call.name == MEMORY_REMEMBER_TOOL:
@@ -95,6 +104,7 @@ class MemoryCapability:
         continuation: object,
         tools: tuple[object, ...],
     ) -> AgentDecision:
+        """处理记忆查询：走委派路径或直接返回不可用结果。"""
         query = call.arguments.get("query")
         scope = call.arguments.get("scope", "global")
         limit = call.arguments.get("limit", 8)
@@ -129,6 +139,7 @@ class MemoryCapability:
         continuation: object,
         tools: tuple[object, ...],
     ) -> AgentDecision:
+        """处理记忆存储：走委派路径或直接返回已存储结果。"""
         content = call.arguments.get("content")
         if not isinstance(content, str) or not content.strip():
             return AgentDecision(failure="memory.remember content must be a non-empty string")
@@ -150,6 +161,7 @@ class MemoryCapability:
     def _continuation_request(
         self, context: AgentContext, continuation: ModelContinuation, tools: tuple[object, ...]
     ) -> ModelRequest:
+        """基于工具执行延续构造后续模型请求。"""
         return ModelRequest(
             role=context.profile.model_role,
             messages=(),

@@ -1,4 +1,4 @@
-"""Composable Agent capability handlers (RFC 0022)."""
+"""可组合的 Agent capability handler（RFC 0022）。"""
 
 from src.agents.capabilities.claim import CLAIM_TOOL, ClaimCapability
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability

@@ -1,4 +1,4 @@
-"""External Tool helper functions: complete_task injection and schema inspection."""
+"""外部工具辅助函数：complete_task 注入与 schema 检查。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ COMPLETE_TASK_DESCRIPTION = "完成后任务结束"
 
 
 def capability_tool_definition(descriptor: CapabilityDescriptor) -> ToolDefinition:
+    """从 CapabilityDescriptor 生成 ToolDefinition，必要时注入 complete_task 属性。"""
     schema = deepcopy(descriptor.parameters_schema)
     if not uses_runtime_complete_task(descriptor) or not _supports_root_property_injection(schema):
         return ToolDefinition(descriptor.id, descriptor.description, schema)
@@ -30,15 +31,17 @@ def capability_tool_definition(descriptor: CapabilityDescriptor) -> ToolDefiniti
 
 
 def uses_runtime_complete_task(descriptor: CapabilityDescriptor) -> bool:
+    """检查 Capability 是否需要在运行时注入 complete_task 参数。"""
     return not _schema_defines_complete_task(descriptor.parameters_schema, descriptor.parameters_schema, set())
 
 
 def _supports_root_property_injection(schema: dict[str, object]) -> bool:
+    """检查 schema 根级别是否支持直接属性注入。"""
     return not any(keyword in schema for keyword in ("$ref", "allOf", "anyOf", "oneOf"))
 
 
-# 递归检查 schema 是否定义 complete_task 属性
 def _schema_defines_complete_task(schema: object, root: dict[str, object], seen: set[int]) -> bool:  # noqa: C901
+    """递归检查 schema 是否已定义 complete_task 属性。"""
     if not isinstance(schema, dict) or id(schema) in seen:
         return False
     seen.add(id(schema))

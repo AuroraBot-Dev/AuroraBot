@@ -1,4 +1,4 @@
-"""Capability that lets the model wait for child agents via aurora.agent.wait."""
+"""让模型通过 aurora.agent.wait 等待子 Agent 的 Capability。"""
 
 from __future__ import annotations
 
@@ -27,9 +27,11 @@ class WaitCapability:
 
     @property
     def tool_names(self) -> frozenset[str]:
+        """返回此 Capability 注册的工具名称集合。"""
         return frozenset({WAIT_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:
+        """仅在存在未终止子 Agent 时提供等待工具定义。"""
         if not any(not child.terminal for child in context.children):
             return ()
         return (ToolDefinition(WAIT_TOOL, _WAIT_DESCRIPTION, _WAIT_SCHEMA),)
@@ -41,6 +43,7 @@ class WaitCapability:
         continuation: object = None,  # noqa: ARG002
         tools: tuple[object, ...] = (),  # noqa: ARG002
     ) -> AgentDecision | None:
+        """处理等待工具调用，返回等待子 Agent 的决策。"""
         if call.name != WAIT_TOOL:
             return None
         return AgentDecision(wait_for_children=True)

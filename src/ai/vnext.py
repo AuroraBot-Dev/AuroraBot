@@ -88,7 +88,7 @@ _FORBIDDEN_PARAMETERS = frozenset(
 
 
 class ModelGatewayService:
-    """Capability-negotiating model boundary with Chat / Responses dispatch."""
+    """基于能力协商的模型边界，调度 Chat Completions / Responses 通道。"""
 
     def __init__(self, configuration: AuroraConfig) -> None:
         self._configuration = configuration

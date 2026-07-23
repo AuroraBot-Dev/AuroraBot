@@ -1,4 +1,4 @@
-"""Built-in homogeneous Agent handlers."""
+"""内建同构 Agent handler。"""
 
 from src.agents.tool_agent import ToolAgent
 

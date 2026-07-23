@@ -1,4 +1,4 @@
-"""Memory Agent handler: executes mem0 read/write without model calls."""
+"""记忆 Agent handler：直接执行 mem0 读写，不经过模型调用。"""
 
 from __future__ import annotations
 
@@ -12,15 +12,22 @@ logger = get_logger("aurora.agent.memory")
 
 
 class MemoryAgent:
-    """Non-cognitive Agent that directly executes memory operations via MemoryService."""
+    """非认知型 Agent，直接通过 MemoryService 执行记忆操作。"""
 
     def __init__(self, *, memory_service: Any | None = None) -> None:
+        """初始化 MemoryAgent。
+
+        Args:
+            memory_service: 记忆服务实例，可通过 install_memory_service 延后注入。
+        """
         self._memory = memory_service
 
     def install_memory_service(self, service: Any) -> None:
+        """安装记忆服务实例。"""
         self._memory = service
 
     def handle(self, context: AgentContext) -> AgentDecision:
+        """根据指令类型分发到 memory.query 或 memory.proposal 处理。"""
         memory = self._memory
         if memory is None:
             return AgentDecision(completion=Completion("memory unavailable", silent=True))
@@ -39,6 +46,7 @@ class MemoryAgent:
 
     @staticmethod
     def _handle_query(memory: Any, instruction: dict[str, Any]) -> AgentDecision:
+        """执行记忆查询操作。"""
         query = instruction.get("query", "")
         limit = instruction.get("limit", 8)
         if not isinstance(limit, int) or limit < 1:
@@ -52,6 +60,7 @@ class MemoryAgent:
 
     @staticmethod
     def _handle_proposal(memory: Any, instruction: dict[str, Any]) -> AgentDecision:
+        """执行记忆存储操作。"""
         content = instruction.get("content", "")
         if isinstance(content, dict):
             content = json.dumps(content, ensure_ascii=False)

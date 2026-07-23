@@ -1,4 +1,4 @@
-"""LiteLLM streaming execution primitives, cancellation and cost tracking.
+"""LiteLLM 流式执行原语、取消机制与成本追踪。
 
 费用计算以 models.dev 为第一（唯一）信息源，不再使用 litellm 内置定价。
 
@@ -44,7 +44,7 @@ logger = get_logger("Gateway")
 
 
 class GatewayState(Protocol):
-    """Minimal state used by a model caller without importing the gateway facade."""
+    """模型调用方使用的最小状态，无需导入网关门面。"""
 
     log_queries: bool
     log_responses: bool

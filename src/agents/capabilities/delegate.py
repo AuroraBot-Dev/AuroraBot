@@ -1,4 +1,4 @@
-"""Capability that lets the model create child agents via aurora.agent.delegate."""
+"""让模型通过 aurora.agent.delegate 创建子 Agent 的 Capability。"""
 
 from __future__ import annotations
 
@@ -49,9 +49,11 @@ class DelegationCapability:
 
     @property
     def tool_names(self) -> frozenset[str]:
+        """返回此 Capability 注册的工具名称集合。"""
         return frozenset({DELEGATE_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:
+        """仅在 profile 允许委派时提供委派工具定义。"""
         if not context.profile.can_delegate:
             return ()
         return (ToolDefinition(DELEGATE_TOOL, _DELEGATE_DESCRIPTION, _DELEGATE_SCHEMA),)
@@ -63,6 +65,7 @@ class DelegationCapability:
         continuation: object = None,  # noqa: ARG002
         tools: tuple[object, ...] = (),  # noqa: ARG002
     ) -> AgentDecision | None:
+        """处理委派工具调用，验证任务参数并返回委派决策。"""
         if call.name != DELEGATE_TOOL:
             return None
         raw_tasks = call.arguments.get("tasks")
