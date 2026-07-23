@@ -1,4 +1,4 @@
-"""Prompt fragments and per-turn message assembly for the homogeneous Agent loop."""
+"""提示词片段与同构 Agent 循环中每轮消息的装配。"""
 
 from __future__ import annotations
 

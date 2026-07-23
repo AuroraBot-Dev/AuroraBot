@@ -1,4 +1,4 @@
-"""Immutable prompt catalog and layered assembly DTOs."""
+"""不可变提示词目录与分层装配 DTO。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from src.contracts.model import ModelMessage
 
+# 校验错误消息常量
 _INVALID_SECTION = "prompt sections require a key and non-empty content"
 _INVALID_CATALOG = "prompt catalog requires string soul and non-empty world"
 _INVALID_AGENT_PROMPTS = "prompt catalog requires non-empty Agent prompts"
@@ -19,12 +20,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class PromptSource:
+    """提示词来源快照：文件路径和 SHA-256 摘要。"""
+
     path: Path
     sha256: str
 
 
 @dataclass(frozen=True, slots=True)
 class PromptCatalog:
+    """不可变提示词目录：soul、world、按 Agent 档案索引的提示词和来源链。"""
+
     soul: str
     world: str
     agents: Mapping[str, str]
@@ -52,11 +57,14 @@ class PromptCatalog:
         agents: Mapping[str, str],
         sources: tuple[PromptSource, ...] = (),
     ) -> "PromptCatalog":
+        """工厂方法：创建校验通过的 PromptCatalog 实例。"""
         return cls(soul, world, agents, sources)
 
 
 @dataclass(frozen=True, slots=True)
 class PromptSection:
+    """提示词片段：由 key 标识，content 不可为空。"""
+
     key: str
     content: str
 
@@ -67,6 +75,8 @@ class PromptSection:
 
 @dataclass(frozen=True, slots=True)
 class PromptDocument:
+    """一份完整的提示词文档，包含 system 和 user 两类 sections。"""
+
     system_sections: tuple[PromptSection, ...]
     user_sections: tuple[PromptSection, ...]
 
@@ -76,11 +86,14 @@ class PromptDocument:
 
     @property
     def system_prompt(self) -> str:
+        """将 system sections 拼接为完整 system prompt。"""
         return "\n\n".join(section.content.strip() for section in self.system_sections)
 
     @property
     def user_prompt(self) -> str:
+        """将 user sections 拼接为完整 user prompt。"""
         return "\n\n".join(section.content.strip() for section in self.user_sections)
 
     def messages(self) -> tuple[ModelMessage, ModelMessage]:
+        """转换为标准模型消息对 (system, user)。"""
         return ModelMessage("system", self.system_prompt), ModelMessage("user", self.user_prompt)

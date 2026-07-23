@@ -1,4 +1,4 @@
-"""Memory service public API."""
+"""记忆服务公开 API。"""
 
 from __future__ import annotations
 

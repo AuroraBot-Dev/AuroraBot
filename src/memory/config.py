@@ -1,4 +1,4 @@
-"""Build mem0 Memory configuration from AuroraConfig."""
+"""从 AuroraConfig 构建 mem0 Memory 配置。"""
 
 from __future__ import annotations
 
@@ -13,18 +13,21 @@ if TYPE_CHECKING:
 _MEMORY_COLLECTION = "aurora_memory"
 _DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
+# 已知 Provider 的默认 base_url 映射
 _KNOWN_BASE_URLS: dict[str, str] = {
     "deepseek": _DEEPSEEK_BASE_URL,
 }
 
 
 def _resolve_base_url(provider: ModelProviderConfig) -> str | None:
+    """解析 Provider 的 base_url：优先使用显式配置，其次查找已知映射。"""
     if provider.base_url is not None:
         return provider.base_url
     return _KNOWN_BASE_URLS.get(provider.id)
 
 
 def _build_openai_provider_config(role_name: str, config: AuroraConfig) -> dict[str, Any] | None:
+    """为给定模型角色构建 OpenAI 兼容的 Provider 配置（LLM 或 Embedder）。"""
     role = config.model_definitions.get(role_name)
     if role is None:
         return None
@@ -42,6 +45,7 @@ def _build_openai_provider_config(role_name: str, config: AuroraConfig) -> dict[
 
 
 def build_memory_config(config: AuroraConfig, data_dir: Path) -> dict[str, Any] | None:
+    """构建 mem0 记忆系统所需的完整配置，LLM 和 Embedder 均不可用时返回 None。"""
     llm = _build_openai_provider_config("fast", config)
     embedder = _build_openai_provider_config("embedding", config)
     if llm is None or embedder is None:

@@ -1,4 +1,4 @@
-"""Memory service wrapping mem0 for semantic search and SQLite for episodic recall."""
+"""记忆服务：包装 mem0 语义搜索和 SQLite 情景回忆。"""
 
 from __future__ import annotations
 
@@ -18,13 +18,14 @@ _DATA_SUBDIR = "memory"
 
 
 def _build_mem0_config(config: AuroraConfig, data_dir: Path) -> dict[str, Any] | None:
+    """根据应用配置构建 mem0 记忆系统配置，不可用时返回 None。"""
     from src.memory.config import build_memory_config as build
 
     return build(config, data_dir)
 
 
 class MemoryService:
-    """Direct memory service: reads L2/L3 automatically, writes via tool delegation."""
+    """直接记忆服务：读取 L2/L3 由服务自动完成，写入通过工具委派。"""
 
     def __init__(
         self,
@@ -36,6 +37,7 @@ class MemoryService:
         self._mem0_config: dict[str, Any] | None = None
         self._user_id = _DEFAULT_USER_ID
         if config is None or data_dir is None or workspace is None:
+            # 未提供完整配置时处于禁用状态
             self._available = False
             self._db_path = Path(":memory:")
             return
@@ -49,14 +51,17 @@ class MemoryService:
 
     @classmethod
     def disabled(cls) -> MemoryService:
+        """返回一个已禁用的记忆服务实例（用于无记忆场景）。"""
         return cls()
 
     @property
     def available(self) -> bool:
+        """记忆服务当前是否可用。"""
         return self._available
 
     @property
     def _mem0(self) -> Any:
+        """懒加载 mem0 Memory 客户端，初始化失败则标记为不可用。"""
         if self._client is None and self._mem0_config is not None:
             try:
                 from mem0 import Memory
@@ -70,6 +75,7 @@ class MemoryService:
         return self._client
 
     def search(self, query: str, user_id: str | None = None, limit: int = 8) -> list[str]:
+        """语义搜索记忆库，返回匹配文本列表。"""
         if not self._available or not query.strip():
             return []
         client = self._mem0
@@ -87,6 +93,7 @@ class MemoryService:
         return []
 
     def add(self, content: str, user_id: str | None = None) -> bool:
+        """向记忆库添加一条新记忆（由工具委派写入）。"""
         if not self._available or not content.strip():
             return False
         client = self._mem0
@@ -103,6 +110,7 @@ class MemoryService:
             return True
 
     def recall_recent_events(self, limit: int = 10) -> list[dict[str, str]]:
+        """从因果事件表中召回最近的事件记录。"""
         if not self._db_path.exists():
             return []
         conn = None
@@ -122,12 +130,14 @@ class MemoryService:
                 conn.close()
 
     def recall_conversation(self, limit: int = 8) -> list[dict[str, str | None]]:
+        """从因果事件表中重建最近对话（用户消息→Aurora 回复）。"""
         if not self._db_path.exists():
             return []
         conn = None
         try:
             conn = sqlite3.connect(str(self._db_path))
             conn.row_factory = sqlite3.Row
+            # 先获取最近启动的 Task（排除自主心跳）
             started = {
                 row["task_id"]: row["summary"]
                 for row in conn.execute(
@@ -151,6 +161,7 @@ class MemoryService:
                 summary = row["summary"]
                 if isinstance(summary, str) and summary.strip():
                     completed[row["task_id"]] = summary
+            # 按时间倒序组装对话轮次
             conversation: list[dict[str, str | None]] = []
             for task_id, user_msg in started.items():
                 turn: dict[str, str | None] = {"user": user_msg}
@@ -166,6 +177,7 @@ class MemoryService:
                 conn.close()
 
     def auto_remember_completed_tasks(self) -> int:
+        """从因果事件表中自动提取最近完成的交互并写入记忆，返回已记忆条数。"""
         if not self._available or not self._db_path.exists():
             return 0
         conn = None
@@ -194,6 +206,7 @@ class MemoryService:
             content = f"用户：{user_msg}"
             if isinstance(bot_msg, str) and bot_msg.strip():
                 stripped = bot_msg.strip()
+                # 跳过纯结构化工具操作摘要
                 if stripped.startswith("{") and '"operation"' in stripped:
                     continue
                 content += f"\nAurora：{stripped}"

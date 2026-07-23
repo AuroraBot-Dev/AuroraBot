@@ -1,4 +1,4 @@
-"""Assemble layered model prompts from catalog text and factual Agent context."""
+"""从目录文本和事实性 Agent 上下文中装配分层模型提示词。"""
 
 from __future__ import annotations
 
@@ -14,12 +14,14 @@ if TYPE_CHECKING:
 
 
 class MissingAgentPromptError(ValueError):
+    """指定的 Agent 档案在提示词目录中缺少对应提示词模板时抛出。"""
+
     def __init__(self, profile_id: str) -> None:
         super().__init__(f"missing prompt for Agent profile {profile_id}")
 
 
 class PromptComposer:
-    """The only assembly boundary for project-authored model input."""
+    """提示词装配的唯一边界——将目录文本和 Agent 上下文组合为模型输入。"""
 
     def __init__(self, catalog: PromptCatalog, memory: Any = None) -> None:
         self._catalog = catalog
@@ -27,9 +29,11 @@ class PromptComposer:
 
     @property
     def catalog(self) -> PromptCatalog:
+        """返回当前绑定的提示词目录。"""
         return self._catalog
 
     def request_document(self, context: AgentContext) -> PromptDocument:
+        """从 Agent 上下文构建一份完整的提示词文档（system + user sections）。"""
         try:
             agent_prompt = self._catalog.agents[context.profile.id]
         except KeyError as error:
@@ -69,10 +73,12 @@ class PromptComposer:
         return PromptDocument(tuple(system), tuple(user))
 
     def request_messages(self, context: AgentContext) -> tuple[ModelMessage, ModelMessage]:
+        """直接返回可投喂给模型的 System+User 消息对。"""
         return self.request_document(context).messages()
 
 
 def _message_text(context: AgentContext) -> str:
+    """根据消息类型渲染对应的用户提示文本。"""
     amp = _amp(context)
     if amp is not None:
         payload = amp.get("payload")
@@ -96,6 +102,7 @@ def _message_text(context: AgentContext) -> str:
 
 
 def _source_note(context: AgentContext) -> str:
+    """从 AMP 信封解析来源渠道信息，生成来源标注。"""
     amp = _amp(context)
     if amp is None:
         return ""
@@ -115,6 +122,7 @@ def _source_note(context: AgentContext) -> str:
 
 
 def _current_work(context: AgentContext) -> str:
+    """生成当前工作状态快照：自身任务、活跃子 Agent、全局活动概览。"""
     active_children = [child for child in context.children if not child.terminal]
     facts = {
         "current": {
@@ -141,6 +149,7 @@ def _current_work(context: AgentContext) -> str:
 
 
 def _situations(context: AgentContext) -> str:
+    """渲染环境态势列表，让 Agent 按 situation_id 认领工作。"""
     if not context.brain.ambient_situations:
         return ""
     introduction = "我有这些事要做；认领时要使用其中的 situation_id："
@@ -148,6 +157,7 @@ def _situations(context: AgentContext) -> str:
 
 
 def _tool_hints(capabilities: tuple[CapabilityDescriptor, ...]) -> str:
+    """生成当前可用的工具能力清单提示。"""
     if not capabilities:
         return ""
     facts = tuple({"id": item.id, "description": item.description} for item in capabilities)
@@ -155,17 +165,20 @@ def _tool_hints(capabilities: tuple[CapabilityDescriptor, ...]) -> str:
 
 
 def _amp(context: AgentContext) -> dict[str, Any] | None:
+    """从消息 payload 中提取 AMP 信封（若存在）。"""
     value = context.message.payload.get("amp")
     return value if isinstance(value, dict) else None
 
 
 def _external(value: object) -> str:
+    """将任意值序列化为安全的 `<external-data>` XML 块，防止注入。"""
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     encoded = encoded.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
     return f'<external-data encoding="json">\n{encoded}\n</external-data>'
 
 
 def _recall_recent_events(memory: Any) -> str:
+    """从记忆服务中召回最近的事件列表。"""
     if memory is None or not getattr(memory, "available", False):
         return ""
     events = memory.recall_recent_events(limit=10)
@@ -176,6 +189,7 @@ def _recall_recent_events(memory: Any) -> str:
 
 
 def _recall_semantic_facts(memory: Any, context: AgentContext) -> str:
+    """基于当前 Task 的 root_summary 进行语义搜索召回记忆。"""
     if memory is None or not getattr(memory, "available", False):
         return ""
     query = context.task.root_summary
@@ -188,6 +202,7 @@ def _recall_semantic_facts(memory: Any, context: AgentContext) -> str:
 
 
 def _recall_conversation(memory: Any) -> str:
+    """从记忆服务中召回最近的对话历史（用户↔Aurora 轮次）。"""
     if memory is None or not getattr(memory, "available", False):
         return ""
     turns = memory.recall_conversation(limit=8)
