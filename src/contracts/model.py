@@ -1,4 +1,4 @@
-"""Provider-neutral model gateway contracts defined by RFC 0005."""
+"""RFC 0005 定义的协议中立模型网关契约。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
+# 模式、重试策略、取消策略、工具选择字面量类型
 ResponseMode = Literal["normalized", "native"]
 RetryPolicy = Literal["none"]
 CancelPolicy = Literal["never", "on_external_activity"]
@@ -14,12 +15,16 @@ ToolChoice = Literal["auto", "none", "required"]
 
 @dataclass(frozen=True, slots=True)
 class ModelMessage:
+    """标准模型消息：角色和内容。"""
+
     role: str
     content: str
 
 
 @dataclass(frozen=True, slots=True)
 class ModelBudget:
+    """模型调用预算：最大输出 token、超时和可选成本上限。"""
+
     max_output_tokens: int = 1024
     timeout_seconds: float = 30.0
     max_cost_usd: float | None = None
@@ -27,6 +32,8 @@ class ModelBudget:
 
 @dataclass(frozen=True, slots=True)
 class ModelRequest:
+    """完整的模型请求：角色、消息列表、能力需求、预算、工具和延续状态。"""
+
     role: str
     messages: tuple[ModelMessage, ...]
     required_capabilities: frozenset[str] = frozenset({"chat"})
@@ -50,6 +57,7 @@ class ModelRequest:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ModelRequest":
+        """从持久化字典反序列化为 ModelRequest。"""
         budget_raw = value.get("budget", {})
         messages_raw = value.get("messages", [])
         tools_raw = value.get("tools", [])
@@ -84,6 +92,8 @@ class ModelRequest:
 
 @dataclass(frozen=True, slots=True)
 class ModelUsage:
+    """模型用量统计：输入和输出 token 数。"""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
 

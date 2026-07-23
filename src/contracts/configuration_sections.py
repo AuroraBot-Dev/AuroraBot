@@ -1,4 +1,4 @@
-"""Parsers for independently declared Agent, MCP App and Dashboard sections."""
+"""独立声明的 Agent、MCP App 和 Dashboard 段的解析器。"""
 
 from math import isfinite
 from pathlib import Path
@@ -24,6 +24,7 @@ from src.contracts.configuration import (
 
 
 def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
+    """解析自主节律配置段，校验心跳边界和每日额度。"""
     defaults = AutonomyConfig()
     allowed = {
         "scan_seconds",
@@ -67,6 +68,7 @@ def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
 def _parse_task_budget(
     raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
 ) -> TaskBudget:
+    """解析 Task 预算配置，支持交互式和自主式两档默认值。"""
     allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
     if set(raw) - allowed:
         raise ConfigurationError(f"runtime.{label} has unsupported keys")
@@ -80,6 +82,7 @@ def _parse_task_budget(
 
 
 def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[AgentProfile, ...]:
+    """解析 agents.toml 中的 Agent 档案数组，校验引用完整性。"""
     _require_keys(data, {"agent"}, "agents.toml")
     raw_agents = data["agent"]
     if not isinstance(raw_agents, list) or not raw_agents:
@@ -130,6 +133,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
 
 
 def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
+    """解析运行时 Agent 限制配置，校验 max_depth 与 max_agents_per_task 的关系。"""
     defaults = AgentLimits()
     allowed = set(AgentLimits.__dataclass_fields__)
     if set(raw) - allowed:
@@ -153,6 +157,7 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
 
 
 def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
+    """解析 apps.toml 中的应用路由数组，校验 stdio/streamable_http 约束。"""
     if not isinstance(raw_apps, list):
         raise ConfigurationError("app must be an array")
     apps: list[AppConfig] = []
@@ -222,6 +227,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
 
 
 def _dotted_name(value: object, label: str) -> str:
+    """校验值为合法的点分名称（如 com.example.app）。"""
     name = _string(value, label)
     parts = name.split(".")
     if len(parts) < 2 or any(not part or any(character.isspace() for character in part) for part in parts):
@@ -230,6 +236,7 @@ def _dotted_name(value: object, label: str) -> str:
 
 
 def _capability_pattern(value: object, label: str) -> str:
+    """校验能力模式：精确工具 ID、package.* 或 *。"""
     capability = _string(value, label)
     if capability == "*":
         return capability
@@ -242,6 +249,7 @@ def _capability_pattern(value: object, label: str) -> str:
 
 
 def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
+    """解析 Dashboard 配置段，校验端口、路径安全和 owner/bot 分离。"""
     _require_keys(
         raw,
         {
@@ -318,6 +326,7 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
 
 
 def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
+    """解析平台偏好配置段（console / dashboard / mcp 的启用和选项）。"""
     _require_keys(platform, {"console", "dashboard", "mcp"}, "platform")
     console = _table(platform["console"], "platform.console")
     dashboard = _table(platform["dashboard"], "platform.dashboard")

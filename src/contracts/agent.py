@@ -1,4 +1,4 @@
-"""Provider-neutral contracts for the RFC 0012 durable Agent runtime."""
+"""RFC 0012 持久化 Agent 运行时的协议中立契约。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 
 class TaskStatus(StrEnum):
+    """Task 生命周期状态：活跃、已完成、静默、取消、预算耗尽、错误。"""
+
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
     SILENT = "SILENT"
@@ -21,8 +23,9 @@ class TaskStatus(StrEnum):
 
 
 class AgentStatus(StrEnum):
+    """Agent 实例的生命周期状态。"""
+
     READY = "READY"
-    RUNNING = "RUNNING"
     WAITING_MODEL = "WAITING_MODEL"
     WAITING_TOOL = "WAITING_TOOL"
     WAITING_CHILDREN = "WAITING_CHILDREN"
@@ -32,6 +35,8 @@ class AgentStatus(StrEnum):
 
 
 class MessageStatus(StrEnum):
+    """邮箱消息的处理状态。"""
+
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
@@ -39,6 +44,8 @@ class MessageStatus(StrEnum):
 
 
 class ActivityStatus(StrEnum):
+    """Activity（模型/工具调用）的执行状态。"""
+
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
@@ -48,6 +55,8 @@ class ActivityStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class CapabilityDescriptor:
+    """Agent 能力的声明描述符，包含 ID、描述和参数 JSON Schema。"""
+
     id: str
     description: str
     parameters_schema: dict[str, Any]
@@ -58,6 +67,8 @@ class CapabilityDescriptor:
 
 @dataclass(frozen=True, slots=True)
 class CapabilityCatalogSnapshot:
+    """能力目录的快照，确保能力 ID 唯一。"""
+
     capabilities: tuple[CapabilityDescriptor, ...] = ()
 
     def __post_init__(self) -> None:
@@ -67,6 +78,7 @@ class CapabilityCatalogSnapshot:
 
     @property
     def by_id(self) -> MappingProxyType[str, CapabilityDescriptor]:
+        """按 ID 索引的只读能力映射。"""
         return MappingProxyType({item.id: item for item in self.capabilities})
 
     def to_dict(self) -> dict[str, object]:
@@ -75,6 +87,8 @@ class CapabilityCatalogSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class TaskBudget:
+    """Task 的资源预算：最大模型调用数、最大工具调用数、最大持续时间。"""
+
     max_model_calls: int
     max_tool_calls: int
     max_duration_seconds: float
@@ -82,6 +96,8 @@ class TaskBudget:
 
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
+    """Agent 运行时的并发与资源限制配置。"""
+
     root_profile: str = "builtin.gate"
     worker_profile: str = "builtin.worker"
     memory_agent_profile: str | None = None
@@ -99,6 +115,8 @@ class AgentLimits:
 
 @dataclass(frozen=True, slots=True)
 class AgentProfile:
+    """Agent 配置档案：实现、模型角色、能力和委派权限。"""
+
     id: str
     implementation: str
     model_role: str
@@ -109,6 +127,8 @@ class AgentProfile:
 
 @dataclass(frozen=True, slots=True)
 class KernelConfiguration:
+    """Kernel 启动配置：工作区、Agent 档案、限制和预算。"""
+
     workspace: str
     profiles: tuple[AgentProfile, ...]
     limits: AgentLimits
@@ -118,6 +138,8 @@ class KernelConfiguration:
 
 @dataclass(slots=True)
 class TaskState:
+    """Task 的持久化运行状态。"""
+
     task_id: str
     root_agent_id: str
     root_message_id: str
@@ -136,6 +158,7 @@ class TaskState:
 
     @property
     def terminal(self) -> bool:
+        """Task 是否已终止（非 ACTIVE 状态）。"""
         return self.status != TaskStatus.ACTIVE
 
     def to_dict(self) -> dict[str, Any]:
@@ -144,6 +167,8 @@ class TaskState:
 
 @dataclass(slots=True)
 class AgentInstance:
+    """Agent 实例的持久化状态，包括层级深度、分配和当前摘要。"""
+
     agent_id: str
     task_id: str
     parent_agent_id: str | None
@@ -159,6 +184,7 @@ class AgentInstance:
 
     @property
     def terminal(self) -> bool:
+        """Agent 是否已终止（COMPLETED / FAILED / CANCELLED）。"""
         return self.status in {AgentStatus.COMPLETED, AgentStatus.FAILED, AgentStatus.CANCELLED}
 
     def to_dict(self) -> dict[str, Any]:
@@ -167,6 +193,8 @@ class AgentInstance:
 
 @dataclass(frozen=True, slots=True)
 class AgentMessage:
+    """Agent 邮箱中的消息，包含因果追踪和租约信息。"""
+
     message_id: str
     task_id: str
     target_agent_id: str
@@ -186,12 +214,16 @@ class AgentMessage:
 
 @dataclass(frozen=True, slots=True)
 class DelegationRequest:
+    """Agent 发出的委派请求。"""
+
     instruction: str
     profile_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ToolRequest:
+    """Agent 发出的工具调用请求。"""
+
     capability: str
     parameters: dict[str, Any]
     complete_task: bool = False
@@ -201,6 +233,8 @@ class ToolRequest:
 
 @dataclass(frozen=True, slots=True)
 class Completion:
+    """Agent 的完成声明：摘要、产出物和静默标记。"""
+
     summary: str
     artifacts: tuple[dict[str, Any], ...] = ()
     silent: bool = False
@@ -208,6 +242,8 @@ class Completion:
 
 @dataclass(frozen=True, slots=True)
 class ChildResult:
+    """子 Agent 完成后的结果报告。"""
+
     child_agent_id: str
     status: Literal["completed", "failed"]
     summary: str
@@ -220,6 +256,8 @@ class ChildResult:
 
 @dataclass(frozen=True, slots=True)
 class AgentDecision:
+    """Agent handler 的返回决策：仅包含一个主动作（模型请求 / 工具调用 / 委派 / 完成 / 等待 / 失败）。"""
+
     model_request: dict[str, Any] | None = None
     tool_request: ToolRequest | None = None
     delegations: tuple[DelegationRequest, ...] = ()
@@ -230,6 +268,7 @@ class AgentDecision:
     state_patch: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        # 确保仅含一个主动作
         actions = sum(
             (
                 self.model_request is not None,
@@ -246,6 +285,8 @@ class AgentDecision:
 
 @dataclass(frozen=True, slots=True)
 class ActivityRequest:
+    """外部 Activity（模型推理或工具执行）的调度请求。"""
+
     activity_id: str
     task_id: str
     agent_id: str
@@ -260,6 +301,8 @@ class ActivityRequest:
 
 @dataclass(frozen=True, slots=True)
 class ToolLease:
+    """工具执行租约：绑定 Activity 到本地执行上下文。"""
+
     activity_id: str
     task_id: str
     agent_id: str
@@ -271,6 +314,8 @@ class ToolLease:
 
 @dataclass(frozen=True, slots=True)
 class BrainContextSnapshot:
+    """Brain 模块提供的全局上下文快照：活跃 Task、Agent 和环境态势。"""
+
     active_tasks: tuple[dict[str, Any], ...]
     active_agents: tuple[dict[str, Any], ...]
     ambient_situations: tuple[dict[str, Any], ...]
@@ -282,6 +327,8 @@ class BrainContextSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class AgentContext:
+    """Agent handler 的输入上下文：包含 Task、Agent 实例、消息、子 Agent、档案和 Brain 快照。"""
+
     task: TaskState
     agent: AgentInstance
     message: AgentMessage
@@ -292,6 +339,8 @@ class AgentContext:
 
 
 class AgentHandler(Protocol):
+    """Agent handler 协议：接收 AgentContext，返回 AgentDecision。"""
+
     def handle(self, context: AgentContext) -> AgentDecision: ...
 
 
@@ -313,12 +362,16 @@ class Capability(Protocol):
 
 
 class ToolQueue(Protocol):
+    """工具队列协议：认领待执行的工具请求和恢复请求。"""
+
     async def claim_tool_requests(self) -> tuple[ToolLease, ...]: ...
 
     async def tool_recovery_requests(self) -> tuple[ToolLease, ...]: ...
 
 
 class ModelActivityQueue(Protocol):
+    """模型 Activity 队列协议：认领模型请求并回传结果。"""
+
     async def claim_model_requests(self, limit: int) -> tuple[ActivityRequest, ...]: ...
 
     async def complete_model(

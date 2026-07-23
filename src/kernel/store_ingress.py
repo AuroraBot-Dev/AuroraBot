@@ -1,4 +1,10 @@
-"""Task ingress, Tool receipts and mailbox leasing."""
+"""Task 入口、工具回执处理与邮箱消息租赁。
+
+处理所有外部事件进入系统的第一个接触点：
+- create_task：将外部 AMP 事件创建为新 Task
+- complete_tool_activity：消费工具回执，推导事件前后因果
+- claim_message：按 Agent 状态匹配邮箱消息供处理
+"""
 
 from __future__ import annotations
 
@@ -20,6 +26,8 @@ from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreIngressMixin(RuntimeStoreBase):
+    """入口处理 Mixin：Task 创建、工具回执消费与邮箱消息租赁。"""
+
     def create_task(
         self,
         *,
@@ -32,10 +40,17 @@ class StoreIngressMixin(RuntimeStoreBase):
         budget: TaskBudget,
         priority: int,
     ) -> TaskState | None:
+        """从外部事件创建新 Task。
+
+        通过 external_message_id 检查幂等（已在 causal_events 中存在则跳过），
+        创建 tasks、agents 和 mailbox 记录，并写入 task.started 因果事件。
+        返回 TaskState 或 duplicate 时的 None。
+        """
         now = utc_now()
         task_id = str(uuid4())
         agent_id = str(uuid4())
         with self.transaction() as connection:
+            # 幂等检查：同一 external_message_id 不可重复创建
             duplicate = connection.execute(
                 "SELECT event_id FROM causal_events WHERE external_message_id = ?",
                 (external_message_id,),
@@ -105,17 +120,20 @@ class StoreIngressMixin(RuntimeStoreBase):
         summary: str,
         payload: dict[str, Any],
     ) -> tuple[bool, str | None]:
-        """Consume a Tool receipt once, deriving authority from the persisted request.
+        """消费工具回执一次，授权来自已持久化请求，支持幂等。
 
-        The boolean distinguishes a known late/duplicate receipt from an unrelated
-        external event, so only the latter becomes an ambient situation.
+        返回 (bool, str | None)：布尔值区分已知的延迟/重复回执与无关外部事件。
+        仅后者成为环境情境（situation）。
+        若工具请求标记 complete_task=True，则自动完成该 Agent。
         """
         now = utc_now()
         with self.transaction() as connection:
+            # 外部事件幂等：同一 external_message_id 只消费一次
             if connection.execute(
                 "SELECT 1 FROM causal_events WHERE external_message_id = ?", (external_message_id,)
             ).fetchone():
                 return True, None
+            # 通过 idempotency_key 关联原始 Activity 请求
             row = connection.execute(
                 "SELECT a.*, t.status AS task_status FROM activities a "
                 "JOIN tasks t ON t.task_id = a.task_id "
@@ -129,6 +147,7 @@ class StoreIngressMixin(RuntimeStoreBase):
             if not isinstance(capability, str) or capability != request.get("capability"):
                 return False, None
             if row["status"] != ActivityStatus.PROCESSING or row["task_status"] != TaskStatus.ACTIVE:
+                # 延迟或重复回执：记录因果事件但不重复处理
                 connection.execute(
                     "INSERT INTO causal_events VALUES (?, ?, ?, 'tool.receipt_ignored', ?, ?, ?, ?, ?, ?)",
                     (
@@ -191,6 +210,10 @@ class StoreIngressMixin(RuntimeStoreBase):
             return True, message_id
 
     def _complete_agent_after_tool(self, connection: Any, row: Any, summary: str, now: str) -> str | None:
+        """工具成功后自动完成 Agent。
+
+        若为根 Agent，结束整个 Task；否则向父 Agent 发送 child.completed 消息。
+        """
         agent = connection.execute("SELECT * FROM agents WHERE agent_id = ?", (row["agent_id"],)).fetchone()
         assert agent is not None
         connection.execute(
@@ -220,6 +243,16 @@ class StoreIngressMixin(RuntimeStoreBase):
         )
 
     def claim_message(self, lease_seconds: float) -> tuple[AgentMessage, AgentInstance, TaskState] | None:
+        """领取下一条待处理消息并设置租约。
+
+        先重置所有过期的 PROCESSING 消息为 PENDING，再按以下规则查找：
+        - 仅匹配 ACTIVE Task 下的 READY Agent 或状态与消息类型一致的等待中 Agent
+        - WAITING_MODEL 仅接收 model.* 消息
+        - WAITING_TOOL 仅接收 tool.* 消息
+        - WAITING_CHILDREN 仅接收 child.* 消息
+        - 同一 Agent 不能同时有 PROCESSING 消息（邮箱租约即执行锁）
+        按优先级降序、创建时间升序排列，返回 (消息, Agent, Task) 三元组。
+        """
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
         lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
@@ -252,8 +285,7 @@ class StoreIngressMixin(RuntimeStoreBase):
             )
             if updated.rowcount != 1:
                 return None
-            # The mailbox lease is the per-Agent execution lock. Keeping the
-            # semantic WAITING_* state intact prevents unrelated wake-ups.
+            # 邮箱租约是逐 Agent 的执行锁。保留 WAITING_* 语义状态可防止无关唤醒。
             message_row = connection.execute(
                 "SELECT * FROM mailbox WHERE message_id = ?", (row["message_id"],)
             ).fetchone()
@@ -265,6 +297,7 @@ class StoreIngressMixin(RuntimeStoreBase):
             return self._message(message_row), self._agent(agent_row), self._task(task_row)
 
     def fail_message(self, message_id: str, agent_id: str, error: str) -> None:
+        """将消息标记为错误并标记对应 Agent 为失败。仅在极端恢复场景使用。"""
         now = utc_now()
         with self.transaction() as connection:
             connection.execute(

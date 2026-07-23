@@ -1,4 +1,4 @@
-"""Leaf-level immutable configuration DTOs and RFC 0002 TOML validation."""
+"""叶子级不可变配置 DTO 与 RFC 0002 TOML 校验。"""
 
 from __future__ import annotations
 
@@ -17,18 +17,19 @@ if TYPE_CHECKING:
 
 
 class ConfigurationError(ValueError):
-    """Raised before startup for invalid structural configuration."""
+    """启动前因无效结构性配置抛出。"""
 
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationSource:
-    """Auditable identity of one file used to build a configuration snapshot."""
+    """可审计的配置来源：记录文件路径和 SHA-256 摘要。"""
 
     path: Path
     sha256: str
 
 
 def _read_toml_snapshot(path: Path) -> tuple[dict[str, Any], ConfigurationSource]:
+    """读取 TOML 文件并返回解析数据和配置来源快照。"""
     path = path.resolve()
     try:
         content = path.read_bytes()
@@ -41,6 +42,7 @@ def _read_toml_snapshot(path: Path) -> tuple[dict[str, Any], ConfigurationSource
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """深度合并两个字典，嵌套字典递归合并。"""
     result = copy.deepcopy(base)
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) != isinstance(value, dict):
@@ -53,6 +55,7 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
 
 
 def _require_keys(value: dict[str, Any], keys: set[str], label: str) -> None:
+    """检查字典键恰好为指定集合，不允许多余或缺失。"""
     unexpected = set(value) - keys
     missing = keys - set(value)
     if unexpected or missing:
@@ -60,18 +63,21 @@ def _require_keys(value: dict[str, Any], keys: set[str], label: str) -> None:
 
 
 def _require_subset(data: dict[str, Any], required: set[str], label: str) -> None:
+    """检查字典至少包含指定的必需键。"""
     missing = required - set(data)
     if missing:
         raise ConfigurationError(f"{label} is missing required keys: {sorted(missing)}")
 
 
 def _table(value: object, label: str) -> dict[str, Any]:
+    """校验值为 TOML 表（dict）类型。"""
     if not isinstance(value, dict):
         raise ConfigurationError(f"{label} must be a table")
     return value
 
 
 def _string(value: object, label: str) -> str:
+    """校验值为非空字符串。"""
     if not isinstance(value, str) or not value:
         raise ConfigurationError(f"{label} must be a non-empty string")
     return value
@@ -79,6 +85,8 @@ def _string(value: object, label: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
+    """运行时配置：profile、工作区、调试、自主、Agent 限制和预算。"""
+
     profile: str
     workspace: Path
     debug_host: str
@@ -91,6 +99,8 @@ class RuntimeConfig:
 
 @dataclass(frozen=True, slots=True)
 class AutonomyConfig:
+    """自主节律配置：扫描间隔、心跳边界和每日额度。"""
+
     scan_seconds: float = 1.0
     heartbeat_initial_seconds: float = 30.0
     heartbeat_min_seconds: float = 30.0
@@ -121,7 +131,7 @@ class DashboardConfig:
 
 @dataclass(frozen=True, slots=True)
 class AppConfig:
-    """One explicitly enabled MCP application route."""
+    """一个显式启用的 MCP 应用路由配置。"""
 
     package: str
     transport: str
@@ -134,7 +144,7 @@ class AppConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelProviderConfig:
-    """A TOML-defined LiteLLM or OpenAI-compatible Provider route."""
+    """TOML 定义的 LiteLLM 或 OpenAI 兼容 Provider 路由。"""
 
     id: str
     adapter: str
@@ -144,10 +154,7 @@ class ModelProviderConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelRoleConfig:
-    """Non-secret configuration for one model role.
-
-    ``capabilities`` 为空时由 models.dev 自动派生。
-    """
+    """模型角色的非密钥配置，capabilities 为空时由 models.dev 自动派生。"""
 
     provider: str
     model: str
@@ -157,7 +164,7 @@ class ModelRoleConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelLoggingConfig:
-    """Opt-in DEBUG logging controls for the retained gateway implementation."""
+    """模型网关的可选 DEBUG 日志控制。"""
 
     log_queries: bool
     log_responses: bool
@@ -190,6 +197,8 @@ class PlatformPreference:
 
 @dataclass(frozen=True, slots=True)
 class AuroraConfig:
+    """聚合所有 TOML 配置的根配置对象。"""
+
     root: Path
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
@@ -206,13 +215,14 @@ class AuroraConfig:
 
 
 def _positive_number(value: object, label: str) -> float:
+    """校验值为正数（int 或 float），返回 float。"""
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
         raise ConfigurationError(f"{label} must be positive")
     return float(value)
 
 
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
-    """Load the selected RFC 0002 configuration snapshot."""
+    """加载选定的 RFC 0002 配置快照：读取 TOML → 合并 profile → 校验并组装。"""
     from src.contracts.configuration_sections import (
         _parse_agent_runtime,
         _parse_agents,

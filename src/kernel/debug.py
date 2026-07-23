@@ -1,10 +1,16 @@
-"""Read-only projections used by debug API and terminal Task archives."""
+"""只读投影，供调试 API 和终止 Task 归档使用。
+
+提供 Task/Agent 详情组装、旧版工作区检测与拒绝等功能。
+所有函数均为纯投影，不产生副作用。
+"""
 
 from pathlib import Path
 from typing import Any, Protocol
 
 
 class DebugStore(Protocol):
+    """调试存储接口协议，定义只读查询签名。"""
+
     def get_task(self, task_id: str) -> Any: ...
     def get_agent(self, agent_id: str) -> Any: ...
     def agents(self) -> tuple[Any, ...]: ...
@@ -14,6 +20,11 @@ class DebugStore(Protocol):
 
 
 def reject_active_legacy_workspace(process_directory: Path) -> None:
+    """检测并拒绝旧版 Episode/Graph 工作区中有残留数据的情况。
+
+    如果 process_directory 中存在 records 或 episodes 子目录且含有 JSON 文件，
+    则抛出 RuntimeError，要求使用干净的工作区。
+    """
     legacy = []
     for name in ("records", "episodes"):
         directory = process_directory / name

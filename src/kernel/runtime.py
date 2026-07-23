@@ -1,4 +1,9 @@
-"""RFC 0012 durable homogeneous-Agent scheduler and causal boundary."""
+"""RFC 0012 持久化同构 Agent 调度器与因果边界。
+
+AgentKernel 拥有 Task/Agent 持久化状态、邮箱队列和 Activity 调度，
+并将所有认知决策委托给外部 Agent handler，将 I/O 委托给平台层。
+这是 Aurora 运行时闭环的唯一入口。
+"""
 
 from __future__ import annotations
 
@@ -50,6 +55,10 @@ _INVALID_TOOL_OUTCOME = "invalid Tool outcome"
 
 
 def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
+    """检查给定能力是否在许可策略中允许。
+
+    支持通配符 '*' 和前缀通配符 'namespace.*'。
+    """
     return (
         "*" in policies
         or capability in policies
@@ -59,6 +68,11 @@ def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class PumpResult:
+    """单次 pump 调用的结果统计。
+
+    包含本次摄入的 Task/Situation ID、成功处理的消息 ID 和失败的消息 ID。
+    """
+
     ingested_task_ids: tuple[str, ...]
     processed_message_ids: tuple[str, ...]
     failed_message_ids: tuple[str, ...]
@@ -68,13 +82,26 @@ class PumpResult:
 
 
 class AgentKernel:
-    """Owns durable Task/Agent state while delegating all cognition and external I/O."""
+    """拥有持久化 Task/Agent 状态，将所有认知和外部 I/O 委托出去。
+
+    核心职责：
+    - pump：周期性摄入 AMP 事件、领取邮箱消息、执行 Agent turn、应用决策
+    - 因果边界：所有状态变更通过 causal_events 表记录
+    - 预算控制：模型和工具调用均有硬上限
+    - 监督树：子 Agent 创建受深度、数量和全局上限约束
+    """
 
     def __init__(
         self,
         configuration: KernelConfiguration,
         handlers: dict[str, AgentHandler],
     ) -> None:
+        """初始化 Agent 内核。
+
+        验证 handler 与 profile 一一对应，创建工作区目录结构，
+        初始化三个线程池执行器（SQLite 写入、Agent turn、阻塞操作），
+        并执行数据库迁移和中断恢复。
+        """
         self.configuration = configuration
         self._profiles = {profile.id: profile for profile in configuration.profiles}
         if set(self._profiles) != set(handlers):
@@ -120,22 +147,30 @@ class AgentKernel:
         return self._capability_catalog or CapabilityCatalogSnapshot()
 
     def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
+        """安装外部能力目录。仅能调用一次，重复调用将抛出 RuntimeError。"""
         if self._capability_catalog is not None:
             raise RuntimeError("capability catalog is already installed")
         self._capability_catalog = catalog
 
     async def submit_amp(self, amp: AmpEnvelope) -> None:
+        """将 AMP Envelope 加入内存队列，供下次 pump 周期摄入。"""
         async with self._lock:
             self._amp_queue.append(amp)
 
     def ingest_ready(self) -> tuple[str, ...]:
+        """同步摄入所有就绪的 AMP 输入（内存队列 + inbox 文件）。"""
         return ingest_runtime_ready(self)
 
     def brain_context(self) -> BrainContextSnapshot:
+        """构建全局 Brain 上下文快照，聚合所有活跃 Task 和 Agent 的摘要信息。"""
         return build_brain_context(self.store)
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
-        """Ingest ready AMP files and process a bounded set of independent Agent turns."""
+        """摄入就绪的 AMP 文件并处理一批独立的 Agent turn。
+
+        流程：摄入 → 过期检查 → 领取消息 → 并发执行 Agent turn → 应用决策 → 归档终止 Task。
+        max_turns 限制单次 pump 处理的最大 turn 数，未指定时使用配置中的 turn_concurrency。
+        """
         limit = max_turns or self.limits.turn_concurrency
         if limit <= 0:
             raise ValueError("max_turns must be positive")
@@ -149,6 +184,7 @@ class AgentKernel:
         return result
 
     async def _ingest_and_claim(self, limit: int) -> tuple[tuple[str, ...], tuple[Any, ...]]:
+        """加锁摄入 AMP + 过期检查 + 领取邮箱消息，返回 (摄入ID列表, 领取的消息列表)。"""
         async with self._lock:
             ingested = await self._store_call(self.ingest_ready)
             await self._store_call(self.store.expire_tasks)
@@ -157,6 +193,7 @@ class AgentKernel:
             return ingested, claims
 
     async def _execute_claims(self, claims: tuple[Any, ...]) -> tuple[Any, ...]:
+        """在线程池中并发执行所有已领取的 Agent turn。返回每个 turn 的决策或异常。"""
         loop = asyncio.get_running_loop()
         return tuple(
             await asyncio.gather(
@@ -168,6 +205,7 @@ class AgentKernel:
     async def _apply_results(
         self, ingested: tuple[str, ...], claims: tuple[Any, ...], decisions: tuple[Any, ...]
     ) -> PumpResult:
+        """将 Agent turn 的执行结果（决策或异常）应用到仓库中。"""
         processed: list[str] = []
         failed: list[str] = []
         for claim, result in zip(claims, decisions, strict=True):
@@ -194,14 +232,17 @@ class AgentKernel:
         return PumpResult(ingested, tuple(processed), tuple(failed))
 
     async def _store_call(self, function: Any, *args: Any, **kwargs: Any) -> Any:
+        """在 SQLite 写入线程池中同步执行数据库操作。确保所有写操作串行化。"""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._store_executor, partial(function, *args, **kwargs))
 
     async def _blocking_call(self, function: Any, *args: Any, **kwargs: Any) -> Any:
+        """在阻塞线程池中执行可能耗时较长的 I/O 操作（如文件归档）。"""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._blocking_executor, partial(function, *args, **kwargs))
 
     def _claim_messages(self, limit: int) -> tuple[Any, ...]:
+        """领取至多 limit 条邮箱消息，每条通过 CAS 获取租约。"""
         claims = []
         for _ in range(limit):
             claimed = self.store.claim_message(self.limits.lease_seconds)
@@ -211,6 +252,11 @@ class AgentKernel:
         return tuple(claims)
 
     def _handle_claim(self, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
+        """在线程池中调度单个 Agent turn。
+
+        组装 AgentContext（含 Task 状态、profile、能力列表、Brain 上下文），
+        然后调用对应 profile 的 handler.handle(context) 执行决策。
+        """
         message, agent, task = claim
         profile = self._profiles[agent.profile_id]
         descriptors = tuple(
@@ -230,6 +276,7 @@ class AgentKernel:
         return self._handlers[agent.profile_id].handle(context)
 
     def _apply_failure(self, message: Any, agent: AgentInstance, error: str) -> None:
+        """Agent turn 异常时的兜底处理：构造 FailCommand 并应用。"""
         command = FailCommand(summary=error, error=error)
         self.store.apply_decision(
             message=message,
@@ -241,10 +288,22 @@ class AgentKernel:
         )
 
     def _apply_authorized_decision(self, message: Any, agent: AgentInstance, decision: AgentDecision) -> None:
+        """校验 Agent 决策权限并构造对应 Command 提交至仓库。
+
+        按优先级判断决策类型：
+        1. model_request → ModelCommand（校验 model_role）
+        2. tool_request → ToolCommand（校验 capability 权限和参数 schema）
+        3. delegations → DelegateCommand（校验委托权限和子 profile）
+        4. completion → CompleteCommand
+        5. wait_for_children → WaitCommand（需有活跃子 Agent）
+        6. failure → FailCommand
+        任何不匹配将抛出 ValueError。
+        """
         profile = self._profiles[agent.profile_id]
         claims = tuple(decision.claims)
 
         if decision.model_request is not None:
+            # 校验模型角色权限
             request_role = decision.model_request.get("role")
             if request_role != profile.model_role:
                 raise PermissionError(f"Agent {agent.agent_id} cannot request model role {request_role}")
@@ -254,6 +313,7 @@ class AgentKernel:
 
         elif decision.tool_request is not None:
             tool = decision.tool_request
+            # 校验工具能力权限
             if not _capability_allowed(tool.capability, profile.capabilities):
                 raise PermissionError(f"Agent {agent.agent_id} cannot request {tool.capability}")
             descriptor = self.capability_catalog.by_id.get(tool.capability)
@@ -318,6 +378,7 @@ class AgentKernel:
         )
 
     def _limit_dict(self) -> dict[str, int]:
+        """将内核限制配置以 dict 形式返回，供仓库层使用。"""
         return {
             "max_active_agents": self.limits.max_active_agents,
             "max_agents_per_task": self.limits.max_agents_per_task,
@@ -326,6 +387,10 @@ class AgentKernel:
         }
 
     def has_work(self) -> bool:
+        """检查是否有待处理的工作。这是主调度循环的触发条件。
+
+        包括：AMP 队列、inbox 文件、待处理消息、可领取的外部 Activity、可恢复的工具。
+        """
         counts = self.store.counts()
         return (
             bool(self._amp_queue)
@@ -336,9 +401,11 @@ class AgentKernel:
         )
 
     def has_pending_tool_requests(self) -> bool:
+        """检查是否有待处理的工具 Activity。"""
         return self.store.counts()["pending_tool_activities"] > 0
 
     def has_pending_model_requests(self) -> bool:
+        """检查是否有待处理的 PENDING 模型 Activity。"""
         with self.store.connect() as connection:
             return bool(
                 connection.execute(
@@ -347,12 +414,15 @@ class AgentKernel:
             )
 
     async def claim_model_requests(self, limit: int) -> tuple[ActivityRequest, ...]:
+        """领取至多 limit 个 PENDING 模型 Activity，设置租约。"""
         return await self._store_call(self.store.claim_activities, "model", limit, self.limits.lease_seconds)
 
     async def complete_model(self, activity: ActivityRequest, result: dict[str, Any] | None, error: str | None) -> None:
+        """完成模型 Activity 并投递对应消息到 Agent 邮箱。"""
         await self._store_call(self.store.complete_model_activity, activity.activity_id, result, error)
 
     async def claim_tool_requests(self) -> tuple[ToolLease, ...]:
+        """领取 PENDING 工具 Activity 并构造 ToolLease 列表。受 tool_concurrency 限制。"""
         activities = await self._store_call(
             self.store.claim_tool_activities,
             self.limits.tool_concurrency,
@@ -375,6 +445,7 @@ class AgentKernel:
         return tuple(leases)
 
     async def tool_recovery_requests(self) -> tuple[ToolLease, ...]:
+        """获取所有租约过期的工具 Activity 以恢复执行。用于重启后重新分发。"""
         activities = await self._store_call(self.store.tool_recovery_activities)
         return tuple(
             ToolLease(
@@ -401,6 +472,11 @@ class AgentKernel:
         source_app: str,
         source_instance: str,
     ) -> None:
+        """完成工具调用，校验状态一致性并通过幂等键写入。
+
+        校验状态（succeeded/failed/unknown）与 result/error 的对应关系，
+        通过 uuid5 生成确定性收据 ID 实现幂等，匹配原始 Activity 后写入。
+        """
         if status not in {"succeeded", "failed", "unknown"}:
             raise ValueError(_INVALID_TOOL_OUTCOME)
         if (status == "succeeded" and error is not None) or (
@@ -408,6 +484,7 @@ class AgentKernel:
         ):
             raise ValueError(_INVALID_TOOL_OUTCOME)
         event_type = f"tool.{status}"
+        # 通过 uuid5 生成确定性收据 ID，确保同一请求 + 事件类型的组合幂等
         receipt_id = str(uuid5(NAMESPACE_URL, f"aurora-tool-receipt:{request_id}:{event_type}"))
         matched, _message_id = await self._store_call(
             self.store.complete_tool_activity,
@@ -427,28 +504,36 @@ class AgentKernel:
             raise ValueError(f"Tool completion does not match an active request: {request_id}")
 
     def tasks(self) -> tuple[TaskState, ...]:
+        """返回仓库中所有 Task。"""
         return self.store.tasks()
 
     def get_task(self, task_id: str) -> TaskState | None:
+        """按 task_id 查找 Task，不存在返回 None。"""
         return self.store.get_task(task_id)
 
     def get_agent(self, agent_id: str) -> AgentInstance | None:
+        """按 agent_id 查找 Agent，不存在返回 None。"""
         return self.store.get_agent(agent_id)
 
     def task_detail(self, task_id: str) -> dict[str, Any] | None:
+        """获取 Task 详情投影（含监督树和因果事件）。"""
         return build_task_detail(self.store, task_id)
 
     def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
+        """获取 Agent 详情投影（含子节点和消息时间线）。"""
         return build_agent_detail(self.store, agent_id)
 
     def status(self) -> dict[str, Any]:
+        """返回内核运行时状态快照：聚合计数 + Brain 上下文生成时间。"""
         return {**self.store.counts(), "brain_context_generated_at": self.brain_context().generated_at}
 
     async def cancel_task(self, task_id: str, reason: str) -> None:
+        """取消指定 Task，将其状态设为 CANCELLED 并级联终止。"""
         await self._store_call(self.store.cancel_task, task_id, reason)
         await self._blocking_call(self._archive_terminal_tasks)
 
     async def cancel_autonomous_tasks(self, reason: str) -> tuple[str, ...]:
+        """取消所有自主 Task（autonomous=True）。返回被取消的 task_id 列表。"""
         cancelled = []
         for task in self.store.tasks(active_only=True):
             if task.autonomous:
@@ -458,6 +543,7 @@ class AgentKernel:
         return tuple(cancelled)
 
     def _archive_terminal_tasks(self) -> None:
+        """将已终止的 Task 详情以 JSON 原子写入归档目录。通过原子写 + 先检查存在性防止重复。"""
         for task in self.store.tasks():
             if not task.terminal:
                 continue
@@ -469,10 +555,12 @@ class AgentKernel:
                 atomic_write_json(destination, detail)
 
     def reset_workspace_for_tests(self) -> None:
+        """仅测试使用：关闭内核并删除整个工作区目录。"""
         self.shutdown()
         shutil.rmtree(self._workspace)
 
     def shutdown(self) -> None:
+        """优雅关闭内核：清空 AMP 队列，关闭所有线程池执行器。"""
         self._amp_queue.clear()
         self._turn_executor.shutdown(wait=True, cancel_futures=True)
         self._blocking_executor.shutdown(wait=True, cancel_futures=True)

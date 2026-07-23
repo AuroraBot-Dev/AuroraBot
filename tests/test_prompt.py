@@ -111,7 +111,7 @@ def _context() -> AgentContext:
     )
     brain = BrainContextSnapshot(
         active_tasks=({"task_id": "other-task", "summary": "整理相册", "status": "ACTIVE"},),
-        active_agents=({"agent_id": "other-agent", "task_id": "other-task", "status": "RUNNING"},),
+        active_agents=({"agent_id": "other-agent", "task_id": "other-task", "status": "READY"},),
         ambient_situations=(
             {
                 "situation_id": "situation-1",

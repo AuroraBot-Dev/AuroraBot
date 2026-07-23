@@ -1,4 +1,8 @@
-"""SQLite Agent runtime schema and migration constants."""
+"""SQLite Agent 运行时 Schema 与迁移常量。
+
+定义运行时所需的全部表结构、索引和版本迁移脚本。
+Schema 版本号 _SCHEMA_VERSION 当前为 5。
+"""
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -103,10 +107,12 @@ CREATE INDEX IF NOT EXISTS idx_situations_open ON situations(status, expires_at,
 """
 
 _SCHEMA_VERSION = 5
+# 每个 Agent 至多一个活跃 Activity 的索引，防止并发重复请求
 _ACTIVE_ACTIVITY_INDEX = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
     "ON activities(agent_id) WHERE status IN ('PENDING', 'PROCESSING')"
 )
+# V5 迁移脚本：将旧的 effect/publication 语义统一为 model/tool 二分
 _ACTIVITIES_V5 = """
 DROP INDEX IF EXISTS idx_activities_one_active_per_agent;
 DROP INDEX IF EXISTS idx_activities_ready;

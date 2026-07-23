@@ -1,4 +1,8 @@
-"""Global Brain Context projection for Aurora's single-tenant persona."""
+"""全局 Brian 上下文投影，为 Aurora 单租户人格提供运行时全景快照。
+
+构建 BrainContextSnapshot，包含活跃 Task、Agent、情境等聚合信息，
+供 Agent handler 在决策时引用。
+"""
 
 from __future__ import annotations
 
@@ -9,6 +13,11 @@ from src.kernel.store import SQLiteRuntimeStore, utc_now
 
 
 def build_brain_context(store: SQLiteRuntimeStore) -> BrainContextSnapshot:
+    """从运行时仓库构建全局 Brain 上下文快照。
+
+    遍历所有活跃 Task 和 Agent，提取摘要、预算状态、最新活动，
+    并合并当前未过期的情境信息。
+    """
     tasks = store.tasks(active_only=True)
     agents = store.agents(active_only=True)
     task_projections: list[dict[str, Any]] = []

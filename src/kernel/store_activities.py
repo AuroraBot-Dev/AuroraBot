@@ -1,4 +1,8 @@
-"""Model and Tool Activity outbox operations."""
+"""模型与工具 Activity 出站操作。
+
+管理向外发送的 model 和 tool Activity，包括领取、租赁、完成和恢复。
+工具 Activity 通过并发限制防止过载，并支持中断后恢复。
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,10 @@ from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreActivitiesMixin(RuntimeStoreBase):
+    """Activity 出站操作 Mixin：模型调用与外部工具请求的排队和执行。"""
+
     def has_claimable_external_activity(self, limit: int) -> bool:
+        """检查是否有可领取的外部工具 Activity（处理中数量未超限）。"""
         with self.connect() as connection:
             processing = int(
                 connection.execute(
@@ -29,6 +36,7 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             )
 
     def has_recoverable_tool(self) -> bool:
+        """检查是否有租约过期的 PROCESSING 工具 Activity 可供恢复。"""
         now = utc_now()
         with self.connect() as connection:
             return bool(
@@ -41,6 +49,10 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             )
 
     def claim_activities(self, kind: str, limit: int, lease_seconds: float) -> tuple[ActivityRequest, ...]:
+        """领取指定类型的 PENDING Activity，将其状态置为 PROCESSING 并设置租约。
+
+        按优先级降序领取，主要用于 model Activity。
+        """
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
         lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
@@ -66,6 +78,10 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             return tuple(result)
 
     def claim_tool_activities(self, limit: int, lease_seconds: float) -> tuple[ActivityRequest, ...]:
+        """领取 PENDING 工具 Activity，受并发上限限制。
+
+        计算处理中数量，仅领取不超过可用槽位的 Activity。
+        """
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
         lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
@@ -100,6 +116,7 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             return tuple(result)
 
     def tool_recovery_activities(self) -> tuple[ActivityRequest, ...]:
+        """获取所有租约过期的 PROCESSING 工具 Activity 以便恢复执行。"""
         now = utc_now()
         with self.connect() as connection:
             rows = connection.execute(
@@ -112,6 +129,11 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             return tuple(self._activity(row) for row in rows)
 
     def complete_model_activity(self, activity_id: str, result: dict[str, Any] | None, error: str | None) -> None:
+        """完成一个模型 Activity。
+
+        将状态置为 COMPLETED 或 ERROR，生成 model.completed 或 model.failed 消息
+        投递到对应 Agent 的邮箱，并记录因果事件。
+        """
         now = utc_now()
         with self.transaction() as connection:
             row = connection.execute("SELECT * FROM activities WHERE activity_id = ?", (activity_id,)).fetchone()

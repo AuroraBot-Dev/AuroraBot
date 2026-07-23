@@ -1,4 +1,8 @@
-"""AMP ingestion for the Agent Kernel — in-memory and filesystem paths."""
+"""AMP 入口处理 —— 内存队列与文件系统两条路径。
+
+将外部 AMP Envelope 归一化为 Task 创建或情境（Situation）记录。
+支持自动 Tick（autonomous Task）和交互式 Task 两种模式。
+"""
 
 from __future__ import annotations
 
@@ -20,6 +24,12 @@ _RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runti
 
 
 class IngressKernel(Protocol):
+    """入口处理所需的内核结构协议。
+
+    定义 ingest_ready 所需的最小内核接口，
+    避免对 AgentKernel 的循环导入。
+    """
+
     configuration: KernelConfiguration
     store: SQLiteRuntimeStore
     _inbox: Path
@@ -35,6 +45,11 @@ class IngressKernel(Protocol):
 
 
 def ingest_ready(kernel: IngressKernel) -> tuple[str, ...]:
+    """领取所有就绪的 AMP 输入。
+
+    先处理内存队列中的 AMP，再扫描 inbox 目录中的 JSON 文件。
+    成功摄入后归档到 archive/inbox/accepted，重复或无效的归入 rejected。
+    """
     ingested: list[str] = []
     while kernel._amp_queue:
         amp = kernel._amp_queue.pop(0)
@@ -58,7 +73,11 @@ def ingest_ready(kernel: IngressKernel) -> tuple[str, ...]:
 
 
 def _ingest_amp(kernel: IngressKernel, amp: AmpEnvelope, ingested: list[str]) -> None:
-    """Core AMP ingestion: create Task or ambient Situation. No filesystem side effects."""
+    """核心 AMP 摄入逻辑：创建 Task 或记录环境情境。无文件系统副作用。
+
+    工具回执事件（tool.*）被保留供内部使用，外部不可直接发送。
+    ambient 标记的事件转为 Situation，其余创建为 Task。
+    """
     data = amp.payload.data
     if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
         raise ValueError(_RESERVED_TOOL_EVENT)
@@ -90,7 +109,7 @@ def _ingest_amp(kernel: IngressKernel, amp: AmpEnvelope, ingested: list[str]) ->
 
 
 def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
-    """Filesystem AMP ingestion with archiving."""
+    """文件系统路径的 AMP 摄入，含归档逻辑。摄入成功或重复后移动原文件。"""
     before = len(ingested)
     _ingest_amp(kernel, amp, ingested)
     if len(ingested) > before:
@@ -100,6 +119,7 @@ def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingest
 
 
 def _archive_inbox(kernel: IngressKernel, source: Path, category: str) -> None:
+    """将已处理的 inbox 文件移动到对应归档目录。如遇冲突追加随机后缀。"""
     destination_dir = kernel._archive / "inbox" / category
     destination_dir.mkdir(parents=True, exist_ok=True)
     destination = destination_dir / source.name
