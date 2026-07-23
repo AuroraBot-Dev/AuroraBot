@@ -19,7 +19,7 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import AmpEnvelope, new_amp
 from src.kernel.runtime import AgentKernel
-from src.kernel.store import SQLiteRuntimeStore, utc_now
+from src.kernel.store import utc_now
 
 if TYPE_CHECKING:
     from pathlib import Path
