@@ -1,4 +1,26 @@
-"""RFC 0005/0008 model gateway with Chat Completions and Responses adapters."""
+"""RFC 0005/0008 模型网关，支持 Chat Completions 与 Responses 适配器。
+
+作为能力协商层，接收上层 ModelRequest，经过角色匹配、能力校验后，
+分派到 Chat Completions 或 Responses API 执行，返回统一的 ModelResult。
+
+核心职责：
+- 根据配置的角色定义（fast/quality/multimodal）选择模型
+- 协商可用能力（structured_output、tools、native_responses 等）
+- 统一 Chat Completions 与 Responses 两套 API 的输出格式
+- 结构化输出回退（JSON Schema 失败时可降级为 JSON 文本提取）
+- 费用预算控制
+
+用法::
+
+    from src.ai.vnext import ModelGatewayService
+    from src.contracts.configuration import AuroraConfig
+    from src.contracts.model import ModelRequest
+
+    service = ModelGatewayService(config)
+    result = await service.complete(request)
+
+作者: [Churk-Ben](https://github.com/Churk-Ben)
+"""
 
 from __future__ import annotations
 

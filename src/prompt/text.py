@@ -1,4 +1,4 @@
-"""Project-authored prose that is visible to models."""
+"""项目编写的、对模型可见的提示词文本。"""
 
 from __future__ import annotations
 
