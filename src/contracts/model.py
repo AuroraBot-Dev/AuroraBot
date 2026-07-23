@@ -100,6 +100,8 @@ class ModelUsage:
 
 @dataclass(frozen=True, slots=True)
 class ModelResult:
+    """模型调用结果：模型标识、协商能力、响应文本、用量、成本和工具调用。"""
+
     model: str
     negotiated_capabilities: frozenset[str]
     response_mode: ResponseMode
@@ -119,6 +121,7 @@ class ModelResult:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ModelResult":
+        """从持久化字典反序列化为 ModelResult。"""
         usage = value.get("usage", {})
         calls = value.get("tool_calls", [])
         continuation = value.get("continuation")
@@ -143,6 +146,8 @@ class ModelResult:
 
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
+    """工具定义：名称、描述和参数 JSON Schema。"""
+
     name: str
     description: str
     parameters_schema: dict[str, Any]
@@ -153,6 +158,8 @@ class ToolDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:
+    """模型发起的工具调用：调用 ID、工具名和参数。"""
+
     call_id: str
     name: str
     arguments: dict[str, Any]

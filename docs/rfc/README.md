@@ -3,25 +3,24 @@
 RFC 保存 AuroraBot 已经作出的设计决定。它们不是认识项目的第一站：如果你只是想知道 AuroraBot 是什么、能做什么或
 如何运行，请先阅读根目录 [README](../../README.md)。当你准备修改公共行为，或想理解某项约束为何存在时，再来到这里。
 
-## 当前阅读顺序
+## 模块实施规范
 
-1. [RFC 0019](0019-centralized-layered-prompt-assembly.md) 定义当前集中式分层提示词边界。
-2. [RFC 0018](0018-thin-platform-and-unified-tools.md) 定义当前统一 Tool 运行时与薄 Platform 边界。
-3. [RFC 0012](0012-homogeneous-agent-runtime.md) 定义继续有效的 Task、同构 Agent、邮箱、监督树与预算。
-4. [RFC 0014](0014-parallel-platform-composition-and-preferences.md) 定义当前进程入口、Platform 组合、偏好配置与包位置。
-5. [RFC 0001](0001-architecture.md) 提供仍然稳定的因果边界与依赖方向。
-6. [RFC 0020](0020-mcp-owned-autonomous-heartbeat.md) 定义内建 MCP 所有的自主心跳与 Runtime 配额边界。
-7. 其余 RFC 用于追溯具体契约；若内容与后续 RFC 冲突，以编号更高且明确取代它的已接受 RFC 为准。
+每个文件是该模块的完整实施契约，按依赖方向组织：
 
-特别注意：RFC 0009、0010、0011 和 0013 记录了演进过程中的重要决定，但其中的旧 CLI、旧包位置或旧运行时术语可能
-已被 RFC 0012/0014 取代。阅读它们时应结合上面的当前基准。
+1. [0100 架构基准、配置与进程入口](0100-architecture.md) — 模块边界、依赖方向、工作区、配置系统、CLI 入口
+2. [0101 数据契约](0101-contracts.md) — AMP 信封、AgentContext、AgentDecision、Model/Tool 契约、Capability 协议
+3. [0102 Kernel 运行时](0102-kernel.md) — Task/Agent/Mailbox/Activity 生命周期、因果事件、SQLite 持久化、BrainContext
+4. [0103 Agent Handler 与能力](0103-agents.md) — AgentHandler 协议、ToolAgent/MemoryAgent、Capability 注册与 dispatch
+5. [0104 AI 模型网关](0104-ai-gateway.md) — 模型角色、Provider 路由、双通道、能力协商、异步调度
+6. [0105 提示词装配](0105-prompt.md) — PromptCatalog、分层 DTO、PromptComposer、Tool 描述归属
+7. [0106 Localhost 运行组合](0106-localhost.md) — 统一输入路由、命令系统、工具分发、自主额度、调试 API
+8. [0107 Platform 适配层](0107-platform.md) — Console/Dashboard/MCP adapter、Tool 注册、ToolOutcome、心跳
+9. [0108 三层记忆](0108-memory.md) — MemoryService、mem0/ChromaDB、自动注入、MemoryAgent
 
 ## 什么时候需要 RFC
 
 影响模块边界、事件、结构配置、扩展协议、模型调用契约、持久化语义或进程组合的改动，需要先更新或新增 RFC。小型
 缺陷修复、测试补充、文案改进和不改变公共语义的重构通常不需要 RFC。
-
-RFC 应描述可验证的决定，而不是只写愿景。完整格式、状态变化和验收要求见 [RFC 0000](0000-rfc-process.md)。
 
 ## 规范优先级
 
@@ -33,33 +32,5 @@ RFC 应描述可验证的决定，而不是只写愿景。完整格式、状态�
 - **草案**：正在讨论，不得作为稳定契约实现。
 - **提议**：决策已经完整，等待接受。
 - **已接受**：当前规范性基准。
-- **已取代**：由后续 RFC 明确替代。
+- **已取代**：由后续 RFC 明确替代，仅保留演进记录。
 - **已废弃**：仅保留历史，不再适用。
-
-## 索引
-
-| RFC                                                           | 状态   | 主题                                                     |
-| ------------------------------------------------------------- | ------ | -------------------------------------------------------- |
-| [0000](0000-rfc-process.md)                                   | 已接受 | RFC 过程与规范语言                                       |
-| [0001](0001-architecture.md)                                  | 已接受 | 架构边界与因果闭环                                       |
-| [0002](0002-configuration.md)                                 | 已接受 | TOML 主配置与 JSON 数据边界                              |
-| [0003](0003-event-contract.md)                                | 已接受 | AMP、Kernel record、周期与效果回执                       |
-| [0004](0004-plugin-contract.md)                               | 已接受 | 节点、平台适配器与应用扩展                               |
-| [0005](0005-model-gateway.md)                                 | 已接受 | 模型角色、能力协商与原生响应                             |
-| [0006](0006-local-debug-api.md)                               | 已接受 | 本地运行用例与开发调试 HTTP API                          |
-| [0007](0007-local-console-and-config-facade.md)               | 已接受 | 本地控制台与显式配置快照                                 |
-| [0008](0008-first-cognitive-loop.md)                          | 已取代 | 首轮认知图、Episode 与主动节律；由 RFC 0012 取代         |
-| [0009](0009-bot-loop-entry.md)                                | 已接受 | 常驻 Bot 组合入口；部分入口由 RFC 0014 更新              |
-| [0010](0010-dashboard-chat.md)                                | 已接受 | Dashboard 聊天适配与本地聊天室；包位置由 RFC 0014 更新   |
-| [0011](0011-current-project-baseline.md)                      | 已接受 | 项目基线与源码归档边界；运行时由 RFC 0012 更新           |
-| [0012](0012-homogeneous-agent-runtime.md)                     | 已接受 | 当前同构多 Agent 持久化运行时                            |
-| [0013](0013-unified-command-routing-and-entry.md)             | 已接受 | 统一命令路由；进程入口由 RFC 0014 更新                   |
-| [0014](0014-parallel-platform-composition-and-preferences.md) | 已接受 | 当前并行平台组合与偏好配置                               |
-| [0015](0015-agent-publication-and-communication-boundary.md)  | 已取代 | Agent 发布、通信授权与 Task 完成解耦；由 RFC 0018 取代   |
-| [0016](0016-mcp-communication-app-contract.md)                | 已取代 | MCP 通信 App、消息入口与跨平台投递契约；由 RFC 0018 取代 |
-| [0017](0017-dashboard-single-owner-token-auth.md)             | 已接受 | Dashboard 单 Owner 与 bootstrap token 鉴权               |
-| [0018](0018-thin-platform-and-unified-tools.md)               | 已接受 | 薄 Platform、统一 Tool 与第三方 MCP 零惯例接入           |
-| [0019](0019-centralized-layered-prompt-assembly.md)           | 已接受 | 集中式分层提示词目录、装配与边界                         |
-| [0020](0020-mcp-owned-autonomous-heartbeat.md)                | 已接受 | 内建 MCP 所有的自主心跳与 Runtime 配额边界               |
-| [0021](0021-memory-three-layer.md)                            | 已接受 | 三层记忆与自动召回                                       |
-| [0022](0022-composable-capability-registration.md)            | 已接受 | 可组合 Agent 能力注册与工具分发                          |
