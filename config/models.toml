@@ -33,6 +33,14 @@ endpoint = "chat_completions"
 provider = "deepseek"
 model = "deepseek-v4-pro"
 endpoint = "responses"
+capabilities = [
+    "chat",
+    "stream",
+    "json_text_fallback",
+    "tools",
+    "reasoning",
+    "structured_output",
+]
 
 [models.roles.multimodal]
 provider = "xiaomi_mimo"

@@ -14,6 +14,14 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+def _execute_runtime(arguments: argparse.Namespace) -> int:
+    """根据解析后的参数启动 Aurora 运行时。"""
+    from aurora.runtime import run_runtime
+
+    asyncio.run(run_runtime(arguments.root, arguments.profile, arguments.platforms))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建包含所有 Aurora 子命令的顶层参数解析器。"""
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
@@ -40,14 +48,6 @@ def run(argv: Sequence[str] | None = None) -> int:
         parser.error("--headless cannot be combined with --console, --dashboard, or --mcp")
     arguments.platforms = frozenset() if arguments.headless else selected or None
     return arguments.executor(arguments)
-
-
-def _execute_runtime(arguments: argparse.Namespace) -> int:
-    """根据解析后的参数启动 Aurora 运行时。"""
-    from aurora.runtime import run_runtime
-
-    asyncio.run(run_runtime(arguments.root, arguments.profile, arguments.platforms))
-    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> None:

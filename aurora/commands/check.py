@@ -26,10 +26,11 @@ def register(subparsers: Any) -> None:
 
 def execute(arguments: argparse.Namespace) -> int:
     """按用户选项依次运行 lint（ruff + pyright）和/或 pytest，汇总并展示结果。"""
-    # 未指定时默认两者都运行
     run_lint = arguments.lint or not arguments.test
     run_test = arguments.test or not arguments.lint
     commands: list[list[str]] = []
+
+    # 运行 lint 检查
     if run_lint:
         flags_check = []
         flags_format = []
@@ -46,12 +47,16 @@ def execute(arguments: argparse.Namespace) -> int:
                 ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
             )
         )
+
+    # 运行 pytest 检查
     if run_test:
         commands.append(["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"])
-    # 依次执行并累计失败数
+
     failures = sum(run_process(command, arguments.root) != 0 for command in commands)
+
     if failures:
         console.print(f"\n[bold red]{failures} check(s) failed[/bold red]")
-    else:
-        console.print("\n[bold green]All checks passed![/bold green]")
-    return 1 if failures else 0
+        return 1
+
+    console.print("\n[bold green]All checks passed![/bold green]")
+    return 0

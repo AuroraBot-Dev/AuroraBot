@@ -13,6 +13,21 @@ if TYPE_CHECKING:
 NAME = "donk"
 
 
+def _read_version(root: Any) -> str | None:
+    """通过 donk show 读取当前版本号，失败或不可用时返回 None。"""
+    try:
+        result = subprocess.run(
+            ["uv", "run", "--no-sync", "donk", "show"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+    except OSError:
+        return None
+
+
 def register(subparsers: Any) -> None:
     """向子解析器注册 donk 命令及其 show/major/minor/patch 子命令。"""
     parser = subparsers.add_parser(NAME, help="自动版本管理")
@@ -32,6 +47,7 @@ def execute(arguments: argparse.Namespace) -> int:
     if exit_code != 0:
         console.print(f"[bold red]donk {subcommand} 执行失败[/bold red]")
         return exit_code
+
     # 读取更新后的版本号并展示
     version = _read_version(arguments.root)
     if subcommand == "show":
@@ -40,18 +56,3 @@ def execute(arguments: argparse.Namespace) -> int:
     elif version:
         console.print(f"[bold green]版本已更新为:[/bold green] [bold cyan]{version}[/bold cyan]")
     return 0
-
-
-def _read_version(root: Any) -> str | None:
-    """通过 donk show 读取当前版本号，失败或不可用时返回 None。"""
-    try:
-        result = subprocess.run(
-            ["uv", "run", "--no-sync", "donk", "show"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout.strip() if result.returncode == 0 else None
-    except OSError:
-        return None
