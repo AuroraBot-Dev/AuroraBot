@@ -1,4 +1,4 @@
-"""叶子级不可变配置 DTO 与 RFC 0002 TOML 校验。"""
+"""叶子级不可变配置 DTO 与 RFC 0100 / 0101 TOML 校验。"""
 
 from __future__ import annotations
 
