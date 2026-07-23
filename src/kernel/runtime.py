@@ -81,6 +81,7 @@ class AgentKernel:
         self._task_archive = self._archive / "tasks"
         for directory in (self._inbox, self._process, self._archive, self._task_archive):
             directory.mkdir(parents=True, exist_ok=True)
+        self._amp_queue: list[AmpEnvelope] = []
         reject_active_legacy_workspace(self._process)
         self._store_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aurora-sqlite-writer")
         self._turn_executor = ThreadPoolExecutor(
@@ -117,11 +118,7 @@ class AgentKernel:
 
     async def submit_amp(self, amp: AmpEnvelope) -> None:
         async with self._lock:
-            await self._blocking_call(
-                atomic_write_json,
-                self._inbox / f"{amp.header.message_id}.json",
-                amp.to_dict(),
-            )
+            self._amp_queue.append(amp)
 
     def ingest_ready(self) -> tuple[str, ...]:
         return ingest_runtime_ready(self)
@@ -300,7 +297,8 @@ class AgentKernel:
     def has_work(self) -> bool:
         counts = self.store.counts()
         return (
-            any(self._inbox.glob("*.json"))
+            bool(self._amp_queue)
+            or any(self._inbox.glob("*.json"))
             or counts["pending_messages"] > 0
             or self.store.has_claimable_external_activity(self.limits.tool_concurrency)
             or self.store.has_recoverable_tool()
@@ -444,6 +442,7 @@ class AgentKernel:
         shutil.rmtree(self._workspace)
 
     def shutdown(self) -> None:
+        self._amp_queue.clear()
         self._turn_executor.shutdown(wait=True, cancel_futures=True)
         self._blocking_executor.shutdown(wait=True, cancel_futures=True)
         self._store_executor.shutdown(wait=True, cancel_futures=True)

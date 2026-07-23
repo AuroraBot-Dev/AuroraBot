@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -65,11 +64,16 @@ def test_console_input_amp_contains_local_channel_data(project_root: Path) -> No
         inputs = iter(("hello", "/quit"))
         try:
             await run_console(runtime, console, readline=lambda _prompt: next(inputs), output=lambda _text: None)
-            inbox = tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
-            assert len(inbox) == 1
-            amp = json.loads(inbox[0].read_text(encoding="utf-8"))
-            assert amp["payload"]["session_id"] == "local:console"
-            assert amp["payload"]["data"] == {"channel": "local_console", "text": "hello"}
+            await runtime.kernel.pump()
+            tasks = runtime.kernel.tasks()
+            assert len(tasks) == 1
+            assert tasks[0].session_id == "local:console"
+            detail = runtime.kernel.task_detail(tasks[0].task_id)
+            assert detail is not None
+            assert detail["events"][0]["payload"]["amp"]["payload"]["data"] == {
+                "channel": "local_console",
+                "text": "hello",
+            }
         finally:
             await runtime.shutdown()
             console.close()

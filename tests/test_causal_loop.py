@@ -102,14 +102,6 @@ def test_arbitrary_ambient_data_is_accepted(project_root: Path) -> None:
             await runtime.kernel.submit_amp(arbitrary)
             await runtime.kernel.submit_amp(valid)
             runtime.kernel.ingest_ready()
-            accepted = (
-                runtime.configuration.runtime.workspace
-                / "archive"
-                / "inbox"
-                / "accepted"
-                / f"{arbitrary.header.message_id}.json"
-            )
-            assert accepted.exists()
             assert {item["summary"] for item in runtime.kernel.store.situations()} == {
                 "arbitrary ambient fact",
                 "valid ambient fact",
@@ -136,9 +128,8 @@ def test_external_tool_receipts_are_reserved(project_root: Path) -> None:
                 await runtime.submit_amp(receipt.to_dict())
             await runtime.kernel.submit_amp(AmpEnvelope.parse(receipt.to_dict()))
             await runtime.kernel.pump()
-            rejected = project_root / "data/kernel/archive/inbox/rejected" / f"{receipt.header.message_id}.json"
-            assert rejected.exists()
             assert not runtime.kernel.store.situations()
+            assert not runtime.kernel.tasks()
         finally:
             await runtime.shutdown()
 

@@ -65,10 +65,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             assert clear.control is CommandControl.CLEAR_CONSOLE and not clear.publish_reply
             assert clear_alias.control is CommandControl.CLEAR_CONSOLE and not clear_alias.publish_reply
             assert quitting.control is CommandControl.SHUTDOWN_PROCESS
-            assert (
-                len(tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json")))
-                == EXPECTED_AMP_INPUTS
-            )
+            assert len(runtime.kernel._amp_queue) == EXPECTED_AMP_INPUTS
 
             pumped = await runtime.route_input(_input("/pump 1"))
             assert pumped.ok and pumped.data is not None

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -145,11 +144,10 @@ def test_dashboard_owner_input_amp_has_only_source_session_and_useful_data(proje
                     "content": "hello bot",
                 },
             )
-            inbox = tuple(runtime.configuration.runtime.workspace.joinpath("inbox").glob("*.json"))
-            assert len(inbox) == 1
-            amp = json.loads(inbox[0].read_text(encoding="utf-8"))
-            assert amp["payload"]["session_id"] == "dashboard:owner"
-            assert amp["payload"]["data"] == {
+            assert len(runtime.kernel._amp_queue) == 1
+            amp = runtime.kernel._amp_queue[0]
+            assert amp.payload.session_id == "dashboard:owner"
+            assert amp.payload.data == {
                 "chat_message_id": client_message_id,
                 "channel": "owner_bot_chat",
                 "text": "hello bot",

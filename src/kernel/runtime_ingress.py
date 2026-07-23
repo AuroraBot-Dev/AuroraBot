@@ -1,9 +1,9 @@
-"""Filesystem AMP ingestion for the Agent Kernel."""
+"""AMP ingestion for the Agent Kernel — in-memory and filesystem paths."""
 
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from src.contracts.amp import AmpEnvelope, AmpValidationError
 from src.utils.log_utils import get_logger
@@ -25,6 +25,7 @@ class IngressKernel(Protocol):
     _inbox: Path
     _archive: Path
     _profiles: dict[str, AgentProfile]
+    _amp_queue: list[Any]
 
     @property
     def limits(self) -> AgentLimits: ...
@@ -35,6 +36,12 @@ class IngressKernel(Protocol):
 
 def ingest_ready(kernel: IngressKernel) -> tuple[str, ...]:
     ingested: list[str] = []
+    while kernel._amp_queue:
+        amp = kernel._amp_queue.pop(0)
+        try:
+            _ingest_amp(kernel, amp, ingested)
+        except (ValueError, TypeError) as error:
+            logger.warning("AMP ingress rejected in-memory reason=%s", error)
     for path in sorted(kernel._inbox.glob("*.json")):
         try:
             amp = AmpEnvelope.parse(read_json(path))
@@ -50,7 +57,8 @@ def ingest_ready(kernel: IngressKernel) -> tuple[str, ...]:
     return tuple(ingested)
 
 
-def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
+def _ingest_amp(kernel: IngressKernel, amp: AmpEnvelope, ingested: list[str]) -> None:
+    """Core AMP ingestion: create Task or ambient Situation. No filesystem side effects."""
     data = amp.payload.data
     if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
         raise ValueError(_RESERVED_TOOL_EVENT)
@@ -64,7 +72,6 @@ def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingest
             kernel.limits.ambient_ttl_seconds,
         )
         ingested.append(situation_id)
-        _archive_inbox(kernel, path, "accepted")
         return
     autonomous = amp.payload.type == "system.tick"
     budget = kernel.configuration.autonomous_budget if autonomous else kernel.configuration.interactive_budget
@@ -78,9 +85,18 @@ def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingest
         budget=budget,
         priority=10 if autonomous else 100,
     )
-    _archive_inbox(kernel, path, "accepted" if task is not None else "duplicate")
     if task is not None:
         ingested.append(task.task_id)
+
+
+def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
+    """Filesystem AMP ingestion with archiving."""
+    before = len(ingested)
+    _ingest_amp(kernel, amp, ingested)
+    if len(ingested) > before:
+        _archive_inbox(kernel, path, "accepted")
+    else:
+        _archive_inbox(kernel, path, "duplicate")
 
 
 def _archive_inbox(kernel: IngressKernel, source: Path, category: str) -> None:
