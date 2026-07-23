@@ -1,1 +1,1 @@
-"""Local runtime use cases and developer-facing adapters."""
+"""本地运行时用例和面向开发者的适配器模块。"""

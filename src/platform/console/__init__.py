@@ -1,4 +1,4 @@
-"""Console Platform public API."""
+"""Console 平台公开 API。"""
 
 from src.platform.console.adapter import (
     CONSOLE_SEND_CAPABILITY,

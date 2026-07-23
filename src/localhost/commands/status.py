@@ -1,4 +1,4 @@
-"""Implementation of the ``/status`` runtime command."""
+"""``/status`` 运行时命令的实现。"""
 
 from __future__ import annotations
 
@@ -18,10 +18,11 @@ DESCRIPTION = "显示本地运行器状态"
 
 
 def configure(_parser: argparse.ArgumentParser) -> None:
-    return None
+    """/status 无需额外参数。"""
 
 
 async def handle(context: CommandContext, _arguments: argparse.Namespace) -> CommandResult:
+    """拼装 profile、workspace 与运行时状态快照并以 JSON 返回。"""
     data = {
         "profile": context.runtime.configuration.runtime.profile,
         "workspace": str(context.runtime.configuration.runtime.workspace),

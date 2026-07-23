@@ -1,4 +1,4 @@
-"""Single argparse entry point for all Aurora process commands."""
+"""所有 Aurora 进程命令的单一 argparse 入口点。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构建包含所有 Aurora 子命令的顶层参数解析器。"""
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置与数据根目录")
     parser.add_argument("--profile", type=str, default="prod", help="配置运行档案")
@@ -28,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    """解析命令行参数、验证平台组合并分发到对应执行器。"""
     parser = build_parser()
     arguments = parser.parse_args(argv)
     selected = frozenset(name for name in ("console", "dashboard", "mcp") if getattr(arguments, name))
@@ -41,6 +43,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
 
 def _execute_runtime(arguments: argparse.Namespace) -> int:
+    """根据解析后的参数启动 Aurora 运行时。"""
     from aurora.runtime import run_runtime
 
     asyncio.run(run_runtime(arguments.root, arguments.profile, arguments.platforms))
@@ -48,6 +51,7 @@ def _execute_runtime(arguments: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    """CLI 顶层入口，通过 SystemExit 返回退出码。"""
     raise SystemExit(run(argv))
 
 

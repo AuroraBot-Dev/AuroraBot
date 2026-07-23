@@ -1,4 +1,4 @@
-"""SQLite persistence owned by the Dashboard Platform."""
+"""Dashboard 平台自有的 SQLite 持久化层。"""
 
 from __future__ import annotations
 
@@ -171,10 +171,12 @@ console = Console(highlight=False)
 
 
 def _now() -> str:
+    """获取当前 UTC 时间的 ISO 格式字符串。"""
     return datetime.now(UTC).isoformat()
 
 
 def _print_token(token: str) -> None:
+    """在终端中以 Rich Panel 格式打印启动 Token 和保管提示。"""
     content = (
         f"[bold yellow]Token:[/bold yellow] [bold green]{token}[/bold green]\n\n"
         "[dim]请妥善保管 Token。\n"
@@ -185,10 +187,22 @@ def _print_token(token: str) -> None:
 
 
 class ChatStore:
+    """Dashboard 聊天数据的 SQLite 持久化存储。
+
+    管理用户、会话、消息、附件和 Tool 请求的 CRUD 操作，
+    以及数据库迁移和启动 Token 管理。
+    """
+
     def __init__(self, database_path: Path) -> None:
+        """绑定数据库文件路径。
+
+        Args:
+            database_path: SQLite 数据库文件路径。
+        """
         self.database_path = database_path
 
     def connect(self) -> sqlite3.Connection:
+        """创建并返回配置好的 SQLite 连接（WAL + 外键 + busy timeout）。"""
         connection = sqlite3.connect(self.database_path, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -196,12 +210,17 @@ class ChatStore:
         return connection
 
     def initialize(self) -> None:
+        """初始化数据库：创建目录、执行迁移、生成启动 Token。
+
+        使用 ``user_version`` 实现增量迁移；若首次启动且 Token.txt 不存在，
+        则自动生成并打印启动 Token。
+        """
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             if version > len(_MIGRATIONS):
-                raise RuntimeError(f"Dashboard database schema {version} is newer than this runtime")  # noqa: TRY003
+                raise RuntimeError(f"Dashboard 数据库 schema {version} 比当前运行时版本更新")  # noqa: TRY003
             for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
                 connection.executescript(
                     f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
@@ -216,12 +235,17 @@ class ChatStore:
             pass
 
     def bootstrap_token(self) -> str:
+        """读取并返回启动 Token。"""
         token = (self.database_path.parent / "Token.txt").read_text(encoding="utf-8").strip()
         if not token:
-            raise RuntimeError("Dashboard bootstrap token is empty")  # noqa: TRY003
+            raise RuntimeError("Dashboard 启动 token 为空")  # noqa: TRY003
         return token
 
     def ensure_owner(self, username: str) -> sqlite3.Row:
+        """确保 Dashboard 所有者用户存在且绑定到指定用户名。
+
+        若已有所有者但用户名不匹配则抛出异常。
+        """
         now = _now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -229,7 +253,7 @@ class ChatStore:
             if owner is not None:
                 if str(owner["username"]) != username:
                     raise RuntimeError(  # noqa: TRY003
-                        f"Dashboard owner is already bound to {owner['username']!s}"
+                        f"Dashboard 所有者已绑定到 {owner['username']!s}"
                     )
                 connection.commit()
                 return owner
@@ -247,14 +271,17 @@ class ChatStore:
             return owner
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
+        """执行查询并返回单行结果（无结果时返回 None）。"""
         with self.connect() as connection:
             return connection.execute(query, tuple(parameters)).fetchone()
 
     def fetch_all(self, query: str, parameters: Iterable[object] = ()) -> list[sqlite3.Row]:
+        """执行查询并返回所有行。"""
         with self.connect() as connection:
             return connection.execute(query, tuple(parameters)).fetchall()
 
     def execute(self, query: str, parameters: Iterable[object] = ()) -> int:
+        """执行写入操作并返回 ``lastrowid``。"""
         with self.connect() as connection:
             cursor = connection.execute(query, tuple(parameters))
             connection.commit()
@@ -262,6 +289,7 @@ class ChatStore:
             return int(cursor.lastrowid)
 
     def ensure_bot(self, username: str, display_name: str, avatar_url: str | None) -> sqlite3.Row:
+        """确保 Bot 用户存在，使用 upsert 语义更新显示名和头像。"""
         now = _now()
         with self.connect() as connection:
             connection.execute(
@@ -293,6 +321,11 @@ class ChatStore:
         amp_message_id: str | None = None,
         source_tool_request_id: str | None = None,
     ) -> tuple[sqlite3.Row, bool]:
+        """创建消息记录，支持幂等插入（通过唯一约束检测重复）。
+
+        Returns:
+            ``(消息行, 是否新建)`` 的元组。
+        """
         now = _now()
         with self.connect() as connection:
             try:
@@ -321,6 +354,7 @@ class ChatStore:
                 assert row is not None
                 return row, True
             except sqlite3.IntegrityError:
+                # 唯一约束冲突 → 取出已存在的行（幂等）
                 row = connection.execute(
                     "SELECT * FROM messages WHERE sender_id = ? AND client_message_id = ?",
                     (sender_id, client_message_id),
@@ -335,6 +369,7 @@ class ChatStore:
                 return row, False
 
     def message_with_attachment(self, message_id: int) -> sqlite3.Row | None:
+        """查询单条消息并 JOIN 其附件信息。"""
         return self.fetch_one(
             """
             SELECT m.*, a.original_name, a.stored_name, a.mime_type, a.size
@@ -345,4 +380,5 @@ class ChatStore:
         )
 
     def messages_with_attachments(self, query: str, parameters: Iterable[object]) -> list[sqlite3.Row]:
+        """执行自定义消息查询（通常含附件 JOIN）。"""
         return self.fetch_all(query, parameters)

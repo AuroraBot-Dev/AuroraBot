@@ -1,4 +1,4 @@
-"""Implementation of the ``/event`` AMP injection command."""
+"""``/event`` AMP 注入命令的实现。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ DESCRIPTION = "投递任意 AMP 事件"
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
+    """配置 /event 命令参数：事件类型、来源、会话、摘要与数据。"""
     parser.add_argument("event_type")
     parser.add_argument("--source")
     parser.add_argument("--session")
@@ -27,6 +28,7 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
+    """构建并提交自定义 AMP 事件到运行时的 Kernel 邮箱。"""
     try:
         data = json.loads(arguments.data)
     except json.JSONDecodeError as error:

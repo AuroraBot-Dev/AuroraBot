@@ -1,4 +1,4 @@
-"""Transport-neutral input and command contracts for localhost use cases."""
+"""localhost 用例的传输无关输入与命令契约。"""
 
 from __future__ import annotations
 
@@ -11,11 +11,15 @@ if TYPE_CHECKING:
 
 
 class InputOrigin(StrEnum):
+    """输入来源枚举：Console 或 Dashboard。"""
+
     CONSOLE = "console"
     DASHBOARD = "dashboard"
 
 
 class CommandControl(StrEnum):
+    """命令控制指令枚举：无操作、清屏或进程关闭。"""
+
     NONE = "none"
     CLEAR_CONSOLE = "clear_console"
     SHUTDOWN_PROCESS = "shutdown_process"
@@ -23,7 +27,7 @@ class CommandControl(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class RuntimeInput:
-    """Normalized text input supplied by a local transport adapter."""
+    """由本地传输适配器提供的规范化文本输入。"""
 
     text: str
     origin: InputOrigin
@@ -35,6 +39,7 @@ class RuntimeInput:
     data: dict[str, Any] = field(default_factory=dict)
 
     def with_text(self, text: str) -> "RuntimeInput":
+        """创建副本并以新文本替换原始文本字段。"""
         return RuntimeInput(
             text=text,
             origin=self.origin,
@@ -49,7 +54,10 @@ class RuntimeInput:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CommandResult:
-    """A transport-independent result returned by input routing."""
+    """输入路由返回的传输无关结果。
+
+    包含成功标志、可选文本、载荷数据、消息 ID 以及控制指令。
+    """
 
     ok: bool
     text: str | None = None
@@ -60,6 +68,8 @@ class CommandResult:
 
 
 class RuntimeCommandPort(Protocol):
+    """运行时命令端口：暴露配置、AMP 提交、泵取和状态查询等核心能力。"""
+
     configuration: AuroraConfig
 
     async def submit_amp(self, value: object) -> str: ...
@@ -77,5 +87,7 @@ class RuntimeCommandPort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class CommandContext:
+    """命令处理器上下文：组合运行时端口与当前请求。"""
+
     runtime: RuntimeCommandPort
     request: RuntimeInput

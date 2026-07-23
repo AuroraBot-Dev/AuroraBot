@@ -1,4 +1,4 @@
-"""Dashboard Platform public API."""
+"""Dashboard 平台公开 API。"""
 
 from src.platform.dashboard.adapter import (
     DASHBOARD_SEND_CAPABILITY,

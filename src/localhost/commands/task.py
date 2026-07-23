@@ -1,4 +1,4 @@
-"""Implementation of the ``/task`` runtime command."""
+"""``/task`` 运行时命令的实现。"""
 
 from __future__ import annotations
 
@@ -18,10 +18,12 @@ DESCRIPTION = "查询 Task 与监督树"
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
+    """配置 /task 命令的参数：Task ID。"""
     parser.add_argument("task_id")
 
 
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
+    """查询指定 Task 详情并以 JSON 格式返回。"""
     task = context.runtime.task(arguments.task_id)
     if task is None:
         return CommandResult(ok=False, text="Task 不存在")

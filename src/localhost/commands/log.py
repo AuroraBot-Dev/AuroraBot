@@ -1,4 +1,4 @@
-"""Implementation of the ``/log`` terminal logging command."""
+"""``/log`` 终端日志命令的实现。"""
 
 from __future__ import annotations
 
@@ -20,11 +20,13 @@ LEVELS = ("debug", "info", "warning", "warn", "error", "critical")
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
+    """配置 /log 命令参数：开关状态与日志级别。"""
     parser.add_argument("state", nargs="?", choices=("on", "off"))
     parser.add_argument("--level", type=str.lower, choices=LEVELS)
 
 
 async def handle(_context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
+    """根据参数切换终端日志开关/级别并返回当前状态。"""
     if arguments.state is not None or arguments.level is not None:
         level = "WARNING" if arguments.level == "warn" else arguments.level
         configure_console_logging(

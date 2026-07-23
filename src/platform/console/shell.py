@@ -1,4 +1,4 @@
-"""Interactive shell for the native Console Platform."""
+"""原生 Console 平台的交互式 Shell。"""
 
 from __future__ import annotations
 
@@ -30,12 +30,24 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class _ReadResult:
+    """单次用户输入的读取结果。"""
+
     text: str | None
+    """用户输入的文本，为 None 表示输入流已关闭。"""
     closed: bool = False
+    """输入流是否已关闭（EOF / Ctrl+C / Ctrl+D）。"""
 
 
 class _PromptReader:
+    """基于 prompt_toolkit 的提示行读取器。"""
+
     def __init__(self, *, input_stream: Input | None = None, output_stream: Output | None = None) -> None:
+        """初始化提示会话，支持历史搜索。
+
+        Args:
+            input_stream: 可选的输入流（用于测试注入）。
+            output_stream: 可选的输出流（用于测试注入）。
+        """
         self.session: PromptSession[str] = PromptSession(
             history=InMemoryHistory(),
             enable_history_search=True,
@@ -44,6 +56,7 @@ class _PromptReader:
         )
 
     async def read(self) -> str:
+        """阻塞等待用户输入一行文本。"""
         return await self.session.prompt_async("You> ")
 
 
@@ -55,7 +68,18 @@ async def run_console(
     readline: Callable[[str], str] | None = None,
     output: Callable[[str], None] = print,
 ) -> None:
-    """Route Console input without owning the shared process lifecycle."""
+    """运行 Console 交互主循环，路由用户输入但不拥有共享进程生命周期。
+
+    主循环负责：读取用户输入、通过 control 端口路由、处理消息输出、
+    处理清屏和关机等控制指令。
+
+    Args:
+        control: Console 控制端口，用于路由输入和控制命令。
+        console: Console 平台实例，用于接收 Bot 消息。
+        stop_event: 外部停止信号。
+        readline: 可注入的读取函数（测试用），为 None 时使用 prompt_toolkit。
+        output: 输出回调函数。
+    """
     stop = stop_event or asyncio.Event()
     output("AuroraBot local console; 输入 /help 查看命令。")
     prompt_reader = _PromptReader() if readline is None else None
@@ -69,6 +93,7 @@ async def run_console(
             while not stop.is_set():
                 read_task = asyncio.create_task(_read_input(prompt_reader, readline), name="aurora-console-read")
                 stop_task = asyncio.create_task(stop.wait(), name="aurora-console-stop")
+                # 等待第一个完成的任务（用户输入或停止信号）
                 done, pending = await asyncio.wait({read_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
                 for task in pending:
                     task.cancel()
@@ -87,6 +112,7 @@ async def run_console(
                 if not raw:
                     continue
                 external_event_id = str(uuid4())
+                # 将用户输入路由到 localhost 的 Console 控制端口
                 routed = await control.route_input(
                     RuntimeInput(
                         text=raw,
@@ -115,6 +141,10 @@ async def _read_input(
     prompt_reader: _PromptReader | None,
     readline: Callable[[str], str] | None,
 ) -> _ReadResult:
+    """从 prompt_toolkit 或可注入函数读取一行用户输入。
+
+    捕获 EOF / Ctrl+C 并返回已关闭的结果。
+    """
     try:
         if prompt_reader is not None:
             return _ReadResult(await prompt_reader.read())
@@ -125,6 +155,10 @@ async def _read_input(
 
 
 def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], None]) -> None:
+    """清空终端屏幕。
+
+    prompt_toolkit 环境下使用其内置清屏；非交互环境使用 ANSI 转义序列。
+    """
     if prompt_reader is not None:
         clear_terminal()
     else:
@@ -132,11 +166,13 @@ def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], 
 
 
 async def _display_messages(console: ConsolePlatform, output: Callable[[str], None]) -> None:
+    """异步循环显示来自 Console 平台的 Bot 消息。"""
     while True:
         output(f"Bot> {await console.next_message()}")
 
 
 async def _cancel_tasks(*tasks: asyncio.Task[Any] | None) -> None:
+    """批量取消多个异步任务并等待完成。"""
     active = [task for task in tasks if task is not None]
     for task in active:
         task.cancel()
