@@ -12,15 +12,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
 from src.ai.vnext import ModelGatewayService
-from src.contracts.agent import (
-    AgentHandler,
-    AgentLimits,
-    AgentProfile,
-    Capability,
-    CapabilityCatalogSnapshot,
-    KernelConfiguration,
-    TaskBudget,
-)
+from src.contracts.agent import AgentHandler, Capability, CapabilityCatalogSnapshot, KernelConfiguration
 from src.contracts.amp import AmpEnvelope, new_amp
 from src.contracts.configuration import AuroraConfig, load_configuration
 from src.contracts.model import ModelRequest
@@ -112,54 +104,21 @@ class AuroraRuntime:
         tool_bindings: tuple[ToolExecutorBinding, ...] | None = (),
     ) -> "AuroraRuntime":
         configuration = configuration or load_configuration(root, profile)
-        profiles = tuple(
-            AgentProfile(
-                id=item.id,
-                implementation=item.implementation,
-                model_role=item.model_role,
-                capabilities=item.capabilities,
-                can_delegate=item.can_delegate,
-                child_profiles=item.child_profiles,
-            )
-            for item in configuration.agents
-        )
-        runtime_agents = configuration.runtime.agents
-        limits = AgentLimits(
-            root_profile=runtime_agents.root_profile,
-            worker_profile=runtime_agents.worker_profile,
-            memory_agent_profile=runtime_agents.memory_agent_profile,
-            max_active_agents=runtime_agents.max_active_agents,
-            max_agents_per_task=runtime_agents.max_agents_per_task,
-            max_depth=runtime_agents.max_depth,
-            max_children_per_agent=runtime_agents.max_children_per_agent,
-            turn_concurrency=runtime_agents.turn_concurrency,
-            model_concurrency=runtime_agents.model_concurrency,
-            tool_concurrency=runtime_agents.tool_concurrency,
-            blocking_workers=runtime_agents.blocking_workers,
-            lease_seconds=runtime_agents.lease_seconds,
-            ambient_ttl_seconds=runtime_agents.ambient_ttl_seconds,
-        )
+        profiles = configuration.agents
+        limits = configuration.runtime.agents
         kernel_config = KernelConfiguration(
             workspace=str(configuration.runtime.workspace),
             profiles=profiles,
             limits=limits,
-            interactive_budget=TaskBudget(
-                configuration.runtime.interactive_budget.max_model_calls,
-                configuration.runtime.interactive_budget.max_tool_calls,
-                configuration.runtime.interactive_budget.max_duration_seconds,
-            ),
-            autonomous_budget=TaskBudget(
-                configuration.runtime.autonomous_budget.max_model_calls,
-                configuration.runtime.autonomous_budget.max_tool_calls,
-                configuration.runtime.autonomous_budget.max_duration_seconds,
-            ),
+            interactive_budget=configuration.runtime.interactive_budget,
+            autonomous_budget=configuration.runtime.autonomous_budget,
         )
         catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
         memory_service = MemoryService(configuration, configuration.root / "data", configuration.runtime.workspace)
         composer = PromptComposer(catalog, memory=memory_service)
         capabilities = _build_capabilities(
             memory_service=memory_service,
-            memory_agent_profile=runtime_agents.memory_agent_profile,
+            memory_agent_profile=limits.memory_agent_profile,
         )
         handlers = {
             profile.id: _load_handler(profile.implementation, composer, memory_service, capabilities)

@@ -10,7 +10,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from src.contracts.agent import AgentLimits, AgentProfile, TaskBudget
 
 
 class ConfigurationError(ValueError):
@@ -81,9 +84,9 @@ class RuntimeConfig:
     debug_host: str
     debug_port: int
     autonomy: "AutonomyConfig"
-    agents: "AgentRuntimeConfig"
-    interactive_budget: "TaskBudgetConfig"
-    autonomous_budget: "TaskBudgetConfig"
+    agents: "AgentLimits"
+    interactive_budget: "TaskBudget"
+    autonomous_budget: "TaskBudget"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,13 +97,6 @@ class AutonomyConfig:
     heartbeat_max_seconds: float = 1800.0
     autonomous_daily_model_calls: int = 24
     autonomous_daily_tokens: int = 100_000
-
-
-@dataclass(frozen=True, slots=True)
-class TaskBudgetConfig:
-    max_model_calls: int
-    max_tool_calls: int
-    max_duration_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,33 +117,6 @@ class DashboardConfig:
     allowed_origins: tuple[str, ...]
     owner_username: str
     bot: DashboardBotConfig
-
-
-@dataclass(frozen=True, slots=True)
-class AgentRuntimeConfig:
-    root_profile: str = "builtin.gate"
-    worker_profile: str = "builtin.worker"
-    memory_agent_profile: str | None = None
-    max_active_agents: int = 16
-    max_agents_per_task: int = 8
-    max_depth: int = 3
-    max_children_per_agent: int = 4
-    turn_concurrency: int = 8
-    model_concurrency: int = 4
-    tool_concurrency: int = 8
-    blocking_workers: int = 4
-    lease_seconds: float = 30.0
-    ambient_ttl_seconds: float = 1800.0
-
-
-@dataclass(frozen=True, slots=True)
-class AgentProfileConfig:
-    id: str
-    implementation: str
-    model_role: str
-    capabilities: frozenset[str]
-    can_delegate: bool
-    child_profiles: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +194,7 @@ class AuroraConfig:
     preference: PlatformPreference
     logging_level: str
     storage_data_dir: Path
-    agents: tuple[AgentProfileConfig, ...]
+    agents: "tuple[AgentProfile, ...]"
     model_roles: frozenset[str]
     model_definitions: Mapping[str, ModelRoleConfig]
     model_providers: Mapping[str, ModelProviderConfig]

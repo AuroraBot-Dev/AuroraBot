@@ -4,9 +4,8 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
+from src.contracts.agent import AgentLimits, AgentProfile, TaskBudget
 from src.contracts.configuration import (
-    AgentProfileConfig,
-    AgentRuntimeConfig,
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
@@ -16,7 +15,6 @@ from src.contracts.configuration import (
     DashboardPreference,
     McpPreference,
     PlatformPreference,
-    TaskBudgetConfig,
     _positive_number,
     _require_keys,
     _require_subset,
@@ -68,7 +66,7 @@ def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
 
 def _parse_task_budget(
     raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
-) -> TaskBudgetConfig:
+) -> TaskBudget:
     allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
     if set(raw) - allowed:
         raise ConfigurationError(f"runtime.{label} has unsupported keys")
@@ -78,15 +76,15 @@ def _parse_task_budget(
         raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
     if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
         raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
-    return TaskBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
+    return TaskBudget(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
 
 
-def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[AgentProfileConfig, ...]:
+def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[AgentProfile, ...]:
     _require_keys(data, {"agent"}, "agents.toml")
     raw_agents = data["agent"]
     if not isinstance(raw_agents, list) or not raw_agents:
         raise ConfigurationError("agents.toml agent must be a non-empty array")
-    agents: list[AgentProfileConfig] = []
+    agents: list[AgentProfile] = []
     ids: set[str] = set()
     for raw in raw_agents:
         if not isinstance(raw, dict):
@@ -114,7 +112,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
         if not isinstance(raw["can_delegate"], bool):
             raise ConfigurationError(f"Agent {agent_id} can_delegate must be boolean")
         agents.append(
-            AgentProfileConfig(
+            AgentProfile(
                 id=agent_id,
                 implementation=_string(raw["implementation"], "agent.implementation"),
                 model_role=model_role,
@@ -131,9 +129,9 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
     return tuple(agents)
 
 
-def _parse_agent_runtime(raw: dict[str, Any]) -> AgentRuntimeConfig:
-    defaults = AgentRuntimeConfig()
-    allowed = set(AgentRuntimeConfig.__dataclass_fields__)
+def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
+    defaults = AgentLimits()
+    allowed = set(AgentLimits.__dataclass_fields__)
     if set(raw) - allowed:
         raise ConfigurationError("runtime.agents has unsupported keys")
     values: dict[str, Any] = {}
@@ -151,7 +149,7 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentRuntimeConfig:
             values[name] = value
     if values["max_depth"] > values["max_agents_per_task"]:
         raise ConfigurationError("runtime.agents.max_depth cannot exceed max_agents_per_task")
-    return AgentRuntimeConfig(**values)
+    return AgentLimits(**values)
 
 
 def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
