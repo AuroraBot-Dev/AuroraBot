@@ -16,6 +16,14 @@ from src.contracts.agent import (
     MessageStatus,
     TaskStatus,
 )
+from src.kernel.commands import (
+    CompleteCommand,
+    DelegateCommand,
+    FailCommand,
+    ModelCommand,
+    ToolCommand,
+    WaitCommand,
+)
 from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
 
 
@@ -25,7 +33,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
         *,
         message: AgentMessage,
         agent: AgentInstance,
-        action: dict[str, Any],
+        command: ModelCommand | ToolCommand | DelegateCommand | CompleteCommand | WaitCommand | FailCommand,
         state_patch: dict[str, Any],
         limits: dict[str, int],
         priority: int,
@@ -48,9 +56,9 @@ class StoreDecisionsMixin(RuntimeStoreBase):
             state = json.loads(agent_row["state_json"])
             state.update(state_patch)
             status = AgentStatus.READY
-            summary = str(action.get("summary", message.type))
-            kind = action["kind"]
-            if kind == "model":
+            summary = command.summary
+
+            if isinstance(command, ModelCommand):
                 if int(task_row["model_calls"]) >= int(task_row["max_model_calls"]):
                     self._end_task(
                         connection, agent.task_id, TaskStatus.BUDGET_EXHAUSTED, "model_budget_exhausted", now
@@ -64,7 +72,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                             activity_id,
                             agent.task_id,
                             agent.agent_id,
-                            _json(action["request"]),
+                            _json(command.request),
                             priority,
                             activity_id,
                             now,
@@ -77,21 +85,22 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     status = AgentStatus.WAITING_MODEL
                     created.append(activity_id)
-            elif kind == "tool":
+
+            elif isinstance(command, ToolCommand):
                 if int(task_row["tool_calls"]) >= int(task_row["max_tool_calls"]):
                     self._end_task(connection, agent.task_id, TaskStatus.BUDGET_EXHAUSTED, "tool_budget_exhausted", now)
                     status = AgentStatus.CANCELLED
                 else:
                     activity_id = str(uuid4())
                     request_id = str(uuid4())
-                    request = {**action["request"], "request_id": request_id}
+                    request = {**command.request, "request_id": request_id}
                     connection.execute(
                         "INSERT INTO activities VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, NULL, ?, ?, NULL, NULL)",
                         (
                             activity_id,
                             agent.task_id,
                             agent.agent_id,
-                            kind,
+                            command.kind,
                             _json(request),
                             priority,
                             request_id,
@@ -105,8 +114,9 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     status = AgentStatus.WAITING_TOOL
                     created.append(activity_id)
-            elif kind == "delegate":
-                requests = action["requests"]
+
+            elif isinstance(command, DelegateCommand):
+                requests = command.requests
                 current_count = int(
                     connection.execute("SELECT count(*) FROM agents WHERE task_id = ?", (agent.task_id,)).fetchone()[0]
                 )
@@ -157,23 +167,25 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     created.extend((child_id, child_message))
                 status = AgentStatus.WAITING_CHILDREN
-            elif kind == "wait":
+
+            elif isinstance(command, WaitCommand):
                 status = AgentStatus.WAITING_CHILDREN
-            elif kind in {"complete", "fail"}:
-                status = AgentStatus.COMPLETED if kind == "complete" else AgentStatus.FAILED
+
+            elif isinstance(command, CompleteCommand):
+                status = AgentStatus.COMPLETED
                 if agent.parent_agent_id is not None:
                     result = ChildResult(
                         child_agent_id=agent.agent_id,
-                        status="completed" if kind == "complete" else "failed",
+                        status="completed",
                         summary=summary,
-                        artifacts=tuple(action.get("artifacts", [])),
-                        error=action.get("error"),
+                        artifacts=command.artifacts,
+                        error=None,
                     )
                     child_message = self._insert_message(
                         connection,
                         task_id=agent.task_id,
                         target_agent_id=agent.parent_agent_id,
-                        message_type="child.completed" if kind == "complete" else "child.failed",
+                        message_type="child.completed",
                         payload=result.to_dict(),
                         causation_id=message.message_id,
                         correlation_id=agent.task_id,
@@ -182,15 +194,38 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     created.append(child_message)
                 else:
-                    task_status = (
-                        TaskStatus.SILENT
-                        if action.get("silent")
-                        else (TaskStatus.ERROR if kind == "fail" else TaskStatus.COMPLETED)
-                    )
+                    task_status = TaskStatus.SILENT if command.silent else TaskStatus.COMPLETED
                     self._end_task(connection, agent.task_id, task_status, summary, now)
+
+            elif isinstance(command, FailCommand):
+                status = AgentStatus.FAILED
+                if agent.parent_agent_id is not None:
+                    result = ChildResult(
+                        child_agent_id=agent.agent_id,
+                        status="failed",
+                        summary=summary,
+                        artifacts=(),
+                        error=command.error,
+                    )
+                    child_message = self._insert_message(
+                        connection,
+                        task_id=agent.task_id,
+                        target_agent_id=agent.parent_agent_id,
+                        message_type="child.failed",
+                        payload=result.to_dict(),
+                        causation_id=message.message_id,
+                        correlation_id=agent.task_id,
+                        priority=priority,
+                        now=now,
+                    )
+                    created.append(child_message)
+                else:
+                    self._end_task(connection, agent.task_id, TaskStatus.ERROR, summary, now)
+
             else:
-                raise ValueError(f"unknown Agent action {kind}")
-            for situation_id in action.get("claims", []):
+                raise ValueError(f"unsupported Agent command {command.kind}")
+
+            for situation_id in command.claims:
                 claimed = connection.execute(
                     "UPDATE situations SET status = 'CLAIMED', claimed_by_agent_id = ?, updated_at = ? "
                     "WHERE situation_id = ? AND status = 'OPEN' AND expires_at > ?",
@@ -198,6 +233,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 )
                 if claimed.rowcount != 1:
                     raise PermissionError(f"situation is unavailable: {situation_id}")
+
             connection.execute(
                 "UPDATE agents SET status = ?, revision = revision + 1, state_json = ?, "
                 "last_summary = ?, updated_at = ? "
@@ -214,9 +250,9 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     str(uuid4()),
                     agent.task_id,
                     agent.agent_id,
-                    f"agent.{kind}",
+                    f"agent.{command.kind}",
                     summary,
-                    _json(action),
+                    _json(command.to_dict()),
                     message.message_id,
                     agent.task_id,
                     now,

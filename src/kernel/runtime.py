@@ -29,6 +29,14 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import AmpEnvelope
 from src.kernel.brain import build_brain_context
+from src.kernel.commands import (
+    CompleteCommand,
+    DelegateCommand,
+    FailCommand,
+    ModelCommand,
+    ToolCommand,
+    WaitCommand,
+)
 from src.kernel.debug import agent_detail as build_agent_detail
 from src.kernel.debug import reject_active_legacy_workspace
 from src.kernel.debug import task_detail as build_task_detail
@@ -131,19 +139,35 @@ class AgentKernel:
         limit = max_turns or self.limits.turn_concurrency
         if limit <= 0:
             raise ValueError("max_turns must be positive")
+        ingested, claims = await self._ingest_and_claim(limit)
+        if not claims:
+            await self._blocking_call(self._archive_terminal_tasks)
+            return PumpResult(ingested, (), ())
+        decisions = await self._execute_claims(claims)
+        result = await self._apply_results(ingested, claims, decisions)
+        await self._blocking_call(self._archive_terminal_tasks)
+        return result
+
+    async def _ingest_and_claim(self, limit: int) -> tuple[tuple[str, ...], tuple[Any, ...]]:
         async with self._lock:
             ingested = await self._store_call(self.ingest_ready)
             await self._store_call(self.store.expire_tasks)
             await self._store_call(self.store.expire_situations)
             claims = await self._store_call(self._claim_messages, limit)
-        if not claims:
-            await self._blocking_call(self._archive_terminal_tasks)
-            return PumpResult(ingested, (), ())
+            return ingested, claims
+
+    async def _execute_claims(self, claims: tuple[Any, ...]) -> tuple[Any, ...]:
         loop = asyncio.get_running_loop()
-        decisions = await asyncio.gather(
-            *(loop.run_in_executor(self._turn_executor, self._handle_claim, claim) for claim in claims),
-            return_exceptions=True,
+        return tuple(
+            await asyncio.gather(
+                *(loop.run_in_executor(self._turn_executor, self._handle_claim, claim) for claim in claims),
+                return_exceptions=True,
+            )
         )
+
+    async def _apply_results(
+        self, ingested: tuple[str, ...], claims: tuple[Any, ...], decisions: tuple[Any, ...]
+    ) -> PumpResult:
         processed: list[str] = []
         failed: list[str] = []
         for claim, result in zip(claims, decisions, strict=True):
@@ -167,7 +191,6 @@ class AgentKernel:
                 except Exception:
                     await self._store_call(self.store.fail_message, message.message_id, agent.agent_id, str(error))
                 failed.append(message.message_id)
-        await self._blocking_call(self._archive_terminal_tasks)
         return PumpResult(ingested, tuple(processed), tuple(failed))
 
     async def _store_call(self, function: Any, *args: Any, **kwargs: Any) -> Any:
@@ -207,11 +230,11 @@ class AgentKernel:
         return self._handlers[agent.profile_id].handle(context)
 
     def _apply_failure(self, message: Any, agent: AgentInstance, error: str) -> None:
-        action = {"kind": "fail", "summary": error, "error": error, "claims": []}
+        command = FailCommand(summary=error, error=error)
         self.store.apply_decision(
             message=message,
             agent=agent,
-            action=action,
+            command=command,
             state_patch={},
             limits=self._limit_dict(),
             priority=message.priority,
@@ -219,12 +242,16 @@ class AgentKernel:
 
     def _apply_authorized_decision(self, message: Any, agent: AgentInstance, decision: AgentDecision) -> None:
         profile = self._profiles[agent.profile_id]
-        action: dict[str, Any]
+        claims = tuple(decision.claims)
+
         if decision.model_request is not None:
             request_role = decision.model_request.get("role")
             if request_role != profile.model_role:
                 raise PermissionError(f"Agent {agent.agent_id} cannot request model role {request_role}")
-            action = {"kind": "model", "request": decision.model_request, "summary": "model.requested"}
+            command: ModelCommand | ToolCommand | DelegateCommand | CompleteCommand | WaitCommand | FailCommand = (
+                ModelCommand(request=decision.model_request, claims=claims)
+            )
+
         elif decision.tool_request is not None:
             tool = decision.tool_request
             if not _capability_allowed(tool.capability, profile.capabilities):
@@ -238,10 +265,8 @@ class AgentKernel:
                 raise ValueError(f"Tool parameters do not match {tool.capability}: {error.message}") from error
             task = self.store.get_task(agent.task_id)
             assert task is not None
-            action = {
-                "kind": "tool",
-                "summary": f"tool.requested:{tool.capability}",
-                "request": {
+            command = ToolCommand(
+                request={
                     "capability": tool.capability,
                     "parameters": tool.parameters,
                     "complete_task": tool.complete_task,
@@ -249,38 +274,44 @@ class AgentKernel:
                     "continuation": tool.continuation,
                     "session_id": task.session_id,
                 },
-            }
+                claims=claims,
+            )
+
         elif decision.delegations:
             if not profile.can_delegate:
                 raise PermissionError(f"Agent profile {profile.id} cannot delegate")
-            requests = []
+            delegation_requests: list[dict[str, str]] = []
             for delegation in decision.delegations:
                 child_profile = delegation.profile_id or self.limits.worker_profile
                 if child_profile not in profile.child_profiles or child_profile not in self._profiles:
                     raise PermissionError(f"Agent profile {profile.id} cannot create {child_profile}")
-                requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
-            action = {"kind": "delegate", "requests": requests, "summary": f"delegated {len(requests)} child Agent(s)"}
+                delegation_requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
+            command = DelegateCommand(requests=tuple(delegation_requests), claims=claims)
+
         elif decision.completion is not None:
-            action = {
-                "kind": "complete",
-                "summary": decision.completion.summary,
-                "artifacts": list(decision.completion.artifacts),
-                "silent": decision.completion.silent,
-            }
+            command = CompleteCommand(
+                summary=decision.completion.summary,
+                artifacts=decision.completion.artifacts,
+                silent=decision.completion.silent,
+                claims=claims,
+            )
+
         elif decision.wait_for_children:
             active_child = any(not child.terminal for child in self.store.children(agent.agent_id))
             if not active_child and not self.store.has_pending_child_reports(agent.agent_id):
                 raise ValueError("Agent cannot wait without active children")
-            action = {"kind": "wait", "summary": "waiting for child Agents"}
+            command = WaitCommand(claims=claims)
+
         elif decision.failure is not None:
-            action = {"kind": "fail", "summary": decision.failure, "error": decision.failure}
+            command = FailCommand(summary=decision.failure, error=decision.failure, claims=claims)
+
         else:
             raise ValueError("unsupported Agent decision")
-        action["claims"] = list(decision.claims)
+
         self.store.apply_decision(
             message=message,
             agent=agent,
-            action=action,
+            command=command,
             state_patch=decision.state_patch,
             limits=self._limit_dict(),
             priority=message.priority,
