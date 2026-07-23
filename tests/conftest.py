@@ -81,16 +81,11 @@ provider = "test"
 model = "fast"
 capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools"]
 
-[models.roles.agent]
-provider = "test"
-model = "agent"
-endpoint = "responses"
-capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses"]
-
 [models.roles.quality]
 provider = "test"
 model = "quality"
-capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]
+endpoint = "responses"
+capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses", "reasoning"]
 
 [models.roles.multimodal]
 provider = "test"
@@ -153,7 +148,7 @@ child_profiles = ["builtin.worker"]
 [[agent]]
 id = "builtin.worker"
 implementation = "src.agents.tool_agent:ToolAgent"
-model_role = "agent"
+model_role = "quality"
 capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker"]

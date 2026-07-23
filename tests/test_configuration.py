@@ -309,7 +309,7 @@ def test_rejects_invalid_autonomy_and_task_budgets(project_root: Path, table: st
         ('adapter = "litellm"', 'adapter = "unknown"', "unsupported", "models.toml"),
         ('provider = "test"', 'provider = "missing"', "unknown provider", "models.toml"),
         (
-            'capabilities = ["chat", "stream", "structured_output", "json_text_fallback"]',
+            'capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools"]',
             'capabilities = "chat"',
             "contain strings",
             "models.toml",
@@ -326,19 +326,16 @@ def test_rejects_invalid_runtime_and_model_configuration(
         load_configuration(project_root)
 
 
-def test_responses_role_requires_native_responses_capability(project_root: Path) -> None:
+def test_responses_role_accepts_models_dev_capabilities(project_root: Path) -> None:
+    """配置中不再强制声明 native_responses —— 由 models.dev 自动补充。"""
     config = project_root / "config" / "models.toml"
-    config.write_text(
-        config.read_text(encoding="utf-8").replace(
-            'capabilities = ["chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses"]',
-            'capabilities = ["chat"]',
-            1,
-        ),
-        encoding="utf-8",
+    old_caps = (
+        'capabilities = ["chat", "stream", "structured_output", "json_text_fallback",'
+        ' "tools", "native_responses", "reasoning"]'
     )
-
-    with pytest.raises(ConfigurationError, match="requires native_responses"):
-        load_configuration(project_root)
+    modified = config.read_text(encoding="utf-8").replace(old_caps, 'capabilities = ["chat"]', 1)
+    config.write_text(modified, encoding="utf-8")
+    load_configuration(project_root)
 
 
 def test_agent_capabilities_are_authorization_limits_not_startup_availability(project_root: Path) -> None:

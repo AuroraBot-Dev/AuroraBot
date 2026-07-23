@@ -83,7 +83,7 @@ class ClaimCapability:
             role=context.profile.model_role,
             messages=(),
             required_capabilities=frozenset({"chat", "tools"}),
-            response_mode="native" if context.profile.model_role == "agent" else "normalized",
+            response_mode="normalized",
             tools=tuple(t for t in tools if isinstance(t, ToolDefinition)),
             continuation=continuation,
             parallel_tool_calls=False,

@@ -144,11 +144,14 @@ class ModelProviderConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelRoleConfig:
-    """Non-secret configuration for one model role."""
+    """Non-secret configuration for one model role.
+
+    ``capabilities`` 为空时由 models.dev 自动派生。
+    """
 
     provider: str
     model: str
-    capabilities: frozenset[str]
+    capabilities: frozenset[str] = frozenset()
     endpoint: str = "chat_completions"
 
 
@@ -333,23 +336,25 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         if not isinstance(settings, dict):
             raise ConfigurationError(f"model role {role} must be a table")
         role_allowed = {"provider", "model", "capabilities", "endpoint"}
-        if set(settings) - role_allowed or not {"provider", "model", "capabilities"} <= set(settings):
+        if set(settings) - role_allowed or not {"provider", "model"} <= set(settings):
             raise ConfigurationError(f"models.roles.{role} has unsupported or missing keys")
         provider_id = _string(settings["provider"], f"models.roles.{role}.provider")
         if provider_id not in model_providers:
             raise ConfigurationError(f"models.roles.{role} references unknown provider")
-        capabilities = settings["capabilities"]
-        if not isinstance(capabilities, list) or not all(isinstance(value, str) for value in capabilities):
-            raise ConfigurationError(f"models.roles.{role}.capabilities must contain strings")
+        capabilities_raw = settings.get("capabilities")
+        if capabilities_raw is not None:
+            if not isinstance(capabilities_raw, list) or not all(isinstance(value, str) for value in capabilities_raw):
+                raise ConfigurationError(f"models.roles.{role}.capabilities must contain strings")
+            capabilities = frozenset(capabilities_raw)
+        else:
+            capabilities = frozenset()
         endpoint = settings.get("endpoint", "chat_completions")
         if endpoint not in {"chat_completions", "responses"}:
             raise ConfigurationError(f"models.roles.{role}.endpoint is unsupported")
-        if endpoint == "responses" and "native_responses" not in capabilities:
-            raise ConfigurationError(f"models.roles.{role} responses endpoint requires native_responses")
         model_definitions[role] = ModelRoleConfig(
             provider=provider_id,
             model=_string(settings["model"], f"models.roles.{role}.model"),
-            capabilities=frozenset(capabilities),
+            capabilities=capabilities,
             endpoint=endpoint,
         )
 

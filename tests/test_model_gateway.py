@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.ai.gateway import GatewayError
+from src.ai.execution import GatewayError
 from src.ai.vnext import ModelCapabilityError, ModelGatewayService
 from src.contracts.agent import TaskStatus
 from src.contracts.configuration import load_configuration
@@ -78,7 +78,7 @@ def test_invalid_model_json_returns_configured_no_action(project_root: Path) -> 
         (ModelRequest(role="fast", messages=(), required_capabilities=frozenset({"vision"})), "lacks capabilities"),
         (
             ModelRequest(
-                role="quality",
+                role="multimodal",
                 messages=(),
                 tools=(ToolDefinition("tool", "", {"type": "object"}),),
             ),
@@ -147,7 +147,7 @@ def test_chat_completion_maps_tools_usage_and_continuation(project_root: Path, m
         monkeypatch.setenv("AURORA_TEST_MODEL_API_KEY", "test-secret")
         service = ModelGatewayService(load_configuration(project_root))
         caller = Caller()
-        service._gateway = SimpleNamespace(use_model=lambda _role: caller)
+        service._callers["fast"] = caller
         request = ModelRequest(
             role="fast",
             messages=(ModelMessage("user", "hello"),),
@@ -193,7 +193,7 @@ def test_chat_structured_output_falls_back_and_enforces_cost_budget(
         monkeypatch.setenv("AURORA_TEST_MODEL_API_KEY", "test-secret")
         service = ModelGatewayService(load_configuration(project_root))
         caller = Caller()
-        service._gateway = SimpleNamespace(use_model=lambda _role: caller)
+        service._callers["fast"] = caller
         request = ModelRequest(
             role="fast",
             messages=(ModelMessage("user", "hello"),),
@@ -237,7 +237,7 @@ def test_responses_completion_maps_native_tool_calls_and_provider_errors(
 
         monkeypatch.setattr("src.ai.vnext.litellm.aresponses", complete_response)
         request = ModelRequest(
-            role="agent",
+            role="quality",
             messages=(ModelMessage("user", "delegate"),),
             response_mode="native",
             output_schema={"type": "object", "required": ["kind"]},

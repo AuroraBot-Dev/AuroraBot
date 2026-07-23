@@ -4,22 +4,17 @@
 # Gate：入口 Agent，接收所有交互并决定委派
 [[agent]]
 id = "builtin.gate"
-# 处理的 Python 类（package.module:Class）
 implementation = "src.agents.tool_agent:ToolAgent"
-# 使用的 model role
-model_role = "agent"
-# 授权的能力模式（* / package.* / 精确 Tool ID）
+model_role = "quality"
 capabilities = ["*"]
-# 是否允许委派子任务
 can_delegate = true
-# 可委派的子 Agent profile id 列表
 child_profiles = ["builtin.worker", "builtin.memory"]
 
 # Worker：执行具体工作的通用 Agent
 [[agent]]
 id = "builtin.worker"
 implementation = "src.agents.tool_agent:ToolAgent"
-model_role = "agent"
+model_role = "quality"
 capabilities = ["*"]
 can_delegate = true
 child_profiles = ["builtin.worker", "builtin.memory"]

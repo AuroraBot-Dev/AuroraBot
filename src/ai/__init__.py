@@ -1,36 +1,37 @@
-"""AI 模块的统一入口，导出网关、模型定价和供应商配置的公开 API。
+"""AI 模块的统一入口，导出网关、模型查询和供应商配置的公开 API。
+
+模型定价与能力以 models.dev 为第一信息源，
+数据缓存于 ``data/ai/`` 目录。
 
 用法::
 
-    from src.ai import gateway, init_gateway
-    from src.ai import setup_providers
-
-    setup_providers()
-    init_gateway()
+    from src.ai import ModelGatewayService, init_cache, setup_providers
+    from src.ai.models import get_pricing_by_id, get_capabilities_by_id
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
-from .gateway import (
+from .execution import (
     CancelledWithPartialResponse,
     CostTracker,
     GatewayError,
     GenerationTask,
     ModelCaller,
-    ModelGateway,
     TaskManager,
-    gateway,
-    get_gateway,
-    init_gateway,
 )
 from .models import (
+    compute_cost,
+    get_capabilities_by_id,
+    get_model_info,
     get_pricing_by_id,
+    init_cache,
 )
 from .providers import (
     ProviderConfig,
     resolve_model,
     setup_providers,
 )
+from .vnext import ModelGatewayService
 
 __all__ = [
     "CancelledWithPartialResponse",
@@ -38,13 +39,14 @@ __all__ = [
     "GatewayError",
     "GenerationTask",
     "ModelCaller",
-    "ModelGateway",
+    "ModelGatewayService",
     "ProviderConfig",
     "TaskManager",
-    "gateway",
-    "get_gateway",
+    "compute_cost",
+    "get_capabilities_by_id",
+    "get_model_info",
     "get_pricing_by_id",
-    "init_gateway",
+    "init_cache",
     "resolve_model",
     "setup_providers",
 ]
