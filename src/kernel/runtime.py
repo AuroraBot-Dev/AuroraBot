@@ -17,12 +17,8 @@ from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
-from jsonschema import ValidationError, validate
-
 from src.contracts.agent import (
     ActivityRequest,
-    AgentContext,
-    AgentDecision,
     AgentHandler,
     AgentInstance,
     AgentLimits,
@@ -34,17 +30,10 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import AmpEnvelope
 from src.kernel.brain import build_brain_context
-from src.kernel.commands import (
-    CompleteCommand,
-    DelegateCommand,
-    FailCommand,
-    ModelCommand,
-    ToolCommand,
-    WaitCommand,
-)
 from src.kernel.debug import agent_detail as build_agent_detail
 from src.kernel.debug import reject_active_legacy_workspace
 from src.kernel.debug import task_detail as build_task_detail
+from src.kernel.runtime_decisions import apply_authorized_decision, apply_failure, handle_claim
 from src.kernel.runtime_ingress import ingest_ready as ingest_runtime_ready
 from src.kernel.store import SQLiteRuntimeStore
 from src.utils.log_utils import get_logger
@@ -52,18 +41,6 @@ from src.utils.serialization import atomic_write_json
 
 logger = get_logger("aurora.kernel")
 _INVALID_TOOL_OUTCOME = "invalid Tool outcome"
-
-
-def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
-    """检查给定能力是否在许可策略中允许。
-
-    支持通配符 '*' 和前缀通配符 'namespace.*'。
-    """
-    return (
-        "*" in policies
-        or capability in policies
-        or any(policy.endswith(".*") and capability.startswith(policy[:-1]) for policy in policies)
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +174,7 @@ class AgentKernel:
         loop = asyncio.get_running_loop()
         return tuple(
             await asyncio.gather(
-                *(loop.run_in_executor(self._turn_executor, self._handle_claim, claim) for claim in claims),
+                *(loop.run_in_executor(self._turn_executor, handle_claim, self, claim) for claim in claims),
                 return_exceptions=True,
             )
         )
@@ -213,7 +190,7 @@ class AgentKernel:
             try:
                 if isinstance(result, BaseException):
                     raise result
-                await self._store_call(self._apply_authorized_decision, message, agent, result)
+                await self._store_call(apply_authorized_decision, self, message, agent, result)
                 processed.append(message.message_id)
             except Exception as error:
                 logger.log(
@@ -225,7 +202,7 @@ class AgentKernel:
                     type(error).__name__,
                 )
                 try:
-                    await self._store_call(self._apply_failure, message, agent, f"{type(error).__name__}: {error}")
+                    await self._store_call(apply_failure, self, message, agent, f"{type(error).__name__}: {error}")
                 except Exception:
                     await self._store_call(self.store.fail_message, message.message_id, agent.agent_id, str(error))
                 failed.append(message.message_id)
@@ -250,141 +227,6 @@ class AgentKernel:
                 break
             claims.append(claimed)
         return tuple(claims)
-
-    def _handle_claim(self, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
-        """在线程池中调度单个 Agent turn。
-
-        组装 AgentContext（含 Task 状态、profile、能力列表、Brain 上下文），
-        然后调用对应 profile 的 handler.handle(context) 执行决策。
-        """
-        message, agent, task = claim
-        profile = self._profiles[agent.profile_id]
-        descriptors = tuple(
-            descriptor
-            for descriptor in self.capability_catalog.capabilities
-            if _capability_allowed(descriptor.id, profile.capabilities)
-        )
-        context = AgentContext(
-            task=task,
-            agent=agent,
-            message=message,
-            children=self.store.children(agent.agent_id),
-            profile=profile,
-            capabilities=descriptors,
-            brain=self.brain_context(),
-        )
-        return self._handlers[agent.profile_id].handle(context)
-
-    def _apply_failure(self, message: Any, agent: AgentInstance, error: str) -> None:
-        """Agent turn 异常时的兜底处理：构造 FailCommand 并应用。"""
-        command = FailCommand(summary=error, error=error)
-        self.store.apply_decision(
-            message=message,
-            agent=agent,
-            command=command,
-            state_patch={},
-            limits=self._limit_dict(),
-            priority=message.priority,
-        )
-
-    def _apply_authorized_decision(self, message: Any, agent: AgentInstance, decision: AgentDecision) -> None:
-        """校验 Agent 决策权限并构造对应 Command 提交至仓库。
-
-        按优先级判断决策类型：
-        1. model_request → ModelCommand（校验 model_role）
-        2. tool_request → ToolCommand（校验 capability 权限和参数 schema）
-        3. delegations → DelegateCommand（校验委托权限和子 profile）
-        4. completion → CompleteCommand
-        5. wait_for_children → WaitCommand（需有活跃子 Agent）
-        6. failure → FailCommand
-        任何不匹配将抛出 ValueError。
-        """
-        profile = self._profiles[agent.profile_id]
-        claims = tuple(decision.claims)
-
-        if decision.model_request is not None:
-            # 校验模型角色权限
-            request_role = decision.model_request.get("role")
-            if request_role != profile.model_role:
-                raise PermissionError(f"Agent {agent.agent_id} cannot request model role {request_role}")
-            command: ModelCommand | ToolCommand | DelegateCommand | CompleteCommand | WaitCommand | FailCommand = (
-                ModelCommand(request=decision.model_request, claims=claims)
-            )
-
-        elif decision.tool_request is not None:
-            tool = decision.tool_request
-            # 校验工具能力权限
-            if not _capability_allowed(tool.capability, profile.capabilities):
-                raise PermissionError(f"Agent {agent.agent_id} cannot request {tool.capability}")
-            descriptor = self.capability_catalog.by_id.get(tool.capability)
-            if descriptor is None:
-                raise ValueError(f"unknown Tool capability {tool.capability}")
-            try:
-                validate(tool.parameters, descriptor.parameters_schema)
-            except ValidationError as error:
-                raise ValueError(f"Tool parameters do not match {tool.capability}: {error.message}") from error
-            task = self.store.get_task(agent.task_id)
-            assert task is not None
-            command = ToolCommand(
-                request={
-                    "capability": tool.capability,
-                    "parameters": tool.parameters,
-                    "complete_task": tool.complete_task,
-                    "tool_call_id": tool.tool_call_id,
-                    "continuation": tool.continuation,
-                    "session_id": task.session_id,
-                },
-                claims=claims,
-            )
-
-        elif decision.delegations:
-            if not profile.can_delegate:
-                raise PermissionError(f"Agent profile {profile.id} cannot delegate")
-            delegation_requests: list[dict[str, str]] = []
-            for delegation in decision.delegations:
-                child_profile = delegation.profile_id or self.limits.worker_profile
-                if child_profile not in profile.child_profiles or child_profile not in self._profiles:
-                    raise PermissionError(f"Agent profile {profile.id} cannot create {child_profile}")
-                delegation_requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
-            command = DelegateCommand(requests=tuple(delegation_requests), claims=claims)
-
-        elif decision.completion is not None:
-            command = CompleteCommand(
-                summary=decision.completion.summary,
-                artifacts=decision.completion.artifacts,
-                silent=decision.completion.silent,
-                claims=claims,
-            )
-
-        elif decision.wait_for_children:
-            active_child = any(not child.terminal for child in self.store.children(agent.agent_id))
-            if not active_child and not self.store.has_pending_child_reports(agent.agent_id):
-                raise ValueError("Agent cannot wait without active children")
-            command = WaitCommand(claims=claims)
-
-        elif decision.failure is not None:
-            command = FailCommand(summary=decision.failure, error=decision.failure, claims=claims)
-
-        else:
-            raise ValueError("unsupported Agent decision")
-
-        self.store.apply_decision(
-            message=message,
-            agent=agent,
-            command=command,
-            state_patch=decision.state_patch,
-            limits=self._limit_dict(),
-            priority=message.priority,
-        )
-
-    def _limit_dict(self) -> dict[str, int]:
-        """将内核限制配置以 dict 形式返回，供仓库层使用。"""
-        return {
-            "max_active_agents": self.limits.max_active_agents,
-            "max_agents_per_task": self.limits.max_agents_per_task,
-            "max_depth": self.limits.max_depth,
-            "max_children_per_agent": self.limits.max_children_per_agent,
-        }
 
     def has_work(self) -> bool:
         """检查是否有待处理的工作。这是主调度循环的触发条件。

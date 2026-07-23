@@ -135,7 +135,7 @@ class MCPPlatform:
         """
         binding = self._tool_bindings.get(capability)
         if binding is None:
-            raise ValueError(f"未知的 MCP capability: {capability}")
+            raise ValueError(f"unknown MCP capability: {capability}")
         package, _raw_name = binding
         return package
 
