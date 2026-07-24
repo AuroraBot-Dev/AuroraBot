@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.localhost.command_types import InputOrigin, RuntimeInput
+from src.contracts.event import InputOrigin, RuntimeInput
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.contracts.agent import CapabilityDescriptor
-from src.localhost.ports import ToolExecutionRequest, ToolOutcome
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome
 
 if TYPE_CHECKING:
     from src.platform.dashboard.service import ChatService

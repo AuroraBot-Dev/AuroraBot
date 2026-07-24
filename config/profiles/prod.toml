@@ -1,5 +1,5 @@
 # 生产环境覆盖项。
-# 本文件只覆盖 runtime.toml 中的配置。密钥通过环境变量注入，不写入此文件。
+# 本文件只覆盖 runtime.toml 中的进程配置。密钥通过环境变量注入，不写入此文件。
 
 [runtime]
 profile = "prod"

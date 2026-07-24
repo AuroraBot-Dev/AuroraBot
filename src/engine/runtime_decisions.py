@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol
 
 from jsonschema import ValidationError, validate
@@ -16,7 +17,7 @@ from src.contracts.agent import (
     AgentInstance,
     TaskState,
 )
-from src.kernel.commands import (
+from src.engine.commands import (
     CompleteCommand,
     DelegateCommand,
     FailCommand,
@@ -33,7 +34,8 @@ if TYPE_CHECKING:
         BrainContextSnapshot,
         CapabilityCatalogSnapshot,
     )
-    from src.kernel.store import SQLiteRuntimeStore
+    from src.contracts.memory import MemoryContextSnapshot
+    from src.engine.store import SQLiteRuntimeStore
 
 
 def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
@@ -58,8 +60,8 @@ def _build_limit_dict(limits: AgentLimits) -> dict[str, int]:
     }
 
 
-class DecisionKernel(Protocol):
-    """决策处理所需的内核最小接口。"""
+class DecisionRuntime(Protocol):
+    """决策处理所需的 engine 最小接口。"""
 
     _profiles: dict[str, AgentProfile]
     _handlers: dict[str, AgentHandler]
@@ -73,8 +75,10 @@ class DecisionKernel(Protocol):
 
     def brain_context(self) -> BrainContextSnapshot: ...
 
+    def recall_memory(self, query: str) -> MemoryContextSnapshot: ...
 
-def handle_claim(kernel: DecisionKernel, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
+
+def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
     """组装 Agent 上下文并调用对应 profile 的 handler。"""
     message, agent, task = claim
     profile = kernel._profiles[agent.profile_id]
@@ -84,18 +88,19 @@ def handle_claim(kernel: DecisionKernel, claim: tuple[Any, AgentInstance, TaskSt
         if _capability_allowed(descriptor.id, profile.capabilities)
     )
     context = AgentContext(
-        task=task,
-        agent=agent,
-        message=message,
-        children=kernel.store.children(agent.agent_id),
-        profile=profile,
-        capabilities=descriptors,
-        brain=kernel.brain_context(),
+        task=deepcopy(task),
+        agent=deepcopy(agent),
+        message=deepcopy(message),
+        children=deepcopy(kernel.store.children(agent.agent_id)),
+        profile=deepcopy(profile),
+        capabilities=deepcopy(descriptors),
+        brain=deepcopy(kernel.brain_context()),
+        memory=kernel.recall_memory(task.root_summary),
     )
     return kernel._handlers[agent.profile_id].handle(context)
 
 
-def apply_failure(kernel: DecisionKernel, message: Any, agent: AgentInstance, error: str) -> None:
+def apply_failure(kernel: DecisionRuntime, message: Any, agent: AgentInstance, error: str) -> None:
     """Agent turn 异常时的兜底处理：构造 FailCommand 并应用。"""
     command = FailCommand(summary=error, error=error)
     kernel.store.apply_decision(
@@ -109,7 +114,7 @@ def apply_failure(kernel: DecisionKernel, message: Any, agent: AgentInstance, er
 
 
 def apply_authorized_decision(
-    kernel: DecisionKernel, message: Any, agent: AgentInstance, decision: AgentDecision
+    kernel: DecisionRuntime, message: Any, agent: AgentInstance, decision: AgentDecision
 ) -> None:
     """校验 Agent 决策权限并构造对应 Command 提交至仓库。
 
@@ -151,7 +156,7 @@ def apply_authorized_decision(
 
 
 def _apply_model_request(
-    _kernel: DecisionKernel,
+    _kernel: DecisionRuntime,
     agent: AgentInstance,
     decision: AgentDecision,
     profile: AgentProfile,
@@ -164,7 +169,7 @@ def _apply_model_request(
 
 
 def _apply_tool_request(
-    kernel: DecisionKernel,
+    kernel: DecisionRuntime,
     agent: AgentInstance,
     decision: AgentDecision,
     profile: AgentProfile,
@@ -197,7 +202,7 @@ def _apply_tool_request(
 
 
 def _apply_delegations(
-    kernel: DecisionKernel,
+    kernel: DecisionRuntime,
     _agent: AgentInstance,
     decision: AgentDecision,
     profile: AgentProfile,
@@ -223,7 +228,7 @@ def _apply_completion(decision: AgentDecision, claims: tuple[Any, ...]) -> Compl
     )
 
 
-def _apply_wait(kernel: DecisionKernel, agent: AgentInstance, claims: tuple[Any, ...]) -> WaitCommand:
+def _apply_wait(kernel: DecisionRuntime, agent: AgentInstance, claims: tuple[Any, ...]) -> WaitCommand:
     active_child = any(not child.terminal for child in kernel.store.children(agent.agent_id))
     if not active_child and not kernel.store.has_pending_child_reports(agent.agent_id):
         raise ValueError("Agent cannot wait without active children")

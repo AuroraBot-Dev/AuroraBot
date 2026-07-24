@@ -45,9 +45,8 @@ AuroraBot は、長期的にプロジェクトへ影響する判断を RFC に�
 小さな不具合修正、テスト、文章の改善、公開動作を変えない refactor は直接提出できます。公開文書を変更する場合は、
 中国語、英語、日本語の入口を同期してください。
 
-現在の runtime は [RFC 0012](rfc/0012-homogeneous-agent-runtime.md) に従います。Platform composition、preference、
-entry point は [RFC 0014](rfc/0014-parallel-platform-composition-and-preferences.md) に従います。古い RFC は、後続の判断に
-置き換えられていない範囲だけが有効です。
+現在の runtime、package boundary、process composition は
+[RFC 0200](rfc/0200-agent-centered-runtime.md) に従います。
 
 ## ループを壊さない
 

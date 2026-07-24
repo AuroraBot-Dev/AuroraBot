@@ -1,6 +1,6 @@
-"""RFC 0012 持久化同构 Agent 调度器与因果边界。
+"""engine 的持久化状态、Agent 调度与因果边界。
 
-AgentKernel 拥有 Task/Agent 持久化状态、邮箱队列和 Activity 调度，
+EngineState 拥有 Task/Agent 持久化状态、邮箱队列和 Activity 调度，
 并将所有认知决策委托给外部 Agent handler，将 I/O 委托给平台层。
 这是 Aurora 运行时闭环的唯一入口。
 """
@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
 from src.contracts.agent import (
@@ -24,22 +24,29 @@ from src.contracts.agent import (
     AgentLimits,
     BrainContextSnapshot,
     CapabilityCatalogSnapshot,
-    KernelConfiguration,
+    EngineConfiguration,
     TaskState,
+    TaskStatus,
     ToolLease,
 )
-from src.contracts.amp import AmpEnvelope
-from src.kernel.brain import build_brain_context
-from src.kernel.debug import agent_detail as build_agent_detail
-from src.kernel.debug import reject_active_legacy_workspace
-from src.kernel.debug import task_detail as build_task_detail
-from src.kernel.runtime_decisions import apply_authorized_decision, apply_failure, handle_claim
-from src.kernel.runtime_ingress import ingest_ready as ingest_runtime_ready
-from src.kernel.store import SQLiteRuntimeStore
+from src.engine.brain import build_brain_context
+from src.engine.debug import agent_detail as build_agent_detail
+from src.engine.debug import reject_active_legacy_workspace
+from src.engine.debug import task_detail as build_task_detail
+from src.engine.runtime_decisions import apply_authorized_decision, apply_failure, handle_claim
+from src.engine.runtime_ingress import ingest_ready as ingest_runtime_ready
+from src.engine.store import SQLiteRuntimeStore
 from src.utils.logging import get_logger
 from src.utils.serialization import atomic_write_json
 
-logger = get_logger("aurora.kernel")
+if TYPE_CHECKING:
+    from src.contracts.amp import AmpEnvelope
+    from src.contracts.memory import MemoryStore
+    from src.contracts.tool import ToolOutcomeStatus
+
+from src.contracts.memory import MemoryContextSnapshot, MemoryEntry
+
+logger = get_logger("aurora.engine")
 _INVALID_TOOL_OUTCOME = "invalid Tool outcome"
 
 
@@ -58,7 +65,7 @@ class PumpResult:
         return asdict(self)
 
 
-class AgentKernel:
+class EngineState:
     """拥有持久化 Task/Agent 状态，将所有认知和外部 I/O 委托出去。
 
     核心职责：
@@ -70,8 +77,9 @@ class AgentKernel:
 
     def __init__(
         self,
-        configuration: KernelConfiguration,
+        configuration: EngineConfiguration,
         handlers: dict[str, AgentHandler],
+        memory_store: MemoryStore | None = None,
     ) -> None:
         """初始化 Agent 内核。
 
@@ -86,6 +94,7 @@ class AgentKernel:
         if configuration.limits.root_profile not in self._profiles:
             raise ValueError("root Agent profile is not configured")
         self._handlers = handlers
+        self._memory_store = memory_store
         self._workspace = Path(configuration.workspace)
         self._inbox = self._workspace / "inbox"
         self._process = self._workspace / "process"
@@ -109,7 +118,7 @@ class AgentKernel:
         self._capability_catalog: CapabilityCatalogSnapshot | None = None
         self._lock = asyncio.Lock()
         logger.info(
-            "Agent Kernel initialized workspace=%s profiles=%d active_tasks=%d",
+            "Agent engine state initialized workspace=%s profiles=%d active_tasks=%d",
             self._workspace,
             len(self._profiles),
             self.store.counts()["active_tasks"],
@@ -142,13 +151,35 @@ class AgentKernel:
         """构建全局 Brain 上下文快照，聚合所有活跃 Task 和 Agent 的摘要信息。"""
         return build_brain_context(self.store)
 
+    def recall_memory(self, query: str) -> MemoryContextSnapshot:
+        """通过注入的 Port 召回 turn 上下文；服务失败时返回空快照。"""
+        if self._memory_store is None:
+            return MemoryContextSnapshot()
+        try:
+            return self._memory_store.recall(query)
+        except Exception as error:
+            logger.warning("Memory recall failed error_type=%s", type(error).__name__)
+            return MemoryContextSnapshot()
+
+    def completed_memory_entries(self) -> tuple[MemoryEntry, ...]:
+        """投影可交给自动记忆服务的已完成交互。"""
+        entries = []
+        for task in self.store.tasks():
+            if task.autonomous or task.status not in {TaskStatus.COMPLETED, TaskStatus.SILENT}:
+                continue
+            agent = self.store.get_agent(task.root_agent_id)
+            if agent is None:
+                continue
+            entries.append(MemoryEntry(task.task_id, task.root_summary, agent.last_summary or None, task.updated_at))
+        return tuple(entries)
+
     async def pump(self, max_turns: int | None = None) -> PumpResult:
         """摄入就绪的 AMP 文件并处理一批独立的 Agent turn。
 
         流程：摄入 → 过期检查 → 领取消息 → 并发执行 Agent turn → 应用决策 → 归档终止 Task。
         max_turns 限制单次 pump 处理的最大 turn 数，未指定时使用配置中的 turn_concurrency。
         """
-        limit = max_turns or self.limits.turn_concurrency
+        limit = self.limits.turn_concurrency if max_turns is None else max_turns
         if limit <= 0:
             raise ValueError("max_turns must be positive")
         ingested, claims = await self._ingest_and_claim(limit)
@@ -307,7 +338,7 @@ class AgentKernel:
         *,
         request_id: str,
         capability: str,
-        status: str,
+        status: ToolOutcomeStatus,
         summary: str,
         result: dict[str, Any] | None,
         error: str | None,

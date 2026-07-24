@@ -44,13 +44,12 @@ def _build_openai_provider_config(role_name: str, config: AuroraConfig) -> dict[
     return {"provider": "openai", "config": cfg}
 
 
-def build_memory_config(config: AuroraConfig, data_dir: Path) -> dict[str, Any] | None:
+def build_memory_config(config: AuroraConfig, memory_dir: Path) -> dict[str, Any] | None:
     """构建 mem0 记忆系统所需的完整配置，LLM 和 Embedder 均不可用时返回 None。"""
     llm = _build_openai_provider_config("fast", config)
     embedder = _build_openai_provider_config("embedding", config)
     if llm is None or embedder is None:
         return None
-    memory_dir = data_dir / "memory"
     memory_dir.mkdir(parents=True, exist_ok=True)
     return {
         "vector_store": {

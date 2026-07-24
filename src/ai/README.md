@@ -17,7 +17,7 @@
 
 ## 选择模型
 
-所有角色和 Provider 都在 `config/aurora.toml` 中声明：
+所有角色和 Provider 都在 `config/models.toml` 中声明：
 
 ```toml
 [models.roles.fast]

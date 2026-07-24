@@ -9,8 +9,8 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.localhost.command_types import CommandControl
-from src.localhost.ports import ToolExecutionRequest, ToolOutcome
+from src.contracts.event import CommandControl
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome
 from src.platform.dashboard.adapter import DASHBOARD_SEND_CAPABILITY
 from src.platform.dashboard.routing import (
     PrivateMessageInput,
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from src.contracts.configuration import DashboardConfig
-    from src.localhost.ports import InteractiveInputPort
+    from src.contracts.ports import InteractiveInputPort
     from src.platform.dashboard.store import ChatStore
 
     Publish = Callable[[int, dict[str, Any]], Awaitable[None]]

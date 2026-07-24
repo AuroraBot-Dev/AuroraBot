@@ -4,28 +4,35 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 import signal
 import webbrowser
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
+from src.ai.vnext import ModelGatewayService
 from src.config import get as get_config
+from src.contracts.agent import AgentHandler, Capability, EngineConfiguration
 from src.contracts.configuration import PLATFORM_NAMES, PlatformPreference
-from src.localhost.ports import ToolExecutorBinding
+from src.contracts.tool import ToolExecutorBinding
+from src.engine.runtime import AgentEngine
+from src.localhost.api import create_debug_app
 from src.localhost.runtime import AuroraRuntime
+from src.memory.service import MemoryService
 from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from src.platform.console.shell import run_console
 from src.platform.dashboard import DASHBOARD_SEND_DESCRIPTOR, ChatService, DashboardPlatform, create_app
 from src.platform.mcp import MCPPlatform
+from src.prompt import PromptComposer, load_prompt_catalog
 from src.utils.logging import configure_console_logging, configure_logging, get_logger
 
 logger = get_logger("aurora.process")
 
 if TYPE_CHECKING:
-    from src.contracts.configuration import DashboardConfig
+    from src.contracts.configuration import AuroraConfig, DashboardConfig
 
 
 class _AuroraServer(uvicorn.Server):
@@ -52,6 +59,14 @@ class _InstalledSignal:
     previous: object | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _ProcessServers:
+    """进程内由组合根管理的 HTTP 服务。"""
+
+    dashboard: uvicorn.Server | None
+    debug: uvicorn.Server
+
+
 async def run_runtime(
     platforms: frozenset[str] | None,
     *,
@@ -60,13 +75,11 @@ async def run_runtime(
     """围绕一个共享运行时和停止事件，启动精确的平台组合并运行至停止。"""
     configuration = get_config()
     selected = _selected_platforms(platforms, configuration.preference)
-    configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
+    configure_logging(configuration.logging_level, configuration.logging_dir / "aurora.log")
     configure_console_logging(enabled=configuration.preference.console.terminal_logs if "console" in selected else True)
 
-    runtime = AuroraRuntime.create(
-        configuration=configuration,
-        tool_bindings=None,
-    )
+    runtime = _create_runtime(configuration)
+    debug_server = _debug_server(runtime)
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
     failure: BaseException | None = None
@@ -87,7 +100,7 @@ async def run_runtime(
                     runtime,
                     stop,
                     console_platform,
-                    server,
+                    _ProcessServers(server, debug_server),
                     open_browser=configuration.preference.dashboard.open_browser,
                 )
         finally:
@@ -109,6 +122,63 @@ def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPr
     return frozenset(name for name in PLATFORM_NAMES if getattr(preference, name).enabled)
 
 
+def _load_handler(
+    specification: str,
+    composer: PromptComposer,
+    capabilities: tuple[Capability, ...],
+) -> AgentHandler:
+    """加载 Agent handler，并注入提示词装配器与主动能力。"""
+    module_name, separator, attribute = specification.partition(":")
+    if not separator:
+        raise ValueError(f"Agent implementation must use module:attribute syntax: {specification}")
+    implementation = getattr(importlib.import_module(module_name), attribute)
+    handler: Any = implementation()
+    composer_installer = getattr(handler, "install_prompt_composer", None)
+    if callable(composer_installer):
+        composer_installer(composer)
+    capability_installer = getattr(handler, "install_capabilities", None)
+    if callable(capability_installer):
+        capability_installer(capabilities)
+    if not callable(getattr(handler, "handle", None)):
+        raise TypeError(f"Agent implementation does not provide handle(): {specification}")
+    return handler
+
+
+def _build_capabilities() -> tuple[Capability, ...]:
+    """构造 Agent 可主动选择的内建能力。"""
+    from src.agents.capabilities.claim import ClaimCapability
+    from src.agents.capabilities.delegate import DelegationCapability
+    from src.agents.capabilities.wait import WaitCapability
+
+    return DelegationCapability(), WaitCapability(), ClaimCapability()
+
+
+def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
+    """在唯一组合根创建 Agent、Provider、自动服务、engine 与 localhost。"""
+    profiles = configuration.agents
+    limits = configuration.engine.agents
+    engine_configuration = EngineConfiguration(
+        workspace=str(configuration.engine.workspace),
+        profiles=profiles,
+        limits=limits,
+        interactive_budget=configuration.engine.interactive_budget,
+        autonomous_budget=configuration.engine.autonomous_budget,
+    )
+    memory = MemoryService(configuration, configuration.storage.memory)
+    catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
+    composer = PromptComposer(catalog)
+    capabilities = _build_capabilities()
+    handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
+    engine = AgentEngine(
+        engine_configuration,
+        handlers,
+        model_provider=ModelGatewayService(configuration),
+        memory_store=memory,
+        idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
+    )
+    return AuroraRuntime(configuration, engine)
+
+
 async def _start_platforms(
     runtime: AuroraRuntime,
     preference: PlatformPreference,
@@ -117,9 +187,7 @@ async def _start_platforms(
 ) -> tuple[ConsolePlatform | None, uvicorn.Server | None]:
     """按选中集合创建并启动各平台实例，绑定工具执行器。"""
     console_platform = (
-        ConsolePlatform(runtime.configuration.root / "data" / "platform" / "console" / "runtime.sqlite3")
-        if "console" in selected
-        else None
+        ConsolePlatform(runtime.configuration.storage.console / "runtime.sqlite3") if "console" in selected else None
     )
     if console_platform is not None:
         resources.callback(console_platform.close)
@@ -166,7 +234,7 @@ async def _run_platform_tasks(
     runtime: AuroraRuntime,
     stop: asyncio.Event,
     console_platform: ConsolePlatform | None,
-    server: uvicorn.Server | None,
+    servers: _ProcessServers,
     *,
     open_browser: bool,
 ) -> BaseException | None:
@@ -177,9 +245,11 @@ async def _run_platform_tasks(
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
     server_task: asyncio.Task[None] | None = None
-    if server is not None:
-        server_task = asyncio.create_task(server.serve(), name="aurora-dashboard-server")
+    if servers.dashboard is not None:
+        server_task = asyncio.create_task(servers.dashboard.serve(), name="aurora-dashboard-server")
         tasks.add(server_task)
+    debug_task = asyncio.create_task(servers.debug.serve(), name="aurora-localhost-debug-server")
+    tasks.add(debug_task)
     console_task: asyncio.Task[None] | None = None
     if console_platform is not None:
         console_task = asyncio.create_task(
@@ -191,7 +261,11 @@ async def _run_platform_tasks(
     tasks.add(stop_task)
     try:
         # 服务器就绪后自动打开浏览器
-        if server is not None and open_browser and await _wait_for_server_start(server, server_task, stop):
+        if (
+            servers.dashboard is not None
+            and open_browser
+            and await _wait_for_server_start(servers.dashboard, server_task, stop)
+        ):
             await asyncio.to_thread(_open_dashboard_browser, runtime.configuration.dashboard)
         done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return _task_failure(done, stop_task, stop)
@@ -202,9 +276,11 @@ async def _run_platform_tasks(
         if console_task is not None:
             console_task.cancel()
             await asyncio.gather(console_task, return_exceptions=True)
-        if server is not None and server_task is not None:
-            server.should_exit = True
+        if servers.dashboard is not None and server_task is not None:
+            servers.dashboard.should_exit = True
             await asyncio.gather(server_task, return_exceptions=True)
+        servers.debug.should_exit = True
+        await asyncio.gather(debug_task, return_exceptions=True)
         stop.set()
         await asyncio.gather(runtime_task, return_exceptions=True)
 
@@ -267,13 +343,27 @@ def _dashboard_server(chat: ChatService, runtime: AuroraRuntime) -> uvicorn.Serv
             create_app(
                 chat,
                 runtime,
-                runtime,
                 dashboard,
                 profile=runtime.configuration.runtime.profile,
             ),
             host=dashboard.host,
             port=dashboard.port,
             log_level=runtime.configuration.logging_level.lower(),
+            log_config=None,
+            access_log=False,
+        )
+    )
+
+
+def _debug_server(runtime: AuroraRuntime) -> uvicorn.Server:
+    """创建独立于 Platform 集合的 localhost 调试服务器。"""
+    configuration = runtime.configuration
+    return _AuroraServer(
+        uvicorn.Config(
+            create_debug_app(runtime),
+            host=configuration.runtime.debug_host,
+            port=configuration.runtime.debug_port,
+            log_level=configuration.logging_level.lower(),
             log_config=None,
             access_log=False,
         )
@@ -326,7 +416,7 @@ def _bind_platform_tools(
             )
             for capability in mcp_platform.capability_catalog.capabilities
         )
-    runtime.bind_tool_executors(tuple(tool_bindings))
+    runtime.engine.bind_tool_executors(tuple(tool_bindings))
 
 
 def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:

@@ -8,7 +8,7 @@ implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "quality"
 capabilities = ["*"]
 can_delegate = true
-child_profiles = ["builtin.worker", "builtin.memory"]
+child_profiles = ["builtin.worker"]
 
 # Worker：执行具体工作的通用 Agent
 [[agent]]
@@ -17,13 +17,4 @@ implementation = "src.agents.tool_agent:ToolAgent"
 model_role = "quality"
 capabilities = ["*"]
 can_delegate = true
-child_profiles = ["builtin.worker", "builtin.memory"]
-
-# Memory：处理记忆查询与存储的专用 Agent
-[[agent]]
-id = "builtin.memory"
-implementation = "src.agents.memory_agent:MemoryAgent"
-model_role = "fast"
-capabilities = ["*"]
-can_delegate = false
-child_profiles = []
+child_profiles = ["builtin.worker"]

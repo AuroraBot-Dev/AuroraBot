@@ -43,8 +43,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、
 英文和日文入口。
 
-当前运行时以 [RFC 0012](rfc/0012-homogeneous-agent-runtime.md) 为准；平台组合、偏好配置和入口以
-[RFC 0014](rfc/0014-parallel-platform-composition-and-preferences.md) 为准。更早的 RFC 只在未被后续决策取代的范围内有效。
+当前运行时、包边界和进程组合以 [RFC 0200](rfc/0200-agent-centered-runtime.md) 为准。
 
 ## 保持闭环完整
 
@@ -52,7 +51,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 
 - Agent handler 读取 `AgentContext` 并返回 `AgentDecision`，不直接调用 Provider 或平台 Client。
 - 外部效果由 Platform 执行，并把 outcome 作为新事件送回运行时；模型普通文本不是效果。
-- Kernel 管理事件、状态、邮箱、Activity 和因果记录，不决定具体的认知内容。
+- engine 管理完整热路径，具体模型、工具与记忆实现通过 contracts Port 注入。
 - 结构配置继续使用 TOML，密钥继续只来自环境变量。
 - 共享日志通过 `src.utils.logging.get_logger()` 获取，不记录完整提示词、continuation 或敏感载荷。
 

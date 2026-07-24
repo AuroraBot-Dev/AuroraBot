@@ -34,17 +34,9 @@ def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
         "heartbeat_initial_seconds",
         "heartbeat_min_seconds",
         "heartbeat_max_seconds",
-        "autonomous_daily_model_calls",
-        "autonomous_daily_tokens",
     }
     if set(raw) - allowed:
-        raise ConfigurationError("runtime.autonomy has unsupported keys")
-    daily_calls = raw.get("autonomous_daily_model_calls", defaults.autonomous_daily_model_calls)
-    daily_tokens = raw.get("autonomous_daily_tokens", defaults.autonomous_daily_tokens)
-    if not isinstance(daily_calls, int) or isinstance(daily_calls, bool) or daily_calls <= 0:
-        raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
-    if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
-        raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
+        raise ConfigurationError("engine.autonomy has unsupported keys")
     heartbeat_min = _positive_number(
         raw.get("heartbeat_min_seconds", defaults.heartbeat_min_seconds), "heartbeat_min_seconds"
     )
@@ -63,8 +55,6 @@ def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
         heartbeat_initial_seconds=heartbeat_initial,
         heartbeat_min_seconds=heartbeat_min,
         heartbeat_max_seconds=heartbeat_max,
-        autonomous_daily_model_calls=daily_calls,
-        autonomous_daily_tokens=daily_tokens,
     )
 
 
@@ -74,13 +64,13 @@ def _parse_task_budget(
     """解析 Task 预算配置，支持交互式和自主式两档默认值。"""
     allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
     if set(raw) - allowed:
-        raise ConfigurationError(f"runtime.{label} has unsupported keys")
+        raise ConfigurationError(f"engine.{label} has unsupported keys")
     calls = raw.get("max_model_calls", default_calls)
     tools = raw.get("max_tool_calls", default_tools)
     if not isinstance(calls, int) or isinstance(calls, bool) or calls <= 0:
-        raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
+        raise ConfigurationError(f"engine.{label}.max_model_calls must be positive")
     if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
-        raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
+        raise ConfigurationError(f"engine.{label}.max_tool_calls must be positive")
     return TaskBudget(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
 
 
@@ -140,22 +130,20 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
     defaults = AgentLimits()
     allowed = set(AgentLimits.__dataclass_fields__)
     if set(raw) - allowed:
-        raise ConfigurationError("runtime.agents has unsupported keys")
+        raise ConfigurationError("engine.agents has unsupported keys")
     values: dict[str, Any] = {}
     for name in allowed:
         value = raw.get(name, getattr(defaults, name))
-        if name == "memory_agent_profile":
-            values[name] = None if value is None else _string(value, "runtime.agents.memory_agent_profile")
-        elif name in {"root_profile", "worker_profile"}:
-            values[name] = _string(value, f"runtime.agents.{name}")
+        if name in {"root_profile", "worker_profile"}:
+            values[name] = _string(value, f"engine.agents.{name}")
         elif name in {"lease_seconds", "ambient_ttl_seconds"}:
-            values[name] = _positive_number(value, f"runtime.agents.{name}")
+            values[name] = _positive_number(value, f"engine.agents.{name}")
         elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-            raise ConfigurationError(f"runtime.agents.{name} must be a positive integer")
+            raise ConfigurationError(f"engine.agents.{name} must be a positive integer")
         else:
             values[name] = value
     if values["max_depth"] > values["max_agents_per_task"]:
-        raise ConfigurationError("runtime.agents.max_depth cannot exceed max_agents_per_task")
+        raise ConfigurationError("engine.agents.max_depth cannot exceed max_agents_per_task")
     return AgentLimits(**values)
 
 
@@ -251,7 +239,7 @@ def _capability_pattern(value: object, label: str) -> str:
     return capability
 
 
-def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
+def _parse_dashboard(raw: dict[str, Any], root: Path, engine_workspace: Path) -> DashboardConfig:
     """解析 Dashboard 配置段，校验端口、路径安全和 owner/bot 分离。"""
     _require_keys(
         raw,
@@ -260,8 +248,6 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
             "open_browser",
             "host",
             "port",
-            "database_path",
-            "upload_dir",
             "max_upload_bytes",
             "session_ttl_seconds",
             "allowed_origins",
@@ -302,13 +288,12 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
     avatar_url = bot_raw["avatar_url"]
     if not isinstance(avatar_url, str):
         raise ConfigurationError("dashboard.bot.avatar_url must be a string")
-    database_path = (root / _string(raw["database_path"], "dashboard.database_path")).resolve()
-    upload_dir = (root / _string(raw["upload_dir"], "dashboard.upload_dir")).resolve()
+    database_path = (root / "chat.sqlite3").resolve()
+    upload_dir = (root / "uploads").resolve()
     if not database_path.is_relative_to(root) or not upload_dir.is_relative_to(root):
-        raise ConfigurationError("dashboard data paths must stay within the project root")
-    kernel_workspace = (root / "data" / "kernel").resolve()
-    if database_path.is_relative_to(kernel_workspace) or upload_dir.is_relative_to(kernel_workspace):
-        raise ConfigurationError("dashboard data paths must not overlap the Kernel workspace")
+        raise ConfigurationError("dashboard data paths must stay within its storage directory")
+    if database_path.is_relative_to(engine_workspace) or upload_dir.is_relative_to(engine_workspace):
+        raise ConfigurationError("dashboard data paths must not overlap the engine workspace")
     if database_path.is_relative_to(upload_dir):
         raise ConfigurationError("dashboard database must not be stored in the upload directory")
     return DashboardConfig(

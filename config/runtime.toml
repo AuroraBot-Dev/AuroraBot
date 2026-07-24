@@ -3,65 +3,7 @@
 [runtime]
 # 激活的 profile（prod / dev），控制 profile 文件的选择
 profile = "prod"
-# Kernel 工作区相对路径，固定为 data/kernel
-workspace = "data/kernel"
 # 调试 API 绑定地址，生产环境必须为 loopback
 debug_host = "127.0.0.1"
 # 调试 API 端口，1–65535
 debug_port = 8765
-
-# 同构 Agent 调度与监督树参数
-[runtime.agents]
-# 入口 Agent 的 profile id
-root_profile = "builtin.gate"
-# 默认子 Agent 的 profile id
-worker_profile = "builtin.worker"
-# 记忆 Agent profile id，null 表示不启用
-memory_agent_profile = "builtin.memory"
-# 全局活跃 Agent 上限
-max_active_agents = 16
-# 单 Task 内 Agent 上限
-max_agents_per_task = 8
-# 委派深度上限，不得超过 max_agents_per_task
-max_depth = 3
-# 单 Agent 子任务上限
-max_children_per_agent = 4
-# 每轮并发执行的 Agent 数
-turn_concurrency = 8
-# 并发模型调用数
-model_concurrency = 4
-# 并发工具调用数
-tool_concurrency = 8
-# 阻塞 IO 工作线程数
-blocking_workers = 4
-# Agent 租约超时（秒）
-lease_seconds = 30.0
-# 环境数据生存时间（秒）
-ambient_ttl_seconds = 1800.0
-
-# 自主节律参数 — 控制心跳间隔与每日模型调用配额
-[runtime.autonomy]
-# 轮询扫描间隔（秒）
-scan_seconds = 1.0
-# 初始心跳间隔（秒），必须在 [min, max] 区间内
-heartbeat_initial_seconds = 30.0
-# 最小心跳间隔（秒）
-heartbeat_min_seconds = 30.0
-# 最大心跳间隔（秒），不得小于 min
-heartbeat_max_seconds = 1800.0
-# 每日自主模型调用配额（次）
-autonomous_daily_model_calls = 24
-# 每日自主 Token 配额
-autonomous_daily_tokens = 100000
-
-# 交互任务预算 — 用户触发的 Task 资源上限
-[runtime.interactive_task]
-max_model_calls = 8
-max_tool_calls = 6
-max_duration_seconds = 300.0
-
-# 自主任务预算 — 自主心跳触发的 Task 资源上限
-[runtime.autonomous_task]
-max_model_calls = 3
-max_tool_calls = 2
-max_duration_seconds = 120.0

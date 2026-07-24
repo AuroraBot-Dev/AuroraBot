@@ -13,7 +13,8 @@ from mcp.client.streamable_http import streamablehttp_client
 from src.contracts.agent import CapabilityCatalogSnapshot, CapabilityDescriptor
 from src.contracts.amp import new_amp
 from src.contracts.configuration import AppConfig, AuroraConfig
-from src.localhost.ports import ExternalAmpIngressPort, ToolExecutionRequest, ToolOutcome
+from src.contracts.ports import ExternalAmpIngressPort
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
@@ -144,9 +145,9 @@ class MCPPlatform:
 
         为内置时钟应用注入心跳节律参数（由运行时 autonomy 配置控制）。
         """
-        environment = {"AURORA_APP_DATA_DIR": str(self._configuration.root / "data" / "app_data")}
+        environment = {"AURORA_APP_DATA_DIR": str(self._configuration.storage.apps)}
         if app.package == "org.aurora.clock":
-            autonomy = self._configuration.runtime.autonomy
+            autonomy = self._configuration.engine.autonomy
             environment.update(
                 {
                     "AURORA_CLOCK_HEARTBEAT_INITIAL_SECONDS": str(autonomy.heartbeat_initial_seconds),

@@ -20,7 +20,8 @@ if TYPE_CHECKING:
     import sqlite3
 
     from src.contracts.configuration import DashboardConfig
-    from src.localhost.ports import InteractiveInputPort, ToolExecutionRequest, ToolOutcome
+    from src.contracts.ports import InteractiveInputPort
+    from src.contracts.tool import ToolExecutionRequest, ToolOutcome
 
 _MESSAGE_TYPES = {"text", "image", "file", "audio", "video"}
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "text/")

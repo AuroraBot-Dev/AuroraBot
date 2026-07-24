@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/help", "/h")
 USAGE = "/help"

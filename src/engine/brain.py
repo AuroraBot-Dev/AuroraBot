@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.contracts.agent import BrainContextSnapshot
-from src.kernel.store import SQLiteRuntimeStore, utc_now
+from src.engine.store import SQLiteRuntimeStore, utc_now
 
 
 def build_brain_context(store: SQLiteRuntimeStore) -> BrainContextSnapshot:

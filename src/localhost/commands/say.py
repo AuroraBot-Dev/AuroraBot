@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 from src.utils.logging import console_logging_status
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/say", "/s")
 USAGE = "/say <message>"

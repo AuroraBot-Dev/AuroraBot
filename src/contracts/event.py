@@ -1,4 +1,4 @@
-"""localhost 用例的传输无关输入与命令契约。"""
+"""交互输入、命令结果与命令上下文契约。"""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ if TYPE_CHECKING:
 
 
 class InputOrigin(StrEnum):
-    """输入来源枚举：Console 或 Dashboard。"""
+    """交互输入来源。"""
 
     CONSOLE = "console"
     DASHBOARD = "dashboard"
 
 
 class CommandControl(StrEnum):
-    """命令控制指令枚举：无操作、清屏或进程关闭。"""
+    """平台执行的进程控制指令。"""
 
     NONE = "none"
     CLEAR_CONSOLE = "clear_console"
@@ -27,7 +27,7 @@ class CommandControl(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class RuntimeInput:
-    """由本地传输适配器提供的规范化文本输入。"""
+    """平台提交的传输无关文本输入。"""
 
     text: str
     origin: InputOrigin
@@ -38,8 +38,8 @@ class RuntimeInput:
     idempotency_key: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
 
-    def with_text(self, text: str) -> "RuntimeInput":
-        """创建副本并以新文本替换原始文本字段。"""
+    def with_text(self, text: str) -> RuntimeInput:
+        """创建仅替换文本字段的输入副本。"""
         return RuntimeInput(
             text=text,
             origin=self.origin,
@@ -54,10 +54,7 @@ class RuntimeInput:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CommandResult:
-    """输入路由返回的传输无关结果。
-
-    包含成功标志、可选文本、载荷数据、消息 ID 以及控制指令。
-    """
+    """输入路由返回的传输无关结果。"""
 
     ok: bool
     text: str | None = None
@@ -68,7 +65,7 @@ class CommandResult:
 
 
 class RuntimeCommandPort(Protocol):
-    """运行时命令端口：暴露配置、AMP 提交、泵取和状态查询等核心能力。"""
+    """localhost 命令处理器所需的最小运行时端口。"""
 
     configuration: AuroraConfig
 
@@ -87,7 +84,7 @@ class RuntimeCommandPort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class CommandContext:
-    """命令处理器上下文：组合运行时端口与当前请求。"""
+    """命令处理器使用的运行时和请求上下文。"""
 
     runtime: RuntimeCommandPort
     request: RuntimeInput

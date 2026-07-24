@@ -86,7 +86,9 @@ When any of `--console`, `--dashboard`, or `--mcp` is present, those flags form 
 | What you want to change                           | Start here               |
 | ------------------------------------------------- | ------------------------ |
 | SOUL, world, and Agent prompt fragments            | `config/prompts.toml`    |
-| Model roles and Providers                         | `config/aurora.toml`     |
+| Model roles and Providers                         | `config/models.toml`     |
+| Engine limits and Task budgets                    | `config/engine.toml`     |
+| Persistent storage paths                          | `config/storage.toml`    |
 | Platforms enabled by default                      | `config/platforms.toml` |
 | Agent models, capabilities, and delegation limits | `config/agents.toml`     |
 | Local or remote MCP applications                  | `config/apps.toml`       |

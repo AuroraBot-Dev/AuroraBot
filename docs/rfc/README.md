@@ -1,0 +1,13 @@
+# AuroraBot RFC
+
+RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、结构配置、扩展协议、模型调用、持久化语义或进程组合的改动，必须先更新或新增 RFC。
+
+## 当前基准
+
+1. [0200 Agent 中心运行时架构](0200-agent-centered-runtime.md) - 包边界、Port 注入、engine 热路径、localhost 监察与组合根
+
+## 规范优先级
+
+已接受 RFC 高于 README、注释、配置样例与现有实现。`ARCHITECTURE.md` 是 RFC 0200 的详细实施规划；两者冲突时以 RFC 为准。
+
+状态包括：草案、提议、已接受、已取代和已废弃。

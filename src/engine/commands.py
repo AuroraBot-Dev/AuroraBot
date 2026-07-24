@@ -1,7 +1,7 @@
 """类型化 Agent 决策指令，桥接运行时授权与仓库执行。
 
 每条指令对应 Agent handler 返回的一种可能决策类型，
-由 AgentKernel._apply_authorized_decision 进行权限校验后，
+由 engine 决策边界进行权限校验后，
 交由 StoreDecisionsMixin.apply_decision 原子执行。
 """
 

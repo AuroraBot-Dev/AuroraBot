@@ -133,7 +133,7 @@ allowed-confusables = [
     "TC003",
 ]
 "src/config/loader.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003"]
-"src/kernel/runtime.py" = [
+"src/engine/state.py" = [
     "BLE001",
     "C901",
     "PLR0912",
@@ -143,7 +143,7 @@ allowed-confusables = [
     "TRY004",
     "TRY301",
 ]
-"src/kernel/store*.py" = [
+"src/engine/store*.py" = [
     "C901",
     "PLR0912",
     "PLR0913",
@@ -157,10 +157,12 @@ allowed-confusables = [
 "src/contracts/amp.py" = ["PLR0913"]
 "src/contracts/agent.py" = ["PLR0913", "TC001"]
 "src/config/sections.py" = ["C901", "PLR0912", "PLR2004", "TC003"]
-"src/kernel/runtime_decisions.py" = []
+"src/engine/runtime.py" = ["BLE001", "TC001"]
+"src/contracts/tool.py" = ["PLR0913"]
 "src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
 "src/platform/dashboard/store.py" = ["PLR0913", "TC003", "TRY300"]
 "src/localhost/runtime.py" = ["BLE001", "TC003"]
+"src/localhost/api.py" = ["C901"]
 "src/agents/tool_agent.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
 "src/memory/service.py" = ["BLE001"]
 "src/platform/console/adapter.py" = ["TC001", "TRY004", "TRY301"]
@@ -180,8 +182,8 @@ keep-runtime-typing = true
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "src"]
-exclude = [".venv", "tests", "**/node_modules", "**/__pycache__", "**/.*"]
+include = ["aurora", "src", "tests"]
+exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 
 [build-system]
 requires = ["setuptools>=75"]

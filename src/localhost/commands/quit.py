@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.localhost.command_types import CommandControl, CommandResult
+from src.contracts.event import CommandControl, CommandResult
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/quit", "/exit", "/q")
 USAGE = "/quit"

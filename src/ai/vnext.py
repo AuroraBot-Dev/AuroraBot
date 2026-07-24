@@ -106,7 +106,7 @@ class ModelGatewayService:
         self.cost_tracker = CostTracker()
 
         # 初始化 models.dev 磁盘缓存
-        init_cache(configuration.root / "data" / "ai")
+        init_cache(configuration.storage.ai)
 
         # 注册 OpenAI 兼容自定义供应商
         custom_providers = tuple(

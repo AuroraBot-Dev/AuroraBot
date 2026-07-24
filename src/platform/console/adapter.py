@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from uuid import NAMESPACE_URL, uuid5
 
 from src.contracts.agent import CapabilityDescriptor
-from src.localhost.ports import ToolExecutionRequest, ToolOutcome
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome
 
 if TYPE_CHECKING:
     from pathlib import Path

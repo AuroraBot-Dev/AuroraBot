@@ -1,7 +1,4 @@
-"""RFC 0108 — 记忆服务公开 API。
-
-MemoryService、mem0 / ChromaDB、自动注入与 MemoryAgent。
-"""
+"""RFC 0200 定义的自动记忆服务与 MemoryStore 实现。"""
 
 from __future__ import annotations
 

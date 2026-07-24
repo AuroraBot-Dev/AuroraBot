@@ -13,7 +13,7 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
-from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
+from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
 from src.utils.logging import get_logger
 
 logger = get_logger("aurora.platform.console")
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from prompt_toolkit.input import Input
     from prompt_toolkit.output import Output
 
-    from src.localhost.ports import ConsoleControlPort
+    from src.contracts.ports import ConsoleControlPort
     from src.platform.console.adapter import ConsolePlatform
 
 

@@ -1,78 +1,101 @@
-"""记忆服务：包装 mem0 语义搜索和 SQLite 情景回忆。"""
+"""自动记忆服务：私有对话账本与 mem0 语义记忆。"""
 
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from src.contracts.configuration import AuroraConfig
-
+from src.contracts.memory import MemoryContextSnapshot, MemoryConversation, MemoryEntry
 from src.utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from src.contracts.configuration import AuroraConfig
+
 logger = get_logger("aurora.memory.service")
-
 _DEFAULT_USER_ID = "aurora"
-_DATA_SUBDIR = "memory"
 
 
-def _build_mem0_config(config: AuroraConfig, data_dir: Path) -> dict[str, Any] | None:
-    """根据应用配置构建 mem0 记忆系统配置，不可用时返回 None。"""
-    from src.memory.config import build_memory_config as build
+def _build_mem0_config(config: AuroraConfig, memory_dir: Path) -> dict[str, Any] | None:
+    """根据应用配置构建 mem0 配置，不可用时返回 None。"""
+    from src.memory.config import build_memory_config
 
-    return build(config, data_dir)
+    return build_memory_config(config, memory_dir)
 
 
 class MemoryService:
-    """直接记忆服务：读取 L2/L3 由服务自动完成，写入通过工具委派。"""
+    """实现 MemoryStore，通过私有账本保证自动写入幂等。"""
 
-    def __init__(
-        self,
-        config: AuroraConfig | None = None,
-        data_dir: Path | None = None,
-        workspace: Path | None = None,
-    ) -> None:
+    def __init__(self, config: AuroraConfig | None = None, memory_dir: Path | None = None) -> None:
         self._client: Any = None
         self._mem0_config: dict[str, Any] | None = None
         self._user_id = _DEFAULT_USER_ID
-        if config is None or data_dir is None or workspace is None:
-            # 未提供完整配置时处于禁用状态
-            self._available = False
-            self._db_path = Path(":memory:")
-            return
-        self._mem0_config = _build_mem0_config(config, data_dir)
-        self._db_path = workspace / "process" / "runtime.sqlite3"
+        self._memory_dir = memory_dir
+        self._ledger_path = memory_dir / "memory.sqlite3" if memory_dir is not None else None
+        if config is not None and memory_dir is not None:
+            self._mem0_config = _build_mem0_config(config, memory_dir)
         self._available = self._mem0_config is not None
         if self._available:
-            logger.info("Memory service initialized data_dir=%s", data_dir / _DATA_SUBDIR)
+            logger.info("Memory service initialized data_dir=%s", memory_dir)
         else:
-            logger.warning("Memory service unavailable: missing credentials or configuration")
+            logger.warning("Memory semantic service unavailable: missing credentials or configuration")
 
     @classmethod
     def disabled(cls) -> MemoryService:
-        """返回一个已禁用的记忆服务实例（用于无记忆场景）。"""
+        """返回不持久化且不调用语义服务的实例。"""
         return cls()
 
     @property
     def available(self) -> bool:
-        """记忆服务当前是否可用。"""
+        """mem0 语义记忆当前是否可用。"""
         return self._available
 
     @property
     def _mem0(self) -> Any:
-        """懒加载 mem0 Memory 客户端，初始化失败则标记为不可用。"""
+        """懒加载 mem0 客户端，初始化失败时停用语义记忆。"""
         if self._client is None and self._mem0_config is not None:
             try:
                 from mem0 import Memory
 
                 self._client = Memory.from_config(self._mem0_config)
                 logger.info("mem0 client initialized")
-            except Exception as exc:
-                logger.warning("Failed to initialize mem0 client: %s", exc)
+            except Exception as error:
+                logger.warning("Failed to initialize mem0 client: %s", error)
                 self._available = False
                 self._mem0_config = None
         return self._client
+
+    def recall(self, query: str) -> MemoryContextSnapshot:
+        """为单次 Agent turn 召回对话账本和相关语义记忆。"""
+        return MemoryContextSnapshot(
+            recent_conversation=self._recent_conversation(limit=8),
+            related_memories=tuple(self.search(query, limit=5)),
+        )
+
+    def remember(self, entry: MemoryEntry) -> bool:
+        """幂等记录一条已完成交互，并在可用时同步写入语义记忆。"""
+        if self._ledger_path is None or not entry.user.strip():
+            return False
+        assert self._memory_dir is not None
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO completed_tasks"
+                "(task_id, user_text, assistant_text, created_at) VALUES (?, ?, ?, ?)",
+                (entry.task_id, entry.user, entry.assistant, entry.created_at),
+            )
+            inserted = cursor.rowcount > 0
+        if not inserted:
+            return False
+        content = f"用户：{entry.user}"
+        if entry.assistant is not None and entry.assistant.strip():
+            content += f"\nAurora：{entry.assistant.strip()}"
+        if self._available and not self.add(content):
+            with self._connect() as connection:
+                connection.execute("DELETE FROM completed_tasks WHERE task_id = ?", (entry.task_id,))
+            return False
+        return True
 
     def search(self, query: str, user_id: str | None = None, limit: int = 8) -> list[str]:
         """语义搜索记忆库，返回匹配文本列表。"""
@@ -81,11 +104,10 @@ class MemoryService:
         client = self._mem0
         if client is None:
             return []
-        uid = user_id or self._user_id
         try:
-            hits = client.search(query, filters={"user_id": uid})
-        except Exception as exc:
-            logger.warning("mem0 search failed: %s", exc)
+            hits = client.search(query, filters={"user_id": user_id or self._user_id})
+        except Exception as error:
+            logger.warning("mem0 search failed: %s", error)
             return []
         if isinstance(hits, dict) and "results" in hits:
             results = [hit["memory"] for hit in hits["results"] if isinstance(hit, dict) and "memory" in hit]
@@ -93,125 +115,41 @@ class MemoryService:
         return []
 
     def add(self, content: str, user_id: str | None = None) -> bool:
-        """向记忆库添加一条新记忆（由工具委派写入）。"""
+        """向语义记忆库添加一条新记忆。"""
         if not self._available or not content.strip():
             return False
         client = self._mem0
         if client is None:
             return False
-        uid = user_id or self._user_id
         try:
-            client.add([{"role": "user", "content": content}], user_id=uid)
-        except Exception as exc:
-            logger.warning("mem0 add failed: %s", exc)
+            client.add([{"role": "user", "content": content}], user_id=user_id or self._user_id)
+        except Exception as error:
+            logger.warning("mem0 add failed: %s", error)
             return False
-        else:
-            logger.debug("Added to memory: %s...", content[:60])
-            return True
+        logger.debug("Added to memory: %s...", content[:60])
+        return True
 
-    def recall_recent_events(self, limit: int = 10) -> list[dict[str, str]]:
-        """从因果事件表中召回最近的事件记录。"""
-        if not self._db_path.exists():
-            return []
-        conn = None
-        try:
-            conn = sqlite3.connect(str(self._db_path))
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT type, summary, created_at FROM causal_events ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-            return [{"type": row["type"], "summary": row["summary"], "created_at": row["created_at"]} for row in rows]
-        except Exception:
-            logger.warning("recall_recent_events failed")
-            return []
-        finally:
-            if conn is not None:
-                conn.close()
+    def _connect(self) -> sqlite3.Connection:
+        """打开记忆私有账本并确保 schema 已初始化。"""
+        assert self._ledger_path is not None
+        connection = sqlite3.connect(str(self._ledger_path))
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS completed_tasks("
+            "task_id TEXT PRIMARY KEY, user_text TEXT NOT NULL, assistant_text TEXT, created_at TEXT NOT NULL)"
+        )
+        return connection
 
-    def recall_conversation(self, limit: int = 8) -> list[dict[str, str | None]]:
-        """从因果事件表中重建最近对话（用户消息→Aurora 回复）。"""
-        if not self._db_path.exists():
-            return []
-        conn = None
+    def _recent_conversation(self, limit: int) -> tuple[MemoryConversation, ...]:
+        """从记忆私有账本读取最近的已完成对话。"""
+        if self._ledger_path is None or not self._ledger_path.exists():
+            return ()
         try:
-            conn = sqlite3.connect(str(self._db_path))
-            conn.row_factory = sqlite3.Row
-            # 先获取最近启动的 Task（排除自主心跳）
-            started = {
-                row["task_id"]: row["summary"]
-                for row in conn.execute(
-                    "SELECT task_id, summary FROM causal_events "
-                    "WHERE type = 'task.started' AND summary != 'system.tick' "
-                    "ORDER BY created_at DESC LIMIT ?",
-                    (limit * 2,),
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT user_text, assistant_text FROM completed_tasks ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
                 ).fetchall()
-            }
-            if not started:
-                return []
-            placeholders = ",".join("?" for _ in started)
-            rows = conn.execute(
-                f"SELECT task_id, summary FROM causal_events "
-                f"WHERE type = 'agent.complete' AND task_id IN ({placeholders}) "
-                f"ORDER BY created_at ASC",
-                tuple(started.keys()),
-            ).fetchall()
-            completed: dict[str, str] = {}
-            for row in rows:
-                summary = row["summary"]
-                if isinstance(summary, str) and summary.strip():
-                    completed[row["task_id"]] = summary
-            # 按时间倒序组装对话轮次
-            conversation: list[dict[str, str | None]] = []
-            for task_id, user_msg in started.items():
-                turn: dict[str, str | None] = {"user": user_msg}
-                turn["bot"] = completed.get(task_id)
-                conversation.append(turn)
-            conversation.reverse()
-            return conversation[-limit:]
-        except Exception:
-            logger.warning("recall_conversation failed")
-            return []
-        finally:
-            if conn is not None:
-                conn.close()
-
-    def auto_remember_completed_tasks(self) -> int:
-        """从因果事件表中自动提取最近完成的交互并写入记忆，返回已记忆条数。"""
-        if not self._available or not self._db_path.exists():
-            return 0
-        conn = None
-        try:
-            conn = sqlite3.connect(str(self._db_path))
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT e1.task_id, e1.summary AS user_msg, e2.summary AS bot_msg "
-                "FROM causal_events e1 "
-                "LEFT JOIN causal_events e2 ON e1.task_id = e2.task_id AND e2.type = 'agent.complete' "
-                "WHERE e1.type = 'task.started' AND e1.summary != 'system.tick' "
-                "ORDER BY e1.created_at DESC LIMIT 6"
-            ).fetchall()
-        except Exception:
-            logger.warning("auto_remember_completed_tasks query failed")
-            return 0
-        finally:
-            if conn is not None:
-                conn.close()
-        remembered = 0
-        for row in rows:
-            user_msg = row["user_msg"]
-            bot_msg = row["bot_msg"]
-            if not isinstance(user_msg, str) or not user_msg.strip():
-                continue
-            content = f"用户：{user_msg}"
-            if isinstance(bot_msg, str) and bot_msg.strip():
-                stripped = bot_msg.strip()
-                # 跳过纯结构化工具操作摘要
-                if stripped.startswith("{") and '"operation"' in stripped:
-                    continue
-                content += f"\nAurora：{stripped}"
-            if self.add(content):
-                remembered += 1
-        if remembered:
-            logger.debug("auto-remembered %d completed tasks", remembered)
-        return remembered
+        except sqlite3.Error as error:
+            logger.warning("memory conversation recall failed: %s", error)
+            return ()
+        return tuple(MemoryConversation(str(user), assistant) for user, assistant in reversed(rows))

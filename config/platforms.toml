@@ -16,10 +16,6 @@ open_browser = false
 host = "127.0.0.1"
 # HTTP 端口（1–65535）
 port = 8000
-# 聊天持久化 SQLite 路径（相对于项目根）
-database_path = "data/platform/dashboard/chat.sqlite3"
-# 附件上传目录（相对于项目根）
-upload_dir = "data/platform/dashboard/uploads"
 # 上传文件最大字节数
 max_upload_bytes = 67108864
 # 会话超时（秒）

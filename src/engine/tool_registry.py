@@ -1,11 +1,11 @@
-"""路由统一 Kernel 工具租约并发出确定性三态回执。"""
+"""路由 engine 工具租约并发出确定性三态回执。"""
 
 from __future__ import annotations
 
 import asyncio
 
 from src.contracts.agent import CapabilityCatalogSnapshot, ToolLease
-from src.localhost.ports import (
+from src.contracts.tool import (
     ToolCompletionPort,
     ToolExecutionRequest,
     ToolExecutorBinding,
@@ -22,8 +22,8 @@ _ALREADY_BOUND = "Tool executors are already bound"
 _NOT_BOUND = "Tool executors have not been bound"
 
 
-class ToolDispatcher:
-    """工具调度器：将 Kernel 工具租约分派给已绑定的执行器并回写完成状态。
+class ToolRegistry:
+    """工具注册表：将 engine 工具租约分派给已绑定的执行器并回写完成状态。
 
     支持首次派发与恢复两种模式，对无匹配执行器的请求返回确定性失败/未知回执。
     """
@@ -54,7 +54,7 @@ class ToolDispatcher:
         self._bindings = dict(sorted(by_capability.items()))
         return self.capability_catalog
 
-    async def recover_processing_tools(self) -> int:
+    async def recover_pending(self) -> int:
         """恢复所有"处理中"状态的工具请求，返回恢复数量。"""
         if self._bindings is None:
             raise ToolBindingError(_NOT_BOUND)
@@ -62,7 +62,7 @@ class ToolDispatcher:
         await self._dispatch_many(leases, recovery=True)
         return len(leases)
 
-    async def dispatch_pending_tools(self) -> int:
+    async def execute_pending(self) -> int:
         """派发所有"待处理"的工具请求，返回派发数量。"""
         if self._bindings is None:
             raise ToolBindingError(_NOT_BOUND)
@@ -87,7 +87,7 @@ class ToolDispatcher:
         if binding is None:
             status = "unknown" if recovery else "failed"
             outcome = ToolOutcome(status, f"No active executor for {lease.capability}", error="Tool unavailable")
-            source_app, source_instance = "localhost.tool_dispatcher", "unavailable"
+            source_app, source_instance = "engine.tool_registry", "unavailable"
         elif recovery and binding.recovery is None:
             outcome = ToolOutcome("unknown", f"Tool result unknown: {lease.capability}", error="recovery unsupported")
             source_app, source_instance = binding.source_app, binding.source_instance

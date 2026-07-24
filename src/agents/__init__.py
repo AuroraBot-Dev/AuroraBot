@@ -1,7 +1,4 @@
-"""RFC 0103 — 内建同构 Agent handler。
-
-AgentHandler 协议、ToolAgent / MemoryAgent、Capability 注册与 dispatch。
-"""
+"""RFC 0200 定义的同构 Agent handler 与主动能力。"""
 
 from src.agents.tool_agent import ToolAgent
 

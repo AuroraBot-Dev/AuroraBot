@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from src.localhost.command_types import CommandContext, CommandResult
+from src.contracts.event import CommandContext, CommandResult
 
 CommandHandler = Callable[[CommandContext, argparse.Namespace], Awaitable[CommandResult]]
 CommandConfigurator = Callable[[argparse.ArgumentParser], None]

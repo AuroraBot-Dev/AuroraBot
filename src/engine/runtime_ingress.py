@@ -16,21 +16,21 @@ from src.utils.serialization import read_json
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.agent import AgentLimits, AgentProfile, CapabilityCatalogSnapshot, KernelConfiguration
-    from src.kernel.store import SQLiteRuntimeStore
+    from src.contracts.agent import AgentLimits, AgentProfile, CapabilityCatalogSnapshot, EngineConfiguration
+    from src.engine.store import SQLiteRuntimeStore
 
-logger = get_logger("aurora.kernel")
+logger = get_logger("aurora.engine")
 _RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runtime use"
 
 
-class IngressKernel(Protocol):
-    """入口处理所需的内核结构协议。
+class IngressRuntime(Protocol):
+    """入口处理所需的 engine 结构协议。
 
     定义 ingest_ready 所需的最小内核接口，
-    避免对 AgentKernel 的循环导入。
+    避免对 EngineState 的循环导入。
     """
 
-    configuration: KernelConfiguration
+    configuration: EngineConfiguration
     store: SQLiteRuntimeStore
     _inbox: Path
     _archive: Path
@@ -44,7 +44,7 @@ class IngressKernel(Protocol):
     def capability_catalog(self) -> CapabilityCatalogSnapshot: ...
 
 
-def ingest_ready(kernel: IngressKernel) -> tuple[str, ...]:
+def ingest_ready(kernel: IngressRuntime) -> tuple[str, ...]:
     """领取所有就绪的 AMP 输入。
 
     先处理内存队列中的 AMP，再扫描 inbox 目录中的 JSON 文件。
@@ -72,7 +72,7 @@ def ingest_ready(kernel: IngressKernel) -> tuple[str, ...]:
     return tuple(ingested)
 
 
-def _ingest_amp(kernel: IngressKernel, amp: AmpEnvelope, ingested: list[str]) -> None:
+def _ingest_amp(kernel: IngressRuntime, amp: AmpEnvelope, ingested: list[str]) -> None:
     """核心 AMP 摄入逻辑：创建 Task 或记录环境情境。无文件系统副作用。
 
     工具回执事件（tool.*）被保留供内部使用，外部不可直接发送。
@@ -108,7 +108,7 @@ def _ingest_amp(kernel: IngressKernel, amp: AmpEnvelope, ingested: list[str]) ->
         ingested.append(task.task_id)
 
 
-def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
+def _ingest_amp_file(kernel: IngressRuntime, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
     """文件系统路径的 AMP 摄入，含归档逻辑。摄入成功或重复后移动原文件。"""
     before = len(ingested)
     _ingest_amp(kernel, amp, ingested)
@@ -118,7 +118,7 @@ def _ingest_amp_file(kernel: IngressKernel, amp: AmpEnvelope, path: Path, ingest
         _archive_inbox(kernel, path, "duplicate")
 
 
-def _archive_inbox(kernel: IngressKernel, source: Path, category: str) -> None:
+def _archive_inbox(kernel: IngressRuntime, source: Path, category: str) -> None:
     """将已处理的 inbox 文件移动到对应归档目录。如遇冲突追加随机后缀。"""
     destination_dir = kernel._archive / "inbox" / category
     destination_dir.mkdir(parents=True, exist_ok=True)

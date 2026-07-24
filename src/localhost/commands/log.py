@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 from src.utils.logging import configure_console_logging, console_logging_status
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/log",)
 USAGE = "/log [on|off] [--level <debug|info|warning|error|critical>]"

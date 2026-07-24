@@ -21,7 +21,7 @@ from src.contracts.agent import (
     MessageStatus,
     TaskStatus,
 )
-from src.kernel.commands import (
+from src.engine.commands import (
     CompleteCommand,
     DelegateCommand,
     FailCommand,
@@ -29,7 +29,7 @@ from src.kernel.commands import (
     ToolCommand,
     WaitCommand,
 )
-from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
+from src.engine.store_base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreDecisionsMixin(RuntimeStoreBase):

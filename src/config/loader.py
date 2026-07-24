@@ -23,10 +23,12 @@ from src.contracts.configuration import (
     AuroraConfig,
     ConfigurationError,
     ConfigurationSource,
+    EngineConfig,
     ModelLoggingConfig,
     ModelProviderConfig,
     ModelRoleConfig,
     RuntimeConfig,
+    StorageConfig,
     _require_keys,
     _string,
 )
@@ -67,6 +69,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     # 加载运行时配置
     runtime_data, runtime_source = _read_toml_snapshot(config_dir / "runtime.toml")
     sources.append(runtime_source)
+    _require_keys(runtime_data, {"runtime"}, "runtime.toml")
     runtime_raw = runtime_data.get("runtime", {})
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError("runtime must be a table")
@@ -77,39 +80,39 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         raise ConfigurationError("no profile selected")
 
     # 合并profile覆盖
-    merged_runtime = runtime_data
     profile_path = config_dir / "profiles" / f"{selected_profile}.toml"
-    if profile_path.exists():
-        profile_data, profile_source = _read_toml_snapshot(profile_path)
-        allowed_profile_keys = {"runtime"}
-        unexpected_keys = set(profile_data) - allowed_profile_keys
-        if unexpected_keys:
-            raise ConfigurationError(f"profile has unexpected keys: {sorted(unexpected_keys)}")
-        merged_runtime = _merge(runtime_data, profile_data)
-        sources.append(profile_source)
+    if not profile_path.exists():
+        raise ConfigurationError(f"profile does not exist: {selected_profile}")
+    profile_data, profile_source = _read_toml_snapshot(profile_path)
+    _require_keys(profile_data, {"runtime"}, "profile")
+    merged_runtime = _merge(runtime_data, profile_data)
+    sources.append(profile_source)
 
     runtime_raw = merged_runtime.get("runtime", {})
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError("runtime must be a table")
 
     # 验证运行时配置
-    runtime_allowed = {
-        "profile",
-        "workspace",
-        "debug_host",
-        "debug_port",
-        "autonomy",
-        "agents",
-        "interactive_task",
-        "autonomous_task",
-    }
-    required_runtime = {"profile", "workspace", "debug_host", "debug_port"}
+    runtime_allowed = {"profile", "debug_host", "debug_port"}
+    required_runtime = set(runtime_allowed)
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
         raise ConfigurationError("runtime has unsupported or missing keys")
+
+    # 加载 engine 配置，profile 不得覆盖此文件
+    engine_data, engine_source = _read_toml_snapshot(config_dir / "engine.toml")
+    sources.append(engine_source)
+    _require_keys(engine_data, {"engine"}, "engine.toml")
+    engine_raw = engine_data.get("engine", {})
+    if not isinstance(engine_raw, dict):
+        raise ConfigurationError("engine must be a table")
+    engine_allowed = {"workspace", "autonomy", "agents", "interactive_task", "autonomous_task"}
+    if set(engine_raw) != engine_allowed:
+        raise ConfigurationError("engine has unsupported or missing keys")
 
     # 加载平台配置
     platforms_data, platforms_source = _read_toml_snapshot(config_dir / "platforms.toml")
     sources.append(platforms_source)
+    _require_keys(platforms_data, {"platform"}, "platforms.toml")
     platform_raw = platforms_data.get("platform")
     if not isinstance(platform_raw, dict):
         raise ConfigurationError("platforms.toml must contain a [platform] table")
@@ -121,20 +124,55 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     # 加载模型配置
     models_data, models_source = _read_toml_snapshot(config_dir / "models.toml")
     sources.append(models_source)
+    _require_keys(models_data, {"models"}, "models.toml")
     models_raw = models_data.get("models", {})
     if not isinstance(models_raw, dict):
         raise ConfigurationError("models must be a table")
     _require_keys(models_raw, {"roles", "providers", "logging"}, "models")
 
-    # 加载日志和存储配置
+    # 加载日志与存储配置
     logging_data, logging_source = _read_toml_snapshot(config_dir / "logging.toml")
-    sources.append(logging_source)
+    storage_data, storage_source = _read_toml_snapshot(config_dir / "storage.toml")
+    sources.extend((logging_source, storage_source))
     logging_raw = logging_data.get("logging", {})
-    storage_raw = logging_data.get("storage", {})
+    storage_raw = storage_data.get("storage", {})
+    _require_keys(logging_data, {"logging"}, "logging.toml")
+    _require_keys(storage_data, {"storage"}, "storage.toml")
     if not isinstance(logging_raw, dict) or not isinstance(storage_raw, dict):
         raise ConfigurationError("logging and storage must be tables")
-    _require_keys(logging_raw, {"level"}, "logging")
-    _require_keys(storage_raw, {"data_dir"}, "storage")
+    _require_keys(logging_raw, {"level", "log_dir"}, "logging")
+    _require_keys(storage_raw, {"data_root", "engine", "ai", "memory", "apps", "platform"}, "storage")
+    storage_platform_raw = storage_raw["platform"]
+    if not isinstance(storage_platform_raw, dict):
+        raise ConfigurationError("storage.platform must be a table")
+    _require_keys(storage_platform_raw, {"console", "dashboard"}, "storage.platform")
+
+    def storage_path(raw: object, label: str, *, parent: Path) -> Path:
+        path = (parent / _string(raw, label)).resolve()
+        if not path.is_relative_to(parent.resolve()):
+            raise ConfigurationError(f"{label} must stay within its parent storage directory")
+        return path
+
+    data_root = storage_path(storage_raw["data_root"], "storage.data_root", parent=root)
+    engine_dir = storage_path(storage_raw["engine"], "storage.engine", parent=data_root)
+    ai_dir = storage_path(storage_raw["ai"], "storage.ai", parent=data_root)
+    memory_dir = storage_path(storage_raw["memory"], "storage.memory", parent=data_root)
+    apps_dir = storage_path(storage_raw["apps"], "storage.apps", parent=data_root)
+    console_storage = storage_platform_raw["console"]
+    dashboard_storage = storage_platform_raw["dashboard"]
+    if not isinstance(console_storage, dict) or not isinstance(dashboard_storage, dict):
+        raise ConfigurationError("storage platform entries must be tables")
+    _require_keys(console_storage, {"data_dir"}, "storage.platform.console")
+    _require_keys(dashboard_storage, {"data_dir"}, "storage.platform.dashboard")
+    console_dir = storage_path(console_storage["data_dir"], "storage.platform.console.data_dir", parent=data_root)
+    dashboard_dir = storage_path(dashboard_storage["data_dir"], "storage.platform.dashboard.data_dir", parent=data_root)
+    package_directories = (engine_dir, ai_dir, memory_dir, apps_dir, console_dir, dashboard_dir)
+    for index, directory in enumerate(package_directories):
+        if any(
+            directory == other or directory.is_relative_to(other) or other.is_relative_to(directory)
+            for other in package_directories[index + 1 :]
+        ):
+            raise ConfigurationError("package storage directories must not overlap")
 
     # 解析模型配置
     roles = models_raw["roles"]
@@ -203,12 +241,12 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     apps = _parse_apps(apps_data["app"], root)
 
     # 解析运行时子配置
-    autonomy_raw = runtime_raw.get("autonomy", {})
-    agents_raw = runtime_raw.get("agents", {})
-    interactive_raw = runtime_raw.get("interactive_task", {})
-    autonomous_raw = runtime_raw.get("autonomous_task", {})
+    autonomy_raw = engine_raw.get("autonomy", {})
+    agents_raw = engine_raw.get("agents", {})
+    interactive_raw = engine_raw.get("interactive_task", {})
+    autonomous_raw = engine_raw.get("autonomous_task", {})
     if not all(isinstance(item, dict) for item in (autonomy_raw, agents_raw, interactive_raw, autonomous_raw)):
-        raise ConfigurationError("runtime autonomy, Agents and Task budgets must be tables")
+        raise ConfigurationError("engine autonomy, Agents and Task budgets must be tables")
 
     # 验证调试端口和主机
     debug_port = runtime_raw["debug_port"]
@@ -222,39 +260,46 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     autonomy = _parse_autonomy(autonomy_raw)
     agent_runtime = _parse_agent_runtime(agents_raw)
     if agent_runtime.root_profile not in {agent.id for agent in agents}:
-        raise ConfigurationError("runtime.agents.root_profile is not configured")
+        raise ConfigurationError("engine.agents.root_profile is not configured")
     if agent_runtime.worker_profile not in {agent.id for agent in agents}:
-        raise ConfigurationError("runtime.agents.worker_profile is not configured")
-    if agent_runtime.memory_agent_profile is not None and agent_runtime.memory_agent_profile not in {
-        agent.id for agent in agents
-    }:
-        raise ConfigurationError("runtime.agents.memory_agent_profile is not configured")
+        raise ConfigurationError("engine.agents.worker_profile is not configured")
     interactive_budget = _parse_task_budget(interactive_raw, 8, 6, 300.0, "interactive_task")
     autonomous_budget = _parse_task_budget(autonomous_raw, 3, 2, 120.0, "autonomous_task")
 
     # 验证工作区
-    workspace = (root / _string(runtime_raw["workspace"], "runtime.workspace")).resolve()
-    expected_workspace = (root / "data" / "kernel").resolve()
+    workspace = (root / _string(engine_raw["workspace"], "engine.workspace")).resolve()
+    expected_workspace = engine_dir
     if workspace != expected_workspace:
-        raise ConfigurationError("runtime.workspace must be data/kernel")
+        raise ConfigurationError("engine.workspace must match storage.engine")
 
     return AuroraConfig(
         root=root,
         sources=tuple(sources),
         runtime=RuntimeConfig(
             profile=selected_profile,
-            workspace=workspace,
             debug_host=debug_host,
             debug_port=debug_port,
+        ),
+        engine=EngineConfig(
+            workspace=workspace,
             autonomy=autonomy,
             agents=agent_runtime,
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,
         ),
-        dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), root),
+        dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), dashboard_dir, engine_dir),
         preference=preference,
         logging_level=_string(logging_raw["level"], "logging.level"),
-        storage_data_dir=(root / _string(storage_raw["data_dir"], "storage.data_dir")).resolve(),
+        logging_dir=storage_path(logging_raw["log_dir"], "logging.log_dir", parent=root),
+        storage=StorageConfig(
+            data_root=data_root,
+            engine=engine_dir,
+            ai=ai_dir,
+            memory=memory_dir,
+            apps=apps_dir,
+            console=console_dir,
+            dashboard=dashboard_dir,
+        ),
         agents=agents,
         model_roles=frozenset(roles),
         model_definitions=MappingProxyType(model_definitions),

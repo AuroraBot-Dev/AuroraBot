@@ -80,27 +80,28 @@ def _positive_number(value: object, label: str) -> float:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
-    """运行时配置：profile、工作区、调试、自主、Agent 限制和预算。
+    """进程运行时配置：profile 与调试服务地址。
 
     RuntimeConfig object::
 
         {
             "profile": "string",
-            "workspace": "/path/to/workspace",
             "debug_host": "string",
-            "debug_port": 0,
-            "autonomy": AutonomyConfig,
-            "agents": AgentLimits,
-            "interactive_budget": TaskBudget,
-            "autonomous_budget": TaskBudget
+            "debug_port": 0
         }
 
     """
 
     profile: str
-    workspace: Path
     debug_host: str
     debug_port: int
+
+
+@dataclass(frozen=True, slots=True)
+class EngineConfig:
+    """engine 工作区、调度限制、节律与 Task 预算。"""
+
+    workspace: Path
     autonomy: "AutonomyConfig"
     agents: "AgentLimits"
     interactive_budget: "TaskBudget"
@@ -117,9 +118,7 @@ class AutonomyConfig:
             "scan_seconds": 1.0,
             "heartbeat_initial_seconds": 30.0,
             "heartbeat_min_seconds": 30.0,
-            "heartbeat_max_seconds": 1800.0,
-            "autonomous_daily_model_calls": 24,
-            "autonomous_daily_tokens": 100000
+            "heartbeat_max_seconds": 1800.0
         }
 
     """
@@ -128,8 +127,6 @@ class AutonomyConfig:
     heartbeat_initial_seconds: float = 30.0
     heartbeat_min_seconds: float = 30.0
     heartbeat_max_seconds: float = 1800.0
-    autonomous_daily_model_calls: int = 24
-    autonomous_daily_tokens: int = 100_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,6 +340,19 @@ PLATFORM_NAMES: frozenset[str] = frozenset(f.name for f in fields(PlatformPrefer
 
 
 @dataclass(frozen=True, slots=True)
+class StorageConfig:
+    """各实现包的私有持久化目录。"""
+
+    data_root: Path
+    engine: Path
+    ai: Path
+    memory: Path
+    apps: Path
+    console: Path
+    dashboard: Path
+
+
+@dataclass(frozen=True, slots=True)
 class AuroraConfig:
     """聚合所有 TOML 配置的根配置对象。
 
@@ -352,10 +362,11 @@ class AuroraConfig:
             "root": "/path/to/root",
             "sources": [ConfigurationSource, ...],
             "runtime": RuntimeConfig,
+            "engine": EngineConfig,
             "dashboard": DashboardConfig,
             "preference": PlatformPreference,
             "logging_level": "string",
-            "storage_data_dir": "/path/to/data",
+            "storage": StorageConfig,
             "agents": [AgentProfile, ...],
             "model_roles": ["string", ...],
             "model_definitions": {"role": ModelRoleConfig, ...},
@@ -369,10 +380,12 @@ class AuroraConfig:
     root: Path
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
+    engine: EngineConfig
     dashboard: DashboardConfig
     preference: PlatformPreference
     logging_level: str
-    storage_data_dir: Path
+    logging_dir: Path
+    storage: StorageConfig
     agents: "tuple[AgentProfile, ...]"
     model_roles: frozenset[str]
     model_definitions: Mapping[str, ModelRoleConfig] = MappingProxyType({})

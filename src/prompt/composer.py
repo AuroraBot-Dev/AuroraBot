@@ -23,9 +23,8 @@ class MissingAgentPromptError(ValueError):
 class PromptComposer:
     """提示词装配的唯一边界——将目录文本和 Agent 上下文组合为模型输入。"""
 
-    def __init__(self, catalog: PromptCatalog, memory: Any = None) -> None:
+    def __init__(self, catalog: PromptCatalog) -> None:
         self._catalog = catalog
-        self._memory = memory
 
     @property
     def catalog(self) -> PromptCatalog:
@@ -58,13 +57,10 @@ class PromptComposer:
         situations = _situations(context)
         if situations:
             user.append(PromptSection("situations", situations))
-        recent = _recall_recent_events(self._memory)
-        if recent:
-            user.append(PromptSection("recent_events", recent))
-        conversation = _recall_conversation(self._memory)
+        conversation = _recall_conversation(context)
         if conversation:
             user.append(PromptSection("recent_conversation", conversation))
-        recalled = _recall_semantic_facts(self._memory, context)
+        recalled = _recall_semantic_facts(context)
         if recalled:
             user.append(PromptSection("related_memories", recalled))
         tools = _tool_hints(context.capabilities)
@@ -177,45 +173,25 @@ def _external(value: object) -> str:
     return f'<external-data encoding="json">\n{encoded}\n</external-data>'
 
 
-def _recall_recent_events(memory: Any) -> str:
-    """从记忆服务中召回最近的事件列表。"""
-    if memory is None or not getattr(memory, "available", False):
-        return ""
-    events = memory.recall_recent_events(limit=10)
-    if not events:
-        return ""
-    lines = [f"- [{event['created_at']}] {event['type']}: {event['summary']}" for event in events]
-    return "[ 最近事件 ]\n" + "\n".join(lines)
-
-
-def _recall_semantic_facts(memory: Any, context: AgentContext) -> str:
-    """基于当前 Task 的 root_summary 进行语义搜索召回记忆。"""
-    if memory is None or not getattr(memory, "available", False):
-        return ""
-    query = context.task.root_summary
-    if not query.strip():
-        return ""
-    facts = memory.search(query, limit=5)
+def _recall_semantic_facts(context: AgentContext) -> str:
+    """渲染 engine 已召回的语义记忆。"""
+    facts = context.memory.related_memories
     if not facts:
         return ""
     return f"[ 相关记忆 ]\n{_external(facts)}"
 
 
-def _recall_conversation(memory: Any) -> str:
-    """从记忆服务中召回最近的对话历史（用户↔Aurora 轮次）。"""
-    if memory is None or not getattr(memory, "available", False):
-        return ""
-    turns = memory.recall_conversation(limit=8)
+def _recall_conversation(context: AgentContext) -> str:
+    """渲染 engine 已召回的最近对话。"""
+    turns = context.memory.recent_conversation
     if not turns:
         return ""
     lines: list[str] = []
     for turn in turns:
-        user_msg = turn.get("user", "")
-        bot_msg = turn.get("bot")
-        if isinstance(user_msg, str) and user_msg.strip():
-            lines.append(f"用户：{user_msg}")
-        if isinstance(bot_msg, str) and bot_msg.strip():
-            lines.append(f"Aurora：{bot_msg}")
+        if turn.user.strip():
+            lines.append(f"用户：{turn.user}")
+        if turn.assistant is not None and turn.assistant.strip():
+            lines.append(f"Aurora：{turn.assistant}")
     if not lines:
         return ""
     return "[ 最近对话 ]\n" + "\n".join(lines)

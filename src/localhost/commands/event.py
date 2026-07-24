@@ -6,12 +6,12 @@ import json
 from typing import TYPE_CHECKING
 
 from src.contracts.amp import new_amp
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/event", "/e")
 USAGE = "/event <type> [--source APP] [--session ID] [--summary TEXT] [--data JSON]"
@@ -28,7 +28,7 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
-    """构建并提交自定义 AMP 事件到运行时的 Kernel 邮箱。"""
+    """构建并提交自定义 AMP 事件到 engine 邮箱。"""
     try:
         data = json.loads(arguments.data)
     except json.JSONDecodeError as error:

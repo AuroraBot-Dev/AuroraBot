@@ -88,7 +88,9 @@ uv run --no-dev --env-file .env aurora --headless
 | 想改变什么                   | 从哪里开始               |
 | ---------------------------- | ------------------------ |
 | SOUL、世界说明与 Agent 提示词 | `config/prompts.toml`    |
-| 模型角色与 Provider          | `config/aurora.toml`     |
+| 模型角色与 Provider          | `config/models.toml`     |
+| engine 限制与 Task 预算      | `config/engine.toml`     |
+| 持久化目录                   | `config/storage.toml`    |
 | 默认启动的平台               | `config/platforms.toml`  |
 | Agent 的模型、能力与委派范围 | `config/agents.toml`     |
 | 本地或远程 MCP 应用          | `config/apps.toml`       |

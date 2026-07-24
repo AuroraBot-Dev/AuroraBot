@@ -87,7 +87,9 @@ Dashboard の browser UI は別プロジェクトで、本リポジトリには�
 | 変更したいもの                         | 最初に見る場所           |
 | -------------------------------------- | ------------------------ |
 | SOUL、世界、Agent prompt fragment       | `config/prompts.toml`    |
-| model role と Provider                 | `config/aurora.toml`     |
+| model role と Provider                 | `config/models.toml`     |
+| engine 制限と Task budget              | `config/engine.toml`     |
+| 永続化 storage path                    | `config/storage.toml`    |
 | 既定で起動する Platform                | `config/platforms.toml` |
 | Agent の model、能力、委任範囲         | `config/agents.toml`     |
 | ローカルまたはリモート MCP application | `config/apps.toml`       |

@@ -1,5 +1,5 @@
 # 开发环境覆盖项。
-# 本文件只覆盖 runtime.toml 中的配置。
+# 本文件只覆盖 runtime.toml 中的进程配置。
 # 日志级别通过 config/logging.toml 配置，不在此文件覆盖。
 
 [runtime]

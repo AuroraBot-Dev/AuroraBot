@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from src.contracts.agent import AgentInstance, TaskState
-from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
+from src.engine.store_base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreQueriesMixin(RuntimeStoreBase):

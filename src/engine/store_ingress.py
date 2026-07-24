@@ -22,7 +22,7 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
-from src.kernel.store_base import RuntimeStoreBase, _json, utc_now
+from src.engine.store_base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreIngressMixin(RuntimeStoreBase):

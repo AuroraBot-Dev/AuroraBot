@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     import argparse
 
 NAME = "check"
-_PATHS = ["aurora/", "src/"]  # tests/
+_PATHS = ["aurora/", "src/", "tests/"]
 
 
 def register(subparsers: Any) -> None:
@@ -33,18 +33,18 @@ def execute(arguments: argparse.Namespace) -> int:
     # 运行 lint 检查
     if run_lint:
         flags_check = []
-        flags_format = []
+        flags_format = [] if arguments.fix else ["--check"]
         if arguments.fix:
             flags_check.append("--fix")
         if arguments.unsafe_fixes:
             flags_check.append("--unsafe-fixes")
-        if arguments.check:
+        if arguments.check and "--check" not in flags_format:
             flags_format.append("--check")
         commands.extend(
             (
                 ["uv", "run", "--no-sync", "ruff", "check", *flags_check, *_PATHS],
                 ["uv", "run", "--no-sync", "ruff", "format", *flags_format, *_PATHS],
-                ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
+                ["uv", "run", "--no-sync", "pyright", *_PATHS],
             )
         )
 

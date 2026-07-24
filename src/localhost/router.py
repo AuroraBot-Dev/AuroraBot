@@ -6,11 +6,11 @@ import argparse
 import shlex
 from typing import TYPE_CHECKING, NoReturn
 
-from src.localhost.command_types import CommandContext, CommandResult, RuntimeInput
+from src.contracts.event import CommandContext, CommandResult, RuntimeInput
 from src.localhost.registry import ConsoleCommand, command_specs
 
 if TYPE_CHECKING:
-    from src.localhost.command_types import RuntimeCommandPort
+    from src.contracts.event import RuntimeCommandPort
 
 
 class CommandParseError(ValueError):

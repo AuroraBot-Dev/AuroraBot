@@ -7,6 +7,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from src.contracts.memory import MemoryContextSnapshot
+
 if TYPE_CHECKING:
     from src.contracts.model import ModelContinuation, ToolCall, ToolDefinition
 
@@ -138,7 +140,6 @@ class AgentLimits:
         {
             "root_profile": "builtin.root",
             "worker_profile": "builtin.worker",
-            "memory_agent_profile": "string" | null,
             "max_active_agents": 16,
             "max_agents_per_task": 8,
             "max_depth": 3,
@@ -155,7 +156,6 @@ class AgentLimits:
 
     root_profile: str = "builtin.root"
     worker_profile: str = "builtin.worker"
-    memory_agent_profile: str | None = None
     max_active_agents: int = 16
     max_agents_per_task: int = 8
     max_depth: int = 3
@@ -194,10 +194,10 @@ class AgentProfile:
 
 
 @dataclass(frozen=True, slots=True)
-class KernelConfiguration:
-    """Kernel 启动配置：工作区、Agent 档案、限制和预算。
+class EngineConfiguration:
+    """engine 启动配置：工作区、Agent 档案、限制和预算。
 
-    KernelConfiguration object::
+    EngineConfiguration object::
 
         {
             "workspace": "/path/to/workspace",
@@ -216,7 +216,7 @@ class KernelConfiguration:
     autonomous_budget: TaskBudget
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class TaskState:
     """Task 的持久化运行状态。
 
@@ -267,7 +267,7 @@ class TaskState:
         return asdict(self)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentInstance:
     """Agent 实例的持久化状态，包括层级深度、分配和当前摘要。
 
@@ -590,6 +590,7 @@ class AgentContext:
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
     brain: BrainContextSnapshot
+    memory: MemoryContextSnapshot = field(default_factory=MemoryContextSnapshot)
 
 
 class AgentHandler(Protocol):

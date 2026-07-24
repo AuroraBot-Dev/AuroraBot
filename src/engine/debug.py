@@ -33,7 +33,7 @@ def reject_active_legacy_workspace(process_directory: Path) -> None:
     if legacy:
         raise RuntimeError(
             "legacy Episode/Graph workspace contains active data; "
-            "select a clean runtime.workspace before starting: " + ", ".join(legacy)
+            "select a clean engine.workspace before starting: " + ", ".join(legacy)
         )
 
 

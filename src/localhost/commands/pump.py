@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/pump", "/p")
 USAGE = "/pump [1-100]"
@@ -23,6 +23,6 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
-    """执行指定轮次的 Kernel 泵取并返回结构化的执行结果。"""
+    """执行指定轮次的 engine 泵取并返回结构化结果。"""
     data = await context.runtime.pump(arguments.turns)
     return CommandResult(ok=True, text=json.dumps(data, ensure_ascii=False), data=data)

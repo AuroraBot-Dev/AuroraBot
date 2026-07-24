@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/status",)
 USAGE = "/status"
@@ -25,7 +25,7 @@ async def handle(context: CommandContext, _arguments: argparse.Namespace) -> Com
     """拼装 profile、workspace 与运行时状态快照并以 JSON 返回。"""
     data = {
         "profile": context.runtime.configuration.runtime.profile,
-        "workspace": str(context.runtime.configuration.runtime.workspace),
+        "workspace": str(context.runtime.configuration.engine.workspace),
         **context.runtime.status(),
     }
     return CommandResult(ok=True, text=json.dumps(data, ensure_ascii=False), data=data)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Protocol
 
 STRUCTURED_OUTPUT_NAME: Final = "aurora_result"
 
@@ -338,3 +338,9 @@ class ModelCapabilityError(ModelGatewayError):
 
 class ModelBudgetError(ModelGatewayError):
     """模型调用超出声明的成本预算。"""
+
+
+class ModelProvider(Protocol):
+    """engine 调用模型实现的标准端口。"""
+
+    async def complete(self, request: ModelRequest) -> ModelResult: ...

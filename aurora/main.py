@@ -28,7 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     """构建包含所有 Aurora 子命令的顶层参数解析器。"""
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置与数据根目录")
-    parser.add_argument("--profile", type=str, default="prod", help="配置运行档案")
+    parser.add_argument(
+        "--profile", type=str, default=None, help="配置运行档案；默认读取 AURORA_PROFILE 或 runtime.toml"
+    )
     parser.add_argument("--headless", action="store_true", help="不启用外部平台")
     for name in sorted(PLATFORM_NAMES):
         parser.add_argument(f"--{name}", action="store_true", help=f"启用 {name.capitalize()} 平台")

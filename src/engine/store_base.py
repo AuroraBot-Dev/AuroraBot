@@ -25,7 +25,7 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
-from src.kernel.store_schema import (
+from src.engine.store_schema import (
     _ACTIVE_ACTIVITY_INDEX,
     _ACTIVITIES_V5,
     _SCHEMA,

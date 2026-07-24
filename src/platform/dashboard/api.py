@@ -1,4 +1,4 @@
-"""Dashboard 聊天、Tool 执行与 localhost 调试端口的 FastAPI 适配器。"""
+"""Dashboard 聊天与 Tool 执行的 FastAPI 适配器。"""
 
 import asyncio
 from typing import Annotated, Any
@@ -8,9 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from src.contracts.amp import AmpValidationError
 from src.contracts.configuration import DashboardConfig
-from src.localhost.ports import DashboardControlPort, DashboardDebugPort
+from src.contracts.ports import DashboardControlPort
 from src.platform.dashboard.service import ChatError, ChatService
 
 
@@ -35,19 +34,17 @@ def _http_error(error: ChatError) -> HTTPException:
 def create_app(
     chat: ChatService,
     control: DashboardControlPort,
-    debug: DashboardDebugPort,
     configuration: DashboardConfig,
     *,
     profile: str,
 ) -> FastAPI:
     """创建配置完整的 Dashboard FastAPI 应用。
 
-    组装所有 REST 端点、WebSocket 端点、CORS 中间件和调试端口。
+    组装 Dashboard REST 端点、WebSocket 端点和 CORS 中间件。
 
     Args:
         chat: 聊天服务实例。
         control: Dashboard 控制端口。
-        debug: Dashboard 调试端口。
         configuration: Dashboard 配置。
         profile: 当前运行的 profile 名称。
 
@@ -230,47 +227,6 @@ def create_app(
             sender.cancel()
             await asyncio.gather(sender, return_exceptions=True)
             await chat.unsubscribe(user_id, queue)
-
-    @app.post("/v1/debug/amp", status_code=202)
-    async def submit_amp(value: dict[str, Any]) -> dict[str, str]:
-        """调试端点：直接提交 AMP 事件。"""
-        try:
-            return {"message_id": await debug.submit_amp(value)}
-        except AmpValidationError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-
-    @app.post("/v1/debug/pump")
-    async def pump(max_turns: int = 8) -> dict[str, Any]:
-        """调试端点：手动触发事件泵，最多执行指定轮次。"""
-        if not 1 <= max_turns <= 100:  # noqa: PLR2004 - 公共调试安全边界
-            raise HTTPException(status_code=422, detail="max_turns 必须在 1 到 100 之间")
-        return await debug.pump(max_turns)
-
-    @app.get("/v1/debug/status")
-    def get_status() -> dict[str, Any]:
-        """调试端点：获取运行时状态快照。"""
-        return debug.status()
-
-    @app.get("/v1/debug/tasks/{task_id}")
-    def get_task(task_id: str) -> dict[str, Any]:
-        """调试端点：按 ID 查询 Task 详情。"""
-        task = debug.task(task_id)
-        if task is None:
-            raise HTTPException(status_code=404, detail="Task 未找到")
-        return task
-
-    @app.get("/v1/debug/agents/{agent_id}")
-    def get_agent(agent_id: str) -> dict[str, Any]:
-        """调试端点：按 ID 查询 Agent 详情。"""
-        agent = debug.agent(agent_id)
-        if agent is None:
-            raise HTTPException(status_code=404, detail="Agent 未找到")
-        return agent
-
-    @app.get("/v1/debug/brain-context")
-    def get_brain_context() -> dict[str, Any]:
-        """调试端点：获取 Brain 上下文信息。"""
-        return debug.brain_context()
 
     return app
 
