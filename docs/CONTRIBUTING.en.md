@@ -57,7 +57,7 @@ A few boundaries make AuroraBot's actions reliable:
 - Platforms execute external effects and return outcomes as new events. Ordinary model text is not an effect.
 - Kernel owns events, state, mailboxes, Activities, and causal records, but not cognitive content.
 - Structural configuration remains in TOML, while secrets continue to come only from environment variables.
-- Shared logging uses `src.utils.log_utils.get_logger()` and excludes full prompts, continuations, and sensitive payloads.
+- Shared logging uses `src.utils.logging.get_logger()` and excludes full prompts, continuations, and sensitive payloads.
 
 See the root `AGENTS.md` for the complete maintainer boundaries.
 

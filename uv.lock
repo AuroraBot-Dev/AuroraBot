@@ -105,7 +105,6 @@ source = { editable = "." }
 dependencies = [
     { name = "botocore" },
     { name = "chromadb" },
-    { name = "concurrent-log-handler" },
     { name = "fastapi" },
     { name = "jsonschema" },
     { name = "litellm" },
@@ -133,7 +132,6 @@ dev = [
 requires-dist = [
     { name = "botocore", specifier = ">=1.43.12" },
     { name = "chromadb", specifier = ">=1.5.9" },
-    { name = "concurrent-log-handler", specifier = ">=0.9.29" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "litellm", specifier = ">=1.83.14" },
@@ -386,18 +384,6 @@ source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
-]
-
-[[package]]
-name = "concurrent-log-handler"
-version = "0.9.29"
-source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
-dependencies = [
-    { name = "portalocker" },
-]
-sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/9c/2c/ba185acc438cff6b58cd8f8dec27e7f4fcabf6968a1facbb6d0cacbde7fe/concurrent_log_handler-0.9.29.tar.gz", hash = "sha256:bc37a76d3f384cbf4a98f693ebd770543edc0f4cd5c6ab6bc70e9e1d7d582265", size = 42114, upload-time = "2026-02-22T18:18:25.758Z" }
-wheels = [
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/4a/f3/3e3188fdb3e53c6343fd1c7de41c55d4db626f07db3877eae77b28d58bd2/concurrent_log_handler-0.9.29-py3-none-any.whl", hash = "sha256:0d6c077fbaef2dae49a25975dcf72a602fe0a6a4ce80a3b7c37696d37e10459a", size = 32052, upload-time = "2026-02-22T18:18:24.558Z" },
 ]
 
 [[package]]

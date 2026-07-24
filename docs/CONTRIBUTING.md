@@ -54,7 +54,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 - 外部效果由 Platform 执行，并把 outcome 作为新事件送回运行时；模型普通文本不是效果。
 - Kernel 管理事件、状态、邮箱、Activity 和因果记录，不决定具体的认知内容。
 - 结构配置继续使用 TOML，密钥继续只来自环境变量。
-- 共享日志通过 `src.utils.log_utils.get_logger()` 获取，不记录完整提示词、continuation 或敏感载荷。
+- 共享日志通过 `src.utils.logging.get_logger()` 获取，不记录完整提示词、continuation 或敏感载荷。
 
 更完整的维护者边界见仓库根目录 `AGENTS.md`。
 

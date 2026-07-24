@@ -57,7 +57,7 @@ AuroraBot の行動を確実にするため、次の boundary を維持してく
 - 外部 effect は Platform が実行し、outcome を新しい event として返します。通常のモデル text は effect ではありません。
 - Kernel は event、state、mailbox、Activity、因果記録を管理しますが、認知内容は決めません。
 - 構造設定は TOML、secret は環境変数だけという原則を維持します。
-- 共通ログは `src.utils.log_utils.get_logger()` を使い、完全な prompt、continuation、機密 payload を記録しません。
+- 共通ログは `src.utils.logging.get_logger()` を使い、完全な prompt、continuation、機密 payload を記録しません。
 
 maintainer 向けの完全な boundary は、リポジトリ root の `AGENTS.md` を参照してください。
 
