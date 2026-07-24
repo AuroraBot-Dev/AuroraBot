@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 from src.utils.serialization import atomic_write_json, read_json
 
 logger = get_logger("aurora.autonomy")

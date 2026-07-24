@@ -6,7 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from src.localhost.command_types import CommandResult
-from src.utils.log_utils import configure_console_logging, console_logging_status
+from src.utils.logging import configure_console_logging, console_logging_status
 
 if TYPE_CHECKING:
     import argparse
