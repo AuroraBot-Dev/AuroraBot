@@ -25,7 +25,7 @@ from src.sandbox.paths import (
     SANDBOX_OUTPUT_DIR,
     SANDBOX_TEMP_DIR,
 )
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.sandbox.inspector import CodeInspector

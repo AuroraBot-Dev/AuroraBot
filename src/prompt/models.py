@@ -20,7 +20,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class PromptSource:
-    """提示词来源快照：文件路径和 SHA-256 摘要。"""
+    """提示词来源快照：文件路径和 SHA-256 摘要。
+
+    PromptSource object::
+
+        {
+            "path": "/path/to/file",
+            "sha256": "hex-digest"
+        }
+
+    """
 
     path: Path
     sha256: str
@@ -28,7 +37,18 @@ class PromptSource:
 
 @dataclass(frozen=True, slots=True)
 class PromptCatalog:
-    """不可变提示词目录：soul、world、按 Agent 档案索引的提示词和来源链。"""
+    """不可变提示词目录：soul、world、按 Agent 档案索引的提示词和来源链。
+
+    PromptCatalog object::
+
+        {
+            "soul": "string",
+            "world": "string",
+            "agents": {"profile_id": "prompt text", ...},
+            "sources": [PromptSource, ...]
+        }
+
+    """
 
     soul: str
     world: str
@@ -63,7 +83,16 @@ class PromptCatalog:
 
 @dataclass(frozen=True, slots=True)
 class PromptSection:
-    """提示词片段：由 key 标识，content 不可为空。"""
+    """提示词片段：由 key 标识，content 不可为空。
+
+    PromptSection object::
+
+        {
+            "key": "string",
+            "content": "string"
+        }
+
+    """
 
     key: str
     content: str
@@ -75,7 +104,16 @@ class PromptSection:
 
 @dataclass(frozen=True, slots=True)
 class PromptDocument:
-    """一份完整的提示词文档，包含 system 和 user 两类 sections。"""
+    """一份完整的提示词文档，包含 system 和 user 两类 sections。
+
+    PromptDocument object::
+
+        {
+            "system_sections": [PromptSection, ...],
+            "user_sections": [PromptSection, ...]
+        }
+
+    """
 
     system_sections: tuple[PromptSection, ...]
     user_sections: tuple[PromptSection, ...]

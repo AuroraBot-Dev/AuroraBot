@@ -35,7 +35,7 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from service import ClockService  # type: ignore[import-untyped]
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora-app-clock.mcp")
 

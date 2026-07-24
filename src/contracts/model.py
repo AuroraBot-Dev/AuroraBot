@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any, Final, Literal
+
+STRUCTURED_OUTPUT_NAME: Final = "aurora_result"
 
 # 模式、重试策略、取消策略、工具选择字面量类型
 ResponseMode = Literal["normalized", "native"]
@@ -15,7 +17,16 @@ ToolChoice = Literal["auto", "none", "required"]
 
 @dataclass(frozen=True, slots=True)
 class ModelMessage:
-    """标准模型消息：角色和内容。"""
+    """标准模型消息：角色和内容。
+
+    ModelMessage object::
+
+        {
+            "role": "string",
+            "content": "string"
+        }
+
+    """
 
     role: str
     content: str
@@ -23,7 +34,17 @@ class ModelMessage:
 
 @dataclass(frozen=True, slots=True)
 class ModelBudget:
-    """模型调用预算：最大输出 token、超时和可选成本上限。"""
+    """模型调用预算：最大输出 token、超时和可选成本上限。
+
+    ModelBudget object::
+
+        {
+            "max_output_tokens": 1024,
+            "timeout_seconds": 30.0,
+            "max_cost_usd": 1.0 | null
+        }
+
+    """
 
     max_output_tokens: int = 1024
     timeout_seconds: float = 30.0
@@ -32,7 +53,29 @@ class ModelBudget:
 
 @dataclass(frozen=True, slots=True)
 class ModelRequest:
-    """完整的模型请求：角色、消息列表、能力需求、预算、工具和延续状态。"""
+    """完整的模型请求：角色、消息列表、能力需求、预算、工具和延续状态。
+
+    ModelRequest object::
+
+        {
+            "role": "string",
+            "messages": [ModelMessage, ...],
+            "required_capabilities": ["chat", ...],
+            "response_mode": "normalized" | "native",
+            "output_schema": {"...": "..."} | null,
+            "allow_json_text_fallback": true,
+            "invalid_output_result": {"...": "..."} | null,
+            "budget": ModelBudget,
+            "retry_policy": "none",
+            "tools": [ToolDefinition, ...],
+            "tool_choice": "auto" | "none" | "required",
+            "parallel_tool_calls": false,
+            "continuation": ModelContinuation | null,
+            "cancel_policy": "never" | "on_external_activity",
+            "parameters": {"...": "..."}
+        }
+
+    """
 
     role: str
     messages: tuple[ModelMessage, ...]
@@ -92,7 +135,16 @@ class ModelRequest:
 
 @dataclass(frozen=True, slots=True)
 class ModelUsage:
-    """模型用量统计：输入和输出 token 数。"""
+    """模型用量统计：输入和输出 token 数。
+
+    ModelUsage object::
+
+        {
+            "prompt_tokens": 0,
+            "completion_tokens": 0
+        }
+
+    """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -100,7 +152,25 @@ class ModelUsage:
 
 @dataclass(frozen=True, slots=True)
 class ModelResult:
-    """模型调用结果：模型标识、协商能力、响应文本、用量、成本和工具调用。"""
+    """模型调用结果：模型标识、协商能力、响应文本、用量、成本和工具调用。
+
+    ModelResult object::
+
+        {
+            "model": "string",
+            "negotiated_capabilities": ["chat", ...],
+            "response_mode": "normalized" | "native",
+            "text": "string",
+            "data": {"...": "..."} | null,
+            "usage": ModelUsage,
+            "cost_usd": 0.0,
+            "diagnostics": ["string", ...],
+            "tool_calls": [ToolCall, ...],
+            "finish_reason": "stop",
+            "continuation": ModelContinuation | null
+        }
+
+    """
 
     model: str
     negotiated_capabilities: frozenset[str]
@@ -146,7 +216,17 @@ class ModelResult:
 
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
-    """工具定义：名称、描述和参数 JSON Schema。"""
+    """工具定义：名称、描述和参数 JSON Schema。
+
+    ToolDefinition object::
+
+        {
+            "name": "string",
+            "description": "string",
+            "parameters_schema": {"...": "..."}
+        }
+
+    """
 
     name: str
     description: str
@@ -158,7 +238,17 @@ class ToolDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:
-    """模型发起的工具调用：调用 ID、工具名和参数。"""
+    """模型发起的工具调用：调用 ID、工具名和参数。
+
+    ToolCall object::
+
+        {
+            "call_id": "string",
+            "name": "string",
+            "arguments": {"...": "..."}
+        }
+
+    """
 
     call_id: str
     name: str
@@ -170,7 +260,17 @@ class ToolCall:
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
-    """工具执行结果：调用 ID、结果数据和错误标记。"""
+    """工具执行结果：调用 ID、结果数据和错误标记。
+
+    ToolResult object::
+
+        {
+            "call_id": "string",
+            "result": {"...": "..."},
+            "is_error": false
+        }
+
+    """
 
     call_id: str
     result: dict[str, Any]
@@ -179,7 +279,17 @@ class ToolResult:
 
 @dataclass(frozen=True, slots=True)
 class ModelContinuation:
-    """可序列化的模型端点重放状态。"""
+    """可序列化的模型端点重放状态。
+
+    ModelContinuation object::
+
+        {
+            "provider": "string",
+            "channel": "chat_completions" | "responses",
+            "items": [{"...": "..."}, ...]
+        }
+
+    """
 
     provider: str
     channel: Literal["chat_completions", "responses"]

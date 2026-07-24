@@ -220,7 +220,7 @@ class ChatStore:
             connection.execute("PRAGMA journal_mode = WAL")
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             if version > len(_MIGRATIONS):
-                raise RuntimeError(f"Dashboard 数据库 schema {version} 比当前运行时版本更新")  # noqa: TRY003
+                raise RuntimeError(f"Dashboard 数据库 schema {version} 比当前运行时版本更新")
             for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
                 connection.executescript(
                     f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
@@ -238,7 +238,7 @@ class ChatStore:
         """读取并返回启动 Token。"""
         token = (self.database_path.parent / "Token.txt").read_text(encoding="utf-8").strip()
         if not token:
-            raise RuntimeError("Dashboard 启动 token 为空")  # noqa: TRY003
+            raise RuntimeError("Dashboard 启动 token 为空")
         return token
 
     def ensure_owner(self, username: str) -> sqlite3.Row:
@@ -252,9 +252,7 @@ class ChatStore:
             owner = connection.execute("SELECT * FROM users WHERE is_owner = 1").fetchone()
             if owner is not None:
                 if str(owner["username"]) != username:
-                    raise RuntimeError(  # noqa: TRY003
-                        f"Dashboard 所有者已绑定到 {owner['username']!s}"
-                    )
+                    raise RuntimeError(f"Dashboard 所有者已绑定到 {owner['username']!s}")
                 connection.commit()
                 return owner
             connection.execute(

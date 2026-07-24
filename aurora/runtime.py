@@ -12,23 +12,20 @@ from typing import TYPE_CHECKING
 
 import uvicorn
 
-from src.contracts.configuration import PlatformPreference, load_configuration
+from src.config import get as get_config
+from src.contracts.configuration import PLATFORM_NAMES, PlatformPreference
 from src.localhost.ports import ToolExecutorBinding
 from src.localhost.runtime import AuroraRuntime
 from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
 from src.platform.console.shell import run_console
 from src.platform.dashboard import DASHBOARD_SEND_DESCRIPTOR, ChatService, DashboardPlatform, create_app
 from src.platform.mcp import MCPPlatform
-from src.utils.log_utils import configure_console_logging, configure_logging, get_logger
+from src.utils.logging import configure_console_logging, configure_logging, get_logger
 
 logger = get_logger("aurora.process")
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from src.contracts.configuration import DashboardConfig
-
-PLATFORM_NAMES = frozenset({"console", "dashboard", "mcp"})
 
 
 class _AuroraServer(uvicorn.Server):
@@ -56,22 +53,17 @@ class _InstalledSignal:
 
 
 async def run_runtime(
-    root: Path,
-    profile: str | None,
     platforms: frozenset[str] | None,
     *,
     stop_event: asyncio.Event | None = None,
 ) -> None:
     """围绕一个共享运行时和停止事件，启动精确的平台组合并运行至停止。"""
-    resolved_root = await asyncio.to_thread(root.resolve)
-    configuration = await asyncio.to_thread(load_configuration, resolved_root, profile)
+    configuration = get_config()
     selected = _selected_platforms(platforms, configuration.preference)
     configure_logging(configuration.logging_level, configuration.root / "logs" / "aurora.log")
     configure_console_logging(enabled=configuration.preference.console.terminal_logs if "console" in selected else True)
 
     runtime = AuroraRuntime.create(
-        resolved_root,
-        profile,
         configuration=configuration,
         tool_bindings=None,
     )

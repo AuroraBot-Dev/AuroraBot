@@ -37,7 +37,7 @@ def provider_tools(
     for tool in tools:
         alias = f"aurora_{hashlib.sha256(tool.name.encode()).hexdigest()[:20]}"
         if alias in aliases:
-            raise ModelCapabilityError("tool alias collision")  # noqa: TRY003
+            raise ModelCapabilityError("tool alias collision")
         aliases[alias] = tool.name
         if responses:
             definitions.append(
@@ -67,7 +67,7 @@ def chat_message(response: object) -> Any:
     try:
         return response.choices[0].message  # type: ignore[attr-defined]
     except (AttributeError, IndexError, TypeError) as error:
-        raise ModelGatewayError("Chat provider returned no assistant message") from error  # noqa: TRY003
+        raise ModelGatewayError("Chat provider returned no assistant message") from error
 
 
 def chat_assistant_item(message: object) -> dict[str, Any]:

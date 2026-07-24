@@ -10,7 +10,7 @@ import os
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.contracts.amp import AmpEnvelope, AmpValidationError
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 from src.utils.serialization import read_json
 
 if TYPE_CHECKING:

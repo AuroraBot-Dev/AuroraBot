@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora.memory.service")
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec

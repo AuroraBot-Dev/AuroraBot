@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from src.contracts.agent import AgentContext, AgentDecision, Completion
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora.agent.memory")
 

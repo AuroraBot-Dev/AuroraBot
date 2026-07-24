@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aurora.registry import register_commands
+from src.config import init as init_config
+from src.contracts.configuration import PLATFORM_NAMES
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -18,7 +20,7 @@ def _execute_runtime(arguments: argparse.Namespace) -> int:
     """根据解析后的参数启动 Aurora 运行时。"""
     from aurora.runtime import run_runtime
 
-    asyncio.run(run_runtime(arguments.root, arguments.profile, arguments.platforms))
+    asyncio.run(run_runtime(arguments.platforms))
     return 0
 
 
@@ -27,26 +29,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置与数据根目录")
     parser.add_argument("--profile", type=str, default="prod", help="配置运行档案")
-    parser.add_argument("--console", action="store_true", help="启用 Console 平台")
-    parser.add_argument("--dashboard", action="store_true", help="启用 Dashboard 平台")
-    parser.add_argument("--mcp", action="store_true", help="启用 MCP 平台")
     parser.add_argument("--headless", action="store_true", help="不启用外部平台")
+    for name in sorted(PLATFORM_NAMES):
+        parser.add_argument(f"--{name}", action="store_true", help=f"启用 {name.capitalize()} 平台")
     register_commands(parser.add_subparsers(dest="command"))
     parser.set_defaults(executor=_execute_runtime)
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    """解析命令行参数、验证平台组合并分发到对应执行器。"""
+    """解析命令行参数、加载配置、验证平台组合并分发到对应执行器。"""
     parser = build_parser()
     arguments = parser.parse_args(argv)
-    selected = frozenset(name for name in ("console", "dashboard", "mcp") if getattr(arguments, name))
+    selected = frozenset(name for name in PLATFORM_NAMES if getattr(arguments, name))
     if arguments.command == "check":
         if arguments.headless or selected:
             parser.error("platform selection options cannot be used with check")
     elif arguments.headless and selected:
-        parser.error("--headless cannot be combined with --console, --dashboard, or --mcp")
+        parser.error("--headless cannot be combined with platform flags")
     arguments.platforms = frozenset() if arguments.headless else selected or None
+    if arguments.command != "check":
+        init_config(arguments.root, arguments.profile)
     return arguments.executor(arguments)
 
 

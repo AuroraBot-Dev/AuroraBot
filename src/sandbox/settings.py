@@ -15,7 +15,7 @@ import yaml
 
 from src.sandbox.base import SandboxConfigError
 from src.sandbox.paths import PROJECT_ROOT
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,23 +37,19 @@ def _load_section(raw: dict, section_name: str) -> dict[str, frozenset[str]]:
     """
     section = raw[section_name]
     if not isinstance(section, dict):
-        raise SandboxConfigError(  # noqa: TRY003
-            f"{section_name} 必须是 dict, 实际得到 {type(section).__name__}"
-        )
+        raise SandboxConfigError(f"{section_name} 必须是 dict, 实际得到 {type(section).__name__}")
     result: dict[str, frozenset[str]] = {}
     for key in _REQUIRED_SECTION_KEYS:
         if key not in section:
-            raise SandboxConfigError(f"default.yaml 缺失必需的 key: {section_name}.{key}")  # noqa: TRY003
+            raise SandboxConfigError(f"default.yaml 缺失必需的 key: {section_name}.{key}")
         value = section[key]
         if not isinstance(value, list):
-            raise SandboxConfigError(  # noqa: TRY003
-                f"{section_name}.{key} 类型错误: 期望 list, 实际得到 {type(value).__name__}"
-            )
+            raise SandboxConfigError(f"{section_name}.{key} 类型错误: 期望 list, 实际得到 {type(value).__name__}")
         result[key] = frozenset(str(item).replace("PROJECT_DIR", str(PROJECT_ROOT)) for item in value)
         if key in ("files", "dirs"):
             for pattern in result[key]:
                 if not Path(pattern).is_absolute():
-                    raise SandboxConfigError(  # noqa: TRY003
+                    raise SandboxConfigError(
                         f"{section_name}.{key} 中的路径必须为绝对路径，"
                         f"禁止相对路径: {pattern!r}（可用 PROJECT_DIR 占位符）"
                     )
@@ -82,21 +78,19 @@ class SandboxConfig:
             YAML 文件不存在、YAML 语法错误、缺失 key、或 key 类型不匹配。
         """
         if not path.exists():
-            raise SandboxConfigError(f"default.yaml 不存在: {path}")  # noqa: TRY003
+            raise SandboxConfigError(f"default.yaml 不存在: {path}")
 
         try:
             raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         except yaml.YAMLError as e:
-            raise SandboxConfigError(f"YAML 解析错误: {e}") from e  # noqa: TRY003
+            raise SandboxConfigError(f"YAML 解析错误: {e}") from e
 
         if not isinstance(raw, dict):
-            raise SandboxConfigError(  # noqa: TRY003
-                f"YAML 顶层结构必须是 dict, 实际得到 {type(raw).__name__}"
-            )
+            raise SandboxConfigError(f"YAML 顶层结构必须是 dict, 实际得到 {type(raw).__name__}")
 
         for key in _REQUIRED_TOP_KEYS:
             if key not in raw:
-                raise SandboxConfigError(f"default.yaml 缺失必需的顶层 key: {key}")  # noqa: TRY003
+                raise SandboxConfigError(f"default.yaml 缺失必需的顶层 key: {key}")
 
         wl = _load_section(raw, "whitelist")
         bl = _load_section(raw, "blacklist")

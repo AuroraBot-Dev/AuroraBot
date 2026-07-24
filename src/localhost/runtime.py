@@ -7,14 +7,13 @@ import contextlib
 import importlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
 from src.ai.vnext import ModelGatewayService
+from src.config import get as get_config
 from src.contracts.agent import AgentHandler, Capability, CapabilityCatalogSnapshot, KernelConfiguration
 from src.contracts.amp import AmpEnvelope, new_amp
-from src.contracts.configuration import AuroraConfig, load_configuration
 from src.contracts.model import ModelRequest
 from src.kernel.runtime import AgentKernel, PumpResult
 from src.localhost.autonomy import AutonomyQuota
@@ -22,11 +21,12 @@ from src.localhost.router import CommandRouter
 from src.localhost.tool_dispatcher import ToolDispatcher
 from src.memory.service import MemoryService
 from src.prompt import PromptComposer, load_prompt_catalog
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora.runtime")
 
 if TYPE_CHECKING:
+    from src.contracts.configuration import AuroraConfig
     from src.localhost.command_types import CommandResult, RuntimeInput
     from src.localhost.ports import ToolExecutorBinding
 
@@ -105,14 +105,12 @@ class AuroraRuntime:
     @classmethod
     def create(
         cls,
-        root: Path,
-        profile: str | None = None,
         *,
         configuration: AuroraConfig | None = None,
         tool_bindings: tuple[ToolExecutorBinding, ...] | None = (),
     ) -> "AuroraRuntime":
         """工厂方法：从配置根目录构建完整的 AuroraRuntime 实例。"""
-        configuration = configuration or load_configuration(root, profile)
+        configuration = configuration or get_config()
         profiles = configuration.agents
         limits = configuration.runtime.agents
         kernel_config = KernelConfiguration(

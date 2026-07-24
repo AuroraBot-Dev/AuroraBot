@@ -36,7 +36,7 @@ from src.kernel.debug import task_detail as build_task_detail
 from src.kernel.runtime_decisions import apply_authorized_decision, apply_failure, handle_claim
 from src.kernel.runtime_ingress import ingest_ready as ingest_runtime_ready
 from src.kernel.store import SQLiteRuntimeStore
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 from src.utils.serialization import atomic_write_json
 
 logger = get_logger("aurora.kernel")

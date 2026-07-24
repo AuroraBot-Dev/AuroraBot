@@ -22,7 +22,16 @@ class ConfigurationError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationSource:
-    """可审计的配置来源：记录文件路径和 SHA-256 摘要。"""
+    """可审计的配置来源：记录文件路径和 SHA-256 摘要。
+
+    ConfigurationSource object::
+
+        {
+            "path": "/path/to/file",
+            "sha256": "hex-digest"
+        }
+
+    """
 
     path: Path
     sha256: str
@@ -71,7 +80,22 @@ def _positive_number(value: object, label: str) -> float:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
-    """运行时配置：profile、工作区、调试、自主、Agent 限制和预算。"""
+    """运行时配置：profile、工作区、调试、自主、Agent 限制和预算。
+
+    RuntimeConfig object::
+
+        {
+            "profile": "string",
+            "workspace": "/path/to/workspace",
+            "debug_host": "string",
+            "debug_port": 0,
+            "autonomy": AutonomyConfig,
+            "agents": AgentLimits,
+            "interactive_budget": TaskBudget,
+            "autonomous_budget": TaskBudget
+        }
+
+    """
 
     profile: str
     workspace: Path
@@ -85,7 +109,20 @@ class RuntimeConfig:
 
 @dataclass(frozen=True, slots=True)
 class AutonomyConfig:
-    """自主节律配置：扫描间隔、心跳边界和每日额度。"""
+    """自主节律配置：扫描间隔、心跳边界和每日额度。
+
+    AutonomyConfig object::
+
+        {
+            "scan_seconds": 1.0,
+            "heartbeat_initial_seconds": 30.0,
+            "heartbeat_min_seconds": 30.0,
+            "heartbeat_max_seconds": 1800.0,
+            "autonomous_daily_model_calls": 24,
+            "autonomous_daily_tokens": 100000
+        }
+
+    """
 
     scan_seconds: float = 1.0
     heartbeat_initial_seconds: float = 30.0
@@ -97,6 +134,18 @@ class AutonomyConfig:
 
 @dataclass(frozen=True, slots=True)
 class DashboardBotConfig:
+    """Dashboard Bot 身份配置。
+
+    DashboardBotConfig object::
+
+        {
+            "username": "string",
+            "display_name": "string",
+            "avatar_url": "string" | null
+        }
+
+    """
+
     username: str
     display_name: str
     avatar_url: str | None
@@ -104,6 +153,24 @@ class DashboardBotConfig:
 
 @dataclass(frozen=True, slots=True)
 class DashboardConfig:
+    """Dashboard 服务配置。
+
+    DashboardConfig object::
+
+        {
+            "host": "string",
+            "port": 0,
+            "database_path": "/path/to/db",
+            "upload_dir": "/path/to/uploads",
+            "max_upload_bytes": 0,
+            "session_ttl_seconds": 0,
+            "allowed_origins": ["string", ...],
+            "owner_username": "string",
+            "bot": DashboardBotConfig
+        }
+
+    """
+
     host: str
     port: int
     database_path: Path
@@ -117,7 +184,21 @@ class DashboardConfig:
 
 @dataclass(frozen=True, slots=True)
 class AppConfig:
-    """一个显式启用的 MCP 应用路由配置。"""
+    """一个显式启用的 MCP 应用路由配置。
+
+    AppConfig object::
+
+        {
+            "package": "string",
+            "transport": "string",
+            "working_dir": "/path/to/dir" | null,
+            "command": ["string", ...],
+            "url": "string" | null,
+            "auth_env": "string" | null,
+            "timeout_seconds": 0.0
+        }
+
+    """
 
     package: str
     transport: str
@@ -130,7 +211,18 @@ class AppConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelProviderConfig:
-    """TOML 定义的 LiteLLM 或 OpenAI 兼容 Provider 路由。"""
+    """TOML 定义的 LiteLLM 或 OpenAI 兼容 Provider 路由。
+
+    ModelProviderConfig object::
+
+        {
+            "id": "string",
+            "adapter": "string",
+            "secret_env": "ENV_VAR_NAME",
+            "base_url": "string" | null
+        }
+
+    """
 
     id: str
     adapter: str
@@ -140,7 +232,18 @@ class ModelProviderConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelRoleConfig:
-    """模型角色的非密钥配置，capabilities 为空时由 models.dev 自动派生。"""
+    """模型角色的非密钥配置，capabilities 为空时由 models.dev 自动派生。
+
+    ModelRoleConfig object::
+
+        {
+            "provider": "string",
+            "model": "string",
+            "capabilities": ["string", ...],
+            "endpoint": "chat_completions"
+        }
+
+    """
 
     provider: str
     model: str
@@ -150,7 +253,16 @@ class ModelRoleConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelLoggingConfig:
-    """模型网关的可选 DEBUG 日志控制。"""
+    """模型网关的可选 DEBUG 日志控制。
+
+    ModelLoggingConfig object::
+
+        {
+            "log_queries": false,
+            "log_responses": false
+        }
+
+    """
 
     log_queries: bool
     log_responses: bool
@@ -158,24 +270,69 @@ class ModelLoggingConfig:
 
 @dataclass(frozen=True, slots=True)
 class ConsolePreference:
+    """Console 平台偏好。
+
+    ConsolePreference object::
+
+        {
+            "enabled": false,
+            "terminal_logs": false
+        }
+
+    """
+
     enabled: bool
     terminal_logs: bool
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardPreference:
+    """Dashboard 平台偏好。
+
+    DashboardPreference object::
+
+        {
+            "enabled": false,
+            "open_browser": false
+        }
+
+    """
+
     enabled: bool
     open_browser: bool
 
 
 @dataclass(frozen=True, slots=True)
 class McpPreference:
+    """MCP 平台偏好。
+
+    McpPreference object::
+
+        {
+            "enabled": false,
+            "terminal_logs": false
+        }
+
+    """
+
     enabled: bool
     terminal_logs: bool
 
 
 @dataclass(frozen=True, slots=True)
 class PlatformPreference:
+    """平台组合偏好。
+
+    PlatformPreference object::
+
+        {
+            "console": ConsolePreference,
+            "dashboard": DashboardPreference,
+            "mcp": McpPreference
+        }
+
+    """
+
     console: ConsolePreference
     dashboard: DashboardPreference
     mcp: McpPreference
@@ -187,7 +344,27 @@ PLATFORM_NAMES: frozenset[str] = frozenset(f.name for f in fields(PlatformPrefer
 
 @dataclass(frozen=True, slots=True)
 class AuroraConfig:
-    """聚合所有 TOML 配置的根配置对象。"""
+    """聚合所有 TOML 配置的根配置对象。
+
+    AuroraConfig object::
+
+        {
+            "root": "/path/to/root",
+            "sources": [ConfigurationSource, ...],
+            "runtime": RuntimeConfig,
+            "dashboard": DashboardConfig,
+            "preference": PlatformPreference,
+            "logging_level": "string",
+            "storage_data_dir": "/path/to/data",
+            "agents": [AgentProfile, ...],
+            "model_roles": ["string", ...],
+            "model_definitions": {"role": ModelRoleConfig, ...},
+            "model_providers": {"provider": ModelProviderConfig, ...},
+            "model_logging": ModelLoggingConfig,
+            "apps": [AppConfig, ...]
+        }
+
+    """
 
     root: Path
     sources: tuple[ConfigurationSource, ...]

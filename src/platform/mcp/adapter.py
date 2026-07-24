@@ -17,7 +17,7 @@ from src.localhost.ports import ExternalAmpIngressPort, ToolExecutionRequest, To
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora.platform.mcp")
 _RESERVED_TOOL_EVENTS = frozenset({"tool.succeeded", "tool.failed", "tool.unknown"})

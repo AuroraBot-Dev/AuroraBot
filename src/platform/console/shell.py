@@ -14,7 +14,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
 from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora.platform.console")
 

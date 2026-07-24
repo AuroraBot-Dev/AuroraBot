@@ -30,7 +30,7 @@ from mcp import types
 from mcp.client.session import ClientSession
 from mcp.shared.message import SessionMessage
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from mcp.types import ServerNotification

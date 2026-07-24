@@ -35,7 +35,7 @@ litellm.suppress_debug_info = True
 
 from src.ai.models import compute_cost
 from src.ai.providers import missing_credentials_reason, resolve_model
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     import collections.abc

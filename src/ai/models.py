@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("ModelsDev")
 

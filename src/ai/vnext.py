@@ -5,7 +5,7 @@
 用法::
 
     from src.ai.vnext import ModelGatewayService
-    from src.contracts.configuration import load_configuration
+    from src.config import load_configuration
     from src.contracts.model import ModelRequest
 
     config = load_configuration(root, profile)
@@ -49,6 +49,7 @@ from src.ai.models import get_capabilities_by_id, init_cache
 from src.ai.providers import ProviderConfig, resolve_model, setup_providers
 from src.contracts.configuration import AuroraConfig, ModelRoleConfig
 from src.contracts.model import (
+    STRUCTURED_OUTPUT_NAME,
     ModelBudgetError,
     ModelCapabilityError,
     ModelContinuation,
@@ -56,8 +57,7 @@ from src.contracts.model import (
     ModelRequest,
     ModelResult,
 )
-from src.prompt.text import STRUCTURED_OUTPUT_NAME
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 from src.utils.serialization import extract_json_from_text
 
 logger = get_logger("aurora.model_gateway")

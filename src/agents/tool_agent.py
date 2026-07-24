@@ -25,7 +25,7 @@ from src.contracts.model import (
 )
 from src.prompt import PromptComposer
 from src.prompt.text import EMPTY_CHILD_COMPLETION, NO_ACTION_COMPLETION
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.contracts.agent import Capability

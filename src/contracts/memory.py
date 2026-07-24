@@ -8,7 +8,17 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class MemoryQuery:
-    """记忆查询：查询文本、作用域和返回数量限制。"""
+    """记忆查询：查询文本、作用域和返回数量限制。
+
+    MemoryQuery object::
+
+        {
+            "query": "string",
+            "scope": "string",
+            "limit": 8
+        }
+
+    """
 
     query: str
     scope: str
@@ -20,14 +30,32 @@ class MemoryQuery:
 
 @dataclass(frozen=True, slots=True)
 class MemoryResult:
-    """记忆查询结果：匹配项元组。"""
+    """记忆查询结果：匹配项元组。
+
+    MemoryResult object::
+
+        {
+            "items": [{"...": "..."}, ...]
+        }
+
+    """
 
     items: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True, slots=True)
 class MemoryProposal:
-    """记忆写入提案：内容、来源 Task ID 和重要性。"""
+    """记忆写入提案：内容、来源 Task ID 和重要性。
+
+    MemoryProposal object::
+
+        {
+            "content": {"...": "..."},
+            "source_task_id": "UUID",
+            "importance": 0.5
+        }
+
+    """
 
     content: dict[str, Any]
     source_task_id: str
@@ -36,7 +64,16 @@ class MemoryProposal:
 
 @dataclass(frozen=True, slots=True)
 class MemoryFailure:
-    """记忆操作失败时的标准错误响应。"""
+    """记忆操作失败时的标准错误响应。
+
+    MemoryFailure object::
+
+        {
+            "code": "string",
+            "message": "string"
+        }
+
+    """
 
     code: str = "memory.unavailable"
     message: str = "No Memory Agent is configured"
