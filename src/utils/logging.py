@@ -175,8 +175,6 @@ def get_logger(
         _apply_managed_logger(logger)
         return logger
 
-    effective_logfile = logfile if logfile is not None else _logging_state.logfile
-
     logger.setLevel(min(console_level, file_level))
     logger.propagate = False
 
@@ -186,6 +184,8 @@ def get_logger(
         stream_handler.setLevel(_OFF_LEVEL)
     logger.addHandler(stream_handler)
 
+    # 配置文件输出
+    effective_logfile = logfile if logfile is not None else _logging_state.logfile
     if isinstance(effective_logfile, (str, Path)):
         file_handler = _create_file_handler(effective_logfile, file_level)
         setattr(file_handler, _MANAGED_FILE_HANDLER, True)
@@ -195,6 +195,7 @@ def get_logger(
 
 
 def _apply_managed_logger(logger: logging.Logger) -> None:
+    """将当前的运行时日志快照应用到已存在的记录器。"""
     active_levels: list[int] = []
     for handler in logger.handlers:
         if getattr(handler, _MANAGED_CONSOLE_HANDLER, False):
@@ -209,6 +210,7 @@ def _apply_managed_logger(logger: logging.Logger) -> None:
 
 
 def _apply_external_console_state() -> None:
+    """将当前的运行时日志快照应用到外部库的控制台记录器。"""
     level = _logging_state.console_level if _logging_state.console_enabled else _OFF_LEVEL
     for name in _EXTERNAL_CONSOLE_LOGGERS:
         logger = logging.getLogger(name)
