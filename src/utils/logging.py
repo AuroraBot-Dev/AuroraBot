@@ -1,27 +1,14 @@
 """日志系统核心模块。
 
-提供统一的日志记录器工厂 ``get_logger()``，支持 Rich 美化控制台输出、
-文件轮转日志、以及 ``DecoratorFactory`` 装饰器注入。
+提供统一的日志记录器工厂 ``get_logger()``，支持 Rich 美化控制台输出、文件轮转日志。
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
-import functools
-import inspect
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, cast
-
-try:
-    from concurrent_log_handler import ConcurrentRotatingFileHandler
-except Exception:  # noqa: BLE001 — 回退到标准 RotatingFileHandler 永远安全
-    # ModuleNotFoundError（未安装）、FileNotFoundError（Reasonix 沙箱残留 TMP 环境变量）
-    # 或其他环境问题导致无法加载时，回退到标准 RotatingFileHandler
-    ConcurrentRotatingFileHandler = RotatingFileHandler
-
 
 # 文件日志格式
 FILE_FORMAT = "%(asctime)s [%(levelname)s] %(name)s | %(message)s"
@@ -36,8 +23,8 @@ FILE_FORMATTER = logging.Formatter(FILE_FORMAT, DATETIME_FORMAT)
 CONSOLE_FORMATTER = logging.Formatter(CONSOLE_FORMAT, DATETIME_FORMAT)
 
 # 日志轮转配置
-MAX_LOGFILE_SIZE = 102400  # KB
-MAX_LOGFILE_BACKUPS = 5  # 保留5个备份
+MAX_LOGFILE_SIZE = 102400
+MAX_LOGFILE_BACKUPS = 5
 
 # 日志级别
 LOG_LEVEL: int | str = logging.INFO
@@ -65,8 +52,7 @@ class _TerminalVisibilityFilter(logging.Filter):
         return bool(getattr(record, _TERMINAL_RECORD_ATTRIBUTE, True))
 
 
-class UnsupportedLoggingLevelError(ValueError):
-    pass
+class UnsupportedLoggingLevelError(ValueError): ...
 
 
 def _level_number(level: int | str) -> int:
@@ -110,13 +96,11 @@ def _create_stream_handler(
         theme = Theme(
             {
                 "log.time": "green",
-                # 不带括号 — Rich 默认 key
                 "logging.level.debug": "cyan",
                 "logging.level.info": "white",
                 "logging.level.warning": "yellow",
                 "logging.level.error": "bold red",
                 "logging.level.critical": "bold white on red",
-                # 带括号 — _BracketRichHandler 改写 levelname 后对应的 key
                 "logging.level.[debug]": "cyan",
                 "logging.level.[info]": "white",
                 "logging.level.[warning]": "yellow",
@@ -154,9 +138,9 @@ def _create_file_handler(
     level: int | str = LOG_LEVEL,
     formatter: logging.Formatter = FILE_FORMATTER,
 ) -> logging.Handler:
-    # 使用大小轮转日志文件, 每个文件最大100KB, 保留5个备份
+    # 使用大小轮转日志文件
     Path(logfile).parent.mkdir(parents=True, exist_ok=True)
-    fh = ConcurrentRotatingFileHandler(
+    fh = RotatingFileHandler(
         logfile,
         maxBytes=MAX_LOGFILE_SIZE,
         backupCount=MAX_LOGFILE_BACKUPS,
@@ -165,85 +149,6 @@ def _create_file_handler(
     fh.setLevel(level)
     fh.setFormatter(formatter)
     return fh
-
-
-class DecoratorFactory:
-    """
-    一个工厂类, 用于创建日志装饰器, 并将其绑定到指定的日志记录器实例.
-    例如, @logger.decorate.info("Executing {func_name}")
-    """
-
-    def __init__(self, logger: logging.Logger) -> None:
-        self._logger = logger
-
-    def _create_decorator(
-        self, level: int, message_template: str
-    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            @functools.wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                # 绑定参数到函数签名, 并应用默认值
-                bound_args = inspect.signature(func).bind(*args, **kwargs)
-                bound_args.apply_defaults()
-
-                # 获取所有参数, 包括默认值
-                all_args = bound_args.arguments
-
-                # 创建格式化字典, 包含所有参数, 以及函数名, 参数列表, 关键字参数列表
-                format_dict = {
-                    **all_args,
-                    "func_name": func.__name__,
-                    "args": args,
-                    "kwargs": kwargs,
-                }
-
-                self._logger.log(level, message_template.format(*args, **format_dict))
-                return func(*args, **kwargs)
-
-            return wrapper
-
-        return decorator
-
-    def info(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """创建一个 INFO 级别的日志装饰器, 用于记录函数调用前的信息."""
-        return self._create_decorator(logging.INFO, message_template)
-
-    def debug(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """创建一个 DEBUG 级别的日志装饰器, 用于记录函数调用前的调试信息."""
-        return self._create_decorator(logging.DEBUG, message_template)
-
-    def warning(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """创建一个 WARNING 级别的日志装饰器, 用于记录函数调用前的警告信息."""
-        return self._create_decorator(logging.WARNING, message_template)
-
-    def error(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """创建一个 ERROR 级别的日志装饰器, 用于记录函数调用前的错误信息."""
-        return self._create_decorator(logging.ERROR, message_template)
-
-    def exception(self, message_template: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """创建一个 ERROR 级别的日志装饰器，记录函数调用异常并附带堆栈."""
-
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            @functools.wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                bound_args = inspect.signature(func).bind(*args, **kwargs)
-                bound_args.apply_defaults()
-                all_args = bound_args.arguments
-                format_dict = {
-                    **all_args,
-                    "func_name": func.__name__,
-                    "args": args,
-                    "kwargs": kwargs,
-                }
-                try:
-                    return func(*args, **kwargs)
-                except Exception:
-                    self._logger.exception(message_template.format(*args, **format_dict))
-                    raise
-
-            return wrapper
-
-        return decorator
 
 
 def get_logger(
@@ -268,8 +173,6 @@ def get_logger(
     logger = logging.getLogger(name)
     if logger.handlers:
         _apply_managed_logger(logger)
-        if not hasattr(logger, "decorate"):
-            cast("Any", logger).decorate = DecoratorFactory(logger)
         return logger
 
     effective_logfile = logfile if logfile is not None else _logging_state.logfile
@@ -287,9 +190,6 @@ def get_logger(
         file_handler = _create_file_handler(effective_logfile, file_level)
         setattr(file_handler, _MANAGED_FILE_HANDLER, True)
         logger.addHandler(file_handler)
-
-    # 将 DecoratorFactory 实例绑定到记录器, 用于创建日志装饰器
-    cast("Any", logger).decorate = DecoratorFactory(logger)
 
     return logger
 
@@ -319,7 +219,7 @@ def _apply_external_console_state() -> None:
 
 
 def configure_logging(level: int | str, logfile: str | Path | None = None) -> None:
-    """Apply one explicit runtime logging snapshot to existing and future loggers."""
+    """将一份显式运行时日志快照应用到已有和后续创建的记录器。"""
     normalized = _level_number(level)
     _logging_state.console_level = normalized
     _logging_state.file_level = normalized
@@ -341,7 +241,7 @@ def configure_logging(level: int | str, logfile: str | Path | None = None) -> No
 
 
 def configure_console_logging(*, enabled: bool | None = None, level: int | str | None = None) -> None:
-    """Change terminal logging without weakening the configured file audit trail."""
+    """调整终端日志输出，不削弱已配置的文件审计日志。"""
     if enabled is not None:
         _logging_state.console_enabled = enabled
     if level is not None:
@@ -352,7 +252,7 @@ def configure_console_logging(*, enabled: bool | None = None, level: int | str |
 
 
 def console_logging_status() -> dict[str, bool | str]:
-    """Return the ephemeral terminal state and persistent file threshold."""
+    """返回当前的终端日志状态和持久化文件级别阈值。"""
     return {
         "enabled": _logging_state.console_enabled,
         "console_level": _level_name(_logging_state.console_level).lower(),

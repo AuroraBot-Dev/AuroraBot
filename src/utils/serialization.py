@@ -130,7 +130,7 @@ def _safe_parse_json_object(content: str) -> Any:
     left = content.find("{")
     right = content.rfind("}")
     if left == -1 or right == -1 or right <= left:
-        raise ValueError("Invalid JSON object format")  # noqa: TRY003
+        raise ValueError("Invalid JSON object format")
     return json.loads(content[left : right + 1])
 
 
