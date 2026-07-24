@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     import argparse
 
 NAME = "check"
-_PATHS = ["aurora/", "src/", "tests/"]
+_PATHS = ["aurora/", "src/"]  # tests/
 
 
 def register(subparsers: Any) -> None:

@@ -1,4 +1,6 @@
-"""独立声明的 Agent、MCP App 和 Dashboard 段的解析器。"""
+"""Agent、MCP App 和 Dashboard 段的解析器。"""
+
+from __future__ import annotations
 
 from math import isfinite
 from pathlib import Path
@@ -6,6 +8,7 @@ from typing import Any
 
 from src.contracts.agent import AgentLimits, AgentProfile, TaskBudget
 from src.contracts.configuration import (
+    PLATFORM_NAMES,
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
@@ -42,24 +45,24 @@ def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
         raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
     if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
         raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
-    minimum = _positive_number(
+    heartbeat_min = _positive_number(
         raw.get("heartbeat_min_seconds", defaults.heartbeat_min_seconds), "heartbeat_min_seconds"
     )
-    maximum = _positive_number(
+    heartbeat_max = _positive_number(
         raw.get("heartbeat_max_seconds", defaults.heartbeat_max_seconds), "heartbeat_max_seconds"
     )
-    if maximum < minimum:
+    if heartbeat_max < heartbeat_min:
         raise ConfigurationError("heartbeat_max_seconds must be at least heartbeat_min_seconds")
-    initial = _positive_number(
+    heartbeat_initial = _positive_number(
         raw.get("heartbeat_initial_seconds", defaults.heartbeat_initial_seconds), "heartbeat_initial_seconds"
     )
-    if not minimum <= initial <= maximum:
+    if not heartbeat_min <= heartbeat_initial <= heartbeat_max:
         raise ConfigurationError("heartbeat_initial_seconds must be within heartbeat bounds")
     return AutonomyConfig(
         scan_seconds=_positive_number(raw.get("scan_seconds", defaults.scan_seconds), "scan_seconds"),
-        heartbeat_initial_seconds=initial,
-        heartbeat_min_seconds=minimum,
-        heartbeat_max_seconds=maximum,
+        heartbeat_initial_seconds=heartbeat_initial,
+        heartbeat_min_seconds=heartbeat_min,
+        heartbeat_max_seconds=heartbeat_max,
         autonomous_daily_model_calls=daily_calls,
         autonomous_daily_tokens=daily_tokens,
     )
@@ -327,7 +330,7 @@ def _parse_dashboard(raw: dict[str, Any], root: Path) -> DashboardConfig:
 
 def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
     """解析平台偏好配置段（console / dashboard / mcp 的启用和选项）。"""
-    _require_keys(platform, {"console", "dashboard", "mcp"}, "platform")
+    _require_keys(platform, set(PLATFORM_NAMES), "platform")
     console = _table(platform["console"], "platform.console")
     dashboard = _table(platform["dashboard"], "platform.dashboard")
     mcp = _table(platform["mcp"], "platform.mcp")

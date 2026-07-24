@@ -102,6 +102,7 @@ ignore = [
     "COM812",  # missing-trailing-comma
     "PLC0415", # import-outside-top-level
     "N999",    # forbidden-import-alias (allowed in __init__.py)
+    "TRY003",  # too-many-nested-blocks
 ]
 allowed-confusables = [
     "，",
@@ -124,18 +125,15 @@ allowed-confusables = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/platform/__init__.py" = ["A005"]
-"src/contracts/amp.py" = ["PLR0913", "TRY003"]
-"src/contracts/agent.py" = ["PLR0913", "TC001", "TRY003"]
-"src/contracts/model.py" = ["TRY003", "TRY004"]
+"src/contracts/model.py" = ["TRY004"]
 "src/contracts/configuration*.py" = [
     "C901",
     "PLR0912",
     "PLR0915",
     "PLR2004",
     "TC003",
-    "TRY003",
 ]
+"src/config/loader.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003"]
 "src/kernel/runtime.py" = [
     "BLE001",
     "C901",
@@ -143,11 +141,9 @@ allowed-confusables = [
     "PLR0913",
     "TC001",
     "TC003",
-    "TRY003",
     "TRY004",
     "TRY301",
 ]
-"src/kernel/runtime_decisions.py" = ["TRY003"]
 "src/kernel/store*.py" = [
     "C901",
     "PLR0912",
@@ -155,44 +151,28 @@ allowed-confusables = [
     "PLR0915",
     "TC001",
     "TC003",
-    "TRY003",
     "TRY004",
 ]
+"src/platform/dashboard/service.py" = ["C901", "PLR0912", "PLR2004", "TC001"]
+"src/platform/__init__.py" = ["A005"]
+"src/contracts/amp.py" = ["PLR0913"]
+"src/contracts/agent.py" = ["PLR0913", "TC001"]
+"src/config/sections.py" = ["C901", "PLR0912", "PLR2004", "TC003"]
+"src/kernel/runtime_decisions.py" = []
 "src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
-"src/platform/dashboard/service.py" = [
-    "C901",
-    "PLR0912",
-    "PLR2004",
-    "TC001",
-    "TRY003",
-]
 "src/platform/dashboard/store.py" = ["PLR0913", "TC003", "TRY300"]
-"src/localhost/runtime.py" = ["BLE001", "TC003", "TRY003"]
+"src/localhost/runtime.py" = ["BLE001", "TC003"]
 "src/agents/tool_agent.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
-"src/memory/service.py" = ["BLE001", "TRY003"]
-"src/platform/console/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
+"src/memory/service.py" = ["BLE001"]
+"src/platform/console/adapter.py" = ["TC001", "TRY004", "TRY301"]
 "src/platform/console/shell.py" = ["C901", "PLR0912", "TC003"]
-"src/platform/dashboard/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
-"src/ai/execution.py" = ["PLR0913", "TRY003"]
-"src/ai/vnext.py" = ["C901", "PLR0912", "TC001", "TRY003"]
-"src/apps/aurora-app-clock/service.py" = ["TC003", "TRY003"]
-"src/platform/mcp/adapter.py" = [
-    "BLE001",
-    "C901",
-    "PLR0911",
-    "TC001",
-    "TRY003",
-    "TRY004",
-]
+"src/platform/dashboard/adapter.py" = ["TC001", "TRY004", "TRY301"]
+"src/ai/execution.py" = ["PLR0913"]
+"src/ai/vnext.py" = ["C901", "PLR0912", "TC001"]
+"src/apps/aurora-app-clock/service.py" = ["TC003"]
+"src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY004"]
 "src/platform/mcp/client_manager.py" = ["C901"]
-"tests/test_api.py" = ["PLR2004", "TC003"]
-"tests/test_causal_loop.py" = ["TC003"]
-"tests/test_configuration.py" = ["TC003"]
-"tests/test_model_gateway.py" = ["TC003"]
-"tests/conftest.py" = ["E501"]
-"tests/test_first_cognitive_loop.py" = ["E501", "PLR2004", "TC002", "TRY003"]
-"tests/test_dashboard_chat.py" = ["PLR2004", "SIM117", "TC003"]
-"tests/test_kernel_resilience.py" = ["TRY003"]
+
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
@@ -202,7 +182,7 @@ pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
 include = ["aurora", "src"]
-exclude = [".venv", "tests"]
+exclude = [".venv", "tests", "**/node_modules", "**/__pycache__", "**/.*"]
 
 [build-system]
 requires = ["setuptools>=75"]

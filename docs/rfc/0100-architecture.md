@@ -14,6 +14,7 @@ Kernel 负责事件、Task/Agent 状态、邮箱、Activity 调度与因果边�
 | 包              | 职责                                                       |
 | --------------- | ---------------------------------------------------------- |
 | `src/contracts` | 配置 DTO、AMP、Agent、模型与记忆的稳定数据契约；无上层依赖 |
+| `src/config`    | TOML 加载、校验、配置注册中心与热重载；依赖 contracts |
 | `src/prompt`    | 提示词目录、分层 DTO 与模型上下文呈现；只依赖 contracts    |
 | `src/kernel`    | Task/Agent、邮箱、Activity、SQLite 运行态与因果限制        |
 | `src/ai`        | 模型网关：角色、能力协商、调用、计费、节流与中断           |
@@ -28,7 +29,7 @@ Kernel 负责事件、Task/Agent 状态、邮箱、Activity 调度与因果边�
 ## 依赖方向
 
 ```
-utils/contracts ← prompt ← memory ← agents/ai/localhost/platform ← aurora
+utils/contracts ← config ← prompt ← memory ← agents/ai/localhost/platform ← aurora
 ```
 
 - Kernel 只依赖 contracts 与 utils，不理解平台名称或私有对象
@@ -42,7 +43,7 @@ utils/contracts ← prompt ← memory ← agents/ai/localhost/platform ← auror
 顶层 `aurora` 包是唯一进程组合与 CLI 入口。平台选择规则：
 
 - `aurora`（无参数）：使用 `platforms.toml` 中各平台的 `enabled` 默认值
-- `aurora --console --dashboard --mcp`：精确启用指定平台
+- `aurora --<platform>`：精确启用指定平台（platform 集合由 `PlatformPreference` 字段动态派生）
 - `aurora --headless`：空平台集合
 - `aurora check`：非运行时质量命令，不创建 Runtime
 
@@ -74,12 +75,13 @@ data/kernel/archive/   # 已完成/失败 Task 的规范 JSON
 ### 强制规则
 
 - 结构性配置使用 TOML；JSON 不得承担主配置职责；YAML 不进入配置链
-- `aurora.toml` 与 `platforms.toml` 必须各自产生不可变快照，不得跨文件任意覆盖
+- `aurora.toml` 与 `platforms.toml` 各自产生不可变快照，不得跨文件任意覆盖
 - profile 只覆盖 `aurora.toml`；表递归合并，标量与数组整体替换
 - 密钥仅来自环境变量，TOML 只声明环境变量名（如 `secret_env = "OPENAI_API_KEY"`）
 - 除 `AURORA_PROFILE` 外，环境变量不得静默覆盖 TOML
 - 未知键、类型不匹配和无效引用必须在启动前失败
 - 模块导入不得隐式读取配置或创建运行目录
+- 配置通过 `src.config` 集中持有：`init()` 在进程早期加载，`get()` 允许所有包零参数获取不可变快照，`reload()` 支持运行时热重载并通知订阅者
 
 ## 约束
 
@@ -87,3 +89,4 @@ data/kernel/archive/   # 已完成/失败 Task 的规范 JSON
 - Dashboard 不成为第二个运行时
 - 第三方 Python 插件自动发现不属于当前契约
 - 守护进程、systemd、容器编排、热重载或自动重启不属于当前范围
+- 平台标识符不得在代码中硬编码：全部从 `PlatformPreference` 字段派生为 `PLATFORM_NAMES`

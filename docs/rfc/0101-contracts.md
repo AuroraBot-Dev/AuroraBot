@@ -119,8 +119,16 @@ parameters_schema    # JSON Schema
 
 ## 配置 DTO
 
-`load_configuration(project_root)` 是唯一公开配置入口，返回不可变 `AuroraConfig`。
-DTO 与纯校验位于 `src/contracts/configuration.py`；组合根显式加载一次并注入各层。
+`load_configuration(project_root)` 返回不可变 `AuroraConfig`。DTO 与纯校验工具（`_require_keys`、`_string`、`_table` 等）位于 `src/contracts/configuration.py`，不含任何 I/O 或 TOML 解析。
+
+`src/config` 提供配置加载与进程级单例：
+- `load_configuration(root, profile)` — 读取所有 TOML、profile 合并、组装 AuroraConfig
+- `init(root, profile)` — 进程早期显式加载，生成不可变快照并注册
+- `get()` — 所有包零参数获取当前配置
+- `reload()` — 热重载全部 TOML 并通知订阅者
+- `subscribe(callback)` / `unsubscribe(callback)` — 注册重载回调
+
+`PLATFORM_NAMES` 由 `PlatformPreference` 字段名派生，位于 contracts 层；用于 CLI 参数生成、平台选择校验和配置段键名验证。
 
 ## 约束
 

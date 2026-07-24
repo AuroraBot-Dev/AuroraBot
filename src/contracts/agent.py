@@ -11,6 +11,13 @@ if TYPE_CHECKING:
     from src.contracts.model import ModelContinuation, ToolCall, ToolDefinition
 
 
+class ErrorMsg(StrEnum):
+    """Agent handler 或工具调用的错误码。"""
+
+    CAPABILITY_IDS_MUST_BE_UNIQUE = "capability IDs must be unique"
+    AGENTDECISION_MUST_CONTAIN_EXACTLY_ONE_PRIMARY_ACTION = "AgentDecision must contain exactly one primary action"
+
+
 class TaskStatus(StrEnum):
     """Task 生命周期状态：活跃、已完成、静默、取消、预算耗尽、错误。"""
 
@@ -74,7 +81,7 @@ class CapabilityCatalogSnapshot:
     def __post_init__(self) -> None:
         identifiers = [item.id for item in self.capabilities]
         if len(identifiers) != len(set(identifiers)):
-            raise ValueError("capability IDs must be unique")
+            raise ValueError(ErrorMsg.CAPABILITY_IDS_MUST_BE_UNIQUE)
 
     @property
     def by_id(self) -> MappingProxyType[str, CapabilityDescriptor]:
@@ -98,7 +105,7 @@ class TaskBudget:
 class AgentLimits:
     """Agent 运行时的并发与资源限制配置。"""
 
-    root_profile: str = "builtin.gate"
+    root_profile: str = "builtin.root"
     worker_profile: str = "builtin.worker"
     memory_agent_profile: str | None = None
     max_active_agents: int = 16
@@ -280,7 +287,7 @@ class AgentDecision:
             )
         )
         if actions != 1:
-            raise ValueError("AgentDecision must contain exactly one primary action")
+            raise ValueError(ErrorMsg.AGENTDECISION_MUST_CONTAIN_EXACTLY_ONE_PRIMARY_ACTION)
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,5 +382,8 @@ class ModelActivityQueue(Protocol):
     async def claim_model_requests(self, limit: int) -> tuple[ActivityRequest, ...]: ...
 
     async def complete_model(
-        self, activity: ActivityRequest, result: dict[str, Any] | None, error: str | None
+        self,
+        activity: ActivityRequest,
+        result: dict[str, Any] | None,
+        error: str | None,
     ) -> None: ...

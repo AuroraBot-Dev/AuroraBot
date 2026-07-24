@@ -90,4 +90,4 @@ localhost 持久化并执行自主额度，不包含 tick 时间、interval 或 
 - localhost 不得导入具体 `src.platform.*` 实现
 - 不得持有平台私有地址或协议对象
 - AMP 正文和 SOUL 内容不写入 INFO 日志
-- 配置只在组合根显式加载一次
+- 配置通过 `src.config.get()` 获取全局实例；组件构造时也可接受显式传入的 `AuroraConfig`

@@ -1,4 +1,28 @@
-"""AMP 信封的校验与创建。"""
+"""AMP 信封的校验与创建。
+
+AMP object::
+
+    {
+        "header": {
+            "protocol": "amp/1.0",
+            "method": "aurora/event",
+            "message_id": "UUID",
+            "timestamp": "ISO-8601",
+            "source": {
+                "app": "string",
+                "instance": "string"
+            }
+        },
+        "payload": {
+            "type": "string",
+            "session_id": "string",
+            "summary": "string",
+            "data": { ... },
+            "expire_at": "ISO-8601" | null
+        }
+    }
+
+"""
 
 from __future__ import annotations
 
@@ -69,27 +93,60 @@ class AmpEnvelope:
     @classmethod
     def parse(cls, value: object) -> "AmpEnvelope":
         """解析原始 JSON 对象为经验证的 AMP 信封。"""
+        # root
         root = _mapping(value, "AMP")
-        if set(root) != {"header", "payload"}:
+        if set(root) != {
+            "header",
+            "payload",
+        }:
             raise AmpValidationError("AMP must contain exactly header and payload")
+
+        # root.header
         header = _mapping(root["header"], "header")
         payload = _mapping(root["payload"], "payload")
-        if set(header) != {"protocol", "method", "message_id", "timestamp", "source"}:
+        if set(header) != {
+            "protocol",
+            "method",
+            "message_id",
+            "timestamp",
+            "source",
+        }:
             raise AmpValidationError("header has unsupported or missing fields")
-        if set(payload) != {"type", "session_id", "summary", "data", "expire_at"}:
+
+        # root.payload
+        if set(payload) != {
+            "type",
+            "session_id",
+            "summary",
+            "data",
+            "expire_at",
+        }:
             raise AmpValidationError("payload has unsupported or missing fields")
+
+        # header.message_id
         message_id = _text(header["message_id"], "header.message_id")
         try:
             UUID(message_id)
         except ValueError as error:
             raise AmpValidationError("header.message_id must be a UUID") from error
+
+        # header.source
         source = _mapping(header["source"], "header.source")
-        if set(source) != {"app", "instance"}:
+        if set(source) != {
+            "app",
+            "instance",
+        }:
             raise AmpValidationError("header.source must contain app and instance")
+
+        # payload.data
         data = _mapping(payload["data"], "payload.data")
+
+        # payload.expire_at
         expire_at = payload["expire_at"]
         if expire_at is not None:
             expire_at = _timestamp(_text(expire_at, "payload.expire_at"))
+
+        # construct
         parsed = cls(
             header=AmpHeader(
                 protocol=_text(header["protocol"], "header.protocol"),
