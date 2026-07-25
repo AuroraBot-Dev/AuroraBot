@@ -4,7 +4,7 @@
 # Gate：入口 Agent，接收所有交互并决定委派
 [[agent]]
 id = "builtin.gate"
-implementation = "src.agents.tool_agent:ToolAgent"
+implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
 capabilities = ["*"]
 can_delegate = true
@@ -13,7 +13,7 @@ child_profiles = ["builtin.worker"]
 # Worker：执行具体工作的通用 Agent
 [[agent]]
 id = "builtin.worker"
-implementation = "src.agents.tool_agent:ToolAgent"
+implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
 capabilities = ["*"]
 can_delegate = true

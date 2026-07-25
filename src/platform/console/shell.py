@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -17,6 +18,11 @@ from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
 from src.utils.logging import get_logger
 
 logger = get_logger("aurora.platform.console")
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable

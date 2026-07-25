@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING
 
-from src.contracts.memory import MemoryEntry, MemoryFailure, MemoryProposal, MemoryQuery, MemoryResult
+from src.contracts.memory import MemoryEntry, MemoryFailure, MemoryProposal, MemoryQuery, MemoryQueryResult
 from src.memory.service import MemoryService
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 def test_memory_placeholder_contracts() -> None:
     assert MemoryQuery("who", "global").limit == 8
-    assert MemoryResult(()).items == ()
+    assert MemoryQueryResult(()).items == ()
     assert MemoryProposal({"fact": "x"}, "task").importance == 0.5
     assert MemoryFailure().code == "memory.unavailable"
 

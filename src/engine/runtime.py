@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import asdict
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from src.contracts.agent import AgentHandler, CapabilityCatalogSnapshot, EngineConfiguration
@@ -18,6 +19,13 @@ if TYPE_CHECKING:
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
     from src.contracts.tool import ToolExecutorBinding
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    RESERVED_EVENT_TYPE = "reserved internal event type: {amp_type}"
+
 
 logger = get_logger("aurora.engine.runtime")
 
@@ -56,7 +64,7 @@ class AgentEngine:
         """解析并提交外部 AMP，同时中断受外部活动影响的自主模型调用。"""
         amp = AmpEnvelope.parse(value)
         if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
-            raise ValueError(f"reserved internal event type: {amp.payload.type}")
+            raise ValueError(_Msg.RESERVED_EVENT_TYPE.format(amp_type=amp.payload.type))
         if amp.payload.type != "system.tick":
             cancelled = set(await self._state.cancel_autonomous_tasks("external_activity"))
             for task, task_id in tuple(self._model_activity_tasks.items()):

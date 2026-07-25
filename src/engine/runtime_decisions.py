@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from jsonschema import ValidationError, validate
@@ -36,6 +37,19 @@ if TYPE_CHECKING:
     )
     from src.contracts.memory import MemoryContextSnapshot
     from src.engine.store import SQLiteRuntimeStore
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    UNSUPPORTED_DECISION = "unsupported Agent decision"
+    AGENT_MODEL_ROLE_DENIED = "Agent {agent_id} cannot request model role {role}"
+    AGENT_TOOL_DENIED = "Agent {agent_id} cannot request {capability}"
+    UNKNOWN_TOOL = "unknown Tool capability {capability}"
+    TOOL_PARAMS_MISMATCH = "Tool parameters do not match {capability}: {message}"
+    PROFILE_CANNOT_DELEGATE = "Agent profile {profile_id} cannot delegate"
+    PROFILE_CANNOT_CREATE = "Agent profile {profile_id} cannot create {child_profile}"
+    WAIT_WITHOUT_CHILDREN = "Agent cannot wait without active children"
 
 
 def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
@@ -143,7 +157,7 @@ def apply_authorized_decision(
     elif decision.failure is not None:
         command = _apply_failure_decision(decision, claims)
     else:
-        raise ValueError("unsupported Agent decision")
+        raise ValueError(_Msg.UNSUPPORTED_DECISION)
 
     kernel.store.apply_decision(
         message=message,
@@ -164,7 +178,7 @@ def _apply_model_request(
 ) -> ModelCommand:
     request_role = decision.model_request.get("role")  # type: ignore[union-attr]
     if request_role != profile.model_role:
-        raise PermissionError(f"Agent {agent.agent_id} cannot request model role {request_role}")
+        raise PermissionError(_Msg.AGENT_MODEL_ROLE_DENIED.format(agent_id=agent.agent_id, role=request_role))
     return ModelCommand(request=decision.model_request, claims=claims)  # type: ignore[arg-type]
 
 
@@ -178,14 +192,14 @@ def _apply_tool_request(
     assert decision.tool_request is not None
     tool = decision.tool_request
     if not _capability_allowed(tool.capability, profile.capabilities):
-        raise PermissionError(f"Agent {agent.agent_id} cannot request {tool.capability}")
+        raise PermissionError(_Msg.AGENT_TOOL_DENIED.format(agent_id=agent.agent_id, capability=tool.capability))
     descriptor = kernel.capability_catalog.by_id.get(tool.capability)
     if descriptor is None:
-        raise ValueError(f"unknown Tool capability {tool.capability}")
+        raise ValueError(_Msg.UNKNOWN_TOOL.format(capability=tool.capability))
     try:
         validate(tool.parameters, descriptor.parameters_schema)
     except ValidationError as error:
-        raise ValueError(f"Tool parameters do not match {tool.capability}: {error.message}") from error
+        raise ValueError(_Msg.TOOL_PARAMS_MISMATCH.format(capability=tool.capability, message=error.message)) from error
     task = kernel.store.get_task(agent.task_id)
     assert task is not None
     return ToolCommand(
@@ -209,12 +223,12 @@ def _apply_delegations(
     claims: tuple[Any, ...],
 ) -> DelegateCommand:
     if not profile.can_delegate:
-        raise PermissionError(f"Agent profile {profile.id} cannot delegate")
+        raise PermissionError(_Msg.PROFILE_CANNOT_DELEGATE.format(profile_id=profile.id))
     delegation_requests: list[dict[str, str]] = []
     for delegation in decision.delegations:
         child_profile = delegation.profile_id or kernel.limits.worker_profile
         if child_profile not in profile.child_profiles or child_profile not in kernel._profiles:
-            raise PermissionError(f"Agent profile {profile.id} cannot create {child_profile}")
+            raise PermissionError(_Msg.PROFILE_CANNOT_CREATE.format(profile_id=profile.id, child_profile=child_profile))
         delegation_requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
     return DelegateCommand(requests=tuple(delegation_requests), claims=claims)
 
@@ -231,7 +245,7 @@ def _apply_completion(decision: AgentDecision, claims: tuple[Any, ...]) -> Compl
 def _apply_wait(kernel: DecisionRuntime, agent: AgentInstance, claims: tuple[Any, ...]) -> WaitCommand:
     active_child = any(not child.terminal for child in kernel.store.children(agent.agent_id))
     if not active_child and not kernel.store.has_pending_child_reports(agent.agent_id):
-        raise ValueError("Agent cannot wait without active children")
+        raise ValueError(_Msg.WAIT_WITHOUT_CHILDREN)
     return WaitCommand(claims=claims)
 
 

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from uuid import NAMESPACE_URL, uuid5
 
 from src.contracts.agent import CapabilityDescriptor
-from src.contracts.tool import ToolExecutionRequest, ToolOutcome
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -93,7 +93,7 @@ class ConsolePlatform:
             (summary, external_message_id, request.request_id),
         )
         self._database.commit()
-        return ToolOutcome("succeeded", summary, result={"message_id": external_message_id})
+        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, summary, result={"message_id": external_message_id})
 
     async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
         """恢复 Console Tool 的执行状态。
@@ -110,7 +110,7 @@ class ConsolePlatform:
         if outcome is not None:
             return outcome
         return ToolOutcome(
-            "failed",
+            ToolOutcomeStatus.FAILED,
             "Console 发送在分发前被中断",
             error="interrupted_before_dispatch",
         )
@@ -127,24 +127,24 @@ class ConsolePlatform:
             return None
         if str(row["request_digest"]) != _request_digest(request):
             return ToolOutcome(
-                "failed",
+                ToolOutcomeStatus.FAILED,
                 "Console Tool 幂等性冲突",
                 error="idempotency conflict: request ID was reused with a different request",
             )
         status = str(row["status"])
         if status == "dispatch_started":
             return ToolOutcome(
-                "unknown",
+                ToolOutcomeStatus.UNKNOWN,
                 "Console 消息投递结果未知",
                 error="dispatch_started_without_terminal_outcome",
             )
         if status == "succeeded":
             return ToolOutcome(
-                "succeeded",
+                ToolOutcomeStatus.SUCCEEDED,
                 str(row["summary"]),
                 result={"message_id": str(row["external_message_id"])},
             )
-        return ToolOutcome("failed", str(row["summary"]), error=str(row["error"]))
+        return ToolOutcome(ToolOutcomeStatus.FAILED, str(row["summary"]), error=str(row["error"]))
 
     @staticmethod
     def _validate(request: ToolExecutionRequest) -> str | None:
@@ -171,7 +171,7 @@ class ConsolePlatform:
             (request.request_id, _request_digest(request), text if isinstance(text, str) else "", summary, error),
         )
         self._database.commit()
-        return ToolOutcome("failed", summary, error=error)
+        return ToolOutcome(ToolOutcomeStatus.FAILED, summary, error=error)
 
     async def next_message(self) -> str:
         """从消息队列中获取下一条待消费的 Console 消息。"""

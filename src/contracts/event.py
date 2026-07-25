@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.contracts.configuration import AuroraConfig
+    from src.contracts.ports import RuntimeCommandPort
 
 
 class InputOrigin(StrEnum):
@@ -62,24 +62,6 @@ class CommandResult:
     message_id: str | None = None
     publish_reply: bool = True
     control: CommandControl = CommandControl.NONE
-
-
-class RuntimeCommandPort(Protocol):
-    """localhost 命令处理器所需的最小运行时端口。"""
-
-    configuration: AuroraConfig
-
-    async def submit_amp(self, value: object) -> str: ...
-
-    async def submit_conversation(self, request: RuntimeInput, text: str) -> str: ...
-
-    async def pump(self, max_turns: int | None = None) -> dict[str, Any]: ...
-
-    def status(self) -> dict[str, Any]: ...
-
-    def task(self, task_id: str) -> dict[str, Any] | None: ...
-
-    def agent(self, agent_id: str) -> dict[str, Any] | None: ...
 
 
 @dataclass(frozen=True, slots=True)

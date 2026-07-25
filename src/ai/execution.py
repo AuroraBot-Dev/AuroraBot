@@ -33,12 +33,21 @@ from litellm.utils import token_counter
 
 litellm.suppress_debug_info = True
 
+from enum import StrEnum
+
 from src.ai.models import compute_cost
 from src.ai.providers import missing_credentials_reason, resolve_model
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     import collections.abc
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    FORBIDDEN_MODEL_PARAM = "调用方禁止传入 model 参数，模型由网关角色统一指定"
+
 
 logger = get_logger("Gateway")
 
@@ -249,7 +258,7 @@ class ModelCaller:
         禁止调用方传入 ``model`` 参数 —— 模型由角色配置统一指定。
         """
         if "model" in kwargs:
-            raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")
+            raise PermissionError(_Msg.FORBIDDEN_MODEL_PARAM)
 
         async def _compute_and_track(
             prompt_tokens: int,

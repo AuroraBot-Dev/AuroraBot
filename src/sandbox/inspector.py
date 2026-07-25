@@ -24,11 +24,11 @@ class CodeInspector:
 
     # 构造函数 → 返回类型的映射（用于调用链解析）
     _CONSTRUCTOR_TO_CLASS: ClassVar[dict[str, str]] = {
-        # pathlib concrete paths
+        # pathlib 具体路径类
         "Path": "pathlib.Path",
         "PosixPath": "pathlib.PosixPath",
         "WindowsPath": "pathlib.WindowsPath",
-        # pathlib pure paths
+        # pathlib 纯路径类
         "PurePath": "pathlib.PurePath",
         "PurePosixPath": "pathlib.PurePosixPath",
         "PureWindowsPath": "pathlib.PureWindowsPath",

@@ -10,7 +10,7 @@ from src.contracts.event import CommandContext, CommandResult, RuntimeInput
 from src.localhost.registry import ConsoleCommand, command_specs
 
 if TYPE_CHECKING:
-    from src.contracts.event import RuntimeCommandPort
+    from src.contracts.ports import RuntimeCommandPort
 
 
 class CommandParseError(ValueError):

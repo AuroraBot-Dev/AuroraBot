@@ -17,12 +17,13 @@ from src.contracts.agent import (
     Completion,
     DelegationRequest,
     EngineConfiguration,
-    TaskBudget,
+    TaskLimits,
     TaskStatus,
     ToolRequest,
 )
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelResult, ModelUsage
+from src.contracts.tool import ToolOutcomeStatus
 from src.engine.state import EngineState
 
 if TYPE_CHECKING:
@@ -55,8 +56,8 @@ def _configuration(workspace: Path) -> EngineConfiguration:
         str(workspace),
         _profiles(),
         AgentLimits(root_profile="gate", worker_profile="worker", lease_seconds=0.01),
-        TaskBudget(8, 6, 300),
-        TaskBudget(3, 2, 120),
+        TaskLimits(8, 6, 300),
+        TaskLimits(3, 2, 120),
     )
 
 
@@ -177,7 +178,7 @@ def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) 
         kwargs = {
             "request_id": lease.request_id,
             "capability": lease.capability,
-            "status": "succeeded",
+            "status": ToolOutcomeStatus.SUCCEEDED,
             "summary": "delivered",
             "result": {"ok": True},
             "error": None,
@@ -216,7 +217,7 @@ def test_complete_task_tool_finishes_without_resume(tmp_path: Path) -> None:
         await state.complete_tool(
             request_id=lease.request_id,
             capability=lease.capability,
-            status="succeeded",
+            status=ToolOutcomeStatus.SUCCEEDED,
             summary="delivered",
             result={},
             error=None,

@@ -26,7 +26,7 @@ from src.utils.logging import get_logger
 logger = get_logger("Providers")
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ProviderConfig:
     """自定义供应商配置。
 

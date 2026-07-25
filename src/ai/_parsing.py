@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from enum import StrEnum
 from typing import Any
 
 from jsonschema import ValidationError, validate
@@ -24,6 +25,14 @@ from src.contracts.model import (
     ToolDefinition,
 )
 
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    ALIAS_COLLISION = "tool alias collision"
+    NO_ASSISTANT_MESSAGE = "Chat provider returned no assistant message"
+
+
 # ═══════════════════════════════════════════════════════════
 # 工具序列化
 # ═══════════════════════════════════════════════════════════
@@ -37,7 +46,7 @@ def provider_tools(
     for tool in tools:
         alias = f"aurora_{hashlib.sha256(tool.name.encode()).hexdigest()[:20]}"
         if alias in aliases:
-            raise ModelCapabilityError("tool alias collision")
+            raise ModelCapabilityError(_Msg.ALIAS_COLLISION)
         aliases[alias] = tool.name
         if responses:
             definitions.append(
@@ -67,7 +76,7 @@ def chat_message(response: object) -> Any:
     try:
         return response.choices[0].message  # type: ignore[attr-defined]
     except (AttributeError, IndexError, TypeError) as error:
-        raise ModelGatewayError("Chat provider returned no assistant message") from error
+        raise ModelGatewayError(_Msg.NO_ASSISTANT_MESSAGE) from error
 
 
 def chat_assistant_item(message: object) -> dict[str, Any]:

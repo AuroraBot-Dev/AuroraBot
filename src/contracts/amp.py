@@ -28,8 +28,25 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    MUST_BE_OBJECT = "{label} must be an object"
+    MUST_BE_NON_EMPTY_STRING = "{label} must be a non-empty string"
+    TIMESTAMP_MUST_BE_ISO8601 = "header.timestamp must be ISO-8601"
+    TIMESTAMP_MUST_INCLUDE_OFFSET = "header.timestamp must include an offset"
+    AMP_MUST_CONTAIN_HEADER_AND_PAYLOAD = "AMP must contain exactly header and payload"
+    HEADER_UNSUPPORTED_FIELDS = "header has unsupported or missing fields"
+    PAYLOAD_UNSUPPORTED_FIELDS = "payload has unsupported or missing fields"
+    MESSAGE_ID_MUST_BE_UUID = "header.message_id must be a UUID"
+    SOURCE_MUST_CONTAIN_APP_INSTANCE = "header.source must contain app and instance"
+    UNSUPPORTED_AMP_PROTOCOL = "unsupported AMP protocol"
+    UNSUPPORTED_AMP_METHOD = "unsupported AMP method"
 
 
 class AmpValidationError(ValueError):
@@ -39,14 +56,14 @@ class AmpValidationError(ValueError):
 def _mapping(value: object, label: str) -> dict[str, Any]:
     """校验值为 dict 类型。"""
     if not isinstance(value, dict):
-        raise AmpValidationError(f"{label} must be an object")
+        raise AmpValidationError(_Msg.MUST_BE_OBJECT.format(label=label))
     return value
 
 
 def _text(value: object, label: str) -> str:
     """校验值为非空字符串。"""
     if not isinstance(value, str) or not value:
-        raise AmpValidationError(f"{label} must be a non-empty string")
+        raise AmpValidationError(_Msg.MUST_BE_NON_EMPTY_STRING.format(label=label))
     return value
 
 
@@ -55,9 +72,9 @@ def _timestamp(value: str) -> str:
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError as error:
-        raise AmpValidationError("header.timestamp must be ISO-8601") from error
+        raise AmpValidationError(_Msg.TIMESTAMP_MUST_BE_ISO8601) from error
     if parsed.tzinfo is None:
-        raise AmpValidationError("header.timestamp must include an offset")
+        raise AmpValidationError(_Msg.TIMESTAMP_MUST_INCLUDE_OFFSET)
     return parsed.astimezone(UTC).isoformat()
 
 
@@ -99,7 +116,7 @@ class AmpEnvelope:
             "header",
             "payload",
         }:
-            raise AmpValidationError("AMP must contain exactly header and payload")
+            raise AmpValidationError(_Msg.AMP_MUST_CONTAIN_HEADER_AND_PAYLOAD)
 
         # root.header
         header = _mapping(root["header"], "header")
@@ -111,7 +128,7 @@ class AmpEnvelope:
             "timestamp",
             "source",
         }:
-            raise AmpValidationError("header has unsupported or missing fields")
+            raise AmpValidationError(_Msg.HEADER_UNSUPPORTED_FIELDS)
 
         # root.payload
         if set(payload) != {
@@ -121,14 +138,14 @@ class AmpEnvelope:
             "data",
             "expire_at",
         }:
-            raise AmpValidationError("payload has unsupported or missing fields")
+            raise AmpValidationError(_Msg.PAYLOAD_UNSUPPORTED_FIELDS)
 
         # header.message_id
         message_id = _text(header["message_id"], "header.message_id")
         try:
             UUID(message_id)
         except ValueError as error:
-            raise AmpValidationError("header.message_id must be a UUID") from error
+            raise AmpValidationError(_Msg.MESSAGE_ID_MUST_BE_UUID) from error
 
         # header.source
         source = _mapping(header["source"], "header.source")
@@ -136,7 +153,7 @@ class AmpEnvelope:
             "app",
             "instance",
         }:
-            raise AmpValidationError("header.source must contain app and instance")
+            raise AmpValidationError(_Msg.SOURCE_MUST_CONTAIN_APP_INSTANCE)
 
         # payload.data
         data = _mapping(payload["data"], "payload.data")
@@ -167,9 +184,9 @@ class AmpEnvelope:
             ),
         )
         if parsed.header.protocol != "amp/1.0":
-            raise AmpValidationError("unsupported AMP protocol")
+            raise AmpValidationError(_Msg.UNSUPPORTED_AMP_PROTOCOL)
         if parsed.header.method != "aurora/event":
-            raise AmpValidationError("unsupported AMP method")
+            raise AmpValidationError(_Msg.UNSUPPORTED_AMP_METHOD)
         return parsed
 
     def to_dict(self) -> dict[str, Any]:

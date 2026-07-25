@@ -29,10 +29,10 @@ class MemoryQuery:
 
 
 @dataclass(frozen=True, slots=True)
-class MemoryResult:
+class MemoryQueryResult:
     """记忆查询结果：匹配项元组。
 
-    MemoryResult object::
+    MemoryQueryResult object::
 
         {
             "items": [{"...": "..."}, ...]

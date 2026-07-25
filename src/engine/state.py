@@ -12,6 +12,7 @@ import logging
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -47,7 +48,17 @@ if TYPE_CHECKING:
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry
 
 logger = get_logger("aurora.engine")
-_INVALID_TOOL_OUTCOME = "invalid Tool outcome"
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    HANDLERS_MISMATCH = "Agent handlers must exactly match configured profiles"
+    ROOT_PROFILE_MISSING = "root Agent profile is not configured"
+    CATALOG_ALREADY_INSTALLED = "capability catalog is already installed"
+    MAX_TURNS_POSITIVE = "max_turns must be positive"
+    INVALID_TOOL_OUTCOME = "invalid Tool outcome"
+    TOOL_COMPLETION_UNMATCHED = "Tool completion does not match an active request: {request_id}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,9 +101,9 @@ class EngineState:
         self.configuration = configuration
         self._profiles = {profile.id: profile for profile in configuration.profiles}
         if set(self._profiles) != set(handlers):
-            raise ValueError("Agent handlers must exactly match configured profiles")
+            raise ValueError(_Msg.HANDLERS_MISMATCH)
         if configuration.limits.root_profile not in self._profiles:
-            raise ValueError("root Agent profile is not configured")
+            raise ValueError(_Msg.ROOT_PROFILE_MISSING)
         self._handlers = handlers
         self._memory_store = memory_store
         self._workspace = Path(configuration.workspace)
@@ -135,7 +146,7 @@ class EngineState:
     def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
         """安装外部能力目录。仅能调用一次，重复调用将抛出 RuntimeError。"""
         if self._capability_catalog is not None:
-            raise RuntimeError("capability catalog is already installed")
+            raise RuntimeError(_Msg.CATALOG_ALREADY_INSTALLED)
         self._capability_catalog = catalog
 
     async def submit_amp(self, amp: AmpEnvelope) -> None:
@@ -181,7 +192,7 @@ class EngineState:
         """
         limit = self.limits.turn_concurrency if max_turns is None else max_turns
         if limit <= 0:
-            raise ValueError("max_turns must be positive")
+            raise ValueError(_Msg.MAX_TURNS_POSITIVE)
         ingested, claims = await self._ingest_and_claim(limit)
         if not claims:
             await self._blocking_call(self._archive_terminal_tasks)
@@ -351,11 +362,11 @@ class EngineState:
         通过 uuid5 生成确定性收据 ID 实现幂等，匹配原始 Activity 后写入。
         """
         if status not in {"succeeded", "failed", "unknown"}:
-            raise ValueError(_INVALID_TOOL_OUTCOME)
+            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
         if (status == "succeeded" and error is not None) or (
             status != "succeeded" and (not error or result is not None)
         ):
-            raise ValueError(_INVALID_TOOL_OUTCOME)
+            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
         event_type = f"tool.{status}"
         # 通过 uuid5 生成确定性收据 ID，确保同一请求 + 事件类型的组合幂等
         receipt_id = str(uuid5(NAMESPACE_URL, f"aurora-tool-receipt:{request_id}:{event_type}"))
@@ -374,7 +385,7 @@ class EngineState:
             },
         )
         if not matched:
-            raise ValueError(f"Tool completion does not match an active request: {request_id}")
+            raise ValueError(_Msg.TOOL_COMPLETION_UNMATCHED.format(request_id=request_id))
 
     def tasks(self) -> tuple[TaskState, ...]:
         """返回仓库中所有 Task。"""

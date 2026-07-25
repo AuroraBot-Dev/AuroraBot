@@ -4,16 +4,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from src.contracts.agent import CapabilityDescriptor, ToolLease
+    from src.contracts.agent import CapabilityDescriptor
 
 
 class _Msg(StrEnum):
     INVALID_OUTCOME = "Tool outcome status and summary must be valid"
     SUCCESS_WITH_ERROR = "a succeeded Tool outcome cannot contain an error"
     FAILURE_WITHOUT_ERROR = "a failed or unknown Tool outcome requires error and forbids result"
+
+
+class ToolOutcomeStatus(StrEnum):
+    """工具执行结果的确定性三态。"""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,9 +34,6 @@ class ToolExecutionRequest:
     parameters: dict[str, Any]
 
 
-ToolOutcomeStatus = Literal["succeeded", "failed", "unknown"]
-
-
 @dataclass(frozen=True, slots=True)
 class ToolOutcome:
     """工具执行的确定性三态结果。"""
@@ -39,9 +44,9 @@ class ToolOutcome:
     error: str | None = None
 
     def __post_init__(self) -> None:
-        if self.status not in {"succeeded", "failed", "unknown"} or not self.summary:
+        if not isinstance(self.status, ToolOutcomeStatus) or not self.summary:
             raise ValueError(_Msg.INVALID_OUTCOME)
-        if self.status == "succeeded":
+        if self.status == ToolOutcomeStatus.SUCCEEDED:
             if self.error is not None:
                 raise ValueError(_Msg.SUCCESS_WITH_ERROR)
         elif not self.error or self.result is not None:
@@ -69,28 +74,3 @@ class ToolExecutorBinding:
     source_app: str
     source_instance: str
     recovery: RecoveryBinding | None = None
-
-
-class ToolQueuePort(Protocol):
-    """engine 工具注册表所需的工具租约队列。"""
-
-    async def claim_tool_requests(self) -> tuple[ToolLease, ...]: ...
-
-    async def tool_recovery_requests(self) -> tuple[ToolLease, ...]: ...
-
-
-class ToolCompletionPort(Protocol):
-    """engine 工具注册表写入执行结果的完成端口。"""
-
-    async def complete_tool(
-        self,
-        *,
-        request_id: str,
-        capability: str,
-        status: ToolOutcomeStatus,
-        summary: str,
-        result: dict[str, Any] | None,
-        error: str | None,
-        source_app: str,
-        source_instance: str,
-    ) -> None: ...

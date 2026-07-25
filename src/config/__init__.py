@@ -6,14 +6,18 @@
 
 from __future__ import annotations
 
+from src.config.hot_reload import ConfigFileWatcher
 from src.config.loader import load_configuration
 from src.config.registry import get, init, reload, subscribe, unsubscribe
+from src.config.validator import validate_config
 
 __all__ = [
+    "ConfigFileWatcher",
     "get",
     "init",
     "load_configuration",
     "reload",
     "subscribe",
     "unsubscribe",
+    "validate_config",
 ]

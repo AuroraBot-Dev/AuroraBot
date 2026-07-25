@@ -12,7 +12,7 @@ from src.contracts.agent import (
     AgentProfile,
     Completion,
     EngineConfiguration,
-    TaskBudget,
+    TaskLimits,
 )
 from src.contracts.amp import new_amp
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry
@@ -49,8 +49,8 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
             workspace=str(tmp_path / "engine"),
             profiles=(profile,),
             limits=limits,
-            interactive_budget=TaskBudget(1, 1, 30.0),
-            autonomous_budget=TaskBudget(1, 1, 30.0),
+            interactive_budget=TaskLimits(1, 1, 30.0),
+            autonomous_budget=TaskLimits(1, 1, 30.0),
         )
         engine = AgentEngine(configuration, {profile.id: _CompletingHandler()}, model_provider=_UnusedModelProvider())
         engine.bind_tool_executors(())
@@ -110,8 +110,8 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             workspace=str(tmp_path / "engine"),
             profiles=(profile,),
             limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
-            interactive_budget=TaskBudget(1, 1, 30.0),
-            autonomous_budget=TaskBudget(1, 1, 30.0),
+            interactive_budget=TaskLimits(1, 1, 30.0),
+            autonomous_budget=TaskLimits(1, 1, 30.0),
         )
         engine = AgentEngine(
             configuration,

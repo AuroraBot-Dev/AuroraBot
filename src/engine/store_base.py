@@ -11,6 +11,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -31,6 +32,12 @@ from src.engine.store_schema import (
     _SCHEMA,
     _SCHEMA_VERSION,
 )
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    UNSUPPORTED_SCHEMA = "不支持的 Agent 运行时数据库 Schema 版本"
 
 
 def utc_now() -> str:
@@ -89,7 +96,7 @@ class RuntimeStoreBase:
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
             elif int(row["version"]) not in {1, 2, 3, 4, _SCHEMA_VERSION}:
-                raise RuntimeError("不支持的 Agent 运行时数据库 Schema 版本")
+                raise RuntimeError(_Msg.UNSUPPORTED_SCHEMA)
             version = int(row["version"]) if row is not None else _SCHEMA_VERSION
             if version < _SCHEMA_VERSION:
                 task_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(tasks)")}

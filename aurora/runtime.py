@@ -1,12 +1,16 @@
-"""按照 RFC 0014 的平台选择规则组合一个运行时实例。"""
+"""按照平台选择规则组合一个运行时实例。
+
+组合根通过统一的 ``PlatformHandle`` 协议管理所有平台的生命周期：
+创建、工具绑定、任务启动和优雅停止均无需感知具体平台类型。
+"""
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import importlib
 import signal
 import webbrowser
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -17,28 +21,45 @@ from src.ai.vnext import ModelGatewayService
 from src.config import get as get_config
 from src.contracts.agent import AgentHandler, Capability, EngineConfiguration
 from src.contracts.configuration import PLATFORM_NAMES, PlatformPreference
-from src.contracts.tool import ToolExecutorBinding
 from src.engine.runtime import AgentEngine
 from src.localhost.api import create_debug_app
 from src.localhost.runtime import AuroraRuntime
 from src.memory.service import MemoryService
-from src.platform.console import CONSOLE_SEND_DESCRIPTOR, ConsolePlatform
-from src.platform.console.shell import run_console
-from src.platform.dashboard import DASHBOARD_SEND_DESCRIPTOR, ChatService, DashboardPlatform, create_app
-from src.platform.mcp import MCPPlatform
 from src.prompt import PromptComposer, load_prompt_catalog
 from src.utils.logging import configure_console_logging, configure_logging, get_logger
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from src.contracts.configuration import AuroraConfig, DashboardConfig
+    from src.platform import PlatformHandle
+
 logger = get_logger("aurora.process")
 
-if TYPE_CHECKING:
-    from src.contracts.configuration import AuroraConfig, DashboardConfig
+# -- 平台注册 ---------------------------------------------------------
+# 每个平台子包通过同名模块函数 _create(config, runtime) -> PlatformHandle 接入组合根。
+# 新增平台只需在本注册表中添加一条映射，无需修改任何组合逻辑。
+_PLATFORM_CREATORS: dict[str, Callable[..., Any]] = {}
+
+
+def _init_platforms() -> dict[str, Callable[..., Any]]:
+    """一次性导入所有平台子包并将 _create 注册到本地映射。"""
+    if _PLATFORM_CREATORS:
+        return _PLATFORM_CREATORS
+    for name in ("console", "dashboard", "mcp"):
+        module = importlib.import_module(f"src.platform.{name}")
+        if hasattr(module, "_create"):
+            _PLATFORM_CREATORS[name] = module._create  # type: ignore[attr-defined]
+    return _PLATFORM_CREATORS
+
+
+# -- 内部辅助类型 -----------------------------------------------------
 
 
 class _AuroraServer(uvicorn.Server):
-    """将进程信号的所有权留给 Aurora 组合根，禁止 uvicorn 自行捕获信号。"""
+    """禁止 uvicorn 自行捕获信号，由组合根统一管理停止流程。"""
 
-    @contextlib.contextmanager
+    @__import__("contextlib").contextmanager
     def capture_signals(self):  # type: ignore[no-untyped-def]
         yield
 
@@ -61,10 +82,13 @@ class _InstalledSignal:
 
 @dataclass(frozen=True, slots=True)
 class _ProcessServers:
-    """进程内由组合根管理的 HTTP 服务。"""
+    """进程内由组合根管理的 HTTP 服务集合。"""
 
-    dashboard: uvicorn.Server | None
+    dashboard: object | None
     debug: uvicorn.Server
+
+
+# -- 主入口 -----------------------------------------------------------
 
 
 async def run_runtime(
@@ -79,18 +103,17 @@ async def run_runtime(
     configure_console_logging(enabled=configuration.preference.console.terminal_logs if "console" in selected else True)
 
     runtime = _create_runtime(configuration)
-    debug_server = _debug_server(runtime)
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
+    debug_server = _debug_server(runtime)
     failure: BaseException | None = None
     async with AsyncExitStack() as resources:
         resources.push_async_callback(runtime.shutdown)
-        # 仅当外部未提供 stop_event 时安装信号处理器，避免重复安装
         installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
         try:
-            started = await _start_platforms_until_stop(runtime, configuration.preference, selected, resources, stop)
+            started = await _start_platforms_until_stop(runtime, selected, resources, stop)
             if started is not None:
-                console_platform, server = started
+                handles, dashboard_server = started
                 logger.info(
                     "process started platforms=%s profile=%s",
                     ",".join(sorted(selected)) or "headless",
@@ -99,8 +122,8 @@ async def run_runtime(
                 failure = await _run_platform_tasks(
                     runtime,
                     stop,
-                    console_platform,
-                    _ProcessServers(server, debug_server),
+                    handles,
+                    _ProcessServers(dashboard_server, debug_server),
                     open_browser=configuration.preference.dashboard.open_browser,
                 )
         finally:
@@ -111,34 +134,35 @@ async def run_runtime(
         raise failure
 
 
+# -- 平台选择 ---------------------------------------------------------
+
+
 def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPreference) -> frozenset[str]:
     """由用户指定的平台或配置偏好推导出本次应启用的平台集合。"""
     if platforms is not None:
         unknown = platforms - PLATFORM_NAMES
         if unknown:
-            message = f"unknown platforms: {sorted(unknown)}"
-            raise ValueError(message)
+            raise ValueError(f"unknown platforms: {sorted(unknown)}")
         return platforms
     return frozenset(name for name in PLATFORM_NAMES if getattr(preference, name).enabled)
 
 
-def _load_handler(
-    specification: str,
-    composer: PromptComposer,
-    capabilities: tuple[Capability, ...],
-) -> AgentHandler:
+# -- Agent handler 加载 -------------------------------------------------
+
+
+def _load_handler(specification: str, composer: PromptComposer, capabilities: tuple[Capability, ...]) -> AgentHandler:
     """加载 Agent handler，并注入提示词装配器与主动能力。"""
     module_name, separator, attribute = specification.partition(":")
     if not separator:
         raise ValueError(f"Agent implementation must use module:attribute syntax: {specification}")
     implementation = getattr(importlib.import_module(module_name), attribute)
     handler: Any = implementation()
-    composer_installer = getattr(handler, "install_prompt_composer", None)
-    if callable(composer_installer):
-        composer_installer(composer)
-    capability_installer = getattr(handler, "install_capabilities", None)
-    if callable(capability_installer):
-        capability_installer(capabilities)
+    installer = getattr(handler, "install_prompt_composer", None)
+    if callable(installer):
+        installer(composer)
+    cap_installer = getattr(handler, "install_capabilities", None)
+    if callable(cap_installer):
+        cap_installer(capabilities)
     if not callable(getattr(handler, "handle", None)):
         raise TypeError(f"Agent implementation does not provide handle(): {specification}")
     return handler
@@ -148,9 +172,13 @@ def _build_capabilities() -> tuple[Capability, ...]:
     """构造 Agent 可主动选择的内建能力。"""
     from src.agents.capabilities.claim import ClaimCapability
     from src.agents.capabilities.delegate import DelegationCapability
+    from src.agents.capabilities.speech import SpeechCapability
     from src.agents.capabilities.wait import WaitCapability
 
-    return DelegationCapability(), WaitCapability(), ClaimCapability()
+    return DelegationCapability(), WaitCapability(), ClaimCapability(), SpeechCapability()
+
+
+# -- Engine / localhost 构造 --------------------------------------------
 
 
 def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
@@ -179,106 +207,107 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     return AuroraRuntime(configuration, engine)
 
 
+# -- 平台启动（统一循环）-----------------------------------------------
+
+
 async def _start_platforms(
     runtime: AuroraRuntime,
-    preference: PlatformPreference,
     selected: frozenset[str],
     resources: AsyncExitStack,
-) -> tuple[ConsolePlatform | None, uvicorn.Server | None]:
-    """按选中集合创建并启动各平台实例，绑定工具执行器。"""
-    console_platform = (
-        ConsolePlatform(runtime.configuration.storage.console / "runtime.sqlite3") if "console" in selected else None
-    )
-    if console_platform is not None:
-        resources.callback(console_platform.close)
-    dashboard_platform: DashboardPlatform | None = None
-    server: uvicorn.Server | None = None
-    if "dashboard" in selected:
-        dashboard_platform, server = await _create_dashboard(runtime)
-    mcp_platform: MCPPlatform | None = None
-    if "mcp" in selected:
-        mcp_platform = MCPPlatform(
-            runtime.configuration,
-            terminal_logs=preference.mcp.terminal_logs,
-        )
-        resources.push_async_callback(mcp_platform.shutdown)
-        await mcp_platform.start(runtime)
-    _bind_platform_tools(runtime, console_platform, dashboard_platform, mcp_platform)
-    return console_platform, server
+) -> tuple[dict[str, PlatformHandle], object | None]:
+    """遍历已注册的平台描述符，为选中的平台创建实例、收集工具绑定与清理回调。
+
+    返回 (handles, dashboard_server) —
+    handles 为平台名到句柄的映射，dashboard_server 为非 None 时表示 HTTP 服务已就绪。
+    """
+    creators = _init_platforms()
+    handles: dict[str, PlatformHandle] = {}
+    all_bindings: list[Any] = []
+    dashboard_server: object | None = None
+
+    for name in sorted(selected):
+        creator = creators.get(name)
+        if creator is None:
+            raise ValueError(f"no platform creator registered for {name}")
+        handle: PlatformHandle = await creator(runtime.configuration, runtime)
+        handles[name] = handle
+        all_bindings.extend(handle.bindings)
+        if handle.cleanup is not None:
+            resources.callback(handle.cleanup)
+        if name == "dashboard" and handle.http_server is not None:
+            dashboard_server = handle.http_server
+
+    if all_bindings:
+        runtime.engine.bind_tool_executors(tuple(all_bindings))
+    return handles, dashboard_server
 
 
 async def _start_platforms_until_stop(
     runtime: AuroraRuntime,
-    preference: PlatformPreference,
     selected: frozenset[str],
     resources: AsyncExitStack,
     stop: asyncio.Event,
-) -> tuple[ConsolePlatform | None, uvicorn.Server | None] | None:
-    """竞速启动平台与停止信号：平台先就绪返回结果，先收到停止信号则返回 None。"""
-    startup_task = asyncio.create_task(
-        _start_platforms(runtime, preference, selected, resources),
-        name="aurora-platform-startup",
-    )
+) -> tuple[dict[str, PlatformHandle], object | None] | None:
+    """竞速启动平台与停止信号。"""
+    startup = asyncio.create_task(_start_platforms(runtime, selected, resources), name="aurora-platform-startup")
     stop_task = asyncio.create_task(stop.wait(), name="aurora-startup-stop")
-    done, _pending = await asyncio.wait({startup_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
-    if startup_task in done:
+    done, _pending = await asyncio.wait({startup, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+    if startup in done:
         stop_task.cancel()
         await asyncio.gather(stop_task, return_exceptions=True)
-        return startup_task.result()
-    startup_task.cancel()
-    await asyncio.gather(startup_task, return_exceptions=True)
+        return startup.result()
+    startup.cancel()
+    await asyncio.gather(startup, return_exceptions=True)
     return None
+
+
+# -- 任务执行与停止 ----------------------------------------------------
 
 
 async def _run_platform_tasks(
     runtime: AuroraRuntime,
     stop: asyncio.Event,
-    console_platform: ConsolePlatform | None,
+    handles: dict[str, PlatformHandle],
     servers: _ProcessServers,
     *,
     open_browser: bool,
 ) -> BaseException | None:
-    """启动运行时循环、Dashboard 服务、Console 和停止监控等协程任务，等待首个完成者。
-
-    返回首个非正常退出任务捕获的异常，正常停止时返回 None。
-    """
+    """启动运行时循环和各平台后台任务，等待首个完成者并协调退出。"""
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
-    server_task: asyncio.Task[None] | None = None
-    if servers.dashboard is not None:
-        server_task = asyncio.create_task(servers.dashboard.serve(), name="aurora-dashboard-server")
-        tasks.add(server_task)
+
+    # 各平台通过 spawn 生成后台任务
+    platform_tasks: dict[str, asyncio.Task[None]] = {}
+    dashboard_task: asyncio.Task[None] | None = None
+    for name, handle in handles.items():
+        if handle.spawn is not None:
+            task = handle.spawn(runtime, stop)
+            if task is not None:
+                platform_tasks[name] = task
+                tasks.add(task)
+                if name == "dashboard":
+                    dashboard_task = task
+
     debug_task = asyncio.create_task(servers.debug.serve(), name="aurora-localhost-debug-server")
     tasks.add(debug_task)
-    console_task: asyncio.Task[None] | None = None
-    if console_platform is not None:
-        console_task = asyncio.create_task(
-            run_console(runtime, console_platform, stop_event=stop),
-            name="aurora-console",
-        )
-        tasks.add(console_task)
     stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
     tasks.add(stop_task)
+
     try:
-        # 服务器就绪后自动打开浏览器
-        if (
-            servers.dashboard is not None
-            and open_browser
-            and await _wait_for_server_start(servers.dashboard, server_task, stop)
-        ):
+        if dashboard_task is not None and open_browser and _await_server_ready(servers.dashboard, dashboard_task, stop):
             await asyncio.to_thread(_open_dashboard_browser, runtime.configuration.dashboard)
+
         done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return _task_failure(done, stop_task, stop)
     finally:
-        # 按顺序退出：停止监控 → Console → Dashboard → 运行时
         stop_task.cancel()
         await asyncio.gather(stop_task, return_exceptions=True)
-        if console_task is not None:
-            console_task.cancel()
-            await asyncio.gather(console_task, return_exceptions=True)
-        if servers.dashboard is not None and server_task is not None:
-            servers.dashboard.should_exit = True
-            await asyncio.gather(server_task, return_exceptions=True)
+        for reversed_name in reversed([name for name in handles if name in platform_tasks]):
+            platform_tasks[reversed_name].cancel()
+            await asyncio.gather(platform_tasks[reversed_name], return_exceptions=True)
+        if dashboard_task is not None and servers.dashboard is not None:
+            servers.dashboard.should_exit = True  # type: ignore[union-attr]
+            await asyncio.gather(dashboard_task, return_exceptions=True)
         servers.debug.should_exit = True
         await asyncio.gather(debug_task, return_exceptions=True)
         stop.set()
@@ -290,141 +319,51 @@ async def _wait_for_stop(stop: asyncio.Event) -> None:
     await stop.wait()
 
 
-async def _wait_for_server_start(
-    server: uvicorn.Server,
-    server_task: asyncio.Task[None] | None,
-    stop: asyncio.Event,
-) -> bool:
-    """轮询等待 uvicorn 服务器完成启动，失败或提前停止时返回 False。"""
-    assert server_task is not None
-    while not server.started:
+async def _await_server_ready(server: object, task: asyncio.Task[None] | None, stop: asyncio.Event) -> bool:
+    """轮询等待 HTTP 服务器完成启动，失败或提前停止时返回 False。"""
+    assert task is not None
+    while not getattr(server, "started", False):
         if stop.is_set():
             return False
-        if server_task.done():
-            server_task.result()
+        if task.done():
+            task.result()
             raise _DashboardStartupError
         await asyncio.sleep(0.01)
     return True
 
 
 def _task_failure(
-    done: set[asyncio.Task[None]],
-    stop_task: asyncio.Task[None],
-    stop: asyncio.Event,
+    done: set[asyncio.Task[None]], stop_task: asyncio.Task[None], stop: asyncio.Event
 ) -> BaseException | None:
-    """从已完成的任务中提取异常或检测意外退出。
-
-    跳过停止监控任务和已取消任务；若某个任务在未设置停止事件的情况下退出，视为意外。
-    """
+    """从已完成的任务中提取异常或检测意外退出。"""
     for task in done:
         if task is stop_task or task.cancelled():
             continue
         try:
             task.result()
-        except BaseException as error:  # noqa: BLE001 - re-raised after coordinated cleanup.
+        except BaseException as error:  # noqa: BLE001
             return error
         if not stop.is_set():
             return RuntimeError(f"{task.get_name()} stopped unexpectedly")
     return None
 
 
-async def _create_dashboard(runtime: AuroraRuntime) -> tuple[DashboardPlatform, uvicorn.Server]:
-    """创建 ChatService 与 DashboardPlatform，并构建对应的 uvicorn 服务器。"""
-    chat = ChatService(runtime.configuration.dashboard, runtime)
-    await chat.start()
-    return DashboardPlatform(chat), _dashboard_server(chat, runtime)
-
-
-def _dashboard_server(chat: ChatService, runtime: AuroraRuntime) -> uvicorn.Server:
-    """用自定义的 _AuroraServer 包装 uvicorn，禁止其接管进程信号。"""
-    dashboard = runtime.configuration.dashboard
-    return _AuroraServer(
-        uvicorn.Config(
-            create_app(
-                chat,
-                runtime,
-                dashboard,
-                profile=runtime.configuration.runtime.profile,
-            ),
-            host=dashboard.host,
-            port=dashboard.port,
-            log_level=runtime.configuration.logging_level.lower(),
-            log_config=None,
-            access_log=False,
-        )
-    )
-
-
-def _debug_server(runtime: AuroraRuntime) -> uvicorn.Server:
-    """创建独立于 Platform 集合的 localhost 调试服务器。"""
-    configuration = runtime.configuration
-    return _AuroraServer(
-        uvicorn.Config(
-            create_debug_app(runtime),
-            host=configuration.runtime.debug_host,
-            port=configuration.runtime.debug_port,
-            log_level=configuration.logging_level.lower(),
-            log_config=None,
-            access_log=False,
-        )
-    )
+# -- Dashboard 辅助 ----------------------------------------------------
 
 
 def _open_dashboard_browser(configuration: DashboardConfig) -> None:
-    """在默认浏览器中打开 Dashboard 地址，支持 IPv6 的 ``[::1]`` 格式。"""
+    """在默认浏览器中打开 Dashboard 地址。"""
     host = "127.0.0.1" if configuration.host in {"0.0.0.0", "::"} else configuration.host
     if ":" in host:
         host = f"[{host}]"
     webbrowser.open(f"http://{host}:{configuration.port}")
 
 
-def _bind_platform_tools(
-    runtime: AuroraRuntime,
-    console_platform: ConsolePlatform | None,
-    dashboard_platform: DashboardPlatform | None,
-    mcp_platform: MCPPlatform | None,
-) -> None:
-    """将已启用平台的工具执行器统一绑定到运行时。"""
-    tool_bindings = []
-    if console_platform is not None:
-        tool_bindings.append(
-            ToolExecutorBinding(
-                CONSOLE_SEND_DESCRIPTOR,
-                console_platform,
-                source_app="platform.console",
-                source_instance="local",
-                recovery=console_platform,
-            )
-        )
-    if dashboard_platform is not None:
-        tool_bindings.append(
-            ToolExecutorBinding(
-                DASHBOARD_SEND_DESCRIPTOR,
-                dashboard_platform,
-                source_app="platform.dashboard",
-                source_instance="local",
-                recovery=dashboard_platform,
-            )
-        )
-    if mcp_platform is not None:
-        tool_bindings.extend(
-            ToolExecutorBinding(
-                capability,
-                mcp_platform,
-                source_app="platform.mcp",
-                source_instance=mcp_platform.source_instance_for(capability.id),
-            )
-            for capability in mcp_platform.capability_catalog.capabilities
-        )
-    runtime.engine.bind_tool_executors(tuple(tool_bindings))
+# -- 信号处理 ----------------------------------------------------------
 
 
 def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:
-    """在事件循环上安装 SIGINT/SIGTERM 信号处理器，用于安全停止。
-
-    优先使用 asyncio 原生信号处理器；在不支持的平台（如某些 Windows 环境）上回退到
-    signal.signal()，并通过 call_soon_threadsafe 连接 stop 事件。
-    """
+    """在事件循环上安装 SIGINT/SIGTERM 信号处理器。"""
     loop = asyncio.get_running_loop()
     installed: list[_InstalledSignal] = []
     for candidate in (signal.SIGINT, signal.SIGTERM):
@@ -444,10 +383,28 @@ def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:
 
 
 def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
-    """恢复通过 _install_stop_handlers 安装的信号处理器到之前的状态。"""
+    """恢复之前安装的信号处理器。"""
     loop = asyncio.get_running_loop()
     for item in installed:
         if item.loop_owned:
             loop.remove_signal_handler(item.candidate)
         else:
             signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
+
+
+# -- 调试服务器 --------------------------------------------------------
+
+
+def _debug_server(runtime: AuroraRuntime) -> uvicorn.Server:
+    """创建独立于 Platform 集合的 localhost 调试服务器。"""
+    configuration = runtime.configuration
+    return _AuroraServer(
+        uvicorn.Config(
+            create_debug_app(runtime),
+            host=configuration.runtime.debug_host,
+            port=configuration.runtime.debug_port,
+            log_level=configuration.logging_level.lower(),
+            log_config=None,
+            access_log=False,
+        )
+    )

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
-from src.agents.tool_agent import _collect_tool_definitions
+from src.agents.handler import _collect_tool_definitions
 from src.agents.tools import COMPLETE_TASK_DESCRIPTION, capability_tool_definition
 from src.contracts.agent import (
     AgentContext,

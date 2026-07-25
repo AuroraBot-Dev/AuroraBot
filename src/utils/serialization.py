@@ -14,6 +14,7 @@ import os
 import re
 import tomllib
 import uuid
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -22,7 +23,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-# region JSON 文件 I/O
+class _Msg(StrEnum):
+    INVALID_JSON_OBJECT = "Invalid JSON object format"
+
+
 def atomic_write_json(path: Path, value: Any) -> None:
     """原子写入 JSON 数据。
 
@@ -48,10 +52,6 @@ def read_json(path: Path) -> Any:
         return json.load(handle)
 
 
-# endregion
-
-
-# region 非严格文本解析
 def extract_json_from_text(raw: str) -> Any:
     """从文本中提取 JSON 对象。
 
@@ -130,14 +130,10 @@ def _safe_parse_json_object(content: str) -> Any:
     left = content.find("{")
     right = content.rfind("}")
     if left == -1 or right == -1 or right <= left:
-        raise ValueError("Invalid JSON object format")
+        raise ValueError(_Msg.INVALID_JSON_OBJECT)
     return json.loads(content[left : right + 1])
 
 
-# endregion
-
-
-# region 通用结构化文本解析
 def parse_structured(text: str | None) -> dict[str, Any]:
     """从文本中提取结构化数据。
 
@@ -158,10 +154,6 @@ def parse_structured(text: str | None) -> dict[str, Any]:
     return {}
 
 
-# endregion
-
-
-# region 值规范化
 def json_ready(value: Any) -> Any:
     """递归将值转化为 JSON 可序列化形式。"""
     if isinstance(value, dict):
@@ -173,6 +165,3 @@ def json_ready(value: Any) -> Any:
     if isinstance(value, (dt.date, dt.datetime)):
         return value.isoformat()
     return value
-
-
-# endregion

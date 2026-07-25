@@ -18,6 +18,7 @@ import os
 import re
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -30,6 +31,14 @@ _BEIJING_TZ = timezone(timedelta(hours=8))
 from src.utils.logging import get_logger
 
 logger = get_logger("aurora-app-clock.service")
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    SECONDS_MUST_BE_POSITIVE = "seconds must be positive"
+    INVALID_TIME_FORMAT = "time_str must be ISO-8601 or HH:MM"
+
 
 # 闹钟和定时器的内存存储
 _alarms: dict[str, dict[str, Any]] = {}
@@ -113,7 +122,7 @@ class ClockService:
     def sleep(seconds: int) -> dict[str, Any]:
         """将下一次自主心跳安排在指定秒数后，实际时长受心跳边界约束。"""
         if seconds <= 0:
-            raise ValueError("seconds must be positive")
+            raise ValueError(_Msg.SECONDS_MUST_BE_POSITIVE)
         fallback = _heartbeat_initial_seconds()
         existing = _alarms.get(_HEARTBEAT_ID)
         if existing is not None:
@@ -274,7 +283,7 @@ def _parse_alarm_time(value: str) -> datetime:
     except ValueError:
         match = re.fullmatch(r"(\d{1,2}):(\d{2})", value.strip())
         if match is None:
-            raise ValueError("time_str must be ISO-8601 or HH:MM") from None
+            raise ValueError(_Msg.INVALID_TIME_FORMAT) from None
         now = datetime.now(_BEIJING_TZ)
         due = now.replace(hour=int(match.group(1)), minute=int(match.group(2)), second=0, microsecond=0)
         if due <= now:

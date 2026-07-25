@@ -20,45 +20,47 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from enum import StrEnum
 from typing import Any
 
-import litellm
 from jsonschema import ValidationError, validate
 
-from src.ai._parsing import (
-    chat_assistant_item,
-    chat_message,
-    chat_tool_calls,
-    invalid_output_result,
-    is_structured_output_error,
-    json_item,
-    provider_tools,
-    response_cost,
-    response_tool_calls,
-    responses_usage,
-    usage,
-)
-from src.ai.execution import (
-    CostTracker,
-    GatewayError,
-    GenerationTask,
-    ModelCaller,
-    TaskManager,
-)
+from src.ai._channels import _complete_chat, _execute_responses_channel
+from src.ai._parsing import invalid_output_result
+from src.ai.execution import CostTracker, ModelCaller, TaskManager
 from src.ai.models import get_capabilities_by_id, init_cache
-from src.ai.providers import ProviderConfig, resolve_model, setup_providers
-from src.contracts.configuration import AuroraConfig, ModelRoleConfig
+from src.ai.providers import ProviderConfig, setup_providers
+from src.contracts.configuration import AuroraConfig
 from src.contracts.model import (
-    STRUCTURED_OUTPUT_NAME,
     ModelBudgetError,
     ModelCapabilityError,
-    ModelContinuation,
     ModelGatewayError,
     ModelRequest,
     ModelResult,
 )
 from src.utils.logging import get_logger
 from src.utils.serialization import extract_json_from_text
+
+
+class _Msg(StrEnum):
+    """本文件内所有异常与日志消息字符串常量。"""
+
+    MODEL_FORMAT = "Model for role '{role}' must be in 'provider/model_name' format, got '{model}'"
+    UNKNOWN_ROLE = "Unknown role '{role}'. Available: {available}"
+    UNKNOWN_MODEL_ROLE = "unknown model role: {role}"
+    RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
+    PARALLEL_TOOLS_UNSUPPORTED = "parallel tool calls are unsupported"
+    CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
+    FORBIDDEN_PARAMETERS = "model parameters may not override controlled fields: {forbidden}"
+    NOT_NATIVE_RESPONSES_ENDPOINT = "role {role} does not use a native Responses endpoint"
+    LACKS_NATIVE_RESPONSES = "role {role} lacks native_responses"
+    LACKS_CAPABILITIES = "role {role} lacks capabilities: {missing}"
+    LACKS_TOOLS = "role {role} lacks tools"
+    CONTINUATION_MISMATCH = "model continuation does not match the selected role endpoint"
+    NO_STRUCTURED_OUTPUT = "structured output is unavailable and JSON-text fallback is not permitted"
+    MISSING_CREDENTIAL = "missing model credential: {env_var}"
+    COST_BUDGET_EXCEEDED = "model cost exceeded max_cost_usd"
+
 
 logger = get_logger("aurora.model_gateway")
 
@@ -98,14 +100,13 @@ class ModelGatewayService:
         }
         for role, model in self._models.items():
             if "/" not in model:
-                raise ValueError(f"Model for role '{role}' must be in 'provider/model_name' format, got '{model}'")
+                raise ValueError(_Msg.MODEL_FORMAT.format(role=role, model=model))
 
         self.log_queries = configuration.model_logging.log_queries
         self.log_responses = configuration.model_logging.log_responses
         self._task_manager = TaskManager()
         self.cost_tracker = CostTracker()
 
-        # 初始化 models.dev 磁盘缓存
         init_cache(configuration.storage.ai)
 
         # 注册 OpenAI 兼容自定义供应商
@@ -122,12 +123,10 @@ class ModelGatewayService:
         if custom_providers:
             setup_providers(*custom_providers)
 
-        # 创建角色 → 调用器映射
         self._callers: dict[str, ModelCaller] = {
             role: ModelCaller(model, role, self._task_manager, self) for role, model in self._models.items()
         }
 
-        # 能力将在首次 negotiate 前由 initialize() 异步解析
         self._capabilities: dict[str, frozenset[str]] = {}
         self._init_lock = asyncio.Lock()
         self._initialized = False
@@ -179,7 +178,7 @@ class ModelGatewayService:
     def use_model(self, role: str) -> ModelCaller:
         role = role.lower()
         if role not in self._callers:
-            raise ValueError(f"Unknown role '{role}'. Available: {sorted(self._callers)}")
+            raise ValueError(_Msg.UNKNOWN_ROLE.format(role=role, available=sorted(self._callers)))
         return self._callers[role]
 
     @property
@@ -224,32 +223,32 @@ class ModelGatewayService:
     def negotiate(self, request: ModelRequest) -> frozenset[str]:
         role = self._configuration.model_definitions.get(request.role)
         if role is None:
-            raise ModelCapabilityError(f"unknown model role: {request.role}")
+            raise ModelCapabilityError(_Msg.UNKNOWN_MODEL_ROLE.format(role=request.role))
 
         capabilities = self._capabilities_for(request.role)
 
         if request.retry_policy != "none":
-            raise ModelCapabilityError("only retry_policy=none is supported")
+            raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
         if request.parallel_tool_calls:
-            raise ModelCapabilityError("parallel tool calls are unsupported by the first cognitive loop")
+            raise ModelCapabilityError(_Msg.PARALLEL_TOOLS_UNSUPPORTED)
         if request.cancel_policy not in {"never", "on_external_activity"}:
-            raise ModelCapabilityError("unsupported model cancellation policy")
+            raise ModelCapabilityError(_Msg.CANCEL_POLICY_UNSUPPORTED)
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
         if forbidden:
-            raise ModelCapabilityError(f"model parameters may not override controlled fields: {forbidden}")
+            raise ModelCapabilityError(_Msg.FORBIDDEN_PARAMETERS.format(forbidden=forbidden))
         if request.response_mode == "native" and role.endpoint != "responses":
-            raise ModelCapabilityError(f"role {request.role} does not use a native Responses endpoint")
+            raise ModelCapabilityError(_Msg.NOT_NATIVE_RESPONSES_ENDPOINT.format(role=request.role))
         if role.endpoint == "responses" and "native_responses" not in capabilities:
-            raise ModelCapabilityError(f"role {request.role} lacks native_responses")
+            raise ModelCapabilityError(_Msg.LACKS_NATIVE_RESPONSES.format(role=request.role))
         if not request.required_capabilities <= capabilities:
             missing = sorted(request.required_capabilities - capabilities)
-            raise ModelCapabilityError(f"role {request.role} lacks capabilities: {missing}")
+            raise ModelCapabilityError(_Msg.LACKS_CAPABILITIES.format(role=request.role, missing=missing))
         if request.tools and "tools" not in capabilities:
-            raise ModelCapabilityError(f"role {request.role} lacks tools")
+            raise ModelCapabilityError(_Msg.LACKS_TOOLS.format(role=request.role))
         if request.continuation is not None and (
             request.continuation.provider != role.provider or request.continuation.channel != role.endpoint
         ):
-            raise ModelCapabilityError("model continuation does not match the selected role endpoint")
+            raise ModelCapabilityError(_Msg.CONTINUATION_MISMATCH)
 
         negotiated = set(request.required_capabilities)
         if request.tools:
@@ -262,7 +261,7 @@ class ModelGatewayService:
             elif request.allow_json_text_fallback and "json_text_fallback" in capabilities:
                 negotiated.add("json_text_fallback")
             else:
-                raise ModelCapabilityError("structured output is unavailable and JSON-text fallback is not permitted")
+                raise ModelCapabilityError(_Msg.NO_STRUCTURED_OUTPUT)
         return frozenset(negotiated)
 
     # ── 请求执行 ──────────────────────────────────────────
@@ -294,12 +293,12 @@ class ModelGatewayService:
                 role.provider,
                 provider.secret_env,
             )
-            raise ModelGatewayError(f"missing model credential: {provider.secret_env}")
+            raise ModelGatewayError(_Msg.MISSING_CREDENTIAL.format(env_var=provider.secret_env))
 
         if role.endpoint == "responses":
-            result = await self._complete_responses(request, role, negotiated)
+            result = await _execute_responses_channel(self, request, role, negotiated)
         else:
-            result = await self._complete_chat(request, role, negotiated)
+            result = await _complete_chat(self, request, role, negotiated)
 
         if request.budget.max_cost_usd is not None and result.cost_usd > request.budget.max_cost_usd:
             logger.warning(
@@ -308,7 +307,7 @@ class ModelGatewayService:
                 result.cost_usd,
                 request.budget.max_cost_usd,
             )
-            raise ModelBudgetError("model cost exceeded max_cost_usd")
+            raise ModelBudgetError(_Msg.COST_BUDGET_EXCEEDED)
 
         logger.debug(
             "model gateway response model_role=%s endpoint=%s prompt_tokens=%d completion_tokens=%d "
@@ -324,162 +323,10 @@ class ModelGatewayService:
         )
         return result
 
-    # ── Chat Completions 通道 ──────────────────────────────
-
-    async def _complete_chat(
-        self, request: ModelRequest, role: ModelRoleConfig, negotiated: frozenset[str]
-    ) -> ModelResult:
-        capabilities = self._capabilities_for(request.role)
-        messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-        if request.continuation is not None:
-            messages.extend(dict(item) for item in request.continuation.items)
-        tool_defs, alias_to_name = provider_tools(request.tools, responses=False)
-        kwargs = dict(request.parameters)
-        if tool_defs:
-            kwargs.update(tools=tool_defs, tool_choice=request.tool_choice, parallel_tool_calls=False)
-        if request.output_schema is not None and "structured_output" in negotiated:
-            kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema},
-            }
-        caller = self.use_model(request.role)
-        try:
-            task, response = await self._complete_chat_with_fallback(
-                caller, messages, request, kwargs, negotiated, capabilities
-            )
-        except GatewayError as error:
-            raise ModelGatewayError(str(error)) from error
-        message = chat_message(response)
-        text = str(getattr(message, "content", "") or "")
-        tool_calls, call_diagnostics = chat_tool_calls(message, alias_to_name)
-        data, output_diagnostics = self._normalize_output(text, request, negotiated)
-        assistant_item = chat_assistant_item(message)
-        previous_items = tuple(
-            request.continuation.items
-            if request.continuation
-            else ({"role": msg.role, "content": msg.content} for msg in request.messages)
-        )
-        continuation = ModelContinuation(role.provider, "chat_completions", (*previous_items, assistant_item))
-        finish_reason = str(getattr(response.choices[0], "finish_reason", "stop") or "stop")
-        return ModelResult(
-            model=self._models[request.role],
-            negotiated_capabilities=negotiated,
-            response_mode=request.response_mode,
-            text=text,
-            data=data,
-            usage=usage(response),
-            cost_usd=task.cost,
-            diagnostics=(*output_diagnostics, *call_diagnostics),
-            tool_calls=tool_calls,
-            finish_reason=finish_reason,
-            continuation=continuation,
-        )
-
-    async def _complete_chat_with_fallback(  # noqa: PLR0913
-        self,
-        caller: ModelCaller,
-        messages: list[dict[str, Any]],
-        request: ModelRequest,
-        kwargs: dict[str, Any],
-        negotiated: frozenset[str],
-        capabilities: frozenset[str],
-    ) -> tuple[GenerationTask, Any]:
-        try:
-            task = caller.acompletion(
-                messages,
-                max_tokens=request.budget.max_output_tokens,
-                timeout=request.budget.timeout_seconds,
-                **kwargs,
-            )
-            return task, await task
-        except GatewayError as error:
-            can_fallback = (
-                "structured_output" in negotiated
-                and request.allow_json_text_fallback
-                and "json_text_fallback" in capabilities
-                and is_structured_output_error(error)
-            )
-            if not can_fallback:
-                raise
-            logger.warning(
-                "structured output unsupported; using JSON text fallback model_role=%s error_type=%s",
-                request.role,
-                type(error).__name__,
-            )
-            fallback_kwargs = dict(kwargs)
-            fallback_kwargs.pop("response_format", None)
-            fallback_task = caller.acompletion(
-                messages,
-                max_tokens=request.budget.max_output_tokens,
-                timeout=request.budget.timeout_seconds,
-                **fallback_kwargs,
-            )
-            return fallback_task, await fallback_task
-
-    # ── Responses 通道 ─────────────────────────────────────
-
-    async def _complete_responses(
-        self, request: ModelRequest, role: ModelRoleConfig, negotiated: frozenset[str]
-    ) -> ModelResult:
-        capabilities = self._capabilities_for(request.role)
-        inputs: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-        if request.continuation is not None:
-            inputs.extend(dict(item) for item in request.continuation.items)
-        tool_defs, alias_to_name = provider_tools(request.tools, responses=True)
-        resolved_model, provider_kwargs = resolve_model(self._models[request.role])
-        kwargs: dict[str, Any] = {
-            "input": inputs,
-            "model": resolved_model,
-            "max_output_tokens": request.budget.max_output_tokens,
-            "timeout": request.budget.timeout_seconds,
-            "store": False,
-            "parallel_tool_calls": False,
-            **provider_kwargs,
-            **request.parameters,
-        }
-        if tool_defs:
-            kwargs["tools"] = tool_defs
-            kwargs["tool_choice"] = request.tool_choice
-        if "reasoning" in capabilities:
-            kwargs["include"] = ["reasoning.encrypted_content"]
-        if request.output_schema is not None:
-            kwargs["text"] = {
-                "format": {"type": "json_schema", "name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema}
-            }
-        try:
-            response = await litellm.aresponses(**kwargs)
-        except Exception as error:
-            raise ModelGatewayError(f"Responses request failed: {type(error).__name__}: {error}") from error
-        output_items = tuple(json_item(item) for item in getattr(response, "output", []) or [])
-        text = str(getattr(response, "output_text", "") or "")
-        tool_calls, call_diagnostics = response_tool_calls(output_items, alias_to_name)
-        data, output_diagnostics = self._normalize_output(text, request, negotiated)
-        previous_items = tuple(
-            request.continuation.items
-            if request.continuation
-            else ({"role": msg.role, "content": msg.content} for msg in request.messages)
-        )
-        continuation = ModelContinuation(role.provider, "responses", (*previous_items, *output_items))
-        cost = await response_cost(response, self._models[request.role])
-        return ModelResult(
-            model=self._models[request.role],
-            negotiated_capabilities=negotiated,
-            response_mode="native",
-            text=text,
-            data=data,
-            usage=responses_usage(response),
-            cost_usd=cost,
-            diagnostics=(*output_diagnostics, *call_diagnostics),
-            tool_calls=tool_calls,
-            finish_reason=str(getattr(response, "status", "completed") or "completed"),
-            continuation=continuation,
-        )
-
     # ── 输出规范化 ────────────────────────────────────────
 
-    @staticmethod
     def _normalize_output(
-        text: str, request: ModelRequest, negotiated: frozenset[str]
+        self, text: str, request: ModelRequest, negotiated: frozenset[str]
     ) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
         if request.output_schema is None:
             return None, ()

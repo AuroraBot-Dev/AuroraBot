@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 from src.contracts.agent import CapabilityCatalogSnapshot, ToolLease
-from src.contracts.tool import (
-    ToolCompletionPort,
-    ToolExecutionRequest,
-    ToolExecutorBinding,
-    ToolOutcome,
-    ToolQueuePort,
-)
+from src.contracts.tool import ToolExecutionRequest, ToolExecutorBinding, ToolOutcome, ToolOutcomeStatus
+
+if TYPE_CHECKING:
+    from src.contracts.ports import ToolCompletionPort, ToolQueuePort
 
 
 class ToolBindingError(RuntimeError):
@@ -85,11 +83,13 @@ class ToolRegistry:
         binding = self._bindings.get(lease.capability)
         request = ToolExecutionRequest(lease.request_id, lease.session_id, lease.capability, lease.parameters)
         if binding is None:
-            status = "unknown" if recovery else "failed"
+            status = ToolOutcomeStatus.UNKNOWN if recovery else ToolOutcomeStatus.FAILED
             outcome = ToolOutcome(status, f"No active executor for {lease.capability}", error="Tool unavailable")
             source_app, source_instance = "engine.tool_registry", "unavailable"
         elif recovery and binding.recovery is None:
-            outcome = ToolOutcome("unknown", f"Tool result unknown: {lease.capability}", error="recovery unsupported")
+            outcome = ToolOutcome(
+                ToolOutcomeStatus.UNKNOWN, f"Tool result unknown: {lease.capability}", error="recovery unsupported"
+            )
             source_app, source_instance = binding.source_app, binding.source_instance
         else:
             try:
@@ -100,7 +100,7 @@ class ToolRegistry:
                     outcome = await binding.executor.execute_tool(request)
             except Exception as error:  # noqa: BLE001 - executor failures have an explicit unknown outcome
                 outcome = ToolOutcome(
-                    "unknown",
+                    ToolOutcomeStatus.UNKNOWN,
                     f"Tool result unknown: {lease.capability}",
                     error=f"{type(error).__name__}: {error}",
                 )

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
@@ -30,6 +31,17 @@ from src.engine.commands import (
     WaitCommand,
 )
 from src.engine.store_base import RuntimeStoreBase, _json, utc_now
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    LEASE_LOST = "Agent message lease was lost"
+    REVISION_CONFLICT = "Agent revision conflict"
+    TASK_NOT_ACTIVE = "Task is no longer active"
+    DELEGATION_LIMIT = "Agent delegation limit exceeded"
+    UNSUPPORTED_COMMAND = "不支持的 Agent 指令 {kind}"
+    SITUATION_UNAVAILABLE = "情境不可用: {situation_id}"
 
 
 class StoreDecisionsMixin(RuntimeStoreBase):
@@ -68,11 +80,11 @@ class StoreDecisionsMixin(RuntimeStoreBase):
             agent_row = connection.execute("SELECT * FROM agents WHERE agent_id = ?", (agent.agent_id,)).fetchone()
             task_row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (agent.task_id,)).fetchone()
             if message_row is None or message_row["status"] != MessageStatus.PROCESSING:
-                raise RuntimeError("Agent message lease was lost")
+                raise RuntimeError(_Msg.LEASE_LOST)
             if agent_row is None or int(agent_row["revision"]) != agent.revision:
-                raise RuntimeError("Agent revision conflict")
+                raise RuntimeError(_Msg.REVISION_CONFLICT)
             if task_row is None or task_row["status"] != TaskStatus.ACTIVE:
-                raise RuntimeError("Task is no longer active")
+                raise RuntimeError(_Msg.TASK_NOT_ACTIVE)
             state = json.loads(agent_row["state_json"])
             state.update(state_patch)
             status = AgentStatus.READY
@@ -161,7 +173,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     or current_count + len(requests) > limits["max_agents_per_task"]
                     or active_count + len(requests) > limits["max_active_agents"]
                 ):
-                    raise PermissionError("Agent delegation limit exceeded")
+                    raise PermissionError(_Msg.DELEGATION_LIMIT)
                 for request in requests:
                     child_id = str(uuid4())
                     instruction = str(request["instruction"])
@@ -252,7 +264,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     self._end_task(connection, agent.task_id, TaskStatus.ERROR, summary, now)
 
             else:
-                raise ValueError(f"不支持的 Agent 指令 {command.kind}")
+                raise ValueError(_Msg.UNSUPPORTED_COMMAND.format(kind=command.kind))
 
             # 认领决策中引用的所有情境（CAS 操作，仅当状态为 OPEN 且未过期）
             for situation_id in command.claims:
@@ -262,7 +274,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     (agent.agent_id, now, situation_id, now),
                 )
                 if claimed.rowcount != 1:
-                    raise PermissionError(f"情境不可用: {situation_id}")
+                    raise PermissionError(_Msg.SITUATION_UNAVAILABLE.format(situation_id=situation_id))
 
             # 更新 Agent 状态（revision +1 实现乐观并发）、消息完成和因果事件
             connection.execute(

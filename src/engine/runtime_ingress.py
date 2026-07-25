@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.contracts.amp import AmpEnvelope, AmpValidationError
@@ -20,7 +21,12 @@ if TYPE_CHECKING:
     from src.engine.store import SQLiteRuntimeStore
 
 logger = get_logger("aurora.engine")
-_RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runtime use"
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runtime use"
 
 
 class IngressRuntime(Protocol):
@@ -80,7 +86,7 @@ def _ingest_amp(kernel: IngressRuntime, amp: AmpEnvelope, ingested: list[str]) -
     """
     data = amp.payload.data
     if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
-        raise ValueError(_RESERVED_TOOL_EVENT)
+        raise ValueError(_Msg.RESERVED_TOOL_EVENT)
     if data.get("ambient") is True:
         situation_id = kernel.store.add_situation(
             amp.header.source["app"],

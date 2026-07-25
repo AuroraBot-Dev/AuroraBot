@@ -36,16 +36,11 @@ def claim_message(self, lease_seconds: float) -> ClaimResult | None: ...
 每个文件中所有硬编码文本（无论语言）必须提取到文件开头，使用 `StrEnum` 继承类统一声明。目的是方便后续国际化（i18n）。
 
 ```python
-from enum import StrEnum
-
-
 class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
-    COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
     COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
     TOOL_UNAVAILABLE = "暂无可用执行器"
     INVALID_OUTCOME = "Tool outcome status and summary must be valid"
-
 
 # 使用
 raise RuntimeError(_Msg.COMPOSER_REQUIRED)
@@ -73,11 +68,11 @@ class _Msg(StrEnum):
 
 raise RuntimeError(_Msg.COMPOSER_REQUIRED)
 
-# 正确：需要变量插值 → 使用 f-string 引用枚举
+# 正确：需要变量插值 → 使用 .format() 引用枚举
 class _Msg(StrEnum):
-    DUPLICATE_CAPABILITY = "duplicate active Tool capability"
+    DUPLICATE_CAPABILITY = "duplicate active Tool capability: {capability}"
 
-raise ToolBindingError(f"{_Msg.DUPLICATE_CAPABILITY}: {capability}")
+raise ToolBindingError(_Msg.DUPLICATE_CAPABILITY.format(capability=capability))
 
 # 错误：字面量直接写死在 raise 中
 raise RuntimeError("ToolAgent requires an installed PromptComposer")
@@ -91,7 +86,7 @@ raise RuntimeError("ToolAgent requires an installed PromptComposer")
 - dataclass 优先 `slots=True`、`frozen=True`
 - Protocol 只声明签名，不给默认实现
 - 公共 API 提供类型注解
-- 一个函数一个职责。超过 500 行的文件按职责拆分。
+- 一个函数一个职责。超过 500 行的文件必须考虑架构是否合理或是否应该根据总分结构分包。
 - 特判是最昂贵的代码——如果遇到无法归入现有模式的个例，先考虑模式是否应该扩展，而非在调用点打补丁。
 
 ### 5. 不可决策时提问
@@ -358,7 +353,7 @@ contracts/
   agent.py           # AgentHandler, AgentDecision, AgentContext, AgentInstance,
                      # Capability, CapabilityDescriptor, CapabilityCatalogSnapshot,
                      # EngineConfiguration, AgentProfile, AgentLimits,
-                     # TaskState, TaskLimits, ToolLease, BrainContextSnapshot, ActivityRequest
+                     # TaskLimits, ToolLease, BrainContextSnapshot, ActivityRequest
   amp.py             # AmpEnvelope, new_amp (AMP 信封构造工厂)
   model.py           # ModelRequest, ModelResult, ModelUsage, ModelMessage,
                      # ModelProvider Protocol (engine 调用模型的标准接口)
@@ -369,7 +364,7 @@ contracts/
   ports.py           # ExternalAmpIngressPort, InteractiveInputPort（平台→命令路由注入）,
                      # ConsoleControlPort, DashboardControlPort, DashboardDebugPort,
                      # ToolQueuePort, ToolCompletionPort, RuntimeCommandPort
-  configuration.py   # AuroraConfig, PlatformPreference, PlatformConfig (各平台配置片段)
+  configuration.py   # AuroraConfig, PlatformPreference (及各平台配置片段)
   memory.py          # MemoryEntry, MemoryQueryResult, MemoryStore Protocol
 ```
 
@@ -436,15 +431,15 @@ config/
 ```
 prompt/
   __init__.py        # PromptComposer, load_prompt_catalog
-  catalog.py         # PromptCatalog — 从 prompts.toml 加载的不可变片段集合
+  models.py          # PromptSource, PromptCatalog — 从 prompts.toml 加载的不可变片段集合
   composer.py        # PromptComposer — 从 AgentContext 装配 PromptDocument
   text.py            # 文本模板与拼接工具
-  dto.py             # PromptSection, PromptDocument — 装配层内部 DTO
+  loader.py          # load_prompt_catalog — TOML 提示词加载器
 ```
 
 **关键约束**：
 
-- `PromptSection` / `PromptDocument` 不下沉 contracts——它们是装配层内部结构
+- `PromptSection` / `PromptDocument` 不下沉 contracts——它们是装配层内部结构，定义于 `prompt/models.py`
 - 唯一跨层交汇点 `ModelMessage` 已在 `contracts.model`
 
 ---
@@ -457,10 +452,9 @@ prompt/
 memory/
   __init__.py
   service.py         # MemoryService — 实现 contracts.memory.MemoryStore Protocol
-                     # auto_remember_completed_tasks() — engine pump hook 自动触发
-                     # recall_relevant(query) — 被 prompt composer 调用以注入上下文
-  store.py           # mem0 / ChromaDB 封装
-  embedding.py       # 嵌入向量生成
+                     # recall(query) — 语义检索相关记忆上下文
+                     # remember(entry) — 写入记忆条目
+  config.py          # build_memory_config() — mem0 LLM / Embedder /向量存储配置工厂
 ```
 
 **构造与注入**：
@@ -488,7 +482,8 @@ engine/
   runtime.py          # AgentEngine — 主类，完整 pump 闭环
                       #   构造签名：
                       #     AgentEngine(configuration, handlers, *,
-                      #                 model_provider, tool_registry, memory_store=None)
+                      #                 model_provider, memory_store=None,
+                      #                 idle_wait_seconds=1.0)
                       #   属性：
                       #     tasks(), get_task(), get_agent(), has_work(), status()
                       #     task_detail(), agent_detail(), brain_context()
@@ -502,6 +497,8 @@ engine/
                       #     7. dispatch models → model_provider.complete()
                       #     8. memory hooks → memory_store.remember()
                       #     9. archive terminal → JSON 归档
+  state.py            # EngineState — 线程池、SQLite 存储与核心 pump 逻辑
+  tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
   store.py            # SQLiteRuntimeStore — SQLite WAL facade
   store_schema.py     # DDL 表定义 (tasks, agents, messages, activities, causal_events)
   store_base.py       # 基础 CRUD 操作
@@ -589,7 +586,7 @@ Agent 能力只包含**模型可自主决策使用的**能力——即 Agent 在
 ```
 agents/
   __init__.py
-  handler.py          # 基础 AgentHandler 实现
+  handler.py         # ToolAgent — 基础 AgentHandler 实现
   capabilities/       # 主动能力（Agent 自主决策）
     __init__.py
     claim.py          # ClaimCapability — 主动认领 Task
@@ -650,13 +647,17 @@ platform/
     __init__.py
     adapter.py        # DashboardPlatform — 实现 ToolExecutor (dashboard.send)
     api.py            # REST API (FastAPI routes)
-    communication.py  # ChatService — 聊天持久化与会话管理
+    communication.py  # DashboardCommunication — 实时消息分发
     routing.py        # 输入路由 (HTTP/WS → RuntimeInput → input_port.route_input())
+    service.py        # ChatService — 聊天编排与会话管理
+    store.py          # ChatStore — Dashboard 自有 SQLite 持久化
+    security.py       # Bearer token 原语
   mcp/                # MCP 协议平台
     __init__.py
     adapter.py        # MCPPlatform — 实现 ToolExecutor + ExternalAmpIngressPort
-    connection.py     # stdio / Streamable HTTP 连接管理
-    discovery.py      # tools/list 动态能力发现
+    client_manager.py # stdio / Streamable HTTP 连接管理与 Tool 缓存
+    server_kit.py     # 本地 stdio MCP server 进程生命周期
+    server_spec.py    # MCP server 启动规范 dataclass
   # 规划中：
   nonebot/            # NoneBot 兼容平台
     __init__.py
@@ -726,11 +727,12 @@ engine.install_tool_registry(ToolRegistry(bindings))
 localhost/
   __init__.py
   runtime.py          # AuroraRuntime — 组合根 light wrapper
-                      #   持有 engine + model_gateway + memory_service + command_router
+                      #   持有 engine + command_router
                       #   暴露统一的 run_forever() / pump() / status() / shutdown()
                       #   实现 contracts.ports.InteractiveInputPort（route_input）
   router.py           # CommandRouter — `/` 前缀判定与命令分发
   registry.py         # 命令目录注册
+  api.py              # create_debug_app() — `/v1/debug/*` FastAPI 端点
   commands/           # 各 `/` 命令实现
     status.py         # /status — engine status
     pump.py           # /pump N — 推进 N 个 engine turn

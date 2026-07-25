@@ -23,6 +23,7 @@ import asyncio
 import contextlib
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import anyio
@@ -39,6 +40,17 @@ if TYPE_CHECKING:
     from src.platform.mcp.server_kit import MCPServerKit
 
 logger = get_logger("MCPClientManager")
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    CONNECTION_FAILED = "MCP Client 连接失败 ({key}): {error}"
+    MISSING_STDIO_PIPES = "MCP Server {key} 缺少 stdio 管道"
+    STDOUT_CLOSED = "MCP Server {key} 已关闭 stdio 输出"
+    SERVER_NOT_FOUND = "未找到 Server 连接: {server_key}"
+    TOOL_CALL_TIMEOUT = "Tool 调用超时: {server_key}.{raw_name}"
+    TOOL_CALL_FAILED = "Tool 调用失败 {server_key}.{raw_name}: {error}"
 
 
 class MCPToolCallError(RuntimeError):
@@ -187,8 +199,7 @@ class MCPClientManager:
         )
         await conn.ready_event.wait()
         if conn.error is not None:
-            msg = f"MCP Client 连接失败 ({key}): {conn.error}"
-            raise MCPToolCallError(msg) from conn.error
+            raise MCPToolCallError(_Msg.CONNECTION_FAILED.format(key=key, error=conn.error)) from conn.error
 
     async def _dispatch_notification(self, key: str, method: str, params: dict[str, object]) -> None:
         """从 ``_NotifiableClientSession`` 接收通知并分派。
@@ -274,8 +285,7 @@ class MCPClientManager:
     def _require_stdio_process(key: str, process: asyncio.subprocess.Process) -> asyncio.subprocess.Process:
         """验证 Server 进程同时提供 stdin 和 stdout 管道。"""
         if process.stdin is None or process.stdout is None:
-            msg = f"MCP Server {key} 缺少 stdio 管道"
-            raise MCPToolCallError(msg)
+            raise MCPToolCallError(_Msg.MISSING_STDIO_PIPES.format(key=key))
         return process
 
     async def _initialize_session(
@@ -308,8 +318,7 @@ class MCPClientManager:
             )
             if reader_task in done and not self._stop_event.is_set():
                 await reader_task
-                msg = f"MCP Server {key} 已关闭 stdio 输出"
-                raise MCPToolCallError(msg)
+                raise MCPToolCallError(_Msg.STDOUT_CLOSED.format(key=key))
         finally:
             if not stop_wait_task.done():
                 stop_wait_task.cancel()
@@ -417,8 +426,7 @@ class MCPClientManager:
         """按连接 key 调用 Server 暴露的原始 Tool 名。"""
         conn = self._connections.get(server_key)
         if conn is None or conn.session is None:
-            msg = f"未找到 Server 连接: {server_key}"
-            raise MCPToolCallError(msg)
+            raise MCPToolCallError(_Msg.SERVER_NOT_FOUND.format(server_key=server_key))
         logger.debug(
             "调用 tool: %s (server: %s, argument_keys: %s)",
             raw_name,
@@ -432,11 +440,11 @@ class MCPClientManager:
                 timeout=timeout_seconds,
             )
         except TimeoutError:
-            msg = f"Tool 调用超时: {server_key}.{raw_name}"
-            raise MCPToolCallError(msg) from None
+            raise MCPToolCallError(_Msg.TOOL_CALL_TIMEOUT.format(server_key=server_key, raw_name=raw_name)) from None
         except Exception as exc:
-            msg = f"Tool 调用失败 {server_key}.{raw_name}: {exc}"
-            raise MCPToolCallError(msg) from exc
+            raise MCPToolCallError(
+                _Msg.TOOL_CALL_FAILED.format(server_key=server_key, raw_name=raw_name, error=exc)
+            ) from exc
 
         content = getattr(result, "content", [])
         is_error = getattr(result, "isError", False)

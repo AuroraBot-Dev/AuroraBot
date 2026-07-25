@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import argparse
 
-NAME = "reload"
+NAMES = "/reload"
 
 
 def register(subparsers: Any) -> None: ...

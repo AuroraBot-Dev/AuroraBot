@@ -18,7 +18,7 @@ from src.contracts.agent import (
     AgentInstance,
     AgentMessage,
     AgentStatus,
-    TaskBudget,
+    TaskLimits,
     TaskState,
     TaskStatus,
 )
@@ -37,7 +37,7 @@ class StoreIngressMixin(RuntimeStoreBase):
         payload: dict[str, Any],
         autonomous: bool,
         root_profile: str,
-        budget: TaskBudget,
+        budget: TaskLimits,
         priority: int,
     ) -> TaskState | None:
         """从外部事件创建新 Task。

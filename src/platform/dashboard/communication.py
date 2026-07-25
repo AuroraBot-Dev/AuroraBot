@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
 from src.contracts.event import CommandControl
-from src.contracts.tool import ToolExecutionRequest, ToolOutcome
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
 from src.platform.dashboard.adapter import DASHBOARD_SEND_CAPABILITY
 from src.platform.dashboard.routing import (
     PrivateMessageInput,
@@ -212,7 +212,7 @@ class DashboardCommunication:
         )
         if created:
             await self._publish(owner_id, {"type": "private_message", "message": self._message(message_row)})
-        return ToolOutcome("succeeded", summary, result={"message_id": message_id})
+        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, summary, result={"message_id": message_id})
 
     async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
         """恢复 Dashboard Tool 执行状态。
@@ -223,7 +223,9 @@ class DashboardCommunication:
             self._store.fetch_one, "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request.request_id,)
         )
         if row is None:
-            return ToolOutcome("failed", "Dashboard 发送在分发前被中断", error="interrupted_before_dispatch")
+            return ToolOutcome(
+                ToolOutcomeStatus.FAILED, "Dashboard 发送在分发前被中断", error="interrupted_before_dispatch"
+            )
         return self._tool_outcome(row, request)
 
     @staticmethod
@@ -247,24 +249,32 @@ class DashboardCommunication:
             "WHERE request_id = ?",
             (summary, error, await asyncio.to_thread(self._now), request_id),
         )
-        return ToolOutcome("failed", summary, error=error)
+        return ToolOutcome(ToolOutcomeStatus.FAILED, summary, error=error)
 
     @staticmethod
     def _tool_outcome(row: sqlite3.Row, request: ToolExecutionRequest) -> ToolOutcome:
         """从持久化记录构造 ToolOutcome，同时校验请求摘要的幂等性。"""
         digest = row["request_digest"]
         if digest is None:
-            return ToolOutcome("unknown", "Dashboard 发送标识未知", error="legacy_request_identity_unknown")
+            return ToolOutcome(
+                ToolOutcomeStatus.UNKNOWN, "Dashboard 发送标识未知", error="legacy_request_identity_unknown"
+            )
         if str(digest) != _request_digest(request):
-            return ToolOutcome("failed", "Dashboard Tool 幂等性冲突", error="request_id_reused_with_different_content")
+            return ToolOutcome(
+                ToolOutcomeStatus.FAILED, "Dashboard Tool 幂等性冲突", error="request_id_reused_with_different_content"
+            )
         status = str(row["status"])
         if status == "dispatch_started":
             return ToolOutcome(
-                "unknown", "Dashboard 消息投递结果未知", error="dispatch_started_without_terminal_outcome"
+                ToolOutcomeStatus.UNKNOWN,
+                "Dashboard 消息投递结果未知",
+                error="dispatch_started_without_terminal_outcome",
             )
         if status == "succeeded":
-            return ToolOutcome("succeeded", str(row["summary"]), result={"message_id": str(row["external_message_id"])})
-        return ToolOutcome("failed", str(row["summary"]), error=str(row["error"]))
+            return ToolOutcome(
+                ToolOutcomeStatus.SUCCEEDED, str(row["summary"]), result={"message_id": str(row["external_message_id"])}
+            )
+        return ToolOutcome(ToolOutcomeStatus.FAILED, str(row["summary"]), error=str(row["error"]))
 
     async def _persist_command_reply(
         self,

@@ -14,7 +14,7 @@ from src.contracts.agent import CapabilityCatalogSnapshot, CapabilityDescriptor
 from src.contracts.amp import new_amp
 from src.contracts.configuration import AppConfig, AuroraConfig
 from src.contracts.ports import ExternalAmpIngressPort
-from src.contracts.tool import ToolExecutionRequest, ToolOutcome
+from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
 from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
@@ -283,10 +283,12 @@ class MCPPlatform:
         支持 isError 检测并映射为失败结果。
         """
         if not self._started:
-            return ToolOutcome("failed", "MCP Tool 不可用", error="MCP 平台尚未启动")
+            return ToolOutcome(ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error="MCP 平台尚未启动")
         binding = self._tool_bindings.get(request.capability)
         if binding is None:
-            return ToolOutcome("failed", "MCP Tool 不可用", error=f"未知的 MCP capability: {request.capability}")
+            return ToolOutcome(
+                ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error=f"未知的 MCP capability: {request.capability}"
+            )
         package, raw_name = binding
         try:
             result = await self._call_tool(package, raw_name, request.parameters)
@@ -298,14 +300,14 @@ class MCPPlatform:
                 type(error).__name__,
             )
             return ToolOutcome(
-                "unknown",
+                ToolOutcomeStatus.UNKNOWN,
                 f"MCP Tool 结果未知: {request.capability}",
                 error=f"{type(error).__name__}: {error}",
             )
         if result.get("is_error") is True:
             detail = str(result.get("text") or result.get("content") or "MCP Tool 返回 isError")
-            return ToolOutcome("failed", f"MCP Tool 执行失败: {request.capability}", error=detail)
-        return ToolOutcome("succeeded", f"MCP Tool 已执行: {request.capability}", result=result)
+            return ToolOutcome(ToolOutcomeStatus.FAILED, f"MCP Tool 执行失败: {request.capability}", error=detail)
+        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, f"MCP Tool 已执行: {request.capability}", result=result)
 
     async def _call_tool(self, package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:
         """调用指定 App 上的 Tool（自动路由到远程 HTTP 或本地 stdio）。

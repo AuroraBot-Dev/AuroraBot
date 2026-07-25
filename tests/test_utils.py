@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from src.utils.serialization import atomic_write_json, extract_json_from_text, json_ready, parse_structured, read_json
-from src.utils.time_utils import from_epoch_seconds, now_text, parse_time_value, to_epoch_seconds, to_time_text
+from src.utils.time import from_epoch_seconds, now_text, parse_time_value, to_epoch_seconds, to_time_text
 
 if TYPE_CHECKING:
     from pathlib import Path

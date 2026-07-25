@@ -102,6 +102,7 @@ ignore = [
     "PLC0415", # import-outside-top-level
     "N999",    # forbidden-import-alias (allowed in __init__.py)
     "TRY003",  # too-many-nested-blocks
+    "PLR0913", # too-many-arguments
 ]
 allowed-confusables = [
     "，",
@@ -137,7 +138,6 @@ allowed-confusables = [
     "BLE001",
     "C901",
     "PLR0912",
-    "PLR0913",
     "TC001",
     "TC003",
     "TRY004",
@@ -146,7 +146,6 @@ allowed-confusables = [
 "src/engine/store*.py" = [
     "C901",
     "PLR0912",
-    "PLR0913",
     "PLR0915",
     "TC001",
     "TC003",
@@ -154,21 +153,18 @@ allowed-confusables = [
 ]
 "src/platform/dashboard/service.py" = ["C901", "PLR0912", "PLR2004", "TC001"]
 "src/platform/__init__.py" = ["A005"]
-"src/contracts/amp.py" = ["PLR0913"]
-"src/contracts/agent.py" = ["PLR0913", "TC001"]
+"src/contracts/agent.py" = ["TC001"]
 "src/config/sections.py" = ["C901", "PLR0912", "PLR2004", "TC003"]
 "src/engine/runtime.py" = ["BLE001", "TC001"]
-"src/contracts/tool.py" = ["PLR0913"]
 "src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
-"src/platform/dashboard/store.py" = ["PLR0913", "TC003", "TRY300"]
+"src/platform/dashboard/store.py" = ["TC003", "TRY300"]
 "src/localhost/runtime.py" = ["BLE001", "TC003"]
 "src/localhost/api.py" = ["C901"]
-"src/agents/tool_agent.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
+"src/agents/handler.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
 "src/memory/service.py" = ["BLE001"]
 "src/platform/console/adapter.py" = ["TC001", "TRY004", "TRY301"]
 "src/platform/console/shell.py" = ["C901", "PLR0912", "TC003"]
 "src/platform/dashboard/adapter.py" = ["TC001", "TRY004", "TRY301"]
-"src/ai/execution.py" = ["PLR0913"]
 "src/ai/vnext.py" = ["C901", "PLR0912", "TC001"]
 "src/apps/aurora-app-clock/service.py" = ["TC003"]
 "src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY004"]

@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.contracts.model import ModelMessage
 
-# 校验错误消息常量
-_INVALID_SECTION = "prompt sections require a key and non-empty content"
-_INVALID_CATALOG = "prompt catalog requires string soul and non-empty world"
-_INVALID_AGENT_PROMPTS = "prompt catalog requires non-empty Agent prompts"
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    INVALID_SECTION = "prompt sections require a key and non-empty content"
+    INVALID_CATALOG = "prompt catalog requires string soul and non-empty world"
+    INVALID_AGENT_PROMPTS = "prompt catalog requires non-empty Agent prompts"
+
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -57,14 +62,14 @@ class PromptCatalog:
 
     def __post_init__(self) -> None:
         if not isinstance(self.soul, str) or not isinstance(self.world, str) or not self.world.strip():
-            raise ValueError(_INVALID_CATALOG)
+            raise ValueError(_Msg.INVALID_CATALOG)
         agents = dict(self.agents)
         invalid = any(
             not isinstance(key, str) or not key or not isinstance(value, str) or not value.strip()
             for key, value in agents.items()
         )
         if not agents or invalid:
-            raise ValueError(_INVALID_AGENT_PROMPTS)
+            raise ValueError(_Msg.INVALID_AGENT_PROMPTS)
         object.__setattr__(self, "agents", MappingProxyType(agents))
         object.__setattr__(self, "sources", tuple(self.sources))
 
@@ -99,7 +104,7 @@ class PromptSection:
 
     def __post_init__(self) -> None:
         if not self.key or not self.content.strip():
-            raise ValueError(_INVALID_SECTION)
+            raise ValueError(_Msg.INVALID_SECTION)
 
 
 @dataclass(frozen=True, slots=True)

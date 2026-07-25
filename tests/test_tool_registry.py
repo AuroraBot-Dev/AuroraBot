@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from src.contracts.agent import CapabilityDescriptor, ToolLease
-from src.contracts.tool import ToolExecutionRequest, ToolExecutorBinding, ToolOutcome
+from src.contracts.tool import ToolExecutionRequest, ToolExecutorBinding, ToolOutcome, ToolOutcomeStatus
 from src.engine.tool_registry import ToolBindingError, ToolRegistry
 
 
@@ -38,7 +38,7 @@ class _Completion:
 
 class _Executor:
     async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        return ToolOutcome("succeeded", "echoed", result={"text": request.parameters["text"]})
+        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, "echoed", result={"text": request.parameters["text"]})
 
     async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
         return await self.execute_tool(request)

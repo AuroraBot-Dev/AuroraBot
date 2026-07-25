@@ -4,8 +4,17 @@
 所有函数均为纯投影，不产生副作用。
 """
 
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    LEGACY_WORKSPACE = (
+        "legacy Episode/Graph workspace contains active data; select a clean engine.workspace before starting: {paths}"
+    )
 
 
 class DebugStore(Protocol):
@@ -31,10 +40,7 @@ def reject_active_legacy_workspace(process_directory: Path) -> None:
         if directory.exists() and any(directory.rglob("*.json")):
             legacy.append(str(directory))
     if legacy:
-        raise RuntimeError(
-            "legacy Episode/Graph workspace contains active data; "
-            "select a clean engine.workspace before starting: " + ", ".join(legacy)
-        )
+        raise RuntimeError(_Msg.LEGACY_WORKSPACE.format(paths=", ".join(legacy)))
 
 
 def task_detail(store: DebugStore, task_id: str) -> dict[str, Any] | None:

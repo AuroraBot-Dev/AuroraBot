@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from typing import Any, Final, Literal, Protocol
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    INVALID_PERSISTED_MODEL_REQUEST = "invalid persisted model request"
+    INVALID_PERSISTED_MODEL_RESULT = "invalid persisted model result"
+    INVALID_CONTINUATION_CHANNEL = "invalid continuation channel"
+    INVALID_MODEL_CONTINUATION = "invalid model continuation"
+
 
 STRUCTURED_OUTPUT_NAME: Final = "aurora_result"
 
@@ -110,7 +121,7 @@ class ModelRequest:
             or not isinstance(messages_raw, (list, tuple))
             or not isinstance(tools_raw, (list, tuple))
         ):
-            raise ValueError("invalid persisted model request")
+            raise ValueError(_Msg.INVALID_PERSISTED_MODEL_REQUEST)
         return cls(
             role=str(value["role"]),
             messages=tuple(ModelMessage(str(item["role"]), str(item["content"])) for item in messages_raw),
@@ -196,7 +207,7 @@ class ModelResult:
         calls = value.get("tool_calls", [])
         continuation = value.get("continuation")
         if not isinstance(usage, dict) or not isinstance(calls, (list, tuple)):
-            raise ValueError("invalid persisted model result")
+            raise ValueError(_Msg.INVALID_PERSISTED_MODEL_RESULT)
         return cls(
             model=str(value["model"]),
             negotiated_capabilities=frozenset(str(item) for item in value.get("negotiated_capabilities", [])),
@@ -303,12 +314,12 @@ class ModelContinuation:
         """从持久化字典反序列化，校验 channel 和 items 合法性。"""
         channel = value.get("channel")
         if channel not in {"chat_completions", "responses"}:
-            raise ValueError("invalid continuation channel")
+            raise ValueError(_Msg.INVALID_CONTINUATION_CHANNEL)
         provider = value.get("provider")
         items = value.get("items", [])
         valid_items = isinstance(items, (list, tuple)) and all(isinstance(item, dict) for item in items)
         if not isinstance(provider, str) or not valid_items:
-            raise ValueError("invalid model continuation")
+            raise ValueError(_Msg.INVALID_MODEL_CONTINUATION)
         return cls(provider, channel, tuple(dict(item) for item in items))
 
 

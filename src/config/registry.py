@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from enum import StrEnum
 
 from src.config.loader import load_configuration
 from src.contracts.configuration import AuroraConfig
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    NOT_INITIALIZED = "Configuration not initialized - call config.init() at process startup"
+
 
 ReloadCallback = Callable[[AuroraConfig], None]
 
@@ -34,7 +42,7 @@ def get() -> AuroraConfig:
         RuntimeError: 尚未调用 :func:`init`。
     """
     if _config is None:
-        raise RuntimeError("Configuration not initialized - call config.init() at process startup")
+        raise RuntimeError(_Msg.NOT_INITIALIZED)
     return _config
 
 

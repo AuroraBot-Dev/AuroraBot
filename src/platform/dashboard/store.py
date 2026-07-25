@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -170,6 +171,14 @@ _MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4, _MIGRATIO
 console = Console(highlight=False)
 
 
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    SCHEMA_VERSION_AHEAD = "Dashboard 数据库 schema {version} 比当前运行时版本更新"
+    TOKEN_EMPTY = "Dashboard 启动 token 为空"
+    OWNER_ALREADY_BOUND = "Dashboard 所有者已绑定到 {username}"
+
+
 def _now() -> str:
     """获取当前 UTC 时间的 ISO 格式字符串。"""
     return datetime.now(UTC).isoformat()
@@ -220,7 +229,7 @@ class ChatStore:
             connection.execute("PRAGMA journal_mode = WAL")
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             if version > len(_MIGRATIONS):
-                raise RuntimeError(f"Dashboard 数据库 schema {version} 比当前运行时版本更新")
+                raise RuntimeError(_Msg.SCHEMA_VERSION_AHEAD.format(version=version))
             for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
                 connection.executescript(
                     f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
@@ -238,7 +247,7 @@ class ChatStore:
         """读取并返回启动 Token。"""
         token = (self.database_path.parent / "Token.txt").read_text(encoding="utf-8").strip()
         if not token:
-            raise RuntimeError("Dashboard 启动 token 为空")
+            raise RuntimeError(_Msg.TOKEN_EMPTY)
         return token
 
     def ensure_owner(self, username: str) -> sqlite3.Row:
@@ -252,7 +261,7 @@ class ChatStore:
             owner = connection.execute("SELECT * FROM users WHERE is_owner = 1").fetchone()
             if owner is not None:
                 if str(owner["username"]) != username:
-                    raise RuntimeError(f"Dashboard 所有者已绑定到 {owner['username']!s}")
+                    raise RuntimeError(_Msg.OWNER_ALREADY_BOUND.format(username=owner["username"]))
                 connection.commit()
                 return owner
             connection.execute(

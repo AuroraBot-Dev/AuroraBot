@@ -14,6 +14,7 @@ import os
 import signal
 import tempfile
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,15 @@ if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
 
 logger = get_logger("MCPServerKit")
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    NO_COMMAND = "Server {key} 没有配置启动命令"
+    START_FAILED_IO = "启动 Server {key} 失败: 命令或临时目录不可用 {command} — {error}"
+    START_FAILED_OS = "启动 Server {key} 失败: {error}"
+    NOT_RUNNING = "Server {key} 不在运行中，无法重启"
 
 
 def _ensure_tempdir() -> Path:
@@ -115,8 +125,7 @@ class MCPServerKit:
         logger.info("启动 MCP Server: %s (%s)", spec.name, spec.key)
 
         if not spec.command:
-            msg = f"Server {spec.key} 没有配置启动命令"
-            raise RuntimeError(msg)
+            raise RuntimeError(_Msg.NO_COMMAND.format(key=spec.key))
 
         _ensure_tempdir()
 
@@ -131,11 +140,9 @@ class MCPServerKit:
                 stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError as exc:
-            msg = f"启动 Server {spec.key} 失败: 命令或临时目录不可用 {spec.command} — {exc}"
-            raise RuntimeError(msg) from exc
+            raise RuntimeError(_Msg.START_FAILED_IO.format(key=spec.key, command=spec.command, error=exc)) from exc
         except OSError as exc:
-            msg = f"启动 Server {spec.key} 失败: {exc}"
-            raise RuntimeError(msg) from exc
+            raise RuntimeError(_Msg.START_FAILED_OS.format(key=spec.key, error=exc)) from exc
 
         server_proc = ServerProcess(spec=spec, process=process)
         self._processes[spec.key] = server_proc
@@ -220,8 +227,7 @@ class MCPServerKit:
         """
         server_proc = self._processes.get(key)
         if server_proc is None:
-            msg = f"Server {key} 不在运行中，无法重启"
-            raise RuntimeError(msg)
+            raise RuntimeError(_Msg.NOT_RUNNING.format(key=key))
 
         spec = server_proc.spec
         await self.stop_one(key)

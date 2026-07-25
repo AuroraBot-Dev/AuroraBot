@@ -17,6 +17,7 @@ from __future__ import annotations
 import ast
 import re
 import time
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = get_logger("Sandbox")
+
+
+class _Msg(StrEnum):
+    INVALID_SESSION_ID = "session_id 包含非法字符: {session_id}。仅允许字母、数字、连字符、下划线。"
 
 
 class SandboxManager:
@@ -58,8 +63,7 @@ class SandboxManager:
     def _validate_session_id(session_id: str) -> None:
         """校验 session_id 格式，仅允许字母、数字、连字符、下划线。"""
         if not re.fullmatch(r"[a-zA-Z0-9_-]+", session_id):
-            msg = f"session_id 包含非法字符: {session_id!r}。仅允许字母、数字、连字符、下划线。"
-            raise ValueError(msg)
+            raise ValueError(_Msg.INVALID_SESSION_ID.format(session_id=session_id))
 
     @staticmethod
     def _format_violations(violations: list[SecurityViolation]) -> str:
