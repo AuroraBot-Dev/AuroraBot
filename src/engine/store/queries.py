@@ -1,8 +1,4 @@
-"""只读 Task、Agent、因果事件与情境查询。
-
-提供所有无需事务边界的读取操作，包括聚合计数、
-Agent 子列表、消息查询、因果事件回溯等。
-"""
+"""只读查询与情境管理。"""
 
 from __future__ import annotations
 
@@ -12,26 +8,24 @@ from typing import Any
 from uuid import uuid4
 
 from src.contracts.agent import AgentInstance, TaskState
-from src.engine.store_base import RuntimeStoreBase, _json, utc_now
+
+from .base import RuntimeStoreBase, _json, utc_now
 
 
 class StoreQueriesMixin(RuntimeStoreBase):
-    """只读查询 Mixin，不产生写事务。"""
+    """只读查询与情境管理，不产生写事务。"""
 
     def get_task(self, task_id: str) -> TaskState | None:
-        """按 task_id 查找 Task。不存在时返回 None。"""
         with self.connect() as connection:
             row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
             return self._task(row) if row is not None else None
 
     def get_agent(self, agent_id: str) -> AgentInstance | None:
-        """按 agent_id 查找 Agent。不存在时返回 None。"""
         with self.connect() as connection:
             row = connection.execute("SELECT * FROM agents WHERE agent_id = ?", (agent_id,)).fetchone()
             return self._agent(row) if row is not None else None
 
     def children(self, agent_id: str) -> tuple[AgentInstance, ...]:
-        """返回指定 Agent 的所有子 Agent（按创建时间排序）。"""
         with self.connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM agents WHERE parent_agent_id = ? ORDER BY created_at, agent_id", (agent_id,)
@@ -39,7 +33,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return tuple(self._agent(row) for row in rows)
 
     def tasks(self, *, active_only: bool = False) -> tuple[TaskState, ...]:
-        """返回所有 Task。active_only=True 时仅返回 ACTIVE 状态的 Task。"""
         query = "SELECT * FROM tasks"
         if active_only:
             query += " WHERE status = 'ACTIVE'"
@@ -48,7 +41,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return tuple(self._task(row) for row in connection.execute(query).fetchall())
 
     def agents(self, *, active_only: bool = False) -> tuple[AgentInstance, ...]:
-        """返回所有 Agent。active_only=True 时排除 COMPLETED/FAILED/CANCELLED。"""
         query = "SELECT * FROM agents"
         if active_only:
             query += " WHERE status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')"
@@ -57,7 +49,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return tuple(self._agent(row) for row in connection.execute(query).fetchall())
 
     def messages_for_agent(self, agent_id: str) -> tuple[dict[str, Any], ...]:
-        """返回指定 Agent 的所有邮箱消息（按创建时间排序）。"""
         with self.connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM mailbox WHERE target_agent_id = ? ORDER BY created_at, message_id", (agent_id,)
@@ -65,7 +56,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return tuple(self._message(row).to_dict() for row in rows)
 
     def has_pending_child_reports(self, agent_id: str) -> bool:
-        """检查 Agent 是否有尚未处理的子 Agent 完成/失败报告。"""
         with self.connect() as connection:
             return bool(
                 connection.execute(
@@ -76,7 +66,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             )
 
     def events_for_task(self, task_id: str) -> tuple[dict[str, Any], ...]:
-        """返回指定 Task 的所有因果事件（按创建时间排序）。用于调试和审计回溯。"""
         with self.connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM causal_events WHERE task_id = ? ORDER BY created_at, event_id", (task_id,)
@@ -97,7 +86,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             )
 
     def situations(self) -> tuple[dict[str, Any], ...]:
-        """返回所有未过期且未认领的情境（OPEN 状态，优先级降序）。"""
         now = utc_now()
         with self.connect() as connection:
             rows = connection.execute(
@@ -119,7 +107,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
             )
 
     def expire_situations(self) -> None:
-        """将已过期的 OPEN 情境标记为 EXPIRED。应在每个 pump 周期调用。"""
         now = utc_now()
         with self.transaction() as connection:
             connection.execute(
@@ -136,7 +123,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
         priority: int,
         ttl_seconds: float,
     ) -> str:
-        """创建一条新情境记录并返回其 situation_id。过期时间为创建时间 + ttl_seconds。"""
         now_dt = datetime.now(UTC)
         situation_id = str(uuid4())
         with self.transaction() as connection:
@@ -160,7 +146,6 @@ class StoreQueriesMixin(RuntimeStoreBase):
         return situation_id
 
     def counts(self) -> dict[str, int]:
-        """返回运行时仓库的关键聚合计数。用于监控和 has_work 判断。"""
         with self.connect() as connection:
             return {
                 "active_tasks": int(

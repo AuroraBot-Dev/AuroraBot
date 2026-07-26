@@ -30,7 +30,8 @@ from src.engine.commands import (
     ToolCommand,
     WaitCommand,
 )
-from src.engine.store_base import RuntimeStoreBase, _json, utc_now
+
+from .base import RuntimeStoreBase, _json, utc_now
 
 
 class _Msg(StrEnum):

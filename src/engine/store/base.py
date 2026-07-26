@@ -26,12 +26,8 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
-from src.engine.store_schema import (
-    _ACTIVE_ACTIVITY_INDEX,
-    _ACTIVITIES_V5,
-    _SCHEMA,
-    _SCHEMA_VERSION,
-)
+
+from .schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V5, _SCHEMA, _SCHEMA_VERSION
 
 
 class _Msg(StrEnum):

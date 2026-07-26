@@ -24,7 +24,7 @@ from src.contracts.agent import (
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelResult, ModelUsage
 from src.contracts.tool import ToolOutcomeStatus
-from src.engine.state import EngineState
+from src.engine.runtime import EngineState
 
 if TYPE_CHECKING:
     from pathlib import Path
