@@ -6,10 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from typing import TYPE_CHECKING
-
-import uvicorn
 
 from src.platform.dashboard.adapter import (
     DASHBOARD_SEND_CAPABILITY,
@@ -17,6 +14,7 @@ from src.platform.dashboard.adapter import (
     DashboardPlatform,
 )
 from src.platform.dashboard.api import create_app
+from src.platform.dashboard.server import SignalSafeServer
 from src.platform.dashboard.service import ChatError, ChatService
 
 if TYPE_CHECKING:
@@ -60,8 +58,10 @@ async def _create(_config: object, runtime: object) -> "PlatformHandle":
     )
 
 
-def _build_server(config: object, chat: ChatService) -> "_SignalSafeServer":
+def _build_server(config: object, chat: ChatService) -> "SignalSafeServer":
     """构建带禁用信号捕获的 uvicorn HTTP 服务器。"""
+    import uvicorn
+
     cfg: "DashboardConfig" = config.dashboard  # type: ignore[union-attr]
     uvc = uvicorn.Config(
         create_app(
@@ -76,12 +76,4 @@ def _build_server(config: object, chat: ChatService) -> "_SignalSafeServer":
         log_config=None,
         access_log=False,
     )
-    return _SignalSafeServer(uvc)
-
-
-class _SignalSafeServer(uvicorn.Server):
-    """禁止 uvicorn 自行捕获进程信号，由组合根统一管理停止流程。"""
-
-    @contextlib.contextmanager
-    def capture_signals(self):  # type: ignore[no-untyped-def]
-        yield
+    return SignalSafeServer(uvc)

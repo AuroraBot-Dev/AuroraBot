@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
-from src.ai.vnext import ModelGatewayService
+from src.ai.gateway import ModelGatewayService
 from src.config import get as get_config
 from src.contracts.agent import AgentHandler, Capability, EngineConfiguration
 from src.contracts.configuration import PLATFORM_NAMES, PlatformPreference

@@ -10,7 +10,6 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,7 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
+from src.utils.time import utc_now
 
 from .schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V5, _SCHEMA, _SCHEMA_VERSION
 
@@ -34,11 +34,6 @@ class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
 
     UNSUPPORTED_SCHEMA = "不支持的 Agent 运行时数据库 Schema 版本"
-
-
-def utc_now() -> str:
-    """返回当前 UTC 时间的 ISO 格式字符串，用于所有数据库时间戳统一。"""
-    return datetime.now(UTC).isoformat()
 
 
 def _json(value: object) -> str:

@@ -8,8 +8,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+
+
+def utc_now() -> str:
+    """返回当前 UTC 时间的 ISO 格式字符串，用于所有数据库时间戳统一。"""
+    return datetime.now(UTC).isoformat()
 
 
 def now_text() -> str:

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import litellm
@@ -34,8 +35,15 @@ from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.ai.execution import ModelCaller
-    from src.ai.vnext import ModelGatewayService
+    from src.ai.gateway import ModelGatewayService
     from src.contracts.configuration import ModelRoleConfig
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    RESPONSES_REQUEST_FAILED = "Responses request failed: {error_type}: {error}"
+
 
 logger = get_logger(__name__)
 
@@ -121,7 +129,9 @@ async def _execute_responses_channel(
     try:
         response = await litellm.aresponses(**kwargs)
     except Exception as error:
-        raise ModelGatewayError(f"Responses request failed: {type(error).__name__}: {error}") from error
+        raise ModelGatewayError(
+            _Msg.RESPONSES_REQUEST_FAILED.format(error_type=type(error).__name__, error=error)
+        ) from error
     output_items = tuple(json_item(item) for item in getattr(response, "output", []) or [])
     text = str(getattr(response, "output_text", "") or "")
     tool_calls, call_diagnostics = response_tool_calls(output_items, alias_to_name)

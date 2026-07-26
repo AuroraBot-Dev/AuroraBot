@@ -9,13 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import TYPE_CHECKING
-
-
-class _Msg(StrEnum):
-    """本文件内所有用户可见或日志输出的字符串常量。"""
-
 
 if TYPE_CHECKING:
     from pathlib import Path

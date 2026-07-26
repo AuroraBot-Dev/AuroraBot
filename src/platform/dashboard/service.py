@@ -14,8 +14,7 @@ from uuid import UUID, uuid4
 
 from src.platform.dashboard.communication import ChatError, DashboardCommunication
 from src.platform.dashboard.routing import PrivateMessageInput, is_conversation_command, message_matches
-from src.platform.dashboard.security import new_token, token_digest
-from src.platform.dashboard.store import ChatStore
+from src.platform.dashboard.store import ChatStore, new_token, token_digest
 
 if TYPE_CHECKING:
     import sqlite3
@@ -53,6 +52,14 @@ class _Msg(StrEnum):
     INVALID_ATTACHMENT_ID = "attachment_id 无效"
     ATTACHMENT_UNAVAILABLE = "附件不可用"
     RECEIVER_NOT_FOUND = "接收者不存在"
+    CODE_UNAUTHORIZED = "UNAUTHORIZED"
+    CODE_MESSAGE_TOO_LARGE = "MESSAGE_TOO_LARGE"
+    CODE_INVALID_PAYLOAD = "INVALID_PAYLOAD"
+    CODE_ATTACHMENT_NOT_FOUND = "ATTACHMENT_NOT_FOUND"
+    CODE_BOT_ATTACHMENT_UNSUPPORTED = "BOT_ATTACHMENT_UNSUPPORTED"
+    CODE_ATTACHMENT_FORBIDDEN = "ATTACHMENT_FORBIDDEN"
+    CODE_IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+    CODE_RECEIVER_NOT_FOUND = "RECEIVER_NOT_FOUND"
 
 
 class ChatService:
@@ -119,14 +126,14 @@ class ChatService:
         """
         expected = await asyncio.to_thread(self.store.bootstrap_token)
         if not secrets.compare_digest(bootstrap_token.strip(), expected):
-            raise ChatError("UNAUTHORIZED", _Msg.INVALID_TOKEN, 401)
+            raise ChatError(_Msg.CODE_UNAUTHORIZED, _Msg.INVALID_TOKEN, 401)
         row = await asyncio.to_thread(
             self.store.fetch_one,
             "SELECT * FROM users WHERE id = ? AND is_owner = 1 AND is_bot = 0",
             (self.owner_id,),
         )
         if row is None:
-            raise ChatError("UNAUTHORIZED", _Msg.OWNER_UNAVAILABLE, 401)
+            raise ChatError(_Msg.CODE_UNAUTHORIZED, _Msg.OWNER_UNAVAILABLE, 401)
         token = new_token()
         now = datetime.now(UTC)
         await asyncio.to_thread(
@@ -159,7 +166,7 @@ class ChatService:
             (token_digest(token), datetime.now(UTC).isoformat(), self.owner_id),
         )
         if row is None:
-            raise ChatError("UNAUTHORIZED", _Msg.UNAUTHORIZED, 401)
+            raise ChatError(_Msg.CODE_UNAUTHORIZED, _Msg.UNAUTHORIZED, 401)
         return dict(row)
 
     async def list_users(self, current_user_id: int) -> list[dict[str, Any]]:
@@ -219,9 +226,9 @@ class ChatService:
         若写入后数据库插入失败，自动清理已写入的文件。
         """
         if len(data) > self.configuration.max_upload_bytes:
-            raise ChatError("MESSAGE_TOO_LARGE", _Msg.FILE_TOO_LARGE, 413)
+            raise ChatError(_Msg.CODE_MESSAGE_TOO_LARGE, _Msg.FILE_TOO_LARGE, 413)
         if not (mime_type.startswith(_ALLOWED_MIME_PREFIXES) or mime_type in _ALLOWED_MIME_TYPES):
-            raise ChatError("INVALID_PAYLOAD", _Msg.UNSUPPORTED_FILE_TYPE)
+            raise ChatError(_Msg.CODE_INVALID_PAYLOAD, _Msg.UNSUPPORTED_FILE_TYPE)
         original_name = Path(filename or "file").name[:255]
         suffix = Path(original_name).suffix[:16]
         stored_name = f"{uuid4().hex}{suffix}"
@@ -259,7 +266,7 @@ class ChatService:
             (attachment_id,),
         )
         if row is None:
-            raise ChatError("ATTACHMENT_NOT_FOUND", _Msg.ATTACHMENT_NOT_FOUND, 404)
+            raise ChatError(_Msg.CODE_ATTACHMENT_NOT_FOUND, _Msg.ATTACHMENT_NOT_FOUND, 404)
         allowed = int(row["owner_id"]) == user_id
         if not allowed:
             message = await asyncio.to_thread(
@@ -269,13 +276,13 @@ class ChatService:
             )
             allowed = message is not None
         if not allowed:
-            raise ChatError("ATTACHMENT_FORBIDDEN", _Msg.ATTACHMENT_FORBIDDEN, 403)
+            raise ChatError(_Msg.CODE_ATTACHMENT_FORBIDDEN, _Msg.ATTACHMENT_FORBIDDEN, 403)
         # 验证文件路径在 upload 目录内（防目录遍历）
         path = await asyncio.to_thread((self.configuration.upload_dir / str(row["stored_name"])).resolve)
         upload_root = await asyncio.to_thread(self.configuration.upload_dir.resolve)
         exists = await asyncio.to_thread(path.is_file)
         if not path.is_relative_to(upload_root) or not exists:
-            raise ChatError("ATTACHMENT_NOT_FOUND", _Msg.ATTACHMENT_FILE_MISSING, 404)
+            raise ChatError(_Msg.CODE_ATTACHMENT_NOT_FOUND, _Msg.ATTACHMENT_FILE_MISSING, 404)
         return path, str(row["mime_type"]), str(row["original_name"])
 
     async def send_private_message(self, sender_id: int, event: dict[str, Any]) -> dict[str, Any]:
@@ -301,7 +308,7 @@ class ChatService:
         assert message_row is not None
         message = self._message(message_row)
         if not created and not message_matches(message, parsed):
-            raise ChatError("IDEMPOTENCY_CONFLICT", _Msg.IDEMPOTENCY_CONFLICT, 409)
+            raise ChatError(_Msg.CODE_IDEMPOTENCY_CONFLICT, _Msg.IDEMPOTENCY_CONFLICT, 409)
         if not created and message["status"] == "saved":
             if is_command and not is_conversation_command(parsed.content or ""):
                 await self._communication.attach_existing_command_reply(
@@ -328,7 +335,7 @@ class ChatService:
             UUID(client_message_id)
             receiver_id = int(event.get("receiver_id", 0))
         except (TypeError, ValueError) as error:
-            raise ChatError("INVALID_PAYLOAD", _Msg.INVALID_MESSAGE_ID) from error
+            raise ChatError(_Msg.CODE_INVALID_PAYLOAD, _Msg.INVALID_MESSAGE_ID) from error
         receiver = await self._require_user(receiver_id)
         message_type = str(event.get("message_type") or "text")
         content_value = event.get("content")
@@ -338,11 +345,11 @@ class ChatService:
             or (message_type == "text" and not content)
             or (message_type != "text" and event.get("attachment_id") is None)
         ):
-            raise ChatError("INVALID_PAYLOAD", _Msg.INVALID_PAYLOAD)
+            raise ChatError(_Msg.CODE_INVALID_PAYLOAD, _Msg.INVALID_PAYLOAD)
         if bool(receiver["is_bot"]):
             await self._communication.require_owner(sender_id)
             if message_type != "text":
-                raise ChatError("BOT_ATTACHMENT_UNSUPPORTED", _Msg.BOT_ATTACHMENT_UNSUPPORTED)
+                raise ChatError(_Msg.CODE_BOT_ATTACHMENT_UNSUPPORTED, _Msg.BOT_ATTACHMENT_UNSUPPORTED)
         attachment_id = await self._validate_attachment(sender_id, event.get("attachment_id"))
         return PrivateMessageInput(
             client_message_id=client_message_id,
@@ -358,18 +365,18 @@ class ChatService:
         if value is None:
             return None
         if not isinstance(value, (int, str)) or isinstance(value, bool):
-            raise ChatError("INVALID_PAYLOAD", _Msg.INVALID_ATTACHMENT_ID)
+            raise ChatError(_Msg.CODE_INVALID_PAYLOAD, _Msg.INVALID_ATTACHMENT_ID)
         try:
             attachment_id = int(value)
         except (TypeError, ValueError) as error:
-            raise ChatError("INVALID_PAYLOAD", _Msg.INVALID_ATTACHMENT_ID) from error
+            raise ChatError(_Msg.CODE_INVALID_PAYLOAD, _Msg.INVALID_ATTACHMENT_ID) from error
         attachment = await asyncio.to_thread(
             self.store.fetch_one,
             "SELECT id FROM attachments WHERE id = ? AND owner_id = ?",
             (attachment_id, sender_id),
         )
         if attachment is None:
-            raise ChatError("ATTACHMENT_FORBIDDEN", _Msg.ATTACHMENT_UNAVAILABLE, 403)
+            raise ChatError(_Msg.CODE_ATTACHMENT_FORBIDDEN, _Msg.ATTACHMENT_UNAVAILABLE, 403)
         return attachment_id
 
     async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
@@ -428,7 +435,7 @@ class ChatService:
             (user_id,),
         )
         if row is None:
-            raise ChatError("RECEIVER_NOT_FOUND", _Msg.RECEIVER_NOT_FOUND, 404)
+            raise ChatError(_Msg.CODE_RECEIVER_NOT_FOUND, _Msg.RECEIVER_NOT_FOUND, 404)
         return dict(row)
 
     def _user(self, row: sqlite3.Row) -> dict[str, Any]:

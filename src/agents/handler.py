@@ -24,7 +24,7 @@ from src.contracts.model import (
     append_tool_result,
 )
 from src.prompt import PromptComposer
-from src.prompt.text import EMPTY_CHILD_COMPLETION, NO_ACTION_COMPLETION
+from src.prompt.models import EMPTY_CHILD_COMPLETION, NO_ACTION_COMPLETION
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:

@@ -21,7 +21,7 @@ from src.ai._parsing import (
     usage,
 )
 from src.ai.execution import CostTracker, GatewayError, TaskManager
-from src.ai.vnext import ModelGatewayService
+from src.ai.gateway import ModelGatewayService
 from src.config.loader import load_configuration
 from src.contracts.model import (
     ModelCapabilityError,

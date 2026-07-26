@@ -4,7 +4,7 @@
 
 用法::
 
-    from src.ai.vnext import ModelGatewayService
+    from src.ai.gateway import ModelGatewayService
 
     service = ModelGatewayService(config)
     gen = service.fast.acompletion(

@@ -11,10 +11,10 @@ import src.sandbox.executor as executor_module
 import src.sandbox.policy as policy_module
 from src.sandbox import SandboxManager
 from src.sandbox.base import SandboxConfigError, SandboxResult, SecurityViolation
+from src.sandbox.config import ConfigReloader, SandboxConfig
 from src.sandbox.executor import SandboxExecutor
 from src.sandbox.inspector import CodeInspector
 from src.sandbox.policy import AccessPolicy
-from src.sandbox.settings import ConfigReloader, SandboxConfig
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -243,10 +243,10 @@ def test_sandbox_manager_validates_inspects_executes_and_calls_back(sandbox_root
 
 
 def test_sandbox_manager_singleton_proxy() -> None:
-    import src.sandbox as sandbox_module
+    from src.sandbox import manager
 
-    sandbox_module._sandbox_singleton = None
-    first = sandbox_module.get_sandbox_manager()
-    second = sandbox_module.get_sandbox_manager()
+    manager._sandbox_singleton = None
+    first = manager.get_sandbox_manager()
+    second = manager.get_sandbox_manager()
     assert first is second
-    assert sandbox_module.sandbox_manager._policy is first._policy
+    assert manager.sandbox_manager._policy is first._policy

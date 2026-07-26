@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import sqlite3
-from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.panel import Panel
 
-from src.platform.dashboard.security import new_token
+from src.utils.time import utc_now
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
+
+
+def new_token() -> str:
+    """生成一个 URL 安全的随机 token 字符串。"""
+    return secrets.token_urlsafe(32)
+
+
+def token_digest(token: str) -> str:
+    """计算 token 的 SHA-256 摘要，用于安全存储。"""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 _MIGRATION_1 = """
@@ -179,11 +190,6 @@ class _Msg(StrEnum):
     OWNER_ALREADY_BOUND = "Dashboard 所有者已绑定到 {username}"
 
 
-def _now() -> str:
-    """获取当前 UTC 时间的 ISO 格式字符串。"""
-    return datetime.now(UTC).isoformat()
-
-
 def _print_token(token: str) -> None:
     """在终端中以 Rich Panel 格式打印启动 Token 和保管提示。"""
     content = (
@@ -255,7 +261,7 @@ class ChatStore:
 
         若已有所有者但用户名不匹配则抛出异常。
         """
-        now = _now()
+        now = utc_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             owner = connection.execute("SELECT * FROM users WHERE is_owner = 1").fetchone()
@@ -297,7 +303,7 @@ class ChatStore:
 
     def ensure_bot(self, username: str, display_name: str, avatar_url: str | None) -> sqlite3.Row:
         """确保 Bot 用户存在，使用 upsert 语义更新显示名和头像。"""
-        now = _now()
+        now = utc_now()
         with self.connect() as connection:
             connection.execute(
                 """
@@ -333,7 +339,7 @@ class ChatStore:
         Returns:
             ``(消息行, 是否新建)`` 的元组。
         """
-        now = _now()
+        now = utc_now()
         with self.connect() as connection:
             try:
                 cursor = connection.execute(

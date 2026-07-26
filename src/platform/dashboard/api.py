@@ -1,6 +1,7 @@
 """Dashboard 聊天与 Tool 执行的 FastAPI 适配器。"""
 
 import asyncio
+from enum import StrEnum
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
@@ -13,6 +14,13 @@ from src.contracts.ports import DashboardControlPort
 from src.platform.dashboard.service import ChatError, ChatService
 
 
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    CODE_UNAUTHORIZED = "UNAUTHORIZED"
+    UNAUTHORIZED_MSG = "Unauthorized"
+
+
 class Credentials(BaseModel):
     """登录凭据模型。"""
 
@@ -22,7 +30,7 @@ class Credentials(BaseModel):
 def _bearer(authorization: str | None) -> str:
     """从 Authorization 头中提取 Bearer token。"""
     if authorization is None or not authorization.startswith("Bearer "):
-        raise ChatError("UNAUTHORIZED", "Unauthorized", 401)
+        raise ChatError(_Msg.CODE_UNAUTHORIZED, _Msg.UNAUTHORIZED_MSG, 401)
     return authorization.removeprefix("Bearer ").strip()
 
 

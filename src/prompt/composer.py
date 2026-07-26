@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from src.prompt.models import PromptCatalog, PromptDocument, PromptSection
-from src.prompt.text import CHANNEL_LABELS
+from src.prompt.models import CHANNEL_LABELS, PromptCatalog, PromptDocument, PromptSection
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentContext, CapabilityDescriptor

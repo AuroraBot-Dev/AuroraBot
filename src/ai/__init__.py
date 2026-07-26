@@ -19,6 +19,7 @@ from .execution import (
     ModelCaller,
     TaskManager,
 )
+from .gateway import ModelGatewayService
 from .models import (
     compute_cost,
     get_capabilities_by_id,
@@ -31,7 +32,6 @@ from .providers import (
     resolve_model,
     setup_providers,
 )
-from .vnext import ModelGatewayService
 
 __all__ = [
     "CancelledWithPartialResponse",

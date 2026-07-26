@@ -15,7 +15,7 @@ from src.sandbox.paths import SANDBOX_DIR
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from src.sandbox.settings import SandboxConfig
+    from src.sandbox.config import SandboxConfig
 
 logger = get_logger("AccessPolicy")
 

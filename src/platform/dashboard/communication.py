@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import asdict
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -19,6 +20,7 @@ from src.platform.dashboard.routing import (
     is_conversation_command,
     is_quit_command,
 )
+from src.utils.time import utc_now
 
 if TYPE_CHECKING:
     import sqlite3
@@ -29,6 +31,17 @@ if TYPE_CHECKING:
     from src.platform.dashboard.store import ChatStore
 
     Publish = Callable[[int, dict[str, Any]], Awaitable[None]]
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    CODE_BOT_OWNER_ONLY = "BOT_OWNER_ONLY"
+    BOT_OWNER_ONLY_MSG = "仅允许已配置的 Dashboard 所有者向 Bot 发送消息"
+    CODE_BOT_ATTACHMENT_UNSUPPORTED = "BOT_ATTACHMENT_UNSUPPORTED"
+    BOT_ATTACHMENT_UNSUPPORTED_MSG = "Bot 不支持附件消息"
+    CODE_BOT_UNAVAILABLE = "BOT_UNAVAILABLE"
+    BOT_UNAVAILABLE_MSG = "Bot 不可用"
 
 
 class ChatError(RuntimeError):
@@ -78,7 +91,7 @@ class DashboardCommunication:
             (user_id, self._configuration.owner_username),
         )
         if owner is None:
-            raise ChatError("BOT_OWNER_ONLY", "仅允许已配置的 Dashboard 所有者向 Bot 发送消息", 403)
+            raise ChatError(_Msg.CODE_BOT_OWNER_ONLY, _Msg.BOT_OWNER_ONLY_MSG, 403)
 
     async def handle_bot_input(
         self,
@@ -104,7 +117,7 @@ class DashboardCommunication:
             ChatError: Bot 不可用或消息类型不支持时。
         """
         if parsed.message_type != "text":
-            raise ChatError("BOT_ATTACHMENT_UNSUPPORTED", "Bot 不支持附件消息")
+            raise ChatError(_Msg.CODE_BOT_ATTACHMENT_UNSUPPORTED, _Msg.BOT_ATTACHMENT_UNSUPPORTED_MSG)
         content = parsed.content or ""
         is_command = content.lstrip().startswith("/")
         # 非新建的旧命令（且非对话命令）不重新路由
@@ -134,7 +147,7 @@ class DashboardCommunication:
                 "UPDATE messages SET status = 'failed' WHERE id = ?",
                 (row_id,),
             )
-            raise ChatError("BOT_UNAVAILABLE", "Bot 不可用", 503) from error
+            raise ChatError(_Msg.CODE_BOT_UNAVAILABLE, _Msg.BOT_UNAVAILABLE_MSG, 503) from error
 
     async def attach_existing_command_reply(
         self,
@@ -174,7 +187,7 @@ class DashboardCommunication:
 
         error = self._validate_tool(request)
         text = request.parameters.get("text")
-        now = await asyncio.to_thread(self._now)
+        now = await asyncio.to_thread(utc_now)
         await asyncio.to_thread(
             self._store.execute,
             "INSERT INTO dashboard_tool_requests(request_id, request_digest, text, status, created_at, updated_at) "
@@ -208,7 +221,7 @@ class DashboardCommunication:
             self._store.execute,
             "UPDATE dashboard_tool_requests SET status = 'succeeded', summary = ?, external_message_id = ?, "
             "updated_at = ? WHERE request_id = ?",
-            (summary, message_id, await asyncio.to_thread(self._now), request.request_id),
+            (summary, message_id, await asyncio.to_thread(utc_now), request.request_id),
         )
         if created:
             await self._publish(owner_id, {"type": "private_message", "message": self._message(message_row)})
@@ -247,7 +260,7 @@ class DashboardCommunication:
             self._store.execute,
             "UPDATE dashboard_tool_requests SET status = 'failed', summary = ?, error = ?, updated_at = ? "
             "WHERE request_id = ?",
-            (summary, error, await asyncio.to_thread(self._now), request_id),
+            (summary, error, await asyncio.to_thread(utc_now), request_id),
         )
         return ToolOutcome(ToolOutcomeStatus.FAILED, summary, error=error)
 
@@ -322,13 +335,6 @@ class DashboardCommunication:
             "created_at": str(row["created_at"]),
             "status": str(row["status"]),
         }
-
-    @staticmethod
-    def _now() -> str:
-        """获取当前 UTC 时间的 ISO 格式字符串。"""
-        from datetime import UTC, datetime
-
-        return datetime.now(UTC).isoformat()
 
 
 def _request_digest(request: ToolExecutionRequest) -> str:

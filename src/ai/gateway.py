@@ -4,7 +4,7 @@
 
 用法::
 
-    from src.ai.vnext import ModelGatewayService
+    from src.ai.gateway import ModelGatewayService
     from src.config import load_configuration
     from src.contracts.model import ModelRequest
 
@@ -21,7 +21,7 @@ import asyncio
 import os
 import time
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jsonschema import ValidationError, validate
 
@@ -30,7 +30,6 @@ from src.ai._parsing import invalid_output_result
 from src.ai.execution import CostTracker, ModelCaller, TaskManager
 from src.ai.models import get_capabilities_by_id, init_cache
 from src.ai.providers import ProviderConfig, setup_providers
-from src.contracts.configuration import AuroraConfig
 from src.contracts.model import (
     ModelBudgetError,
     ModelCapabilityError,
@@ -40,6 +39,9 @@ from src.contracts.model import (
 )
 from src.utils.logging import get_logger
 from src.utils.serialization import extract_json_from_text
+
+if TYPE_CHECKING:
+    from src.contracts.configuration import AuroraConfig
 
 
 class _Msg(StrEnum):
@@ -92,7 +94,7 @@ _FORBIDDEN_PARAMETERS = frozenset(
 class ModelGatewayService:
     """基于能力协商的模型边界，调度 Chat Completions / Responses 通道。"""
 
-    def __init__(self, configuration: AuroraConfig) -> None:
+    def __init__(self, configuration: "AuroraConfig") -> None:
         self._configuration = configuration
         self._models: dict[str, str] = {
             role: f"{definition.provider}/{definition.model}"

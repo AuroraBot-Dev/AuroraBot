@@ -1,6 +1,6 @@
 # 包依赖关系
 
-本文档描述 AuroraBot 源码包之间的导入依赖与硬边界。当前为**目标架构**，代码尚未完全迁移。
+本文档描述 AuroraBot 源码包之间的导入依赖与硬边界。**持续与实现保持同步**。
 
 ## 指导原则
 
@@ -86,7 +86,7 @@ raise RuntimeError("ToolAgent requires an installed PromptComposer")
 - dataclass 优先 `slots=True`、`frozen=True`
 - Protocol 只声明签名，不给默认实现
 - 公共 API 提供类型注解
-- 一个函数一个职责。超过 500 行的文件必须考虑架构是否合理或是否应该根据总分结构分包。
+- 一个函数一个职责。
 - 特判是最昂贵的代码——如果遇到无法归入现有模式的个例，先考虑模式是否应该扩展，而非在调用点打补丁。
 
 ### 5. 不可决策时提问
@@ -383,10 +383,12 @@ contracts/
 ```
 utils/
   __init__.py
-  logging.py         # get_logger("aurora.<module>") — 统一日志工厂
-  serialization.py   # extract_json_from_text, atomic_write_json — JSON 解析与原子写入
-  time.py            # 时间格式化与计时工具
+  logging.py         # get_logger("aurora.<module>") — 统一日志工厂（含 rich 终端日志）
+  serialization.py   # extract_json_from_text, atomic_write_json — JSON 解析与原子写入（含 yaml 序列化）
+  time.py            # utc_now, now_text, from_epoch_seconds — 时间格式化与计时工具
 ```
+
+**与原始设计的小差异**：`logging.py` 内部使用 `rich`，`serialization.py` 内部使用 `yaml`。这两个第三方依赖在 `pyproject.toml` 中声明，utils 包不引入 `src.*` 依赖。
 
 ---
 
@@ -398,6 +400,8 @@ utils/
 config/
   __init__.py        # init(root, profile) / get() → AuroraConfig / reload() / subscribe()
   loader.py          # 按包名加载所有 config/*.toml，合并为单一不可变快照
+  sections.py        # TOML 各节解析函数（_parse_agent_runtime, _parse_preference 等）
+  registry.py        # 配置注册中心：get() / init() / reload() / subscribe() / unsubscribe()
   validator.py       # 未知键、类型不匹配、无效引用启动前失败
   hot_reload.py      # 文件监听 + subscriber 通知
 ```
@@ -431,9 +435,8 @@ config/
 ```
 prompt/
   __init__.py        # PromptComposer, load_prompt_catalog
-  models.py          # PromptSource, PromptCatalog — 从 prompts.toml 加载的不可变片段集合
+  models.py          # PromptSource, PromptCatalog — 从 prompts.toml 加载的不可变片段集合（含 CHANNEL_LABELS 等文本常量）
   composer.py        # PromptComposer — 从 AgentContext 装配 PromptDocument
-  text.py            # 文本模板与拼接工具
   loader.py          # load_prompt_catalog — TOML 提示词加载器
 ```
 
@@ -452,9 +455,11 @@ prompt/
 memory/
   __init__.py
   service.py         # MemoryService — 实现 contracts.memory.MemoryStore Protocol
-                     # recall(query) — 语义检索相关记忆上下文
-                     # remember(entry) — 写入记忆条目
+                      # recall(query) — 语义检索相关记忆上下文
+                      # remember(entry) — 写入记忆条目
   config.py          # build_memory_config() — mem0 LLM / Embedder /向量存储配置工厂
+  embedding.py       # 嵌入向量生成与缓存
+  store.py           # Mem0Store — mem0 底层向量存储包装
 ```
 
 **构造与注入**：
@@ -479,38 +484,35 @@ engine = AgentEngine(config, handlers, memory_store=memory_service)
 ```
 engine/
   __init__.py
-  runtime.py          # AgentEngine — 主类，完整 pump 闭环
-                      #   构造签名：
-                      #     AgentEngine(configuration, handlers, *,
-                      #                 model_provider, memory_store=None,
-                      #                 idle_wait_seconds=1.0)
-                      #   属性：
-                      #     tasks(), get_task(), get_agent(), has_work(), status()
-                      #     task_detail(), agent_detail(), brain_context()
-                      #   pump 闭环：
-                      #     1. recover tools → tool_registry.recover()
-                      #     2. ingest_ready() → AMP 文件 + 内存队列
-                      #     3. expire & claim → 过期检查 + 领取邮箱消息
-                      #     4. execute agent turns → AgentHandler.handle()
-                      #     5. apply decisions → 状态写入 SQLite
-                      #     6. dispatch tools → tool_registry.execute()
-                      #     7. dispatch models → model_provider.complete()
-                      #     8. memory hooks → memory_store.remember()
-                      #     9. archive terminal → JSON 归档
-  state.py            # EngineState — 线程池、SQLite 存储与核心 pump 逻辑
+  runtime.py          # AgentEngine — 主类，完整 pump 闭环（含 EngineState、ingest_ready、handle_claim、brain_context）
+                       #   构造签名：
+                       #     AgentEngine(configuration, handlers, *,
+                       #                 model_provider, memory_store=None,
+                       #                 idle_wait_seconds=1.0)
+                       #   属性：
+                       #     tasks(), get_task(), get_agent(), has_work(), status()
+                       #     task_detail(), agent_detail(), brain_context()
+                       #   pump 闭环：
+                       #     1. recover tools → tool_registry.recover()
+                       #     2. ingest_ready() → AMP 文件 + 内存队列
+                       #     3. expire & claim → 过期检查 + 领取邮箱消息
+                       #     4. execute agent turns → AgentHandler.handle()
+                       #     5. apply decisions → 状态写入 SQLite
+                       #     6. dispatch tools → tool_registry.execute()
+                       #     7. dispatch models → model_provider.complete()
+                       #     8. memory hooks → memory_store.remember()
+                       #     9. archive terminal → JSON 归档
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
-  store.py            # SQLiteRuntimeStore — SQLite WAL facade
-  store_schema.py     # DDL 表定义 (tasks, agents, messages, activities, causal_events)
-  store_base.py       # 基础 CRUD 操作
-  store_queries.py    # 查询（任务树、消息时间线、统计计数）
-  store_ingress.py    # AMP 事件摄入与 Task 创建
-  store_decisions.py  # AgentDecision 到状态变更的翻译
-  store_activities.py # Activity CRUD（model + tool）
-  brain.py            # build_brain_context() — 全局脑图快照
-  debug.py            # task_detail() / agent_detail() / 工作区校验
-  runtime_ingress.py  # ingest_ready() — 内存队列 + inbox 文件摄入
-  runtime_decisions.py# handle_claim() — Agent turn 执行与决策应用
   commands.py         # 内部命令定义
+  debug.py            # task_detail() / agent_detail() / 工作区校验
+  store/              # SQLite 运行态持久化子包
+    __init__.py       # SQLiteRuntimeStore — 组合多 Mixin 的 WAL facade
+    schema.py         # DDL 表定义 (tasks, agents, messages, activities, causal_events)
+    base.py           # 基础 CRUD 操作
+    queries.py        # 查询（任务树、消息时间线、统计计数）
+    ingress.py        # AMP 事件摄入与 Task 创建
+    decisions.py      # AgentDecision 到状态变更的翻译
+    activities.py     # Activity CRUD（model + tool）
 ```
 
 **AgentEngine 构造签名**：
@@ -547,7 +549,9 @@ pump(max_turns):
 
 **关键约束**：
 
-- 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config`
+- 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `src.localhost`
+- `runtime.py` 已合并 `EngineState`、`ingest_ready()`、`handle_claim()` 和 `build_brain_context()`，当前约 880 行。建议后续根据总分结构回拆为独立模块。
+- `store/` 是子包，`SQLiteRuntimeStore` 在其中组合多 Mixin，替换了文档中的单体 `store.py`。
 - 所有权通过 `contracts` 中的 Protocol 注入
 - `ToolRegistry` 是 engine 内部的聚合类（非 contracts），管理多个 `ToolExecutor` 实现的分发
 - engine 的 `status()` / `task_detail()` / `agent_detail()` / `brain_context()` 是透明查询接口，供 `localhost` 监察使用
@@ -561,11 +565,13 @@ pump(max_turns):
 ```
 ai/
   __init__.py
-  vnext.py            # ModelGatewayService — 实现 ModelProvider Protocol
-                      #   complete(request: ModelRequest) → ModelResult
-                      #   supports_multimodal() → bool
+  gateway.py          # ModelGatewayService — 实现 ModelProvider Protocol（原 vnext.py）
+                       #   complete(request: ModelRequest) → ModelResult
+                       #   supports_multimodal() → bool
   models.py           # 模型角色、能力协商、Provider 适配表
+  providers.py        # 模型解析（resolve_model）与 Provider 参数配置
   execution.py        # acompletion + stream（Chat Completions API）
+  _channels.py        # Chat Completions / Responses 双通道调度
   _parsing.py         # 响应解析与提取
 ```
 
@@ -592,7 +598,6 @@ agents/
     claim.py          # ClaimCapability — 主动认领 Task
     delegate.py       # DelegationCapability — 创建子 Agent 委派任务
     wait.py           # WaitCapability — 延迟执行
-    # 规划中：
     speech.py         # SpeechCapability — 决定输出是否朗读，生成 tts.speak tool request
   tools.py            # Agent 内建工具的 CapabilityDescriptor 定义
 ```
@@ -649,9 +654,9 @@ platform/
     api.py            # REST API (FastAPI routes)
     communication.py  # DashboardCommunication — 实时消息分发
     routing.py        # 输入路由 (HTTP/WS → RuntimeInput → input_port.route_input())
-    service.py        # ChatService — 聊天编排与会话管理
-    store.py          # ChatStore — Dashboard 自有 SQLite 持久化
-    security.py       # Bearer token 原语
+  service.py         # ChatService — 聊天编排与会话管理
+  server.py          # SignalSafeServer — uvicorn 辅助类（禁用信号捕获）
+  store.py           # ChatStore — Dashboard 自有 SQLite 持久化（含 token 生成原语）
   mcp/                # MCP 协议平台
     __init__.py
     adapter.py        # MCPPlatform — 实现 ToolExecutor + ExternalAmpIngressPort
@@ -744,6 +749,7 @@ localhost/
     log.py            # /log — 控制终端日志级别
     quit.py           # /quit — 优雅停止进程
     help.py           # /help — 显示命令列表
+    reload.py         # /reload — 配置热重载（待实现）
 ```
 
 > 注：`command_types.py` 和 `ports.py`（原 localhost 中的 DTO/Protocol）迁移到 `contracts/event.py` 和 `contracts/ports.py`。`tool_dispatcher.py` 迁移到 `engine/`——工具调度是热路径操作，属于引擎职责。`autonomy.py` 暂移除——自主额度等高可用性功能延后。
@@ -797,6 +803,10 @@ aurora/
   runtime.py         # run_runtime() — 构造 engine + 注入 Port + 启动平台 + 主事件循环
   registry.py        # register_commands() — 子命令注册
   process.py         # run_process() — 子进程辅助
+  commands/          # CLI 子命令实现
+    __init__.py
+    check.py         # aurora check — 代码检查与 lint
+    donk.py          # aurora donk — 版本管理
 ```
 
 **`aurora/runtime.py` 的组装流程**：
@@ -838,7 +848,13 @@ run_runtime():
 ```
 sandbox/
   __init__.py
-  executor.py        # 独立代码执行器
+  config.py           # SandboxConfig dataclass + ConfigReloader（原 settings.py）
+  base.py             # 沙箱数据类：SandboxResult, SecurityViolation, SandboxConfigError
+  manager.py          # SandboxManager — 对外唯一门面与模块单例
+  executor.py         # 独立代码执行器
+  inspector.py        # 代码安全检查
+  paths.py            # 沙箱路径隔离管理
+  policy.py           # 安全策略定义
 ```
 
 完全独立，不被任何包导入，当前 Agent 运行时不启用。

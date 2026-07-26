@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import os
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from mcp.client.streamable_http import streamablehttp_client
@@ -22,6 +23,18 @@ from src.utils.logging import get_logger
 
 logger = get_logger("aurora.platform.mcp")
 _RESERVED_TOOL_EVENTS = frozenset({"tool.succeeded", "tool.failed", "tool.unknown"})
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    SHUTDOWN_RESTART_DENIED = "MCP 平台不可在关机后重启"
+    UNKNOWN_CAPABILITY = "unknown MCP capability: {capability}"
+    HEARTBEAT_REJECTED = "时钟心跳启动被拒绝"
+    INVALID_RAW_NAME = "MCP tool 的 raw name 无效: {package}"
+    MISSING_INPUT_SCHEMA = "MCP tool 缺少 input schema: {package}.{raw_name}"
+    DUPLICATE_CAPABILITY = "MCP capability 重复: {capability}"
+    REMOTE_SESSION_UNAVAILABLE = "远程 MCP 会话不可用: {package}"
 
 
 @dataclass(slots=True)
@@ -89,7 +102,7 @@ class MCPPlatform:
         if self._started:
             return self._catalog
         if self._shutdown_complete:
-            raise RuntimeError("MCP 平台不可在关机后重启")
+            raise RuntimeError(_Msg.SHUTDOWN_RESTART_DENIED)
         self._ingress = ingress
         try:
             startup_timeout = max((app.timeout_seconds for app in self._configuration.apps), default=30.0)
@@ -136,7 +149,7 @@ class MCPPlatform:
         """
         binding = self._tool_bindings.get(capability)
         if binding is None:
-            raise ValueError(f"unknown MCP capability: {capability}")
+            raise ValueError(_Msg.UNKNOWN_CAPABILITY.format(capability=capability))
         package, _raw_name = binding
         return package
 
@@ -174,7 +187,7 @@ class MCPPlatform:
         package, raw_name = binding
         result = await self._call_tool(package, raw_name, {})
         if result.get("is_error") is True:
-            raise RuntimeError("时钟心跳启动被拒绝")
+            raise RuntimeError(_Msg.HEARTBEAT_REJECTED)
 
     async def _connect_remote(self, app: AppConfig) -> None:
         """建立到远程 Streamable HTTP MCP Server 的连接。
@@ -249,13 +262,13 @@ class MCPPlatform:
             for tool in self._tools_for_app(app.package):
                 raw_name = getattr(tool, "name", None)
                 if not isinstance(raw_name, str) or not raw_name:
-                    raise RuntimeError(f"MCP tool 的 raw name 无效: {app.package}")
+                    raise RuntimeError(_Msg.INVALID_RAW_NAME.format(package=app.package))
                 schema = getattr(tool, "inputSchema", None)
                 if not isinstance(schema, dict):
-                    raise RuntimeError(f"MCP tool 缺少 input schema: {app.package}.{raw_name}")
+                    raise RuntimeError(_Msg.MISSING_INPUT_SCHEMA.format(package=app.package, raw_name=raw_name))
                 capability = f"{app.package}.{raw_name}"
                 if capability in descriptors:
-                    raise RuntimeError(f"MCP capability 重复: {capability}")
+                    raise RuntimeError(_Msg.DUPLICATE_CAPABILITY.format(capability=capability))
                 description = getattr(tool, "description", "")
                 descriptors[capability] = CapabilityDescriptor(
                     capability,
@@ -318,7 +331,7 @@ class MCPPlatform:
         remote = self._remote.get(package)
         if remote is not None:
             if remote.session is None:
-                raise MCPToolCallError(f"远程 MCP 会话不可用: {package}")
+                raise MCPToolCallError(_Msg.REMOTE_SESSION_UNAVAILABLE.format(package=package))
             result = await asyncio.wait_for(
                 remote.session.call_tool(raw_name, parameters), timeout=remote.app.timeout_seconds
             )
