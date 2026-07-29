@@ -41,6 +41,9 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
     from src.localhost.commands import (
         quit as quit_command,
     )
+    from src.localhost.commands import (
+        reload as reload_command,
+    )
 
     return (
         ConsoleCommand(
@@ -64,5 +67,12 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
             quit_command.DESCRIPTION,
             quit_command.configure,
             quit_command.handle,
+        ),
+        ConsoleCommand(
+            reload_command.NAMES,
+            reload_command.USAGE,
+            reload_command.DESCRIPTION,
+            reload_command.configure,
+            reload_command.handle,
         ),
     )
