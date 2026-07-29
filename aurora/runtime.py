@@ -233,7 +233,10 @@ async def _start_platforms(
         handles[name] = handle
         all_bindings.extend(handle.bindings)
         if handle.cleanup is not None:
-            resources.callback(handle.cleanup)
+            if asyncio.iscoroutinefunction(handle.cleanup):
+                resources.push_async_callback(handle.cleanup)
+            else:
+                resources.callback(handle.cleanup)
         if name == "dashboard" and handle.http_server is not None:
             dashboard_server = handle.http_server
 

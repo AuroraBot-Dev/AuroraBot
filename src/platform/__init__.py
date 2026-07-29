@@ -23,6 +23,6 @@ class PlatformHandle:
     """平台创建并启动后的运行时句柄，由组合根统一管理。"""
 
     bindings: tuple[ToolExecutorBinding, ...] = ()
-    cleanup: Callable[[], Any] | None = None
+    cleanup: Callable[..., Any] | None = None
     spawn: Callable[..., Any] | None = None
     http_server: object = None

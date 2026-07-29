@@ -4,7 +4,7 @@
 # 内建 Clock 应用：提供时间查询与定时能力
 [[app]]
 package = "org.aurora.clock"
-enabled = true
+enabled = false
 transport = "stdio"
 working_dir = "src/apps/aurora-app-clock"
 command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
@@ -17,4 +17,13 @@ enabled = false
 transport = "stdio"
 working_dir = "extensions/apps/Windows-MCP"
 command = ["uv", "run", "windows-mcp", "serve"]
+timeout_seconds = 60
+
+# Aurora-QQ：通过 OneBot 11 / NapCat 提供 QQ 消息、联系人和群管理能力
+[[app]]
+package = "org.aurora.qq"
+enabled = true
+transport = "stdio"
+working_dir = "extensions/apps/Aurora-QQ"
+command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
 timeout_seconds = 60
