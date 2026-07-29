@@ -22,10 +22,18 @@ CONSOLE_SEND_DESCRIPTOR = CapabilityDescriptor(
     description="通过本地 Console 发送文本。",
     parameters_schema={
         "type": "object",
-        "properties": {"text": {"type": "string", "minLength": 1}},
+        "properties": {
+            "text": {"type": "string", "minLength": 1},
+            "complete_task": {
+                "type": "boolean",
+                "description": "发送后结束当前任务。",
+                "default": False,
+            },
+        },
         "required": ["text"],
         "additionalProperties": False,
     },
+    runtime_completion=True,
 )
 
 

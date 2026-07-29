@@ -74,6 +74,8 @@ _TRIAGE_SUMMARY_LIMIT = 600
 
 
 class _Msg(StrEnum):
+    """本文件内所有用户或模型可见的硬编码文本。"""
+
     RESERVED_EVENT_TYPE = "reserved internal event type: {amp_type}"
     RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runtime use"
     HANDLERS_MISMATCH = "Agent handlers must exactly match configured profiles"
@@ -89,6 +91,8 @@ class _Msg(StrEnum):
     TOOL_PARAMS_MISMATCH = "Tool parameters do not match {capability}: {message}"
     PROFILE_CANNOT_DELEGATE = "Agent profile {profile_id} cannot delegate"
     PROFILE_CANNOT_CREATE = "Agent profile {profile_id} cannot create {child_profile}"
+    TRIAGE_FALLBACK_REASON = "fail-open:{error_type}"
+    TRIAGE_FALLBACK_SUMMARY = "Inbox event batch"
     WAIT_WITHOUT_CHILDREN = "Agent cannot wait without active children"
 
 
@@ -156,6 +160,7 @@ def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskS
         profile=deepcopy(profile),
         capabilities=deepcopy(descriptors),
         memory=kernel.recall_memory(MemoryQuery(task.root_summary, task.session_id)),
+        pending_child_reports=kernel.store.has_pending_child_reports(agent.agent_id),
     )
     return kernel._handlers[agent.profile_id].handle(context)
 
@@ -237,7 +242,6 @@ def _apply_tool_request(
             "parameters": tool.parameters,
             "complete_task": tool.complete_task,
             "tool_call_id": tool.tool_call_id,
-            "continuation": tool.continuation,
             "session_id": task.session_id,
         },
     )
@@ -674,15 +678,6 @@ class EngineState:
         await self._store_call(self.store.cancel_task, task_id, reason)
         await self.finalize_terminal_tasks()
 
-    async def cancel_autonomous_tasks(self, reason: str) -> tuple[str, ...]:
-        cancelled = []
-        for task in self.store.tasks(active_only=True):
-            if task.autonomous:
-                await self._store_call(self.store.cancel_task, task.task_id, reason)
-                cancelled.append(task.task_id)
-        await self.finalize_terminal_tasks()
-        return tuple(cancelled)
-
     def _archive_terminal_tasks(self) -> None:
         for task in self.store.tasks():
             if not task.terminal:
@@ -764,11 +759,6 @@ class AgentEngine:
         amp = AmpEnvelope.parse(value)
         if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
             raise ValueError(_Msg.RESERVED_EVENT_TYPE.format(amp_type=amp.payload.type))
-        if amp.payload.type != "system.tick":
-            cancelled = set(await self._state.cancel_autonomous_tasks("external_activity"))
-            for task, task_id in tuple(self._model_activity_tasks.items()):
-                if task_id in cancelled:
-                    task.cancel()
         await self._state.submit_amp(amp)
         self._wake.set()
         return amp.header.message_id
@@ -843,8 +833,8 @@ class AgentEngine:
             summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
         return TriageDecision(
             action=TriageAction.PROCESS,
-            summary=summary or "Inbox event batch",
-            reason=f"fail-open:{type(error).__name__}",
+            summary=summary or _Msg.TRIAGE_FALLBACK_SUMMARY,
+            reason=_Msg.TRIAGE_FALLBACK_REASON.format(error_type=type(error).__name__),
         )
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
@@ -886,7 +876,7 @@ class AgentEngine:
         try:
             result = await self._model_provider.complete(ModelRequest.from_dict(activity.request))
         except asyncio.CancelledError:
-            await self._state.complete_model(activity, None, "cancelled:external_activity")
+            await self._state.complete_model(activity, None, "cancelled")
             raise
         except Exception as error:
             await self._state.complete_model(activity, None, f"{type(error).__name__}: {error}")

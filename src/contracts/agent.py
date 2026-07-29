@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 class ErrorMsg(StrEnum):
     """Agent handler 或工具调用的错误码。"""
 
+    AGENT_DECISION_REQUIRES_ONE_TRANSITION = "AgentDecision must contain exactly one atomic transition"
     CAPABILITY_IDS_MUST_BE_UNIQUE = "capability IDs must be unique"
-    AGENTDECISION_MUST_CONTAIN_EXACTLY_ONE_PRIMARY_ACTION = "AgentDecision must contain exactly one primary action"
 
 
 class TaskStatus(StrEnum):
@@ -66,6 +66,7 @@ class CapabilityDescriptor:
     id: str
     description: str
     parameters_schema: dict[str, Any]
+    runtime_completion: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -145,7 +146,6 @@ class ToolRequest:
     parameters: dict[str, Any]
     complete_task: bool = False
     tool_call_id: str | None = None
-    continuation: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,18 +249,16 @@ class AgentDecision:
     state_patch: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        actions = sum(
-            (
-                self.model_request is not None,
-                self.tool_request is not None,
-                bool(self.delegations),
-                self.completion is not None,
-                self.wait_for_children,
-                self.failure is not None,
-            )
+        transitions = (
+            self.model_request is not None,
+            self.tool_request is not None,
+            bool(self.delegations),
+            self.completion is not None,
+            self.wait_for_children,
+            self.failure is not None,
         )
-        if actions != 1:
-            raise ValueError(ErrorMsg.AGENTDECISION_MUST_CONTAIN_EXACTLY_ONE_PRIMARY_ACTION)
+        if sum(transitions) != 1:
+            raise ValueError(ErrorMsg.AGENT_DECISION_REQUIRES_ONE_TRANSITION)
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,6 +295,7 @@ class AgentContext:
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
     memory: MemoryContextSnapshot = field(default_factory=MemoryContextSnapshot)
+    pending_child_reports: bool = False
 
 
 # -- Protocols ------------------------------------------------------------

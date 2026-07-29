@@ -1,14 +1,12 @@
-"""所有 RFC 0012 Agent profile 共享的串行工具型 handler。"""
+"""所有 RFC 0012 Agent profile 共享的可恢复 Tool 链 handler。"""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.agents.tools import (
-    capability_tool_definition,
-    uses_runtime_complete_task,
-)
+from src.agents.tools import capability_tool_definition
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
@@ -25,18 +23,80 @@ from src.contracts.model import (
     append_tool_result,
 )
 from src.prompt import PromptComposer
-from src.prompt.models import EMPTY_CHILD_COMPLETION, NO_ACTION_COMPLETION
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.contracts.agent import Capability
 
 logger = get_logger("aurora.agent.tool")
-_COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
-_COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
-_CAPABILITIES_ALREADY_INSTALLED = "capabilities are already installed"
-_DUPLICATE_TOOL_IDS = "model Tool IDs must be unique"
-_PARALLEL_TOOL_REJECTED = "parallel_tool_calls_disabled"
+_TOOL_CHAIN_STATE = "_aurora_tool_chain"
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户或模型可见的硬编码文本。"""
+
+    CAPABILITIES_ALREADY_INSTALLED = "capabilities are already installed"
+    CAPABILITY_NO_DECISION = "capability {name} returned no decision"
+    COMPLETE_TASK_BOOLEAN = "complete_task must be a boolean"
+    COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
+    COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
+    DUPLICATE_TOOL_IDS = "model Tool IDs must be unique: {duplicates}"
+    UNKNOWN_TOOL = "unknown Tool capability {name}"
+
+
+@dataclass(frozen=True, slots=True)
+class _ToolChain:
+    """一次模型响应中尚未完成的 Tool 调用链。"""
+
+    call: ToolCall
+    continuation: ModelContinuation | None
+    remaining: tuple[ToolCall, ...] = ()
+    finish_task: bool = False
+    complete_on_success: bool = False
+
+    def to_state(self) -> dict[str, object]:
+        return {
+            "call_id": self.call.call_id,
+            "continuation": self.continuation.to_dict() if self.continuation is not None else None,
+            "remaining_tool_calls": [item.to_dict() for item in self.remaining],
+            "finish_task": self.finish_task,
+            "complete_on_success": self.complete_on_success,
+        }
+
+    @classmethod
+    def from_context(cls, context: AgentContext) -> _ToolChain | None:
+        raw = context.agent.state.get(_TOOL_CHAIN_STATE)
+        if not isinstance(raw, dict) or not isinstance(raw.get("call_id"), str):
+            return None
+        remaining = _tool_calls_from_state(raw.get("remaining_tool_calls", []))
+        if remaining is None:
+            return None
+        raw_continuation = raw.get("continuation")
+        continuation = ModelContinuation.from_dict(raw_continuation) if isinstance(raw_continuation, dict) else None
+        return cls(
+            ToolCall(raw["call_id"], "", {}),
+            continuation,
+            remaining,
+            finish_task=raw.get("finish_task") is True,
+            complete_on_success=raw.get("complete_on_success") is True,
+        )
+
+
+def _tool_calls_from_state(value: object) -> tuple[ToolCall, ...] | None:
+    """恢复 Agent 状态中尚未执行的 Tool calls。"""
+    if not isinstance(value, (list, tuple)):
+        return None
+    calls: list[ToolCall] = []
+    for item in value:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("call_id"), str)
+            or not isinstance(item.get("name"), str)
+            or not isinstance(item.get("arguments"), dict)
+        ):
+            return None
+        calls.append(ToolCall(item["call_id"], item["name"], dict(item["arguments"])))
+    return tuple(calls)
 
 
 def _collect_tool_definitions(
@@ -50,8 +110,7 @@ def _collect_tool_definitions(
     names = [tool.name for tool in tools]
     if len(names) != len(set(names)):
         duplicates = sorted({name for name in names if names.count(name) > 1})
-        message = f"{_DUPLICATE_TOOL_IDS}: {duplicates}"
-        raise ValueError(message)
+        raise ValueError(_Msg.DUPLICATE_TOOL_IDS.format(duplicates=duplicates))
     return tuple(tools)
 
 
@@ -79,13 +138,13 @@ class ToolAgent:
     def install_prompt_composer(self, composer: PromptComposer) -> None:
         """安装提示词装配器，仅可调用一次。"""
         if self._composer is not None:
-            raise RuntimeError(_COMPOSER_ALREADY_INSTALLED)
+            raise RuntimeError(_Msg.COMPOSER_ALREADY_INSTALLED)
         self._composer = composer
 
     def install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
         """安装额外 Capability，仅可调用一次。"""
         if self._capabilities or self._dispatch:
-            raise RuntimeError(_CAPABILITIES_ALREADY_INSTALLED)
+            raise RuntimeError(_Msg.CAPABILITIES_ALREADY_INSTALLED)
         self._install_capabilities(capabilities)
 
     def _install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
@@ -110,6 +169,8 @@ class ToolAgent:
         if message_type == "model.failed":
             error = str(context.message.payload.get("error", "model_failed"))
             return AgentDecision(failure=error)
+        if message_type.startswith("child.") and isinstance(context.agent.state.get(_TOOL_CHAIN_STATE), dict):
+            return self._resume_control_call(context)
         if message_type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
             return self._resume_tool(context)
         return self._request_model(context)
@@ -123,89 +184,196 @@ class ToolAgent:
             required_capabilities=frozenset({"chat", "tools"}),
             response_mode="normalized",
             tools=_collect_tool_definitions(context, self._capabilities),
-            parallel_tool_calls=False,
-            cancel_policy="on_external_activity" if context.task.autonomous else "never",
+            parallel_tool_calls=True,
+            cancel_policy="never",
         )
         return AgentDecision(model_request=request.to_dict())
 
     def _require_composer(self) -> PromptComposer:
         """获取已安装的提示词装配器，未安装时抛出异常。"""
         if self._composer is None:
-            raise RuntimeError(_COMPOSER_REQUIRED)
+            raise RuntimeError(_Msg.COMPOSER_REQUIRED)
         return self._composer
 
     def _handle_model_result(self, context: AgentContext) -> AgentDecision:
         """处理模型返回结果：纯文本完成或工具调用分发。"""
         result = ModelResult.from_dict(context.message.payload)
-        if len(result.tool_calls) > 1:
-            continuation = result.continuation
-            if continuation is None:
-                return AgentDecision(failure="parallel_tool_calls_without_continuation")
-            for call in result.tool_calls[1:]:
-                continuation = append_tool_result(
-                    continuation,
-                    call.call_id,
-                    {"status": "rejected", "error": _PARALLEL_TOOL_REJECTED},
-                    is_error=True,
-                )
-            result = replace(result, tool_calls=result.tool_calls[:1], continuation=continuation)
         if not result.tool_calls:
-            text = result.text.strip()
-            if context.agent.parent_agent_id is not None:
-                return AgentDecision(completion=Completion(text or EMPTY_CHILD_COMPLETION))
-            return AgentDecision(completion=Completion(text or NO_ACTION_COMPLETION, silent=not bool(text)))
-        raw = result.tool_calls[0]
-        tool_call = ToolCall(raw.call_id, raw.name, raw.arguments)
-        tools = _collect_tool_definitions(context, self._capabilities)
-        capability = self._dispatch.get(raw.name)
-        if capability is not None:
-            decision = capability.handle_tool(tool_call, context, result.continuation, tools)
-            if decision is not None:
-                return decision
-            return AgentDecision(failure=f"capability {raw.name} returned no decision")
-        descriptor = next((item for item in context.capabilities if item.id == raw.name), None)
-        if descriptor is None:
-            return AgentDecision(failure=f"unknown Tool capability {raw.name}")
-        return self._capability_decision(result, descriptor)
+            return AgentDecision(completion=Completion(result.text))
+        return self._dispatch_tool_call(
+            context, _ToolChain(result.tool_calls[0], result.continuation, result.tool_calls[1:])
+        )
 
-    def _capability_decision(self, result: ModelResult, descriptor: CapabilityDescriptor) -> AgentDecision:
+    def _dispatch_tool_call(
+        self,
+        context: AgentContext,
+        chain: _ToolChain,
+    ) -> AgentDecision:
+        """分派一个 Tool call；同一响应的恢复信息只保存在 Agent 状态。"""
+        tool_call = chain.call
+        tools = _collect_tool_definitions(context, self._capabilities)
+        capability = self._dispatch.get(tool_call.name)
+        if capability is not None:
+            decision = capability.handle_tool(tool_call, context, chain.continuation, tools)
+            if decision is not None:
+                if decision.tool_request is not None or decision.delegations or decision.wait_for_children:
+                    return self._attach_tool_chain(decision, chain)
+                if decision.failure is not None:
+                    return self._continue_after_local_error(context, chain, decision.failure)
+                return decision
+            return self._continue_after_local_error(
+                context,
+                chain,
+                _Msg.CAPABILITY_NO_DECISION.format(name=tool_call.name),
+            )
+        descriptor = next((item for item in context.capabilities if item.id == tool_call.name), None)
+        if descriptor is None:
+            return self._continue_after_local_error(
+                context,
+                chain,
+                _Msg.UNKNOWN_TOOL.format(name=tool_call.name),
+            )
+        return self._capability_decision(context, chain, descriptor)
+
+    def _capability_decision(
+        self,
+        context: AgentContext,
+        chain: _ToolChain,
+        descriptor: CapabilityDescriptor,
+    ) -> AgentDecision:
         """将模型工具调用转换为对应 Capability 的工具请求决策。"""
-        call = result.tool_calls[0]
+        call = chain.call
         parameters = dict(call.arguments)
         complete_task = False
-        if uses_runtime_complete_task(descriptor):
+        if descriptor.runtime_completion:
             complete_task = parameters.pop("complete_task", False)
             if not isinstance(complete_task, bool):
-                return AgentDecision(failure="complete_task must be a boolean")
-        return AgentDecision(
+                return self._continue_after_local_error(context, chain, _Msg.COMPLETE_TASK_BOOLEAN)
+        decision = AgentDecision(
             tool_request=ToolRequest(
                 capability=call.name,
                 parameters=parameters,
                 complete_task=complete_task,
                 tool_call_id=call.call_id,
-                continuation=result.continuation.to_dict() if result.continuation is not None else None,
             )
         )
+        return self._attach_tool_chain(decision, chain)
+
+    @staticmethod
+    def _attach_tool_chain(
+        decision: AgentDecision,
+        chain: _ToolChain,
+    ) -> AgentDecision:
+        """把当前调用与剩余调用保存为一个统一、可恢复的 Agent 状态。"""
+        complete_on_success = False
+        if decision.tool_request is not None:
+            complete_on_success = decision.tool_request.complete_task
+            decision = replace(
+                decision,
+                tool_request=replace(decision.tool_request, complete_task=False),
+            )
+        state_patch = {
+            **decision.state_patch,
+            _TOOL_CHAIN_STATE: replace(chain, complete_on_success=complete_on_success).to_state(),
+        }
+        return replace(decision, state_patch=state_patch)
+
+    def _resume_control_call(self, context: AgentContext) -> AgentDecision:
+        """等待所有子 Agent 回报后，为控制 Tool 生成结果并继续剩余调用。"""
+        if any(not child.terminal for child in context.children) or context.pending_child_reports:
+            return AgentDecision(wait_for_children=True)
+        chain = _ToolChain.from_context(context)
+        if chain is None:
+            return self._request_model(context)
+        children = [
+            {
+                "agent_id": child.agent_id,
+                "status": child.status,
+                "summary": child.last_summary,
+            }
+            for child in context.children
+        ]
+        is_error = any(child.status == "FAILED" for child in context.children)
+        continuation = chain.continuation
+        if continuation is not None:
+            continuation = append_tool_result(
+                continuation,
+                chain.call.call_id,
+                {"status": "failed" if is_error else "succeeded", "children": children},
+                is_error=is_error,
+            )
+        return self._advance_tool_chain(context, replace(chain, continuation=continuation))
+
+    def _continue_after_local_error(
+        self,
+        context: AgentContext,
+        chain: _ToolChain,
+        error: str,
+    ) -> AgentDecision:
+        """把本地调用错误作为 Tool result 交还模型，不终止整个 Task。"""
+        continuation = chain.continuation
+        if continuation is not None:
+            continuation = append_tool_result(
+                continuation,
+                chain.call.call_id,
+                {"status": "failed", "error": error},
+                is_error=True,
+            )
+        if continuation is None and not chain.remaining:
+            return AgentDecision(failure=error)
+        return self._advance_tool_chain(context, replace(chain, continuation=continuation))
 
     def _resume_tool(self, context: AgentContext) -> AgentDecision:
         """工具执行完成后恢复：将结果附着到延续并构造新的模型请求。"""
-        request = context.message.payload.get("request")
-        if not isinstance(request, dict):
-            return AgentDecision(failure="Tool receipt lacks original request")
-        raw_continuation = request.get("continuation")
-        call_id = request.get("tool_call_id")
-        if not isinstance(raw_continuation, dict) or not isinstance(call_id, str):
+        chain = _ToolChain.from_context(context)
+        if chain is None:
             return self._request_model(context)
-        continuation = ModelContinuation.from_dict(raw_continuation)
         status = context.message.type.removeprefix("tool.")
         output: dict[str, object] = {"status": status}
         if status == "succeeded":
             output["result"] = context.message.payload.get("result", {})
         else:
             output["error"] = context.message.payload.get("error", status)
-        continuation = append_tool_result(continuation, call_id, output, is_error=status != "succeeded")
-        model_request = self._continuation_request(context, continuation)
-        return AgentDecision(model_request=model_request.to_dict())
+        continuation = chain.continuation
+        if continuation is not None:
+            continuation = append_tool_result(
+                continuation,
+                chain.call.call_id,
+                output,
+                is_error=status != "succeeded",
+            )
+        return self._advance_tool_chain(
+            context,
+            replace(
+                chain,
+                continuation=continuation,
+                finish_task=chain.finish_task or (chain.complete_on_success and status == "succeeded"),
+            ),
+        )
+
+    def _advance_tool_chain(
+        self,
+        context: AgentContext,
+        chain: _ToolChain,
+    ) -> AgentDecision:
+        """推进统一 Tool 链；链尾才恢复模型并清除运行态。"""
+        if chain.remaining:
+            return self._dispatch_tool_call(
+                context,
+                _ToolChain(
+                    chain.remaining[0],
+                    chain.continuation,
+                    chain.remaining[1:],
+                    finish_task=chain.finish_task,
+                ),
+            )
+        if chain.finish_task:
+            decision = AgentDecision(completion=Completion(""))
+        elif chain.continuation is None:
+            decision = self._request_model(context)
+        else:
+            decision = AgentDecision(model_request=self._continuation_request(context, chain.continuation).to_dict())
+        return replace(decision, state_patch={**decision.state_patch, _TOOL_CHAIN_STATE: None})
 
     def _continuation_request(self, context: AgentContext, continuation: ModelContinuation) -> ModelRequest:
         """基于工具执行延续构造后续模型请求。"""
@@ -216,6 +384,6 @@ class ToolAgent:
             response_mode="normalized",
             tools=_collect_tool_definitions(context, self._capabilities),
             continuation=continuation,
-            parallel_tool_calls=False,
-            cancel_policy="on_external_activity" if context.task.autonomous else "never",
+            parallel_tool_calls=True,
+            cancel_policy="never",
         )

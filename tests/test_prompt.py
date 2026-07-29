@@ -7,7 +7,7 @@ import pytest
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
 from src.agents.handler import ToolAgent, _collect_tool_definitions
-from src.agents.tools import COMPLETE_TASK_DESCRIPTION, capability_tool_definition
+from src.agents.tools import capability_tool_definition
 from src.contracts.agent import (
     AgentContext,
     AgentInstance,
@@ -20,7 +20,7 @@ from src.contracts.agent import (
     TaskStatus,
 )
 from src.contracts.memory import MemoryContextSnapshot
-from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
+from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.prompt import PromptCatalog, PromptComposer, PromptConfigurationError, load_prompt_catalog
 
 if TYPE_CHECKING:
@@ -88,7 +88,18 @@ def _context() -> AgentContext:
         "builtin.gate", "test", "fast", frozenset({"*"}), can_delegate=True, child_profiles=frozenset()
     )
     capabilities = (
-        CapabilityDescriptor("org.aurora.console.send", "Send to Console", {"type": "object"}),
+        CapabilityDescriptor(
+            "org.aurora.console.send",
+            "Send to Console",
+            {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "complete_task": {"type": "boolean", "description": "finish"},
+                },
+            },
+            runtime_completion=True,
+        ),
         CapabilityDescriptor("com.vendor.lookup", "Vendor supplied description", {"type": "object"}),
     )
     return AgentContext(task, agent, message, (child,), profile, capabilities)
@@ -196,12 +207,34 @@ def test_agent_tool_owner_preserves_external_description_without_memory_capabili
     tools = {tool.name: tool for tool in _collect_tool_definitions(_context(), (DelegationCapability(),))}
     assert DELEGATE_TOOL in tools
     assert tools["com.vendor.lookup"].description == "Vendor supplied description"
-    assert tools["org.aurora.console.send"].parameters_schema["properties"]["complete_task"]["description"] == (
-        COMPLETE_TASK_DESCRIPTION
+    assert tools["org.aurora.console.send"].parameters_schema["properties"]["complete_task"]["description"] == "finish"
+    decision = ToolAgent(
+        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"}))
+    ).handle(_context())
+    assert decision.model_request is not None
+    assert ModelRequest.from_dict(decision.model_request).parallel_tool_calls is True
+
+
+def test_agent_preserves_model_text_verbatim() -> None:
+    context = _context()
+    result = ModelResult(
+        "model",
+        frozenset({"chat", "tools"}),
+        "native",
+        "  deliberate whitespace  ",
+        None,
+        ModelUsage(),
+        0.0,
     )
+    decision = ToolAgent(
+        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"}))
+    ).handle(replace(context, message=replace(context.message, type="model.completed", payload=result.to_dict())))
+
+    assert decision.completion is not None
+    assert decision.completion.summary == "  deliberate whitespace  "
 
 
-def test_agent_serializes_unexpected_parallel_tool_calls_with_complete_receipts() -> None:
+def test_agent_executes_every_tool_call_before_resuming_model() -> None:
     context = _context()
     continuation = ModelContinuation(
         "provider",
@@ -226,15 +259,134 @@ def test_agent_serializes_unexpected_parallel_tool_calls_with_complete_receipts(
         continuation=continuation,
     )
     message = replace(context.message, type="model.completed", payload=result.to_dict())
-    decision = ToolAgent(
+    agent = ToolAgent(
         composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"}))
-    ).handle(replace(context, message=message))
+    )
+    first = agent.handle(replace(context, message=message))
 
-    assert decision.tool_request is not None
-    assert decision.tool_request.capability == "com.vendor.lookup"
-    resumed = ModelContinuation.from_dict(decision.tool_request.continuation or {})
-    assert resumed.items[-1]["call_id"] == "second"
-    assert "parallel_tool_calls_disabled" in str(resumed.items[-1])
+    assert first.tool_request is not None
+    assert first.tool_request.capability == "com.vendor.lookup"
+
+    second_message = replace(
+        context.message,
+        type="tool.succeeded",
+        payload={"request": {}, "result": {"value": "one"}},
+    )
+    second = agent.handle(
+        replace(
+            context,
+            agent=replace(context.agent, state=first.state_patch),
+            message=second_message,
+        )
+    )
+    assert second.tool_request is not None
+    assert second.tool_request.capability == "org.aurora.console.send"
+
+    final_message = replace(
+        context.message,
+        type="tool.succeeded",
+        payload={"request": {}, "result": {"value": "two"}},
+    )
+    final = agent.handle(
+        replace(
+            context,
+            agent=replace(context.agent, state=second.state_patch),
+            message=final_message,
+        )
+    )
+    assert final.model_request is not None
+    resumed = ModelRequest.from_dict(final.model_request).continuation
+    assert resumed is not None
+    outputs = [item for item in resumed.items if item.get("type") == "function_call_output"]
+    assert [item["call_id"] for item in outputs] == ["first", "second"]
+
+
+def test_agent_finishes_only_after_every_tool_call() -> None:
+    context = _context()
+    result = ModelResult(
+        "model",
+        frozenset({"chat", "tools"}),
+        "native",
+        "",
+        None,
+        ModelUsage(),
+        0.0,
+        tool_calls=(
+            ToolCall("reply", "org.aurora.console.send", {"text": "done", "complete_task": True}),
+            ToolCall("lookup", "com.vendor.lookup", {"query": "still execute this"}),
+        ),
+        continuation=ModelContinuation("provider", "responses", ()),
+    )
+    agent = ToolAgent(
+        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"}))
+    )
+    first = agent.handle(
+        replace(context, message=replace(context.message, type="model.completed", payload=result.to_dict()))
+    )
+    assert first.tool_request is not None
+    assert first.tool_request.complete_task is False
+
+    second = agent.handle(
+        replace(
+            context,
+            agent=replace(context.agent, state=first.state_patch),
+            message=replace(context.message, type="tool.succeeded", payload={"result": {}}),
+        )
+    )
+    assert second.tool_request is not None
+    assert second.tool_request.capability == "com.vendor.lookup"
+
+    finished = agent.handle(
+        replace(
+            context,
+            agent=replace(context.agent, state=second.state_patch),
+            message=replace(context.message, type="tool.succeeded", payload={"result": {}}),
+        )
+    )
+    assert finished.completion is not None
+
+
+def test_agent_continues_after_control_tool_in_a_multi_call_response() -> None:
+    context = _context()
+    continuation = ModelContinuation(
+        "provider",
+        "responses",
+        (
+            {"type": "function_call", "call_id": "delegate", "name": DELEGATE_TOOL},
+            {"type": "function_call", "call_id": "lookup", "name": "com.vendor.lookup"},
+        ),
+    )
+    result = ModelResult(
+        "model",
+        frozenset({"chat", "tools"}),
+        "native",
+        "",
+        None,
+        ModelUsage(),
+        0.0,
+        tool_calls=(
+            ToolCall("delegate", DELEGATE_TOOL, {"tasks": [{"instruction": "inspect"}]}),
+            ToolCall("lookup", "com.vendor.lookup", {"query": "after delegation"}),
+        ),
+        continuation=continuation,
+    )
+    agent = ToolAgent(
+        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"})),
+        capabilities=(DelegationCapability(),),
+    )
+    delegated = agent.handle(
+        replace(context, message=replace(context.message, type="model.completed", payload=result.to_dict()))
+    )
+    assert delegated.delegations
+    resumed_context = replace(
+        context,
+        agent=replace(context.agent, state=delegated.state_patch),
+        children=(replace(context.children[0], status=AgentStatus.COMPLETED, last_summary="inspected"),),
+        message=replace(context.message, type="child.completed", payload={"summary": "inspected"}),
+    )
+    resumed = agent.handle(resumed_context)
+    assert resumed.tool_request is not None
+    assert resumed.tool_request.capability == "com.vendor.lookup"
 
 
 @pytest.mark.parametrize(

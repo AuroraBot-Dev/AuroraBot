@@ -52,8 +52,13 @@ def test_console_tool_is_idempotent_and_recoverable(tmp_path: Path) -> None:
 
 def test_console_tool_has_uniform_three_field_descriptor() -> None:
     assert CONSOLE_SEND_CAPABILITY == "org.aurora.console.send"
-    assert set(CONSOLE_SEND_DESCRIPTOR.to_dict()) == {"id", "description", "parameters_schema"}
-    assert set(CONSOLE_SEND_DESCRIPTOR.parameters_schema["properties"]) == {"text"}
+    assert set(CONSOLE_SEND_DESCRIPTOR.to_dict()) == {
+        "id",
+        "description",
+        "parameters_schema",
+        "runtime_completion",
+    }
+    assert set(CONSOLE_SEND_DESCRIPTOR.parameters_schema["properties"]) == {"text", "complete_task"}
 
 
 def test_console_prompt_keeps_session_command_history() -> None:

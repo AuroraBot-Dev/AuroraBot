@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from src.agents.handler import ToolAgent
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
@@ -23,12 +24,13 @@ from src.contracts.agent import (
     ToolRequest,
 )
 from src.contracts.amp import new_amp
-from src.contracts.model import ModelResult, ModelUsage
+from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
 from src.contracts.tool import ToolOutcomeStatus
 from src.contracts.triage import TriageAction, TriageDecision, TriageLimits
 from src.engine.archive import task_archive_projection
 from src.engine.runtime import EngineState, PumpResult
 from src.engine.store import SQLiteRuntimeStore
+from src.prompt import PromptCatalog, PromptComposer
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -248,6 +250,92 @@ def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) 
         assert task is not None and task.status == TaskStatus.COMPLETED
         with pytest.raises(ValueError, match="invalid Tool outcome"):
             await state.complete_tool(**{**kwargs, "status": "forged"})  # type: ignore[arg-type]
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        state.shutdown()
+
+
+def test_engine_persists_and_executes_every_model_tool_call(tmp_path: Path) -> None:
+    catalog = PromptCatalog.create(
+        soul="soul",
+        world="world",
+        agents={"gate": "gate", "worker": "worker"},
+    )
+    agent = ToolAgent(composer=PromptComposer(catalog))
+    state = EngineState(_configuration(tmp_path), {"gate": agent, "worker": agent})
+    state.install_capability_catalog(
+        CapabilityCatalogSnapshot(
+            (
+                CapabilityDescriptor("test.first", "first", {"type": "object"}),
+                CapabilityDescriptor("test.second", "second", {"type": "object"}),
+            )
+        )
+    )
+
+    async def scenario() -> None:
+        await state.submit_amp(_amp())
+        await _admit(state)
+        model_activity = (await state.claim_model_requests(1))[0]
+        model_result = ModelResult(
+            "model",
+            frozenset({"chat", "tools"}),
+            "native",
+            "",
+            None,
+            ModelUsage(),
+            0.0,
+            tool_calls=(
+                ToolCall("first-call", "test.first", {"value": 1}),
+                ToolCall("second-call", "test.second", {"value": 2}),
+            ),
+            continuation=ModelContinuation(
+                "provider",
+                "responses",
+                (
+                    {"type": "function_call", "call_id": "first-call", "name": "test.first"},
+                    {"type": "function_call", "call_id": "second-call", "name": "test.second"},
+                ),
+            ),
+        )
+        await state.complete_model(model_activity, model_result.to_dict(), None)
+        await state.pump()
+
+        first = (await state.claim_tool_requests())[0]
+        assert first.capability == "test.first"
+        await state.complete_tool(
+            request_id=first.request_id,
+            capability=first.capability,
+            status=ToolOutcomeStatus.SUCCEEDED,
+            summary="first complete",
+            result={"value": 1},
+            error=None,
+            source_app="test",
+            source_instance="test",
+        )
+        await state.pump()
+
+        second = (await state.claim_tool_requests())[0]
+        assert second.capability == "test.second"
+        await state.complete_tool(
+            request_id=second.request_id,
+            capability=second.capability,
+            status=ToolOutcomeStatus.SUCCEEDED,
+            summary="second complete",
+            result={"value": 2},
+            error=None,
+            source_app="test",
+            source_instance="test",
+        )
+        await state.pump()
+
+        resumed_activity = (await state.claim_model_requests(1))[0]
+        resumed = ModelRequest.from_dict(resumed_activity.request).continuation
+        assert resumed is not None
+        outputs = [item for item in resumed.items if item.get("type") == "function_call_output"]
+        assert [item["call_id"] for item in outputs] == ["first-call", "second-call"]
+        assert state.tasks()[0].tool_calls == 2
 
     try:
         asyncio.run(scenario())

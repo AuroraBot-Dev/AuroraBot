@@ -59,7 +59,11 @@ async def _complete_chat(
     tool_defs, alias_to_name = provider_tools(request.tools, responses=False)
     kwargs = dict(request.parameters)
     if tool_defs:
-        kwargs.update(tools=tool_defs, tool_choice=request.tool_choice, parallel_tool_calls=False)
+        kwargs.update(
+            tools=tool_defs,
+            tool_choice=request.tool_choice,
+            parallel_tool_calls=request.parallel_tool_calls,
+        )
     if request.output_schema is not None and "structured_output" in negotiated:
         kwargs["response_format"] = {
             "type": "json_schema",
@@ -113,7 +117,7 @@ async def _execute_responses_channel(
         "max_output_tokens": request.budget.max_output_tokens,
         "timeout": request.budget.timeout_seconds,
         "store": False,
-        "parallel_tool_calls": False,
+        "parallel_tool_calls": request.parallel_tool_calls,
         **provider_kwargs,
         **request.parameters,
     }

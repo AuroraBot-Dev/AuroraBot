@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from src.prompt.models import PromptCatalog, PromptDocument, PromptSection
@@ -12,9 +13,23 @@ if TYPE_CHECKING:
     from src.contracts.model import ModelMessage
 
 
+class _Msg(StrEnum):
+    """本文件内所有用户或模型可见的硬编码文本。"""
+
+    ADMITTED_EVENTS = "处理这批刚刚接纳的会话事件：\n{content}"
+    CHILD_RESULT = "子代理返回：\n{content}"
+    CURRENT_MESSAGE = "处理当前消息：\n{content}"
+    EXTERNAL_DATA = '<external-data encoding="json">\n{encoded}\n</external-data>'
+    LOCAL_WORK = "当前局部工作：\n{content}"
+    MISSING_AGENT_PROMPT = "missing prompt for Agent profile {profile_id}"
+    RELEVANT_FACTS = "[ 相关长期事实 ]\n{content}"
+    SESSION_MEMORY = "[ 会话摘要 ]\n{content}"
+    TOOL_RESULT = "工具返回 {status}：\n{content}"
+
+
 class MissingAgentPromptError(ValueError):
     def __init__(self, profile_id: str) -> None:
-        super().__init__(f"missing prompt for Agent profile {profile_id}")
+        super().__init__(_Msg.MISSING_AGENT_PROMPT.format(profile_id=profile_id))
 
 
 class PromptComposer:
@@ -38,10 +53,18 @@ class PromptComposer:
         system.extend((PromptSection("world", self._catalog.world), PromptSection("agent_profile", agent_prompt)))
         memory: list[PromptSection] = []
         if context.memory.session_summary.strip():
-            memory.append(PromptSection("session_memory", f"[ 会话摘要 ]\n{_external(context.memory.session_summary)}"))
+            memory.append(
+                PromptSection(
+                    "session_memory",
+                    _Msg.SESSION_MEMORY.format(content=_external(context.memory.session_summary)),
+                )
+            )
         if context.memory.relevant_facts:
             memory.append(
-                PromptSection("relevant_facts", f"[ 相关长期事实 ]\n{_external(context.memory.relevant_facts)}")
+                PromptSection(
+                    "relevant_facts",
+                    _Msg.RELEVANT_FACTS.format(content=_external(context.memory.relevant_facts)),
+                )
             )
         user = [PromptSection("message", _message_text(context))]
         work = _local_work(context)
@@ -58,7 +81,7 @@ def _message_text(context: AgentContext) -> str:
     events = payload.get("events")
     if context.message.type == "task.started" and isinstance(events, list):
         admitted = {"triage": payload.get("triage"), "events": events}
-        return f"处理这批刚刚接纳的会话事件：\n{_external(admitted)}"
+        return _Msg.ADMITTED_EVENTS.format(content=_external(admitted))
     if context.message.type.startswith("tool."):
         status = context.message.type.removeprefix("tool.")
         request = payload.get("request")
@@ -68,11 +91,14 @@ def _message_text(context: AgentContext) -> str:
                 key: request[key] for key in ("capability", "parameters", "complete_task") if key in request
             }
         outcome_key = "result" if status == "succeeded" else "error"
-        return f"工具返回 {status}：\n{_external({'request': request_fact, outcome_key: payload.get(outcome_key)})}"
+        return _Msg.TOOL_RESULT.format(
+            status=status,
+            content=_external({"request": request_fact, outcome_key: payload.get(outcome_key)}),
+        )
     if context.message.type.startswith("child."):
-        return f"子代理返回：\n{_external(payload)}"
+        return _Msg.CHILD_RESULT.format(content=_external(payload))
     value = context.task.root_summary if context.message.type == "task.started" else context.agent.assignment
-    return f"处理当前消息：\n{_external(value)}"
+    return _Msg.CURRENT_MESSAGE.format(content=_external(value))
 
 
 def _local_work(context: AgentContext) -> str:
@@ -88,10 +114,12 @@ def _local_work(context: AgentContext) -> str:
     ]
     if context.agent.parent_agent_id is None and not children:
         return ""
-    return f"当前局部工作：\n{_external({'assignment': context.agent.assignment, 'active_children': children})}"
+    return _Msg.LOCAL_WORK.format(
+        content=_external({"assignment": context.agent.assignment, "active_children": children})
+    )
 
 
 def _external(value: object) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     encoded = encoded.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
-    return f'<external-data encoding="json">\n{encoded}\n</external-data>'
+    return _Msg.EXTERNAL_DATA.format(encoded=encoded)

@@ -51,7 +51,6 @@ class _Msg(StrEnum):
     UNKNOWN_ROLE = "Unknown role '{role}'. Available: {available}"
     UNKNOWN_MODEL_ROLE = "unknown model role: {role}"
     RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
-    PARALLEL_TOOLS_UNSUPPORTED = "parallel tool calls are unsupported"
     CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
     FORBIDDEN_PARAMETERS = "model parameters may not override controlled fields: {forbidden}"
     NOT_NATIVE_RESPONSES_ENDPOINT = "role {role} does not use a native Responses endpoint"
@@ -231,8 +230,6 @@ class ModelGatewayService:
 
         if request.retry_policy != "none":
             raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
-        if request.parallel_tool_calls:
-            raise ModelCapabilityError(_Msg.PARALLEL_TOOLS_UNSUPPORTED)
         if request.cancel_policy not in {"never", "on_external_activity"}:
             raise ModelCapabilityError(_Msg.CANCEL_POLICY_UNSUPPORTED)
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())

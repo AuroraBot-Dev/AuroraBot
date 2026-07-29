@@ -17,7 +17,8 @@ def task_archive_projection(detail: dict[str, Any]) -> dict[str, Any]:
 
     def project(value: Any) -> Any:
         if isinstance(value, dict):
-            projected = {key: project(item) for key, item in value.items() if key not in {"continuation", "tools"}}
+            replay_keys = {"continuation", "tools"}
+            projected = {key: project(item) for key, item in value.items() if key not in replay_keys}
             tools = value.get("tools")
             if isinstance(tools, (list, tuple)) and all(
                 isinstance(item, dict) and isinstance(item.get("name"), str) for item in tools

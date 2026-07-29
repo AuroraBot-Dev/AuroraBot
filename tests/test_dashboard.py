@@ -81,7 +81,12 @@ def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
             await runtime.shutdown()
 
     assert DASHBOARD_SEND_CAPABILITY == "org.aurora.dashboard.send"
-    assert set(DASHBOARD_SEND_DESCRIPTOR.to_dict()) == {"id", "description", "parameters_schema"}
+    assert set(DASHBOARD_SEND_DESCRIPTOR.to_dict()) == {
+        "id",
+        "description",
+        "parameters_schema",
+        "runtime_completion",
+    }
     asyncio.run(scenario())
 
 

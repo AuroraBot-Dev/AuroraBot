@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
@@ -13,6 +14,13 @@ if TYPE_CHECKING:
 
 logger = get_logger("aurora.memory.service")
 _SUMMARY_LIMIT = 2400
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户或模型可见的硬编码文本。"""
+
+    ELLIPSIS = "…"
+    REMEMBERED_TURN = "{input_summary}\nAurora：{outcome_summary}"
 
 
 class MemoryService:
@@ -75,7 +83,10 @@ class MemoryService:
             ).fetchone()
             turn = entry.input_summary.strip()
             if entry.outcome_summary and entry.outcome_summary.strip():
-                turn = f"{turn}\nAurora：{entry.outcome_summary.strip()}"
+                turn = _Msg.REMEMBERED_TURN.format(
+                    input_summary=turn,
+                    outcome_summary=entry.outcome_summary.strip(),
+                )
             combined = f"{previous[0]}\n{turn}".strip() if previous is not None else turn
             summary = _tail(combined, _SUMMARY_LIMIT)
             connection.execute(
@@ -133,10 +144,10 @@ def _clip(value: str, limit: int) -> str:
         return ""
     if len(value) <= limit:
         return value
-    return value[: max(0, limit - 1)] + "…"
+    return value[: max(0, limit - 1)] + _Msg.ELLIPSIS
 
 
 def _tail(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
-    return "…" + value[-(limit - 1) :]
+    return _Msg.ELLIPSIS + value[-(limit - 1) :]

@@ -77,6 +77,11 @@ class _Msg(StrEnum):
     STDIO_COMMAND_ARRAY = "stdio app.command must be a non-empty string array"
     STDIO_NO_URL = "stdio app may not declare url"
     STDIO_WORKING_DIR_REQUIRED = "stdio app.working_dir is required"
+    TRIAGE_CHARACTERS_MIN = "engine.triage.max_batch_characters must be at least 1000"
+    TRIAGE_DEFER_BOUNDS = "engine.triage.defer_seconds must not exceed max_defer_seconds"
+    TRIAGE_POSITIVE_INTEGER = "engine.triage.{name} must be a positive integer"
+    TRIAGE_QUIET_BOUNDS = "engine.triage.quiet_seconds must not exceed max_wait_seconds"
+    TRIAGE_UNSUPPORTED_KEYS = "engine.triage has unexpected {unexpected} or missing {missing}"
 
 
 def _parse_autonomy(raw: dict[str, Any]) -> AutonomyConfig:
@@ -205,7 +210,10 @@ def _parse_triage(raw: dict[str, Any]) -> TriageLimits:
     allowed = set(TriageLimits.__dataclass_fields__)
     if set(raw) != allowed:
         raise ConfigurationError(
-            f"engine.triage has unexpected {sorted(set(raw) - allowed)} or missing {sorted(allowed - set(raw))}"
+            _Msg.TRIAGE_UNSUPPORTED_KEYS.format(
+                unexpected=sorted(set(raw) - allowed),
+                missing=sorted(allowed - set(raw)),
+            )
         )
     values: dict[str, Any] = {}
     for name in allowed:
@@ -214,16 +222,16 @@ def _parse_triage(raw: dict[str, Any]) -> TriageLimits:
             values[name] = _string(value, f"engine.triage.{name}")
         elif name in {"max_batch_events", "max_batch_characters"}:
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                raise ConfigurationError(f"engine.triage.{name} must be a positive integer")
+                raise ConfigurationError(_Msg.TRIAGE_POSITIVE_INTEGER.format(name=name))
             values[name] = value
         else:
             values[name] = _positive_number(value, f"engine.triage.{name}")
     if values["quiet_seconds"] > values["max_wait_seconds"]:
-        raise ConfigurationError("engine.triage.quiet_seconds must not exceed max_wait_seconds")
+        raise ConfigurationError(_Msg.TRIAGE_QUIET_BOUNDS)
     if values["defer_seconds"] > values["max_defer_seconds"]:
-        raise ConfigurationError("engine.triage.defer_seconds must not exceed max_defer_seconds")
+        raise ConfigurationError(_Msg.TRIAGE_DEFER_BOUNDS)
     if values["max_batch_characters"] < 1000:
-        raise ConfigurationError("engine.triage.max_batch_characters must be at least 1000")
+        raise ConfigurationError(_Msg.TRIAGE_CHARACTERS_MIN)
     return TriageLimits(**values)
 
 

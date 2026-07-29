@@ -58,11 +58,11 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
     service = _service(project_root)
     request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),), output_schema={"type": "object"})
     assert {"chat", "structured_output"} <= service.negotiate(request)
+    assert "chat" in service.negotiate(ModelRequest(role="fast", messages=(), parallel_tool_calls=True))
 
     invalid = (
         (ModelRequest(role="missing", messages=()), "unknown model role"),
         (ModelRequest(role="fast", messages=(), retry_policy="retry"), "retry_policy"),  # type: ignore[arg-type]
-        (ModelRequest(role="fast", messages=(), parallel_tool_calls=True), "parallel tool"),
         (ModelRequest(role="fast", messages=(), cancel_policy="sometimes"), "cancellation"),  # type: ignore[arg-type]
         (ModelRequest(role="fast", messages=(), parameters={"model": "override"}), "controlled fields"),
         (ModelRequest(role="fast", messages=(), response_mode="native"), "native Responses"),

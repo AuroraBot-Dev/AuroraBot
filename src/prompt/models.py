@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 from src.contracts.model import ModelMessage
 
@@ -21,10 +21,6 @@ class _Msg(StrEnum):
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
-
-
-EMPTY_CHILD_COMPLETION: Final = "这件事已经做完，但没有留下额外的话。"
-NO_ACTION_COMPLETION: Final = "no_action"
 
 
 @dataclass(frozen=True, slots=True)

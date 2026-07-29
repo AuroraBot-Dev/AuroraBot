@@ -178,3 +178,66 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             await engine.shutdown()
 
     asyncio.run(exercise())
+
+
+def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> None:
+    class ModelRequestingHandler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            _ = context
+            return AgentDecision(model_request={"role": "test", "messages": []})
+
+    async def exercise() -> None:
+        profile = AgentProfile(
+            "test.root",
+            "unused",
+            "test",
+            frozenset(),
+            can_delegate=False,
+            child_profiles=frozenset(),
+        )
+        configuration = EngineConfiguration(
+            workspace=str(tmp_path / "engine"),
+            profiles=(profile,),
+            limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
+            interactive_budget=TaskLimits(4, 4, 30.0),
+            autonomous_budget=TaskLimits(4, 4, 30.0),
+            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+        )
+        engine = AgentEngine(
+            configuration,
+            {profile.id: ModelRequestingHandler()},
+            model_provider=_UnusedModelProvider(),
+            triage_policy=StructuredTriagePolicy(configuration.triage),
+        )
+        engine.bind_tool_executors(())
+        try:
+            await engine.submit_amp(
+                new_amp(
+                    event_type="system.tick",
+                    session_id="autonomy",
+                    summary="tick",
+                    data={},
+                    source_app="engine",
+                    source_instance="local",
+                ).to_dict()
+            )
+            autonomous = await engine.pump()
+            task_id = autonomous["admitted_task_ids"][0]
+
+            await engine.submit_amp(
+                new_amp(
+                    event_type="message.received",
+                    session_id="interactive",
+                    summary="hello",
+                    data={"text": "hello"},
+                    source_app="test",
+                    source_instance="local",
+                ).to_dict()
+            )
+            detail = engine.task_detail(task_id)
+            assert detail is not None
+            assert detail["task"]["status"] == "ACTIVE"
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(exercise())

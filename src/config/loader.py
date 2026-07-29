@@ -67,6 +67,7 @@ class _Msg(StrEnum):
     ROLE_CAPABILITIES_STRINGS = "models.roles.{role}.capabilities must contain strings"
     ROLE_ENDPOINT_UNSUPPORTED = "models.roles.{role}.endpoint is unsupported"
     ENGINE_SUB_MUST_BE_TABLES = "engine autonomy, Agents and Task budgets must be tables"
+    TRIAGE_UNKNOWN_ROLE = "engine.triage.model_role references unknown role {model_role}"
     DEBUG_PORT_INVALID = "runtime.debug_port must be a valid port"
     PROD_DEBUG_LOOPBACK = "production debug API must bind to loopback"
     ROOT_PROFILE_NOT_CONFIGURED = "engine.agents.root_profile is not configured"
@@ -304,7 +305,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     agent_runtime = _parse_agent_runtime(agents_raw)
     triage = _parse_triage(triage_raw)
     if triage.model_role not in roles:
-        raise ConfigurationError(f"engine.triage.model_role references unknown role {triage.model_role}")
+        raise ConfigurationError(_Msg.TRIAGE_UNKNOWN_ROLE.format(model_role=triage.model_role))
     if agent_runtime.root_profile not in {agent.id for agent in agents}:
         raise ConfigurationError(_Msg.ROOT_PROFILE_NOT_CONFIGURED)
     if agent_runtime.worker_profile not in {agent.id for agent in agents}:

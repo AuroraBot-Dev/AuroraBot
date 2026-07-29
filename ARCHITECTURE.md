@@ -624,6 +624,8 @@ speech.install_tts_config(enabled=config.agents.tts_enabled)
 - 不 import `src.ai` / `src.platform` / `src.memory` / `src.engine` / `src.config`
 - 外部依赖通过 setter 注入，类型声明为 `Any` 或 Protocol
 - `handle()` 只读 `AgentContext`，返回 `AgentDecision`（可能包含 `tool_requests`）
+- 一次模型响应中的文本与全部 Tool call 都必须保留；执行层可以为恢复而组织批次或链，但不得截断、伪造拒绝
+  结果或禁止模型组合控制能力与外部效果能力
 - 主动能力可生成 tool request（如 speech → `tts.speak`），由平台负责执行
 
 ---

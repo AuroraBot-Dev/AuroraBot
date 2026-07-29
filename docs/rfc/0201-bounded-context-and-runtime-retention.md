@@ -36,6 +36,9 @@ RFC 0200 确立了 Agent 中心热路径，但没有规定模型上下文和终�
 
 - 模型 Tool 别名必须确定、可读并满足 Provider 标识符约束；仅在截断或碰撞时附加短摘要。
 - MCP Tool 成功结果使用单一规范表示：优先结构化内容，其次可解析 JSON 文本，最后才是纯文本。不得同时保留等价的 `content`、`text` 和 `structured_content`。
+- Provider 可以在一次响应中返回多个 Tool call。Agent 不得只执行第一项或为其余项伪造 rejected receipt；
+  所有调用及其结果都必须恰好一次进入可恢复执行与同一 continuation。具体调度不限制模型的调用组合，遵循
+  RFC 0203。
 - 模型 continuation 和完整 Tool schema 是活跃 Activity 的恢复数据，不是长期记忆。Task 归档可以把 Tool 定义压缩为名称列表，并移除结果中的 continuation 重放副本，但必须保留 Tool call、Tool result、文本、用量、诊断和因果元数据。
 
 ### 热库与归档生命周期

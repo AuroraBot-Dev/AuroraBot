@@ -69,7 +69,7 @@ class SpeechCapability:
         self,
         call: ToolCall,
         context: AgentContext,  # noqa: ARG002
-        continuation: object = None,
+        continuation: object = None,  # noqa: ARG002
         tools: tuple[object, ...] = (),  # noqa: ARG002
     ) -> AgentDecision | None:
         """处理 tts.speak 工具调用，验证参数并生成朗读工具请求。"""
@@ -80,14 +80,10 @@ class SpeechCapability:
         text = call.arguments.get("text")
         if not isinstance(text, str) or not text.strip():
             return AgentDecision(failure=_Msg.TEXT_REQUIRED)
-        continuation_dict: dict[str, object] | None = None
-        if continuation is not None and callable(getattr(continuation, "to_dict", None)):
-            continuation_dict = continuation.to_dict()  # type: ignore[union-attr]
         return AgentDecision(
             tool_request=ToolRequest(
                 capability=SPEECH_TOOL,
                 parameters={"text": text},
                 tool_call_id=call.call_id,
-                continuation=continuation_dict,
             )
         )
