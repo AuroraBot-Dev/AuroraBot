@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 from dataclasses import dataclass
 from enum import StrEnum
@@ -320,7 +321,11 @@ class MCPPlatform:
         if result.get("is_error") is True:
             detail = str(result.get("text") or result.get("content") or "MCP Tool 返回 isError")
             return ToolOutcome(ToolOutcomeStatus.FAILED, f"MCP Tool 执行失败: {request.capability}", error=detail)
-        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, f"MCP Tool 已执行: {request.capability}", result=result)
+        return ToolOutcome(
+            ToolOutcomeStatus.SUCCEEDED,
+            f"MCP Tool 已执行: {request.capability}",
+            result=_canonical_tool_result(result),
+        )
 
     async def _call_tool(self, package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:
         """调用指定 App 上的 Tool（自动路由到远程 HTTP 或本地 stdio）。
@@ -451,3 +456,21 @@ def _tool_result(result: object) -> dict[str, object]:
         "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
         "structured_content": getattr(result, "structuredContent", None),
     }
+
+
+def _canonical_tool_result(result: dict[str, object]) -> dict[str, Any]:
+    """将 MCP 的多种等价结果表示压缩为单一模型上下文。"""
+    structured = result.get("structured_content")
+    if isinstance(structured, dict):
+        return dict(structured)
+    if structured is not None:
+        return {"data": structured}
+    text = result.get("text")
+    if isinstance(text, str) and text.strip():
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return {"text": text}
+        return dict(parsed) if isinstance(parsed, dict) else {"data": parsed}
+    content = result.get("content")
+    return {"content": content} if content else {}

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
-from src.agents.handler import _collect_tool_definitions
+from src.agents.handler import ToolAgent, _collect_tool_definitions
 from src.agents.tools import COMPLETE_TASK_DESCRIPTION, capability_tool_definition
 from src.contracts.agent import (
     AgentContext,
@@ -21,6 +21,7 @@ from src.contracts.agent import (
     TaskStatus,
 )
 from src.contracts.memory import MemoryContextSnapshot, MemoryConversation
+from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
 from src.prompt import PromptCatalog, PromptComposer, PromptConfigurationError, load_prompt_catalog
 
 if TYPE_CHECKING:
@@ -172,12 +173,11 @@ def test_prompt_document_has_stable_layers_and_context() -> None:
         "message",
         "current_work",
         "situations",
-        "available_tools",
     ]
     assert '"vendor_metadata":{"thread":"42"}' in document.user_prompt
     assert '"agent_id":"child"' in document.user_prompt
     assert '"situation_id":"situation-1"' in document.user_prompt
-    assert "Vendor supplied description" in document.user_prompt
+    assert "Vendor supplied description" not in document.user_prompt
     assert [message.role for message in document.messages()] == ["system", "user"]
 
 
@@ -220,6 +220,42 @@ def test_agent_tool_owner_preserves_external_description_without_memory_capabili
     assert tools["org.aurora.console.send"].parameters_schema["properties"]["complete_task"]["description"] == (
         COMPLETE_TASK_DESCRIPTION
     )
+
+
+def test_agent_serializes_unexpected_parallel_tool_calls_with_complete_receipts() -> None:
+    context = _context()
+    continuation = ModelContinuation(
+        "provider",
+        "responses",
+        (
+            {"type": "function_call", "call_id": "first", "name": "first"},
+            {"type": "function_call", "call_id": "second", "name": "second"},
+        ),
+    )
+    result = ModelResult(
+        "model",
+        frozenset({"chat", "tools"}),
+        "native",
+        "",
+        None,
+        ModelUsage(),
+        0.0,
+        tool_calls=(
+            ToolCall("first", "com.vendor.lookup", {"query": "one"}),
+            ToolCall("second", "org.aurora.console.send", {"text": "two"}),
+        ),
+        continuation=continuation,
+    )
+    message = replace(context.message, type="model.completed", payload=result.to_dict())
+    decision = ToolAgent(
+        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"}))
+    ).handle(replace(context, message=message))
+
+    assert decision.tool_request is not None
+    assert decision.tool_request.capability == "com.vendor.lookup"
+    resumed = ModelContinuation.from_dict(decision.tool_request.continuation or {})
+    assert resumed.items[-1]["call_id"] == "second"
+    assert "parallel_tool_calls_disabled" in str(resumed.items[-1])
 
 
 @pytest.mark.parametrize(

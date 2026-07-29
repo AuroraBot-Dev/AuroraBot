@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from enum import StrEnum
 from typing import Any
 
@@ -33,6 +34,24 @@ class _Msg(StrEnum):
     NO_ASSISTANT_MESSAGE = "Chat provider returned no assistant message"
 
 
+_PROVIDER_TOOL_NAME_LIMIT = 64
+_INVALID_TOOL_NAME = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def _provider_tool_alias(name: str) -> str:
+    """生成 Provider 可接受且可由模型稳定复述的 Tool 名称。"""
+    readable = _INVALID_TOOL_NAME.sub("_", name).strip("_")
+    if not readable:
+        readable = "tool"
+    if readable[0].isdigit():
+        readable = f"tool_{readable}"
+    if len(readable) <= _PROVIDER_TOOL_NAME_LIMIT:
+        return readable
+    digest = hashlib.sha256(name.encode()).hexdigest()[:12]
+    prefix = readable[: _PROVIDER_TOOL_NAME_LIMIT - len(digest) - 1].rstrip("_")
+    return f"{prefix}_{digest}"
+
+
 # ═══════════════════════════════════════════════════════════
 # 工具序列化
 # ═══════════════════════════════════════════════════════════
@@ -44,10 +63,11 @@ def provider_tools(
     definitions: list[dict[str, Any]] = []
     aliases: dict[str, str] = {}
     for tool in tools:
-        alias = f"aurora_{hashlib.sha256(tool.name.encode()).hexdigest()[:20]}"
+        alias = _provider_tool_alias(tool.name)
         if alias in aliases:
             raise ModelCapabilityError(_Msg.ALIAS_COLLISION)
         aliases[alias] = tool.name
+        aliases.setdefault(tool.name, tool.name)
         if responses:
             definitions.append(
                 {

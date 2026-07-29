@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS situations (
 CREATE INDEX IF NOT EXISTS idx_situations_open ON situations(status, expires_at, priority DESC);
 """
 
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 6
 _ACTIVE_ACTIVITY_INDEX = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
     "ON activities(agent_id) WHERE status IN ('PENDING', 'PROCESSING')"

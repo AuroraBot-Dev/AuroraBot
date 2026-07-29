@@ -10,9 +10,11 @@ from .base import RuntimeStoreBase, utc_now
 from .decisions import StoreDecisionsMixin
 from .ingress import StoreIngressMixin
 from .queries import StoreQueriesMixin
+from .retention import StoreRetentionMixin
 
 
 class SQLiteRuntimeStore(
+    StoreRetentionMixin,
     StoreDecisionsMixin,
     StoreActivitiesMixin,
     StoreQueriesMixin,

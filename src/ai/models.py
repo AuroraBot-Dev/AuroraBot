@@ -19,6 +19,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import gzip
 import json
 import sys
 import time
@@ -80,32 +82,41 @@ def _exc_msg() -> str:
 
 def _cache_file_path(timestamp: datetime) -> Path:
     assert _cache_dir is not None
-    return _cache_dir / f"{_CACHE_FILE_PREFIX}{timestamp.strftime('%Y%m%d-%H')}.json"
+    return _cache_dir / f"{_CACHE_FILE_PREFIX}{timestamp.strftime('%Y%m%d-%H')}.json.gz"
+
+
+def _read_cache_file(path: Path) -> dict[str, Any] | None:
+    try:
+        if path.name.endswith(".json.gz"):
+            with gzip.open(path, mode="rt", encoding="utf-8") as stream:
+                value = json.load(stream)
+        elif path.name.endswith(".json"):
+            value = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            return None
+    except (gzip.BadGzipFile, json.JSONDecodeError, OSError):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def _find_valid_cache() -> tuple[dict[str, Any] | None, float]:
     """查找最新的有效磁盘缓存文件，返回 (data, mtime) 或 (None, 0)。"""
     if _cache_dir is None or not _cache_dir.is_dir():
         return None, 0.0
-    now = time.monotonic()
-    best: tuple[dict[str, Any], float] | None = None
+    now = time.time()
     for entry in sorted(_cache_dir.iterdir(), reverse=True):
         if not entry.is_file() or not entry.name.startswith(_CACHE_FILE_PREFIX):
             continue
-        if not entry.name.endswith(".json"):
+        if not entry.name.endswith((".json", ".json.gz")):
             continue
         mtime = entry.stat().st_mtime
         age = now - mtime
         if age >= CACHE_TTL_SEC:
-            # 过期文件稍后清理
             continue
-        try:
-            data = json.loads(entry.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        if isinstance(data, dict):
-            return data, mtime
-    return best or (None, 0.0)
+        data = _read_cache_file(entry)
+        if data is not None:
+            return data, time.monotonic()
+    return None, 0.0
 
 
 def _write_cache(data: dict[str, Any]) -> None:
@@ -114,23 +125,23 @@ def _write_cache(data: dict[str, Any]) -> None:
         return
     now = datetime.now(tz=UTC)
     new_path = _cache_file_path(now)
+    temporary = new_path.with_suffix(f"{new_path.suffix}.tmp")
     try:
-        new_path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        with gzip.open(temporary, mode="wt", encoding="utf-8", compresslevel=6) as stream:
+            json.dump(data, stream, ensure_ascii=False, separators=(",", ":"))
+        temporary.replace(new_path)
     except OSError:
         logger.warning("无法写入 models.dev 缓存: %s", new_path)
+        temporary.unlink(missing_ok=True)
         return
 
-    threshold = time.monotonic() - CACHE_TTL_SEC
     for entry in sorted(_cache_dir.iterdir()):
-        if not entry.is_file() or entry is new_path or not entry.name.startswith(_CACHE_FILE_PREFIX):
+        if not entry.is_file() or entry == new_path or not entry.name.startswith(_CACHE_FILE_PREFIX):
             continue
-        if not entry.name.endswith(".json"):
+        if not entry.name.endswith((".json", ".json.gz")):
             continue
-        try:
-            if entry.stat().st_mtime < threshold:
-                entry.unlink()
-        except OSError:
-            pass
+        with contextlib.suppress(OSError):
+            entry.unlink()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -218,26 +229,24 @@ def _fallback_cache() -> dict[str, dict[str, Any]]:  # noqa: C901
         for entry in sorted(_cache_dir.iterdir(), reverse=True):
             if not entry.is_file() or not entry.name.startswith(_CACHE_FILE_PREFIX):
                 continue
-            if not entry.name.endswith(".json"):
+            if not entry.name.endswith((".json", ".json.gz")):
                 continue
-            try:
-                raw = json.loads(entry.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            raw = _read_cache_file(entry)
+            if raw is None:
                 continue
-            if isinstance(raw, dict):
-                _cache = {}
-                for provider_id, provider_info in raw.items():
-                    if not isinstance(provider_info, dict):
-                        continue
-                    models = provider_info.get("models")
-                    if not isinstance(models, dict):
-                        continue
-                    for model_name, model_info in models.items():
-                        if isinstance(model_info, dict):
-                            _cache[f"{provider_id}/{model_name}"] = model_info
-                _cache_ts = entry.stat().st_mtime
-                logger.info("降级使用过期磁盘缓存（%d 条记录）", len(_cache))
-                return _cache
+            _cache = {}
+            for provider_id, provider_info in raw.items():
+                if not isinstance(provider_info, dict):
+                    continue
+                provider_models = provider_info.get("models")
+                if not isinstance(provider_models, dict):
+                    continue
+                for model_name, model_info in provider_models.items():
+                    if isinstance(model_info, dict):
+                        _cache[f"{provider_id}/{model_name}"] = model_info
+            _cache_ts = time.monotonic()
+            logger.info("降级使用过期磁盘缓存（%d 条记录）", len(_cache))
+            return _cache
 
     return {}
 

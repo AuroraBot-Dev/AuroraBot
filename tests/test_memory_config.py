@@ -49,7 +49,7 @@ def test_memory_service_search_add_and_remember(tmp_path: Path) -> None:
     service._client = client
     assert service.search("hello", limit=1) == ["one"]
     assert service.add("remember this")
-    assert service.remember(MemoryEntry("one", "hello", "hi", "2026-01-02"))
+    assert service.remember(MemoryEntry("one", "session", "hello", "hi", "2026-01-02"))
     assert len(client.added) == 2
 
 

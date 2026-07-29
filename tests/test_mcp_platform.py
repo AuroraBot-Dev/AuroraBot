@@ -162,6 +162,7 @@ def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Pat
         platform._call_tool = accepted  # type: ignore[method-assign]
         succeeded = await platform.execute_tool(request)
         assert succeeded.status == "succeeded"
+        assert succeeded.result == {"sent": True}
         assert calls == [("com.example.alpha", "send", {"text": "hello"})]
 
         async def rejected(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:

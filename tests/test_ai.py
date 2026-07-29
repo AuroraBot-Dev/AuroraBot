@@ -134,6 +134,7 @@ def test_parsing_maps_provider_tools_and_tool_calls() -> None:
     chat_defs, aliases = provider_tools(definitions, responses=False)
     response_defs, response_aliases = provider_tools(definitions, responses=True)
     alias = next(iter(aliases))
+    assert alias == "org_example_echo"
     assert chat_defs[0]["function"]["name"] == alias
     assert response_defs[0]["name"] == alias
     assert response_aliases == aliases
@@ -245,9 +246,13 @@ def test_models_dev_capabilities_pricing_and_disk_cache(tmp_path: Path, monkeypa
         assert await models.get_model_info("missing") is None
 
     asyncio.run(scenario())
+    legacy = tmp_path / "models-dev-20000101-00.json"
+    legacy.write_text("{}", encoding="utf-8")
     models._write_cache(raw)
     cached, _timestamp = models._find_valid_cache()
     assert cached == raw
+    assert not legacy.exists()
+    assert len(tuple(tmp_path.glob("models-dev-*.json.gz"))) == 1
 
 
 def test_gateway_error_preserves_retryability() -> None:

@@ -27,7 +27,7 @@ class _Msg(StrEnum):
     INVALID_JSON_OBJECT = "Invalid JSON object format"
 
 
-def atomic_write_json(path: Path, value: Any) -> None:
+def atomic_write_json(path: Path, value: Any, *, compact: bool = False) -> None:
     """原子写入 JSON 数据。
 
     通过创建临时文件并原子替换来确保数据一致性。
@@ -36,7 +36,14 @@ def atomic_write_json(path: Path, value: Any) -> None:
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
         with temporary.open("x", encoding="utf-8", newline="\n") as handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            json.dump(
+                value,
+                handle,
+                ensure_ascii=False,
+                indent=None if compact else 2,
+                separators=(",", ":") if compact else None,
+                sort_keys=True,
+            )
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())

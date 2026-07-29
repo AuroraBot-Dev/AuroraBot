@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from src.prompt.models import CHANNEL_LABELS, PromptCatalog, PromptDocument, PromptSection
 
 if TYPE_CHECKING:
-    from src.contracts.agent import AgentContext, CapabilityDescriptor
+    from src.contracts.agent import AgentContext
     from src.contracts.model import ModelMessage
 
 
@@ -62,9 +62,6 @@ class PromptComposer:
         recalled = _recall_semantic_facts(context)
         if recalled:
             user.append(PromptSection("related_memories", recalled))
-        tools = _tool_hints(context.capabilities)
-        if tools:
-            user.append(PromptSection("available_tools", tools))
         return PromptDocument(tuple(system), tuple(user))
 
     def request_messages(self, context: AgentContext) -> tuple[ModelMessage, ModelMessage]:
@@ -117,8 +114,18 @@ def _source_note(context: AgentContext) -> str:
 
 
 def _current_work(context: AgentContext) -> str:
-    """生成当前工作状态快照：自身任务、活跃子 Agent、全局活动概览。"""
+    """生成去重且有界的当前工作状态快照。"""
     active_children = [child for child in context.children if not child.terminal]
+    other_tasks = [
+        {
+            "task_id": task.get("task_id"),
+            "session_id": task.get("session_id"),
+            "summary": task.get("summary"),
+            "latest_activity": task.get("latest_activity"),
+        }
+        for task in context.brain.active_tasks
+        if task.get("task_id") != context.task.task_id
+    ][:4]
     facts = {
         "current": {
             "task_id": context.task.task_id,
@@ -134,11 +141,7 @@ def _current_work(context: AgentContext) -> str:
             }
             for child in active_children
         ],
-        "global_activity": {
-            "active_tasks": context.brain.active_tasks,
-            "active_agents": context.brain.active_agents,
-            "generated_at": context.brain.generated_at,
-        },
+        "other_active_tasks": other_tasks,
     }
     return f"这是我此刻接住的工作，以及同一片活动空间里的进展：\n{_external(facts)}"
 
@@ -149,14 +152,6 @@ def _situations(context: AgentContext) -> str:
         return ""
     introduction = "我有这些事要做；认领时要使用其中的 situation_id："
     return f"{introduction}\n{_external(context.brain.ambient_situations)}"
-
-
-def _tool_hints(capabilities: tuple[CapabilityDescriptor, ...]) -> str:
-    """生成当前可用的工具能力清单提示。"""
-    if not capabilities:
-        return ""
-    facts = tuple({"id": item.id, "description": item.description} for item in capabilities)
-    return f"这些能力此刻可以使用：\n{_external(facts)}"
 
 
 def _amp(context: AgentContext) -> dict[str, Any] | None:

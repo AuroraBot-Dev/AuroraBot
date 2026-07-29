@@ -29,6 +29,8 @@ from src.utils.time import utc_now
 
 from .schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V5, _SCHEMA, _SCHEMA_VERSION
 
+_AUTO_VACUUM_INCREMENTAL = 2
+
 
 class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
@@ -82,11 +84,13 @@ class RuntimeStoreBase:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA journal_size_limit = 1048576")
+            connection.execute("PRAGMA auto_vacuum = INCREMENTAL")
             connection.executescript(_SCHEMA)
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, 2, 3, 4, _SCHEMA_VERSION}:
+            elif int(row["version"]) not in {1, 2, 3, 4, 5, _SCHEMA_VERSION}:
                 raise RuntimeError(_Msg.UNSUPPORTED_SCHEMA)
             version = int(row["version"]) if row is not None else _SCHEMA_VERSION
             if version < _SCHEMA_VERSION:
@@ -119,6 +123,12 @@ class RuntimeStoreBase:
             connection.execute(_ACTIVE_ACTIVITY_INDEX)
             connection.execute("UPDATE schema_meta SET version = ?", (_SCHEMA_VERSION,))
             connection.commit()
+            if (
+                version < _SCHEMA_VERSION
+                and int(connection.execute("PRAGMA auto_vacuum").fetchone()[0]) != _AUTO_VACUUM_INCREMENTAL
+            ):
+                connection.execute("PRAGMA auto_vacuum = INCREMENTAL")
+                connection.execute("VACUUM")
         self.recover_interrupted()
 
     def recover_interrupted(self) -> None:

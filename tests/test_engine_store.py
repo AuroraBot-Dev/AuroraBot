@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from dataclasses import FrozenInstanceError
 from typing import TYPE_CHECKING
 
@@ -24,7 +25,9 @@ from src.contracts.agent import (
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelResult, ModelUsage
 from src.contracts.tool import ToolOutcomeStatus
+from src.engine.archive import task_archive_projection
 from src.engine.runtime import EngineState
+from src.engine.store import SQLiteRuntimeStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -77,6 +80,40 @@ class _Complete:
         return AgentDecision(completion=Completion(f"done: {context.agent.assignment}"))
 
 
+def test_task_archive_projection_removes_replay_redundancy() -> None:
+    projected = task_archive_projection(
+        {
+            "events": [
+                {
+                    "payload": {
+                        "continuation": {"items": [{"large": "value"}]},
+                        "tools": [{"name": "one", "parameters_schema": {"type": "object"}}],
+                        "text": "kept",
+                    }
+                }
+            ]
+        }
+    )
+    payload = projected["events"][0]["payload"]
+    assert payload == {"text": "kept", "tool_names": ["one"]}
+
+
+def test_runtime_store_migrates_v5_to_incremental_vacuum(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    SQLiteRuntimeStore(database).initialize()
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE schema_meta SET version = 5")
+        connection.commit()
+        connection.execute("PRAGMA auto_vacuum = NONE")
+        connection.execute("VACUUM")
+        assert connection.execute("PRAGMA auto_vacuum").fetchone()[0] == 0
+
+    SQLiteRuntimeStore(database).initialize()
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == 6
+        assert connection.execute("PRAGMA auto_vacuum").fetchone()[0] == 2
+
+
 def test_amp_creates_archives_and_deduplicates_task(tmp_path: Path) -> None:
     state = EngineState(_configuration(tmp_path), {"gate": _Complete(), "worker": _Complete()})
 
@@ -84,16 +121,18 @@ def test_amp_creates_archives_and_deduplicates_task(tmp_path: Path) -> None:
         amp = _amp()
         await state.submit_amp(amp)
         first = await state.pump()
+        task_id = first.ingested_task_ids[0]
+        await state.finalize_terminal_tasks()
         await state.submit_amp(amp)
         replay = await state.pump()
         assert len(first.ingested_task_ids) == 1
         assert replay.ingested_task_ids == ()
-        task = state.get_task(first.ingested_task_ids[0])
-        assert task is not None and task.status == TaskStatus.COMPLETED
-        detail = state.task_detail(task.task_id)
+        assert state.get_task(task_id) is None
+        detail = state.task_detail(task_id)
         assert detail is not None
+        assert detail["archive_version"] == 2
         assert detail["events"][0]["type"] == "task.started"
-        assert (tmp_path / "archive" / "tasks" / f"{task.task_id}.json").is_file()
+        assert (tmp_path / "archive" / "tasks" / f"{task_id}.json").is_file()
 
     try:
         asyncio.run(scenario())

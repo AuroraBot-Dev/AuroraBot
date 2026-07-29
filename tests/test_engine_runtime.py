@@ -15,7 +15,7 @@ from src.contracts.agent import (
     TaskLimits,
 )
 from src.contracts.amp import new_amp
-from src.contracts.memory import MemoryContextSnapshot, MemoryEntry
+from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
 from src.engine.runtime import AgentEngine
 
 if TYPE_CHECKING:
@@ -83,9 +83,9 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
     events: list[tuple[str, object]] = []
 
     class Memory:
-        def recall(self, query: str) -> MemoryContextSnapshot:
+        def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
             events.append(("recall", query))
-            return MemoryContextSnapshot(related_memories=(f"memory:{query}",))
+            return MemoryContextSnapshot(related_memories=(f"memory:{query.query}",))
 
         def remember(self, entry: MemoryEntry) -> bool:
             events.append(("remember", entry))
@@ -136,6 +136,8 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             assert [name for name, _value in events[:2]] == ["recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert [entry.task_id for entry in remembered if isinstance(entry, MemoryEntry)] == [interactive_id]
+            recalled = next(value for name, value in events if name == "recall")
+            assert isinstance(recalled, MemoryQuery) and recalled.scope == "interactive"
 
             events.clear()
             await engine.submit_amp(

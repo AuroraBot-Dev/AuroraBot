@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def test_memory_placeholder_contracts() -> None:
-    assert MemoryQuery("who", "global").limit == 8
+    assert MemoryQuery("who", "global").limit == 4
+    assert MemoryQuery("who", "global").max_characters == 4000
     assert MemoryQueryResult(()).items == ()
     assert MemoryProposal({"fact": "x"}, "task").importance == 0.5
     assert MemoryFailure().code == "memory.unavailable"
@@ -21,9 +22,10 @@ def test_memory_placeholder_contracts() -> None:
 def test_disabled_service_uses_the_memory_store_contract() -> None:
     service = MemoryService.disabled()
     assert not service.available
-    assert service.recall("anything").recent_conversation == ()
-    assert service.recall("anything").related_memories == ()
-    assert not service.remember(MemoryEntry("task", "hello", "hi", "2026-01-01T00:00:00Z"))
+    query = MemoryQuery("anything", "session")
+    assert service.recall(query).recent_conversation == ()
+    assert service.recall(query).related_memories == ()
+    assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01T00:00:00Z"))
 
 
 def test_remember_is_idempotent_and_recall_reads_completed_private_ledger(tmp_path: Path) -> None:
@@ -35,19 +37,21 @@ def test_remember_is_idempotent_and_recall_reads_completed_private_ledger(tmp_pa
 
     memory_dir = tmp_path / "memory"
     service = MemoryService(memory_dir=memory_dir)
-    assert service.recall("engine-only event").recent_conversation == ()
-    first = MemoryEntry("task-1", "first question", "first answer", "2026-01-01T00:00:00Z")
-    duplicate = MemoryEntry("task-1", "changed question", "changed answer", "2026-01-03T00:00:00Z")
-    second = MemoryEntry("task-2", "second question", None, "2026-01-02T00:00:00Z")
+    assert service.recall(MemoryQuery("engine-only event", "session")).recent_conversation == ()
+    first = MemoryEntry("task-1", "session", "first question", "first answer", "2026-01-01T00:00:00Z")
+    duplicate = MemoryEntry("task-1", "session", "changed question", "changed answer", "2026-01-03T00:00:00Z")
+    second = MemoryEntry("task-2", "session", "second question", None, "2026-01-02T00:00:00Z")
+    other = MemoryEntry("task-3", "other", "other question", "other answer", "2026-01-04T00:00:00Z")
 
     assert service.remember(first)
     assert not service.remember(duplicate)
     assert service.remember(second)
+    assert service.remember(other)
     with sqlite3.connect(memory_dir / "memory.sqlite3") as connection:
         connection.execute("CREATE TABLE pending_tasks(user_text TEXT, assistant_text TEXT, created_at TEXT)")
         connection.execute("INSERT INTO pending_tasks VALUES ('pending question', 'pending answer', '2026-01-04')")
 
-    recalled = service.recall("question")
+    recalled = service.recall(MemoryQuery("question", "session"))
     assert [(turn.user, turn.assistant) for turn in recalled.recent_conversation] == [
         ("first question", "first answer"),
         ("second question", None),
@@ -58,4 +62,14 @@ def test_remember_is_idempotent_and_recall_reads_completed_private_ledger(tmp_pa
 def test_private_ledger_errors_are_nonfatal(tmp_path: Path) -> None:
     (tmp_path / "memory.sqlite3").mkdir()
     service = MemoryService(memory_dir=tmp_path)
-    assert service.recall("anything").recent_conversation == ()
+    assert service.recall(MemoryQuery("anything", "session")).recent_conversation == ()
+
+
+def test_recent_conversation_obeys_character_budget(tmp_path: Path) -> None:
+    service = MemoryService(memory_dir=tmp_path)
+    assert service.remember(MemoryEntry("one", "session", "older", "answer", "2026-01-01"))
+    assert service.remember(MemoryEntry("two", "session", "newest question", "newest answer", "2026-01-02"))
+
+    recalled = service.recall(MemoryQuery("query", "session", limit=4, max_characters=12))
+    assert len(recalled.recent_conversation) == 1
+    assert sum(len(turn.user) + len(turn.assistant or "") for turn in recalled.recent_conversation) <= 12

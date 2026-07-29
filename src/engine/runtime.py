@@ -39,8 +39,14 @@ from src.contracts.agent import (
     ToolLease,
 )
 from src.contracts.amp import AmpEnvelope, AmpValidationError
-from src.contracts.memory import MemoryContextSnapshot, MemoryEntry
+from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
 from src.contracts.model import ModelRequest
+from src.engine.archive import (
+    TASK_ARCHIVE_VERSION,
+    archived_agent_detail,
+    read_task_archive,
+    task_archive_projection,
+)
 from src.engine.commands import (
     CompleteCommand,
     DelegateCommand,
@@ -171,7 +177,7 @@ class DecisionRuntime(Protocol):
 
     def brain_context(self) -> BrainContextSnapshot: ...
 
-    def recall_memory(self, query: str) -> MemoryContextSnapshot: ...
+    def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 
 
 def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
@@ -190,7 +196,7 @@ def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskS
         profile=deepcopy(profile),
         capabilities=deepcopy(descriptors),
         brain=deepcopy(kernel.brain_context()),
-        memory=kernel.recall_memory(task.root_summary),
+        memory=kernel.recall_memory(MemoryQuery(task.root_summary, task.session_id)),
     )
     return kernel._handlers[agent.profile_id].handle(context)
 
@@ -482,7 +488,7 @@ class EngineState:
     def brain_context(self) -> BrainContextSnapshot:
         return build_brain_context(self.store)
 
-    def recall_memory(self, query: str) -> MemoryContextSnapshot:
+    def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if self._memory_store is None:
             return MemoryContextSnapshot()
         try:
@@ -499,7 +505,15 @@ class EngineState:
             agent = self.store.get_agent(task.root_agent_id)
             if agent is None:
                 continue
-            entries.append(MemoryEntry(task.task_id, task.root_summary, agent.last_summary or None, task.updated_at))
+            entries.append(
+                MemoryEntry(
+                    task.task_id,
+                    task.session_id,
+                    task.root_summary,
+                    agent.last_summary or None,
+                    task.updated_at,
+                )
+            )
         return tuple(entries)
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
@@ -688,17 +702,24 @@ class EngineState:
         return self.store.get_agent(agent_id)
 
     def task_detail(self, task_id: str) -> dict[str, Any] | None:
-        return build_task_detail(self.store, task_id)
+        detail = build_task_detail(self.store, task_id)
+        if detail is not None:
+            return detail
+        archive = self._task_archive / f"{task_id}.json"
+        return read_task_archive(archive, task_id)
 
     def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
-        return build_agent_detail(self.store, agent_id)
+        detail = build_agent_detail(self.store, agent_id)
+        if detail is not None:
+            return detail
+        return archived_agent_detail(self._task_archive, agent_id)
 
     def status(self) -> dict[str, Any]:
         return {**self.store.counts(), "brain_context_generated_at": self.brain_context().generated_at}
 
     async def cancel_task(self, task_id: str, reason: str) -> None:
         await self._store_call(self.store.cancel_task, task_id, reason)
-        await self._blocking_call(self._archive_terminal_tasks)
+        await self.finalize_terminal_tasks()
 
     async def cancel_autonomous_tasks(self, reason: str) -> tuple[str, ...]:
         cancelled = []
@@ -706,7 +727,7 @@ class EngineState:
             if task.autonomous:
                 await self._store_call(self.store.cancel_task, task.task_id, reason)
                 cancelled.append(task.task_id)
-        await self._blocking_call(self._archive_terminal_tasks)
+        await self.finalize_terminal_tasks()
         return tuple(cancelled)
 
     def _archive_terminal_tasks(self) -> None:
@@ -714,11 +735,26 @@ class EngineState:
             if not task.terminal:
                 continue
             destination = self._task_archive / f"{task.task_id}.json"
-            if destination.exists():
+            archived = read_task_archive(destination, task.task_id)
+            if archived is not None and archived.get("archive_version") == TASK_ARCHIVE_VERSION:
                 continue
-            detail = self.task_detail(task.task_id)
+            detail = archived or build_task_detail(self.store, task.task_id)
             if detail is not None:
-                atomic_write_json(destination, detail)
+                atomic_write_json(destination, task_archive_projection(detail), compact=True)
+
+    def _prune_archived_terminal_tasks(self) -> None:
+        pruned = False
+        for task in self.store.tasks():
+            archive = self._task_archive / f"{task.task_id}.json"
+            if task.terminal and read_task_archive(archive, task.task_id) is not None:
+                pruned = self.store.prune_archived_task(task.task_id) or pruned
+        if pruned:
+            self.store.maintain_storage()
+
+    async def finalize_terminal_tasks(self) -> None:
+        """确保终态 Task 已归档后，将其从热库清除。"""
+        await self._blocking_call(self._archive_terminal_tasks)
+        await self._store_call(self._prune_archived_terminal_tasks)
 
     def reset_workspace_for_tests(self) -> None:
         self.shutdown()
@@ -797,6 +833,7 @@ class AgentEngine:
                             entry.task_id,
                             type(error).__name__,
                         )
+            await self._state.finalize_terminal_tasks()
             response = asdict(result)
             response["tool_recovery_receipts_emitted"] = recoveries
             response["tool_receipts_emitted"] = receipts

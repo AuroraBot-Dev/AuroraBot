@@ -15,14 +15,16 @@ class MemoryQuery:
         {
             "query": "string",
             "scope": "string",
-            "limit": 8
+            "limit": 4,
+            "max_characters": 4000
         }
 
     """
 
     query: str
     scope: str
-    limit: int = 8
+    limit: int = 4
+    max_characters: int = 4000
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -103,6 +105,7 @@ class MemoryEntry:
     """engine 提交给自动记忆服务的已完成交互。"""
 
     task_id: str
+    scope: str
     user: str
     assistant: str | None
     created_at: str
@@ -111,6 +114,6 @@ class MemoryEntry:
 class MemoryStore(Protocol):
     """engine 在 turn 前后调用的自动记忆端口。"""
 
-    def recall(self, query: str) -> MemoryContextSnapshot: ...
+    def recall(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 
     def remember(self, entry: MemoryEntry) -> bool: ...

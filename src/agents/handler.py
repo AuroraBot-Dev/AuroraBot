@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from src.agents.tools import (
@@ -35,6 +36,7 @@ _COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
 _COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
 _CAPABILITIES_ALREADY_INSTALLED = "capabilities are already installed"
 _DUPLICATE_TOOL_IDS = "model Tool IDs must be unique"
+_PARALLEL_TOOL_REJECTED = "parallel_tool_calls_disabled"
 
 
 def _collect_tool_definitions(
@@ -136,7 +138,17 @@ class ToolAgent:
         """处理模型返回结果：纯文本完成或工具调用分发。"""
         result = ModelResult.from_dict(context.message.payload)
         if len(result.tool_calls) > 1:
-            return AgentDecision(failure="parallel_tool_calls_rejected")
+            continuation = result.continuation
+            if continuation is None:
+                return AgentDecision(failure="parallel_tool_calls_without_continuation")
+            for call in result.tool_calls[1:]:
+                continuation = append_tool_result(
+                    continuation,
+                    call.call_id,
+                    {"status": "rejected", "error": _PARALLEL_TOOL_REJECTED},
+                    is_error=True,
+                )
+            result = replace(result, tool_calls=result.tool_calls[:1], continuation=continuation)
         if not result.tool_calls:
             text = result.text.strip()
             if context.agent.parent_agent_id is not None:

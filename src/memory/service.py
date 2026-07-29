@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
-from src.contracts.memory import MemoryContextSnapshot, MemoryConversation, MemoryEntry
+from src.contracts.memory import MemoryContextSnapshot, MemoryConversation, MemoryEntry, MemoryQuery
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -66,11 +66,15 @@ class MemoryService:
                 self._mem0_config = None
         return self._client
 
-    def recall(self, query: str) -> MemoryContextSnapshot:
+    def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
         """为单次 Agent turn 召回对话账本和相关语义记忆。"""
         return MemoryContextSnapshot(
-            recent_conversation=self._recent_conversation(limit=8),
-            related_memories=tuple(self.search(query, limit=5)),
+            recent_conversation=self._recent_conversation(
+                query.scope,
+                limit=query.limit,
+                max_characters=query.max_characters,
+            ),
+            related_memories=tuple(self.search(query.query, limit=5)),
         )
 
     def remember(self, entry: MemoryEntry) -> bool:
@@ -82,8 +86,8 @@ class MemoryService:
         with self._connect() as connection:
             cursor = connection.execute(
                 "INSERT OR IGNORE INTO completed_tasks"
-                "(task_id, user_text, assistant_text, created_at) VALUES (?, ?, ?, ?)",
-                (entry.task_id, entry.user, entry.assistant, entry.created_at),
+                "(task_id, scope, user_text, assistant_text, created_at) VALUES (?, ?, ?, ?, ?)",
+                (entry.task_id, entry.scope, entry.user, entry.assistant, entry.created_at),
             )
             inserted = cursor.rowcount > 0
         if not inserted:
@@ -135,21 +139,63 @@ class MemoryService:
         connection = sqlite3.connect(str(self._ledger_path))
         connection.execute(
             "CREATE TABLE IF NOT EXISTS completed_tasks("
-            "task_id TEXT PRIMARY KEY, user_text TEXT NOT NULL, assistant_text TEXT, created_at TEXT NOT NULL)"
+            "task_id TEXT PRIMARY KEY, scope TEXT NOT NULL, user_text TEXT NOT NULL, "
+            "assistant_text TEXT, created_at TEXT NOT NULL)"
+        )
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(completed_tasks)")}
+        if "scope" not in columns:
+            connection.execute("ALTER TABLE completed_tasks ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_completed_tasks_scope_created ON completed_tasks(scope, created_at DESC)"
         )
         return connection
 
-    def _recent_conversation(self, limit: int) -> tuple[MemoryConversation, ...]:
+    def _recent_conversation(
+        self,
+        scope: str,
+        *,
+        limit: int,
+        max_characters: int,
+    ) -> tuple[MemoryConversation, ...]:
         """从记忆私有账本读取最近的已完成对话。"""
         if self._ledger_path is None or not self._ledger_path.exists():
             return ()
         try:
             with self._connect() as connection:
                 rows = connection.execute(
-                    "SELECT user_text, assistant_text FROM completed_tasks ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
+                    "SELECT user_text, assistant_text FROM completed_tasks "
+                    "WHERE scope = ? ORDER BY created_at DESC LIMIT ?",
+                    (scope, limit),
                 ).fetchall()
         except sqlite3.Error as error:
             logger.warning("memory conversation recall failed: %s", error)
             return ()
-        return tuple(MemoryConversation(str(user), assistant) for user, assistant in reversed(rows))
+        selected: list[MemoryConversation] = []
+        remaining = max_characters
+        for user, assistant in rows:
+            if remaining <= 0:
+                break
+            user_text = str(user)
+            assistant_text = str(assistant) if assistant is not None else None
+            combined = len(user_text) + len(assistant_text or "")
+            if combined <= remaining:
+                selected.append(MemoryConversation(user_text, assistant_text))
+                remaining -= combined
+                continue
+            clipped_user = _clip(user_text, remaining)
+            remaining -= len(clipped_user)
+            clipped_assistant = _clip(assistant_text or "", remaining) if remaining > 0 else ""
+            if clipped_user or clipped_assistant:
+                selected.append(MemoryConversation(clipped_user, clipped_assistant or None))
+            break
+        return tuple(reversed(selected))
+
+
+def _clip(value: str, limit: int) -> str:
+    if limit <= 0:
+        return ""
+    if len(value) <= limit:
+        return value
+    if limit == 1:
+        return "…"
+    return f"{value[: limit - 1]}…"
