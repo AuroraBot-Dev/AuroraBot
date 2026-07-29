@@ -28,9 +28,7 @@ async def handle(context: CommandContext, _arguments: argparse.Namespace) -> Com
     data = {
         "profile": new_config.runtime.profile,
         "workspace": str(new_config.engine.workspace),
-        "platforms": [
-            name for name in ("console", "dashboard", "mcp") if getattr(new_config.preference, name).enabled
-        ],
+        "platforms": [name for name in ("console", "dashboard", "mcp") if getattr(new_config.preference, name).enabled],
         **context.runtime.status(),
     }
     return CommandResult(ok=True, text=json.dumps(data, ensure_ascii=False), data=data)

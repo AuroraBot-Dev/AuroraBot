@@ -160,7 +160,7 @@ def test_dashboard_owner_input_is_idempotent_amp(project_root: Path) -> None:
 def test_independent_localhost_debug_app_drives_and_queries_engine(project_root: Path) -> None:
     runtime = create_test_runtime(project_root)
     app = create_debug_app(runtime)
-    with TestClient(app) as client:
+    with TestClient(app) as client:  # pyright: ignore[reportArgumentType]
         assert client.get("/healthz").status_code == 404
         assert client.post("/v1/debug/amp", json={}).status_code == 422
         assert client.post("/v1/debug/pump?max_turns=0").status_code == 422
