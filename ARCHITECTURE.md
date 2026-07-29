@@ -183,11 +183,11 @@ graph TD
 | ------------ | --------------- | -------------------------------------------------------------------------------------------------- | -------------------------- |
 | **进程层**   | `aurora`        | 唯一进程 CLI、平台选择、生命周期组合、engine + Port 构造、挂载 localhost 命令路由与主事件循环      | 所有下层                   |
 | **监察层**   | `src/localhost` | 运行时状态检查、`/` 命令路由、调试 API、输入分发。**可自由 import 任何 src/ 包**                   | 所有底层（设计如此）       |
-| **引擎层**   | `src/engine`    | 完整泵取闭环。Task/Agent 状态、邮箱、Activity、因果边界、SQLite                                    | contracts · utils          |
+| **引擎层**   | `src/engine`    | Inbox 防抖、Triage、Task/Agent、邮箱、Activity、因果边界、SQLite                                   | contracts · utils          |
 | **适配层**   | `src/platform`  | Console / Dashboard / MCP / NoneBot 协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
 | **模型层**   | `src/ai`        | 宽泛模型网关。实现 `ModelProvider` Port                                                            | contracts · utils          |
-| **记忆层**   | `src/memory`    | 记忆读写服务（自动服务）。实现 `MemoryStore` Port                                                  | contracts · utils          |
-| **认知层**   | `src/agents`    | 同构 Agent handler + 主动能力（delegate / wait / claim / speech）                                  | prompt · contracts · utils |
+| **记忆层**   | `src/memory`    | 有界会话摘要与长期事实投影。实现 `MemoryStore` Port                                                | contracts · utils          |
+| **认知层**   | `src/agents`    | Triage policy、同构 Agent handler + 主动能力（delegate / wait / speech）                           | prompt · contracts · utils |
 | **配置层**   | `src/config`    | TOML 加载、校验、注册中心与热重载                                                                  | contracts                  |
 | **提示词层** | `src/prompt`    | 提示词目录、分层 DTO 与模型上下文装配                                                              | contracts                  |
 | **契约层**   | `src/contracts` | **所有**跨层共享的不可变 dataclass 与 Port Protocol                                                | 仅标准库                   |
@@ -282,7 +282,7 @@ Aurora 的能力扩展分为三种正交类型：
 | 类型         | 位置                                  | 触发方式                  | 例子                                                        | 本质                                                                                                     |
 | ------------ | ------------------------------------- | ------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | **自动服务** | `src/memory/` 等，注入 engine 的 Port | 自动（pump hook）         | memory（记忆注入/回忆）、prompt assembly、因果记录          | 发生**于** Agent，不由 Agent 决策。像潜意识——Agent 不"调用"记忆，记忆结果自动出现在上下文中。            |
-| **主动能力** | `agents/capabilities/`                | Agent 决策（模型 token）  | delegate、wait、claim、speech (TTS)                         | 由 Agent **主动选择**使用。是 Agent 认知决策空间的一部分——Agent 决定"我要委派"、"我要等待"、"我要朗读"。 |
+| **主动能力** | `agents/capabilities/`                | Agent 决策（模型 token）  | delegate、wait、speech (TTS)                                | 由 Agent **主动选择**使用。是 Agent 认知决策空间的一部分——Agent 决定"我要委派"、"我要等待"、"我要朗读"。 |
 | **工具能力** | `platform/<name>/`                    | Agent 决策 → tool request | console.send、dashboard.send、MCP tools、NoneBot QQ actions | Agent 想要触发的**外部效果**。Agent 决定"我要在控制台输出这段文字"，工具系统执行。                       |
 
 ### 三种类型的关系
@@ -353,7 +353,7 @@ contracts/
   agent.py           # AgentHandler, AgentDecision, AgentContext, AgentInstance,
                      # Capability, CapabilityDescriptor, CapabilityCatalogSnapshot,
                      # EngineConfiguration, AgentProfile, AgentLimits,
-                     # TaskLimits, ToolLease, BrainContextSnapshot, ActivityRequest
+                     # TaskLimits, ToolLease, ActivityRequest
   amp.py             # AmpEnvelope, new_amp (AMP 信封构造工厂)
   model.py           # ModelRequest, ModelResult, ModelUsage, ModelMessage,
                      # ModelProvider Protocol (engine 调用模型的标准接口)
@@ -365,7 +365,8 @@ contracts/
                      # ConsoleControlPort, DashboardControlPort, DashboardDebugPort,
                      # ToolQueuePort, ToolCompletionPort, RuntimeCommandPort
   configuration.py   # AuroraConfig, PlatformPreference (及各平台配置片段)
-  memory.py          # MemoryEntry, MemoryQueryResult, MemoryStore Protocol
+  memory.py          # MemoryContextSnapshot, MemoryEntry, MemoryQuery, MemoryStore Protocol
+  triage.py          # InboxEvent, TriageBatch, TriageDecision, TriagePolicy
 ```
 
 **关键约束**：
@@ -454,26 +455,21 @@ prompt/
 ```
 memory/
   __init__.py
-  service.py         # MemoryService — 实现 contracts.memory.MemoryStore Protocol
-                      # recall(query) — 语义检索相关记忆上下文
-                      # remember(entry) — 写入记忆条目
-  config.py          # build_memory_config() — mem0 LLM / Embedder /向量存储配置工厂
-  embedding.py       # 嵌入向量生成与缓存
-  store.py           # Mem0Store — mem0 底层向量存储包装
+  service.py         # MemoryService — 单一 SQLite；会话摘要、长期事实、幂等回执
 ```
 
 **构造与注入**：
 
 ```python
-memory_service = MemoryService(configuration, data_dir, workspace)
-engine = AgentEngine(config, handlers, memory_store=memory_service)
+memory_service = MemoryService(memory_dir)
+engine = AgentEngine(config, handlers, memory_store=memory_service, triage_policy=triage_policy)
 ```
 
 **关键约束**：
 
 - 实现 `MemoryStore` Protocol，不定义新的跨层类型
 - 作为 Port 注入 engine——Agent handler 不直接持有 memory_service
-- Prompt composer 在装配 AgentContext 时调用 `recall_relevant()` 注入相关记忆——这一步对 Agent 透明
+- engine 在 Agent turn 前取得不可变快照；Prompt composer 将其作为独立 Memory System 消息
 
 ---
 
@@ -484,33 +480,31 @@ engine = AgentEngine(config, handlers, memory_store=memory_service)
 ```
 engine/
   __init__.py
-  runtime.py          # AgentEngine — 主类，完整 pump 闭环（含 EngineState、ingest_ready、handle_claim、brain_context）
+  runtime.py          # AgentEngine — Inbox → Triage → Root/子代理 → Memory 完整闭环
                        #   构造签名：
                        #     AgentEngine(configuration, handlers, *,
-                       #                 model_provider, memory_store=None,
+                       #                 model_provider, triage_policy, memory_store=None,
                        #                 idle_wait_seconds=1.0)
                        #   属性：
                        #     tasks(), get_task(), get_agent(), has_work(), status()
-                       #     task_detail(), agent_detail(), brain_context()
+                       #     task_detail(), agent_detail()
                        #   pump 闭环：
                        #     1. recover tools → tool_registry.recover()
-                       #     2. ingest_ready() → AMP 文件 + 内存队列
-                       #     3. expire & claim → 过期检查 + 领取邮箱消息
-                       #     4. execute agent turns → AgentHandler.handle()
-                       #     5. apply decisions → 状态写入 SQLite
-                       #     6. dispatch tools → tool_registry.execute()
-                       #     7. dispatch models → model_provider.complete()
-                       #     8. memory hooks → memory_store.remember()
-                       #     9. archive terminal → JSON 归档
+                       #     2. ingest → 持久化 Inbox + 动态防抖
+                       #     3. triage → process / defer / discard
+                       #     4. process 批次创建 Root Task
+                       #     5. Agent turn / Tool / Model 调度
+                       #     6. 异步 Memory 投影 + 终态归档
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
   commands.py         # 内部命令定义
   debug.py            # task_detail() / agent_detail() / 工作区校验
   store/              # SQLite 运行态持久化子包
     __init__.py       # SQLiteRuntimeStore — 组合多 Mixin 的 WAL facade
-    schema.py         # DDL 表定义 (tasks, agents, messages, activities, causal_events)
+    schema.py         # DDL (inbox_events, tasks, agents, mailbox, activities, causal_events)
     base.py           # 基础 CRUD 操作
     queries.py        # 查询（任务树、消息时间线、统计计数）
-    ingress.py        # AMP 事件摄入与 Task 创建
+    triage.py         # Inbox 摄入、防抖批次、Triage 决策与 admitted Task 创建
+    ingress.py        # Tool receipt 与 Agent mailbox 租赁
     decisions.py      # AgentDecision 到状态变更的翻译
     activities.py     # Activity CRUD（model + tool）
 ```
@@ -525,6 +519,7 @@ class AgentEngine:
         handlers: dict[str, AgentHandler],
         *,
         model_provider: ModelProvider,         # 来自 contracts.model
+        triage_policy: TriagePolicy,           # 来自 contracts.triage
         tool_registry: ToolRegistry,           # 来自 contracts.tool（聚合多个 ToolExecutor）
         memory_store: MemoryStore | None = None, # 来自 contracts.memory
     ) -> None: ...
@@ -535,26 +530,23 @@ class AgentEngine:
 ```
 pump(max_turns):
   1. recover tools      → self._tool_registry.recover_pending()
-  2. ingest ready        → self.ingest_ready()  # AMP 文件 + 内存队列 → Task 创建
-  3. expire & claim      → self.store.expire_tasks/expire_situations + claim_messages()
-  4. execute agent turns → handle_claim() 在线程池中并发执行
-                           # AgentHandler 内部调用自身持有的 PromptComposer + MemoryStore
-                           # 装配 AgentContext（含记忆注入）→ 模型推理 → AgentDecision
-  5. apply decisions     → apply_authorized_decision() 写入状态
-  6. dispatch tools      → self._tool_registry.execute_pending()
-  7. dispatch models     → self._model_provider.complete_pending()
-  8. memory hooks        → self._memory_store.auto_remember()  # 自动存储已完成 Task
-  9. archive terminal    → 终态 Task JSON 原子写入 archive/
+  2. ingest              → AMP 文件 + 内存队列写入 inbox_events
+  3. triage due batches  → 无工具模型判断 process / defer / discard
+  4. admit process       → 同会话批次创建一个 Root Task
+  5. execute turns       → handle_claim() 在线程池中并发执行
+  6. dispatch I/O        → ToolRegistry + ModelProvider
+  7. memory projection   → 后台更新会话摘要和长期事实
+  8. archive terminal    → 终态 Task JSON 原子写入 archive/
 ```
 
 **关键约束**：
 
 - 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `src.localhost`
-- `runtime.py` 已合并 `EngineState`、`ingest_ready()`、`handle_claim()` 和 `build_brain_context()`，当前约 880 行。建议后续根据总分结构回拆为独立模块。
+- `runtime.py` 组合 EngineState、Triage、Agent turn 与 I/O 调度；Inbox 事务位于 `store/triage.py`。
 - `store/` 是子包，`SQLiteRuntimeStore` 在其中组合多 Mixin，替换了文档中的单体 `store.py`。
 - 所有权通过 `contracts` 中的 Protocol 注入
 - `ToolRegistry` 是 engine 内部的聚合类（非 contracts），管理多个 `ToolExecutor` 实现的分发
-- engine 的 `status()` / `task_detail()` / `agent_detail()` / `brain_context()` 是透明查询接口，供 `localhost` 监察使用
+- engine 的 `status()` / `task_detail()` / `agent_detail()` 是透明查询接口，供 `localhost` 监察使用
 
 ---
 
@@ -592,10 +584,10 @@ Agent 能力只包含**模型可自主决策使用的**能力——即 Agent 在
 ```
 agents/
   __init__.py
+  triage.py          # StructuredTriagePolicy — 无工具的批次接纳判断
   handler.py         # ToolAgent — 基础 AgentHandler 实现
   capabilities/       # 主动能力（Agent 自主决策）
     __init__.py
-    claim.py          # ClaimCapability — 主动认领 Task
     delegate.py       # DelegationCapability — 创建子 Agent 委派任务
     wait.py           # WaitCapability — 延迟执行
     speech.py         # SpeechCapability — 决定输出是否朗读，生成 tts.speak tool request
@@ -815,20 +807,22 @@ aurora/
 run_runtime():
   1. 加载配置           → get_config()
   2. 创建 PromptComposer → load_prompt_catalog() + PromptComposer()
-  3. 创建 MemoryService  → MemoryService(config)    # 自动服务
-  4. 创建主动能力        → ClaimCapability, DelegationCapability, WaitCapability, SpeechCapability
-  5. 加载 AgentHandler   → _load_handler(spec, composer, capabilities)
-  6. 创建 AI Gateway     → ModelGatewayService(config)
-  7. 创建平台适配器       → ConsolePlatform, DashboardPlatform, MCPPlatform
-  8. 收集 ToolBinding     → 各平台的 ToolExecutorBinding
-  9. 构造 engine         → AgentEngine(config, handlers,
+  3. 创建 MemoryService  → MemoryService(memory_dir)    # 自动服务
+  4. 创建 TriagePolicy   → StructuredTriagePolicy(config.engine.triage)
+  5. 创建主动能力        → DelegationCapability, WaitCapability, SpeechCapability
+  6. 加载 AgentHandler   → _load_handler(spec, composer, capabilities)
+  7. 创建 AI Gateway     → ModelGatewayService(config)
+  8. 创建平台适配器       → ConsolePlatform, DashboardPlatform, MCPPlatform
+  9. 收集 ToolBinding     → 各平台的 ToolExecutorBinding
+  10. 构造 engine        → AgentEngine(config, handlers,
                             model_provider=...,
+                            triage_policy=...,
                             tool_registry=...,
                             memory_store=memory_service)
-  10. 注册 ToolExecutors → engine.tool_registry.add_all(bindings)
-  11. 挂载 localhost      → AuroraRuntime(engine, model_gateway, memory_service, ...)
+  11. 注册 ToolExecutors → engine.tool_registry.add_all(bindings)
+  12. 挂载 localhost     → AuroraRuntime(engine, model_gateway, memory_service, ...)
                             # AuroraRuntime 实现 contracts.ports.InteractiveInputPort
-  12. 注入 localhost 到平台 → console_shell(input_port=localhost, ...)
+  13. 注入 localhost 到平台 → console_shell(input_port=localhost, ...)
                             # 平台通过 InteractiveInputPort Protocol 接收，不 import localhost
    13. 启动主循环          → engine.run_forever() + 平台各自的事件循环
 ```
@@ -883,7 +877,7 @@ sandbox/
 - **`contracts` 是唯一的跨层契约来源**：所有 Port Protocol 和跨层 DTO 统一归入 contracts。
 - **所有适配器同级对等**：engine / ai / platform / memory / agents （除 localhost 外）只依赖 `contracts` + `utils`，彼此之间无直接 import。
 - **自动服务通过 Port 注入 engine**：记忆等自动服务在 pump hook 中被动触发，Agent 不参与决策——Agent "被记住"而非"决定记住"。
-- **主动能力通过 setter 注入 Agent handler**：delegate、wait、claim、speech 等由 Agent 在 turn 内自主选择使用。
+- **主动能力通过 setter 注入 Agent handler**：delegate、wait、speech 等由 Agent 在 turn 内自主选择使用。
 - **工具平台按 Protocol 接入**：新增平台只需实现 `ToolExecutor` + event ingress，注册到 `aurora` 组合层。
 - **`aurora` 是唯一组合根**：创建所有实例、注入 Port、组装 localhost 监察器、运行主事件循环。
 - **`prompt` DTO 不下沉 contracts**：装配层内部 DTO 不是跨层契约。
@@ -896,7 +890,7 @@ sandbox/
 ```text
 data/
   engine/          # runtime.sqlite3 (WAL), inbox/, archive/
-  memory/          # ChromaDB 向量存储
+  memory/          # memory.sqlite3：会话摘要、长期事实、幂等回执
   platform/
     console/       # Console 平台私有数据
     dashboard/     # Dashboard 数据库 + Token.txt
@@ -959,7 +953,6 @@ workspace = "data/engine"
 [engine.agents]
 root_profile = "builtin.gate"
 worker_profile = "builtin.worker"
-memory_agent_profile = "builtin.memory"
 max_active_agents = 16
 max_agents_per_task = 8
 max_depth = 3
@@ -969,7 +962,14 @@ model_concurrency = 4
 tool_concurrency = 8
 blocking_workers = 4
 lease_seconds = 30.0
-ambient_ttl_seconds = 1800.0
+[engine.triage]
+model_role = "fast"
+quiet_seconds = 0.4
+max_wait_seconds = 1.5
+defer_seconds = 5.0
+max_defer_seconds = 60.0
+max_batch_events = 24
+max_batch_characters = 12000
 
 [engine.interactive_task]
 max_model_calls = 8

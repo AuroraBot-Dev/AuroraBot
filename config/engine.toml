@@ -14,7 +14,15 @@ model_concurrency = 4
 tool_concurrency = 8
 blocking_workers = 4
 lease_seconds = 30.0
-ambient_ttl_seconds = 1800.0
+
+[engine.triage]
+model_role = "fast"
+quiet_seconds = 0.4
+max_wait_seconds = 1.5
+defer_seconds = 5.0
+max_defer_seconds = 60.0
+max_batch_events = 24
+max_batch_characters = 12000
 
 [engine.autonomy]
 scan_seconds = 1.0

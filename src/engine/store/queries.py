@@ -1,19 +1,17 @@
-"""只读查询与情境管理。"""
+"""Task、Agent、因果事件与运行计数查询。"""
 
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
 
 from src.contracts.agent import AgentInstance, TaskState
 
-from .base import RuntimeStoreBase, _json, utc_now
+from .base import RuntimeStoreBase, utc_now
 
 
 class StoreQueriesMixin(RuntimeStoreBase):
-    """只读查询与情境管理，不产生写事务。"""
+    """运行态只读查询。"""
 
     def get_task(self, task_id: str) -> TaskState | None:
         with self.connect() as connection:
@@ -85,69 +83,17 @@ class StoreQueriesMixin(RuntimeStoreBase):
                 for row in rows
             )
 
-    def situations(self) -> tuple[dict[str, Any], ...]:
-        now = utc_now()
-        with self.connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM situations WHERE status = 'OPEN' AND expires_at > ? ORDER BY priority DESC, created_at",
-                (now,),
-            ).fetchall()
-            return tuple(
-                {
-                    "situation_id": row["situation_id"],
-                    "source": row["source"],
-                    "type": row["type"],
-                    "summary": row["summary"],
-                    "payload": json.loads(row["payload_json"]),
-                    "priority": row["priority"],
-                    "expires_at": row["expires_at"],
-                    "created_at": row["created_at"],
-                }
-                for row in rows
-            )
-
-    def expire_situations(self) -> None:
-        now = utc_now()
-        with self.transaction() as connection:
-            connection.execute(
-                "UPDATE situations SET status = 'EXPIRED', updated_at = ? WHERE status = 'OPEN' AND expires_at <= ?",
-                (now, now),
-            )
-
-    def add_situation(
-        self,
-        source: str,
-        event_type: str,
-        summary: str,
-        payload: dict[str, Any],
-        priority: int,
-        ttl_seconds: float,
-    ) -> str:
-        now_dt = datetime.now(UTC)
-        situation_id = str(uuid4())
-        with self.transaction() as connection:
-            connection.execute(
-                "INSERT INTO situations (situation_id, audience_ref, source, type, summary, payload_json, priority, "
-                "status, claimed_by_agent_id, expires_at, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, ?, ?, ?)",
-                (
-                    situation_id,
-                    "global",
-                    source,
-                    event_type,
-                    summary,
-                    _json(payload),
-                    priority,
-                    (now_dt + timedelta(seconds=ttl_seconds)).isoformat(),
-                    now_dt.isoformat(),
-                    now_dt.isoformat(),
-                ),
-            )
-        return situation_id
-
     def counts(self) -> dict[str, int]:
         with self.connect() as connection:
             return {
+                "inbox_events": int(connection.execute("SELECT count(*) FROM inbox_events").fetchone()[0]),
+                "due_inbox_sessions": int(
+                    connection.execute(
+                        "SELECT count(DISTINCT session_id) FROM inbox_events "
+                        "WHERE status IN ('PENDING', 'DEFERRED') AND available_at <= ?",
+                        (utc_now(),),
+                    ).fetchone()[0]
+                ),
                 "active_tasks": int(
                     connection.execute("SELECT count(*) FROM tasks WHERE status = 'ACTIVE'").fetchone()[0]
                 ),

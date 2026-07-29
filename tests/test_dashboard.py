@@ -150,7 +150,7 @@ def test_dashboard_owner_input_is_idempotent_amp(project_root: Path) -> None:
             duplicate = await chat.send_private_message(owner_id, payload)
             result = await runtime.pump()
             assert first == duplicate
-            assert len(result["ingested_task_ids"]) == 1
+            assert len(result["admitted_task_ids"]) == 1
         finally:
             await runtime.shutdown()
 
@@ -167,7 +167,7 @@ def test_independent_localhost_debug_app_drives_and_queries_engine(project_root:
         submitted = client.post("/v1/debug/amp", json=valid_amp())
         assert submitted.status_code == 202
         first = client.post("/v1/debug/pump?max_turns=1").json()
-        task_id = first["ingested_task_ids"][0]
+        task_id = first["admitted_task_ids"][0]
         task = client.get(f"/v1/debug/tasks/{task_id}")
         assert task.status_code == 200
         agent_id = task.json()["task"]["root_agent_id"]

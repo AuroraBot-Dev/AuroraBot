@@ -42,7 +42,6 @@ class _Msg(StrEnum):
     TASK_NOT_ACTIVE = "Task is no longer active"
     DELEGATION_LIMIT = "Agent delegation limit exceeded"
     UNSUPPORTED_COMMAND = "不支持的 Agent 指令 {kind}"
-    SITUATION_UNAVAILABLE = "情境不可用: {situation_id}"
 
 
 class StoreDecisionsMixin(RuntimeStoreBase):
@@ -68,7 +67,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
         - CompleteCommand：Agent 完成，通知父 Agent 或结束 Task
         - FailCommand：Agent 失败，通知父 Agent 或结束 Task
 
-        所有命令统一处理 situation 认领、Agent 状态更新、消息完成和因果事件记录。
+        所有命令统一处理 Agent 状态更新、消息完成和因果事件记录。
         返回本次决策创建的所有新实体 ID（子 Agent、邮箱消息、Activity）。
         """
         now = utc_now()
@@ -266,16 +265,6 @@ class StoreDecisionsMixin(RuntimeStoreBase):
 
             else:
                 raise ValueError(_Msg.UNSUPPORTED_COMMAND.format(kind=command.kind))
-
-            # 认领决策中引用的所有情境（CAS 操作，仅当状态为 OPEN 且未过期）
-            for situation_id in command.claims:
-                claimed = connection.execute(
-                    "UPDATE situations SET status = 'CLAIMED', claimed_by_agent_id = ?, updated_at = ? "
-                    "WHERE situation_id = ? AND status = 'OPEN' AND expires_at > ?",
-                    (agent.agent_id, now, situation_id, now),
-                )
-                if claimed.rowcount != 1:
-                    raise PermissionError(_Msg.SITUATION_UNAVAILABLE.format(situation_id=situation_id))
 
             # 更新 Agent 状态（revision +1 实现乐观并发）、消息完成和因果事件
             connection.execute(

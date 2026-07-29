@@ -31,7 +31,6 @@ from src.contracts.agent import (
     AgentInstance,
     AgentLimits,
     AgentProfile,
-    BrainContextSnapshot,
     CapabilityCatalogSnapshot,
     EngineConfiguration,
     TaskState,
@@ -41,6 +40,7 @@ from src.contracts.agent import (
 from src.contracts.amp import AmpEnvelope, AmpValidationError
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
 from src.contracts.model import ModelRequest
+from src.contracts.triage import TriageAction, TriageBatch, TriageDecision
 from src.engine.archive import (
     TASK_ARCHIVE_VERSION,
     archived_agent_detail,
@@ -58,7 +58,7 @@ from src.engine.commands import (
 from src.engine.debug import agent_detail as build_agent_detail
 from src.engine.debug import reject_active_legacy_workspace
 from src.engine.debug import task_detail as build_task_detail
-from src.engine.store import SQLiteRuntimeStore, utc_now
+from src.engine.store import SQLiteRuntimeStore
 from src.engine.tool_registry import ToolRegistry
 from src.utils.logging import get_logger
 from src.utils.serialization import atomic_write_json, read_json
@@ -67,8 +67,10 @@ if TYPE_CHECKING:
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
     from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.triage import TriagePolicy
 
 logger = get_logger("aurora.engine")
+_TRIAGE_SUMMARY_LIMIT = 600
 
 
 class _Msg(StrEnum):
@@ -95,53 +97,13 @@ class _Msg(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class PumpResult:
-    ingested_task_ids: tuple[str, ...]
+    ingested_event_ids: tuple[str, ...]
+    admitted_task_ids: tuple[str, ...]
     processed_message_ids: tuple[str, ...]
     failed_message_ids: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
-
-def build_brain_context(store: SQLiteRuntimeStore) -> BrainContextSnapshot:
-    tasks = store.tasks(active_only=True)
-    agents = store.agents(active_only=True)
-    task_projections: list[dict[str, Any]] = []
-    for task in tasks:
-        events = store.events_for_task(task.task_id)
-        projection: dict[str, Any] = {
-            "task_id": task.task_id,
-            "status": task.status,
-            "model_calls": task.model_calls,
-            "tool_calls": task.tool_calls,
-            "max_model_calls": task.max_model_calls,
-            "max_tool_calls": task.max_tool_calls,
-            "work_type": "autonomous" if task.autonomous else "interactive",
-            "updated_at": task.updated_at,
-            "session_id": task.session_id,
-            "summary": task.root_summary,
-            "latest_activity": events[-1]["summary"] if events else task.root_summary,
-        }
-        task_projections.append(projection)
-    agent_projections: list[dict[str, Any]] = []
-    for agent in agents:
-        projection = {
-            "agent_id": agent.agent_id,
-            "task_id": agent.task_id,
-            "parent_agent_id": agent.parent_agent_id,
-            "profile_id": agent.profile_id,
-            "status": agent.status,
-            "updated_at": agent.updated_at,
-        }
-        projection.update({"assignment": agent.assignment, "last_summary": agent.last_summary})
-        agent_projections.append(projection)
-    situations = store.situations()
-    return BrainContextSnapshot(
-        active_tasks=tuple(task_projections),
-        active_agents=tuple(agent_projections),
-        ambient_situations=situations,
-        generated_at=utc_now(),
-    )
 
 
 # -- 决策处理 ------------------------------------------------------------
@@ -175,8 +137,6 @@ class DecisionRuntime(Protocol):
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot: ...
 
-    def brain_context(self) -> BrainContextSnapshot: ...
-
     def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 
 
@@ -195,7 +155,6 @@ def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskS
         children=deepcopy(kernel.store.children(agent.agent_id)),
         profile=deepcopy(profile),
         capabilities=deepcopy(descriptors),
-        brain=deepcopy(kernel.brain_context()),
         memory=kernel.recall_memory(MemoryQuery(task.root_summary, task.session_id)),
     )
     return kernel._handlers[agent.profile_id].handle(context)
@@ -217,19 +176,18 @@ def apply_authorized_decision(
     kernel: DecisionRuntime, message: Any, agent: AgentInstance, decision: AgentDecision
 ) -> None:
     profile = kernel._profiles[agent.profile_id]
-    claims = tuple(decision.claims)
     if decision.model_request is not None:
-        command = _apply_model_request(kernel, agent, decision, profile, claims)
+        command = _apply_model_request(kernel, agent, decision, profile)
     elif decision.tool_request is not None:
-        command = _apply_tool_request(kernel, agent, decision, profile, claims)
+        command = _apply_tool_request(kernel, agent, decision, profile)
     elif decision.delegations:
-        command = _apply_delegations(kernel, agent, decision, profile, claims)
+        command = _apply_delegations(kernel, agent, decision, profile)
     elif decision.completion is not None:
-        command = _apply_completion(decision, claims)
+        command = _apply_completion(decision)
     elif decision.wait_for_children:
-        command = _apply_wait(kernel, agent, claims)
+        command = _apply_wait(kernel, agent)
     elif decision.failure is not None:
-        command = _apply_failure(decision, claims)
+        command = _apply_failure(decision)
     else:
         raise ValueError(_Msg.UNSUPPORTED_DECISION)
     kernel.store.apply_decision(
@@ -247,12 +205,11 @@ def _apply_model_request(
     agent: AgentInstance,
     decision: AgentDecision,
     profile: AgentProfile,
-    claims: tuple[Any, ...],
 ) -> ModelCommand:
     request_role = decision.model_request.get("role")  # type: ignore[union-attr]
     if request_role != profile.model_role:
         raise PermissionError(_Msg.AGENT_MODEL_ROLE_DENIED.format(agent_id=agent.agent_id, role=request_role))
-    return ModelCommand(request=decision.model_request, claims=claims)  # type: ignore[arg-type]
+    return ModelCommand(request=decision.model_request)  # type: ignore[arg-type]
 
 
 def _apply_tool_request(
@@ -260,7 +217,6 @@ def _apply_tool_request(
     agent: AgentInstance,
     decision: AgentDecision,
     profile: AgentProfile,
-    claims: tuple[Any, ...],
 ) -> ToolCommand:
     assert decision.tool_request is not None
     tool = decision.tool_request
@@ -284,7 +240,6 @@ def _apply_tool_request(
             "continuation": tool.continuation,
             "session_id": task.session_id,
         },
-        claims=claims,
     )
 
 
@@ -293,7 +248,6 @@ def _apply_delegations(
     _agent: AgentInstance,
     decision: AgentDecision,
     profile: AgentProfile,
-    claims: tuple[Any, ...],
 ) -> DelegateCommand:
     if not profile.can_delegate:
         raise PermissionError(_Msg.PROFILE_CANNOT_DELEGATE.format(profile_id=profile.id))
@@ -303,27 +257,26 @@ def _apply_delegations(
         if child_profile not in profile.child_profiles or child_profile not in kernel._profiles:
             raise PermissionError(_Msg.PROFILE_CANNOT_CREATE.format(profile_id=profile.id, child_profile=child_profile))
         delegation_requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
-    return DelegateCommand(requests=tuple(delegation_requests), claims=claims)
+    return DelegateCommand(requests=tuple(delegation_requests))
 
 
-def _apply_completion(decision: AgentDecision, claims: tuple[Any, ...]) -> CompleteCommand:
+def _apply_completion(decision: AgentDecision) -> CompleteCommand:
     return CompleteCommand(
         summary=decision.completion.summary,  # type: ignore[union-attr]
         artifacts=decision.completion.artifacts,  # type: ignore[union-attr]
         silent=decision.completion.silent,  # type: ignore[union-attr]
-        claims=claims,
     )
 
 
-def _apply_wait(kernel: DecisionRuntime, agent: AgentInstance, claims: tuple[Any, ...]) -> WaitCommand:
+def _apply_wait(kernel: DecisionRuntime, agent: AgentInstance) -> WaitCommand:
     active_child = any(not child.terminal for child in kernel.store.children(agent.agent_id))
     if not active_child and not kernel.store.has_pending_child_reports(agent.agent_id):
         raise ValueError(_Msg.WAIT_WITHOUT_CHILDREN)
-    return WaitCommand(claims=claims)
+    return WaitCommand()
 
 
-def _apply_failure(decision: AgentDecision, claims: tuple[Any, ...]) -> FailCommand:
-    return FailCommand(summary=decision.failure, error=decision.failure, claims=claims)  # type: ignore[arg-type]
+def _apply_failure(decision: AgentDecision) -> FailCommand:
+    return FailCommand(summary=decision.failure, error=decision.failure)  # type: ignore[arg-type]
 
 
 # -- AMP 摄入 ------------------------------------------------------------
@@ -368,34 +321,10 @@ def ingest_ready(kernel: IngressRuntime) -> tuple[str, ...]:
 
 
 def _ingest_amp(kernel: IngressRuntime, amp: AmpEnvelope, ingested: list[str]) -> None:
-    data = amp.payload.data
     if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
         raise ValueError(_Msg.RESERVED_TOOL_EVENT)
-    if data.get("ambient") is True:
-        situation_id = kernel.store.add_situation(
-            amp.header.source["app"],
-            amp.payload.type,
-            amp.payload.summary,
-            amp.to_dict(),
-            10 if amp.payload.type == "system.tick" else 100,
-            kernel.limits.ambient_ttl_seconds,
-        )
-        ingested.append(situation_id)
-        return
-    autonomous = amp.payload.type == "system.tick"
-    budget = kernel.configuration.autonomous_budget if autonomous else kernel.configuration.interactive_budget
-    task = kernel.store.create_task(
-        external_message_id=amp.header.message_id,
-        session_id=amp.payload.session_id,
-        summary=amp.payload.summary,
-        payload={"amp": amp.to_dict()},
-        autonomous=autonomous,
-        root_profile=kernel.limits.root_profile,
-        budget=budget,
-        priority=10 if autonomous else 100,
-    )
-    if task is not None:
-        ingested.append(task.task_id)
+    if kernel.store.enqueue_inbox(amp, kernel.configuration.triage):
+        ingested.append(amp.header.message_id)
 
 
 def _ingest_amp_file(kernel: IngressRuntime, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
@@ -456,6 +385,8 @@ class EngineState:
         )
         self.store = SQLiteRuntimeStore(self._process / "runtime.sqlite3")
         self._store_executor.submit(self.store.initialize).result()
+        self._archive_terminal_tasks()
+        self._prune_archived_terminal_tasks()
         self._capability_catalog: CapabilityCatalogSnapshot | None = None
         self._lock = asyncio.Lock()
         logger.info(
@@ -485,9 +416,6 @@ class EngineState:
     def _ingest_ready(self) -> tuple[str, ...]:
         return ingest_ready(self)
 
-    def brain_context(self) -> BrainContextSnapshot:
-        return build_brain_context(self.store)
-
     def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if self._memory_store is None:
             return MemoryContextSnapshot()
@@ -507,35 +435,61 @@ class EngineState:
                 continue
             entries.append(
                 MemoryEntry(
-                    task.task_id,
-                    task.session_id,
-                    task.root_summary,
-                    agent.last_summary or None,
-                    task.updated_at,
+                    task_id=task.task_id,
+                    scope=task.session_id,
+                    input_summary=task.root_summary,
+                    outcome_summary=agent.last_summary or None,
+                    created_at=task.updated_at,
+                    fact_candidates=self._memory_candidates(task.task_id),
                 )
             )
         return tuple(entries)
+
+    def _memory_candidates(self, task_id: str) -> tuple[str, ...]:
+        events = self.store.events_for_task(task_id)
+        if not events:
+            return ()
+        triage = events[0].get("payload", {}).get("triage")
+        candidate = triage.get("memory_candidate") if isinstance(triage, dict) else None
+        return (candidate,) if isinstance(candidate, str) and candidate.strip() else ()
+
+    async def ingest(self) -> tuple[str, ...]:
+        """只把 AMP 写入持久化 Inbox，不创建 Task。"""
+        async with self._lock:
+            return await self._store_call(self._ingest_ready)
+
+    async def claim_triage_batches(self, limit: int) -> tuple[TriageBatch, ...]:
+        return await self._store_call(self.store.claim_triage_batches, self.configuration.triage, limit)
+
+    async def apply_triage(self, batch: TriageBatch, decision: TriageDecision) -> str | None:
+        priority = max((event.priority for event in batch.events), default=100)
+        return await self._store_call(
+            self.store.apply_triage,
+            batch,
+            decision,
+            root_profile=self.limits.root_profile,
+            interactive_budget=self.configuration.interactive_budget,
+            autonomous_budget=self.configuration.autonomous_budget,
+            priority=priority,
+        )
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
         limit = self.limits.turn_concurrency if max_turns is None else max_turns
         if limit <= 0:
             raise ValueError(_Msg.MAX_TURNS_POSITIVE)
-        ingested, claims = await self._ingest_and_claim(limit)
+        claims = await self._expire_and_claim(limit)
         if not claims:
             await self._blocking_call(self._archive_terminal_tasks)
-            return PumpResult(ingested, (), ())
+            return PumpResult((), (), (), ())
         decisions = await self._execute_claims(claims)
-        result = await self._apply_results(ingested, claims, decisions)
+        result = await self._apply_results(claims, decisions)
         await self._blocking_call(self._archive_terminal_tasks)
         return result
 
-    async def _ingest_and_claim(self, limit: int) -> tuple[tuple[str, ...], tuple[Any, ...]]:
+    async def _expire_and_claim(self, limit: int) -> tuple[Any, ...]:
         async with self._lock:
-            ingested = await self._store_call(self._ingest_ready)
             await self._store_call(self.store.expire_tasks)
-            await self._store_call(self.store.expire_situations)
-            claims = await self._store_call(self._claim_messages, limit)
-            return ingested, claims
+            return await self._store_call(self._claim_messages, limit)
 
     async def _execute_claims(self, claims: tuple[Any, ...]) -> tuple[Any, ...]:
         loop = asyncio.get_running_loop()
@@ -546,9 +500,7 @@ class EngineState:
             )
         )
 
-    async def _apply_results(
-        self, ingested: tuple[str, ...], claims: tuple[Any, ...], decisions: tuple[Any, ...]
-    ) -> PumpResult:
+    async def _apply_results(self, claims: tuple[Any, ...], decisions: tuple[Any, ...]) -> PumpResult:
         processed: list[str] = []
         failed: list[str] = []
         for claim, result in zip(claims, decisions, strict=True):
@@ -572,7 +524,7 @@ class EngineState:
                 except Exception:
                     await self._store_call(self.store.fail_message, message.message_id, agent.agent_id, str(error))
                 failed.append(message.message_id)
-        return PumpResult(ingested, tuple(processed), tuple(failed))
+        return PumpResult((), (), tuple(processed), tuple(failed))
 
     async def _store_call(self, function: Any, *args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
@@ -596,6 +548,7 @@ class EngineState:
         return (
             bool(self._amp_queue)
             or any(self._inbox.glob("*.json"))
+            or self.store.has_due_inbox()
             or counts["pending_messages"] > 0
             or self.store.has_claimable_external_activity(self.limits.tool_concurrency)
             or self.store.has_recoverable_tool()
@@ -715,7 +668,7 @@ class EngineState:
         return archived_agent_detail(self._task_archive, agent_id)
 
     def status(self) -> dict[str, Any]:
-        return {**self.store.counts(), "brain_context_generated_at": self.brain_context().generated_at}
+        return self.store.counts()
 
     async def cancel_task(self, task_id: str, reason: str) -> None:
         await self._store_call(self.store.cancel_task, task_id, reason)
@@ -783,6 +736,7 @@ class AgentEngine:
         handlers: dict[str, AgentHandler],
         *,
         model_provider: ModelProvider,
+        triage_policy: TriagePolicy,
         tool_registry: ToolRegistry | None = None,
         memory_store: MemoryStore | None = None,
         idle_wait_seconds: float = 1.0,
@@ -790,6 +744,7 @@ class AgentEngine:
         self.configuration = configuration
         self._state = EngineState(configuration, handlers, memory_store)
         self._model_provider = model_provider
+        self._triage_policy = triage_policy
         self._memory_store = memory_store
         self._idle_wait_seconds = idle_wait_seconds
         self._tools = tool_registry if tool_registry is not None else ToolRegistry(self._state, self._state)
@@ -798,6 +753,7 @@ class AgentEngine:
         self._closed = False
         self._model_dispatch_task: asyncio.Task[None] | None = None
         self._model_activity_tasks: dict[asyncio.Task[None], str] = {}
+        self._memory_tasks: set[asyncio.Task[None]] = set()
         self._wake = asyncio.Event()
 
     def bind_tool_executors(self, bindings: tuple[ToolExecutorBinding, ...]) -> None:
@@ -820,24 +776,76 @@ class AgentEngine:
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
             recoveries = await self._tools.recover_pending()
+            ingested = await self._state.ingest()
+            admitted = await self._triage_inbox()
             result: PumpResult = await self._state.pump(max_turns)
             receipts = await self._tools.execute_pending()
             self._ensure_model_dispatcher()
             if self._memory_store is not None:
                 for entry in self._state.completed_memory_entries():
-                    try:
-                        await asyncio.to_thread(self._memory_store.remember, entry)
-                    except Exception as error:
-                        logger.warning(
-                            "Memory remember failed task_id=%s error_type=%s",
-                            entry.task_id,
-                            type(error).__name__,
-                        )
+                    task = asyncio.create_task(self._remember(entry), name=f"aurora-memory-{entry.task_id}")
+                    self._memory_tasks.add(task)
+                    task.add_done_callback(self._memory_tasks.discard)
             await self._state.finalize_terminal_tasks()
-            response = asdict(result)
+            response = asdict(
+                PumpResult(
+                    ingested_event_ids=(*ingested, *result.ingested_event_ids),
+                    admitted_task_ids=admitted,
+                    processed_message_ids=result.processed_message_ids,
+                    failed_message_ids=result.failed_message_ids,
+                )
+            )
             response["tool_recovery_receipts_emitted"] = recoveries
             response["tool_receipts_emitted"] = receipts
             return response
+
+    async def _remember(self, entry: MemoryEntry) -> None:
+        assert self._memory_store is not None
+        try:
+            await asyncio.to_thread(self._memory_store.remember, entry)
+        except Exception as error:
+            logger.warning(
+                "Memory remember failed task_id=%s error_type=%s",
+                entry.task_id,
+                type(error).__name__,
+            )
+
+    async def _triage_inbox(self) -> tuple[str, ...]:
+        batches = await self._state.claim_triage_batches(self._state.limits.model_concurrency)
+        if not batches:
+            return ()
+        results = await asyncio.gather(
+            *(self._triage_batch(batch) for batch in batches),
+            return_exceptions=True,
+        )
+        admitted: list[str] = []
+        for batch, result in zip(batches, results, strict=True):
+            decision = result if isinstance(result, TriageDecision) else self._triage_fallback(batch, result)
+            task_id = await self._state.apply_triage(batch, decision)
+            if task_id is not None:
+                admitted.append(task_id)
+        return tuple(admitted)
+
+    async def _triage_batch(self, batch: TriageBatch) -> TriageDecision:
+        request = self._triage_policy.request(batch)
+        result = await self._model_provider.complete(request)
+        return self._triage_policy.resolve(batch, result)
+
+    @staticmethod
+    def _triage_fallback(batch: TriageBatch, error: object) -> TriageDecision:
+        logger.warning(
+            "Triage failed; admitting batch batch_id=%s error_type=%s",
+            batch.batch_id,
+            type(error).__name__,
+        )
+        summary = "；".join(event.summary for event in batch.events)
+        if len(summary) > _TRIAGE_SUMMARY_LIMIT:
+            summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
+        return TriageDecision(
+            action=TriageAction.PROCESS,
+            summary=summary or "Inbox event batch",
+            reason=f"fail-open:{type(error).__name__}",
+        )
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         stop = stop_event or asyncio.Event()
@@ -848,8 +856,10 @@ class AgentEngine:
             if self._state.has_pending_model_requests():
                 self._ensure_model_dispatcher()
             self._wake.clear()
+            delay = self._state.store.inbox_delay_seconds()
+            timeout = self._idle_wait_seconds if delay is None else min(self._idle_wait_seconds, max(delay, 0.01))
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._wake.wait(), timeout=self._idle_wait_seconds)
+                await asyncio.wait_for(self._wake.wait(), timeout=timeout)
 
     def _ensure_model_dispatcher(self) -> None:
         if self._model_dispatch_task is None or self._model_dispatch_task.done():
@@ -892,7 +902,7 @@ class AgentEngine:
                 self._model_dispatch_task.cancel()
             for task in tuple(self._model_activity_tasks):
                 task.cancel()
-            pending = tuple(self._model_activity_tasks)
+            pending: tuple[asyncio.Task[None], ...] = (*self._model_activity_tasks, *self._memory_tasks)
             if self._model_dispatch_task is not None:
                 pending = (*pending, self._model_dispatch_task)
             await asyncio.gather(*pending, return_exceptions=True)
@@ -912,4 +922,5 @@ class AgentEngine:
         return self._state.agent_detail(agent_id)
 
     def brain_context(self) -> dict[str, Any]:
-        return self._state.brain_context().to_dict()
+        """返回紧凑运行态计数；该投影不会进入模型上下文。"""
+        return self.status()

@@ -38,6 +38,7 @@ class _Msg(StrEnum):
 
     MUST_BE_OBJECT = "{label} must be an object"
     MUST_BE_NON_EMPTY_STRING = "{label} must be a non-empty string"
+    STRING_TOO_LONG = "{label} exceeds {limit} characters"
     TIMESTAMP_MUST_BE_ISO8601 = "header.timestamp must be ISO-8601"
     TIMESTAMP_MUST_INCLUDE_OFFSET = "header.timestamp must include an offset"
     AMP_MUST_CONTAIN_HEADER_AND_PAYLOAD = "AMP must contain exactly header and payload"
@@ -60,10 +61,12 @@ def _mapping(value: object, label: str) -> dict[str, Any]:
     return value
 
 
-def _text(value: object, label: str) -> str:
+def _text(value: object, label: str, limit: int = 512) -> str:
     """校验值为非空字符串。"""
     if not isinstance(value, str) or not value:
         raise AmpValidationError(_Msg.MUST_BE_NON_EMPTY_STRING.format(label=label))
+    if len(value) > limit:
+        raise AmpValidationError(_Msg.STRING_TOO_LONG.format(label=label, limit=limit))
     return value
 
 
@@ -178,7 +181,7 @@ class AmpEnvelope:
             payload=AmpPayload(
                 type=_text(payload["type"], "payload.type"),
                 session_id=_text(payload["session_id"], "payload.session_id"),
-                summary=_text(payload["summary"], "payload.summary"),
+                summary=_text(payload["summary"], "payload.summary", 4000),
                 data=data,
                 expire_at=expire_at,
             ),

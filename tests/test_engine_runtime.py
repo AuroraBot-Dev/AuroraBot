@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from src.agents.triage import StructuredTriagePolicy
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
@@ -16,12 +17,14 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import new_amp
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
+from src.contracts.model import ModelResult, ModelUsage
+from src.contracts.triage import TriageLimits
 from src.engine.runtime import AgentEngine
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.model import ModelRequest, ModelResult
+    from src.contracts.model import ModelRequest
 
 
 class _CompletingHandler:
@@ -31,7 +34,15 @@ class _CompletingHandler:
 
 class _UnusedModelProvider:
     async def complete(self, request: ModelRequest) -> ModelResult:
-        raise AssertionError(f"unexpected model request: {request.role}")
+        return ModelResult(
+            request.role,
+            frozenset({"chat", "structured_output"}),
+            "normalized",
+            "",
+            {"action": "process", "summary": "hello", "reason": "test"},
+            ModelUsage(),
+            0.0,
+        )
 
 
 def test_engine_owns_complete_pump(tmp_path: Path) -> None:
@@ -51,8 +62,14 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
             limits=limits,
             interactive_budget=TaskLimits(1, 1, 30.0),
             autonomous_budget=TaskLimits(1, 1, 30.0),
+            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
         )
-        engine = AgentEngine(configuration, {profile.id: _CompletingHandler()}, model_provider=_UnusedModelProvider())
+        engine = AgentEngine(
+            configuration,
+            {profile.id: _CompletingHandler()},
+            model_provider=_UnusedModelProvider(),
+            triage_policy=StructuredTriagePolicy(configuration.triage),
+        )
         engine.bind_tool_executors(())
         try:
             message_id = await engine.submit_amp(
@@ -68,9 +85,9 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
             result = await engine.pump()
 
             assert message_id
-            assert len(result["ingested_task_ids"]) == 1
+            assert len(result["admitted_task_ids"]) == 1
             assert len(result["processed_message_ids"]) == 1
-            task = engine.task_detail(result["ingested_task_ids"][0])
+            task = engine.task_detail(result["admitted_task_ids"][0])
             assert task is not None
             assert task["task"]["status"] == "COMPLETED"
         finally:
@@ -85,7 +102,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
     class Memory:
         def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
             events.append(("recall", query))
-            return MemoryContextSnapshot(related_memories=(f"memory:{query.query}",))
+            return MemoryContextSnapshot(relevant_facts=(f"memory:{query.query}",))
 
         def remember(self, entry: MemoryEntry) -> bool:
             events.append(("remember", entry))
@@ -94,7 +111,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:
             events.append(("handler", context.task.root_summary))
-            assert context.memory.related_memories == (f"memory:{context.task.root_summary}",)
+            assert context.memory.relevant_facts == (f"memory:{context.task.root_summary}",)
             return AgentDecision(completion=Completion(f"completed: {context.task.root_summary}"))
 
     async def exercise() -> None:
@@ -112,11 +129,13 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
             interactive_budget=TaskLimits(1, 1, 30.0),
             autonomous_budget=TaskLimits(1, 1, 30.0),
+            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
         )
         engine = AgentEngine(
             configuration,
             {profile.id: Handler()},
             model_provider=_UnusedModelProvider(),
+            triage_policy=StructuredTriagePolicy(configuration.triage),
             memory_store=Memory(),
         )
         engine.bind_tool_executors(())
@@ -132,7 +151,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
                 ).to_dict()
             )
             interactive = await engine.pump()
-            interactive_id = interactive["ingested_task_ids"][0]
+            interactive_id = interactive["admitted_task_ids"][0]
             assert [name for name, _value in events[:2]] == ["recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert [entry.task_id for entry in remembered if isinstance(entry, MemoryEntry)] == [interactive_id]
@@ -151,7 +170,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
                 ).to_dict()
             )
             autonomous = await engine.pump()
-            autonomous_id = autonomous["ingested_task_ids"][0]
+            autonomous_id = autonomous["admitted_task_ids"][0]
             assert [name for name, _value in events[:2]] == ["recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert all(isinstance(entry, MemoryEntry) and entry.task_id != autonomous_id for entry in remembered)

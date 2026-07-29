@@ -11,9 +11,11 @@ from .decisions import StoreDecisionsMixin
 from .ingress import StoreIngressMixin
 from .queries import StoreQueriesMixin
 from .retention import StoreRetentionMixin
+from .triage import StoreTriageMixin
 
 
 class SQLiteRuntimeStore(
+    StoreTriageMixin,
     StoreRetentionMixin,
     StoreDecisionsMixin,
     StoreActivitiesMixin,

@@ -1,75 +1,50 @@
 # ruff: noqa: PLR2004
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING
 
-from src.contracts.memory import MemoryEntry, MemoryFailure, MemoryProposal, MemoryQuery, MemoryQueryResult
+from src.contracts.memory import MemoryEntry, MemoryQuery
 from src.memory.service import MemoryService
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_memory_placeholder_contracts() -> None:
-    assert MemoryQuery("who", "global").limit == 4
-    assert MemoryQuery("who", "global").max_characters == 4000
-    assert MemoryQueryResult(()).items == ()
-    assert MemoryProposal({"fact": "x"}, "task").importance == 0.5
-    assert MemoryFailure().code == "memory.unavailable"
-
-
 def test_disabled_service_uses_the_memory_store_contract() -> None:
     service = MemoryService.disabled()
     assert not service.available
-    query = MemoryQuery("anything", "session")
-    assert service.recall(query).recent_conversation == ()
-    assert service.recall(query).related_memories == ()
-    assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01T00:00:00Z"))
+    assert service.recall(MemoryQuery("anything", "session")).session_summary == ""
+    assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01"))
 
 
-def test_remember_is_idempotent_and_recall_reads_completed_private_ledger(tmp_path: Path) -> None:
-    engine_dir = tmp_path / "engine" / "process"
-    engine_dir.mkdir(parents=True)
-    with sqlite3.connect(engine_dir / "runtime.sqlite3") as connection:
-        connection.execute("CREATE TABLE causal_events(summary TEXT)")
-        connection.execute("INSERT INTO causal_events VALUES ('engine-only event')")
-
-    memory_dir = tmp_path / "memory"
-    service = MemoryService(memory_dir=memory_dir)
-    assert service.recall(MemoryQuery("engine-only event", "session")).recent_conversation == ()
-    first = MemoryEntry("task-1", "session", "first question", "first answer", "2026-01-01T00:00:00Z")
-    duplicate = MemoryEntry("task-1", "session", "changed question", "changed answer", "2026-01-03T00:00:00Z")
-    second = MemoryEntry("task-2", "session", "second question", None, "2026-01-02T00:00:00Z")
-    other = MemoryEntry("task-3", "other", "other question", "other answer", "2026-01-04T00:00:00Z")
+def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) -> None:
+    service = MemoryService(tmp_path)
+    first = MemoryEntry(
+        "task-1",
+        "session",
+        "用户：first question",
+        "first answer",
+        "2026-01-01",
+        ("user prefers concise answers",),
+    )
+    duplicate = MemoryEntry("task-1", "session", "changed", "changed", "2026-01-03")
+    second = MemoryEntry("task-2", "session", "用户：second question", None, "2026-01-02")
+    other = MemoryEntry("task-3", "other", "用户：other", "other answer", "2026-01-04")
 
     assert service.remember(first)
     assert not service.remember(duplicate)
     assert service.remember(second)
     assert service.remember(other)
-    with sqlite3.connect(memory_dir / "memory.sqlite3") as connection:
-        connection.execute("CREATE TABLE pending_tasks(user_text TEXT, assistant_text TEXT, created_at TEXT)")
-        connection.execute("INSERT INTO pending_tasks VALUES ('pending question', 'pending answer', '2026-01-04')")
 
-    recalled = service.recall(MemoryQuery("question", "session"))
-    assert [(turn.user, turn.assistant) for turn in recalled.recent_conversation] == [
-        ("first question", "first answer"),
-        ("second question", None),
-    ]
-    assert recalled.related_memories == ()
+    recalled = service.recall(MemoryQuery("concise", "session", fact_limit=1))
+    assert "first question" in recalled.session_summary
+    assert "second question" in recalled.session_summary
+    assert "other answer" not in recalled.session_summary
+    assert recalled.relevant_facts == ("user prefers concise answers",)
 
 
-def test_private_ledger_errors_are_nonfatal(tmp_path: Path) -> None:
-    (tmp_path / "memory.sqlite3").mkdir()
-    service = MemoryService(memory_dir=tmp_path)
-    assert service.recall(MemoryQuery("anything", "session")).recent_conversation == ()
-
-
-def test_recent_conversation_obeys_character_budget(tmp_path: Path) -> None:
-    service = MemoryService(memory_dir=tmp_path)
-    assert service.remember(MemoryEntry("one", "session", "older", "answer", "2026-01-01"))
-    assert service.remember(MemoryEntry("two", "session", "newest question", "newest answer", "2026-01-02"))
-
-    recalled = service.recall(MemoryQuery("query", "session", limit=4, max_characters=12))
-    assert len(recalled.recent_conversation) == 1
-    assert sum(len(turn.user) + len(turn.assistant or "") for turn in recalled.recent_conversation) <= 12
+def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
+    service = MemoryService(tmp_path)
+    assert service.remember(MemoryEntry("one", "session", "x" * 100, "y" * 100, "2026-01-01", ("z" * 100,)))
+    recalled = service.recall(MemoryQuery("query", "session", max_characters=32))
+    assert len(recalled.session_summary) + sum(map(len, recalled.relevant_facts)) <= 32

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from src.contracts.agent import AgentLimits, AgentProfile, TaskLimits
+    from src.contracts.triage import TriageLimits
 
 
 class ConfigurationError(ValueError):
@@ -118,6 +119,7 @@ class EngineConfig:
     workspace: Path
     autonomy: "AutonomyConfig"
     agents: "AgentLimits"
+    triage: "TriageLimits"
     interactive_budget: "TaskLimits"
     autonomous_budget: "TaskLimits"
 

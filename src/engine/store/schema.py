@@ -87,24 +87,27 @@ CREATE TABLE IF NOT EXISTS causal_events (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_causal_task ON causal_events(task_id, created_at);
-CREATE TABLE IF NOT EXISTS situations (
-    situation_id TEXT PRIMARY KEY,
-    audience_ref TEXT NOT NULL,
-    source TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS inbox_events (
+    event_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
     type TEXT NOT NULL,
     summary TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
+    source_json TEXT NOT NULL,
+    data_json TEXT NOT NULL,
     priority INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    claimed_by_agent_id TEXT,
-    expires_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('PENDING', 'TRIAGING', 'DEFERRED')),
+    batch_id TEXT,
+    available_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_situations_open ON situations(status, expires_at, priority DESC);
+CREATE INDEX IF NOT EXISTS idx_inbox_due
+ON inbox_events(status, available_at, priority DESC, created_at);
+CREATE INDEX IF NOT EXISTS idx_inbox_session
+ON inbox_events(session_id, status, created_at);
 """
 
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 7
 _ACTIVE_ACTIVITY_INDEX = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
     "ON activities(agent_id) WHERE status IN ('PENDING', 'PROCESSING')"

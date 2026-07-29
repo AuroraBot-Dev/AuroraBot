@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
+from src.agents.triage import StructuredTriagePolicy
 from src.ai.gateway import ModelGatewayService
 from src.config import get as get_config
 from src.contracts.agent import AgentHandler, Capability, EngineConfiguration
@@ -170,12 +171,11 @@ def _load_handler(specification: str, composer: PromptComposer, capabilities: tu
 
 def _build_capabilities() -> tuple[Capability, ...]:
     """构造 Agent 可主动选择的内建能力。"""
-    from src.agents.capabilities.claim import ClaimCapability
     from src.agents.capabilities.delegate import DelegationCapability
     from src.agents.capabilities.speech import SpeechCapability
     from src.agents.capabilities.wait import WaitCapability
 
-    return DelegationCapability(), WaitCapability(), ClaimCapability(), SpeechCapability()
+    return DelegationCapability(), WaitCapability(), SpeechCapability()
 
 
 # -- Engine / localhost 构造 --------------------------------------------
@@ -191,8 +191,9 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         limits=limits,
         interactive_budget=configuration.engine.interactive_budget,
         autonomous_budget=configuration.engine.autonomous_budget,
+        triage=configuration.engine.triage,
     )
-    memory = MemoryService(configuration, configuration.storage.memory)
+    memory = MemoryService(configuration.storage.memory)
     catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
     composer = PromptComposer(catalog)
     capabilities = _build_capabilities()
@@ -201,6 +202,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         engine_configuration,
         handlers,
         model_provider=ModelGatewayService(configuration),
+        triage_policy=StructuredTriagePolicy(configuration.engine.triage),
         memory_store=memory,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )

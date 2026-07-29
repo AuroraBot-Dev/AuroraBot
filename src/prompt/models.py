@@ -23,15 +23,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-CHANNEL_LABELS: Final = {
-    "local_console": "Console",
-    "dashboard": "Dashboard",
-    "owner_bot_chat": "Dashboard",
-}
-
 EMPTY_CHILD_COMPLETION: Final = "这件事已经做完，但没有留下额外的话。"
 NO_ACTION_COMPLETION: Final = "no_action"
-AUTONOMOUS_TICK_SUMMARY: Final = "新一轮安静的自省时刻到了。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,10 +126,12 @@ class PromptDocument:
 
     system_sections: tuple[PromptSection, ...]
     user_sections: tuple[PromptSection, ...]
+    memory_system_sections: tuple[PromptSection, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "system_sections", tuple(self.system_sections))
         object.__setattr__(self, "user_sections", tuple(self.user_sections))
+        object.__setattr__(self, "memory_system_sections", tuple(self.memory_system_sections))
 
     @property
     def system_prompt(self) -> str:
@@ -148,6 +143,15 @@ class PromptDocument:
         """将 user sections 拼接为完整 user prompt。"""
         return "\n\n".join(section.content.strip() for section in self.user_sections)
 
-    def messages(self) -> tuple[ModelMessage, ModelMessage]:
-        """转换为标准模型消息对 (system, user)。"""
-        return ModelMessage("system", self.system_prompt), ModelMessage("user", self.user_prompt)
+    @property
+    def memory_system_prompt(self) -> str:
+        """将压缩记忆拼接为独立的 system prompt。"""
+        return "\n\n".join(section.content.strip() for section in self.memory_system_sections)
+
+    def messages(self) -> tuple[ModelMessage, ...]:
+        """转换为 stable system、可选 memory system 和 user。"""
+        messages = [ModelMessage("system", self.system_prompt)]
+        if self.memory_system_prompt:
+            messages.append(ModelMessage("system", self.memory_system_prompt))
+        messages.append(ModelMessage("user", self.user_prompt))
+        return tuple(messages)

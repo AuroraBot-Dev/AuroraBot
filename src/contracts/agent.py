@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from src.contracts.memory import MemoryContextSnapshot
+from src.contracts.triage import TriageLimits
 
 if TYPE_CHECKING:
     from src.contracts.model import ModelContinuation, ToolCall, ToolDefinition
@@ -107,7 +108,6 @@ class AgentLimits:
     tool_concurrency: int = 8
     blocking_workers: int = 4
     lease_seconds: float = 30.0
-    ambient_ttl_seconds: float = 1800.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +127,7 @@ class EngineConfiguration:
     limits: AgentLimits
     interactive_budget: TaskLimits
     autonomous_budget: TaskLimits
+    triage: TriageLimits
 
 
 # -- Agent 动作 ----------------------------------------------------------
@@ -242,7 +243,6 @@ class AgentDecision:
     model_request: dict[str, Any] | None = None
     tool_request: ToolRequest | None = None
     delegations: tuple[DelegationRequest, ...] = ()
-    claims: tuple[str, ...] = ()
     completion: Completion | None = None
     wait_for_children: bool = False
     failure: str | None = None
@@ -289,17 +289,6 @@ class ToolLease:
 
 
 @dataclass(frozen=True, slots=True)
-class BrainContextSnapshot:
-    active_tasks: tuple[dict[str, Any], ...]
-    active_agents: tuple[dict[str, Any], ...]
-    ambient_situations: tuple[dict[str, Any], ...]
-    generated_at: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
 class AgentContext:
     task: TaskState
     agent: AgentInstance
@@ -307,7 +296,6 @@ class AgentContext:
     children: tuple[AgentInstance, ...]
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
-    brain: BrainContextSnapshot
     memory: MemoryContextSnapshot = field(default_factory=MemoryContextSnapshot)
 
 

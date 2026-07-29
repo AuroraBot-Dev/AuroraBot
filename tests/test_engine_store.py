@@ -25,8 +25,9 @@ from src.contracts.agent import (
 from src.contracts.amp import new_amp
 from src.contracts.model import ModelResult, ModelUsage
 from src.contracts.tool import ToolOutcomeStatus
+from src.contracts.triage import TriageAction, TriageDecision, TriageLimits
 from src.engine.archive import task_archive_projection
-from src.engine.runtime import EngineState
+from src.engine.runtime import EngineState, PumpResult
 from src.engine.store import SQLiteRuntimeStore
 
 if TYPE_CHECKING:
@@ -61,6 +62,7 @@ def _configuration(workspace: Path) -> EngineConfiguration:
         AgentLimits(root_profile="gate", worker_profile="worker", lease_seconds=0.01),
         TaskLimits(8, 6, 300),
         TaskLimits(3, 2, 120),
+        TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
     )
 
 
@@ -78,6 +80,22 @@ def _amp(summary: str = "hello"):
 class _Complete:
     def handle(self, context: AgentContext) -> AgentDecision:
         return AgentDecision(completion=Completion(f"done: {context.agent.assignment}"))
+
+
+async def _admit(state: EngineState, max_turns: int | None = None) -> PumpResult:
+    ingested = await state.ingest()
+    await asyncio.sleep(0.001)
+    batches = await state.claim_triage_batches(8)
+    admitted = []
+    for batch in batches:
+        task_id = await state.apply_triage(
+            batch,
+            TriageDecision(TriageAction.PROCESS, batch.events[0].summary, "test"),
+        )
+        if task_id is not None:
+            admitted.append(task_id)
+    result = await state.pump(max_turns)
+    return PumpResult(ingested, tuple(admitted), result.processed_message_ids, result.failed_message_ids)
 
 
 def test_task_archive_projection_removes_replay_redundancy() -> None:
@@ -110,7 +128,7 @@ def test_runtime_store_migrates_v5_to_incremental_vacuum(tmp_path: Path) -> None
 
     SQLiteRuntimeStore(database).initialize()
     with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == 6
+        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == 7
         assert connection.execute("PRAGMA auto_vacuum").fetchone()[0] == 2
 
 
@@ -120,13 +138,13 @@ def test_amp_creates_archives_and_deduplicates_task(tmp_path: Path) -> None:
     async def scenario() -> None:
         amp = _amp()
         await state.submit_amp(amp)
-        first = await state.pump()
-        task_id = first.ingested_task_ids[0]
+        first = await _admit(state)
+        task_id = first.admitted_task_ids[0]
         await state.finalize_terminal_tasks()
         await state.submit_amp(amp)
-        replay = await state.pump()
-        assert len(first.ingested_task_ids) == 1
-        assert replay.ingested_task_ids == ()
+        replay = await _admit(state)
+        assert len(first.admitted_task_ids) == 1
+        assert replay.admitted_task_ids == ()
         assert state.get_task(task_id) is None
         detail = state.task_detail(task_id)
         assert detail is not None
@@ -140,7 +158,7 @@ def test_amp_creates_archives_and_deduplicates_task(tmp_path: Path) -> None:
         state.shutdown()
 
 
-def test_invalid_inbox_is_rejected_and_ambient_event_becomes_situation(tmp_path: Path) -> None:
+def test_invalid_file_is_rejected_and_ambient_hint_still_requires_triage(tmp_path: Path) -> None:
     state = EngineState(_configuration(tmp_path), {"gate": _Complete(), "worker": _Complete()})
     invalid = tmp_path / "inbox" / "invalid.json"
     invalid.write_text("{", encoding="utf-8")
@@ -155,10 +173,9 @@ def test_invalid_inbox_is_rejected_and_ambient_event_becomes_situation(tmp_path:
             source_instance="test",
         )
         await state.submit_amp(ambient)
-        result = await state.pump()
-        assert result.ingested_task_ids
-        assert state.tasks() == ()
-        assert state.store.situations()[0]["summary"] == "ambient fact"
+        result = await _admit(state)
+        assert result.admitted_task_ids
+        assert state.tasks()[0].root_summary == "ambient fact"
         assert (tmp_path / "archive" / "inbox" / "rejected" / "invalid.json").is_file()
 
     try:
@@ -183,7 +200,7 @@ def test_delegation_children_report_to_parent(tmp_path: Path) -> None:
 
     async def scenario() -> None:
         await state.submit_amp(_amp())
-        await state.pump(8)
+        await _admit(state, 8)
         await state.pump(8)
         await state.pump(1)
         assert state.tasks()[0].status == TaskStatus.ACTIVE
@@ -211,7 +228,7 @@ def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) 
 
     async def scenario() -> None:
         await state.submit_amp(_amp())
-        result = await state.pump()
+        result = await _admit(state)
         assert state.has_pending_tool_requests() and state.has_work()
         lease = (await state.claim_tool_requests())[0]
         kwargs = {
@@ -227,7 +244,7 @@ def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) 
         await state.complete_tool(**kwargs)  # type: ignore[arg-type]
         await state.complete_tool(**kwargs)  # type: ignore[arg-type]
         await state.pump()
-        task = state.get_task(result.ingested_task_ids[0])
+        task = state.get_task(result.admitted_task_ids[0])
         assert task is not None and task.status == TaskStatus.COMPLETED
         with pytest.raises(ValueError, match="invalid Tool outcome"):
             await state.complete_tool(**{**kwargs, "status": "forged"})  # type: ignore[arg-type]
@@ -251,7 +268,7 @@ def test_complete_task_tool_finishes_without_resume(tmp_path: Path) -> None:
 
     async def scenario() -> None:
         await state.submit_amp(_amp())
-        await state.pump()
+        await _admit(state)
         lease = (await state.claim_tool_requests())[0]
         await state.complete_tool(
             request_id=lease.request_id,
@@ -284,15 +301,15 @@ def test_model_activity_completion_and_failure_are_auditable(tmp_path: Path) -> 
 
     async def scenario() -> None:
         await state.submit_amp(_amp("success"))
-        await state.pump()
+        await _admit(state)
         activity = (await state.claim_model_requests(1))[0]
         model_result = ModelResult("fake", frozenset({"chat"}), "normalized", "answer", None, ModelUsage(), 0)
         await state.complete_model(activity, model_result.to_dict(), None)
-        await state.pump()
+        await _admit(state)
         assert state.tasks()[0].status == TaskStatus.COMPLETED
 
         await state.submit_amp(_amp("failure"))
-        await state.pump()
+        await _admit(state)
         failed_activity = (await state.claim_model_requests(1))[0]
         await state.complete_model(failed_activity, None, "provider unavailable")
         failed = await state.pump()
@@ -317,7 +334,7 @@ def test_handler_exception_fails_message_and_task(tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="positive"):
             await state.pump(0)
         await state.submit_amp(_amp())
-        result = await state.pump()
+        result = await _admit(state)
         assert result.failed_message_ids
         assert state.tasks()[0].status == TaskStatus.ERROR
         assert state.agent_detail(state.tasks()[0].root_agent_id) is not None
@@ -348,8 +365,8 @@ def test_handler_context_cannot_mutate_canonical_authorization_state(tmp_path: P
 
     async def scenario() -> None:
         await state.submit_amp(_amp())
-        result = await state.pump()
-        task = state.get_task(result.ingested_task_ids[0])
+        result = await _admit(state)
+        task = state.get_task(result.admitted_task_ids[0])
         agent = state.get_agent(task.root_agent_id) if task is not None else None
         assert result.failed_message_ids
         assert task is not None and task.status == TaskStatus.ERROR

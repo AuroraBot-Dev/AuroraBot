@@ -59,7 +59,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
             pumped = await runtime.route_input(_input("/pump 3"))
             assert pumped.ok and pumped.data is not None
-            details = [runtime.task(task_id) for task_id in pumped.data["ingested_task_ids"]]
+            details = [runtime.task(task_id) for task_id in pumped.data["admitted_task_ids"]]
             detail = next(item for item in details if item is not None)
             assert detail is not None
             task_id = detail["task"]["task_id"]
@@ -100,7 +100,7 @@ def test_runtime_shutdown_request_and_idempotent_conversation(project_root: Path
         pumped = await runtime.pump()
         assert stopped
         assert first.message_id == second.message_id
-        assert len(pumped["ingested_task_ids"]) == 1
+        assert len(pumped["admitted_task_ids"]) == 1
         await runtime.shutdown()
 
     asyncio.run(scenario())

@@ -19,6 +19,7 @@ from src.config.sections import (
     _parse_dashboard,
     _parse_preference,
     _parse_task_budget,
+    _parse_triage,
 )
 from src.contracts.configuration import (
     AuroraConfig,
@@ -144,7 +145,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     engine_raw = engine_data.get("engine", {})
     if not isinstance(engine_raw, dict):
         raise ConfigurationError(_Msg.ENGINE_MUST_BE_TABLE)
-    engine_allowed = {"workspace", "autonomy", "agents", "interactive_task", "autonomous_task"}
+    engine_allowed = {"workspace", "autonomy", "agents", "triage", "interactive_task", "autonomous_task"}
     if set(engine_raw) != engine_allowed:
         raise ConfigurationError(_Msg.ENGINE_UNSUPPORTED_KEYS)
 
@@ -282,9 +283,12 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     # 解析运行时子配置
     autonomy_raw = engine_raw.get("autonomy", {})
     agents_raw = engine_raw.get("agents", {})
+    triage_raw = engine_raw.get("triage", {})
     interactive_raw = engine_raw.get("interactive_task", {})
     autonomous_raw = engine_raw.get("autonomous_task", {})
-    if not all(isinstance(item, dict) for item in (autonomy_raw, agents_raw, interactive_raw, autonomous_raw)):
+    if not all(
+        isinstance(item, dict) for item in (autonomy_raw, agents_raw, triage_raw, interactive_raw, autonomous_raw)
+    ):
         raise ConfigurationError(_Msg.ENGINE_SUB_MUST_BE_TABLES)
 
     # 验证调试端口和主机
@@ -298,6 +302,9 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     # 解析子配置
     autonomy = _parse_autonomy(autonomy_raw)
     agent_runtime = _parse_agent_runtime(agents_raw)
+    triage = _parse_triage(triage_raw)
+    if triage.model_role not in roles:
+        raise ConfigurationError(f"engine.triage.model_role references unknown role {triage.model_role}")
     if agent_runtime.root_profile not in {agent.id for agent in agents}:
         raise ConfigurationError(_Msg.ROOT_PROFILE_NOT_CONFIGURED)
     if agent_runtime.worker_profile not in {agent.id for agent in agents}:
@@ -323,6 +330,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             workspace=workspace,
             autonomy=autonomy,
             agents=agent_runtime,
+            triage=triage,
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,
         ),

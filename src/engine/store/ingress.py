@@ -1,7 +1,6 @@
-"""Task 入口、工具回执处理与邮箱消息租赁。
+"""工具回执处理与 Agent 邮箱消息租赁。
 
-处理所有外部事件进入系统的第一个接触点：
-- create_task：将外部 AMP 事件创建为新 Task
+Triage 前的 AMP 摄入与 admitted Task 创建位于 store/triage.py：
 - complete_tool_activity：消费工具回执，推导事件前后因果
 - claim_message：按 Agent 状态匹配邮箱消息供处理
 """
@@ -17,8 +16,6 @@ from src.contracts.agent import (
     ActivityStatus,
     AgentInstance,
     AgentMessage,
-    AgentStatus,
-    TaskLimits,
     TaskState,
     TaskStatus,
 )
@@ -28,89 +25,6 @@ from .base import RuntimeStoreBase, _json, utc_now
 
 class StoreIngressMixin(RuntimeStoreBase):
     """入口处理 Mixin：Task 创建、工具回执消费与邮箱消息租赁。"""
-
-    def create_task(
-        self,
-        *,
-        external_message_id: str,
-        session_id: str,
-        summary: str,
-        payload: dict[str, Any],
-        autonomous: bool,
-        root_profile: str,
-        budget: TaskLimits,
-        priority: int,
-    ) -> TaskState | None:
-        """从外部事件创建新 Task。
-
-        通过 external_message_id 检查幂等（已在 causal_events 中存在则跳过），
-        创建 tasks、agents 和 mailbox 记录，并写入 task.started 因果事件。
-        返回 TaskState 或 duplicate 时的 None。
-        """
-        now = utc_now()
-        task_id = str(uuid4())
-        agent_id = str(uuid4())
-        with self.transaction() as connection:
-            # 幂等检查：同一 external_message_id 不可重复创建
-            duplicate = connection.execute(
-                "SELECT event_id FROM causal_events WHERE external_message_id = ?",
-                (external_message_id,),
-            ).fetchone()
-            if duplicate is not None:
-                return None
-            connection.execute(
-                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
-                "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
-                "started_at, updated_at, termination_reason) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
-                (
-                    task_id,
-                    agent_id,
-                    external_message_id,
-                    session_id,
-                    "global",
-                    summary,
-                    int(autonomous),
-                    TaskStatus.ACTIVE,
-                    budget.max_model_calls,
-                    budget.max_tool_calls,
-                    budget.max_duration_seconds,
-                    now,
-                    now,
-                ),
-            )
-            connection.execute(
-                "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, 0, '{}', ?, ?, ?)",
-                (agent_id, task_id, root_profile, summary, AgentStatus.READY, now, now, summary),
-            )
-            message_id = self._insert_message(
-                connection,
-                task_id=task_id,
-                target_agent_id=agent_id,
-                message_type="task.started",
-                payload=payload,
-                causation_id=None,
-                correlation_id=task_id,
-                priority=priority,
-                now=now,
-            )
-            connection.execute(
-                "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)",
-                (
-                    str(uuid4()),
-                    task_id,
-                    agent_id,
-                    "task.started",
-                    summary,
-                    _json(payload),
-                    task_id,
-                    external_message_id,
-                    now,
-                ),
-            )
-        task = self.get_task(task_id)
-        assert task is not None and message_id
-        return task
 
     def complete_tool_activity(
         self,
@@ -124,7 +38,7 @@ class StoreIngressMixin(RuntimeStoreBase):
         """消费工具回执一次，授权来自已持久化请求，支持幂等。
 
         返回 (bool, str | None)：布尔值区分已知的延迟/重复回执与无关外部事件。
-        仅后者成为环境情境（situation）。
+        无关外部事件由调用者拒绝，不会进入 Agent mailbox。
         若工具请求标记 complete_task=True，则自动完成该 Agent。
         """
         now = utc_now()

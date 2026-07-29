@@ -90,16 +90,13 @@ class RuntimeStoreBase:
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, 2, 3, 4, 5, _SCHEMA_VERSION}:
+            elif int(row["version"]) not in {1, 2, 3, 4, 5, 6, _SCHEMA_VERSION}:
                 raise RuntimeError(_Msg.UNSUPPORTED_SCHEMA)
             version = int(row["version"]) if row is not None else _SCHEMA_VERSION
             if version < _SCHEMA_VERSION:
                 task_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(tasks)")}
                 if "audience_ref" not in task_columns:
                     connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'global'")
-                situation_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(situations)")}
-                if "audience_ref" not in situation_columns:
-                    connection.execute("ALTER TABLE situations ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'global'")
                 activity_sql = str(
                     connection.execute(
                         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'"
@@ -120,6 +117,7 @@ class RuntimeStoreBase:
                     "WHEN 'publication.unknown' THEN 'tool.unknown' "
                     "ELSE type END"
                 )
+                connection.execute("DROP TABLE IF EXISTS situations")
             connection.execute(_ACTIVE_ACTIVITY_INDEX)
             connection.execute("UPDATE schema_meta SET version = ?", (_SCHEMA_VERSION,))
             connection.commit()
@@ -141,6 +139,7 @@ class RuntimeStoreBase:
         now = utc_now()
         with self.transaction() as connection:
             connection.execute("UPDATE mailbox SET status = 'PENDING', lease_until = NULL WHERE status = 'PROCESSING'")
+            connection.execute("UPDATE inbox_events SET status = 'PENDING', batch_id = NULL WHERE status = 'TRIAGING'")
             # RUNNING 仅存在于 v2 之前的存储；邮箱租赁是当前锁机制
             connection.execute(
                 "UPDATE agents SET status = 'READY', updated_at = ? WHERE status = 'RUNNING'",

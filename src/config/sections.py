@@ -25,6 +25,7 @@ from src.contracts.configuration import (
     _string,
     _table,
 )
+from src.contracts.triage import TriageLimits
 
 
 class _Msg(StrEnum):
@@ -188,7 +189,7 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
         value = raw.get(name, getattr(defaults, name))
         if name in {"root_profile", "worker_profile"}:
             values[name] = _string(value, f"engine.agents.{name}")
-        elif name in {"lease_seconds", "ambient_ttl_seconds"}:
+        elif name == "lease_seconds":
             values[name] = _positive_number(value, f"engine.agents.{name}")
         elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ConfigurationError(_Msg.AGENTS_POSITIVE_INTEGER.format(name=name))
@@ -197,6 +198,33 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
     if values["max_depth"] > values["max_agents_per_task"]:
         raise ConfigurationError(_Msg.MAX_DEPTH_EXCEEDS_MAX_AGENTS)
     return AgentLimits(**values)
+
+
+def _parse_triage(raw: dict[str, Any]) -> TriageLimits:
+    """解析防抖与 Triage 的严格结构配置。"""
+    allowed = set(TriageLimits.__dataclass_fields__)
+    if set(raw) != allowed:
+        raise ConfigurationError(
+            f"engine.triage has unexpected {sorted(set(raw) - allowed)} or missing {sorted(allowed - set(raw))}"
+        )
+    values: dict[str, Any] = {}
+    for name in allowed:
+        value = raw[name]
+        if name == "model_role":
+            values[name] = _string(value, f"engine.triage.{name}")
+        elif name in {"max_batch_events", "max_batch_characters"}:
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ConfigurationError(f"engine.triage.{name} must be a positive integer")
+            values[name] = value
+        else:
+            values[name] = _positive_number(value, f"engine.triage.{name}")
+    if values["quiet_seconds"] > values["max_wait_seconds"]:
+        raise ConfigurationError("engine.triage.quiet_seconds must not exceed max_wait_seconds")
+    if values["defer_seconds"] > values["max_defer_seconds"]:
+        raise ConfigurationError("engine.triage.defer_seconds must not exceed max_defer_seconds")
+    if values["max_batch_characters"] < 1000:
+        raise ConfigurationError("engine.triage.max_batch_characters must be at least 1000")
+    return TriageLimits(**values)
 
 
 def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:

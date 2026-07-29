@@ -72,7 +72,7 @@ def test_console_input_submits_conversation_and_commands(project_root: Path) -> 
         try:
             await run_console(runtime, console, readline=lambda _prompt: next(inputs), output=output.append)
             assert any("processed_message_ids" in line for line in output)
-            assert any("ingested_task_ids" in line for line in output)
+            assert any("admitted_task_ids" in line for line in output)
         finally:
             await runtime.shutdown()
             console.close()

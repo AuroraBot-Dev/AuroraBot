@@ -16,7 +16,6 @@ class ModelCommand:
     """请求调用模型。Agent 状态变为 WAITING_MODEL，等待异步模型响应。"""
 
     request: dict[str, Any]
-    claims: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -27,7 +26,7 @@ class ModelCommand:
         return "model.requested"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": "model", "request": self.request, "summary": self.summary, "claims": list(self.claims)}
+        return {"kind": "model", "request": self.request, "summary": self.summary}
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +34,6 @@ class ToolCommand:
     """请求调用外部工具。Agent 状态变为 WAITING_TOOL，异步由 effect executor 执行。"""
 
     request: dict[str, Any]
-    claims: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -46,7 +44,7 @@ class ToolCommand:
         return f"tool.requested:{self.request['capability']}"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": "tool", "summary": self.summary, "request": self.request, "claims": list(self.claims)}
+        return {"kind": "tool", "summary": self.summary, "request": self.request}
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +52,6 @@ class DelegateCommand:
     """请求创建子 Agent。Token 会由监督树限制（最大深度、最大子 Agent 数等）。"""
 
     requests: tuple[dict[str, str], ...]
-    claims: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -69,7 +66,6 @@ class DelegateCommand:
             "kind": "delegate",
             "requests": list(self.requests),
             "summary": self.summary,
-            "claims": list(self.claims),
         }
 
 
@@ -80,7 +76,6 @@ class CompleteCommand:
     summary: str
     artifacts: tuple[dict[str, Any], ...] = ()
     silent: bool = False
-    claims: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -92,15 +87,12 @@ class CompleteCommand:
             "summary": self.summary,
             "artifacts": list(self.artifacts),
             "silent": self.silent,
-            "claims": list(self.claims),
         }
 
 
 @dataclass(frozen=True, slots=True)
 class WaitCommand:
     """等待所有子 Agent 完成。仅在有活跃子 Agent 时有效。"""
-
-    claims: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -111,7 +103,7 @@ class WaitCommand:
         return "waiting for child Agents"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": "wait", "summary": self.summary, "claims": list(self.claims)}
+        return {"kind": "wait", "summary": self.summary}
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,11 +112,10 @@ class FailCommand:
 
     summary: str
     error: str
-    claims: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
         return "fail"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": "fail", "summary": self.summary, "error": self.error, "claims": list(self.claims)}
+        return {"kind": "fail", "summary": self.summary, "error": self.error}
