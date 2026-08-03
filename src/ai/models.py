@@ -1,14 +1,17 @@
-"""models.dev 模型能力与定价查询。
+"""models.dev 模型能力与定价查询 —— 唯一信息源。
 
 从 ``https://models.dev/api.json`` 拉取社区维护的模型数据库，
-提供模型定价与能力查询，作为 litellm 内置定价缺失时的回退数据源。
+缓存到 ``data/ai/`` 目录（按时间命名，过期自动刷新）。
+作为模型定价和能力的第一信息源，替代 litellm 内置数据。
 
 用法::
 
-    from src.ai.models import get_pricing_by_id
+    from src.ai.models import init_cache, get_pricing_by_id, get_capabilities_by_id
+
+    init_cache(Path("data/ai"))
 
     pricing = await get_pricing_by_id("openai/gpt-4o-mini")
-    # => {"input": 0.15, "output": 0.60}  或  None
+    caps = await get_capabilities_by_id("deepseek/deepseek-v4-pro")
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
@@ -16,14 +19,18 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import gzip
 import json
 import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
+from pathlib import Path  # noqa: TC003
 from typing import Any
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("ModelsDev")
 
@@ -32,48 +39,142 @@ logger = get_logger("ModelsDev")
 # ═══════════════════════════════════════════════════════════
 
 MODELS_DEV_API = "https://models.dev/api.json"
-CACHE_TTL_SEC = 3600  # 1 小时
+CACHE_TTL_SEC = 3600
 FETCH_TIMEOUT_SEC = 30
+_CACHE_FILE_PREFIX = "models-dev-"
+
+# models.dev 字段 → 内部能力名
+_FIELD_CAPABILITY_MAP: dict[str, str] = {
+    "tool_call": "tools",
+    "reasoning": "reasoning",
+    "structured_output": "structured_output",
+}
+
+# 无歧义的基础能力
+_IMPLICIT_CAPABILITIES: frozenset[str] = frozenset({"chat", "stream", "json_text_fallback"})
 
 # ═══════════════════════════════════════════════════════════
-# 模块级缓存
+# 模块级状态
 # ═══════════════════════════════════════════════════════════
 
+_cache_dir: Path | None = None
 _cache: dict[str, dict[str, Any]] | None = None
 _cache_ts: float = 0.0
 _lock = asyncio.Lock()
 
 
+def init_cache(cache_dir: Path) -> None:
+    """设置 models.dev 磁盘缓存目录（需在首次查询前调用）。"""
+    global _cache_dir  # noqa: PLW0603
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    _cache_dir = cache_dir
+
+
 def _exc_msg() -> str:
-    """返回当前异常的简略消息，不打印堆栈。"""
     e = sys.exc_info()[1]
     return f"{type(e).__name__}: {e}" if e is not None else "unknown"
 
 
-def _is_cache_valid() -> bool:
-    """缓存存在且未过期。"""
-    return _cache is not None and (time.monotonic() - _cache_ts) < CACHE_TTL_SEC
+# ═══════════════════════════════════════════════════════════
+# 磁盘缓存
+# ═══════════════════════════════════════════════════════════
 
 
-async def _ensure_cache() -> dict[str, dict[str, Any]]:  # noqa: C901, PLR0911
-    """确保缓存可用，必要时从 models.dev 拉取并索引。
+def _cache_file_path(timestamp: datetime) -> Path:
+    assert _cache_dir is not None
+    return _cache_dir / f"{_CACHE_FILE_PREFIX}{timestamp.strftime('%Y%m%d-%H')}.json.gz"
 
-    特性：
-    - 首次调用时拉取全量 JSON 并以 ``model_id → model_info`` 建索引
-    - 1 小时内重复调用直接命中内存缓存
-    - 网络不可达时降级使用过期缓存（如有）
-    - 并发安全：双重检查 + asyncio.Lock
+
+def _read_cache_file(path: Path) -> dict[str, Any] | None:
+    try:
+        if path.name.endswith(".json.gz"):
+            with gzip.open(path, mode="rt", encoding="utf-8") as stream:
+                value = json.load(stream)
+        elif path.name.endswith(".json"):
+            value = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            return None
+    except (gzip.BadGzipFile, json.JSONDecodeError, OSError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _find_valid_cache() -> tuple[dict[str, Any] | None, float]:
+    """查找最新的有效磁盘缓存文件，返回 (data, mtime) 或 (None, 0)。"""
+    if _cache_dir is None or not _cache_dir.is_dir():
+        return None, 0.0
+    now = time.time()
+    for entry in sorted(_cache_dir.iterdir(), reverse=True):
+        if not entry.is_file() or not entry.name.startswith(_CACHE_FILE_PREFIX):
+            continue
+        if not entry.name.endswith((".json", ".json.gz")):
+            continue
+        mtime = entry.stat().st_mtime
+        age = now - mtime
+        if age >= CACHE_TTL_SEC:
+            continue
+        data = _read_cache_file(entry)
+        if data is not None:
+            return data, time.monotonic()
+    return None, 0.0
+
+
+def _write_cache(data: dict[str, Any]) -> None:
+    """写入新缓存文件并清理过期文件。"""
+    if _cache_dir is None:
+        return
+    now = datetime.now(tz=UTC)
+    new_path = _cache_file_path(now)
+    temporary = new_path.with_suffix(f"{new_path.suffix}.tmp")
+    try:
+        with gzip.open(temporary, mode="wt", encoding="utf-8", compresslevel=6) as stream:
+            json.dump(data, stream, ensure_ascii=False, separators=(",", ":"))
+        temporary.replace(new_path)
+    except OSError:
+        logger.warning("无法写入 models.dev 缓存: %s", new_path)
+        temporary.unlink(missing_ok=True)
+        return
+
+    for entry in sorted(_cache_dir.iterdir()):
+        if not entry.is_file() or entry == new_path or not entry.name.startswith(_CACHE_FILE_PREFIX):
+            continue
+        if not entry.name.endswith((".json", ".json.gz")):
+            continue
+        with contextlib.suppress(OSError):
+            entry.unlink()
+
+
+# ═══════════════════════════════════════════════════════════
+# 缓存保障
+# ═══════════════════════════════════════════════════════════
+
+
+async def _ensure_cache() -> dict[str, dict[str, Any]]:  # noqa: C901
+    """确保内存缓存可用。
+
+    优先级：
+    1. 有效的内存缓存
+    2. 有效的磁盘缓存
+    3. 从 models.dev API 拉取 → 写磁盘
+    4. 降级到过期缓存（内存或磁盘）
     """
     global _cache, _cache_ts  # noqa: PLW0603
 
-    if _is_cache_valid():
-        return _cache  # type: ignore[return-value]
+    if _cache is not None and (time.monotonic() - _cache_ts) < CACHE_TTL_SEC:
+        return _cache
 
     async with _lock:
-        # 双重检查：锁内可能已被上一个竞争者填充
-        if _is_cache_valid():
-            return _cache  # type: ignore[return-value]
+        if _cache is not None and (time.monotonic() - _cache_ts) < CACHE_TTL_SEC:
+            return _cache
 
+        # 尝试磁盘缓存
+        disk_data, disk_mtime = _find_valid_cache()
+        if disk_data is not None:
+            _cache, _cache_ts = disk_data, disk_mtime
+            logger.debug("从磁盘缓存加载 models.dev（%d 条记录）", len(_cache))
+            return _cache
+
+        # 从 API 拉取
         logger.debug("正在从 models.dev 拉取模型数据库...")
 
         def _fetch() -> dict[str, Any]:
@@ -81,7 +182,6 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:  # noqa: C901, PLR0911
                 MODELS_DEV_API,
                 headers={
                     "Accept": "application/json",
-                    # Cloudflare 会拦截 Python 默认的 UA，需要伪装
                     "User-Agent": "Mozilla/5.0 (compatible; AuroraBot/1.0)",
                 },
             )
@@ -89,73 +189,165 @@ async def _ensure_cache() -> dict[str, dict[str, Any]]:  # noqa: C901, PLR0911
                 return json.loads(resp.read())  # type: ignore[no-any-return]
 
         try:
-            data = await asyncio.to_thread(_fetch)
+            raw = await asyncio.to_thread(_fetch)
         except urllib.error.URLError as exc:
             logger.warning("models.dev API 不可达: %s", exc)
-            if _cache is not None:
-                logger.info("降级使用过期缓存（%d 条记录）", len(_cache))
-                return _cache
-            return {}
+            return _fallback_cache()
         except Exception:  # noqa: BLE001
-            logger.warning("models.dev 数据拉取/解析失败: %s", _exc_msg())
-            if _cache is not None:
-                return _cache
-            return {}
+            logger.warning("models.dev 数据拉取失败: %s", _exc_msg())
+            return _fallback_cache()
 
-        # API 结构: { provider_id: { models: { model_name: { id, cost, ... } } } }
-        # 构建索引: "provider/model_name" → { input, output, cache_read, ... }
+        # 索引原始数据: "provider/model_name" → full model info dict
         _cache = {}
-        for provider_id, provider_info in data.items():
+        for provider_id, provider_info in raw.items():
             if not isinstance(provider_info, dict):
                 continue
             models = provider_info.get("models")
             if not isinstance(models, dict):
                 continue
             for model_name, model_info in models.items():
-                if not isinstance(model_info, dict):
-                    continue
-                cost = model_info.get("cost")
-                if isinstance(cost, dict):
-                    _cache[f"{provider_id}/{model_name}"] = cost
+                if isinstance(model_info, dict):
+                    _cache[f"{provider_id}/{model_name}"] = model_info
 
         _cache_ts = time.monotonic()
+
+        # 写磁盘缓存
+        await asyncio.to_thread(_write_cache, raw)
         logger.debug("models.dev 缓存已更新（%d 个模型）", len(_cache))
         return _cache
 
 
+def _fallback_cache() -> dict[str, dict[str, Any]]:  # noqa: C901
+    """API 不可达时降级：内存缓存 > 过期磁盘文件。"""
+    global _cache, _cache_ts  # noqa: PLW0603
+
+    if _cache is not None:
+        logger.info("降级使用过期内存缓存（%d 条记录）", len(_cache))
+        return _cache
+
+    if _cache_dir is not None:
+        for entry in sorted(_cache_dir.iterdir(), reverse=True):
+            if not entry.is_file() or not entry.name.startswith(_CACHE_FILE_PREFIX):
+                continue
+            if not entry.name.endswith((".json", ".json.gz")):
+                continue
+            raw = _read_cache_file(entry)
+            if raw is None:
+                continue
+            _cache = {}
+            for provider_id, provider_info in raw.items():
+                if not isinstance(provider_info, dict):
+                    continue
+                provider_models = provider_info.get("models")
+                if not isinstance(provider_models, dict):
+                    continue
+                for model_name, model_info in provider_models.items():
+                    if isinstance(model_info, dict):
+                        _cache[f"{provider_id}/{model_name}"] = model_info
+            _cache_ts = time.monotonic()
+            logger.info("降级使用过期磁盘缓存（%d 条记录）", len(_cache))
+            return _cache
+
+    return {}
+
+
 # ═══════════════════════════════════════════════════════════
-# 公开 API
+# 公开 API — 定价（主信息源）
 # ═══════════════════════════════════════════════════════════
 
 
 async def get_pricing_by_id(model_id: str) -> dict[str, Any] | None:
-    """查询指定模型的定价信息。
-
-    数据来源于 ``https://models.dev/api.json``，
-    首次调用时拉取全量数据并缓存 1 小时，
-    后续调用直接命中内存缓存。
+    """查询指定模型的定价（USD / 1M tokens）— models.dev 第一信息源。
 
     Args:
-        model_id: 模型标识符，格式 ``provider/model_name``，
-                  例如 ``"openai/gpt-4o-mini"``、
-                  ``"openai/gpt-4o"``。
+        model_id: 模型标识符，格式 ``provider/model_name``。
 
     Returns:
-        定价字典（含 ``input`` / ``output`` 等字段，单位为 USD / 1M tokens），
-        模型不存在或数据不可用时返回 ``None``。
-
-    Example::
-
-        from src.ai.models import get_pricing_by_id
-
-        p = await get_pricing_by_id("openai/gpt-4o")
-        if p:
-            input_cost = p.get("input", 0)    # USD / 1M tokens
-            output_cost = p.get("output", 0)  # USD / 1M tokens
+        定价字典（含 ``input`` / ``output`` 等字段），不存在时返回 ``None``。
     """
     models = await _ensure_cache()
-    pricing = models.get(model_id)
-    if pricing is None:
-        logger.debug("models.dev 中未找到模型: %s", model_id)
+    info = models.get(model_id)
+    if info is None:
         return None
-    return pricing
+    cost = info.get("cost")
+    return cost if isinstance(cost, dict) else None
+
+
+async def compute_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """根据 models.dev 定价计算单次调用费用。
+
+    这是 cost 计算的第一（也是唯一）信息源；不再使用 litellm 内置定价。
+
+    Args:
+        model_id: 模型标识符，格式 ``provider/model_name``。
+        prompt_tokens: 提示词 token 数。
+        completion_tokens: 完成 token 数。
+
+    Returns:
+        费用（USD），不可用时返回 ``0.0``。
+    """
+    pricing = await get_pricing_by_id(model_id)
+    if pricing is None:
+        return 0.0
+    input_price = pricing.get("input", 0)
+    output_price = pricing.get("output", 0)
+    return (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
+
+
+# ═══════════════════════════════════════════════════════════
+# 公开 API — 能力（主信息源）
+# ═══════════════════════════════════════════════════════════
+
+
+def _derive_capabilities(info: dict[str, Any]) -> frozenset[str]:
+    """从 models.dev 原始模型数据派生内部能力集。"""
+    caps: set[str] = set(_IMPLICIT_CAPABILITIES)
+
+    for field, capability in _FIELD_CAPABILITY_MAP.items():
+        if info.get(field) is True:
+            caps.add(capability)
+
+    modalities = info.get("modalities")
+    if isinstance(modalities, dict):
+        inputs = modalities.get("input")
+        if isinstance(inputs, list) and "image" in inputs:
+            caps.add("vision")
+
+    return frozenset(caps)
+
+
+async def get_capabilities_by_id(model_id: str) -> frozenset[str]:
+    """从 models.dev 派生模型能力集 — 第一信息源。
+
+    能力映射：
+    - ``tool_call`` → ``tools``
+    - ``reasoning`` → ``reasoning``
+    - ``structured_output`` → ``structured_output``
+    - ``modalities.input`` 含 ``image`` → ``vision``
+    - 所有模型隐含 ``chat`` / ``stream`` / ``json_text_fallback``
+
+    Args:
+        model_id: 模型标识符，格式 ``provider/model_name``。
+
+    Returns:
+        能力名 frozenset；数据不可用时退回隐含能力。
+    """
+    models = await _ensure_cache()
+    info = models.get(model_id)
+    if info is None:
+        logger.debug("models.dev 中未找到模型 %s，使用隐含能力", model_id)
+        return _IMPLICIT_CAPABILITIES
+    return _derive_capabilities(info)
+
+
+async def get_model_info(model_id: str) -> dict[str, Any] | None:
+    """返回 models.dev 中指定模型的完整原始信息。
+
+    Args:
+        model_id: 模型标识符，格式 ``provider/model_name``。
+
+    Returns:
+        模型信息字典；不存在时返回 ``None``。
+    """
+    models = await _ensure_cache()
+    return models.get(model_id)

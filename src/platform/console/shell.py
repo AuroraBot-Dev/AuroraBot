@@ -1,24 +1,28 @@
-"""Interactive shell for the native Console Platform."""
+"""原生 Console 平台的交互式 Shell。"""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import uuid4
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
-from src.localhost.command_types import CommandControl, InputOrigin, RuntimeInput
-from src.localhost.router import is_conversation_input
-from src.platform.console.adapter import CONSOLE_AUDIENCE, CONSOLE_ENDPOINT
-from src.utils.log_utils import get_logger
+from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora.platform.console")
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,18 +30,30 @@ if TYPE_CHECKING:
     from prompt_toolkit.input import Input
     from prompt_toolkit.output import Output
 
-    from src.localhost.ports import ConsoleControlPort
+    from src.contracts.ports import ConsoleControlPort
     from src.platform.console.adapter import ConsolePlatform
 
 
 @dataclass(frozen=True, slots=True)
 class _ReadResult:
+    """单次用户输入的读取结果。"""
+
     text: str | None
+    """用户输入的文本，为 None 表示输入流已关闭。"""
     closed: bool = False
+    """输入流是否已关闭（EOF / Ctrl+C / Ctrl+D）。"""
 
 
 class _PromptReader:
+    """基于 prompt_toolkit 的提示行读取器。"""
+
     def __init__(self, *, input_stream: Input | None = None, output_stream: Output | None = None) -> None:
+        """初始化提示会话，支持历史搜索。
+
+        Args:
+            input_stream: 可选的输入流（用于测试注入）。
+            output_stream: 可选的输出流（用于测试注入）。
+        """
         self.session: PromptSession[str] = PromptSession(
             history=InMemoryHistory(),
             enable_history_search=True,
@@ -46,7 +62,8 @@ class _PromptReader:
         )
 
     async def read(self) -> str:
-        return await self.session.prompt_async("Aurora> ")
+        """阻塞等待用户输入一行文本。"""
+        return await self.session.prompt_async("You> ")
 
 
 async def run_console(
@@ -57,7 +74,18 @@ async def run_console(
     readline: Callable[[str], str] | None = None,
     output: Callable[[str], None] = print,
 ) -> None:
-    """Route Console input without owning the shared process lifecycle."""
+    """运行 Console 交互主循环，路由用户输入但不拥有共享进程生命周期。
+
+    主循环负责：读取用户输入、通过 control 端口路由、处理消息输出、
+    处理清屏和关机等控制指令。
+
+    Args:
+        control: Console 控制端口，用于路由输入和控制命令。
+        console: Console 平台实例，用于接收 Bot 消息。
+        stop_event: 外部停止信号。
+        readline: 可注入的读取函数（测试用），为 None 时使用 prompt_toolkit。
+        output: 输出回调函数。
+    """
     stop = stop_event or asyncio.Event()
     output("AuroraBot local console; 输入 /help 查看命令。")
     prompt_reader = _PromptReader() if readline is None else None
@@ -71,6 +99,7 @@ async def run_console(
             while not stop.is_set():
                 read_task = asyncio.create_task(_read_input(prompt_reader, readline), name="aurora-console-read")
                 stop_task = asyncio.create_task(stop.wait(), name="aurora-console-stop")
+                # 等待第一个完成的任务（用户输入或停止信号）
                 done, pending = await asyncio.wait({read_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
                 for task in pending:
                     task.cancel()
@@ -89,22 +118,7 @@ async def run_console(
                 if not raw:
                     continue
                 external_event_id = str(uuid4())
-                external_message_id = str(uuid5(NAMESPACE_URL, f"aurora-console-message:{external_event_id}"))
-                route_ref = str(uuid5(NAMESPACE_URL, f"aurora-console-route:{external_event_id}"))
-                communication: dict[str, object] = {}
-                if is_conversation_input(raw):
-                    console.register_reply_route(route_ref, external_event_id)
-                    communication = {
-                        "communication": {
-                            "endpoint_id": CONSOLE_ENDPOINT,
-                            "external_event_id": external_event_id,
-                            "external_message_id": external_message_id,
-                            "conversation_ref": "console.local:owner",
-                            "actor_ref": "owner.local",
-                            "audience_ref": CONSOLE_AUDIENCE,
-                            "reply_route_ref": route_ref,
-                        }
-                    }
+                # 将用户输入路由到 localhost 的 Console 控制端口
                 routed = await control.route_input(
                     RuntimeInput(
                         text=raw,
@@ -113,7 +127,7 @@ async def run_console(
                         source_app="platform.console",
                         source_instance="default",
                         idempotency_key=external_event_id,
-                        data=communication,
+                        data={"channel": "local_console"},
                     )
                 )
                 if routed.control is CommandControl.CLEAR_CONSOLE:
@@ -133,16 +147,24 @@ async def _read_input(
     prompt_reader: _PromptReader | None,
     readline: Callable[[str], str] | None,
 ) -> _ReadResult:
+    """从 prompt_toolkit 或可注入函数读取一行用户输入。
+
+    捕获 EOF / Ctrl+C 并返回已关闭的结果。
+    """
     try:
         if prompt_reader is not None:
             return _ReadResult(await prompt_reader.read())
         assert readline is not None
-        return _ReadResult(await asyncio.to_thread(readline, "Aurora> "))
+        return _ReadResult(await asyncio.to_thread(readline, "You> "))
     except (EOFError, KeyboardInterrupt, StopIteration):
         return _ReadResult(None, closed=True)
 
 
 def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], None]) -> None:
+    """清空终端屏幕。
+
+    prompt_toolkit 环境下使用其内置清屏；非交互环境使用 ANSI 转义序列。
+    """
     if prompt_reader is not None:
         clear_terminal()
     else:
@@ -150,11 +172,13 @@ def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], 
 
 
 async def _display_messages(console: ConsolePlatform, output: Callable[[str], None]) -> None:
+    """异步循环显示来自 Console 平台的 Bot 消息。"""
     while True:
         output(f"Bot> {await console.next_message()}")
 
 
 async def _cancel_tasks(*tasks: asyncio.Task[Any] | None) -> None:
+    """批量取消多个异步任务并等待完成。"""
     active = [task for task in tasks if task is not None]
     for task in active:
         task.cancel()

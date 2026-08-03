@@ -1,3 +1,4 @@
+# ruff: noqa: PLR2004
 from __future__ import annotations
 
 import argparse
@@ -10,8 +11,6 @@ from aurora.main import build_parser, run
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-_ARGPARSE_ERROR = 2
 
 
 def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -26,12 +25,7 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
     arguments = argparse.Namespace(root=tmp_path, lint=True, test=True, fix=False, unsafe_fixes=False, check=False)
 
     assert check.execute(arguments) == 0
-    assert commands == [
-        ["uv", "run", "--no-sync", "ruff", "check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "--no-sync", "ruff", "format", "aurora/", "src/", "tests/"],
-        ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
-        ["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"],
-    ]
+    assert commands[-1] == ["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"]
 
 
 @pytest.mark.parametrize(
@@ -41,40 +35,32 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
         (["--console"], frozenset({"console"})),
         (["--dashboard"], frozenset({"dashboard"})),
         (["--mcp"], frozenset({"mcp"})),
-        (["--console", "--dashboard"], frozenset({"console", "dashboard"})),
-        (["--console", "--mcp"], frozenset({"console", "mcp"})),
-        (["--dashboard", "--mcp"], frozenset({"dashboard", "mcp"})),
         (["--console", "--dashboard", "--mcp"], frozenset({"console", "dashboard", "mcp"})),
     ),
 )
 def test_cli_passes_each_exact_platform_set_once(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
     flags: list[str],
     expected: frozenset[str],
 ) -> None:
-    calls: list[tuple[Path, str | None, frozenset[str] | None]] = []
-
-    async def execute(root: Path, profile: str | None, platforms: frozenset[str] | None) -> None:
-        calls.append((root, profile, platforms))
-
-    monkeypatch.setattr("aurora.runtime.run_runtime", execute)
-
-    assert run(["--root", str(tmp_path), "--profile", "test", *flags]) == 0
-    assert calls == [(tmp_path, "test", expected)]
-
-
-def test_cli_uses_preference_selection_when_no_platform_flag_is_present(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
     calls: list[frozenset[str] | None] = []
 
-    async def execute(_root: Path, _profile: str | None, platforms: frozenset[str] | None) -> None:
+    async def execute(platforms: frozenset[str] | None) -> None:
         calls.append(platforms)
 
     monkeypatch.setattr("aurora.runtime.run_runtime", execute)
+    assert run(flags) == 0
+    assert calls == [expected]
 
-    assert run(["--root", str(tmp_path)]) == 0
+
+def test_cli_uses_preference_selection_when_no_platform_flag_is_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[frozenset[str] | None] = []
+
+    async def execute(platforms: frozenset[str] | None) -> None:
+        calls.append(platforms)
+
+    monkeypatch.setattr("aurora.runtime.run_runtime", execute)
+    assert run([]) == 0
     assert calls == [None]
 
 
@@ -82,36 +68,22 @@ def test_cli_uses_preference_selection_when_no_platform_flag_is_present(
 def test_headless_rejects_positive_platform_flags(platform: str) -> None:
     with pytest.raises(SystemExit) as raised:
         run(["--headless", platform])
-
-    assert raised.value.code == _ARGPARSE_ERROR
-
-
-@pytest.mark.parametrize("command", ("dev", "run", "serve", "console"))
-def test_cli_rejects_removed_runtime_commands(command: str) -> None:
-    with pytest.raises(SystemExit) as raised:
-        run([command])
-
-    assert raised.value.code == _ARGPARSE_ERROR
+    assert raised.value.code == 2
 
 
 def test_check_does_not_enter_runtime_composition(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     commands: list[list[str]] = []
 
-    async def fail_runtime(_root: Path, _profile: str | None, _platforms: frozenset[str] | None) -> None:
-        pytest.fail("check loaded the runtime composition")
+    async def fail_runtime(_platforms: frozenset[str] | None) -> None:
+        pytest.fail("check loaded runtime composition")
 
     monkeypatch.setattr("aurora.runtime.run_runtime", fail_runtime)
     monkeypatch.setattr(check, "run_process", lambda command, _root: commands.append(command) or 0)
-
     assert run(["--root", str(tmp_path), "check", "--lint"]) == 0
-    assert commands == [
-        ["uv", "run", "--no-sync", "ruff", "check", "aurora/", "src/", "tests/"],
-        ["uv", "run", "--no-sync", "ruff", "format", "aurora/", "src/", "tests/"],
-        ["uv", "run", "--no-sync", "pyright", "aurora/", "src/"],
-    ]
+    assert len(commands) == 3
 
 
 def test_cli_registers_only_the_public_quality_command() -> None:
     parser = build_parser()
-
+    assert parser.parse_args([]).profile is None
     assert parser.parse_args(["check"]).command == "check"

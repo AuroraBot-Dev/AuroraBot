@@ -1,0 +1,9 @@
+# 运行时配置 — 进程级别参数，可通过 profiles/<name>.toml 覆盖
+
+[runtime]
+# 激活的 profile（prod / dev），控制 profile 文件的选择
+profile = "prod"
+# 调试 API 绑定地址，生产环境必须为 loopback
+debug_host = "127.0.0.1"
+# 调试 API 端口，1–65535
+debug_port = 8765

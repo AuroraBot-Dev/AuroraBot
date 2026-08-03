@@ -46,7 +46,7 @@ AuroraBot 是一个面向开发者的开源自主智能体框架。我们想做�
 
 ## 主要能力
 
-- **主动运行**：持久化 scheduler 按节律和预算产生自主任务，外部输入到来时及时切回交互工作。
+- **主动运行**：内建 Clock MCP 持久化自主心跳并产生受预算约束的自主任务；外部输入到来时及时切回交互工作。
 - **持续任务**：任务可以异步等待模型、工具和子 Agent，在结果返回后恢复，并有明确的预算与终态。
 - **多 Agent 协作**：同构 Agent 通过有界委派组成监督树，简单工作直接完成，复杂工作可以并行拆分。
 - **连接外部世界**：Console、Dashboard 和 MCP Platform 将不同来源统一为事件，并提供经过授权的环境能力。
@@ -71,7 +71,7 @@ uv run --no-dev --env-file .env aurora --console --mcp
 启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
 
 ```powershell
-# 使用 config/preference.toml 中的默认平台组合
+# 使用 config/platforms.toml 中的默认平台组合
 uv run --no-dev --env-file .env aurora
 
 # 只启动本地 Console
@@ -87,9 +87,11 @@ uv run --no-dev --env-file .env aurora --headless
 
 | 想改变什么                   | 从哪里开始               |
 | ---------------------------- | ------------------------ |
-| 人格、语气与表达边界         | `config/prompts/SOUL.md` |
-| 模型角色与 Provider          | `config/aurora.toml`     |
-| 默认启动的平台               | `config/preference.toml` |
+| SOUL、世界说明与 Agent 提示词 | `config/prompts.toml`    |
+| 模型角色与 Provider          | `config/models.toml`     |
+| engine 限制与 Task 预算      | `config/engine.toml`     |
+| 持久化目录                   | `config/storage.toml`    |
+| 默认启动的平台               | `config/platforms.toml`  |
 | Agent 的模型、能力与委派范围 | `config/agents.toml`     |
 | 本地或远程 MCP 应用          | `config/apps.toml`       |
 

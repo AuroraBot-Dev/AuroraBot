@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,11 +26,19 @@ from src.sandbox.paths import (
     SANDBOX_OUTPUT_DIR,
     SANDBOX_TEMP_DIR,
 )
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.sandbox.inspector import CodeInspector
     from src.sandbox.policy import AccessPolicy, AccessPolicySnapshot
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    ACCESS_DENIED = "访问被拒绝"
+    WRITE_DENIED = "写入被拒绝"
+
 
 logger = get_logger("SandboxExecutor")
 
@@ -126,7 +135,7 @@ class SandboxExecutor:
         snapshot: "AccessPolicySnapshot",
     ) -> tuple[str, str]:
         """生成安全命名空间代码片段。"""
-        # safe builtins: 从 builtins 模块中按白名单提取
+        # 从 builtins 模块中按白名单提取安全内置函数
         builtins_items = []
         for name in sorted(snapshot.whitelist_builtins):
             if name in snapshot.blacklist_builtins:
@@ -134,7 +143,7 @@ class SandboxExecutor:
             builtins_items.append(f'    "{name}": _b.{name},')
         safe_builtins_code = "_safe_builtins = {\n" + "\n".join(builtins_items) + "\n}"
 
-        # context injection
+        # 注入执行上下文变量
         if context:
             import json
 
@@ -199,12 +208,12 @@ class SandboxExecutor:
     def read_file(self, path: Path) -> str:
         """读取文件内容，受限于 AccessPolicy 文件白名单。"""
         if not self._policy.can_read_file(path):
-            raise PermissionError("访问被拒绝")
+            raise PermissionError(_Msg.ACCESS_DENIED)
         return path.read_text(encoding="utf-8")
 
     def write_file(self, path: Path, content: str) -> None:
         """写入文件内容，写模式仅限 SANDBOX_DIR 内。"""
         if not self._policy.can_open_file(path, "w"):
-            raise PermissionError("写入被拒绝")
+            raise PermissionError(_Msg.WRITE_DENIED)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")

@@ -1,15 +1,17 @@
-"""LiteLLM streaming execution primitives, cancellation and cost tracking.
+"""LiteLLM 流式执行原语、取消机制与成本追踪。
+
+费用计算以 models.dev 为第一（唯一）信息源，不再使用 litellm 内置定价。
 
 用法::
 
-    from src.ai.gateway import gateway
+    from src.ai.gateway import ModelGatewayService
 
-    gen = gateway.fast.acompletion(
+    service = ModelGatewayService(config)
+    gen = service.fast.acompletion(
         messages=[{"role": "user", "content": "Hello"}],
         max_tokens=100,
     )
-    response = await gen                     # ModelResponse
-    text = gateway.plain(response)           # str
+    response = await gen
     print(gen.cost)
 
 作者: [Churk-Ben](https://github.com/Churk-Ben)
@@ -23,40 +25,40 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-# ── LiteLLM 环境抑制（必须在 import litellm 前设置） ──
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "False"
 
 import litellm
-from litellm import completion_cost, stream_chunk_builder
+from litellm import stream_chunk_builder
 from litellm.utils import token_counter
 
 litellm.suppress_debug_info = True
 
-from src.ai.models import get_pricing_by_id
+from enum import StrEnum
+
+from src.ai.models import compute_cost
 from src.ai.providers import missing_credentials_reason, resolve_model
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     import collections.abc
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    FORBIDDEN_MODEL_PARAM = "调用方禁止传入 model 参数，模型由网关角色统一指定"
+
 
 logger = get_logger("Gateway")
 
 
 class GatewayState(Protocol):
-    """Minimal state used by a model caller without importing the gateway facade."""
+    """模型调用方使用的最小状态，无需导入网关门面。"""
 
     log_queries: bool
     log_responses: bool
     cost_tracker: "CostTracker"
 
-
-# ═══════════════════════════════════════════════════════════
-# 常量
-# ═══════════════════════════════════════════════════════════
-
-ROLE_FAST = "fast"
-ROLE_QUALITY = "quality"
-ROLE_MULTIMODAL = "multimodal"
 
 # ═══════════════════════════════════════════════════════════
 # 异常体系
@@ -89,7 +91,6 @@ class CancelledWithPartialResponse(asyncio.CancelledError):
 
 
 def _exc_msg() -> str:
-    """返回当前异常的简略消息，不打印堆栈。"""
     import sys
 
     e = sys.exc_info()[1]
@@ -181,7 +182,6 @@ class GenerationTask:
         return self._task.done()
 
     def plain(self) -> str:
-        """从响应中提取纯文本内容，兼容 None → ''。"""
         if self.response is None:
             return ""
         try:
@@ -258,70 +258,36 @@ class ModelCaller:
         禁止调用方传入 ``model`` 参数 —— 模型由角色配置统一指定。
         """
         if "model" in kwargs:
-            raise PermissionError("调用方禁止传入 model 参数，模型由网关角色统一指定")
+            raise PermissionError(_Msg.FORBIDDEN_MODEL_PARAM)
 
-        async def _safe_cost(
-            response: Any,
-            prompt_tokens: int = 0,
-            completion_tokens: int = 0,
+        async def _compute_and_track(
+            prompt_tokens: int,
+            completion_tokens: int,
+            status: str = "completed",
         ) -> float:
-            """安全计算费用；litellm 失败时回退到 models.dev 定价。"""
+            """费用计算第一信息源：models.dev。"""
             try:
-                return completion_cost(completion_response=response)
+                cost = await compute_cost(self.model, prompt_tokens, completion_tokens)
             except Exception:  # noqa: BLE001
-                logger.warning(
-                    "litellm completion_cost failed for model=%s: %s",
-                    self.model,
-                    _exc_msg(),
-                )
-                return await _fallback_cost(prompt_tokens, completion_tokens)
-
-        async def _safe_cost_per_token(pt: int, ct: int) -> float:
-            """按 token 数计费；litellm 失败时回退到 models.dev 定价。"""
-            try:
-                cost = litellm.cost_per_token(
-                    model=self.model,
-                    prompt_tokens=pt,
-                    completion_tokens=ct,
-                )
-                if isinstance(cost, tuple):
-                    return float(sum(cost))
-                return float(cost)
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    "litellm cost_per_token failed for model=%s: %s",
-                    self.model,
-                    _exc_msg(),
-                )
-                return await _fallback_cost(pt, ct)
-
-        async def _fallback_cost(prompt_tokens: int, completion_tokens: int) -> float:
-            """从 models.dev 拉取定价并计算费用，不可用时返回 0.0。"""
-            pricing = await get_pricing_by_id(self.model)
-            if not pricing:
-                return 0.0
-            input_price = pricing.get("input", 0)
-            output_price = pricing.get("output", 0)
-            cost = (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
-            logger.debug(
-                "models.dev fallback cost:\n%s",
-                json.dumps(
-                    {
-                        "model": self.model,
-                        "cost": cost,
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
+                logger.warning("models.dev 费用计算失败 model=%s: %s", self.model, _exc_msg())
+                cost = 0.0
+            await self.gateway.cost_tracker.add(
+                {
+                    "task_id": None,
+                    "role": self.role,
+                    "model": self.model,
+                    "type": "completion",
+                    "status": status,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost": cost,
+                }
             )
             return cost
 
         async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0912, PLR0915
             prompt_tokens = 0
 
-            # 解析自定义供应商 → litellm 原生模型 + 额外参数
             missing_reason = missing_credentials_reason(self.model)
             if missing_reason is not None:
                 raise GatewayError(missing_reason, retryable=False)
@@ -331,7 +297,6 @@ class ModelCaller:
             try:
                 prompt_tokens = token_counter(model=resolved_model, messages=messages)
             except Exception:  # noqa: BLE001
-                # Token 估算失败不应中断主流程；保留默认值 0，并记录调试信息便于排查。
                 logger.debug(
                     "token_counter failed for model=%s; fallback prompt_tokens=0",
                     resolved_model,
@@ -347,7 +312,6 @@ class ModelCaller:
             }
             if timeout is not None:
                 litellm_kwargs["timeout"] = timeout
-            # 先合并供应商的 api_base / api_key，再合并调用方传入的 kwargs
             litellm_kwargs.update(provider_kwargs)
             litellm_kwargs.update(kwargs)
 
@@ -396,7 +360,6 @@ class ModelCaller:
             chunks: list = []
             final_usage: Any = None
             is_cancelled = False
-            estimated_completion = 0
 
             try:
                 async for chunk in response_stream:
@@ -406,30 +369,16 @@ class ModelCaller:
             except asyncio.CancelledError:
                 is_cancelled = True
 
-            cost = 0.0
-            final_response: Any = None
-
             if not is_cancelled:
                 final_response = stream_chunk_builder(chunks, messages=messages)
                 pt = final_usage.prompt_tokens if final_usage else 0
                 ct = final_usage.completion_tokens if final_usage else 0
-                cost = await _safe_cost(final_response, pt, ct)
-                await self.gateway.cost_tracker.add(
-                    {
-                        "task_id": None,
-                        "role": self.role,
-                        "model": self.model,
-                        "type": "completion",
-                        "status": "completed",
-                        "prompt_tokens": (final_usage.prompt_tokens if final_usage else 0),
-                        "completion_tokens": (final_usage.completion_tokens if final_usage else 0),
-                        "cost": cost,
-                    }
-                )
+                cost = await _compute_and_track(pt, ct, "completed")
+
                 response_text = ""
                 try:
                     if final_response is not None:
-                        content = final_response.choices[0].message.content
+                        content = final_response.choices[0].message.content  # type: ignore[attr-defined]
                         response_text = str(content) if content is not None else "<empty>"
                 except (AttributeError, IndexError, TypeError):
                     pass
@@ -438,11 +387,7 @@ class ModelCaller:
                     logger.debug(
                         "LLM 响应:\n%s",
                         json.dumps(
-                            {
-                                "role": self.role,
-                                "cost": cost,
-                                "text": response_text,
-                            },
+                            {"role": self.role, "cost": cost, "text": response_text},
                             ensure_ascii=False,
                             indent=2,
                         ),
@@ -450,43 +395,22 @@ class ModelCaller:
                 else:
                     logger.debug(
                         "LLM 响应:\n%s",
-                        json.dumps(
-                            {
-                                "role": self.role,
-                                "cost": cost,
-                            },
-                            ensure_ascii=False,
-                            indent=2,
-                        ),
+                        json.dumps({"role": self.role, "cost": cost}, ensure_ascii=False, indent=2),
                     )
                 return final_response, cost
+
+            # 被取消：构建部分响应并估算费用
             if final_usage is not None:
-                built = stream_chunk_builder(chunks, messages=messages)
-                cost = await _safe_cost(
-                    built,
-                    final_usage.prompt_tokens,
-                    final_usage.completion_tokens,
-                )
+                cost = await _compute_and_track(final_usage.prompt_tokens, final_usage.completion_tokens, "cancelled")
             else:
-                estimated_completion = sum(len(c.choices[0].delta.content or "") // 4 for c in chunks if c.choices)
-                cost = await _safe_cost_per_token(prompt_tokens, estimated_completion)
+                completion_tokens = sum(len(c.choices[0].delta.content or "") // 4 for c in chunks if c.choices)
+                cost = await _compute_and_track(prompt_tokens, completion_tokens, "cancelled")
+
             try:
                 partial_response = stream_chunk_builder(chunks, messages=messages)
             except Exception:  # noqa: BLE001
                 partial_response = None
 
-            await self.gateway.cost_tracker.add(
-                {
-                    "task_id": None,
-                    "role": self.role,
-                    "model": self.model,
-                    "type": "completion",
-                    "status": "cancelled",
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": (final_usage.completion_tokens if final_usage else estimated_completion),
-                    "cost": cost,
-                }
-            )
             raise CancelledWithPartialResponse(partial_response, cost)
 
         return self.tm.create_task(_stream_and_collect())

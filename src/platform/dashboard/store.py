@@ -1,19 +1,31 @@
-"""SQLite persistence owned by the Dashboard Platform."""
+"""Dashboard 平台自有的 SQLite 持久化层。"""
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.panel import Panel
 
-from src.platform.dashboard.security import new_token
+from src.utils.time import utc_now
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
+
+
+def new_token() -> str:
+    """生成一个 URL 安全的随机 token 字符串。"""
+    return secrets.token_urlsafe(32)
+
+
+def token_digest(token: str) -> str:
+    """计算 token 的 SHA-256 摘要，用于安全存储。"""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 _MIGRATION_1 = """
@@ -141,16 +153,45 @@ ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0 CHECK (is_owner
 CREATE UNIQUE INDEX idx_users_single_owner ON users(is_owner) WHERE is_owner = 1;
 """
 
-_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4)
+_MIGRATION_5 = """
+ALTER TABLE messages RENAME COLUMN source_publication_request_id TO source_tool_request_id;
+DROP TABLE dashboard_reply_routes;
+ALTER TABLE dashboard_publications RENAME TO dashboard_publications_legacy;
+CREATE TABLE dashboard_tool_requests (
+    request_id TEXT PRIMARY KEY,
+    request_digest TEXT,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('dispatch_started', 'succeeded', 'failed')),
+    summary TEXT,
+    external_message_id TEXT UNIQUE,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+INSERT INTO dashboard_tool_requests(
+    request_id, text, status, summary, external_message_id, error, created_at, updated_at
+)
+SELECT request_id, text, CASE status WHEN 'accepted' THEN 'succeeded' ELSE status END,
+       summary, external_message_id, error, created_at, updated_at
+FROM dashboard_publications_legacy;
+DROP TABLE dashboard_publications_legacy;
+"""
+
+_MIGRATIONS = (_MIGRATION_1, _MIGRATION_2, _MIGRATION_3, _MIGRATION_4, _MIGRATION_5)
 
 console = Console(highlight=False)
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    SCHEMA_VERSION_AHEAD = "Dashboard 数据库 schema {version} 比当前运行时版本更新"
+    TOKEN_EMPTY = "Dashboard 启动 token 为空"
+    OWNER_ALREADY_BOUND = "Dashboard 所有者已绑定到 {username}"
 
 
 def _print_token(token: str) -> None:
+    """在终端中以 Rich Panel 格式打印启动 Token 和保管提示。"""
     content = (
         f"[bold yellow]Token:[/bold yellow] [bold green]{token}[/bold green]\n\n"
         "[dim]请妥善保管 Token。\n"
@@ -161,10 +202,22 @@ def _print_token(token: str) -> None:
 
 
 class ChatStore:
+    """Dashboard 聊天数据的 SQLite 持久化存储。
+
+    管理用户、会话、消息、附件和 Tool 请求的 CRUD 操作，
+    以及数据库迁移和启动 Token 管理。
+    """
+
     def __init__(self, database_path: Path) -> None:
+        """绑定数据库文件路径。
+
+        Args:
+            database_path: SQLite 数据库文件路径。
+        """
         self.database_path = database_path
 
     def connect(self) -> sqlite3.Connection:
+        """创建并返回配置好的 SQLite 连接（WAL + 外键 + busy timeout）。"""
         connection = sqlite3.connect(self.database_path, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -172,12 +225,17 @@ class ChatStore:
         return connection
 
     def initialize(self) -> None:
+        """初始化数据库：创建目录、执行迁移、生成启动 Token。
+
+        使用 ``user_version`` 实现增量迁移；若首次启动且 Token.txt 不存在，
+        则自动生成并打印启动 Token。
+        """
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             if version > len(_MIGRATIONS):
-                raise RuntimeError(f"Dashboard database schema {version} is newer than this runtime")  # noqa: TRY003
+                raise RuntimeError(_Msg.SCHEMA_VERSION_AHEAD.format(version=version))
             for target_version, migration in enumerate(_MIGRATIONS[version:], start=version + 1):
                 connection.executescript(
                     f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
@@ -192,21 +250,24 @@ class ChatStore:
             pass
 
     def bootstrap_token(self) -> str:
+        """读取并返回启动 Token。"""
         token = (self.database_path.parent / "Token.txt").read_text(encoding="utf-8").strip()
         if not token:
-            raise RuntimeError("Dashboard bootstrap token is empty")  # noqa: TRY003
+            raise RuntimeError(_Msg.TOKEN_EMPTY)
         return token
 
     def ensure_owner(self, username: str) -> sqlite3.Row:
-        now = _now()
+        """确保 Dashboard 所有者用户存在且绑定到指定用户名。
+
+        若已有所有者但用户名不匹配则抛出异常。
+        """
+        now = utc_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             owner = connection.execute("SELECT * FROM users WHERE is_owner = 1").fetchone()
             if owner is not None:
                 if str(owner["username"]) != username:
-                    raise RuntimeError(  # noqa: TRY003
-                        f"Dashboard owner is already bound to {owner['username']!s}"
-                    )
+                    raise RuntimeError(_Msg.OWNER_ALREADY_BOUND.format(username=owner["username"]))
                 connection.commit()
                 return owner
             connection.execute(
@@ -223,14 +284,17 @@ class ChatStore:
             return owner
 
     def fetch_one(self, query: str, parameters: Iterable[object] = ()) -> sqlite3.Row | None:
+        """执行查询并返回单行结果（无结果时返回 None）。"""
         with self.connect() as connection:
             return connection.execute(query, tuple(parameters)).fetchone()
 
     def fetch_all(self, query: str, parameters: Iterable[object] = ()) -> list[sqlite3.Row]:
+        """执行查询并返回所有行。"""
         with self.connect() as connection:
             return connection.execute(query, tuple(parameters)).fetchall()
 
     def execute(self, query: str, parameters: Iterable[object] = ()) -> int:
+        """执行写入操作并返回 ``lastrowid``。"""
         with self.connect() as connection:
             cursor = connection.execute(query, tuple(parameters))
             connection.commit()
@@ -238,7 +302,8 @@ class ChatStore:
             return int(cursor.lastrowid)
 
     def ensure_bot(self, username: str, display_name: str, avatar_url: str | None) -> sqlite3.Row:
-        now = _now()
+        """确保 Bot 用户存在，使用 upsert 语义更新显示名和头像。"""
+        now = utc_now()
         with self.connect() as connection:
             connection.execute(
                 """
@@ -267,16 +332,21 @@ class ChatStore:
         attachment_id: int | None,
         status: str = "saved",
         amp_message_id: str | None = None,
-        source_publication_request_id: str | None = None,
+        source_tool_request_id: str | None = None,
     ) -> tuple[sqlite3.Row, bool]:
-        now = _now()
+        """创建消息记录，支持幂等插入（通过唯一约束检测重复）。
+
+        Returns:
+            ``(消息行, 是否新建)`` 的元组。
+        """
+        now = utc_now()
         with self.connect() as connection:
             try:
                 cursor = connection.execute(
                     """
                     INSERT INTO messages(
                         client_message_id, sender_id, receiver_id, message_type, content, attachment_id,
-                        status, amp_message_id, source_publication_request_id, created_at
+                        status, amp_message_id, source_tool_request_id, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -288,7 +358,7 @@ class ChatStore:
                         attachment_id,
                         status,
                         amp_message_id,
-                        source_publication_request_id,
+                        source_tool_request_id,
                         now,
                     ),
                 )
@@ -297,117 +367,22 @@ class ChatStore:
                 assert row is not None
                 return row, True
             except sqlite3.IntegrityError:
+                # 唯一约束冲突 → 取出已存在的行（幂等）
                 row = connection.execute(
                     "SELECT * FROM messages WHERE sender_id = ? AND client_message_id = ?",
                     (sender_id, client_message_id),
                 ).fetchone()
-                if row is None and source_publication_request_id is not None:
+                if row is None and source_tool_request_id is not None:
                     row = connection.execute(
-                        "SELECT * FROM messages WHERE source_publication_request_id = ?",
-                        (source_publication_request_id,),
+                        "SELECT * FROM messages WHERE source_tool_request_id = ?",
+                        (source_tool_request_id,),
                     ).fetchone()
                 if row is None:
                     raise
                 return row, False
 
-    def register_reply_route(
-        self,
-        *,
-        route_ref: str,
-        external_event_id: str,
-        external_message_id: str,
-        owner_user_id: int,
-        conversation_ref: str,
-        actor_ref: str,
-        reply_route_ttl_seconds: float,
-    ) -> sqlite3.Row:
-        now = datetime.now(UTC)
-        with self.connect() as connection:
-            connection.execute("DELETE FROM dashboard_reply_routes WHERE expires_at <= ?", (now.isoformat(),))
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO dashboard_reply_routes(
-                    route_ref, external_event_id, external_message_id, owner_user_id,
-                    conversation_ref, actor_ref, created_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    route_ref,
-                    external_event_id,
-                    external_message_id,
-                    owner_user_id,
-                    conversation_ref,
-                    actor_ref,
-                    now.isoformat(),
-                    (now + timedelta(seconds=reply_route_ttl_seconds)).isoformat(),
-                ),
-            )
-            row = connection.execute(
-                "SELECT * FROM dashboard_reply_routes WHERE external_event_id = ?",
-                (external_event_id,),
-            ).fetchone()
-            connection.commit()
-            assert row is not None
-            if (
-                str(row["route_ref"]) != route_ref
-                or str(row["external_message_id"]) != external_message_id
-                or int(row["owner_user_id"]) != owner_user_id
-            ):
-                raise ValueError(  # noqa: TRY003
-                    "Dashboard external event route conflicts with its persisted binding"
-                )
-            return row
-
-    def start_publication(
-        self,
-        *,
-        request_id: str,
-        route_ref: str | None,
-        capability: str,
-        endpoint_id: str,
-        operation: str,
-        text: str,
-    ) -> tuple[sqlite3.Row, bool]:
-        now = _now()
-        with self.connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT OR IGNORE INTO dashboard_publications(
-                    request_id, route_ref, capability, endpoint_id, operation, text,
-                    status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'dispatch_started', ?, ?)
-                """,
-                (request_id, route_ref, capability, endpoint_id, operation, text, now, now),
-            )
-            row = connection.execute(
-                "SELECT * FROM dashboard_publications WHERE request_id = ?",
-                (request_id,),
-            ).fetchone()
-            connection.commit()
-            assert row is not None
-            return row, cursor.rowcount == 1
-
-    def finish_publication(
-        self,
-        request_id: str,
-        *,
-        status: str,
-        summary: str,
-        external_message_id: str | None = None,
-        error: str | None = None,
-    ) -> None:
-        with self.connect() as connection:
-            connection.execute(
-                """
-                UPDATE dashboard_publications
-                SET status = ?, summary = ?, external_message_id = ?, error = ?, updated_at = ?
-                WHERE request_id = ?
-                """,
-                (status, summary, external_message_id, error, _now(), request_id),
-            )
-            connection.commit()
-
     def message_with_attachment(self, message_id: int) -> sqlite3.Row | None:
+        """查询单条消息并 JOIN 其附件信息。"""
         return self.fetch_one(
             """
             SELECT m.*, a.original_name, a.stored_name, a.mime_type, a.size
@@ -418,4 +393,5 @@ class ChatStore:
         )
 
     def messages_with_attachments(self, query: str, parameters: Iterable[object]) -> list[sqlite3.Row]:
+        """执行自定义消息查询（通常含附件 JOIN）。"""
         return self.fetch_all(query, parameters)

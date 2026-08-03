@@ -1,106 +1,164 @@
-"""Leaf-level immutable configuration DTOs and RFC 0002 TOML validation."""
+"""不可变配置 DTO 与基础校验工具。
+
+不含 I/O、TOML 解析或文件读取 —— 这些由 ``src.config`` 提供。
+"""
 
 from __future__ import annotations
 
-import copy
-import hashlib
-import os
-import tomllib
-from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    UNEXPECTED_OR_MISSING_KEYS = "{label} has unexpected {unexpected} or missing {missing} keys"
+    MISSING_REQUIRED_KEYS = "{label} is missing required keys: {missing}"
+    MUST_BE_TABLE = "{label} must be a table"
+    MUST_BE_NON_EMPTY_STRING = "{label} must be a non-empty string"
+    MUST_BE_POSITIVE = "{label} must be positive"
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from src.contracts.agent import AgentLimits, AgentProfile, TaskLimits
+    from src.contracts.triage import TriageLimits
 
 
 class ConfigurationError(ValueError):
-    """Raised before startup for invalid structural configuration."""
+    """启动前因无效结构性配置抛出。"""
 
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationSource:
-    """Auditable identity of one file used to build a configuration snapshot."""
+    """可审计的配置来源：记录文件路径和 SHA-256 摘要。
+
+    ConfigurationSource object::
+
+        {
+            "path": "/path/to/file",
+            "sha256": "hex-digest"
+        }
+
+    """
 
     path: Path
     sha256: str
 
 
-def _read_toml_snapshot(path: Path) -> tuple[dict[str, Any], ConfigurationSource]:
-    path = path.resolve()
-    try:
-        content = path.read_bytes()
-        data = tomllib.loads(content.decode("utf-8"))
-    except FileNotFoundError as error:
-        raise ConfigurationError(f"configuration file does not exist: {path}") from error
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-        raise ConfigurationError(f"invalid TOML in {path}: {error}") from error
-    return data, ConfigurationSource(path=path, sha256=hashlib.sha256(content).hexdigest())
-
-
-def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    result = copy.deepcopy(base)
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) != isinstance(value, dict):
-            raise ConfigurationError(f"profile type mismatch at {key}")
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = _merge(result[key], value)
-        else:
-            result[key] = copy.deepcopy(value)
-    return result
-
-
 def _require_keys(value: dict[str, Any], keys: set[str], label: str) -> None:
+    """检查字典键恰好为指定集合，不允许多余或缺失。"""
     unexpected = set(value) - keys
     missing = keys - set(value)
     if unexpected or missing:
-        raise ConfigurationError(f"{label} has unexpected {sorted(unexpected)} or missing {sorted(missing)} keys")
+        raise ConfigurationError(
+            _Msg.UNEXPECTED_OR_MISSING_KEYS.format(label=label, unexpected=sorted(unexpected), missing=sorted(missing))
+        )
+
+
+def _require_subset(data: dict[str, Any], required: set[str], label: str) -> None:
+    """检查字典至少包含指定的必需键。"""
+    missing = required - set(data)
+    if missing:
+        raise ConfigurationError(_Msg.MISSING_REQUIRED_KEYS.format(label=label, missing=sorted(missing)))
+
+
+def _table(value: object, label: str) -> dict[str, Any]:
+    """校验值为 TOML 表（dict）类型。"""
+    if not isinstance(value, dict):
+        raise ConfigurationError(_Msg.MUST_BE_TABLE.format(label=label))
+    return value
 
 
 def _string(value: object, label: str) -> str:
+    """校验值为非空字符串。"""
     if not isinstance(value, str) or not value:
-        raise ConfigurationError(f"{label} must be a non-empty string")
+        raise ConfigurationError(_Msg.MUST_BE_NON_EMPTY_STRING.format(label=label))
     return value
+
+
+def _positive_number(value: object, label: str) -> float:
+    """校验值为正数（int 或 float），返回 float。"""
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        raise ConfigurationError(_Msg.MUST_BE_POSITIVE.format(label=label))
+    return float(value)
+
+
+# ---------------------------------------------------------------------------
+# 配置 DTO
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
+    """进程运行时配置：profile 与调试服务地址。
+
+    RuntimeConfig object::
+
+        {
+            "profile": "string",
+            "debug_host": "string",
+            "debug_port": 0
+        }
+
+    """
+
     profile: str
-    workspace: Path
     debug_host: str
     debug_port: int
-    scheduler: "SchedulerConfig"
-    agents: "AgentRuntimeConfig"
-    interactive_budget: "TaskBudgetConfig"
-    autonomous_budget: "TaskBudgetConfig"
 
 
 @dataclass(frozen=True, slots=True)
-class SchedulerConfig:
-    enabled: bool = True
+class EngineConfig:
+    """engine 工作区、调度限制、节律与 Task 预算。"""
+
+    workspace: Path
+    autonomy: "AutonomyConfig"
+    agents: "AgentLimits"
+    triage: "TriageLimits"
+    interactive_budget: "TaskLimits"
+    autonomous_budget: "TaskLimits"
+
+
+@dataclass(frozen=True, slots=True)
+class AutonomyConfig:
+    """自主节律配置：扫描间隔、心跳边界和每日额度。
+
+    AutonomyConfig object::
+
+        {
+            "scan_seconds": 1.0,
+            "heartbeat_initial_seconds": 30.0,
+            "heartbeat_min_seconds": 30.0,
+            "heartbeat_max_seconds": 1800.0
+        }
+
+    """
+
     scan_seconds: float = 1.0
-    idle_initial_seconds: float = 30.0
-    idle_max_seconds: float = 1800.0
-    idle_multiplier: float = 2.0
-    action_cooldown_seconds: float = 300.0
-    autonomous_daily_model_calls: int = 24
-    autonomous_daily_tokens: int = 100_000
-
-
-@dataclass(frozen=True, slots=True)
-class TaskBudgetConfig:
-    max_model_calls: int
-    max_tool_calls: int
-    max_duration_seconds: float
-
-
-@dataclass(frozen=True, slots=True)
-class CommunicationConfig:
-    reply_route_ttl_seconds: float
-    relay_hop_limit: Literal[1]
+    heartbeat_initial_seconds: float = 30.0
+    heartbeat_min_seconds: float = 30.0
+    heartbeat_max_seconds: float = 1800.0
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardBotConfig:
+    """Dashboard Bot 身份配置。
+
+    DashboardBotConfig object::
+
+        {
+            "username": "string",
+            "display_name": "string",
+            "avatar_url": "string" | null
+        }
+
+    """
+
     username: str
     display_name: str
     avatar_url: str | None
@@ -108,6 +166,24 @@ class DashboardBotConfig:
 
 @dataclass(frozen=True, slots=True)
 class DashboardConfig:
+    """Dashboard 服务配置。
+
+    DashboardConfig object::
+
+        {
+            "host": "string",
+            "port": 0,
+            "database_path": "/path/to/db",
+            "upload_dir": "/path/to/uploads",
+            "max_upload_bytes": 0,
+            "session_ttl_seconds": 0,
+            "allowed_origins": ["string", ...],
+            "owner_username": "string",
+            "bot": DashboardBotConfig
+        }
+
+    """
+
     host: str
     port: int
     database_path: Path
@@ -120,80 +196,46 @@ class DashboardConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class AgentRuntimeConfig:
-    root_profile: str = "builtin.gate"
-    worker_profile: str = "builtin.worker"
-    memory_agent_profile: str | None = None
-    max_active_agents: int = 16
-    max_agents_per_task: int = 8
-    max_depth: int = 3
-    max_children_per_agent: int = 4
-    turn_concurrency: int = 8
-    model_concurrency: int = 4
-    effect_concurrency: int = 8
-    blocking_workers: int = 4
-    lease_seconds: float = 30.0
-    ambient_ttl_seconds: float = 1800.0
-
-
-@dataclass(frozen=True, slots=True)
-class AgentProfileConfig:
-    id: str
-    implementation: str
-    model_role: str
-    prompt: str
-    capabilities: frozenset[str]
-    can_delegate: bool
-    child_profiles: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class AppToolConfig:
-    name: str
-    kind: Literal["effect", "publication"]
-
-
-@dataclass(frozen=True, slots=True)
-class AppPublicationConfig:
-    capability: str
-    tool: str
-    operation: Literal["reply", "relay", "proactive_send"]
-
-
-@dataclass(frozen=True, slots=True)
-class AppDestinationConfig:
-    alias: str
-    description: str
-    capability: str
-    address_ref: str
-    allowed_source_audiences: tuple[str, ...]
-    target_audience_ref: str
-
-
-@dataclass(frozen=True, slots=True)
 class AppConfig:
-    """One explicitly enabled MCP application route."""
+    """一个显式启用的 MCP 应用路由配置。
+
+    AppConfig object::
+
+        {
+            "package": "string",
+            "transport": "string",
+            "working_dir": "/path/to/dir" | null,
+            "command": ["string", ...],
+            "url": "string" | null,
+            "auth_env": "string" | null,
+            "timeout_seconds": 0.0
+        }
+
+    """
 
     package: str
-    kind: Literal["utility", "communication"]
     transport: str
     working_dir: Path | None
     command: tuple[str, ...]
     url: str | None
     auth_env: str | None
     timeout_seconds: float
-    tools: tuple[AppToolConfig, ...]
-    publications: tuple[AppPublicationConfig, ...]
-    destinations: tuple[AppDestinationConfig, ...]
-
-    @property
-    def allowed_tools(self) -> frozenset[str]:
-        return frozenset(tool.name for tool in self.tools)
 
 
 @dataclass(frozen=True, slots=True)
 class ModelProviderConfig:
-    """A TOML-defined LiteLLM or OpenAI-compatible Provider route."""
+    """TOML 定义的 LiteLLM 或 OpenAI 兼容 Provider 路由。
+
+    ModelProviderConfig object::
+
+        {
+            "id": "string",
+            "adapter": "string",
+            "secret_env": "ENV_VAR_NAME",
+            "base_url": "string" | null
+        }
+
+    """
 
     id: str
     adapter: str
@@ -203,287 +245,166 @@ class ModelProviderConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelRoleConfig:
-    """Non-secret configuration for one model role."""
+    """模型角色的非密钥配置，capabilities 为空时由 models.dev 自动派生。
+
+    ModelRoleConfig object::
+
+        {
+            "provider": "string",
+            "model": "string",
+            "capabilities": ["string", ...],
+            "endpoint": "chat_completions"
+        }
+
+    """
 
     provider: str
     model: str
-    capabilities: frozenset[str]
+    capabilities: frozenset[str] = frozenset()
     endpoint: str = "chat_completions"
 
 
 @dataclass(frozen=True, slots=True)
 class ModelLoggingConfig:
-    """Opt-in DEBUG logging controls for the retained gateway implementation."""
+    """模型网关的可选 DEBUG 日志控制。
+
+    ModelLoggingConfig object::
+
+        {
+            "log_queries": false,
+            "log_responses": false
+        }
+
+    """
 
     log_queries: bool
     log_responses: bool
 
 
 @dataclass(frozen=True, slots=True)
+class ConsolePreference:
+    """Console 平台偏好。
+
+    ConsolePreference object::
+
+        {
+            "enabled": false,
+            "terminal_logs": false
+        }
+
+    """
+
+    enabled: bool
+    terminal_logs: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardPreference:
+    """Dashboard 平台偏好。
+
+    DashboardPreference object::
+
+        {
+            "enabled": false,
+            "open_browser": false
+        }
+
+    """
+
+    enabled: bool
+    open_browser: bool
+
+
+@dataclass(frozen=True, slots=True)
+class McpPreference:
+    """MCP 平台偏好。
+
+    McpPreference object::
+
+        {
+            "enabled": false,
+            "terminal_logs": false
+        }
+
+    """
+
+    enabled: bool
+    terminal_logs: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformPreference:
+    """平台组合偏好。
+
+    PlatformPreference object::
+
+        {
+            "console": ConsolePreference,
+            "dashboard": DashboardPreference,
+            "mcp": McpPreference
+        }
+
+    """
+
+    console: ConsolePreference
+    dashboard: DashboardPreference
+    mcp: McpPreference
+
+
+PLATFORM_NAMES: frozenset[str] = frozenset(f.name for f in fields(PlatformPreference))
+"""所有已知平台标识符，由 PlatformPreference 的字段名派生。"""
+
+
+@dataclass(frozen=True, slots=True)
+class StorageConfig:
+    """各实现包的私有持久化目录。"""
+
+    data_root: Path
+    engine: Path
+    ai: Path
+    memory: Path
+    apps: Path
+    console: Path
+    dashboard: Path
+
+
+@dataclass(frozen=True, slots=True)
 class AuroraConfig:
+    """聚合所有 TOML 配置的根配置对象。
+
+    AuroraConfig object::
+
+        {
+            "root": "/path/to/root",
+            "sources": [ConfigurationSource, ...],
+            "runtime": RuntimeConfig,
+            "engine": EngineConfig,
+            "dashboard": DashboardConfig,
+            "preference": PlatformPreference,
+            "logging_level": "string",
+            "storage": StorageConfig,
+            "agents": [AgentProfile, ...],
+            "model_roles": ["string", ...],
+            "model_definitions": {"role": ModelRoleConfig, ...},
+            "model_providers": {"provider": ModelProviderConfig, ...},
+            "model_logging": ModelLoggingConfig,
+            "apps": [AppConfig, ...]
+        }
+
+    """
+
     root: Path
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
-    communication: CommunicationConfig
+    engine: EngineConfig
     dashboard: DashboardConfig
-    soul_path: Path
-    soul_hash: str
+    preference: PlatformPreference
     logging_level: str
-    agents: tuple[AgentProfileConfig, ...]
+    logging_dir: Path
+    storage: StorageConfig
+    agents: "tuple[AgentProfile, ...]"
     model_roles: frozenset[str]
-    model_definitions: Mapping[str, ModelRoleConfig]
-    model_providers: Mapping[str, ModelProviderConfig]
-    model_logging: ModelLoggingConfig
-    apps: tuple[AppConfig, ...]
-    apps_configuration_hash: str
-
-
-def _positive_number(value: object, label: str) -> float:
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
-        raise ConfigurationError(f"{label} must be positive")
-    return float(value)
-
-
-def _parse_scheduler(raw: dict[str, Any]) -> SchedulerConfig:
-    defaults = SchedulerConfig()
-    allowed = {
-        "enabled",
-        "scan_seconds",
-        "idle_initial_seconds",
-        "idle_max_seconds",
-        "idle_multiplier",
-        "action_cooldown_seconds",
-        "autonomous_daily_model_calls",
-        "autonomous_daily_tokens",
-    }
-    if set(raw) - allowed:
-        raise ConfigurationError("runtime.scheduler has unsupported keys")
-    enabled = raw.get("enabled", defaults.enabled)
-    if not isinstance(enabled, bool):
-        raise ConfigurationError("runtime.scheduler.enabled must be boolean")
-    daily_calls = raw.get("autonomous_daily_model_calls", defaults.autonomous_daily_model_calls)
-    daily_tokens = raw.get("autonomous_daily_tokens", defaults.autonomous_daily_tokens)
-    if not isinstance(daily_calls, int) or isinstance(daily_calls, bool) or daily_calls <= 0:
-        raise ConfigurationError("autonomous_daily_model_calls must be a positive integer")
-    if not isinstance(daily_tokens, int) or isinstance(daily_tokens, bool) or daily_tokens <= 0:
-        raise ConfigurationError("autonomous_daily_tokens must be a positive integer")
-    initial = _positive_number(raw.get("idle_initial_seconds", defaults.idle_initial_seconds), "idle_initial_seconds")
-    maximum = _positive_number(raw.get("idle_max_seconds", defaults.idle_max_seconds), "idle_max_seconds")
-    if maximum < initial:
-        raise ConfigurationError("idle_max_seconds must be at least idle_initial_seconds")
-    multiplier = _positive_number(raw.get("idle_multiplier", defaults.idle_multiplier), "idle_multiplier")
-    if multiplier <= 1:
-        raise ConfigurationError("idle_multiplier must be greater than one")
-    return SchedulerConfig(
-        enabled=enabled,
-        scan_seconds=_positive_number(raw.get("scan_seconds", defaults.scan_seconds), "scan_seconds"),
-        idle_initial_seconds=initial,
-        idle_max_seconds=maximum,
-        idle_multiplier=multiplier,
-        action_cooldown_seconds=_positive_number(
-            raw.get("action_cooldown_seconds", defaults.action_cooldown_seconds), "action_cooldown_seconds"
-        ),
-        autonomous_daily_model_calls=daily_calls,
-        autonomous_daily_tokens=daily_tokens,
-    )
-
-
-def _parse_task_budget(
-    raw: dict[str, Any], default_calls: int, default_tools: int, default_duration: float, label: str
-) -> TaskBudgetConfig:
-    allowed = {"max_model_calls", "max_tool_calls", "max_duration_seconds"}
-    if set(raw) - allowed:
-        raise ConfigurationError(f"runtime.{label} has unsupported keys")
-    calls = raw.get("max_model_calls", default_calls)
-    tools = raw.get("max_tool_calls", default_tools)
-    if not isinstance(calls, int) or isinstance(calls, bool) or calls <= 0:
-        raise ConfigurationError(f"runtime.{label}.max_model_calls must be positive")
-    if not isinstance(tools, int) or isinstance(tools, bool) or tools <= 0:
-        raise ConfigurationError(f"runtime.{label}.max_tool_calls must be positive")
-    return TaskBudgetConfig(calls, tools, _positive_number(raw.get("max_duration_seconds", default_duration), label))
-
-
-def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
-    """Load the selected RFC 0002 configuration snapshot."""
-    from src.contracts.configuration_sections import (
-        _parse_agent_runtime,
-        _parse_agents,
-        _parse_apps,
-        _parse_communication,
-        _parse_dashboard,
-    )
-
-    root = root.resolve()
-    base, base_source = _read_toml_snapshot(root / "config" / "aurora.toml")
-    sources = [base_source]
-    _require_keys(
-        base,
-        {"runtime", "communication", "dashboard", "soul", "logging", "storage", "models"},
-        "aurora.toml",
-    )
-    runtime_raw = base["runtime"]
-    if not isinstance(runtime_raw, dict):
-        raise ConfigurationError("runtime must be a table")
-    selected_profile = profile or os.environ.get("AURORA_PROFILE") or runtime_raw.get("profile")
-    if not isinstance(selected_profile, str) or not selected_profile:
-        raise ConfigurationError("no profile selected")
-    merged = base
-    profile_path = root / "config" / "profiles" / f"{selected_profile}.toml"
-    if profile_path.exists():
-        profile_data, profile_source = _read_toml_snapshot(profile_path)
-        merged = _merge(base, profile_data)
-        sources.append(profile_source)
-    _require_keys(
-        merged,
-        {"runtime", "communication", "dashboard", "soul", "logging", "storage", "models"},
-        "merged aurora config",
-    )
-    runtime_raw = merged["runtime"]
-    communication_raw = merged["communication"]
-    dashboard_raw = merged["dashboard"]
-    soul_raw = merged["soul"]
-    logging_raw = merged["logging"]
-    storage_raw = merged["storage"]
-    models_raw = merged["models"]
-    if not all(
-        isinstance(value, dict)
-        for value in (runtime_raw, communication_raw, dashboard_raw, soul_raw, logging_raw, storage_raw, models_raw)
-    ):
-        raise ConfigurationError("aurora top-level sections must be tables")
-    runtime_allowed = {
-        "profile",
-        "workspace",
-        "debug_host",
-        "debug_port",
-        "scheduler",
-        "agents",
-        "interactive_task",
-        "autonomous_task",
-    }
-    required_runtime = {"profile", "workspace", "debug_host", "debug_port"}
-    if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
-        raise ConfigurationError("runtime has unsupported or missing keys")
-    _require_keys(soul_raw, {"path"}, "soul")
-    _require_keys(logging_raw, {"level"}, "logging")
-    _require_keys(storage_raw, {"data_dir"}, "storage")
-    _require_keys(models_raw, {"roles", "providers", "logging"}, "models")
-    debug_port = runtime_raw["debug_port"]
-    if not isinstance(debug_port, int) or not 1 <= debug_port <= 65535:
-        raise ConfigurationError("runtime.debug_port must be a valid port")
-    debug_host = _string(runtime_raw["debug_host"], "runtime.debug_host")
-    if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
-        raise ConfigurationError("production debug API must bind to loopback")
-    roles = models_raw["roles"]
-    providers = models_raw["providers"]
-    model_logging = models_raw["logging"]
-    if not isinstance(roles, dict) or not isinstance(providers, dict) or not isinstance(model_logging, dict):
-        raise ConfigurationError("models.roles, models.providers and models.logging must be tables")
-    _require_keys(model_logging, {"log_queries", "log_responses"}, "models.logging")
-    if not isinstance(model_logging["log_queries"], bool) or not isinstance(model_logging["log_responses"], bool):
-        raise ConfigurationError("models.logging values must be booleans")
-    model_providers: dict[str, ModelProviderConfig] = {}
-    for provider_id, settings in providers.items():
-        if not isinstance(provider_id, str) or not isinstance(settings, dict):
-            raise ConfigurationError("model provider IDs and settings must be tables")
-        required_keys = {"adapter", "secret_env", "base_url"} if "base_url" in settings else {"adapter", "secret_env"}
-        _require_keys(settings, required_keys, f"models.providers.{provider_id}")
-        adapter = _string(settings["adapter"], f"models.providers.{provider_id}.adapter")
-        if adapter not in {"litellm", "openai_compatible"}:
-            raise ConfigurationError(f"models.providers.{provider_id}.adapter is unsupported")
-        base_url = settings.get("base_url")
-        if base_url is not None:
-            base_url = _string(base_url, f"models.providers.{provider_id}.base_url")
-        if adapter == "openai_compatible" and base_url is None:
-            raise ConfigurationError(f"models.providers.{provider_id}.base_url is required")
-        model_providers[provider_id] = ModelProviderConfig(
-            id=provider_id,
-            adapter=adapter,
-            secret_env=_string(settings["secret_env"], f"models.providers.{provider_id}.secret_env"),
-            base_url=base_url,
-        )
-    model_definitions: dict[str, ModelRoleConfig] = {}
-    for role, settings in roles.items():
-        if not isinstance(settings, dict):
-            raise ConfigurationError(f"model role {role} must be a table")
-        role_allowed = {"provider", "model", "capabilities", "endpoint"}
-        if set(settings) - role_allowed or not {"provider", "model", "capabilities"} <= set(settings):
-            raise ConfigurationError(f"models.roles.{role} has unsupported or missing keys")
-        provider_id = _string(settings["provider"], f"models.roles.{role}.provider")
-        if provider_id not in model_providers:
-            raise ConfigurationError(f"models.roles.{role} references unknown provider")
-        capabilities = settings["capabilities"]
-        if not isinstance(capabilities, list) or not all(isinstance(value, str) for value in capabilities):
-            raise ConfigurationError(f"models.roles.{role}.capabilities must contain strings")
-        endpoint = settings.get("endpoint", "chat_completions")
-        if endpoint not in {"chat_completions", "responses"}:
-            raise ConfigurationError(f"models.roles.{role}.endpoint is unsupported")
-        if endpoint == "responses" and "native_responses" not in capabilities:
-            raise ConfigurationError(f"models.roles.{role} responses endpoint requires native_responses")
-        model_definitions[role] = ModelRoleConfig(
-            provider=provider_id,
-            model=_string(settings["model"], f"models.roles.{role}.model"),
-            capabilities=frozenset(capabilities),
-            endpoint=endpoint,
-        )
-    soul_path = (root / _string(soul_raw["path"], "soul.path")).resolve()
-    try:
-        soul_hash = hashlib.sha256(soul_path.read_bytes()).hexdigest()
-    except FileNotFoundError as error:
-        raise ConfigurationError(f"SOUL file does not exist: {soul_path}") from error
-    agents_data, agents_source = _read_toml_snapshot(root / "config" / "agents.toml")
-    apps_data, apps_source = _read_toml_snapshot(root / "config" / "apps.toml")
-    sources.extend((agents_source, apps_source))
-    agents = _parse_agents(agents_data, frozenset(roles))
-    _require_keys(apps_data, {"app"}, "apps.toml")
-    apps = _parse_apps(apps_data["app"], root)
-    scheduler_raw = runtime_raw.get("scheduler", {})
-    agents_raw = runtime_raw.get("agents", {})
-    interactive_raw = runtime_raw.get("interactive_task", {})
-    autonomous_raw = runtime_raw.get("autonomous_task", {})
-    if not all(isinstance(item, dict) for item in (scheduler_raw, agents_raw, interactive_raw, autonomous_raw)):
-        raise ConfigurationError("runtime scheduler, Agents and Task budgets must be tables")
-    scheduler = _parse_scheduler(scheduler_raw)
-    agent_runtime = _parse_agent_runtime(agents_raw)
-    if agent_runtime.root_profile not in {agent.id for agent in agents}:
-        raise ConfigurationError("runtime.agents.root_profile is not configured")
-    if agent_runtime.worker_profile not in {agent.id for agent in agents}:
-        raise ConfigurationError("runtime.agents.worker_profile is not configured")
-    if agent_runtime.memory_agent_profile is not None and agent_runtime.memory_agent_profile not in {
-        agent.id for agent in agents
-    }:
-        raise ConfigurationError("runtime.agents.memory_agent_profile is not configured")
-    interactive_budget = _parse_task_budget(interactive_raw, 8, 6, 300.0, "interactive_task")
-    autonomous_budget = _parse_task_budget(autonomous_raw, 3, 2, 120.0, "autonomous_task")
-    workspace = (root / _string(runtime_raw["workspace"], "runtime.workspace")).resolve()
-    expected_workspace = (root / "data" / "kernel").resolve()
-    if workspace != expected_workspace:
-        raise ConfigurationError("runtime.workspace must be data/kernel")
-    return AuroraConfig(
-        root=root,
-        sources=tuple(sources),
-        runtime=RuntimeConfig(
-            profile=selected_profile,
-            workspace=workspace,
-            debug_host=debug_host,
-            debug_port=debug_port,
-            scheduler=scheduler,
-            agents=agent_runtime,
-            interactive_budget=interactive_budget,
-            autonomous_budget=autonomous_budget,
-        ),
-        communication=_parse_communication(cast("dict[str, Any]", communication_raw)),
-        dashboard=_parse_dashboard(cast("dict[str, Any]", dashboard_raw), root),
-        soul_path=soul_path,
-        soul_hash=soul_hash,
-        logging_level=_string(logging_raw["level"], "logging.level"),
-        agents=agents,
-        model_roles=frozenset(roles),
-        model_definitions=MappingProxyType(model_definitions),
-        model_providers=MappingProxyType(model_providers),
-        model_logging=ModelLoggingConfig(
-            log_queries=model_logging["log_queries"],
-            log_responses=model_logging["log_responses"],
-        ),
-        apps=apps,
-        apps_configuration_hash=apps_source.sha256,
-    )
+    model_definitions: Mapping[str, ModelRoleConfig] = MappingProxyType({})
+    model_providers: Mapping[str, ModelProviderConfig] = MappingProxyType({})
+    model_logging: ModelLoggingConfig = ModelLoggingConfig(log_queries=False, log_responses=False)
+    apps: tuple[AppConfig, ...] = ()

@@ -1,1 +1,1 @@
-"""Local runtime use cases and developer-facing adapters."""
+"""RFC 0200 定义的运行时监察、命令路由与输入分发 sidecar。"""

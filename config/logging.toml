@@ -1,0 +1,7 @@
+# 日志配置
+
+# 运行时日志：文件名固定为 logs/aurora.log
+[logging]
+# 日志级别：DEBUG / INFO / WARNING / ERROR
+level = "INFO"
+log_dir = "logs"

@@ -1,4 +1,4 @@
-"""Support ``python -m aurora`` from an installed wheel."""
+"""支持通过 ``python -m aurora`` 从已安装的 wheel 中启动。"""
 
 from aurora.main import main
 

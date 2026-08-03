@@ -44,7 +44,7 @@ AuroraBot は、開発者向けのオープンソース自律エージェント�
 
 ## 主な能力
 
-- **能動的な runtime**：永続 scheduler が予算内で自律 Task を作り、外部入力時は対話処理へ素早く切り替えます。
+- **能動的な runtime**：内蔵 Clock MCP が自律 heartbeat を永続化し、予算内で自律 Task を作り、外部入力時は対話処理へ素早く切り替えます。
 - **継続する Task**：model、能力、child Agent を非同期に待ち、結果から再開し、明確な予算と終端を持ちます。
 - **Multi-Agent 協調**：同構 Agent が限定された監督ツリーを作り、複雑な仕事を並行して分担できます。
 - **外部世界との接続**：Console、Dashboard、MCP Platform が入力を event に統一し、許可済みの能力を提供します。
@@ -69,7 +69,7 @@ uv run --no-dev --env-file .env aurora --console --mcp
 起動後はメッセージを入力できます。`/help` で command、`/status` で runtime state を確認できます。
 
 ```powershell
-# config/preference.toml の既定 Platform 構成を使用
+# config/platforms.toml の既定 Platform 構成を使用
 uv run --no-dev --env-file .env aurora
 
 # ローカル Console のみ起動
@@ -86,9 +86,11 @@ Dashboard の browser UI は別プロジェクトで、本リポジトリには�
 
 | 変更したいもの                         | 最初に見る場所           |
 | -------------------------------------- | ------------------------ |
-| persona、話し方、会話の境界            | `config/prompts/SOUL.md` |
-| model role と Provider                 | `config/aurora.toml`     |
-| 既定で起動する Platform                | `config/preference.toml` |
+| SOUL、世界、Agent prompt fragment       | `config/prompts.toml`    |
+| model role と Provider                 | `config/models.toml`     |
+| engine 制限と Task budget              | `config/engine.toml`     |
+| 永続化 storage path                    | `config/storage.toml`    |
+| 既定で起動する Platform                | `config/platforms.toml` |
 | Agent の model、能力、委任範囲         | `config/agents.toml`     |
 | ローカルまたはリモート MCP application | `config/apps.toml`       |
 

@@ -11,7 +11,7 @@ import ast
 from typing import TYPE_CHECKING, ClassVar
 
 from src.sandbox.base import SecurityViolation
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.sandbox.policy import AccessPolicy, AccessPolicySnapshot
@@ -24,11 +24,11 @@ class CodeInspector:
 
     # 构造函数 → 返回类型的映射（用于调用链解析）
     _CONSTRUCTOR_TO_CLASS: ClassVar[dict[str, str]] = {
-        # pathlib concrete paths
+        # pathlib 具体路径类
         "Path": "pathlib.Path",
         "PosixPath": "pathlib.PosixPath",
         "WindowsPath": "pathlib.WindowsPath",
-        # pathlib pure paths
+        # pathlib 纯路径类
         "PurePath": "pathlib.PurePath",
         "PurePosixPath": "pathlib.PurePosixPath",
         "PureWindowsPath": "pathlib.PureWindowsPath",

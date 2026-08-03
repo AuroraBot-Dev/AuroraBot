@@ -1,0 +1,12 @@
+[storage]
+data_root = "data"
+engine = "engine"
+ai = "ai"
+memory = "memory"
+apps = "apps"
+
+[storage.platform.console]
+data_dir = "platform/console"
+
+[storage.platform.dashboard]
+data_dir = "platform/dashboard"

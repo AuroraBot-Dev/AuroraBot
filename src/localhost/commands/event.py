@@ -1,4 +1,4 @@
-"""Implementation of the ``/event`` AMP injection command."""
+"""``/event`` AMP 注入命令的实现。"""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import json
 from typing import TYPE_CHECKING
 
 from src.contracts.amp import new_amp
-from src.localhost.command_types import CommandResult
+from src.contracts.event import CommandResult
 
 if TYPE_CHECKING:
     import argparse
 
-    from src.localhost.command_types import CommandContext
+    from src.contracts.event import CommandContext
 
 NAMES = ("/event", "/e")
 USAGE = "/event <type> [--source APP] [--session ID] [--summary TEXT] [--data JSON]"
@@ -19,6 +19,7 @@ DESCRIPTION = "投递任意 AMP 事件"
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
+    """配置 /event 命令参数：事件类型、来源、会话、摘要与数据。"""
     parser.add_argument("event_type")
     parser.add_argument("--source")
     parser.add_argument("--session")
@@ -27,6 +28,7 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 
 async def handle(context: CommandContext, arguments: argparse.Namespace) -> CommandResult:
+    """构建并提交自定义 AMP 事件到 engine 邮箱。"""
     try:
         data = json.loads(arguments.data)
     except json.JSONDecodeError as error:

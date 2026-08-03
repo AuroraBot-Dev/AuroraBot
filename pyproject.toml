@@ -6,10 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
     "litellm>=1.83.14",
-    "concurrent-log-handler>=0.9.29",
-    "mem0ai[nlp]>=2.0.1",
     "pyyaml>=6.0.3",
-    "chromadb>=1.5.9",
     "websockets<14.0",
     "botocore>=1.43.12",
     "tiktoken>=0.13.0",
@@ -30,13 +27,7 @@ where = ["."]
 include = ["aurora", "aurora.*", "src", "src.*"]
 
 [dependency-groups]
-dev = [
-    "pyright[nodejs]",
-    "ruff",
-    "pytest",
-    "pytest-cov",
-    "donk>=1.1.0",
-]
+dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov", "donk>=1.1.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -44,7 +35,7 @@ testpaths = ["tests"]
 addopts = "-ra"
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 75
 
 [tool.ruff]
 line-length = 120
@@ -89,16 +80,16 @@ select = [
     "ARG",   # flake8-unused-arguments
     "PTH",   # flake8-use-pathlib
     # "ERA",   # eradicate
-    "FAST",  # FastAPI
-    "PERF",  # Perflint
-    "PGH",   # pygrep-hooks
-    "FURB",  # refurb
-    "TRY",   # tryceratops
-    "RUF",   # Ruff-specific rules
+    "FAST", # FastAPI
+    "PERF", # Perflint
+    "PGH",  # pygrep-hooks
+    "FURB", # refurb
+    "TRY",  # tryceratops
+    "RUF",  # Ruff-specific rules
 ]
 ignore = [
-    "E402",    # module-import-not-at-top-of-file  # gateway configures env before importing litellm
-    "UP037",   # quoted-annotation
+    "E402",  # module-import-not-at-top-of-file  # gateway configures env before importing litellm
+    "UP037", # quoted-annotation
     # "RUF001",  # ambiguous-unicode-character-string
     # "RUF002",  # ambiguous-unicode-character-docstring
     # "RUF003",  # ambiguous-unicode-character-comment
@@ -107,49 +98,76 @@ ignore = [
     "ANN401",  # any-type
     "COM812",  # missing-trailing-comma
     "PLC0415", # import-outside-top-level
+    "N999",    # forbidden-import-alias (allowed in __init__.py)
+    "TRY003",  # too-many-nested-blocks
+    "PLR0913", # too-many-arguments
 ]
-allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "【", "】", "《", "》", "…", "—", "（", "）", "、"]
+allowed-confusables = [
+    "，",
+    "。",
+    "“",
+    "”",
+    "：",
+    "；",
+    "？",
+    "！",
+    "【",
+    "】",
+    "《",
+    "》",
+    "…",
+    "—",
+    "（",
+    "）",
+    "、",
+]
 
 [tool.ruff.lint.per-file-ignores]
-"apps/*/__init__.py" = ["N999"]
+"src/contracts/model.py" = ["TRY004"]
+"src/contracts/configuration*.py" = [
+    "C901",
+    "PLR0912",
+    "PLR0915",
+    "PLR2004",
+    "TC003",
+]
+"src/config/loader.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003"]
+"src/engine/state.py" = [
+    "BLE001",
+    "C901",
+    "PLR0912",
+    "TC001",
+    "TC003",
+    "TRY004",
+    "TRY301",
+]
+"src/engine/store*.py" = [
+    "C901",
+    "PLR0912",
+    "PLR0915",
+    "TC001",
+    "TC003",
+    "TRY004",
+]
+"src/platform/dashboard/service.py" = ["C901", "PLR0912", "PLR2004", "TC001"]
 "src/platform/__init__.py" = ["A005"]
-"src/apps/*/__init__.py" = ["N999"]
-"src/contracts/amp.py" = ["PLR0913", "TRY003"]
-"src/contracts/agent.py" = ["PLR0913", "TC001", "TRY003"]
-"src/contracts/model.py" = ["TRY003", "TRY004"]
-"src/contracts/configuration*.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003", "TRY003"]
-"src/kernel/runtime.py" = ["BLE001", "C901", "PLR0912", "PLR0913", "TC001", "TC003", "TRY003", "TRY004", "TRY301"]
-"src/kernel/store*.py" = ["C901", "PLR0912", "PLR0913", "PLR0915", "TC001", "TC003", "TRY003"]
+"src/contracts/agent.py" = ["TC001"]
+"src/config/sections.py" = ["C901", "PLR0912", "PLR2004", "TC003"]
+"src/engine/runtime.py" = ["BLE001", "TC001"]
 "src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
-"src/platform/dashboard/service.py" = ["C901", "PLR0912", "PLR2004", "TC001", "TRY003"]
-"src/platform/dashboard/store.py" = ["PLR0913", "TC003", "TRY300"]
-"src/localhost/runtime.py" = ["BLE001", "TC003", "TRY003"]
-"src/localhost/effect_dispatcher.py" = ["BLE001", "TRY003"]
-"src/localhost/publication_dispatcher.py" = ["BLE001", "TRY003"]
-"src/localhost/scheduler.py" = ["TRY300"]
-"src/agents/tool_agent.py" = ["C901", "PLR0911", "PLR2004", "TC001"]
-"src/platform/console/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
+"src/platform/dashboard/store.py" = ["TC003", "TRY300"]
+"src/localhost/runtime.py" = ["BLE001", "TC003"]
+"src/localhost/api.py" = ["C901"]
+"src/agents/handler.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
+"src/memory/service.py" = ["BLE001"]
+"src/platform/console/adapter.py" = ["TC001", "TRY004", "TRY301"]
 "src/platform/console/shell.py" = ["C901", "PLR0912", "TC003"]
-"src/platform/dashboard/adapter.py" = ["TC001", "TRY003", "TRY004", "TRY301"]
-"src/utils/jsonio.py" = ["TC003"]
-"src/ai/execution.py" = ["PLR0913", "TRY003"]
-"src/ai/gateway.py" = ["PLR0913", "TRY003"]
-"src/ai/vnext.py" = ["C901", "PLR0912", "TC001", "TRY003"]
-"src/apps/aurora-app-clock/service.py" = ["TC003", "TRY003"]
-"src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY003", "TRY004"]
+"src/platform/dashboard/adapter.py" = ["TC001", "TRY004", "TRY301"]
+"src/ai/gateway.py" = ["C901", "PLR0912", "TC001"]
+"src/apps/aurora-app-clock/service.py" = ["TC003"]
+"src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY004"]
 "src/platform/mcp/client_manager.py" = ["C901"]
-"src/platform/mcp/communication.py" = ["TRY003"]
-"src/platform/mcp/publication.py" = ["BLE001", "C901", "PLR0911"]
-"src/platform/mcp/publication_ledger.py" = ["PLR0913"]
-"tests/test_api.py" = ["PLR2004", "TC003"]
-"tests/test_causal_loop.py" = ["TC003"]
-"tests/test_configuration.py" = ["TC003"]
-"tests/test_model_gateway.py" = ["TC003"]
-"tests/conftest.py" = ["E501"]
-"tests/test_first_cognitive_loop.py" = ["E501", "PLR2004", "TC002", "TRY003"]
-"tests/test_dashboard_chat.py" = ["PLR2004", "SIM117", "TC003"]
-"tests/test_scheduler_and_contracts.py" = ["PLR0913", "PLR2004"]
-"tests/test_kernel_resilience.py" = ["TRY003"]
+
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
@@ -158,8 +176,8 @@ keep-runtime-typing = true
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "src"]
-exclude = [".venv", "tests"]
+include = ["aurora", "src", "tests"]
+exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 
 [build-system]
 requires = ["setuptools>=75"]

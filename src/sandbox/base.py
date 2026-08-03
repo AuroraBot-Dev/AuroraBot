@@ -40,7 +40,7 @@ class SandboxResult:
     execution_time: float = 0.0
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SecurityViolation:
     """安全违规记录。
 

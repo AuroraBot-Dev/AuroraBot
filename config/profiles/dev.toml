@@ -1,5 +1,6 @@
 # 开发环境覆盖项。
-# 本文件仅覆盖 config/aurora.toml；应用和 Agent profile 启用状态不在此隐式覆盖。
+# 本文件只覆盖 runtime.toml 中的进程配置。
+# 日志级别通过 config/logging.toml 配置，不在此文件覆盖。
 
-[logging]
-level = "DEBUG"
+[runtime]
+profile = "dev"

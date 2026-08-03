@@ -1,1 +1,1 @@
-"""Dependency-free utility helpers."""
+"""无外部依赖的通用工具集：日志、序列化与时间处理。"""

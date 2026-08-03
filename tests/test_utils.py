@@ -4,13 +4,7 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from src.utils.serialization import atomic_write_json, extract_json_from_text, json_ready, parse_structured, read_json
-from src.utils.time_utils import (
-    from_epoch_seconds,
-    now_text,
-    parse_time_value,
-    to_epoch_seconds,
-    to_time_text,
-)
+from src.utils.time import from_epoch_seconds, now_text, parse_time_value, to_epoch_seconds, to_time_text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,7 +32,6 @@ def test_structured_text_helpers_parse_expected_formats_and_reject_invalid_conte
 
 def test_json_ready_normalizes_nested_dates_tuples_and_keys() -> None:
     value = {1: (date(2024, 1, 2), datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC))}
-
     assert json_ready(value) == {"1": ["2024-01-02", "2024-01-02T03:04:05+00:00"]}
 
 
@@ -48,12 +41,12 @@ def test_time_helpers_normalize_iso_text_and_epoch_values() -> None:
     epoch = 1_700_000_000
     naive = datetime.fromisoformat("2024-01-02T00:00:00")
 
-    assert parsed is not None
-    assert parsed.tzinfo is not None
+    assert parsed is not None and parsed.tzinfo is not None
     assert to_epoch_seconds(parsed) == 0
     assert to_epoch_seconds("invalid", default=fallback) == fallback
     assert to_time_text("invalid") is None
     assert datetime.fromisoformat(to_time_text(parsed) or "").timestamp() == 0
     assert datetime.fromisoformat(from_epoch_seconds(epoch)).timestamp() == epoch
-    assert parse_time_value(naive).tzinfo is not None
+    parsed_naive = parse_time_value(naive)
+    assert parsed_naive is not None and parsed_naive.tzinfo is not None
     assert parse_time_value(now_text()) is not None

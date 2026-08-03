@@ -1,4 +1,4 @@
-"""Small subprocess helpers shared by process-level commands."""
+"""供进程级命令共享的轻量子进程辅助工具。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,10 @@ console = Console(highlight=False)
 
 
 def run_process(command: list[str], root: Path) -> int:
+    """在指定根目录下运行一个子进程命令，并输出格式化结果。
+
+    返回子进程的退出码。捕获 KeyboardInterrupt 时返回 130。
+    """
     console.print(f"\n[bold cyan]>>> {' '.join(command)}[/bold cyan]")
     try:
         result = subprocess.run(command, cwd=root, check=False)

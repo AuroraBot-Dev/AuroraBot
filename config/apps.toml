@@ -1,31 +1,29 @@
-# MCP 应用声明。安装或发现不代表启用。
-# 运行时事件和应用私有载荷仍使用 JSON。
+# MCP 应用配置
+# 每个 [[app]] 定义一个 MCP 服务（内建或远程）
 
+# 内建 Clock 应用：提供时间查询与定时能力
 [[app]]
 package = "org.aurora.clock"
-kind = "utility"
-enabled = true
+enabled = false
 transport = "stdio"
 working_dir = "src/apps/aurora-app-clock"
 command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
 timeout_seconds = 30
 
-[[app.tool]]
-name = "org.aurora.clock.get_current_time"
-kind = "effect"
+# Windows-MCP：Windows 桌面自动化（截屏、鼠标键盘、窗口控制等）
+[[app]]
+package = "com.github.windows_mcp"
+enabled = false
+transport = "stdio"
+working_dir = "extensions/apps/Windows-MCP"
+command = ["uv", "run", "windows-mcp", "serve"]
+timeout_seconds = 60
 
-[[app.tool]]
-name = "org.aurora.clock.set_alarm"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.set_timer"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.list_alarms"
-kind = "effect"
-
-[[app.tool]]
-name = "org.aurora.clock.cancel_alarm"
-kind = "effect"
+# Aurora-QQ：通过 OneBot 11 / NapCat 提供 QQ 消息、联系人和群管理能力
+[[app]]
+package = "org.aurora.qq"
+enabled = true
+transport = "stdio"
+working_dir = "extensions/apps/Aurora-QQ"
+command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
+timeout_seconds = 60

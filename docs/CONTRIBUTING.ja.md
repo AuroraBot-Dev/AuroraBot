@@ -45,9 +45,8 @@ AuroraBot は、長期的にプロジェクトへ影響する判断を RFC に�
 小さな不具合修正、テスト、文章の改善、公開動作を変えない refactor は直接提出できます。公開文書を変更する場合は、
 中国語、英語、日本語の入口を同期してください。
 
-現在の runtime は [RFC 0012](rfc/0012-homogeneous-agent-runtime.md) に従います。Platform composition、preference、
-entry point は [RFC 0014](rfc/0014-parallel-platform-composition-and-preferences.md) に従います。古い RFC は、後続の判断に
-置き換えられていない範囲だけが有効です。
+現在の runtime、package boundary、process composition は
+[RFC 0200](rfc/0200-agent-centered-runtime.md) に従います。
 
 ## ループを壊さない
 
@@ -57,7 +56,7 @@ AuroraBot の行動を確実にするため、次の boundary を維持してく
 - 外部 effect は Platform が実行し、outcome を新しい event として返します。通常のモデル text は effect ではありません。
 - Kernel は event、state、mailbox、Activity、因果記録を管理しますが、認知内容は決めません。
 - 構造設定は TOML、secret は環境変数だけという原則を維持します。
-- 共通ログは `src.utils.log_utils.get_logger()` を使い、完全な prompt、continuation、機密 payload を記録しません。
+- 共通ログは `src.utils.logging.get_logger()` を使い、完全な prompt、continuation、機密 payload を記録しません。
 
 maintainer 向けの完全な boundary は、リポジトリ root の `AGENTS.md` を参照してください。
 

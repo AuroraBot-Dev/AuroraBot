@@ -8,10 +8,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 
-@dataclass(slots=True)
+class _Msg(StrEnum):
+    TRANSPORT_STDIO_ONLY = "transport 只支持 'stdio'，收到 '{transport}'"
+
+
+@dataclass(frozen=True, slots=True)
 class MCPServerSpec:
     """MCP Server 的完整描述。
 
@@ -58,5 +63,4 @@ class MCPServerSpec:
     def __post_init__(self) -> None:
         """验证约束。"""
         if self.transport != "stdio":
-            msg = f"transport 只支持 'stdio'，收到 '{self.transport}'"
-            raise ValueError(msg)
+            raise ValueError(_Msg.TRANSPORT_STDIO_ONLY.format(transport=self.transport))

@@ -1,4 +1,4 @@
-"""Declarative catalog for transport-neutral runtime commands."""
+"""传输无关运行时命令的声明式目录。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from src.localhost.command_types import CommandContext, CommandResult
+from src.contracts.event import CommandContext, CommandResult
 
 CommandHandler = Callable[[CommandContext, argparse.Namespace], Awaitable[CommandResult]]
 CommandConfigurator = Callable[[argparse.ArgumentParser], None]
@@ -14,6 +14,8 @@ CommandConfigurator = Callable[[argparse.ArgumentParser], None]
 
 @dataclass(frozen=True, slots=True)
 class ConsoleCommand:
+    """控制台命令的声明式描述：名称、用法、参数配置与异步处理器。"""
+
     names: tuple[str, ...]
     usage: str
     description: str
@@ -22,7 +24,7 @@ class ConsoleCommand:
 
 
 def command_specs() -> tuple[ConsoleCommand, ...]:
-    """Return the command set shared by Console and Dashboard input."""
+    """返回 Console 与 Dashboard 输入共用的命令集。"""
     from src.localhost.commands import (
         agent,
         clear,
@@ -38,6 +40,9 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
     )
     from src.localhost.commands import (
         quit as quit_command,
+    )
+    from src.localhost.commands import (
+        reload as reload_command,
     )
 
     return (
@@ -62,5 +67,12 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
             quit_command.DESCRIPTION,
             quit_command.configure,
             quit_command.handle,
+        ),
+        ConsoleCommand(
+            reload_command.NAMES,
+            reload_command.USAGE,
+            reload_command.DESCRIPTION,
+            reload_command.configure,
+            reload_command.handle,
         ),
     )

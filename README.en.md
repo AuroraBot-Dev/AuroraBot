@@ -44,7 +44,7 @@ Models interpret and decide, but ordinary model text cannot directly change the 
 
 ## Highlights
 
-- **Active runtime:** a durable scheduler creates budgeted autonomous Tasks and yields promptly to external interaction.
+- **Active runtime:** the built-in Clock MCP persists a heartbeat that creates budgeted autonomous Tasks and yields promptly to external interaction.
 - **Continuing Tasks:** work can await models, capabilities, and child Agents, then resume with explicit budgets and terminal states.
 - **Multi-Agent collaboration:** homogeneous Agents form bounded supervision trees and can split complex work concurrently.
 - **Connections to the world:** Console, Dashboard, and MCP Platforms normalize inputs and expose authorized capabilities.
@@ -69,7 +69,7 @@ uv run --no-dev --env-file .env aurora --console --mcp
 Type a message after startup, use `/help` to discover commands, or `/status` to inspect the runtime.
 
 ```powershell
-# Use the default Platform set from config/preference.toml
+# Use the default Platform set from config/platforms.toml
 uv run --no-dev --env-file .env aurora
 
 # Start only the local Console
@@ -85,9 +85,11 @@ When any of `--console`, `--dashboard`, or `--mcp` is present, those flags form 
 
 | What you want to change                           | Start here               |
 | ------------------------------------------------- | ------------------------ |
-| Persona, voice, and conversational boundaries     | `config/prompts/SOUL.md` |
-| Model roles and Providers                         | `config/aurora.toml`     |
-| Platforms enabled by default                      | `config/preference.toml` |
+| SOUL, world, and Agent prompt fragments            | `config/prompts.toml`    |
+| Model roles and Providers                         | `config/models.toml`     |
+| Engine limits and Task budgets                    | `config/engine.toml`     |
+| Persistent storage paths                          | `config/storage.toml`    |
+| Platforms enabled by default                      | `config/platforms.toml` |
 | Agent models, capabilities, and delegation limits | `config/agents.toml`     |
 | Local or remote MCP applications                  | `config/apps.toml`       |
 

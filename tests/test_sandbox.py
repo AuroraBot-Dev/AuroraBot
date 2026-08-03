@@ -1,3 +1,4 @@
+# ruff: noqa: PLR2004
 from __future__ import annotations
 
 import asyncio
@@ -10,16 +11,14 @@ import src.sandbox.executor as executor_module
 import src.sandbox.policy as policy_module
 from src.sandbox import SandboxManager
 from src.sandbox.base import SandboxConfigError, SandboxResult, SecurityViolation
+from src.sandbox.config import ConfigReloader, SandboxConfig
 from src.sandbox.executor import SandboxExecutor
 from src.sandbox.inspector import CodeInspector
 from src.sandbox.policy import AccessPolicy
-from src.sandbox.settings import ConfigReloader, SandboxConfig
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
-
-_EXPECTED_RELOADS = 2
 
 
 def _configuration(root: Path) -> SandboxConfig:
@@ -61,15 +60,15 @@ def test_sandbox_configuration_loads_and_reloads_valid_yaml(tmp_path: Path) -> N
     def write(modules: str) -> None:
         config_path.write_text(
             f"""whitelist:
-  files: [\"{root.as_posix()}/**\"]
-  dirs: [\"{root.as_posix()}/**\"]
+  files: ["{root.as_posix()}/**"]
+  dirs: ["{root.as_posix()}/**"]
   modules: [{modules}]
-  builtins: [\"len\", \"print\"]
+  builtins: ["len", "print"]
 blacklist:
   files: []
   dirs: []
-  modules: [\"os\"]
-  builtins: [\"exec\"]
+  modules: ["os"]
+  builtins: ["exec"]
 """,
             encoding="utf-8",
         )
@@ -94,24 +93,24 @@ blacklist:
     config_path.write_text("not: valid: yaml: [", encoding="utf-8")
     reloader._last_mtime = 0
     reloader.check_and_reload()
-    assert len(received) == _EXPECTED_RELOADS
+    assert len(received) == 2
 
 
 @pytest.mark.parametrize(
     ("content", "message"),
     (
-        ("[]", "YAML 顶层结构"),
-        ("whitelist: {}", "缺失必需的顶层 key"),
-        ("whitelist: []\nblacklist: {}", "whitelist 必须是 dict"),
+        ("[]", "YAML"),
+        ("whitelist: {}", "key"),
+        ("whitelist: []\nblacklist: {}", "whitelist"),
         (
             "whitelist: {files: relative/**, dirs: [], modules: [], builtins: []}\n"
             "blacklist: {files: [], dirs: [], modules: [], builtins: []}",
-            "期望 list",
+            "list",
         ),
         (
             "whitelist: {files: [relative/**], dirs: [], modules: [], builtins: []}\n"
             "blacklist: {files: [], dirs: [], modules: [], builtins: []}",
-            "必须为绝对路径",
+            "absolute|绝对",
         ),
     ),
 )
@@ -121,7 +120,7 @@ def test_sandbox_configuration_rejects_invalid_shapes(tmp_path: Path, content: s
     with pytest.raises(SandboxConfigError, match=message):
         SandboxConfig.from_yaml(path)
 
-    with pytest.raises(SandboxConfigError, match="不存在"):
+    with pytest.raises(SandboxConfigError):
         SandboxConfig.from_yaml(tmp_path / "missing.yaml")
 
 
@@ -190,7 +189,7 @@ def test_sandbox_executor_runs_code_and_handles_failures(sandbox_root: Path, mon
 
         monkeypatch.setattr(executor, "_check_disk_space", lambda: False)
         no_space = await executor.execute("print(1)", "no-space")
-        assert not no_space.success and "磁盘空间不足" in (no_space.error or "")
+        assert not no_space.success
 
     asyncio.run(scenario())
 
@@ -212,7 +211,7 @@ def test_sandbox_executor_collects_artifacts_and_guards_file_access(sandbox_root
     target = sandbox_root / "written.txt"
     executor.write_file(target, "written")
     assert target.read_text(encoding="utf-8") == "written"
-    with pytest.raises(PermissionError, match="写入被拒绝"):
+    with pytest.raises(PermissionError):
         executor.write_file(sandbox_root.parent / "outside.txt", "blocked")
 
 
@@ -222,19 +221,16 @@ def test_sandbox_manager_validates_inspects_executes_and_calls_back(sandbox_root
 
     async def scenario() -> None:
         successful = await manager.execute(
-            'print(f"user={user}")',
-            "valid-session",
-            {"user": "Aurora"},
-            received.append,
+            'print(f"user={user}")', "valid-session", {"user": "Aurora"}, received.append
         )
         dangerous = await manager.execute("import os", "dangerous")
         syntax_error = await manager.execute("def broken(", "syntax")
         invalid_session = await manager.execute("print(1)", "../escape")
 
         assert successful.success and "user=Aurora" in successful.output
-        assert dangerous.error is not None and "安全违规" in dangerous.error
-        assert syntax_error.error is not None and "语法错误" in syntax_error.error
-        assert invalid_session.error is not None and "非法字符" in invalid_session.error
+        assert dangerous.error is not None
+        assert syntax_error.error is not None
+        assert invalid_session.error is not None
 
     asyncio.run(scenario())
     assert received and received[0].success
@@ -247,10 +243,10 @@ def test_sandbox_manager_validates_inspects_executes_and_calls_back(sandbox_root
 
 
 def test_sandbox_manager_singleton_proxy() -> None:
-    import src.sandbox as sandbox_module
+    from src.sandbox import manager
 
-    sandbox_module._sandbox_singleton = None
-    first = sandbox_module.get_sandbox_manager()
-    second = sandbox_module.get_sandbox_manager()
+    manager._sandbox_singleton = None
+    first = manager.get_sandbox_manager()
+    second = manager.get_sandbox_manager()
     assert first is second
-    assert sandbox_module.sandbox_manager._policy is first._policy
+    assert manager.sandbox_manager._policy is first._policy

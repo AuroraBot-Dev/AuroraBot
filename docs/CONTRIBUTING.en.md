@@ -45,9 +45,8 @@ changing:
 Small bug fixes, tests, writing improvements, and refactors that preserve public behavior can be submitted directly.
 When public documentation changes, keep the Chinese, English, and Japanese entry points in sync.
 
-The current runtime follows [RFC 0012](rfc/0012-homogeneous-agent-runtime.md). Platform composition, preferences, and
-entry points follow [RFC 0014](rfc/0014-parallel-platform-composition-and-preferences.md). Earlier RFCs remain valid only
-where later decisions have not replaced them.
+The runtime, package boundaries, and process composition follow
+[RFC 0200](rfc/0200-agent-centered-runtime.md).
 
 ## Keep the loop intact
 
@@ -57,7 +56,7 @@ A few boundaries make AuroraBot's actions reliable:
 - Platforms execute external effects and return outcomes as new events. Ordinary model text is not an effect.
 - Kernel owns events, state, mailboxes, Activities, and causal records, but not cognitive content.
 - Structural configuration remains in TOML, while secrets continue to come only from environment variables.
-- Shared logging uses `src.utils.log_utils.get_logger()` and excludes full prompts, continuations, and sensitive payloads.
+- Shared logging uses `src.utils.logging.get_logger()` and excludes full prompts, continuations, and sensitive payloads.
 
 See the root `AGENTS.md` for the complete maintainer boundaries.
 

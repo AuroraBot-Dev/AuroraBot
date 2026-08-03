@@ -8,11 +8,13 @@
 
 暴露工具::
 
-    org.aurora.clock.get_current_time
-    org.aurora.clock.set_alarm
-    org.aurora.clock.set_timer
-    org.aurora.clock.list_alarms
-    org.aurora.clock.cancel_alarm
+    get_current_time
+    set_alarm
+    set_timer
+    start_heartbeat
+    sleep
+    list_alarms
+    cancel_alarm
 """
 
 from __future__ import annotations
@@ -33,14 +35,14 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from service import ClockService  # type: ignore[import-untyped]
 
-from src.utils.log_utils import get_logger
+from src.utils.logging import get_logger
 
 logger = get_logger("aurora-app-clock.mcp")
 
 mcp = FastMCP("Clock")
 
 
-@mcp.tool("org.aurora.clock.get_current_time")
+@mcp.tool("get_current_time")
 def get_current_time(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     """获取当前时间。
 
@@ -54,7 +56,7 @@ def get_current_time(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     return ClockService.get_current_time(fmt)
 
 
-@mcp.tool("org.aurora.clock.set_alarm")
+@mcp.tool("set_alarm")
 async def set_alarm(ctx: Context, time_str: str, label: str = "") -> dict[str, Any]:
     """设置闹钟。
 
@@ -70,7 +72,7 @@ async def set_alarm(ctx: Context, time_str: str, label: str = "") -> dict[str, A
     return await ClockService.set_alarm(time_str, label)
 
 
-@mcp.tool("org.aurora.clock.set_timer")
+@mcp.tool("set_timer")
 async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, Any]:
     """设置定时器。
 
@@ -86,7 +88,27 @@ async def set_timer(ctx: Context, seconds: int, label: str = "") -> dict[str, An
     return await ClockService.set_timer(seconds, label)
 
 
-@mcp.tool("org.aurora.clock.list_alarms")
+@mcp.tool("start_heartbeat")
+async def start_heartbeat(ctx: Context) -> dict[str, Any]:
+    """启动或恢复内建自主心跳。
+
+    此工具由 Aurora 的 MCP Platform 在 Clock 启动后调用。已有心跳会被恢复而不是重置。
+    """
+    await ClockService.initialize(_notifier(ctx))
+    return ClockService.start_heartbeat()
+
+
+@mcp.tool("sleep")
+async def sleep(ctx: Context, seconds: int) -> dict[str, Any]:
+    """把下一次自主心跳安排在一段安静休息后。
+
+    实际时长会限制在部署配置的心跳边界内；普通闹钟和外部消息仍可提前带来新的事实。
+    """
+    await ClockService.initialize(_notifier(ctx))
+    return ClockService.sleep(seconds)
+
+
+@mcp.tool("list_alarms")
 def list_alarms() -> list[dict[str, Any]]:
     """列出所有闹钟和定时器。
 
@@ -97,7 +119,7 @@ def list_alarms() -> list[dict[str, Any]]:
     return ClockService.list_alarms()
 
 
-@mcp.tool("org.aurora.clock.cancel_alarm")
+@mcp.tool("cancel_alarm")
 def cancel_alarm(alarm_id: str) -> bool:
     """取消闹钟或定时器。
 
