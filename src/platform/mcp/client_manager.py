@@ -59,6 +59,13 @@ class MCPToolCallError(RuntimeError):
 
 NotificationHandler = Callable[[str, dict[str, object]], None]
 
+_SHUTDOWN_GRACE_SECONDS = 1.5
+"""Server stdout 关闭后、判定为异常断开前的停机等待窗口。
+
+进程级信号（如整组 SIGTERM）会同时终止 Server 子进程与主进程，此时
+stdout 关闭先于客户端关机事件到达；保留一个短窗口以区分正常停机与意外崩溃。
+"""
+
 
 class _NotifiableClientSession(ClientSession):
     """可接收 notification 回调的 ClientSession 子类。
@@ -317,8 +324,11 @@ class MCPClientManager:
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if reader_task in done and not self._stop_event.is_set():
-                await reader_task
-                raise MCPToolCallError(_Msg.STDOUT_CLOSED.format(key=key))
+                try:
+                    await asyncio.wait_for(stop_wait_task, timeout=_SHUTDOWN_GRACE_SECONDS)
+                except TimeoutError:
+                    await reader_task
+                    raise MCPToolCallError(_Msg.STDOUT_CLOSED.format(key=key)) from None
         finally:
             if not stop_wait_task.done():
                 stop_wait_task.cancel()

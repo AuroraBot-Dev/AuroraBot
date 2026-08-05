@@ -12,7 +12,7 @@ from src.config.loader import load_configuration
 from src.contracts.amp import AmpEnvelope
 from src.contracts.tool import ToolExecutionRequest
 from src.platform.mcp import MCPPlatform
-from src.platform.mcp.client_manager import ClientConnection, MCPClientManager
+from src.platform.mcp.client_manager import ClientConnection, MCPClientManager, MCPToolCallError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -203,6 +203,38 @@ def test_client_manager_calls_raw_name_for_server_key() -> None:
         result = await manager.call_tool("com.example.alpha", "vendor.send", {"text": "hello"})
         assert session.calls == [("vendor.send", {"text": "hello"})]
         assert result["is_error"] is False
+
+    asyncio.run(scenario())
+
+
+def test_stdout_close_during_shutdown_is_not_an_error() -> None:
+    """Server stdout 在停机窗口内关闭不应被判定为异常断开。"""
+
+    async def scenario() -> None:
+        manager = MCPClientManager(SimpleNamespace())  # type: ignore[arg-type]
+        manager._stop_event.set()
+
+        async def reader_done() -> None:
+            return None
+
+        reader_task = asyncio.create_task(reader_done(), name="mcp-stdout-reader")
+        await manager._wait_for_stop_or_disconnect("org.aurora.qq", reader_task)
+
+    asyncio.run(scenario())
+
+
+def test_stdout_close_without_shutdown_raises_after_grace() -> None:
+    """Server stdout 关闭且停机窗口内无停止信号时应报告异常断开。"""
+
+    async def scenario() -> None:
+        manager = MCPClientManager(SimpleNamespace())  # type: ignore[arg-type]
+
+        async def reader_done() -> None:
+            return None
+
+        reader_task = asyncio.create_task(reader_done(), name="mcp-stdout-reader")
+        with pytest.raises(MCPToolCallError, match="已关闭 stdio 输出"):
+            await manager._wait_for_stop_or_disconnect("org.aurora.qq", reader_task)
 
     asyncio.run(scenario())
 

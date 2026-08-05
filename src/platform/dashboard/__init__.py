@@ -14,7 +14,7 @@ from src.platform.dashboard.adapter import (
     DashboardPlatform,
 )
 from src.platform.dashboard.api import create_app
-from src.platform.dashboard.server import SignalSafeServer
+from src.platform.dashboard.server import SignalSafeServer, _LifespanSafeApp
 from src.platform.dashboard.service import ChatError, ChatService
 
 if TYPE_CHECKING:
@@ -64,11 +64,13 @@ def _build_server(config: object, chat: ChatService) -> "SignalSafeServer":
 
     cfg: "DashboardConfig" = config.dashboard  # type: ignore[union-attr]
     uvc = uvicorn.Config(
-        create_app(
-            chat,
-            config,  # type: ignore[arg-type]
-            cfg,
-            profile=config.runtime.profile,  # type: ignore[union-attr]
+        _LifespanSafeApp(
+            create_app(
+                chat,
+                config,  # type: ignore[arg-type]
+                cfg,
+                profile=config.runtime.profile,  # type: ignore[union-attr]
+            )
         ),
         host=cfg.host,
         port=cfg.port,

@@ -11,7 +11,7 @@ import importlib
 import signal
 import webbrowser
 from collections.abc import Callable
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -70,6 +70,10 @@ class _DashboardStartupError(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__("Dashboard server stopped before accepting connections")
+
+
+_SERVER_GRACE_SECONDS = 10.0
+"""uvicorn 服务器优雅退出的等待上限，超时后强制取消。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,12 +311,19 @@ async def _run_platform_tasks(
     finally:
         stop_task.cancel()
         await asyncio.gather(stop_task, return_exceptions=True)
-        for reversed_name in reversed([name for name in handles if name in platform_tasks]):
-            platform_tasks[reversed_name].cancel()
-            await asyncio.gather(platform_tasks[reversed_name], return_exceptions=True)
+        for name, task in platform_tasks.items():
+            if name == "dashboard":
+                continue
+            task.cancel()
+        await asyncio.gather(
+            *(task for name, task in platform_tasks.items() if name != "dashboard"),
+            return_exceptions=True,
+        )
         if dashboard_task is not None and servers.dashboard is not None:
+            # uvicorn 服务器必须通过 should_exit 优雅退出：直接取消会中断
+            # lifespan 握手并在进程收尾时打印 CancelledError traceback。
             servers.dashboard.should_exit = True  # type: ignore[union-attr]
-            await asyncio.gather(dashboard_task, return_exceptions=True)
+            await _await_server_exit(dashboard_task)
         servers.debug.should_exit = True
         await asyncio.gather(debug_task, return_exceptions=True)
         stop.set()
@@ -322,6 +333,15 @@ async def _run_platform_tasks(
 async def _wait_for_stop(stop: asyncio.Event) -> None:
     """挂起直到 stop 事件被设置。"""
     await stop.wait()
+
+
+async def _await_server_exit(task: asyncio.Task[None]) -> None:
+    """等待 uvicorn 服务器任务优雅退出，超时后强制取消。"""
+    with suppress(TimeoutError, asyncio.CancelledError):
+        await asyncio.wait_for(asyncio.shield(task), timeout=_SERVER_GRACE_SECONDS)
+    if not task.done():
+        task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
 
 
 async def _await_server_ready(server: object, task: asyncio.Task[None] | None, stop: asyncio.Event) -> bool:

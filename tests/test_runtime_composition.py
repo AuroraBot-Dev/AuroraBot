@@ -159,6 +159,54 @@ def test_runtime_task_failure_and_browser_address(monkeypatch: pytest.MonkeyPatc
     assert opened == ["http://127.0.0.1:8000"]
 
 
+def test_dashboard_server_shuts_down_gracefully_via_should_exit() -> None:
+    """关闭时 Dashboard 服务器通过 should_exit 优雅退出，而不是被直接取消。"""
+    events: list[str] = []
+    stop = asyncio.Event()
+    runtime = _Runtime(SimpleNamespace(dashboard=SimpleNamespace(host="127.0.0.1", port=8000)), events)
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.should_exit = False
+            self.started = True
+
+    class FakeHandle:
+        def __init__(self, task: asyncio.Task[None]) -> None:
+            self.task = task
+
+        def spawn(self, _rt: object, _stop: asyncio.Event) -> asyncio.Task[None]:
+            return self.task
+
+    class FakeDebugServer:
+        def __init__(self) -> None:
+            self.should_exit = False
+
+        async def serve(self) -> None:
+            return None
+
+    async def already_done() -> None:
+        return None
+
+    async def scenario() -> None:
+        dashboard_task = asyncio.create_task(already_done(), name="aurora-dashboard-server")
+        server = FakeServer()
+        handles = {"dashboard": FakeHandle(dashboard_task)}
+        stop_task = asyncio.create_task(asyncio.sleep(0), name="stop")
+        debug_task = asyncio.create_task(asyncio.sleep(0), name="debug")
+        await composition._run_platform_tasks(
+            cast("AuroraRuntime", runtime),
+            stop,
+            handles,  # type: ignore[arg-type]
+            composition._ProcessServers(server, FakeDebugServer()),  # type: ignore[arg-type]
+            open_browser=False,
+        )
+        assert server.should_exit is True
+        assert not dashboard_task.cancelled()
+        assert stop_task.done() and debug_task.done()
+
+    asyncio.run(scenario())
+
+
 def test_load_handler_installs_composer_and_capabilities() -> None:
     composer = object()
     capabilities = ()
