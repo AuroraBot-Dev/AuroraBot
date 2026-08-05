@@ -1,6 +1,6 @@
 # 0205：Agent 状态机收敛与决策链路扁平化
 
-状态：草案
+状态：已接受
 日期：2026-08-05
 来源：RFC 0200/0203 的运行时细化；先决条件是已实现的类型化 AgentDecision（model_request 为 ModelRequest、ToolRequest 类型化贯穿、AgentContext 只读快照）
 

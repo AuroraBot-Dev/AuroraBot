@@ -26,7 +26,8 @@ Console 在平台抽象中的位置只剩一个事实：输出侧通过 `org.aur
   与 `storage.platform.console` 路径。Console 不再拥有任何 Tool executor。
 - `ConsolePreference` 从 `PlatformPreference` 移除；`PLATFORM_NAMES` 只包含 dashboard 与 mcp。
 - `--platform console` 不再合法；平台选择与 Console 无关。
-- `--headless`（不启动外部平台）同时抑制 Console。headless 就是无 Console。
+- `--headless` 只抑制 Console，不改变平台组合：平台仍由 `--platform` 或偏好决定，默认按偏好启用。
+  无头模式与 `--platform` 可自由组合。
 
 ### 输出改为渲染
 
@@ -45,7 +46,7 @@ Console 在平台抽象中的位置只剩一个事实：输出侧通过 `org.aur
 
 ### 进程组合与生命周期
 
-- aurora 组合根不再通过 `PlatformHandle` 注册表管理 Console；当 `--headless` 或
+- aurora 组合根不再通过 `PlatformHandle` 注册表管理 Console；默认启动，当 `--headless` 或
   `[runtime.console].enabled = false` 时不启动。
 - Console 停止语义不变：EOF / Ctrl+C / 斜杠命令仍请求组合根统一关闭流程。
 - engine 的 tool 派发、任务结束与收尾流程不受影响：模型结束一轮仍通过 `Completion`，文本由

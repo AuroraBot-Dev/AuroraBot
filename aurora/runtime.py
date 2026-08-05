@@ -92,12 +92,16 @@ class _ProcessServers:
 async def run_runtime(
     platforms: frozenset[str] | None,
     *,
+    headless: bool = False,
     stop_event: asyncio.Event | None = None,
 ) -> None:
-    """围绕一个共享运行时和停止事件，启动精确的平台组合并运行至停止。"""
+    """围绕一个共享运行时和停止事件，启动精确的平台组合并运行至停止。
+
+    headless 只禁用本地 Console，不改变平台组合。
+    """
     configuration = get_config()
     selected = _selected_platforms(platforms, configuration.preference)
-    console_enabled = platforms != frozenset() and configuration.runtime.console.enabled
+    console_enabled = not headless and configuration.runtime.console.enabled
     configure_logging(configuration.logging_level, configuration.logging_dir / "aurora.log")
     configure_console_logging(enabled=configuration.runtime.console.terminal_logs if console_enabled else True)
 
@@ -332,7 +336,7 @@ async def _wait_for_stop(stop: asyncio.Event) -> None:
 
 
 def _spawn_console(runtime: AuroraRuntime, stop: asyncio.Event, *, enabled: bool) -> asyncio.Task[None] | None:
-    """按运行时配置创建本地 Console 前端任务（非平台，headless 时禁用）。"""
+    """按运行时配置创建本地 Console 前端任务（headless 或配置禁用时不启动）。"""
     if not enabled:
         return None
     from src.console import run_console

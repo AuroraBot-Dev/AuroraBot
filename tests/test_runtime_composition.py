@@ -102,11 +102,58 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
 
     monkeypatch.setattr(composition, "_run_platform_tasks", run_tasks)
 
-    asyncio.run(composition.run_runtime(frozenset(), stop_event=asyncio.Event()))
+    asyncio.run(composition.run_runtime(None, headless=True, stop_event=asyncio.Event()))
 
     assert events == ["logging", "terminal", "process-tasks", "runtime-loop", "runtime-shutdown"]
     assert runtime.engine.bindings is None
     assert runtime.stop_requester is None
+
+
+def test_console_enabled_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """非 headless 且 console.enabled=true 时 Console 默认启用。"""
+    events: list[str] = []
+    configuration = SimpleNamespace(
+        preference=_preference(frozenset()),
+        logging_level="INFO",
+        logging_dir=tmp_path / "logs",
+        runtime=SimpleNamespace(
+            profile="test",
+            debug_host="127.0.0.1",
+            debug_port=8765,
+            console=SimpleNamespace(enabled=True, terminal_logs=False),
+        ),
+    )
+    runtime = _Runtime(configuration, events)
+    monkeypatch.setattr(composition, "get_config", lambda: configuration)
+    monkeypatch.setattr(composition, "configure_logging", lambda *_args: events.append("logging"))
+    monkeypatch.setattr(composition, "configure_console_logging", lambda **_kwargs: events.append("terminal"))
+    monkeypatch.setattr(composition, "_create_runtime", lambda _configuration: runtime)
+    debug_server = object()
+    monkeypatch.setattr(composition, "_debug_server", lambda _runtime: debug_server)
+
+    async def run_tasks(
+        selected_runtime: object,
+        stop: asyncio.Event,
+        handles: dict[str, PlatformHandle],
+        servers: composition._ProcessServers,
+        *,
+        open_browser: bool,
+        console_enabled: bool,
+    ) -> BaseException | None:
+        assert selected_runtime is runtime
+        assert not handles
+        assert servers.dashboard is None and servers.debug is debug_server
+        assert not open_browser
+        assert console_enabled is True
+        events.append("process-tasks")
+        await runtime.run_forever(stop)
+        return None
+
+    monkeypatch.setattr(composition, "_run_platform_tasks", run_tasks)
+
+    asyncio.run(composition.run_runtime(None, stop_event=asyncio.Event()))
+
+    assert events == ["logging", "terminal", "process-tasks", "runtime-loop", "runtime-shutdown"]
 
 
 def test_start_platforms_uses_unified_creators(monkeypatch: pytest.MonkeyPatch) -> None:

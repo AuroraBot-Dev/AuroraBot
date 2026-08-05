@@ -75,7 +75,7 @@ uv run --no-dev --env-file .env aurora
 # Start only the local Console
 uv run --no-dev --env-file .env aurora --console
 
-# Run without an external Platform
+# Headless: disable the local Console, Platform set unchanged
 uv run --no-dev --env-file .env aurora --headless
 ```
 

@@ -75,7 +75,7 @@ uv run --no-dev --env-file .env aurora
 # ローカル Console のみ起動
 uv run --no-dev --env-file .env aurora --console
 
-# 外部 Platform なしで実行
+# ヘッドレス：ローカル Console を無効化、Platform 構成は変更なし
 uv run --no-dev --env-file .env aurora --headless
 ```
 

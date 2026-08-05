@@ -74,7 +74,7 @@ uv run --no-dev --env-file .env aurora
 # 使用 config/platforms.toml 中的默认平台组合
 uv run --no-dev --env-file .env aurora
 
-# 无头模式：不启动本地 Console，也不启动外部平台
+# 无头模式：不启动本地 Console，平台组合不变
 uv run --no-dev --env-file .env aurora --headless
 ```
 

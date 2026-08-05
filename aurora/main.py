@@ -20,7 +20,7 @@ def _execute_runtime(arguments: argparse.Namespace) -> int:
     """根据解析后的参数启动 Aurora 运行时。"""
     from aurora.runtime import run_runtime
 
-    asyncio.run(run_runtime(arguments.platforms))
+    asyncio.run(run_runtime(arguments.platforms, headless=arguments.headless))
     return 0
 
 
@@ -43,12 +43,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     arguments = parser.parse_args(argv)
     selected = frozenset(arguments.platform or ())
-    if arguments.command == "check":
-        if arguments.headless or selected:
-            parser.error("platform selection options cannot be used with check")
-    elif arguments.headless and selected:
-        parser.error("--headless cannot be combined with --platform")
-    arguments.platforms = frozenset() if arguments.headless else selected or None
+    if arguments.command == "check" and (arguments.headless or selected):
+        parser.error("platform selection options cannot be used with check")
+    arguments.platforms = selected or None
     if arguments.command != "check":
         init_config(arguments.root, arguments.profile)
     return arguments.executor(arguments)
