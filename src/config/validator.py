@@ -49,7 +49,6 @@ def _validate_storage_paths(config: AuroraConfig) -> None:
         ("ai", storage.ai),
         ("memory", storage.memory),
         ("apps", storage.apps),
-        ("console", storage.console),
         ("dashboard", storage.dashboard),
     ]
     data_root = storage.data_root

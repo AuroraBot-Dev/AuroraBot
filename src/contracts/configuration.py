@@ -44,15 +44,33 @@ class ConfigurationSource:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsoleConfig:
+    """本地 Console 交互前端配置。
+
+    ConsoleConfig object::
+
+        {
+            "enabled": true,
+            "terminal_logs": false
+        }
+
+    """
+
+    enabled: bool
+    terminal_logs: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeConfig:
-    """进程运行时配置：profile 与调试服务地址。
+    """进程运行时配置：profile、调试服务地址与本地 Console 前端。
 
     RuntimeConfig object::
 
         {
             "profile": "string",
             "debug_host": "string",
-            "debug_port": 0
+            "debug_port": 0,
+            "console": ConsoleConfig
         }
 
     """
@@ -60,6 +78,7 @@ class RuntimeConfig:
     profile: str
     debug_host: str
     debug_port: int
+    console: "ConsoleConfig"
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,23 +251,6 @@ class ModelLoggingConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class ConsolePreference:
-    """Console 平台偏好。
-
-    ConsolePreference object::
-
-        {
-            "enabled": false,
-            "terminal_logs": false
-        }
-
-    """
-
-    enabled: bool
-    terminal_logs: bool
-
-
-@dataclass(frozen=True, slots=True)
 class DashboardPreference:
     """Dashboard 平台偏好。
 
@@ -289,14 +291,12 @@ class PlatformPreference:
     PlatformPreference object::
 
         {
-            "console": ConsolePreference,
             "dashboard": DashboardPreference,
             "mcp": McpPreference
         }
 
     """
 
-    console: ConsolePreference
     dashboard: DashboardPreference
     mcp: McpPreference
 
@@ -314,7 +314,6 @@ class StorageConfig:
     ai: Path
     memory: Path
     apps: Path
-    console: Path
     dashboard: Path
 
 

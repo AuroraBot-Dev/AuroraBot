@@ -83,6 +83,41 @@ class StoreQueriesMixin(RuntimeStoreBase):
                 for row in rows
             )
 
+    def recent_outputs(self, cursor: int = 0, *, limit: int = 64) -> tuple[dict[str, Any], ...]:
+        """返回游标之后新增的模型输出文本，按活动行 ID 单调排序。
+
+        kind 为 ``model`` 时取模型结果文本，为 ``error`` 时取失败信息；
+        空文本的条目也返回，以便游标持续前进。
+        """
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT a.rowid, a.activity_id, a.task_id, t.session_id, a.result_json, a.error, a.updated_at "
+                "FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                "WHERE a.kind = 'model' AND a.status IN ('COMPLETED', 'ERROR') AND a.rowid > ? "
+                "ORDER BY a.rowid LIMIT ?",
+                (cursor, limit),
+            ).fetchall()
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            kind = "error"
+            text = str(row["error"]) if row["error"] else ""
+            result = json.loads(row["result_json"]) if row["result_json"] else None
+            if not row["error"] and isinstance(result, dict) and isinstance(result.get("text"), str):
+                kind = "model"
+                text = result["text"]
+            items.append(
+                {
+                    "cursor": int(row["rowid"]),
+                    "activity_id": str(row["activity_id"]),
+                    "task_id": str(row["task_id"]),
+                    "session_id": str(row["session_id"]),
+                    "kind": kind,
+                    "text": text,
+                    "at": str(row["updated_at"]),
+                }
+            )
+        return tuple(items)
+
     def counts(self) -> dict[str, int]:
         with self.connect() as connection:
             return {

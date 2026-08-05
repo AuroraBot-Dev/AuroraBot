@@ -31,6 +31,7 @@ from src.contracts.configuration import (
     AuroraConfig,
     ConfigurationError,
     ConfigurationSource,
+    ConsoleConfig,
     EngineConfig,
     ModelLoggingConfig,
     ModelProviderConfig,
@@ -54,6 +55,7 @@ class _Msg(StrEnum):
     NO_PROFILE_SELECTED = "no profile selected"
     PROFILE_NOT_FOUND = "profile does not exist: {profile}"
     RUNTIME_UNSUPPORTED_KEYS = "runtime has unsupported or missing keys"
+    MUST_BE_BOOLEAN = "{label} must be boolean"
     ENGINE_MUST_BE_TABLE = "engine must be a table"
     ENGINE_UNSUPPORTED_KEYS = "engine has unsupported or missing keys"
     PLATFORMS_NO_PLATFORM_TABLE = "platforms.toml must contain a [platform] table"
@@ -136,7 +138,7 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     runtime_raw = merged_runtime.get("runtime", {})
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
-    runtime_allowed = {"profile", "debug_host", "debug_port"}
+    runtime_allowed = {"profile", "debug_host", "debug_port", "console"}
     required_runtime = set(runtime_allowed)
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
         raise ConfigurationError(_Msg.RUNTIME_UNSUPPORTED_KEYS)
@@ -147,7 +149,19 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     debug_host = _string(runtime_raw["debug_host"], "runtime.debug_host")
     if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
         raise ConfigurationError(_Msg.PROD_DEBUG_LOOPBACK)
-    return RuntimeConfig(profile=selected_profile, debug_host=debug_host, debug_port=debug_port)
+    console_raw = runtime_raw["console"]
+    if not isinstance(console_raw, dict):
+        raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
+    _require_keys(console_raw, {"enabled", "terminal_logs"}, "runtime.console")
+    if not isinstance(console_raw["enabled"], bool):
+        raise ConfigurationError(_Msg.MUST_BE_BOOLEAN.format(label="runtime.console.enabled"))
+    if not isinstance(console_raw["terminal_logs"], bool):
+        raise ConfigurationError(_Msg.MUST_BE_BOOLEAN.format(label="runtime.console.terminal_logs"))
+    console = ConsoleConfig(
+        enabled=console_raw["enabled"],
+        terminal_logs=console_raw["terminal_logs"],
+    )
+    return RuntimeConfig(profile=selected_profile, debug_host=debug_host, debug_port=debug_port, console=console)
 
 
 def _load_engine_raw(config_dir: Path, sources: list[ConfigurationSource]) -> dict[str, Any]:
@@ -270,7 +284,7 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
     storage_platform_raw = storage_raw["platform"]
     if not isinstance(storage_platform_raw, dict):
         raise ConfigurationError(_Msg.STORAGE_PLATFORM_MUST_BE_TABLE)
-    _require_keys(storage_platform_raw, {"console", "dashboard"}, "storage.platform")
+    _require_keys(storage_platform_raw, {"dashboard"}, "storage.platform")
 
     def storage_path(raw: object, label: str, *, parent: Path) -> Path:
         path = (parent / _string(raw, label)).resolve()
@@ -283,15 +297,12 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
     ai_dir = storage_path(storage_raw["ai"], "storage.ai", parent=data_root)
     memory_dir = storage_path(storage_raw["memory"], "storage.memory", parent=data_root)
     apps_dir = storage_path(storage_raw["apps"], "storage.apps", parent=data_root)
-    console_storage = storage_platform_raw["console"]
     dashboard_storage = storage_platform_raw["dashboard"]
-    if not isinstance(console_storage, dict) or not isinstance(dashboard_storage, dict):
+    if not isinstance(dashboard_storage, dict):
         raise ConfigurationError(_Msg.STORAGE_ENTRIES_MUST_BE_TABLES)
-    _require_keys(console_storage, {"data_dir"}, "storage.platform.console")
     _require_keys(dashboard_storage, {"data_dir"}, "storage.platform.dashboard")
-    console_dir = storage_path(console_storage["data_dir"], "storage.platform.console.data_dir", parent=data_root)
     dashboard_dir = storage_path(dashboard_storage["data_dir"], "storage.platform.dashboard.data_dir", parent=data_root)
-    package_directories = (engine_dir, ai_dir, memory_dir, apps_dir, console_dir, dashboard_dir)
+    package_directories = (engine_dir, ai_dir, memory_dir, apps_dir, dashboard_dir)
     for index, directory in enumerate(package_directories):
         if any(
             directory == other or directory.is_relative_to(other) or other.is_relative_to(directory)
@@ -308,7 +319,6 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
             ai=ai_dir,
             memory=memory_dir,
             apps=apps_dir,
-            console=console_dir,
             dashboard=dashboard_dir,
         ),
         engine_dir=engine_dir,

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from aurora import runtime as composition
-from src.contracts.configuration import ConsolePreference, DashboardPreference, McpPreference, PlatformPreference
+from src.contracts.configuration import DashboardPreference, McpPreference, PlatformPreference
 from src.platform import PlatformHandle
 
 if TYPE_CHECKING:
@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 def _preference(enabled: frozenset[str], *, open_browser: bool = False) -> PlatformPreference:
     return PlatformPreference(
-        console=ConsolePreference(enabled="console" in enabled, terminal_logs=False),
         dashboard=DashboardPreference(enabled="dashboard" in enabled, open_browser=open_browser),
         mcp=McpPreference(enabled="mcp" in enabled, terminal_logs=False),
     )
@@ -55,8 +54,8 @@ class _Runtime:
 
 
 def test_selected_platforms_uses_preference_or_exact_override() -> None:
-    preference = _preference(frozenset({"console", "mcp"}))
-    assert composition._selected_platforms(None, preference) == frozenset({"console", "mcp"})
+    preference = _preference(frozenset({"mcp"}))
+    assert composition._selected_platforms(None, preference) == frozenset({"mcp"})
     assert composition._selected_platforms(frozenset({"dashboard"}), preference) == frozenset({"dashboard"})
     with pytest.raises(ValueError, match="unknown platforms"):
         composition._selected_platforms(frozenset({"unknown"}), preference)
@@ -68,7 +67,12 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
         preference=_preference(frozenset()),
         logging_level="INFO",
         logging_dir=tmp_path / "logs",
-        runtime=SimpleNamespace(profile="test", debug_host="127.0.0.1", debug_port=8765),
+        runtime=SimpleNamespace(
+            profile="test",
+            debug_host="127.0.0.1",
+            debug_port=8765,
+            console=SimpleNamespace(enabled=True, terminal_logs=False),
+        ),
     )
     runtime = _Runtime(configuration, events)
     monkeypatch.setattr(composition, "get_config", lambda: configuration)
@@ -85,11 +89,13 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
         servers: composition._ProcessServers,
         *,
         open_browser: bool,
+        console_enabled: bool,
     ) -> BaseException | None:
         assert selected_runtime is runtime
         assert not handles
         assert servers.dashboard is None and servers.debug is debug_server
         assert not open_browser
+        assert console_enabled is False
         events.append("process-tasks")
         await runtime.run_forever(stop)
         return None
@@ -107,30 +113,30 @@ def test_start_platforms_uses_unified_creators(monkeypatch: pytest.MonkeyPatch) 
     """平台通过统一的 _init_platforms → _create 协议创建，无需特判。"""
     events: list[str] = []
 
-    async def console_create(config: object, rt: object) -> PlatformHandle:  # noqa: ARG001
-        events.append("console-create")
-        return PlatformHandle(bindings=(), cleanup=lambda: events.append("console-close"), spawn=None)
+    async def dashboard_create(config: object, rt: object) -> PlatformHandle:  # noqa: ARG001
+        events.append("dashboard-create")
+        return PlatformHandle(bindings=(), cleanup=lambda: events.append("dashboard-close"), spawn=None)
 
     async def mcp_create(config: object, rt: object) -> PlatformHandle:  # noqa: ARG001
         events.append("mcp-create")
         return PlatformHandle(bindings=(), cleanup=lambda: events.append("mcp-close"), spawn=None)
 
-    monkeypatch.setattr(composition, "_init_platforms", lambda: {"console": console_create, "mcp": mcp_create})
-    configuration = SimpleNamespace(preference=_preference(frozenset({"console", "mcp"})))
+    monkeypatch.setattr(composition, "_init_platforms", lambda: {"dashboard": dashboard_create, "mcp": mcp_create})
+    configuration = SimpleNamespace(preference=_preference(frozenset({"dashboard", "mcp"})))
     runtime = _Runtime(configuration, events)
 
     async def scenario() -> None:
         async with AsyncExitStack() as resources:
             handles, server = await composition._start_platforms(
                 cast("AuroraRuntime", runtime),
-                frozenset({"console", "mcp"}),
+                frozenset({"dashboard", "mcp"}),
                 resources,
             )
             assert server is None
-            assert set(handles.keys()) == {"console", "mcp"}
+            assert set(handles.keys()) == {"dashboard", "mcp"}
 
     asyncio.run(scenario())
-    assert events == ["console-create", "mcp-create", "mcp-close", "console-close"]
+    assert events == ["dashboard-create", "mcp-create", "mcp-close", "dashboard-close"]
 
 
 def test_runtime_task_failure_and_browser_address(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -199,6 +205,7 @@ def test_dashboard_server_shuts_down_gracefully_via_should_exit() -> None:
             handles,  # type: ignore[arg-type]
             composition._ProcessServers(server, FakeDebugServer()),  # type: ignore[arg-type]
             open_browser=False,
+            console_enabled=False,
         )
         assert server.should_exit is True
         assert not dashboard_task.cancelled()

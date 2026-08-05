@@ -38,6 +38,7 @@ from src.contracts.agent import (
     ToolLease,
 )
 from src.contracts.amp import AmpEnvelope, AmpValidationError
+from src.contracts.event import OutputStreamItem, OutputStreamPage
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
 from src.contracts.model import ModelRequest
 from src.contracts.triage import TriageAction, TriageBatch, TriageDecision
@@ -674,6 +675,13 @@ class EngineState:
     def status(self) -> dict[str, Any]:
         return self.store.counts()
 
+    def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage:
+        """返回游标之后新增的用户可见模型输出（只读）。"""
+        rows = self.store.recent_outputs(cursor, limit=limit)
+        items = tuple(OutputStreamItem(**row) for row in rows)
+        next_cursor = items[-1].cursor if items else cursor
+        return OutputStreamPage(items=items, next_cursor=next_cursor)
+
     async def cancel_task(self, task_id: str, reason: str) -> None:
         await self._store_call(self.store.cancel_task, task_id, reason)
         await self.finalize_terminal_tasks()
@@ -910,6 +918,10 @@ class AgentEngine:
 
     def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
         return self._state.agent_detail(agent_id)
+
+    def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage:
+        """返回游标之后新增的用户可见模型输出（只读）。"""
+        return self._state.output_stream(cursor, limit=limit)
 
     def brain_context(self) -> dict[str, Any]:
         """返回紧凑运行态计数；该投影不会进入模型上下文。"""

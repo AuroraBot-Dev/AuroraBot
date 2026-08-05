@@ -114,7 +114,7 @@ graph TD
     aurora["aurora<br/>进程组合 · CLI"]
     localhost["src/localhost<br/>运行时监察 · 命令路由 · 调试"]
     engine["src/engine<br/>Agent 运行时引擎 · 状态 · 因果"]
-    platform["src/platform<br/>Console · Dashboard · MCP · NoneBot"]
+    platform["src/platform<br/>Dashboard · MCP · NoneBot"]
     ai["src/ai<br/>模型网关"]
     memory["src/memory<br/>记忆服务（自动）"]
     agents["src/agents<br/>Agent handler · 主动能力"]
@@ -184,7 +184,7 @@ graph TD
 | **进程层**   | `aurora`        | 唯一进程 CLI、平台选择、生命周期组合、engine + Port 构造、挂载 localhost 命令路由与主事件循环      | 所有下层                   |
 | **监察层**   | `src/localhost` | 运行时状态检查、`/` 命令路由、调试 API、输入分发。**可自由 import 任何 src/ 包**                   | 所有底层（设计如此）       |
 | **引擎层**   | `src/engine`    | Inbox 防抖、Triage、Task/Agent、邮箱、Activity、因果边界、SQLite                                   | contracts · utils          |
-| **适配层**   | `src/platform`  | Console / Dashboard / MCP / NoneBot 协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
+| **适配层**   | `src/platform`  | Dashboard / MCP / NoneBot 外部生态协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
 | **模型层**   | `src/ai`        | 宽泛模型网关。实现 `ModelProvider` Port                                                            | contracts · utils          |
 | **记忆层**   | `src/memory`    | 有界会话摘要与长期事实投影。实现 `MemoryStore` Port                                                | contracts · utils          |
 | **认知层**   | `src/agents`    | Triage policy、同构 Agent handler + 主动能力（delegate / wait / speech）                           | prompt · contracts · utils |
@@ -211,9 +211,9 @@ graph TD
 ### 完整流程
 
 ```
-Console (platform/console/shell.py)
+Console (src/console/shell.py)
   │  stdin 读取用户输入
-  │  import: contracts.event.RuntimeInput, contracts.ports.InteractiveInputPort
+  │  import: contracts.event.RuntimeInput, contracts.ports.ConsoleControlPort
   │  不 import: src.localhost
   │
   ▼
@@ -283,7 +283,7 @@ Aurora 的能力扩展分为三种正交类型：
 | ------------ | ------------------------------------- | ------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | **自动服务** | `src/memory/` 等，注入 engine 的 Port | 自动（pump hook）         | memory（记忆注入/回忆）、prompt assembly、因果记录          | 发生**于** Agent，不由 Agent 决策。像潜意识——Agent 不"调用"记忆，记忆结果自动出现在上下文中。            |
 | **主动能力** | `agents/capabilities/`                | Agent 决策（模型 token）  | delegate、wait、speech (TTS)                                | 由 Agent **主动选择**使用。是 Agent 认知决策空间的一部分——Agent 决定"我要委派"、"我要等待"、"我要朗读"。 |
-| **工具能力** | `platform/<name>/`                    | Agent 决策 → tool request | console.send、dashboard.send、MCP tools、NoneBot QQ actions | Agent 想要触发的**外部效果**。Agent 决定"我要在控制台输出这段文字"，工具系统执行。                       |
+| **工具能力** | `platform/<name>/`                    | Agent 决策 → tool request | dashboard.send、MCP tools、NoneBot QQ actions | Agent 想要触发的**外部效果**。Agent 决定"我要在 Dashboard 聊天里发送这段文字"，工具系统执行。本地 Console 不再属于工具能力：Bot 文本默认由 console 渲染。 |
 
 ### 三种类型的关系
 
@@ -637,11 +637,6 @@ speech.install_tts_config(enabled=config.agents.tts_enabled)
 ```
 platform/
   __init__.py
-  console/            # 终端平台
-    __init__.py
-    adapter.py        # ConsolePlatform — 实现 ToolExecutor (console.send) + RecoveryBinding
-    shell.py          # run_console(input_port, console_platform, stop_event)
-                      #   stdin 读取 → RuntimeInput → input_port.route_input() → CommandResult
   dashboard/          # Web 面板平台
     __init__.py
     adapter.py        # DashboardPlatform — 实现 ToolExecutor (dashboard.send)
@@ -673,20 +668,20 @@ platform/
 - 可选 `RecoveryBinding`：`recover_tool(request) → ToolOutcome`（幂等恢复）
 - 可选 event ingress：将外部事件（stdin、WebSocket、MCP notification、QQ 消息）转为 `AmpEnvelope` 并通过 `ExternalAmpIngressPort` 提交
 
-交互式平台（Console、Dashboard）的构造函数接受 `InteractiveInputPort` 注入（定义在 `contracts/ports.py`），用于将用户输入路由到 localhost 的命令系统：
+交互式平台（Dashboard）的构造函数接受 `InteractiveInputPort` 注入（定义在 `contracts/ports.py`），用于将用户输入路由到 localhost 的命令系统；本地 Console 是独立于平台的运行时前端（见 `src/console`）：
 
 ```python
 # Console shell
 async def run_console(
-    input_port: InteractiveInputPort,   # ← aurora 注入 localhost 实例
-    console_platform: ConsolePlatform,
+    control: ConsoleControlPort,   # ← aurora 注入 localhost 实例
+    query: RuntimeQueryPort,       # ← 只读输出流查询端口
     *,
     stop_event: asyncio.Event,
 ) -> None:
     while not stop_event.is_set():
         text = await read_stdin()
         request = RuntimeInput(text=text, origin=InputOrigin.CONSOLE, ...)
-        result = await input_port.route_input(request)  # ← 通过 Protocol 调用，不 import localhost
+        result = await control.route_input(request)  # ← 通过 Protocol 调用，不 import localhost
         handle_result(result)
 ```
 
@@ -694,13 +689,11 @@ async def run_console(
 
 ```python
 # 1. 创建平台实例
-console = ConsolePlatform(db_path)
 dashboard = DashboardPlatform(chat_service)
 mcp = MCPPlatform(config)
 
 # 2. 收集 ToolExecutorBinding
 bindings = [
-    ToolExecutorBinding(CONSOLE_SEND_DESCRIPTOR, console, "platform.console", "local"),
     ToolExecutorBinding(DASHBOARD_SEND_DESCRIPTOR, dashboard, "platform.dashboard", "local"),
     *[ToolExecutorBinding(cap, mcp, "platform.mcp", instance) for cap in mcp.capability_catalog],
 ]
@@ -708,6 +701,8 @@ bindings = [
 # 3. 注入到 engine
 engine.install_tool_registry(ToolRegistry(bindings))
 ```
+
+**Console 前端**：不注册 Tool 能力；`--headless` 或 `[runtime].console.enabled = false` 时不启动。启动时 shell 后台循环按游标轮询 `RuntimeQueryPort.output_stream()` 并打印 `Bot> <text>`，因此 Bot 文本不调用任何工具也会默认出现在本地终端。
 
 **新增平台只需**：在 `platform/<name>/` 中实现 `ToolExecutor` + event ingress，在 `aurora/runtime.py` 中注册。无需修改 contracts、engine、agents。
 
@@ -814,7 +809,7 @@ run_runtime():
   5. 创建主动能力        → DelegationCapability, WaitCapability, SpeechCapability
   6. 加载 AgentHandler   → _load_handler(spec, composer, capabilities)
   7. 创建 AI Gateway     → ModelGatewayService(config)
-  8. 创建平台适配器       → ConsolePlatform, DashboardPlatform, MCPPlatform
+  8. 创建平台适配器       → DashboardPlatform, MCPPlatform
   9. 收集 ToolBinding     → 各平台的 ToolExecutorBinding
   10. 构造 engine        → AgentEngine(config, handlers,
                             model_provider=...,
@@ -824,8 +819,8 @@ run_runtime():
   11. 注册 ToolExecutors → engine.tool_registry.add_all(bindings)
   12. 挂载 localhost     → AuroraRuntime(engine, model_gateway, memory_service, ...)
                             # AuroraRuntime 实现 contracts.ports.InteractiveInputPort
-  13. 注入 localhost 到平台 → console_shell(input_port=localhost, ...)
-                            # 平台通过 InteractiveInputPort Protocol 接收，不 import localhost
+  13. 注入 localhost 到平台 → 平台通过 InteractiveInputPort Protocol 接收，不 import localhost
+  14. 启动本地前端      → run_console(control=localhost, query=localhost)（非 headless 时）
    13. 启动主循环          → engine.run_forever() + 平台各自的事件循环
 ```
 
@@ -894,7 +889,6 @@ data/
   engine/          # runtime.sqlite3 (WAL), inbox/, archive/
   memory/          # memory.sqlite3：会话摘要、长期事实、幂等回执
   platform/
-    console/       # Console 平台私有数据
     dashboard/     # Dashboard 数据库 + Token.txt
   logs/            # 日志文件
 ```
@@ -993,9 +987,6 @@ data_root = "data"
 # 各包的数据子目录，相对于 data_root，与包名一致，内部扁平化
 engine = "engine"
 memory = "memory"
-
-[storage.platform.console]
-data_dir = "platform/console"
 
 [storage.platform.dashboard]
 data_dir = "platform/dashboard"

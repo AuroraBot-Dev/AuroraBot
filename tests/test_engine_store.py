@@ -410,6 +410,50 @@ def test_model_activity_completion_and_failure_are_auditable(tmp_path: Path) -> 
         state.shutdown()
 
 
+def test_output_stream_returns_model_text_and_failures_ordered_by_cursor(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "model.completed":
+                return AgentDecision(completion=Completion(str(context.message.payload["text"])))
+            return AgentDecision(model_request={"role": "fast", "messages": []})
+
+    state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
+
+    async def scenario() -> None:
+        await state.submit_amp(_amp("first"))
+        await _admit(state)
+        activity = (await state.claim_model_requests(1))[0]
+        model_result = ModelResult("fake", frozenset({"chat"}), "normalized", "answer one", None, ModelUsage(), 0)
+        await state.complete_model(activity, model_result.to_dict(), None)
+        await _admit(state)
+        assert state.tasks()[0].status == TaskStatus.COMPLETED
+
+        page = state.output_stream()
+        assert [item.text for item in page.items] == ["answer one"]
+        assert all(item.kind == "model" for item in page.items)
+        assert page.next_cursor == page.items[-1].cursor
+
+        await state.submit_amp(_amp("second"))
+        await _admit(state)
+        failed_activity = (await state.claim_model_requests(1))[0]
+        await state.complete_model(failed_activity, None, "provider unavailable")
+        failed = await state.pump()
+        assert failed.processed_message_ids
+
+        page = state.output_stream(page.next_cursor)
+        assert len(page.items) == 1
+        assert page.items[0].kind == "error"
+        assert page.items[0].text == "provider unavailable"
+
+        assert state.output_stream(page.next_cursor).items == ()
+        assert state.output_stream(page.next_cursor).next_cursor == page.next_cursor
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        state.shutdown()
+
+
 def test_handler_exception_fails_message_and_task(tmp_path: Path) -> None:
     class Broken:
         def handle(self, context: AgentContext) -> AgentDecision:

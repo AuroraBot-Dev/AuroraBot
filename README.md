@@ -65,7 +65,7 @@ uv sync --no-dev
 Copy-Item .env.example .env
 
 # 在 .env 中填写默认配置所需的 DEEPSEEK_API_KEY
-uv run --no-dev --env-file .env aurora --platform console --platform mcp
+uv run --no-dev --env-file .env aurora
 ```
 
 启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
@@ -74,12 +74,11 @@ uv run --no-dev --env-file .env aurora --platform console --platform mcp
 # 使用 config/platforms.toml 中的默认平台组合
 uv run --no-dev --env-file .env aurora
 
-# 只启动本地 Console
-uv run --no-dev --env-file .env aurora --platform console
-
-# 不启动外部平台
+# 无头模式：不启动本地 Console，也不启动外部平台
 uv run --no-dev --env-file .env aurora --headless
 ```
+
+本地 Console 不随 `--platform` 选择启停：只要不是无头模式且 `[runtime.console].enabled = true`，它就会运行。
 
 显式提供 `--platform` 时，这些平台组成精确的平台集合，不与默认值叠加。Dashboard 浏览器前端由独立项目提供，本仓库包含本地后端和聊天桥接。
 

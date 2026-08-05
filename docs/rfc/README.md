@@ -8,6 +8,7 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 2. [0201 有界上下文与运行态留存](0201-bounded-context-and-runtime-retention.md) - 会话级记忆、上下文预算、瞬时事件过滤与终态数据生命周期
 3. [0202 Triage、Root 与压缩记忆基线](0202-triage-root-memory-baseline.md) - 批量防抖摄入、Triage 决策、Root 上下文与三层信息存储
 4. [0203 Agent 自由与运行时边界](0203-agent-freedom-boundary.md) - Prompt 人格、模型行动自由、效果安全与资源边界
+5. [0204 Console 本地交互前端](0204-console-local-frontend.md) - Console 脱离平台抽象，改为本地渲染器，Bot 文本默认输出
 
 ## 规范优先级
 

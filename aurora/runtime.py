@@ -48,7 +48,7 @@ def _init_platforms() -> dict[str, Callable[..., Any]]:
     """一次性导入所有平台子包并将 _create 注册到本地映射。"""
     if _PLATFORM_CREATORS:
         return _PLATFORM_CREATORS
-    for name in ("console", "dashboard", "mcp"):
+    for name in ("dashboard", "mcp"):
         module = importlib.import_module(f"src.platform.{name}")
         if hasattr(module, "_create"):
             _PLATFORM_CREATORS[name] = module._create  # type: ignore[attr-defined]
@@ -97,8 +97,9 @@ async def run_runtime(
     """围绕一个共享运行时和停止事件，启动精确的平台组合并运行至停止。"""
     configuration = get_config()
     selected = _selected_platforms(platforms, configuration.preference)
+    console_enabled = platforms != frozenset() and configuration.runtime.console.enabled
     configure_logging(configuration.logging_level, configuration.logging_dir / "aurora.log")
-    configure_console_logging(enabled=configuration.preference.console.terminal_logs if "console" in selected else True)
+    configure_console_logging(enabled=configuration.runtime.console.terminal_logs if console_enabled else True)
 
     runtime = _create_runtime(configuration)
     stop = stop_event or asyncio.Event()
@@ -123,6 +124,7 @@ async def run_runtime(
                     handles,
                     _ProcessServers(dashboard_server, debug_server),
                     open_browser=configuration.preference.dashboard.open_browser,
+                    console_enabled=console_enabled,
                 )
         finally:
             runtime.bind_stop_requester(None)
@@ -273,6 +275,7 @@ async def _run_platform_tasks(
     servers: _ProcessServers,
     *,
     open_browser: bool,
+    console_enabled: bool,
 ) -> BaseException | None:
     """启动运行时循环和各平台后台任务，等待首个完成者并协调退出。"""
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
@@ -290,6 +293,9 @@ async def _run_platform_tasks(
                 if name == "dashboard":
                     dashboard_task = task
 
+    console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
+    tasks.update(task for task in (console_task,) if task is not None)
+
     debug_task = asyncio.create_task(servers.debug.serve(), name="aurora-localhost-debug-server")
     tasks.add(debug_task)
     stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
@@ -304,17 +310,14 @@ async def _run_platform_tasks(
     finally:
         stop_task.cancel()
         await asyncio.gather(stop_task, return_exceptions=True)
-        for name, task in platform_tasks.items():
-            if name == "dashboard":
-                continue
-            task.cancel()
-        await asyncio.gather(
+        pending_tasks = (
             *(task for name, task in platform_tasks.items() if name != "dashboard"),
-            return_exceptions=True,
+            *(task for task in (console_task,) if task is not None),
         )
+        for task in pending_tasks:
+            task.cancel()
+        await asyncio.gather(*pending_tasks, return_exceptions=True)
         if dashboard_task is not None and servers.dashboard is not None:
-            # uvicorn 服务器必须通过 should_exit 优雅退出：直接取消会中断
-            # lifespan 握手并在进程收尾时打印 CancelledError traceback。
             servers.dashboard.should_exit = True  # type: ignore[union-attr]
             await _await_server_exit(dashboard_task)
         servers.debug.should_exit = True
@@ -326,6 +329,15 @@ async def _run_platform_tasks(
 async def _wait_for_stop(stop: asyncio.Event) -> None:
     """挂起直到 stop 事件被设置。"""
     await stop.wait()
+
+
+def _spawn_console(runtime: AuroraRuntime, stop: asyncio.Event, *, enabled: bool) -> asyncio.Task[None] | None:
+    """按运行时配置创建本地 Console 前端任务（非平台，headless 时禁用）。"""
+    if not enabled:
+        return None
+    from src.console import run_console
+
+    return asyncio.create_task(run_console(runtime, runtime, stop_event=stop), name="aurora-console")
 
 
 async def _await_server_exit(task: asyncio.Task[None]) -> None:

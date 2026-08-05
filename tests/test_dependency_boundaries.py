@@ -17,6 +17,7 @@ ALLOWED_SRC_DEPENDENCIES = {
     "ai": {"ai", "contracts", "utils"},
     "memory": {"memory", "contracts", "utils"},
     "agents": {"agents", "prompt", "contracts", "utils"},
+    "console": {"console", "contracts", "utils"},
     "platform": {"platform", "contracts", "utils"},
     "sandbox": {"sandbox", "utils"},
 }

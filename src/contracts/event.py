@@ -70,3 +70,24 @@ class CommandContext:
 
     runtime: RuntimeCommandPort
     request: RuntimeInput
+
+
+@dataclass(frozen=True, slots=True)
+class OutputStreamItem:
+    """输出流中的一条用户可见文本。"""
+
+    cursor: int
+    activity_id: str
+    task_id: str
+    session_id: str
+    kind: str
+    text: str
+    at: str
+
+
+@dataclass(frozen=True, slots=True)
+class OutputStreamPage:
+    """输出流查询的游标分页结果。"""
+
+    items: tuple[OutputStreamItem, ...]
+    next_cursor: int

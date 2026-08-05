@@ -1,4 +1,8 @@
-"""原生 Console 平台的交互式 Shell。"""
+"""本地 Console 交互 Shell 与输出渲染。
+
+位于热路径之外：输入经控制端口路由，输出通过只读查询端口按游标拉取并渲染，
+不拥有任何 Tool 能力。
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,10 @@ from prompt_toolkit.shortcuts import clear as clear_terminal
 from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
 from src.utils.logging import get_logger
 
-logger = get_logger("aurora.platform.console")
+logger = get_logger("aurora.console")
+
+_RENDER_POLL_SECONDS = 0.2
+"""输出流轮询间隔。"""
 
 
 class _Msg(StrEnum):
@@ -30,8 +37,7 @@ if TYPE_CHECKING:
     from prompt_toolkit.input import Input
     from prompt_toolkit.output import Output
 
-    from src.contracts.ports import ConsoleControlPort
-    from src.platform.console.adapter import ConsolePlatform
+    from src.contracts.ports import ConsoleControlPort, RuntimeQueryPort
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,48 +74,38 @@ class _PromptReader:
 
 async def run_console(
     control: ConsoleControlPort,
-    console: ConsolePlatform,
+    query: RuntimeQueryPort,
     *,
     stop_event: asyncio.Event | None = None,
     readline: Callable[[str], str] | None = None,
     output: Callable[[str], None] = print,
+    poll_seconds: float = _RENDER_POLL_SECONDS,
 ) -> None:
-    """运行 Console 交互主循环，路由用户输入但不拥有共享进程生命周期。
+    """运行本地 Console 交互主循环，路由输入并渲染 Bot 输出。
 
-    主循环负责：读取用户输入、通过 control 端口路由、处理消息输出、
+    主循环负责：读取用户输入、通过控制端口路由、按游标拉取输出流并打印、
     处理清屏和关机等控制指令。
 
     Args:
         control: Console 控制端口，用于路由输入和控制命令。
-        console: Console 平台实例，用于接收 Bot 消息。
+        query: 只读输出流查询端口，用于渲染 Bot 输出。
         stop_event: 外部停止信号。
         readline: 可注入的读取函数（测试用），为 None 时使用 prompt_toolkit。
         output: 输出回调函数。
+        poll_seconds: 输出流轮询间隔。
     """
     stop = stop_event or asyncio.Event()
     output("AuroraBot local console; 输入 /help 查看命令。")
     prompt_reader = _PromptReader() if readline is None else None
-    display = asyncio.create_task(_display_messages(console, output), name="aurora-console-output")
-    read_task: asyncio.Task[_ReadResult] | None = None
-    stop_task: asyncio.Task[bool] | None = None
-    logger.info("developer console started")
+    display = asyncio.create_task(_display_messages(query, output, poll_seconds), name="aurora-console-output")
+    logger.info("local console started")
     try:
         terminal_context = patch_stdout(raw=True) if prompt_reader is not None else contextlib.nullcontext()
         with terminal_context:
             while not stop.is_set():
-                read_task = asyncio.create_task(_read_input(prompt_reader, readline), name="aurora-console-read")
-                stop_task = asyncio.create_task(stop.wait(), name="aurora-console-stop")
-                # 等待第一个完成的任务（用户输入或停止信号）
-                done, pending = await asyncio.wait({read_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
-                for task in pending:
-                    task.cancel()
-                if read_task in pending:
-                    await asyncio.gather(read_task, return_exceptions=True)
-                if stop_task in pending:
-                    await asyncio.gather(stop_task, return_exceptions=True)
-                if stop_task in done and stop.is_set():
+                result, should_stop = await _read_input_or_stop(prompt_reader, readline, stop)
+                if should_stop:
                     return
-                result = read_task.result()
                 if result.closed:
                     output("")
                     control.request_shutdown()
@@ -118,13 +114,13 @@ async def run_console(
                 if not raw:
                     continue
                 external_event_id = str(uuid4())
-                # 将用户输入路由到 localhost 的 Console 控制端口
+                # 将用户输入路由到 localhost 的控制端口
                 routed = await control.route_input(
                     RuntimeInput(
                         text=raw,
                         origin=InputOrigin.CONSOLE,
                         session_id="local:console",
-                        source_app="platform.console",
+                        source_app="local.console",
                         source_instance="default",
                         idempotency_key=external_event_id,
                         data={"channel": "local_console"},
@@ -139,8 +135,29 @@ async def run_console(
                     control.request_shutdown()
                     return
     finally:
-        await _cancel_tasks(read_task, stop_task, display)
-        logger.info("developer console stopped")
+        await _cancel_tasks(display)
+        logger.info("local console stopped")
+
+
+async def _read_input_or_stop(
+    prompt_reader: _PromptReader | None,
+    readline: Callable[[str], str] | None,
+    stop: asyncio.Event,
+) -> tuple[_ReadResult, bool]:
+    """等待用户输入或停止信号，返回 (输入结果, 是否因停止而退出)。"""
+    read_task = asyncio.create_task(_read_input(prompt_reader, readline), name="aurora-console-read")
+    stop_task = asyncio.create_task(stop.wait(), name="aurora-console-stop")
+    # 等待第一个完成的任务（用户输入或停止信号）
+    done, pending = await asyncio.wait({read_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+    if read_task in pending:
+        await asyncio.gather(read_task, return_exceptions=True)
+    if stop_task in pending:
+        await asyncio.gather(stop_task, return_exceptions=True)
+    if stop_task in done and stop.is_set():
+        return _ReadResult(None, closed=True), True
+    return read_task.result(), False
 
 
 async def _read_input(
@@ -171,10 +188,21 @@ def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], 
         output("\033[2J\033[H")
 
 
-async def _display_messages(console: ConsolePlatform, output: Callable[[str], None]) -> None:
-    """异步循环显示来自 Console 平台的 Bot 消息。"""
+async def _display_messages(
+    query: RuntimeQueryPort,
+    output: Callable[[str], None],
+    poll_seconds: float,
+) -> None:
+    """按游标轮询输出流并渲染 Bot 的用户可见文本。"""
+    cursor = 0
     while True:
-        output(f"Bot> {await console.next_message()}")
+        page = query.output_stream(cursor)
+        for item in page.items:
+            if item.text:
+                prefix = "Bot! " if item.kind == "error" else "Bot> "
+                output(f"{prefix}{item.text}")
+        cursor = page.next_cursor
+        await asyncio.sleep(poll_seconds)
 
 
 async def _cancel_tasks(*tasks: asyncio.Task[Any] | None) -> None:

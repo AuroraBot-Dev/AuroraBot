@@ -1,12 +1,5 @@
 # 平台配置 — 启用状态、本地体验偏好与各平台私有服务器配置
 
-# Console：本地 stdin/终端交互
-[platform.console]
-# 是否在默认组合中启用此平台
-enabled = true
-# 是否在终端输出运行时日志（仍写入文件）
-terminal_logs = false
-
 # Dashboard：Web 面板，同时承载偏好与服务器配置
 [platform.dashboard]
 enabled = true

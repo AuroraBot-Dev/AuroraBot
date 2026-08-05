@@ -24,7 +24,8 @@ src/ai/         宽泛模型网关
 src/memory/     自动记忆服务与持久化适配
 src/config/     TOML 加载、校验与配置快照
 src/localhost/  输入、命令路由、运行时监察与开发者调试接口
-src/platform/   Console、Dashboard、MCP 的协议、持久化、能力与效果适配
+src/console/    本地交互 Shell 与输出渲染（热路径外的只读渲染器）
+src/platform/   Dashboard、MCP 的协议、持久化、能力与效果适配
 src/apps/       内建原生 AMP-MCP 应用
 src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
 src/utils/      无上层依赖的通用工具

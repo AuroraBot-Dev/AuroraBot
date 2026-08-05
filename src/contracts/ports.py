@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from src.contracts.agent import ToolLease
     from src.contracts.configuration import AuroraConfig
-    from src.contracts.event import CommandResult, RuntimeInput
+    from src.contracts.event import CommandResult, OutputStreamPage, RuntimeInput
     from src.contracts.tool import ToolOutcomeStatus
 
 
@@ -65,6 +65,12 @@ class RuntimeCommandPort(Protocol):
     def task(self, task_id: str) -> dict[str, Any] | None: ...
 
     def agent(self, agent_id: str) -> dict[str, Any] | None: ...
+
+
+class RuntimeQueryPort(Protocol):
+    """本地交互前端只读查询输出流与运行状态的端口。"""
+
+    def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage: ...
 
 
 class ToolQueuePort(Protocol):

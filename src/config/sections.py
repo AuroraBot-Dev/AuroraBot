@@ -14,7 +14,6 @@ from src.contracts.configuration import (
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
-    ConsolePreference,
     DashboardBotConfig,
     DashboardConfig,
     DashboardPreference,
@@ -398,12 +397,10 @@ def _parse_dashboard(raw: dict[str, Any], root: Path, engine_workspace: Path) ->
 
 
 def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
-    """解析平台偏好配置段（console / dashboard / mcp 的启用和选项）。"""
+    """解析平台偏好配置段（dashboard / mcp 的启用和选项）。"""
     _require_keys(platform, set(PLATFORM_NAMES), "platform")
-    console = _table(platform["console"], "platform.console")
     dashboard = _table(platform["dashboard"], "platform.dashboard")
     mcp = _table(platform["mcp"], "platform.mcp")
-    _require_subset(console, {"enabled", "terminal_logs"}, "platform.console")
     _require_subset(dashboard, {"enabled", "open_browser"}, "platform.dashboard")
     _require_subset(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
 
@@ -413,10 +410,6 @@ def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
         return value
 
     return PlatformPreference(
-        console=ConsolePreference(
-            enabled=_bool(console["enabled"], "platform.console.enabled"),
-            terminal_logs=_bool(console["terminal_logs"], "platform.console.terminal_logs"),
-        ),
         dashboard=DashboardPreference(
             enabled=_bool(dashboard["enabled"], "platform.dashboard.enabled"),
             open_browser=_bool(dashboard["open_browser"], "platform.dashboard.open_browser"),

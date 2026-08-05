@@ -32,13 +32,9 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
     ("flags", "expected"),
     (
         (["--headless"], frozenset()),
-        (["--platform", "console"], frozenset({"console"})),
         (["--platform", "dashboard"], frozenset({"dashboard"})),
         (["--platform", "mcp"], frozenset({"mcp"})),
-        (
-            ["--platform", "console", "--platform", "dashboard", "--platform", "mcp"],
-            frozenset({"console", "dashboard", "mcp"}),
-        ),
+        (["--platform", "dashboard", "--platform", "mcp"], frozenset({"dashboard", "mcp"})),
     ),
 )
 def test_cli_passes_each_exact_platform_set_once(
@@ -67,7 +63,7 @@ def test_cli_uses_preference_selection_when_no_platform_flag_is_present(monkeypa
     assert calls == [None]
 
 
-@pytest.mark.parametrize("platform", ("console", "dashboard", "mcp"))
+@pytest.mark.parametrize("platform", ("dashboard", "mcp"))
 def test_headless_rejects_positive_platform_flags(platform: str) -> None:
     with pytest.raises(SystemExit) as raised:
         run(["--headless", "--platform", platform])

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     import asyncio
 
     from src.contracts.configuration import AuroraConfig
-    from src.contracts.event import CommandResult, RuntimeInput
+    from src.contracts.event import CommandResult, OutputStreamPage, RuntimeInput
     from src.engine.runtime import AgentEngine
 
 
@@ -93,3 +93,7 @@ class AuroraRuntime:
 
     def brain_context(self) -> dict[str, Any]:
         return self.engine.brain_context()
+
+    def output_stream(self, cursor: int = 0, *, limit: int = 64) -> "OutputStreamPage":
+        """返回游标之后新增的用户可见模型输出，供本地交互前端渲染。"""
+        return self.engine.output_stream(cursor, limit=limit)
