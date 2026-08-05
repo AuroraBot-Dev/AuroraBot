@@ -2,29 +2,37 @@
 
 from __future__ import annotations
 
-import subprocess
+import tomllib
 from typing import TYPE_CHECKING, Any
 
-from aurora.process import console, run_process
+import click
+from donk.main import cli as donk_cli
+
+from aurora.process import console
 
 if TYPE_CHECKING:
     import argparse
+    from pathlib import Path
 
 NAME = "donk"
 
 
-def _read_version(root: Any) -> str | None:
-    """通过 donk show 读取当前版本号，失败或不可用时返回 None。"""
+def _invoke(args: list[str]) -> int:
+    """在进程内调用 donk CLI，避免子进程 uv 环境解析开销。"""
     try:
-        result = subprocess.run(
-            ["uv", "run", "--no-sync", "donk", "show"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout.strip() if result.returncode == 0 else None
-    except OSError:
+        result = donk_cli.main(args=args, prog_name="donk", standalone_mode=False)
+    except click.ClickException as error:
+        console.print(f"[bold red]{error}[/bold red]")
+        return 1
+    return 0 if result is None else int(result)
+
+
+def _read_version(root: Path) -> str | None:
+    """读取 pyproject.toml 当前版本号，失败或不可用时返回 None。"""
+    try:
+        with (root / "pyproject.toml").open("rb") as file:
+            return str(tomllib.load(file)["project"]["version"])
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
         return None
 
 
@@ -42,13 +50,11 @@ def register(subparsers: Any) -> None:
 def execute(arguments: argparse.Namespace) -> int:
     """执行 donk 子命令的运行逻辑并输出版本更新结果。"""
     subcommand = arguments.donk_command
-    # 先通过 uv run donk 执行版本号操作
-    exit_code = run_process(["uv", "run", "--no-sync", "donk", subcommand], arguments.root)
+    pyproject = str((arguments.root / "pyproject.toml").resolve())
+    exit_code = _invoke([subcommand, pyproject])
     if exit_code != 0:
         console.print(f"[bold red]donk {subcommand} 执行失败[/bold red]")
         return exit_code
-
-    # 读取更新后的版本号并展示
     version = _read_version(arguments.root)
     if subcommand == "show":
         if version:

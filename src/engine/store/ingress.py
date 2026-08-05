@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
-from uuid import uuid4
 
 from src.contracts.agent import (
     ActivityStatus,
@@ -21,6 +21,13 @@ from src.contracts.agent import (
 )
 
 from .base import RuntimeStoreBase, _json, utc_now
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    AGENT_ROW_MISSING = "agent row missing for {agent_id}"
+    CLAIM_ROW_MISSING = "claimed message references missing rows"
 
 
 class StoreIngressMixin(RuntimeStoreBase):
@@ -63,19 +70,17 @@ class StoreIngressMixin(RuntimeStoreBase):
                 return False, None
             if row["status"] != ActivityStatus.PROCESSING or row["task_status"] != TaskStatus.ACTIVE:
                 # 延迟或重复回执：记录因果事件但不重复处理
-                connection.execute(
-                    "INSERT INTO causal_events VALUES (?, ?, ?, 'tool.receipt_ignored', ?, ?, ?, ?, ?, ?)",
-                    (
-                        str(uuid4()),
-                        row["task_id"],
-                        row["agent_id"],
-                        f"Ignored late or duplicate receipt for {capability}",
-                        _json(payload),
-                        row["activity_id"],
-                        row["task_id"],
-                        external_message_id,
-                        now,
-                    ),
+                self._insert_causal_event(
+                    connection,
+                    event_type="tool.receipt_ignored",
+                    summary=f"Ignored late or duplicate receipt for {capability}",
+                    payload=payload,
+                    task_id=str(row["task_id"]),
+                    agent_id=str(row["agent_id"]),
+                    causation_id=str(row["activity_id"]),
+                    correlation_id=str(row["task_id"]),
+                    external_message_id=external_message_id,
+                    now=now,
                 )
                 return True, None
             succeeded = event_type == "tool.succeeded"
@@ -107,20 +112,17 @@ class StoreIngressMixin(RuntimeStoreBase):
                     priority=int(row["priority"]),
                     now=now,
                 )
-            connection.execute(
-                "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    str(uuid4()),
-                    row["task_id"],
-                    row["agent_id"],
-                    event_type,
-                    summary,
-                    _json(payload),
-                    row["activity_id"],
-                    row["task_id"],
-                    external_message_id,
-                    now,
-                ),
+            self._insert_causal_event(
+                connection,
+                event_type=event_type,
+                summary=summary,
+                payload=payload,
+                task_id=str(row["task_id"]),
+                agent_id=str(row["agent_id"]),
+                causation_id=str(row["activity_id"]),
+                correlation_id=str(row["task_id"]),
+                external_message_id=external_message_id,
+                now=now,
             )
             return True, message_id
 
@@ -130,7 +132,8 @@ class StoreIngressMixin(RuntimeStoreBase):
         若为根 Agent，结束整个 Task；否则向父 Agent 发送 child.completed 消息。
         """
         agent = connection.execute("SELECT * FROM agents WHERE agent_id = ?", (row["agent_id"],)).fetchone()
-        assert agent is not None
+        if agent is None:
+            raise RuntimeError(_Msg.AGENT_ROW_MISSING.format(agent_id=row["agent_id"]))
         connection.execute(
             "UPDATE agents SET status = 'COMPLETED', last_summary = ?, updated_at = ? WHERE agent_id = ?",
             (summary, now, row["agent_id"]),
@@ -208,7 +211,8 @@ class StoreIngressMixin(RuntimeStoreBase):
                 "SELECT * FROM agents WHERE agent_id = ?", (row["target_agent_id"],)
             ).fetchone()
             task_row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (row["task_id"],)).fetchone()
-            assert message_row is not None and agent_row is not None and task_row is not None
+            if message_row is None or agent_row is None or task_row is None:
+                raise RuntimeError(_Msg.CLAIM_ROW_MISSING)
             return self._message(message_row), self._agent(agent_row), self._task(task_row)
 
     def fail_message(self, message_id: str, agent_id: str, error: str) -> None:

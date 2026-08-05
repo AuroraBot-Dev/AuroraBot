@@ -277,19 +277,16 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 "UPDATE mailbox SET status = 'COMPLETED', lease_until = NULL, completed_at = ? WHERE message_id = ?",
                 (now, message.message_id),
             )
-            connection.execute(
-                "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
-                (
-                    str(uuid4()),
-                    agent.task_id,
-                    agent.agent_id,
-                    f"agent.{command.kind}",
-                    summary,
-                    _json(command.to_dict()),
-                    message.message_id,
-                    agent.task_id,
-                    now,
-                ),
+            self._insert_causal_event(
+                connection,
+                event_type=f"agent.{command.kind}",
+                summary=summary,
+                payload=command.to_dict(),
+                task_id=agent.task_id,
+                agent_id=agent.agent_id,
+                causation_id=message.message_id,
+                correlation_id=agent.task_id,
+                now=now,
             )
         return tuple(created)
 

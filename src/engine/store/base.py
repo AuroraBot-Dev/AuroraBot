@@ -284,6 +284,39 @@ class RuntimeStoreBase:
         return message_id
 
     @staticmethod
+    def _insert_causal_event(
+        connection: sqlite3.Connection,
+        *,
+        event_type: str,
+        summary: str,
+        payload: dict[str, Any],
+        correlation_id: str,
+        task_id: str | None = None,
+        agent_id: str | None = None,
+        causation_id: str | None = None,
+        external_message_id: str | None = None,
+        now: str,
+    ) -> str:
+        """向 causal_events 插入一条因果事件并返回 event_id。所有因果记录均通过此方法。"""
+        event_id = str(uuid4())
+        connection.execute(
+            "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                event_id,
+                task_id,
+                agent_id,
+                event_type,
+                summary,
+                _json(payload),
+                causation_id,
+                correlation_id,
+                external_message_id,
+                now,
+            ),
+        )
+        return event_id
+
+    @staticmethod
     def _end_task(connection: sqlite3.Connection, task_id: str, status: TaskStatus, reason: str, now: str) -> None:
         raise NotImplementedError
 

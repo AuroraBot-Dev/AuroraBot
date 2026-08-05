@@ -28,6 +28,7 @@ from src.localhost.runtime import AuroraRuntime
 from src.memory.service import MemoryService
 from src.prompt import PromptComposer, load_prompt_catalog
 from src.utils.logging import configure_console_logging, configure_logging, get_logger
+from src.utils.uvicorn import SignalSafeServer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -55,14 +56,6 @@ def _init_platforms() -> dict[str, Callable[..., Any]]:
 
 
 # -- 内部辅助类型 -----------------------------------------------------
-
-
-class _AuroraServer(uvicorn.Server):
-    """禁止 uvicorn 自行捕获信号，由组合根统一管理停止流程。"""
-
-    @__import__("contextlib").contextmanager
-    def capture_signals(self):  # type: ignore[no-untyped-def]
-        yield
 
 
 class _DashboardStartupError(RuntimeError):
@@ -423,7 +416,7 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
 def _debug_server(runtime: AuroraRuntime) -> uvicorn.Server:
     """创建独立于 Platform 集合的 localhost 调试服务器。"""
     configuration = runtime.configuration
-    return _AuroraServer(
+    return SignalSafeServer(
         uvicorn.Config(
             create_debug_app(runtime),
             host=configuration.runtime.debug_host,

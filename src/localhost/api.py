@@ -1,7 +1,5 @@
 """localhost 独立运行时调试 API。"""
 
-import asyncio
-import contextlib
 from enum import StrEnum
 from typing import Any
 
@@ -9,20 +7,7 @@ from fastapi import FastAPI, HTTPException
 
 from src.contracts.amp import AmpValidationError
 from src.contracts.ports import DashboardDebugPort
-
-
-class _LifespanSafeApp:
-    """在 lifespan 阶段抑制 CancelledError traceback 的 ASGI 包装器。"""
-
-    def __init__(self, app: FastAPI) -> None:
-        self._app = app
-
-    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
-        if scope["type"] == "lifespan":
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._app(scope, receive, send)
-        else:
-            await self._app(scope, receive, send)
+from src.utils.uvicorn import LifespanSafeApp
 
 
 class _Msg(StrEnum):
@@ -33,7 +18,7 @@ class _Msg(StrEnum):
     AGENT_NOT_FOUND = "Agent 未找到"
 
 
-def create_debug_app(debug: DashboardDebugPort) -> _LifespanSafeApp:
+def create_debug_app(debug: DashboardDebugPort) -> LifespanSafeApp:
     """创建只依赖 localhost 调试端口的 FastAPI 应用，外层包装 lifespan 安全 ASGI 适配器。"""
     app = FastAPI(title="Aurora localhost", version="1")
 
@@ -72,4 +57,4 @@ def create_debug_app(debug: DashboardDebugPort) -> _LifespanSafeApp:
     def brain_context() -> dict[str, Any]:
         return debug.brain_context()
 
-    return _LifespanSafeApp(app)
+    return LifespanSafeApp(app)

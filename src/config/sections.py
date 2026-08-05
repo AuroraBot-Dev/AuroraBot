@@ -7,6 +7,7 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
+from src.config.helpers import _positive_number, _require_keys, _require_subset, _string, _table
 from src.contracts.agent import AgentLimits, AgentProfile, TaskLimits
 from src.contracts.configuration import (
     PLATFORM_NAMES,
@@ -19,11 +20,6 @@ from src.contracts.configuration import (
     DashboardPreference,
     McpPreference,
     PlatformPreference,
-    _positive_number,
-    _require_keys,
-    _require_subset,
-    _string,
-    _table,
 )
 from src.contracts.triage import TriageLimits
 

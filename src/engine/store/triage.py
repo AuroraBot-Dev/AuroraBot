@@ -28,22 +28,18 @@ class StoreTriageMixin(RuntimeStoreBase):
                 (event_id,),
             ).fetchone():
                 return False
-            connection.execute(
-                "INSERT INTO causal_events VALUES (?, NULL, NULL, 'ingress.received', ?, ?, NULL, ?, ?, ?)",
-                (
-                    str(uuid4()),
-                    amp.payload.summary,
-                    _json(
-                        {
-                            "session_id": amp.payload.session_id,
-                            "source": amp.header.source,
-                            "type": amp.payload.type,
-                        }
-                    ),
-                    amp.payload.session_id,
-                    event_id,
-                    now,
-                ),
+            self._insert_causal_event(
+                connection,
+                event_type="ingress.received",
+                summary=amp.payload.summary,
+                payload={
+                    "session_id": amp.payload.session_id,
+                    "source": amp.header.source,
+                    "type": amp.payload.type,
+                },
+                correlation_id=amp.payload.session_id,
+                external_message_id=event_id,
+                now=now,
             )
             first_row = connection.execute(
                 "SELECT min(created_at) FROM inbox_events WHERE session_id = ? AND status IN ('PENDING', 'DEFERRED')",
@@ -139,16 +135,13 @@ class StoreTriageMixin(RuntimeStoreBase):
             if not rows:
                 return None
             event_ids = [str(row["event_id"]) for row in rows]
-            connection.execute(
-                "INSERT INTO causal_events VALUES (?, NULL, NULL, ?, ?, ?, NULL, ?, NULL, ?)",
-                (
-                    str(uuid4()),
-                    f"triage.{decision.action.value}",
-                    decision.summary,
-                    _json({"decision": decision.to_dict(), "event_ids": event_ids}),
-                    batch.batch_id,
-                    now,
-                ),
+            self._insert_causal_event(
+                connection,
+                event_type=f"triage.{decision.action.value}",
+                summary=decision.summary,
+                payload={"decision": decision.to_dict(), "event_ids": event_ids},
+                correlation_id=batch.batch_id,
+                now=now,
             )
             if decision.action == TriageAction.DEFER:
                 available_at = (now_dt + timedelta(seconds=decision.defer_seconds or 1.0)).isoformat()
@@ -239,18 +232,16 @@ class StoreTriageMixin(RuntimeStoreBase):
             priority=priority,
             now=now,
         )
-        connection.execute(
-            "INSERT INTO causal_events VALUES (?, ?, ?, 'task.started', ?, ?, ?, ?, NULL, ?)",
-            (
-                str(uuid4()),
-                task_id,
-                agent_id,
-                decision.summary,
-                _json({"event_ids": [event["event_id"] for event in events], "triage": decision.to_dict()}),
-                batch.batch_id,
-                task_id,
-                now,
-            ),
+        self._insert_causal_event(
+            connection,
+            event_type="task.started",
+            summary=decision.summary,
+            payload={"event_ids": [event["event_id"] for event in events], "triage": decision.to_dict()},
+            task_id=task_id,
+            agent_id=agent_id,
+            causation_id=batch.batch_id,
+            correlation_id=task_id,
+            now=now,
         )
         return task_id
 

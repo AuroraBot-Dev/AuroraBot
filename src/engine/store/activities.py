@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
-from uuid import uuid4
 
 from src.contracts.agent import ActivityRequest, ActivityStatus
 
 from .base import RuntimeStoreBase, _json, utc_now
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    ACTIVITY_ROW_MISSING = "activity row missing for {activity_id}"
 
 
 class StoreActivitiesMixin(RuntimeStoreBase):
@@ -64,7 +70,8 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                 updated = connection.execute(
                     "SELECT * FROM activities WHERE activity_id = ?", (row["activity_id"],)
                 ).fetchone()
-                assert updated is not None
+                if updated is None:
+                    raise RuntimeError(_Msg.ACTIVITY_ROW_MISSING.format(activity_id=row["activity_id"]))
                 result.append(self._activity(updated))
             return tuple(result)
 
@@ -96,7 +103,8 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                 updated = connection.execute(
                     "SELECT * FROM activities WHERE activity_id = ?", (row["activity_id"],)
                 ).fetchone()
-                assert updated is not None
+                if updated is None:
+                    raise RuntimeError(_Msg.ACTIVITY_ROW_MISSING.format(activity_id=row["activity_id"]))
                 result.append(self._activity(updated))
                 if len(result) >= available:
                     break
@@ -143,17 +151,14 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                 priority=int(row["priority"]),
                 now=now,
             )
-            connection.execute(
-                "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
-                (
-                    str(uuid4()),
-                    row["task_id"],
-                    row["agent_id"],
-                    message_type,
-                    message_type,
-                    _json(payload),
-                    activity_id,
-                    row["task_id"],
-                    now,
-                ),
+            self._insert_causal_event(
+                connection,
+                event_type=message_type,
+                summary=message_type,
+                payload=payload,
+                task_id=str(row["task_id"]),
+                agent_id=str(row["agent_id"]),
+                causation_id=activity_id,
+                correlation_id=str(row["task_id"]),
+                now=now,
             )
