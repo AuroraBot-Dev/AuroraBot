@@ -9,6 +9,7 @@ from typing import Any
 from src.contracts.agent import ActivityRequest, ActivityStatus
 
 from .base import RuntimeStoreBase, _json, utc_now
+from .status import ACT_PENDING, ACT_PROCESSING, TASK_ACTIVE
 
 
 class _Msg(StrEnum):
@@ -24,7 +25,7 @@ class StoreActivitiesMixin(RuntimeStoreBase):
         with self.connect() as connection:
             processing = int(
                 connection.execute(
-                    "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PROCESSING'"
+                    f"SELECT count(*) FROM activities WHERE kind = 'tool' AND status = {ACT_PROCESSING}"
                 ).fetchone()[0]
             )
             if processing >= limit:
@@ -32,8 +33,8 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             return bool(
                 connection.execute(
                     "SELECT 1 FROM activities a JOIN tasks t ON t.task_id = a.task_id "
-                    "WHERE a.kind = 'tool' AND a.status = 'PENDING' "
-                    "AND t.status = 'ACTIVE' LIMIT 1"
+                    f"WHERE a.kind = 'tool' AND a.status = {ACT_PENDING} "
+                    f"AND t.status = {TASK_ACTIVE} LIMIT 1"
                 ).fetchone()
             )
 
@@ -43,8 +44,8 @@ class StoreActivitiesMixin(RuntimeStoreBase):
             return bool(
                 connection.execute(
                     "SELECT 1 FROM activities a JOIN tasks t ON t.task_id = a.task_id "
-                    "WHERE a.kind = 'tool' AND a.status = 'PROCESSING' "
-                    "AND (a.lease_until IS NULL OR a.lease_until <= ?) AND t.status = 'ACTIVE' LIMIT 1",
+                    f"WHERE a.kind = 'tool' AND a.status = {ACT_PROCESSING} "
+                    f"AND (a.lease_until IS NULL OR a.lease_until <= ?) AND t.status = {TASK_ACTIVE} LIMIT 1",
                     (now,),
                 ).fetchone()
             )
@@ -56,14 +57,14 @@ class StoreActivitiesMixin(RuntimeStoreBase):
         with self.transaction() as connection:
             rows = connection.execute(
                 "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
-                "WHERE a.kind = ? AND a.status = 'PENDING' AND t.status = 'ACTIVE' "
+                f"WHERE a.kind = ? AND a.status = {ACT_PENDING} AND t.status = {TASK_ACTIVE} "
                 "ORDER BY a.priority DESC, a.created_at LIMIT ?",
                 (kind, limit),
             ).fetchall()
             result: list[ActivityRequest] = []
             for row in rows:
                 connection.execute(
-                    "UPDATE activities SET status = 'PROCESSING', lease_until = ?, updated_at = ? "
+                    f"UPDATE activities SET status = {ACT_PROCESSING}, lease_until = ?, updated_at = ? "
                     "WHERE activity_id = ?",
                     (lease, now, row["activity_id"]),
                 )
@@ -82,7 +83,7 @@ class StoreActivitiesMixin(RuntimeStoreBase):
         with self.transaction() as connection:
             processing = int(
                 connection.execute(
-                    "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PROCESSING'"
+                    f"SELECT count(*) FROM activities WHERE kind = 'tool' AND status = {ACT_PROCESSING}"
                 ).fetchone()[0]
             )
             available = max(0, limit - processing)
@@ -90,13 +91,13 @@ class StoreActivitiesMixin(RuntimeStoreBase):
                 return ()
             rows = connection.execute(
                 "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
-                "WHERE a.kind = 'tool' AND a.status = 'PENDING' AND t.status = 'ACTIVE' "
+                f"WHERE a.kind = 'tool' AND a.status = {ACT_PENDING} AND t.status = {TASK_ACTIVE} "
                 "ORDER BY a.priority DESC, a.created_at"
             ).fetchall()
             result: list[ActivityRequest] = []
             for row in rows:
                 connection.execute(
-                    "UPDATE activities SET status = 'PROCESSING', lease_until = ?, updated_at = ? "
+                    f"UPDATE activities SET status = {ACT_PROCESSING}, lease_until = ?, updated_at = ? "
                     "WHERE activity_id = ?",
                     (lease, now, row["activity_id"]),
                 )
@@ -115,9 +116,9 @@ class StoreActivitiesMixin(RuntimeStoreBase):
         with self.connect() as connection:
             rows = connection.execute(
                 "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
-                "WHERE a.kind = 'tool' AND a.status = 'PROCESSING' "
-                "AND (a.lease_until IS NULL OR a.lease_until <= ?) "
-                "AND t.status = 'ACTIVE' ORDER BY a.priority DESC, a.created_at",
+                f"WHERE a.kind = 'tool' AND a.status = {ACT_PROCESSING} "
+                f"AND (a.lease_until IS NULL OR a.lease_until <= ?) "
+                f"AND t.status = {TASK_ACTIVE} ORDER BY a.priority DESC, a.created_at",
                 (now,),
             ).fetchall()
             return tuple(self._activity(row) for row in rows)

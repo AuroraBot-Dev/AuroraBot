@@ -52,7 +52,7 @@ def _context() -> AgentContext:
         "builtin.worker",
         1,
         "check weather",
-        AgentStatus.WAITING_TOOL,
+        AgentStatus.READY,
         0,
         {},
         "now",

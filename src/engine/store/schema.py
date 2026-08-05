@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .status import ACT_ACTIVE
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
     version INTEGER NOT NULL
@@ -107,10 +109,10 @@ CREATE INDEX IF NOT EXISTS idx_inbox_session
 ON inbox_events(session_id, status, created_at);
 """
 
-_SCHEMA_VERSION = 7
+_SCHEMA_VERSION = 8
 _ACTIVE_ACTIVITY_INDEX = (
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
-    "ON activities(agent_id) WHERE status IN ('PENDING', 'PROCESSING')"
+    f"CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
+    f"ON activities(agent_id) WHERE status IN {ACT_ACTIVE}"
 )
 _ACTIVITIES_V5 = """
 DROP INDEX IF EXISTS idx_activities_one_active_per_agent;

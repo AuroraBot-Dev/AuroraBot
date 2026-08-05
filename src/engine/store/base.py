@@ -28,6 +28,15 @@ from src.contracts.agent import (
 from src.utils.time import utc_now
 
 from .schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V5, _SCHEMA, _SCHEMA_VERSION
+from .status import (
+    ACT_ACTIVE,
+    ACT_ERROR,
+    ACT_PROCESSING,
+    AGENT_READY,
+    AGENT_TERMINAL,
+    MSG_PENDING,
+    MSG_PROCESSING,
+)
 
 _AUTO_VACUUM_INCREMENTAL = 2
 
@@ -90,7 +99,7 @@ class RuntimeStoreBase:
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
             if row is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, 2, 3, 4, 5, 6, _SCHEMA_VERSION}:
+            elif int(row["version"]) not in {1, 2, 3, 4, 5, 6, 7, _SCHEMA_VERSION}:
                 raise RuntimeError(_Msg.UNSUPPORTED_SCHEMA)
             version = int(row["version"]) if row is not None else _SCHEMA_VERSION
             if version < _SCHEMA_VERSION:
@@ -104,7 +113,7 @@ class RuntimeStoreBase:
                 )
                 if "'tool'" not in activity_sql:
                     connection.executescript(_ACTIVITIES_V5)
-                connection.execute("UPDATE agents SET status = 'WAITING_TOOL' WHERE status = 'WAITING_EFFECT'")
+                connection.execute(f"UPDATE agents SET status = {AGENT_READY} WHERE status NOT IN {AGENT_TERMINAL}")
                 connection.execute(
                     "UPDATE mailbox SET type = CASE type "
                     "WHEN 'effect.succeeded' THEN 'tool.succeeded' "
@@ -138,21 +147,23 @@ class RuntimeStoreBase:
         """
         now = utc_now()
         with self.transaction() as connection:
-            connection.execute("UPDATE mailbox SET status = 'PENDING', lease_until = NULL WHERE status = 'PROCESSING'")
+            connection.execute(
+                f"UPDATE mailbox SET status = {MSG_PENDING}, lease_until = NULL WHERE status = {MSG_PROCESSING}"
+            )
             connection.execute("UPDATE inbox_events SET status = 'PENDING', batch_id = NULL WHERE status = 'TRIAGING'")
             # RUNNING 仅存在于 v2 之前的存储；邮箱租赁是当前锁机制
             connection.execute(
-                "UPDATE agents SET status = 'READY', updated_at = ? WHERE status = 'RUNNING'",
+                f"UPDATE agents SET status = {AGENT_READY}, updated_at = ? WHERE status = 'RUNNING'",
                 (now,),
             )
             interrupted = connection.execute(
                 "SELECT * FROM activities WHERE "
-                "(status = 'PROCESSING' AND kind = 'model') OR "
-                "(status IN ('PENDING', 'PROCESSING') AND json_extract(request_json, '$.legacy_kind') IS NOT NULL)"
+                f"(status = {ACT_PROCESSING} AND kind = 'model') OR "
+                f"(status IN {ACT_ACTIVE} AND json_extract(request_json, '$.legacy_kind') IS NOT NULL)"
             ).fetchall()
             for row in interrupted:
                 connection.execute(
-                    "UPDATE activities SET status = 'ERROR', lease_until = NULL, error = ?, updated_at = ? "
+                    f"UPDATE activities SET status = {ACT_ERROR}, lease_until = NULL, error = ?, updated_at = ? "
                     "WHERE activity_id = ?",
                     ("interrupted_by_restart", now, row["activity_id"]),
                 )
@@ -172,8 +183,8 @@ class RuntimeStoreBase:
                     now=now,
                 )
             connection.execute(
-                "UPDATE activities SET lease_until = NULL, updated_at = ? "
-                "WHERE status = 'PROCESSING' AND kind = 'tool'",
+                f"UPDATE activities SET lease_until = NULL, updated_at = ? "
+                f"WHERE status = {ACT_PROCESSING} AND kind = 'tool'",
                 (now,),
             )
 

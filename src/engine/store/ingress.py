@@ -21,6 +21,16 @@ from src.contracts.agent import (
 )
 
 from .base import RuntimeStoreBase, _json, utc_now
+from .status import (
+    ACT_NONCANCELLED,
+    AGENT_COMPLETED,
+    AGENT_FAILED,
+    AGENT_TERMINAL,
+    MSG_ERROR,
+    MSG_PENDING,
+    MSG_PROCESSING,
+    TASK_ACTIVE,
+)
 
 
 class _Msg(StrEnum):
@@ -135,7 +145,7 @@ class StoreIngressMixin(RuntimeStoreBase):
         if agent is None:
             raise RuntimeError(_Msg.AGENT_ROW_MISSING.format(agent_id=row["agent_id"]))
         connection.execute(
-            "UPDATE agents SET status = 'COMPLETED', last_summary = ?, updated_at = ? WHERE agent_id = ?",
+            f"UPDATE agents SET status = {AGENT_COMPLETED}, last_summary = ?, updated_at = ? WHERE agent_id = ?",
             (summary, now, row["agent_id"]),
         )
         parent = agent["parent_agent_id"]
@@ -164,10 +174,12 @@ class StoreIngressMixin(RuntimeStoreBase):
         """领取下一条待处理消息并设置租约。
 
         先重置所有过期的 PROCESSING 消息为 PENDING，再按以下规则查找：
-        - 仅匹配 ACTIVE Task 下的 READY Agent 或状态与消息类型一致的等待中 Agent
-        - WAITING_MODEL 仅接收 model.* 消息
-        - WAITING_TOOL 仅接收 tool.* 消息
-        - WAITING_CHILDREN 仅接收 child.* 消息
+        - 仅匹配 ACTIVE Task 下的消息；等待语义由数据库事实派生（RFC 0205）：
+          - 空闲 Agent（无非 CANCELLED Activity、无非终态 children、无 pending
+            child reports）接受任意消息
+          - 存在 model Activity 的 Agent 仅接受 model.* 消息
+          - 存在 tool Activity 的 Agent 仅接受 tool.* 消息
+          - 存在非终态 children 或 pending child reports 的 Agent 仅接受 child.* 消息
         - 同一 Agent 不能同时有 PROCESSING 消息（邮箱租约即执行锁）
         按优先级降序、创建时间升序排列，返回 (消息, Agent, Task) 三元组。
         """
@@ -176,34 +188,52 @@ class StoreIngressMixin(RuntimeStoreBase):
         lease = (now_dt + timedelta(seconds=lease_seconds)).isoformat()
         with self.transaction() as connection:
             connection.execute(
-                "UPDATE mailbox SET status = 'PENDING', lease_until = NULL WHERE status = 'PROCESSING' "
-                "AND lease_until < ?",
+                f"UPDATE mailbox SET status = {MSG_PENDING}, lease_until = NULL "
+                f"WHERE status = {MSG_PROCESSING} AND lease_until < ?",
                 (now,),
             )
             row = connection.execute(
                 "SELECT m.* FROM mailbox m JOIN tasks t ON t.task_id = m.task_id "
                 "JOIN agents a ON a.agent_id = m.target_agent_id "
-                "WHERE m.status = 'PENDING' AND m.available_at <= ? AND t.status = 'ACTIVE' "
+                f"WHERE m.status = {MSG_PENDING} AND m.available_at <= ? AND t.status = {TASK_ACTIVE} "
                 "AND NOT EXISTS (SELECT 1 FROM mailbox busy WHERE busy.target_agent_id = a.agent_id "
-                "AND busy.status = 'PROCESSING') "
-                "AND ((a.status = 'READY') "
-                "OR (a.status = 'WAITING_MODEL' AND m.type IN ('model.completed', 'model.failed')) "
-                "OR (a.status = 'WAITING_TOOL' AND m.type IN ("
-                "'tool.succeeded', 'tool.failed', 'tool.unknown')) "
-                "OR (a.status = 'WAITING_CHILDREN' AND m.type IN ('child.completed', 'child.failed'))) "
+                f"AND busy.status = {MSG_PROCESSING}) "
+                "AND ("
+                # 空闲：无非 CANCELLED Activity、无非终态 children、无 pending child reports
+                f"  (NOT EXISTS (SELECT 1 FROM activities ac WHERE ac.agent_id = a.agent_id "
+                f"    AND ac.status IN {ACT_NONCANCELLED}) "
+                f"   AND NOT EXISTS (SELECT 1 FROM agents c WHERE c.parent_agent_id = a.agent_id "
+                f"    AND c.status NOT IN {AGENT_TERMINAL}) "
+                f"   AND NOT EXISTS (SELECT 1 FROM mailbox p WHERE p.target_agent_id = a.agent_id "
+                f"    AND p.type IN ('child.completed', 'child.failed') AND p.status = {MSG_PENDING})) "
+                # 等待模型结果
+                "  OR (m.type IN ('model.completed', 'model.failed') AND EXISTS "
+                "    (SELECT 1 FROM activities ac WHERE ac.agent_id = a.agent_id AND ac.kind = 'model' "
+                f"     AND ac.status IN {ACT_NONCANCELLED})) "
+                # 等待工具结果
+                "  OR (m.type IN ('tool.succeeded', 'tool.failed', 'tool.unknown') AND EXISTS "
+                "    (SELECT 1 FROM activities ac WHERE ac.agent_id = a.agent_id AND ac.kind = 'tool' "
+                f"     AND ac.status IN {ACT_NONCANCELLED})) "
+                # 等待子 Agent
+                "  OR (m.type IN ('child.completed', 'child.failed') AND "
+                "    (EXISTS (SELECT 1 FROM agents c WHERE c.parent_agent_id = a.agent_id "
+                f"      AND c.status NOT IN {AGENT_TERMINAL}) "
+                f"     OR EXISTS (SELECT 1 FROM mailbox p WHERE p.target_agent_id = a.agent_id "
+                f"      AND p.type IN ('child.completed', 'child.failed') AND p.status = {MSG_PENDING})))"
+                ") "
                 "ORDER BY m.priority DESC, m.created_at, m.message_id LIMIT 1",
                 (now,),
             ).fetchone()
             if row is None:
                 return None
             updated = connection.execute(
-                "UPDATE mailbox SET status = 'PROCESSING', lease_until = ?, attempts = attempts + 1 "
-                "WHERE message_id = ? AND status = 'PENDING'",
+                f"UPDATE mailbox SET status = {MSG_PROCESSING}, lease_until = ?, attempts = attempts + 1 "
+                f"WHERE message_id = ? AND status = {MSG_PENDING}",
                 (lease, row["message_id"]),
             )
             if updated.rowcount != 1:
                 return None
-            # 邮箱租约是逐 Agent 的执行锁。保留 WAITING_* 语义状态可防止无关唤醒。
+            # 邮箱租约是逐 Agent 的执行锁；等待语义由活动事实派生。
             message_row = connection.execute(
                 "SELECT * FROM mailbox WHERE message_id = ?", (row["message_id"],)
             ).fetchone()
@@ -220,10 +250,10 @@ class StoreIngressMixin(RuntimeStoreBase):
         now = utc_now()
         with self.transaction() as connection:
             connection.execute(
-                "UPDATE mailbox SET status = 'ERROR', lease_until = NULL, completed_at = ? WHERE message_id = ?",
+                f"UPDATE mailbox SET status = {MSG_ERROR}, lease_until = NULL, completed_at = ? WHERE message_id = ?",
                 (now, message_id),
             )
             connection.execute(
-                "UPDATE agents SET status = 'FAILED', last_summary = ?, updated_at = ? WHERE agent_id = ?",
+                f"UPDATE agents SET status = {AGENT_FAILED}, last_summary = ?, updated_at = ? WHERE agent_id = ?",
                 (error, now, agent_id),
             )

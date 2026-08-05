@@ -32,6 +32,7 @@ from src.contracts.agent import (
     AgentLimits,
     AgentProfile,
     CapabilityCatalogSnapshot,
+    DelegationRequest,
     EngineConfiguration,
     TaskState,
     TaskStatus,
@@ -49,14 +50,6 @@ from src.engine.archive import (
     archived_agent_detail,
     read_task_archive,
     task_archive_projection,
-)
-from src.engine.commands import (
-    CompleteCommand,
-    DelegateCommand,
-    FailCommand,
-    ModelCommand,
-    ToolCommand,
-    WaitCommand,
 )
 from src.engine.debug import agent_detail as build_agent_detail
 from src.engine.debug import reject_active_legacy_workspace
@@ -87,7 +80,6 @@ class _Msg(StrEnum):
     MAX_TURNS_POSITIVE = "max_turns must be positive"
     INVALID_TOOL_OUTCOME = "invalid Tool outcome"
     TOOL_COMPLETION_UNMATCHED = "Tool completion does not match an active request: {request_id}"
-    UNSUPPORTED_DECISION = "unsupported Agent decision"
     AGENT_MODEL_ROLE_DENIED = "Agent {agent_id} cannot request model role {role}"
     AGENT_TOOL_DENIED = "Agent {agent_id} cannot request {capability}"
     UNKNOWN_TOOL = "unknown Tool capability {capability}"
@@ -96,9 +88,6 @@ class _Msg(StrEnum):
     PROFILE_CANNOT_CREATE = "Agent profile {profile_id} cannot create {child_profile}"
     TRIAGE_FALLBACK_REASON = "fail-open:{error_type}"
     TRIAGE_FALLBACK_SUMMARY = "Inbox event batch"
-    WAIT_WITHOUT_CHILDREN = "Agent cannot wait without active children"
-    DECISION_REQUEST_MISSING = "Agent decision lacks its requested transition"
-    TASK_ROW_MISSING = "task row missing for {task_id}"
 
 
 # -- 类型与工具函数 ------------------------------------------------------
@@ -126,12 +115,13 @@ def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
     )
 
 
-def _build_limit_dict(limits: AgentLimits) -> dict[str, int]:
+def _build_limit_dict(limits: AgentLimits) -> dict[str, Any]:
     return {
         "max_active_agents": limits.max_active_agents,
         "max_agents_per_task": limits.max_agents_per_task,
         "max_depth": limits.max_depth,
         "max_children_per_agent": limits.max_children_per_agent,
+        "worker_profile": limits.worker_profile,
     }
 
 
@@ -183,11 +173,10 @@ def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskS
 
 
 def apply_failure(kernel: DecisionRuntime, message: Any, agent: AgentInstance, error: str) -> None:
-    command = FailCommand(summary=error, error=error)
     kernel.store.apply_decision(
         message=message,
         agent=agent,
-        command=command,
+        decision=AgentDecision(failure=error),
         state_patch={},
         limits=_build_limit_dict(kernel.limits),
         priority=message.priority,
@@ -197,54 +186,34 @@ def apply_failure(kernel: DecisionRuntime, message: Any, agent: AgentInstance, e
 def apply_authorized_decision(
     kernel: DecisionRuntime, message: Any, agent: AgentInstance, profile_id: str, decision: AgentDecision
 ) -> None:
+    """按决策字段分派授权校验；校验通过后原样交给 store 原子执行（RFC 0205）。
+
+    completion/wait/failure 无需额外授权；wait 的等待前提校验在 store
+    事务内原子完成。所有 resource 上界校验仍由 store 事务内执行。
+    """
     profile = kernel._profiles[profile_id]
     if decision.model_request is not None:
-        command = _apply_model_request(kernel, agent, decision, profile)
+        _authorize_model(agent, profile, decision.model_request)
     elif decision.tool_request is not None:
-        command = _apply_tool_request(kernel, agent, decision, profile)
+        _authorize_tool(kernel, agent, profile, decision.tool_request)
     elif decision.delegations:
-        command = _apply_delegations(kernel, agent, decision, profile)
-    elif decision.completion is not None:
-        command = _apply_completion(decision)
-    elif decision.wait_for_children:
-        command = _apply_wait(kernel, agent)
-    elif decision.failure is not None:
-        command = _apply_failure(decision)
-    else:
-        raise ValueError(_Msg.UNSUPPORTED_DECISION)
+        _authorize_delegation(kernel, profile, decision.delegations)
     kernel.store.apply_decision(
         message=message,
         agent=agent,
-        command=command,
+        decision=decision,
         state_patch=decision.state_patch,
         limits=_build_limit_dict(kernel.limits),
         priority=message.priority,
     )
 
 
-def _apply_model_request(
-    _kernel: DecisionRuntime,
-    agent: AgentInstance,
-    decision: AgentDecision,
-    profile: AgentProfile,
-) -> ModelCommand:
-    request = decision.model_request
-    if request is None:
-        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
+def _authorize_model(agent: AgentInstance, profile: AgentProfile, request: ModelRequest) -> None:
     if request.role != profile.model_role:
         raise PermissionError(_Msg.AGENT_MODEL_ROLE_DENIED.format(agent_id=agent.agent_id, role=request.role))
-    return ModelCommand(request=request.to_dict())
 
 
-def _apply_tool_request(
-    kernel: DecisionRuntime,
-    agent: AgentInstance,
-    decision: AgentDecision,
-    profile: AgentProfile,
-) -> ToolCommand:
-    tool = decision.tool_request
-    if tool is None:
-        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
+def _authorize_tool(kernel: DecisionRuntime, agent: AgentInstance, profile: AgentProfile, tool: ToolRequest) -> None:
     if not _capability_allowed(tool.capability, profile.capabilities):
         raise PermissionError(_Msg.AGENT_TOOL_DENIED.format(agent_id=agent.agent_id, capability=tool.capability))
     descriptor = kernel.capability_catalog.by_id.get(tool.capability)
@@ -254,52 +223,17 @@ def _apply_tool_request(
         validate(tool.parameters, descriptor.parameters_schema)
     except ValidationError as error:
         raise ValueError(_Msg.TOOL_PARAMS_MISMATCH.format(capability=tool.capability, message=error.message)) from error
-    task = kernel.store.get_task(agent.task_id)
-    if task is None:
-        raise ValueError(_Msg.TASK_ROW_MISSING.format(task_id=agent.task_id))
-    return ToolCommand(request={**tool.to_dict(), "session_id": task.session_id})
 
 
-def _apply_delegations(
-    kernel: DecisionRuntime,
-    _agent: AgentInstance,
-    decision: AgentDecision,
-    profile: AgentProfile,
-) -> DelegateCommand:
+def _authorize_delegation(
+    kernel: DecisionRuntime, profile: AgentProfile, delegations: tuple[DelegationRequest, ...]
+) -> None:
     if not profile.can_delegate:
         raise PermissionError(_Msg.PROFILE_CANNOT_DELEGATE.format(profile_id=profile.id))
-    delegation_requests: list[dict[str, str]] = []
-    for delegation in decision.delegations:
+    for delegation in delegations:
         child_profile = delegation.profile_id or kernel.limits.worker_profile
         if child_profile not in profile.child_profiles or child_profile not in kernel._profiles:
             raise PermissionError(_Msg.PROFILE_CANNOT_CREATE.format(profile_id=profile.id, child_profile=child_profile))
-        delegation_requests.append({"instruction": delegation.instruction, "profile_id": child_profile})
-    return DelegateCommand(requests=tuple(delegation_requests))
-
-
-def _apply_completion(decision: AgentDecision) -> CompleteCommand:
-    completion = decision.completion
-    if completion is None:
-        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
-    return CompleteCommand(
-        summary=completion.summary,
-        artifacts=completion.artifacts,
-        silent=completion.silent,
-    )
-
-
-def _apply_wait(kernel: DecisionRuntime, agent: AgentInstance) -> WaitCommand:
-    active_child = any(not child.terminal for child in kernel.store.children(agent.agent_id))
-    if not active_child and not kernel.store.has_pending_child_reports(agent.agent_id):
-        raise ValueError(_Msg.WAIT_WITHOUT_CHILDREN)
-    return WaitCommand()
-
-
-def _apply_failure(decision: AgentDecision) -> FailCommand:
-    failure = decision.failure
-    if failure is None:
-        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
-    return FailCommand(summary=failure, error=failure)
 
 
 # -- AMP 摄入 ------------------------------------------------------------

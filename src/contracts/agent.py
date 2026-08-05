@@ -36,10 +36,9 @@ class TaskStatus(StrEnum):
 
 
 class AgentStatus(StrEnum):
+    """Agent 持久化基态；等待语义由 activities/children 派生（RFC 0205）。"""
+
     READY = "READY"
-    WAITING_MODEL = "WAITING_MODEL"
-    WAITING_TOOL = "WAITING_TOOL"
-    WAITING_CHILDREN = "WAITING_CHILDREN"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -279,6 +278,18 @@ class AgentDecision:
         )
         if sum(transitions) != 1:
             raise ValueError(ErrorMsg.AGENT_DECISION_REQUIRES_ONE_TRANSITION)
+
+    def to_dict(self) -> dict[str, Any]:
+        """将决策序列化为因果事件载荷。"""
+        return {
+            "model_request": self.model_request.to_dict() if self.model_request is not None else None,
+            "tool_request": self.tool_request.to_dict() if self.tool_request is not None else None,
+            "delegations": [asdict(item) for item in self.delegations],
+            "completion": asdict(self.completion) if self.completion is not None else None,
+            "wait_for_children": self.wait_for_children,
+            "failure": self.failure,
+            "state_patch": self.state_patch,
+        }
 
 
 @dataclass(frozen=True, slots=True)

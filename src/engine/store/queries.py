@@ -8,6 +8,16 @@ from typing import Any
 from src.contracts.agent import AgentInstance, TaskState
 
 from .base import RuntimeStoreBase, utc_now
+from .status import (
+    ACT_COMPLETED,
+    ACT_ERROR,
+    ACT_PENDING,
+    ACT_PROCESSING,
+    AGENT_TERMINAL,
+    MSG_PENDING,
+    MSG_PROCESSING,
+    TASK_ACTIVE,
+)
 
 
 class StoreQueriesMixin(RuntimeStoreBase):
@@ -33,7 +43,7 @@ class StoreQueriesMixin(RuntimeStoreBase):
     def tasks(self, *, active_only: bool = False) -> tuple[TaskState, ...]:
         query = "SELECT * FROM tasks"
         if active_only:
-            query += " WHERE status = 'ACTIVE'"
+            query += f" WHERE status = {TASK_ACTIVE}"
         query += " ORDER BY started_at, task_id"
         with self.connect() as connection:
             return tuple(self._task(row) for row in connection.execute(query).fetchall())
@@ -41,7 +51,7 @@ class StoreQueriesMixin(RuntimeStoreBase):
     def agents(self, *, active_only: bool = False) -> tuple[AgentInstance, ...]:
         query = "SELECT * FROM agents"
         if active_only:
-            query += " WHERE status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')"
+            query += f" WHERE status NOT IN {AGENT_TERMINAL}"
         query += " ORDER BY created_at, agent_id"
         with self.connect() as connection:
             return tuple(self._agent(row) for row in connection.execute(query).fetchall())
@@ -58,7 +68,7 @@ class StoreQueriesMixin(RuntimeStoreBase):
             return bool(
                 connection.execute(
                     "SELECT 1 FROM mailbox WHERE target_agent_id = ? AND type IN ('child.completed', 'child.failed') "
-                    "AND status = 'PENDING' LIMIT 1",
+                    f"AND status = {MSG_PENDING} LIMIT 1",
                     (agent_id,),
                 ).fetchone()
             )
@@ -93,7 +103,7 @@ class StoreQueriesMixin(RuntimeStoreBase):
             rows = connection.execute(
                 "SELECT a.rowid, a.activity_id, a.task_id, t.session_id, a.result_json, a.error, a.updated_at "
                 "FROM activities a JOIN tasks t ON t.task_id = a.task_id "
-                "WHERE a.kind = 'model' AND a.status IN ('COMPLETED', 'ERROR') AND a.rowid > ? "
+                f"WHERE a.kind = 'model' AND a.status IN ({ACT_COMPLETED}, {ACT_ERROR}) AND a.rowid > ? "
                 "ORDER BY a.rowid LIMIT ?",
                 (cursor, limit),
             ).fetchall()
@@ -130,40 +140,40 @@ class StoreQueriesMixin(RuntimeStoreBase):
                     ).fetchone()[0]
                 ),
                 "active_tasks": int(
-                    connection.execute("SELECT count(*) FROM tasks WHERE status = 'ACTIVE'").fetchone()[0]
+                    connection.execute(f"SELECT count(*) FROM tasks WHERE status = {TASK_ACTIVE}").fetchone()[0]
                 ),
                 "active_agents": int(
-                    connection.execute(
-                        "SELECT count(*) FROM agents WHERE status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')"
-                    ).fetchone()[0]
+                    connection.execute(f"SELECT count(*) FROM agents WHERE status NOT IN {AGENT_TERMINAL}").fetchone()[
+                        0
+                    ]
                 ),
                 "pending_messages": int(
-                    connection.execute("SELECT count(*) FROM mailbox WHERE status = 'PENDING'").fetchone()[0]
+                    connection.execute(f"SELECT count(*) FROM mailbox WHERE status = {MSG_PENDING}").fetchone()[0]
                 ),
                 "processing_messages": int(
-                    connection.execute("SELECT count(*) FROM mailbox WHERE status = 'PROCESSING'").fetchone()[0]
+                    connection.execute(f"SELECT count(*) FROM mailbox WHERE status = {MSG_PROCESSING}").fetchone()[0]
                 ),
                 "pending_activities": int(
-                    connection.execute("SELECT count(*) FROM activities WHERE status = 'PENDING'").fetchone()[0]
+                    connection.execute(f"SELECT count(*) FROM activities WHERE status = {ACT_PENDING}").fetchone()[0]
                 ),
                 "pending_model_activities": int(
                     connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'model' AND status = 'PENDING'"
+                        f"SELECT count(*) FROM activities WHERE kind = 'model' AND status = {ACT_PENDING}"
                     ).fetchone()[0]
                 ),
                 "processing_model_activities": int(
                     connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'model' AND status = 'PROCESSING'"
+                        f"SELECT count(*) FROM activities WHERE kind = 'model' AND status = {ACT_PROCESSING}"
                     ).fetchone()[0]
                 ),
                 "pending_tool_activities": int(
                     connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PENDING'"
+                        f"SELECT count(*) FROM activities WHERE kind = 'tool' AND status = {ACT_PENDING}"
                     ).fetchone()[0]
                 ),
                 "processing_tool_activities": int(
                     connection.execute(
-                        "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PROCESSING'"
+                        f"SELECT count(*) FROM activities WHERE kind = 'tool' AND status = {ACT_PROCESSING}"
                     ).fetchone()[0]
                 ),
             }

@@ -130,8 +130,43 @@ def test_runtime_store_migrates_v5_to_incremental_vacuum(tmp_path: Path) -> None
 
     SQLiteRuntimeStore(database).initialize()
     with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == 7
+        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == 8
         assert connection.execute("PRAGMA auto_vacuum").fetchone()[0] == 2
+
+
+def test_runtime_store_migrates_v7_waiting_statuses_to_ready(tmp_path: Path) -> None:
+    """RFC 0205：v7 的 WAITING_* 状态在迁移后归一化为 READY。"""
+    database = tmp_path / "runtime.sqlite3"
+    store = SQLiteRuntimeStore(database)
+    store.initialize()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO tasks VALUES ('t1', 'a1', 'm1', 's1', 'global', 's', 0, 'ACTIVE', "
+            "0, 0, 8, 6, 300, '2026-01-01T00:00:00', '2026-01-01T00:00:00', NULL)"
+        )
+        for status in ("READY", "WAITING_MODEL", "WAITING_TOOL", "WAITING_CHILDREN", "COMPLETED"):
+            connection.execute(
+                "INSERT INTO agents VALUES (?, 't1', NULL, 'gate', 0, 'a', ?, 0, '{}', "
+                "'2026-01-01T00:00:00', '2026-01-01T00:00:00', '')",
+                (f"a-{status}", status),
+            )
+        connection.execute("UPDATE schema_meta SET version = 7")
+        connection.commit()
+
+    store.initialize()
+    with sqlite3.connect(database) as connection:
+        connection.row_factory = sqlite3.Row
+        statuses = {
+            str(row["agent_id"]): str(row["status"])
+            for row in connection.execute("SELECT agent_id, status FROM agents").fetchall()
+        }
+    assert statuses == {
+        "a-READY": "READY",
+        "a-WAITING_MODEL": "READY",
+        "a-WAITING_TOOL": "READY",
+        "a-WAITING_CHILDREN": "READY",
+        "a-COMPLETED": "COMPLETED",
+    }
 
 
 def test_amp_creates_archives_and_deduplicates_task(tmp_path: Path) -> None:
