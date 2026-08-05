@@ -530,13 +530,13 @@ class AgentEngine:
 ```
 pump(max_turns):
   1. recover tools      → self._tool_registry.recover_pending()
-  2. ingest              → AMP 文件 + 内存队列写入 inbox_events
+  2. ingest              → AMP 文件 + 内存队列写入 inbox_events（同时追加会话 JSONL）
   3. triage due batches  → 无工具模型判断 process / defer / discard
-  4. admit process       → 同会话批次创建一个 Root Task
+  4. admit process       → 同会话批次创建一个 Root Task（同时记录 task.admitted）
   5. execute turns       → handle_claim() 在线程池中并发执行
   6. dispatch I/O        → ToolRegistry + ModelProvider
   7. memory projection   → 后台更新会话摘要和长期事实
-  8. archive terminal    → 终态 Task JSON 原子写入 archive/
+  8. archive terminal    → 终态 Task JSON 原子写入 archive/（同时记录 task.finished）
 ```
 
 **关键约束**：
@@ -886,22 +886,29 @@ sandbox/
 
 ```text
 data/
-  engine/          # runtime.sqlite3 (WAL), inbox/, archive/
+  engine/          # runtime.sqlite3 (WAL), inbox/, archive/, sessions/
   memory/          # memory.sqlite3：会话摘要、长期事实、幂等回执
+  ai/              # models.dev 能力缓存
   platform/
     dashboard/     # Dashboard 数据库 + Token.txt
+    mcp/
+      apps/        # MCP 平台运行的内建应用私有数据（org.aurora.clock 等）
   logs/            # 日志文件
 ```
 
 ### 路径声明
 
-持久化路径通过 `config/storage.toml` 声明（详见 [配置](#配置) 节），与包名一致，内部扁平化。
+持久化路径通过 `config/storage.toml` 声明（详见 [配置](#配置) 节），路径层级镜像包层级：
+`src/engine → data/engine`、`src/platform/dashboard → data/platform/dashboard`、
+`src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`。
 
 ### 强制规则
 
 - 持久化路径不得在代码中硬编码。全部从 TOML 配置读取。
-- 路径以包名命名（`data/engine/`、`data/memory/` 等），内部扁平化——不超过两层。
+- 路径以包名命名（`data/engine/`、`data/platform/mcp/` 等），允许的嵌套关系见 `storage.toml`。
 - 外部 AMP 与终态 Task 使用 JSON，先写临时文件再原子改名。运行态使用 SQLite WAL。
+- engine 会话记录使用追加式 JSONL：`data/engine/sessions/<session_id>.jsonl`，只追加不回写，
+  不参与热路径决策，SQLite 仍是运行态权威。
 
 ## 配置
 
@@ -984,12 +991,20 @@ max_duration_seconds = 120.0
 [storage]
 data_root = "data"
 
-# 各包的数据子目录，相对于 data_root，与包名一致，内部扁平化
+# 各包的数据子目录，相对 data_root，路径层级与包层级一致
 engine = "engine"
 memory = "memory"
 
+[storage.platform]
+data_dir = "platform"
+
 [storage.platform.dashboard]
-data_dir = "platform/dashboard"
+data_dir = "dashboard"
+
+[storage.platform.mcp]
+data_dir = "mcp"
+# MCP 平台运行内建应用的私有数据目录（相对 data_dir）
+apps_dir = "apps"
 ```
 
 #### `logging.toml` — 日志

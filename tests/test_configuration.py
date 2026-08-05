@@ -18,6 +18,10 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert configuration.engine.workspace == ROOT / "data" / "engine"
     assert configuration.engine.workspace == configuration.storage.engine
     assert configuration.storage.memory == ROOT / "data" / "memory"
+    assert configuration.storage.platform == ROOT / "data" / "platform"
+    assert configuration.storage.dashboard == ROOT / "data" / "platform" / "dashboard"
+    assert configuration.storage.mcp == ROOT / "data" / "platform" / "mcp"
+    assert configuration.storage.apps == ROOT / "data" / "platform" / "mcp" / "apps"
     assert configuration.dashboard.database_path.parent == configuration.storage.dashboard
     assert configuration.dashboard.upload_dir.parent == configuration.storage.dashboard
     assert configuration.logging_dir == ROOT / "logs"

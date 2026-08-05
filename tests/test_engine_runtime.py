@@ -239,3 +239,59 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
             await engine.shutdown()
 
     asyncio.run(exercise())
+
+
+def test_engine_writes_session_jsonl_log(tmp_path: Path) -> None:
+    import json as json_module
+
+    async def exercise() -> None:
+        profile = AgentProfile(
+            id="test.root",
+            implementation="unused",
+            model_role="test",
+            capabilities=frozenset(),
+            can_delegate=False,
+            child_profiles=frozenset(),
+        )
+        configuration = EngineConfiguration(
+            workspace=str(tmp_path / "engine"),
+            profiles=(profile,),
+            limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
+            interactive_budget=TaskLimits(1, 1, 30.0),
+            autonomous_budget=TaskLimits(1, 1, 30.0),
+            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+        )
+        engine = AgentEngine(
+            configuration,
+            {profile.id: _CompletingHandler()},
+            model_provider=_UnusedModelProvider(),
+            triage_policy=StructuredTriagePolicy(configuration.triage),
+        )
+        engine.bind_tool_executors(())
+        try:
+            await engine.submit_amp(
+                new_amp(
+                    event_type="message.received",
+                    session_id="group/私聊:10001",
+                    summary="hello",
+                    data={"text": "hello"},
+                    source_app="org.aurora.qq",
+                    source_instance="mcp:org.aurora.qq",
+                ).to_dict()
+            )
+            result = await engine.pump()
+            assert len(result["admitted_task_ids"]) == 1
+        finally:
+            await engine.shutdown()
+
+        session_dir = tmp_path / "engine" / "sessions"
+        files = list(session_dir.glob("*.jsonl"))
+        assert len(files) == 1
+        records = [json_module.loads(line) for line in files[0].read_text(encoding="utf-8").splitlines()]
+        assert [record["kind"] for record in records] == ["amp.in", "task.admitted", "task.finished"]
+        assert all(record["session_id"] == "group/私聊:10001" for record in records)
+        assert records[0]["event_type"] == "message.received"
+        assert records[0]["source_app"] == "org.aurora.qq"
+        assert records[2]["status"] == "COMPLETED"
+
+    asyncio.run(exercise())

@@ -50,6 +50,16 @@ RFC 0200 确立了 Agent 中心热路径，但没有规定模型上下文和终�
 - engine 使用增量 auto-vacuum、受限 WAL 和 checkpoint 回收已释放页；一次性 schema 迁移可以重建旧数据库以启用该策略。
 - models.dev 目录属于 `src.ai` 的共享能力缓存，不计入单 Task 归档；缓存实现使用 gzip 且只保留当前有效快照。
 
+### 存储层级与会话日志
+
+- 数据持久化路径镜像包层级：`src/engine → data/engine`、`src/platform/dashboard → data/platform/dashboard`、
+  `src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；
+  全部通过 `storage.toml` 声明，只允许声明过的祖先包含关系。
+- engine 新增追加式会话日志：`data/engine/sessions/<session_id>.jsonl`，每行一条 JSON 记录，
+  覆盖入站 AMP（`amp.in`）、Task 准入（`task.admitted`）与终态（`task.finished`），按 `session_id` 隔离。
+- 会话日志只追加、不回写，失败只记 warning，不参与热路径决策；SQLite 仍是运行态权威，
+  会话日志不承担任何恢复职责，热库清除规则不变。
+
 ## 结果
 
 模型首轮上下文不会随其他会话或通知风暴增长，后续 Tool 轮只携带必要的无状态 continuation。终态 Task 的详细审计数据只存在于归档，热库保留量与当前并发工作而不是历史 Task 总数相关。平台噪声不会消耗 Agent turn 或模型并发。

@@ -280,11 +280,11 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
     if not isinstance(logging_raw, dict) or not isinstance(storage_raw, dict):
         raise ConfigurationError(_Msg.LOGGING_STORAGE_MUST_BE_TABLES)
     _require_keys(logging_raw, {"level", "log_dir"}, "logging")
-    _require_keys(storage_raw, {"data_root", "engine", "ai", "memory", "apps", "platform"}, "storage")
+    _require_keys(storage_raw, {"data_root", "engine", "ai", "memory", "platform"}, "storage")
     storage_platform_raw = storage_raw["platform"]
     if not isinstance(storage_platform_raw, dict):
         raise ConfigurationError(_Msg.STORAGE_PLATFORM_MUST_BE_TABLE)
-    _require_keys(storage_platform_raw, {"dashboard"}, "storage.platform")
+    _require_keys(storage_platform_raw, {"data_dir", "dashboard", "mcp"}, "storage.platform")
 
     def storage_path(raw: object, label: str, *, parent: Path) -> Path:
         path = (parent / _string(raw, label)).resolve()
@@ -296,19 +296,28 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
     engine_dir = storage_path(storage_raw["engine"], "storage.engine", parent=data_root)
     ai_dir = storage_path(storage_raw["ai"], "storage.ai", parent=data_root)
     memory_dir = storage_path(storage_raw["memory"], "storage.memory", parent=data_root)
-    apps_dir = storage_path(storage_raw["apps"], "storage.apps", parent=data_root)
+    platform_dir = storage_path(storage_platform_raw["data_dir"], "storage.platform.data_dir", parent=data_root)
     dashboard_storage = storage_platform_raw["dashboard"]
-    if not isinstance(dashboard_storage, dict):
+    mcp_storage = storage_platform_raw["mcp"]
+    if not isinstance(dashboard_storage, dict) or not isinstance(mcp_storage, dict):
         raise ConfigurationError(_Msg.STORAGE_ENTRIES_MUST_BE_TABLES)
     _require_keys(dashboard_storage, {"data_dir"}, "storage.platform.dashboard")
-    dashboard_dir = storage_path(dashboard_storage["data_dir"], "storage.platform.dashboard.data_dir", parent=data_root)
-    package_directories = (engine_dir, ai_dir, memory_dir, apps_dir, dashboard_dir)
-    for index, directory in enumerate(package_directories):
-        if any(
-            directory == other or directory.is_relative_to(other) or other.is_relative_to(directory)
-            for other in package_directories[index + 1 :]
-        ):
-            raise ConfigurationError(_Msg.PACKAGE_STORAGE_OVERLAP)
+    _require_keys(mcp_storage, {"data_dir", "apps_dir"}, "storage.platform.mcp")
+    dashboard_dir = storage_path(
+        dashboard_storage["data_dir"], "storage.platform.dashboard.data_dir", parent=platform_dir
+    )
+    mcp_dir = storage_path(mcp_storage["data_dir"], "storage.platform.mcp.data_dir", parent=platform_dir)
+    apps_dir = storage_path(mcp_storage["apps_dir"], "storage.platform.mcp.apps_dir", parent=mcp_dir)
+    package_directories = {
+        "engine": engine_dir,
+        "ai": ai_dir,
+        "memory": memory_dir,
+        "platform": platform_dir,
+        "dashboard": dashboard_dir,
+        "mcp": mcp_dir,
+        "apps": apps_dir,
+    }
+    _validate_package_directories(package_directories)
 
     return _StorageSnapshot(
         level=_string(logging_raw["level"], "logging.level"),
@@ -318,12 +327,39 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
             engine=engine_dir,
             ai=ai_dir,
             memory=memory_dir,
-            apps=apps_dir,
+            platform=platform_dir,
             dashboard=dashboard_dir,
+            mcp=mcp_dir,
+            apps=apps_dir,
         ),
         engine_dir=engine_dir,
         dashboard_dir=dashboard_dir,
     )
+
+
+# 允许的包含关系（含传递闭包）：目录可嵌套在声明过的祖先包之下
+_PACKAGE_STORAGE_CONTAINS: dict[str, frozenset[str]] = {
+    "platform": frozenset({"dashboard", "mcp", "apps"}),
+    "mcp": frozenset({"apps"}),
+    "dashboard": frozenset(),
+    "engine": frozenset(),
+    "ai": frozenset(),
+    "memory": frozenset(),
+    "apps": frozenset(),
+}
+
+
+def _validate_package_directories(package_directories: dict[str, Path]) -> None:
+    """校验各包数据目录互不重叠，仅允许声明过的祖先包含关系。"""
+    for label, directory in package_directories.items():
+        for other_label, other in package_directories.items():
+            if other_label == label or not (
+                directory == other or directory.is_relative_to(other) or other.is_relative_to(directory)
+            ):
+                continue
+            if label in _PACKAGE_STORAGE_CONTAINS[other_label] or other_label in _PACKAGE_STORAGE_CONTAINS[label]:
+                continue
+            raise ConfigurationError(_Msg.PACKAGE_STORAGE_OVERLAP)
 
 
 def _load_platforms(

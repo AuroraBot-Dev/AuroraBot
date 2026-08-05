@@ -1,9 +1,17 @@
 [storage]
 data_root = "data"
+# 各实现包的私有持久化目录；相对 data_root，路径层级与包层级一致
 engine = "engine"
 ai = "ai"
 memory = "memory"
-apps = "apps"
+
+[storage.platform]
+data_dir = "platform"
 
 [storage.platform.dashboard]
-data_dir = "platform/dashboard"
+data_dir = "dashboard"
+
+[storage.platform.mcp]
+data_dir = "mcp"
+# MCP 平台运行内建应用的私有数据目录（相对 data_dir）
+apps_dir = "apps"

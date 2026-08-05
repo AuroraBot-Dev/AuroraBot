@@ -44,8 +44,12 @@ tests/          契约、集成与回归测试
 
 ## Workspace and configuration
 
-- engine 工作区固定为 `data/engine/inbox/`、`process/`、`archive/`。
+- 数据持久化路径必须镜像包层级：`src/engine → data/engine`、`src/platform/mcp → data/platform/mcp`、
+  `src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；配置见 `storage.toml`。
+- engine 工作区固定为 `data/engine/inbox/`、`process/`、`archive/`、`sessions/`。
 - 外部 AMP 与终态 Task 归档使用 JSON，生产者必须先写临时文件再原子改名；运行态使用 SQLite WAL。
+- engine 会话记录使用追加式 JSONL：`data/engine/sessions/<session_id>.jsonl`，只追加不回写，
+  不参与热路径决策，SQLite 仍是运行态权威。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
 - 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、
   `prompts.toml`、`logging.toml` 与 `storage.toml`；profile 只覆盖 runtime。

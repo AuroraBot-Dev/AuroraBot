@@ -307,14 +307,31 @@ PLATFORM_NAMES: frozenset[str] = frozenset(f.name for f in fields(PlatformPrefer
 
 @dataclass(frozen=True, slots=True)
 class StorageConfig:
-    """各实现包的私有持久化目录。"""
+    """各实现包的私有持久化目录；路径层级与包层级一致。
+
+    StorageConfig object::
+
+        {
+            "data_root": "/path/to/data",
+            "engine": "/path/to/data/engine",
+            "ai": "/path/to/data/ai",
+            "memory": "/path/to/data/memory",
+            "platform": "/path/to/data/platform",
+            "dashboard": "/path/to/data/platform/dashboard",
+            "mcp": "/path/to/data/platform/mcp",
+            "apps": "/path/to/data/platform/mcp/apps"
+        }
+
+    """
 
     data_root: Path
     engine: Path
     ai: Path
     memory: Path
-    apps: Path
+    platform: Path
     dashboard: Path
+    mcp: Path
+    apps: Path
 
 
 @dataclass(frozen=True, slots=True)

@@ -41,28 +41,43 @@ def validate_config(config: AuroraConfig) -> None:
 
 
 def _validate_storage_paths(config: AuroraConfig) -> None:
-    """校验各包数据目录不重叠且不侵入其他包的根。"""
+    """校验各包数据目录位于 data_root 之下且互不重叠，仅允许声明过的祖先包含关系。"""
     storage = config.storage
     # 所有包级存储目录必须位于 data_root 之下
-    directories: list[tuple[str, Path]] = [
-        ("engine", storage.engine),
-        ("ai", storage.ai),
-        ("memory", storage.memory),
-        ("apps", storage.apps),
-        ("dashboard", storage.dashboard),
-    ]
+    directories: dict[str, Path] = {
+        "engine": storage.engine,
+        "ai": storage.ai,
+        "memory": storage.memory,
+        "platform": storage.platform,
+        "dashboard": storage.dashboard,
+        "mcp": storage.mcp,
+        "apps": storage.apps,
+    }
     data_root = storage.data_root
-    for _label, directory in directories:
+    for directory in directories.values():
         if not directory.is_relative_to(data_root):
             raise ConfigurationError(_Msg.STORAGE_NOT_UNDER_ROOT.format(dir=directory, root=data_root))
 
-    # 两两比较，确保任意两个包目录不重叠
-    paths = [directory for _, directory in directories]
-    for i in range(len(paths)):
-        for j in range(i + 1, len(paths)):
-            a, b = paths[i], paths[j]
-            if a == b or a.is_relative_to(b) or b.is_relative_to(a):
-                raise ConfigurationError(_Msg.STORAGE_OVERLAP.format(a=a, b=b))
+    # 两两比较，仅允许声明过的祖先包含关系（与 loader 的规则一致）
+    paths = list(directories.items())
+    for index, (label, directory) in enumerate(paths):
+        for other_label, other in paths[index + 1 :]:
+            if directory != other and not (directory.is_relative_to(other) or other.is_relative_to(directory)):
+                continue
+            if label in _STORAGE_CONTAINS[other_label] or other_label in _STORAGE_CONTAINS[label]:
+                continue
+            raise ConfigurationError(_Msg.STORAGE_OVERLAP.format(a=label, b=other_label))
+
+
+_STORAGE_CONTAINS: dict[str, frozenset[str]] = {
+    "platform": frozenset({"dashboard", "mcp", "apps"}),
+    "mcp": frozenset({"apps"}),
+    "dashboard": frozenset(),
+    "engine": frozenset(),
+    "ai": frozenset(),
+    "memory": frozenset(),
+    "apps": frozenset(),
+}
 
 
 def _validate_dashboard_constraints(config: AuroraConfig) -> None:

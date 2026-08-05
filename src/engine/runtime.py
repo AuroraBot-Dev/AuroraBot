@@ -54,6 +54,7 @@ from src.engine.archive import (
 from src.engine.debug import agent_detail as build_agent_detail
 from src.engine.debug import reject_active_legacy_workspace
 from src.engine.debug import task_detail as build_task_detail
+from src.engine.session_log import SessionLog
 from src.engine.store import SQLiteRuntimeStore
 from src.engine.tool_registry import ToolRegistry
 from src.utils.logging import get_logger
@@ -244,6 +245,7 @@ class IngressRuntime(Protocol):
     store: SQLiteRuntimeStore
     _inbox: Path
     _archive: Path
+    _session_log: SessionLog
     _profiles: dict[str, AgentProfile]
     _amp_queue: list[Any]
 
@@ -281,6 +283,7 @@ def _ingest_amp(kernel: IngressRuntime, amp: AmpEnvelope, ingested: list[str]) -
     if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
         raise ValueError(_Msg.RESERVED_TOOL_EVENT)
     if kernel.store.enqueue_inbox(amp, kernel.configuration.triage):
+        kernel._session_log.amp_in(amp)
         ingested.append(amp.header.message_id)
 
 
@@ -327,6 +330,7 @@ class EngineState:
         self._process = self._workspace / "process"
         self._archive = self._workspace / "archive"
         self._task_archive = self._archive / "tasks"
+        self._session_log = SessionLog(self._workspace / "sessions")
         for directory in (self._inbox, self._process, self._archive, self._task_archive):
             directory.mkdir(parents=True, exist_ok=True)
         self._amp_queue: list[AmpEnvelope] = []
@@ -420,7 +424,7 @@ class EngineState:
 
     async def apply_triage(self, batch: TriageBatch, decision: TriageDecision) -> str | None:
         priority = max((event.priority for event in batch.events), default=100)
-        return await self._store_call(
+        task_id = await self._store_call(
             self.store.apply_triage,
             batch,
             decision,
@@ -429,6 +433,9 @@ class EngineState:
             autonomous_budget=self.configuration.autonomous_budget,
             priority=priority,
         )
+        if task_id is not None:
+            self._session_log.task_admitted(task_id, batch.session_id, decision.summary)
+        return task_id
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
         limit = self.limits.turn_concurrency if max_turns is None else max_turns
@@ -639,6 +646,7 @@ class EngineState:
             detail = archived or build_task_detail(self.store, task.task_id)
             if detail is not None:
                 atomic_write_json(destination, task_archive_projection(detail), compact=True)
+                self._session_log.task_finished(task)
 
     def _prune_archived_terminal_tasks(self) -> None:
         pruned = False
