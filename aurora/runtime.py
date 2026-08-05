@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import inspect
 import signal
-import webbrowser
 from collections.abc import Callable
 from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass
@@ -33,14 +33,14 @@ from src.utils.uvicorn import SignalSafeServer
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.contracts.configuration import AuroraConfig, DashboardConfig
-    from src.platform import PlatformHandle
+    from src.contracts.configuration import AuroraConfig
+    from src.platform import PlatformHandle, PlatformServer
 
 logger = get_logger("aurora.process")
 
 # -- 平台注册 ---------------------------------------------------------
 # 每个平台子包通过同名模块函数 _create(config, runtime) -> PlatformHandle 接入组合根。
-# 新增平台只需在本注册表中添加一条映射，无需修改任何组合逻辑。
+# 平台名单以 contracts 的 PLATFORM_NAMES 为准，新增平台无需修改组合根。
 _PLATFORM_CREATORS: dict[str, Callable[..., Any]] = {}
 
 
@@ -48,7 +48,7 @@ def _init_platforms() -> dict[str, Callable[..., Any]]:
     """一次性导入所有平台子包并将 _create 注册到本地映射。"""
     if _PLATFORM_CREATORS:
         return _PLATFORM_CREATORS
-    for name in ("dashboard", "mcp"):
+    for name in sorted(PLATFORM_NAMES):
         module = importlib.import_module(f"src.platform.{name}")
         if hasattr(module, "_create"):
             _PLATFORM_CREATORS[name] = module._create  # type: ignore[attr-defined]
@@ -58,15 +58,8 @@ def _init_platforms() -> dict[str, Callable[..., Any]]:
 # -- 内部辅助类型 -----------------------------------------------------
 
 
-class _DashboardStartupError(RuntimeError):
-    """Dashboard 服务器在接收连接前就已停止。"""
-
-    def __init__(self) -> None:
-        super().__init__("Dashboard server stopped before accepting connections")
-
-
 _SERVER_GRACE_SECONDS = 10.0
-"""uvicorn 服务器优雅退出的等待上限，超时后强制取消。"""
+"""平台 server 优雅退出的等待上限，超时后强制取消。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,14 +69,6 @@ class _InstalledSignal:
     candidate: signal.Signals
     loop_owned: bool
     previous: object | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class _ProcessServers:
-    """进程内由组合根管理的 HTTP 服务集合。"""
-
-    dashboard: object | None
-    debug: uvicorn.Server
 
 
 # -- 主入口 -----------------------------------------------------------
@@ -114,28 +99,31 @@ async def run_runtime(
         resources.push_async_callback(runtime.shutdown)
         installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
         try:
-            started = await _start_platforms_until_stop(runtime, selected, resources, stop)
-            if started is not None:
-                handles, dashboard_server = started
+            handles = await _start_platforms_until_stop(runtime, selected, resources, stop)
+            if handles is not None:
                 logger.info(
                     "process started platforms=%s profile=%s",
-                    ",".join(sorted(selected)) or "headless",
+                    _platforms_label(selected),
                     runtime.configuration.runtime.profile,
                 )
                 failure = await _run_platform_tasks(
                     runtime,
                     stop,
                     handles,
-                    _ProcessServers(dashboard_server, debug_server),
-                    open_browser=configuration.preference.dashboard.open_browser,
+                    debug_server,
                     console_enabled=console_enabled,
                 )
         finally:
             runtime.bind_stop_requester(None)
             _restore_stop_handlers(installed_signals)
-    logger.info("process stopped platforms=%s", ",".join(sorted(selected)) or "headless")
+    logger.info("process stopped platforms=%s", _platforms_label(selected))
     if failure is not None:
         raise failure
+
+
+def _platforms_label(selected: frozenset[str]) -> str:
+    """平台集合的日志标签，空集合表示为 headless。"""
+    return ",".join(sorted(selected)) or "headless"
 
 
 # -- 平台选择 ---------------------------------------------------------
@@ -219,16 +207,14 @@ async def _start_platforms(
     runtime: AuroraRuntime,
     selected: frozenset[str],
     resources: AsyncExitStack,
-) -> tuple[dict[str, PlatformHandle], object | None]:
-    """遍历已注册的平台描述符，为选中的平台创建实例、收集工具绑定与清理回调。
+) -> dict[str, PlatformHandle]:
+    """遍历已注册的平台描述符，为选中的平台创建实例并收集工具绑定与清理回调。
 
-    返回 (handles, dashboard_server) —
-    handles 为平台名到句柄的映射，dashboard_server 为非 None 时表示 HTTP 服务已就绪。
+    平台的 server 与后台任务不在此启动，统一由 ``_run_platform_tasks`` 调度。
     """
     creators = _init_platforms()
     handles: dict[str, PlatformHandle] = {}
     all_bindings: list[Any] = []
-    dashboard_server: object | None = None
 
     for name in sorted(selected):
         creator = creators.get(name)
@@ -238,16 +224,14 @@ async def _start_platforms(
         handles[name] = handle
         all_bindings.extend(handle.bindings)
         if handle.cleanup is not None:
-            if asyncio.iscoroutinefunction(handle.cleanup):
+            if inspect.iscoroutinefunction(handle.cleanup):
                 resources.push_async_callback(handle.cleanup)
             else:
                 resources.callback(handle.cleanup)
-        if name == "dashboard" and handle.http_server is not None:
-            dashboard_server = handle.http_server
 
     if all_bindings:
         runtime.engine.bind_tool_executors(tuple(all_bindings))
-    return handles, dashboard_server
+    return handles
 
 
 async def _start_platforms_until_stop(
@@ -255,7 +239,7 @@ async def _start_platforms_until_stop(
     selected: frozenset[str],
     resources: AsyncExitStack,
     stop: asyncio.Event,
-) -> tuple[dict[str, PlatformHandle], object | None] | None:
+) -> dict[str, PlatformHandle] | None:
     """竞速启动平台与停止信号。"""
     startup = asyncio.create_task(_start_platforms(runtime, selected, resources), name="aurora-platform-startup")
     stop_task = asyncio.create_task(stop.wait(), name="aurora-startup-stop")
@@ -276,55 +260,56 @@ async def _run_platform_tasks(
     runtime: AuroraRuntime,
     stop: asyncio.Event,
     handles: dict[str, PlatformHandle],
-    servers: _ProcessServers,
+    debug_server: PlatformServer,
     *,
-    open_browser: bool,
     console_enabled: bool,
 ) -> BaseException | None:
     """启动运行时循环和各平台后台任务，等待首个完成者并协调退出。"""
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
 
-    # 各平台通过 spawn 生成后台任务
+    # 平台 server 由组合根统一启动，关闭时通过 should_exit 优雅退出；
+    # spawn 是平台自有的附加后台任务，关闭时直接取消。
+    servers: dict[str, PlatformServer] = {}
+    server_tasks: dict[str, asyncio.Task[None]] = {}
     platform_tasks: dict[str, asyncio.Task[None]] = {}
-    dashboard_task: asyncio.Task[None] | None = None
     for name, handle in handles.items():
+        if handle.server is not None:
+            servers[name] = handle.server
+            task = asyncio.create_task(handle.server.serve(), name=f"aurora-platform-{name}-server")
+            server_tasks[name] = task
+            tasks.add(task)
         if handle.spawn is not None:
             task = handle.spawn(runtime, stop)
             if task is not None:
                 platform_tasks[name] = task
                 tasks.add(task)
-                if name == "dashboard":
-                    dashboard_task = task
 
     console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
     tasks.update(task for task in (console_task,) if task is not None)
 
-    debug_task = asyncio.create_task(servers.debug.serve(), name="aurora-localhost-debug-server")
+    debug_task = asyncio.create_task(debug_server.serve(), name="aurora-localhost-debug-server")
     tasks.add(debug_task)
     stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
     tasks.add(stop_task)
 
     try:
-        if dashboard_task is not None and open_browser and _await_server_ready(servers.dashboard, dashboard_task, stop):
-            await asyncio.to_thread(_open_dashboard_browser, runtime.configuration.dashboard)
-
         done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return _task_failure(done, stop_task, stop)
     finally:
         stop_task.cancel()
         await asyncio.gather(stop_task, return_exceptions=True)
+        for name, task in server_tasks.items():
+            servers[name].should_exit = True
+            await _await_server_exit(task)
         pending_tasks = (
-            *(task for name, task in platform_tasks.items() if name != "dashboard"),
+            *(task for task in platform_tasks.values()),
             *(task for task in (console_task,) if task is not None),
         )
         for task in pending_tasks:
             task.cancel()
         await asyncio.gather(*pending_tasks, return_exceptions=True)
-        if dashboard_task is not None and servers.dashboard is not None:
-            servers.dashboard.should_exit = True  # type: ignore[union-attr]
-            await _await_server_exit(dashboard_task)
-        servers.debug.should_exit = True
+        debug_server.should_exit = True
         await asyncio.gather(debug_task, return_exceptions=True)
         stop.set()
         await asyncio.gather(runtime_task, return_exceptions=True)
@@ -345,25 +330,12 @@ def _spawn_console(runtime: AuroraRuntime, stop: asyncio.Event, *, enabled: bool
 
 
 async def _await_server_exit(task: asyncio.Task[None]) -> None:
-    """等待 uvicorn 服务器任务优雅退出，超时后强制取消。"""
+    """等待 server 任务优雅退出，超时后强制取消。"""
     with suppress(TimeoutError, asyncio.CancelledError):
         await asyncio.wait_for(asyncio.shield(task), timeout=_SERVER_GRACE_SECONDS)
     if not task.done():
         task.cancel()
     await asyncio.gather(task, return_exceptions=True)
-
-
-async def _await_server_ready(server: object, task: asyncio.Task[None] | None, stop: asyncio.Event) -> bool:
-    """轮询等待 HTTP 服务器完成启动，失败或提前停止时返回 False。"""
-    assert task is not None
-    while not getattr(server, "started", False):
-        if stop.is_set():
-            return False
-        if task.done():
-            task.result()
-            raise _DashboardStartupError
-        await asyncio.sleep(0.01)
-    return True
 
 
 def _task_failure(
@@ -380,17 +352,6 @@ def _task_failure(
         if not stop.is_set():
             return RuntimeError(f"{task.get_name()} stopped unexpectedly")
     return None
-
-
-# -- Dashboard 辅助 ----------------------------------------------------
-
-
-def _open_dashboard_browser(configuration: DashboardConfig) -> None:
-    """在默认浏览器中打开 Dashboard 地址。"""
-    host = "127.0.0.1" if configuration.host in {"0.0.0.0", "::"} else configuration.host
-    if ":" in host:
-        host = f"[{host}]"
-    webbrowser.open(f"http://{host}:{configuration.port}")
 
 
 # -- 信号处理 ----------------------------------------------------------

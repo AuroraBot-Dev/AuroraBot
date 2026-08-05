@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from src.contracts.configuration import DashboardConfig
     from src.contracts.tool import ToolExecutorBinding
     from src.localhost.runtime import AuroraRuntime
 
@@ -79,22 +78,20 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
     monkeypatch.setattr(composition, "configure_logging", lambda *_args: events.append("logging"))
     monkeypatch.setattr(composition, "configure_console_logging", lambda **_kwargs: events.append("terminal"))
     monkeypatch.setattr(composition, "_create_runtime", lambda _configuration: runtime)
-    debug_server = object()
-    monkeypatch.setattr(composition, "_debug_server", lambda _runtime: debug_server)
+    debug = object()
+    monkeypatch.setattr(composition, "_debug_server", lambda _runtime: debug)
 
     async def run_tasks(
         selected_runtime: object,
         stop: asyncio.Event,
         handles: dict[str, PlatformHandle],
-        servers: composition._ProcessServers,
+        debug_server: object,
         *,
-        open_browser: bool,
         console_enabled: bool,
     ) -> BaseException | None:
         assert selected_runtime is runtime
         assert not handles
-        assert servers.dashboard is None and servers.debug is debug_server
-        assert not open_browser
+        assert debug_server is debug
         assert console_enabled is False
         events.append("process-tasks")
         await runtime.run_forever(stop)
@@ -128,22 +125,20 @@ def test_console_enabled_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.setattr(composition, "configure_logging", lambda *_args: events.append("logging"))
     monkeypatch.setattr(composition, "configure_console_logging", lambda **_kwargs: events.append("terminal"))
     monkeypatch.setattr(composition, "_create_runtime", lambda _configuration: runtime)
-    debug_server = object()
-    monkeypatch.setattr(composition, "_debug_server", lambda _runtime: debug_server)
+    debug = object()
+    monkeypatch.setattr(composition, "_debug_server", lambda _runtime: debug)
 
     async def run_tasks(
         selected_runtime: object,
         stop: asyncio.Event,
         handles: dict[str, PlatformHandle],
-        servers: composition._ProcessServers,
+        debug_server: object,
         *,
-        open_browser: bool,
         console_enabled: bool,
     ) -> BaseException | None:
         assert selected_runtime is runtime
         assert not handles
-        assert servers.dashboard is None and servers.debug is debug_server
-        assert not open_browser
+        assert debug_server is debug
         assert console_enabled is True
         events.append("process-tasks")
         await runtime.run_forever(stop)
@@ -174,19 +169,18 @@ def test_start_platforms_uses_unified_creators(monkeypatch: pytest.MonkeyPatch) 
 
     async def scenario() -> None:
         async with AsyncExitStack() as resources:
-            handles, server = await composition._start_platforms(
+            handles = await composition._start_platforms(
                 cast("AuroraRuntime", runtime),
                 frozenset({"dashboard", "mcp"}),
                 resources,
             )
-            assert server is None
             assert set(handles.keys()) == {"dashboard", "mcp"}
 
     asyncio.run(scenario())
     assert events == ["dashboard-create", "mcp-create", "mcp-close", "dashboard-close"]
 
 
-def test_runtime_task_failure_and_browser_address(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_task_failure_detection() -> None:
     async def scenario() -> None:
         stop = asyncio.Event()
         stop_task = asyncio.create_task(asyncio.sleep(0), name="stop")
@@ -205,57 +199,51 @@ def test_runtime_task_failure_and_browser_address(monkeypatch: pytest.MonkeyPatc
 
     asyncio.run(scenario())
 
-    opened: list[str] = []
-    monkeypatch.setattr(composition.webbrowser, "open", opened.append)
-    dashboard = cast("DashboardConfig", SimpleNamespace(host="::", port=8000))
-    composition._open_dashboard_browser(dashboard)
-    assert opened == ["http://127.0.0.1:8000"]
 
-
-def test_dashboard_server_shuts_down_gracefully_via_should_exit() -> None:
-    """关闭时 Dashboard 服务器通过 should_exit 优雅退出，而不是被直接取消。"""
+def test_platform_server_exits_gracefully_and_spawn_tasks_are_cancelled() -> None:
+    """server 通过 should_exit 优雅退出，spawn/console 后台任务直接取消。"""
     events: list[str] = []
     stop = asyncio.Event()
-    runtime = _Runtime(SimpleNamespace(dashboard=SimpleNamespace(host="127.0.0.1", port=8000)), events)
+    runtime = _Runtime(SimpleNamespace(), events)
 
     class FakeServer:
         def __init__(self) -> None:
-            self.should_exit = False
             self.started = True
+            self.should_exit = False
+            self.exited = False
 
-    class FakeHandle:
-        def __init__(self, task: asyncio.Task[None]) -> None:
-            self.task = task
-
-        def spawn(self, _rt: object, _stop: asyncio.Event) -> asyncio.Task[None]:
-            return self.task
+        async def serve(self) -> None:
+            while not self.should_exit:  # noqa: ASYNC110
+                await asyncio.sleep(0.01)
+            self.exited = True
 
     class FakeDebugServer:
         def __init__(self) -> None:
+            self.started = True
             self.should_exit = False
 
         async def serve(self) -> None:
             return None
 
-    async def already_done() -> None:
-        return None
+    async def spinner() -> None:
+        await asyncio.Event().wait()
 
     async def scenario() -> None:
-        dashboard_task = asyncio.create_task(already_done(), name="aurora-dashboard-server")
         server = FakeServer()
-        handles = {"dashboard": FakeHandle(dashboard_task)}
+        spawn_task = asyncio.create_task(spinner(), name="aurora-platform-demo-spawn")
+        handle = SimpleNamespace(server=server, spawn=lambda _rt, _stop: spawn_task)
         stop_task = asyncio.create_task(asyncio.sleep(0), name="stop")
         debug_task = asyncio.create_task(asyncio.sleep(0), name="debug")
         await composition._run_platform_tasks(
             cast("AuroraRuntime", runtime),
             stop,
-            handles,  # type: ignore[arg-type]
-            composition._ProcessServers(server, FakeDebugServer()),  # type: ignore[arg-type]
-            open_browser=False,
+            {"demo": cast("PlatformHandle", handle)},
+            FakeDebugServer(),
             console_enabled=False,
         )
         assert server.should_exit is True
-        assert not dashboard_task.cancelled()
+        assert server.exited is True
+        assert spawn_task.cancelled()
         assert stop_task.done() and debug_task.done()
 
     asyncio.run(scenario())

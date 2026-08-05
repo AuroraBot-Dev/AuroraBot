@@ -4,7 +4,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from src.platform.dashboard import (
     ChatError,
     ChatService,
     DashboardPlatform,
+    _open_browser_when_ready,
 )
 from tests.support import create_test_runtime
 from tests.test_events import valid_amp
@@ -25,7 +27,9 @@ from tests.test_events import valid_amp
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from src.contracts.configuration import DashboardConfig
     from src.localhost.runtime import AuroraRuntime
+    from src.utils.uvicorn import SignalSafeServer
 
 
 async def _started_chat(runtime: AuroraRuntime) -> ChatService:
@@ -182,3 +186,46 @@ def test_independent_localhost_debug_app_drives_and_queries_engine(project_root:
         assert client.get("/v1/debug/brain-context").status_code == 200
         assert client.get("/v1/debug/status").status_code == 200
     asyncio.run(runtime.shutdown())
+
+
+def test_browser_opens_once_server_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """浏览器在 server 就绪后打开一次，地址按 Dashboard 配置格式化。"""
+    opened: list[str] = []
+    monkeypatch.setattr("src.platform.dashboard.webbrowser.open", opened.append)
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.started = False
+            self.should_exit = False
+
+    async def scenario() -> None:
+        server = cast("SignalSafeServer", FakeServer())
+        task = asyncio.create_task(
+            _open_browser_when_ready(server, cast("DashboardConfig", SimpleNamespace(host="::", port=8000)))
+        )
+        await asyncio.sleep(0.05)
+        assert opened == []
+        server.started = True
+        await asyncio.wait_for(task, timeout=1)
+
+    asyncio.run(scenario())
+    assert opened == ["http://127.0.0.1:8000"]
+
+
+def test_browser_aborts_when_server_stops_before_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """server 在就绪前停止时不再打开浏览器。"""
+    opened: list[str] = []
+    monkeypatch.setattr("src.platform.dashboard.webbrowser.open", opened.append)
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.started = False
+            self.should_exit = True
+
+    asyncio.run(
+        _open_browser_when_ready(
+            cast("SignalSafeServer", FakeServer()),
+            cast("DashboardConfig", SimpleNamespace(host="127.0.0.1", port=8000)),
+        )
+    )
+    assert opened == []
