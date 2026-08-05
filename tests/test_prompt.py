@@ -7,7 +7,6 @@ import pytest
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
 from src.agents.handler import ToolAgent, _collect_tool_definitions
-from src.agents.tools import capability_tool_definition
 from src.contracts.agent import (
     AgentContext,
     AgentInstance,
@@ -18,9 +17,10 @@ from src.contracts.agent import (
     MessageStatus,
     TaskState,
     TaskStatus,
+    capability_tool_definition,
 )
 from src.contracts.memory import MemoryContextSnapshot
-from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
+from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
 from src.prompt import PromptCatalog, PromptComposer, PromptConfigurationError, load_prompt_catalog
 
 if TYPE_CHECKING:
@@ -102,7 +102,15 @@ def _context() -> AgentContext:
         ),
         CapabilityDescriptor("com.vendor.lookup", "Vendor supplied description", {"type": "object"}),
     )
-    return AgentContext(task, agent, message, (child,), profile, capabilities)
+    return AgentContext(
+        task,
+        agent,
+        message,
+        (child,),
+        profile,
+        capabilities,
+        tool_definitions=tuple(capability_tool_definition(item) for item in capabilities),
+    )
 
 
 def test_prompt_catalog_loads_all_fragments_as_an_immutable_snapshot(project_root: Path) -> None:
@@ -212,7 +220,7 @@ def test_agent_tool_owner_preserves_external_description_without_memory_capabili
         composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.gate": "gate"}))
     ).handle(_context())
     assert decision.model_request is not None
-    assert ModelRequest.from_dict(decision.model_request).parallel_tool_calls is True
+    assert decision.model_request.parallel_tool_calls is True
 
 
 def test_agent_preserves_model_text_verbatim() -> None:
@@ -295,7 +303,7 @@ def test_agent_executes_every_tool_call_before_resuming_model() -> None:
         )
     )
     assert final.model_request is not None
-    resumed = ModelRequest.from_dict(final.model_request).continuation
+    resumed = final.model_request.continuation
     assert resumed is not None
     outputs = [item for item in resumed.items if item.get("type") == "function_call_output"]
     assert [item["call_id"] for item in outputs] == ["first", "second"]

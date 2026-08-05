@@ -28,7 +28,7 @@ from jsonschema import ValidationError, validate
 from src.ai._channels import _complete_chat, _execute_responses_channel
 from src.ai._parsing import invalid_output_result
 from src.ai.execution import CostTracker, ModelCaller, TaskManager
-from src.ai.models import get_capabilities_by_id, init_cache
+from src.ai.models import cache_available, get_capabilities_by_id, init_cache, refresh_now
 from src.ai.providers import ProviderConfig, setup_providers
 from src.contracts.model import (
     ModelBudgetError,
@@ -64,6 +64,9 @@ class _Msg(StrEnum):
 
 
 logger = get_logger("aurora.model_gateway")
+
+_COLD_START_REFRESH_SECONDS = 5.0
+"""冷启动时等待 models.dev 后台刷新的上限；超时后使用隐含能力继续对话。"""
 
 _FORBIDDEN_PARAMETERS = frozenset(
     {
@@ -129,6 +132,7 @@ class ModelGatewayService:
         }
 
         self._capabilities: dict[str, frozenset[str]] = {}
+        self._uncertain_roles: set[str] = set()
         self._init_lock = asyncio.Lock()
         self._initialized = False
 
@@ -142,13 +146,26 @@ class ModelGatewayService:
         )
 
     async def initialize(self) -> None:
-        """异步解析各角色的能力（models.dev + TOML 覆盖）。"""
+        """异步解析各角色的能力（models.dev 缓存 + TOML 覆盖）。
+
+        不等待慢网络：冷启动时只给后台刷新一个短时限机会，超时后使用
+        隐含能力继续对话，并把相关角色标记为不确定（工具检查放宽）。
+        """
         if self._initialized:
             return
+        if not await cache_available():
+            await refresh_now(wait_seconds=_COLD_START_REFRESH_SECONDS)
+        data_available = await cache_available()
+        self._uncertain_roles = set()
         responses_count = 0
         for role_id, model_id in self._models.items():
             definition = self._configuration.model_definitions[role_id]
-            caps = definition.capabilities or await get_capabilities_by_id(model_id)
+            if definition.capabilities:
+                caps = definition.capabilities
+            else:
+                caps = await get_capabilities_by_id(model_id)
+                if not data_available:
+                    self._uncertain_roles.add(role_id)
             if definition.endpoint == "responses":
                 caps = caps | frozenset({"native_responses"})
             self._capabilities[role_id] = caps
@@ -243,7 +260,10 @@ class ModelGatewayService:
             missing = sorted(request.required_capabilities - capabilities)
             raise ModelCapabilityError(_Msg.LACKS_CAPABILITIES.format(role=request.role, missing=missing))
         if request.tools and "tools" not in capabilities:
-            raise ModelCapabilityError(_Msg.LACKS_TOOLS.format(role=request.role))
+            if request.role in self._uncertain_roles:
+                logger.warning("models.dev 数据不可用，假定 model_role=%s 支持工具调用", request.role)
+            else:
+                raise ModelCapabilityError(_Msg.LACKS_TOOLS.format(role=request.role))
         if request.continuation is not None and (
             request.continuation.provider != role.provider or request.continuation.channel != role.endpoint
         ):

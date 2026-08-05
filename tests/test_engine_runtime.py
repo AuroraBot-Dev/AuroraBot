@@ -17,14 +17,12 @@ from src.contracts.agent import (
 )
 from src.contracts.amp import new_amp
 from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
-from src.contracts.model import ModelResult, ModelUsage
+from src.contracts.model import ModelRequest, ModelResult, ModelUsage
 from src.contracts.triage import TriageLimits
 from src.engine.runtime import AgentEngine
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from src.contracts.model import ModelRequest
 
 
 class _CompletingHandler:
@@ -184,7 +182,7 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
     class ModelRequestingHandler:
         def handle(self, context: AgentContext) -> AgentDecision:
             _ = context
-            return AgentDecision(model_request={"role": "test", "messages": []})
+            return AgentDecision(model_request=ModelRequest(role="test", messages=()))
 
     async def exercise() -> None:
         profile = AgentProfile(

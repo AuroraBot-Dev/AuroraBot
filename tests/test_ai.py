@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import time
+import urllib.error
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -249,10 +251,82 @@ def test_models_dev_capabilities_pricing_and_disk_cache(tmp_path: Path, monkeypa
     legacy = tmp_path / "models-dev-20000101-00.json"
     legacy.write_text("{}", encoding="utf-8")
     models._write_cache(raw)
-    cached, _timestamp = models._find_valid_cache()
+    cached, fresh = models._find_disk_cache()
     assert cached == raw
+    assert fresh is True
     assert not legacy.exists()
     assert len(tuple(tmp_path.glob("models-dev-*.json.gz"))) == 1
+
+
+def test_models_dev_slow_network_never_blocks_getters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """慢网络下查询立即返回当前可用缓存，刷新在后台进行。"""
+    monkeypatch.setattr(models, "_cache", None)
+    monkeypatch.setattr(models, "_cache_ts", 0.0)
+    monkeypatch.setattr(models, "_refresh_task", None)
+    models.init_cache(tmp_path)
+
+    def slow_fetch() -> dict[str, Any]:
+        time.sleep(0.2)
+        raise urllib.error.URLError("slow network")
+
+    monkeypatch.setattr(models, "_fetch", slow_fetch)
+
+    async def scenario() -> None:
+        started = time.monotonic()
+        caps = await models.get_capabilities_by_id("provider/model")
+        assert caps == models._IMPLICIT_CAPABILITIES
+        assert time.monotonic() - started < 0.1
+        assert models._refresh_task is not None
+
+        started = time.monotonic()
+        assert await models.refresh_now(wait_seconds=0.05) is False
+        assert time.monotonic() - started < 0.1
+        assert await models.cache_available() is False
+
+        if models._refresh_task is not None:
+            await asyncio.shield(models._refresh_task)
+
+    asyncio.run(scenario())
+
+
+def test_gateway_cold_start_falls_back_and_opens_tools(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """冷启动且 models.dev 不可用时：短时限等待后使用隐含能力继续对话。"""
+
+    def offline() -> dict[str, Any]:
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr(models, "_fetch", offline)
+    monkeypatch.setattr(models, "_cache", None)
+    monkeypatch.setattr(models, "_cache_ts", 0.0)
+    monkeypatch.setattr(models, "_refresh_task", None)
+
+    async def _no_cache() -> bool:
+        return False
+
+    async def _no_refresh(wait_seconds: float) -> bool:
+        _ = wait_seconds
+        return False
+
+    monkeypatch.setattr("src.ai.gateway.cache_available", _no_cache)
+    monkeypatch.setattr("src.ai.gateway.refresh_now", _no_refresh)
+
+    async def scenario() -> None:
+        service = ModelGatewayService(load_configuration(project_root))
+        try:
+            await service.initialize()
+            assert "fast" in service._uncertain_roles
+            assert "quality" not in service._uncertain_roles
+            request = ModelRequest(
+                role="fast",
+                messages=(),
+                tools=(ToolDefinition("t", "", {"type": "object"}),),
+            )
+            assert "tools" in service.negotiate(request)
+        finally:
+            if models._refresh_task is not None:
+                await asyncio.shield(models._refresh_task)
+
+    asyncio.run(scenario())
 
 
 def test_gateway_error_preserves_retryability() -> None:

@@ -36,6 +36,8 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
     ToolLease,
+    ToolRequest,
+    capability_tool_definition,
 )
 from src.contracts.amp import AmpEnvelope, AmpValidationError
 from src.contracts.event import OutputStreamItem, OutputStreamPage
@@ -95,6 +97,8 @@ class _Msg(StrEnum):
     TRIAGE_FALLBACK_REASON = "fail-open:{error_type}"
     TRIAGE_FALLBACK_SUMMARY = "Inbox event batch"
     WAIT_WITHOUT_CHILDREN = "Agent cannot wait without active children"
+    DECISION_REQUEST_MISSING = "Agent decision lacks its requested transition"
+    TASK_ROW_MISSING = "task row missing for {task_id}"
 
 
 # -- 类型与工具函数 ------------------------------------------------------
@@ -145,25 +149,37 @@ class DecisionRuntime(Protocol):
     def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 
 
-def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskState]) -> AgentDecision:
+def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskState]) -> tuple[AgentDecision, str]:
+    """构造只读 AgentContext 并调用对应 handler，返回 (决策, 授权的 profile_id)。
+
+    task/agent/message/children 直接复用当轮新建的 store 对象，不做深拷贝；
+    handler 违反只读契约的变异会以乐观锁冲突失败，不会静默损坏状态。
+    profile 与 capability 描述符是跨轮共享的规范对象，必须拷贝，防止 handler
+    通过变异 context 提权。返回的 profile_id 在 handler 运行前捕获，apply
+    路径据此取规范 profile，篡改 agent.profile_id 无法重定向授权。
+    """
     message, agent, task = claim
-    profile = kernel._profiles[agent.profile_id]
-    descriptors = tuple(
-        descriptor
-        for descriptor in kernel.capability_catalog.capabilities
-        if _capability_allowed(descriptor.id, profile.capabilities)
+    profile_id = agent.profile_id
+    profile = deepcopy(kernel._profiles[profile_id])
+    descriptors = deepcopy(
+        tuple(
+            descriptor
+            for descriptor in kernel.capability_catalog.capabilities
+            if _capability_allowed(descriptor.id, profile.capabilities)
+        )
     )
     context = AgentContext(
-        task=deepcopy(task),
-        agent=deepcopy(agent),
-        message=deepcopy(message),
-        children=deepcopy(kernel.store.children(agent.agent_id)),
-        profile=deepcopy(profile),
-        capabilities=deepcopy(descriptors),
+        task=task,
+        agent=agent,
+        message=message,
+        children=kernel.store.children(agent.agent_id),
+        profile=profile,
+        capabilities=descriptors,
+        tool_definitions=tuple(capability_tool_definition(item) for item in descriptors),
         memory=kernel.recall_memory(MemoryQuery(task.root_summary, task.session_id)),
         pending_child_reports=kernel.store.has_pending_child_reports(agent.agent_id),
     )
-    return kernel._handlers[agent.profile_id].handle(context)
+    return kernel._handlers[profile_id].handle(context), profile_id
 
 
 def apply_failure(kernel: DecisionRuntime, message: Any, agent: AgentInstance, error: str) -> None:
@@ -179,9 +195,9 @@ def apply_failure(kernel: DecisionRuntime, message: Any, agent: AgentInstance, e
 
 
 def apply_authorized_decision(
-    kernel: DecisionRuntime, message: Any, agent: AgentInstance, decision: AgentDecision
+    kernel: DecisionRuntime, message: Any, agent: AgentInstance, profile_id: str, decision: AgentDecision
 ) -> None:
-    profile = kernel._profiles[agent.profile_id]
+    profile = kernel._profiles[profile_id]
     if decision.model_request is not None:
         command = _apply_model_request(kernel, agent, decision, profile)
     elif decision.tool_request is not None:
@@ -212,10 +228,12 @@ def _apply_model_request(
     decision: AgentDecision,
     profile: AgentProfile,
 ) -> ModelCommand:
-    request_role = decision.model_request.get("role")  # type: ignore[union-attr]
-    if request_role != profile.model_role:
-        raise PermissionError(_Msg.AGENT_MODEL_ROLE_DENIED.format(agent_id=agent.agent_id, role=request_role))
-    return ModelCommand(request=decision.model_request)  # type: ignore[arg-type]
+    request = decision.model_request
+    if request is None:
+        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
+    if request.role != profile.model_role:
+        raise PermissionError(_Msg.AGENT_MODEL_ROLE_DENIED.format(agent_id=agent.agent_id, role=request.role))
+    return ModelCommand(request=request.to_dict())
 
 
 def _apply_tool_request(
@@ -224,8 +242,9 @@ def _apply_tool_request(
     decision: AgentDecision,
     profile: AgentProfile,
 ) -> ToolCommand:
-    assert decision.tool_request is not None
     tool = decision.tool_request
+    if tool is None:
+        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
     if not _capability_allowed(tool.capability, profile.capabilities):
         raise PermissionError(_Msg.AGENT_TOOL_DENIED.format(agent_id=agent.agent_id, capability=tool.capability))
     descriptor = kernel.capability_catalog.by_id.get(tool.capability)
@@ -236,16 +255,9 @@ def _apply_tool_request(
     except ValidationError as error:
         raise ValueError(_Msg.TOOL_PARAMS_MISMATCH.format(capability=tool.capability, message=error.message)) from error
     task = kernel.store.get_task(agent.task_id)
-    assert task is not None
-    return ToolCommand(
-        request={
-            "capability": tool.capability,
-            "parameters": tool.parameters,
-            "complete_task": tool.complete_task,
-            "tool_call_id": tool.tool_call_id,
-            "session_id": task.session_id,
-        },
-    )
+    if task is None:
+        raise ValueError(_Msg.TASK_ROW_MISSING.format(task_id=agent.task_id))
+    return ToolCommand(request={**tool.to_dict(), "session_id": task.session_id})
 
 
 def _apply_delegations(
@@ -266,10 +278,13 @@ def _apply_delegations(
 
 
 def _apply_completion(decision: AgentDecision) -> CompleteCommand:
+    completion = decision.completion
+    if completion is None:
+        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
     return CompleteCommand(
-        summary=decision.completion.summary,  # type: ignore[union-attr]
-        artifacts=decision.completion.artifacts,  # type: ignore[union-attr]
-        silent=decision.completion.silent,  # type: ignore[union-attr]
+        summary=completion.summary,
+        artifacts=completion.artifacts,
+        silent=completion.silent,
     )
 
 
@@ -281,7 +296,10 @@ def _apply_wait(kernel: DecisionRuntime, agent: AgentInstance) -> WaitCommand:
 
 
 def _apply_failure(decision: AgentDecision) -> FailCommand:
-    return FailCommand(summary=decision.failure, error=decision.failure)  # type: ignore[arg-type]
+    failure = decision.failure
+    if failure is None:
+        raise ValueError(_Msg.DECISION_REQUEST_MISSING)
+    return FailCommand(summary=failure, error=failure)
 
 
 # -- AMP 摄入 ------------------------------------------------------------
@@ -513,7 +531,8 @@ class EngineState:
             try:
                 if isinstance(result, BaseException):
                     raise result  # noqa: TRY301
-                await self._store_call(apply_authorized_decision, self, message, agent, result)
+                decision, profile_id = result
+                await self._store_call(apply_authorized_decision, self, message, agent, profile_id, decision)
                 processed.append(message.message_id)
             except Exception as error:
                 logger.log(
@@ -582,35 +601,24 @@ class EngineState:
             self.limits.tool_concurrency,
             self.limits.lease_seconds,
         )
-        leases = []
-        for activity in activities:
-            request = activity.request
-            leases.append(
-                ToolLease(
-                    activity_id=activity.activity_id,
-                    task_id=activity.task_id,
-                    agent_id=activity.agent_id,
-                    request_id=activity.idempotency_key,
-                    session_id=str(request["session_id"]),
-                    capability=str(request["capability"]),
-                    parameters=dict(request["parameters"]),
-                )
-            )
-        return tuple(leases)
+        return tuple(self._tool_lease(activity) for activity in activities)
 
     async def tool_recovery_requests(self) -> tuple[ToolLease, ...]:
         activities = await self._store_call(self.store.tool_recovery_activities)
-        return tuple(
-            ToolLease(
-                activity.activity_id,
-                activity.task_id,
-                activity.agent_id,
-                activity.idempotency_key,
-                str(activity.request["session_id"]),
-                str(activity.request["capability"]),
-                dict(activity.request["parameters"]),
-            )
-            for activity in activities
+        return tuple(self._tool_lease(activity) for activity in activities)
+
+    @staticmethod
+    def _tool_lease(activity: ActivityRequest) -> ToolLease:
+        """将持久化的工具活动请求解析为类型化租约。"""
+        request = ToolRequest.from_dict(activity.request)
+        return ToolLease(
+            activity_id=activity.activity_id,
+            task_id=activity.task_id,
+            agent_id=activity.agent_id,
+            request_id=activity.idempotency_key,
+            session_id=str(activity.request["session_id"]),
+            capability=request.capability,
+            parameters=request.parameters,
         )
 
     async def complete_tool(

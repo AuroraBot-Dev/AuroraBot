@@ -6,7 +6,6 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.agents.tools import capability_tool_definition
 from src.contracts.agent import (
     AgentContext,
     AgentDecision,
@@ -103,8 +102,8 @@ def _collect_tool_definitions(
     context: AgentContext,
     capabilities: tuple[Capability, ...],
 ) -> tuple[ToolDefinition, ...]:
-    """收集所有工具定义：运行时 Capability + 内建 Capability，并检查名称唯一性。"""
-    tools: list[ToolDefinition] = [capability_tool_definition(item) for item in context.capabilities]
+    """收集所有工具定义：预计算的运行时 Capability + 内建 Capability，并检查名称唯一性。"""
+    tools: list[ToolDefinition] = list(context.tool_definitions)
     for cap in capabilities:
         tools.extend(cap.tool_definitions(context))
     names = [tool.name for tool in tools]
@@ -187,7 +186,7 @@ class ToolAgent:
             parallel_tool_calls=True,
             cancel_policy="never",
         )
-        return AgentDecision(model_request=request.to_dict())
+        return AgentDecision(model_request=request)
 
     def _require_composer(self) -> PromptComposer:
         """获取已安装的提示词装配器，未安装时抛出异常。"""
@@ -372,7 +371,7 @@ class ToolAgent:
         elif chain.continuation is None:
             decision = self._request_model(context)
         else:
-            decision = AgentDecision(model_request=self._continuation_request(context, chain.continuation).to_dict())
+            decision = AgentDecision(model_request=self._continuation_request(context, chain.continuation))
         return replace(decision, state_patch={**decision.state_patch, _TOOL_CHAIN_STATE: None})
 
     def _continuation_request(self, context: AgentContext, continuation: ModelContinuation) -> ModelRequest:

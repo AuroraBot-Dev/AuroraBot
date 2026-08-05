@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from src.contracts.memory import MemoryContextSnapshot
+from src.contracts.model import ToolDefinition
 from src.contracts.triage import TriageLimits
 
 if TYPE_CHECKING:
-    from src.contracts.model import ModelContinuation, ToolCall, ToolDefinition
+    from src.contracts.model import ModelContinuation, ModelRequest, ToolCall
 
 
 # -- enums ---------------------------------------------------------------
@@ -147,6 +149,24 @@ class ToolRequest:
     complete_task: bool = False
     tool_call_id: str | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "ToolRequest":
+        """从持久化的工具活动请求字典反序列化。"""
+        return cls(
+            capability=str(value["capability"]),
+            parameters=dict(value.get("parameters", {})),
+            complete_task=bool(value.get("complete_task", False)),
+            tool_call_id=value.get("tool_call_id"),
+        )
+
+
+def capability_tool_definition(descriptor: CapabilityDescriptor) -> ToolDefinition:
+    """保持外部 schema 原样，不再注入隐藏参数。"""
+    return ToolDefinition(descriptor.id, descriptor.description, deepcopy(descriptor.parameters_schema))
+
 
 @dataclass(frozen=True, slots=True)
 class Completion:
@@ -240,7 +260,7 @@ class AgentMessage:
 
 @dataclass(frozen=True, slots=True)
 class AgentDecision:
-    model_request: dict[str, Any] | None = None
+    model_request: "ModelRequest | None" = None
     tool_request: ToolRequest | None = None
     delegations: tuple[DelegationRequest, ...] = ()
     completion: Completion | None = None
@@ -288,12 +308,15 @@ class ToolLease:
 
 @dataclass(frozen=True, slots=True)
 class AgentContext:
+    """一次 Agent 轮次的只读快照；handler 不得修改任何字段。"""
+
     task: TaskState
     agent: AgentInstance
     message: AgentMessage
     children: tuple[AgentInstance, ...]
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
+    tool_definitions: tuple[ToolDefinition, ...] = ()
     memory: MemoryContextSnapshot = field(default_factory=MemoryContextSnapshot)
     pending_child_reports: bool = False
 

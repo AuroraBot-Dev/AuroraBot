@@ -21,11 +21,13 @@ from .execution import (
 )
 from .gateway import ModelGatewayService
 from .models import (
+    cache_available,
     compute_cost,
     get_capabilities_by_id,
     get_model_info,
     get_pricing_by_id,
     init_cache,
+    refresh_now,
 )
 from .providers import (
     ProviderConfig,
@@ -42,11 +44,13 @@ __all__ = [
     "ModelGatewayService",
     "ProviderConfig",
     "TaskManager",
+    "cache_available",
     "compute_cost",
     "get_capabilities_by_id",
     "get_model_info",
     "get_pricing_by_id",
     "init_cache",
+    "refresh_now",
     "resolve_model",
     "setup_providers",
 ]

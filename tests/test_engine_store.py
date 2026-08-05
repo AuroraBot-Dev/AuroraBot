@@ -383,7 +383,7 @@ def test_model_activity_completion_and_failure_are_auditable(tmp_path: Path) -> 
                 return AgentDecision(completion=Completion(str(context.message.payload["text"])))
             if context.message.type == "model.failed":
                 return AgentDecision(failure=str(context.message.payload["error"]))
-            return AgentDecision(model_request={"role": "fast", "messages": []})
+            return AgentDecision(model_request=ModelRequest(role="fast", messages=()))
 
     state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
 
@@ -415,7 +415,7 @@ def test_output_stream_returns_model_text_and_failures_ordered_by_cursor(tmp_pat
         def handle(self, context: AgentContext) -> AgentDecision:
             if context.message.type == "model.completed":
                 return AgentDecision(completion=Completion(str(context.message.payload["text"])))
-            return AgentDecision(model_request={"role": "fast", "messages": []})
+            return AgentDecision(model_request=ModelRequest(role="fast", messages=()))
 
     state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
 
