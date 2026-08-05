@@ -32,10 +32,13 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
     ("flags", "expected"),
     (
         (["--headless"], frozenset()),
-        (["--console"], frozenset({"console"})),
-        (["--dashboard"], frozenset({"dashboard"})),
-        (["--mcp"], frozenset({"mcp"})),
-        (["--console", "--dashboard", "--mcp"], frozenset({"console", "dashboard", "mcp"})),
+        (["--platform", "console"], frozenset({"console"})),
+        (["--platform", "dashboard"], frozenset({"dashboard"})),
+        (["--platform", "mcp"], frozenset({"mcp"})),
+        (
+            ["--platform", "console", "--platform", "dashboard", "--platform", "mcp"],
+            frozenset({"console", "dashboard", "mcp"}),
+        ),
     ),
 )
 def test_cli_passes_each_exact_platform_set_once(
@@ -64,10 +67,17 @@ def test_cli_uses_preference_selection_when_no_platform_flag_is_present(monkeypa
     assert calls == [None]
 
 
-@pytest.mark.parametrize("platform", ("--console", "--dashboard", "--mcp"))
+@pytest.mark.parametrize("platform", ("console", "dashboard", "mcp"))
 def test_headless_rejects_positive_platform_flags(platform: str) -> None:
     with pytest.raises(SystemExit) as raised:
-        run(["--headless", platform])
+        run(["--headless", "--platform", platform])
+    assert raised.value.code == 2
+
+
+@pytest.mark.parametrize("platform", ("unknown", "console,mcp"))
+def test_cli_rejects_unknown_platform_names(platform: str) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run(["--platform", platform])
     assert raised.value.code == 2
 
 

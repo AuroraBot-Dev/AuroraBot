@@ -26,7 +26,7 @@ uv sync --group dev
 Copy-Item .env.example .env
 
 # 実際のモデルを動かす時は .env に key を追加し、明示的に読み込む
-uv run --env-file .env aurora --console --mcp
+uv run --env-file .env aurora --platform console --platform mcp
 ```
 
 テストと静的チェックには実際のモデル key は不要です。secret はローカル `.env` またはプロセス環境だけに置き、

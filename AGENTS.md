@@ -52,7 +52,7 @@ tests/          契约、集成与回归测试
 
 ## Runtime and quality
 
-- `uv run aurora` 使用 preference 默认组合；`--console`、`--dashboard`、`--mcp` 形成精确平台集合，`--headless` 不启动外部平台。
+- `uv run aurora` 使用 preference 默认组合；`--platform`（可重复）构成精确平台集合，`--headless` 不启动外部平台。
 - Python 3.12，包管理使用 `uv`。
 - Ruff 行宽 120，LF，双引号；公开 API 提供类型注解，dataclass 优先 `slots=True`。
 - 主源码文件原则上不超过 500 行；超过 500 行的文件必须考虑架构是否合理或是否应该根据总分结构分包。

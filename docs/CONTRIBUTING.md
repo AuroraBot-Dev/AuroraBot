@@ -25,7 +25,7 @@ uv sync --group dev
 Copy-Item .env.example .env
 
 # 需要实际运行模型时，在 .env 中填写密钥并显式加载
-uv run --env-file .env aurora --console --mcp
+uv run --env-file .env aurora --platform console --platform mcp
 ```
 
 仅运行测试和静态检查不需要真实模型密钥。密钥只写入本地 `.env` 或进程环境；不要提交密钥、真实对话、模型

@@ -26,7 +26,7 @@ uv sync --group dev
 Copy-Item .env.example .env
 
 # Add keys to .env and load it explicitly when running a real model
-uv run --env-file .env aurora --console --mcp
+uv run --env-file .env aurora --platform console --platform mcp
 ```
 
 Tests and static checks do not require real model keys. Keep secrets in the local `.env` file or process environment.
