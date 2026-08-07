@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
-from src.agents.triage import StructuredTriagePolicy
 from src.ai import ModelGatewayService
 from src.config import get
 from src.contracts import (
@@ -197,7 +196,6 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         engine_configuration,
         handlers,
         model_provider=ModelGatewayService(configuration),
-        triage_policy=StructuredTriagePolicy(configuration.engine.triage),
         memory_store=memory,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )

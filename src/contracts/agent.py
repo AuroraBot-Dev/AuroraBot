@@ -270,6 +270,7 @@ class AgentDecision:
     failure: str | None = None
     state_patch: dict[str, Any] = field(default_factory=dict)
     memory_candidates: tuple[str, ...] = ()
+    summary: str = ""
 
     def __post_init__(self) -> None:
         transitions = (
@@ -298,6 +299,7 @@ class AgentDecision:
             "failure": self.failure,
             "state_patch": self.state_patch,
             "memory_candidates": list(self.memory_candidates),
+            "summary": self.summary,
         }
 
 

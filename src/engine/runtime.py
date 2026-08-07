@@ -13,7 +13,7 @@ import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from enum import StrEnum
 from functools import partial
 from pathlib import Path
@@ -45,9 +45,8 @@ from src.contracts import (
     TaskStatus,
     ToolLease,
     ToolRequest,
-    TriageAction,
     TriageBatch,
-    TriageDecision,
+    TriageLimits,
     capability_tool_definition,
 )
 from src.engine.archive import (
@@ -73,10 +72,8 @@ if TYPE_CHECKING:
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
     from src.contracts.tool import ToolExecutorBinding
-    from src.contracts.triage import TriagePolicy
 
 logger = get_logger("aurora.engine")
-_TRIAGE_SUMMARY_LIMIT = 600
 
 
 class _Msg(StrEnum):
@@ -96,8 +93,7 @@ class _Msg(StrEnum):
     TOOL_PARAMS_MISMATCH = "Tool parameters do not match {capability}: {message}"
     PROFILE_CANNOT_DELEGATE = "Agent profile {profile_id} cannot delegate"
     PROFILE_CANNOT_CREATE = "Agent profile {profile_id} cannot create {child_profile}"
-    TRIAGE_FALLBACK_REASON = "fail-open:{error_type}"
-    TRIAGE_FALLBACK_SUMMARY = "Inbox event batch"
+    TRIAGE_CONTROL_DENIED = "Agent profile {profile_id} cannot issue triage transitions"
 
 
 # -- 类型与工具函数 ------------------------------------------------------
@@ -141,6 +137,7 @@ def _build_limit_dict(limits: AgentLimits) -> dict[str, Any]:
 
 
 class DecisionRuntime(Protocol):
+    configuration: EngineConfiguration
     _profiles: dict[str, AgentProfile]
     _handlers: dict[str, AgentHandler]
     store: SQLiteRuntimeStore
@@ -205,6 +202,8 @@ def apply_authorized_decision(
 
     completion/wait/failure 无需额外授权；wait 的等待前提校验在 store
     事务内原子完成。所有 resource 上界校验仍由 store 事务内执行。
+    defer/discard 由 triage_control profile 专属，defer 的秒数在授权时
+    按 TriageLimits 钳制（RFC 0209）。
     """
     profile = kernel._profiles[profile_id]
     if decision.model_request is not None:
@@ -213,6 +212,8 @@ def apply_authorized_decision(
         _authorize_tool(kernel, agent, profile, decision.tool_request)
     elif decision.delegations:
         _authorize_delegation(kernel, profile, decision.delegations)
+    elif decision.defer_seconds is not None or decision.discard:
+        decision = _authorize_triage(profile, decision, kernel.configuration.triage)
     kernel.store.apply_decision(
         message=message,
         agent=agent,
@@ -249,6 +250,16 @@ def _authorize_delegation(
         child_profile = delegation.profile_id or kernel.limits.worker_profile
         if child_profile not in profile.child_profiles or child_profile not in kernel._profiles:
             raise PermissionError(_Msg.PROFILE_CANNOT_CREATE.format(profile_id=profile.id, child_profile=child_profile))
+
+
+def _authorize_triage(profile: AgentProfile, decision: AgentDecision, limits: TriageLimits) -> AgentDecision:
+    """defer/discard 仅限 triage_control profile；defer 秒数钳制到 TriageLimits 上下界。"""
+    if not profile.triage_control:
+        raise PermissionError(_Msg.TRIAGE_CONTROL_DENIED.format(profile_id=profile.id))
+    if decision.defer_seconds is None:
+        return decision
+    clamped = min(max(decision.defer_seconds, limits.quiet_seconds), limits.max_defer_seconds)
+    return replace(decision, defer_seconds=clamped)
 
 
 # -- AMP 摄入 ------------------------------------------------------------
@@ -420,12 +431,15 @@ class EngineState:
         return tuple(entries)
 
     def _memory_candidates(self, task_id: str) -> tuple[str, ...]:
-        events = self.store.events_for_task(task_id)
-        if not events:
-            return ()
-        triage = events[0].get("payload", {}).get("triage")
-        candidate = triage.get("memory_candidate") if isinstance(triage, dict) else None
-        return (candidate,) if isinstance(candidate, str) and candidate.strip() else ()
+        candidates: list[str] = []
+        for event in self.store.events_for_task(task_id):
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            raw = payload.get("memory_candidates")
+            if isinstance(raw, list):
+                candidates.extend(str(item) for item in raw if isinstance(item, str) and item.strip())
+        return tuple(dict.fromkeys(candidates))
 
     async def ingest(self) -> tuple[str, ...]:
         """只把 AMP 写入持久化 Inbox，不创建 Task。"""
@@ -435,20 +449,21 @@ class EngineState:
     async def claim_triage_batches(self, limit: int) -> tuple[TriageBatch, ...]:
         return await self._store_call(self.store.claim_triage_batches, self.configuration.triage, limit)
 
-    async def apply_triage(self, batch: TriageBatch, decision: TriageDecision) -> str | None:
+    async def create_triage_task(self, batch: TriageBatch) -> str | None:
+        """防抖批次到期后创建 Task 与入口 triage agent（RFC 0209）。"""
         priority = max((event.priority for event in batch.events), default=100)
-        task_id = await self._store_call(
-            self.store.apply_triage,
+        created = await self._store_call(
+            self.store.create_triage_task,
             batch,
-            decision,
-            root_profile=self.limits.root_profile,
+            triage_profile=self.limits.root_profile,
             interactive_budget=self.configuration.interactive_budget,
             autonomous_budget=self.configuration.autonomous_budget,
             priority=priority,
         )
-        if task_id is not None:
-            self._session_log.task_admitted(task_id, batch.session_id, decision.summary)
-        return task_id
+        if created is not None:
+            task_id, summary = created
+            self._session_log.task_admitted(task_id, batch.session_id, summary)
+        return created[0] if created is not None else None
 
     async def pump(self, max_turns: int | None = None) -> PumpResult:
         limit = self.limits.turn_concurrency if max_turns is None else max_turns
@@ -700,7 +715,6 @@ class AgentEngine:
         handlers: dict[str, AgentHandler],
         *,
         model_provider: ModelProvider,
-        triage_policy: TriagePolicy,
         tool_registry: ToolRegistry | None = None,
         memory_store: MemoryStore | None = None,
         idle_wait_seconds: float = 1.0,
@@ -708,7 +722,6 @@ class AgentEngine:
         self.configuration = configuration
         self._state = EngineState(configuration, handlers, memory_store)
         self._model_provider = model_provider
-        self._triage_policy = triage_policy
         self._memory_store = memory_store
         self._idle_wait_seconds = idle_wait_seconds
         self._tools = tool_registry if tool_registry is not None else ToolRegistry(self._state, self._state)
@@ -770,41 +783,16 @@ class AgentEngine:
             )
 
     async def _triage_inbox(self) -> tuple[str, ...]:
+        """到期批次直接创建入口 triage Task；模型判断走正常 Agent turn 链路。"""
         batches = await self._state.claim_triage_batches(self._state.limits.model_concurrency)
         if not batches:
             return ()
-        results = await asyncio.gather(
-            *(self._triage_batch(batch) for batch in batches),
-            return_exceptions=True,
-        )
-        admitted: list[str] = []
-        for batch, result in zip(batches, results, strict=True):
-            decision = result if isinstance(result, TriageDecision) else self._triage_fallback(batch, result)
-            task_id = await self._state.apply_triage(batch, decision)
+        created: list[str] = []
+        for batch in batches:
+            task_id = await self._state.create_triage_task(batch)
             if task_id is not None:
-                admitted.append(task_id)
-        return tuple(admitted)
-
-    async def _triage_batch(self, batch: TriageBatch) -> TriageDecision:
-        request = self._triage_policy.request(batch)
-        result = await self._model_provider.complete(request)
-        return self._triage_policy.resolve(result)
-
-    @staticmethod
-    def _triage_fallback(batch: TriageBatch, error: object) -> TriageDecision:
-        logger.warning(
-            "Triage failed; admitting batch batch_id=%s error_type=%s",
-            batch.batch_id,
-            type(error).__name__,
-        )
-        summary = "；".join(event.summary for event in batch.events)
-        if len(summary) > _TRIAGE_SUMMARY_LIMIT:
-            summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
-        return TriageDecision(
-            action=TriageAction.PROCESS,
-            summary=summary or _Msg.TRIAGE_FALLBACK_SUMMARY,
-            reason=_Msg.TRIAGE_FALLBACK_REASON.format(error_type=type(error).__name__),
-        )
+                created.append(task_id)
+        return tuple(created)
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         stop = stop_event or asyncio.Event()

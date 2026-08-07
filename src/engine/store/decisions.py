@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import uuid4
@@ -50,6 +50,7 @@ class _Msg(StrEnum):
     REVISION_CONFLICT = "Agent revision conflict"
     TASK_NOT_ACTIVE = "Task is no longer active"
     DELEGATION_LIMIT = "Agent delegation limit exceeded"
+    TRIAGE_CONTROL_DENIED = "defer/discard is only allowed for the entry triage Agent"
     WAIT_WITHOUT_CHILDREN = "Agent cannot wait without active children"
     UNSUPPORTED_DECISION = "unsupported Agent decision"
 
@@ -66,6 +67,10 @@ def _decision_kind(decision: AgentDecision) -> str:
         return "complete"
     if decision.wait_for_children:
         return "wait"
+    if decision.defer_seconds is not None:
+        return "defer"
+    if decision.discard:
+        return "discard"
     return "fail"
 
 
@@ -81,6 +86,10 @@ def _decision_summary(decision: AgentDecision) -> str:
         return decision.completion.summary
     if decision.wait_for_children:
         return "waiting for child Agents"
+    if decision.defer_seconds is not None:
+        return decision.summary or f"triage.defer:{decision.defer_seconds}"
+    if decision.discard:
+        return decision.summary or "triage.discard"
     failure = decision.failure
     return failure if failure is not None else ""
 
@@ -221,6 +230,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     or active_count + len(resolved) > limits["max_active_agents"]
                 ):
                     raise PermissionError(_Msg.DELEGATION_LIMIT)
+                batch_events = self._root_batch_events(state)
                 for instruction, child_profile in resolved:
                     child_id = str(uuid4())
                     # 创建子 Agent，depth + 1，初始状态为 READY
@@ -238,18 +248,36 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                             instruction,
                         ),
                     )
+                    payload: dict[str, Any] = {"instruction": instruction, "parent_agent_id": agent.agent_id}
+                    if batch_events is not None:
+                        # 入口 agent 委派时，把有界批次投影交给子 Agent（RFC 0209）
+                        payload["context_events"] = batch_events
                     child_message = self._insert_message(
                         connection,
                         task_id=agent.task_id,
                         target_agent_id=child_id,
                         message_type="agent.assigned",
-                        payload={"instruction": instruction, "parent_agent_id": agent.agent_id},
+                        payload=payload,
                         causation_id=message.message_id,
                         correlation_id=agent.task_id,
                         priority=priority,
                         now=now,
                     )
                     created.extend((child_id, child_message))
+                if batch_events is not None:
+                    self._settle_batch(connection, task_row, "delete", now)
+
+            elif decision.defer_seconds is not None:
+                self._require_triage_root(agent, task_row)
+                self._settle_batch(connection, task_row, "defer", now, decision.defer_seconds)
+                status = AgentStatus.COMPLETED
+                self._end_task(connection, agent.task_id, TaskStatus.CANCELLED, "triage.defer", now)
+
+            elif decision.discard:
+                self._require_triage_root(agent, task_row)
+                self._settle_batch(connection, task_row, "delete", now)
+                status = AgentStatus.COMPLETED
+                self._end_task(connection, agent.task_id, TaskStatus.CANCELLED, "triage.discard", now)
 
             elif decision.completion is not None:
                 completion = decision.completion
@@ -290,6 +318,9 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 if failure is None:
                     raise ValueError(_Msg.UNSUPPORTED_DECISION)
                 status = AgentStatus.FAILED
+                if self._root_batch_events(state) is not None:
+                    # 入口 triage agent 失败：结算批次，避免 Inbox 残留（fail-open 已由 handler 兜底）
+                    self._settle_batch(connection, task_row, "delete", now)
                 if agent.parent_agent_id is not None:
                     # 非根 Agent：向父 Agent 发送 child.failed 消息
                     result = ChildResult(
@@ -338,6 +369,38 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 now=now,
             )
         return tuple(created)
+
+    @staticmethod
+    def _root_batch_events(state: dict[str, Any]) -> list[Any] | None:
+        """入口 agent 状态中的批次投影；仅 triage 创建的根 agent 携带。"""
+        events = state.get("batch_events")
+        return events if isinstance(events, list) else None
+
+    @staticmethod
+    def _require_triage_root(agent: AgentInstance, task_row: Any) -> None:
+        """defer/discard 只允许入口 triage agent 发出（RFC 0209）。"""
+        if agent.agent_id != str(task_row["root_agent_id"]):
+            raise PermissionError(_Msg.TRIAGE_CONTROL_DENIED)
+
+    @staticmethod
+    def _settle_batch(
+        connection: sqlite3.Connection,
+        task_row: Any,
+        mode: str,
+        now: str,
+        defer_seconds: float | None = None,
+    ) -> None:
+        """按 triage 决策结算批次：defer 回到 DEFERRED，delete 移除原始事件。"""
+        batch_id = str(task_row["root_message_id"])
+        if mode == "defer":
+            available_at = (datetime.now(UTC) + timedelta(seconds=max(0.0, defer_seconds or 0.0))).isoformat()
+            connection.execute(
+                "UPDATE inbox_events SET status='DEFERRED', batch_id=NULL, available_at=?, updated_at=? "
+                "WHERE batch_id=?",
+                (available_at, now, batch_id),
+            )
+        else:
+            connection.execute("DELETE FROM inbox_events WHERE batch_id = ?", (batch_id,))
 
     @staticmethod
     def _has_active_children(connection: sqlite3.Connection, agent_id: str) -> bool:

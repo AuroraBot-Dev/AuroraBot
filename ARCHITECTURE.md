@@ -366,7 +366,7 @@ contracts/
                      # ToolQueuePort, ToolCompletionPort, RuntimeCommandPort
   configuration.py   # AuroraConfig, PlatformPreference (及各平台配置片段)
   memory.py          # MemoryContextSnapshot, MemoryEntry, MemoryQuery, MemoryStore Protocol
-  triage.py          # InboxEvent, TriageBatch, TriageDecision, TriagePolicy
+  triage.py          # InboxEvent, TriageBatch, TriageLimits
 ```
 
 **关键约束**：
@@ -462,7 +462,7 @@ memory/
 
 ```python
 memory_service = MemoryService(memory_dir)
-engine = AgentEngine(config, handlers, memory_store=memory_service, triage_policy=triage_policy)
+engine = AgentEngine(config, handlers, memory_store=memory_service)
 ```
 
 **关键约束**：
@@ -483,7 +483,7 @@ engine/
   runtime.py          # AgentEngine — Inbox → Triage → Root/子代理 → Memory 完整闭环
                        #   构造签名：
                        #     AgentEngine(configuration, handlers, *,
-                       #                 model_provider, triage_policy, memory_store=None,
+                       #                 model_provider, memory_store=None,
                        #                 idle_wait_seconds=1.0)
                        #   属性：
                        #     tasks(), get_task(), get_agent(), has_work(), status()
@@ -491,10 +491,9 @@ engine/
                        #   pump 闭环：
                        #     1. recover tools → tool_registry.recover()
                        #     2. ingest → 持久化 Inbox + 动态防抖
-                       #     3. triage → process / defer / discard
-                       #     4. process 批次创建 Root Task
-                       #     5. Agent turn / Tool / Model 调度
-                       #     6. 异步 Memory 投影 + 终态归档
+                       #     3. triage → 批次创建入口 triage Task（RFC 0209）
+                       #     4. Agent turn / Tool / Model 调度（triage 判断走正常链路）
+                       #     5. 异步 Memory 投影 + 终态归档
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
   debug.py            # task_detail() / agent_detail() / 工作区校验
   store/              # SQLite 运行态持久化子包
@@ -502,7 +501,7 @@ engine/
     schema.py         # DDL (inbox_events, tasks, agents, mailbox, activities, causal_events)
     base.py           # 基础 CRUD 操作
     queries.py        # 查询（任务树、消息时间线、统计计数）
-    triage.py         # Inbox 摄入、防抖批次、Triage 决策与 admitted Task 创建
+    triage.py         # Inbox 摄入、防抖批次与入口 triage Task 创建（RFC 0209）
     ingress.py        # Tool receipt 与 Agent mailbox 租赁
     decisions.py      # AgentDecision 到状态变更的翻译
     activities.py     # Activity CRUD（model + tool）
@@ -518,7 +517,6 @@ class AgentEngine:
         handlers: dict[str, AgentHandler],
         *,
         model_provider: ModelProvider,         # 来自 contracts.model
-        triage_policy: TriagePolicy,           # 来自 contracts.triage
         tool_registry: ToolRegistry,           # 来自 contracts.tool（聚合多个 ToolExecutor）
         memory_store: MemoryStore | None = None, # 来自 contracts.memory
     ) -> None: ...
@@ -530,12 +528,11 @@ class AgentEngine:
 pump(max_turns):
   1. recover tools      → self._tool_registry.recover_pending()
   2. ingest              → AMP 文件 + 内存队列写入 inbox_events（同时追加会话 JSONL）
-  3. triage due batches  → 无工具模型判断 process / defer / discard
-  4. admit process       → 同会话批次创建一个 Root Task（同时记录 task.admitted）
-  5. execute turns       → handle_claim() 在线程池中并发执行
-  6. dispatch I/O        → ToolRegistry + ModelProvider
-  7. memory projection   → 后台更新会话摘要和长期事实
-  8. archive terminal    → 终态 Task JSON 原子写入 archive/（同时记录 task.finished）
+  3. triage due batches  → 每个批次创建 Task 与入口 triage agent（RFC 0209，纯同步，无模型调用）
+  4. execute turns       → handle_claim() 在线程池中并发执行（triage 的模型判断走正常 model Activity）
+  5. dispatch I/O        → ToolRegistry + ModelProvider
+  6. memory projection   → 后台更新会话摘要和长期事实
+  7. archive terminal    → 终态 Task JSON 原子写入 archive/（同时记录 task.finished）
 ```
 
 **关键约束**：
@@ -583,7 +580,7 @@ Agent 能力只包含**模型可自主决策使用的**能力——即 Agent 在
 ```
 agents/
   __init__.py
-  triage.py          # StructuredTriagePolicy — 无工具的批次接纳判断
+  triage.py          # TriageAgent — 注意力初筛入口 Agent（无工具、结构化输出、fail-open）
   handler.py         # ToolAgent — 基础 AgentHandler 实现
   capabilities/       # 主动能力（Agent 自主决策）
     __init__.py
@@ -804,7 +801,7 @@ run_runtime():
   1. 加载配置           → get_config()
   2. 创建 PromptComposer → PromptCatalog.from_config() + PromptComposer()
   3. 创建 MemoryService  → MemoryService(memory_dir)    # 自动服务
-  4. 创建 TriagePolicy   → StructuredTriagePolicy(config.engine.triage)
+  4. 加载 TriageAgent    → 与其他 profile 同构走 _load_handler（RFC 0209）
   5. 创建主动能力        → DelegationCapability, WaitCapability, SpeechCapability
   6. 加载 AgentHandler   → _load_handler(spec, composer, capabilities)
   7. 创建 AI Gateway     → ModelGatewayService(config)
@@ -812,7 +809,6 @@ run_runtime():
   9. 收集 ToolBinding     → 各平台的 ToolExecutorBinding
   10. 构造 engine        → AgentEngine(config, handlers,
                             model_provider=...,
-                            triage_policy=...,
                             tool_registry=...,
                             memory_store=memory_service)
   11. 注册 ToolExecutors → engine.tool_registry.add_all(bindings)
@@ -953,7 +949,7 @@ port = 8765
 workspace = "data/engine"
 
 [engine.agents]
-root_profile = "builtin.gate"
+root_profile = "builtin.triage"  # 入口 triage agent（RFC 0209）
 worker_profile = "builtin.worker"
 max_active_agents = 16
 max_agents_per_task = 8

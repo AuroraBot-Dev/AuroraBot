@@ -3,7 +3,8 @@
 workspace = "data/engine"
 
 [engine.agents]
-root_profile = "builtin.gate"
+# 入口（triage）Agent profile：Task 从 triage 开始，process 时委派本体意识（RFC 0209）
+root_profile = "builtin.triage"
 worker_profile = "builtin.worker"
 max_active_agents = 16
 max_agents_per_task = 8

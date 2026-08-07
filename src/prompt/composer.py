@@ -78,6 +78,10 @@ def _message_text(context: AgentContext) -> str:
     if context.message.type == "task.started" and isinstance(events, list):
         admitted = {"triage": payload.get("triage"), "events": events}
         return _Msg.ADMITTED_EVENTS.format(content=_external(admitted))
+    if context.message.type == "agent.assigned" and isinstance(payload.get("context_events"), list):
+        # 入口 agent 委派时把有界批次投影交给本体意识（RFC 0209）
+        assigned = {"instruction": context.agent.assignment, "events": payload["context_events"]}
+        return _Msg.ADMITTED_EVENTS.format(content=_external(assigned))
     if context.message.type.startswith("tool."):
         status = context.message.type.removeprefix("tool.")
         request = payload.get("request")

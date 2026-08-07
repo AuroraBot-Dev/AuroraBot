@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.agents.triage import StructuredTriagePolicy
 from src.config.loader import load_configuration
 from src.contracts import (
     AgentContext,
@@ -58,7 +57,6 @@ def create_test_runtime(root: Path) -> AuroraRuntime:
         engine_configuration,
         handlers,
         model_provider=TriageModelProvider(),
-        triage_policy=StructuredTriagePolicy(engine_configuration.triage),
     )
     engine.bind_tool_executors(())
     return AuroraRuntime(configuration, engine)

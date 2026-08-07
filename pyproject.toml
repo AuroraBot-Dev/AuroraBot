@@ -143,6 +143,7 @@ allowed-confusables = [
 ]
 "src/engine/store*.py" = [
     "C901",
+    "PLR0911",
     "PLR0912",
     "PLR0915",
     "TC001",

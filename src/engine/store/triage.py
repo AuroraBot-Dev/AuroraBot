@@ -1,4 +1,4 @@
-"""持久化 Inbox、防抖批次与 Triage 决策事务。"""
+"""持久化 Inbox、防抖批次与入口 Triage Task 创建事务（RFC 0209）。"""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ from src.contracts import (
     InboxEvent,
     TaskLimits,
     TaskStatus,
-    TriageAction,
     TriageBatch,
-    TriageDecision,
     TriageLimits,
 )
 
 from .base import RuntimeStoreBase, _json, utc_now
+
+_TRIAGE_SUMMARY_LIMIT = 600
 
 
 class StoreTriageMixin(RuntimeStoreBase):
@@ -122,17 +122,21 @@ class StoreTriageMixin(RuntimeStoreBase):
                 )
         return tuple(batches)
 
-    def apply_triage(
+    def create_triage_task(
         self,
         batch: TriageBatch,
-        decision: TriageDecision,
         *,
-        root_profile: str,
+        triage_profile: str,
         interactive_budget: TaskLimits,
         autonomous_budget: TaskLimits,
         priority: int,
-    ) -> str | None:
-        """原子记录 Triage 决定，并 defer、删除或创建一个 Root Task。"""
+    ) -> tuple[str, str] | None:
+        """防抖批次到期后创建 Task 与入口 triage agent（RFC 0209）。
+
+        批次原始事件保留在 Inbox，由 triage agent 的决策（delegation /
+        defer / discard）在 apply_decision 中结算；批次投影同时存入入口
+        agent 状态，供委派时向子 Agent 传递有界原始事实。
+        """
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
         with self.transaction() as connection:
@@ -142,116 +146,69 @@ class StoreTriageMixin(RuntimeStoreBase):
             ).fetchall()
             if not rows:
                 return None
-            event_ids = [str(row["event_id"]) for row in rows]
-            self._insert_causal_event(
-                connection,
-                event_type=f"triage.{decision.action.value}",
-                summary=decision.summary,
-                payload={"decision": decision.to_dict(), "event_ids": event_ids},
-                correlation_id=batch.batch_id,
-                now=now,
+            task_id = str(uuid4())
+            agent_id = str(uuid4())
+            autonomous = all(str(row["type"]) == "system.tick" for row in rows)
+            budget = autonomous_budget if autonomous else interactive_budget
+            summary = _bounded_summary(batch.events)
+            connection.execute(
+                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
+                "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
+                "started_at, updated_at, termination_reason) "
+                "VALUES (?, ?, ?, ?, 'global', ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
+                (
+                    task_id,
+                    agent_id,
+                    batch.batch_id,
+                    batch.session_id,
+                    summary,
+                    int(autonomous),
+                    TaskStatus.ACTIVE,
+                    budget.max_model_calls,
+                    budget.max_tool_calls,
+                    budget.max_duration_seconds,
+                    now,
+                    now,
+                ),
             )
-            if decision.action == TriageAction.DEFER:
-                available_at = (now_dt + timedelta(seconds=decision.defer_seconds or 1.0)).isoformat()
-                connection.execute(
-                    "UPDATE inbox_events SET status='DEFERRED', batch_id=NULL, available_at=?, updated_at=? "
-                    "WHERE batch_id=?",
-                    (available_at, now, batch.batch_id),
-                )
-                return None
-            if decision.action == TriageAction.DISCARD:
-                connection.execute("DELETE FROM inbox_events WHERE batch_id = ?", (batch.batch_id,))
-                return None
-            task_id = self._create_admitted_task(
+            events = _event_projection(batch.events)
+            connection.execute(
+                "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, 0, ?, ?, ?, ?)",
+                (
+                    agent_id,
+                    task_id,
+                    triage_profile,
+                    "triage",
+                    AgentStatus.READY,
+                    _json({"batch_events": events}),
+                    now,
+                    now,
+                    summary,
+                ),
+            )
+            self._insert_message(
                 connection,
-                batch,
-                decision,
-                rows,
-                root_profile=root_profile,
-                interactive_budget=interactive_budget,
-                autonomous_budget=autonomous_budget,
+                task_id=task_id,
+                target_agent_id=agent_id,
+                message_type="task.started",
+                payload={"batch": batch.to_dict()},
+                causation_id=batch.batch_id,
+                correlation_id=task_id,
                 priority=priority,
                 now=now,
             )
-            connection.execute("DELETE FROM inbox_events WHERE batch_id = ?", (batch.batch_id,))
-            return task_id
-
-    def _create_admitted_task(
-        self,
-        connection: Any,
-        batch: TriageBatch,
-        decision: TriageDecision,
-        rows: list[Any],
-        *,
-        root_profile: str,
-        interactive_budget: TaskLimits,
-        autonomous_budget: TaskLimits,
-        priority: int,
-        now: str,
-    ) -> str:
-        task_id = str(uuid4())
-        agent_id = str(uuid4())
-        autonomous = all(str(row["type"]) == "system.tick" for row in rows)
-        budget = autonomous_budget if autonomous else interactive_budget
-        connection.execute(
-            "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
-            "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
-            "started_at, updated_at, termination_reason) "
-            "VALUES (?, ?, ?, ?, 'global', ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
-            (
-                task_id,
-                agent_id,
-                batch.batch_id,
-                batch.session_id,
-                decision.summary,
-                int(autonomous),
-                TaskStatus.ACTIVE,
-                budget.max_model_calls,
-                budget.max_tool_calls,
-                budget.max_duration_seconds,
-                now,
-                now,
-            ),
-        )
-        connection.execute(
-            "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, 0, '{}', ?, ?, ?)",
-            (agent_id, task_id, root_profile, decision.summary, AgentStatus.READY, now, now, decision.summary),
-        )
-        events = [
-            {
-                "event_id": event.event_id,
-                "type": event.type,
-                "summary": event.summary,
-                "source": event.source,
-                "data": event.data,
-                "created_at": event.created_at,
-            }
-            for event in batch.events
-        ]
-        payload = {"events": events, "triage": decision.to_dict()}
-        self._insert_message(
-            connection,
-            task_id=task_id,
-            target_agent_id=agent_id,
-            message_type="task.started",
-            payload=payload,
-            causation_id=batch.batch_id,
-            correlation_id=task_id,
-            priority=priority,
-            now=now,
-        )
-        self._insert_causal_event(
-            connection,
-            event_type="task.started",
-            summary=decision.summary,
-            payload={"event_ids": [event["event_id"] for event in events], "triage": decision.to_dict()},
-            task_id=task_id,
-            agent_id=agent_id,
-            causation_id=batch.batch_id,
-            correlation_id=task_id,
-            now=now,
-        )
-        return task_id
+            self._insert_causal_event(
+                connection,
+                event_type="task.started",
+                summary=summary,
+                payload={"batch_id": batch.batch_id, "event_ids": [event["event_id"] for event in events]},
+                task_id=task_id,
+                agent_id=agent_id,
+                causation_id=batch.batch_id,
+                correlation_id=task_id,
+                now=now,
+            )
+        return task_id, summary
 
     @staticmethod
     def _bounded_events(rows: list[Any], max_characters: int) -> tuple[InboxEvent, ...]:
@@ -327,3 +284,26 @@ class StoreTriageMixin(RuntimeStoreBase):
         if row is None or row[0] is None:
             return None
         return max(0.0, (datetime.fromisoformat(str(row[0])) - now).total_seconds())
+
+
+def _bounded_summary(events: tuple[InboxEvent, ...]) -> str:
+    """从批次事件拼接有界摘要，作为 Task 的 root_summary。"""
+    summary = "；".join(event.summary for event in events)
+    if len(summary) > _TRIAGE_SUMMARY_LIMIT:
+        summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
+    return summary or "Inbox event batch"
+
+
+def _event_projection(events: tuple[InboxEvent, ...]) -> list[dict[str, Any]]:
+    """批次事件的规范投影，供入口 agent 状态与委派传递复用。"""
+    return [
+        {
+            "event_id": event.event_id,
+            "type": event.type,
+            "summary": event.summary,
+            "source": event.source,
+            "data": event.data,
+            "created_at": event.created_at,
+        }
+        for event in events
+    ]

@@ -28,8 +28,6 @@ from src.contracts import (
     ToolCall,
     ToolOutcomeStatus,
     ToolRequest,
-    TriageAction,
-    TriageDecision,
     TriageLimits,
     new_amp,
 )
@@ -96,10 +94,7 @@ async def _admit(state: EngineState, max_turns: int | None = None) -> PumpResult
     batches = await state.claim_triage_batches(8)
     admitted = []
     for batch in batches:
-        task_id = await state.apply_triage(
-            batch,
-            TriageDecision(TriageAction.PROCESS, batch.events[0].summary, "test"),
-        )
+        task_id = await state.create_triage_task(batch)
         if task_id is not None:
             admitted.append(task_id)
     result = await state.pump(max_turns)
@@ -543,7 +538,8 @@ def test_handler_context_cannot_mutate_canonical_authorization_state(tmp_path: P
         agent = state.get_agent(task.root_agent_id) if task is not None else None
         assert result.failed_message_ids
         assert task is not None and task.status == TaskStatus.ERROR
-        assert agent is not None and agent.state == {}
+        assert agent is not None and "forged" not in agent.state
+        assert isinstance(agent.state.get("batch_events"), list)
         assert state._profiles["gate"].capabilities == canonical_profile.capabilities == frozenset({"test.*"})
 
     try:

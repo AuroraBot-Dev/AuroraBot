@@ -122,12 +122,13 @@ def test_unknown_mcp_keys_and_invalid_env_names_are_rejected(project_root: Path)
 
 def test_prompt_agent_ids_do_not_collide_with_system_sections(project_root: Path) -> None:
     agents = project_root / "config" / "agents.toml"
-    agents.write_text(agents.read_text(encoding="utf-8").replace('id = "builtin.gate"', 'id = "soul"', 1))
+    renamed = agents.read_text(encoding="utf-8").replace("builtin.gate", "soul")
+    agents.write_text(renamed)
     prompts = project_root / "config" / "prompts.toml"
     prompts.write_text(prompts.read_text(encoding="utf-8").replace('"builtin.gate"', '"soul"'))
     engine = project_root / "config" / "engine.toml"
     engine.write_text(
-        engine.read_text(encoding="utf-8").replace('root_profile = "builtin.gate"', 'root_profile = "soul"')
+        engine.read_text(encoding="utf-8").replace('root_profile = "builtin.triage"', 'root_profile = "soul"')
     )
 
     configuration = load_configuration(project_root)

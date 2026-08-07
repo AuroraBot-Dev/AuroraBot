@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from src.agents.triage import StructuredTriagePolicy
 from src.contracts import (
     AgentContext,
     AgentDecision,
@@ -70,7 +69,6 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
             configuration,
             {profile.id: _CompletingHandler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
         )
         engine.bind_tool_executors(())
         try:
@@ -138,7 +136,6 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             configuration,
             {profile.id: Handler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
             memory_store=Memory(),
         )
         engine.bind_tool_executors(())
@@ -210,7 +207,6 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
             configuration,
             {profile.id: ModelRequestingHandler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
         )
         engine.bind_tool_executors(())
         try:
@@ -270,7 +266,6 @@ def test_engine_writes_session_jsonl_log(tmp_path: Path) -> None:
             configuration,
             {profile.id: _CompletingHandler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
         )
         engine.bind_tool_executors(())
         try:
