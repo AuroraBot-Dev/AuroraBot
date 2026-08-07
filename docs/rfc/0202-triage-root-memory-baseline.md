@@ -1,8 +1,10 @@
 # 0202：Triage、Root 与压缩记忆基线
 
-状态：已接受
+状态：已接受（TriagePolicy 与 admit 路径已被 RFC 0209 取代）
 日期：2026-07-29
 来源：取代 RFC 0200 的逐 AMP Task 摄入与 situation claim，取代 RFC 0201 的原始最近对话注入
+> 注：RFC 0209 将无工具 TriagePolicy 与特殊 admit 路径替换为同构的入口 triage agent；
+> 本 RFC 的防抖批次、三层信息存储、Prompt 形状与留存语义仍然有效。
 
 ## 问题
 

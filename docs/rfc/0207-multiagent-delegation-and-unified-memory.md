@@ -1,8 +1,10 @@
 # 0207：Multiagent 委派链与同源记忆
 
-状态：已接受
+状态：已接受（注意力 agent 的承载形态已被 RFC 0209 取代）
 日期：2026-08-07
 来源：固化 RFC 0202 的 Triage→Root→子代理拓扑为三级认知角色，并为记忆补充唯一缺失的主动写入路径；先决条件是 RFC 0202 的三层信息存储与 RFC 0205 的类型化 AgentDecision
+> 注：RFC 0209 将注意力 agent 从 `StructuredTriagePolicy` 改为同构的入口 triage agent；
+> 本 RFC 的委派链、全员被动记忆与记忆同源语义不变。
 
 ## 问题
 

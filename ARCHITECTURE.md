@@ -187,7 +187,7 @@ graph TD
 | **适配层**   | `src/platform`  | Dashboard / MCP / NoneBot 外部生态协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
 | **模型层**   | `src/ai`        | 宽泛模型网关。实现 `ModelProvider` Port                                                            | contracts · utils          |
 | **记忆层**   | `src/memory`    | 有界会话摘要与长期事实投影。实现 `MemoryStore` Port                                                | contracts · utils          |
-| **认知层**   | `src/agents`    | Triage policy、同构 Agent handler + 主动能力（delegate / wait / speech）                           | prompt · contracts · utils |
+| **认知层**   | `src/agents`    | Triage 入口 agent、同构 Agent handler + 主动能力（delegate / wait / speech / memory）            | prompt · contracts · utils |
 | **配置层**   | `src/config`    | TOML 加载、校验、注册中心与热重载                                                                  | contracts                  |
 | **提示词层** | `src/prompt`    | 提示词目录、分层 DTO 与模型上下文装配                                                              | contracts                  |
 | **契约层**   | `src/contracts` | **所有**跨层共享的不可变 dataclass 与 Port Protocol                                                | 仅标准库                   |

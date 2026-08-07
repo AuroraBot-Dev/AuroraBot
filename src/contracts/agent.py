@@ -99,7 +99,7 @@ class TaskLimits:
 
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
-    root_profile: str = "builtin.root"
+    root_profile: str = "builtin.triage"
     worker_profile: str = "builtin.worker"
     max_active_agents: int = 16
     max_agents_per_task: int = 8

@@ -74,9 +74,9 @@ class PromptComposer:
 
 def _message_text(context: AgentContext) -> str:
     payload = context.message.payload
-    events = payload.get("events")
-    if context.message.type == "task.started" and isinstance(events, list):
-        admitted = {"triage": payload.get("triage"), "events": events}
+    if context.message.type == "task.started" and isinstance(payload.get("batch"), dict):
+        # 入口 triage Task 的批次投影（RFC 0209）；TriageAgent 自构请求，此分支供通用渲染兜底
+        admitted = {"events": payload["batch"].get("events", [])}
         return _Msg.ADMITTED_EVENTS.format(content=_external(admitted))
     if context.message.type == "agent.assigned" and isinstance(payload.get("context_events"), list):
         # 入口 agent 委派时把有界批次投影交给本体意识（RFC 0209）

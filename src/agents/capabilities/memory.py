@@ -47,7 +47,7 @@ class MemoryCapability:
         content = call.arguments.get("content")
         if not isinstance(content, str) or not content.strip():
             return AgentDecision(failure=_Msg.CONTENT_REQUIRED)
-        raw_facts = call.arguments.get("fact_candidates", ())
+        raw_facts = call.arguments.get("fact_candidates") or []
         if not isinstance(raw_facts, list) or any(not isinstance(item, str) for item in raw_facts):
             return AgentDecision(failure=_Msg.FACT_CANDIDATES_INVALID)
         parameters: dict[str, object] = {"content": content}

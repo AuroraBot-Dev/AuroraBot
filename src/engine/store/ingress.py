@@ -1,8 +1,8 @@
 """工具回执处理与 Agent 邮箱消息租赁。
 
-Triage 前的 AMP 摄入与 admitted Task 创建位于 store/triage.py：
 - complete_tool_activity：消费工具回执，推导事件前后因果
 - claim_message：按 Agent 状态匹配邮箱消息供处理
+（入口 triage Task 创建位于 store/triage.py，RFC 0209）
 """
 
 from __future__ import annotations

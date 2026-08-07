@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 from src.agents.capabilities.memory import MemoryCapability
 from src.contracts import (
     MEMORY_REMEMBER_CAPABILITY,
+    AgentDecision,
     MemoryEntry,
     MemoryQuery,
     ToolCall,
@@ -117,6 +118,9 @@ def test_capability_builds_tool_request_and_validates() -> None:
     assert decision.tool_request.parameters == {"content": "记住 X", "fact_candidates": ["X"]}
     rejected = capability.handle_tool(ToolCall("call-2", MEMORY_REMEMBER_CAPABILITY, {}))
     assert rejected is not None and rejected.failure is not None
+    without_facts = capability.handle_tool(ToolCall("call-3", MEMORY_REMEMBER_CAPABILITY, {"content": "记住 Y"}))
+    assert without_facts is not None and without_facts.tool_request is not None
+    assert without_facts.tool_request.parameters == {"content": "记住 Y"}
 
 
 def test_memory_descriptor_schema_requires_content() -> None:
@@ -130,3 +134,130 @@ def test_capability_allowed_exclusion_overrides_wildcard() -> None:
     assert _capability_allowed("org.aurora.mcp.clock.read", allowed)
     assert not _capability_allowed(MEMORY_REMEMBER_CAPABILITY, allowed)
     assert _capability_allowed(MEMORY_REMEMBER_CAPABILITY, frozenset({MEMORY_REMEMBER_CAPABILITY}))
+
+
+def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) -> None:
+    """RFC 0207 全链路：本体意识委派记忆 agent → 工具请求 → executor 写入同一 SQLite。"""
+    from src.agents.capabilities import DelegationCapability, MemoryCapability
+    from src.agents.handler import ToolAgent
+    from src.agents.triage import TriageAgent
+    from src.contracts import (
+        AgentLimits,
+        AgentProfile,
+        DelegationRequest,
+        EngineConfiguration,
+        TaskLimits,
+        ToolExecutorBinding,
+        TriageLimits,
+        new_amp,
+    )
+    from src.engine.runtime import AgentEngine
+    from src.prompt import PromptCatalog, PromptComposer
+    from tests.support import TriageModelProvider
+
+    memory = MemoryService(tmp_path / "memory")
+    catalog = PromptCatalog.create(
+        soul="soul", world="world", agents={"gate": "gate", "memory": "memory", "worker": "worker"}
+    )
+    capabilities = (DelegationCapability(), MemoryCapability())
+    composer = PromptComposer(catalog)
+    gate = ToolAgent(composer=composer, capabilities=capabilities)
+    memory_agent = ToolAgent(composer=composer, capabilities=capabilities)
+
+    class GateHandler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "agent.assigned" and not context.children:
+                return AgentDecision(delegations=(DelegationRequest("记住：用户偏好简洁", "memory"),))
+            return gate.handle(context)
+
+    class MemoryHandler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "agent.assigned":
+                decision = MemoryCapability().handle_tool(
+                    ToolCall("memory-call", MEMORY_REMEMBER_CAPABILITY, {"content": "用户偏好简洁"})
+                )
+                assert decision is not None
+                return decision
+            return memory_agent.handle(context)
+
+    profiles = (
+        AgentProfile(
+            "triage",
+            "test",
+            "fast",
+            frozenset(),
+            can_delegate=True,
+            child_profiles=frozenset({"gate"}),
+            triage_control=True,
+        ),
+        AgentProfile(
+            "gate",
+            "test",
+            "quality",
+            frozenset({"*", "!aurora.memory.remember"}),
+            can_delegate=True,
+            child_profiles=frozenset({"worker", "memory"}),
+        ),
+        AgentProfile(
+            "worker",
+            "test",
+            "quality",
+            frozenset({"*", "!aurora.memory.remember"}),
+            can_delegate=True,
+            child_profiles=frozenset({"worker"}),
+        ),
+        AgentProfile(
+            "memory",
+            "test",
+            "quality",
+            frozenset({MEMORY_REMEMBER_CAPABILITY}),
+            can_delegate=False,
+            child_profiles=frozenset(),
+        ),
+    )
+    configuration = EngineConfiguration(
+        str(tmp_path / "engine"),
+        profiles,
+        AgentLimits(root_profile="triage", worker_profile="worker"),
+        TaskLimits(8, 8, 300),
+        TaskLimits(8, 8, 120),
+        TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+    )
+    engine = AgentEngine(
+        configuration,
+        {"triage": TriageAgent(), "gate": GateHandler(), "worker": gate, "memory": MemoryHandler()},
+        model_provider=TriageModelProvider(),
+        memory_store=memory,
+    )
+    engine.bind_tool_executors(
+        (ToolExecutorBinding(MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor(memory), "memory", "local"),)
+    )
+
+    async def scenario() -> None:
+        await engine.submit_amp(
+            new_amp(
+                event_type="message.received",
+                session_id="session",
+                summary="hello",
+                data={"text": "hello"},
+                source_app="test",
+                source_instance="local",
+            ).to_dict()
+        )
+        await asyncio.sleep(0.001)
+        result = await engine.pump()
+        task_id = result["admitted_task_ids"][0]
+        for _ in range(16):
+            detail = engine.task_detail(task_id)
+            if detail is None or detail["task"]["status"] != "ACTIVE":
+                break
+            await engine.pump()
+
+        # 记忆 agent 完成后，主动写入应已落库（同源 SQLite）
+        recalled = memory.recall(MemoryQuery("简洁", "session", fact_limit=4))
+        assert "用户偏好简洁" in recalled.session_summary
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        asyncio.run(engine.shutdown())
