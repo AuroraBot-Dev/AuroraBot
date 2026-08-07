@@ -51,7 +51,7 @@ def test_cli_passes_each_exact_platform_set_once(
         calls.append((platforms, headless))
 
     monkeypatch.setattr("aurora.runtime.run_runtime", execute)
-    assert run(flags) == 0
+    assert run(["start", *flags]) == 0
     assert calls == [(expected_platforms, expected_headless)]
 
 
@@ -62,14 +62,14 @@ def test_cli_uses_preference_selection_when_no_platform_flag_is_present(monkeypa
         calls.append(platforms)
 
     monkeypatch.setattr("aurora.runtime.run_runtime", execute)
-    assert run([]) == 0
+    assert run(["start"]) == 0
     assert calls == [None]
 
 
 @pytest.mark.parametrize("platform", ("unknown", "console,mcp"))
 def test_cli_rejects_unknown_platform_names(platform: str) -> None:
     with pytest.raises(SystemExit) as raised:
-        run(["--platform", platform])
+        run(["start", "--platform", platform])
     assert raised.value.code == 2
 
 
@@ -87,5 +87,21 @@ def test_check_does_not_enter_runtime_composition(monkeypatch: pytest.MonkeyPatc
 
 def test_cli_registers_only_the_public_quality_command() -> None:
     parser = build_parser()
-    assert parser.parse_args([]).profile is None
     assert parser.parse_args(["check"]).command == "check"
+    assert parser.parse_args(["start"]).command == "start"
+
+
+def test_cli_without_command_shows_usage_only() -> None:
+    with pytest.raises(SystemExit) as raised:
+        build_parser().parse_args([])
+    assert raised.value.code == 2
+
+
+def test_cli_without_command_does_not_start_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def execute(platforms: frozenset[str] | None, *, headless: bool = False) -> None:  # noqa: ARG001
+        pytest.fail("bare aurora entered runtime composition")
+
+    monkeypatch.setattr("aurora.runtime.run_runtime", execute)
+    with pytest.raises(SystemExit) as raised:
+        run([])
+    assert raised.value.code == 2

@@ -3,49 +3,33 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aurora.registry import register_commands
 from src.config import init as init_config
-from src.contracts.configuration import PLATFORM_NAMES
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-def _execute_runtime(arguments: argparse.Namespace) -> int:
-    """根据解析后的参数启动 Aurora 运行时。"""
-    from aurora.runtime import run_runtime
-
-    asyncio.run(run_runtime(arguments.platforms, headless=arguments.headless))
-    return 0
-
-
 def build_parser() -> argparse.ArgumentParser:
-    """构建包含所有 Aurora 子命令的顶层参数解析器。"""
+    """构建包含所有 Aurora 子命令的顶层参数解析器。
+
+    顶层不承载任何执行行为：裸 ``aurora`` 只展示用法，具体命令通过子命令分发。
+    """
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置与数据根目录")
     parser.add_argument("--profile", type=str, default=None, help="配置运行档案")
-    parser.add_argument("--headless", action="store_true", help="启用无头模式")
-    parser.add_argument(
-        "--platform", action="append", choices=sorted(PLATFORM_NAMES), metavar="NAME", help="启用指定平台"
-    )
-    register_commands(parser.add_subparsers(dest="command"))
-    parser.set_defaults(executor=_execute_runtime)
+    register_commands(parser.add_subparsers(dest="command", required=True))
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    """解析命令行参数、加载配置、验证平台组合并分发到对应执行器。"""
+    """解析命令行参数、加载配置并分发到对应子命令执行器。"""
     parser = build_parser()
     arguments = parser.parse_args(argv)
-    selected = frozenset(arguments.platform or ())
-    if arguments.command == "check" and (arguments.headless or selected):
-        parser.error("platform selection options cannot be used with check")
-    arguments.platforms = selected or None
     if arguments.command != "check":
         init_config(arguments.root, arguments.profile)
     return arguments.executor(arguments)

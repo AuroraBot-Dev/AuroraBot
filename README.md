@@ -65,17 +65,17 @@ uv sync --no-dev
 Copy-Item .env.example .env
 
 # 在 .env 中填写默认配置所需的 DEEPSEEK_API_KEY
-uv run --no-dev --env-file .env aurora
+uv run --no-dev --env-file .env aurora start
 ```
 
 启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
 
 ```powershell
 # 使用 config/platforms.toml 中的默认平台组合
-uv run --no-dev --env-file .env aurora
+uv run --no-dev --env-file .env aurora start
 
 # 无头模式：不启动本地 Console，平台组合不变
-uv run --no-dev --env-file .env aurora --headless
+uv run --no-dev --env-file .env aurora start --headless
 ```
 
 本地 Console 不随 `--platform` 选择启停：只要不是无头模式且 `[runtime.console].enabled = true`，它就会运行。
