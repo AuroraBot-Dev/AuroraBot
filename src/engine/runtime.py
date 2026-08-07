@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,7 @@ from src.contracts import (
     AgentHandler,
     AgentInstance,
     AgentLimits,
+    AgentMessage,
     AmpEnvelope,
     CapabilityCatalogSnapshot,
     EngineConfiguration,
@@ -59,6 +61,31 @@ class _Msg(StrEnum):
     MAX_TURNS_POSITIVE = "max_turns must be positive"
     INVALID_TOOL_OUTCOME = "invalid Tool outcome"
     TOOL_COMPLETION_UNMATCHED = "Tool completion does not match an active request: {request_id}"
+
+
+def _memory_turn_input(message: AgentMessage) -> str:
+    """从消息投影提取记忆窗口的 user 侧文本（RFC 0216）。"""
+    payload = message.payload
+    for key in ("batch", "context_events"):
+        container = payload.get(key)
+        if isinstance(container, dict):
+            container = container.get("events")
+        if isinstance(container, list):
+            summaries = [
+                str(item.get("summary", "")) for item in container if isinstance(item, dict) and item.get("summary")
+            ]
+            if summaries:
+                return "；".join(summaries)
+    if isinstance(payload.get("instruction"), str):
+        return payload["instruction"]
+    if message.type.startswith("tool."):
+        request = payload.get("request")
+        if isinstance(request, dict):
+            return f"{message.type}: {request.get('parameters', {})}"
+        return message.type
+    if isinstance(payload.get("summary"), str) and payload["summary"].strip():
+        return payload["summary"]
+    return message.type
 
 
 class AgentEngine:
@@ -263,8 +290,11 @@ class AgentEngine:
                 break
             message, agent, task = claim
             try:
+                self._append_memory_turn(task.session_id, "user", _memory_turn_input(message))
                 decision, profile_id = handle_claim(self, message, agent, task)
                 apply_authorized_decision(self, message, agent, profile_id, decision)
+                if decision.completion is not None:
+                    self._append_memory_turn(task.session_id, "assistant", decision.completion.summary)
                 processed.append(message.message_id)
             except Exception as error:
                 logger.log(
@@ -281,6 +311,17 @@ class AgentEngine:
                     self.store.fail_message(message.message_id, str(error))
                 failed.append(message.message_id)
         return processed, failed
+
+    def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
+        """记录一轮对话到记忆窗口（RFC 0216 短期历史）。"""
+        if self._memory_store is None or not content.strip():
+            return
+        self._memory_store.append_turn(
+            scope,
+            role=role,
+            content=content,
+            at=datetime.now(UTC).isoformat(),
+        )
 
     def _project_memory(self) -> None:
         if self._memory_store is None:

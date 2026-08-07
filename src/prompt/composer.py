@@ -22,6 +22,7 @@ class _Msg(StrEnum):
     EXTERNAL_DATA = '<external-data encoding="json">\n{encoded}\n</external-data>'
     LOCAL_WORK = "当前局部工作：\n{content}"
     MISSING_AGENT_PROMPT = "missing prompt for Agent profile {profile_id}"
+    MEMORY_WINDOW = "[ 最近对话 ]\n{content}"
     RELEVANT_FACTS = "[ 相关长期事实 ]\n{content}"
     SESSION_MEMORY = "[ 会话摘要 ]\n{content}"
     TOOL_RESULT = "工具返回 {status}：\n{content}"
@@ -48,11 +49,20 @@ class PromptComposer:
             system.append(PromptSection("soul", self._catalog.soul))
         system.extend((PromptSection("world", self._catalog.world), PromptSection("agent_profile", agent_prompt)))
         memory: list[PromptSection] = []
-        if context.memory.session_summary.strip():
+        if context.memory.summary.strip():
             memory.append(
                 PromptSection(
                     "session_memory",
-                    _Msg.SESSION_MEMORY.format(content=_external(context.memory.session_summary)),
+                    _Msg.SESSION_MEMORY.format(content=_external(context.memory.summary)),
+                )
+            )
+        if context.memory.window:
+            memory.append(
+                PromptSection(
+                    "memory_window",
+                    _Msg.MEMORY_WINDOW.format(
+                        content=_external([f"{item.role}: {item.content}" for item in context.memory.window])
+                    ),
                 )
             )
         if context.memory.relevant_facts:

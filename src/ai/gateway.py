@@ -261,6 +261,27 @@ class ModelGatewayService:
         await self._ensure_initialized()
         return await get_modalities_by_id(self._models[role])
 
+    def embed_sync(self, texts: list[str]) -> list[list[float]]:
+        """同步 embedding（供记忆引擎的 mem0 自定义嵌入函数调用，RFC 0216）。"""
+        import litellm
+
+        from src.ai.providers import resolve_model
+
+        model_id = self._models.get("embedding")
+        if not model_id:
+            return []
+        resolved, provider_kwargs = resolve_model(model_id)
+        response = litellm.embedding(model=resolved, input=texts, **provider_kwargs)
+        data = response.get("data") if isinstance(response, dict) else getattr(response, "data", None)
+        if not isinstance(data, list):
+            return []
+        vectors: list[list[float]] = []
+        for item in data:
+            embedding = item.get("embedding") if isinstance(item, dict) else getattr(item, "embedding", None)
+            if isinstance(embedding, list):
+                vectors.append([float(value) for value in embedding])
+        return vectors
+
     def export_openai_client(self) -> Any:
         """导出 litellm 的 OpenAI 兼容 client，供 mem0 等外部库使用。
 

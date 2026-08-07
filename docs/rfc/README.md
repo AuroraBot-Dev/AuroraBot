@@ -20,6 +20,7 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 14. [0213 模型通道收敛与角色钩子](0213-model-channel-convergence.md) - 统一 chat_completions、协商简化、能力基线 + adapt_request
 15. [0214 角色域自洽](0214-role-domain-self-contained.md) - 每个角色自包含实现、共享纯函数收敛
 16. [0215 AI 包外部接口](0215-ai-external-surface.md) - get_response 脱壳输出、词嵌入角色、模态查询、费用统计、导出 OpenAI client
+17. [0216 记忆引擎](0216-memory-engine.md) - 窗口+LLM 概要（短期）、mem0 长期记忆、MemoryStore 契约扩展
 
 ## 规范优先级
 

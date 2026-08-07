@@ -84,9 +84,9 @@ class TriageAgent(BaseAgent):
         if not isinstance(batch, dict):
             return self._fail_open(context, "missing_batch")
         payload: dict[str, object] = {"batch": batch}
-        if context.memory.session_summary or context.memory.relevant_facts:
+        if context.memory.summary or context.memory.relevant_facts:
             payload["memory"] = {
-                "session_summary": context.memory.session_summary,
+                "session_summary": context.memory.summary,
                 "relevant_facts": list(context.memory.relevant_facts),
             }
         return self._request_model(

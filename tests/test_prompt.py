@@ -209,7 +209,7 @@ def test_memory_sections_are_optional_and_removed_capability_is_absent() -> None
     context = replace(
         _context(),
         memory=MemoryContextSnapshot(
-            session_summary="用户问过 hello，Aurora 回答 hi",
+            summary="用户问过 hello，Aurora 回答 hi",
             relevant_facts=("remembered fact",),
         ),
     )

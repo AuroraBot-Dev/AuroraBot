@@ -1,4 +1,4 @@
-"""压缩会话记忆与长期事实的稳定契约。"""
+"""记忆引擎契约（RFC 0216）：窗口 + 概要（短期）与长期事实。"""
 
 from __future__ import annotations
 
@@ -20,10 +20,23 @@ class MemoryQuery:
 
 
 @dataclass(frozen=True, slots=True)
-class MemoryContextSnapshot:
-    """模型调用前固定下来的会话摘要与相关长期事实。"""
+class MemoryMessage:
+    """记忆窗口中的一条原始消息（RFC 0216 短期历史）。"""
 
-    session_summary: str = ""
+    role: str
+    content: str
+    at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryContextSnapshot:
+    """模型调用前固定下来的三层记忆：概要 + 窗口原文 + 长期事实。"""
+
+    summary: str = ""
+    window: tuple[MemoryMessage, ...] = ()
     relevant_facts: tuple[str, ...] = ()
 
 
@@ -40,8 +53,10 @@ class MemoryEntry:
 
 
 class MemoryStore(Protocol):
-    """engine 在 Root turn 前后调用的压缩记忆端口。"""
+    """engine 在 Agent turn 前后调用的记忆引擎端口（RFC 0216）。"""
 
     def recall(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 
     def remember(self, entry: MemoryEntry) -> bool: ...
+
+    def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None: ...

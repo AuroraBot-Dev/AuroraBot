@@ -25,8 +25,24 @@ if TYPE_CHECKING:
 
 def test_service_without_memory_dir_falls_back_to_empty_context() -> None:
     service = MemoryService()
-    assert service.recall(MemoryQuery("anything", "session")).session_summary == ""
+    recalled = service.recall(MemoryQuery("anything", "session"))
+    assert recalled.summary == ""
+    assert recalled.window == ()
     assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01"))
+
+
+def test_window_captures_recent_messages_and_summarizes_on_overflow(tmp_path: Path) -> None:
+    """RFC 0216：窗口记录最近消息；无网关时溢出以规则截断浓缩为概要。"""
+    service = MemoryService(tmp_path, max_window=3)
+    for index in range(1, 7):
+        service.append_turn("session", role="user", content=f"question {index}", at=f"2026-01-0{index}")
+
+    recalled = service.recall(MemoryQuery("", "session"))
+    # 窗口保留最近 3 条原文
+    assert [message.content for message in recalled.window] == ["question 4", "question 5", "question 6"]
+    # 溢出部分浓缩进概要（规则截断，无网关）
+    assert recalled.summary
+    assert "question 1" in recalled.summary
 
 
 def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) -> None:
@@ -40,26 +56,25 @@ def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) ->
         ("user prefers concise answers",),
     )
     duplicate = MemoryEntry("task-1", "session", "changed", "changed", "2026-01-03")
-    second = MemoryEntry("task-2", "session", "用户：second question", None, "2026-01-02")
     other = MemoryEntry("task-3", "other", "用户：other", "other answer", "2026-01-04")
 
     assert service.remember(first)
     assert not service.remember(duplicate)
-    assert service.remember(second)
     assert service.remember(other)
 
     recalled = service.recall(MemoryQuery("concise", "session", fact_limit=1))
-    assert "first question" in recalled.session_summary
-    assert "second question" in recalled.session_summary
-    assert "other answer" not in recalled.session_summary
+    assert "other answer" not in recalled.summary
     assert recalled.relevant_facts == ("user prefers concise answers",)
 
 
 def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
-    service = MemoryService(tmp_path)
-    assert service.remember(MemoryEntry("one", "session", "x" * 100, "y" * 100, "2026-01-01", ("z" * 100,)))
+    service = MemoryService(tmp_path, max_window=2)
+    service.append_turn("session", role="user", content="x" * 100, at="2026-01-01")
+    service.append_turn("session", role="assistant", content="y" * 100, at="2026-01-02")
     recalled = service.recall(MemoryQuery("query", "session", max_characters=32))
-    assert len(recalled.session_summary) + sum(map(len, recalled.relevant_facts)) <= 32
+    # 概要裁剪到预算（窗口原文不裁剪，属设计语义）
+    assert len(recalled.summary) + sum(map(len, recalled.relevant_facts)) <= 32
+    assert len(recalled.window) == 2
 
 
 class _ReceiptIngress:
@@ -92,8 +107,7 @@ def test_executor_writes_memory_and_submits_receipt(tmp_path: Path) -> None:
     asyncio.run(executor.execute_tool(request))
     assert _receipt_of(ingress.amps[0])["type"] == "tool.succeeded"
     recalled = service.recall(MemoryQuery("简洁", "session", fact_limit=4))
-    assert "用户偏好简洁回答" in recalled.session_summary
-    assert recalled.relevant_facts == ("用户偏好简洁回答",)
+    assert "用户偏好简洁回答" in recalled.relevant_facts
 
 
 def test_executor_submits_failed_receipt_for_missing_content(tmp_path: Path) -> None:
@@ -260,7 +274,7 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
         # 记忆 agent 完成后，主动写入应已落库（同源 SQLite）
         await asyncio.sleep(0)
         recalled = memory.recall(MemoryQuery("简洁", "session", fact_limit=4))
-        assert "用户偏好简洁" in recalled.session_summary
+        assert any("用户偏好简洁" in item.content for item in recalled.window)
 
     try:
         asyncio.run(scenario())

@@ -60,7 +60,13 @@ from src.contracts.event import (
     OutputStreamPage,
     RuntimeInput,
 )
-from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery, MemoryStore
+from src.contracts.memory import (
+    MemoryContextSnapshot,
+    MemoryEntry,
+    MemoryMessage,
+    MemoryQuery,
+    MemoryStore,
+)
 from src.contracts.model import (
     STRUCTURED_OUTPUT_NAME,
     CancelPolicy,
@@ -158,6 +164,7 @@ __all__ = [
     "McpPreference",
     "MemoryContextSnapshot",
     "MemoryEntry",
+    "MemoryMessage",
     "MemoryQuery",
     "MemoryStore",
     "MessageStatus",

@@ -109,6 +109,9 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             events.append(("remember", entry))
             return True
 
+        def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:  # noqa: ARG002
+            events.append(("append_turn", role))
+
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:
             events.append(("handler", context.task.root_summary))
@@ -153,7 +156,8 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             interactive = await engine.pump()
             await asyncio.sleep(0)  # 让异步记忆投影任务执行（RFC 0210 单循环）
             interactive_id = interactive["admitted_task_ids"][0]
-            assert [name for name, _value in events[:2]] == ["recall", "handler"]
+            # RFC 0216：user 窗口写入 → recall → handler → assistant 窗口写入
+            assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert [entry.task_id for entry in remembered if isinstance(entry, MemoryEntry)] == [interactive_id]
             recalled = next(value for name, value in events if name == "recall")
@@ -172,7 +176,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             )
             autonomous = await engine.pump()
             autonomous_id = autonomous["admitted_task_ids"][0]
-            assert [name for name, _value in events[:2]] == ["recall", "handler"]
+            assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert all(isinstance(entry, MemoryEntry) and entry.task_id != autonomous_id for entry in remembered)
         finally:

@@ -187,11 +187,11 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         autonomous_budget=configuration.engine.autonomous_budget,
         triage=configuration.engine.triage,
     )
-    memory = MemoryService(configuration.storage.memory)
     composer = PromptComposer(PromptCatalog.from_config(configuration.prompts))
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     model_gateway = ModelGatewayService(configuration)
+    memory = MemoryService(configuration.storage.memory, gateway=model_gateway)
     engine = AgentEngine(
         engine_configuration,
         handlers,
