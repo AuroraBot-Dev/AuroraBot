@@ -11,14 +11,21 @@ from enum import StrEnum
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from mcp import types
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared.exceptions import McpError
 
 from src.contracts.agent import CapabilityCatalogSnapshot, CapabilityDescriptor
 from src.contracts.amp import new_amp
 from src.contracts.configuration import AppConfig, AuroraConfig
 from src.contracts.ports import ExternalAmpIngressPort
 from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
-from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
+from src.platform.mcp.client_manager import (
+    MCPClientManager,
+    MCPToolCallError,
+    MCPToolRejectedError,
+    _NotifiableClientSession,
+)
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
 from src.utils.logging import get_logger
@@ -38,7 +45,6 @@ class _Msg(StrEnum):
     DUPLICATE_CAPABILITY = "MCP capability 重复: {capability}"
     REMOTE_SESSION_UNAVAILABLE = "远程 MCP 会话不可用: {package}"
     CONNECTION_LOST = "MCP 连接意外终止"
-    MISSING_ENV = "MCP App {package} 缺少环境变量: {names}"
 
 
 @dataclass(slots=True)
@@ -62,12 +68,7 @@ class MCPPlatform:
     """
 
     def __init__(self, configuration: AuroraConfig, *, terminal_logs: bool = True) -> None:
-        """初始化 MCP 平台。
-
-        Args:
-            configuration: Aurora 核心配置（含 apps 列表）。
-            terminal_logs: 是否将 MCP Server stderr 输出到终端。
-        """
+        """初始化 MCP 平台及其连接状态。"""
         self._configuration = configuration
         self._kit = MCPServerKit(terminal_logs=terminal_logs)
         self._clients = MCPClientManager(self._kit)
@@ -90,7 +91,7 @@ class MCPPlatform:
         2. 建立客户端连接并刷新工具列表
         3. 连接远程 HTTP Server
         4. 发现并注册所有能力
-        5. 启动内置心跳和通知转发任务
+        5. 启动内置心跳
 
         Args:
             ingress: 外部 AMP 事件入口，用于转发 MCP 通知。
@@ -104,6 +105,7 @@ class MCPPlatform:
             raise RuntimeError(_Msg.SHUTDOWN_RESTART_DENIED)
         self._ingress = ingress
         try:
+            self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
             local_apps = [app for app in self._configuration.apps if app.transport == "stdio"]
             await self._kit.start_all([self._local_spec(app) for app in local_apps])
             await self._clients.connect_all({app.package: app.timeout_seconds for app in local_apps})
@@ -116,7 +118,6 @@ class MCPPlatform:
                 await asyncio.gather(*remote_tasks)
             self._catalog = self._discover_capabilities()
             await self._start_builtin_heartbeat()
-            self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
             self._started = True
         except BaseException:
             await self.shutdown()
@@ -151,17 +152,7 @@ class MCPPlatform:
         return self._catalog
 
     def source_instance_for(self, capability: str) -> str:
-        """根据能力 ID 反查其所属的 App package。
-
-        Args:
-            capability: 能力 ID（格式 ``package.raw_name``）。
-
-        Returns:
-            所属 App 的 package 字符串。
-
-        Raises:
-            ValueError: 若能力 ID 未知。
-        """
+        """根据能力 ID 反查其所属的 App package。"""
         binding = self._tool_bindings.get(capability)
         if binding is None:
             raise ValueError(_Msg.UNKNOWN_CAPABILITY.format(capability=capability))
@@ -174,10 +165,7 @@ class MCPPlatform:
         为内置时钟应用注入心跳节律参数（由运行时 autonomy 配置控制）。
         """
         environment = {"AURORA_APP_DATA_DIR": str(self._configuration.storage.apps)}
-        missing = [name for name in app.env_vars if name not in os.environ]
-        if missing:
-            raise RuntimeError(_Msg.MISSING_ENV.format(package=app.package, names=", ".join(missing)))
-        environment.update({name: os.environ[name] for name in app.env_vars})
+        environment.update({name: os.environ[name] for name in app.env_vars if name in os.environ})
         if app.package == "org.aurora.clock":
             autonomy = self._configuration.engine.autonomy
             environment.update(
@@ -329,6 +317,12 @@ class MCPPlatform:
         try:
             result = await self._call_tool(package, raw_name, request.parameters)
         except Exception as error:
+            if isinstance(error, MCPToolRejectedError) or (
+                isinstance(error, McpError) and error.error.code != types.CONNECTION_CLOSED
+            ):
+                return ToolOutcome(
+                    ToolOutcomeStatus.FAILED, f"MCP Tool 执行失败: {request.capability}", error=str(error)
+                )
             logger.exception(
                 "MCP Tool 结果未知 request_id=%s capability=%s error_type=%s",
                 request.request_id,
@@ -424,7 +418,13 @@ class MCPPlatform:
             identity = raw_event.get("idempotency_key")
             if not isinstance(identity, str) or not identity:
                 identity = json.dumps(raw_event, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
-            message_id = str(uuid5(NAMESPACE_URL, f"aurora-mcp-event:{package}:{identity}"))
+            identity = json.dumps(
+                {"package": package, "type": event_type, "session_id": session_id, "key": identity},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            message_id = str(uuid5(NAMESPACE_URL, f"aurora-mcp-event:{identity}"))
         else:
             if not isinstance(method, str) or not method or not isinstance(params, dict):
                 return

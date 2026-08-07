@@ -67,6 +67,26 @@ def test_profile_cannot_escape_profile_directory(project_root: Path) -> None:
     with pytest.raises(ConfigurationError, match="simple name"):
         load_configuration(project_root, "/tmp/external")
 
+    profile = project_root / "config" / "profiles" / "dev.toml"
+    external = project_root / "external.toml"
+    external.write_bytes(profile.read_bytes())
+    profile.unlink()
+    profile.symlink_to(external)
+    with pytest.raises(ConfigurationError, match="simple name"):
+        load_configuration(project_root, "dev")
+
+
+def test_profile_directory_symlink_and_empty_selector_are_rejected(project_root: Path) -> None:
+    with pytest.raises(ConfigurationError, match="simple name"):
+        load_configuration(project_root, "")
+
+    profiles = project_root / "config" / "profiles"
+    external = project_root / "external-profiles"
+    profiles.rename(external)
+    profiles.symlink_to(external, target_is_directory=True)
+    with pytest.raises(ConfigurationError, match="simple name"):
+        load_configuration(project_root, "dev")
+
 
 @pytest.mark.parametrize("value", ("nan", "inf", "-inf"))
 def test_non_finite_runtime_limits_are_rejected(project_root: Path, value: str) -> None:
@@ -94,6 +114,26 @@ def test_unknown_mcp_keys_and_invalid_env_names_are_rejected(project_root: Path)
     apps.write_text(apps.read_text(encoding="utf-8").replace("env = []", 'env = ["BAD-NAME"]', 1))
     with pytest.raises(ConfigurationError, match="environment variable names"):
         load_configuration(project_root)
+
+    apps.write_text(apps.read_text(encoding="utf-8").replace('env = ["BAD-NAME"]', 'env = [{ name = "X" }]'))
+    with pytest.raises(ConfigurationError, match="environment variable names"):
+        load_configuration(project_root)
+
+
+def test_prompt_agent_ids_do_not_collide_with_system_sections(project_root: Path) -> None:
+    agents = project_root / "config" / "agents.toml"
+    agents.write_text(agents.read_text(encoding="utf-8").replace('id = "builtin.gate"', 'id = "soul"', 1))
+    prompts = project_root / "config" / "prompts.toml"
+    prompts.write_text(prompts.read_text(encoding="utf-8").replace('"builtin.gate"', '"soul"'))
+    engine = project_root / "config" / "engine.toml"
+    engine.write_text(
+        engine.read_text(encoding="utf-8").replace('root_profile = "builtin.gate"', 'root_profile = "soul"')
+    )
+
+    configuration = load_configuration(project_root)
+    assert configuration.prompts.agents["soul"] != configuration.prompts.soul
+    qq = next(app for app in configuration.apps if app.package == "org.aurora.qq")
+    assert qq.env_vars == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
 
 
 @pytest.mark.parametrize(

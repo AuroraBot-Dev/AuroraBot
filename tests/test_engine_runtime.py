@@ -80,6 +80,7 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
                     source_instance="local",
                 ).to_dict()
             )
+            assert engine.status()["inbox_events"] == 1
             result = await engine.pump()
 
             assert message_id

@@ -11,7 +11,7 @@ import importlib
 import signal
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
@@ -30,26 +30,22 @@ from src.utils.uvicorn import SignalSafeServer
 
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig
-    from src.contracts.platform import PlatformFactory, PlatformHandle, PlatformServer
+    from src.contracts.platform import PlatformCleanup, PlatformFactory, PlatformHandle, PlatformServer
+    from src.contracts.tool import ToolExecutorBinding
 
 logger = get_logger("aurora.process")
 
+
 # -- 平台注册 ---------------------------------------------------------
-# 每个平台子包通过同名模块函数 _create(config, runtime) -> PlatformHandle 接入组合根。
-# 平台名单以 contracts 的 PLATFORM_NAMES 为准，新增平台无需修改组合根。
-_PLATFORM_CREATORS: dict[str, PlatformFactory] = {}
-
-
 def _init_platforms() -> dict[str, PlatformFactory]:
-    """一次性导入所有平台子包并将 _create 注册到本地映射。"""
-    if _PLATFORM_CREATORS:
-        return _PLATFORM_CREATORS
-    for name in sorted(PLATFORM_NAMES):
-        module = importlib.import_module(f"src.platform.{name}")
-        creator = getattr(module, "_create", None)
-        if creator is not None:
-            _PLATFORM_CREATORS[name] = cast("PlatformFactory", creator)
-    return _PLATFORM_CREATORS
+    """显式注册平台工厂，使签名漂移在静态检查阶段失败。"""
+    from src.platform.dashboard import _create as create_dashboard
+    from src.platform.mcp import _create as create_mcp
+
+    creators: dict[str, PlatformFactory] = {"dashboard": create_dashboard, "mcp": create_mcp}
+    if creators.keys() != PLATFORM_NAMES:
+        raise RuntimeError("platform factory registry does not match PlatformPreference")
+    return creators
 
 
 # -- 内部辅助类型 -----------------------------------------------------
@@ -57,6 +53,7 @@ def _init_platforms() -> dict[str, PlatformFactory]:
 
 _SERVER_GRACE_SECONDS = 10.0
 """平台 server 优雅退出的等待上限，超时后强制取消。"""
+_CANCEL_GRACE_SECONDS = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +90,7 @@ async def run_runtime(
     debug_server = _debug_server(runtime)
     failure: BaseException | None = None
     async with AsyncExitStack() as resources:
-        resources.push_async_callback(runtime.shutdown)
+        resources.push_async_callback(_run_cleanup, runtime.shutdown)
         installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
         try:
             handles = await _start_platforms_until_stop(runtime, selected, resources, stop)
@@ -210,7 +207,7 @@ async def _start_platforms(
     """
     creators = _init_platforms()
     handles: dict[str, PlatformHandle] = {}
-    all_bindings: list[Any] = []
+    all_bindings: list[ToolExecutorBinding] = []
 
     for name in sorted(selected):
         creator = creators.get(name)
@@ -220,7 +217,7 @@ async def _start_platforms(
         handles[name] = handle
         all_bindings.extend(handle.bindings)
         if handle.cleanup is not None:
-            resources.push_async_callback(handle.cleanup)
+            resources.push_async_callback(_run_cleanup, handle.cleanup)
 
     runtime.engine.bind_tool_executors(tuple(all_bindings))
     return handles
@@ -239,10 +236,7 @@ async def _start_platforms_until_stop(
         done, _pending = await asyncio.wait({startup, stop_task}, return_when=asyncio.FIRST_COMPLETED)
         return startup.result() if startup in done else None
     finally:
-        for task in (startup, stop_task):
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(startup, stop_task, return_exceptions=True)
+        await asyncio.gather(*(_cancel_task(task) for task in (startup, stop_task)))
 
 
 # -- 任务执行与停止 ----------------------------------------------------
@@ -287,21 +281,15 @@ async def _run_platform_tasks(
         done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return _task_failure(done, stop_task, stop)
     finally:
-        stop_task.cancel()
-        await asyncio.gather(stop_task, return_exceptions=True)
-        await asyncio.gather(
-            *(_stop_server(servers[name], task) for name, task in server_tasks.items()), return_exceptions=True
-        )
-        pending_tasks = (
-            *(task for task in platform_tasks.values()),
-            *(task for task in (console_task,) if task is not None),
-        )
-        for task in pending_tasks:
-            task.cancel()
-        await asyncio.gather(*pending_tasks, return_exceptions=True)
-        await _stop_server(debug_server, debug_task)
         stop.set()
-        await _await_task_exit(runtime_task)
+        await _cancel_task(stop_task)
+        await asyncio.gather(
+            *(_stop_server(servers[name], task) for name, task in server_tasks.items()),
+            *(_await_task_exit(task) for task in platform_tasks.values()),
+            *(_await_task_exit(task) for task in (console_task,) if task is not None),
+            _stop_server(debug_server, debug_task),
+            _await_task_exit(runtime_task),
+        )
 
 
 async def _wait_for_stop(stop: asyncio.Event) -> None:
@@ -330,7 +318,32 @@ async def _await_task_exit(task: asyncio.Task[None]) -> None:
         await asyncio.wait({task}, timeout=_SERVER_GRACE_SECONDS)
     if not task.done():
         task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+        await asyncio.wait({task}, timeout=_CANCEL_GRACE_SECONDS)
+    if task.done():
+        await asyncio.gather(task, return_exceptions=True)
+    else:
+        logger.error("task ignored cancellation task=%s", task.get_name())
+
+
+async def _cancel_task(task: asyncio.Task[Any]) -> None:
+    """取消任务并有界回收。"""
+    if not task.done():
+        task.cancel()
+        await asyncio.wait({task}, timeout=_CANCEL_GRACE_SECONDS)
+    if task.done():
+        await asyncio.gather(task, return_exceptions=True)
+    else:
+        logger.error("task ignored cancellation task=%s", task.get_name())
+
+
+async def _run_cleanup(cleanup: PlatformCleanup) -> None:
+    """在统一期限内执行资源清理回调。"""
+    task = asyncio.create_task(cleanup(), name="aurora-resource-cleanup")
+    await _await_task_exit(task)
+    if not task.done() or task.cancelled():
+        raise TimeoutError("resource cleanup did not finish")
+    if error := task.exception():
+        raise error
 
 
 def _task_failure(

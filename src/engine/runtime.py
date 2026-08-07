@@ -246,7 +246,6 @@ class IngressRuntime(Protocol):
     _archive: Path
     _session_log: SessionLog
     _profiles: dict[str, AgentProfile]
-    _amp_queue: list[Any]
 
     @property
     def limits(self) -> AgentLimits: ...
@@ -257,12 +256,6 @@ class IngressRuntime(Protocol):
 
 def ingest_ready(kernel: IngressRuntime) -> tuple[str, ...]:
     ingested: list[str] = []
-    while kernel._amp_queue:
-        amp = kernel._amp_queue.pop(0)
-        try:
-            _ingest_amp(kernel, amp, ingested)
-        except (ValueError, TypeError) as error:
-            logger.warning("AMP ingress rejected in-memory reason=%s", error)
     for p in sorted(kernel._inbox.glob("*.json")):
         try:
             amp = AmpEnvelope.parse(read_json(p))
@@ -284,6 +277,13 @@ def _ingest_amp(kernel: IngressRuntime, amp: AmpEnvelope, ingested: list[str]) -
     if kernel.store.enqueue_inbox(amp, kernel.configuration.triage):
         kernel._session_log.amp_in(amp)
         ingested.append(amp.header.message_id)
+
+
+def persist_amp(kernel: IngressRuntime, amp: AmpEnvelope) -> bool:
+    """在入口回执前将单个 AMP 幂等写入持久化 Inbox。"""
+    ingested: list[str] = []
+    _ingest_amp(kernel, amp, ingested)
+    return bool(ingested)
 
 
 def _ingest_amp_file(kernel: IngressRuntime, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
@@ -332,7 +332,6 @@ class EngineState:
         self._session_log = SessionLog(self._workspace / "sessions")
         for directory in (self._inbox, self._process, self._archive, self._task_archive):
             directory.mkdir(parents=True, exist_ok=True)
-        self._amp_queue: list[AmpEnvelope] = []
         reject_active_legacy_workspace(self._process)
         self._store_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aurora-sqlite-writer")
         self._turn_executor = ThreadPoolExecutor(
@@ -371,7 +370,7 @@ class EngineState:
 
     async def submit_amp(self, amp: AmpEnvelope) -> None:
         async with self._lock:
-            self._amp_queue.append(amp)
+            await self._store_call(persist_amp, self, amp)
 
     def _ingest_ready(self) -> tuple[str, ...]:
         return ingest_ready(self)
@@ -510,8 +509,7 @@ class EngineState:
     def has_work(self) -> bool:
         counts = self.store.counts()
         return (
-            bool(self._amp_queue)
-            or any(self._inbox.glob("*.json"))
+            any(self._inbox.glob("*.json"))
             or self.store.has_due_inbox()
             or counts["pending_messages"] > 0
             or self.store.has_claimable_external_activity(self.limits.tool_concurrency)
@@ -666,7 +664,6 @@ class EngineState:
         shutil.rmtree(self._workspace)
 
     def shutdown(self) -> None:
-        self._amp_queue.clear()
         self._turn_executor.shutdown(wait=True, cancel_futures=True)
         self._blocking_executor.shutdown(wait=True, cancel_futures=True)
         self._store_executor.shutdown(wait=True, cancel_futures=True)
@@ -806,10 +803,13 @@ class AgentEngine:
             delay = self._state.store.inbox_delay_seconds()
             timeout = self._idle_wait_seconds if delay is None else min(self._idle_wait_seconds, max(delay, 0.01))
             waiters = (asyncio.create_task(self._wake.wait()), asyncio.create_task(stop.wait()))
-            _, pending = await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+            try:
+                await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for task in waiters:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*waiters, return_exceptions=True)
 
     def _ensure_model_dispatcher(self) -> None:
         if self._model_dispatch_task is None or self._model_dispatch_task.done():

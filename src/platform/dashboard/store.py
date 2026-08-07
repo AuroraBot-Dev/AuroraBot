@@ -369,6 +369,33 @@ class ChatStore:
             assert row is not None
             return row, cursor.rowcount == 1
 
+    def recover_tool_request(self, request_id: str, now: str) -> sqlite3.Row | None:
+        """按已持久化消息对账中断的 Tool 台账，并返回确定结果。"""
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            request = connection.execute(
+                "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+            if request is None or request["status"] != "dispatch_started":
+                return request
+            message = connection.execute(
+                "SELECT client_message_id FROM messages WHERE source_tool_request_id = ?", (request_id,)
+            ).fetchone()
+            if message is None:
+                values = ("failed", "Dashboard 发送失败", "interrupted_before_dispatch", None, now, request_id)
+            else:
+                values = ("succeeded", "Dashboard 消息已发送", None, str(message["client_message_id"]), now, request_id)
+            connection.execute(
+                "UPDATE dashboard_tool_requests SET status = ?, summary = ?, error = ?, external_message_id = ?, "
+                "updated_at = ? WHERE request_id = ?",
+                values,
+            )
+            row = connection.execute(
+                "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+            connection.commit()
+            return row
+
     def ensure_bot(self, username: str, display_name: str, avatar_url: str | None) -> sqlite3.Row:
         """确保 Bot 用户存在，使用 upsert 语义更新显示名和头像。"""
         now = utc_now()

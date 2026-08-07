@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -70,6 +71,12 @@ def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
             first = await platform.execute_tool(request)
             duplicate = await platform.execute_tool(request)
             conflict = await platform.execute_tool(replace(request, parameters={"text": "different"}))
+            await asyncio.to_thread(
+                chat.store.execute,
+                "UPDATE dashboard_tool_requests SET status = 'dispatch_started', summary = NULL, "
+                "external_message_id = NULL WHERE request_id = ?",
+                (request.request_id,),
+            )
             recovered = await platform.recover_tool(request)
             missing = await platform.recover_tool(_tool("missing", "missing"))
 
@@ -198,7 +205,7 @@ def test_independent_localhost_debug_app_drives_and_queries_engine(project_root:
 def test_browser_opens_once_server_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     """浏览器在 server 就绪后打开一次，地址按 Dashboard 配置格式化。"""
     opened: list[str] = []
-    opened_event = asyncio.Event()
+    opened_event = threading.Event()
 
     def record_open(url: str) -> None:
         opened.append(url)
@@ -220,7 +227,7 @@ def test_browser_opens_once_server_ready(monkeypatch: pytest.MonkeyPatch) -> Non
         await asyncio.sleep(0.05)
         assert opened == []
         server.started = True
-        await opened_event.wait()
+        assert await asyncio.to_thread(opened_event.wait, 1)
         assert not task.done()
         stop.set()
         await asyncio.wait_for(task, timeout=1)

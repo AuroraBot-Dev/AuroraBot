@@ -73,7 +73,9 @@ async def _open_browser_when_ready(
         if server.should_exit or stop.is_set():
             return
         await asyncio.sleep(0.01)
-    _open_dashboard_browser(configuration)
+    if server.should_exit or stop.is_set():
+        return
+    await asyncio.to_thread(_open_dashboard_browser, configuration)
     await stop.wait()
 
 

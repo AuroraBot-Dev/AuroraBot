@@ -7,12 +7,19 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from mcp import types
+from mcp.shared.exceptions import McpError
 
 from src.config.loader import load_configuration
 from src.contracts.amp import AmpEnvelope
 from src.contracts.tool import ToolExecutionRequest
 from src.platform.mcp import MCPPlatform
-from src.platform.mcp.client_manager import ClientConnection, MCPClientManager, MCPToolCallError
+from src.platform.mcp.client_manager import (
+    ClientConnection,
+    MCPClientManager,
+    MCPToolCallError,
+    MCPToolRejectedError,
+)
 from src.platform.mcp.server_kit import _subprocess_environment
 
 if TYPE_CHECKING:
@@ -190,6 +197,20 @@ def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Pat
         failed = await platform.execute_tool(request)
         assert failed.status == "failed" and failed.error == "rejected"
 
+        async def explicitly_rejected(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
+            raise MCPToolRejectedError("rejected response")
+
+        platform._call_tool = explicitly_rejected  # type: ignore[method-assign]
+        explicit_failure = await platform.execute_tool(request)
+        assert explicit_failure.status == "failed" and explicit_failure.error == "rejected response"
+
+        async def connection_closed(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
+            raise McpError(types.ErrorData(code=types.CONNECTION_CLOSED, message="closed"))
+
+        platform._call_tool = connection_closed  # type: ignore[method-assign]
+        uncertain = await platform.execute_tool(request)
+        assert uncertain.status == "unknown" and "McpError" in (uncertain.error or "")
+
         async def disconnected(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
             raise _ConnectionLostError
 
@@ -300,6 +321,34 @@ def test_notifications_preserve_events_and_normalize_methods(project_root: Path)
         progress = AmpEnvelope.parse(ingress.values[2])
         assert progress.payload.type == "mcp.notification"
         assert progress.payload.data["method"] == "notifications/progress"
+
+    asyncio.run(scenario())
+
+
+def test_notification_idempotency_keys_are_scoped_by_session(project_root: Path) -> None:
+    _write_apps(project_root, "com.example.alpha")
+
+    async def scenario() -> None:
+        ingress = _Ingress()
+        platform = MCPPlatform(load_configuration(project_root))
+        platform._ingress = ingress
+        for session_id in ("session-a", "session-b"):
+            await platform._handle_notification(
+                "com.example.alpha",
+                "notifications/message",
+                {
+                    "logger": "aurora/event",
+                    "data": {
+                        "type": "vendor.message",
+                        "session_id": session_id,
+                        "summary": "message",
+                        "idempotency_key": "42",
+                        "data": {},
+                    },
+                },
+            )
+        first, second = (AmpEnvelope.parse(value) for value in ingress.values)
+        assert first.header.message_id != second.header.message_id
 
     asyncio.run(scenario())
 

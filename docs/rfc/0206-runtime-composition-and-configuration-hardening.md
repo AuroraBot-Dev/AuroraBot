@@ -20,7 +20,7 @@ MCP 还存在三个边界缺口：stdio App 继承整个父进程环境、通知
 - `PlatformHandle`、`PlatformServer` 和平台组合 Port 只定义在 `src.contracts`；平台实现包不再定义跨层 DTO。
 - 平台工厂接收不可变 `AuroraConfig` 和强类型运行时 Port，不得通过 `object`、`getattr` 或 `type: ignore` 猜测依赖。
 - `PlatformHandle.background` 表示必须运行到 stop 的后台协程。一次性启动效果必须由该协程继续等待 stop，或在平台
-  创建阶段完成；后台协程提前返回等同平台失效。
+  创建阶段完成；后台协程提前返回等同平台失效。后台协程和 cleanup 必须协作响应 stop/cancel，不得吞掉取消。
 - cleanup 统一为异步回调。组合根负责给 server、后台任务、Debug 和 Engine loop 提供有界清理，不让已记录的任务
   异常中断其余资源释放。
 - Tool binding 目录总是在平台创建后绑定；空元组是合法且完整的目录，不表示“尚未初始化”。
@@ -28,8 +28,8 @@ MCP 还存在三个边界缺口：stdio App 继承整个父进程环境、通知
 ### 单一启动配置快照
 
 - `load_configuration()` 是结构配置的唯一解析与校验入口；删除重复 validator。
-- `prompts.toml` 由 config loader 解析为 contracts 中的路径 DTO，并进入 `AuroraConfig.sources`。`src.prompt` 只读取
-  已校验路径对应的 Markdown 内容，不再二次解析结构配置。
+- `prompts.toml` 和引用的 Markdown 由 config loader 一次读取为 contracts 中的内容 DTO，并进入
+  `AuroraConfig.sources`。`src.prompt` 只从该快照构造目录，不再二次读取结构配置或内容文件。
 - 核心配置只支持启动时不可变快照。删除没有原子重组语义的 `/reload`、subscriber 和文件 watcher；配置变更通过
   统一重启生效，不提供“注册中心已更新但消费者未更新”的部分重载。
 - Profile 只能是 `config/profiles/` 下的简单名称；数值配置必须是有限值，未知键继续在启动前失败。
@@ -40,6 +40,8 @@ MCP 还存在三个边界缺口：stdio App 继承整个父进程环境、通知
   只保存名称，运行时按名称读取值。
 - MCP 和 Dashboard 推送队列必须有界。MCP 上游使用背压；Dashboard 慢消费者只保留最新事件，持久消息由同步接口
   恢复。
+- Engine AMP 入口在返回 message ID 前直接写入 SQLite Inbox，不设置摄入前内存队列；平台背压必须延伸到该持久化
+  边界，优雅关机不得清空尚未持久化的已确认事件。
 - `aurora/event` 通知按 App、事件类型、会话和规范化事件内容派生稳定 UUID；同一外部事件重放得到同一 AMP ID。
 - 任一已建立 MCP 会话意外结束时，平台后台协程向组合根报告失败并触发统一关闭，不允许继续广告过期能力。
 - Tool 调用在确认会话不存在且尚未派发时返回 `FAILED`；只有派发边界之后无法确认结果才返回 `UNKNOWN`。

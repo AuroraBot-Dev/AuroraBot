@@ -30,13 +30,13 @@ class PlatformServer(Protocol):
 
 
 class PlatformBackground(Protocol):
-    """必须持续运行到 stop 的平台后台协程。"""
+    """必须持续运行到 stop，且不得吞掉取消的后台协程。"""
 
     async def __call__(self, stop: asyncio.Event) -> None: ...
 
 
 class PlatformCleanup(Protocol):
-    """平台异步清理回调。"""
+    """必须在有界时间返回且不得吞掉取消的平台清理回调。"""
 
     async def __call__(self) -> None: ...
 

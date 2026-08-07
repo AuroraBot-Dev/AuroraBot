@@ -229,8 +229,19 @@ def test_failed_server_task_does_not_interrupt_cleanup() -> None:
     asyncio.run(scenario())
 
 
-def test_platform_server_exits_gracefully_and_background_tasks_are_cancelled() -> None:
-    """server 通过 should_exit 优雅退出，平台后台任务直接取消。"""
+def test_cleanup_failures_are_propagated() -> None:
+    async def scenario() -> None:
+        async def fail() -> None:
+            raise RuntimeError("cleanup failed")
+
+        with pytest.raises(RuntimeError, match="cleanup failed"):
+            await composition._run_cleanup(fail)
+
+    asyncio.run(scenario())
+
+
+def test_platform_server_and_background_tasks_stop_gracefully() -> None:
+    """server 通过 should_exit、后台任务通过 stop 事件优雅退出。"""
     events: list[str] = []
     stop = asyncio.Event()
     runtime = _Runtime(SimpleNamespace(), events)
@@ -254,11 +265,11 @@ def test_platform_server_exits_gracefully_and_background_tasks_are_cancelled() -
         async def serve(self) -> None:
             return None
 
-    async def spinner(stop: asyncio.Event) -> None:  # noqa: ARG001
+    async def spinner(stop: asyncio.Event) -> None:
         try:
-            await asyncio.Event().wait()
+            await stop.wait()
         finally:
-            events.append("background-cancelled")
+            events.append("background-stopped")
 
     async def scenario() -> None:
         server = FakeServer()
@@ -274,7 +285,7 @@ def test_platform_server_exits_gracefully_and_background_tasks_are_cancelled() -
         )
         assert server.should_exit is True
         assert server.exited is True
-        assert "background-cancelled" in events
+        assert "background-stopped" in events
         assert stop_task.done() and debug_task.done()
 
     asyncio.run(scenario())

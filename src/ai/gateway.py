@@ -136,9 +136,6 @@ class ModelGatewayService:
         self._init_lock = asyncio.Lock()
         self._initialized = False
 
-        self._embedding_model = self._models.get("embedding", "")
-        self._reranker_model = self._models.get("reranker", "")
-
         logger.info(
             "model gateway created roles=%d providers=%d",
             len(configuration.model_definitions),
@@ -199,43 +196,6 @@ class ModelGatewayService:
             raise ValueError(_Msg.UNKNOWN_ROLE.format(role=role, available=sorted(self._callers)))
         return self._callers[role]
 
-    @property
-    def fast(self) -> ModelCaller:
-        return self.use_model("fast")
-
-    @property
-    def quality(self) -> ModelCaller:
-        return self.use_model("quality")
-
-    @property
-    def multimodal(self) -> ModelCaller:
-        return self.use_model("multimodal")
-
-    @property
-    def embedding(self) -> str:
-        return self._embedding_model
-
-    @property
-    def reranker(self) -> str:
-        return self._reranker_model
-
-    def export_config(self) -> dict[str, str]:
-        config: dict[str, str] = {role: caller.model for role, caller in self._callers.items()}
-        if self._embedding_model:
-            config["embedding"] = self._embedding_model
-        if self._reranker_model:
-            config["reranker"] = self._reranker_model
-        return config
-
-    async def cost_summary(self) -> dict[str, Any]:
-        return await self.cost_tracker.summary()
-
-    def abort_task(self, task_id: str) -> bool:
-        return self._task_manager.abort(task_id)
-
-    def abort_all(self) -> None:
-        self._task_manager.abort_all()
-
     # ── 能力协商 ──────────────────────────────────────────
 
     def negotiate(self, request: ModelRequest) -> frozenset[str]:
@@ -247,7 +207,7 @@ class ModelGatewayService:
 
         if request.retry_policy != "none":
             raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
-        if request.cancel_policy not in {"never", "on_external_activity"}:
+        if request.cancel_policy != "never":
             raise ModelCapabilityError(_Msg.CANCEL_POLICY_UNSUPPORTED)
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
         if forbidden:

@@ -111,13 +111,20 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
 
-    selected_profile = profile or os.environ.get("AURORA_PROFILE") or runtime_raw.get("profile")
-    if not isinstance(selected_profile, str) or not selected_profile:
+    selected_profile = profile if profile is not None else os.environ.get("AURORA_PROFILE")
+    if selected_profile is None:
+        selected_profile = runtime_raw.get("profile")
+    if not isinstance(selected_profile, str):
         raise ConfigurationError(_Msg.NO_PROFILE_SELECTED)
     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", selected_profile) is None:
         raise ConfigurationError(_Msg.PROFILE_NAME_INVALID)
 
-    profile_path = config_dir / "profiles" / f"{selected_profile}.toml"
+    profile_root = (config_dir / "profiles").resolve()
+    if not profile_root.is_relative_to(config_dir.resolve()):
+        raise ConfigurationError(_Msg.PROFILE_NAME_INVALID)
+    profile_path = (profile_root / f"{selected_profile}.toml").resolve()
+    if not profile_path.is_relative_to(profile_root):
+        raise ConfigurationError(_Msg.PROFILE_NAME_INVALID)
     if not profile_path.exists():
         raise ConfigurationError(_Msg.PROFILE_NOT_FOUND.format(profile=selected_profile))
     profile_data, profile_source = read_toml_snapshot(profile_path)

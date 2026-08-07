@@ -271,11 +271,9 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
         url = raw.get("url")
         auth_env = raw.get("auth_env")
         parsed_auth_env = _string(auth_env, "app.auth_env") if auth_env is not None else None
-        if (
-            not isinstance(env_vars, list)
-            or len(env_vars) != len(set(env_vars))
-            or not all(isinstance(item, str) and item.isidentifier() for item in env_vars)
-        ):
+        if not isinstance(env_vars, list) or not all(isinstance(item, str) for item in env_vars):
+            raise ConfigurationError("app.env must contain unique environment variable names")
+        if len(env_vars) != len(set(env_vars)) or not all(item.isidentifier() for item in env_vars):
             raise ConfigurationError("app.env must contain unique environment variable names")
         if transport == "stdio":
             if (

@@ -25,8 +25,13 @@ def load_prompts(config_dir: Path, sources: list[ConfigurationSource], profile_i
     if not isinstance(agents, dict) or frozenset(agents) != profile_ids:
         raise ConfigurationError("invalid prompt configuration: agent profiles do not match agents.toml")
 
+    entries = (
+        ("system.soul", system["soul"]),
+        ("system.world", system["world"]),
+        *((f"agent.{profile_id}", raw_path) for profile_id, raw_path in agents.items()),
+    )
     paths: dict[str, Path] = {}
-    for label, raw_path in (("soul", system["soul"]), ("world", system["world"]), *agents.items()):
+    for label, raw_path in entries:
         path = (config_dir / _string(raw_path, f"prompt.{label}")).resolve()
         if not path.is_relative_to(config_dir) or path.suffix.lower() != ".md":
             raise ConfigurationError(f"invalid prompt configuration: {label} must be a Markdown file under config")
@@ -42,14 +47,14 @@ def load_prompts(config_dir: Path, sources: list[ConfigurationSource], profile_i
             content = raw.decode("utf-8")
         except UnicodeDecodeError as error:
             raise ConfigurationError(f"invalid prompt file {path}: file is not UTF-8") from error
-        if label != "soul" and not content.strip():
+        if label != "system.soul" and not content.strip():
             raise ConfigurationError(f"invalid prompt file {path}: file is empty")
         contents[label] = content
         sources.append(source)
         prompt_sources.append(source)
     return PromptConfig(
-        soul=contents["soul"],
-        world=contents["world"],
-        agents={profile_id: contents[profile_id] for profile_id in sorted(profile_ids)},
+        soul=contents["system.soul"],
+        world=contents["system.world"],
+        agents={profile_id: contents[f"agent.{profile_id}"] for profile_id in sorted(profile_ids)},
         sources=tuple(prompt_sources),
     )

@@ -224,7 +224,7 @@ class DashboardCommunication:
         用于故障恢复：查询持久化记录，若有已知结果则返回，否则返回中断错误。
         """
         row = await asyncio.to_thread(
-            self._store.fetch_one, "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request.request_id,)
+            self._store.recover_tool_request, request.request_id, await asyncio.to_thread(utc_now)
         )
         if row is None:
             return ToolOutcome(

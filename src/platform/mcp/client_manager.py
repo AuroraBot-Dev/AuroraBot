@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 import anyio
 from mcp import types
 from mcp.client.session import ClientSession
+from mcp.shared.exceptions import McpError
 from mcp.shared.message import SessionMessage
 
 from src.utils.logging import get_logger
@@ -56,6 +57,10 @@ class _Msg(StrEnum):
 
 class MCPToolCallError(RuntimeError):
     """MCP tools/call 调用错误。"""
+
+
+class MCPToolRejectedError(MCPToolCallError):
+    """Server 已返回明确的 tools/call 失败响应。"""
 
 
 NotificationHandler = Callable[[str, dict[str, object]], None]
@@ -465,6 +470,9 @@ class MCPClientManager:
             )
         except TimeoutError:
             raise MCPToolCallError(_Msg.TOOL_CALL_TIMEOUT.format(server_key=server_key, raw_name=raw_name)) from None
+        except McpError as exc:
+            error_type = MCPToolCallError if exc.error.code == types.CONNECTION_CLOSED else MCPToolRejectedError
+            raise error_type(_Msg.TOOL_CALL_FAILED.format(server_key=server_key, raw_name=raw_name, error=exc)) from exc
         except Exception as exc:
             raise MCPToolCallError(
                 _Msg.TOOL_CALL_FAILED.format(server_key=server_key, raw_name=raw_name, error=exc)

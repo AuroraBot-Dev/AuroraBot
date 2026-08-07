@@ -28,5 +28,5 @@ enabled = true
 transport = "stdio"
 working_dir = "extensions/apps/Aurora-QQ"
 command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
-env = []
+env = ["AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG"]
 timeout_seconds = 60
