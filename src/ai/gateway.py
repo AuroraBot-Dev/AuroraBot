@@ -23,11 +23,11 @@ from typing import TYPE_CHECKING, Any
 
 from jsonschema import ValidationError, validate
 
-from src.ai.channels.chat import ChatCaller
 from src.ai.execution import CostTracker, TaskManager
 from src.ai.models import cache_available, get_capabilities_by_id, init_cache, refresh_now
 from src.ai.providers import ProviderConfig, setup_providers
 from src.ai.roles import resolve
+from src.ai.roles.base import ChatCaller
 from src.contracts import (
     ModelBudgetError,
     ModelCapabilityError,
@@ -41,7 +41,7 @@ from src.utils import (
 )
 
 if TYPE_CHECKING:
-    from src.ai.channels.base import RoleHandler
+    from src.ai.roles.base import RoleHandler
     from src.contracts.configuration import AuroraConfig
 
 

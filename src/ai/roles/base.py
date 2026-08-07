@@ -1,31 +1,37 @@
-"""ChatRole：chat_completions 通道的预设角色实现（RFC 0212）。
+"""角色域基础（RFC 0212/0213/0214）。
 
-包含：ChatCaller（原 ModelCaller 的流式调用封装）、chat 通道的调用与
-解析、结构化输出 JSON-text fallback。
+- :class:`RoleHandler`：角色契约（endpoint / capability_baseline / adapt_request / complete）。
+- 共享**纯函数**：工具序列化、chat 通道的消息组装、调用封装（ChatCaller）与
+  响应解析。每个角色文件在自己的 ``complete`` 中调用它们——角色自包含，
+  多样化改造只改对应角色文件。
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import re
+from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import litellm
 from litellm import stream_chunk_builder
 from litellm.utils import token_counter
 
-from src.ai.channels.base import RoleHandler, json_item, parse_arguments, provider_tools
 from src.ai.execution import GatewayError, GatewayState, GenerationTask, TaskManager, _classify_exception
 from src.ai.models import compute_cost
 from src.ai.providers import missing_credentials_reason, resolve_model
 from src.contracts import (
     STRUCTURED_OUTPUT_NAME,
+    ModelCapabilityError,
     ModelContinuation,
     ModelGatewayError,
     ModelResult,
     ModelUsage,
     ToolCall,
+    ToolDefinition,
 )
 from src.utils import get_logger
 
@@ -40,15 +46,123 @@ if TYPE_CHECKING:
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
+    ALIAS_COLLISION = "tool alias collision"
+    INVALID_ARGUMENTS = "tool arguments were not valid JSON"
+    ARGUMENTS_NOT_OBJECT = "tool arguments were not an object"
     FORBIDDEN_MODEL_PARAM = "调用方禁止传入 model 参数，模型由网关角色统一指定"
     NO_ASSISTANT_MESSAGE = "Chat provider returned no assistant message"
 
 
-logger = get_logger("aurora.ai.chat")
+logger = get_logger("aurora.ai.roles")
+_PROVIDER_TOOL_NAME_LIMIT = 64
+_INVALID_TOOL_NAME = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+class RoleHandler(ABC):
+    """角色契约（RFC 0212/0213）。
+
+    - ``endpoint``：通道（当前统一 ``chat_completions``）；
+    - ``capability_baseline``：角色的能力侧重声明（并入该角色的能力集）；
+    - ``adapt_request``：per-role 请求适配钩子（默认原样返回）；
+    - ``complete``：完整实现（每个角色文件自包含，RFC 0214）。
+    """
+
+    endpoint: ClassVar[str]
+    capability_baseline: ClassVar[frozenset[str]] = frozenset()
+
+    def adapt_request(self, request: "ModelRequest") -> "ModelRequest":
+        """per-role 请求适配：修改预算、参数或校验输入。"""
+        return request
+
+    @abstractmethod
+    async def complete(
+        self,
+        gateway: "ModelGatewayService",
+        request: "ModelRequest",
+        role: "ModelRoleConfig",
+        negotiated: frozenset[str],
+    ) -> ModelResult:
+        """执行一次模型调用并返回规范化结果（角色自包含实现）。"""
+
+
+# ═══════════════════════════════════════════════════════════
+# 工具序列化（共享）
+# ═══════════════════════════════════════════════════════════
+
+
+def provider_tools(
+    tools: tuple[ToolDefinition, ...], *, responses: bool
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    definitions: list[dict[str, Any]] = []
+    aliases: dict[str, str] = {}
+    for tool in tools:
+        alias = _provider_tool_alias(tool.name)
+        if alias in aliases:
+            raise ModelCapabilityError(_Msg.ALIAS_COLLISION)
+        aliases[alias] = tool.name
+        aliases.setdefault(tool.name, tool.name)
+        if responses:
+            definitions.append(
+                {
+                    "type": "function",
+                    "name": alias,
+                    "description": tool.description,
+                    "parameters": tool.parameters_schema,
+                }
+            )
+        else:
+            definitions.append(
+                {
+                    "type": "function",
+                    "function": {"name": alias, "description": tool.description, "parameters": tool.parameters_schema},
+                }
+            )
+    return definitions, aliases
+
+
+def _provider_tool_alias(name: str) -> str:
+    """生成 Provider 可接受且可由模型稳定复述的 Tool 名称。"""
+    readable = _INVALID_TOOL_NAME.sub("_", name).strip("_")
+    if not readable:
+        readable = "tool"
+    if readable[0].isdigit():
+        readable = f"tool_{readable}"
+    if len(readable) <= _PROVIDER_TOOL_NAME_LIMIT:
+        return readable
+    digest = hashlib.sha256(name.encode()).hexdigest()[:12]
+    prefix = readable[: _PROVIDER_TOOL_NAME_LIMIT - len(digest) - 1].rstrip("_")
+    return f"{prefix}_{digest}"
+
+
+def parse_arguments(value: object, diagnostics: list[str]) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+    except json.JSONDecodeError:
+        diagnostics.append(_Msg.INVALID_ARGUMENTS)
+        return {}
+    if not isinstance(parsed, dict):
+        diagnostics.append(_Msg.ARGUMENTS_NOT_OBJECT)
+        return {}
+    return parsed
+
+
+def json_item(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump(mode="json")
+        return dict(dumped) if isinstance(dumped, dict) else {"value": dumped}
+    return {"type": str(getattr(value, "type", "unknown"))}
+
+
+# ═══════════════════════════════════════════════════════════
+# chat 通道共享实现（角色文件在 complete 中调用）
+# ═══════════════════════════════════════════════════════════
 
 
 class ChatCaller:
-    """chat_completions 通道的流式调用封装：凭据检查、流式收集与成本跟踪。"""
+    """chat_completions 流式调用封装：凭据检查、流式收集与成本跟踪。"""
 
     def __init__(
         self,
@@ -222,71 +336,111 @@ class ChatCaller:
         return self.tm.create_task(_stream_and_collect())
 
 
-class ChatChannel(RoleHandler):
-    """chat_completions 通道的预设角色：低延迟对话、工具调用与结构化输出。"""
-
-    endpoint = "chat_completions"
-
-    async def complete(
-        self,
-        gateway: "ModelGatewayService",
-        request: "ModelRequest",
-        role: "ModelRoleConfig",
-        negotiated: frozenset[str],
-    ) -> ModelResult:
-        capabilities = gateway._capabilities_for(request.role)
-        messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-        if request.continuation is not None:
-            messages.extend(dict(item) for item in request.continuation.items)
-        tool_defs, alias_to_name = provider_tools(request.tools, responses=False)
-        kwargs = dict(request.parameters)
-        if tool_defs:
-            kwargs.update(
-                tools=tool_defs,
-                tool_choice=request.tool_choice,
-                parallel_tool_calls=request.parallel_tool_calls,
-            )
-        if request.output_schema is not None and "structured_output" in negotiated:
-            kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema},
-            }
-        caller = gateway._caller_for(request.role)
-        try:
-            task, response = await _complete_chat_with_fallback(
-                caller, messages, request, kwargs, negotiated, capabilities
-            )
-        except GatewayError as error:
-            raise ModelGatewayError(str(error)) from error
-        message = chat_message(response)
-        text = str(getattr(message, "content", "") or "")
-        tool_calls, call_diagnostics = chat_tool_calls(message, alias_to_name)
-        data, output_diagnostics = gateway._normalize_output(text, request, negotiated)
-        assistant_item = chat_assistant_item(message)
-        previous_items = tuple(
-            request.continuation.items
-            if request.continuation
-            else ({"role": msg.role, "content": msg.content} for msg in request.messages)
+def build_chat_kwargs(
+    request: "ModelRequest",
+    negotiated: frozenset[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, str]]:
+    """组装 chat 请求：messages、litellm kwargs 与工具别名映射（共享函数）。"""
+    messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+    if request.continuation is not None:
+        messages.extend(dict(item) for item in request.continuation.items)
+    tool_defs, alias_to_name = provider_tools(request.tools, responses=False)
+    kwargs = dict(request.parameters)
+    if tool_defs:
+        kwargs.update(
+            tools=tool_defs,
+            tool_choice=request.tool_choice,
+            parallel_tool_calls=request.parallel_tool_calls,
         )
-        continuation = ModelContinuation(role.provider, "chat_completions", (*previous_items, assistant_item))
-        finish_reason = str(getattr(response.choices[0], "finish_reason", "stop") or "stop")
-        return ModelResult(
-            model=gateway._models[request.role],
-            negotiated_capabilities=negotiated,
-            response_mode=request.response_mode,
-            text=text,
-            data=data,
-            usage=usage(response),
-            cost_usd=task.cost,
-            diagnostics=(*output_diagnostics, *call_diagnostics),
-            tool_calls=tool_calls,
-            finish_reason=finish_reason,
-            continuation=continuation,
+    if request.output_schema is not None and "structured_output" in negotiated:
+        kwargs["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema},
+        }
+    return messages, kwargs, alias_to_name
+
+
+async def complete_chat_with_fallback(
+    caller: ChatCaller,
+    messages: list[dict[str, Any]],
+    request: "ModelRequest",
+    kwargs: dict[str, Any],
+    negotiated: frozenset[str],
+    capabilities: frozenset[str],
+) -> tuple[GenerationTask, Any]:
+    """调用 chat 通道；结构化输出不受支持时按 JSON-text fallback 重试（共享函数）。"""
+    try:
+        task = caller.acompletion(
+            messages,
+            max_tokens=request.budget.max_output_tokens,
+            timeout=request.budget.timeout_seconds,
+            **kwargs,
         )
+        return task, await task
+    except GatewayError as error:
+        can_fallback = (
+            "structured_output" in negotiated
+            and request.allow_json_text_fallback
+            and "json_text_fallback" in capabilities
+            and is_structured_output_error(error)
+        )
+        if not can_fallback:
+            raise
+        logger.warning(
+            "structured output unsupported; using JSON text fallback model_role=%s error_type=%s",
+            request.role,
+            type(error).__name__,
+        )
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs.pop("response_format", None)
+        fallback_task = caller.acompletion(
+            messages,
+            max_tokens=request.budget.max_output_tokens,
+            timeout=request.budget.timeout_seconds,
+            **fallback_kwargs,
+        )
+        return fallback_task, await fallback_task
+
+
+def parse_chat_response(
+    gateway: "ModelGatewayService",
+    request: "ModelRequest",
+    role: "ModelRoleConfig",
+    negotiated: frozenset[str],
+    response: Any,
+    task: GenerationTask,
+    alias_to_name: dict[str, str],
+) -> ModelResult:
+    """解析 chat 响应并构造结果（共享函数）。"""
+    message = chat_message(response)
+    text = str(getattr(message, "content", "") or "")
+    tool_calls, call_diagnostics = chat_tool_calls(message, alias_to_name)
+    data, output_diagnostics = gateway._normalize_output(text, request, negotiated)
+    assistant_item = chat_assistant_item(message)
+    previous_items = tuple(
+        request.continuation.items
+        if request.continuation
+        else ({"role": msg.role, "content": msg.content} for msg in request.messages)
+    )
+    continuation = ModelContinuation(role.provider, "chat_completions", (*previous_items, assistant_item))
+    finish_reason = str(getattr(response.choices[0], "finish_reason", "stop") or "stop")
+    return ModelResult(
+        model=gateway._models[request.role],
+        negotiated_capabilities=negotiated,
+        response_mode=request.response_mode,
+        text=text,
+        data=data,
+        usage=usage(response),
+        cost_usd=task.cost,
+        diagnostics=(*output_diagnostics, *call_diagnostics),
+        tool_calls=tool_calls,
+        finish_reason=finish_reason,
+        continuation=continuation,
+    )
 
 
 # ═══════════════════════════════════════════════════════════
-# chat 通道解析（原 _parsing chat 部分）
+# chat 响应解析（共享函数）
 # ═══════════════════════════════════════════════════════════
 
 
@@ -334,44 +488,3 @@ def usage(response: object) -> ModelUsage:
 def is_structured_output_error(error: Any) -> bool:
     text = str(error).lower()
     return "response_format" in text or "structured" in text or "unsupported" in text
-
-
-async def _complete_chat_with_fallback(
-    caller: ChatCaller,
-    messages: list[dict[str, Any]],
-    request: "ModelRequest",
-    kwargs: dict[str, Any],
-    negotiated: frozenset[str],
-    capabilities: frozenset[str],
-) -> tuple[GenerationTask, Any]:
-    try:
-        task = caller.acompletion(
-            messages,
-            max_tokens=request.budget.max_output_tokens,
-            timeout=request.budget.timeout_seconds,
-            **kwargs,
-        )
-        return task, await task
-    except GatewayError as error:
-        can_fallback = (
-            "structured_output" in negotiated
-            and request.allow_json_text_fallback
-            and "json_text_fallback" in capabilities
-            and is_structured_output_error(error)
-        )
-        if not can_fallback:
-            raise
-        logger.warning(
-            "structured output unsupported; using JSON text fallback model_role=%s error_type=%s",
-            request.role,
-            type(error).__name__,
-        )
-        fallback_kwargs = dict(kwargs)
-        fallback_kwargs.pop("response_format", None)
-        fallback_task = caller.acompletion(
-            messages,
-            max_tokens=request.budget.max_output_tokens,
-            timeout=request.budget.timeout_seconds,
-            **fallback_kwargs,
-        )
-        return fallback_task, await fallback_task

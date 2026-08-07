@@ -10,10 +10,21 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from src.ai import models
-from src.ai.channels.base import json_item, parse_arguments, provider_tools
-from src.ai.channels.chat import chat_assistant_item, chat_message, chat_tool_calls, usage
 from src.ai.execution import CostTracker, GatewayError
 from src.ai.gateway import ModelGatewayService, invalid_output_result
+from src.ai.roles.base import (
+    RoleHandler,
+    build_chat_kwargs,
+    chat_assistant_item,
+    chat_message,
+    chat_tool_calls,
+    complete_chat_with_fallback,
+    json_item,
+    parse_arguments,
+    parse_chat_response,
+    provider_tools,
+    usage,
+)
 from src.config.loader import load_configuration
 from src.contracts import (
     ModelCapabilityError,
@@ -30,6 +41,8 @@ from src.contracts import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from src.contracts.configuration import ModelRoleConfig
 
 
 def _service(project_root: Path) -> ModelGatewayService:
@@ -72,7 +85,7 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
 def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
     """RFC 0213：能力基线并入能力集；adapt_request 可改写请求。"""
 
-    from src.ai.channels.base import RoleHandler
+    from src.ai.roles.base import RoleHandler
     from src.ai.roles.quality import QualityRole
 
     service = _service(project_root)
@@ -92,6 +105,41 @@ def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
     assert QualityRole().adapt_request(request) is request
     assert QualityRole.capability_baseline == frozenset({"reasoning"})
     assert issubclass(QualityRole, RoleHandler)
+
+
+def test_role_self_contained_implementation(project_root: Path) -> None:
+    """RFC 0214：角色文件自包含完整实现，可独立扩展（如音频输出）。"""
+
+    class AudioMultimodalRole(RoleHandler):
+        """模拟多模态角色的音频输出适配：完整实现，独立于其他角色。"""
+
+        endpoint = "chat_completions"
+        capability_baseline = frozenset({"vision", "audio"})
+
+        async def complete(
+            self,
+            gateway: ModelGatewayService,
+            request: ModelRequest,
+            role: ModelRoleConfig,
+            negotiated: frozenset[str],
+        ) -> ModelResult:  # type: ignore[override]
+            capabilities = gateway._capabilities_for(request.role)
+            messages, kwargs, alias_to_name = build_chat_kwargs(request, negotiated)
+            # 多模态扩展点：音频输出参数
+            kwargs["modalities"] = ["text", "audio"]
+            caller = gateway._caller_for(request.role)
+            task, response = await complete_chat_with_fallback(
+                caller, messages, request, kwargs, negotiated, capabilities
+            )
+            return parse_chat_response(gateway, request, role, negotiated, response, task, alias_to_name)
+
+    service = _service(project_root)
+    service._handlers["multimodal"] = AudioMultimodalRole()
+    assert service._capabilities_for("multimodal") >= {"vision", "audio"}
+    request = ModelRequest(role="multimodal", messages=(), parameters={"text": "hi"})
+    assert AudioMultimodalRole().adapt_request(request) is request
+    _messages, kwargs, _aliases = build_chat_kwargs(request, frozenset())
+    assert "modalities" not in kwargs  # 共享函数不含多模态参数，扩展在角色文件内
 
 
 def test_output_normalization_returns_valid_json_and_configured_fallback(project_root: Path) -> None:

@@ -255,11 +255,10 @@ triage agent (depth 0, 无工具, 快模型)
 | 层 | 文件 | 内容 |
 | --- | --- | --- |
 | 总控 | `gateway.py` | `ModelGatewayService`：能力协商、角色路由、输出规范化、成本预算、冷启动 |
-| 预设角色 | `roles/` | `fast`（chat 通道，低延迟）/ `quality`（chat 通道 + reasoning 侧重）/ `multimodal`（chat 通道 + vision 侧重）；注册表 `ROLE_PRESETS` + `resolve()`（未预设启动报错） |
-| 协议通道 | `channels/` | `RoleHandler` 契约（endpoint + capability_baseline + adapt_request）+ `ChatChannel` 实现（调用 + 解析） |
+| 预设角色 | `roles/` | `fast`/`quality`/`multimodal`：每个角色文件**自包含完整实现**（RFC 0214）；`base.py` 提供共享纯函数（工具序列化/请求组装/ChatCaller/响应解析）；注册表 `ROLE_PRESETS` + `resolve()` |
 | 基础设施 | `models.py`/`providers.py`/`execution.py` | models.dev 缓存/Provider 注册/`TaskManager`/`CostTracker` |
 
-**关键语义（RFC 0212/0213）**：统一 `chat_completions` 单通道（responses 已收敛删除）；基础能力（chat/stream/tools/reasoning/vision）由 models.dev 自动派生，协商只做子集校验与结构化输出二选一；`endpoint` 归代码，`models.toml` 只配置 model 绑定。角色预设的语义载体 = `capability_baseline`（能力侧重）+ `adapt_request`（per-role 请求适配钩子）。
+**关键语义（RFC 0212/0213/0214）**：统一 `chat_completions` 单通道；基础能力由 models.dev 自动派生，协商只做子集校验与结构化输出二选一；`endpoint` 归代码，`models.toml` 只配置 model 绑定。**角色自包含**：无共享通道类，每个角色文件有自己的 `complete` 实现，多样化改造（如 multimodal 的音频输出处理）只改对应角色文件；共享逻辑以纯函数复用。
 
 ### 4.6 `src/engine` — 运行实现层（核心，只依赖 contracts + utils）
 
