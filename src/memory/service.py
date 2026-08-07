@@ -33,7 +33,8 @@ if TYPE_CHECKING:
 
 logger = get_logger("aurora.memory.service")
 _SUMMARY_LIMIT = 2400
-_DEFAULT_MAX_WINDOW = 20
+_DEFAULT_WINDOW_MIN = 10
+_DEFAULT_WINDOW_MAX = 20
 
 
 class _Msg(StrEnum):
@@ -41,8 +42,9 @@ class _Msg(StrEnum):
 
     ELLIPSIS = "…"
     SUMMARIZE_PROMPT = (
-        "把以下旧对话要点压缩进已有摘要，保持事实完整、按时间顺序：\n"
-        "已有摘要：\n{summary}\n\n旧对话：\n{messages}\n\n只输出新摘要文本。"
+        "你负责记忆浓缩：把『最早记忆项』与一批旧对话再次压缩为一条更浓缩的"
+        "记忆项（保留关键事实，丢弃已失去时效的细节）。\n"
+        "最早记忆项：\n{summary}\n\n旧对话：\n{messages}\n\n只输出新的记忆项文本。"
     )
 
 
@@ -54,11 +56,13 @@ class MemoryService:
         memory_dir: "Path | None" = None,
         *,
         gateway: _Summarizer | None = None,
-        max_window: int = _DEFAULT_MAX_WINDOW,
+        window_min: int = _DEFAULT_WINDOW_MIN,
+        window_max: int = _DEFAULT_WINDOW_MAX,
     ) -> None:
         self._memory_dir = memory_dir
         self._gateway: _Summarizer | None = gateway
-        self._max_window = max_window
+        self._window_min = window_min
+        self._window_max = window_max
         self._database_path = memory_dir / "memory.sqlite3" if memory_dir is not None else None
         if memory_dir is not None:
             memory_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +83,7 @@ class MemoryService:
                 summary = str(row[0]) if row is not None else ""
                 rows = connection.execute(
                     "SELECT role, content, at FROM memory_messages WHERE scope = ? ORDER BY seq DESC LIMIT ?",
-                    (query.scope, self._max_window),
+                    (query.scope, self._window_max),
                 ).fetchall()
                 window = tuple(
                     MemoryMessage(str(row["role"]), str(row["content"]), str(row["at"])) for row in reversed(rows)
@@ -111,8 +115,8 @@ class MemoryService:
             count = int(
                 connection.execute("SELECT count(*) FROM memory_messages WHERE scope = ?", (scope,)).fetchone()[0]
             )
-            if count > self._max_window:
-                self._condense(connection, scope, count - self._max_window)
+            if count > self._window_max:
+                self._condense(connection, scope, count - self._window_min)
 
     def remember(self, entry: MemoryEntry) -> bool:
         """终态投影：幂等回执 + 长期事实（窗口消息由 append_turn 负责）。"""

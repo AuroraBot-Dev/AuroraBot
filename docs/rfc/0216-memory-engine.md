@@ -43,9 +43,15 @@ class MemoryStore(Protocol):
 ### 2. 短期记忆：窗口 + LLM 概要（langchain summary buffer）
 
 - 存储：SQLite 新增 `memory_messages(scope, seq, role, content, at)`；`session_memory` 保留为概要。
-- 窗口上限 `max_window`（默认 20 条）：`append_turn` 超出后，把**最旧的 m 条 + 现有概要**交给模型网关浓缩为新概要（LLM 摘要，`fast` role），删除被浓缩的消息。
+- 窗口采用**上下界**：`window_min`（默认 10）与 `window_max`（默认 20）。窗口在
+  `[window_min, window_max]` 之间自由增长（前缀缓存稳定，不逐条抖动）；**超过
+  `window_max` 才触发压缩**，一次把超出 `window_min` 的部分（`count - window_min` 条）
+  浓缩进概要——批量压缩而非逐条。
+- **自然遗忘（迭代压缩）**：概要文本以换行分条，**第一段是压缩项**（最早的记忆）。
+  每次压缩把「压缩项 + 窗口最旧消息」交给模型网关再次浓缩为一条新压缩项——
+  最早的对话被反复压缩，逐渐只剩核心事实，实现自然遗忘。
 - 概要生成依赖模型网关——`MemoryService` 构造时注入 `ModelGatewayService`（组合层）。
-- `recall`：返回 `summary + window（最近 N 条原文）+ relevant_facts`。
+- `recall`：返回 `summary + window（最近 window_max 条原文）+ relevant_facts`。
 
 ### 3. 长期记忆：mem0
 

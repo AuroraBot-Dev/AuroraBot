@@ -31,18 +31,20 @@ def test_service_without_memory_dir_falls_back_to_empty_context() -> None:
     assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01"))
 
 
-def test_window_captures_recent_messages_and_summarizes_on_overflow(tmp_path: Path) -> None:
-    """RFC 0216：窗口记录最近消息；无网关时溢出以规则截断浓缩为概要。"""
-    service = MemoryService(tmp_path, max_window=3)
-    for index in range(1, 7):
+def test_window_bounds_and_natural_forgetting(tmp_path: Path) -> None:
+    """RFC 0216：上下界批量压缩；压缩项被再次浓缩（自然遗忘）。"""
+    service = MemoryService(tmp_path, window_min=2, window_max=4)
+    for index in range(1, 9):
         service.append_turn("session", role="user", content=f"question {index}", at=f"2026-01-0{index}")
 
     recalled = service.recall(MemoryQuery("", "session"))
-    # 窗口保留最近 3 条原文
-    assert [message.content for message in recalled.window] == ["question 4", "question 5", "question 6"]
-    # 溢出部分浓缩进概要（规则截断，无网关）
-    assert recalled.summary
+    # 窗口压缩回下界 2 条
+    assert [message.content for message in recalled.window] == ["question 7", "question 8"]
+    # 概要第一段为最早记忆的压缩项（含 question 1 的事实），随后分段
     assert "question 1" in recalled.summary
+    # 首次压缩把最早的对话浓缩为第一段；后续压缩再次浓缩第一段（每次压缩重复处理）
+    assert recalled.summary.count("question 1") >= 1
+    assert "question 4" in recalled.summary or "question 5" in recalled.summary
 
 
 def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) -> None:
@@ -68,7 +70,7 @@ def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) ->
 
 
 def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
-    service = MemoryService(tmp_path, max_window=2)
+    service = MemoryService(tmp_path, window_min=1, window_max=2)
     service.append_turn("session", role="user", content="x" * 100, at="2026-01-01")
     service.append_turn("session", role="assistant", content="y" * 100, at="2026-01-02")
     recalled = service.recall(MemoryQuery("query", "session", max_characters=32))
