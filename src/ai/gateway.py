@@ -24,7 +24,13 @@ from typing import TYPE_CHECKING, Any
 from jsonschema import ValidationError, validate
 
 from src.ai.execution import CostTracker, TaskManager
-from src.ai.models import cache_available, get_capabilities_by_id, init_cache, refresh_now
+from src.ai.models import (
+    cache_available,
+    get_capabilities_by_id,
+    get_modalities_by_id,
+    init_cache,
+    refresh_now,
+)
 from src.ai.providers import ProviderConfig, setup_providers
 from src.ai.roles import resolve
 from src.ai.roles.base import ChatCaller
@@ -32,6 +38,7 @@ from src.contracts import (
     ModelBudgetError,
     ModelCapabilityError,
     ModelGatewayError,
+    ModelMessage,
     ModelRequest,
     ModelResult,
 )
@@ -240,6 +247,44 @@ class ModelGatewayService:
             else:
                 raise ModelCapabilityError(_Msg.NO_STRUCTURED_OUTPUT)
         return frozenset(negotiated)
+
+    # ── 外部接口（RFC 0215）───────────────────────────────
+
+    async def get_response(self, role: str, inputs: list[Any]) -> dict[str, Any]:
+        """外部简单入口：传入 role 与 inputs，返回脱壳的纯粹输出。
+
+        - chat 类角色：``{"text", "tool_calls", "finish_reason"}``；
+        - embedding 角色：``{"embeddings", "model"}``（inputs 为文本数组）。
+        """
+        if self._handlers[role].endpoint == "embeddings":
+            vectors = await self._handlers[role].embed(self, [str(item) for item in inputs])
+            return {"embeddings": vectors, "model": self._models[role]}
+        request = ModelRequest(
+            role=role,
+            messages=tuple(
+                ModelMessage(str(item.get("role", "user")), str(item.get("content", ""))) for item in inputs
+            ),
+        )
+        result = await self.complete(request)
+        return {
+            "text": result.text,
+            "tool_calls": [call.to_dict() for call in result.tool_calls],
+            "finish_reason": result.finish_reason,
+        }
+
+    async def modalities_for(self, role: str) -> tuple[frozenset[str], frozenset[str]]:
+        """角色绑定模型的输入/输出模态（RFC 0215）。"""
+        await self._ensure_initialized()
+        return await get_modalities_by_id(self._models[role])
+
+    def export_openai_client(self) -> Any:
+        """导出 litellm 的 OpenAI 兼容 client，供 mem0 等外部库使用。
+
+        api_key 为占位符：实际凭据由 Provider 配置（环境变量）在调用时解析。
+        """
+        import litellm
+
+        return litellm.OpenAI(api_key="aurora-router")
 
     # ── 请求执行 ──────────────────────────────────────────
 

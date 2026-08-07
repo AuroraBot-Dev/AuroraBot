@@ -142,6 +142,65 @@ def test_role_self_contained_implementation(project_root: Path) -> None:
     assert "modalities" not in kwargs  # 共享函数不含多模态参数，扩展在角色文件内
 
 
+def test_get_response_returns_unwrapped_output(project_root: Path) -> None:
+    """RFC 0215：get_response 返回脱壳 dict（text/tool_calls/finish_reason）。"""
+    from src.ai.roles.embedding import EmbeddingRole
+
+    service = _service(project_root)
+
+    async def fake_complete(request: ModelRequest) -> ModelResult:
+        assert request.messages[0].content == "hi"
+        return ModelResult(
+            model="provider/model",
+            negotiated_capabilities=frozenset({"chat"}),
+            response_mode="normalized",
+            text="hello",
+            data=None,
+            usage=ModelUsage(1, 1),
+            cost_usd=0.0,
+            diagnostics=(),
+            tool_calls=(ToolCall("call-1", "aur.tool", {"x": 1}),),
+            finish_reason="tool_calls",
+            continuation=None,
+        )
+
+    service.complete = fake_complete  # type: ignore[method-assign]
+    result = asyncio.run(service.get_response("fast", [{"role": "user", "content": "hi"}]))
+    assert result["text"] == "hello"
+    assert result["tool_calls"] == [{"call_id": "call-1", "name": "aur.tool", "arguments": {"x": 1}}]
+    assert result["finish_reason"] == "tool_calls"
+
+    # embedding 角色：get_response 走 embed 路径
+    class FakeEmbedding(EmbeddingRole):
+        async def embed(self, gateway: object, inputs: list[str]) -> list[list[float]]:  # noqa: ARG002
+            return [[0.1, 0.2]] * len(inputs)
+
+    service._handlers["embedding"] = FakeEmbedding()
+    embedding_result = asyncio.run(service.get_response("embedding", ["text one", "text two"]))
+    assert len(embedding_result["embeddings"]) == 2
+    assert embedding_result["model"] == service._models["embedding"]
+
+
+def test_export_openai_client_and_cost_stats(project_root: Path) -> None:
+    """RFC 0215：client 可导出；CostTracker 提供总费用与分类统计。"""
+    from src.ai.execution import CostTracker
+
+    service = _service(project_root)
+    client = service.export_openai_client()
+    assert client is not None
+
+    async def scenario() -> None:
+        tracker = CostTracker()
+        await tracker.add({"role": "fast", "model": "m1", "status": "completed", "cost": 0.5})
+        await tracker.add({"role": "fast", "model": "m1", "status": "completed", "cost": 0.3})
+        await tracker.add({"role": "quality", "model": "m2", "status": "completed", "cost": 1.2})
+        assert await tracker.total_cost() == 2.0
+        assert await tracker.by_role() == {"fast": {"count": 2, "cost": 0.8}, "quality": {"count": 1, "cost": 1.2}}
+        assert await tracker.by_model() == {"m1": {"count": 2, "cost": 0.8}, "m2": {"count": 1, "cost": 1.2}}
+
+    asyncio.run(scenario())
+
+
 def test_output_normalization_returns_valid_json_and_configured_fallback(project_root: Path) -> None:
     service = _service(project_root)
     request = ModelRequest(role="fast", messages=(), output_schema={"type": "object", "required": ["kind"]})
@@ -280,6 +339,8 @@ def test_models_dev_capabilities_pricing_and_disk_cache(tmp_path: Path, monkeypa
         capabilities = await models.get_capabilities_by_id("provider/model")
         assert {"chat", "tools", "reasoning", "structured_output", "vision"} <= capabilities
         assert await models.get_model_info("missing") is None
+        assert await models.get_modalities_by_id("provider/model") == (frozenset({"text", "image"}), frozenset())
+        assert await models.get_modalities_by_id("missing") == (frozenset(), frozenset())
 
     asyncio.run(scenario())
     legacy = tmp_path / "models-dev-20000101-00.json"

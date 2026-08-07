@@ -260,6 +260,14 @@ triage agent (depth 0, 无工具, 快模型)
 
 **关键语义（RFC 0212/0213/0214）**：统一 `chat_completions` 单通道；基础能力由 models.dev 自动派生，协商只做子集校验与结构化输出二选一；`endpoint` 归代码，`models.toml` 只配置 model 绑定。**角色自包含**：无共享通道类，每个角色文件有自己的 `complete` 实现，多样化改造（如 multimodal 的音频输出处理）只改对应角色文件；共享逻辑以纯函数复用。
 
+**外部接口（RFC 0215）**：
+
+- `get_response(role, inputs)`：脱壳输出——chat 角色返回 `{text, tool_calls, finish_reason}`，embedding 角色返回 `{embeddings, model}`；
+- 四类基础角色：快速 / 质量 / 多模态 / **词嵌入**（`EmbeddingRole`，`litellm.aembedding`）；
+- `modalities_for(role)`：模型输入/输出模态查询（models.dev）；
+- `cost_tracker`：`total_cost()` / `by_role()` / `by_model()` / `by_status()`；
+- `export_openai_client()`：导出 `litellm.OpenAI` 兼容 client（mem0 等库使用）。
+
 ### 4.6 `src/engine` — 运行实现层（核心，只依赖 contracts + utils）
 
 **模式**：单进程 asyncio 独占、单一 SQLite v9、无租约无乐观锁（RFC 0210）。

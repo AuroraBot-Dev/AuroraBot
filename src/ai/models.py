@@ -362,3 +362,30 @@ async def get_model_info(model_id: str) -> dict[str, Any] | None:
     """
     models = await _load_cache()
     return models.get(model_id)
+
+
+async def get_modalities_by_id(model_id: str) -> tuple[frozenset[str], frozenset[str]]:
+    """返回 models.dev 中模型的输入/输出模态（RFC 0215）。
+
+    模态来自 models.dev 原始缓存的 ``modalities.input`` / ``modalities.output``；
+    数据不可用时退回空集。
+
+    Args:
+        model_id: 模型标识符，格式 ``provider/model_name``。
+
+    Returns:
+        ``(输入模态, 输出模态)``，如 ``({"text", "image"}, {"text", "audio"})``。
+    """
+    models = await _load_cache()
+    info = models.get(model_id)
+    if info is None:
+        return frozenset(), frozenset()
+    modalities = info.get("modalities")
+    if not isinstance(modalities, dict):
+        return frozenset(), frozenset()
+    inputs = modalities.get("input")
+    outputs = modalities.get("output")
+    return (
+        frozenset(str(item) for item in inputs if isinstance(item, str)) if isinstance(inputs, list) else frozenset(),
+        frozenset(str(item) for item in outputs if isinstance(item, str)) if isinstance(outputs, list) else frozenset(),
+    )

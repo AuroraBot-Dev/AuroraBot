@@ -42,6 +42,10 @@ capabilities = [
 provider = "xiaomi_mimo"
 model = "mimo-v2.5-pro"
 
+[models.roles.embedding]
+provider = "openai"
+model = "text-embedding-3-small"
+
 [models.logging]
 log_queries = false
 log_responses = false

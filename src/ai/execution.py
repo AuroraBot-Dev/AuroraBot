@@ -112,6 +112,8 @@ def _classify_exception(exc: Exception) -> GatewayError:  # noqa: PLR0911
 
 
 class CostTracker:
+    """调用费用记录与分类统计（RFC 0215：追踪所有完成的模型调用总费用）。"""
+
     def __init__(self) -> None:
         self._records: list[dict] = []
         self._lock = asyncio.Lock()
@@ -120,29 +122,45 @@ class CostTracker:
         async with self._lock:
             self._records.append(record)
 
-    async def summary(self) -> dict:
+    async def total_cost(self) -> float:
+        """全部已完成调用的总费用（USD）。"""
         async with self._lock:
-            total = 0.0
-            by_role: dict[str, dict] = {}
-            by_model: dict[str, dict] = {}
-            for r in self._records:
-                total += r.get("cost", 0.0)
-                role = r["role"]
-                model = r["model"]
-                if role not in by_role:
-                    by_role[role] = {"count": 0, "cost": 0.0}
-                by_role[role]["count"] += 1
-                by_role[role]["cost"] += r.get("cost", 0.0)
-                if model not in by_model:
-                    by_model[model] = {"count": 0, "cost": 0.0}
-                by_model[model]["count"] += 1
-                by_model[model]["cost"] += r.get("cost", 0.0)
+            return round(sum(r.get("cost", 0.0) for r in self._records), 6)
+
+    async def by_role(self) -> dict[str, dict]:
+        """按角色分类统计。"""
+        async with self._lock:
+            return _aggregate(self._records, "role")
+
+    async def by_model(self) -> dict[str, dict]:
+        """按模型分类统计。"""
+        async with self._lock:
+            return _aggregate(self._records, "model")
+
+    async def by_status(self) -> dict[str, dict]:
+        """按调用状态分类统计（completed/cancelled）。"""
+        async with self._lock:
+            return _aggregate(self._records, "status")
+
+    async def summary(self) -> dict:
+        """汇总：总费用 + 角色/模型分类 + 原始记录。"""
+        async with self._lock:
             return {
-                "total_cost": total,
-                "by_role": by_role,
-                "by_model": by_model,
+                "total_cost": round(sum(r.get("cost", 0.0) for r in self._records), 6),
+                "by_role": _aggregate(self._records, "role"),
+                "by_model": _aggregate(self._records, "model"),
                 "records": list(self._records),
             }
+
+
+def _aggregate(records: list[dict], key: str) -> dict[str, dict]:
+    grouped: dict[str, dict] = {}
+    for record in records:
+        value = str(record.get(key, "unknown"))
+        group = grouped.setdefault(value, {"count": 0, "cost": 0.0})
+        group["count"] += 1
+        group["cost"] += record.get("cost", 0.0)
+    return grouped
 
 
 # ═══════════════════════════════════════════════════════════
@@ -358,7 +376,11 @@ class ModelCaller:
                 else:
                     logger.debug(
                         "LLM 响应:\n%s",
-                        json.dumps({"role": self.role, "cost": cost}, ensure_ascii=False, indent=2),
+                        json.dumps(
+                            {"role": self.role, "cost": cost},
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
                     )
                 return final_response, cost
 

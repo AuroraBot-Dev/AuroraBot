@@ -18,7 +18,8 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 12. [0211 工具域统一与 AMP 化工具回执](0211-tool-domain-and-amp-receipts.md) - aur.* 域命名规范、工具结果统一走 AMP、删 ToolLease/RecoveryBinding/双端口
 13. [0212 AI 包总分结构](0212-ai-role-hierarchy.md) - 预设角色（roles/ 子包）、endpoint 归代码、配置只描述 model 绑定
 14. [0213 模型通道收敛与角色钩子](0213-model-channel-convergence.md) - 统一 chat_completions、协商简化、能力基线 + adapt_request
-15. [0214 角色域自洽](0214-role-domain-self-contained.md) - 通道实现下沉 roles、ChatChannel 拆可覆写步骤
+15. [0214 角色域自洽](0214-role-domain-self-contained.md) - 每个角色自包含实现、共享纯函数收敛
+16. [0215 AI 包外部接口](0215-ai-external-surface.md) - get_response 脱壳输出、词嵌入角色、模态查询、费用统计、导出 OpenAI client
 
 ## 规范优先级
 

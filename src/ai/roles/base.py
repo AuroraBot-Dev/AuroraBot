@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import litellm
 from litellm import stream_chunk_builder
-from litellm.utils import token_counter
 
 from src.ai.execution import GatewayError, GatewayState, GenerationTask, TaskManager, _classify_exception
 from src.ai.models import compute_cost
@@ -83,6 +82,14 @@ class RoleHandler(ABC):
         negotiated: frozenset[str],
     ) -> ModelResult:
         """执行一次模型调用并返回规范化结果（角色自包含实现）。"""
+
+    async def embed(
+        self,
+        gateway: "ModelGatewayService",
+        inputs: list[str],
+    ) -> list[list[float]]:
+        """词嵌入调用（RFC 0215）；仅 embedding 角色实现。"""
+        raise NotImplementedError
 
 
 # ═══════════════════════════════════════════════════════════
@@ -215,19 +222,12 @@ class ChatCaller:
             )
             return cost
 
-        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0912, PLR0915
-            prompt_tokens = 0
-
+        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901
             missing_reason = missing_credentials_reason(self.model)
             if missing_reason is not None:
                 raise GatewayError(missing_reason, retryable=False)
 
             resolved_model, provider_kwargs = resolve_model(self.model)
-
-            try:
-                prompt_tokens = token_counter(model=resolved_model, messages=messages)
-            except Exception:  # noqa: BLE001
-                logger.debug("token_counter failed for model=%s; fallback prompt_tokens=0", resolved_model)
 
             litellm_kwargs: dict[str, Any] = {
                 "model": resolved_model,
@@ -285,53 +285,40 @@ class ChatCaller:
             response_stream = cast("collections.abc.AsyncIterable[Any]", response)
             chunks: list = []
             final_usage: Any = None
-            is_cancelled = False
 
+            async for chunk in response_stream:
+                chunks.append(chunk)
+                if hasattr(chunk, "usage") and chunk.usage is not None:
+                    final_usage = chunk.usage
+
+            final_response = stream_chunk_builder(chunks, messages=messages)
+            pt = final_usage.prompt_tokens if final_usage else 0
+            ct = final_usage.completion_tokens if final_usage else 0
+            cost = await _compute_and_track(pt, ct, "completed")
+
+            response_text = ""
             try:
-                async for chunk in response_stream:
-                    chunks.append(chunk)
-                    if hasattr(chunk, "usage") and chunk.usage is not None:
-                        final_usage = chunk.usage
-            except asyncio.CancelledError:
-                is_cancelled = True
+                if final_response is not None:
+                    content = final_response.choices[0].message.content  # type: ignore[attr-defined]
+                    response_text = str(content) if content is not None else "<empty>"
+            except (AttributeError, IndexError, TypeError):
+                pass
 
-            if not is_cancelled:
-                final_response = stream_chunk_builder(chunks, messages=messages)
-                pt = final_usage.prompt_tokens if final_usage else 0
-                ct = final_usage.completion_tokens if final_usage else 0
-                cost = await _compute_and_track(pt, ct, "completed")
-
-                response_text = ""
-                try:
-                    if final_response is not None:
-                        content = final_response.choices[0].message.content  # type: ignore[attr-defined]
-                        response_text = str(content) if content is not None else "<empty>"
-                except (AttributeError, IndexError, TypeError):
-                    pass
-
-                if self.gateway.log_responses:
-                    logger.debug(
-                        "LLM 响应:\n%s",
-                        json.dumps(
-                            {"role": self.role, "cost": cost, "text": response_text},
-                            ensure_ascii=False,
-                            indent=2,
-                        ),
-                    )
-                else:
-                    logger.debug(
-                        "LLM 响应:\n%s",
-                        json.dumps({"role": self.role, "cost": cost}, ensure_ascii=False, indent=2),
-                    )
-                return final_response, cost
-
-            # 被取消：记录已生成 token 的费用后继续传播取消
-            if final_usage is not None:
-                await _compute_and_track(final_usage.prompt_tokens, final_usage.completion_tokens, "cancelled")
+            if self.gateway.log_responses:
+                logger.debug(
+                    "LLM 响应:\n%s",
+                    json.dumps(
+                        {"role": self.role, "cost": cost, "text": response_text},
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                )
             else:
-                completion_tokens = sum(len(c.choices[0].delta.content or "") // 4 for c in chunks if c.choices)
-                await _compute_and_track(prompt_tokens, completion_tokens, "cancelled")
-            raise asyncio.CancelledError
+                logger.debug(
+                    "LLM 响应:\n%s",
+                    json.dumps({"role": self.role, "cost": cost}, ensure_ascii=False, indent=2),
+                )
+            return final_response, cost
 
         return self.tm.create_task(_stream_and_collect())
 

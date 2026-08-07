@@ -9,6 +9,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from src.ai.roles.base import RoleHandler
+from src.ai.roles.embedding import EmbeddingRole
 from src.ai.roles.fast import FastRole
 from src.ai.roles.multimodal import MultimodalRole
 from src.ai.roles.quality import QualityRole
@@ -24,6 +25,7 @@ ROLE_PRESETS: dict[str, type[RoleHandler]] = {
     "fast": FastRole,
     "quality": QualityRole,
     "multimodal": MultimodalRole,
+    "embedding": EmbeddingRole,
 }
 
 
