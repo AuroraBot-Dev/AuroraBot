@@ -5,8 +5,14 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from src.contracts.agent import CapabilityDescriptor, ToolLease
-from src.contracts.tool import ToolExecutionRequest, ToolExecutorBinding, ToolOutcome, ToolOutcomeStatus
+from src.contracts import (
+    CapabilityDescriptor,
+    ToolExecutionRequest,
+    ToolExecutorBinding,
+    ToolLease,
+    ToolOutcome,
+    ToolOutcomeStatus,
+)
 from src.engine.tool_registry import ToolBindingError, ToolRegistry
 
 

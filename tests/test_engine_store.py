@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from src.agents.handler import ToolAgent
-from src.contracts.agent import (
+from src.contracts import (
     AgentContext,
     AgentDecision,
     AgentLimits,
@@ -19,14 +19,20 @@ from src.contracts.agent import (
     Completion,
     DelegationRequest,
     EngineConfiguration,
+    ModelContinuation,
+    ModelRequest,
+    ModelResult,
+    ModelUsage,
     TaskLimits,
     TaskStatus,
+    ToolCall,
+    ToolOutcomeStatus,
     ToolRequest,
+    TriageAction,
+    TriageDecision,
+    TriageLimits,
+    new_amp,
 )
-from src.contracts.amp import new_amp
-from src.contracts.model import ModelContinuation, ModelRequest, ModelResult, ModelUsage, ToolCall
-from src.contracts.tool import ToolOutcomeStatus
-from src.contracts.triage import TriageAction, TriageDecision, TriageLimits
 from src.engine.archive import task_archive_projection
 from src.engine.runtime import EngineState, PumpResult
 from src.engine.store import SQLiteRuntimeStore

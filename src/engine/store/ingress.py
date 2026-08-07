@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-from src.contracts.agent import (
+from src.contracts import (
     ActivityStatus,
     AgentInstance,
     AgentMessage,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.contracts.agent import TaskStatus
+from src.contracts import TaskStatus
 
 from .base import RuntimeStoreBase
 

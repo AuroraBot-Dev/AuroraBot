@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from src.config.files import read_source, read_toml_snapshot
 from src.config.helpers import _string
-from src.contracts.configuration import (
+from src.contracts import (
     ConfigurationError,
     ConfigurationSource,
     PromptConfig,

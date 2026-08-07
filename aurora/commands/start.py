@@ -6,7 +6,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from src.config import init as init_config
-from src.contracts.configuration import PLATFORM_NAMES
+from src.contracts import PLATFORM_NAMES
 
 if TYPE_CHECKING:
     import argparse

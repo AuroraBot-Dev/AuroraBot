@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 # 北京时区（UTC+8）
 _BEIJING_TZ = timezone(timedelta(hours=8))
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 logger = get_logger("aurora-app-clock.service")
 

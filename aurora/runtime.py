@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 import uvicorn
 
 from src.agents.triage import StructuredTriagePolicy
-from src.ai.gateway import ModelGatewayService
-from src.config import get as get_config
+from src.ai import ModelGatewayService
+from src.config import get
 from src.contracts import (
     PLATFORM_NAMES,
     AgentHandler,
@@ -87,7 +87,7 @@ async def run_runtime(
 
     headless 只禁用本地 Console，不改变平台组合。
     """
-    configuration = get_config()
+    configuration = get()
     selected = _selected_platforms(platforms, configuration.preference)
     console_enabled = not headless and configuration.runtime.console.enabled
     configure_logging(configuration.logging_level, configuration.logging_dir / "aurora.log")

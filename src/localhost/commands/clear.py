@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.event import CommandControl, CommandResult
+from src.contracts import (
+    CommandControl,
+    CommandResult,
+)
 
 if TYPE_CHECKING:
     import argparse

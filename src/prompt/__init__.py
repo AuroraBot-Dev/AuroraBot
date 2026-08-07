@@ -1,4 +1,4 @@
-"""RFC 0105 — 提示词片段与同构 Agent 循环中每轮消息的装配。"""
+"""提示词片段与同构 Agent 循环中每轮消息的装配。"""
 
 from __future__ import annotations
 

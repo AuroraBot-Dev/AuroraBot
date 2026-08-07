@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.contracts.amp import new_amp
-from src.contracts.event import CommandResult
+from src.contracts import (
+    CommandResult,
+    new_amp,
+)
 
 if TYPE_CHECKING:
     import argparse

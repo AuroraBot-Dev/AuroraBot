@@ -5,8 +5,10 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
-from src.contracts.amp import AmpValidationError
-from src.contracts.ports import DashboardDebugPort
+from src.contracts import (
+    AmpValidationError,
+    DashboardDebugPort,
+)
 from src.utils import LifespanSafeApp
 
 

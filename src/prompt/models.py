@@ -7,7 +7,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from src.contracts.model import ModelMessage
+from src.contracts import ModelMessage
 
 
 class _Msg(StrEnum):

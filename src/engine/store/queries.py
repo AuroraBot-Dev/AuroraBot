@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from src.contracts.agent import AgentInstance, TaskState
+from src.contracts import (
+    AgentInstance,
+    TaskState,
+)
 
 from .base import RuntimeStoreBase, utc_now
 from .status import (

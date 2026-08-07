@@ -1,8 +1,6 @@
 """MCP Kit — AuroraBot Platform 的 MCP 接入包。
 
 导出自描述 ``_create``，组合根通过统一协议完成创建、工具绑定与任务调度。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

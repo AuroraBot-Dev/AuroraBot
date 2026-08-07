@@ -2,8 +2,6 @@
 
 整合了原子 JSON 文件持久化、LLM 输出的容错解析、
 以及 JSON/YAML/TOML 通用结构化文本提取。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

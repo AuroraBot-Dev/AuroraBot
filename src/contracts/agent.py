@@ -13,7 +13,7 @@ from src.contracts.model import ToolDefinition
 from src.contracts.triage import TriageLimits
 
 if TYPE_CHECKING:
-    from src.contracts.model import ModelContinuation, ModelRequest, ToolCall
+    from src.contracts.model import ModelRequest, ToolCall
 
 
 # -- enums ---------------------------------------------------------------
@@ -345,10 +345,4 @@ class Capability(Protocol):
 
     def tool_definitions(self, context: AgentContext) -> tuple["ToolDefinition", ...]: ...
 
-    def handle_tool(
-        self,
-        call: "ToolCall",
-        context: AgentContext,
-        continuation: "ModelContinuation | None" = None,
-        tools: tuple["ToolDefinition", ...] = (),
-    ) -> AgentDecision | None: ...
+    def handle_tool(self, call: "ToolCall") -> AgentDecision | None: ...

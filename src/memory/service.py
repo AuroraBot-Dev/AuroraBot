@@ -6,7 +6,7 @@ import sqlite3
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.contracts.memory import (
+from src.contracts import (
     MemoryContextSnapshot,
     MemoryEntry,
     MemoryQuery,

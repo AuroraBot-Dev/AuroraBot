@@ -6,13 +6,11 @@ import json
 from enum import StrEnum
 from typing import Any
 
-from src.contracts.model import (
+from src.contracts import (
     ModelBudget,
     ModelMessage,
     ModelRequest,
     ModelResult,
-)
-from src.contracts.triage import (
     TriageAction,
     TriageBatch,
     TriageDecision,

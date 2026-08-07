@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import AgentDecision
-from src.contracts.model import ToolDefinition
+from src.contracts import (
+    AgentDecision,
+    ToolDefinition,
+)
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentContext
@@ -36,13 +38,7 @@ class WaitCapability:
             return ()
         return (ToolDefinition(WAIT_TOOL, _WAIT_DESCRIPTION, _WAIT_SCHEMA),)
 
-    def handle_tool(
-        self,
-        call: ToolCall,
-        _context: AgentContext,
-        _continuation: object = None,
-        _tools: tuple[object, ...] = (),
-    ) -> AgentDecision | None:
+    def handle_tool(self, call: ToolCall) -> AgentDecision | None:
         """处理等待工具调用，返回等待子 Agent 的决策。"""
         if call.name != WAIT_TOOL:
             return None

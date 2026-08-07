@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from src.contracts.agent import (
+from src.contracts import (
     ActivityRequest,
     ActivityStatus,
     AgentInstance,
@@ -25,7 +25,7 @@ from src.contracts.agent import (
     TaskState,
     TaskStatus,
 )
-from src.utils.time import utc_now
+from src.utils import utc_now
 
 from .schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V5, _SCHEMA, _SCHEMA_VERSION
 from .status import (

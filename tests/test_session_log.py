@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.contracts.amp import new_amp
+from src.contracts import new_amp
 from src.engine.session_log import SessionLog, session_file_stem
 
 

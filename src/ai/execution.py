@@ -13,8 +13,6 @@
     )
     response = await gen
     print(gen.cost)
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

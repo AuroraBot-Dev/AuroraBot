@@ -10,7 +10,12 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Final
 
-from src.contracts.agent import ActivityStatus, AgentStatus, MessageStatus, TaskStatus
+from src.contracts import (
+    ActivityStatus,
+    AgentStatus,
+    MessageStatus,
+    TaskStatus,
+)
 
 
 def _quoted(value: StrEnum) -> str:

@@ -18,8 +18,12 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
-from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
-from src.utils.logging import get_logger
+from src.contracts import (
+    CommandControl,
+    InputOrigin,
+    RuntimeInput,
+)
+from src.utils import get_logger
 
 logger = get_logger("aurora.console")
 

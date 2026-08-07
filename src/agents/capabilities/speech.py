@@ -9,11 +9,11 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import (
+from src.contracts import (
     AgentDecision,
+    ToolDefinition,
     ToolRequest,
 )
-from src.contracts.model import ToolDefinition
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentContext
@@ -62,19 +62,13 @@ class SpeechCapability:
         """此能力产生的 tool 名称集合。"""
         return frozenset({SPEECH_TOOL})
 
-    def tool_definitions(self, _context: AgentContext) -> tuple[ToolDefinition, ...]:
+    def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:  # noqa: ARG002
         """仅在 TTS 启用时提供朗读工具定义。"""
         if not self._tts_enabled:
             return ()
         return (ToolDefinition(SPEECH_TOOL, _SPEECH_DESCRIPTION, _SPEECH_SCHEMA),)
 
-    def handle_tool(
-        self,
-        call: ToolCall,
-        _context: AgentContext,
-        _continuation: object = None,
-        _tools: tuple[object, ...] = (),
-    ) -> AgentDecision | None:
+    def handle_tool(self, call: ToolCall) -> AgentDecision | None:
         """处理 tts.speak 工具调用，验证参数并生成朗读工具请求。"""
         if call.name != SPEECH_TOOL:
             return None

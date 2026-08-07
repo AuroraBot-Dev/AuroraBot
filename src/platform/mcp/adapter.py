@@ -15,20 +15,16 @@ from mcp import types
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.exceptions import McpError
 
-from src.contracts.agent import (
-    CapabilityCatalogSnapshot,
-    CapabilityDescriptor,
-)
-from src.contracts.amp import new_amp
-from src.contracts.configuration import (
+from src.contracts import (
     AppConfig,
     AuroraConfig,
-)
-from src.contracts.ports import ExternalAmpIngressPort
-from src.contracts.tool import (
+    CapabilityCatalogSnapshot,
+    CapabilityDescriptor,
+    ExternalAmpIngressPort,
     ToolExecutionRequest,
     ToolOutcome,
     ToolOutcomeStatus,
+    new_amp,
 )
 from src.platform.mcp.client_manager import (
     MCPClientManager,

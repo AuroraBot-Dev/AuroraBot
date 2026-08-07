@@ -10,8 +10,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.contracts.event import CommandControl
-from src.contracts.tool import (
+from src.contracts import (
+    CommandControl,
     ToolExecutionRequest,
     ToolOutcome,
     ToolOutcomeStatus,

@@ -2,8 +2,6 @@
 
 从 vnext.py 按职责分离出来的纯函数，负责工具序列化、
 响应解析、费用提取和输出验证。不依赖网关服务状态。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -17,7 +15,7 @@ from typing import Any
 from jsonschema import ValidationError, validate
 
 from src.ai.models import compute_cost
-from src.contracts.model import (
+from src.contracts import (
     ModelCapabilityError,
     ModelGatewayError,
     ModelRequest,

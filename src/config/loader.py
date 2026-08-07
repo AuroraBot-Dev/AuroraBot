@@ -28,7 +28,7 @@ from src.config.sections import (
     _parse_task_budget,
     _parse_triage,
 )
-from src.contracts.configuration import (
+from src.contracts import (
     AuroraConfig,
     ConfigurationError,
     ConfigurationSource,
@@ -405,7 +405,7 @@ def _load_agents_apps(
 
 
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
-    """加载选定的 RFC 0002 配置快照：读取 TOML → 合并 profile → 校验并组装。"""
+    """加载启动配置快照：读取 TOML → 合并 profile → 校验并组装。"""
     root = root.resolve()
     config_dir = root / "config"
     sources: list[ConfigurationSource] = []

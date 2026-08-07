@@ -1,4 +1,4 @@
-"""RFC 0005 定义的协议中立模型网关契约。"""
+"""协议中立模型网关契约。"""
 
 from __future__ import annotations
 

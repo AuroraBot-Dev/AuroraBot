@@ -15,8 +15,6 @@
 
     pricing = await get_pricing_by_id("openai/gpt-4o-mini")
     caps = await get_capabilities_by_id("deepseek/deepseek-v4-pro")
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -33,7 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 logger = get_logger("ModelsDev")
 

@@ -1,8 +1,6 @@
 """MCP Server 启动规范。
 
 由已校验的 ``config/apps.toml`` App 配置构造。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

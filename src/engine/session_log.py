@@ -15,7 +15,7 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from pathlib import Path

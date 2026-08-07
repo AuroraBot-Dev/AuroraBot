@@ -3,7 +3,11 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
+from src.contracts import (
+    CommandControl,
+    InputOrigin,
+    RuntimeInput,
+)
 from tests.support import create_test_runtime
 
 if TYPE_CHECKING:

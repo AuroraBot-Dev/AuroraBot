@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.contracts.event import (
+from src.contracts import (
     InputOrigin,
     RuntimeInput,
 )

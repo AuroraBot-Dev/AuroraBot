@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import (
+from src.contracts import (
     AgentContext,
     AgentDecision,
     AgentLimits,
@@ -12,9 +12,11 @@ from src.contracts.agent import (
     Completion,
     EngineConfiguration,
     TaskLimits,
+    TriageAction,
+    TriageDecision,
+    TriageLimits,
+    new_amp,
 )
-from src.contracts.amp import new_amp
-from src.contracts.triage import TriageAction, TriageDecision, TriageLimits
 from src.engine.runtime import AgentEngine
 from src.engine.store import SQLiteRuntimeStore
 

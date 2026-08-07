@@ -79,7 +79,7 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
         ),
     )
     runtime = _Runtime(configuration, events)
-    monkeypatch.setattr(composition, "get_config", lambda: configuration)
+    monkeypatch.setattr(composition, "get", lambda: configuration)
     monkeypatch.setattr(composition, "configure_logging", lambda *_args: events.append("logging"))
     monkeypatch.setattr(
         composition,
@@ -130,7 +130,7 @@ def test_console_enabled_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: P
         ),
     )
     runtime = _Runtime(configuration, events)
-    monkeypatch.setattr(composition, "get_config", lambda: configuration)
+    monkeypatch.setattr(composition, "get", lambda: configuration)
     monkeypatch.setattr(composition, "configure_logging", lambda *_args: events.append("logging"))
     monkeypatch.setattr(composition, "configure_console_logging", lambda **_kwargs: events.append("terminal"))
     monkeypatch.setattr(composition, "_create_runtime", lambda _configuration: runtime)

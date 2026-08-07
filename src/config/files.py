@@ -6,7 +6,10 @@ import hashlib
 import tomllib
 from typing import TYPE_CHECKING, Any
 
-from src.contracts.configuration import ConfigurationError, ConfigurationSource
+from src.contracts import (
+    ConfigurationError,
+    ConfigurationSource,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

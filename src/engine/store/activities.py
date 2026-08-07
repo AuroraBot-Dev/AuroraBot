@@ -6,7 +6,10 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-from src.contracts.agent import ActivityRequest, ActivityStatus
+from src.contracts import (
+    ActivityRequest,
+    ActivityStatus,
+)
 
 from .base import RuntimeStoreBase, _json, utc_now
 from .status import ACT_PENDING, ACT_PROCESSING, TASK_ACTIVE

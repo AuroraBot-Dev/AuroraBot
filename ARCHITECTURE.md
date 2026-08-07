@@ -495,7 +495,6 @@ engine/
                        #     5. Agent turn / Tool / Model 调度
                        #     6. 异步 Memory 投影 + 终态归档
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
-  commands.py         # 内部命令定义
   debug.py            # task_detail() / agent_detail() / 工作区校验
   store/              # SQLite 运行态持久化子包
     __init__.py       # SQLiteRuntimeStore — 组合多 Mixin 的 WAL facade
@@ -713,7 +712,7 @@ engine.install_tool_registry(ToolRegistry(bindings))
 
 - **命令路由**：解析 `/` 前缀命令，分发到确定性业务用例（`/status`、`/pump`、`/task`、`/agent`、`/help` 等）
 - **运行时检查**：读取 engine、platform、ai、memory 的状态快照
-- **调试 API**：`/v1/debug/*` 端点，提供脱敏的 Task/Agent/Brain 投影
+- **调试 API**：`/v1/debug/*` 端点，提供脱敏的 Task/Agent/运行态投影
 - **输入分发**：将纯文本从 Console / Dashboard 规范化为 AMP 并投递
 
 ```

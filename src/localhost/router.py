@@ -6,7 +6,11 @@ import argparse
 import shlex
 from typing import TYPE_CHECKING, NoReturn
 
-from src.contracts.event import CommandContext, CommandResult, RuntimeInput
+from src.contracts import (
+    CommandContext,
+    CommandResult,
+    RuntimeInput,
+)
 from src.localhost.registry import ConsoleCommand, command_specs
 
 if TYPE_CHECKING:

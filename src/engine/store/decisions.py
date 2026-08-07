@@ -17,7 +17,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from src.contracts.agent import (
+from src.contracts import (
     AgentDecision,
     AgentInstance,
     AgentMessage,

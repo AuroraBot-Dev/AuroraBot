@@ -8,13 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from src.config.helpers import _positive_number, _require_keys, _string, _table
-from src.contracts.agent import (
+from src.contracts import (
+    PLATFORM_NAMES,
     AgentLimits,
     AgentProfile,
-    TaskLimits,
-)
-from src.contracts.configuration import (
-    PLATFORM_NAMES,
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
@@ -23,8 +20,9 @@ from src.contracts.configuration import (
     DashboardPreference,
     McpPreference,
     PlatformPreference,
+    TaskLimits,
+    TriageLimits,
 )
-from src.contracts.triage import TriageLimits
 
 
 class _Msg(StrEnum):

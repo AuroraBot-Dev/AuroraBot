@@ -1,20 +1,14 @@
-"""MCP Client Manager — Brain 侧的 MCP 连接管理。
+"""MCP Client Manager — 与 MCP Server 建立 stdio 连接的客户端管理器。
 
 负责：
 - 建立与所有 MCP Server 的 stdio 连接
 - 维护 tools 列表缓存
 - 执行 tools/call
-- 可选：接收 notifications 并桥接到 EventBridge
+- 接收 notifications 并交给平台后台任务转发为 AMP 事件
 
-Notification 接收是可选增强：
-- 原生 Aurora App 可以主动推送 ``aurora/event`` 通知
-- 普通 MCP Server 不需要实现任何 Aurora 私有协议
-- 对于没有主动事件能力的 MCP Server，它是"可调用/可读取应用"，不是"主动感知源"
-
-Notification 接收方式：子类化 ``ClientSession``，重写
+原生 Aurora App 可以主动推送 ``aurora/event`` 通知；普通 MCP Server 不需要
+实现任何 Aurora 私有协议。接收方式：子类化 ``ClientSession``，重写
 ``_received_notification`` 方法（这是 MCP SDK 官方推荐的扩展点）。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations

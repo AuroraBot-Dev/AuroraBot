@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from src.utils.serialization import read_json
+from src.utils import read_json
 
 if TYPE_CHECKING:
     from pathlib import Path

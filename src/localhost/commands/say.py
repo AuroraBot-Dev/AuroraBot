@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.event import CommandResult
-from src.utils.logging import console_logging_status
+from src.contracts import CommandResult
+from src.utils import console_logging_status
 
 if TYPE_CHECKING:
     import argparse

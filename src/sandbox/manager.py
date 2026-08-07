@@ -14,7 +14,7 @@ from src.sandbox.config import ConfigReloader, SandboxConfig
 from src.sandbox.executor import SandboxExecutor
 from src.sandbox.inspector import CodeInspector
 from src.sandbox.policy import AccessPolicy
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable

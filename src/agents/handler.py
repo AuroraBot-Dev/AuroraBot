@@ -1,4 +1,4 @@
-"""所有 RFC 0012 Agent profile 共享的可恢复 Tool 链 handler。"""
+"""所有 Agent profile 共享的可恢复 Tool 链 handler。"""
 
 from __future__ import annotations
 
@@ -6,23 +6,21 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import (
+from src.contracts import (
     AgentContext,
     AgentDecision,
     CapabilityDescriptor,
     Completion,
-    ToolRequest,
-)
-from src.contracts.model import (
     ModelContinuation,
     ModelRequest,
     ModelResult,
     ToolCall,
     ToolDefinition,
+    ToolRequest,
     append_tool_result,
 )
 from src.prompt import PromptComposer
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from src.contracts.agent import Capability
@@ -210,10 +208,9 @@ class ToolAgent:
     ) -> AgentDecision:
         """分派一个 Tool call；同一响应的恢复信息只保存在 Agent 状态。"""
         tool_call = chain.call
-        tools = _collect_tool_definitions(context, self._capabilities)
         capability = self._dispatch.get(tool_call.name)
         if capability is not None:
-            decision = capability.handle_tool(tool_call, context, chain.continuation, tools)
+            decision = capability.handle_tool(tool_call)
             if decision is not None:
                 if decision.tool_request is not None or decision.delegations or decision.wait_for_children:
                     return self._attach_tool_chain(decision, chain)

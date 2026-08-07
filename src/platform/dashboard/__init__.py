@@ -18,7 +18,7 @@ from src.platform.dashboard.adapter import (
 )
 from src.platform.dashboard.api import create_app
 from src.platform.dashboard.service import ChatError, ChatService
-from src.utils.uvicorn import (
+from src.utils import (
     LifespanSafeApp,
     SignalSafeServer,
 )

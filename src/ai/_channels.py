@@ -24,14 +24,14 @@ from src.ai._parsing import (
 )
 from src.ai.execution import GatewayError, GenerationTask
 from src.ai.providers import resolve_model
-from src.contracts.model import (
+from src.contracts import (
     STRUCTURED_OUTPUT_NAME,
     ModelContinuation,
     ModelGatewayError,
     ModelRequest,
     ModelResult,
 )
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from src.ai.execution import ModelCaller

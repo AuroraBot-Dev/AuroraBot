@@ -1,4 +1,4 @@
-"""可组合的 Agent capability handler（RFC 0022）。"""
+"""可组合的 Agent capability handler。"""
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
 from src.agents.capabilities.speech import SPEECH_TOOL, SpeechCapability

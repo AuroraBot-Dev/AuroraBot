@@ -9,7 +9,7 @@ from enum import StrEnum
 from math import isfinite
 from typing import Any
 
-from src.contracts.configuration import ConfigurationError
+from src.contracts import ConfigurationError
 
 
 class _Msg(StrEnum):

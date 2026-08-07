@@ -7,7 +7,10 @@ from prompt_toolkit.input import DummyInput
 from prompt_toolkit.output import DummyOutput
 
 from src.console.shell import _display_messages, _PromptReader, run_console
-from src.contracts.event import OutputStreamItem, OutputStreamPage
+from src.contracts import (
+    OutputStreamItem,
+    OutputStreamPage,
+)
 from tests.support import create_test_runtime
 
 if TYPE_CHECKING:

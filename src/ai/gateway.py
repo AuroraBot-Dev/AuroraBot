@@ -1,4 +1,4 @@
-"""RFC 0005/0008 模型网关 —— Chat Completions / Responses 双通道调度。
+"""模型网关 —— Chat Completions / Responses 双通道调度。
 
 能力以 models.dev 为第一信息源；TOML 显式配置的 capabilities 作为高优覆盖。
 
@@ -11,8 +11,6 @@
     config = load_configuration(root, profile)
     service = ModelGatewayService(config)
     result = await service.complete(request)
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -30,15 +28,17 @@ from src.ai._parsing import invalid_output_result
 from src.ai.execution import CostTracker, ModelCaller, TaskManager
 from src.ai.models import cache_available, get_capabilities_by_id, init_cache, refresh_now
 from src.ai.providers import ProviderConfig, setup_providers
-from src.contracts.model import (
+from src.contracts import (
     ModelBudgetError,
     ModelCapabilityError,
     ModelGatewayError,
     ModelRequest,
     ModelResult,
 )
-from src.utils.logging import get_logger
-from src.utils.serialization import extract_json_from_text
+from src.utils import (
+    extract_json_from_text,
+    get_logger,
+)
 
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig

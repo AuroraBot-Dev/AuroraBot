@@ -8,21 +8,24 @@ import pytest
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
 from src.agents.handler import ToolAgent, _collect_tool_definitions
 from src.config.loader import load_configuration
-from src.contracts.agent import (
+from src.contracts import (
     AgentContext,
     AgentInstance,
     AgentMessage,
     AgentProfile,
     AgentStatus,
     CapabilityDescriptor,
+    ConfigurationError,
+    MemoryContextSnapshot,
     MessageStatus,
+    ModelContinuation,
+    ModelResult,
+    ModelUsage,
     TaskState,
     TaskStatus,
+    ToolCall,
     capability_tool_definition,
 )
-from src.contracts.configuration import ConfigurationError
-from src.contracts.memory import MemoryContextSnapshot
-from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
 from src.prompt import PromptCatalog, PromptComposer
 
 if TYPE_CHECKING:
