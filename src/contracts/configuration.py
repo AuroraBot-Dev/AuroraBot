@@ -237,8 +237,7 @@ class ModelRoleConfig:
         {
             "provider": "string",
             "model": "string",
-            "capabilities": ["string", ...],
-            "endpoint": "chat_completions"
+            "capabilities": ["string", ...]
         }
 
     """
@@ -246,7 +245,6 @@ class ModelRoleConfig:
     provider: str
     model: str
     capabilities: frozenset[str] = frozenset()
-    endpoint: str = "chat_completions"
 
 
 @dataclass(frozen=True, slots=True)

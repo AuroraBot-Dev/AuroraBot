@@ -248,19 +248,18 @@ triage agent (depth 0, 无工具, 快模型)
 - `_message_text` 按消息类型渲染：`task.started` 的 `{batch}` 投影、`agent.assigned` 的 `context_events`、`tool.*` 回执、`child.*` 子代理回报。
 - 所有外部数据经 `_external()` 转义，防止提示词注入。
 
-### 4.5 `src/ai` — 模型层（实现 `ModelProvider`）
+### 4.5 `src/ai` — 模型层（总分结构，RFC 0212）
 
-**模式**：宽泛模型网关——一个进程一个 `ModelGatewayService`，按 role 解析模型端点。
+**模式**：总控 + 预设角色 + 协议通道三层。
 
-| 文件 | 内容 |
-| --- | --- |
-| `gateway.py` | `ModelGatewayService.complete(request)` → `ModelResult` |
-| `models.py` | 模型角色、能力协商、Provider 适配表 |
-| `providers.py` | 模型解析与 Provider 参数配置 |
-| `execution.py` | acompletion + stream |
-| `_channels.py`/`_parsing.py` | Chat Completions / Responses 双通道调度与响应解析 |
+| 层 | 文件 | 内容 |
+| --- | --- | --- |
+| 总控 | `gateway.py` | `ModelGatewayService`：能力协商、角色路由、输出规范化、成本预算、冷启动 |
+| 预设角色 | `roles/` | `fast`（chat 通道，低延迟决策）/ `quality`（responses 通道，复杂推理）/ `multimodal`（chat 通道，多模态）；注册表 `ROLE_PRESETS` + `resolve()`（未预设启动报错） |
+| 协议通道 | `channels/` | `RoleHandler` 契约（endpoint 声明）+ `ChatChannel`/`ResponsesChannel` 实现（调用 + 解析） |
+| 基础设施 | `models.py`/`providers.py`/`execution.py` | models.dev 缓存/Provider 注册/`TaskManager`/`CostTracker` |
 
-**与 engine 的协作**：engine 只持有 `model_provider` 引用，`_execute_model` 调 `complete()`；多模态支持是模型级别的能力协商。
+**关键语义（RFC 0212）**：`endpoint`（通道选择）由预设角色代码声明，`models.toml` 只配置 model 绑定（provider + model + capabilities 覆盖）。新增角色 = 在 `roles/` 加预设文件 + 配置绑定 model；配置出现未预设角色启动报错。
 
 ### 4.6 `src/engine` — 运行实现层（核心，只依赖 contracts + utils）
 

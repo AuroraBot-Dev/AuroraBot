@@ -74,7 +74,6 @@ class _Msg(StrEnum):
     ROLE_UNSUPPORTED_KEYS = "models.roles.{role} has unsupported or missing keys"
     ROLE_UNKNOWN_PROVIDER = "models.roles.{role} references unknown provider"
     ROLE_CAPABILITIES_STRINGS = "models.roles.{role}.capabilities must contain strings"
-    ROLE_ENDPOINT_UNSUPPORTED = "models.roles.{role}.endpoint is unsupported"
     ENGINE_SUB_MUST_BE_TABLES = "engine autonomy, Agents and Task budgets must be tables"
     TRIAGE_UNKNOWN_ROLE = "engine.triage.model_role references unknown role {model_role}"
     DEBUG_PORT_INVALID = "runtime.debug_port must be a valid port"
@@ -223,7 +222,7 @@ def _load_models(
     for role, settings in roles.items():
         if not isinstance(settings, dict):
             raise ConfigurationError(_Msg.ROLE_MUST_BE_TABLE.format(role=role))
-        role_allowed = {"provider", "model", "capabilities", "endpoint"}
+        role_allowed = {"provider", "model", "capabilities"}
         if set(settings) - role_allowed or not {"provider", "model"} <= set(settings):
             raise ConfigurationError(_Msg.ROLE_UNSUPPORTED_KEYS.format(role=role))
         provider_id = _string(settings["provider"], f"models.roles.{role}.provider")
@@ -236,14 +235,10 @@ def _load_models(
             capabilities = frozenset(capabilities_raw)
         else:
             capabilities = frozenset()
-        endpoint = settings.get("endpoint", "chat_completions")
-        if endpoint not in {"chat_completions", "responses"}:
-            raise ConfigurationError(_Msg.ROLE_ENDPOINT_UNSUPPORTED.format(role=role))
         model_definitions[role] = ModelRoleConfig(
             provider=provider_id,
             model=_string(settings["model"], f"models.roles.{role}.model"),
             capabilities=capabilities,
-            endpoint=endpoint,
         )
 
     return (

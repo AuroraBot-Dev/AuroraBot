@@ -16,6 +16,7 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 10. [0209 Agent 全同构](0209-agent-isomorphism.md) - Triage 入口 agent、三元组实例化（上下文/权限域/逻辑类）、委派唯一化与 defer/discard transition
 11. [0210 最小 engine 重写](0210-minimal-engine-rewrite.md) - 单一 SQLite 即归档、无租约单进程并发、BaseAgent 基类、Schema v9 不迁移
 12. [0211 工具域统一与 AMP 化工具回执](0211-tool-domain-and-amp-receipts.md) - aur.* 域命名规范、工具结果统一走 AMP、删 ToolLease/RecoveryBinding/双端口
+13. [0212 AI 包总分结构](0212-ai-role-hierarchy.md) - 预设角色（roles/ 子包）、endpoint 归代码、配置只描述 model 绑定
 
 ## 规范优先级
 

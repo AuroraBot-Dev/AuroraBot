@@ -10,20 +10,11 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from src.ai import models
-from src.ai._parsing import (
-    chat_assistant_item,
-    chat_message,
-    chat_tool_calls,
-    invalid_output_result,
-    json_item,
-    parse_arguments,
-    provider_tools,
-    response_tool_calls,
-    responses_usage,
-    usage,
-)
+from src.ai.channels.base import json_item, parse_arguments, provider_tools
+from src.ai.channels.chat import chat_assistant_item, chat_message, chat_tool_calls, usage
+from src.ai.channels.responses import response_tool_calls, responses_usage
 from src.ai.execution import CostTracker, GatewayError
-from src.ai.gateway import ModelGatewayService
+from src.ai.gateway import ModelGatewayService, invalid_output_result
 from src.config.loader import load_configuration
 from src.contracts import (
     ModelCapabilityError,

@@ -23,11 +23,11 @@ from typing import TYPE_CHECKING, Any
 
 from jsonschema import ValidationError, validate
 
-from src.ai._channels import _complete_chat, _execute_responses_channel
-from src.ai._parsing import invalid_output_result
-from src.ai.execution import CostTracker, ModelCaller, TaskManager
+from src.ai.channels.chat import ChatCaller
+from src.ai.execution import CostTracker, TaskManager
 from src.ai.models import cache_available, get_capabilities_by_id, init_cache, refresh_now
 from src.ai.providers import ProviderConfig, setup_providers
+from src.ai.roles import resolve
 from src.contracts import (
     ModelBudgetError,
     ModelCapabilityError,
@@ -41,6 +41,7 @@ from src.utils import (
 )
 
 if TYPE_CHECKING:
+    from src.ai.channels.base import RoleHandler
     from src.contracts.configuration import AuroraConfig
 
 
@@ -48,7 +49,6 @@ class _Msg(StrEnum):
     """本文件内所有异常与日志消息字符串常量。"""
 
     MODEL_FORMAT = "Model for role '{role}' must be in 'provider/model_name' format, got '{model}'"
-    UNKNOWN_ROLE = "Unknown role '{role}'. Available: {available}"
     UNKNOWN_MODEL_ROLE = "unknown model role: {role}"
     RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
     CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
@@ -64,6 +64,19 @@ class _Msg(StrEnum):
 
 
 logger = get_logger("aurora.model_gateway")
+
+
+def invalid_output_result(request: ModelRequest, diagnostic: str) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
+    """模型输出未通过结构化校验时的确定性回退（配置了则返回，否则仅诊断）。"""
+    if request.invalid_output_result is None:
+        return None, (diagnostic,)
+    try:
+        assert request.output_schema is not None
+        validate(request.invalid_output_result, request.output_schema)
+    except (AssertionError, ValidationError):
+        return None, (diagnostic, "configured invalid-output fallback did not match schema")
+    return request.invalid_output_result, (diagnostic, "returned configured no_action fallback")
+
 
 _COLD_START_REFRESH_SECONDS = 5.0
 """冷启动时等待 models.dev 后台刷新的上限；超时后使用隐含能力继续对话。"""
@@ -127,9 +140,12 @@ class ModelGatewayService:
         if custom_providers:
             setup_providers(*custom_providers)
 
-        self._callers: dict[str, ModelCaller] = {
-            role: ModelCaller(model, role, self._task_manager, self) for role, model in self._models.items()
-        }
+        self._handlers: dict[str, RoleHandler] = {}
+        self._callers: dict[str, ChatCaller] = {}
+        for role_id, model in self._models.items():
+            handler_cls = resolve(role_id)  # RFC 0212：预设之外启动报错
+            self._handlers[role_id] = handler_cls()
+            self._callers[role_id] = ChatCaller(model, role_id, self._task_manager, self)
 
         self._capabilities: dict[str, frozenset[str]] = {}
         self._uncertain_roles: set[str] = set()
@@ -163,10 +179,10 @@ class ModelGatewayService:
                 caps = await get_capabilities_by_id(model_id)
                 if not data_available:
                     self._uncertain_roles.add(role_id)
-            if definition.endpoint == "responses":
+            if self._handlers[role_id].endpoint == "responses":
                 caps = caps | frozenset({"native_responses"})
             self._capabilities[role_id] = caps
-            if definition.endpoint == "responses":
+            if self._handlers[role_id].endpoint == "responses":
                 responses_count += 1
         self._initialized = True
         logger.info("model gateway initialized roles=%d responses_roles=%d", len(self._models), responses_count)
@@ -188,12 +204,9 @@ class ModelGatewayService:
             return definition.capabilities
         return frozenset({"chat", "stream", "json_text_fallback"})
 
-    # ── 角色 → 调用器映射 ──────────────────────────────────
+    # ── 角色 → 调用器映射（chat 通道使用）────────────────────
 
-    def use_model(self, role: str) -> ModelCaller:
-        role = role.lower()
-        if role not in self._callers:
-            raise ValueError(_Msg.UNKNOWN_ROLE.format(role=role, available=sorted(self._callers)))
+    def _caller_for(self, role: str) -> ChatCaller:
         return self._callers[role]
 
     # ── 能力协商 ──────────────────────────────────────────
@@ -212,9 +225,10 @@ class ModelGatewayService:
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
         if forbidden:
             raise ModelCapabilityError(_Msg.FORBIDDEN_PARAMETERS.format(forbidden=forbidden))
-        if request.response_mode == "native" and role.endpoint != "responses":
+        handler = self._handlers[request.role]
+        if request.response_mode == "native" and handler.endpoint != "responses":
             raise ModelCapabilityError(_Msg.NOT_NATIVE_RESPONSES_ENDPOINT.format(role=request.role))
-        if role.endpoint == "responses" and "native_responses" not in capabilities:
+        if handler.endpoint == "responses" and "native_responses" not in capabilities:
             raise ModelCapabilityError(_Msg.LACKS_NATIVE_RESPONSES.format(role=request.role))
         if not request.required_capabilities <= capabilities:
             missing = sorted(request.required_capabilities - capabilities)
@@ -225,17 +239,17 @@ class ModelGatewayService:
             else:
                 raise ModelCapabilityError(_Msg.LACKS_TOOLS.format(role=request.role))
         if request.continuation is not None and (
-            request.continuation.provider != role.provider or request.continuation.channel != role.endpoint
+            request.continuation.provider != role.provider or request.continuation.channel != handler.endpoint
         ):
             raise ModelCapabilityError(_Msg.CONTINUATION_MISMATCH)
 
         negotiated = set(request.required_capabilities)
         if request.tools:
             negotiated.add("tools")
-        if role.endpoint == "responses":
+        if self._handlers[request.role].endpoint == "responses":
             negotiated.add("native_responses")
         if request.output_schema is not None:
-            if role.endpoint == "responses" or "structured_output" in capabilities:
+            if handler.endpoint == "responses" or "structured_output" in capabilities:
                 negotiated.add("structured_output")
             elif request.allow_json_text_fallback and "json_text_fallback" in capabilities:
                 negotiated.add("json_text_fallback")
@@ -251,13 +265,14 @@ class ModelGatewayService:
         negotiated = self.negotiate(request)
         role = self._configuration.model_definitions[request.role]
         provider = self._configuration.model_providers[role.provider]
+        handler = self._handlers[request.role]
 
         logger.debug(
             "model gateway request model_role=%s provider=%s endpoint=%s messages=%d tools=%d "
             "continuation=%s output_schema=%s cancel_policy=%s parameter_keys=%s",
             request.role,
             role.provider,
-            role.endpoint,
+            handler.endpoint,
             len(request.messages),
             len(request.tools),
             request.continuation is not None,
@@ -274,10 +289,7 @@ class ModelGatewayService:
             )
             raise ModelGatewayError(_Msg.MISSING_CREDENTIAL.format(env_var=provider.secret_env))
 
-        if role.endpoint == "responses":
-            result = await _execute_responses_channel(self, request, role, negotiated)
-        else:
-            result = await _complete_chat(self, request, role, negotiated)
+        result = await handler.complete(self, request, role, negotiated)
 
         if request.budget.max_cost_usd is not None and result.cost_usd > request.budget.max_cost_usd:
             logger.warning(
@@ -292,7 +304,7 @@ class ModelGatewayService:
             "model gateway response model_role=%s endpoint=%s prompt_tokens=%d completion_tokens=%d "
             "cost_usd=%.6f tool_calls=%d finish_reason=%s duration_ms=%.1f",
             request.role,
-            role.endpoint,
+            handler.endpoint,
             result.usage.prompt_tokens,
             result.usage.completion_tokens,
             result.cost_usd,
