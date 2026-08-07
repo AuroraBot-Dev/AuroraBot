@@ -1,18 +1,16 @@
-"""原子 Agent 决策提交、监督更新与 Task 终止。
+"""原子 Agent 决策提交、消息/活动队列与 Task 终止（Schema v9，RFC 0210）。
 
-apply_decision 是本模块的核心入口：在单一事务中原子执行一条已授权的
-AgentDecision（模型调用、工具请求、委托、完成、等待、失败六种转换），
-并同时写入邮箱出站消息、因果事件和状态更新。
-
-等待语义由数据库事实派生（RFC 0205）：非终态决策统一落到 READY 基态，
-消息接纳由 claim_message 基于 activities/children 的存在性判断。
+apply_decision 在单一事务中原子执行一条已授权的 AgentDecision（模型、
+工具、委托、完成、等待、defer、discard、失败八种转换），并同时写入
+消息、因果事件（轻量载荷）与状态更新。单进程 asyncio 独占：无租约、
+无乐观锁，claim 退化为原子 UPDATE。
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import uuid4
@@ -28,6 +26,7 @@ from src.contracts import (
 )
 
 from .base import RuntimeStoreBase, _json, utc_now
+from .inbox import StoreInboxMixin
 from .status import (
     ACT_ACTIVE,
     ACT_CANCELLED,
@@ -46,13 +45,13 @@ from .status import (
 class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
 
-    LEASE_LOST = "Agent message lease was lost"
-    REVISION_CONFLICT = "Agent revision conflict"
+    MESSAGE_NOT_CLAIMED = "message is not in processing state"
     TASK_NOT_ACTIVE = "Task is no longer active"
     DELEGATION_LIMIT = "Agent delegation limit exceeded"
     TRIAGE_CONTROL_DENIED = "defer/discard is only allowed for the entry triage Agent"
     WAIT_WITHOUT_CHILDREN = "Agent cannot wait without active children"
     UNSUPPORTED_DECISION = "unsupported Agent decision"
+    ACTIVITY_ROW_MISSING = "activity row missing for {activity_id}"
 
 
 def _decision_kind(decision: AgentDecision) -> str:
@@ -94,8 +93,34 @@ def _decision_summary(decision: AgentDecision) -> str:
     return failure if failure is not None else ""
 
 
-class StoreDecisionsMixin(RuntimeStoreBase):
-    """决策提交 Mixin：原子执行 Agent 决策，管理监督树和 Task 终止。"""
+def _decision_payload(decision: AgentDecision) -> dict[str, Any]:
+    """轻量因果载荷（RFC 0210）：只存审计摘要字段，不存完整请求。"""
+    if decision.model_request is not None:
+        return {
+            "role": decision.model_request.role,
+            "tool_names": [tool.name for tool in decision.model_request.tools],
+        }
+    if decision.tool_request is not None:
+        return {"capability": decision.tool_request.capability}
+    if decision.delegations:
+        return {"count": len(decision.delegations), "memory_candidates": list(decision.memory_candidates)}
+    if decision.completion is not None:
+        return {"silent": decision.completion.silent}
+    if decision.wait_for_children:
+        return {}
+    if decision.defer_seconds is not None:
+        return {"defer_seconds": decision.defer_seconds}
+    if decision.discard:
+        return {}
+    return {"error": decision.failure}
+
+
+class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
+    """决策提交 Mixin：原子执行 Agent 决策，管理消息/活动队列与 Task 终止。
+
+    继承 StoreInboxMixin 使 settle_batch（批次结算）对 pyright 可见；
+    组合顺序由 SQLiteRuntimeStore 的 MRO 保证。
+    """
 
     def apply_decision(
         self,
@@ -112,47 +137,43 @@ class StoreDecisionsMixin(RuntimeStoreBase):
         根据决策类型执行对应逻辑：
         - model_request：检查模型调用预算，创建 PENDING model Activity
         - tool_request：检查工具调用预算，在事务内解析 session_id，创建 PENDING tool Activity
-        - delegations：检查监督限额（深度、子节点数等），以 limits.worker_profile
-          解析默认 child profile，创建子 Agent
+        - delegations：检查监督限额，解析默认 child profile，创建子 Agent
         - wait_for_children：原子校验存在非终态 children 或 pending child reports
+        - defer / discard：仅入口 triage agent，结算批次并终止 Task
         - completion / failure：完成或失败，通知父 Agent 或结束 Task
 
-        所有决策统一将 Agent 落回 READY 基态（终态除外）、完成消息、
-        记录因果事件。返回本次决策创建的所有新实体 ID。
+        返回本次决策创建的所有新实体 ID。
         """
         now = utc_now()
         created: list[str] = []
         with self.transaction() as connection:
-            # 校验消息租约、Agent 版本和 Task 活跃性
             message_row = connection.execute(
-                "SELECT * FROM mailbox WHERE message_id = ?", (message.message_id,)
+                "SELECT * FROM messages WHERE message_id = ?", (message.message_id,)
             ).fetchone()
-            agent_row = connection.execute("SELECT * FROM agents WHERE agent_id = ?", (agent.agent_id,)).fetchone()
             task_row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (agent.task_id,)).fetchone()
             if message_row is None or message_row["status"] != MessageStatus.PROCESSING:
-                raise RuntimeError(_Msg.LEASE_LOST)
-            if agent_row is None or int(agent_row["revision"]) != agent.revision:
-                raise RuntimeError(_Msg.REVISION_CONFLICT)
+                raise RuntimeError(_Msg.MESSAGE_NOT_CLAIMED)
             if task_row is None or task_row["status"] != TaskStatus.ACTIVE:
                 raise RuntimeError(_Msg.TASK_NOT_ACTIVE)
-            state = json.loads(agent_row["state_json"])
+            state = json.loads(
+                connection.execute("SELECT state_json FROM agents WHERE agent_id = ?", (agent.agent_id,)).fetchone()[
+                    "state_json"
+                ]
+            )
             state.update(state_patch)
             status = AgentStatus.READY
             summary = _decision_summary(decision)
 
             if decision.model_request is not None:
-                # 检查模型调用预算，超出则终止 Task
                 if int(task_row["model_calls"]) >= int(task_row["max_model_calls"]):
                     self._end_task(
                         connection, agent.task_id, TaskStatus.BUDGET_EXHAUSTED, "model_budget_exhausted", now
                     )
                     status = AgentStatus.CANCELLED
                 else:
-                    # 创建 PENDING model Activity，等待外部模型服务处理
                     activity_id = str(uuid4())
                     connection.execute(
-                        "INSERT INTO activities VALUES (?, ?, ?, 'model', ?, "
-                        f"{ACT_PENDING}, ?, ?, NULL, ?, ?, NULL, NULL)",
+                        f"INSERT INTO activities VALUES (?, ?, ?, 'model', ?, {ACT_PENDING}, ?, ?, ?, ?, NULL, NULL)",
                         (
                             activity_id,
                             agent.task_id,
@@ -171,12 +192,10 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     created.append(activity_id)
 
             elif decision.tool_request is not None:
-                # 检查工具调用预算，超出则终止 Task
                 if int(task_row["tool_calls"]) >= int(task_row["max_tool_calls"]):
                     self._end_task(connection, agent.task_id, TaskStatus.BUDGET_EXHAUSTED, "tool_budget_exhausted", now)
                     status = AgentStatus.CANCELLED
                 else:
-                    # 创建 PENDING tool Activity；session_id 与 request_id 在事务内解析
                     activity_id = str(uuid4())
                     request_id = str(uuid4())
                     request = {
@@ -185,7 +204,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                         "session_id": str(task_row["session_id"]),
                     }
                     connection.execute(
-                        f"INSERT INTO activities VALUES (?, ?, ?, ?, ?, {ACT_PENDING}, ?, ?, NULL, ?, ?, NULL, NULL)",
+                        f"INSERT INTO activities VALUES (?, ?, ?, ?, ?, {ACT_PENDING}, ?, ?, ?, ?, NULL, NULL)",
                         (
                             activity_id,
                             agent.task_id,
@@ -209,7 +228,6 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 resolved = [
                     (request.instruction, request.profile_id or worker_profile) for request in decision.delegations
                 ]
-                # 检查委托限额：深度、每 Agent 子节点数、每 Task 总 Agent 数、全局活跃 Agent 数
                 current_count = int(
                     connection.execute("SELECT count(*) FROM agents WHERE task_id = ?", (agent.task_id,)).fetchone()[0]
                 )
@@ -233,9 +251,8 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 batch_events = self._root_batch_events(state)
                 for instruction, child_profile in resolved:
                     child_id = str(uuid4())
-                    # 创建子 Agent，depth + 1，初始状态为 READY
                     connection.execute(
-                        f"INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, {AGENT_READY}, 0, '{{}}', ?, ?, ?)",
+                        f"INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, {AGENT_READY}, '{{}}', ?, ?, ?)",
                         (
                             child_id,
                             agent.task_id,
@@ -265,25 +282,27 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     created.extend((child_id, child_message))
                 if batch_events is not None:
-                    self._settle_batch(connection, task_row, "delete", now)
+                    self.settle_batch(connection, str(task_row["root_message_id"]), "delete", now)
 
             elif decision.defer_seconds is not None:
                 self._require_triage_root(agent, task_row)
-                self._settle_batch(connection, task_row, "defer", now, decision.defer_seconds)
+                self.settle_batch(connection, str(task_row["root_message_id"]), "defer", now, decision.defer_seconds)
                 status = AgentStatus.COMPLETED
                 self._end_task(connection, agent.task_id, TaskStatus.CANCELLED, "triage.defer", now)
 
             elif decision.discard:
                 self._require_triage_root(agent, task_row)
-                self._settle_batch(connection, task_row, "delete", now)
+                self.settle_batch(connection, str(task_row["root_message_id"]), "delete", now)
                 status = AgentStatus.COMPLETED
                 self._end_task(connection, agent.task_id, TaskStatus.CANCELLED, "triage.discard", now)
 
             elif decision.completion is not None:
                 completion = decision.completion
                 status = AgentStatus.COMPLETED
+                if self._root_batch_events(state) is not None:
+                    # 入口 agent 直接完成（未委派）：按 process 语义结算批次（RFC 0209）
+                    self.settle_batch(connection, str(task_row["root_message_id"]), "delete", now)
                 if agent.parent_agent_id is not None:
-                    # 非根 Agent：向父 Agent 发送 child.completed 消息
                     result = ChildResult(
                         child_agent_id=agent.agent_id,
                         status="completed",
@@ -304,12 +323,10 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                     )
                     created.append(child_message)
                 else:
-                    # 根 Agent 完成：结束整个 Task（silent 模式标记为 SILENT）
                     task_status = TaskStatus.SILENT if completion.silent else TaskStatus.COMPLETED
                     self._end_task(connection, agent.task_id, task_status, summary, now)
 
             elif decision.wait_for_children:
-                # 原子校验等待前提：存在非终态 children 或 pending child reports
                 if not self._has_active_children(connection, agent.agent_id):
                     raise ValueError(_Msg.WAIT_WITHOUT_CHILDREN)
 
@@ -320,9 +337,8 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 status = AgentStatus.FAILED
                 if self._root_batch_events(state) is not None:
                     # 入口 triage agent 失败：结算批次，避免 Inbox 残留（fail-open 已由 handler 兜底）
-                    self._settle_batch(connection, task_row, "delete", now)
+                    self.settle_batch(connection, str(task_row["root_message_id"]), "delete", now)
                 if agent.parent_agent_id is not None:
-                    # 非根 Agent：向父 Agent 发送 child.failed 消息
                     result = ChildResult(
                         child_agent_id=agent.agent_id,
                         status="failed",
@@ -345,23 +361,19 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 else:
                     self._end_task(connection, agent.task_id, TaskStatus.ERROR, summary, now)
 
-            # 更新 Agent 状态（revision +1 实现乐观并发）、消息完成和因果事件
             connection.execute(
-                "UPDATE agents SET status = ?, revision = revision + 1, state_json = ?, "
-                "last_summary = ?, updated_at = ? "
-                "WHERE agent_id = ?",
+                "UPDATE agents SET status = ?, state_json = ?, last_summary = ?, updated_at = ? WHERE agent_id = ?",
                 (status, _json(state), summary, now, agent.agent_id),
             )
             connection.execute(
-                f"UPDATE mailbox SET status = {MSG_COMPLETED}, lease_until = NULL, completed_at = ? "
-                "WHERE message_id = ?",
+                f"UPDATE messages SET status = {MSG_COMPLETED}, completed_at = ? WHERE message_id = ?",
                 (now, message.message_id),
             )
             self._insert_causal_event(
                 connection,
                 event_type=f"agent.{_decision_kind(decision)}",
                 summary=summary,
-                payload=decision.to_dict(),
+                payload=_decision_payload(decision),
                 task_id=agent.task_id,
                 agent_id=agent.agent_id,
                 causation_id=message.message_id,
@@ -369,6 +381,275 @@ class StoreDecisionsMixin(RuntimeStoreBase):
                 now=now,
             )
         return tuple(created)
+
+    # -- 消息与活动队列（无租约原子 claim）--------------------------------
+
+    def claim_message(self) -> tuple[AgentMessage, AgentInstance, Any] | None:
+        """原子领取一条可处理消息（含其 Agent 与 Task），单进程无竞争。"""
+        with self.transaction() as connection:
+            row = connection.execute(
+                f"SELECT * FROM messages WHERE status = {MSG_PENDING} "
+                "ORDER BY priority DESC, created_at, message_id LIMIT 1"
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute(
+                f"UPDATE messages SET status = {MSG_PROCESSING} WHERE message_id = ?", (row["message_id"],)
+            )
+            message = self._message(
+                connection.execute("SELECT * FROM messages WHERE message_id = ?", (row["message_id"],)).fetchone()
+            )
+            agent_row = connection.execute(
+                "SELECT * FROM agents WHERE agent_id = ?", (message.target_agent_id,)
+            ).fetchone()
+            task_row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (message.task_id,)).fetchone()
+            if agent_row is None or task_row is None or task_row["status"] != TaskStatus.ACTIVE:
+                connection.execute(
+                    f"UPDATE messages SET status = {MSG_ERROR}, completed_at = ? WHERE message_id = ?",
+                    (utc_now(), message.message_id),
+                )
+                return None
+            return message, self._agent(agent_row), self._task(task_row)
+
+    def fail_message(self, message_id: str, error: str) -> None:
+        with self.transaction() as connection:
+            row = connection.execute("SELECT * FROM messages WHERE message_id = ?", (message_id,)).fetchone()
+            connection.execute(
+                f"UPDATE messages SET status = {MSG_ERROR}, completed_at = ? WHERE message_id = ?",
+                (utc_now(), message_id),
+            )
+            if row is not None:
+                self._insert_causal_event(
+                    connection,
+                    event_type="message.failed",
+                    summary=error,
+                    payload={"message_id": message_id},
+                    task_id=str(row["task_id"]),
+                    agent_id=str(row["target_agent_id"]),
+                    correlation_id=str(row["correlation_id"]),
+                    now=utc_now(),
+                )
+
+    def claim_activities(self, kind: str, limit: int) -> tuple[Any, ...]:
+        """原子领取指定类型的待处理活动，返回活动行对象。"""
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                f"WHERE a.kind = ? AND a.status = {ACT_PENDING} AND t.status = {TASK_ACTIVE} "
+                "ORDER BY a.priority DESC, a.created_at LIMIT ?",
+                (kind, limit),
+            ).fetchall()
+            result: list[Any] = []
+            for row in rows:
+                connection.execute(
+                    "UPDATE activities SET status = 'PROCESSING', updated_at = ? WHERE activity_id = ?",
+                    (utc_now(), row["activity_id"]),
+                )
+                updated = connection.execute(
+                    "SELECT * FROM activities WHERE activity_id = ?", (row["activity_id"],)
+                ).fetchone()
+                if updated is None:
+                    raise RuntimeError(_Msg.ACTIVITY_ROW_MISSING.format(activity_id=row["activity_id"]))
+                result.append(updated)
+            return tuple(result)
+
+    def complete_model_activity(self, activity_id: str, result: dict[str, Any] | None, error: str | None) -> None:
+        """完成模型活动：写入结果并投递 model.completed / model.failed 消息。"""
+        now = utc_now()
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM activities WHERE activity_id = ? AND kind = 'model'", (activity_id,)
+            ).fetchone()
+            if row is None:
+                return
+            status = "COMPLETED" if error is None else "ERROR"
+            connection.execute(
+                "UPDATE activities SET status = ?, result_json = ?, error = ?, updated_at = ? WHERE activity_id = ?",
+                (status, _json(result) if result is not None else None, error, now, activity_id),
+            )
+            task_row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (row["task_id"],)).fetchone()
+            if task_row is not None and task_row["status"] == TaskStatus.ACTIVE:
+                payload: dict[str, Any] = (
+                    {"activity_id": activity_id, "error": error}
+                    if error is not None
+                    else {"activity_id": activity_id, **(result or {})}
+                )
+                self._insert_message(
+                    connection,
+                    task_id=str(row["task_id"]),
+                    target_agent_id=str(row["agent_id"]),
+                    message_type="model.completed" if error is None else "model.failed",
+                    payload=payload,
+                    causation_id=activity_id,
+                    correlation_id=str(row["task_id"]),
+                    priority=int(row["priority"]),
+                    now=now,
+                )
+
+    def claim_tool_activities(self, limit: int) -> tuple[Any, ...]:
+        return self.claim_activities("tool", limit)
+
+    def tool_recovery_activities(self) -> tuple[Any, ...]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT a.* FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                f"WHERE a.kind = 'tool' AND a.status = 'PROCESSING' AND t.status = {TASK_ACTIVE}"
+            ).fetchall()
+            return tuple(rows)
+
+    def complete_tool_activity(
+        self,
+        *,
+        request_id: str,
+        event_type: str,
+        summary: str,
+        payload: dict[str, Any],
+    ) -> tuple[bool, str | None]:
+        """消费工具回执：幂等投递 tool.{status} 消息给请求方 Agent。
+
+        幂等键为 request_id：因果事件中已存在同类型回执则忽略（重放去重）。
+        """
+        now = utc_now()
+        with self.transaction() as connection:
+            existing = connection.execute(
+                "SELECT event_id FROM causal_events WHERE correlation_id = ? AND type = ?",
+                (request_id, event_type),
+            ).fetchone()
+            if existing is not None:
+                return False, None
+            row = connection.execute(
+                "SELECT * FROM activities WHERE idempotency_key = ? AND kind = 'tool'", (request_id,)
+            ).fetchone()
+            if row is None:
+                return False, None
+            status = "COMPLETED" if event_type == "tool.succeeded" else "ERROR"
+            connection.execute(
+                "UPDATE activities SET status = ?, result_json = ?, error = ?, updated_at = ? WHERE activity_id = ?",
+                (
+                    status,
+                    _json(payload.get("result")) if payload.get("result") is not None else None,
+                    payload.get("error"),
+                    now,
+                    row["activity_id"],
+                ),
+            )
+            request = json.loads(row["request_json"])
+            if event_type == "tool.succeeded" and request.get("complete_task") is True:
+                # 工具成功后自动完成 Agent（RFC 0203 语义）：不投递 tool.succeeded 消息
+                message_id = self._complete_agent_after_tool(connection, row, summary, now)
+            else:
+                message_id = self._insert_message(
+                    connection,
+                    task_id=str(row["task_id"]),
+                    target_agent_id=str(row["agent_id"]),
+                    message_type=event_type,
+                    payload={**payload, "activity_id": row["activity_id"], "request": request},
+                    causation_id=request_id,
+                    correlation_id=request_id,
+                    priority=int(row["priority"]),
+                    now=now,
+                )
+            self._insert_causal_event(
+                connection,
+                event_type=event_type,
+                summary=summary,
+                payload={"request_id": request_id, "capability": payload.get("capability")},
+                task_id=str(row["task_id"]),
+                agent_id=str(row["agent_id"]),
+                causation_id=request_id,
+                correlation_id=request_id,
+                now=now,
+            )
+            return True, message_id
+
+    def _complete_agent_after_tool(
+        self, connection: sqlite3.Connection, row: Any, summary: str, now: str
+    ) -> str | None:
+        """工具成功后自动完成 Agent。
+
+        若为根 Agent，结束整个 Task；否则向父 Agent 发送 child.completed 消息。
+        """
+        agent = connection.execute("SELECT * FROM agents WHERE agent_id = ?", (row["agent_id"],)).fetchone()
+        if agent is None:
+            return None
+        connection.execute(
+            "UPDATE agents SET status = ?, last_summary = ?, updated_at = ? WHERE agent_id = ?",
+            (AgentStatus.COMPLETED, summary, now, row["agent_id"]),
+        )
+        if agent["parent_agent_id"] is None:
+            self._end_task(connection, str(row["task_id"]), TaskStatus.COMPLETED, summary, now)
+            return None
+        result = ChildResult(
+            child_agent_id=str(row["agent_id"]),
+            status="completed",
+            summary=summary,
+            artifacts=(),
+            error=None,
+        )
+        return self._insert_message(
+            connection,
+            task_id=str(row["task_id"]),
+            target_agent_id=str(agent["parent_agent_id"]),
+            message_type="child.completed",
+            payload=result.to_dict(),
+            causation_id=str(row["activity_id"]),
+            correlation_id=str(row["task_id"]),
+            priority=int(row["priority"]),
+            now=now,
+        )
+
+    def has_claimable_external_activity(self, limit: int) -> bool:
+        with self.connect() as connection:
+            processing = int(
+                connection.execute(
+                    "SELECT count(*) FROM activities WHERE kind = 'tool' AND status = 'PROCESSING'"
+                ).fetchone()[0]
+            )
+            if processing >= limit:
+                return False
+            return bool(
+                connection.execute(
+                    "SELECT 1 FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                    f"WHERE a.kind = 'tool' AND a.status = {ACT_PENDING} AND t.status = {TASK_ACTIVE} LIMIT 1"
+                ).fetchone()
+            )
+
+    def has_recoverable_tool(self) -> bool:
+        with self.connect() as connection:
+            return bool(
+                connection.execute(
+                    "SELECT 1 FROM activities a JOIN tasks t ON t.task_id = a.task_id "
+                    "WHERE a.kind = 'tool' AND a.status = 'PROCESSING' AND t.status = "
+                    f"{TASK_ACTIVE} LIMIT 1"
+                ).fetchone()
+            )
+
+    # -- Task 终止与预算 -----------------------------------------------
+
+    def cancel_task(self, task_id: str, reason: str) -> None:
+        with self.transaction() as connection:
+            self._end_task(connection, task_id, TaskStatus.CANCELLED, reason, utc_now())
+
+    def expire_tasks(self) -> tuple[str, ...]:
+        """检查并终止所有超时的活跃 Task（duration 预算）。"""
+        now_dt = datetime.now(UTC)
+        expired: list[str] = []
+        with self.transaction() as connection:
+            rows = connection.execute(f"SELECT * FROM tasks WHERE status = {TASK_ACTIVE}").fetchall()
+            for row in rows:
+                if (now_dt - datetime.fromisoformat(row["started_at"])).total_seconds() <= row["max_duration_seconds"]:
+                    continue
+                self._end_task(
+                    connection,
+                    str(row["task_id"]),
+                    TaskStatus.BUDGET_EXHAUSTED,
+                    "duration_budget_exhausted",
+                    now_dt.isoformat(),
+                )
+                expired.append(str(row["task_id"]))
+        return tuple(expired)
+
+    # -- 内部辅助 -------------------------------------------------------
 
     @staticmethod
     def _root_batch_events(state: dict[str, Any]) -> list[Any] | None:
@@ -383,26 +664,6 @@ class StoreDecisionsMixin(RuntimeStoreBase):
             raise PermissionError(_Msg.TRIAGE_CONTROL_DENIED)
 
     @staticmethod
-    def _settle_batch(
-        connection: sqlite3.Connection,
-        task_row: Any,
-        mode: str,
-        now: str,
-        defer_seconds: float | None = None,
-    ) -> None:
-        """按 triage 决策结算批次：defer 回到 DEFERRED，delete 移除原始事件。"""
-        batch_id = str(task_row["root_message_id"])
-        if mode == "defer":
-            available_at = (datetime.now(UTC) + timedelta(seconds=max(0.0, defer_seconds or 0.0))).isoformat()
-            connection.execute(
-                "UPDATE inbox_events SET status='DEFERRED', batch_id=NULL, available_at=?, updated_at=? "
-                "WHERE batch_id=?",
-                (available_at, now, batch_id),
-            )
-        else:
-            connection.execute("DELETE FROM inbox_events WHERE batch_id = ?", (batch_id,))
-
-    @staticmethod
     def _has_active_children(connection: sqlite3.Connection, agent_id: str) -> bool:
         """派生等待前提：非终态 children 或 pending child reports。"""
         if (
@@ -415,7 +676,7 @@ class StoreDecisionsMixin(RuntimeStoreBase):
             return True
         return (
             connection.execute(
-                "SELECT 1 FROM mailbox WHERE target_agent_id = ? "
+                "SELECT 1 FROM messages WHERE target_agent_id = ? "
                 "AND type IN ('child.completed', 'child.failed') "
                 f"AND status = {MSG_PENDING} LIMIT 1",
                 (agent_id,),
@@ -436,36 +697,12 @@ class StoreDecisionsMixin(RuntimeStoreBase):
             (now, task_id),
         )
         connection.execute(
-            f"UPDATE mailbox SET status = {MSG_ERROR}, completed_at = ?, lease_until = NULL WHERE task_id = ? "
+            f"UPDATE messages SET status = {MSG_ERROR}, completed_at = ? WHERE task_id = ? "
             f"AND status IN ({MSG_PENDING}, {MSG_PROCESSING})",
             (now, task_id),
         )
         connection.execute(
-            f"UPDATE activities SET status = {ACT_CANCELLED}, updated_at = ?, lease_until = NULL WHERE task_id = ? "
+            f"UPDATE activities SET status = {ACT_CANCELLED}, updated_at = ? WHERE task_id = ? "
             f"AND status IN {ACT_ACTIVE}",
             (now, task_id),
         )
-
-    def cancel_task(self, task_id: str, reason: str) -> None:
-        """手动取消指定 Task。将其状态设为 CANCELLED 并级联终止所有相关实体。"""
-        with self.transaction() as connection:
-            self._end_task(connection, task_id, TaskStatus.CANCELLED, reason, utc_now())
-
-    def expire_tasks(self) -> tuple[str, ...]:
-        """检查并终止所有超时的活跃 Task。每个 pump 周期调用一次。"""
-        now_dt = datetime.now(UTC)
-        expired: list[str] = []
-        with self.transaction() as connection:
-            rows = connection.execute(f"SELECT * FROM tasks WHERE status = {TASK_ACTIVE}").fetchall()
-            for row in rows:
-                if (now_dt - datetime.fromisoformat(row["started_at"])).total_seconds() <= row["max_duration_seconds"]:
-                    continue
-                self._end_task(
-                    connection,
-                    str(row["task_id"]),
-                    TaskStatus.BUDGET_EXHAUSTED,
-                    "duration_budget_exhausted",
-                    now_dt.isoformat(),
-                )
-                expired.append(str(row["task_id"]))
-        return tuple(expired)

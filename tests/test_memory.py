@@ -252,8 +252,10 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
             if detail is None or detail["task"]["status"] != "ACTIVE":
                 break
             await engine.pump()
+            await asyncio.sleep(0)  # 让模型派发与记忆投影任务执行
 
         # 记忆 agent 完成后，主动写入应已落库（同源 SQLite）
+        await asyncio.sleep(0)
         recalled = memory.recall(MemoryQuery("简洁", "session", fact_limit=4))
         assert "用户偏好简洁" in recalled.session_summary
 

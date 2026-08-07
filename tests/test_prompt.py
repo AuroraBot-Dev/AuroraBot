@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
-from src.agents.handler import ToolAgent, _collect_tool_definitions
+from src.agents.handler import ToolAgent
 from src.config.loader import load_configuration
 from src.contracts import (
     AgentContext,
@@ -49,7 +49,7 @@ def _context() -> AgentContext:
         started_at="now",
         updated_at="now",
     )
-    agent = AgentInstance("root", "task", None, "builtin.gate", 0, "reply", AgentStatus.READY, 0, {}, "now", "now")
+    agent = AgentInstance("root", "task", None, "builtin.gate", 0, "reply", AgentStatus.READY, {}, "now", "now")
     child = AgentInstance(
         "child",
         "task",
@@ -58,7 +58,6 @@ def _context() -> AgentContext:
         1,
         "check weather",
         AgentStatus.READY,
-        0,
         {},
         "now",
         "now",
@@ -89,8 +88,6 @@ def _context() -> AgentContext:
         "task",
         100,
         MessageStatus.PENDING,
-        "now",
-        None,
         "now",
     )
     profile = AgentProfile(
@@ -225,7 +222,10 @@ def test_memory_sections_are_optional_and_removed_capability_is_absent() -> None
 
 
 def test_agent_tool_owner_preserves_external_description_without_memory_capability() -> None:
-    tools = {tool.name: tool for tool in _collect_tool_definitions(_context(), (DelegationCapability(),))}
+    tools = {
+        tool.name: tool
+        for tool in ToolAgent(capabilities=(DelegationCapability(),))._collect_tool_definitions(_context())
+    }
     assert DELEGATE_TOOL in tools
     assert tools["com.vendor.lookup"].description == "Vendor supplied description"
     assert tools["org.aurora.console.send"].parameters_schema["properties"]["complete_task"]["description"] == "finish"

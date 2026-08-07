@@ -46,10 +46,9 @@ tests/          契约、集成与回归测试
 
 - 数据持久化路径必须镜像包层级：`src/engine → data/engine`、`src/platform/mcp → data/platform/mcp`、
   `src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；配置见 `storage.toml`。
-- engine 工作区固定为 `data/engine/inbox/`、`process/`、`archive/`、`sessions/`。
-- 外部 AMP 与终态 Task 归档使用 JSON，生产者必须先写临时文件再原子改名；运行态使用 SQLite WAL。
-- engine 会话记录使用追加式 JSONL：`data/engine/sessions/<session_id>.jsonl`，只追加不回写，
-  不参与热路径决策，SQLite 仍是运行态权威。
+- engine 工作区固定为 `data/engine/inbox/`、`process/`、`archive/`（仅 Inbox 输入文件分类）；终态即留存于 SQLite（RFC 0210，无 JSON 归档与 JSONL 会话日志）。
+- 外部 AMP 摄入使用 JSON，生产者必须先写临时文件再原子改名；运行态与归档统一使用 SQLite WAL（Schema v9，不迁移旧库）。
+- 会话可读性由 `causal_events` 提供；localhost 可按需导出，不写入热路径日志文件。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
 - 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、
   `prompts.toml`、`logging.toml` 与 `storage.toml`；profile 只覆盖 runtime。

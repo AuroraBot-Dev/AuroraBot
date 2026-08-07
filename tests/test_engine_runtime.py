@@ -151,6 +151,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
                 ).to_dict()
             )
             interactive = await engine.pump()
+            await asyncio.sleep(0)  # 让异步记忆投影任务执行（RFC 0210 单循环）
             interactive_id = interactive["admitted_task_ids"][0]
             assert [name for name, _value in events[:2]] == ["recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
@@ -242,8 +243,8 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
     asyncio.run(exercise())
 
 
-def test_engine_writes_session_jsonl_log(tmp_path: Path) -> None:
-    import json as json_module
+def test_engine_records_session_causality_in_sqlite(tmp_path: Path) -> None:
+    """RFC 0210：会话可读性由 causal_events 提供，不再写 JSONL。"""
 
     async def exercise() -> None:
         profile = AgentProfile(
@@ -281,17 +282,13 @@ def test_engine_writes_session_jsonl_log(tmp_path: Path) -> None:
             )
             result = await engine.pump()
             assert len(result["admitted_task_ids"]) == 1
+            task_id = result["admitted_task_ids"][0]
+            detail = engine.task_detail(task_id)
+            assert detail is not None
+            types = [event["type"] for event in detail["events"]]
+            assert types == ["task.started", "agent.complete"]
+            assert not (tmp_path / "engine" / "sessions").exists()
         finally:
             await engine.shutdown()
-
-        session_dir = tmp_path / "engine" / "sessions"
-        files = list(session_dir.glob("*.jsonl"))
-        assert len(files) == 1
-        records = [json_module.loads(line) for line in files[0].read_text(encoding="utf-8").splitlines()]
-        assert [record["kind"] for record in records] == ["amp.in", "task.admitted", "task.finished"]
-        assert all(record["session_id"] == "group/私聊:10001" for record in records)
-        assert records[0]["event_type"] == "message.received"
-        assert records[0]["source_app"] == "org.aurora.qq"
-        assert records[2]["status"] == "COMPLETED"
 
     asyncio.run(exercise())

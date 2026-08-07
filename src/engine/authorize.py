@@ -18,6 +18,7 @@ from src.contracts import (
     AgentDecision,
     AgentInstance,
     AgentLimits,
+    AgentMessage,
     AgentProfile,
     DelegationRequest,
     MemoryQuery,
@@ -29,7 +30,7 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    from src.engine.runtime import EngineState
+    from src.engine.runtime import AgentEngine as EngineState
 
 
 class _Msg(StrEnum):
@@ -67,16 +68,20 @@ def _build_limit_dict(limits: AgentLimits) -> dict[str, Any]:
     }
 
 
-def handle_claim(kernel: "EngineState", claim: tuple[Any, AgentInstance, TaskState]) -> tuple[AgentDecision, str]:
+def handle_claim(
+    kernel: "EngineState",
+    message: AgentMessage,
+    agent: AgentInstance,
+    task: TaskState,
+) -> tuple[AgentDecision, str]:
     """构造只读 AgentContext 并调用对应 handler，返回 (决策, 授权的 profile_id)。
 
     task/agent/message/children 直接复用当轮新建的 store 对象，不做深拷贝；
-    handler 违反只读契约的变异会以乐观锁冲突失败，不会静默损坏状态。
+    handler 违反只读契约的变异会以失败告终，不会静默损坏状态。
     profile 与 capability 描述符是跨轮共享的规范对象，必须拷贝，防止 handler
     通过变异 context 提权。返回的 profile_id 在 handler 运行前捕获，apply
     路径据此取规范 profile，篡改 agent.profile_id 无法重定向授权。
     """
-    message, agent, task = claim
     profile_id = agent.profile_id
     profile = deepcopy(kernel._profiles[profile_id])
     descriptors = deepcopy(

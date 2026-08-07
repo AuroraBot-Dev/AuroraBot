@@ -1,8 +1,9 @@
-"""持久化 Inbox、防抖批次与入口 Triage Task 创建事务（RFC 0209）。"""
+"""持久化 Inbox、防抖批次、入口 Triage Task 与批次结算（Schema v9，RFC 0209/0210）。"""
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -22,8 +23,8 @@ from .base import RuntimeStoreBase, _json, utc_now
 _TRIAGE_SUMMARY_LIMIT = 600
 
 
-class StoreTriageMixin(RuntimeStoreBase):
-    """AMP 在创建 Task 之前的唯一持久化入口。"""
+class StoreInboxMixin(RuntimeStoreBase):
+    """AMP 在入口 triage Task 之前的唯一持久化入口（RFC 0209）。"""
 
     def enqueue_inbox(self, amp: AmpEnvelope, limits: TriageLimits) -> bool:
         """幂等写入事件，并为同会话 pending 批次刷新 quiet window。"""
@@ -32,7 +33,7 @@ class StoreTriageMixin(RuntimeStoreBase):
         event_id = amp.header.message_id
         with self.transaction() as connection:
             if connection.execute(
-                "SELECT 1 FROM causal_events WHERE external_message_id = ?",
+                "SELECT 1 FROM causal_events WHERE correlation_id = ? AND type = 'ingress.received'",
                 (event_id,),
             ).fetchone():
                 return False
@@ -45,8 +46,7 @@ class StoreTriageMixin(RuntimeStoreBase):
                     "source": amp.header.source,
                     "type": amp.payload.type,
                 },
-                correlation_id=amp.payload.session_id,
-                external_message_id=event_id,
+                correlation_id=event_id,
                 now=now,
             )
             first_row = connection.execute(
@@ -79,6 +79,25 @@ class StoreTriageMixin(RuntimeStoreBase):
                 ),
             )
         return True
+
+    def has_due_inbox(self) -> bool:
+        with self.connect() as connection:
+            return bool(
+                connection.execute(
+                    "SELECT 1 FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED') AND available_at <= ? LIMIT 1",
+                    (utc_now(),),
+                ).fetchone()
+            )
+
+    def inbox_delay_seconds(self) -> float | None:
+        now = datetime.now(UTC)
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT min(available_at) FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED')"
+            ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return max(0.0, (datetime.fromisoformat(str(row[0])) - now).total_seconds())
 
     def claim_triage_batches(self, limits: TriageLimits, limit: int) -> tuple[TriageBatch, ...]:
         """领取到期会话批次；模型 I/O 在事务外进行。"""
@@ -133,9 +152,8 @@ class StoreTriageMixin(RuntimeStoreBase):
     ) -> tuple[str, str] | None:
         """防抖批次到期后创建 Task 与入口 triage agent（RFC 0209）。
 
-        批次原始事件保留在 Inbox，由 triage agent 的决策（delegation /
-        defer / discard）在 apply_decision 中结算；批次投影同时存入入口
-        agent 状态，供委派时向子 Agent 传递有界原始事实。
+        批次原始事件保留在 Inbox，由 triage agent 的决策在 apply_decision
+        中结算；批次投影存入入口 agent 状态，供委派时向子 Agent 传递。
         """
         now_dt = datetime.now(UTC)
         now = now_dt.isoformat()
@@ -152,10 +170,10 @@ class StoreTriageMixin(RuntimeStoreBase):
             budget = autonomous_budget if autonomous else interactive_budget
             summary = _bounded_summary(batch.events)
             connection.execute(
-                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, audience_ref, root_summary, "
+                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, root_summary, "
                 "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
                 "started_at, updated_at, termination_reason) "
-                "VALUES (?, ?, ?, ?, 'global', ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
                 (
                     task_id,
                     agent_id,
@@ -173,7 +191,7 @@ class StoreTriageMixin(RuntimeStoreBase):
             )
             events = _event_projection(batch.events)
             connection.execute(
-                "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, 0, ?, ?, ?, ?)",
+                "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?)",
                 (
                     agent_id,
                     task_id,
@@ -211,6 +229,25 @@ class StoreTriageMixin(RuntimeStoreBase):
         return task_id, summary
 
     @staticmethod
+    def settle_batch(
+        connection: sqlite3.Connection,
+        batch_id: str,
+        mode: str,
+        now: str,
+        defer_seconds: float | None = None,
+    ) -> None:
+        """按 triage 决策结算批次：defer 回到 DEFERRED，delete 移除原始事件。"""
+        if mode == "defer":
+            available_at = (datetime.now(UTC) + timedelta(seconds=max(0.0, defer_seconds or 0.0))).isoformat()
+            connection.execute(
+                "UPDATE inbox_events SET status='DEFERRED', batch_id=NULL, available_at=?, updated_at=? "
+                "WHERE batch_id=?",
+                (available_at, now, batch_id),
+            )
+        else:
+            connection.execute("DELETE FROM inbox_events WHERE batch_id = ?", (batch_id,))
+
+    @staticmethod
     def _bounded_events(rows: list[Any], max_characters: int) -> tuple[InboxEvent, ...]:
         selected: list[InboxEvent] = []
         used = 0
@@ -227,7 +264,7 @@ class StoreTriageMixin(RuntimeStoreBase):
             )
             size = len(_json(event.to_dict()))
             if not selected and size > max_characters:
-                event = StoreTriageMixin._clipped_event(event, max_characters)
+                event = StoreInboxMixin._clipped_event(event, max_characters)
                 size = len(_json(event.to_dict()))
             if selected and used + size > max_characters:
                 break
@@ -265,25 +302,6 @@ class StoreTriageMixin(RuntimeStoreBase):
                 priority=clipped.priority,
             )
         return clipped
-
-    def has_due_inbox(self) -> bool:
-        with self.connect() as connection:
-            return bool(
-                connection.execute(
-                    "SELECT 1 FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED') AND available_at <= ? LIMIT 1",
-                    (utc_now(),),
-                ).fetchone()
-            )
-
-    def inbox_delay_seconds(self) -> float | None:
-        now = datetime.now(UTC)
-        with self.connect() as connection:
-            row = connection.execute(
-                "SELECT min(available_at) FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED')"
-            ).fetchone()
-        if row is None or row[0] is None:
-            return None
-        return max(0.0, (datetime.fromisoformat(str(row[0])) - now).total_seconds())
 
 
 def _bounded_summary(events: tuple[InboxEvent, ...]) -> str:

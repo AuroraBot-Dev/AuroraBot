@@ -91,7 +91,7 @@ def test_profile_directory_symlink_and_empty_selector_are_rejected(project_root:
 @pytest.mark.parametrize("value", ("nan", "inf", "-inf"))
 def test_non_finite_runtime_limits_are_rejected(project_root: Path, value: str) -> None:
     path = project_root / "config" / "engine.toml"
-    path.write_text(path.read_text(encoding="utf-8").replace("lease_seconds = 30.0", f"lease_seconds = {value}"))
+    path.write_text(path.read_text(encoding="utf-8").replace("turn_concurrency = 8", f"turn_concurrency = {value}"))
     with pytest.raises(ConfigurationError, match="positive"):
         load_configuration(project_root)
 

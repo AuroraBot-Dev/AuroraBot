@@ -23,12 +23,8 @@
 
 ```python
 # 正确
-# 从 Agent 邮箱领取消息，CAS 获取租约
-def claim_message(self, lease_seconds: float) -> ClaimResult | None: ...
 
 # 错误
-# claim messages from agent mailbox with CAS lease
-def claim_message(self, lease_seconds: float) -> ClaimResult | None: ...
 ```
 
 ### 3. 硬编码文本上提为文件级枚举
@@ -480,7 +476,7 @@ engine = AgentEngine(config, handlers, memory_store=memory_service)
 ```
 engine/
   __init__.py
-  runtime.py          # AgentEngine（门面） + EngineState（内部状态与 turn 调度）
+  runtime.py          # AgentEngine — 单循环无租约运行时（RFC 0210）
                        #   构造签名：
                        #     AgentEngine(configuration, handlers, *,
                        #                 model_provider, memory_store=None,
@@ -493,20 +489,18 @@ engine/
                        #     2. ingest → 持久化 Inbox + 动态防抖
                        #     3. triage → 批次创建入口 triage Task（RFC 0209）
                        #     4. Agent turn / Tool / Model 调度（triage 判断走正常链路）
-                       #     5. 异步 Memory 投影 + 终态归档
+                       #     5. 异步 Memory 投影（终态留存 SQLite，RFC 0210）
   authorize.py        # 决策构造、授权校验与应用（RFC 0208 拆包）
   ingress.py          # AMP 持久化摄入与幂等回执（RFC 0208 拆包）
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
   debug.py            # task_detail() / agent_detail() / 工作区校验
-  store/              # SQLite 运行态持久化子包
-    __init__.py       # SQLiteRuntimeStore — 组合多 Mixin 的 WAL facade
-    schema.py         # DDL (inbox_events, tasks, agents, mailbox, activities, causal_events)
-    base.py           # 基础 CRUD 操作
-    queries.py        # 查询（任务树、消息时间线、统计计数）
-    triage.py         # Inbox 摄入、防抖批次与入口 triage Task 创建（RFC 0209）
-    ingress.py        # Tool receipt 与 Agent mailbox 租赁
-    decisions.py      # AgentDecision 到状态变更的翻译
-    activities.py     # Activity CRUD（model + tool）
+  store/              # SQLite 运行态与终态留存子包（Schema v9，RFC 0210）
+    __init__.py       # SQLiteRuntimeStore — 组合 3 个 Mixin 的 WAL facade
+    schema.py         # DDL (inbox_events, tasks, agents, messages, activities, causal_events)
+    base.py           # 连接/事务/行映射/崩溃恢复
+    runtime.py        # 状态与查询（任务树、消息时间线、统计计数）
+    decisions.py      # AgentDecision 八分支状态机 + 消息/活动队列
+    inbox.py          # Inbox 摄入、防抖批次、入口 triage Task 与批次结算
 ```
 
 **AgentEngine 构造签名**：
@@ -534,13 +528,13 @@ pump(max_turns):
   4. execute turns       → handle_claim() 在线程池中并发执行（triage 的模型判断走正常 model Activity）
   5. dispatch I/O        → ToolRegistry + ModelProvider
   6. memory projection   → 后台更新会话摘要和长期事实
-  7. archive terminal    → 终态 Task JSON 原子写入 archive/（同时记录 task.finished）
+  7. 终态留存        → 终态 Task 留在 SQLite（无文件归档，RFC 0210）
 ```
 
 **关键约束**：
 
 - 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `src.localhost`
-- `runtime.py` 组合 EngineState、Triage、Agent turn 与 I/O 调度；Inbox 事务位于 `store/triage.py`。
+- `runtime.py` 组合 Agent turn 与 I/O 调度；Inbox 事务位于 `store/inbox.py`（RFC 0209/0210）。
 - `store/` 是子包，`SQLiteRuntimeStore` 在其中组合多 Mixin，替换了文档中的单体 `store.py`。
 - 所有权通过 `contracts` 中的 Protocol 注入
 - `ToolRegistry` 是 engine 内部的聚合类（非 contracts），管理多个 `ToolExecutor` 实现的分发
@@ -883,7 +877,7 @@ sandbox/
 
 ```text
 data/
-  engine/          # runtime.sqlite3 (WAL), inbox/, archive/, sessions/
+  engine/          # runtime.sqlite3 (WAL), inbox/, archive/（仅 Inbox 分类）
   memory/          # memory.sqlite3：会话摘要、长期事实、幂等回执
   ai/              # models.dev 能力缓存
   platform/
@@ -903,9 +897,8 @@ data/
 
 - 持久化路径不得在代码中硬编码。全部从 TOML 配置读取。
 - 路径以包名命名（`data/engine/`、`data/platform/mcp/` 等），允许的嵌套关系见 `storage.toml`。
-- 外部 AMP 与终态 Task 使用 JSON，先写临时文件再原子改名。运行态使用 SQLite WAL。
-- engine 会话记录使用追加式 JSONL：`data/engine/sessions/<session_id>.jsonl`，只追加不回写，
-  不参与热路径决策，SQLite 仍是运行态权威。
+- 外部 AMP 摄入使用 JSON，先写临时文件再原子改名。运行态与终态统一使用 SQLite WAL（Schema v9）。
+- 无 JSON 归档与 JSONL 会话日志（RFC 0210）：终态即留存于 SQLite，会话可读性由 causal_events 提供。
 
 ## 配置
 
@@ -961,7 +954,6 @@ turn_concurrency = 8
 model_concurrency = 4
 tool_concurrency = 8
 blocking_workers = 4
-lease_seconds = 30.0
 [engine.triage]
 model_role = "fast"
 quiet_seconds = 0.4

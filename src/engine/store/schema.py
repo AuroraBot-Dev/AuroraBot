@@ -1,8 +1,13 @@
-"""SQLite DDL 与迁移常量。"""
+"""SQLite DDL（Schema v9，RFC 0210）。
+
+单一 SQLite 即运行态与归档；不迁移旧库（旧工作区拒绝启动）。
+"""
 
 from __future__ import annotations
 
 from .status import ACT_ACTIVE
+
+_SCHEMA_VERSION = 9
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -13,7 +18,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     root_agent_id TEXT NOT NULL,
     root_message_id TEXT NOT NULL UNIQUE,
     session_id TEXT NOT NULL,
-    audience_ref TEXT NOT NULL,
     root_summary TEXT NOT NULL,
     autonomous INTEGER NOT NULL CHECK (autonomous IN (0, 1)),
     status TEXT NOT NULL,
@@ -34,7 +38,6 @@ CREATE TABLE IF NOT EXISTS agents (
     depth INTEGER NOT NULL,
     assignment TEXT NOT NULL,
     status TEXT NOT NULL,
-    revision INTEGER NOT NULL,
     state_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -42,7 +45,7 @@ CREATE TABLE IF NOT EXISTS agents (
 );
 CREATE INDEX IF NOT EXISTS idx_agents_task ON agents(task_id, status);
 CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id, status);
-CREATE TABLE IF NOT EXISTS mailbox (
+CREATE TABLE IF NOT EXISTS messages (
     message_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
     target_agent_id TEXT NOT NULL REFERENCES agents(agent_id),
@@ -52,14 +55,11 @@ CREATE TABLE IF NOT EXISTS mailbox (
     correlation_id TEXT NOT NULL,
     priority INTEGER NOT NULL,
     status TEXT NOT NULL,
-    available_at TEXT NOT NULL,
-    lease_until TEXT,
-    attempts INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     completed_at TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_mailbox_ready ON mailbox(status, priority DESC, available_at, created_at);
-CREATE INDEX IF NOT EXISTS idx_mailbox_agent ON mailbox(target_agent_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_ready ON messages(status, priority DESC, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(target_agent_id, status, created_at);
 CREATE TABLE IF NOT EXISTS activities (
     activity_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
@@ -69,7 +69,6 @@ CREATE TABLE IF NOT EXISTS activities (
     status TEXT NOT NULL,
     priority INTEGER NOT NULL,
     idempotency_key TEXT NOT NULL UNIQUE,
-    lease_until TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     result_json TEXT,
@@ -85,7 +84,6 @@ CREATE TABLE IF NOT EXISTS causal_events (
     payload_json TEXT NOT NULL,
     causation_id TEXT,
     correlation_id TEXT NOT NULL,
-    external_message_id TEXT UNIQUE,
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_causal_task ON causal_events(task_id, created_at);
@@ -109,37 +107,7 @@ CREATE INDEX IF NOT EXISTS idx_inbox_session
 ON inbox_events(session_id, status, created_at);
 """
 
-_SCHEMA_VERSION = 8
 _ACTIVE_ACTIVITY_INDEX = (
     f"CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_one_active_per_agent "
     f"ON activities(agent_id) WHERE status IN {ACT_ACTIVE}"
 )
-_ACTIVITIES_V5 = """
-DROP INDEX IF EXISTS idx_activities_one_active_per_agent;
-DROP INDEX IF EXISTS idx_activities_ready;
-ALTER TABLE activities RENAME TO activities_v4;
-CREATE TABLE activities (
-    activity_id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL REFERENCES tasks(task_id),
-    agent_id TEXT NOT NULL REFERENCES agents(agent_id),
-    kind TEXT NOT NULL CHECK (kind IN ('model', 'tool')),
-    request_json TEXT NOT NULL,
-    status TEXT NOT NULL,
-    priority INTEGER NOT NULL,
-    idempotency_key TEXT NOT NULL UNIQUE,
-    lease_until TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    result_json TEXT,
-    error TEXT
-);
-INSERT INTO activities
-SELECT activity_id, task_id, agent_id,
-       CASE WHEN kind = 'model' THEN 'model' ELSE 'tool' END,
-       CASE WHEN kind = 'model' THEN request_json
-            ELSE json_set(request_json, '$.legacy_kind', kind) END,
-       status, priority, idempotency_key, lease_until, created_at, updated_at, result_json, error
-FROM activities_v4;
-DROP TABLE activities_v4;
-CREATE INDEX idx_activities_ready ON activities(kind, status, priority DESC, created_at);
-"""

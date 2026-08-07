@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
+from src.agents.base import BaseAgent
 from src.contracts import (
     AgentContext,
     AgentDecision,
@@ -15,15 +15,10 @@ from src.contracts import (
     ModelRequest,
     ModelResult,
     ToolCall,
-    ToolDefinition,
     ToolRequest,
     append_tool_result,
 )
-from src.prompt import PromptComposer
 from src.utils import get_logger
-
-if TYPE_CHECKING:
-    from src.contracts.agent import Capability
 
 logger = get_logger("aurora.agent.tool")
 _TOOL_CHAIN_STATE = "_aurora_tool_chain"
@@ -32,12 +27,8 @@ _TOOL_CHAIN_STATE = "_aurora_tool_chain"
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
-    CAPABILITIES_ALREADY_INSTALLED = "capabilities are already installed"
     CAPABILITY_NO_DECISION = "capability {name} returned no decision"
     COMPLETE_TASK_BOOLEAN = "complete_task must be a boolean"
-    COMPOSER_ALREADY_INSTALLED = "prompt composer is already installed"
-    COMPOSER_REQUIRED = "ToolAgent requires an installed PromptComposer"
-    DUPLICATE_TOOL_IDS = "model Tool IDs must be unique: {duplicates}"
     UNKNOWN_TOOL = "unknown Tool capability {name}"
 
 
@@ -96,59 +87,8 @@ def _tool_calls_from_state(value: object) -> tuple[ToolCall, ...] | None:
     return tuple(calls)
 
 
-def _collect_tool_definitions(
-    context: AgentContext,
-    capabilities: tuple[Capability, ...],
-) -> tuple[ToolDefinition, ...]:
-    """收集所有工具定义：预计算的运行时 Capability + 内建 Capability，并检查名称唯一性。"""
-    tools: list[ToolDefinition] = list(context.tool_definitions)
-    for cap in capabilities:
-        tools.extend(cap.tool_definitions(context))
-    names = [tool.name for tool in tools]
-    if len(names) != len(set(names)):
-        duplicates = sorted({name for name in names if names.count(name) > 1})
-        raise ValueError(_Msg.DUPLICATE_TOOL_IDS.format(duplicates=duplicates))
-    return tuple(tools)
-
-
-class ToolAgent:
+class ToolAgent(BaseAgent):
     """围绕提供商原生 Tool IR 的确定性状态机适配器。"""
-
-    def __init__(
-        self,
-        *,
-        composer: PromptComposer | None = None,
-        capabilities: tuple[Capability, ...] = (),
-    ) -> None:
-        """初始化 ToolAgent。
-
-        Args:
-            composer: 提示词装配器，可通过 install_prompt_composer 延后注入。
-            capabilities: 内建 Capability 元组。
-        """
-        self._composer = composer
-        self._capabilities = capabilities
-        self._dispatch: dict[str, Capability] = {}
-        if capabilities:
-            self._install_capabilities(capabilities)
-
-    def install_prompt_composer(self, composer: PromptComposer) -> None:
-        """安装提示词装配器，仅可调用一次。"""
-        if self._composer is not None:
-            raise RuntimeError(_Msg.COMPOSER_ALREADY_INSTALLED)
-        self._composer = composer
-
-    def install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
-        """安装额外 Capability，仅可调用一次。"""
-        if self._capabilities or self._dispatch:
-            raise RuntimeError(_Msg.CAPABILITIES_ALREADY_INSTALLED)
-        self._install_capabilities(capabilities)
-
-    def _install_capabilities(self, capabilities: tuple[Capability, ...]) -> None:
-        """将 Capability 安装到内部调度表。"""
-        self._capabilities = capabilities
-        for cap in capabilities:
-            self._dispatch.update(dict.fromkeys(cap.tool_names, cap))
 
     def handle(self, context: AgentContext) -> AgentDecision:
         """Agent 入口：根据消息类型路由到对应的处理阶段。"""
@@ -171,26 +111,6 @@ class ToolAgent:
         if message_type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
             return self._resume_tool(context)
         return self._request_model(context)
-
-    def _request_model(self, context: AgentContext) -> AgentDecision:
-        """构造模型请求，包含提示词消息与工具定义。"""
-        composer = self._require_composer()
-        request = ModelRequest(
-            role=context.profile.model_role,
-            messages=composer.request_messages(context),
-            required_capabilities=frozenset({"chat", "tools"}),
-            response_mode="normalized",
-            tools=_collect_tool_definitions(context, self._capabilities),
-            parallel_tool_calls=True,
-            cancel_policy="never",
-        )
-        return AgentDecision(model_request=request)
-
-    def _require_composer(self) -> PromptComposer:
-        """获取已安装的提示词装配器，未安装时抛出异常。"""
-        if self._composer is None:
-            raise RuntimeError(_Msg.COMPOSER_REQUIRED)
-        return self._composer
 
     def _handle_model_result(self, context: AgentContext) -> AgentDecision:
         """处理模型返回结果：纯文本完成或工具调用分发。"""
@@ -373,13 +293,10 @@ class ToolAgent:
 
     def _continuation_request(self, context: AgentContext, continuation: ModelContinuation) -> ModelRequest:
         """基于工具执行延续构造后续模型请求。"""
-        return ModelRequest(
-            role=context.profile.model_role,
+        request = self._request_model(context)
+        assert request.model_request is not None
+        return replace(
+            request.model_request,
             messages=(),
-            required_capabilities=frozenset({"chat", "tools"}),
-            response_mode="normalized",
-            tools=_collect_tool_definitions(context, self._capabilities),
             continuation=continuation,
-            parallel_tool_calls=True,
-            cancel_policy="never",
         )

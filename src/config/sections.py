@@ -197,8 +197,6 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
         value = raw.get(name, getattr(defaults, name))
         if name in {"root_profile", "worker_profile"}:
             values[name] = _string(value, f"engine.agents.{name}")
-        elif name == "lease_seconds":
-            values[name] = _positive_number(value, f"engine.agents.{name}")
         elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ConfigurationError(_Msg.AGENTS_POSITIVE_INTEGER.format(name=name))
         else:

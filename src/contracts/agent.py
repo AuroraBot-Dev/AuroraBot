@@ -109,7 +109,6 @@ class AgentLimits:
     model_concurrency: int = 4
     tool_concurrency: int = 8
     blocking_workers: int = 4
-    lease_seconds: float = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +224,6 @@ class AgentInstance:
     depth: int
     assignment: str
     status: AgentStatus
-    revision: int
     state: dict[str, Any]
     created_at: str
     updated_at: str
@@ -250,8 +248,6 @@ class AgentMessage:
     correlation_id: str
     priority: int
     status: MessageStatus
-    available_at: str
-    lease_until: str | None
     created_at: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -313,7 +309,6 @@ class ActivityRequest:
     status: ActivityStatus
     priority: int
     idempotency_key: str
-    lease_until: str | None
     created_at: str
 
 

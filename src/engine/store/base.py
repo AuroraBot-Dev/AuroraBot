@@ -1,7 +1,7 @@
-"""SQLite 连接管理、Schema 迁移与行数据转换，供所有 Store Mixin 共享。
+"""SQLite 连接管理、Schema v9 初始化与行数据转换，供所有 Store Mixin 共享。
 
-提供事务管理、初始化迁移、中断恢复以及 Task/Agent/Message/Activity 的行映射。
-所有写操作均需通过 transaction() 上下文管理器执行。
+所有写操作均通过 transaction() 上下文管理器执行；单进程 asyncio 独占，
+无租约与乐观锁（RFC 0210）。初始化只接受全新 v9 库，旧库拒绝启动。
 """
 
 from __future__ import annotations
@@ -27,24 +27,18 @@ from src.contracts import (
 )
 from src.utils import utc_now
 
-from .schema import _ACTIVE_ACTIVITY_INDEX, _ACTIVITIES_V5, _SCHEMA, _SCHEMA_VERSION
+from .schema import _ACTIVE_ACTIVITY_INDEX, _SCHEMA, _SCHEMA_VERSION
 from .status import (
-    ACT_ACTIVE,
-    ACT_ERROR,
     ACT_PROCESSING,
-    AGENT_READY,
-    AGENT_TERMINAL,
     MSG_PENDING,
     MSG_PROCESSING,
 )
-
-_AUTO_VACUUM_INCREMENTAL = 2
 
 
 class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
 
-    UNSUPPORTED_SCHEMA = "不支持的 Agent 运行时数据库 Schema 版本"
+    UNSUPPORTED_SCHEMA = "不支持的 Agent 运行时数据库 Schema 版本（仅接受全新 v9，旧工作区请重建）"
 
 
 def _json(value: object) -> str:
@@ -53,11 +47,7 @@ def _json(value: object) -> str:
 
 
 class RuntimeStoreBase:
-    """事务型持久化仓库基类。调用者将模型和平台 I/O 置于事务外部。
-
-    所有写操作通过 transaction() 上下文管理器执行，自动 BEGIN IMMEDIATE/commit/rollback。
-    行映射方法 _task/_agent/_message/_activity 将 sqlite3.Row 转换为领域数据类。
-    """
+    """事务型持久化仓库基类。调用者将模型和平台 I/O 置于事务外部。"""
 
     def __init__(self, database_path: Path) -> None:
         """初始化仓库基类，接收 SQLite 数据库文件路径。"""
@@ -84,12 +74,7 @@ class RuntimeStoreBase:
             connection.commit()
 
     def initialize(self) -> None:
-        """初始化运行时数据库：创建目录、启用 WAL、执行 Schema 和渐进迁移。
-
-        迁移策略：检查 schema_meta.version，按需执行 ALTER TABLE 添加列、
-        统一旧的 effect/publication 语义为 tool，然后重置版本号。
-        最后调用 recover_interrupted 重置所有 PROCESSING 状态。
-        """
+        """初始化运行时数据库：创建 v9 Schema，拒绝旧库。"""
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
@@ -97,93 +82,44 @@ class RuntimeStoreBase:
             connection.execute("PRAGMA auto_vacuum = INCREMENTAL")
             connection.executescript(_SCHEMA)
             row = connection.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
-            if row is None:
+            version = int(row["version"]) if row is not None else None
+            if version is None:
                 connection.execute("INSERT INTO schema_meta(version) VALUES (?)", (_SCHEMA_VERSION,))
-            elif int(row["version"]) not in {1, 2, 3, 4, 5, 6, 7, _SCHEMA_VERSION}:
+            elif version != _SCHEMA_VERSION:
                 raise RuntimeError(_Msg.UNSUPPORTED_SCHEMA)
-            version = int(row["version"]) if row is not None else _SCHEMA_VERSION
-            if version < _SCHEMA_VERSION:
-                task_columns = {str(item["name"]) for item in connection.execute("PRAGMA table_info(tasks)")}
-                if "audience_ref" not in task_columns:
-                    connection.execute("ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT 'global'")
-                activity_sql = str(
-                    connection.execute(
-                        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'"
-                    ).fetchone()["sql"]
-                )
-                if "'tool'" not in activity_sql:
-                    connection.executescript(_ACTIVITIES_V5)
-                connection.execute(f"UPDATE agents SET status = {AGENT_READY} WHERE status NOT IN {AGENT_TERMINAL}")
-                connection.execute(
-                    "UPDATE mailbox SET type = CASE type "
-                    "WHEN 'effect.succeeded' THEN 'tool.succeeded' "
-                    "WHEN 'effect.failed' THEN 'tool.failed' "
-                    "WHEN 'effect.delivery_unknown' THEN 'tool.unknown' "
-                    "WHEN 'effect.unknown' THEN 'tool.unknown' "
-                    "WHEN 'publication.succeeded' THEN 'tool.succeeded' "
-                    "WHEN 'publication.failed' THEN 'tool.failed' "
-                    "WHEN 'publication.delivery_unknown' THEN 'tool.unknown' "
-                    "WHEN 'publication.unknown' THEN 'tool.unknown' "
-                    "ELSE type END"
-                )
-                connection.execute("DROP TABLE IF EXISTS situations")
             connection.execute(_ACTIVE_ACTIVITY_INDEX)
-            connection.execute("UPDATE schema_meta SET version = ?", (_SCHEMA_VERSION,))
             connection.commit()
-            if (
-                version < _SCHEMA_VERSION
-                and int(connection.execute("PRAGMA auto_vacuum").fetchone()[0]) != _AUTO_VACUUM_INCREMENTAL
-            ):
-                connection.execute("PRAGMA auto_vacuum = INCREMENTAL")
-                connection.execute("VACUUM")
         self.recover_interrupted()
 
     def recover_interrupted(self) -> None:
-        """恢复上次异常退出遗留的 PROCESSING 状态。
-
-        将 PROCESSING 邮箱消息重置为 PENDING，将遗留的 RUNNING Agent 重置为 READY，
-        并把中断的 model Activity 和旧版 effect Activity 标记为 ERROR 并通知相关 Agent。
-        工具 Activity 仅清除租约，允许后续恢复。
-        """
+        """崩溃恢复：处理中的消息回到 PENDING，中断的 model Activity 标 ERROR 并通知。"""
         now = utc_now()
         with self.transaction() as connection:
             connection.execute(
-                f"UPDATE mailbox SET status = {MSG_PENDING}, lease_until = NULL WHERE status = {MSG_PROCESSING}"
+                f"UPDATE messages SET status = {MSG_PENDING}, completed_at = NULL WHERE status = {MSG_PROCESSING}"
             )
             connection.execute("UPDATE inbox_events SET status = 'PENDING', batch_id = NULL WHERE status = 'TRIAGING'")
-            # RUNNING 仅存在于 v2 之前的存储；邮箱租赁是当前锁机制
-            connection.execute(
-                f"UPDATE agents SET status = {AGENT_READY}, updated_at = ? WHERE status = 'RUNNING'",
-                (now,),
-            )
             interrupted = connection.execute(
-                "SELECT * FROM activities WHERE "
-                f"(status = {ACT_PROCESSING} AND kind = 'model') OR "
-                f"(status IN {ACT_ACTIVE} AND json_extract(request_json, '$.legacy_kind') IS NOT NULL)"
+                f"SELECT * FROM activities WHERE status = {ACT_PROCESSING} AND kind = 'model'"
             ).fetchall()
             for row in interrupted:
                 connection.execute(
-                    f"UPDATE activities SET status = {ACT_ERROR}, lease_until = NULL, error = ?, updated_at = ? "
-                    "WHERE activity_id = ?",
+                    "UPDATE activities SET status = 'ERROR', error = ?, updated_at = ? WHERE activity_id = ?",
                     ("interrupted_by_restart", now, row["activity_id"]),
                 )
                 self._insert_message(
                     connection,
                     task_id=str(row["task_id"]),
                     target_agent_id=str(row["agent_id"]),
-                    message_type="model.failed" if row["kind"] == "model" else "tool.unknown",
-                    payload={
-                        "activity_id": row["activity_id"],
-                        "error": "interrupted_by_restart",
-                        "request": json.loads(row["request_json"]),
-                    },
+                    message_type="model.failed",
+                    payload={"activity_id": row["activity_id"], "error": "interrupted_by_restart"},
                     causation_id=str(row["activity_id"]),
                     correlation_id=str(row["task_id"]),
                     priority=int(row["priority"]),
                     now=now,
                 )
             connection.execute(
-                f"UPDATE activities SET lease_until = NULL, updated_at = ? "
+                f"UPDATE activities SET status = 'PROCESSING', updated_at = ? "
                 f"WHERE status = {ACT_PROCESSING} AND kind = 'tool'",
                 (now,),
             )
@@ -220,7 +156,6 @@ class RuntimeStoreBase:
             depth=int(row["depth"]),
             assignment=str(row["assignment"]),
             status=AgentStatus(row["status"]),
-            revision=int(row["revision"]),
             state=json.loads(row["state_json"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
@@ -229,7 +164,7 @@ class RuntimeStoreBase:
 
     @staticmethod
     def _message(row: sqlite3.Row) -> AgentMessage:
-        """将 mailbox 表的数据库行转换为 AgentMessage 领域模型。"""
+        """将 messages 表的数据库行转换为 AgentMessage 领域模型。"""
         return AgentMessage(
             message_id=str(row["message_id"]),
             task_id=str(row["task_id"]),
@@ -240,8 +175,6 @@ class RuntimeStoreBase:
             correlation_id=str(row["correlation_id"]),
             priority=int(row["priority"]),
             status=MessageStatus(row["status"]),
-            available_at=str(row["available_at"]),
-            lease_until=row["lease_until"],
             created_at=str(row["created_at"]),
         )
 
@@ -257,7 +190,6 @@ class RuntimeStoreBase:
             status=ActivityStatus(row["status"]),
             priority=int(row["priority"]),
             idempotency_key=str(row["idempotency_key"]),
-            lease_until=row["lease_until"],
             created_at=str(row["created_at"]),
         )
 
@@ -277,7 +209,7 @@ class RuntimeStoreBase:
         """向邮箱插入一条新消息并返回 message_id。所有消息创建均通过此方法。"""
         message_id = str(uuid4())
         connection.execute(
-            "INSERT INTO mailbox VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, NULL)",
+            "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
             (
                 message_id,
                 task_id,
@@ -288,7 +220,6 @@ class RuntimeStoreBase:
                 correlation_id,
                 priority,
                 MessageStatus.PENDING,
-                now,
                 now,
             ),
         )
@@ -305,13 +236,12 @@ class RuntimeStoreBase:
         task_id: str | None = None,
         agent_id: str | None = None,
         causation_id: str | None = None,
-        external_message_id: str | None = None,
         now: str,
     ) -> str:
-        """向 causal_events 插入一条因果事件并返回 event_id。所有因果记录均通过此方法。"""
+        """向 causal_events 插入一条因果事件并返回 event_id（载荷为轻量摘要，RFC 0210）。"""
         event_id = str(uuid4())
         connection.execute(
-            "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO causal_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event_id,
                 task_id,
@@ -321,15 +251,7 @@ class RuntimeStoreBase:
                 _json(payload),
                 causation_id,
                 correlation_id,
-                external_message_id,
                 now,
             ),
         )
         return event_id
-
-    @staticmethod
-    def _end_task(connection: sqlite3.Connection, task_id: str, status: TaskStatus, reason: str, now: str) -> None:
-        raise NotImplementedError
-
-    def get_task(self, task_id: str) -> TaskState | None:
-        raise NotImplementedError

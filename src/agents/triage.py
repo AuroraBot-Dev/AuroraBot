@@ -14,13 +14,11 @@ import json
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from src.agents.base import BaseAgent
 from src.contracts import (
     AgentDecision,
-    Completion,
-    DelegationRequest,
     ModelBudget,
     ModelMessage,
-    ModelRequest,
     ModelResult,
 )
 from src.utils import get_logger
@@ -65,7 +63,7 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
-class TriageAgent:
+class TriageAgent(BaseAgent):
     """入口 agent：批次投影 → 结构化判断 → 委派 / defer / discard。"""
 
     def handle(self, context: AgentContext) -> AgentDecision:
@@ -78,7 +76,7 @@ class TriageAgent:
             return self._fail_open(context, "model_failed")
         if message_type.startswith("child."):
             return self._settle_children(context)
-        return AgentDecision(failure=_Msg.UNEXPECTED_MESSAGE.format(message_type=message_type))
+        return self._fail(_Msg.UNEXPECTED_MESSAGE.format(message_type=message_type))
 
     def _request_triage(self, context: AgentContext) -> AgentDecision:
         """构造无工具的结构化模型请求，携带批次投影与记忆快照。"""
@@ -91,8 +89,8 @@ class TriageAgent:
                 "session_summary": context.memory.session_summary,
                 "relevant_facts": list(context.memory.relevant_facts),
             }
-        request = ModelRequest(
-            role=context.profile.model_role,
+        return self._request_model(
+            context,
             messages=(
                 ModelMessage("system", _Msg.SYSTEM),
                 ModelMessage(
@@ -102,13 +100,11 @@ class TriageAgent:
                     ),
                 ),
             ),
-            required_capabilities=frozenset({"chat"}),
+            tools=(),
             output_schema=_OUTPUT_SCHEMA,
-            invalid_output_result=None,
             budget=ModelBudget(max_output_tokens=300, timeout_seconds=15.0),
             tool_choice="none",
         )
-        return AgentDecision(model_request=request)
 
     def _resolve_triage(self, context: AgentContext) -> AgentDecision:
         """把结构化模型结果映射为委派 / defer / discard 决策。"""
@@ -122,41 +118,32 @@ class TriageAgent:
             return self._fail_open(context, "missing_fields")
         action = value.get("action")
         if action == "process":
-            return AgentDecision(
-                delegations=(
-                    DelegationRequest(summary.strip(), self._delegate_profile(context, value.get("delegate_profile"))),
-                ),
+            return self._delegate(
+                ((summary.strip(), self._delegate_profile(context, value.get("delegate_profile"))),),
                 memory_candidates=_candidate(value),
                 summary=summary.strip(),
             )
         if action == "defer":
             raw = value.get("defer_seconds")
             defer_seconds = float(raw) if isinstance(raw, (int, float)) and raw > 0 else _DEFAULT_DEFER_SECONDS
-            return AgentDecision(
-                defer_seconds=defer_seconds,
-                memory_candidates=_candidate(value),
-                summary=summary.strip(),
-            )
+            return self._defer(defer_seconds, summary=summary.strip(), memory_candidates=_candidate(value))
         if action == "discard":
-            return AgentDecision(discard=True, memory_candidates=_candidate(value), summary=summary.strip())
+            return self._discard(summary=summary.strip(), memory_candidates=_candidate(value))
         return self._fail_open(context, "unknown_action")
 
     def _settle_children(self, context: AgentContext) -> AgentDecision:
         """本体意识回报后完成入口任务；等待语义与其他 Agent 同构。"""
         if any(not child.terminal for child in context.children) or context.pending_child_reports:
-            return AgentDecision(wait_for_children=True)
+            return self._wait()
         report = next((child for child in context.children if child.last_summary), None)
-        return AgentDecision(completion=Completion(report.last_summary if report else context.task.root_summary))
+        return self._complete(report.last_summary if report else context.task.root_summary)
 
     def _fail_open(self, context: AgentContext, reason: str) -> AgentDecision:
         """模型或结构失败时按确定性规则直接委派本体意识（RFC 0209 fail-open）。"""
         logger.warning("Triage fail-open task_id=%s reason=%s", context.task.task_id, reason)
         batch = context.message.payload.get("batch")
         summary = _fallback_summary(batch) if isinstance(batch, dict) else context.task.root_summary
-        return AgentDecision(
-            delegations=(DelegationRequest(summary, self._delegate_profile(context, None)),),
-            summary=summary,
-        )
+        return self._delegate(((summary, self._delegate_profile(context, None)),), summary=summary)
 
     @staticmethod
     def _delegate_profile(context: AgentContext, raw: object) -> str | None:

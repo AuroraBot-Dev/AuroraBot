@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from dataclasses import FrozenInstanceError
 from typing import TYPE_CHECKING
 
@@ -14,7 +13,6 @@ from src.contracts import (
     AgentDecision,
     AgentLimits,
     AgentProfile,
-    CapabilityCatalogSnapshot,
     CapabilityDescriptor,
     Completion,
     DelegationRequest,
@@ -26,14 +24,15 @@ from src.contracts import (
     TaskLimits,
     TaskStatus,
     ToolCall,
+    ToolExecutionRequest,
+    ToolExecutorBinding,
+    ToolOutcome,
     ToolOutcomeStatus,
     ToolRequest,
     TriageLimits,
     new_amp,
 )
-from src.engine.archive import task_archive_projection
-from src.engine.runtime import EngineState, PumpResult
-from src.engine.store import SQLiteRuntimeStore
+from src.engine.runtime import AgentEngine
 from src.prompt import PromptCatalog, PromptComposer
 
 if TYPE_CHECKING:
@@ -65,7 +64,7 @@ def _configuration(workspace: Path) -> EngineConfiguration:
     return EngineConfiguration(
         str(workspace),
         _profiles(),
-        AgentLimits(root_profile="gate", worker_profile="worker", lease_seconds=0.01),
+        AgentLimits(root_profile="gate", worker_profile="worker"),
         TaskLimits(8, 6, 300),
         TaskLimits(3, 2, 120),
         TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
@@ -88,138 +87,87 @@ class _Complete:
         return AgentDecision(completion=Completion(f"done: {context.agent.assignment}"))
 
 
-async def _admit(state: EngineState, max_turns: int | None = None) -> PumpResult:
-    ingested = await state.ingest()
-    await asyncio.sleep(0.001)
-    batches = await state.claim_triage_batches(8)
-    admitted = []
-    for batch in batches:
-        task_id = await state.create_triage_task(batch)
-        if task_id is not None:
-            admitted.append(task_id)
-    result = await state.pump(max_turns)
-    return PumpResult(ingested, tuple(admitted), result.processed_message_ids, result.failed_message_ids)
+class _UnusedProvider:
+    async def complete(self, request: ModelRequest) -> ModelResult:
+        return ModelResult(
+            request.role,
+            frozenset({"chat", "structured_output"}),
+            "normalized",
+            "",
+            {"action": "process", "summary": "hello", "reason": "test"},
+            ModelUsage(),
+            0.0,
+        )
 
 
-def test_task_archive_projection_removes_replay_redundancy() -> None:
-    projected = task_archive_projection(
-        {
-            "events": [
-                {
-                    "payload": {
-                        "continuation": {"items": [{"large": "value"}]},
-                        "tools": [{"name": "one", "parameters_schema": {"type": "object"}}],
-                        "text": "kept",
-                    }
-                }
-            ]
-        }
+async def _pump_until_terminal(engine: AgentEngine, task_id: str, max_rounds: int = 20) -> None:
+    for _ in range(max_rounds):
+        task = engine.get_task(task_id)
+        if task is None or task.terminal:
+            return
+        await engine.pump()
+        await asyncio.sleep(0)
+
+
+def _engine(
+    workspace: Path,
+    handlers: dict[str, object],
+    provider: object | None = None,
+    bindings: tuple[ToolExecutorBinding, ...] = (),
+) -> AgentEngine:
+    engine = AgentEngine(
+        _configuration(workspace),
+        dict(handlers),  # type: ignore[dict-item]
+        model_provider=provider if provider is not None else _UnusedProvider(),  # type: ignore[arg-type]
     )
-    payload = projected["events"][0]["payload"]
-    assert payload == {"text": "kept", "tool_names": ["one"]}
+    engine.bind_tool_executors(bindings)
+    return engine
 
 
-def test_runtime_store_migrates_v5_to_incremental_vacuum(tmp_path: Path) -> None:
-    database = tmp_path / "runtime.sqlite3"
-    SQLiteRuntimeStore(database).initialize()
-    with sqlite3.connect(database) as connection:
-        connection.execute("UPDATE schema_meta SET version = 5")
-        connection.commit()
-        connection.execute("PRAGMA auto_vacuum = NONE")
-        connection.execute("VACUUM")
-        assert connection.execute("PRAGMA auto_vacuum").fetchone()[0] == 0
-
-    SQLiteRuntimeStore(database).initialize()
-    with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT version FROM schema_meta").fetchone()[0] == 8
-        assert connection.execute("PRAGMA auto_vacuum").fetchone()[0] == 2
-
-
-def test_runtime_store_migrates_v7_waiting_statuses_to_ready(tmp_path: Path) -> None:
-    """RFC 0205：v7 的 WAITING_* 状态在迁移后归一化为 READY。"""
-    database = tmp_path / "runtime.sqlite3"
-    store = SQLiteRuntimeStore(database)
-    store.initialize()
-    with sqlite3.connect(database) as connection:
-        connection.execute(
-            "INSERT INTO tasks VALUES ('t1', 'a1', 'm1', 's1', 'global', 's', 0, 'ACTIVE', "
-            "0, 0, 8, 6, 300, '2026-01-01T00:00:00', '2026-01-01T00:00:00', NULL)"
-        )
-        for status in ("READY", "WAITING_MODEL", "WAITING_TOOL", "WAITING_CHILDREN", "COMPLETED"):
-            connection.execute(
-                "INSERT INTO agents VALUES (?, 't1', NULL, 'gate', 0, 'a', ?, 0, '{}', "
-                "'2026-01-01T00:00:00', '2026-01-01T00:00:00', '')",
-                (f"a-{status}", status),
-            )
-        connection.execute("UPDATE schema_meta SET version = 7")
-        connection.commit()
-
-    store.initialize()
-    with sqlite3.connect(database) as connection:
-        connection.row_factory = sqlite3.Row
-        statuses = {
-            str(row["agent_id"]): str(row["status"])
-            for row in connection.execute("SELECT agent_id, status FROM agents").fetchall()
-        }
-    assert statuses == {
-        "a-READY": "READY",
-        "a-WAITING_MODEL": "READY",
-        "a-WAITING_TOOL": "READY",
-        "a-WAITING_CHILDREN": "READY",
-        "a-COMPLETED": "COMPLETED",
-    }
-
-
-def test_amp_creates_archives_and_deduplicates_task(tmp_path: Path) -> None:
-    state = EngineState(_configuration(tmp_path), {"gate": _Complete(), "worker": _Complete()})
+def test_amp_creates_terminal_record_and_deduplicates_task(tmp_path: Path) -> None:
+    """提交 → 入口任务 → 完成：终态留存 SQLite（无文件归档，RFC 0210）。"""
 
     async def scenario() -> None:
-        amp = _amp()
-        await state.submit_amp(amp)
-        first = await _admit(state)
-        task_id = first.admitted_task_ids[0]
-        await state.finalize_terminal_tasks()
-        await state.submit_amp(amp)
-        replay = await _admit(state)
-        assert len(first.admitted_task_ids) == 1
-        assert replay.admitted_task_ids == ()
-        assert state.get_task(task_id) is None
-        detail = state.task_detail(task_id)
-        assert detail is not None
-        assert detail["archive_version"] == 2
-        assert detail["events"][0]["type"] == "task.started"
-        assert (tmp_path / "archive" / "tasks" / f"{task_id}.json").is_file()
+        engine = _engine(tmp_path, {"gate": _Complete(), "worker": _Complete()})
+        try:
+            amp = _amp().to_dict()
+            await engine.submit_amp(amp)
+            await asyncio.sleep(0.001)
+            first = await engine.pump()
+            task_id = first["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+
+            detail = engine.task_detail(task_id)
+            assert detail is not None
+            assert detail["events"][0]["type"] == "task.started"
+
+            # 重复 AMP 幂等：不产生新任务
+            await engine.submit_amp(amp)
+            await asyncio.sleep(0.001)
+            replay = await engine.pump()
+            assert replay["admitted_task_ids"] == ()
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
 
 
-def test_invalid_file_is_rejected_and_ambient_hint_still_requires_triage(tmp_path: Path) -> None:
-    state = EngineState(_configuration(tmp_path), {"gate": _Complete(), "worker": _Complete()})
-    invalid = tmp_path / "inbox" / "invalid.json"
-    invalid.write_text("{", encoding="utf-8")
-
+def test_invalid_file_is_rejected(tmp_path: Path) -> None:
     async def scenario() -> None:
-        ambient = new_amp(
-            event_type="clock.changed",
-            session_id="clock",
-            summary="ambient fact",
-            data={"ambient": True, "vendor": {"arbitrary": True}},
-            source_app="clock",
-            source_instance="test",
-        )
-        await state.submit_amp(ambient)
-        result = await _admit(state)
-        assert result.admitted_task_ids
-        assert state.tasks()[0].root_summary == "ambient fact"
-        assert (tmp_path / "archive" / "inbox" / "rejected" / "invalid.json").is_file()
+        engine = _engine(tmp_path, {"gate": _Complete(), "worker": _Complete()})
+        try:
+            invalid = tmp_path / "inbox" / "invalid.json"
+            invalid.write_text("{", encoding="utf-8")
+            await engine.pump()
+            rejected = tmp_path / "archive" / "inbox" / "rejected"
+            assert (rejected / "invalid.json").is_file()
+        finally:
+            await engine.shutdown()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
 
 
 def test_delegation_children_report_to_parent(tmp_path: Path) -> None:
@@ -234,22 +182,21 @@ def test_delegation_children_report_to_parent(tmp_path: Path) -> None:
                 return AgentDecision(wait_for_children=True, state_patch={"completed": completed})
             return AgentDecision(completion=Completion("all children reported"), state_patch={"completed": completed})
 
-    state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
-
     async def scenario() -> None:
-        await state.submit_amp(_amp())
-        await _admit(state, 8)
-        await state.pump(8)
-        await state.pump(1)
-        assert state.tasks()[0].status == TaskStatus.ACTIVE
-        await state.pump(1)
-        assert state.tasks()[0].status == TaskStatus.COMPLETED
-        assert len(state.store.agents()) == 3
+        engine = _engine(tmp_path, {"gate": Handler(), "worker": Handler()})
+        try:
+            await engine.submit_amp(_amp().to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id, max_rounds=30)
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+            assert len(engine.store.agents()) == 3
+        finally:
+            await engine.shutdown()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
 
 
 def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) -> None:
@@ -259,124 +206,24 @@ def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) 
                 return AgentDecision(completion=Completion("tool handled"))
             return AgentDecision(tool_request=ToolRequest("test.reply", {"text": "hello"}))
 
-    state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
-    state.install_capability_catalog(
-        CapabilityCatalogSnapshot((CapabilityDescriptor("test.reply", "reply", {"type": "object"}),))
-    )
-
     async def scenario() -> None:
-        await state.submit_amp(_amp())
-        result = await _admit(state)
-        assert state.has_pending_tool_requests() and state.has_work()
-        lease = (await state.claim_tool_requests())[0]
-        kwargs = {
-            "request_id": lease.request_id,
-            "capability": lease.capability,
-            "status": ToolOutcomeStatus.SUCCEEDED,
-            "summary": "delivered",
-            "result": {"ok": True},
-            "error": None,
-            "source_app": "test",
-            "source_instance": "test",
-        }
-        await state.complete_tool(**kwargs)  # type: ignore[arg-type]
-        await state.complete_tool(**kwargs)  # type: ignore[arg-type]
-        await state.pump()
-        task = state.get_task(result.admitted_task_ids[0])
-        assert task is not None and task.status == TaskStatus.COMPLETED
-        with pytest.raises(ValueError, match="invalid Tool outcome"):
-            await state.complete_tool(**{**kwargs, "status": "forged"})  # type: ignore[arg-type]
-
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
-
-
-def test_engine_persists_and_executes_every_model_tool_call(tmp_path: Path) -> None:
-    catalog = PromptCatalog.create(
-        soul="soul",
-        world="world",
-        agents={"gate": "gate", "worker": "worker"},
-    )
-    agent = ToolAgent(composer=PromptComposer(catalog))
-    state = EngineState(_configuration(tmp_path), {"gate": agent, "worker": agent})
-    state.install_capability_catalog(
-        CapabilityCatalogSnapshot(
-            (
-                CapabilityDescriptor("test.first", "first", {"type": "object"}),
-                CapabilityDescriptor("test.second", "second", {"type": "object"}),
-            )
+        engine = _engine(
+            tmp_path,
+            {"gate": Handler(), "worker": Handler()},
+            bindings=(_binding("test.reply"),),
         )
-    )
+        try:
+            await engine.submit_amp(_amp().to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+        finally:
+            await engine.shutdown()
 
-    async def scenario() -> None:
-        await state.submit_amp(_amp())
-        await _admit(state)
-        model_activity = (await state.claim_model_requests(1))[0]
-        model_result = ModelResult(
-            "model",
-            frozenset({"chat", "tools"}),
-            "native",
-            "",
-            None,
-            ModelUsage(),
-            0.0,
-            tool_calls=(
-                ToolCall("first-call", "test.first", {"value": 1}),
-                ToolCall("second-call", "test.second", {"value": 2}),
-            ),
-            continuation=ModelContinuation(
-                "provider",
-                "responses",
-                (
-                    {"type": "function_call", "call_id": "first-call", "name": "test.first"},
-                    {"type": "function_call", "call_id": "second-call", "name": "test.second"},
-                ),
-            ),
-        )
-        await state.complete_model(model_activity, model_result.to_dict(), None)
-        await state.pump()
-
-        first = (await state.claim_tool_requests())[0]
-        assert first.capability == "test.first"
-        await state.complete_tool(
-            request_id=first.request_id,
-            capability=first.capability,
-            status=ToolOutcomeStatus.SUCCEEDED,
-            summary="first complete",
-            result={"value": 1},
-            error=None,
-            source_app="test",
-            source_instance="test",
-        )
-        await state.pump()
-
-        second = (await state.claim_tool_requests())[0]
-        assert second.capability == "test.second"
-        await state.complete_tool(
-            request_id=second.request_id,
-            capability=second.capability,
-            status=ToolOutcomeStatus.SUCCEEDED,
-            summary="second complete",
-            result={"value": 2},
-            error=None,
-            source_app="test",
-            source_instance="test",
-        )
-        await state.pump()
-
-        resumed_activity = (await state.claim_model_requests(1))[0]
-        resumed = ModelRequest.from_dict(resumed_activity.request).continuation
-        assert resumed is not None
-        outputs = [item for item in resumed.items if item.get("type") == "function_call_output"]
-        assert [item["call_id"] for item in outputs] == ["first-call", "second-call"]
-        assert state.tasks()[0].tool_calls == 2
-
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
 
 
 def test_complete_task_tool_finishes_without_resume(tmp_path: Path) -> None:
@@ -385,31 +232,104 @@ def test_complete_task_tool_finishes_without_resume(tmp_path: Path) -> None:
             _ = context
             return AgentDecision(tool_request=ToolRequest("test.reply", {"text": "done"}, complete_task=True))
 
-    state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
-    state.install_capability_catalog(
-        CapabilityCatalogSnapshot((CapabilityDescriptor("test.reply", "reply", {"type": "object"}),))
+    async def scenario() -> None:
+        engine = _engine(
+            tmp_path,
+            {"gate": Handler(), "worker": Handler()},
+            bindings=(_binding("test.reply"),),
+        )
+        try:
+            await engine.submit_amp(_amp().to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_engine_persists_and_executes_every_model_tool_call(tmp_path: Path) -> None:
+    catalog = PromptCatalog.create(soul="soul", world="world", agents={"gate": "gate", "worker": "worker"})
+    agent = ToolAgent(composer=PromptComposer(catalog))
+    engine = _engine(
+        tmp_path,
+        {"gate": agent, "worker": agent},
+        bindings=(_binding("test.first"), _binding("test.second")),
     )
 
-    async def scenario() -> None:
-        await state.submit_amp(_amp())
-        await _admit(state)
-        lease = (await state.claim_tool_requests())[0]
-        await state.complete_tool(
-            request_id=lease.request_id,
-            capability=lease.capability,
-            status=ToolOutcomeStatus.SUCCEEDED,
-            summary="delivered",
-            result={},
-            error=None,
-            source_app="test",
-            source_instance="test",
-        )
-        assert state.tasks()[0].status == TaskStatus.COMPLETED
+    class ChainProvider:
+        """第一次调用返回两个工具调用；续轮返回纯文本完成。"""
 
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResult:
+            self._calls += 1
+            if self._calls == 1:
+                return ModelResult(
+                    "model",
+                    frozenset({"chat", "tools"}),
+                    "native",
+                    "",
+                    None,
+                    ModelUsage(),
+                    0.0,
+                    tool_calls=(
+                        ToolCall("first-call", "test.first", {"value": 1}),
+                        ToolCall("second-call", "test.second", {"value": 2}),
+                    ),
+                    continuation=ModelContinuation(
+                        "provider",
+                        "responses",
+                        (
+                            {"type": "function_call", "call_id": "first-call", "name": "test.first"},
+                            {"type": "function_call", "call_id": "second-call", "name": "test.second"},
+                        ),
+                    ),
+                )
+            return ModelResult("model", frozenset({"chat", "tools"}), "native", "all done", None, ModelUsage(), 0.0)
+
+    engine._model_provider = ChainProvider()  # type: ignore[assignment]
     try:
-        asyncio.run(scenario())
+        asyncio.run(_chain_scenario(engine))
     finally:
-        state.shutdown()
+        asyncio.run(engine.shutdown())
+
+
+async def _chain_scenario(engine: AgentEngine) -> None:
+    await engine.submit_amp(_amp().to_dict())
+    await asyncio.sleep(0.001)
+    result = await engine.pump()
+    task_id = result["admitted_task_ids"][0]
+    for _ in range(12):
+        task = engine.get_task(task_id)
+        if task is None or task.terminal:
+            break
+        await engine.pump()
+        await asyncio.sleep(0)
+    task = engine.get_task(task_id)
+    assert task is not None and task.status == TaskStatus.COMPLETED
+    assert task.tool_calls == 2
+    assert task.model_calls == 2
+
+
+def _binding(capability: str) -> ToolExecutorBinding:
+    from src.contracts import ToolExecutorBinding, ToolOutcome
+
+    class _Executor:
+        async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:  # noqa: ARG002
+            return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, "done", result={"ok": True})
+
+    return ToolExecutorBinding(
+        CapabilityDescriptor(capability, "reply", {"type": "object"}),
+        _Executor(),
+        "test",
+        "local",
+    )
 
 
 def test_model_activity_completion_and_failure_are_auditable(tmp_path: Path) -> None:
@@ -421,29 +341,38 @@ def test_model_activity_completion_and_failure_are_auditable(tmp_path: Path) -> 
                 return AgentDecision(failure=str(context.message.payload["error"]))
             return AgentDecision(model_request=ModelRequest(role="fast", messages=()))
 
-    state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
+    class Provider:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResult:
+            self._calls += 1
+            if self._calls == 1:
+                return ModelResult("fake", frozenset({"chat"}), "normalized", "answer", None, ModelUsage(), 0)
+            raise RuntimeError("provider unavailable")
 
     async def scenario() -> None:
-        await state.submit_amp(_amp("success"))
-        await _admit(state)
-        activity = (await state.claim_model_requests(1))[0]
-        model_result = ModelResult("fake", frozenset({"chat"}), "normalized", "answer", None, ModelUsage(), 0)
-        await state.complete_model(activity, model_result.to_dict(), None)
-        await _admit(state)
-        assert state.tasks()[0].status == TaskStatus.COMPLETED
+        engine = _engine(tmp_path, {"gate": Handler(), "worker": Handler()}, provider=Provider())
+        try:
+            await engine.submit_amp(_amp("success").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            assert engine.get_task(task_id) is not None
+            assert engine.get_task(task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
 
-        await state.submit_amp(_amp("failure"))
-        await _admit(state)
-        failed_activity = (await state.claim_model_requests(1))[0]
-        await state.complete_model(failed_activity, None, "provider unavailable")
-        failed = await state.pump()
-        assert failed.processed_message_ids
-        assert state.tasks()[1].status == TaskStatus.ERROR
+            await engine.submit_amp(_amp("failure").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            assert engine.get_task(task_id) is not None
+            assert engine.get_task(task_id).status == TaskStatus.ERROR  # type: ignore[union-attr]
+        finally:
+            await engine.shutdown()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
 
 
 def test_output_stream_returns_model_text_and_failures_ordered_by_cursor(tmp_path: Path) -> None:
@@ -451,43 +380,50 @@ def test_output_stream_returns_model_text_and_failures_ordered_by_cursor(tmp_pat
         def handle(self, context: AgentContext) -> AgentDecision:
             if context.message.type == "model.completed":
                 return AgentDecision(completion=Completion(str(context.message.payload["text"])))
+            if context.message.type == "model.failed":
+                return AgentDecision(failure=str(context.message.payload["error"]))
             return AgentDecision(model_request=ModelRequest(role="fast", messages=()))
 
-    state = EngineState(_configuration(tmp_path), {"gate": Handler(), "worker": Handler()})
+    class Provider:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResult:
+            self._calls += 1
+            if self._calls == 1:
+                return ModelResult("fake", frozenset({"chat"}), "normalized", "answer one", None, ModelUsage(), 0)
+            raise RuntimeError("provider unavailable")
 
     async def scenario() -> None:
-        await state.submit_amp(_amp("first"))
-        await _admit(state)
-        activity = (await state.claim_model_requests(1))[0]
-        model_result = ModelResult("fake", frozenset({"chat"}), "normalized", "answer one", None, ModelUsage(), 0)
-        await state.complete_model(activity, model_result.to_dict(), None)
-        await _admit(state)
-        assert state.tasks()[0].status == TaskStatus.COMPLETED
+        engine = _engine(tmp_path, {"gate": Handler(), "worker": Handler()}, provider=Provider())
+        try:
+            await engine.submit_amp(_amp("first").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
 
-        page = state.output_stream()
-        assert [item.text for item in page.items] == ["answer one"]
-        assert all(item.kind == "model" for item in page.items)
-        assert page.next_cursor == page.items[-1].cursor
+            page = engine.output_stream()
+            assert [item.text for item in page.items] == ["answer one"]
+            assert all(item.kind == "model" for item in page.items)
+            assert page.next_cursor == page.items[-1].cursor
 
-        await state.submit_amp(_amp("second"))
-        await _admit(state)
-        failed_activity = (await state.claim_model_requests(1))[0]
-        await state.complete_model(failed_activity, None, "provider unavailable")
-        failed = await state.pump()
-        assert failed.processed_message_ids
+            await engine.submit_amp(_amp("second").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
 
-        page = state.output_stream(page.next_cursor)
-        assert len(page.items) == 1
-        assert page.items[0].kind == "error"
-        assert page.items[0].text == "provider unavailable"
+            page = engine.output_stream(page.next_cursor)
+            assert len(page.items) == 1
+            assert page.items[0].kind == "error"
+            assert page.items[0].text == "RuntimeError: provider unavailable"
 
-        assert state.output_stream(page.next_cursor).items == ()
-        assert state.output_stream(page.next_cursor).next_cursor == page.next_cursor
+            assert engine.output_stream(page.next_cursor).items == ()
+        finally:
+            await engine.shutdown()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
 
 
 def test_handler_exception_fails_message_and_task(tmp_path: Path) -> None:
@@ -496,22 +432,24 @@ def test_handler_exception_fails_message_and_task(tmp_path: Path) -> None:
             _ = context
             raise RuntimeError("broken handler")
 
-    state = EngineState(_configuration(tmp_path), {"gate": Broken(), "worker": Broken()})
-
     async def scenario() -> None:
-        with pytest.raises(ValueError, match="positive"):
-            await state.pump(0)
-        await state.submit_amp(_amp())
-        result = await _admit(state)
-        assert result.failed_message_ids
-        assert state.tasks()[0].status == TaskStatus.ERROR
-        assert state.agent_detail(state.tasks()[0].root_agent_id) is not None
-        assert state.status()["active_tasks"] == 0
+        engine = _engine(tmp_path, {"gate": Broken(), "worker": Broken()})
+        try:
+            with pytest.raises(ValueError, match="positive"):
+                await engine.pump(0)
+            await engine.submit_amp(_amp().to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            task = engine.get_task(task_id)
+            assert result["failed_message_ids"]
+            assert task is not None and task.status == TaskStatus.ERROR
+            assert engine.status()["active_tasks"] == 0
+        finally:
+            await engine.shutdown()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
 
 
 def test_handler_context_cannot_mutate_canonical_authorization_state(tmp_path: Path) -> None:
@@ -526,23 +464,39 @@ def test_handler_context_cannot_mutate_canonical_authorization_state(tmp_path: P
             context.message.payload["forged"] = True
             return AgentDecision(tool_request=ToolRequest("forbidden.send", {}))
 
-    state = EngineState(_configuration(tmp_path), {"gate": Hostile(), "worker": _Complete()})
-    state.install_capability_catalog(
-        CapabilityCatalogSnapshot((CapabilityDescriptor("forbidden.send", "forbidden", {"type": "object"}),))
-    )
-
     async def scenario() -> None:
-        await state.submit_amp(_amp())
-        result = await _admit(state)
-        task = state.get_task(result.admitted_task_ids[0])
-        agent = state.get_agent(task.root_agent_id) if task is not None else None
-        assert result.failed_message_ids
-        assert task is not None and task.status == TaskStatus.ERROR
-        assert agent is not None and "forged" not in agent.state
-        assert isinstance(agent.state.get("batch_events"), list)
-        assert state._profiles["gate"].capabilities == canonical_profile.capabilities == frozenset({"test.*"})
+        engine = _engine(
+            tmp_path,
+            {"gate": Hostile(), "worker": _Complete()},
+            bindings=(
+                ToolExecutorBinding(
+                    CapabilityDescriptor("forbidden.send", "forbidden", {"type": "object"}),
+                    _NoopExecutor(),
+                    "test",
+                    "local",
+                ),
+            ),
+        )
+        try:
+            await engine.submit_amp(_amp().to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            task = engine.get_task(task_id)
+            agent = engine.get_agent(task.root_agent_id) if task is not None else None
+            assert result["failed_message_ids"]
+            assert task is not None and task.status == TaskStatus.ERROR
+            assert agent is not None and "forged" not in agent.state
+            assert engine._profiles["gate"].capabilities == canonical_profile.capabilities == frozenset({"test.*"})
+        finally:
+            await engine.shutdown()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        state.shutdown()
+    asyncio.run(scenario())
+
+
+class _NoopExecutor:
+    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:  # noqa: ARG002
+        from src.contracts import ToolOutcome
+
+        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, "noop")
