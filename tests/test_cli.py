@@ -105,3 +105,29 @@ def test_cli_without_command_does_not_start_runtime(monkeypatch: pytest.MonkeyPa
     with pytest.raises(SystemExit) as raised:
         run([])
     assert raised.value.code == 2
+
+
+def test_start_initializes_config_with_root_and_profile(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    init_calls: list[tuple[Path, str | None]] = []
+
+    async def run_runtime(_platforms: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("aurora.runtime.run_runtime", run_runtime)
+    monkeypatch.setattr(
+        "aurora.commands.start.init_config",
+        lambda root, profile: init_calls.append((root, profile)),
+    )
+    assert run(["--root", str(tmp_path), "--profile", "dev", "start"]) == 0
+    assert init_calls == [(tmp_path, "dev")]
+
+
+def test_check_and_donk_do_not_initialize_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_called(*_args: object) -> None:
+        pytest.fail("config initialized for non-runtime command")
+
+    monkeypatch.setattr("aurora.commands.start.init_config", fail_if_called)
+    monkeypatch.setattr("aurora.commands.check.run_process", lambda _command, _root: 0)
+    monkeypatch.setattr("aurora.commands.donk._invoke", lambda *_args: 0)
+    assert run(["check", "--lint"]) == 0
+    assert run(["donk", "show"]) == 0
