@@ -29,6 +29,7 @@ class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
 
     AGENT_CAN_DELEGATE_BOOLEAN = "Agent {agent_id} can_delegate must be boolean"
+    AGENT_TRIAGE_CONTROL_BOOLEAN = "Agent {agent_id} triage_control must be boolean"
     AGENT_CAPABILITIES_STRINGS = "Agent {agent_id} capabilities must contain strings"
     AGENT_CHILD_PROFILES_STRINGS = "Agent {agent_id} child_profiles must contain strings"
     AGENT_DELEGATION_DISABLED = "Agent {agent_id} cannot declare child_profiles when delegation is disabled"
@@ -140,6 +141,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
     for raw in raw_agents:
         if not isinstance(raw, dict):
             raise ConfigurationError(_Msg.AGENT_MUST_BE_TABLE)
+        raw_triage_control = raw.pop("triage_control", None)
         _require_keys(
             raw,
             {"id", "implementation", "model_role", "capabilities", "can_delegate", "child_profiles"},
@@ -162,6 +164,9 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
             raise ConfigurationError(_Msg.AGENT_CHILD_PROFILES_STRINGS.format(agent_id=agent_id))
         if not isinstance(raw["can_delegate"], bool):
             raise ConfigurationError(_Msg.AGENT_CAN_DELEGATE_BOOLEAN.format(agent_id=agent_id))
+        triage_control = raw_triage_control
+        if triage_control is not None and not isinstance(triage_control, bool):
+            raise ConfigurationError(_Msg.AGENT_TRIAGE_CONTROL_BOOLEAN.format(agent_id=agent_id))
         agents.append(
             AgentProfile(
                 id=agent_id,
@@ -170,6 +175,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
                 capabilities=frozenset(capabilities),
                 can_delegate=raw["can_delegate"],
                 child_profiles=frozenset(children),
+                triage_control=bool(triage_control),
             )
         )
     for agent in agents:

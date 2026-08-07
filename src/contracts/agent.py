@@ -120,6 +120,7 @@ class AgentProfile:
     capabilities: frozenset[str]
     can_delegate: bool
     child_profiles: frozenset[str]
+    triage_control: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,8 +265,11 @@ class AgentDecision:
     delegations: tuple[DelegationRequest, ...] = ()
     completion: Completion | None = None
     wait_for_children: bool = False
+    defer_seconds: float | None = None
+    discard: bool = False
     failure: str | None = None
     state_patch: dict[str, Any] = field(default_factory=dict)
+    memory_candidates: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         transitions = (
@@ -274,6 +278,8 @@ class AgentDecision:
             bool(self.delegations),
             self.completion is not None,
             self.wait_for_children,
+            self.defer_seconds is not None,
+            self.discard,
             self.failure is not None,
         )
         if sum(transitions) != 1:
@@ -287,8 +293,11 @@ class AgentDecision:
             "delegations": [asdict(item) for item in self.delegations],
             "completion": asdict(self.completion) if self.completion is not None else None,
             "wait_for_children": self.wait_for_children,
+            "defer_seconds": self.defer_seconds,
+            "discard": self.discard,
             "failure": self.failure,
             "state_patch": self.state_patch,
+            "memory_candidates": list(self.memory_candidates),
         }
 
 
