@@ -128,17 +128,22 @@ def provider_tools(
 
 
 def _provider_tool_alias(name: str) -> str:
-    """生成 Provider 可接受且可由模型稳定复述的 Tool 名称。"""
-    readable = _INVALID_TOOL_NAME.sub("_", name).strip("_")
+    """生成 Provider 可接受且可由模型稳定复述的 Tool 名称。
+
+    非法字符以双下划线（``__``）替换，避免与原始名称中的单下划线歧义
+    （如 ``aur.agent.delegate`` → ``aur__agent__delegate`` 不会与
+    ``aur_agent_delegate`` 混淆）。
+    """
+    readable = _INVALID_TOOL_NAME.sub("__", name).strip("_")
     if not readable:
         readable = "tool"
     if readable[0].isdigit():
-        readable = f"tool_{readable}"
+        readable = f"tool__{readable}"
     if len(readable) <= _PROVIDER_TOOL_NAME_LIMIT:
         return readable
     digest = hashlib.sha256(name.encode()).hexdigest()[:12]
     prefix = readable[: _PROVIDER_TOOL_NAME_LIMIT - len(digest) - 1].rstrip("_")
-    return f"{prefix}_{digest}"
+    return f"{prefix}__{digest}"
 
 
 def parse_arguments(value: object, diagnostics: list[str]) -> dict[str, Any]:

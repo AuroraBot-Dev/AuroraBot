@@ -14,6 +14,7 @@ from src.ai.execution import CostTracker, GatewayError
 from src.ai.gateway import ModelGatewayService, invalid_output_result
 from src.ai.roles.base import (
     RoleHandler,
+    _provider_tool_alias,
     build_chat_kwargs,
     chat_assistant_item,
     chat_message,
@@ -253,7 +254,11 @@ def test_parsing_maps_provider_tools_and_tool_calls() -> None:
     definitions = (ToolDefinition("org.example.echo", "Echo", {"type": "object"}),)
     chat_defs, aliases = provider_tools(definitions, responses=False)
     alias = next(iter(aliases))
-    assert alias == "org_example_echo"
+    assert alias == "org__example__echo"
+    # 双下划线替换与原始单下划线不混淆（RFC 0214 歧义消除）
+    assert _provider_tool_alias("aur_agent_delegate") == "aur_agent_delegate"
+    assert _provider_tool_alias("aur.agent.delegate") == "aur__agent__delegate"
+    assert _provider_tool_alias("aur_agent.delegate") == "aur_agent__delegate"
     assert chat_defs[0]["function"]["name"] == alias
 
     raw_call = SimpleNamespace(id="call", function=SimpleNamespace(name=alias, arguments='{"text":"hello"}'))
