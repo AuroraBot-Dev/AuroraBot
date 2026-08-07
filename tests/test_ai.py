@@ -68,11 +68,6 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
         (ModelRequest(role="fast", messages=(), retry_policy="retry"), "retry_policy"),  # type: ignore[arg-type]
         (ModelRequest(role="fast", messages=(), cancel_policy="sometimes"), "cancellation"),  # type: ignore[arg-type]
         (ModelRequest(role="fast", messages=(), parameters={"model": "override"}), "controlled fields"),
-        (ModelRequest(role="fast", messages=(), required_capabilities=frozenset({"vision"})), "lacks capabilities"),
-        (
-            ModelRequest(role="multimodal", messages=(), tools=(ToolDefinition("tool", "", {"type": "object"}),)),
-            "lacks capabilities",
-        ),
         (
             ModelRequest(role="fast", messages=(), continuation=ModelContinuation("other", "chat_completions")),
             "continuation",
@@ -413,15 +408,15 @@ def test_gateway_cold_start_falls_back_and_opens_tools(project_root: Path, monke
     async def scenario() -> None:
         service = ModelGatewayService(load_configuration(project_root))
         try:
+            # 冷启动且 models.dev 不可用：能力假定满足（RFC 0215），协商不阻塞
             await service.initialize()
-            assert "fast" in service._uncertain_roles
-            assert "quality" not in service._uncertain_roles
             request = ModelRequest(
                 role="fast",
                 messages=(),
                 tools=(ToolDefinition("t", "", {"type": "object"}),),
             )
             assert "tools" in service.negotiate(request)
+            assert "chat" in service.negotiate(ModelRequest(role="fast", messages=()))
         finally:
             if models._refresh_task is not None:
                 await asyncio.shield(models._refresh_task)

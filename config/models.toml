@@ -29,15 +29,6 @@ model = "deepseek-v4-flash"
 [models.roles.quality]
 provider = "deepseek"
 model = "deepseek-v4-pro"
-# 显式声明：quality 是确定性角色，不受 models.dev 冷启动影响
-capabilities = [
-    "chat",
-    "stream",
-    "json_text_fallback",
-    "tools",
-    "structured_output",
-    "reasoning",
-]
 
 [models.roles.multimodal]
 provider = "xiaomi_mimo"

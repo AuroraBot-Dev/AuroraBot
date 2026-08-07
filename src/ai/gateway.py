@@ -60,9 +60,7 @@ class _Msg(StrEnum):
     RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
     CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
     FORBIDDEN_PARAMETERS = "model parameters may not override controlled fields: {forbidden}"
-    LACKS_CAPABILITIES = "role {role} lacks capabilities: {missing}"
     CONTINUATION_MISMATCH = "model continuation does not match the selected role"
-    NO_STRUCTURED_OUTPUT = "structured output is unavailable and JSON-text fallback is not permitted"
     MISSING_CREDENTIAL = "missing model credential: {env_var}"
     COST_BUDGET_EXCEEDED = "model cost exceeded max_cost_usd"
 
@@ -152,7 +150,6 @@ class ModelGatewayService:
             self._callers[role_id] = ChatCaller(model, role_id, self._task_manager, self)
 
         self._capabilities: dict[str, frozenset[str]] = {}
-        self._uncertain_roles: set[str] = set()
         self._init_lock = asyncio.Lock()
         self._initialized = False
 
@@ -172,16 +169,12 @@ class ModelGatewayService:
             return
         if not await cache_available():
             await refresh_now(wait_seconds=_COLD_START_REFRESH_SECONDS)
-        data_available = await cache_available()
-        self._uncertain_roles = set()
         for role_id, model_id in self._models.items():
             definition = self._configuration.model_definitions[role_id]
             if definition.capabilities:
                 caps = definition.capabilities
             else:
                 caps = await get_capabilities_by_id(model_id)
-                if not data_available:
-                    self._uncertain_roles.add(role_id)
             self._capabilities[role_id] = caps
         self._initialized = True
         logger.info("model gateway initialized roles=%d", len(self._models))
@@ -212,11 +205,15 @@ class ModelGatewayService:
     # ── 能力协商 ──────────────────────────────────────────
 
     def negotiate(self, request: ModelRequest) -> frozenset[str]:
+        """契约与参数协商（RFC 0213/0215）。
+
+        模型基础能力假定满足（配置模型即信任它符合角色要求）；本方法只做
+        请求契约校验与结构化输出标记。结构化输出失败由通道的 JSON-text
+        fallback 兜底。
+        """
         role = self._configuration.model_definitions.get(request.role)
         if role is None:
             raise ModelCapabilityError(_Msg.UNKNOWN_MODEL_ROLE.format(role=request.role))
-
-        capabilities = self._capabilities_for(request.role)
 
         if request.retry_policy != "none":
             raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
@@ -228,24 +225,11 @@ class ModelGatewayService:
         if request.continuation is not None and request.continuation.provider != role.provider:
             raise ModelCapabilityError(_Msg.CONTINUATION_MISMATCH)
 
-        required = set(request.required_capabilities)
+        negotiated = set(request.required_capabilities)
         if request.tools:
-            required.add("tools")
-        missing = sorted(required - capabilities)
-        if missing:
-            if request.role in self._uncertain_roles:
-                logger.warning("models.dev 数据不可用，假定 model_role=%s 支持缺失能力 %s", request.role, missing)
-            else:
-                raise ModelCapabilityError(_Msg.LACKS_CAPABILITIES.format(role=request.role, missing=missing))
-
-        negotiated = required
+            negotiated.add("tools")
         if request.output_schema is not None:
-            if "structured_output" in capabilities:
-                negotiated.add("structured_output")
-            elif request.allow_json_text_fallback and "json_text_fallback" in capabilities:
-                negotiated.add("json_text_fallback")
-            else:
-                raise ModelCapabilityError(_Msg.NO_STRUCTURED_OUTPUT)
+            negotiated.add("structured_output")
         return frozenset(negotiated)
 
     # ── 外部接口（RFC 0215）───────────────────────────────
