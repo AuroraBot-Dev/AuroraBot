@@ -480,7 +480,7 @@ engine = AgentEngine(config, handlers, memory_store=memory_service)
 ```
 engine/
   __init__.py
-  runtime.py          # AgentEngine — Inbox → Triage → Root/子代理 → Memory 完整闭环
+  runtime.py          # AgentEngine（门面） + EngineState（内部状态与 turn 调度）
                        #   构造签名：
                        #     AgentEngine(configuration, handlers, *,
                        #                 model_provider, memory_store=None,
@@ -494,6 +494,8 @@ engine/
                        #     3. triage → 批次创建入口 triage Task（RFC 0209）
                        #     4. Agent turn / Tool / Model 调度（triage 判断走正常链路）
                        #     5. 异步 Memory 投影 + 终态归档
+  authorize.py        # 决策构造、授权校验与应用（RFC 0208 拆包）
+  ingress.py          # AMP 持久化摄入与幂等回执（RFC 0208 拆包）
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
   debug.py            # task_detail() / agent_detail() / 工作区校验
   store/              # SQLite 运行态持久化子包

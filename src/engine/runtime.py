@@ -3,37 +3,29 @@
 AgentEngine 是外部可见的唯一入口——组合持久化状态、模型、工具与自动记忆服务。
 EngineState 拥有 Task/Agent 持久化状态、邮箱队列和 Activity 调度，
 将所有认知决策委托给外部 Agent handler，将 I/O 委托给平台层。
+决策构造/授权与 AMP 摄入分别位于 engine/authorize.py 与 engine/ingress.py（RFC 0208）。
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
-
-from jsonschema import ValidationError, validate
 
 from src.contracts import (
     ActivityRequest,
-    AgentContext,
-    AgentDecision,
     AgentHandler,
     AgentInstance,
     AgentLimits,
-    AgentProfile,
     AmpEnvelope,
-    AmpValidationError,
     CapabilityCatalogSnapshot,
-    DelegationRequest,
     EngineConfiguration,
     MemoryContextSnapshot,
     MemoryEntry,
@@ -46,8 +38,6 @@ from src.contracts import (
     ToolLease,
     ToolRequest,
     TriageBatch,
-    TriageLimits,
-    capability_tool_definition,
 )
 from src.engine.archive import (
     TASK_ARCHIVE_VERSION,
@@ -55,9 +45,15 @@ from src.engine.archive import (
     read_task_archive,
     task_archive_projection,
 )
+from src.engine.authorize import (
+    apply_authorized_decision,
+    apply_failure,
+    handle_claim,
+)
 from src.engine.debug import agent_detail as build_agent_detail
 from src.engine.debug import reject_active_legacy_workspace
 from src.engine.debug import task_detail as build_task_detail
+from src.engine.ingress import ingest_ready, persist_amp
 from src.engine.session_log import SessionLog
 from src.engine.store import SQLiteRuntimeStore
 from src.engine.store.status import ACT_PENDING
@@ -65,7 +61,6 @@ from src.engine.tool_registry import ToolRegistry
 from src.utils import (
     atomic_write_json,
     get_logger,
-    read_json,
 )
 
 if TYPE_CHECKING:
@@ -80,20 +75,12 @@ class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
     RESERVED_EVENT_TYPE = "reserved internal event type: {amp_type}"
-    RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runtime use"
     HANDLERS_MISMATCH = "Agent handlers must exactly match configured profiles"
     ROOT_PROFILE_MISSING = "root Agent profile is not configured"
     CATALOG_ALREADY_INSTALLED = "capability catalog is already installed"
     MAX_TURNS_POSITIVE = "max_turns must be positive"
     INVALID_TOOL_OUTCOME = "invalid Tool outcome"
     TOOL_COMPLETION_UNMATCHED = "Tool completion does not match an active request: {request_id}"
-    AGENT_MODEL_ROLE_DENIED = "Agent {agent_id} cannot request model role {role}"
-    AGENT_TOOL_DENIED = "Agent {agent_id} cannot request {capability}"
-    UNKNOWN_TOOL = "unknown Tool capability {capability}"
-    TOOL_PARAMS_MISMATCH = "Tool parameters do not match {capability}: {message}"
-    PROFILE_CANNOT_DELEGATE = "Agent profile {profile_id} cannot delegate"
-    PROFILE_CANNOT_CREATE = "Agent profile {profile_id} cannot create {child_profile}"
-    TRIAGE_CONTROL_DENIED = "Agent profile {profile_id} cannot issue triage transitions"
 
 
 # -- 类型与工具函数 ------------------------------------------------------
@@ -108,226 +95,6 @@ class PumpResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
-
-# -- 决策处理 ------------------------------------------------------------
-
-
-def _policy_matches(capability: str, policy: str) -> bool:
-    return policy in ("*", capability) or (policy.endswith(".*") and capability.startswith(policy[:-1]))
-
-
-def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
-    """权限域匹配：`!` 前缀否定优先于 `*` 与前缀通配（RFC 0207 排除语义）。"""
-    if any(
-        policy.startswith("!") and len(policy) > 1 and _policy_matches(capability, policy[1:]) for policy in policies
-    ):
-        return False
-    return any(_policy_matches(capability, policy) for policy in policies if not policy.startswith("!"))
-
-
-def _build_limit_dict(limits: AgentLimits) -> dict[str, Any]:
-    return {
-        "max_active_agents": limits.max_active_agents,
-        "max_agents_per_task": limits.max_agents_per_task,
-        "max_depth": limits.max_depth,
-        "max_children_per_agent": limits.max_children_per_agent,
-        "worker_profile": limits.worker_profile,
-    }
-
-
-class DecisionRuntime(Protocol):
-    configuration: EngineConfiguration
-    _profiles: dict[str, AgentProfile]
-    _handlers: dict[str, AgentHandler]
-    store: SQLiteRuntimeStore
-
-    @property
-    def limits(self) -> AgentLimits: ...
-
-    @property
-    def capability_catalog(self) -> CapabilityCatalogSnapshot: ...
-
-    def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
-
-
-def handle_claim(kernel: DecisionRuntime, claim: tuple[Any, AgentInstance, TaskState]) -> tuple[AgentDecision, str]:
-    """构造只读 AgentContext 并调用对应 handler，返回 (决策, 授权的 profile_id)。
-
-    task/agent/message/children 直接复用当轮新建的 store 对象，不做深拷贝；
-    handler 违反只读契约的变异会以乐观锁冲突失败，不会静默损坏状态。
-    profile 与 capability 描述符是跨轮共享的规范对象，必须拷贝，防止 handler
-    通过变异 context 提权。返回的 profile_id 在 handler 运行前捕获，apply
-    路径据此取规范 profile，篡改 agent.profile_id 无法重定向授权。
-    """
-    message, agent, task = claim
-    profile_id = agent.profile_id
-    profile = deepcopy(kernel._profiles[profile_id])
-    descriptors = deepcopy(
-        tuple(
-            descriptor
-            for descriptor in kernel.capability_catalog.capabilities
-            if _capability_allowed(descriptor.id, profile.capabilities)
-        )
-    )
-    context = AgentContext(
-        task=task,
-        agent=agent,
-        message=message,
-        children=kernel.store.children(agent.agent_id),
-        profile=profile,
-        capabilities=descriptors,
-        tool_definitions=tuple(capability_tool_definition(item) for item in descriptors),
-        memory=kernel.recall_memory(MemoryQuery(task.root_summary, task.session_id)),
-        pending_child_reports=kernel.store.has_pending_child_reports(agent.agent_id),
-    )
-    return kernel._handlers[profile_id].handle(context), profile_id
-
-
-def apply_failure(kernel: DecisionRuntime, message: Any, agent: AgentInstance, error: str) -> None:
-    kernel.store.apply_decision(
-        message=message,
-        agent=agent,
-        decision=AgentDecision(failure=error),
-        state_patch={},
-        limits=_build_limit_dict(kernel.limits),
-        priority=message.priority,
-    )
-
-
-def apply_authorized_decision(
-    kernel: DecisionRuntime, message: Any, agent: AgentInstance, profile_id: str, decision: AgentDecision
-) -> None:
-    """按决策字段分派授权校验；校验通过后原样交给 store 原子执行（RFC 0205）。
-
-    completion/wait/failure 无需额外授权；wait 的等待前提校验在 store
-    事务内原子完成。所有 resource 上界校验仍由 store 事务内执行。
-    defer/discard 由 triage_control profile 专属，defer 的秒数在授权时
-    按 TriageLimits 钳制（RFC 0209）。
-    """
-    profile = kernel._profiles[profile_id]
-    if decision.model_request is not None:
-        _authorize_model(agent, profile, decision.model_request)
-    elif decision.tool_request is not None:
-        _authorize_tool(kernel, agent, profile, decision.tool_request)
-    elif decision.delegations:
-        _authorize_delegation(kernel, profile, decision.delegations)
-    elif decision.defer_seconds is not None or decision.discard:
-        decision = _authorize_triage(profile, decision, kernel.configuration.triage)
-    kernel.store.apply_decision(
-        message=message,
-        agent=agent,
-        decision=decision,
-        state_patch=decision.state_patch,
-        limits=_build_limit_dict(kernel.limits),
-        priority=message.priority,
-    )
-
-
-def _authorize_model(agent: AgentInstance, profile: AgentProfile, request: ModelRequest) -> None:
-    if request.role != profile.model_role:
-        raise PermissionError(_Msg.AGENT_MODEL_ROLE_DENIED.format(agent_id=agent.agent_id, role=request.role))
-
-
-def _authorize_tool(kernel: DecisionRuntime, agent: AgentInstance, profile: AgentProfile, tool: ToolRequest) -> None:
-    if not _capability_allowed(tool.capability, profile.capabilities):
-        raise PermissionError(_Msg.AGENT_TOOL_DENIED.format(agent_id=agent.agent_id, capability=tool.capability))
-    descriptor = kernel.capability_catalog.by_id.get(tool.capability)
-    if descriptor is None:
-        raise ValueError(_Msg.UNKNOWN_TOOL.format(capability=tool.capability))
-    try:
-        validate(tool.parameters, descriptor.parameters_schema)
-    except ValidationError as error:
-        raise ValueError(_Msg.TOOL_PARAMS_MISMATCH.format(capability=tool.capability, message=error.message)) from error
-
-
-def _authorize_delegation(
-    kernel: DecisionRuntime, profile: AgentProfile, delegations: tuple[DelegationRequest, ...]
-) -> None:
-    if not profile.can_delegate:
-        raise PermissionError(_Msg.PROFILE_CANNOT_DELEGATE.format(profile_id=profile.id))
-    for delegation in delegations:
-        child_profile = delegation.profile_id or kernel.limits.worker_profile
-        if child_profile not in profile.child_profiles or child_profile not in kernel._profiles:
-            raise PermissionError(_Msg.PROFILE_CANNOT_CREATE.format(profile_id=profile.id, child_profile=child_profile))
-
-
-def _authorize_triage(profile: AgentProfile, decision: AgentDecision, limits: TriageLimits) -> AgentDecision:
-    """defer/discard 仅限 triage_control profile；defer 秒数钳制到 TriageLimits 上下界。"""
-    if not profile.triage_control:
-        raise PermissionError(_Msg.TRIAGE_CONTROL_DENIED.format(profile_id=profile.id))
-    if decision.defer_seconds is None:
-        return decision
-    clamped = min(max(decision.defer_seconds, limits.quiet_seconds), limits.max_defer_seconds)
-    return replace(decision, defer_seconds=clamped)
-
-
-# -- AMP 摄入 ------------------------------------------------------------
-
-
-class IngressRuntime(Protocol):
-    configuration: EngineConfiguration
-    store: SQLiteRuntimeStore
-    _inbox: Path
-    _archive: Path
-    _session_log: SessionLog
-    _profiles: dict[str, AgentProfile]
-
-    @property
-    def limits(self) -> AgentLimits: ...
-
-    @property
-    def capability_catalog(self) -> CapabilityCatalogSnapshot: ...
-
-
-def ingest_ready(kernel: IngressRuntime) -> tuple[str, ...]:
-    ingested: list[str] = []
-    for p in sorted(kernel._inbox.glob("*.json")):
-        try:
-            amp = AmpEnvelope.parse(read_json(p))
-        except (OSError, ValueError, TypeError, AmpValidationError) as error:
-            logger.warning("AMP ingress rejected file=%s reason=%s", p.name, error)
-            _archive_inbox(kernel, p, "rejected")
-            continue
-        try:
-            _ingest_amp_file(kernel, amp, p, ingested)
-        except (ValueError, TypeError) as error:
-            logger.warning("AMP ingress rejected file=%s reason=%s", p.name, error)
-            _archive_inbox(kernel, p, "rejected")
-    return tuple(ingested)
-
-
-def _ingest_amp(kernel: IngressRuntime, amp: AmpEnvelope, ingested: list[str]) -> None:
-    if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
-        raise ValueError(_Msg.RESERVED_TOOL_EVENT)
-    if kernel.store.enqueue_inbox(amp, kernel.configuration.triage):
-        kernel._session_log.amp_in(amp)
-        ingested.append(amp.header.message_id)
-
-
-def persist_amp(kernel: IngressRuntime, amp: AmpEnvelope) -> bool:
-    """在入口回执前将单个 AMP 幂等写入持久化 Inbox。"""
-    ingested: list[str] = []
-    _ingest_amp(kernel, amp, ingested)
-    return bool(ingested)
-
-
-def _ingest_amp_file(kernel: IngressRuntime, amp: AmpEnvelope, path: Path, ingested: list[str]) -> None:
-    before = len(ingested)
-    _ingest_amp(kernel, amp, ingested)
-    if len(ingested) > before:
-        _archive_inbox(kernel, path, "accepted")
-    else:
-        _archive_inbox(kernel, path, "duplicate")
-
-
-def _archive_inbox(kernel: IngressRuntime, source: Path, category: str) -> None:
-    destination_dir = kernel._archive / "inbox" / category
-    destination_dir.mkdir(parents=True, exist_ok=True)
-    destination = destination_dir / source.name
-    if destination.exists():
-        destination = destination_dir / f"{source.stem}-{os.urandom(4).hex()}{source.suffix}"
-    source.replace(destination)
 
 
 # -- 引擎核心 ------------------------------------------------------------

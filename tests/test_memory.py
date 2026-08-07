@@ -13,7 +13,7 @@ from src.contracts import (
     ToolExecutionRequest,
     ToolOutcomeStatus,
 )
-from src.engine.runtime import _capability_allowed
+from src.engine.authorize import _capability_allowed
 from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 from src.memory.service import MemoryService
 
