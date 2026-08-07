@@ -12,6 +12,8 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 6. [0205 Agent 状态机收敛与决策链路扁平化](0205-agent-state-and-decision-thinning.md) - 删除 Command 层、Agent 等待状态派生化、Schema v8 迁移
 7. [0206 运行时组合与配置快照收敛](0206-runtime-composition-and-configuration-hardening.md) - 强类型平台生命周期、单一启动配置快照与 MCP 边界
 8. [0207 Multiagent 委派链与同源记忆](0207-multiagent-delegation-and-unified-memory.md) - 注意力初筛、本体意识委派链、全员被动记忆与可委派记忆 agent 的同源记忆
+9. [0208 层级重定性](0208-layer-reframing.md) - 启动环境、基础建设、能力、外部接入与运行实现五层语义；能力统一为 ToolExecutor；engine 瘦身方向
+10. [0209 Agent 全同构](0209-agent-isomorphism.md) - Triage 入口 agent、三元组实例化（上下文/权限域/逻辑类）、委派唯一化与 defer/discard transition
 
 ## 规范优先级
 
