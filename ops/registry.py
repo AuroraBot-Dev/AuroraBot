@@ -30,6 +30,7 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
     """返回 Console 与 Dashboard 输入共用的命令集。"""
     from ops.commands import (
         agent,
+        ai,
         clear,
         event,
         log,
@@ -54,6 +55,7 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
             help_command.handle,
         ),
         ConsoleCommand(status.NAMES, status.USAGE, status.DESCRIPTION, status.configure, status.handle),
+        ConsoleCommand(ai.NAMES, ai.USAGE, ai.DESCRIPTION, ai.configure, ai.handle),
         ConsoleCommand(say.NAMES, say.USAGE, say.DESCRIPTION, say.configure, say.handle),
         ConsoleCommand(event.NAMES, event.USAGE, event.DESCRIPTION, event.configure, event.handle),
         ConsoleCommand(pump.NAMES, pump.USAGE, pump.DESCRIPTION, pump.configure, pump.handle),

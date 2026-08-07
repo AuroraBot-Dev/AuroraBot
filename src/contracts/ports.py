@@ -49,6 +49,7 @@ class RuntimeCommandPort(Protocol):
     """ops 命令处理器所需的最小运行时端口。"""
 
     configuration: AuroraConfig
+    model_gateway: Any
 
     async def submit_amp(self, value: object) -> str: ...
 

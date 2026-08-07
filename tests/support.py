@@ -59,4 +59,16 @@ def create_test_runtime(root: Path) -> AuroraRuntime:
         model_provider=TriageModelProvider(),
     )
     engine.bind_tool_executors(())
-    return AuroraRuntime(configuration, engine)
+    return AuroraRuntime(
+        configuration,
+        engine,
+        model_gateway=_gateway_with_cost_tracker(),
+    )
+
+
+def _gateway_with_cost_tracker() -> object:
+    from types import SimpleNamespace
+
+    from src.ai.execution import CostTracker
+
+    return SimpleNamespace(cost_tracker=CostTracker())

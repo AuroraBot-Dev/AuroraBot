@@ -26,6 +26,7 @@ class AuroraRuntime:
     configuration: AuroraConfig
     engine: AgentEngine
     tool_bindings: tuple["ToolExecutorBinding", ...] = ()
+    model_gateway: Any = None
     _command_router: CommandRouter = field(init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
 

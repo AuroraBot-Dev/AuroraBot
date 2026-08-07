@@ -79,6 +79,26 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
     asyncio.run(scenario())
 
 
+def test_ai_command_reports_gateway_cost_stats(project_root: Path) -> None:
+    """/ai 返回模型网关的费用与分类统计（RFC 0215）。"""
+
+    async def scenario() -> None:
+        runtime = create_test_runtime(project_root)
+        try:
+            if runtime.model_gateway is not None:
+                tracker = runtime.model_gateway.cost_tracker
+                await tracker.add({"role": "fast", "model": "m1", "status": "completed", "cost": 0.5})
+            result = await runtime.route_input(_input("/ai"))
+            assert result.ok
+            assert result.data is not None
+            assert "total_cost" in result.data
+            assert "by_role" in result.data
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
 def test_runtime_shutdown_request_and_idempotent_conversation(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)

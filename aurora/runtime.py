@@ -191,15 +191,16 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     composer = PromptComposer(PromptCatalog.from_config(configuration.prompts))
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
+    model_gateway = ModelGatewayService(configuration)
     engine = AgentEngine(
         engine_configuration,
         handlers,
-        model_provider=ModelGatewayService(configuration),
+        model_provider=model_gateway,
         memory_store=memory,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
     memory_bindings = _build_memory_bindings(memory, engine)
-    return AuroraRuntime(configuration, engine, tool_bindings=memory_bindings)
+    return AuroraRuntime(configuration, engine, tool_bindings=memory_bindings, model_gateway=model_gateway)
 
 
 def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
