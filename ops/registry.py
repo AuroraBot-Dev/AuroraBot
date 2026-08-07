@@ -28,7 +28,7 @@ class ConsoleCommand:
 
 def command_specs() -> tuple[ConsoleCommand, ...]:
     """返回 Console 与 Dashboard 输入共用的命令集。"""
-    from src.localhost.commands import (
+    from ops.commands import (
         agent,
         clear,
         event,
@@ -38,10 +38,10 @@ def command_specs() -> tuple[ConsoleCommand, ...]:
         status,
         task,
     )
-    from src.localhost.commands import (
+    from ops.commands import (
         help as help_command,
     )
-    from src.localhost.commands import (
+    from ops.commands import (
         quit as quit_command,
     )
 

@@ -6,12 +6,12 @@ import argparse
 import shlex
 from typing import TYPE_CHECKING, NoReturn
 
+from ops.registry import ConsoleCommand, command_specs
 from src.contracts import (
     CommandContext,
     CommandResult,
     RuntimeInput,
 )
-from src.localhost.registry import ConsoleCommand, command_specs
 
 if TYPE_CHECKING:
     from src.contracts.ports import RuntimeCommandPort

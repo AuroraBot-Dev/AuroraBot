@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
+from ops.api import create_debug_app
+from ops.runtime import AuroraRuntime
 from src.ai import ModelGatewayService
 from src.config import get
 from src.contracts import (
@@ -25,8 +27,6 @@ from src.contracts import (
     PlatformPreference,
 )
 from src.engine.runtime import AgentEngine
-from src.localhost.api import create_debug_app
-from src.localhost.runtime import AuroraRuntime
 from src.memory.service import MemoryService
 from src.prompt import PromptCatalog, PromptComposer
 from src.utils import (
@@ -172,11 +172,11 @@ def _build_capabilities() -> tuple[Capability, ...]:
     return DelegationCapability(), WaitCapability(), SpeechCapability(), MemoryCapability()
 
 
-# -- Engine / localhost 构造 --------------------------------------------
+# -- Engine / ops 构造 --------------------------------------------
 
 
 def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
-    """在唯一组合根创建 Agent、Provider、自动服务、engine 与 localhost。"""
+    """在唯一组合根创建 Agent、Provider、自动服务、engine 与 ops。"""
     profiles = configuration.agents
     limits = configuration.engine.agents
     engine_configuration = EngineConfiguration(
@@ -188,7 +188,6 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         triage=configuration.engine.triage,
     )
     memory = MemoryService(configuration.storage.memory)
-    memory_bindings = _build_memory_bindings(memory)
     composer = PromptComposer(PromptCatalog.from_config(configuration.prompts))
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
@@ -199,18 +198,19 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         memory_store=memory,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
+    memory_bindings = _build_memory_bindings(memory, engine)
     return AuroraRuntime(configuration, engine, tool_bindings=memory_bindings)
 
 
-def _build_memory_bindings(memory: MemoryService) -> tuple["ToolExecutorBinding", ...]:
-    """构造主动记忆写入的工具绑定（RFC 0207 记忆同源）。"""
+def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
+    """构造主动记忆写入的工具绑定（RFC 0207 记忆同源，RFC 0211 回执走 AMP）。"""
     from src.contracts.tool import ToolExecutorBinding
     from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 
     return (
         ToolExecutorBinding(
             MEMORY_REMEMBER_DESCRIPTOR,
-            MemoryToolExecutor(memory),
+            MemoryToolExecutor(memory, ingress),  # type: ignore[arg-type]
             source_app="memory",
             source_instance="local",
         ),
@@ -297,7 +297,7 @@ async def _run_platform_tasks(
     console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
     tasks.update(task for task in (console_task,) if task is not None)
 
-    debug_task = asyncio.create_task(debug_server.serve(), name="aurora-localhost-debug-server")
+    debug_task = asyncio.create_task(debug_server.serve(), name="aurora-ops-debug-server")
     tasks.add(debug_task)
     stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
     tasks.add(stop_task)
@@ -424,7 +424,7 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
 
 
 def _debug_server(runtime: AuroraRuntime) -> uvicorn.Server:
-    """创建独立于 Platform 集合的 localhost 调试服务器。"""
+    """创建独立于 Platform 集合的 ops 调试服务器。"""
     configuration = runtime.configuration
     return SignalSafeServer(
         uvicorn.Config(

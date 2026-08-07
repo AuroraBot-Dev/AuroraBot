@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
+from ops.router import CommandRouter
 from src.contracts import new_amp
-from src.localhost.router import CommandRouter
 
 if TYPE_CHECKING:
     import asyncio

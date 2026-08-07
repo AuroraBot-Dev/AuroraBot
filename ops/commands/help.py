@@ -22,7 +22,7 @@ def configure(_parser: argparse.ArgumentParser) -> None:
 
 async def handle(_context: CommandContext, _arguments: argparse.Namespace) -> CommandResult:
     """从注册表收集所有命令的用法与描述，拼接为帮助文本。"""
-    from src.localhost.registry import command_specs
+    from ops.registry import command_specs
 
     text = "\n".join(f"{spec.usage:<58} {spec.description}" for spec in command_specs())
     return CommandResult(ok=True, text=text)

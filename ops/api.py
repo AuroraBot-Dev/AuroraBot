@@ -1,4 +1,4 @@
-"""localhost 独立运行时调试 API。"""
+"""ops 独立运行时调试 API。"""
 
 from enum import StrEnum
 from typing import Any
@@ -21,8 +21,8 @@ class _Msg(StrEnum):
 
 
 def create_debug_app(debug: DashboardDebugPort) -> LifespanSafeApp:
-    """创建只依赖 localhost 调试端口的 FastAPI 应用，外层包装 lifespan 安全 ASGI 适配器。"""
-    app = FastAPI(title="Aurora localhost", version="1")
+    """创建只依赖 ops 调试端口的 FastAPI 应用，外层包装 lifespan 安全 ASGI 适配器。"""
+    app = FastAPI(title="Aurora ops", version="1")
 
     @app.post("/v1/debug/amp", status_code=202)
     async def submit_amp(value: dict[str, Any]) -> dict[str, str]:

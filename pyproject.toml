@@ -24,7 +24,7 @@ aurora = "aurora.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["aurora", "aurora.*", "src", "src.*"]
+include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
 
 [dependency-groups]
 dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov", "donk>=1.1.0"]
@@ -157,8 +157,8 @@ allowed-confusables = [
 "src/engine/runtime.py" = ["BLE001", "TC001"]
 "src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
 "src/platform/dashboard/store.py" = ["TC003", "TRY300"]
-"src/localhost/runtime.py" = ["BLE001", "TC003"]
-"src/localhost/api.py" = ["C901"]
+"ops/runtime.py" = ["BLE001", "TC003"]
+"ops/api.py" = ["C901"]
 "src/agents/handler.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
 "src/memory/service.py" = ["BLE001"]
 "src/platform/console/adapter.py" = ["TC001", "TRY004", "TRY301"]
@@ -177,7 +177,7 @@ keep-runtime-typing = true
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "src", "tests"]
+include = ["aurora", "ops", "src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 
 [build-system]
