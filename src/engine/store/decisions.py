@@ -497,7 +497,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             ).fetchall()
             return tuple(rows)
 
-    def complete_tool_activity(
+    def consume_tool_receipt(
         self,
         *,
         request_id: str,
@@ -505,7 +505,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
         summary: str,
         payload: dict[str, Any],
     ) -> tuple[bool, str | None]:
-        """消费工具回执：幂等投递 tool.{status} 消息给请求方 Agent。
+        """消费工具回执 AMP（RFC 0211）：幂等投递 tool.{status} 消息给请求方 Agent。
 
         幂等键为 request_id：因果事件中已存在同类型回执则忽略（重放去重）。
         """

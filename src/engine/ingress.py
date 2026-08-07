@@ -1,13 +1,12 @@
-"""AMP 持久化摄入与幂等回执（RFC 0208/0210 拆包）。
+"""AMP 持久化摄入、工具回执与幂等分发（RFC 0208/0210/0211 拆包）。
 
-把 Inbox 文件与内存队列写入持久化 inbox_events，并归档已接受/拒绝/重复
-的输入文件。不持有运行时状态。
+普通事件写入 inbox_events（防抖聚合）；工具回执（``tool.{status}``）不进入
+Inbox，直接匹配活动完成并投递 Agent 消息（RFC 0211：结果统一经 AMP 回 engine）。
 """
 
 from __future__ import annotations
 
 import os
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from src.contracts import AmpEnvelope, AmpValidationError
@@ -20,14 +19,11 @@ if TYPE_CHECKING:
 
 logger = get_logger("aurora.engine.ingress")
 
-
-class _Msg(StrEnum):
-    """本文件内所有用户或模型可见的硬编码文本。"""
-
-    RESERVED_TOOL_EVENT = "Tool receipt event types are reserved for internal Runtime use"
+TOOL_EVENT_TYPES = frozenset({"tool.succeeded", "tool.failed", "tool.unknown"})
 
 
 def ingest_ready(kernel: "AgentEngine") -> tuple[str, ...]:
+    """摄入 Inbox 文件：普通事件入 Inbox，工具回执直接消费。"""
     ingested: list[str] = []
     for p in sorted(kernel._inbox.glob("*.json")):
         try:
@@ -45,14 +41,17 @@ def ingest_ready(kernel: "AgentEngine") -> tuple[str, ...]:
 
 
 def _ingest_amp(kernel: "AgentEngine", amp: AmpEnvelope, ingested: list[str]) -> None:
-    if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
-        raise ValueError(_Msg.RESERVED_TOOL_EVENT)
+    if amp.payload.type in TOOL_EVENT_TYPES:
+        # 工具回执：匹配活动完成，不进入 Inbox（RFC 0211）
+        kernel.consume_tool_receipt(amp)
+        ingested.append(amp.header.message_id)
+        return
     if kernel.store.enqueue_inbox(amp, kernel.configuration.triage):
         ingested.append(amp.header.message_id)
 
 
 def persist_amp(kernel: "AgentEngine", amp: AmpEnvelope) -> bool:
-    """在入口回执前将单个 AMP 幂等写入持久化 Inbox。"""
+    """在入口回执前将单个 AMP 幂等写入持久化 Inbox（或直接消费工具回执）。"""
     ingested: list[str] = []
     _ingest_amp(kernel, amp, ingested)
     return bool(ingested)

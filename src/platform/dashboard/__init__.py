@@ -40,12 +40,11 @@ __all__ = [
 async def _create(config: "AuroraConfig", runtime: "PlatformRuntimePort") -> "PlatformHandle":
     """创建 Dashboard 平台句柄，含聊天服务、平台适配器与 HTTP 服务器。"""
     from src.contracts.platform import PlatformHandle
-    from src.contracts.tool import ToolExecutorBinding
 
     dashboard_cfg = config.dashboard
     chat = ChatService(dashboard_cfg, runtime)
     await chat.start()
-    dash = DashboardPlatform(chat)
+    dash = DashboardPlatform(chat, runtime)
     server = _build_server(config, runtime, chat)
     background = (
         None
@@ -54,15 +53,7 @@ async def _create(config: "AuroraConfig", runtime: "PlatformRuntimePort") -> "Pl
     )
 
     return PlatformHandle(
-        bindings=(
-            ToolExecutorBinding(
-                DASHBOARD_SEND_DESCRIPTOR,
-                dash,
-                source_app="platform.dashboard",
-                source_instance="local",
-                recovery=dash,
-            ),
-        ),
+        bindings=(dash.binding,),
         server=server,
         background=background,
     )

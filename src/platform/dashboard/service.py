@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from src.contracts.configuration import DashboardConfig
     from src.contracts.ports import InteractiveInputPort
-    from src.contracts.tool import ToolExecutionRequest, ToolOutcome
+    from src.contracts.tool import ToolExecutionRequest
 
 _MESSAGE_TYPES = {"text", "image", "file", "audio", "video"}
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "text/")
@@ -80,7 +80,7 @@ class ChatService:
 
         Args:
             configuration: Dashboard 配置。
-            input_port: 交互式输入端口，用于将用户命令路由到 localhost。
+            input_port: 交互式输入端口，用于将用户命令路由到 ops。
         """
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
@@ -385,13 +385,9 @@ class ChatService:
             raise ChatError(_Msg.CODE_ATTACHMENT_FORBIDDEN, _Msg.ATTACHMENT_UNAVAILABLE, 403)
         return attachment_id
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """执行 Dashboard Tool，委托给通信层处理。"""
+    async def execute_tool(self, request: ToolExecutionRequest) -> tuple[str, str, dict[str, Any] | None, str | None]:
+        """执行 Dashboard Tool，委托给通信层处理，返回 (状态, 摘要, 结果, 错误)。"""
         return await self._communication.execute_tool(request)
-
-    async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """恢复 Dashboard Tool 状态，委托给通信层处理。"""
-        return await self._communication.recover_tool(request)
 
     async def subscribe(self, user_id: int) -> asyncio.Queue[dict[str, Any]]:
         """为用户创建事件订阅队列。

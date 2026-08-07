@@ -29,7 +29,7 @@ AuroraBot 是一个以 **Agent 为中心**的自主智能体框架。核心哲�
 ```mermaid
 graph TD
     aurora["aurora/<br/>组合根：读配置、组装、启动、生命周期"]
-    localhost["src/localhost<br/>监察 sidecar：命令路由、调试 API、输入分发"]
+    ops["src/ops<br/>监察 sidecar：命令路由、调试 API、输入分发"]
     engine["src/engine<br/>AgentEngine 单循环运行时 + SQLite store"]
     agents["src/agents<br/>BaseAgent 子类 + 主动能力"]
     prompt["src/prompt<br/>提示词装配"]
@@ -43,22 +43,22 @@ graph TD
     sandbox["src/sandbox<br/>独立沙箱（未启用）"]
 
     aurora --> engine
-    aurora --> localhost
+    aurora --> ops
     aurora --> platform
     aurora --> ai
     aurora --> memory
     aurora --> config
     aurora --> console
 
-    localhost --> engine
-    localhost --> platform
-    localhost --> ai
-    localhost --> memory
-    localhost --> agents
-    localhost --> config
-    localhost --> prompt
-    localhost --> contracts
-    localhost --> utils
+    ops --> engine
+    ops --> platform
+    ops --> ai
+    ops --> memory
+    ops --> agents
+    ops --> config
+    ops --> prompt
+    ops --> contracts
+    ops --> utils
 
     engine --> contracts
     engine --> utils
@@ -84,7 +84,7 @@ graph TD
     class contracts,prompt,config,memory,ai,agents,platform,console,utils leaf
     class engine core
     class aurora proc
-    class localhost inspect
+    class ops inspect
 ```
 
 ### 2.2 五层角色（RFC 0208 重定性）
@@ -99,10 +99,10 @@ graph TD
 
 ### 2.3 依赖铁律
 
-- `engine` 不 import `ai/platform/memory/agents/config/prompt/localhost`——外部服务全部通过**构造参数注入**（`model_provider=`、`memory_store=`、`bind_tool_executors()`）。
+- `engine` 不 import `ai/platform/memory/agents/config/prompt/ops`——外部服务全部通过**构造参数注入**（`model_provider=`、`memory_store=`、`bind_tool_executors()`）。
 - `agents` 不 import engine/memory/platform——handler 只读 `AgentContext`、只返回 `AgentDecision`；主动能力只生成 `ToolRequest`。
 - `platform` 只 import contracts + utils。
-- `localhost` 是唯一可自由 import 所有包的监察 sidecar，但**不在热路径**：engine 不依赖它。
+- `ops` 是唯一可自由 import 所有包的监察 sidecar，但**不在热路径**：engine 不依赖它。
 - `src/` 一律不 import `aurora/`。
 
 ---
@@ -330,7 +330,7 @@ engine/
 
 **每个平台的统一协议**（`contracts/platform.py`）：`PlatformFactory._create(config, runtime) → PlatformHandle{bindings, server, background, cleanup}`；`aurora/runtime.py` 遍历注册表创建、收集绑定、统一启动/停止。
 
-### 4.10 `src/localhost` — 监察层（热路径外）
+### 4.10 `src/ops` — 监察层（热路径外）
 
 **模式**：可 import 一切的 sidecar，只查不改。
 
@@ -341,7 +341,7 @@ engine/
 | `commands/` | `/status` `/pump` `/say` `/event` `/task` `/agent` `/clear` `/log` `/quit` `/help` |
 | `api.py` | `/v1/debug/*` FastAPI 调试端点 |
 
-**平台 ↔ localhost 解耦**：平台通过 `InteractiveInputPort` 注入调用，不 import localhost。
+**平台 ↔ ops 解耦**：平台通过 `InteractiveInputPort` 注入调用，不 import ops。
 
 ### 4.11 `src/console` — 本地前端（热路径外）
 
@@ -444,15 +444,28 @@ WAL（Write-Ahead Logging）是 SQLite 的并发模式：写先追加到 `-wal` 
 
 ## 7. 工具域划分
 
-### 7.1 三种来源 → 一个目录
+### 7.1 工具域命名（RFC 0211：一律 `aur.*`）
 
-| 来源 | 示例 ID | 定义处 | 执行处 |
-| --- | --- | --- | --- |
-| 平台 | `org.aurora.dashboard.send`、`org.aurora.mcp.<app>.<tool>` | platform adapter | 平台 executor |
-| 记忆 | `aurora.memory.remember` | memory/executor.py | MemoryToolExecutor |
-| 内建能力 | `aurora.agent.delegate`/`wait`/`speech` | agents/capabilities/ | handler 内联 |
+| 域 | 格式 | 示例 |
+| --- | --- | --- |
+| 平台 | `aur.<平台注册名>.<方法>` | `aur.dashboard.send` |
+| 平台 MCP | `aur.mcp.<app_package>.<tool>` | `aur.mcp.org.aurora.clock.get_time` |
+| 服务 | `aur.serv.<服务名>.<方法>` | `aur.serv.memory.remember` |
+| Agent 内建 | `aur.agent.<方法>` | `aur.agent.delegate` / `aur.agent.wait` / `aur.agent.speech` |
 
-所有工具最终汇入 `ToolRegistry`（capability ID → binding 的唯一执行表），catalog descriptor 是授权与参数校验的唯一依据。
+所有工具汇入 `ToolRegistry`（capability ID → executor 的一对一路由表）；catalog descriptor 是授权与参数校验的唯一依据。
+
+### 7.1b 回执通道（RFC 0211：结果 = AMP）
+
+```
+engine → ToolRegistry → executor.execute_tool(request)（无返回值）
+                              │ 执行完成
+                              ▼
+executor → tool_receipt_amp() → submit_amp(tool.{status}) → engine 幂等消费
+                              │（request_id 幂等键）
+                              ▼
+store.consume_tool_receipt → 完成活动 → agent 消息（complete_task 直接完成）
+```
 
 ### 7.2 权限域语法（profile.capabilities）
 

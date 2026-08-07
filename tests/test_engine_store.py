@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError
 from typing import TYPE_CHECKING
 
@@ -26,16 +27,16 @@ from src.contracts import (
     ToolCall,
     ToolExecutionRequest,
     ToolExecutorBinding,
-    ToolOutcome,
-    ToolOutcomeStatus,
     ToolRequest,
     TriageLimits,
     new_amp,
+    tool_receipt_amp,
 )
 from src.engine.runtime import AgentEngine
 from src.prompt import PromptCatalog, PromptComposer
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -113,14 +114,15 @@ def _engine(
     workspace: Path,
     handlers: dict[str, object],
     provider: object | None = None,
-    bindings: tuple[ToolExecutorBinding, ...] = (),
+    bindings: tuple[ToolExecutorBinding, ...] | Callable[[AgentEngine], tuple[ToolExecutorBinding, ...]] = (),
 ) -> AgentEngine:
     engine = AgentEngine(
         _configuration(workspace),
         dict(handlers),  # type: ignore[dict-item]
         model_provider=provider if provider is not None else _UnusedProvider(),  # type: ignore[arg-type]
     )
-    engine.bind_tool_executors(bindings)
+    resolved = bindings(engine) if callable(bindings) else bindings
+    engine.bind_tool_executors(resolved)
     return engine
 
 
@@ -210,7 +212,7 @@ def test_tool_success_resumes_agent_and_duplicate_is_idempotent(tmp_path: Path) 
         engine = _engine(
             tmp_path,
             {"gate": Handler(), "worker": Handler()},
-            bindings=(_binding("test.reply"),),
+            bindings=lambda engine: (_binding("test.reply", engine),),
         )
         try:
             await engine.submit_amp(_amp().to_dict())
@@ -236,7 +238,7 @@ def test_complete_task_tool_finishes_without_resume(tmp_path: Path) -> None:
         engine = _engine(
             tmp_path,
             {"gate": Handler(), "worker": Handler()},
-            bindings=(_binding("test.reply"),),
+            bindings=lambda engine: (_binding("test.reply", engine),),
         )
         try:
             await engine.submit_amp(_amp().to_dict())
@@ -258,7 +260,7 @@ def test_engine_persists_and_executes_every_model_tool_call(tmp_path: Path) -> N
     engine = _engine(
         tmp_path,
         {"gate": agent, "worker": agent},
-        bindings=(_binding("test.first"), _binding("test.second")),
+        bindings=lambda engine: (_binding("test.first", engine), _binding("test.second", engine)),
     )
 
     class ChainProvider:
@@ -317,12 +319,19 @@ async def _chain_scenario(engine: AgentEngine) -> None:
     assert task.model_calls == 2
 
 
-def _binding(capability: str) -> ToolExecutorBinding:
-    from src.contracts import ToolExecutorBinding, ToolOutcome
-
+def _binding(capability: str, engine: AgentEngine) -> ToolExecutorBinding:
     class _Executor:
-        async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:  # noqa: ARG002
-            return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, "done", result={"ok": True})
+        async def execute_tool(self, request: ToolExecutionRequest) -> None:
+            await engine.submit_amp(
+                tool_receipt_amp(
+                    status="succeeded",
+                    request=request,
+                    summary="done",
+                    source_app="test",
+                    source_instance="local",
+                    result={"ok": True},
+                )
+            )
 
     return ToolExecutorBinding(
         CapabilityDescriptor(capability, "reply", {"type": "object"}),
@@ -496,7 +505,5 @@ def test_handler_context_cannot_mutate_canonical_authorization_state(tmp_path: P
 
 
 class _NoopExecutor:
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:  # noqa: ARG002
-        from src.contracts import ToolOutcome
-
-        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, "noop")
+    async def execute_tool(self, request: ToolExecutionRequest) -> None:  # noqa: ARG002
+        return None

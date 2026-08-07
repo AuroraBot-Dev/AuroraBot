@@ -22,9 +22,8 @@ from src.contracts import (
     CapabilityDescriptor,
     ExternalAmpIngressPort,
     ToolExecutionRequest,
-    ToolOutcome,
-    ToolOutcomeStatus,
     new_amp,
+    tool_receipt_amp,
 )
 from src.platform.mcp.client_manager import (
     MCPClientManager,
@@ -193,7 +192,7 @@ class MCPPlatform:
 
     async def _start_builtin_heartbeat(self) -> None:
         """若已发现时钟应用能力，则启动内置心跳。"""
-        capability = "org.aurora.clock.start_heartbeat"
+        capability = "aur.mcp.org.aurora.clock.start_heartbeat"
         binding = self._tool_bindings.get(capability)
         if binding is None:
             return
@@ -281,7 +280,7 @@ class MCPPlatform:
                 schema = getattr(tool, "inputSchema", None)
                 if not isinstance(schema, dict):
                     raise RuntimeError(_Msg.MISSING_INPUT_SCHEMA.format(package=app.package, raw_name=raw_name))
-                capability = f"{app.package}.{raw_name}"
+                capability = f"aur.mcp.{app.package}.{raw_name}"
                 if capability in descriptors:
                     raise RuntimeError(_Msg.DUPLICATE_CAPABILITY.format(capability=capability))
                 description = getattr(tool, "description", "")
@@ -304,49 +303,78 @@ class MCPPlatform:
             return remote.tools or []
         return list(self._clients.list_all_tools().get(package, []))
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """执行 MCP Tool 调用：路由到正确的 Server 并返回结构化结果。
-
-        根据 capability ID 路由到对应 App 和 raw tool name。
-        支持 isError 检测并映射为失败结果。
-        """
+    async def execute_tool(self, request: ToolExecutionRequest) -> None:
+        """执行 MCP Tool 调用：路由到对应 Server，完成后提交回执 AMP（RFC 0211）。"""
+        status: str
+        summary: str
+        result: dict[str, Any] | None = None
+        error: str | None = None
         if not self._started:
-            return ToolOutcome(ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error="MCP 平台尚未启动")
-        binding = self._tool_bindings.get(request.capability)
-        if binding is None:
-            return ToolOutcome(
-                ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error=f"未知的 MCP capability: {request.capability}"
-            )
-        package, raw_name = binding
-        if not self._is_connected(package):
-            return ToolOutcome(ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error=f"MCP App 未连接: {package}")
-        try:
-            result = await self._call_tool(package, raw_name, request.parameters)
-        except Exception as error:
-            if isinstance(error, MCPToolRejectedError) or (
-                isinstance(error, McpError) and error.error.code != types.CONNECTION_CLOSED
-            ):
-                return ToolOutcome(
-                    ToolOutcomeStatus.FAILED, f"MCP Tool 执行失败: {request.capability}", error=str(error)
+            status, summary, error = "failed", "MCP Tool 不可用", "MCP 平台尚未启动"
+        else:
+            binding = self._tool_bindings.get(request.capability)
+            if binding is None:
+                status, summary, error = (
+                    "failed",
+                    "MCP Tool 不可用",
+                    f"未知的 MCP capability: {request.capability}",
                 )
-            logger.exception(
-                "MCP Tool 结果未知 request_id=%s capability=%s error_type=%s",
-                request.request_id,
-                request.capability,
-                type(error).__name__,
+            elif not self._is_connected(binding[0]):
+                status, summary, error = (
+                    "failed",
+                    "MCP Tool 不可用",
+                    f"MCP App 未连接: {binding[0]}",
+                )
+            else:
+                package, raw_name = binding
+                try:
+                    outcome = await self._call_tool(package, raw_name, request.parameters)
+                except Exception as call_error:
+                    if isinstance(call_error, MCPToolRejectedError) or (
+                        isinstance(call_error, McpError) and call_error.error.code != types.CONNECTION_CLOSED
+                    ):
+                        status, summary, error = (
+                            "failed",
+                            f"MCP Tool 执行失败: {request.capability}",
+                            str(call_error),
+                        )
+                    else:
+                        logger.exception(
+                            "MCP Tool 结果未知 request_id=%s capability=%s error_type=%s",
+                            request.request_id,
+                            request.capability,
+                            type(call_error).__name__,
+                        )
+                        status, summary, error = (
+                            "unknown",
+                            f"MCP Tool 结果未知: {request.capability}",
+                            f"{type(call_error).__name__}: {call_error}",
+                        )
+                else:
+                    if outcome.get("is_error") is True:
+                        detail = str(outcome.get("text") or outcome.get("content") or "MCP Tool 返回 isError")
+                        status, summary, error = (
+                            "failed",
+                            f"MCP Tool 执行失败: {request.capability}",
+                            detail,
+                        )
+                    else:
+                        status, summary, result = (
+                            "succeeded",
+                            f"MCP Tool 已执行: {request.capability}",
+                            _canonical_tool_result(outcome),
+                        )
+        assert self._ingress is not None
+        await self._ingress.submit_amp(
+            tool_receipt_amp(
+                status=status,
+                request=request,
+                summary=summary,
+                source_app="platform.mcp",
+                source_instance="local",
+                result=result,
+                error=error,
             )
-            return ToolOutcome(
-                ToolOutcomeStatus.UNKNOWN,
-                f"MCP Tool 结果未知: {request.capability}",
-                error=f"{type(error).__name__}: {error}",
-            )
-        if result.get("is_error") is True:
-            detail = str(result.get("text") or result.get("content") or "MCP Tool 返回 isError")
-            return ToolOutcome(ToolOutcomeStatus.FAILED, f"MCP Tool 执行失败: {request.capability}", error=detail)
-        return ToolOutcome(
-            ToolOutcomeStatus.SUCCEEDED,
-            f"MCP Tool 已执行: {request.capability}",
-            result=_canonical_tool_result(result),
         )
 
     async def _call_tool(self, package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:

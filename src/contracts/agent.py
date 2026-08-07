@@ -313,17 +313,6 @@ class ActivityRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class ToolLease:
-    activity_id: str
-    task_id: str
-    agent_id: str
-    request_id: str
-    session_id: str
-    capability: str
-    parameters: dict[str, Any]
-
-
-@dataclass(frozen=True, slots=True)
 class AgentContext:
     """一次 Agent 轮次的只读快照；handler 不得修改任何字段。"""
 

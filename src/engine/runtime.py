@@ -31,8 +31,6 @@ from src.contracts import (
     OutputStreamPage,
     TaskState,
     TaskStatus,
-    ToolLease,
-    ToolRequest,
     TriageBatch,
 )
 from src.engine.authorize import apply_authorized_decision, apply_failure, handle_claim
@@ -94,7 +92,7 @@ class AgentEngine:
         reject_active_legacy_workspace(self._workspace)
         self.store = SQLiteRuntimeStore(self._workspace / "process" / "runtime.sqlite3")
         self.store.initialize()
-        self._tools = tool_registry if tool_registry is not None else ToolRegistry(self, self)
+        self._tools = tool_registry if tool_registry is not None else ToolRegistry(self.store)
         self._capability_catalog: CapabilityCatalogSnapshot | None = None
         self._pump_lock = asyncio.Lock()
         self._shutdown_lock = asyncio.Lock()
@@ -173,11 +171,38 @@ class AgentEngine:
 
     async def submit_amp(self, value: object) -> str:
         amp = AmpEnvelope.parse(value)
-        if amp.payload.type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
-            raise ValueError(_Msg.RESERVED_EVENT_TYPE.format(amp_type=amp.payload.type))
         persist_amp(self, amp)
         self._wake.set()
         return amp.header.message_id
+
+    def consume_tool_receipt(self, amp: AmpEnvelope) -> None:
+        """工具回执 AMP：校验并交给 store 幂等消费（RFC 0211）。"""
+        status = amp.payload.type.removeprefix("tool.")
+        data = amp.payload.data
+        request_id = data.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
+        capability = data.get("capability")
+        if not isinstance(capability, str) or not capability:
+            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
+        error = data.get("error")
+        result = data.get("result")
+        if (status == "succeeded" and error is not None) or (
+            status != "succeeded" and (not error or result is not None)
+        ):
+            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
+        self.store.consume_tool_receipt(
+            request_id=request_id,
+            event_type=amp.payload.type,
+            summary=amp.payload.summary,
+            payload={
+                "request_id": request_id,
+                "capability": capability,
+                "result": result,
+                "error": error,
+                "source": amp.header.source,
+            },
+        )
 
     def ingest(self) -> tuple[str, ...]:
         """只把 AMP 写入持久化 Inbox，不创建 Task。"""
@@ -192,7 +217,7 @@ class AgentEngine:
             admitted = self._triage_inbox()
             expired = self.store.expire_tasks()
             processed, failed = self._pump_turns(max_turns)
-            receipts = await self._tools.execute_pending()
+            receipts = await self._tools.execute_pending(self.limits.tool_concurrency)
             self._ensure_model_dispatcher()
             self._project_memory()
             return {
@@ -320,63 +345,6 @@ class AgentEngine:
             self.store.complete_model_activity(activity.activity_id, None, f"{type(error).__name__}: {error}")
             return
         self.store.complete_model_activity(activity.activity_id, result.to_dict(), None)
-
-    # -- 工具队列端口（ToolQueuePort / ToolCompletionPort）----------------
-
-    async def claim_tool_requests(self) -> tuple[ToolLease, ...]:
-        return tuple(self._tool_lease(row) for row in self.store.claim_tool_activities(self.limits.tool_concurrency))
-
-    async def tool_recovery_requests(self) -> tuple[ToolLease, ...]:
-        return tuple(self._tool_lease(row) for row in self.store.tool_recovery_activities())
-
-    @staticmethod
-    def _tool_lease(row: Any) -> ToolLease:
-        """将持久化的工具活动行解析为类型化租约。"""
-        raw = json.loads(row["request_json"])
-        request = ToolRequest.from_dict(raw)
-        return ToolLease(
-            activity_id=str(row["activity_id"]),
-            task_id=str(row["task_id"]),
-            agent_id=str(row["agent_id"]),
-            request_id=str(row["idempotency_key"]),
-            session_id=str(raw.get("session_id", "")),
-            capability=request.capability,
-            parameters=request.parameters,
-        )
-
-    async def complete_tool(
-        self,
-        *,
-        request_id: str,
-        capability: str,
-        status: Any,
-        summary: str,
-        result: dict[str, Any] | None,
-        error: str | None,
-        source_app: str,
-        source_instance: str,
-    ) -> None:
-        if status not in {"succeeded", "failed", "unknown"}:
-            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
-        if (status == "succeeded" and error is not None) or (
-            status != "succeeded" and (not error or result is not None)
-        ):
-            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
-        event_type = f"tool.{status}"
-        matched, _message_id = self.store.complete_tool_activity(
-            request_id=request_id,
-            event_type=event_type,
-            summary=summary,
-            payload={
-                "request_id": request_id,
-                "capability": capability,
-                "result": result,
-                "error": error,
-                "source": {"app": source_app, "instance": source_instance},
-            },
-        )
-        if not matched:
-            raise ValueError(_Msg.TOOL_COMPLETION_UNMATCHED.format(request_id=request_id))
 
     # -- 查询代理 ---------------------------------------------------------
 

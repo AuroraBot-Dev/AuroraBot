@@ -1,4 +1,4 @@
-"""进程内 Dashboard Tool 执行与恢复适配器。"""
+"""进程内 Dashboard Tool 执行适配器（RFC 0211：执行后提交 AMP 回执）。"""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ from typing import TYPE_CHECKING
 from src.contracts import (
     CapabilityDescriptor,
     ToolExecutionRequest,
-    ToolOutcome,
+    ToolExecutorBinding,
+    tool_receipt_amp,
 )
 
 if TYPE_CHECKING:
+    from src.contracts.ports import ExternalAmpIngressPort
     from src.platform.dashboard.service import ChatService
 
-DASHBOARD_SEND_CAPABILITY = "org.aurora.dashboard.send"
+DASHBOARD_SEND_CAPABILITY = "aur.dashboard.send"
 DASHBOARD_SEND_DESCRIPTOR = CapabilityDescriptor(
     id=DASHBOARD_SEND_CAPABILITY,
     description="通过已配置的 Dashboard 发送文本。",
@@ -35,20 +37,28 @@ DASHBOARD_SEND_DESCRIPTOR = CapabilityDescriptor(
 
 
 class DashboardPlatform:
-    """将 Dashboard 的消息投递和持久化恢复能力暴露给 localhost。"""
+    """执行 Dashboard 工具并提交 tool.{status} 回执 AMP（RFC 0211）。"""
 
-    def __init__(self, chat: ChatService) -> None:
-        """绑定 ChatService 作为 Tool 执行的委托目标。
-
-        Args:
-            chat: Dashboard 聊天服务实例。
-        """
+    def __init__(self, chat: "ChatService", ingress: "ExternalAmpIngressPort") -> None:
         self._chat = chat
+        self._ingress = ingress
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """执行 Dashboard 消息发送 Tool，委托给 ChatService。"""
-        return await self._chat.execute_tool(request)
+    async def execute_tool(self, request: ToolExecutionRequest) -> None:
+        """执行 Dashboard 消息发送工具，完成后提交回执 AMP。"""
+        status, summary, result, error = await self._chat.execute_tool(request)
+        await self._ingress.submit_amp(
+            tool_receipt_amp(
+                status=status,
+                request=request,
+                summary=summary,
+                source_app="platform.dashboard",
+                source_instance="local",
+                result=result,
+                error=error,
+            )
+        )
 
-    async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """恢复 Dashboard Tool 执行状态，委托给 ChatService。"""
-        return await self._chat.recover_tool(request)
+    @property
+    def binding(self) -> ToolExecutorBinding:
+        """返回此平台对应的工具绑定。"""
+        return ToolExecutorBinding(DASHBOARD_SEND_DESCRIPTOR, self, "platform.dashboard", "local")

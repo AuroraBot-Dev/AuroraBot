@@ -26,7 +26,6 @@ from src.contracts.agent import (
     TaskLimits,
     TaskState,
     TaskStatus,
-    ToolLease,
     ToolRequest,
     capability_tool_definition,
 )
@@ -99,17 +98,13 @@ from src.contracts.ports import (
     InteractiveInputPort,
     RuntimeCommandPort,
     RuntimeQueryPort,
-    ToolCompletionPort,
-    ToolQueuePort,
 )
 from src.contracts.tool import (
     MEMORY_REMEMBER_CAPABILITY,
-    RecoveryBinding,
     ToolExecutionRequest,
     ToolExecutor,
     ToolExecutorBinding,
-    ToolOutcome,
-    ToolOutcomeStatus,
+    tool_receipt_amp,
 )
 from src.contracts.triage import InboxEvent, TriageBatch, TriageLimits
 
@@ -189,7 +184,6 @@ __all__ = [
     "PlatformRuntimePort",
     "PlatformServer",
     "PromptConfig",
-    "RecoveryBinding",
     "ResponseMode",
     "RetryPolicy",
     "RuntimeCommandPort",
@@ -202,15 +196,10 @@ __all__ = [
     "TaskStatus",
     "ToolCall",
     "ToolChoice",
-    "ToolCompletionPort",
     "ToolDefinition",
     "ToolExecutionRequest",
     "ToolExecutor",
     "ToolExecutorBinding",
-    "ToolLease",
-    "ToolOutcome",
-    "ToolOutcomeStatus",
-    "ToolQueuePort",
     "ToolRequest",
     "ToolResult",
     "TriageBatch",
@@ -218,4 +207,5 @@ __all__ = [
     "append_tool_result",
     "capability_tool_definition",
     "new_amp",
+    "tool_receipt_amp",
 ]

@@ -1,7 +1,7 @@
 """SpeechCapability — 决定 Agent 回复是否应朗读。
 
 Agent 在决策空间内自主选择是否发起 TTS 朗读。
-若启用，在 AgentDecision 中生成 tts.speak 工具请求。
+若启用，在 AgentDecision 中生成 aur.agent.speech 工具请求。
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from src.contracts.agent import AgentContext
     from src.contracts.model import ToolCall
 
-SPEECH_TOOL = "tts.speak"
+SPEECH_TOOL = "aur.agent.speech"
 
 _SPEECH_DESCRIPTION = "将回复文本朗读出来。"
 
@@ -39,12 +39,12 @@ _SPEECH_SCHEMA: dict[str, object] = {
 class _Msg(StrEnum):
     """SpeechCapability 内部错误消息。"""
 
-    TTS_NOT_ENABLED = "tts.speak is not enabled"
-    TEXT_REQUIRED = "tts.speak requires a non-empty text string"
+    TTS_NOT_ENABLED = "aur.agent.speech is not enabled"
+    TEXT_REQUIRED = "aur.agent.speech requires a non-empty text string"
 
 
 class SpeechCapability:
-    """决定 Agent 回复是否应朗读，生成 tts.speak 工具请求。"""
+    """决定 Agent 回复是否应朗读，生成 aur.agent.speech 工具请求。"""
 
     def __init__(self) -> None:
         self._tts_enabled = False
@@ -69,7 +69,7 @@ class SpeechCapability:
         return (ToolDefinition(SPEECH_TOOL, _SPEECH_DESCRIPTION, _SPEECH_SCHEMA),)
 
     def handle_tool(self, call: ToolCall) -> AgentDecision | None:
-        """处理 tts.speak 工具调用，验证参数并生成朗读工具请求。"""
+        """处理 aur.agent.speech 工具调用，验证参数并生成朗读工具请求。"""
         if call.name != SPEECH_TOOL:
             return None
         if not self._tts_enabled:

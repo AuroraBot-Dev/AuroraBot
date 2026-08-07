@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
-    CONTENT_REQUIRED = "aurora.memory.remember requires a non-empty content string"
-    FACT_CANDIDATES_INVALID = "aurora.memory.remember fact_candidates must be a list of strings"
+    CONTENT_REQUIRED = "aur.serv.memory.remember requires a non-empty content string"
+    FACT_CANDIDATES_INVALID = "aur.serv.memory.remember fact_candidates must be a list of strings"
 
 
 class MemoryCapability:
-    """生成 aurora.memory.remember 工具请求；执行由 MemoryToolExecutor 承担。"""
+    """生成 aur.serv.memory.remember 工具请求；执行由 MemoryToolExecutor 承担。"""
 
     @property
     def tool_names(self) -> frozenset[str]:

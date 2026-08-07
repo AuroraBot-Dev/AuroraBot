@@ -1,7 +1,8 @@
-"""MemoryToolExecutor — 将主动记忆写入暴露为 Agent 可调用的 Tool。
+"""MemoryToolExecutor — 主动记忆写入工具执行器（RFC 0207/0211）。
 
-主动写入与自动投影共用同一个 MemoryService：记忆同源（RFC 0207）。
-幂等键为工具请求的 request_id，恢复重放由 memory_receipts 天然去重。
+主动写入与自动投影共用同一个 MemoryService（同源）；执行完成后经
+注入的 AMP 入口提交 tool.succeeded 回执（RFC 0211）。
+幂等：request_id 由 engine 的活动幂等键保证回执去重。
 """
 
 from __future__ import annotations
@@ -16,18 +17,18 @@ from src.contracts import (
     CapabilityDescriptor,
     MemoryEntry,
     ToolExecutionRequest,
-    ToolOutcome,
-    ToolOutcomeStatus,
+    tool_receipt_amp,
 )
 
 if TYPE_CHECKING:
+    from src.contracts.ports import ExternalAmpIngressPort
     from src.memory.service import MemoryService
 
 
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
-    CONTENT_REQUIRED = "aurora.memory.remember requires a non-empty content string"
+    CONTENT_REQUIRED = "aur.serv.memory.remember requires a non-empty content string"
     NOT_RECORDED = "memory not recorded"
     RECORDED = "memory recorded"
 
@@ -56,15 +57,17 @@ MEMORY_REMEMBER_DESCRIPTOR = CapabilityDescriptor(
 
 
 class MemoryToolExecutor:
-    """通过同一个 MemoryService 写入记忆；scope 来自工具租约的 session_id。"""
+    """通过同一个 MemoryService 写入记忆；scope 来自工具请求的 session_id。"""
 
-    def __init__(self, memory: "MemoryService") -> None:
+    def __init__(self, memory: "MemoryService", ingress: "ExternalAmpIngressPort") -> None:
         self._memory = memory
+        self._ingress = ingress
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
+    async def execute_tool(self, request: ToolExecutionRequest) -> None:
         content = request.parameters.get("content")
         if not isinstance(content, str) or not content.strip():
-            return ToolOutcome(ToolOutcomeStatus.FAILED, _Msg.NOT_RECORDED, error=_Msg.CONTENT_REQUIRED)
+            await self._submit(request, "failed", _Msg.NOT_RECORDED, error=_Msg.CONTENT_REQUIRED)
+            return
         facts = tuple(
             str(item)
             for item in request.parameters.get("fact_candidates", ())
@@ -79,4 +82,25 @@ class MemoryToolExecutor:
             fact_candidates=facts,
         )
         await asyncio.to_thread(self._memory.remember, entry)
-        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, _Msg.RECORDED)
+        await self._submit(request, "succeeded", _Msg.RECORDED)
+
+    async def _submit(
+        self,
+        request: ToolExecutionRequest,
+        status: str,
+        summary: str,
+        *,
+        result: dict[str, object] | None = None,
+        error: str | None = None,
+    ) -> None:
+        await self._ingress.submit_amp(
+            tool_receipt_amp(
+                status=status,
+                request=request,
+                summary=summary,
+                source_app="memory",
+                source_instance="local",
+                result=result,
+                error=error,
+            )
+        )

@@ -1,4 +1,8 @@
-"""工具执行、恢复、绑定与 engine 队列契约。"""
+"""工具执行、绑定与回执契约（RFC 0211：工具域统一与 AMP 化回执）。
+
+工具结果统一经 AMP（``tool.{status}``）回 engine：executor 只负责执行并
+通过 ``tool_receipt_amp`` 构造回执提交，engine 不再有内部完成端口。
+"""
 
 from __future__ import annotations
 
@@ -6,25 +10,21 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
+from src.contracts.amp import new_amp
+
 if TYPE_CHECKING:
     from src.contracts.agent import CapabilityDescriptor
 
-MEMORY_REMEMBER_CAPABILITY = "aurora.memory.remember"
-"""主动记忆写入工具 ID：agents 侧能力与 memory 侧执行器的跨层线缆契约。"""
+MEMORY_REMEMBER_CAPABILITY = "aur.serv.memory.remember"
+"""主动记忆写入工具 ID（RFC 0211 服务域命名）：agents 侧能力与 memory 侧执行器的跨层线缆契约。"""
+
+_TOOL_STATUSES = frozenset({"succeeded", "failed", "unknown"})
 
 
 class _Msg(StrEnum):
-    INVALID_OUTCOME = "Tool outcome status and summary must be valid"
-    SUCCESS_WITH_ERROR = "a succeeded Tool outcome cannot contain an error"
-    FAILURE_WITHOUT_ERROR = "a failed or unknown Tool outcome requires error and forbids result"
-
-
-class ToolOutcomeStatus(StrEnum):
-    """工具执行结果的确定性三态。"""
-
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    UNKNOWN = "unknown"
+    INVALID_STATUS = "tool receipt status must be succeeded, failed or unknown"
+    SUCCESS_WITH_ERROR = "a succeeded tool receipt cannot contain an error"
+    FAILURE_WITHOUT_ERROR = "a failed or unknown tool receipt requires error and forbids result"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,43 +37,49 @@ class ToolExecutionRequest:
     parameters: dict[str, Any]
 
 
-@dataclass(frozen=True, slots=True)
-class ToolOutcome:
-    """工具执行的确定性三态结果。"""
-
-    status: ToolOutcomeStatus
-    summary: str
-    result: dict[str, Any] | None = None
-    error: str | None = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.status, ToolOutcomeStatus) or not self.summary:
-            raise ValueError(_Msg.INVALID_OUTCOME)
-        if self.status == ToolOutcomeStatus.SUCCEEDED:
-            if self.error is not None:
-                raise ValueError(_Msg.SUCCESS_WITH_ERROR)
-        elif not self.error or self.result is not None:
-            raise ValueError(_Msg.FAILURE_WITHOUT_ERROR)
-
-
 class ToolExecutor(Protocol):
-    """执行单个外部工具请求。"""
+    """执行单个外部工具请求：执行完成后通过注入的 AMP 入口提交 tool.{status} 回执。"""
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome: ...
-
-
-class RecoveryBinding(Protocol):
-    """恢复单个已进入处理态的工具请求。"""
-
-    async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome: ...
+    async def execute_tool(self, request: ToolExecutionRequest) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
 class ToolExecutorBinding:
-    """能力描述符与具体平台执行器的组合绑定。"""
+    """能力描述符与具体平台执行器的组合绑定（一对一路由表条目）。"""
 
     capability: CapabilityDescriptor
     executor: ToolExecutor
     source_app: str
     source_instance: str
-    recovery: RecoveryBinding | None = None
+
+
+def tool_receipt_amp(
+    *,
+    status: str,
+    request: ToolExecutionRequest,
+    summary: str,
+    source_app: str,
+    source_instance: str,
+    result: dict[str, Any] | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """构造工具回执 AMP（RFC 0211）：executor 执行完成后提交此信封。"""
+    if status not in _TOOL_STATUSES:
+        raise ValueError(_Msg.INVALID_STATUS)
+    if status == "succeeded" and error is not None:
+        raise ValueError(_Msg.SUCCESS_WITH_ERROR)
+    if status != "succeeded" and (not error or result is not None):
+        raise ValueError(_Msg.FAILURE_WITHOUT_ERROR)
+    return new_amp(
+        event_type=f"tool.{status}",
+        session_id=request.session_id,
+        summary=summary,
+        data={
+            "request_id": request.request_id,
+            "capability": request.capability,
+            "result": result,
+            "error": error,
+        },
+        source_app=source_app,
+        source_instance=source_instance,
+    ).to_dict()

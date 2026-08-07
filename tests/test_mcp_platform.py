@@ -132,14 +132,14 @@ def test_discovery_prefixes_raw_names_and_isolates_servers(project_root: Path) -
         try:
             catalog = await platform.start(_Ingress())
             assert set(catalog.by_id) == {
-                "com.example.alpha.send",
-                "com.example.alpha.vendor.inspect",
-                "com.example.beta.send",
+                "aur.mcp.com.example.alpha.send",
+                "aur.mcp.com.example.alpha.vendor.inspect",
+                "aur.mcp.com.example.beta.send",
             }
-            descriptor = catalog.by_id["com.example.alpha.send"]
+            descriptor = catalog.by_id["aur.mcp.com.example.alpha.send"]
             assert descriptor.description == "raw description"
             assert descriptor.parameters_schema is schema
-            assert platform.source_instance_for("com.example.alpha.vendor.inspect") == "com.example.alpha"
+            assert platform.source_instance_for("aur.mcp.com.example.alpha.vendor.inspect") == "com.example.alpha"
             with pytest.raises(ValueError, match="unknown MCP capability"):
                 platform.source_instance_for("missing")
         finally:
@@ -172,12 +172,23 @@ def test_clock_heartbeat_starts_after_builtin_discovery(project_root: Path) -> N
 
 
 def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Path) -> None:
+    """RFC 0211：execute_tool 提交回执 AMP（succeeded/failed/unknown 映射）。"""
     _write_apps(project_root, "com.example.alpha")
 
+    class _Ingress:
+        def __init__(self) -> None:
+            self.amps: list[dict[str, object]] = []
+
+        async def submit_amp(self, value: object) -> str:
+            self.amps.append(value)  # type: ignore[arg-type]
+            return ""
+
     async def scenario() -> None:
+        ingress = _Ingress()
         platform = MCPPlatform(load_configuration(project_root))
         platform._started = True
-        platform._tool_bindings = {"com.example.alpha.send": ("com.example.alpha", "send")}
+        platform._ingress = ingress
+        platform._tool_bindings = {"aur.mcp.com.example.alpha.send": ("com.example.alpha", "send")}
         platform._is_connected = lambda _package: True  # type: ignore[method-assign]
         calls: list[tuple[str, str, dict[str, Any]]] = []
 
@@ -185,48 +196,58 @@ def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Pat
             calls.append((package, raw_name, parameters))
             return {"is_error": False, "structured_content": {"sent": True}}
 
-        request = ToolExecutionRequest("request", "session", "com.example.alpha.send", {"text": "hello"})
+        request = ToolExecutionRequest("request", "session", "aur.mcp.com.example.alpha.send", {"text": "hello"})
         platform._call_tool = accepted  # type: ignore[method-assign]
-        succeeded = await platform.execute_tool(request)
-        assert succeeded.status == "succeeded"
-        assert succeeded.result == {"sent": True}
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[0])["type"] == "tool.succeeded"
+        assert payload_of(ingress.amps[0])["data"]["result"] == {"sent": True}
         assert calls == [("com.example.alpha", "send", {"text": "hello"})]
 
         async def rejected(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
             return {"is_error": True, "text": "rejected"}
 
         platform._call_tool = rejected  # type: ignore[method-assign]
-        failed = await platform.execute_tool(request)
-        assert failed.status == "failed" and failed.error == "rejected"
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[1])["type"] == "tool.failed"
+        assert payload_of(ingress.amps[1])["data"]["error"] == "rejected"
 
         async def explicitly_rejected(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
             raise MCPToolRejectedError("rejected response")
 
         platform._call_tool = explicitly_rejected  # type: ignore[method-assign]
-        explicit_failure = await platform.execute_tool(request)
-        assert explicit_failure.status == "failed" and explicit_failure.error == "rejected response"
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[2])["type"] == "tool.failed"
+        assert payload_of(ingress.amps[2])["data"]["error"] == "rejected response"
 
         async def connection_closed(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
             raise McpError(types.ErrorData(code=types.CONNECTION_CLOSED, message="closed"))
 
         platform._call_tool = connection_closed  # type: ignore[method-assign]
-        uncertain = await platform.execute_tool(request)
-        assert uncertain.status == "unknown" and "McpError" in (uncertain.error or "")
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[3])["type"] == "tool.unknown"
 
         async def disconnected(_package: str, _raw_name: str, _parameters: dict[str, Any]) -> dict[str, object]:
             raise _ConnectionLostError
 
         platform._call_tool = disconnected  # type: ignore[method-assign]
-        unknown = await platform.execute_tool(request)
-        assert unknown.status == "unknown" and "_ConnectionLostError" in (unknown.error or "")
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[4])["type"] == "tool.unknown"
         platform._is_connected = lambda _package: False  # type: ignore[method-assign]
-        disconnected_result = await platform.execute_tool(request)
-        assert disconnected_result.status == "failed" and "未连接" in (disconnected_result.error or "")
-        missing = await platform.execute_tool(ToolExecutionRequest("missing", "session", "com.example.missing", {}))
-        assert missing.status == "failed"
-        await platform.shutdown()
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[5])["type"] == "tool.failed"
+        assert "未连接" in (payload_of(ingress.amps[5])["data"]["error"] or "")
+        platform._started = False
+        await platform.execute_tool(request)
+        assert payload_of(ingress.amps[6])["type"] == "tool.failed"
+        assert "尚未启动" in (payload_of(ingress.amps[6])["data"]["error"] or "")
 
     asyncio.run(scenario())
+
+
+def payload_of(amp: dict[str, object]) -> dict[str, Any]:
+    value = amp["payload"]
+    assert isinstance(value, dict)
+    return value
 
 
 def test_client_manager_calls_raw_name_for_server_key() -> None:

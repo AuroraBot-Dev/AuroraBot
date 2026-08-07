@@ -12,7 +12,6 @@ from src.contracts import (
     MemoryQuery,
     ToolCall,
     ToolExecutionRequest,
-    ToolOutcomeStatus,
 )
 from src.engine.authorize import _capability_allowed
 from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
@@ -63,48 +62,52 @@ def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
     assert len(recalled.session_summary) + sum(map(len, recalled.relevant_facts)) <= 32
 
 
-def test_executor_writes_memory_scoped_to_session(tmp_path: Path) -> None:
+class _ReceiptIngress:
+    """捕获回执 AMP 的假入口（RFC 0211）。"""
+
+    def __init__(self) -> None:
+        self.amps: list[dict[str, object]] = []
+
+    async def submit_amp(self, value: object) -> str:
+        self.amps.append(value)  # type: ignore[arg-type]
+        return ""
+
+
+def _receipt_of(amp: dict[str, object]) -> dict[str, object]:
+    payload = amp["payload"]
+    assert isinstance(payload, dict)
+    return {"type": payload.get("type"), "data": payload.get("data")}
+
+
+def test_executor_writes_memory_and_submits_receipt(tmp_path: Path) -> None:
     service = MemoryService(tmp_path)
-    executor = MemoryToolExecutor(service)
+    ingress = _ReceiptIngress()
+    executor = MemoryToolExecutor(service, ingress)  # type: ignore[arg-type]
     request = ToolExecutionRequest(
         "request-1",
         "session",
         MEMORY_REMEMBER_CAPABILITY,
         {"content": "记住：用户偏好简洁回答", "fact_candidates": ["用户偏好简洁回答"]},
     )
-    outcome = asyncio.run(executor.execute_tool(request))
-    assert outcome.status == ToolOutcomeStatus.SUCCEEDED
+    asyncio.run(executor.execute_tool(request))
+    assert _receipt_of(ingress.amps[0])["type"] == "tool.succeeded"
     recalled = service.recall(MemoryQuery("简洁", "session", fact_limit=4))
     assert "用户偏好简洁回答" in recalled.session_summary
     assert recalled.relevant_facts == ("用户偏好简洁回答",)
 
 
-def test_executor_is_idempotent_across_recovery_replay(tmp_path: Path) -> None:
-    service = MemoryService(tmp_path)
-    executor = MemoryToolExecutor(service)
-    request = ToolExecutionRequest(
-        "request-1",
-        "session",
-        MEMORY_REMEMBER_CAPABILITY,
-        {"content": "记住：用户偏好简洁回答"},
-    )
-    first = asyncio.run(executor.execute_tool(request))
-    replay = asyncio.run(executor.execute_tool(request))
-    assert first.status == ToolOutcomeStatus.SUCCEEDED
-    assert replay.status == ToolOutcomeStatus.SUCCEEDED
-    summary = service.recall(MemoryQuery("", "session")).session_summary
-    assert summary.count("用户偏好简洁回答") == 1
-
-
-def test_executor_rejects_missing_content(tmp_path: Path) -> None:
-    executor = MemoryToolExecutor(MemoryService(tmp_path))
-    outcome = asyncio.run(
+def test_executor_submits_failed_receipt_for_missing_content(tmp_path: Path) -> None:
+    ingress = _ReceiptIngress()
+    executor = MemoryToolExecutor(MemoryService(tmp_path), ingress)  # type: ignore[arg-type]
+    asyncio.run(
         executor.execute_tool(
             ToolExecutionRequest("request-1", "session", MEMORY_REMEMBER_CAPABILITY, {"content": "  "})
         )
     )
-    assert outcome.status == ToolOutcomeStatus.FAILED
-    assert outcome.error is not None
+    receipt = _receipt_of(ingress.amps[0])
+    assert receipt["type"] == "tool.failed"
+    data = receipt["data"]
+    assert isinstance(data, dict) and data.get("error") is not None
 
 
 def test_capability_builds_tool_request_and_validates() -> None:
@@ -129,9 +132,9 @@ def test_memory_descriptor_schema_requires_content() -> None:
 
 
 def test_capability_allowed_exclusion_overrides_wildcard() -> None:
-    allowed = frozenset({"*", "!aurora.memory.remember"})
-    assert _capability_allowed("org.aurora.dashboard.send", allowed)
-    assert _capability_allowed("org.aurora.mcp.clock.read", allowed)
+    allowed = frozenset({"*", "!aur.serv.memory.remember"})
+    assert _capability_allowed("aur.dashboard.send", allowed)
+    assert _capability_allowed("aur.mcp.org.aurora.clock.get_time", allowed)
     assert not _capability_allowed(MEMORY_REMEMBER_CAPABILITY, allowed)
     assert _capability_allowed(MEMORY_REMEMBER_CAPABILITY, frozenset({MEMORY_REMEMBER_CAPABILITY}))
 
@@ -230,7 +233,7 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
         memory_store=memory,
     )
     engine.bind_tool_executors(
-        (ToolExecutorBinding(MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor(memory), "memory", "local"),)
+        (ToolExecutorBinding(MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor(memory, engine), "memory", "local"),)
     )
 
     async def scenario() -> None:

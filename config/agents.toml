@@ -17,7 +17,7 @@ triage_control = true
 id = "builtin.gate"
 implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
-capabilities = ["*", "!aurora.memory.remember"]
+capabilities = ["*", "!aur.serv.memory.remember"]
 can_delegate = true
 child_profiles = ["builtin.worker", "builtin.memory"]
 
@@ -26,7 +26,7 @@ child_profiles = ["builtin.worker", "builtin.memory"]
 id = "builtin.worker"
 implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
-capabilities = ["*", "!aurora.memory.remember"]
+capabilities = ["*", "!aur.serv.memory.remember"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
 
@@ -35,6 +35,6 @@ child_profiles = ["builtin.worker"]
 id = "builtin.memory"
 implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
-capabilities = ["aurora.memory.remember"]
+capabilities = ["aur.serv.memory.remember"]
 can_delegate = false
 child_profiles = []
