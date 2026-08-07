@@ -117,12 +117,17 @@ class PumpResult:
 # -- 决策处理 ------------------------------------------------------------
 
 
+def _policy_matches(capability: str, policy: str) -> bool:
+    return policy in ("*", capability) or (policy.endswith(".*") and capability.startswith(policy[:-1]))
+
+
 def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
-    return (
-        "*" in policies
-        or capability in policies
-        or any(policy.endswith(".*") and capability.startswith(policy[:-1]) for policy in policies)
-    )
+    """权限域匹配：`!` 前缀否定优先于 `*` 与前缀通配（RFC 0207 排除语义）。"""
+    if any(
+        policy.startswith("!") and len(policy) > 1 and _policy_matches(capability, policy[1:]) for policy in policies
+    ):
+        return False
+    return any(_policy_matches(capability, policy) for policy in policies if not policy.startswith("!"))
 
 
 def _build_limit_dict(limits: AgentLimits) -> dict[str, Any]:

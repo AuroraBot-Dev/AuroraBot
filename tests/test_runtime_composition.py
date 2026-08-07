@@ -44,6 +44,7 @@ class _Runtime:
         self.configuration = configuration
         self.events = events
         self.engine = _Engine()
+        self.tool_bindings: tuple[ToolExecutorBinding, ...] = ()
         self.stop_requester: Callable[[], None] | None = None
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:

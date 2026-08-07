@@ -455,6 +455,7 @@ prompt/
 memory/
   __init__.py
   service.py         # MemoryService — 单一 SQLite；会话摘要、长期事实、幂等回执
+  executor.py        # MemoryToolExecutor — 主动记忆写入的 ToolExecutor（RFC 0207，与自动投影同源）
 ```
 
 **构造与注入**：
@@ -589,6 +590,7 @@ agents/
     delegate.py       # DelegationCapability — 创建子 Agent 委派任务
     wait.py           # WaitCapability — 延迟执行
     speech.py         # SpeechCapability — 决定输出是否朗读，生成 tts.speak tool request
+    memory.py         # MemoryCapability — 主动记忆写入请求（RFC 0207，执行由 memory 层承担）
   tools.py            # Agent 内建工具的 CapabilityDescriptor 定义
 ```
 
@@ -917,7 +919,7 @@ config/
   engine.toml           # 引擎级：workspace、Agent 限制、Task 预算、pump 并发
   models.toml           # AI 网关：Provider 定义、Role→模型端点映射
   platforms.toml        # 平台：各平台启停、私有安全配置、本地体验偏好
-  agents.toml           # Agent：profile、主动能力授权、委派边界
+  agents.toml           # Agent：profile、主动能力授权、委派边界（capabilities 支持 `!` 排除语义）
   apps.toml             # MCP：App 连接、transport、timeout
   prompts.toml          # 提示词：片段文件路径映射
   logging.toml          # 日志：级别、文件路径

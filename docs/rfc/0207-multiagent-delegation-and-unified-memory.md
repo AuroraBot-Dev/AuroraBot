@@ -34,7 +34,8 @@ Multiagent 拓扑（注意力初筛 → 本体意识 → 专精 worker）已分�
 - 新增主动能力 `MemoryCapability`（`src/agents/capabilities/memory.py`）：定义 `aurora.memory.remember` 工具（参数 `content`、可选 `fact_candidates`），只生成 `ToolRequest`，不持有任何存储实现——与 speech 同构。工具定义按 `context.profile.capabilities` 自门控，仅获权 profile 可见。
 - 新增执行器 `MemoryToolExecutor`（`src/memory/executor.py`）：实现 `contracts.tool.ToolExecutor`，内部调用**同一个** `MemoryService`；scope 取自 `ToolExecutionRequest.session_id`；幂等键为 tool request_id（复用 `memory_receipts`，恢复重放天然去重）。
 - `aurora` 组合：构造 `MemoryService` → `MemoryToolExecutor` → 作为 `ToolExecutorBinding` 与平台工具同路注入 `ToolRegistry`；`MemoryCapability` 随 `_build_capabilities()` 安装到 handler。授权仍由 `profile.capabilities` 门控。
-- 主动写入的唯一入口是记忆 agent：Root/worker 的 capabilities 不得包含 `aurora.memory.remember`（现有 `"*"` 收敛为显式列表属于配置收敛，与 RFC 0206 一致，不改变运行时语义）。
+- 主动写入的唯一入口是记忆 agent：Root/worker 的 capabilities **不得包含** `aurora.memory.remember`。由于 MCP 工具名在运行时动态发现，`"*"` 无法收敛为静态显式列表，配置采用**排除语义**：`capabilities = ["*", "!aurora.memory.remember"]`（`!` 前缀否定优先于 `*` 与前缀通配，仅此一种新增语义）。
+- `MemoryCapability.tool_definitions()` 返回空元组：工具定义由记忆执行器的 catalog descriptor 单一提供（`handle_claim` 已按 profile 注入 descriptor，重复提供会触发 `DUPLICATE_TOOL_IDS`）；能力类只负责参数校验与 ToolRequest 构造，授权仍由 `profile.capabilities` 门控。
 
 ### 4. 记忆同源
 

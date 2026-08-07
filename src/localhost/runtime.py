@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from src.contracts.configuration import AuroraConfig
     from src.contracts.event import CommandResult, OutputStreamPage, RuntimeInput
+    from src.contracts.tool import ToolExecutorBinding
     from src.engine.runtime import AgentEngine
 
 
@@ -24,6 +25,7 @@ class AuroraRuntime:
 
     configuration: AuroraConfig
     engine: AgentEngine
+    tool_bindings: tuple["ToolExecutorBinding", ...] = ()
     _command_router: CommandRouter = field(init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
 

@@ -166,10 +166,11 @@ def _load_handler(specification: str, composer: PromptComposer, capabilities: tu
 def _build_capabilities() -> tuple[Capability, ...]:
     """构造 Agent 可主动选择的内建能力。"""
     from src.agents.capabilities.delegate import DelegationCapability
+    from src.agents.capabilities.memory import MemoryCapability
     from src.agents.capabilities.speech import SpeechCapability
     from src.agents.capabilities.wait import WaitCapability
 
-    return DelegationCapability(), WaitCapability(), SpeechCapability()
+    return DelegationCapability(), WaitCapability(), SpeechCapability(), MemoryCapability()
 
 
 # -- Engine / localhost 构造 --------------------------------------------
@@ -188,6 +189,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         triage=configuration.engine.triage,
     )
     memory = MemoryService(configuration.storage.memory)
+    memory_bindings = _build_memory_bindings(memory)
     composer = PromptComposer(PromptCatalog.from_config(configuration.prompts))
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
@@ -199,7 +201,22 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         memory_store=memory,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
-    return AuroraRuntime(configuration, engine)
+    return AuroraRuntime(configuration, engine, tool_bindings=memory_bindings)
+
+
+def _build_memory_bindings(memory: MemoryService) -> tuple["ToolExecutorBinding", ...]:
+    """构造主动记忆写入的工具绑定（RFC 0207 记忆同源）。"""
+    from src.contracts.tool import ToolExecutorBinding
+    from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
+
+    return (
+        ToolExecutorBinding(
+            MEMORY_REMEMBER_DESCRIPTOR,
+            MemoryToolExecutor(memory),
+            source_app="memory",
+            source_instance="local",
+        ),
+    )
 
 
 # -- 平台启动（统一循环）-----------------------------------------------
@@ -228,6 +245,7 @@ async def _start_platforms(
         if handle.cleanup is not None:
             resources.push_async_callback(_run_cleanup, handle.cleanup)
 
+    all_bindings.extend(runtime.tool_bindings)
     runtime.engine.bind_tool_executors(tuple(all_bindings))
     return handles
 

@@ -1,20 +1,30 @@
 # Agent 定义 — profile、能力授权与委派边界
 # 每个 [[agent]] 定义一个 Agent 配置项
+# capabilities 支持 `!` 前缀排除语义：否定优先于 `*` 与前缀通配（RFC 0207）
 
-# Gate：入口 Agent，接收所有交互并决定委派
+# Gate：入口 Agent（本体意识），接收所有交互并决定委派
 [[agent]]
 id = "builtin.gate"
 implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
-capabilities = ["*"]
+capabilities = ["*", "!aurora.memory.remember"]
 can_delegate = true
-child_profiles = ["builtin.worker"]
+child_profiles = ["builtin.worker", "builtin.memory"]
 
 # Worker：执行具体工作的通用 Agent
 [[agent]]
 id = "builtin.worker"
 implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
-capabilities = ["*"]
+capabilities = ["*", "!aurora.memory.remember"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
+
+# Memory：主动记忆写入的专精 Agent（RFC 0207）
+[[agent]]
+id = "builtin.memory"
+implementation = "src.agents.handler:ToolAgent"
+model_role = "quality"
+capabilities = ["aurora.memory.remember"]
+can_delegate = false
+child_profiles = []

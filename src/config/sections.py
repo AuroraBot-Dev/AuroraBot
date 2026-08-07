@@ -319,16 +319,20 @@ def _dotted_name(value: object, label: str) -> str:
 
 
 def _capability_pattern(value: object, label: str) -> str:
-    """校验能力模式：精确工具 ID、package.* 或 *。"""
-    capability = _string(value, label)
-    if capability == "*":
-        return capability
-    if "*" not in capability:
-        return _dotted_name(capability, label)
-    if capability.count("*") != 1 or not capability.endswith(".*"):
+    """校验能力模式：`!` 排除前缀、精确工具 ID、package.* 或 *（RFC 0207）。"""
+    raw = _string(value, label)
+    if raw.startswith("!"):
+        if len(raw) == 1:
+            raise ConfigurationError(_Msg.CAPABILITY_PATTERN.format(label=label))
+        return "!" + _capability_pattern(raw[1:], label)
+    if raw == "*":
+        return raw
+    if "*" not in raw:
+        return _dotted_name(raw, label)
+    if raw.count("*") != 1 or not raw.endswith(".*"):
         raise ConfigurationError(_Msg.CAPABILITY_PATTERN.format(label=label))
-    _dotted_name(capability[:-2], label)
-    return capability
+    _dotted_name(raw[:-2], label)
+    return raw
 
 
 def _parse_dashboard(raw: dict[str, Any], root: Path, engine_workspace: Path) -> DashboardConfig:

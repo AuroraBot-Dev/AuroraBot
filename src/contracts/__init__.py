@@ -103,6 +103,7 @@ from src.contracts.ports import (
     ToolQueuePort,
 )
 from src.contracts.tool import (
+    MEMORY_REMEMBER_CAPABILITY,
     RecoveryBinding,
     ToolExecutionRequest,
     ToolExecutor,
@@ -113,6 +114,7 @@ from src.contracts.tool import (
 from src.contracts.triage import InboxEvent, TriageAction, TriageBatch, TriageDecision, TriageLimits, TriagePolicy
 
 __all__ = [
+    "MEMORY_REMEMBER_CAPABILITY",
     "PLATFORM_NAMES",
     "STRUCTURED_OUTPUT_NAME",
     "ActivityRequest",

@@ -11,3 +11,4 @@ world = "prompts/WORLD.md"
 [agent]
 "builtin.gate" = "prompts/agents/gate.md"
 "builtin.worker" = "prompts/agents/worker.md"
+"builtin.memory" = "prompts/agents/memory.md"

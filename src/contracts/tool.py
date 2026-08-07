@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from src.contracts.agent import CapabilityDescriptor
 
+MEMORY_REMEMBER_CAPABILITY = "aurora.memory.remember"
+"""主动记忆写入工具 ID：agents 侧能力与 memory 侧执行器的跨层线缆契约。"""
+
 
 class _Msg(StrEnum):
     INVALID_OUTCOME = "Tool outcome status and summary must be valid"
