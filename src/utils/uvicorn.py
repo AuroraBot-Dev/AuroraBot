@@ -1,6 +1,6 @@
 """uvicorn 服务器共享辅助：优雅退出与 lifespan 安全包装。
 
-localhost 调试 API 与 Dashboard HTTP 服务器共用同一套停止协议：
+ops 调试 API 与 Dashboard HTTP 服务器共用同一套停止协议：
 组合根统一捕获信号并设置 should_exit，服务器本身不自行接管信号；
 lifespan 阶段被强制取消时抑制 CancelledError 日志。
 """

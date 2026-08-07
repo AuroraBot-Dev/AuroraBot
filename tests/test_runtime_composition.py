@@ -19,9 +19,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from ops.runtime import AuroraRuntime
     from src.contracts.platform import PlatformServer
     from src.contracts.tool import ToolExecutorBinding
-    from src.localhost.runtime import AuroraRuntime
 
 
 def _preference(enabled: frozenset[str], *, open_browser: bool = False) -> PlatformPreference:

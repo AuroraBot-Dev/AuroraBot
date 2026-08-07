@@ -56,4 +56,4 @@ Agent 运行时有两条多余的复杂度，使 engine 热路径偏厚且难以
 ## 兼容性
 
 - `AgentStatus` 枚举删值属于契约变更：所有写库路径由 migration 归一化，读库路径只接受新枚举值。
-- Dashboard、localhost 调试投影只读展示状态字符串，新增 `waiting_on` 字段向后兼容。
+- Dashboard、ops 调试投影只读展示状态字符串，新增 `waiting_on` 字段向后兼容。

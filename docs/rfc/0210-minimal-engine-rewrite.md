@@ -27,8 +27,8 @@ engine 现有实现 3301 行，其中约 1500 行是历史累积与投机复杂�
 
 ### 2. 存储形态：单一 SQLite 即归档
 
-- **删除 JSON 终态归档与 JSONL 会话日志**：终态 Task 留在 SQLite（终态行即档案），由 `causal_events` 提供可读性；会话日志按需由 localhost 从 causal_events 导出。取代 RFC 0201 的"先归档后清理"与 AGENTS.md 的 JSONL 约定。
-- 清理策略：终态行保留，可配置 TTL 由 localhost 命令触发删除（不做热路径归档）。
+- **删除 JSON 终态归档与 JSONL 会话日志**：终态 Task 留在 SQLite（终态行即档案），由 `causal_events` 提供可读性；会话日志按需由 ops 从 causal_events 导出。取代 RFC 0201 的"先归档后清理"与 AGENTS.md 的 JSONL 约定。
+- 清理策略：终态行保留，可配置 TTL 由 ops 命令触发删除（不做热路径归档）。
 - 外部 AMP 文件摄入保留（platform 写 JSON → engine 读），但处理完即移入 rejected/duplicate 分类目录（现状不变）。
 - 审计去重：`causal_events.payload_json` 只存轻量摘要（决策种类、摘要文本、关联 ID），不再存完整请求；activities 仍存执行所需完整请求。
 
@@ -83,6 +83,6 @@ pump():
 ## 兼容性
 
 - Schema 不迁移：旧 data/engine 工作区拒绝启动，需重建。
-- localhost 命令与调试 API：`/task`、`/agent` 改读 SQLite 终态行（删除归档反查路径）；`/log` 会话导出改为 causal_events 投影。
+- ops 命令与调试 API：`/task`、`/agent` 改读 SQLite 终态行（删除归档反查路径）；`/log` 会话导出改为 causal_events 投影。
 - 外部契约（AMP、配置、平台 Tool 协议、MemoryStore）不变。
 - 测试：删除迁移/租约/归档/JSONL 测试；pump 流程测试按语义重写；contracts/config/prompt/ai/platform/memory 测试保留。

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ops.runtime import AuroraRuntime
 from src.config.loader import load_configuration
 from src.contracts import (
     AgentContext,
@@ -13,7 +14,6 @@ from src.contracts import (
     TriageLimits,
 )
 from src.engine.runtime import AgentEngine
-from src.localhost.runtime import AuroraRuntime
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -118,7 +118,7 @@ async def run_console(
                 if not raw:
                     continue
                 external_event_id = str(uuid4())
-                # 将用户输入路由到 localhost 的控制端口
+                # 将用户输入路由到 ops 的控制端口
                 routed = await control.route_input(
                     RuntimeInput(
                         text=raw,

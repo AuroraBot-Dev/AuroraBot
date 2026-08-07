@@ -36,7 +36,7 @@
 - 恢复 500 行规则：`runtime.py` 按职责拆分（授权校验、摄入、认知闭环、I/O 编排、查询投影）。
 - 收敛中间层：`EngineState` 与 store 之间的透传包装（`_store_call` / `_blocking_call`）随拆包自然消失或合并。
 - 删除仅为类型提示的内部 Protocol（`DecisionRuntime` / `IngressRuntime` 等），直接类型引用。
-- 收敛持久化：SQLite 是运行态权威；JSON archive 与 JSONL session log 属审计/可读性用途，重估是否由热路径写入改为 localhost 侧生成物。
+- 收敛持久化：SQLite 是运行态权威；JSON archive 与 JSONL session log 属审计/可读性用途，重估是否由热路径写入改为 ops 侧生成物。
 - 审计去重：activities 与 causal_events 载荷只保留一份权威，另一份降为轻量投影。
 - 单进程语义下，租约/CAS 只保留崩溃恢复能力，不再扩展多进程假设。
 

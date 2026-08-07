@@ -7,7 +7,7 @@
 ## 问题
 
 Console 在平台抽象中的位置只剩一个事实：输出侧通过 `org.aurora.console.send` 工具 executor 投递。
-输入侧早已脱离平台——`run_console` 直接调用 `ConsoleControlPort.route_input()` 进入 localhost
+输入侧早已脱离平台——`run_console` 直接调用 `ConsoleControlPort.route_input()` 进入 ops
 （shell.py:120-132），从不经过平台 AMP 入口。由此产生两个结构性缺口：
 
 - 模型纯文本只会进入 `Completion`（src/agents/handler.py:198-205），不会路由到任何平台；Bot 文本必须
@@ -21,7 +21,7 @@ Console 在平台抽象中的位置只剩一个事实：输出侧通过 `org.aur
 ### Console 脱离平台抽象
 
 - 删除 `src/platform/console/`，新增 `src/console/` 作为运行时本地交互前端，职责为交互 Shell 与
-  输出渲染，与 localhost 同级、位于热路径之外。
+  输出渲染，与 ops 同级、位于热路径之外。
 - 删除 `org.aurora.console.send` 能力、`complete_task` 参数、`ToolExecutorBinding`、SQLite 幂等台账
   与 `storage.platform.console` 路径。Console 不再拥有任何 Tool executor。
 - `ConsolePreference` 从 `PlatformPreference` 移除；`PLATFORM_NAMES` 只包含 dashboard 与 mcp。
@@ -36,7 +36,7 @@ Console 在平台抽象中的位置只剩一个事实：输出侧通过 `org.aur
   failure），Console 后台循环拉取并打印 `Bot> ...`。
 - 任何会话产生的用户可见文本都被渲染：Console 同时是本地开发者监察面，不为各会话做权限过滤。
 - 没有投递就没有去重问题：模型既调 send 工具又留结束语的双输出冲突从根上消失。
-- 输入路径不变：继续经 localhost `route_input` 处理普通会话与斜杠命令。
+- 输入路径不变：继续经 ops `route_input` 处理普通会话与斜杠命令。
 
 ### 配置与 CLI 语义
 

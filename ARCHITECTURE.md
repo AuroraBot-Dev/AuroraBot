@@ -102,17 +102,17 @@ raise RuntimeError("ToolAgent requires an installed PromptComposer")
 | 路径         | 包                                              | 角色                                                                   | 方向                                 |
 | ------------ | ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------ |
 | **热路径**   | `engine` → Ports → `platform` / `ai` / `memory` | Agent 认知闭环：事件摄入 → 决策 → 模型调用 → 工具执行 → 记忆           | 引擎通过注入的 Port 驱动适配器       |
-| **检查路径** | `localhost` → 所有包                            | 运行时状态监察、命令路由、调试接口、输入分发                           | `localhost` 检查一切，不被热路径依赖 |
-| **组合**     | `aurora`                                        | 进程入口：构造 engine + 注入 Port + 启动平台 + 挂载 localhost 命令路由 | 唯一组合根                           |
+| **检查路径** | `ops` → `contracts` / `utils`          | 运行时状态监察、命令路由、调试接口、输入分发                           | `ops` 经注入 Port 观察，不被热路径依赖 |
+| **组合**     | `aurora`                                        | 进程入口：构造 engine + 注入 Port + 启动平台 + 挂载 ops 命令路由 | 唯一组合根                           |
 
 ### 依赖全景
 
-箭头方向为「依赖者 → 被依赖者」。`localhost` 是监察 sidecar，注入所有需要检查的包，但**不在热路径中**——engine 的 pump 循环不经过 localhost。
+箭头方向为「依赖者 → 被依赖者」。`ops` 是监察 sidecar，只依赖 `contracts` + `utils`，**不在热路径中**——engine 的 pump 循环不经过 ops。
 
 ```mermaid
 graph TD
     aurora["aurora<br/>进程组合 · CLI"]
-    localhost["src/localhost<br/>运行时监察 · 命令路由 · 调试"]
+    ops["ops<br/>运行时监察 · 命令路由 · 调试"]
     engine["src/engine<br/>Agent 运行时引擎 · 状态 · 因果"]
     platform["src/platform<br/>Dashboard · MCP · NoneBot"]
     ai["src/ai<br/>模型网关"]
@@ -125,7 +125,7 @@ graph TD
     sandbox["src/sandbox<br/>独立沙箱（未启用）"]
 
     aurora --> engine
-    aurora --> localhost
+    aurora --> ops
     aurora --> platform
     aurora --> ai
     aurora --> memory
@@ -133,15 +133,8 @@ graph TD
     aurora --> contracts
     aurora --> utils
 
-    localhost --> engine
-    localhost --> platform
-    localhost --> ai
-    localhost --> memory
-    localhost --> agents
-    localhost --> config
-    localhost --> prompt
-    localhost --> contracts
-    localhost --> utils
+    ops --> contracts
+    ops --> utils
 
     engine --> contracts
     engine --> utils
@@ -173,7 +166,7 @@ graph TD
     class contracts,prompt,config,memory,ai,agents,platform,utils leaf
     class engine engine
     class aurora proc
-    class localhost inspect
+    class ops inspect
     class sandbox iso
 ```
 
@@ -181,8 +174,8 @@ graph TD
 
 | 层           | 包              | 职责                                                                                               | 可依赖                     |
 | ------------ | --------------- | -------------------------------------------------------------------------------------------------- | -------------------------- |
-| **进程层**   | `aurora`        | 唯一进程 CLI、平台选择、生命周期组合、engine + Port 构造、挂载 localhost 命令路由与主事件循环      | 所有下层                   |
-| **监察层**   | `src/localhost` | 运行时状态检查、`/` 命令路由、调试 API、输入分发。**可自由 import 任何 src/ 包**                   | 所有底层（设计如此）       |
+| **进程层**   | `aurora`        | 唯一进程 CLI、平台选择、生命周期组合、engine + Port 构造、挂载 ops 命令路由与主事件循环      | 所有下层                   |
+| **监察层**   | `ops` | 运行时状态检查、`/` 命令路由、调试 API、输入分发。位于热路径之外，只依赖 `contracts` + `utils`                   | contracts、utils（RFC 0200）       |
 | **引擎层**   | `src/engine`    | Inbox 防抖、Triage、Task/Agent、邮箱、Activity、因果边界、SQLite                                   | contracts · utils          |
 | **适配层**   | `src/platform`  | Dashboard / MCP / NoneBot 外部生态协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
 | **模型层**   | `src/ai`        | 宽泛模型网关。实现 `ModelProvider` Port                                                            | contracts · utils          |
@@ -198,15 +191,15 @@ graph TD
 
 ## 命令与输入路由
 
-用户输入从平台进入、经命令路由、到引擎执行，全程通过 **Port 注入** 避免平台层直接依赖 localhost。
+用户输入从平台进入、经命令路由、到引擎执行，全程通过 **Port 注入** 避免平台层直接依赖 ops。
 
 ### 机制
 
 1. `contracts/ports.py` 定义 `InteractiveInputPort` Protocol（`route_input(request) → CommandResult`）
 2. `contracts/event.py` 定义 `RuntimeInput`、`CommandResult`、`InputOrigin` 等 DTO
-3. `localhost` **实现** `InteractiveInputPort`（`CommandRouter` 是其内部组件）
-4. `aurora` 在构造时将 localhost 实例作为 `InteractiveInputPort` **注入**到需要交互输入的平台
-5. Platform 只 import `contracts`，通过注入的 Port 调用 `route_input()`，不 import `localhost`
+3. `ops` **实现** `InteractiveInputPort`（`CommandRouter` 是其内部组件）
+4. `aurora` 在构造时将 ops 实例作为 `InteractiveInputPort` **注入**到需要交互输入的平台
+5. Platform 只 import `contracts`，通过注入的 Port 调用 `route_input()`，不 import `ops`
 
 ### 完整流程
 
@@ -214,14 +207,14 @@ graph TD
 Console (src/console/shell.py)
   │  stdin 读取用户输入
   │  import: contracts.event.RuntimeInput, contracts.ports.ConsoleControlPort
-  │  不 import: src.localhost
+  │  不 import: ops
   │
   ▼
 ports.route_input(RuntimeInput)
-  │  ← aurora 在 run_runtime() 中将 localhost 实例注入到 console shell
+  │  ← aurora 在 run_runtime() 中将 ops 实例注入到 console shell
   │
   ▼
-localhost (CommandRouter)
+ops (CommandRouter)
   ├─ 非 `/` 前缀 → 转为 AMP → submit_amp() → engine._amp_queue
   └─ `/` 前缀  → shlex 分词 → 命令目录匹配 → 执行 handler → CommandResult
                    │
@@ -241,18 +234,18 @@ CommandResult
 Console shell 根据 CommandResult 决定输出内容 / 清屏 / 退出
 ```
 
-### 为什么 Platform 不 import localhost
+### 为什么 Platform 不 import ops
 
-如果 Platform 直接 import `src.localhost.router`：
+如果 Platform 直接 import `ops.router`：
 
-- Platform 变成 `platform → localhost → engine/ai/memory/...` 扇入链
-- localhost 的任何改动都可能波及 Platform
-- Platform 的单元测试需要 mock 整个 localhost 依赖树
+- Platform 变成 `platform → ops → engine/ai/memory/...` 扇入链
+- ops 的任何改动都可能波及 Platform
+- Platform 的单元测试需要 mock 整个 ops 依赖树
 
 如果 Platform 通过 Port 接收注入：
 
 - Platform 只依赖 `contracts`（Protocol + DTO）
-- Platform 与 localhost 完全解耦——替换 localhost 实现不需要改 Platform
+- Platform 与 ops 完全解耦——替换 ops 实现不需要改 Platform
 - Platform 单元测试只需 mock `InteractiveInputPort`
 
 `contracts/ports.py` 中仅一个 Protocol 即可完成注入：
@@ -268,10 +261,10 @@ class InteractiveInputPort(Protocol):
 Dashboard 同样接收注入的 `InteractiveInputPort`，用户在 Web 面板输入 `/status` 走完全相同的路由：
 
 ```
-Dashboard HTTP/WS → routing.py → InteractiveInputPort.route_input(RuntimeInput) → 同一条 localhost 路由
+Dashboard HTTP/WS → routing.py → InteractiveInputPort.route_input(RuntimeInput) → 同一条 ops 路由
 ```
 
-新增平台只需：构造函数接受 `InteractiveInputPort` 参数，`aurora` 负责注入。无需 import localhost。
+新增平台只需：构造函数接受 `InteractiveInputPort` 参数，`aurora` 负责注入。无需 import ops。
 
 ---
 
@@ -537,12 +530,12 @@ pump(max_turns):
 
 **关键约束**：
 
-- 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `src.localhost`
+- 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `ops`
 - `runtime.py` 组合 Agent turn 与 I/O 调度；Inbox 事务位于 `store/inbox.py`（RFC 0209/0210）。
 - `store/` 是子包，`SQLiteRuntimeStore` 在其中组合多 Mixin，替换了文档中的单体 `store.py`。
 - 所有权通过 `contracts` 中的 Protocol 注入
 - `ToolRegistry` 是 engine 内部的聚合类（非 contracts），管理多个 `ToolExecutor` 实现的分发
-- engine 的 `status()` / `task_detail()` / `agent_detail()` 是透明查询接口，供 `localhost` 监察使用
+- engine 的 `status()` / `task_detail()` / `agent_detail()` 是透明查询接口，供 `ops` 监察使用
 
 ---
 
@@ -665,12 +658,12 @@ platform/
 - 可选 `RecoveryBinding`：`recover_tool(request) → ToolOutcome`（幂等恢复）
 - 可选 event ingress：将外部事件（stdin、WebSocket、MCP notification、QQ 消息）转为 `AmpEnvelope` 并通过 `ExternalAmpIngressPort` 提交
 
-交互式平台（Dashboard）的构造函数接受 `InteractiveInputPort` 注入（定义在 `contracts/ports.py`），用于将用户输入路由到 localhost 的命令系统；本地 Console 是独立于平台的运行时前端（见 `src/console`）：
+交互式平台（Dashboard）的构造函数接受 `InteractiveInputPort` 注入（定义在 `contracts/ports.py`），用于将用户输入路由到 ops 的命令系统；本地 Console 是独立于平台的运行时前端（见 `src/console`）：
 
 ```python
 # Console shell
 async def run_console(
-    control: ConsoleControlPort,   # ← aurora 注入 localhost 实例
+    control: ConsoleControlPort,   # ← aurora 注入 ops 实例
     query: RuntimeQueryPort,       # ← 只读输出流查询端口
     *,
     stop_event: asyncio.Event,
@@ -678,7 +671,7 @@ async def run_console(
     while not stop_event.is_set():
         text = await read_stdin()
         request = RuntimeInput(text=text, origin=InputOrigin.CONSOLE, ...)
-        result = await control.route_input(request)  # ← 通过 Protocol 调用，不 import localhost
+        result = await control.route_input(request)  # ← 通过 Protocol 调用，不 import ops
         handle_result(result)
 ```
 
@@ -705,9 +698,9 @@ engine.install_tool_registry(ToolRegistry(bindings))
 
 ---
 
-### `src/localhost` — 监察层
+### `ops` — 监察层
 
-依赖**所有** `src/*` 包。`localhost` 是运行时监察 sidecar——它不在引擎热路径中，而是侧挂的**上帝式监察器**，负责：
+依赖 `src.contracts` 与 `src.utils`。`ops` 是运行时监察 sidecar——它不在引擎热路径中，而是侧挂的监察器，负责：
 
 - **命令路由**：解析 `/` 前缀命令，分发到确定性业务用例（`/status`、`/pump`、`/task`、`/agent`、`/help` 等）
 - **运行时检查**：读取 engine、platform、ai、memory 的状态快照
@@ -715,7 +708,7 @@ engine.install_tool_registry(ToolRegistry(bindings))
 - **输入分发**：将纯文本从 Console / Dashboard 规范化为 AMP 并投递
 
 ```
-localhost/
+ops/
   __init__.py
   runtime.py          # AuroraRuntime — 组合根 light wrapper
                       #   持有 engine + command_router
@@ -737,9 +730,9 @@ localhost/
     help.py           # /help — 显示命令列表
 ```
 
-> 注：`command_types.py` 和 `ports.py`（原 localhost 中的 DTO/Protocol）迁移到 `contracts/event.py` 和 `contracts/ports.py`。`tool_dispatcher.py` 迁移到 `engine/`——工具调度是热路径操作，属于引擎职责。`autonomy.py` 暂移除——自主额度等高可用性功能延后。
+> 注：`command_types.py` 和 `ports.py`（原 ops 中的 DTO/Protocol）迁移到 `contracts/event.py` 和 `contracts/ports.py`。`tool_dispatcher.py` 迁移到 `engine/`——工具调度是热路径操作，属于引擎职责。`autonomy.py` 暂移除——自主额度等高可用性功能延后。
 
-**localhost 的设计定位**：
+**ops 的设计定位**：
 
 ```
                           aurora (注入)
@@ -753,25 +746,25 @@ localhost/
                             │ contracts.ports.InteractiveInputPort
                             ▼
                      ┌──────────────┐
-                     │  localhost   │
+                     │  ops   │
                      │              │
-                     │ 命令路由      │
-                     │ 状态检查      │──────────→ engine (只读查询)
-                     │ 调试 API     │──────────→ platform / ai / memory (只读)
-                     │ 输入分发      │──────────→ engine (submit_amp)
-                     └──────────────┘
+                      │ 命令路由      │
+                      │ 状态检查      │──────────→ engine (只读查询，经 Port)
+                      │ 调试 API     │
+                      │ 输入分发      │──────────→ engine (submit_amp，经 Port)
+                      └──────────────┘
 ```
 
-`localhost` **在热路径之外**。engine 的 pump 循环不经过 localhost——engine 通过注入的 Port 直接调用 platform、ai、memory。`localhost` 与 engine 并行持有引用，仅用于命令路由、状态检查和输入分发。
+`ops` **在热路径之外**。engine 的 pump 循环不经过 ops——engine 通过注入的 Port 直接调用 platform、ai、memory。`ops` 只通过注入的 Port 持有 engine 等实例，仅用于命令路由、状态检查和输入分发。
 
-平台通过 `InteractiveInputPort`（定义在 `contracts/ports.py`）接收 localhost，而不是直接 import。详见 [命令与输入路由](#命令与输入路由)。
+平台通过 `InteractiveInputPort`（定义在 `contracts/ports.py`）接收 ops，而不是直接 import。详见 [命令与输入路由](#命令与输入路由)。
 
 **关键约束**：
 
-- `localhost` 可以自由 import 任何 `src/*` 包——它是监察器，需要全知
-- `localhost` 实现 `contracts.ports.InteractiveInputPort`——平台通过 Protocol 调用，不 import localhost
+- `ops` 只 import `src.contracts` / `src.utils` 与根级 `aurora` 注入的 Port——它是监察器，通过 Port 观察
+- `ops` 实现 `contracts.ports.InteractiveInputPort`——平台通过 Protocol 调用，不 import ops
 - 不 import `aurora/*`——进程组合层是最顶层
-- 不在 engine pump 热路径中——engine 不 import localhost
+- 不在 engine pump 热路径中——engine 不 import ops
 - `/` 命令不包含业务逻辑——命令 handler 读取状态、触发操作、返回结果，不做认知决策
 
 ---
@@ -812,10 +805,10 @@ run_runtime():
                             tool_registry=...,
                             memory_store=memory_service)
   11. 注册 ToolExecutors → engine.tool_registry.add_all(bindings)
-  12. 挂载 localhost     → AuroraRuntime(engine, model_gateway, memory_service, ...)
+  12. 挂载 ops     → AuroraRuntime(engine, model_gateway, memory_service, ...)
                             # AuroraRuntime 实现 contracts.ports.InteractiveInputPort
-  13. 注入 localhost 到平台 → 平台通过 InteractiveInputPort Protocol 接收，不 import localhost
-  14. 启动本地前端      → run_console(control=localhost, query=localhost)（非 headless 时）
+  13. 注入 ops 到平台 → 平台通过 InteractiveInputPort Protocol 接收，不 import ops
+  14. 启动本地前端      → run_console(control=ops, query=ops)（非 headless 时）
    13. 启动主循环          → engine.run_forever() + 平台各自的事件循环
 ```
 
@@ -823,7 +816,7 @@ run_runtime():
 
 - 一个进程只有一个 engine 所有者
 - `run_forever()` 主事件循环由 `aurora` 管理
-- 命令路由（`/` 前缀判定）由 `localhost` 承担，`aurora` 只做最外层的循环管理
+- 命令路由（`/` 前缀判定）由 `ops` 承担，`aurora` 只做最外层的循环管理
 
 ---
 
@@ -853,25 +846,25 @@ sandbox/
 | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `src/` 不得导入 `aurora/`                                                                                 | 进程组合层是最顶层                                                      |
 | engine 不依赖 `prompt` / `config` / `ai` / `agents` / `platform` / `memory`                               | 外部服务通过 Port Protocol 注入，engine 只 import `contracts` + `utils` |
-| engine 不依赖 `localhost`                                                                                 | localhost 是监察 sidecar，不在热路径中                                  |
+| engine 不依赖 `ops`                                                                                 | ops 是监察 sidecar，不在热路径中                                  |
 | Platform / ai / memory 只依赖 `contracts` + `utils`                                                       | 适配器同级对等                                                          |
 | Agent handler 不直接写运行态 / 调用 Provider / 操作平台 Client                                            | 只返回 `AgentDecision`                                                  |
 | Agent 主动能力的外依赖通过 setter 注入，不 import 外部包                                                  | 保持 agents 包边界干净                                                  |
 | `contracts` 是所有跨层 DTO 和 Protocol 的唯一来源                                                         | 所有 Port 和跨层 DTO 统一在此                                           |
-| `localhost` 可自由导入任何 `src/*` 包                                                                     | 监察器需要全知                                                          |
+| `ops` 只 import `contracts` + `utils`                                                                     | 监察 sidecar，位于热路径之外，经 Port 观察 |
 | 依赖方向（热路径）：`contracts ← utils ← engine / ai / platform / memory / agents ← aurora`               | 实现包同级对等                                                          |
-| 依赖方向（检查路径）：`contracts ← utils ← engine / ai / platform / memory / agents ← localhost ← aurora` | localhost 挂在热路径侧面，只查不改                                      |
+| 依赖方向（检查路径）：`contracts ← utils ← engine / ai / platform / memory / agents ← ops ← aurora` | ops 挂在热路径侧面，只查不改                                      |
 
 ## 关键设计判断
 
-- **engine 是自包含的热路径引擎**：完整 pump 循环在 engine 内部，外部服务通过 Port 注入。engine 不需要 localhost。
-- **localhost 是监察 sidecar**：不在引擎热路径中。它可自由引入任何包，执行运行时状态检查、命令路由和调试接口。没有人依赖它；它依赖所有人。
+- **engine 是自包含的热路径引擎**：完整 pump 循环在 engine 内部，外部服务通过 Port 注入。engine 不需要 ops。
+- **ops 是监察 sidecar**：不在引擎热路径中。它只 import `contracts` + `utils`，通过注入的 Port 执行运行时状态检查、命令路由和调试接口。热路径不依赖它。
 - **`contracts` 是唯一的跨层契约来源**：所有 Port Protocol 和跨层 DTO 统一归入 contracts。
-- **所有适配器同级对等**：engine / ai / platform / memory / agents （除 localhost 外）只依赖 `contracts` + `utils`，彼此之间无直接 import。
+- **所有适配器同级对等**：engine / ai / platform / memory / agents / ops 只依赖 `contracts` + `utils`，彼此之间无直接 import。
 - **自动服务通过 Port 注入 engine**：记忆等自动服务在 pump hook 中被动触发，Agent 不参与决策——Agent "被记住"而非"决定记住"。
 - **主动能力通过 setter 注入 Agent handler**：delegate、wait、speech 等由 Agent 在 turn 内自主选择使用。
 - **工具平台按 Protocol 接入**：新增平台只需实现 `ToolExecutor` + event ingress，注册到 `aurora` 组合层。
-- **`aurora` 是唯一组合根**：创建所有实例、注入 Port、组装 localhost 监察器、运行主事件循环。
+- **`aurora` 是唯一组合根**：创建所有实例、注入 Port、组装 ops 监察器、运行主事件循环。
 - **`prompt` DTO 不下沉 contracts**：装配层内部 DTO 不是跨层契约。
 - **`sandbox` 完全孤立**：只依赖 utils，不被任何包导入。
 
