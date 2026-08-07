@@ -53,11 +53,8 @@ class _Msg(StrEnum):
     RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
     CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
     FORBIDDEN_PARAMETERS = "model parameters may not override controlled fields: {forbidden}"
-    NOT_NATIVE_RESPONSES_ENDPOINT = "role {role} does not use a native Responses endpoint"
-    LACKS_NATIVE_RESPONSES = "role {role} lacks native_responses"
     LACKS_CAPABILITIES = "role {role} lacks capabilities: {missing}"
-    LACKS_TOOLS = "role {role} lacks tools"
-    CONTINUATION_MISMATCH = "model continuation does not match the selected role endpoint"
+    CONTINUATION_MISMATCH = "model continuation does not match the selected role"
     NO_STRUCTURED_OUTPUT = "structured output is unavailable and JSON-text fallback is not permitted"
     MISSING_CREDENTIAL = "missing model credential: {env_var}"
     COST_BUDGET_EXCEEDED = "model cost exceeded max_cost_usd"
@@ -170,7 +167,6 @@ class ModelGatewayService:
             await refresh_now(wait_seconds=_COLD_START_REFRESH_SECONDS)
         data_available = await cache_available()
         self._uncertain_roles = set()
-        responses_count = 0
         for role_id, model_id in self._models.items():
             definition = self._configuration.model_definitions[role_id]
             if definition.capabilities:
@@ -179,13 +175,9 @@ class ModelGatewayService:
                 caps = await get_capabilities_by_id(model_id)
                 if not data_available:
                     self._uncertain_roles.add(role_id)
-            if self._handlers[role_id].endpoint == "responses":
-                caps = caps | frozenset({"native_responses"})
             self._capabilities[role_id] = caps
-            if self._handlers[role_id].endpoint == "responses":
-                responses_count += 1
         self._initialized = True
-        logger.info("model gateway initialized roles=%d responses_roles=%d", len(self._models), responses_count)
+        logger.info("model gateway initialized roles=%d", len(self._models))
 
     async def _ensure_initialized(self) -> None:
         if self._initialized:
@@ -196,13 +188,14 @@ class ModelGatewayService:
             await self.initialize()
 
     def _capabilities_for(self, role_id: str) -> frozenset[str]:
-        """同步获取已解析能力；未初始化时退回 TOML 配置或隐含能力。"""
+        """已解析能力合并角色能力基线（RFC 0213）；未初始化时退回 TOML 配置或隐含能力。"""
+        baseline = self._handlers[role_id].capability_baseline
         if role_id in self._capabilities:
-            return self._capabilities[role_id]
+            return self._capabilities[role_id] | baseline
         definition = self._configuration.model_definitions.get(role_id)
         if definition is not None and definition.capabilities:
-            return definition.capabilities
-        return frozenset({"chat", "stream", "json_text_fallback"})
+            return definition.capabilities | baseline
+        return frozenset({"chat", "stream", "json_text_fallback"}) | baseline
 
     # ── 角色 → 调用器映射（chat 通道使用）────────────────────
 
@@ -225,31 +218,22 @@ class ModelGatewayService:
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
         if forbidden:
             raise ModelCapabilityError(_Msg.FORBIDDEN_PARAMETERS.format(forbidden=forbidden))
-        handler = self._handlers[request.role]
-        if request.response_mode == "native" and handler.endpoint != "responses":
-            raise ModelCapabilityError(_Msg.NOT_NATIVE_RESPONSES_ENDPOINT.format(role=request.role))
-        if handler.endpoint == "responses" and "native_responses" not in capabilities:
-            raise ModelCapabilityError(_Msg.LACKS_NATIVE_RESPONSES.format(role=request.role))
-        if not request.required_capabilities <= capabilities:
-            missing = sorted(request.required_capabilities - capabilities)
-            raise ModelCapabilityError(_Msg.LACKS_CAPABILITIES.format(role=request.role, missing=missing))
-        if request.tools and "tools" not in capabilities:
-            if request.role in self._uncertain_roles:
-                logger.warning("models.dev 数据不可用，假定 model_role=%s 支持工具调用", request.role)
-            else:
-                raise ModelCapabilityError(_Msg.LACKS_TOOLS.format(role=request.role))
-        if request.continuation is not None and (
-            request.continuation.provider != role.provider or request.continuation.channel != handler.endpoint
-        ):
+        if request.continuation is not None and request.continuation.provider != role.provider:
             raise ModelCapabilityError(_Msg.CONTINUATION_MISMATCH)
 
-        negotiated = set(request.required_capabilities)
+        required = set(request.required_capabilities)
         if request.tools:
-            negotiated.add("tools")
-        if self._handlers[request.role].endpoint == "responses":
-            negotiated.add("native_responses")
+            required.add("tools")
+        missing = sorted(required - capabilities)
+        if missing:
+            if request.role in self._uncertain_roles:
+                logger.warning("models.dev 数据不可用，假定 model_role=%s 支持缺失能力 %s", request.role, missing)
+            else:
+                raise ModelCapabilityError(_Msg.LACKS_CAPABILITIES.format(role=request.role, missing=missing))
+
+        negotiated = required
         if request.output_schema is not None:
-            if handler.endpoint == "responses" or "structured_output" in capabilities:
+            if "structured_output" in capabilities:
                 negotiated.add("structured_output")
             elif request.allow_json_text_fallback and "json_text_fallback" in capabilities:
                 negotiated.add("json_text_fallback")

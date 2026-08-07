@@ -12,7 +12,6 @@ import pytest
 from src.ai import models
 from src.ai.channels.base import json_item, parse_arguments, provider_tools
 from src.ai.channels.chat import chat_assistant_item, chat_message, chat_tool_calls, usage
-from src.ai.channels.responses import response_tool_calls, responses_usage
 from src.ai.execution import CostTracker, GatewayError
 from src.ai.gateway import ModelGatewayService, invalid_output_result
 from src.config.loader import load_configuration
@@ -37,9 +36,7 @@ def _service(project_root: Path) -> ModelGatewayService:
     service = ModelGatewayService(load_configuration(project_root))
     service._capabilities = {
         "fast": frozenset({"chat", "stream", "structured_output", "json_text_fallback", "tools"}),
-        "quality": frozenset(
-            {"chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses", "reasoning"}
-        ),
+        "quality": frozenset({"chat", "stream", "structured_output", "json_text_fallback", "tools", "reasoning"}),
         "multimodal": frozenset({"chat", "stream", "vision"}),
     }
     service._initialized = True
@@ -57,11 +54,10 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
         (ModelRequest(role="fast", messages=(), retry_policy="retry"), "retry_policy"),  # type: ignore[arg-type]
         (ModelRequest(role="fast", messages=(), cancel_policy="sometimes"), "cancellation"),  # type: ignore[arg-type]
         (ModelRequest(role="fast", messages=(), parameters={"model": "override"}), "controlled fields"),
-        (ModelRequest(role="fast", messages=(), response_mode="native"), "native Responses"),
         (ModelRequest(role="fast", messages=(), required_capabilities=frozenset({"vision"})), "lacks capabilities"),
         (
             ModelRequest(role="multimodal", messages=(), tools=(ToolDefinition("tool", "", {"type": "object"}),)),
-            "lacks tools",
+            "lacks capabilities",
         ),
         (
             ModelRequest(role="fast", messages=(), continuation=ModelContinuation("other", "chat_completions")),
@@ -71,6 +67,31 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
     for model_request, message in invalid:
         with pytest.raises(ModelCapabilityError, match=message):
             service.negotiate(model_request)
+
+
+def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
+    """RFC 0213：能力基线并入能力集；adapt_request 可改写请求。"""
+
+    from src.ai.channels.base import RoleHandler
+    from src.ai.roles.quality import QualityRole
+
+    service = _service(project_root)
+    service._capabilities = {
+        "fast": frozenset({"chat", "stream", "tools"}),
+        "quality": frozenset({"chat", "stream", "tools"}),
+        "multimodal": frozenset({"chat", "stream", "vision"}),
+    }
+    service._initialized = True
+    # 能力基线合并：quality 声明 reasoning，即使 models.dev 未标注也可协商
+    assert "reasoning" in service._capabilities_for("quality")
+    assert service.negotiate(
+        ModelRequest(role="quality", messages=(), required_capabilities=frozenset({"reasoning"}))
+    ) >= {"reasoning"}
+    # adapt_request 默认原样返回
+    request = ModelRequest(role="fast", messages=())
+    assert QualityRole().adapt_request(request) is request
+    assert QualityRole.capability_baseline == frozenset({"reasoning"})
+    assert issubclass(QualityRole, RoleHandler)
 
 
 def test_output_normalization_returns_valid_json_and_configured_fallback(project_root: Path) -> None:
@@ -124,12 +145,9 @@ def test_model_contracts_round_trip_and_append_tool_results() -> None:
 def test_parsing_maps_provider_tools_and_tool_calls() -> None:
     definitions = (ToolDefinition("org.example.echo", "Echo", {"type": "object"}),)
     chat_defs, aliases = provider_tools(definitions, responses=False)
-    response_defs, response_aliases = provider_tools(definitions, responses=True)
     alias = next(iter(aliases))
     assert alias == "org_example_echo"
     assert chat_defs[0]["function"]["name"] == alias
-    assert response_defs[0]["name"] == alias
-    assert response_aliases == aliases
 
     raw_call = SimpleNamespace(id="call", function=SimpleNamespace(name=alias, arguments='{"text":"hello"}'))
     message = SimpleNamespace(content="ok", reasoning_content="private", tool_calls=[raw_call])
@@ -137,12 +155,6 @@ def test_parsing_maps_provider_tools_and_tool_calls() -> None:
     assert calls == (ToolCall("call", "org.example.echo", {"text": "hello"}),)
     assert diagnostics == ()
     assert chat_assistant_item(message)["reasoning_content"] == "private"
-
-    response_calls, diagnostics = response_tool_calls(
-        ({"type": "function_call", "name": alias, "call_id": "native", "arguments": {"x": 1}},), aliases
-    )
-    assert response_calls == (ToolCall("native", "org.example.echo", {"x": 1}),)
-    assert diagnostics == ()
 
 
 def test_parsing_handles_malformed_provider_values() -> None:
@@ -162,9 +174,7 @@ def test_parsing_handles_malformed_provider_values() -> None:
 
 def test_usage_helpers_and_invalid_output_fallback() -> None:
     response = SimpleNamespace(usage=SimpleNamespace(prompt_tokens=4, completion_tokens=5))
-    native = SimpleNamespace(usage=SimpleNamespace(input_tokens=6, output_tokens=7))
     assert usage(response) == ModelUsage(4, 5)
-    assert responses_usage(native) == ModelUsage(6, 7)
     request = ModelRequest(
         role="fast",
         messages=(),

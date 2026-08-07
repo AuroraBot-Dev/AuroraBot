@@ -21,9 +21,7 @@ base_url = "https://api.siliconflow.cn/v1"
 secret_env = "SILICONFLOW_API_KEY"
 
 
-# Role 定义：每个 role 绑定一个 provider 的具体 model + 端点
-# fast → chat_completions (低延迟，快速决策)
-# quality → responses (高能力，复杂推理)
+# Role 定义：每个 role 绑定一个 provider 的具体 model
 [models.roles.fast]
 provider = "deepseek"
 model = "deepseek-v4-flash"

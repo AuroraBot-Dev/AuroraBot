@@ -18,9 +18,19 @@ if TYPE_CHECKING:
 
 
 class RoleHandler(ABC):
-    """通道契约：``endpoint``（通道）由实现声明，模型绑定由配置决定。"""
+    """通道契约与角色扩展点（RFC 0212/0213）。
+
+    - ``endpoint``：通道由实现声明；
+    - ``capability_baseline``：角色的能力侧重声明（并入该角色的能力集）；
+    - ``adapt_request``：per-role 请求适配钩子（默认原样返回）。
+    """
 
     endpoint: ClassVar[str]
+    capability_baseline: ClassVar[frozenset[str]] = frozenset()
+
+    def adapt_request(self, request: "ModelRequest") -> "ModelRequest":
+        """per-role 请求适配：修改预算、参数或校验输入。"""
+        return request
 
     @abstractmethod
     async def complete(
