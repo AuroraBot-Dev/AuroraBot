@@ -11,8 +11,10 @@ from mcp import types
 from mcp.shared.exceptions import McpError
 
 from src.config.loader import load_configuration
-from src.contracts.amp import AmpEnvelope
-from src.contracts.tool import ToolExecutionRequest
+from src.contracts import (
+    AmpEnvelope,
+    ToolExecutionRequest,
+)
 from src.platform.mcp import MCPPlatform
 from src.platform.mcp.client_manager import (
     ClientConnection,

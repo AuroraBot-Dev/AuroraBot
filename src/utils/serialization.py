@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import os
 import re
@@ -159,16 +158,3 @@ def parse_structured(text: str | None) -> dict[str, Any]:
             continue
 
     return {}
-
-
-def json_ready(value: Any) -> Any:
-    """递归将值转化为 JSON 可序列化形式。"""
-    if isinstance(value, dict):
-        return {str(key): json_ready(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [json_ready(item) for item in value]
-    if isinstance(value, tuple):
-        return [json_ready(item) for item in value]
-    if isinstance(value, (dt.date, dt.datetime)):
-        return value.isoformat()
-    return value

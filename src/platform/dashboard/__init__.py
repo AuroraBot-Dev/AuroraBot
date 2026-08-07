@@ -18,7 +18,10 @@ from src.platform.dashboard.adapter import (
 )
 from src.platform.dashboard.api import create_app
 from src.platform.dashboard.service import ChatError, ChatService
-from src.utils.uvicorn import LifespanSafeApp, SignalSafeServer
+from src.utils.uvicorn import (
+    LifespanSafeApp,
+    SignalSafeServer,
+)
 
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig, DashboardConfig

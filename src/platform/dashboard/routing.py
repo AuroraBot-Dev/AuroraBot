@@ -1,15 +1,22 @@
-"""仪表盘聊天输入的纯函数命令路由工具。
+"""仪表盘聊天输入的纯函数路由与消息转换工具。
 
-将仪表盘 WebSocket 消息解析为 RuntimeInput，并提供命令识别与消息匹配能力。
+将仪表盘 WebSocket 消息解析为 RuntimeInput，并提供命令识别、消息匹配
+与数据库行到 API 消息字典的转换能力。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.contracts.event import InputOrigin, RuntimeInput
+from src.contracts.event import (
+    InputOrigin,
+    RuntimeInput,
+)
+
+if TYPE_CHECKING:
+    import sqlite3
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -48,6 +55,30 @@ def is_quit_command(content: str) -> bool:
 def command_reply_id(receiver_id: int, source_client_message_id: str) -> str:
     """为命令回复生成确定性的 client_message_id。"""
     return str(uuid5(NAMESPACE_URL, f"aurora-dashboard-command:{receiver_id}:{source_client_message_id}"))
+
+
+def message_to_api(row: sqlite3.Row) -> dict[str, Any]:
+    """将数据库消息行（含可选的 JOIN 附件字段）转换为 API 消息字典。"""
+    attachment = None
+    if row["attachment_id"] is not None:
+        attachment = {
+            "attachment_id": int(row["attachment_id"]),
+            "file_name": str(row["original_name"]),
+            "mime_type": str(row["mime_type"]),
+            "size": int(row["size"]),
+            "url": f"/api/attachments/{int(row['attachment_id'])}/download",
+        }
+    return {
+        "message_id": int(row["id"]),
+        "client_message_id": str(row["client_message_id"]),
+        "sender_id": int(row["sender_id"]),
+        "receiver_id": int(row["receiver_id"]),
+        "message_type": str(row["message_type"]),
+        "content": row["content"],
+        "attachment": attachment,
+        "created_at": str(row["created_at"]),
+        "status": str(row["status"]),
+    }
 
 
 def message_matches(message: dict[str, Any], parsed: PrivateMessageInput) -> bool:

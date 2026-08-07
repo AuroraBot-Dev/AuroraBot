@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
 from src.contracts.event import CommandControl
-from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
+from src.contracts.tool import (
+    ToolExecutionRequest,
+    ToolOutcome,
+    ToolOutcomeStatus,
+)
 from src.platform.dashboard.adapter import DASHBOARD_SEND_CAPABILITY
 from src.platform.dashboard.routing import (
     PrivateMessageInput,
@@ -19,8 +23,9 @@ from src.platform.dashboard.routing import (
     dashboard_input,
     is_conversation_command,
     is_quit_command,
+    message_to_api,
 )
-from src.utils.time import utc_now
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     import sqlite3
@@ -172,7 +177,7 @@ class DashboardCommunication:
         message_row = await asyncio.to_thread(self._store.message_with_attachment, int(row["id"]))
         assert message_row is not None
         control = CommandControl.SHUTDOWN_PROCESS if is_quit_command(content) else CommandControl.NONE
-        message["_post_ack"] = {"reply": self._message(message_row), "control": control}
+        message["_post_ack"] = {"reply": message_to_api(message_row), "control": control}
 
     async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
         """执行 Dashboard Tool 请求：将文本消息发送给配置的所有者。
@@ -215,7 +220,7 @@ class DashboardCommunication:
             now=await asyncio.to_thread(utc_now),
         )
         if created:
-            await self._publish(owner_id, {"type": "private_message", "message": self._message(message_row)})
+            await self._publish(owner_id, {"type": "private_message", "message": message_to_api(message_row)})
         return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, summary, result={"message_id": message_id})
 
     async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
@@ -310,22 +315,7 @@ class DashboardCommunication:
             content=text,
             attachment_id=None,
         )
-        return self._message(row)
-
-    @staticmethod
-    def _message(row: sqlite3.Row) -> dict[str, Any]:
-        """将数据库行转换为 API 消息字典格式。"""
-        return {
-            "message_id": int(row["id"]),
-            "client_message_id": str(row["client_message_id"]),
-            "sender_id": int(row["sender_id"]),
-            "receiver_id": int(row["receiver_id"]),
-            "message_type": str(row["message_type"]),
-            "content": row["content"],
-            "attachment": None,
-            "created_at": str(row["created_at"]),
-            "status": str(row["status"]),
-        }
+        return message_to_api(row)
 
 
 def _request_digest(request: ToolExecutionRequest) -> str:

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import AgentDecision, DelegationRequest
+from src.contracts.agent import (
+    AgentDecision,
+    DelegationRequest,
+)
 from src.contracts.model import ToolDefinition
 
 if TYPE_CHECKING:
@@ -61,9 +64,9 @@ class DelegationCapability:
     def handle_tool(
         self,
         call: ToolCall,
-        context: AgentContext,  # noqa: ARG002
-        continuation: object = None,  # noqa: ARG002
-        tools: tuple[object, ...] = (),  # noqa: ARG002
+        _context: AgentContext,
+        _continuation: object = None,
+        _tools: tuple[object, ...] = (),
     ) -> AgentDecision | None:
         """处理委派工具调用，验证任务参数并返回委派决策。"""
         if call.name != DELEGATE_TOOL:

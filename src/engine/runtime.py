@@ -39,11 +39,25 @@ from src.contracts.agent import (
     ToolRequest,
     capability_tool_definition,
 )
-from src.contracts.amp import AmpEnvelope, AmpValidationError
-from src.contracts.event import OutputStreamItem, OutputStreamPage
-from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
+from src.contracts.amp import (
+    AmpEnvelope,
+    AmpValidationError,
+)
+from src.contracts.event import (
+    OutputStreamItem,
+    OutputStreamPage,
+)
+from src.contracts.memory import (
+    MemoryContextSnapshot,
+    MemoryEntry,
+    MemoryQuery,
+)
 from src.contracts.model import ModelRequest
-from src.contracts.triage import TriageAction, TriageBatch, TriageDecision
+from src.contracts.triage import (
+    TriageAction,
+    TriageBatch,
+    TriageDecision,
+)
 from src.engine.archive import (
     TASK_ARCHIVE_VERSION,
     archived_agent_detail,
@@ -55,9 +69,13 @@ from src.engine.debug import reject_active_legacy_workspace
 from src.engine.debug import task_detail as build_task_detail
 from src.engine.session_log import SessionLog
 from src.engine.store import SQLiteRuntimeStore
+from src.engine.store.status import ACT_PENDING
 from src.engine.tool_registry import ToolRegistry
 from src.utils.logging import get_logger
-from src.utils.serialization import atomic_write_json, read_json
+from src.utils.serialization import (
+    atomic_write_json,
+    read_json,
+)
 
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryStore
@@ -523,7 +541,7 @@ class EngineState:
         with self.store.connect() as connection:
             return bool(
                 connection.execute(
-                    "SELECT 1 FROM activities WHERE kind = 'model' AND status = 'PENDING' LIMIT 1"
+                    f"SELECT 1 FROM activities WHERE kind = 'model' AND status = {ACT_PENDING} LIMIT 1"
                 ).fetchone()
             )
 
@@ -773,7 +791,7 @@ class AgentEngine:
     async def _triage_batch(self, batch: TriageBatch) -> TriageDecision:
         request = self._triage_policy.request(batch)
         result = await self._model_provider.complete(request)
-        return self._triage_policy.resolve(batch, result)
+        return self._triage_policy.resolve(result)
 
     @staticmethod
     def _triage_fallback(batch: TriageBatch, error: object) -> TriageDecision:
@@ -874,7 +892,3 @@ class AgentEngine:
     def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage:
         """返回游标之后新增的用户可见模型输出（只读）。"""
         return self._state.output_stream(cursor, limit=limit)
-
-    def brain_context(self) -> dict[str, Any]:
-        """返回紧凑运行态计数；该投影不会进入模型上下文。"""
-        return self.status()

@@ -8,8 +8,12 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from aurora import runtime as composition
-from src.contracts.configuration import DashboardPreference, McpPreference, PlatformPreference
-from src.contracts.platform import PlatformHandle
+from src.contracts import (
+    DashboardPreference,
+    McpPreference,
+    PlatformHandle,
+    PlatformPreference,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable

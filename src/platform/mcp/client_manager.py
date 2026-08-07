@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -32,9 +31,11 @@ from mcp.client.session import ClientSession
 from mcp.shared.exceptions import McpError
 from mcp.shared.message import SessionMessage
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
     from mcp.types import ServerNotification
     from mcp.types import Tool as MCPTool
 
@@ -62,8 +63,6 @@ class MCPToolCallError(RuntimeError):
 class MCPToolRejectedError(MCPToolCallError):
     """Server 已返回明确的 tools/call 失败响应。"""
 
-
-NotificationHandler = Callable[[str, dict[str, object]], None]
 
 _SHUTDOWN_GRACE_SECONDS = 1.5
 """Server stdout 关闭后、判定为异常断开前的停机等待窗口。
@@ -137,7 +136,7 @@ class ClientConnection:
 
 
 class MCPClientManager:
-    """Brain 侧的 MCP 客户端管理器。
+    """与 MCP Server 建立客户端连接的管理器。
 
     Usage::
 
@@ -153,7 +152,6 @@ class MCPClientManager:
         self._connections: dict[str, ClientConnection] = {}
         self._stop_event = asyncio.Event()
         self.disconnected = asyncio.Event()
-        self._notification_handlers: dict[str, list[NotificationHandler]] = {}
         self._notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue(
             _NOTIFICATION_QUEUE_SIZE
         )
@@ -165,28 +163,8 @@ class MCPClientManager:
 
     @property
     def notification_queue(self) -> asyncio.Queue[tuple[str, str, dict[str, object]]]:
-        """通知队列，供 EventBridge 消费。"""
+        """本地通知队列，由平台后台任务转发为 AMP 事件。"""
         return self._notification_queue
-
-    def on_notification(self, method: str, handler: NotificationHandler) -> Callable[[], None]:
-        """注册 notification 处理器。
-
-        Args:
-            method: notification method 名（如 ``aurora/event``）。
-            handler: 处理函数，接收 (server_key, params)。
-
-        Returns:
-            取消注册的闭包。
-        """
-        self._notification_handlers.setdefault(method, []).append(handler)
-        logger.debug("注册 notification handler: %s", method)
-
-        def _unregister() -> None:
-            handlers = self._notification_handlers.get(method, [])
-            if handler in handlers:
-                handlers.remove(handler)
-
-        return _unregister
 
     # ── 连接管理 ──
 
@@ -221,25 +199,8 @@ class MCPClientManager:
             raise MCPToolCallError(_Msg.CONNECTION_FAILED.format(key=key, error=conn.error)) from conn.error
 
     async def _dispatch_notification(self, key: str, method: str, params: dict[str, object]) -> None:
-        """从 ``_NotifiableClientSession`` 接收通知并分派。
-
-        Args:
-            key: Server key。
-            method: notification method。
-            params: notification 参数。
-        """
-        # 1. 放入队列供 EventBridge 消费
+        """从 ``_NotifiableClientSession`` 接收通知并入队供平台转发。"""
         await self._notification_queue.put((key, method, params))
-
-        # 2. 分发给注册的同步 handlers
-        handlers = self._notification_handlers.get(method, [])
-        if handlers:
-            logger.debug("通知 %s (server: %s) -> %d handlers", method, key, len(handlers))
-            for handler in handlers:
-                try:
-                    handler(key, params)
-                except Exception:
-                    logger.exception("notification handler 异常: %s", method)
 
     async def _run_connection(
         self,

@@ -3,16 +3,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.memory import MemoryEntry, MemoryQuery
+from src.contracts import (
+    MemoryEntry,
+    MemoryQuery,
+)
 from src.memory.service import MemoryService
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_disabled_service_uses_the_memory_store_contract() -> None:
-    service = MemoryService.disabled()
-    assert not service.available
+def test_service_without_memory_dir_falls_back_to_empty_context() -> None:
+    service = MemoryService()
     assert service.recall(MemoryQuery("anything", "session")).session_summary == ""
     assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01"))
 

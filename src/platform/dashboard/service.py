@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from src.platform.dashboard.communication import ChatError, DashboardCommunication
-from src.platform.dashboard.routing import PrivateMessageInput, is_conversation_command, message_matches
+from src.platform.dashboard.routing import (
+    PrivateMessageInput,
+    is_conversation_command,
+    message_matches,
+    message_to_api,
+)
 from src.platform.dashboard.store import ChatStore, new_token, token_digest
 
 if TYPE_CHECKING:
@@ -205,7 +210,7 @@ class ChatService:
             """,
             parameters,
         )
-        return [self._message(row) for row in reversed(rows)]
+        return [message_to_api(row) for row in reversed(rows)]
 
     async def sync_messages(self, current_user_id: int, after_id: int) -> list[dict[str, Any]]:
         """增量同步指定 ID 之后的消息，最多返回 200 条。"""
@@ -219,7 +224,7 @@ class ChatService:
             """,
             (max(0, after_id), current_user_id, current_user_id),
         )
-        return [self._message(row) for row in rows]
+        return [message_to_api(row) for row in rows]
 
     async def upload_attachment(self, owner_id: int, filename: str, mime_type: str, data: bytes) -> dict[str, Any]:
         """上传附件文件：校验大小和类型，原子写入磁盘，记录到数据库。
@@ -307,7 +312,7 @@ class ChatService:
         )
         message_row = await asyncio.to_thread(self.store.message_with_attachment, int(row["id"]))
         assert message_row is not None
-        message = self._message(message_row)
+        message = message_to_api(message_row)
         if not created and not message_matches(message, parsed):
             raise ChatError(_Msg.CODE_IDEMPOTENCY_CONFLICT, _Msg.IDEMPOTENCY_CONFLICT, 409)
         if not created and message["status"] == "saved":
@@ -451,30 +456,6 @@ class ChatService:
             "avatar_url": row["avatar_url"],
             "online": bool(row["is_bot"]) or bool(self._subscribers.get(user_id)),
             "is_bot": bool(row["is_bot"]),
-        }
-
-    @staticmethod
-    def _message(row: sqlite3.Row) -> dict[str, Any]:
-        """将数据库消息行（含 JOIN 的附件字段）转换为 API 消息字典。"""
-        attachment = None
-        if row["attachment_id"] is not None:
-            attachment = {
-                "attachment_id": int(row["attachment_id"]),
-                "file_name": str(row["original_name"]),
-                "mime_type": str(row["mime_type"]),
-                "size": int(row["size"]),
-                "url": f"/api/attachments/{int(row['attachment_id'])}/download",
-            }
-        return {
-            "message_id": int(row["id"]),
-            "client_message_id": str(row["client_message_id"]),
-            "sender_id": int(row["sender_id"]),
-            "receiver_id": int(row["receiver_id"]),
-            "message_type": str(row["message_type"]),
-            "content": row["content"],
-            "attachment": attachment,
-            "created_at": str(row["created_at"]),
-            "status": str(row["status"]),
         }
 
     @staticmethod

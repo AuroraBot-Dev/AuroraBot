@@ -6,8 +6,18 @@ import json
 from enum import StrEnum
 from typing import Any
 
-from src.contracts.model import ModelBudget, ModelMessage, ModelRequest, ModelResult
-from src.contracts.triage import TriageAction, TriageBatch, TriageDecision, TriageLimits
+from src.contracts.model import (
+    ModelBudget,
+    ModelMessage,
+    ModelRequest,
+    ModelResult,
+)
+from src.contracts.triage import (
+    TriageAction,
+    TriageBatch,
+    TriageDecision,
+    TriageLimits,
+)
 
 
 class _Msg(StrEnum):
@@ -59,8 +69,7 @@ class StructuredTriagePolicy:
             tool_choice="none",
         )
 
-    def resolve(self, batch: TriageBatch, result: ModelResult) -> TriageDecision:
-        _ = batch
+    def resolve(self, result: ModelResult) -> TriageDecision:
         value = result.data
         if not isinstance(value, dict):
             raise TypeError(_Msg.RESULT_NOT_STRUCTURED)

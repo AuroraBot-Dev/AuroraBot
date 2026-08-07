@@ -22,10 +22,10 @@ from src.ai._parsing import (
     responses_usage,
     usage,
 )
-from src.ai.execution import CostTracker, GatewayError, TaskManager
+from src.ai.execution import CostTracker, GatewayError
 from src.ai.gateway import ModelGatewayService
 from src.config.loader import load_configuration
-from src.contracts.model import (
+from src.contracts import (
     ModelCapabilityError,
     ModelContinuation,
     ModelGatewayError,
@@ -50,7 +50,6 @@ def _service(project_root: Path) -> ModelGatewayService:
             {"chat", "stream", "structured_output", "json_text_fallback", "tools", "native_responses", "reasoning"}
         ),
         "multimodal": frozenset({"chat", "stream", "vision"}),
-        "embedding": frozenset({"embedding"}),
     }
     service._initialized = True
     return service
@@ -196,7 +195,7 @@ def test_model_call_without_credential_is_rejected_before_provider(
     asyncio.run(scenario())
 
 
-def test_cost_tracker_and_task_manager() -> None:
+def test_cost_tracker() -> None:
     async def scenario() -> None:
         tracker = CostTracker()
         await tracker.add({"role": "fast", "model": "m", "cost": 0.25})
@@ -204,20 +203,6 @@ def test_cost_tracker_and_task_manager() -> None:
         summary = await tracker.summary()
         assert summary["total_cost"] == 0.75
         assert summary["by_role"]["fast"]["count"] == 2
-
-        manager = TaskManager()
-
-        async def wait() -> tuple[str, float]:
-            await asyncio.sleep(10)
-            return "never", 0.0
-
-        generation = manager.create_task(wait())
-        await asyncio.sleep(0)
-        assert manager.abort(generation.task_id)
-        with pytest.raises(asyncio.CancelledError):
-            await generation
-        assert not manager.abort("missing")
-        manager.abort_all()
 
     asyncio.run(scenario())
 

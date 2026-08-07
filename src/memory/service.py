@@ -6,8 +6,12 @@ import sqlite3
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
-from src.utils.logging import get_logger
+from src.contracts.memory import (
+    MemoryContextSnapshot,
+    MemoryEntry,
+    MemoryQuery,
+)
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -33,14 +37,6 @@ class MemoryService:
             memory_dir.mkdir(parents=True, exist_ok=True)
             with self._connect() as connection:
                 self._initialize(connection)
-
-    @classmethod
-    def disabled(cls) -> "MemoryService":
-        return cls()
-
-    @property
-    def available(self) -> bool:
-        return self._database_path is not None
 
     def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if self._database_path is None:

@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 
 from src.contracts.amp import AmpValidationError
 from src.contracts.ports import DashboardDebugPort
-from src.utils.uvicorn import LifespanSafeApp
+from src.utils import LifespanSafeApp
 
 
 class _Msg(StrEnum):
@@ -52,9 +52,5 @@ def create_debug_app(debug: DashboardDebugPort) -> LifespanSafeApp:
         if value is None:
             raise HTTPException(status_code=404, detail=_Msg.AGENT_NOT_FOUND)
         return value
-
-    @app.get("/v1/debug/brain-context")
-    def brain_context() -> dict[str, Any]:
-        return debug.brain_context()
 
     return LifespanSafeApp(app)

@@ -18,7 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
@@ -240,23 +240,6 @@ class MCPServerKit:
         del self._processes[key]
         logger.info("MCP Server %s 已停止", key)
 
-    async def restart_one(self, key: str) -> asyncio.subprocess.Process:
-        """重启单个 Server。
-
-        Args:
-            key: Server 的 key。
-
-        Returns:
-            新的子进程句柄。
-        """
-        server_proc = self._processes.get(key)
-        if server_proc is None:
-            raise RuntimeError(_Msg.NOT_RUNNING.format(key=key))
-
-        spec = server_proc.spec
-        await self.stop_one(key)
-        return await self.start_one(spec)
-
     # ── 健康检查 ──
 
     async def _forward_stderr(self, key: str, process: asyncio.subprocess.Process) -> None:
@@ -272,23 +255,6 @@ class MCPServerKit:
                         message,
                         extra={"aurora_terminal": self._terminal_logs},
                     )
-
-    def health_report(self) -> dict[str, str]:
-        """返回所有 Server 的健康状态。
-
-        Returns:
-            ``{key: "running" | "stopped" | "crashed"}`` 的映射。
-        """
-        report: dict[str, str] = {}
-        for key, server_proc in self._processes.items():
-            proc = server_proc.process
-            if proc.returncode is None:
-                report[key] = "running"
-            elif proc.returncode == 0:
-                report[key] = "stopped"
-            else:
-                report[key] = f"crashed (code={proc.returncode})"
-        return report
 
     async def _health_check_loop(self, key: str, server_proc: ServerProcess) -> None:
         """定期检查单个 Server 进程状态。

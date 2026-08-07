@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from src.contracts.tool import ToolExecutionRequest
+from src.contracts import ToolExecutionRequest
 from src.localhost.api import create_debug_app
 from src.platform.dashboard import (
     DASHBOARD_SEND_CAPABILITY,
@@ -197,7 +197,6 @@ def test_independent_localhost_debug_app_drives_and_queries_engine(project_root:
         assert client.get(f"/v1/debug/agents/{agent_id}").status_code == 200
         assert client.get("/v1/debug/agents/missing").status_code == 404
         assert client.get("/v1/debug/tasks/missing").status_code == 404
-        assert client.get("/v1/debug/brain-context").status_code == 200
         assert client.get("/v1/debug/status").status_code == 200
     asyncio.run(runtime.shutdown())
 

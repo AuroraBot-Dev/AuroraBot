@@ -38,10 +38,6 @@ class PromptComposer:
     def __init__(self, catalog: PromptCatalog) -> None:
         self._catalog = catalog
 
-    @property
-    def catalog(self) -> PromptCatalog:
-        return self._catalog
-
     def request_document(self, context: AgentContext) -> PromptDocument:
         try:
             agent_prompt = self._catalog.agents[context.profile.id]

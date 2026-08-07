@@ -18,15 +18,24 @@ import uvicorn
 from src.agents.triage import StructuredTriagePolicy
 from src.ai.gateway import ModelGatewayService
 from src.config import get as get_config
-from src.contracts.agent import AgentHandler, Capability, EngineConfiguration
-from src.contracts.configuration import PLATFORM_NAMES, PlatformPreference
+from src.contracts import (
+    PLATFORM_NAMES,
+    AgentHandler,
+    Capability,
+    EngineConfiguration,
+    PlatformPreference,
+)
 from src.engine.runtime import AgentEngine
 from src.localhost.api import create_debug_app
 from src.localhost.runtime import AuroraRuntime
 from src.memory.service import MemoryService
 from src.prompt import PromptCatalog, PromptComposer
-from src.utils.logging import configure_console_logging, configure_logging, get_logger
-from src.utils.uvicorn import SignalSafeServer
+from src.utils import (
+    SignalSafeServer,
+    configure_console_logging,
+    configure_logging,
+    get_logger,
+)
 
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig

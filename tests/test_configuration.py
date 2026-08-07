@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.config.loader import load_configuration
-from src.contracts.configuration import ConfigurationError
+from src.contracts import ConfigurationError
 
 ROOT = Path(__file__).parents[1]
 

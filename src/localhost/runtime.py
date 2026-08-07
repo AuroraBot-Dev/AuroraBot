@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.contracts.amp import new_amp
+from src.contracts import new_amp
 from src.localhost.router import CommandRouter
 
 if TYPE_CHECKING:
@@ -90,9 +90,6 @@ class AuroraRuntime:
 
     def agent(self, agent_id: str) -> dict[str, Any] | None:
         return self.engine.agent_detail(agent_id)
-
-    def brain_context(self) -> dict[str, Any]:
-        return self.engine.brain_context()
 
     def output_stream(self, cursor: int = 0, *, limit: int = 64) -> "OutputStreamPage":
         """返回游标之后新增的用户可见模型输出，供本地交互前端渲染。"""

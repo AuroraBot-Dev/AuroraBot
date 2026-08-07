@@ -39,9 +39,9 @@ class WaitCapability:
     def handle_tool(
         self,
         call: ToolCall,
-        context: AgentContext,  # noqa: ARG002
-        continuation: object = None,  # noqa: ARG002
-        tools: tuple[object, ...] = (),  # noqa: ARG002
+        _context: AgentContext,
+        _continuation: object = None,
+        _tools: tuple[object, ...] = (),
     ) -> AgentDecision | None:
         """处理等待工具调用，返回等待子 Agent 的决策。"""
         if call.name != WAIT_TOOL:

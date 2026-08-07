@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 from rich.panel import Panel
 
-from src.utils.time import utc_now
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

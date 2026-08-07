@@ -46,8 +46,6 @@ class DashboardDebugPort(ExternalAmpIngressPort, Protocol):
 
     def agent(self, agent_id: str) -> dict[str, Any] | None: ...
 
-    def brain_context(self) -> dict[str, Any]: ...
-
 
 class RuntimeCommandPort(Protocol):
     """localhost 命令处理器所需的最小运行时端口。"""
