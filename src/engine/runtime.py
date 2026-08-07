@@ -8,7 +8,6 @@ EngineState 拥有 Task/Agent 持久化状态、邮箱队列和 Activity 调度�
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import os
 import shutil
@@ -806,8 +805,11 @@ class AgentEngine:
             self._wake.clear()
             delay = self._state.store.inbox_delay_seconds()
             timeout = self._idle_wait_seconds if delay is None else min(self._idle_wait_seconds, max(delay, 0.01))
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._wake.wait(), timeout=timeout)
+            waiters = (asyncio.create_task(self._wake.wait()), asyncio.create_task(stop.wait()))
+            _, pending = await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
 
     def _ensure_model_dispatcher(self) -> None:
         if self._model_dispatch_task is None or self._model_dispatch_task.done():

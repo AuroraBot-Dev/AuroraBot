@@ -9,12 +9,13 @@ import pytest
 
 from aurora import runtime as composition
 from src.contracts.configuration import DashboardPreference, McpPreference, PlatformPreference
-from src.platform import PlatformHandle
+from src.contracts.platform import PlatformHandle
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from src.contracts.platform import PlatformServer
     from src.contracts.tool import ToolExecutorBinding
     from src.localhost.runtime import AuroraRuntime
 
@@ -76,7 +77,11 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
     runtime = _Runtime(configuration, events)
     monkeypatch.setattr(composition, "get_config", lambda: configuration)
     monkeypatch.setattr(composition, "configure_logging", lambda *_args: events.append("logging"))
-    monkeypatch.setattr(composition, "configure_console_logging", lambda **_kwargs: events.append("terminal"))
+    monkeypatch.setattr(
+        composition,
+        "configure_console_logging",
+        lambda **kwargs: events.append(f"terminal:{kwargs['enabled']}"),
+    )
     monkeypatch.setattr(composition, "_create_runtime", lambda _configuration: runtime)
     debug = object()
     monkeypatch.setattr(composition, "_debug_server", lambda _runtime: debug)
@@ -101,8 +106,8 @@ def test_headless_runtime_composes_one_owner_and_shuts_down(monkeypatch: pytest.
 
     asyncio.run(composition.run_runtime(None, headless=True, stop_event=asyncio.Event()))
 
-    assert events == ["logging", "terminal", "process-tasks", "runtime-loop", "runtime-shutdown"]
-    assert runtime.engine.bindings is None
+    assert events == ["logging", "terminal:False", "process-tasks", "runtime-loop", "runtime-shutdown"]
+    assert runtime.engine.bindings == ()
     assert runtime.stop_requester is None
 
 
@@ -155,13 +160,19 @@ def test_start_platforms_uses_unified_creators(monkeypatch: pytest.MonkeyPatch) 
     """平台通过统一的 _init_platforms → _create 协议创建，无需特判。"""
     events: list[str] = []
 
+    async def dashboard_close() -> None:
+        events.append("dashboard-close")
+
+    async def mcp_close() -> None:
+        events.append("mcp-close")
+
     async def dashboard_create(config: object, rt: object) -> PlatformHandle:  # noqa: ARG001
         events.append("dashboard-create")
-        return PlatformHandle(bindings=(), cleanup=lambda: events.append("dashboard-close"), spawn=None)
+        return PlatformHandle(cleanup=dashboard_close)
 
     async def mcp_create(config: object, rt: object) -> PlatformHandle:  # noqa: ARG001
         events.append("mcp-create")
-        return PlatformHandle(bindings=(), cleanup=lambda: events.append("mcp-close"), spawn=None)
+        return PlatformHandle(cleanup=mcp_close)
 
     monkeypatch.setattr(composition, "_init_platforms", lambda: {"dashboard": dashboard_create, "mcp": mcp_create})
     configuration = SimpleNamespace(preference=_preference(frozenset({"dashboard", "mcp"})))
@@ -178,6 +189,7 @@ def test_start_platforms_uses_unified_creators(monkeypatch: pytest.MonkeyPatch) 
 
     asyncio.run(scenario())
     assert events == ["dashboard-create", "mcp-create", "mcp-close", "dashboard-close"]
+    assert runtime.engine.bindings == ()
 
 
 def test_runtime_task_failure_detection() -> None:
@@ -200,8 +212,25 @@ def test_runtime_task_failure_detection() -> None:
     asyncio.run(scenario())
 
 
-def test_platform_server_exits_gracefully_and_spawn_tasks_are_cancelled() -> None:
-    """server 通过 should_exit 优雅退出，spawn/console 后台任务直接取消。"""
+def test_failed_server_task_does_not_interrupt_cleanup() -> None:
+    class FailedServer:
+        should_exit = False
+
+    async def scenario() -> None:
+        async def fail() -> None:
+            raise RuntimeError("server failed")
+
+        server = FailedServer()
+        task = asyncio.create_task(fail())
+        await asyncio.sleep(0)
+        await composition._stop_server(cast("PlatformServer", server), task)
+        assert server.should_exit
+
+    asyncio.run(scenario())
+
+
+def test_platform_server_exits_gracefully_and_background_tasks_are_cancelled() -> None:
+    """server 通过 should_exit 优雅退出，平台后台任务直接取消。"""
     events: list[str] = []
     stop = asyncio.Event()
     runtime = _Runtime(SimpleNamespace(), events)
@@ -225,13 +254,15 @@ def test_platform_server_exits_gracefully_and_spawn_tasks_are_cancelled() -> Non
         async def serve(self) -> None:
             return None
 
-    async def spinner() -> None:
-        await asyncio.Event().wait()
+    async def spinner(stop: asyncio.Event) -> None:  # noqa: ARG001
+        try:
+            await asyncio.Event().wait()
+        finally:
+            events.append("background-cancelled")
 
     async def scenario() -> None:
         server = FakeServer()
-        spawn_task = asyncio.create_task(spinner(), name="aurora-platform-demo-spawn")
-        handle = SimpleNamespace(server=server, spawn=lambda _rt, _stop: spawn_task)
+        handle = PlatformHandle(server=server, background=spinner)
         stop_task = asyncio.create_task(asyncio.sleep(0), name="stop")
         debug_task = asyncio.create_task(asyncio.sleep(0), name="debug")
         await composition._run_platform_tasks(
@@ -243,7 +274,7 @@ def test_platform_server_exits_gracefully_and_spawn_tasks_are_cancelled() -> Non
         )
         assert server.should_exit is True
         assert server.exited is True
-        assert spawn_task.cancelled()
+        assert "background-cancelled" in events
         assert stop_task.done() and debug_task.done()
 
     asyncio.run(scenario())

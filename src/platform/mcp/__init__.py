@@ -12,30 +12,30 @@ from typing import TYPE_CHECKING
 from src.platform.mcp.adapter import MCPPlatform
 
 if TYPE_CHECKING:
-    from src.contracts.configuration import McpPreference
-    from src.platform import PlatformHandle
+    from src.contracts.agent import CapabilityCatalogSnapshot
+    from src.contracts.configuration import AuroraConfig
+    from src.contracts.platform import PlatformHandle, PlatformRuntimePort
+    from src.contracts.tool import ToolExecutorBinding
 
 __all__ = ["MCPPlatform"]
 
 
-async def _create(_config: object, runtime: object) -> "PlatformHandle":
+async def _create(config: "AuroraConfig", runtime: "PlatformRuntimePort") -> "PlatformHandle":
     """创建 MCP 平台句柄：启动所有 Server 连接、发现 Tool 并构建能力目录。"""
-    from src.platform import PlatformHandle
+    from src.contracts.platform import PlatformHandle
 
-    config = getattr(runtime, "configuration")  # noqa: B009  # type: ignore[union-attr]
-    pref: "McpPreference" = config.preference.mcp  # type: ignore[union-attr]
-    mcp = MCPPlatform(config, terminal_logs=pref.terminal_logs)  # type: ignore[arg-type]
-    catalog = await mcp.start(runtime)  # type: ignore[arg-type]
+    mcp = MCPPlatform(config, terminal_logs=config.preference.mcp.terminal_logs)
+    catalog = await mcp.start(runtime)
 
     bindings = _build_mcp_bindings(mcp, catalog)
     return PlatformHandle(
         bindings=bindings,
         cleanup=mcp.shutdown,
-        spawn=None,
+        background=mcp.run,
     )
 
 
-def _build_mcp_bindings(mcp: MCPPlatform, catalog: object) -> tuple:
+def _build_mcp_bindings(mcp: MCPPlatform, catalog: "CapabilityCatalogSnapshot") -> tuple["ToolExecutorBinding", ...]:
     """从 MCP 能力目录构建工具绑定元组。"""
     from src.contracts.tool import ToolExecutorBinding
 
@@ -46,5 +46,5 @@ def _build_mcp_bindings(mcp: MCPPlatform, catalog: object) -> tuple:
             source_app="platform.mcp",
             source_instance=mcp.source_instance_for(capability.id),
         )
-        for capability in catalog.capabilities  # type: ignore[attr-defined]
+        for capability in catalog.capabilities
     )

@@ -165,6 +165,20 @@ class DashboardConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PromptConfig:
+    """启动时加载的不可变提示词内容及来源。"""
+
+    soul: str
+    world: str
+    agents: Mapping[str, str]
+    sources: tuple[ConfigurationSource, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "agents", MappingProxyType(dict(self.agents)))
+        object.__setattr__(self, "sources", tuple(self.sources))
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     """一个显式启用的 MCP 应用路由配置。
 
@@ -175,6 +189,7 @@ class AppConfig:
             "transport": "string",
             "working_dir": "/path/to/dir" | null,
             "command": ["string", ...],
+            "env_vars": ["ENV_VAR_NAME", ...],
             "url": "string" | null,
             "auth_env": "string" | null,
             "timeout_seconds": 0.0
@@ -186,6 +201,7 @@ class AppConfig:
     transport: str
     working_dir: Path | None
     command: tuple[str, ...]
+    env_vars: tuple[str, ...]
     url: str | None
     auth_env: str | None
     timeout_seconds: float
@@ -349,6 +365,7 @@ class AuroraConfig:
             "preference": PlatformPreference,
             "logging_level": "string",
             "storage": StorageConfig,
+            "prompts": PromptConfig,
             "agents": [AgentProfile, ...],
             "model_roles": ["string", ...],
             "model_definitions": {"role": ModelRoleConfig, ...},
@@ -368,6 +385,7 @@ class AuroraConfig:
     logging_level: str
     logging_dir: Path
     storage: StorageConfig
+    prompts: PromptConfig
     agents: "tuple[AgentProfile, ...]"
     model_roles: frozenset[str]
     model_definitions: Mapping[str, ModelRoleConfig] = MappingProxyType({})

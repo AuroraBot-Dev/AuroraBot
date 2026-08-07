@@ -13,6 +13,7 @@ from src.contracts.amp import AmpEnvelope
 from src.contracts.tool import ToolExecutionRequest
 from src.platform.mcp import MCPPlatform
 from src.platform.mcp.client_manager import ClientConnection, MCPClientManager, MCPToolCallError
+from src.platform.mcp.server_kit import _subprocess_environment
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,9 +43,10 @@ class _FakeKit:
 class _FakeClients:
     def __init__(self, tools: dict[str, list[object]]) -> None:
         self.tools = tools
+        self.disconnected = asyncio.Event()
         self.notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue()
 
-    async def connect_all(self) -> None:
+    async def connect_all(self, _timeouts: dict[str, float] | None = None) -> None:
         pass
 
     async def refresh_tools(self) -> None:
@@ -55,6 +57,9 @@ class _FakeClients:
 
     async def shutdown(self) -> None:
         pass
+
+    def is_connected(self, package: str) -> bool:
+        return package in self.tools
 
 
 def _write_apps(project_root: Path, *packages: str) -> None:
@@ -87,6 +92,18 @@ def test_start_with_no_apps_has_empty_catalog(project_root: Path) -> None:
             assert platform._tool_bindings == {}
         finally:
             await platform.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_connection_loss_is_propagated_and_notification_queue_is_bounded(project_root: Path) -> None:
+    async def scenario() -> None:
+        platform = MCPPlatform(load_configuration(project_root))
+        platform._clients.disconnected.set()
+        with pytest.raises(RuntimeError, match="连接意外终止"):
+            await platform.run(asyncio.Event())
+        assert platform._clients.notification_queue.maxsize > 0
+        await platform.shutdown()
 
     asyncio.run(scenario())
 
@@ -152,6 +169,7 @@ def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Pat
         platform = MCPPlatform(load_configuration(project_root))
         platform._started = True
         platform._tool_bindings = {"com.example.alpha.send": ("com.example.alpha", "send")}
+        platform._is_connected = lambda _package: True  # type: ignore[method-assign]
         calls: list[tuple[str, str, dict[str, Any]]] = []
 
         async def accepted(package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:
@@ -178,6 +196,9 @@ def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Pat
         platform._call_tool = disconnected  # type: ignore[method-assign]
         unknown = await platform.execute_tool(request)
         assert unknown.status == "unknown" and "_ConnectionLostError" in (unknown.error or "")
+        platform._is_connected = lambda _package: False  # type: ignore[method-assign]
+        disconnected_result = await platform.execute_tool(request)
+        assert disconnected_result.status == "failed" and "未连接" in (disconnected_result.error or "")
         missing = await platform.execute_tool(ToolExecutionRequest("missing", "session", "com.example.missing", {}))
         assert missing.status == "failed"
         await platform.shutdown()
@@ -246,19 +267,17 @@ def test_notifications_preserve_events_and_normalize_methods(project_root: Path)
         ingress = _Ingress()
         platform = MCPPlatform(load_configuration(project_root))
         platform._ingress = ingress
-        await platform._handle_notification(
-            "com.example.alpha",
-            "notifications/message",
-            {
-                "logger": "aurora/event",
-                "data": {
-                    "type": "vendor.message",
-                    "session_id": "vendor-session",
-                    "summary": "Vendor event",
-                    "data": {"vendor_metadata": {"arbitrary": True}},
-                },
+        notification = {
+            "logger": "aurora/event",
+            "data": {
+                "type": "vendor.message",
+                "session_id": "vendor-session",
+                "summary": "Vendor event",
+                "data": {"vendor_metadata": {"arbitrary": True}},
             },
-        )
+        }
+        await platform._handle_notification("com.example.alpha", "notifications/message", notification)
+        await platform._handle_notification("com.example.alpha", "notifications/message", notification)
         await platform._handle_notification("com.example.alpha", "notifications/progress", {"progress": 2, "total": 3})
         await platform._handle_notification(
             "com.example.alpha",
@@ -273,14 +292,26 @@ def test_notifications_preserve_events_and_normalize_methods(project_root: Path)
                 },
             },
         )
-        assert len(ingress.values) == 2
+        assert len(ingress.values) == 3
         free_event = AmpEnvelope.parse(ingress.values[0])
         assert free_event.payload.type == "vendor.message"
-        notification = AmpEnvelope.parse(ingress.values[1])
-        assert notification.payload.type == "mcp.notification"
-        assert notification.payload.data["method"] == "notifications/progress"
+        duplicate = AmpEnvelope.parse(ingress.values[1])
+        assert duplicate.header.message_id == free_event.header.message_id
+        progress = AmpEnvelope.parse(ingress.values[2])
+        assert progress.payload.type == "mcp.notification"
+        assert progress.payload.data["method"] == "notifications/progress"
 
     asyncio.run(scenario())
+
+
+def test_stdio_environment_excludes_unapproved_secrets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PATH", "/bin")
+    monkeypatch.setenv("OPENAI_API_KEY", "secret")
+    environment = _subprocess_environment({"APP_TOKEN": "approved"}, tmp_path)
+
+    assert environment["PATH"] == "/bin"
+    assert environment["APP_TOKEN"] == "approved"
+    assert "OPENAI_API_KEY" not in environment
 
 
 def test_malformed_notification_does_not_stop_worker(project_root: Path) -> None:

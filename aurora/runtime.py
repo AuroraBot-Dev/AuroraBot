@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import inspect
 import signal
-from collections.abc import Callable
-from contextlib import AsyncExitStack, suppress
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import uvicorn
 
@@ -26,32 +24,31 @@ from src.engine.runtime import AgentEngine
 from src.localhost.api import create_debug_app
 from src.localhost.runtime import AuroraRuntime
 from src.memory.service import MemoryService
-from src.prompt import PromptComposer, load_prompt_catalog
+from src.prompt import PromptCatalog, PromptComposer
 from src.utils.logging import configure_console_logging, configure_logging, get_logger
 from src.utils.uvicorn import SignalSafeServer
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from src.contracts.configuration import AuroraConfig
-    from src.platform import PlatformHandle, PlatformServer
+    from src.contracts.platform import PlatformFactory, PlatformHandle, PlatformServer
 
 logger = get_logger("aurora.process")
 
 # -- 平台注册 ---------------------------------------------------------
 # 每个平台子包通过同名模块函数 _create(config, runtime) -> PlatformHandle 接入组合根。
 # 平台名单以 contracts 的 PLATFORM_NAMES 为准，新增平台无需修改组合根。
-_PLATFORM_CREATORS: dict[str, Callable[..., Any]] = {}
+_PLATFORM_CREATORS: dict[str, PlatformFactory] = {}
 
 
-def _init_platforms() -> dict[str, Callable[..., Any]]:
+def _init_platforms() -> dict[str, PlatformFactory]:
     """一次性导入所有平台子包并将 _create 注册到本地映射。"""
     if _PLATFORM_CREATORS:
         return _PLATFORM_CREATORS
     for name in sorted(PLATFORM_NAMES):
         module = importlib.import_module(f"src.platform.{name}")
-        if hasattr(module, "_create"):
-            _PLATFORM_CREATORS[name] = module._create  # type: ignore[attr-defined]
+        creator = getattr(module, "_create", None)
+        if creator is not None:
+            _PLATFORM_CREATORS[name] = cast("PlatformFactory", creator)
     return _PLATFORM_CREATORS
 
 
@@ -88,7 +85,7 @@ async def run_runtime(
     selected = _selected_platforms(platforms, configuration.preference)
     console_enabled = not headless and configuration.runtime.console.enabled
     configure_logging(configuration.logging_level, configuration.logging_dir / "aurora.log")
-    configure_console_logging(enabled=configuration.runtime.console.terminal_logs if console_enabled else True)
+    configure_console_logging(enabled=configuration.runtime.console.terminal_logs)
 
     runtime = _create_runtime(configuration)
     stop = stop_event or asyncio.Event()
@@ -185,8 +182,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         triage=configuration.engine.triage,
     )
     memory = MemoryService(configuration.storage.memory)
-    catalog = load_prompt_catalog(configuration.root, frozenset(profile.id for profile in profiles))
-    composer = PromptComposer(catalog)
+    composer = PromptComposer(PromptCatalog.from_config(configuration.prompts))
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     engine = AgentEngine(
@@ -220,17 +216,13 @@ async def _start_platforms(
         creator = creators.get(name)
         if creator is None:
             raise ValueError(f"no platform creator registered for {name}")
-        handle: PlatformHandle = await creator(runtime.configuration, runtime)
+        handle = await creator(runtime.configuration, runtime)
         handles[name] = handle
         all_bindings.extend(handle.bindings)
         if handle.cleanup is not None:
-            if inspect.iscoroutinefunction(handle.cleanup):
-                resources.push_async_callback(handle.cleanup)
-            else:
-                resources.callback(handle.cleanup)
+            resources.push_async_callback(handle.cleanup)
 
-    if all_bindings:
-        runtime.engine.bind_tool_executors(tuple(all_bindings))
+    runtime.engine.bind_tool_executors(tuple(all_bindings))
     return handles
 
 
@@ -243,14 +235,14 @@ async def _start_platforms_until_stop(
     """竞速启动平台与停止信号。"""
     startup = asyncio.create_task(_start_platforms(runtime, selected, resources), name="aurora-platform-startup")
     stop_task = asyncio.create_task(stop.wait(), name="aurora-startup-stop")
-    done, _pending = await asyncio.wait({startup, stop_task}, return_when=asyncio.FIRST_COMPLETED)
-    if startup in done:
-        stop_task.cancel()
-        await asyncio.gather(stop_task, return_exceptions=True)
-        return startup.result()
-    startup.cancel()
-    await asyncio.gather(startup, return_exceptions=True)
-    return None
+    try:
+        done, _pending = await asyncio.wait({startup, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+        return startup.result() if startup in done else None
+    finally:
+        for task in (startup, stop_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(startup, stop_task, return_exceptions=True)
 
 
 # -- 任务执行与停止 ----------------------------------------------------
@@ -268,8 +260,7 @@ async def _run_platform_tasks(
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
 
-    # 平台 server 由组合根统一启动，关闭时通过 should_exit 优雅退出；
-    # spawn 是平台自有的附加后台任务，关闭时直接取消。
+    # 平台 server 通过 should_exit 优雅退出；background 必须持续运行到 stop。
     servers: dict[str, PlatformServer] = {}
     server_tasks: dict[str, asyncio.Task[None]] = {}
     platform_tasks: dict[str, asyncio.Task[None]] = {}
@@ -279,11 +270,10 @@ async def _run_platform_tasks(
             task = asyncio.create_task(handle.server.serve(), name=f"aurora-platform-{name}-server")
             server_tasks[name] = task
             tasks.add(task)
-        if handle.spawn is not None:
-            task = handle.spawn(runtime, stop)
-            if task is not None:
-                platform_tasks[name] = task
-                tasks.add(task)
+        if handle.background is not None:
+            task = asyncio.create_task(handle.background(stop), name=f"aurora-platform-{name}-background")
+            platform_tasks[name] = task
+            tasks.add(task)
 
     console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
     tasks.update(task for task in (console_task,) if task is not None)
@@ -299,9 +289,9 @@ async def _run_platform_tasks(
     finally:
         stop_task.cancel()
         await asyncio.gather(stop_task, return_exceptions=True)
-        for name, task in server_tasks.items():
-            servers[name].should_exit = True
-            await _await_server_exit(task)
+        await asyncio.gather(
+            *(_stop_server(servers[name], task) for name, task in server_tasks.items()), return_exceptions=True
+        )
         pending_tasks = (
             *(task for task in platform_tasks.values()),
             *(task for task in (console_task,) if task is not None),
@@ -309,10 +299,9 @@ async def _run_platform_tasks(
         for task in pending_tasks:
             task.cancel()
         await asyncio.gather(*pending_tasks, return_exceptions=True)
-        debug_server.should_exit = True
-        await asyncio.gather(debug_task, return_exceptions=True)
+        await _stop_server(debug_server, debug_task)
         stop.set()
-        await asyncio.gather(runtime_task, return_exceptions=True)
+        await _await_task_exit(runtime_task)
 
 
 async def _wait_for_stop(stop: asyncio.Event) -> None:
@@ -329,10 +318,16 @@ def _spawn_console(runtime: AuroraRuntime, stop: asyncio.Event, *, enabled: bool
     return asyncio.create_task(run_console(runtime, runtime, stop_event=stop), name="aurora-console")
 
 
-async def _await_server_exit(task: asyncio.Task[None]) -> None:
-    """等待 server 任务优雅退出，超时后强制取消。"""
-    with suppress(TimeoutError, asyncio.CancelledError):
-        await asyncio.wait_for(asyncio.shield(task), timeout=_SERVER_GRACE_SECONDS)
+async def _stop_server(server: PlatformServer, task: asyncio.Task[None]) -> None:
+    """请求 server 退出且不让其原异常中断其他资源清理。"""
+    server.should_exit = True
+    await _await_task_exit(task)
+
+
+async def _await_task_exit(task: asyncio.Task[None]) -> None:
+    """有界等待任务退出，超时后取消并吸收原任务异常。"""
+    if not task.done():
+        await asyncio.wait({task}, timeout=_SERVER_GRACE_SECONDS)
     if not task.done():
         task.cancel()
     await asyncio.gather(task, return_exceptions=True)

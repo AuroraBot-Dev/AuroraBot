@@ -205,13 +205,14 @@ def new_amp(
     data: dict[str, Any],
     source_app: str,
     source_instance: str,
+    message_id: str | None = None,
 ) -> AmpEnvelope:
     """创建内部或平台产生的 AMP 事实。"""
     return AmpEnvelope(
         header=AmpHeader(
             protocol="amp/1.0",
             method="aurora/event",
-            message_id=str(uuid4()),
+            message_id=message_id or str(uuid4()),
             timestamp=datetime.now(UTC).isoformat(),
             source={"app": source_app, "instance": source_instance},
         ),

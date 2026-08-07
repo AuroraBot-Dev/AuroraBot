@@ -10,6 +10,7 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 4. [0203 Agent 自由与运行时边界](0203-agent-freedom-boundary.md) - Prompt 人格、模型行动自由、效果安全与资源边界
 5. [0204 Console 本地交互前端](0204-console-local-frontend.md) - Console 脱离平台抽象，改为本地渲染器，Bot 文本默认输出
 6. [0205 Agent 状态机收敛与决策链路扁平化](0205-agent-state-and-decision-thinning.md) - 删除 Command 层、Agent 等待状态派生化、Schema v8 迁移
+7. [0206 运行时组合与配置快照收敛](0206-runtime-composition-and-configuration-hardening.md) - 强类型平台生命周期、单一启动配置快照与 MCP 边界
 
 ## 规范优先级
 

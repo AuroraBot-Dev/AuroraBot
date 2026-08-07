@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from mcp.client.streamable_http import streamablehttp_client
 
@@ -36,6 +37,8 @@ class _Msg(StrEnum):
     MISSING_INPUT_SCHEMA = "MCP tool 缺少 input schema: {package}.{raw_name}"
     DUPLICATE_CAPABILITY = "MCP capability 重复: {capability}"
     REMOTE_SESSION_UNAVAILABLE = "远程 MCP 会话不可用: {package}"
+    CONNECTION_LOST = "MCP 连接意外终止"
+    MISSING_ENV = "MCP App {package} 缺少环境变量: {names}"
 
 
 @dataclass(slots=True)
@@ -43,17 +46,11 @@ class _RemoteConnection:
     """远程 Streamable HTTP MCP 连接的内部状态。"""
 
     app: AppConfig
-    """对应的 App 配置。"""
     session: _NotifiableClientSession | None = None
-    """活跃的 MCP ClientSession（连接成功时赋值）。"""
     tools: list[object] | None = None
-    """从远程 Server 获取的 Tool 列表缓存。"""
     ready: asyncio.Event | None = None
-    """连接初始化完成（成功或失败）时置位。"""
     error: BaseException | None = None
-    """连接过程中捕获的异常。"""
     task: asyncio.Task[None] | None = None
-    """后台运行的连接任务。"""
 
 
 class MCPPlatform:
@@ -81,6 +78,7 @@ class MCPPlatform:
         self._shutdown_complete = False
         self._shutdown_lock = asyncio.Lock()
         self._stop = asyncio.Event()
+        self._remote_disconnected = asyncio.Event()
         self._notification_task: asyncio.Task[None] | None = None
         self._ingress: ExternalAmpIngressPort | None = None
 
@@ -106,17 +104,16 @@ class MCPPlatform:
             raise RuntimeError(_Msg.SHUTDOWN_RESTART_DENIED)
         self._ingress = ingress
         try:
-            startup_timeout = max((app.timeout_seconds for app in self._configuration.apps), default=30.0)
-            await self._kit.start_all(
-                [self._local_spec(app) for app in self._configuration.apps if app.transport == "stdio"]
-            )
-            await asyncio.wait_for(self._clients.connect_all(), timeout=startup_timeout)
-            await asyncio.wait_for(self._clients.refresh_tools(), timeout=startup_timeout)
+            local_apps = [app for app in self._configuration.apps if app.transport == "stdio"]
+            await self._kit.start_all([self._local_spec(app) for app in local_apps])
+            await self._clients.connect_all({app.package: app.timeout_seconds for app in local_apps})
             remote_tasks = [
-                self._connect_remote(app) for app in self._configuration.apps if app.transport == "streamable_http"
+                asyncio.wait_for(self._connect_remote(app), timeout=app.timeout_seconds)
+                for app in self._configuration.apps
+                if app.transport == "streamable_http"
             ]
             if remote_tasks:
-                await asyncio.wait_for(asyncio.gather(*remote_tasks), timeout=startup_timeout)
+                await asyncio.gather(*remote_tasks)
             self._catalog = self._discover_capabilities()
             await self._start_builtin_heartbeat()
             self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
@@ -130,6 +127,23 @@ class MCPPlatform:
             len(self._catalog.capabilities),
         )
         return self._catalog
+
+    async def run(self, stop: asyncio.Event) -> None:
+        """监视已建立连接；连接意外结束时让组合根关闭进程。"""
+        waiters = {
+            asyncio.create_task(stop.wait()),
+            asyncio.create_task(self._clients.disconnected.wait()),
+            asyncio.create_task(self._remote_disconnected.wait()),
+        }
+        try:
+            await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            if not stop.is_set():
+                raise RuntimeError(_Msg.CONNECTION_LOST)
+        finally:
+            for task in waiters:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
@@ -160,6 +174,10 @@ class MCPPlatform:
         为内置时钟应用注入心跳节律参数（由运行时 autonomy 配置控制）。
         """
         environment = {"AURORA_APP_DATA_DIR": str(self._configuration.storage.apps)}
+        missing = [name for name in app.env_vars if name not in os.environ]
+        if missing:
+            raise RuntimeError(_Msg.MISSING_ENV.format(package=app.package, names=", ".join(missing)))
+        environment.update({name: os.environ[name] for name in app.env_vars})
         if app.package == "org.aurora.clock":
             autonomy = self._configuration.engine.autonomy
             environment.update(
@@ -250,6 +268,8 @@ class MCPPlatform:
                 connection.ready.set()
         finally:
             connection.session = None
+            if not self._stop.is_set():
+                self._remote_disconnected.set()
 
     def _discover_capabilities(self) -> CapabilityCatalogSnapshot:
         """扫描所有已连接 App 的 Tool 列表，构建统一能力目录。
@@ -304,6 +324,8 @@ class MCPPlatform:
                 ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error=f"未知的 MCP capability: {request.capability}"
             )
         package, raw_name = binding
+        if not self._is_connected(package):
+            return ToolOutcome(ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error=f"MCP App 未连接: {package}")
         try:
             result = await self._call_tool(package, raw_name, request.parameters)
         except Exception as error:
@@ -348,6 +370,11 @@ class MCPPlatform:
             timeout_seconds=self._app_timeout(package),
         )
 
+    def _is_connected(self, package: str) -> bool:
+        """检查本地或远程 App 是否仍有活跃会话。"""
+        remote = self._remote.get(package)
+        return remote.session is not None if remote is not None else self._clients.is_connected(package)
+
     def _app_timeout(self, package: str) -> float:
         """查询指定 App 的配置超时秒数。"""
         return next(app.timeout_seconds for app in self._configuration.apps if app.package == package)
@@ -374,6 +401,7 @@ class MCPPlatform:
         """
         if self._ingress is None or not any(app.package == package for app in self._configuration.apps):
             return
+        message_id: str | None = None
         if method == "notifications/message" and params.get("logger") == "aurora/event":
             raw_event = params.get("data")
             if not isinstance(raw_event, dict):
@@ -393,6 +421,10 @@ class MCPPlatform:
                 return
             if not isinstance(data, dict):
                 return
+            identity = raw_event.get("idempotency_key")
+            if not isinstance(identity, str) or not identity:
+                identity = json.dumps(raw_event, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+            message_id = str(uuid5(NAMESPACE_URL, f"aurora-mcp-event:{package}:{identity}"))
         else:
             if not isinstance(method, str) or not method or not isinstance(params, dict):
                 return
@@ -407,6 +439,7 @@ class MCPPlatform:
             data=data,
             source_app=package,
             source_instance=f"mcp:{package}",
+            message_id=message_id,
         )
         await self._ingress.submit_amp(event.to_dict())
 
@@ -438,16 +471,7 @@ class MCPPlatform:
 
 
 def _tool_result(result: object) -> dict[str, object]:
-    """将 MCP Tool 调用结果转换为统一的字典格式。
-
-    提取 content 中的文本内容，序列化结构化数据，并保留 isError 标记。
-
-    Args:
-        result: MCP SDK 的 Tool 调用返回值。
-
-    Returns:
-        包含 ``is_error``、``text``、``content``、``structured_content`` 的字典。
-    """
+    """将 MCP Tool 调用结果转换为统一字典。"""
     content = getattr(result, "content", [])
     text = "\n".join(str(value) for item in content if (value := getattr(item, "text", None)) is not None)
     return {

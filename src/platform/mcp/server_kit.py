@@ -24,6 +24,22 @@ if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
 
 logger = get_logger("MCPServerKit")
+_INHERITED_ENV = frozenset(
+    {
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOCALAPPDATA",
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "USERPROFILE",
+        "WINDIR",
+        "XDG_CACHE_HOME",
+    }
+)
 
 
 class _Msg(StrEnum):
@@ -61,6 +77,14 @@ def _ensure_tempdir() -> Path:
     logger.debug("系统 TEMP 不可写，回退使用 CWD: %s", cwd)
     tempfile.tempdir = str(cwd)
     return cwd
+
+
+def _subprocess_environment(extra: dict[str, str], temp_dir: Path) -> dict[str, str]:
+    """只继承进程启动所需环境，并叠加 App 显式授权的变量。"""
+    environment = {name: os.environ[name] for name in _INHERITED_ENV if name in os.environ}
+    environment.update({"TEMP": str(temp_dir), "TMP": str(temp_dir), "TMPDIR": str(temp_dir)})
+    environment.update(extra)
+    return environment
 
 
 @dataclass(slots=True)
@@ -127,14 +151,14 @@ class MCPServerKit:
         if not spec.command:
             raise RuntimeError(_Msg.NO_COMMAND.format(key=spec.key))
 
-        _ensure_tempdir()
+        temp_dir = _ensure_tempdir()
 
         try:
             process = await asyncio.create_subprocess_exec(
                 *spec.command,
                 *spec.args,
                 cwd=str(spec.directory) if spec.directory else None,
-                env={**os.environ, **spec.env},
+                env=_subprocess_environment(spec.env, temp_dir),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

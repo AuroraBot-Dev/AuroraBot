@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from src.platform.mcp.server_kit import MCPServerKit
 
 logger = get_logger("MCPClientManager")
+_NOTIFICATION_QUEUE_SIZE = 256
 
 
 class _Msg(StrEnum):
@@ -146,9 +147,11 @@ class MCPClientManager:
         self._server_kit = server_kit
         self._connections: dict[str, ClientConnection] = {}
         self._stop_event = asyncio.Event()
+        self.disconnected = asyncio.Event()
         self._notification_handlers: dict[str, list[NotificationHandler]] = {}
-        # 通知队列：EventBridge 从此队列消费
-        self._notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue()
+        self._notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue(
+            _NOTIFICATION_QUEUE_SIZE
+        )
 
     @property
     def connections(self) -> dict[str, ClientConnection]:
@@ -182,12 +185,16 @@ class MCPClientManager:
 
     # ── 连接管理 ──
 
-    async def connect_all(self) -> None:
+    async def connect_all(self, timeouts: dict[str, float] | None = None) -> None:
         """建立与所有运行中 MCP Server 的客户端连接。"""
         for key, server_proc in self._server_kit.processes.items():
             if key in self._connections:
                 continue
-            await self._connect_one(key, server_proc)
+            connection = self._connect_one(key, server_proc)
+            if timeouts is None:
+                await connection
+            else:
+                await asyncio.wait_for(connection, timeout=timeouts[key])
 
     async def _connect_one(self, key: str, server_proc: object) -> None:
         """建立到 ServerKit 已启动进程的单个 MCP 连接。"""
@@ -249,6 +256,8 @@ class MCPClientManager:
             conn.ready_event.set()
             if self._connections.get(key) is conn:
                 self._connections.pop(key, None)
+            if not self._stop_event.is_set():
+                self.disconnected.set()
             logger.info("MCP Client 已断开: %s (%s)", server_proc.spec.name, key)
 
     async def _run_stdio_session(
@@ -424,6 +433,11 @@ class MCPClientManager:
     def list_all_tools(self) -> dict[str, list[MCPTool]]:
         """列出所有已缓存的工具。"""
         return {key: list(conn.tools) for key, conn in self._connections.items()}
+
+    def is_connected(self, server_key: str) -> bool:
+        """返回指定 Server 是否仍有活跃会话。"""
+        connection = self._connections.get(server_key)
+        return connection is not None and connection.session is not None
 
     async def call_tool(
         self,

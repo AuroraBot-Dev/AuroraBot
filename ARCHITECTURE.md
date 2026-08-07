@@ -399,12 +399,12 @@ utils/
 
 ```
 config/
-  __init__.py        # init(root, profile) / get() → AuroraConfig / reload() / subscribe()
+  __init__.py        # init(root, profile) / get() → AuroraConfig
+  files.py           # TOML/Markdown 文件读取与 SHA-256 来源快照
   loader.py          # 按包名加载所有 config/*.toml，合并为单一不可变快照
+  prompts.py         # prompts.toml 与 Markdown 内容快照
   sections.py        # TOML 各节解析函数（_parse_agent_runtime, _parse_preference 等）
-  registry.py        # 配置注册中心：get() / init() / reload() / subscribe() / unsubscribe()
-  validator.py       # 未知键、类型不匹配、无效引用启动前失败
-  hot_reload.py      # 文件监听 + subscriber 通知
+  registry.py        # 配置注册中心：get() / init()
 ```
 
 加载的文件（一个包一个文件）：
@@ -417,7 +417,7 @@ config/
 | `platforms.toml` | platform     | `PlatformsConfig` (per-platform settings)      |
 | `agents.toml`    | agents       | `AgentsConfig` (profiles, capabilities)        |
 | `apps.toml`      | platform/mcp | `AppsConfig` (MCP connections)                 |
-| `prompts.toml`   | prompt       | `PromptsConfig` (fragment paths)               |
+| `prompts.toml`   | prompt       | `PromptConfig` (fragment content and sources)  |
 | `logging.toml`   | utils        | `LoggingConfig` (level, log_dir)               |
 | `storage.toml`   | 跨包         | `StorageConfig` (data_root, per-package paths) |
 
@@ -435,10 +435,9 @@ config/
 
 ```
 prompt/
-  __init__.py        # PromptComposer, load_prompt_catalog
-  models.py          # PromptSource, PromptCatalog — 从 prompts.toml 加载的不可变片段集合（含 CHANNEL_LABELS 等文本常量）
+  __init__.py        # PromptCatalog, PromptComposer
+  models.py          # PromptCatalog — 从启动配置快照构造的不可变片段集合
   composer.py        # PromptComposer — 从 AgentContext 装配 PromptDocument
-  loader.py          # load_prompt_catalog — TOML 提示词加载器
 ```
 
 **关键约束**：
@@ -738,7 +737,6 @@ localhost/
     log.py            # /log — 控制终端日志级别
     quit.py           # /quit — 优雅停止进程
     help.py           # /help — 显示命令列表
-    reload.py         # /reload — 配置热重载（待实现）
 ```
 
 > 注：`command_types.py` 和 `ports.py`（原 localhost 中的 DTO/Protocol）迁移到 `contracts/event.py` 和 `contracts/ports.py`。`tool_dispatcher.py` 迁移到 `engine/`——工具调度是热路径操作，属于引擎职责。`autonomy.py` 暂移除——自主额度等高可用性功能延后。
@@ -803,7 +801,7 @@ aurora/
 ```
 run_runtime():
   1. 加载配置           → get_config()
-  2. 创建 PromptComposer → load_prompt_catalog() + PromptComposer()
+  2. 创建 PromptComposer → PromptCatalog.from_config() + PromptComposer()
   3. 创建 MemoryService  → MemoryService(memory_dir)    # 自动服务
   4. 创建 TriagePolicy   → StructuredTriagePolicy(config.engine.triage)
   5. 创建主动能力        → DelegationCapability, WaitCapability, SpeechCapability
@@ -1033,5 +1031,5 @@ log_dir = "logs"
 - 一个配置文件对应一个包职责，不交叉覆盖
 - 密钥仅来自环境变量，TOML 只声明环境变量名
 - 除 `AURORA_PROFILE` 外，环境变量不得静默覆盖 TOML
-- `src.config` 集中持有：`init(root, profile)` 在进程早期加载，`get()` 零参数获取不可变快照，支持 `reload()` 重载
+- `src.config` 集中持有：`init(root, profile)` 在进程早期加载，`get()` 零参数获取不可变快照；配置变更通过重启生效
 - 模块导入不得隐式读取配置或创建运行目录

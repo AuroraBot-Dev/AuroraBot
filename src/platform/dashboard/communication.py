@@ -179,21 +179,18 @@ class DashboardCommunication:
 
         含幂等性检查、验证、持久化和发布流程。
         """
-        existing = await asyncio.to_thread(
-            self._store.fetch_one, "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request.request_id,)
-        )
-        if existing is not None:
-            return self._tool_outcome(existing, request)
-
         error = self._validate_tool(request)
         text = request.parameters.get("text")
         now = await asyncio.to_thread(utc_now)
-        await asyncio.to_thread(
-            self._store.execute,
-            "INSERT INTO dashboard_tool_requests(request_id, request_digest, text, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, 'dispatch_started', ?, ?)",
-            (request.request_id, _request_digest(request), text if isinstance(text, str) else "", now, now),
+        record, created_request = await asyncio.to_thread(
+            self._store.begin_tool_request,
+            request.request_id,
+            _request_digest(request),
+            text if isinstance(text, str) else "",
+            now,
         )
+        if not created_request:
+            return self._tool_outcome(record, request)
         if error is not None:
             return await self._finish_failure(request.request_id, error)
 
@@ -206,22 +203,16 @@ class DashboardCommunication:
             return await self._finish_failure(request.request_id, "已配置的 Dashboard 所有者不可用")
         owner_id = int(owner["id"])
         message_id = str(uuid5(NAMESPACE_URL, f"aurora-dashboard-tool:{request.request_id}"))
+        summary = "Dashboard 消息已发送"
         message_row, created = await asyncio.to_thread(
-            self._store.create_message,
-            client_message_id=message_id,
+            self._store.complete_tool_message,
+            request_id=request.request_id,
+            message_id=message_id,
             sender_id=self._bot_id(),
             receiver_id=owner_id,
-            message_type="text",
-            content=str(text),
-            attachment_id=None,
-            source_tool_request_id=request.request_id,
-        )
-        summary = "Dashboard 消息已发送"
-        await asyncio.to_thread(
-            self._store.execute,
-            "UPDATE dashboard_tool_requests SET status = 'succeeded', summary = ?, external_message_id = ?, "
-            "updated_at = ? WHERE request_id = ?",
-            (summary, message_id, await asyncio.to_thread(utc_now), request.request_id),
+            text=str(text),
+            summary=summary,
+            now=await asyncio.to_thread(utc_now),
         )
         if created:
             await self._publish(owner_id, {"type": "private_message", "message": self._message(message_row)})

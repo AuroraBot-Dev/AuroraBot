@@ -8,6 +8,7 @@ enabled = false
 transport = "stdio"
 working_dir = "src/apps/aurora-app-clock"
 command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
+env = []
 timeout_seconds = 30
 
 # Windows-MCP：Windows 桌面自动化（截屏、鼠标键盘、窗口控制等）
@@ -17,6 +18,7 @@ enabled = false
 transport = "stdio"
 working_dir = "extensions/apps/Windows-MCP"
 command = ["uv", "run", "windows-mcp", "serve"]
+env = []
 timeout_seconds = 60
 
 # Aurora-QQ：通过 OneBot 11 / NapCat 提供 QQ 消息、联系人和群管理能力
@@ -26,4 +28,5 @@ enabled = true
 transport = "stdio"
 working_dir = "extensions/apps/Aurora-QQ"
 command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
+env = []
 timeout_seconds = 60

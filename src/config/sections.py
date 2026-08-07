@@ -7,7 +7,7 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
-from src.config.helpers import _positive_number, _require_keys, _require_subset, _string, _table
+from src.config.helpers import _positive_number, _require_keys, _string, _table
 from src.contracts.agent import AgentLimits, AgentProfile, TaskLimits
 from src.contracts.configuration import (
     PLATFORM_NAMES,
@@ -245,6 +245,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
             "transport",
             "working_dir",
             "command",
+            "env",
             "url",
             "auth_env",
             "timeout_seconds",
@@ -265,10 +266,17 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0 or not isfinite(timeout):
             raise ConfigurationError(_Msg.APP_TIMEOUT_POSITIVE)
         command = raw.get("command", [])
+        env_vars = raw.get("env", [])
         working_dir = raw.get("working_dir")
         url = raw.get("url")
         auth_env = raw.get("auth_env")
         parsed_auth_env = _string(auth_env, "app.auth_env") if auth_env is not None else None
+        if (
+            not isinstance(env_vars, list)
+            or len(env_vars) != len(set(env_vars))
+            or not all(isinstance(item, str) and item.isidentifier() for item in env_vars)
+        ):
+            raise ConfigurationError("app.env must contain unique environment variable names")
         if transport == "stdio":
             if (
                 not isinstance(command, list)
@@ -292,6 +300,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
                     transport=transport,
                     working_dir=(root / working_dir).resolve() if isinstance(working_dir, str) else None,
                     command=tuple(command) if isinstance(command, list) else (),
+                    env_vars=tuple(env_vars),
                     url=url if isinstance(url, str) else None,
                     auth_env=parsed_auth_env,
                     timeout_seconds=float(timeout),
@@ -401,8 +410,22 @@ def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
     _require_keys(platform, set(PLATFORM_NAMES), "platform")
     dashboard = _table(platform["dashboard"], "platform.dashboard")
     mcp = _table(platform["mcp"], "platform.mcp")
-    _require_subset(dashboard, {"enabled", "open_browser"}, "platform.dashboard")
-    _require_subset(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
+    _require_keys(
+        dashboard,
+        {
+            "enabled",
+            "open_browser",
+            "host",
+            "port",
+            "max_upload_bytes",
+            "session_ttl_seconds",
+            "allowed_origins",
+            "owner",
+            "bot",
+        },
+        "platform.dashboard",
+    )
+    _require_keys(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
 
     def _bool(value: object, label: str) -> bool:
         if not isinstance(value, bool):

@@ -7,6 +7,7 @@ import pytest
 
 from src.agents.capabilities.delegate import DELEGATE_TOOL, DelegationCapability
 from src.agents.handler import ToolAgent, _collect_tool_definitions
+from src.config.loader import load_configuration
 from src.contracts.agent import (
     AgentContext,
     AgentInstance,
@@ -19,9 +20,10 @@ from src.contracts.agent import (
     TaskStatus,
     capability_tool_definition,
 )
+from src.contracts.configuration import ConfigurationError
 from src.contracts.memory import MemoryContextSnapshot
 from src.contracts.model import ModelContinuation, ModelResult, ModelUsage, ToolCall
-from src.prompt import PromptCatalog, PromptComposer, PromptConfigurationError, load_prompt_catalog
+from src.prompt import PromptCatalog, PromptComposer
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -114,7 +116,7 @@ def _context() -> AgentContext:
 
 
 def test_prompt_catalog_loads_all_fragments_as_an_immutable_snapshot(project_root: Path) -> None:
-    catalog = load_prompt_catalog(project_root, frozenset({"builtin.gate", "builtin.worker"}))
+    catalog = PromptCatalog.from_config(load_configuration(project_root).prompts)
     assert catalog.soul
     assert catalog.world
     assert set(catalog.agents) == {"builtin.gate", "builtin.worker"}
@@ -126,15 +128,17 @@ def test_prompt_catalog_loads_all_fragments_as_an_immutable_snapshot(project_roo
 
 
 def test_prompt_catalog_requires_an_exact_agent_mapping(project_root: Path) -> None:
-    with pytest.raises(PromptConfigurationError, match=r"missing=.*unknown"):
-        load_prompt_catalog(project_root, frozenset({"builtin.gate", "builtin.worker", "unknown"}))
+    manifest = project_root / "config" / "prompts.toml"
+    manifest.write_text(manifest.read_text(encoding="utf-8").replace('"builtin.worker"', '"unknown"'), encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="profiles do not match"):
+        load_configuration(project_root)
 
 
 def test_prompt_catalog_rejects_unknown_top_level_toml_keys(project_root: Path) -> None:
     manifest = project_root / "config" / "prompts.toml"
     manifest.write_text(f"{manifest.read_text(encoding='utf-8')}\n[unknown]\nvalue = true\n", encoding="utf-8")
-    with pytest.raises(PromptConfigurationError, match="exactly system and agent"):
-        load_prompt_catalog(project_root, frozenset({"builtin.gate", "builtin.worker"}))
+    with pytest.raises(ConfigurationError, match="system and agent"):
+        load_configuration(project_root)
 
 
 def test_prompt_catalog_requires_distinct_markdown_fragments(project_root: Path) -> None:
@@ -150,20 +154,20 @@ world = "prompts/SOUL.md"
 """,
         encoding="utf-8",
     )
-    with pytest.raises(PromptConfigurationError, match="distinct files"):
-        load_prompt_catalog(project_root, frozenset({"builtin.gate", "builtin.worker"}))
+    with pytest.raises(ConfigurationError, match="distinct files"):
+        load_configuration(project_root)
 
 
 def test_prompt_catalog_rejects_non_markdown_and_outside_fragments(project_root: Path) -> None:
     manifest = project_root / "config" / "prompts.toml"
     text = manifest.read_text(encoding="utf-8")
     manifest.write_text(text.replace("WORLD.md", "WORLD.txt"), encoding="utf-8")
-    with pytest.raises(PromptConfigurationError, match="Markdown"):
-        load_prompt_catalog(project_root, frozenset({"builtin.gate", "builtin.worker"}))
+    with pytest.raises(ConfigurationError, match="Markdown"):
+        load_configuration(project_root)
 
     manifest.write_text(text.replace("prompts/WORLD.md", "../outside.md"), encoding="utf-8")
-    with pytest.raises(PromptConfigurationError, match="inside config"):
-        load_prompt_catalog(project_root, frozenset({"builtin.gate", "builtin.worker"}))
+    with pytest.raises(ConfigurationError, match="under config"):
+        load_configuration(project_root)
 
 
 def test_prompt_document_has_stable_layers_and_context() -> None:

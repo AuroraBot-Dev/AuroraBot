@@ -7,16 +7,17 @@ agents/apps，最后由 ``load_configuration`` 做跨段引用校验与组装。
 from __future__ import annotations
 
 import copy
-import hashlib
 import os
-import tomllib
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
+from src.config.files import read_toml_snapshot
 from src.config.helpers import _require_keys, _string
+from src.config.prompts import load_prompts
 from src.config.sections import (
     _parse_agent_runtime,
     _parse_agents,
@@ -48,8 +49,6 @@ if TYPE_CHECKING:
 class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
 
-    FILE_NOT_FOUND = "configuration file does not exist: {path}"
-    INVALID_TOML = "invalid TOML in {path}: {error}"
     PROFILE_TYPE_MISMATCH = "profile type mismatch at {key}"
     RUNTIME_MUST_BE_TABLE = "runtime must be a table"
     NO_PROFILE_SELECTED = "no profile selected"
@@ -83,19 +82,8 @@ class _Msg(StrEnum):
     ROOT_PROFILE_NOT_CONFIGURED = "engine.agents.root_profile is not configured"
     WORKER_PROFILE_NOT_CONFIGURED = "engine.agents.worker_profile is not configured"
     WORKSPACE_MISMATCH = "engine.workspace must match storage.engine"
-
-
-def _read_toml_snapshot(path: Path) -> tuple[dict[str, Any], ConfigurationSource]:
-    """读取 TOML 文件并返回解析数据和配置来源快照。"""
-    path = path.resolve()
-    try:
-        content = path.read_bytes()
-        data = tomllib.loads(content.decode("utf-8"))
-    except FileNotFoundError as error:
-        raise ConfigurationError(_Msg.FILE_NOT_FOUND.format(path=path)) from error
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-        raise ConfigurationError(_Msg.INVALID_TOML.format(path=path, error=error)) from error
-    return data, ConfigurationSource(path=path, sha256=hashlib.sha256(content).hexdigest())
+    PROFILE_NAME_INVALID = "profile must be a simple name"
+    PROFILE_VALUE_MISMATCH = "profile file runtime.profile must match the selected profile"
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -116,7 +104,7 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
 
 def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], profile: str | None) -> RuntimeConfig:
     """加载 runtime.toml，合并 profile 覆盖并校验运行时配置。"""
-    runtime_data, runtime_source = _read_toml_snapshot(config_dir / "runtime.toml")
+    runtime_data, runtime_source = read_toml_snapshot(config_dir / "runtime.toml")
     sources.append(runtime_source)
     _require_keys(runtime_data, {"runtime"}, "runtime.toml")
     runtime_raw = runtime_data.get("runtime", {})
@@ -126,11 +114,13 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     selected_profile = profile or os.environ.get("AURORA_PROFILE") or runtime_raw.get("profile")
     if not isinstance(selected_profile, str) or not selected_profile:
         raise ConfigurationError(_Msg.NO_PROFILE_SELECTED)
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", selected_profile) is None:
+        raise ConfigurationError(_Msg.PROFILE_NAME_INVALID)
 
     profile_path = config_dir / "profiles" / f"{selected_profile}.toml"
     if not profile_path.exists():
         raise ConfigurationError(_Msg.PROFILE_NOT_FOUND.format(profile=selected_profile))
-    profile_data, profile_source = _read_toml_snapshot(profile_path)
+    profile_data, profile_source = read_toml_snapshot(profile_path)
     _require_keys(profile_data, {"runtime"}, "profile")
     merged_runtime = _merge(runtime_data, profile_data)
     sources.append(profile_source)
@@ -142,9 +132,11 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     required_runtime = set(runtime_allowed)
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
         raise ConfigurationError(_Msg.RUNTIME_UNSUPPORTED_KEYS)
+    if runtime_raw["profile"] != selected_profile:
+        raise ConfigurationError(_Msg.PROFILE_VALUE_MISMATCH)
 
     debug_port = runtime_raw["debug_port"]
-    if not isinstance(debug_port, int) or not 1 <= debug_port <= 65535:
+    if not isinstance(debug_port, int) or isinstance(debug_port, bool) or not 1 <= debug_port <= 65535:
         raise ConfigurationError(_Msg.DEBUG_PORT_INVALID)
     debug_host = _string(runtime_raw["debug_host"], "runtime.debug_host")
     if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
@@ -166,7 +158,7 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
 
 def _load_engine_raw(config_dir: Path, sources: list[ConfigurationSource]) -> dict[str, Any]:
     """加载 engine.toml 并校验顶层结构；profile 不得覆盖此文件。"""
-    engine_data, engine_source = _read_toml_snapshot(config_dir / "engine.toml")
+    engine_data, engine_source = read_toml_snapshot(config_dir / "engine.toml")
     sources.append(engine_source)
     _require_keys(engine_data, {"engine"}, "engine.toml")
     engine_raw = engine_data.get("engine", {})
@@ -182,7 +174,7 @@ def _load_models(
     config_dir: Path, sources: list[ConfigurationSource]
 ) -> tuple[dict[str, ModelRoleConfig], dict[str, ModelProviderConfig], ModelLoggingConfig]:
     """加载 models.toml，解析角色、提供商与日志开关。"""
-    models_data, models_source = _read_toml_snapshot(config_dir / "models.toml")
+    models_data, models_source = read_toml_snapshot(config_dir / "models.toml")
     sources.append(models_source)
     _require_keys(models_data, {"models"}, "models.toml")
     models_raw = models_data.get("models", {})
@@ -270,8 +262,8 @@ class _StorageSnapshot:
 
 def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSource]) -> _StorageSnapshot:
     """加载 logging.toml 与 storage.toml，校验所有存储路径沙箱与互不重叠。"""
-    logging_data, logging_source = _read_toml_snapshot(config_dir / "logging.toml")
-    storage_data, storage_source = _read_toml_snapshot(config_dir / "storage.toml")
+    logging_data, logging_source = read_toml_snapshot(config_dir / "logging.toml")
+    storage_data, storage_source = read_toml_snapshot(config_dir / "storage.toml")
     sources.extend((logging_source, storage_source))
     logging_raw = logging_data.get("logging", {})
     storage_raw = storage_data.get("storage", {})
@@ -351,11 +343,12 @@ _PACKAGE_STORAGE_CONTAINS: dict[str, frozenset[str]] = {
 
 def _validate_package_directories(package_directories: dict[str, Path]) -> None:
     """校验各包数据目录互不重叠，仅允许声明过的祖先包含关系。"""
-    for label, directory in package_directories.items():
-        for other_label, other in package_directories.items():
-            if other_label == label or not (
-                directory == other or directory.is_relative_to(other) or other.is_relative_to(directory)
-            ):
+    paths = list(package_directories.items())
+    for index, (label, directory) in enumerate(paths):
+        for other_label, other in paths[index + 1 :]:
+            if directory == other:
+                raise ConfigurationError(_Msg.PACKAGE_STORAGE_OVERLAP)
+            if not (directory.is_relative_to(other) or other.is_relative_to(directory)):
                 continue
             if label in _PACKAGE_STORAGE_CONTAINS[other_label] or other_label in _PACKAGE_STORAGE_CONTAINS[label]:
                 continue
@@ -370,7 +363,7 @@ def _load_platforms(
     engine_dir: Path,
 ) -> tuple[PlatformPreference, DashboardConfig]:
     """加载 platforms.toml，解析平台偏好与 Dashboard 配置。"""
-    platforms_data, platforms_source = _read_toml_snapshot(config_dir / "platforms.toml")
+    platforms_data, platforms_source = read_toml_snapshot(config_dir / "platforms.toml")
     sources.append(platforms_source)
     _require_keys(platforms_data, {"platform"}, "platforms.toml")
     platform_raw = platforms_data.get("platform")
@@ -392,8 +385,8 @@ def _load_agents_apps(
     roles: frozenset[str],
 ) -> tuple[tuple[AgentProfile, ...], tuple[AppConfig, ...]]:
     """加载 agents.toml 与 apps.toml，解析 Agent 档案与应用路由。"""
-    agents_data, agents_source = _read_toml_snapshot(config_dir / "agents.toml")
-    apps_data, apps_source = _read_toml_snapshot(config_dir / "apps.toml")
+    agents_data, agents_source = read_toml_snapshot(config_dir / "agents.toml")
+    apps_data, apps_source = read_toml_snapshot(config_dir / "apps.toml")
     sources.extend((agents_source, apps_source))
     agents = _parse_agents(agents_data, roles)
     _require_keys(apps_data, {"app"}, "apps.toml")
@@ -422,6 +415,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         engine_dir=storage_snapshot.engine_dir,
     )
     agents, apps = _load_agents_apps(config_dir, sources, root=root, roles=roles)
+    prompts = load_prompts(config_dir, sources, frozenset(agent.id for agent in agents))
 
     # 解析运行时子配置
     autonomy_raw = engine_raw.get("autonomy", {})
@@ -469,6 +463,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         logging_level=storage_snapshot.level,
         logging_dir=storage_snapshot.log_dir,
         storage=storage_snapshot.storage,
+        prompts=prompts,
         agents=agents,
         model_roles=roles,
         model_definitions=MappingProxyType(model_definitions),

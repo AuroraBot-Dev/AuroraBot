@@ -44,6 +44,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
             assert status.ok and status.data is not None
             assert help_result.ok and "/event" in (help_result.text or "")
+            assert "/reload" not in (help_result.text or "")
             assert not unknown.ok
             assert not invalid.ok and "用法" in (invalid.text or "")
             assert not invalid_quote.ok
@@ -101,6 +102,20 @@ def test_runtime_shutdown_request_and_idempotent_conversation(project_root: Path
         assert stopped
         assert first.message_id == second.message_id
         assert len(pumped["admitted_task_ids"]) == 1
+        await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_stop_event_wakes_idle_runtime_immediately(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = create_test_runtime(project_root)
+        runtime.engine._idle_wait_seconds = 60
+        stop = asyncio.Event()
+        task = asyncio.create_task(runtime.run_forever(stop))
+        await asyncio.sleep(0)
+        stop.set()
+        await asyncio.wait_for(task, timeout=1)
         await runtime.shutdown()
 
     asyncio.run(scenario())

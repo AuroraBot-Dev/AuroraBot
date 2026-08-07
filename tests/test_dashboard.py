@@ -19,6 +19,7 @@ from src.platform.dashboard import (
     ChatError,
     ChatService,
     DashboardPlatform,
+    _create,
     _open_browser_when_ready,
 )
 from tests.support import create_test_runtime
@@ -97,8 +98,12 @@ def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
 def test_only_owner_can_trigger_bot_and_attachments_are_rejected(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
-        chat = await _started_chat(runtime)
+        handle = await _create(runtime.configuration, runtime)
+        platform = cast("DashboardPlatform", handle.bindings[0].executor)
+        chat = platform._chat
         try:
+            token_path = runtime.configuration.dashboard.database_path.parent / "Token.txt"
+            assert token_path.stat().st_mode & 0o777 == 0o600
             owner = await _owner(chat)
             owner_id = _user_id(owner)
             bot = next(item for item in await chat.list_users(owner_id) if item["is_bot"])
@@ -143,7 +148,9 @@ def test_only_owner_can_trigger_bot_and_attachments_are_rejected(project_root: P
 def test_dashboard_owner_input_is_idempotent_amp(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
-        chat = await _started_chat(runtime)
+        handle = await _create(runtime.configuration, runtime)
+        platform = cast("DashboardPlatform", handle.bindings[0].executor)
+        chat = platform._chat
         try:
             owner = await _owner(chat)
             owner_id = _user_id(owner)
@@ -191,7 +198,13 @@ def test_independent_localhost_debug_app_drives_and_queries_engine(project_root:
 def test_browser_opens_once_server_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     """浏览器在 server 就绪后打开一次，地址按 Dashboard 配置格式化。"""
     opened: list[str] = []
-    monkeypatch.setattr("src.platform.dashboard.webbrowser.open", opened.append)
+    opened_event = asyncio.Event()
+
+    def record_open(url: str) -> None:
+        opened.append(url)
+        opened_event.set()
+
+    monkeypatch.setattr("src.platform.dashboard.webbrowser.open", record_open)
 
     class FakeServer:
         def __init__(self) -> None:
@@ -200,12 +213,16 @@ def test_browser_opens_once_server_ready(monkeypatch: pytest.MonkeyPatch) -> Non
 
     async def scenario() -> None:
         server = cast("SignalSafeServer", FakeServer())
+        stop = asyncio.Event()
         task = asyncio.create_task(
-            _open_browser_when_ready(server, cast("DashboardConfig", SimpleNamespace(host="::", port=8000)))
+            _open_browser_when_ready(server, cast("DashboardConfig", SimpleNamespace(host="::", port=8000)), stop)
         )
         await asyncio.sleep(0.05)
         assert opened == []
         server.started = True
+        await opened_event.wait()
+        assert not task.done()
+        stop.set()
         await asyncio.wait_for(task, timeout=1)
 
     asyncio.run(scenario())
@@ -226,6 +243,7 @@ def test_browser_aborts_when_server_stops_before_ready(monkeypatch: pytest.Monke
         _open_browser_when_ready(
             cast("SignalSafeServer", FakeServer()),
             cast("DashboardConfig", SimpleNamespace(host="127.0.0.1", port=8000)),
+            asyncio.Event(),
         )
     )
     assert opened == []

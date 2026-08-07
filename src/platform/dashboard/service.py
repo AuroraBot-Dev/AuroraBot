@@ -31,6 +31,7 @@ _ALLOWED_MIME_TYPES = {
     "application/x-zip-compressed",
     "application/octet-stream",
 }
+_SUBSCRIBER_QUEUE_SIZE = 128
 
 
 class _Msg(StrEnum):
@@ -392,7 +393,7 @@ class ChatService:
 
         若用户首次订阅则广播上线通知。
         """
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(_SUBSCRIBER_QUEUE_SIZE)
         first = not self._subscribers.get(user_id)
         self._subscribers.setdefault(user_id, set()).add(queue)
         if first:
@@ -419,6 +420,8 @@ class ChatService:
         """向指定用户的所有订阅队列发布事件，支持排除特定队列。"""
         for queue in tuple(self._subscribers.get(user_id, ())):
             if queue is not exclude_queue:
+                if queue.full():
+                    queue.get_nowait()
                 queue.put_nowait(event)
 
     async def broadcast(self, event: dict[str, Any], *, exclude: int | None = None) -> None:
