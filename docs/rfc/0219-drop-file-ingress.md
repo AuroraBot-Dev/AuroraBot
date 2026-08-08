@@ -21,7 +21,7 @@ engine 扫描摄入并分类移入 `data/engine/archive/inbox/{accepted,rejected
 2. **`persist_amp` 与 `inbox_events` 表保留**：`inbox_events` 是防抖批次与 triage 输入的核心表（RFC 0209），
    摄入路径不变（`submit_amp` → `enqueue_inbox`），仅移除文件形态的中间载体。
 3. **工作区收敛为 `data/engine/process/runtime.sqlite3`**：engine 不再创建 `inbox/` 与 `archive/`；
-   既有目录与文件不再读取（不迁移、不清理，由运维删除）。
+   既有目录与文件不再读取（不迁移、不清理，由运维删除）。（运行库路径已被 RFC 0220 上提至 `data/engine/runtime.sqlite3`）
 4. **替换 RFC 0210 中"外部 AMP 文件摄入保留"条款**（0210 §"外部 AMP 文件摄入保留（platform 写 JSON → engine 读）"）。
 
 ## 结果

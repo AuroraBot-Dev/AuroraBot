@@ -113,7 +113,7 @@ class AgentEngine:
         self._idle_wait_seconds = idle_wait_seconds
         self._workspace = Path(configuration.workspace)
         reject_active_legacy_workspace(self._workspace)
-        self.store = SQLiteRuntimeStore(self._workspace / "process" / "runtime.sqlite3")
+        self.store = SQLiteRuntimeStore(self._workspace / "runtime.sqlite3")
         self.store.initialize()
         self._tools = tool_registry if tool_registry is not None else ToolRegistry(self.store)
         self._capability_catalog: CapabilityCatalogSnapshot | None = None

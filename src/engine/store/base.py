@@ -42,7 +42,6 @@ from .models import (
     MSG_PENDING,
     MSG_PROCESSING,
     ActivityRow,
-    Base,
     CausalEventRow,
     InboxEventRow,
     MessageRow,
@@ -136,7 +135,7 @@ class RuntimeStoreBase:
         with self._engine.begin() as connection:
             current = _read_schema_version(connection)
             if current == 0:
-                Base.metadata.create_all(bind=connection, checkfirst=True)
+                migration.migrate_v0_to_current(connection)
                 _write_schema_version(connection, migration.TARGET_VERSION)
                 current = migration.TARGET_VERSION
             migrate_to(

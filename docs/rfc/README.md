@@ -24,6 +24,7 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 18. [0217 存储实现迁移](0217-storage-orm-migration.md) - SQLAlchemy 2.0 ORM 取代裸 sqlite3 手写 SQL，Schema v9 契约不变
 19. [0218 面板后端与统一操作体系](0218-panel-backend-and-operation-system.md) - ops 唯一后端路由、RESTful 资源树与命令同构、dashboard 退出平台
 20. [0219 废弃外部 AMP 文件摄入通道](0219-drop-file-ingress.md) - 移除 inbox/archive 目录与文件投递箱，摄入统一 SQLite 直连（取代 0210 保留条款）
+21. [0220 engine 运行库路径上提](0220-engine-workspace-runtime-sqlite.md) - `data/engine/runtime.sqlite3` 单一文件即运行态与终态（取代 0219 路径细节）
 
 ## 规范优先级
 

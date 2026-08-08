@@ -427,7 +427,7 @@ READY ──claim──▶ (处理中，无持久化中间态)
 
 | 载体 | 路径 | 内容 | 写入者 |
 | --- | --- | --- | --- |
-| SQLite WAL | `data/engine/process/runtime.sqlite3` | 运行态 + 终态（唯一权威） | engine store |
+| SQLite WAL | `data/engine/runtime.sqlite3` | 运行态 + 终态（唯一权威） | engine store |
 | SQLite WAL | `data/memory/memory.sqlite3` | 会话摘要/长期事实/幂等回执 | MemoryService |
 | SQLite WAL | `data/ops/panel.sqlite3` | 面板会话/附件索引 | PanelStore（RFC 0218） |
 

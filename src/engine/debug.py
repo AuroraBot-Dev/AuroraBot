@@ -28,15 +28,15 @@ class DebugStore(Protocol):
     def messages_for_agent(self, agent_id: str) -> tuple[dict[str, Any], ...]: ...
 
 
-def reject_active_legacy_workspace(process_directory: Path) -> None:
+def reject_active_legacy_workspace(workspace: Path) -> None:
     """检测并拒绝旧版 Episode/Graph 工作区中有残留数据的情况。
 
-    如果 process_directory 中存在 records 或 episodes 子目录且含有 JSON 文件，
+    如果 workspace 中存在 records 或 episodes 子目录且含有 JSON 文件，
     则抛出 RuntimeError，要求使用干净的工作区。
     """
     legacy = []
     for name in ("records", "episodes"):
-        directory = process_directory / name
+        directory = workspace / name
         if directory.exists() and any(directory.rglob("*.json")):
             legacy.append(str(directory))
     if legacy:
