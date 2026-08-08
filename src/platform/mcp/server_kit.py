@@ -21,7 +21,7 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
 
-logger = get_logger("MCPServerKit")
+logger = get_logger("aurora.platform.mcp.server_kit")
 _STDOUT_LIMIT = 16 * 1024 * 1024
 _INHERITED_ENV = frozenset(
     {
@@ -263,7 +263,7 @@ class MCPServerKit:
             key: Server 的 key。
             server_proc: Server 进程信息。
         """
-        timeout = server_proc.spec.health_timeout_seconds
+        timeout = server_proc.spec.health_poll_seconds
         try:
             while True:
                 await asyncio.sleep(timeout)

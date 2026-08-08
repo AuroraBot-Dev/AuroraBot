@@ -30,7 +30,7 @@ async def console_clear(_context: Any, _params: dict[str, Any]) -> OperationResu
     scope=OperationScope.CONSOLE_ONLY,
 )
 async def console_log_status(_context: Any, _params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success({"enabled": console_logging_status()})
+    return OperationResult.success(console_logging_status())
 
 
 @operation(

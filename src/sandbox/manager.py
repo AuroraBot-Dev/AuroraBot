@@ -19,7 +19,7 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-logger = get_logger("Sandbox")
+logger = get_logger("aurora.sandbox.manager")
 
 
 class _Msg(StrEnum):
@@ -72,7 +72,7 @@ class SandboxManager:
     ) -> SandboxResult:
         """执行 Python 代码（通过完整安全检查链）。"""
         start_time = time.monotonic()
-        logger.info(f"执行代码: session_id={session_id}, code_length={len(code)}")
+        logger.info("执行代码: session_id=%s, code_length=%d", session_id, len(code))
 
         try:
             self._validate_session_id(session_id)
@@ -111,7 +111,7 @@ class SandboxManager:
         if on_result is not None:
             on_result(result)
 
-        logger.info(f"代码执行完成: success={result.success}, time={result.execution_time:.2f}s")
+        logger.info("代码执行完成: success=%s, time=%.2fs", result.success, result.execution_time)
         return result
 
 

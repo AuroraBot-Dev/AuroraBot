@@ -7,9 +7,6 @@ Schema v9；`create_all(checkfirst=True)` 只用于全新库，旧库经版本�
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
 from sqlalchemy import (
     CheckConstraint,
     Column,
@@ -19,7 +16,6 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
-    TypeDecorator,
     desc,
     text,
 )
@@ -32,21 +28,6 @@ _SCHEMA_VERSION = 9
 
 class Base(DeclarativeBase):
     """全部运行态表的声明式基类。"""
-
-
-class CompactJSON(TypeDecorator[dict[str, Any]]):
-    """JSON 列：保持紧凑序列化（sort_keys、紧凑分隔符，RFC 0210）不变。"""
-
-    impl = String
-    cache_ok = True
-
-    def process_bind_param(self, value: dict[str, Any] | None, dialect: Any) -> str | None:  # noqa: ARG002
-        if value is None:
-            return None
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-
-    def process_result_value(self, value: str | None, dialect: Any) -> dict[str, Any] | None:  # noqa: ARG002
-        return json.loads(value) if value is not None else None
 
 
 SchemaMetaRow = Table(
@@ -222,3 +203,6 @@ ACT_ERROR = ActivityStatus.ERROR
 ACT_CANCELLED = ActivityStatus.CANCELLED
 ACT_ACTIVE = frozenset({ActivityStatus.PENDING, ActivityStatus.PROCESSING})
 TASK_ACTIVE = TaskStatus.ACTIVE
+INBOX_PENDING = "PENDING"
+INBOX_TRIAGING = "TRIAGING"
+INBOX_DEFERRED = "DEFERRED"

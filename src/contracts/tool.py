@@ -20,6 +20,12 @@ MEMORY_REMEMBER_CAPABILITY = "aur.serv.memory.remember"
 
 _TOOL_STATUSES = frozenset({"succeeded", "failed", "unknown"})
 
+TOOL_EVENT_TYPES = frozenset({f"tool.{status}" for status in _TOOL_STATUSES})
+"""工具回执事件类型全集（``tool.succeeded`` / ``tool.failed`` / ``tool.unknown``）。
+
+engine 摄入分拣、agent 恢复与平台保留事件的唯一来源。
+"""
+
 
 class _Msg(StrEnum):
     INVALID_STATUS = "tool receipt status must be succeeded, failed or unknown"

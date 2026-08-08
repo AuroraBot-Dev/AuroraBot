@@ -22,7 +22,7 @@ def operation(
     method: str,
     path: str,
     *,
-    name: str | None = None,
+    name: str,
     summary: str = "",
     parameters: tuple[ParameterSpec, ...] = (),
     aliases: tuple[str, ...] = (),
@@ -31,11 +31,10 @@ def operation(
     """装饰器：把处理器注册为资源树上的一个操作。"""
 
     def decorator(handler: Callable[..., Awaitable[OperationResult]]) -> Callable[..., Awaitable[OperationResult]]:
-        spec_name = name or _default_name(method, path)
         spec = OperationSpec(
             method=method,
             path=path,
-            name=spec_name,
+            name=name,
             summary=summary,
             parameters=parameters,
             aliases=aliases,
@@ -46,14 +45,6 @@ def operation(
         return handler
 
     return decorator
-
-
-def _default_name(method: str, path: str) -> str:
-    """由方法+路径推导规范名：GET /engine/tasks -> engine.tasks。"""
-    segments = [segment for segment in path.strip("/").split("/") if segment and not segment.startswith("{")]
-    domain = segments[0] if segments else "system"
-    resource = segments[-1] if len(segments) > 1 else (segments[0] if segments else "info")
-    return f"{domain}.{resource}"
 
 
 def _register(spec: OperationSpec) -> None:

@@ -8,16 +8,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.contracts import (
     ActivityRequest,
-    ActivityStatus,
     AgentHandler,
     AgentInstance,
     AgentLimits,
@@ -42,7 +39,7 @@ from src.engine.debug import task_detail as build_task_detail
 from src.engine.ingress import persist_amp
 from src.engine.store import SQLiteRuntimeStore
 from src.engine.tool_registry import ToolRegistry
-from src.utils import get_logger
+from src.utils import get_logger, utc_now
 
 logger = get_logger("aurora.engine")
 
@@ -308,7 +305,7 @@ class AgentEngine:
             scope,
             role=role,
             content=content,
-            at=datetime.now(UTC).isoformat(),
+            at=utc_now(),
         )
 
     def _project_memory(self) -> None:
@@ -339,27 +336,13 @@ class AgentEngine:
                 return
             tasks = []
             for row in activities:
-                activity = self._activity(row)
+                activity = self.store._activity(row)
                 task = asyncio.create_task(self._execute_model(activity), name=f"aurora-model-{activity.activity_id}")
                 self._model_activity_tasks[task] = activity.task_id
                 task.add_done_callback(self._model_activity_tasks.pop)
                 tasks.append(task)
             await asyncio.gather(*tasks, return_exceptions=True)
             self._wake.set()
-
-    @staticmethod
-    def _activity(row: Any) -> ActivityRequest:
-        return ActivityRequest(
-            activity_id=str(row.activity_id),
-            task_id=str(row.task_id),
-            agent_id=str(row.agent_id),
-            kind=row.kind,
-            request=json.loads(row.request_json),
-            status=ActivityStatus(row.status),
-            priority=int(row.priority),
-            idempotency_key=str(row.idempotency_key),
-            created_at=str(row.created_at),
-        )
 
     async def _execute_model(self, activity: ActivityRequest) -> None:
         task = self.store.get_task(activity.task_id)

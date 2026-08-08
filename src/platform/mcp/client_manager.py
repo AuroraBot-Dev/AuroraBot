@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
     from src.platform.mcp.server_kit import MCPServerKit
 
-logger = get_logger("MCPClientManager")
+logger = get_logger("aurora.platform.mcp.client_manager")
 _NOTIFICATION_QUEUE_SIZE = 256
 
 
@@ -129,6 +129,23 @@ class ClientConnection:
     """初始化或运行期间的最后一次连接错误。"""
 
 
+def tool_result_dict(result: object) -> dict[str, object]:
+    """将 MCP Tool 调用结果规范化为统一字典（client_manager 与平台远程路径共用）。"""
+    content = getattr(result, "content", [])
+    text_parts: list[str] = []
+    for item in content:
+        text = getattr(item, "text", None)
+        if text is not None:
+            text_parts.append(str(text))
+    return {
+        "ok": not bool(getattr(result, "isError", False)),
+        "text": "\n".join(text_parts),
+        "is_error": bool(getattr(result, "isError", False)),
+        "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
+        "structured_content": getattr(result, "structuredContent", None),
+    }
+
+
 class MCPClientManager:
     """与 MCP Server 建立客户端连接的管理器。
 
@@ -136,7 +153,6 @@ class MCPClientManager:
 
         mgr = MCPClientManager(server_kit)
         await mgr.connect_all()
-        await mgr.refresh_tools()
         result = await mgr.call_tool("org.aurora.test", "echo", {"msg": "hi"})
         await mgr.shutdown()
     """
@@ -376,20 +392,6 @@ class MCPClientManager:
 
     # ── Tool 操作 ──
 
-    async def refresh_tools(self, server_key: str | None = None) -> None:
-        """刷新 tools 列表缓存。"""
-        keys = [server_key] if server_key else list(self._connections.keys())
-        for key in keys:
-            conn = self._connections.get(key)
-            if conn is None or conn.session is None:
-                continue
-            try:
-                result = await conn.session.list_tools()
-                conn.tools = list(result.tools)
-                logger.debug("刷新 tools (%s): %d tools", key, len(conn.tools))
-            except Exception:
-                logger.exception("刷新 tools 失败 (%s)", key)
-
     def list_all_tools(self) -> dict[str, list[MCPTool]]:
         """列出所有已缓存的工具。"""
         return {key: list(conn.tools) for key, conn in self._connections.items()}
@@ -433,18 +435,4 @@ class MCPClientManager:
                 _Msg.TOOL_CALL_FAILED.format(server_key=server_key, raw_name=raw_name, error=exc)
             ) from exc
 
-        content = getattr(result, "content", [])
-        is_error = getattr(result, "isError", False)
-        text_parts: list[str] = []
-        for item in content:
-            text = getattr(item, "text", None)
-            if text is not None:
-                text_parts.append(str(text))
-
-        return {
-            "ok": not is_error,
-            "text": "\n".join(text_parts),
-            "is_error": is_error,
-            "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
-            "structured_content": getattr(result, "structuredContent", None),
-        }
+        return tool_result_dict(result)

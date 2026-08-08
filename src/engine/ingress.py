@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.contracts import TOOL_EVENT_TYPES
+
 if TYPE_CHECKING:
     from src.contracts import AmpEnvelope
     from src.engine.runtime import AgentEngine
-
-TOOL_EVENT_TYPES = frozenset({"tool.succeeded", "tool.failed", "tool.unknown"})
 
 
 def _ingest_amp(kernel: "AgentEngine", amp: AmpEnvelope, ingested: list[str]) -> None:

@@ -21,7 +21,6 @@ from src.contracts.agent import (
     Completion,
     DelegationRequest,
     EngineConfiguration,
-    ErrorMsg,
     MessageStatus,
     TaskLimits,
     TaskState,
@@ -117,6 +116,7 @@ from src.contracts.ports import (
 )
 from src.contracts.tool import (
     MEMORY_REMEMBER_CAPABILITY,
+    TOOL_EVENT_TYPES,
     ToolExecutionRequest,
     ToolExecutor,
     ToolExecutorBinding,
@@ -128,6 +128,7 @@ __all__ = [
     "MEMORY_REMEMBER_CAPABILITY",
     "PLATFORM_NAMES",
     "STRUCTURED_OUTPUT_NAME",
+    "TOOL_EVENT_TYPES",
     "ActivityRequest",
     "ActivityStatus",
     "AgentContext",
@@ -164,7 +165,6 @@ __all__ = [
     "EngineConfig",
     "EngineConfiguration",
     "EngineQueryPort",
-    "ErrorMsg",
     "ExternalAmpIngressPort",
     "InboxEvent",
     "InputOrigin",

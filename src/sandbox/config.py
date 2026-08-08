@@ -33,11 +33,11 @@ class _Msg(StrEnum):
     )
     YAML_NOT_FOUND = "default.yaml 不存在: {path}"
     YAML_PARSE_ERROR = "YAML 解析错误: {error}"
-    TOP_LEVEL_MUST_BE_DICT = "YAML 顶层结构必须是 dict, 实际得到 {type_name}"
+    TOP_LEVEL_MUST_BE_DICT = "YAML 顶层结构必须是 dict，实际得到 {type_name}"
     MISSING_TOP_KEY = "default.yaml 缺失必需的顶层 key: {key}"
 
 
-logger = get_logger("SandboxConfig")
+logger = get_logger("aurora.sandbox.config")
 
 # 所有 YAML 顶层 section 必须包含的 key
 _REQUIRED_TOP_KEYS = ("whitelist", "blacklist")
@@ -157,4 +157,4 @@ class ConfigReloader:
             self._callback(new_config)
             logger.info("配置热加载成功")
         except (SandboxConfigError, yaml.YAMLError) as e:
-            logger.warning(f"YAML 配置解析失败，保留上次有效配置: {e}")
+            logger.warning("YAML 配置解析失败，保留上次有效配置: %s", e)

@@ -11,11 +11,13 @@ from enum import StrEnum
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+import httpx
 from mcp import types
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import McpError
 
 from src.contracts import (
+    TOOL_EVENT_TYPES,
     AppConfig,
     AuroraConfig,
     CapabilityCatalogSnapshot,
@@ -30,13 +32,13 @@ from src.platform.mcp.client_manager import (
     MCPToolCallError,
     MCPToolRejectedError,
     _NotifiableClientSession,
+    tool_result_dict,
 )
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
 from src.utils import get_logger
 
 logger = get_logger("aurora.platform.mcp")
-_RESERVED_TOOL_EVENTS = frozenset({"tool.succeeded", "tool.failed", "tool.unknown"})
 
 
 class _Msg(StrEnum):
@@ -187,7 +189,7 @@ class MCPPlatform:
             directory=app.working_dir or self._configuration.root,
             command=list(app.command),
             env=environment,
-            health_timeout_seconds=app.timeout_seconds,
+            health_poll_seconds=app.timeout_seconds,
         )
 
     async def _start_builtin_heartbeat(self) -> None:
@@ -232,11 +234,16 @@ class MCPPlatform:
             headers["Authorization"] = f"Bearer {token}"
         try:
             assert connection.app.url is not None
-            async with streamablehttp_client(
-                connection.app.url,
-                headers=headers,
-                timeout=connection.app.timeout_seconds,
-            ) as streams:
+            async with (
+                httpx.AsyncClient(
+                    headers=headers,
+                    timeout=connection.app.timeout_seconds,
+                ) as http_client,
+                streamable_http_client(
+                    connection.app.url,
+                    http_client=http_client,
+                ) as streams,
+            ):
                 read_stream, write_stream, _get_session_id = streams
                 async with _NotifiableClientSession(
                     read_stream,
@@ -380,7 +387,7 @@ class MCPPlatform:
     async def _call_tool(self, package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:
         """调用指定 App 上的 Tool（自动路由到远程 HTTP 或本地 stdio）。
 
-        远程调用使用 ``streamablehttp_client`` 的连接会话；
+        远程调用使用 ``streamable_http_client`` 的连接会话；
         本地调用委托给 ``MCPClientManager.call_tool``。
         """
         remote = self._remote.get(package)
@@ -390,7 +397,7 @@ class MCPPlatform:
             result = await asyncio.wait_for(
                 remote.session.call_tool(raw_name, parameters), timeout=remote.app.timeout_seconds
             )
-            return _tool_result(result)
+            return tool_result_dict(result)
         return await self._clients.call_tool(
             package,
             raw_name,
@@ -440,7 +447,7 @@ class MCPPlatform:
             data = raw_event.get("data", {})
             if not isinstance(event_type, str) or not event_type:
                 return
-            if event_type in _RESERVED_TOOL_EVENTS:
+            if event_type in TOOL_EVENT_TYPES:
                 logger.warning("保留的 MCP 事件已跳过 package=%s event_type=%s", package, event_type)
                 return
             if not isinstance(session_id, str) or not session_id:
@@ -502,18 +509,6 @@ class MCPPlatform:
             self._started = False
             self._ingress = None
             self._shutdown_complete = True
-
-
-def _tool_result(result: object) -> dict[str, object]:
-    """将 MCP Tool 调用结果转换为统一字典。"""
-    content = getattr(result, "content", [])
-    text = "\n".join(str(value) for item in content if (value := getattr(item, "text", None)) is not None)
-    return {
-        "is_error": bool(getattr(result, "isError", False)),
-        "text": text,
-        "content": [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in content],
-        "structured_content": getattr(result, "structuredContent", None),
-    }
 
 
 def _canonical_tool_result(result: dict[str, object]) -> dict[str, Any]:

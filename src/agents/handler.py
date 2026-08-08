@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from src.agents.base import BaseAgent
 from src.contracts import (
+    TOOL_EVENT_TYPES,
     AgentContext,
     AgentDecision,
     CapabilityDescriptor,
@@ -108,7 +109,7 @@ class ToolAgent(BaseAgent):
             return AgentDecision(failure=error)
         if message_type.startswith("child.") and isinstance(context.agent.state.get(_TOOL_CHAIN_STATE), dict):
             return self._resume_control_call(context)
-        if message_type in {"tool.succeeded", "tool.failed", "tool.unknown"}:
+        if message_type in TOOL_EVENT_TYPES:
             return self._resume_tool(context)
         return self._request_model(context)
 

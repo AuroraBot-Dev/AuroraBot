@@ -231,7 +231,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             while True:
                 page = context.ports.engine.output_stream(cursor, limit=_STREAM_BATCH_LIMIT)
                 for item in page.items:
-                    await websocket.send_json({"type": "output", "item": item.__dict__})
+                    await websocket.send_json({"type": "output", "item": item.to_dict()})
                 cursor = page.next_cursor
                 await asyncio.sleep(_STREAM_POLL_SECONDS)
         except WebSocketDisconnect:

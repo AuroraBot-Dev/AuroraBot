@@ -29,7 +29,7 @@ async def engine_status(context: Any, _params: dict[str, Any]) -> OperationResul
     summary="Task 列表（状态筛选、分页）",
     parameters=(
         ParameterSpec("status", ParameterLocation.QUERY, help="按状态筛选"),
-        ParameterSpec("limit", ParameterLocation.QUERY, kind=ParameterKind.NAMED, type="int", default=64),
+        ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64),
     ),
 )
 async def engine_tasks(context: Any, params: dict[str, Any]) -> OperationResult:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -83,6 +83,10 @@ class OutputStreamItem:
     kind: str
     text: str
     at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为普通字典（面板输出与 console 渲染共用）。"""
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)

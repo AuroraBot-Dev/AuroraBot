@@ -12,7 +12,10 @@ from .base import RuntimeStoreBase, _loads, utc_now
 from .models import (
     ACT_COMPLETED,
     ACT_ERROR,
+    ACT_PENDING,
     AGENT_TERMINAL,
+    INBOX_DEFERRED,
+    INBOX_PENDING,
     MSG_PENDING,
     TASK_ACTIVE,
     ActivityRow,
@@ -242,7 +245,8 @@ class StoreRuntimeMixin(RuntimeStoreBase):
             due_sessions = (
                 session.scalar(
                     select(func.count(func.distinct(InboxEventRow.session_id))).where(
-                        InboxEventRow.status.in_(("PENDING", "DEFERRED")), InboxEventRow.available_at <= utc_now()
+                        InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                        InboxEventRow.available_at <= utc_now(),
                     )
                 )
                 or 0
@@ -259,14 +263,14 @@ class StoreRuntimeMixin(RuntimeStoreBase):
                 or 0
             )
             pending_activities = (
-                session.scalar(select(func.count()).select_from(ActivityRow).where(ActivityRow.status == "PENDING"))
+                session.scalar(select(func.count()).select_from(ActivityRow).where(ActivityRow.status == ACT_PENDING))
                 or 0
             )
             pending_model = (
                 session.scalar(
                     select(func.count())
                     .select_from(ActivityRow)
-                    .where(ActivityRow.kind == "model", ActivityRow.status == "PENDING")
+                    .where(ActivityRow.kind == "model", ActivityRow.status == ACT_PENDING)
                 )
                 or 0
             )
@@ -274,7 +278,7 @@ class StoreRuntimeMixin(RuntimeStoreBase):
                 session.scalar(
                     select(func.count())
                     .select_from(ActivityRow)
-                    .where(ActivityRow.kind == "tool", ActivityRow.status == "PENDING")
+                    .where(ActivityRow.kind == "tool", ActivityRow.status == ACT_PENDING)
                 )
                 or 0
             )

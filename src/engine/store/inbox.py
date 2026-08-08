@@ -20,11 +20,18 @@ from src.contracts import (
     TriageBatch,
     TriageLimits,
 )
+from src.utils import bounded_summary
 
 from .base import RuntimeStoreBase, _json, _loads, utc_now
-from .models import AgentRow, CausalEventRow, InboxEventRow, TaskRow
-
-_TRIAGE_SUMMARY_LIMIT = 600
+from .models import (
+    INBOX_DEFERRED,
+    INBOX_PENDING,
+    INBOX_TRIAGING,
+    AgentRow,
+    CausalEventRow,
+    InboxEventRow,
+    TaskRow,
+)
 
 
 class StoreInboxMixin(RuntimeStoreBase):
@@ -32,8 +39,8 @@ class StoreInboxMixin(RuntimeStoreBase):
 
     def enqueue_inbox(self, amp: AmpEnvelope, limits: TriageLimits) -> bool:
         """幂等写入事件，并为同会话 pending 批次刷新 quiet window。"""
-        now_dt = datetime.now(UTC)
-        now = now_dt.isoformat()
+        now = utc_now()
+        now_dt = datetime.fromisoformat(now)
         event_id = amp.header.message_id
         with self.session() as session:
             if (
@@ -61,7 +68,7 @@ class StoreInboxMixin(RuntimeStoreBase):
             first_at = session.scalar(
                 select(func.min(InboxEventRow.created_at)).where(
                     InboxEventRow.session_id == amp.payload.session_id,
-                    InboxEventRow.status.in_(("PENDING", "DEFERRED")),
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
                 )
             )
             first_dt = datetime.fromisoformat(first_at) if first_at else now_dt
@@ -73,9 +80,9 @@ class StoreInboxMixin(RuntimeStoreBase):
                 update(InboxEventRow)
                 .where(
                     InboxEventRow.session_id == amp.payload.session_id,
-                    InboxEventRow.status.in_(("PENDING", "DEFERRED")),
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
                 )
-                .values(status="PENDING", available_at=deadline, updated_at=now)
+                .values(status=INBOX_PENDING, available_at=deadline, updated_at=now)
             )
             session.add(
                 InboxEventRow(
@@ -86,7 +93,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                     source_json=_json(amp.header.source),
                     data_json=_json(amp.payload.data),
                     priority=10 if amp.payload.type == "system.tick" else 100,
-                    status="PENDING",
+                    status=INBOX_PENDING,
                     batch_id=None,
                     available_at=deadline,
                     created_at=now,
@@ -99,7 +106,10 @@ class StoreInboxMixin(RuntimeStoreBase):
         with self.session() as session:
             row = session.scalar(
                 select(InboxEventRow.event_id)
-                .where(InboxEventRow.status.in_(("PENDING", "DEFERRED")), InboxEventRow.available_at <= utc_now())
+                .where(
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                    InboxEventRow.available_at <= utc_now(),
+                )
                 .limit(1)
             )
             return row is not None
@@ -108,7 +118,9 @@ class StoreInboxMixin(RuntimeStoreBase):
         now = datetime.now(UTC)
         with self.session() as session:
             first_at = session.scalar(
-                select(func.min(InboxEventRow.available_at)).where(InboxEventRow.status.in_(("PENDING", "DEFERRED")))
+                select(func.min(InboxEventRow.available_at)).where(
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED))
+                )
             )
         if first_at is None:
             return None
@@ -125,7 +137,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                     func.min(InboxEventRow.created_at).label("first_at"),
                     func.max(InboxEventRow.priority).label("priority"),
                 )
-                .where(InboxEventRow.status.in_(("PENDING", "DEFERRED")), InboxEventRow.available_at <= now)
+                .where(InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)), InboxEventRow.available_at <= now)
                 .group_by(InboxEventRow.session_id)
                 .order_by(func.max(InboxEventRow.priority).desc(), "first_at")
                 .limit(limit)
@@ -135,7 +147,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                     select(InboxEventRow)
                     .where(
                         InboxEventRow.session_id == session_id,
-                        InboxEventRow.status.in_(("PENDING", "DEFERRED")),
+                        InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
                         InboxEventRow.available_at <= now,
                     )
                     .order_by(InboxEventRow.created_at, InboxEventRow.event_id)
@@ -149,7 +161,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                 session.execute(
                     update(InboxEventRow)
                     .where(InboxEventRow.event_id.in_([event.event_id for event in selected]))
-                    .values(status="TRIAGING", batch_id=batch_id, updated_at=now)
+                    .values(status=INBOX_TRIAGING, batch_id=batch_id, updated_at=now)
                 )
                 batches.append(
                     TriageBatch(
@@ -175,13 +187,12 @@ class StoreInboxMixin(RuntimeStoreBase):
         批次原始事件保留在 Inbox，由 triage agent 的决策在 apply_decision
         中结算；批次投影存入入口 agent 状态，供委派时向子 Agent 传递。
         """
-        now_dt = datetime.now(UTC)
-        now = now_dt.isoformat()
+        now = utc_now()
         with self.session() as session:
             rows = (
                 session.execute(
                     select(InboxEventRow)
-                    .where(InboxEventRow.batch_id == batch.batch_id, InboxEventRow.status == "TRIAGING")
+                    .where(InboxEventRow.batch_id == batch.batch_id, InboxEventRow.status == INBOX_TRIAGING)
                     .order_by(InboxEventRow.created_at, InboxEventRow.event_id)
                 )
                 .scalars()
@@ -193,7 +204,7 @@ class StoreInboxMixin(RuntimeStoreBase):
             agent_id = str(uuid4())
             autonomous = all(str(row.event_type) == "system.tick" for row in rows)
             budget = autonomous_budget if autonomous else interactive_budget
-            summary = _bounded_summary(batch.events)
+            summary = bounded_summary([event.summary for event in batch.events])
             session.add(
                 TaskRow(
                     task_id=task_id,
@@ -267,7 +278,7 @@ class StoreInboxMixin(RuntimeStoreBase):
             session.execute(
                 update(InboxEventRow)
                 .where(InboxEventRow.batch_id == batch_id)
-                .values(status="DEFERRED", batch_id=None, available_at=available_at, updated_at=now)
+                .values(status=INBOX_DEFERRED, batch_id=None, available_at=available_at, updated_at=now)
             )
         else:
             session.execute(delete(InboxEventRow).where(InboxEventRow.batch_id == batch_id))
@@ -327,14 +338,6 @@ class StoreInboxMixin(RuntimeStoreBase):
                 priority=clipped.priority,
             )
         return clipped
-
-
-def _bounded_summary(events: tuple[InboxEvent, ...]) -> str:
-    """从批次事件拼接有界摘要，作为 Task 的 root_summary。"""
-    summary = "；".join(event.summary for event in events)
-    if len(summary) > _TRIAGE_SUMMARY_LIMIT:
-        summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
-    return summary or "Inbox event batch"
 
 
 def _event_projection(events: tuple[InboxEvent, ...]) -> list[dict[str, Any]]:

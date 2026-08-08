@@ -12,6 +12,7 @@ dependencies = [
     "tiktoken>=0.13.0",
     "rich>=15.0.0",
     "mcp[cli]>=1.27,<2",
+    "httpx>=0.28,<1",
     "fastapi>=0.115,<1",
     "uvicorn>=0.34,<1",
     "jsonschema>=4.23,<5",

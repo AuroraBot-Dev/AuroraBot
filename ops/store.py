@@ -8,6 +8,7 @@ contracts + utils 与通用依赖的边界。
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import NullPool
 
+from src.utils import utc_now
 from src.utils.migration import initialize_storage
 
 from . import migration
@@ -154,7 +156,7 @@ class PanelStore:
 
     def verify_session(self, token: str) -> bool:
         """校验 Bearer token：存在且未过期。"""
-        now = datetime.now(UTC).isoformat()
+        now = utc_now()
         with self._session() as session:
             row = session.scalar(select(SessionRow.expires_at).where(SessionRow.token_hash == _digest(token)))
         return row is not None and str(row) > now
@@ -169,7 +171,7 @@ class PanelStore:
     def add_attachment(self, *, name: str, mime: str, size: int, stored_name: str) -> dict[str, Any]:
         """登记附件并返回索引记录。"""
         attachment_id = str(uuid4().hex)
-        created_at = datetime.now(UTC).isoformat()
+        created_at = utc_now()
         with self._session() as session:
             session.add(
                 AttachmentRow(
@@ -213,6 +215,4 @@ class PanelStore:
 
 def _digest(token: str) -> str:
     """会话 token 的 SHA-256 摘要（库中不存明文）。"""
-    import hashlib
-
     return hashlib.sha256(token.encode("utf-8")).hexdigest()

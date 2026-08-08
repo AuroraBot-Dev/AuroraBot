@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -29,10 +28,6 @@ logger = get_logger("aurora.console")
 
 _RENDER_POLL_SECONDS = 0.2
 """输出流轮询间隔。"""
-
-
-class _Msg(StrEnum):
-    """本文件内所有用户可见或日志输出的字符串常量。"""
 
 
 if TYPE_CHECKING:

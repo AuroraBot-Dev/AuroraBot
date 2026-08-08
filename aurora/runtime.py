@@ -47,6 +47,8 @@ logger = get_logger("aurora.process")
 
 
 # -- 平台注册 ---------------------------------------------------------
+
+
 def _init_platforms() -> dict[str, PlatformFactory]:
     """显式注册平台工厂，使签名漂移在静态检查阶段失败。"""
     from src.platform.mcp import _create as create_mcp
@@ -63,6 +65,7 @@ def _init_platforms() -> dict[str, PlatformFactory]:
 _SERVER_GRACE_SECONDS = 10.0
 """平台 server 优雅退出的等待上限，超时后强制取消。"""
 _CANCEL_GRACE_SECONDS = 1.0
+"""取消后的有界回收等待上限。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,14 +378,10 @@ async def _await_task_exit(task: asyncio.Task[None]) -> None:
 
 
 async def _cancel_task(task: asyncio.Task[Any]) -> None:
-    """取消任务并有界回收。"""
+    """立即取消任务并有界回收（等待窗口内未退出则由 _await_task_exit 二次取消）。"""
     if not task.done():
         task.cancel()
-        await asyncio.wait({task}, timeout=_CANCEL_GRACE_SECONDS)
-    if task.done():
-        await asyncio.gather(task, return_exceptions=True)
-    else:
-        logger.error("task ignored cancellation task=%s", task.get_name())
+    await _await_task_exit(task)
 
 
 async def _run_cleanup(cleanup: PlatformCleanup) -> None:

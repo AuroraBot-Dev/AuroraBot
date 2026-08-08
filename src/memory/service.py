@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -45,7 +44,7 @@ from src.contracts import (
     MemoryMessage,
     MemoryQuery,
 )
-from src.utils import get_logger
+from src.utils import get_logger, utc_now
 from src.utils.migration import initialize_storage
 
 
@@ -366,7 +365,7 @@ class MemoryService:
         summary = str(existing) if existing else ""
         oldest = [{"role": row.role, "content": row.content, "at": row.at} for row in rows]
         condensed = self._summarize(summary, oldest)
-        updated_at = datetime.now(UTC).isoformat()
+        updated_at = utc_now()
         session.execute(
             sqlite_insert(SessionMemoryRow)
             .values(scope=scope, summary=condensed, updated_at=updated_at)
@@ -376,12 +375,12 @@ class MemoryService:
 
     def _summarize(self, existing: str, messages: list[dict[str, Any]]) -> str:
         """LLM 浓缩（fast role）；网关不可用时规则截断。"""
+        combined = existing + "\n" + "\n".join(m["content"] for m in messages)
+        fallback = _tail(combined.strip(), _SUMMARY_LIMIT)
         if self._gateway is None:
-            combined = existing + "\n" + "\n".join(m["content"] for m in messages)
-            return _tail(combined.strip(), _SUMMARY_LIMIT)
+            return fallback
         import asyncio
 
-        assert self._gateway is not None
         prompt = _Msg.SUMMARIZE_PROMPT.format(
             summary=existing or "（无）",
             messages="\n".join(f"{m['role']}: {m['content']}" for m in messages),
@@ -393,8 +392,7 @@ class MemoryService:
                 return _tail(text_value, _SUMMARY_LIMIT)
         except Exception as error:
             logger.warning("memory summarization failed error_type=%s", type(error).__name__)
-        combined = existing + "\n" + "\n".join(m["content"] for m in messages)
-        return _tail(combined.strip(), _SUMMARY_LIMIT)
+        return fallback
 
     def _select_facts(self, session: Session, query: MemoryQuery) -> tuple[str, ...]:
         rows = (

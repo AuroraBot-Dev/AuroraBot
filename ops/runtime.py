@@ -9,13 +9,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from uuid import NAMESPACE_URL, uuid5
 
 from ops.router import OperationRouter
 from src.contracts import (
     CommandResult,
-    OperationResult,
     PanelRuntime,
     RuntimeInput,
+    new_amp,
 )
 
 if TYPE_CHECKING:
@@ -202,10 +203,6 @@ class AuroraRuntime:
 
     async def submit_conversation(self, request: RuntimeInput, text: str) -> str:
         """将平台文本规范化为共享 AMP 后提交给 engine。"""
-        from uuid import NAMESPACE_URL, uuid5
-
-        from src.contracts import new_amp
-
         data = dict(request.data)
         data["text"] = text
         if request.actor_id is not None:
@@ -230,16 +227,6 @@ class AuroraRuntime:
     async def route_input(self, request: RuntimeInput) -> CommandResult:
         """路由普通会话或斜杠命令（文本入口）。"""
         return await self._router.route_text(request)
-
-    async def dispatch(self, method: str, path: str, params: dict[str, Any]) -> OperationResult:
-        """路由 REST 请求（面板 API 入口）。"""
-        spec, path_params, mismatch = self._router.resolve(method, path)
-        if spec is None:
-            code = "METHOD_NOT_ALLOWED" if mismatch else "NOT_FOUND"
-            return OperationResult.failure(code, code)
-        merged = dict(path_params or {})
-        merged.update(params)
-        return await self._router.execute(spec, merged)
 
     # -- 进程停止 --------------------------------------------------------
 

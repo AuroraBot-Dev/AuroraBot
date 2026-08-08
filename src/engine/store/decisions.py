@@ -33,7 +33,10 @@ from .inbox import StoreInboxMixin
 from .models import (
     ACT_ACTIVE,
     ACT_CANCELLED,
+    ACT_COMPLETED,
+    ACT_ERROR,
     ACT_PENDING,
+    ACT_PROCESSING,
     AGENT_CANCELLED,
     AGENT_TERMINAL,
     MSG_COMPLETED,
@@ -436,7 +439,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             ).scalars()
             result: list[Any] = []
             for row in rows:
-                row.status = "PROCESSING"
+                row.status = ACT_PROCESSING
                 row.updated_at = utc_now()
                 result.append(row)
             return tuple(result)
@@ -450,7 +453,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             )
             if row is None:
                 return
-            row.status = "COMPLETED" if error is None else "ERROR"
+            row.status = ACT_COMPLETED if error is None else ACT_ERROR
             row.result_json = _json(result) if result is not None else None
             row.error = error
             row.updated_at = now
@@ -481,7 +484,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             rows = session.execute(
                 select(ActivityRow)
                 .join(TaskRow, TaskRow.task_id == ActivityRow.task_id)
-                .where(ActivityRow.kind == "tool", ActivityRow.status == "PROCESSING", TaskRow.status == TASK_ACTIVE)
+                .where(ActivityRow.kind == "tool", ActivityRow.status == ACT_PROCESSING, TaskRow.status == TASK_ACTIVE)
             ).scalars()
             return tuple(rows)
 
@@ -511,7 +514,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             )
             if row is None:
                 return False, None
-            row.status = "COMPLETED" if event_type == "tool.succeeded" else "ERROR"
+            row.status = ACT_COMPLETED if event_type == "tool.succeeded" else ACT_ERROR
             row.result_json = _json(payload["result"]) if payload.get("result") is not None else None
             row.error = payload.get("error")
             row.updated_at = now
@@ -583,7 +586,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                 session.scalar(
                     select(func.count())
                     .select_from(ActivityRow)
-                    .where(ActivityRow.kind == "tool", ActivityRow.status == "PROCESSING")
+                    .where(ActivityRow.kind == "tool", ActivityRow.status == ACT_PROCESSING)
                 )
                 or 0
             )
@@ -602,7 +605,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             row = session.scalar(
                 select(ActivityRow.activity_id)
                 .join(TaskRow, TaskRow.task_id == ActivityRow.task_id)
-                .where(ActivityRow.kind == "tool", ActivityRow.status == "PROCESSING", TaskRow.status == TASK_ACTIVE)
+                .where(ActivityRow.kind == "tool", ActivityRow.status == ACT_PROCESSING, TaskRow.status == TASK_ACTIVE)
                 .limit(1)
             )
             return row is not None

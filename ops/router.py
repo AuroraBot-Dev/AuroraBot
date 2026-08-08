@@ -71,13 +71,11 @@ class OperationRouter:
         try:
             normalized = validate_params(spec, params)
         except CommandParseError as error:
-            return OperationResult.failure("PARSE_ERROR", f"{error}\n用法: {usage(spec)}")
+            return OperationResult.failure("PARSE_ERROR", _with_usage(spec, str(error)))
         assert spec.handler is not None
         result = await spec.handler(OperationContext(self._runtime, None), normalized)
         if result.code == "PARSE_ERROR" and result.message is not None and "用法" not in result.message:
-            return OperationResult(
-                ok=False, code="PARSE_ERROR", message=f"{result.message}\n用法: {usage(spec)}", data=None
-            )
+            return OperationResult(ok=False, code="PARSE_ERROR", message=_with_usage(spec, result.message), data=None)
         return result
 
     async def route_text(self, request: RuntimeInput) -> CommandResult:
@@ -114,7 +112,7 @@ class OperationRouter:
         except HelpRequestError:
             return CommandResult(ok=True, text=usage(spec), data=None)
         except CommandParseError as error:
-            return _result_to_command(OperationResult.failure("PARSE_ERROR", f"{error}\n用法: {usage(spec)}"))
+            return _result_to_command(OperationResult.failure("PARSE_ERROR", _with_usage(spec, str(error))))
         short = params.pop("short", None)
         result = await self.execute(spec, params)
         return _result_to_command(result, short=short)
@@ -136,6 +134,11 @@ class OperationRouter:
             else:
                 segments.append(re.escape(segment))
         return re.compile("^" + "/".join(segments) + "$"), tuple(names), spec
+
+
+def _with_usage(spec: OperationSpec, message: str) -> str:
+    """错误消息追加一行用法提示（文本与 REST 双入口统一）。"""
+    return f"{message}\n用法: {usage(spec)}"
 
 
 def _result_to_command(result: OperationResult, *, short: str | None = None) -> CommandResult:

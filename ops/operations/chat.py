@@ -47,6 +47,7 @@ async def messages_send(context: Any, params: dict[str, Any]) -> OperationResult
     if not text:
         return OperationResult.failure("PARSE_ERROR", "text 不能为空")
     session_id = str(params.get("session_id") or _PANEL_SESSION_ID)
+    attachments = params.get("attachments")
     request = RuntimeInput(
         text=text,
         origin=InputOrigin.PANEL,
@@ -54,7 +55,7 @@ async def messages_send(context: Any, params: dict[str, Any]) -> OperationResult
         source_app="panel.chat",
         source_instance="web",
         idempotency_key=params.get("client_message_id"),
-        data={"attachments": params.get("attachments")} if params.get("attachments") else {},
+        data={"attachments": attachments} if attachments else {},
     )
     message_id = await context.runtime.engine.submit_conversation(request, text)
     return OperationResult.success({"message_id": message_id, "session_id": session_id})
@@ -73,4 +74,4 @@ async def messages_send(context: Any, params: dict[str, Any]) -> OperationResult
 )
 async def activities_stream(context: Any, params: dict[str, Any]) -> OperationResult:
     page = context.runtime.engine.output_stream(params.get("cursor", 0), limit=params.get("limit", 64))
-    return OperationResult.success({"items": [item.__dict__ for item in page.items], "next_cursor": page.next_cursor})
+    return OperationResult.success({"items": [item.to_dict() for item in page.items], "next_cursor": page.next_cursor})

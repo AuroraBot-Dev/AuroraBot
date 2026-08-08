@@ -38,7 +38,10 @@ from src.utils import utc_now
 from src.utils.migration import initialize_storage
 
 from .models import (
+    ACT_ERROR,
     ACT_PROCESSING,
+    INBOX_PENDING,
+    INBOX_TRIAGING,
     MSG_PENDING,
     MSG_PROCESSING,
     ActivityRow,
@@ -135,13 +138,15 @@ class RuntimeStoreBase:
                 .values(status=MSG_PENDING, completed_at=None)
             )
             session.execute(
-                update(InboxEventRow).where(InboxEventRow.status == "TRIAGING").values(status="PENDING", batch_id=None)
+                update(InboxEventRow)
+                .where(InboxEventRow.status == INBOX_TRIAGING)
+                .values(status=INBOX_PENDING, batch_id=None)
             )
             interrupted = session.execute(
                 select(ActivityRow).where(ActivityRow.status == ACT_PROCESSING, ActivityRow.kind == "model")
             ).scalars()
             for row in interrupted:
-                row.status = "ERROR"
+                row.status = ACT_ERROR
                 row.error = "interrupted_by_restart"
                 row.updated_at = now
                 self._insert_message(
