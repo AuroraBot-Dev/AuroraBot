@@ -10,7 +10,7 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol
 
-os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "False"
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
 import litellm
 
