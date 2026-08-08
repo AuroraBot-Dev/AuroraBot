@@ -29,7 +29,7 @@ engine 现有实现 3301 行，其中约 1500 行是历史累积与投机复杂�
 
 - **删除 JSON 终态归档与 JSONL 会话日志**：终态 Task 留在 SQLite（终态行即档案），由 `causal_events` 提供可读性；会话日志按需由 ops 从 causal_events 导出。取代 RFC 0201 的"先归档后清理"与 AGENTS.md 的 JSONL 约定。
 - 清理策略：终态行保留，可配置 TTL 由 ops 命令触发删除（不做热路径归档）。
-- 外部 AMP 文件摄入保留（platform 写 JSON → engine 读），但处理完即移入 rejected/duplicate 分类目录（现状不变）。
+- 外部 AMP 文件摄入保留（platform 写 JSON → engine 读），但处理完即移入 rejected/duplicate 分类目录（现状不变）。**该条款已被 RFC 0219 废弃**：inbox/archive 文件投递箱移除，摄入统一经 submit_amp SQLite 直连。
 - 审计去重：`causal_events.payload_json` 只存轻量摘要（决策种类、摘要文本、关联 ID），不再存完整请求；activities 仍存执行所需完整请求。
 
 ### 3. Schema v9（自即日起数据库必须考虑迁移）
@@ -51,7 +51,7 @@ engine 现有实现 3301 行，其中约 1500 行是历史累积与投机复杂�
 
 ```
 pump():
-  1. ingest          → Inbox 文件 + 内存队列 → inbox_events
+  1. ingest          → Inbox 文件 + 内存队列 → inbox_events（文件通道已被 0219 废弃）
   2. triage batches  → 到期批次创建入口 triage Task（同 RFC 0209）
   3. claim messages  → 原子 UPDATE 领取，同步执行 handler（事件循环内）
   4. apply decision  → 8 分支状态机（model/tool/delegate/complete/wait/defer/discard/fail）

@@ -2,7 +2,7 @@
 
 所有写操作均通过 session() 事务上下文执行（引擎级 isolation_level=IMMEDIATE，
 等价 RFC 0210 的 BEGIN IMMEDIATE）；单进程 asyncio 独占，无租约与乐观锁。
-初始化：全新库直接建 v9 Schema；v1–v8 旧库按版本序列迁移到 v9
+初始化：全新库直接建 v9 Schema；v1-v8 旧库按版本序列迁移到 v9
 （src/engine/store/migration/，RFC 0217 §5）。connect()/transaction() 保留
 为原始 sqlite3 逃生口（测试与调试直查 DB 用，热路径不使用）。
 """
@@ -122,7 +122,7 @@ class RuntimeStoreBase:
         """初始化运行时数据库：全新库建 v9 Schema，旧库按版本序列迁移到 v9。
 
         版本号存于 schema_meta（无表 = v0 全新库）；v0 直接建表并写入
-        当前目标版本；v1–v8 旧库经 src/engine/store/migration/ 版本序列
+        当前目标版本；v1-v8 旧库经 src/engine/store/migration/ 版本序列
         升级到 v9（RFC 0217 §5）。迁移在单个事务中执行，任一版本步骤
         失败整体回滚。
         """
