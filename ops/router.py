@@ -146,17 +146,26 @@ def _result_to_command(result: OperationResult) -> CommandResult:
 
 
 def _render(result: OperationResult) -> str | None:
-    """把成功结果渲染为 console 可读文本（data 的 JSON 摘要）。"""
+    """把成功结果渲染为 console 可读文本（data 完整输出，嵌套 JSON 以 indent=2 格式化）。"""
     if result.data is None or not result.data:
         return None
     operations = result.data.get("operations")
     if isinstance(operations, list):
         lines = [f"{op['method']:4} {op['path']:<40} {op['summary']}" for op in operations]
         return "\n".join(lines)
-    return "\n".join(f"{key}: {_compact(value)}" for key, value in result.data.items())
+    lines: list[str] = []
+    for key, value in result.data.items():
+        if isinstance(value, (dict, list)):
+            lines.append(f"{key}: {_indent_json(value)}")
+        else:
+            lines.append(f"{key}: {value}")
+    return "\n".join(lines)
 
 
-def _compact(value: Any) -> str:
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)[:400]
-    return str(value)
+def _indent_json(value: Any) -> str:
+    """序列化嵌套值：indent=2，且首行后的行整体再缩进 2 以嵌套在键下。"""
+    rendered = json.dumps(value, ensure_ascii=False, indent=2)
+    lines = rendered.splitlines()
+    if len(lines) <= 1:
+        return rendered
+    return "\n".join([lines[0], *("  " + line for line in lines[1:])])
