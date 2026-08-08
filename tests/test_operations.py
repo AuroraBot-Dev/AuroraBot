@@ -246,6 +246,52 @@ def test_parameter_validation_and_error_codes() -> None:
     asyncio.run(scenario())
 
 
+def test_help_flag_renders_usage_without_executing() -> None:
+    async def scenario() -> None:
+        runtime = _runtime()
+        router = OperationRouter(runtime)
+
+        long_help = await router.route_text(
+            RuntimeInput(
+                text="/task --help",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
+        )
+        assert long_help.ok
+        assert "GET /engine/tasks/{task_id}" in (long_help.text or "")
+        assert "别名: /task" in (long_help.text or "")
+
+        short_help = await router.route_text(
+            RuntimeInput(
+                text="/engine/pump -h",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
+        )
+        assert short_help.ok
+        assert "POST /engine/pump" in (short_help.text or "")
+        assert "--max_turns" in (short_help.text or "")
+
+        alias_help = await router.route_text(
+            RuntimeInput(
+                text="/say --help",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
+        )
+        assert alias_help.ok
+        assert "POST /messages" in (alias_help.text or "")
+
+    asyncio.run(scenario())
+
+
 def test_control_semantics_clear_and_shutdown() -> None:
     async def scenario() -> None:
         runtime = _runtime()

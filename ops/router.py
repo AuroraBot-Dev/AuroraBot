@@ -11,7 +11,15 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from ops.parser import CommandParseError, match_path, parse_text, split_text, usage, validate_params
+from ops.parser import (
+    CommandParseError,
+    HelpRequestError,
+    match_path,
+    parse_text,
+    split_text,
+    usage,
+    validate_params,
+)
 from ops.registry import find_by_alias, iter_operations
 from src.contracts import (
     CommandControl,
@@ -103,6 +111,8 @@ class OperationRouter:
             return _result_to_command(OperationResult.failure("NOT_FOUND", "未知命令；输入 /help 查看命令。"))
         try:
             params = parse_text(spec, tokens, path_params)
+        except HelpRequestError:
+            return CommandResult(ok=True, text=usage(spec), data=None)
         except CommandParseError as error:
             return _result_to_command(OperationResult.failure("PARSE_ERROR", f"{error}\n用法: {usage(spec)}"))
         result = await self.execute(spec, params)

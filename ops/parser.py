@@ -17,6 +17,13 @@ class CommandParseError(ValueError):
     """命令文本解析失败。"""
 
 
+class HelpRequestError(ValueError):
+    """命令请求展示用法（--help / -h）。"""
+
+
+_HELP_FLAGS = ("--help", "-h")
+
+
 def split_text(raw: str) -> tuple[str, ...]:
     """按 shell 规则分词；失败时抛出 CommandParseError。"""
     try:
@@ -57,6 +64,8 @@ def parse_text(spec: OperationSpec, tokens: tuple[str, ...], path_params: dict[s
     if path_params is not None:
         params.update(path_params)
     rest = tokens[1:]
+    if any(flag in rest for flag in _HELP_FLAGS):
+        raise HelpRequestError
     positional_slots = [p for p in spec.parameters if p.location in {ParameterLocation.PATH, ParameterLocation.BODY}]
     positional_index = 0
     index = 0
