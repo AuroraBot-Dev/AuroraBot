@@ -236,7 +236,8 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             await websocket.close(code=4401)
             return
         await websocket.accept()
-        cursor = 0
+        # 从当前输出流末尾起订阅，不重放历史（历史归 GET /messages）
+        cursor = context.ports.engine.output_tail_cursor()
         try:
             while True:
                 page = context.ports.engine.output_stream(cursor, limit=_STREAM_BATCH_LIMIT)

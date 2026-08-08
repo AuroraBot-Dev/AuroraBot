@@ -266,6 +266,10 @@ class AuroraRuntime:
         """返回游标之后新增的用户可见模型输出，供本地交互前端渲染。"""
         return self.engine.output_stream(cursor, limit=limit)
 
+    def output_tail_cursor(self) -> int:
+        """当前输出流末尾游标：新前端从该游标起订阅，避免重放历史。"""
+        return self.engine.output_tail_cursor()
+
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
         return self.engine.list_tasks(status=status, limit=limit)
 

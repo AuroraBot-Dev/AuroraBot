@@ -239,6 +239,17 @@ class StoreRuntimeMixin(RuntimeStoreBase):
             )
         return tuple(items)
 
+    def recent_outputs_tail(self) -> int:
+        """当前输出流末尾游标（与 recent_outputs 同一筛选条件的最大行 ID）。"""
+        rowid_column = literal_column("activities.rowid")
+        statement = select(func.max(rowid_column)).where(
+            ActivityRow.kind == "model",
+            or_(ActivityRow.status == ACT_COMPLETED, ActivityRow.status == ACT_ERROR),
+        )
+        with self.session() as session:
+            value = session.scalar(statement)
+        return int(value) if value is not None else 0
+
     def counts(self) -> dict[str, int]:
         with self.session() as session:
             inbox_total = session.scalar(select(func.count()).select_from(InboxEventRow)) or 0

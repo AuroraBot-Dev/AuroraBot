@@ -1,9 +1,8 @@
 (function () {
   "use strict";
 
-  var baseInput = document.getElementById("base-url");
   var tokenInput = document.getElementById("bootstrap-token");
-  var authStatus = document.getElementById("auth-status");
+  var authBtn = document.getElementById("auth-btn");
   var sessionToken = localStorage.getItem("lab-session-token") || "";
 
   var QUICK = [
@@ -31,25 +30,17 @@
   var responsePre = document.getElementById("response");
   var responseHead = document.getElementById("response-head");
 
-  function base() {
-    return String(baseInput.value || "").replace(/\/+$/, "");
-  }
-
-  function setStatus(text, ok) {
-    authStatus.textContent = text;
-    authStatus.className = "status " + (ok === false ? "err" : "ok");
-  }
-
-  function showAuth() {
-    if (sessionToken) setStatus("已认证（会话 token 已存 localStorage）");
-    else setStatus("未认证", false);
+  function updateAuth() {
+    var loggedIn = Boolean(sessionToken);
+    authBtn.textContent = loggedIn ? "登出" : "登录";
+    tokenInput.style.display = loggedIn ? "none" : "";
   }
 
   async function request(path, options) {
     var opts = Object.assign({}, options || {});
     opts.headers = Object.assign({}, opts.headers || {});
     if (sessionToken) opts.headers["Authorization"] = "Bearer " + sessionToken;
-    var response = await fetch(base() + path, opts);
+    var response = await fetch(path, opts);
     var body = await response.json().catch(function () {
       return null;
     });
@@ -57,30 +48,21 @@
     return body;
   }
 
-  async function health() {
-    var button = document.getElementById("health-btn");
-    button.disabled = true;
-    try {
-      var body = await fetch(base() + "/healthz").then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      });
-      setStatus("健康检查 OK: " + JSON.stringify(body));
-    } catch (error) {
-      setStatus("健康检查失败: " + error.message, false);
-    } finally {
-      button.disabled = false;
-    }
+  function flashAuth(message) {
+    authBtn.disabled = true;
+    authBtn.textContent = message;
+    window.setTimeout(function () {
+      authBtn.disabled = false;
+      updateAuth();
+    }, 2400);
   }
 
   async function login() {
     var token = tokenInput.value.trim();
     if (!token) {
-      setStatus("请先填写 bootstrap token", false);
+      flashAuth("填 token 再登录");
       return;
     }
-    var button = document.getElementById("login-btn");
-    button.disabled = true;
     try {
       var body = await request("/api/auth/login", {
         method: "POST",
@@ -90,11 +72,9 @@
       sessionToken = body.token;
       localStorage.setItem("lab-session-token", sessionToken);
       tokenInput.value = "";
-      setStatus("登录成功，session token 已保存");
+      updateAuth();
     } catch (error) {
-      setStatus("登录失败: " + error.message, false);
-    } finally {
-      button.disabled = false;
+      flashAuth("登录失败");
     }
   }
 
@@ -106,8 +86,13 @@
     }
     sessionToken = "";
     localStorage.removeItem("lab-session-token");
-    setStatus("已登出", false);
+    updateAuth();
   }
+
+  authBtn.addEventListener("click", function () {
+    if (sessionToken) logout();
+    else login();
+  });
 
   function fillQuick(item) {
     document.getElementById("method").value = item.m;
@@ -174,18 +159,23 @@
     list.appendChild(row);
   });
 
-  document.getElementById("health-btn").addEventListener("click", health);
-  document.getElementById("login-btn").addEventListener("click", login);
-  document.getElementById("logout-btn").addEventListener("click", logout);
   document.getElementById("run-btn").addEventListener("click", run);
   document.getElementById("path").addEventListener("keydown", function (event) {
     if (event.key === "Enter") run();
   });
-  baseInput.addEventListener("change", function () {
-    localStorage.setItem("lab-base-url", baseInput.value);
+
+  var root = document.documentElement;
+  var storedTheme = localStorage.getItem("lab-theme");
+  if (storedTheme === "dark" || storedTheme === "light") {
+    root.setAttribute("data-theme", storedTheme);
+  } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    root.setAttribute("data-theme", "dark");
+  }
+  document.querySelector(".theme-toggle").addEventListener("click", function () {
+    var nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", nextTheme);
+    localStorage.setItem("lab-theme", nextTheme);
   });
 
-  var storedBase = localStorage.getItem("lab-base-url");
-  if (storedBase) baseInput.value = storedBase;
-  showAuth();
+  updateAuth();
 })();

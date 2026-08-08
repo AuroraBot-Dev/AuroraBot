@@ -96,7 +96,10 @@ async def run_console(
     stop = stop_event or asyncio.Event()
     output("AuroraBot local console; 输入 /help 查看命令。")
     prompt_reader = _PromptReader() if readline is None else None
-    display = asyncio.create_task(_display_messages(query, output, poll_seconds), name="aurora-console-output")
+    display = asyncio.create_task(
+        _display_messages(query, output, poll_seconds, query.output_tail_cursor()),
+        name="aurora-console-output",
+    )
     logger.info("local console started")
     try:
         terminal_context = patch_stdout(raw=True) if prompt_reader is not None else contextlib.nullcontext()
@@ -191,9 +194,9 @@ async def _display_messages(
     query: RuntimeQueryPort,
     output: Callable[[str], None],
     poll_seconds: float,
+    cursor: int,
 ) -> None:
     """按游标轮询输出流并渲染 Bot 的用户可见文本。"""
-    cursor = 0
     while True:
         page = query.output_stream(cursor)
         for item in page.items:

@@ -49,6 +49,9 @@ class _FakeEngine:
 
         return OutputStreamPage(items=(), next_cursor=cursor)
 
+    def output_tail_cursor(self) -> int:
+        return 0
+
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
         return [item["task"] for item in self.tasks.values()]
 

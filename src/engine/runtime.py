@@ -389,6 +389,10 @@ class AgentEngine:
         next_cursor = items[-1].cursor if items else cursor
         return OutputStreamPage(items=items, next_cursor=next_cursor)
 
+    def output_tail_cursor(self) -> int:
+        """当前输出流末尾游标：新前端从该游标起订阅，避免重放历史。"""
+        return self.store.recent_outputs_tail()
+
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
         """Task 列表投影（RFC 0218 观察操作）。"""
         rows = self.store.tasks(status=status, limit=limit)
