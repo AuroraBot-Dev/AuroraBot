@@ -137,6 +137,12 @@ aside h2 {
   font-weight: 500;
 }
 
+#quick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .quick {
   display: grid;
   grid-template-columns: 48px 1fr;
