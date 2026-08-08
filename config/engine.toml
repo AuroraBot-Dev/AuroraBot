@@ -1,0 +1,41 @@
+[engine]
+# engine 私有工作区；必须与 storage.engine 解析结果一致
+workspace = "data/engine"
+
+[engine.agents]
+# 入口（triage）Agent profile：Task 从 triage 开始，process 时委派本体意识（RFC 0209）
+root_profile = "builtin.triage"
+worker_profile = "builtin.worker"
+max_active_agents = 16
+max_agents_per_task = 8
+max_depth = 3
+max_children_per_agent = 4
+turn_concurrency = 8
+model_concurrency = 4
+tool_concurrency = 8
+blocking_workers = 4
+
+[engine.triage]
+model_role = "fast"
+quiet_seconds = 0.4
+max_wait_seconds = 1.5
+defer_seconds = 5.0
+max_defer_seconds = 60.0
+max_batch_events = 24
+max_batch_characters = 12000
+
+[engine.autonomy]
+scan_seconds = 1.0
+heartbeat_initial_seconds = 30.0
+heartbeat_min_seconds = 30.0
+heartbeat_max_seconds = 1800.0
+
+[engine.interactive_task]
+max_model_calls = 8
+max_tool_calls = 6
+max_duration_seconds = 300.0
+
+[engine.autonomous_task]
+max_model_calls = 3
+max_tool_calls = 2
+max_duration_seconds = 120.0

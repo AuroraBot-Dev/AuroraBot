@@ -1,9 +1,8 @@
-"""Single argparse entry point for all Aurora process commands."""
+"""所有 Aurora 进程命令的单一 argparse 入口点。"""
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,36 +14,19 @@ if TYPE_CHECKING:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构建包含所有 Aurora 子命令的顶层参数解析器。"""
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot CLI")
-    parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置与数据根目录")
-    parser.add_argument("--profile", type=str, default="prod", help="配置运行档案")
-    parser.add_argument("--console", action="store_true", help="启用 Console 平台")
-    parser.add_argument("--dashboard", action="store_true", help="启用 Dashboard 平台")
-    parser.add_argument("--mcp", action="store_true", help="启用 MCP 平台")
-    parser.add_argument("--headless", action="store_true", help="不启用外部平台")
-    register_commands(parser.add_subparsers(dest="command"))
-    parser.set_defaults(executor=_execute_runtime)
+    parser.add_argument("--root", type=Path, default=Path.cwd(), help="配置运行根目录")
+    parser.add_argument("--profile", type=str, default=None, help="配置运行档案")
+    register_commands(parser.add_subparsers(dest="command", required=True))
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    """解析命令行参数并分发到对应子命令执行器。"""
     parser = build_parser()
     arguments = parser.parse_args(argv)
-    selected = frozenset(name for name in ("console", "dashboard", "mcp") if getattr(arguments, name))
-    if arguments.command == "check":
-        if arguments.headless or selected:
-            parser.error("platform selection options cannot be used with check")
-    elif arguments.headless and selected:
-        parser.error("--headless cannot be combined with --console, --dashboard, or --mcp")
-    arguments.platforms = frozenset() if arguments.headless else selected or None
     return arguments.executor(arguments)
-
-
-def _execute_runtime(arguments: argparse.Namespace) -> int:
-    from aurora.runtime import run_runtime
-
-    asyncio.run(run_runtime(arguments.root, arguments.profile, arguments.platforms))
-    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> None:

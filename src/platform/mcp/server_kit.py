@@ -2,8 +2,6 @@
 
 负责本地 stdio MCP Server 的启动、停止、重启和健康检查。
 工具能力由 MCP Client 通过 tools/list 动态发现。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -14,15 +12,42 @@ import os
 import signal
 import tempfile
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.utils.log_utils import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
 
-logger = get_logger("MCPServerKit")
+logger = get_logger("aurora.platform.mcp.server_kit")
+_STDOUT_LIMIT = 16 * 1024 * 1024
+_INHERITED_ENV = frozenset(
+    {
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOCALAPPDATA",
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "USERPROFILE",
+        "WINDIR",
+        "XDG_CACHE_HOME",
+    }
+)
+
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    NO_COMMAND = "Server {key} 没有配置启动命令"
+    START_FAILED_IO = "启动 Server {key} 失败: 命令或临时目录不可用 {command} — {error}"
+    START_FAILED_OS = "启动 Server {key} 失败: {error}"
+    NOT_RUNNING = "Server {key} 不在运行中，无法重启"
 
 
 def _ensure_tempdir() -> Path:
@@ -51,6 +76,14 @@ def _ensure_tempdir() -> Path:
     logger.debug("系统 TEMP 不可写，回退使用 CWD: %s", cwd)
     tempfile.tempdir = str(cwd)
     return cwd
+
+
+def _subprocess_environment(extra: dict[str, str], temp_dir: Path) -> dict[str, str]:
+    """只继承进程启动所需环境，并叠加 App 显式授权的变量。"""
+    environment = {name: os.environ[name] for name in _INHERITED_ENV if name in os.environ}
+    environment.update({"TEMP": str(temp_dir), "TMP": str(temp_dir), "TMPDIR": str(temp_dir)})
+    environment.update(extra)
+    return environment
 
 
 @dataclass(slots=True)
@@ -115,27 +148,25 @@ class MCPServerKit:
         logger.info("启动 MCP Server: %s (%s)", spec.name, spec.key)
 
         if not spec.command:
-            msg = f"Server {spec.key} 没有配置启动命令"
-            raise RuntimeError(msg)
+            raise RuntimeError(_Msg.NO_COMMAND.format(key=spec.key))
 
-        _ensure_tempdir()
+        temp_dir = _ensure_tempdir()
 
         try:
             process = await asyncio.create_subprocess_exec(
                 *spec.command,
                 *spec.args,
                 cwd=str(spec.directory) if spec.directory else None,
-                env={**os.environ, **spec.env},
+                env=_subprocess_environment(spec.env, temp_dir),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=_STDOUT_LIMIT,
             )
         except FileNotFoundError as exc:
-            msg = f"启动 Server {spec.key} 失败: 命令或临时目录不可用 {spec.command} — {exc}"
-            raise RuntimeError(msg) from exc
+            raise RuntimeError(_Msg.START_FAILED_IO.format(key=spec.key, command=spec.command, error=exc)) from exc
         except OSError as exc:
-            msg = f"启动 Server {spec.key} 失败: {exc}"
-            raise RuntimeError(msg) from exc
+            raise RuntimeError(_Msg.START_FAILED_OS.format(key=spec.key, error=exc)) from exc
 
         server_proc = ServerProcess(spec=spec, process=process)
         self._processes[spec.key] = server_proc
@@ -209,24 +240,6 @@ class MCPServerKit:
         del self._processes[key]
         logger.info("MCP Server %s 已停止", key)
 
-    async def restart_one(self, key: str) -> asyncio.subprocess.Process:
-        """重启单个 Server。
-
-        Args:
-            key: Server 的 key。
-
-        Returns:
-            新的子进程句柄。
-        """
-        server_proc = self._processes.get(key)
-        if server_proc is None:
-            msg = f"Server {key} 不在运行中，无法重启"
-            raise RuntimeError(msg)
-
-        spec = server_proc.spec
-        await self.stop_one(key)
-        return await self.start_one(spec)
-
     # ── 健康检查 ──
 
     async def _forward_stderr(self, key: str, process: asyncio.subprocess.Process) -> None:
@@ -243,23 +256,6 @@ class MCPServerKit:
                         extra={"aurora_terminal": self._terminal_logs},
                     )
 
-    def health_report(self) -> dict[str, str]:
-        """返回所有 Server 的健康状态。
-
-        Returns:
-            ``{key: "running" | "stopped" | "crashed"}`` 的映射。
-        """
-        report: dict[str, str] = {}
-        for key, server_proc in self._processes.items():
-            proc = server_proc.process
-            if proc.returncode is None:
-                report[key] = "running"
-            elif proc.returncode == 0:
-                report[key] = "stopped"
-            else:
-                report[key] = f"crashed (code={proc.returncode})"
-        return report
-
     async def _health_check_loop(self, key: str, server_proc: ServerProcess) -> None:
         """定期检查单个 Server 进程状态。
 
@@ -267,7 +263,7 @@ class MCPServerKit:
             key: Server 的 key。
             server_proc: Server 进程信息。
         """
-        timeout = server_proc.spec.health_timeout_seconds
+        timeout = server_proc.spec.health_poll_seconds
         try:
             while True:
                 await asyncio.sleep(timeout)

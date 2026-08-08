@@ -9,11 +9,12 @@ stdout/stderr 重定向到输出文件。
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import sys
 import tempfile
 import time
-from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,13 +26,24 @@ from src.sandbox.paths import (
     SANDBOX_OUTPUT_DIR,
     SANDBOX_TEMP_DIR,
 )
-from src.utils.log_utils import get_logger
+from src.utils import get_logger, utc_today
 
 if TYPE_CHECKING:
     from src.sandbox.inspector import CodeInspector
     from src.sandbox.policy import AccessPolicy, AccessPolicySnapshot
 
-logger = get_logger("SandboxExecutor")
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    ACCESS_DENIED = "访问被拒绝"
+    DISK_SPACE_ERROR = "磁盘空间不足，无法执行代码（需要至少 100MB 可用空间）"
+    UNEXPECTED_ERROR = "执行过程中发生未预期的错误"
+    TIMEOUT_ERROR = "执行超时（超过 {timeout} 秒）"
+    WRITE_DENIED = "写入被拒绝"
+
+
+logger = get_logger("aurora.sandbox.executor")
 
 
 class SandboxExecutor:
@@ -53,12 +65,12 @@ class SandboxExecutor:
         context: dict[str, Any] | None = None,
         policy_snapshot: "AccessPolicySnapshot | None" = None,
     ) -> SandboxResult:
-        """执行 Python 代码，并将结果写入 SANDBOX_OUT_DIR。"""
+        """执行 Python 代码，并将结果写入 SANDBOX_OUTPUT_DIR。"""
         if not self._check_disk_space():
             return SandboxResult(
                 success=False,
                 output="",
-                error="磁盘空间不足,无法执行代码(需要至少 100MB 可用空间)",
+                error=_Msg.DISK_SPACE_ERROR,
             )
 
         start_time = time.monotonic()
@@ -84,7 +96,7 @@ class SandboxExecutor:
             return SandboxResult(
                 success=False,
                 output="",
-                error="执行过程中发生未预期的错误",
+                error=_Msg.UNEXPECTED_ERROR,
                 execution_time=time.monotonic() - start_time,
             )
 
@@ -95,14 +107,14 @@ class SandboxExecutor:
 
     def _create_sandbox_temp(self, session_id: str) -> Path:
         """在 SANDBOX_TEMP_DIR 下创建带日期和 session_id 前缀的临时目录。"""
-        today = datetime.now(UTC).date().isoformat()
+        today = utc_today()
         prefix = f"{today}-{session_id}-"
         SANDBOX_TEMP_DIR.mkdir(parents=True, exist_ok=True)
         return Path(tempfile.mkdtemp(dir=SANDBOX_TEMP_DIR, prefix=prefix))
 
     def _create_output_dir(self, session_id: str) -> Path:
         """创建 stdout/stderr 重定向文件和产物文件的输出目录。"""
-        today = datetime.now(UTC).date().isoformat()
+        today = utc_today()
         output_dir = SANDBOX_OUTPUT_DIR / f"{today}-{session_id}"
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
@@ -126,7 +138,7 @@ class SandboxExecutor:
         snapshot: "AccessPolicySnapshot",
     ) -> tuple[str, str]:
         """生成安全命名空间代码片段。"""
-        # safe builtins: 从 builtins 模块中按白名单提取
+        # 从 builtins 模块中按白名单提取安全内置函数
         builtins_items = []
         for name in sorted(snapshot.whitelist_builtins):
             if name in snapshot.blacklist_builtins:
@@ -134,10 +146,8 @@ class SandboxExecutor:
             builtins_items.append(f'    "{name}": _b.{name},')
         safe_builtins_code = "_safe_builtins = {\n" + "\n".join(builtins_items) + "\n}"
 
-        # context injection
+        # 注入执行上下文变量
         if context:
-            import json
-
             ctx_json = json.dumps(context, ensure_ascii=False, default=str)
             context_code = f"_ctx = {ctx_json}"
         else:
@@ -173,7 +183,7 @@ class SandboxExecutor:
                 return (
                     False,
                     stdout_path.read_text(encoding="utf-8", errors="replace")[:SANDBOX_MAX_OUTPUT_SIZE],
-                    f"执行超时(超过 {SANDBOX_EXEC_TIMEOUT} 秒)",
+                    _Msg.TIMEOUT_ERROR.format(timeout=SANDBOX_EXEC_TIMEOUT),
                 )
 
         stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace")
@@ -199,12 +209,12 @@ class SandboxExecutor:
     def read_file(self, path: Path) -> str:
         """读取文件内容，受限于 AccessPolicy 文件白名单。"""
         if not self._policy.can_read_file(path):
-            raise PermissionError("访问被拒绝")
+            raise PermissionError(_Msg.ACCESS_DENIED)
         return path.read_text(encoding="utf-8")
 
     def write_file(self, path: Path, content: str) -> None:
         """写入文件内容，写模式仅限 SANDBOX_DIR 内。"""
         if not self._policy.can_open_file(path, "w"):
-            raise PermissionError("写入被拒绝")
+            raise PermissionError(_Msg.WRITE_DENIED)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")

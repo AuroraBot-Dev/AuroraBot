@@ -92,7 +92,7 @@
   "start": {
     "index": "03 · 开始",
     "title": "从源码运行。",
-    "description": "需要 Python 3.12、Git、uv，以及默认模型配置对应的 API Key。",
+    "description": "需要 Python 3.12（推荐，以上版本未经充分验证）、Git、uv，以及默认模型配置对应的 API Key。",
     "terminal": "PowerShell",
     "copy": "复制",
     "copied": "已复制",

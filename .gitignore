@@ -45,6 +45,7 @@ config.ini
 logs/
 data/
 temp/
+extensions/
 
 # IDE / Editor
 .vscode/

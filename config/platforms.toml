@@ -1,0 +1,7 @@
+# 平台配置 — 启用状态与平台私有服务器配置
+
+# MCP：模型上下文协议，子进程与远程服务管理
+[platform.mcp]
+enabled = true
+# 是否在终端输出 MCP 子进程诊断（stdin/stdout 不受影响）
+terminal_logs = true

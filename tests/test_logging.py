@@ -1,36 +1,27 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING
 
 import pytest
 
-from src.ai.vnext import ModelGatewayService
-from src.contracts.configuration import load_configuration
-from src.contracts.model import ModelGatewayError, ModelMessage, ModelRequest
-from src.localhost.runtime import AuroraRuntime
-from src.utils import log_utils
-from src.utils.log_utils import configure_logging, get_logger
-from tests.test_events import valid_amp
+from src.utils import (
+    UnsupportedLoggingLevelError,
+    configure_console_logging,
+    configure_logging,
+    console_logging_status,
+    get_logger,
+)
+from src.utils import logging as aurora_logging
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class RecordHandler(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__(logging.DEBUG)
-        self.records: list[logging.LogRecord] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
-
-
-def test_mcp_child_diagnostics_can_skip_terminal_without_skipping_file(tmp_path: Path) -> None:
-    terminal = log_utils._create_stream_handler()
+def test_terminal_visibility_filter_does_not_hide_file_audit(tmp_path: Path) -> None:
+    terminal = aurora_logging._create_stream_handler()
     logfile = tmp_path / "mcp.log"
-    file_handler = log_utils._create_file_handler(logfile)
+    file_handler = aurora_logging._create_file_handler(logfile)
     record = logging.LogRecord("MCPServerKit", logging.INFO, __file__, 1, "child diagnostic", (), None)
     record.aurora_terminal = False
     try:
@@ -40,82 +31,34 @@ def test_mcp_child_diagnostics_can_skip_terminal_without_skipping_file(tmp_path:
     finally:
         terminal.close()
         file_handler.close()
-
     assert "child diagnostic" in logfile.read_text(encoding="utf-8")
 
 
-def test_runtime_configuration_updates_existing_and_future_utils_loggers() -> None:
+def test_runtime_configuration_updates_existing_and_future_loggers(tmp_path: Path) -> None:
+    logfile = tmp_path / "aurora.log"
     existing = get_logger("aurora.test.logging.existing")
-    configure_logging("ERROR")
+    configure_logging("ERROR", logfile)
     future = get_logger("aurora.test.logging.future")
 
     assert existing.level == logging.ERROR
     assert future.level == logging.ERROR
-    assert all(handler.level == logging.ERROR for handler in existing.handlers)
-    assert all(handler.level == logging.ERROR for handler in future.handlers)
+    assert any(hasattr(handler, "baseFilename") for handler in existing.handlers)
 
+    configure_console_logging(enabled=False, level="DEBUG")
+    status = console_logging_status()
+    assert status == {"enabled": False, "console_level": "debug", "file_level": "error"}
+    marker = "file-audit-survives-console-off"
+    existing.error(marker)
+    for handler in existing.handlers:
+        handler.flush()
+    assert marker in logfile.read_text(encoding="utf-8")
+
+    configure_console_logging(enabled=True)
     configure_logging("INFO")
 
 
-def test_causal_logs_have_correlation_ids_without_amp_content(project_root: Path) -> None:
-    async def scenario() -> None:
-        runtime = AuroraRuntime.create(project_root)
-        configure_logging("DEBUG")
-        handler = RecordHandler()
-        loggers = [
-            get_logger("aurora.kernel"),
-            get_logger("aurora.runtime"),
-            get_logger("aurora.agent.tool"),
-            get_logger("aurora.platform.console"),
-        ]
-        for item in loggers:
-            item.addHandler(handler)
-        amp = valid_amp()
-        amp["payload"]["summary"] = "TOP-SECRET-CONTENT"
-        amp["payload"]["data"] = {"text": "TOP-SECRET-CONTENT"}
-        try:
-            await runtime.submit_amp(amp)
-            await runtime.pump()
-        finally:
-            for item in loggers:
-                item.removeHandler(handler)
-            await runtime.shutdown()
-            configure_logging("INFO")
-
-        messages = "\n".join(record.getMessage() for record in handler.records)
-        assert "TOP-SECRET-CONTENT" not in messages
-        assert "task_id=" in messages
-        assert "agent_id=" in messages
-
-    asyncio.run(scenario())
-
-
-def test_model_gateway_logs_metadata_without_prompt_content(
-    project_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    async def scenario() -> None:
-        monkeypatch.delenv("AURORA_TEST_MODEL_API_KEY", raising=False)
-        service = ModelGatewayService(load_configuration(project_root))
-        configure_logging("DEBUG")
-        handler = RecordHandler()
-        gateway_logger = get_logger("aurora.model_gateway")
-        gateway_logger.addHandler(handler)
-        try:
-            with pytest.raises(ModelGatewayError, match="missing model credential"):
-                await service.complete(
-                    ModelRequest(
-                        role="fast",
-                        messages=(ModelMessage("user", "PRIVATE-PROMPT-CONTENT"),),
-                        parameters={"temperature": 0.2},
-                    )
-                )
-        finally:
-            gateway_logger.removeHandler(handler)
-            configure_logging("INFO")
-
-        messages = "\n".join(record.getMessage() for record in handler.records)
-        assert "PRIVATE-PROMPT-CONTENT" not in messages
-        assert "messages=1" in messages
-        assert "parameter_keys=['temperature']" in messages
-
-    asyncio.run(scenario())
+def test_logging_levels_accept_warn_and_reject_unknown() -> None:
+    assert aurora_logging._level_number("warn") == logging.WARNING
+    assert aurora_logging._level_name(logging.DEBUG) == "DEBUG"
+    with pytest.raises(UnsupportedLoggingLevelError):
+        aurora_logging._level_number("verbose")

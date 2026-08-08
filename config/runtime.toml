@@ -1,0 +1,27 @@
+# 运行时配置 — 进程级别参数，可通过 profiles/<name>.toml 覆盖
+
+[runtime]
+# 激活的 profile（prod / dev），控制 profile 文件的选择
+profile = "prod"
+
+[runtime.panel]
+# 面板后端（RFC 0218）唯一 HTTP 服务：认证、操作资源树与聊天语义
+enabled = true
+# HTTP 绑定地址，必须为 loopback
+host = "127.0.0.1"
+# HTTP 端口，1–65535
+port = 8765
+# 允许的跨域来源（前端开发服务器）
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# 启动后是否自动打开浏览器
+open_browser = false
+# 会话超时（秒）
+session_ttl_seconds = 604800
+# 附件上传最大字节数，0 表示禁用附件
+max_upload_bytes = 67108864
+
+[runtime.console]
+# 是否启动本地交互 Console（--headless 时始终关闭）
+enabled = true
+# 是否在终端输出运行时日志（仍写入文件）
+terminal_logs = false

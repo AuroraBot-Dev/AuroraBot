@@ -1,11 +1,29 @@
-"""Provider-neutral contracts for the RFC 0012 durable Agent runtime."""
+"""Agent 运行时核心契约：状态、决策、上下文、配置与跨层 Protocol。"""
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+
+from src.contracts.memory import MemoryContextSnapshot
+from src.contracts.model import ToolDefinition
+from src.contracts.triage import TriageLimits
+
+if TYPE_CHECKING:
+    from src.contracts.model import ModelRequest, ToolCall
+
+
+# -- enums ---------------------------------------------------------------
+
+
+class _Msg(StrEnum):
+    """Agent handler 或工具调用的错误码。"""
+
+    AGENT_DECISION_REQUIRES_ONE_TRANSITION = "AgentDecision must contain exactly one atomic transition"
+    CAPABILITY_IDS_MUST_BE_UNIQUE = "capability IDs must be unique"
 
 
 class TaskStatus(StrEnum):
@@ -18,11 +36,9 @@ class TaskStatus(StrEnum):
 
 
 class AgentStatus(StrEnum):
+    """Agent 持久化基态；等待语义由 activities/children 派生（RFC 0205）。"""
+
     READY = "READY"
-    RUNNING = "RUNNING"
-    WAITING_MODEL = "WAITING_MODEL"
-    WAITING_EFFECT = "WAITING_EFFECT"
-    WAITING_CHILDREN = "WAITING_CHILDREN"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -43,9 +59,7 @@ class ActivityStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
-CapabilityKind = Literal["effect", "publication"]
-PublicationOperation = Literal["reply", "relay", "proactive_send"]
-PublicationCompletionMode = Literal["continue", "complete_on_success"]
+# -- 配置类型 ------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,10 +67,7 @@ class CapabilityDescriptor:
     id: str
     description: str
     parameters_schema: dict[str, Any]
-    kind: CapabilityKind = "effect"
-    endpoint: str | None = None
-    operation: PublicationOperation | None = None
-    root_only: bool = False
+    runtime_completion: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -69,17 +80,7 @@ class CapabilityCatalogSnapshot:
     def __post_init__(self) -> None:
         identifiers = [item.id for item in self.capabilities]
         if len(identifiers) != len(set(identifiers)):
-            raise ValueError("capability IDs must be unique")
-        for item in self.capabilities:
-            if item.kind not in {"effect", "publication"}:
-                raise ValueError("capability kind must be effect or publication")
-            if item.kind == "publication":
-                if not item.endpoint or item.operation not in {"reply", "relay", "proactive_send"}:
-                    raise ValueError("publication capability requires endpoint and operation")
-                if not item.root_only:
-                    raise ValueError("publication capability must be root_only")
-            elif item.endpoint is not None or item.operation is not None:
-                raise ValueError("effect capability cannot declare a publication endpoint or operation")
+            raise ValueError(_Msg.CAPABILITY_IDS_MUST_BE_UNIQUE)
 
     @property
     def by_id(self) -> MappingProxyType[str, CapabilityDescriptor]:
@@ -90,7 +91,7 @@ class CapabilityCatalogSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
-class TaskBudget:
+class TaskLimits:
     max_model_calls: int
     max_tool_calls: int
     max_duration_seconds: float
@@ -98,19 +99,16 @@ class TaskBudget:
 
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
-    root_profile: str = "builtin.gate"
+    root_profile: str = "builtin.triage"
     worker_profile: str = "builtin.worker"
-    memory_agent_profile: str | None = None
     max_active_agents: int = 16
     max_agents_per_task: int = 8
     max_depth: int = 3
     max_children_per_agent: int = 4
     turn_concurrency: int = 8
     model_concurrency: int = 4
-    effect_concurrency: int = 8
+    tool_concurrency: int = 8
     blocking_workers: int = 4
-    lease_seconds: float = 30.0
-    ambient_ttl_seconds: float = 1800.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,24 +116,80 @@ class AgentProfile:
     id: str
     implementation: str
     model_role: str
-    prompt: str
     capabilities: frozenset[str]
     can_delegate: bool
     child_profiles: frozenset[str]
+    triage_control: bool = False
 
 
 @dataclass(frozen=True, slots=True)
-class KernelConfiguration:
+class EngineConfiguration:
     workspace: str
-    soul_content: str
-    soul_hash: str
     profiles: tuple[AgentProfile, ...]
     limits: AgentLimits
-    interactive_budget: TaskBudget
-    autonomous_budget: TaskBudget
+    interactive_budget: TaskLimits
+    autonomous_budget: TaskLimits
+    triage: TriageLimits
 
 
-@dataclass(slots=True)
+# -- Agent 动作 ----------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DelegationRequest:
+    instruction: str
+    profile_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ToolRequest:
+    capability: str
+    parameters: dict[str, Any]
+    complete_task: bool = False
+    tool_call_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "ToolRequest":
+        """从持久化的工具活动请求字典反序列化。"""
+        return cls(
+            capability=str(value["capability"]),
+            parameters=dict(value.get("parameters", {})),
+            complete_task=bool(value.get("complete_task", False)),
+            tool_call_id=value.get("tool_call_id"),
+        )
+
+
+def capability_tool_definition(descriptor: CapabilityDescriptor) -> ToolDefinition:
+    """保持外部 schema 原样，不再注入隐藏参数。"""
+    return ToolDefinition(descriptor.id, descriptor.description, deepcopy(descriptor.parameters_schema))
+
+
+@dataclass(frozen=True, slots=True)
+class Completion:
+    summary: str
+    artifacts: tuple[dict[str, Any], ...] = ()
+    silent: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ChildResult:
+    child_agent_id: str
+    status: Literal["completed", "failed"]
+    summary: str
+    artifacts: tuple[dict[str, Any], ...] = ()
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# -- 运行时状态 ---------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
 class TaskState:
     task_id: str
     root_agent_id: str
@@ -151,7 +205,6 @@ class TaskState:
     max_duration_seconds: float
     started_at: str
     updated_at: str
-    audience_ref: str = "system.local"
     termination_reason: str | None = None
 
     @property
@@ -162,7 +215,7 @@ class TaskState:
         return asdict(self)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentInstance:
     agent_id: str
     task_id: str
@@ -171,7 +224,6 @@ class AgentInstance:
     depth: int
     assignment: str
     status: AgentStatus
-    revision: int
     state: dict[str, Any]
     created_at: str
     updated_at: str
@@ -196,144 +248,7 @@ class AgentMessage:
     correlation_id: str
     priority: int
     status: MessageStatus
-    available_at: str
-    lease_until: str | None
     created_at: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
-class DelegationRequest:
-    instruction: str
-    profile_id: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class EffectRequest:
-    capability: str
-    parameters: dict[str, Any]
-    tool_call_id: str | None = None
-    continuation: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class CommunicationContext:
-    endpoint_id: str
-    audience_ref: str
-    external_event_id: str | None = None
-    external_message_id: str | None = None
-    conversation_ref: str | None = None
-    actor_ref: str | None = None
-    reply_route_ref: str | None = None
-
-    @classmethod
-    def from_dict(cls, value: object, *, require_message_fields: bool = False) -> "CommunicationContext":
-        if not isinstance(value, dict):
-            raise TypeError("communication context must be an object")
-        allowed = {
-            "endpoint_id",
-            "external_event_id",
-            "external_message_id",
-            "conversation_ref",
-            "actor_ref",
-            "audience_ref",
-            "reply_route_ref",
-        }
-        if set(value) - allowed:
-            raise ValueError("communication context contains unsupported fields")
-        endpoint_id = value.get("endpoint_id")
-        audience_ref = value.get("audience_ref")
-        if not isinstance(endpoint_id, str) or not endpoint_id:
-            raise ValueError("communication endpoint_id must be a non-empty string")
-        if not isinstance(audience_ref, str) or not audience_ref:
-            raise ValueError("communication audience_ref must be a non-empty string")
-        optional: dict[str, Any] = {}
-        string_fields = allowed - {"endpoint_id", "audience_ref"}
-        for name in string_fields:
-            item = value.get(name)
-            if item is not None and (not isinstance(item, str) or not item):
-                raise ValueError(f"communication {name} must be a non-empty string or null")
-            optional[name] = item
-        if require_message_fields and any(optional[name] is None for name in string_fields):
-            raise ValueError("message.received communication context requires all fields")
-        return cls(endpoint_id=endpoint_id, audience_ref=audience_ref, **optional)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
-class DestinationGrant:
-    alias: str
-    endpoint_id: str
-    capability_id: str
-    operation: Literal["relay", "proactive_send"]
-    allowed_source_audiences: frozenset[str]
-    target_audience_ref: str
-    configuration_hash: str
-    description: str = ""
-    target_audience_label: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "alias": self.alias,
-            "endpoint_id": self.endpoint_id,
-            "capability_id": self.capability_id,
-            "operation": self.operation,
-            "allowed_source_audiences": sorted(self.allowed_source_audiences),
-            "target_audience_ref": self.target_audience_ref,
-            "configuration_hash": self.configuration_hash,
-            "description": self.description,
-            "target_audience_label": self.target_audience_label,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PublicationRequest:
-    operation: PublicationOperation
-    text: str
-    completion_mode: PublicationCompletionMode
-    route_ref: str | None = None
-    destination: str | None = None
-    reason: str | None = None
-    tool_call_id: str | None = None
-    continuation: dict[str, Any] | None = None
-
-    def __post_init__(self) -> None:
-        if self.operation not in {"reply", "relay", "proactive_send"}:
-            raise ValueError("unsupported publication operation")
-        if not self.text:
-            raise ValueError("publication text must be non-empty")
-        if self.completion_mode not in {"continue", "complete_on_success"}:
-            raise ValueError("unsupported publication completion mode")
-        if self.operation == "reply":
-            if not self.route_ref or self.destination is not None:
-                raise ValueError("reply publication requires route_ref and forbids destination")
-        elif not self.destination or self.route_ref is not None:
-            raise ValueError("relay/proactive publication requires destination and forbids route_ref")
-        if self.operation == "proactive_send" and not self.reason:
-            raise ValueError("proactive_send publication requires reason")
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
-class Completion:
-    summary: str
-    artifacts: tuple[dict[str, Any], ...] = ()
-    silent: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class ChildResult:
-    child_agent_id: str
-    status: Literal["completed", "failed"]
-    summary: str
-    artifacts: tuple[dict[str, Any], ...] = ()
-    error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -341,30 +256,47 @@ class ChildResult:
 
 @dataclass(frozen=True, slots=True)
 class AgentDecision:
-    model_request: dict[str, Any] | None = None
-    effect_request: EffectRequest | None = None
-    publication_request: PublicationRequest | None = None
+    model_request: "ModelRequest | None" = None
+    tool_request: ToolRequest | None = None
     delegations: tuple[DelegationRequest, ...] = ()
-    claims: tuple[str, ...] = ()
     completion: Completion | None = None
     wait_for_children: bool = False
+    defer_seconds: float | None = None
+    discard: bool = False
     failure: str | None = None
     state_patch: dict[str, Any] = field(default_factory=dict)
+    memory_candidates: tuple[str, ...] = ()
+    summary: str = ""
 
     def __post_init__(self) -> None:
-        actions = sum(
-            (
-                self.model_request is not None,
-                self.effect_request is not None,
-                self.publication_request is not None,
-                bool(self.delegations),
-                self.completion is not None,
-                self.wait_for_children,
-                self.failure is not None,
-            )
+        transitions = (
+            self.model_request is not None,
+            self.tool_request is not None,
+            bool(self.delegations),
+            self.completion is not None,
+            self.wait_for_children,
+            self.defer_seconds is not None,
+            self.discard,
+            self.failure is not None,
         )
-        if actions != 1:
-            raise ValueError("AgentDecision must contain exactly one primary action")
+        if sum(transitions) != 1:
+            raise ValueError(_Msg.AGENT_DECISION_REQUIRES_ONE_TRANSITION)
+
+    def to_dict(self) -> dict[str, Any]:
+        """将决策序列化为因果事件载荷。"""
+        return {
+            "model_request": self.model_request.to_dict() if self.model_request is not None else None,
+            "tool_request": self.tool_request.to_dict() if self.tool_request is not None else None,
+            "delegations": [asdict(item) for item in self.delegations],
+            "completion": asdict(self.completion) if self.completion is not None else None,
+            "wait_for_children": self.wait_for_children,
+            "defer_seconds": self.defer_seconds,
+            "discard": self.discard,
+            "failure": self.failure,
+            "state_patch": self.state_patch,
+            "memory_candidates": list(self.memory_candidates),
+            "summary": self.summary,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,86 +304,40 @@ class ActivityRequest:
     activity_id: str
     task_id: str
     agent_id: str
-    kind: Literal["model", "effect", "publication"]
+    kind: Literal["model", "tool"]
     request: dict[str, Any]
     status: ActivityStatus
     priority: int
     idempotency_key: str
-    lease_until: str | None
     created_at: str
 
 
 @dataclass(frozen=True, slots=True)
-class EffectLease:
-    activity_id: str
-    task_id: str
-    agent_id: str
-    request_id: str
-    session_id: str
-    capability: str
-    parameters: dict[str, Any]
-
-
-@dataclass(frozen=True, slots=True)
-class PublicationLease:
-    activity_id: str
-    task_id: str
-    agent_id: str
-    request_id: str
-    capability: str
-    endpoint_id: str
-    operation: PublicationOperation
-    text: str
-    completion_mode: PublicationCompletionMode
-    source_audience_ref: str
-    target_audience_ref: str
-    root_message_id: str
-    route_ref: str | None = None
-    destination: str | None = None
-    reason: str | None = None
-    tool_call_id: str | None = None
-    continuation: dict[str, Any] | None = None
-    source_endpoint_id: str | None = None
-    source_external_event_id: str | None = None
-    hop_count: int = 0
-    configuration_hash: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class BrainContextSnapshot:
-    persona: dict[str, str]
-    active_tasks: tuple[dict[str, Any], ...]
-    active_agents: tuple[dict[str, Any], ...]
-    ambient_situations: tuple[dict[str, Any], ...]
-    generated_at: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
 class AgentContext:
+    """一次 Agent 轮次的只读快照；handler 不得修改任何字段。"""
+
     task: TaskState
     agent: AgentInstance
     message: AgentMessage
     children: tuple[AgentInstance, ...]
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
-    brain: BrainContextSnapshot
-    memory_agent_profile: str | None = None
+    tool_definitions: tuple[ToolDefinition, ...] = ()
+    memory: MemoryContextSnapshot = field(default_factory=MemoryContextSnapshot)
+    pending_child_reports: bool = False
+
+
+# -- Protocols ------------------------------------------------------------
 
 
 class AgentHandler(Protocol):
     def handle(self, context: AgentContext) -> AgentDecision: ...
 
 
-class EffectQueue(Protocol):
-    async def claim_effect_requests(self) -> tuple[EffectLease, ...]: ...
+class Capability(Protocol):
+    @property
+    def tool_names(self) -> frozenset[str]: ...
 
+    def tool_definitions(self, context: AgentContext) -> tuple["ToolDefinition", ...]: ...
 
-class ModelActivityQueue(Protocol):
-    async def claim_model_requests(self, limit: int) -> tuple[ActivityRequest, ...]: ...
-
-    async def complete_model(
-        self, activity: ActivityRequest, result: dict[str, Any] | None, error: str | None
-    ) -> None: ...
+    def handle_tool(self, call: "ToolCall") -> AgentDecision | None: ...

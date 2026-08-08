@@ -1,1 +1,1 @@
-"""Platform normalization and effect execution adapters."""
+"""外部生态输入与环境效果适配器。"""

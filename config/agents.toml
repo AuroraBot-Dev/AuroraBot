@@ -1,35 +1,40 @@
-# RFC 0012 同构 Agent profiles。所有 profile 使用同一 handler，只改变模型与能力策略。
+# Agent 定义 — profile、能力授权与委派边界
+# 每个 [[agent]] 定义一个 Agent 配置项
+# capabilities 支持 `!` 前缀排除语义：否定优先于 `*` 与前缀通配（RFC 0207）
 
+# Triage：注意力初筛入口 agent（RFC 0209），无工具、快模型，process 时委派本体意识
+[[agent]]
+id = "builtin.triage"
+implementation = "src.agents.triage:TriageAgent"
+model_role = "fast"
+capabilities = []
+can_delegate = true
+child_profiles = ["builtin.gate"]
+triage_control = true
+
+# Gate：本体意识，接收 Triage 委派并决定是否继续委派
 [[agent]]
 id = "builtin.gate"
-implementation = "src.agents.tool_agent:ToolAgent"
-model_role = "fast"
-prompt = "Gate the task, handle it directly when simple, or delegate bounded subtasks when useful."
-capabilities = [
-    "org.aurora.console.send_message",
-    "org.aurora.dashboard.send_message",
-    "org.aurora.clock.get_current_time",
-    "org.aurora.clock.set_alarm",
-    "org.aurora.clock.set_timer",
-    "org.aurora.clock.list_alarms",
-    "org.aurora.clock.cancel_alarm",
-]
+implementation = "src.agents.handler:ToolAgent"
+model_role = "quality"
+capabilities = ["*", "!aur.serv.memory.remember"]
+can_delegate = true
+child_profiles = ["builtin.worker", "builtin.memory"]
+
+# Worker：执行具体工作的通用 Agent
+[[agent]]
+id = "builtin.worker"
+implementation = "src.agents.handler:ToolAgent"
+model_role = "quality"
+capabilities = ["*", "!aur.serv.memory.remember"]
 can_delegate = true
 child_profiles = ["builtin.worker"]
 
+# Memory：主动记忆写入的专精 Agent（RFC 0207）
 [[agent]]
-id = "builtin.worker"
-implementation = "src.agents.tool_agent:ToolAgent"
-model_role = "agent"
-prompt = "Complete the assigned task, use tools when necessary, and report a concise structured result to your parent."
-capabilities = [
-    "org.aurora.console.send_message",
-    "org.aurora.dashboard.send_message",
-    "org.aurora.clock.get_current_time",
-    "org.aurora.clock.set_alarm",
-    "org.aurora.clock.set_timer",
-    "org.aurora.clock.list_alarms",
-    "org.aurora.clock.cancel_alarm",
-]
-can_delegate = true
-child_profiles = ["builtin.worker"]
+id = "builtin.memory"
+implementation = "src.agents.handler:ToolAgent"
+model_role = "quality"
+capabilities = ["aur.serv.memory.remember"]
+can_delegate = false
+child_profiles = []

@@ -1,25 +1,62 @@
-"""Provider-neutral model gateway contracts defined by RFC 0005."""
+"""协议中立模型网关契约。"""
 
 from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from enum import StrEnum
+from typing import Any, Final, Literal, Protocol
 
+
+class _Msg(StrEnum):
+    """本文件内所有用户可见或日志输出的字符串常量。"""
+
+    INVALID_PERSISTED_MODEL_REQUEST = "invalid persisted model request"
+    INVALID_PERSISTED_MODEL_RESULT = "invalid persisted model result"
+    INVALID_CONTINUATION_CHANNEL = "invalid continuation channel"
+    INVALID_MODEL_CONTINUATION = "invalid model continuation"
+
+
+STRUCTURED_OUTPUT_NAME: Final = "aurora_result"
+
+# 模式、重试策略、取消策略、工具选择字面量类型
 ResponseMode = Literal["normalized", "native"]
 RetryPolicy = Literal["none"]
-CancelPolicy = Literal["never", "on_external_activity"]
+CancelPolicy = Literal["never"]
 ToolChoice = Literal["auto", "none", "required"]
 
 
 @dataclass(frozen=True, slots=True)
 class ModelMessage:
+    """标准模型消息：角色和内容。
+
+    ModelMessage object::
+
+        {
+            "role": "string",
+            "content": "string"
+        }
+
+    """
+
     role: str
     content: str
 
 
 @dataclass(frozen=True, slots=True)
 class ModelBudget:
+    """模型调用预算：最大输出 token、超时和可选成本上限。
+
+    ModelBudget object::
+
+        {
+            "max_output_tokens": 1024,
+            "timeout_seconds": 30.0,
+            "max_cost_usd": 1.0 | null
+        }
+
+    """
+
     max_output_tokens: int = 1024
     timeout_seconds: float = 30.0
     max_cost_usd: float | None = None
@@ -27,6 +64,30 @@ class ModelBudget:
 
 @dataclass(frozen=True, slots=True)
 class ModelRequest:
+    """完整的模型请求：角色、消息列表、能力需求、预算、工具和延续状态。
+
+    ModelRequest object::
+
+        {
+            "role": "string",
+            "messages": [ModelMessage, ...],
+            "required_capabilities": ["chat", ...],
+            "response_mode": "normalized" | "native",
+            "output_schema": {"...": "..."} | null,
+            "allow_json_text_fallback": true,
+            "invalid_output_result": {"...": "..."} | null,
+            "budget": ModelBudget,
+            "retry_policy": "none",
+            "tools": [ToolDefinition, ...],
+            "tool_choice": "auto" | "none" | "required",
+            "parallel_tool_calls": false,
+            "continuation": ModelContinuation | null,
+            "cancel_policy": "never",
+            "parameters": {"...": "..."}
+        }
+
+    """
+
     role: str
     messages: tuple[ModelMessage, ...]
     required_capabilities: frozenset[str] = frozenset({"chat"})
@@ -50,6 +111,7 @@ class ModelRequest:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ModelRequest":
+        """从持久化字典反序列化为 ModelRequest。"""
         budget_raw = value.get("budget", {})
         messages_raw = value.get("messages", [])
         tools_raw = value.get("tools", [])
@@ -59,7 +121,7 @@ class ModelRequest:
             or not isinstance(messages_raw, (list, tuple))
             or not isinstance(tools_raw, (list, tuple))
         ):
-            raise ValueError("invalid persisted model request")
+            raise ValueError(_Msg.INVALID_PERSISTED_MODEL_REQUEST)
         return cls(
             role=str(value["role"]),
             messages=tuple(ModelMessage(str(item["role"]), str(item["content"])) for item in messages_raw),
@@ -84,12 +146,43 @@ class ModelRequest:
 
 @dataclass(frozen=True, slots=True)
 class ModelUsage:
+    """模型用量统计：输入和输出 token 数。
+
+    ModelUsage object::
+
+        {
+            "prompt_tokens": 0,
+            "completion_tokens": 0
+        }
+
+    """
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class ModelResult:
+    """模型调用结果：模型标识、协商能力、响应文本、用量、成本和工具调用。
+
+    ModelResult object::
+
+        {
+            "model": "string",
+            "negotiated_capabilities": ["chat", ...],
+            "response_mode": "normalized" | "native",
+            "text": "string",
+            "data": {"...": "..."} | null,
+            "usage": ModelUsage,
+            "cost_usd": 0.0,
+            "diagnostics": ["string", ...],
+            "tool_calls": [ToolCall, ...],
+            "finish_reason": "stop",
+            "continuation": ModelContinuation | null
+        }
+
+    """
+
     model: str
     negotiated_capabilities: frozenset[str]
     response_mode: ResponseMode
@@ -109,11 +202,12 @@ class ModelResult:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ModelResult":
+        """从持久化字典反序列化为 ModelResult。"""
         usage = value.get("usage", {})
         calls = value.get("tool_calls", [])
         continuation = value.get("continuation")
         if not isinstance(usage, dict) or not isinstance(calls, (list, tuple)):
-            raise ValueError("invalid persisted model result")
+            raise ValueError(_Msg.INVALID_PERSISTED_MODEL_RESULT)
         return cls(
             model=str(value["model"]),
             negotiated_capabilities=frozenset(str(item) for item in value.get("negotiated_capabilities", [])),
@@ -133,6 +227,18 @@ class ModelResult:
 
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
+    """工具定义：名称、描述和参数 JSON Schema。
+
+    ToolDefinition object::
+
+        {
+            "name": "string",
+            "description": "string",
+            "parameters_schema": {"...": "..."}
+        }
+
+    """
+
     name: str
     description: str
     parameters_schema: dict[str, Any]
@@ -143,6 +249,18 @@ class ToolDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:
+    """模型发起的工具调用：调用 ID、工具名和参数。
+
+    ToolCall object::
+
+        {
+            "call_id": "string",
+            "name": "string",
+            "arguments": {"...": "..."}
+        }
+
+    """
+
     call_id: str
     name: str
     arguments: dict[str, Any]
@@ -153,6 +271,18 @@ class ToolCall:
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
+    """工具执行结果：调用 ID、结果数据和错误标记。
+
+    ToolResult object::
+
+        {
+            "call_id": "string",
+            "result": {"...": "..."},
+            "is_error": false
+        }
+
+    """
+
     call_id: str
     result: dict[str, Any]
     is_error: bool = False
@@ -160,7 +290,17 @@ class ToolResult:
 
 @dataclass(frozen=True, slots=True)
 class ModelContinuation:
-    """Serializable replay state owned by one model endpoint."""
+    """可序列化的模型端点重放状态。
+
+    ModelContinuation object::
+
+        {
+            "provider": "string",
+            "channel": "chat_completions" | "responses",
+            "items": [{"...": "..."}, ...]
+        }
+
+    """
 
     provider: str
     channel: Literal["chat_completions", "responses"]
@@ -171,14 +311,15 @@ class ModelContinuation:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ModelContinuation":
+        """从持久化字典反序列化，校验 channel 和 items 合法性。"""
         channel = value.get("channel")
         if channel not in {"chat_completions", "responses"}:
-            raise ValueError("invalid continuation channel")
+            raise ValueError(_Msg.INVALID_CONTINUATION_CHANNEL)
         provider = value.get("provider")
         items = value.get("items", [])
         valid_items = isinstance(items, (list, tuple)) and all(isinstance(item, dict) for item in items)
         if not isinstance(provider, str) or not valid_items:
-            raise ValueError("invalid model continuation")
+            raise ValueError(_Msg.INVALID_MODEL_CONTINUATION)
         return cls(provider, channel, tuple(dict(item) for item in items))
 
 
@@ -189,7 +330,7 @@ def append_tool_result(
     *,
     is_error: bool,
 ) -> ModelContinuation:
-    """Append one provider-neutral tool result using the continuation's replay shape."""
+    """将一条工具结果追加到延续状态中（按通道格式化）。"""
     serialized = json.dumps({"is_error": is_error, "result": result}, ensure_ascii=False, separators=(",", ":"))
     if continuation.channel == "responses":
         item = {"type": "function_call_output", "call_id": call_id, "output": serialized}
@@ -199,12 +340,18 @@ def append_tool_result(
 
 
 class ModelGatewayError(RuntimeError):
-    """A safe, auditable model capability or execution failure."""
+    """安全、可审计的模型能力或执行失败。"""
 
 
 class ModelCapabilityError(ModelGatewayError):
-    """The selected role or Provider cannot satisfy a request before invocation."""
+    """选定的角色或 Provider 无法在调用前满足请求。"""
 
 
 class ModelBudgetError(ModelGatewayError):
-    """A completed model call exceeded its declared cost budget."""
+    """模型调用超出声明的成本预算。"""
+
+
+class ModelProvider(Protocol):
+    """engine 调用模型实现的标准端口。"""
+
+    async def complete(self, request: ModelRequest) -> ModelResult: ...

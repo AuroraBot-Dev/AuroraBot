@@ -1,6 +1,6 @@
 """Sandbox 访问策略引擎。
 
-白名单 + 黑名单访问控制,规则优先级：黑名单 > 白名单 > 默认拒绝。
+白名单 + 黑名单访问控制，规则优先级：黑名单 > 白名单 > 默认拒绝。
 
 作者: [Wende](https://github.com/dengweitian0-svg)
 """
@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.sandbox.paths import SANDBOX_DIR
-from src.utils.log_utils import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
-    from src.sandbox.settings import SandboxConfig
+    from src.sandbox.config import SandboxConfig
 
-logger = get_logger("AccessPolicy")
+logger = get_logger("aurora.sandbox.policy")
 
 
 @dataclass(slots=True)
