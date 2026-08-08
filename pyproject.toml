@@ -17,6 +17,8 @@ dependencies = [
     "jsonschema>=4.23,<5",
     "python-multipart>=0.0.9",
     "prompt-toolkit>=3.0,<4",
+    "mem0ai>=2.0.17",
+    "chromadb>=1.5.9",
 ]
 
 [project.scripts]
