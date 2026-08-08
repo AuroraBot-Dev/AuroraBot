@@ -99,7 +99,7 @@ async def run_runtime(
     runtime = _create_runtime(configuration)
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
-    panel_server = _panel_server(runtime)
+    panel_server = _panel_server(runtime, console_enabled=console_enabled)
     failure: BaseException | None = None
     async with AsyncExitStack() as resources:
         resources.push_async_callback(_run_cleanup, runtime.shutdown)
@@ -446,8 +446,11 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
 # -- 面板服务器 --------------------------------------------------------
 
 
-def _panel_server(runtime: AuroraRuntime) -> SignalSafeServer | None:
-    """创建独立于 Platform 集合的面板后端服务器（RFC 0218 §1）。"""
+def _panel_server(runtime: AuroraRuntime, *, console_enabled: bool = True) -> SignalSafeServer | None:
+    """创建独立于 Platform 集合的面板后端服务器（RFC 0218 §1）。
+
+    console_enabled 控制 Lab 调试页（/debug/lab）是否随本地 Console 一起提供。
+    """
     configuration = runtime.configuration
     panel = configuration.runtime.panel
     if not panel.enabled:
@@ -458,6 +461,7 @@ def _panel_server(runtime: AuroraRuntime) -> SignalSafeServer | None:
         panel=panel,
         profile=configuration.runtime.profile,
         store=store,
+        console_enabled=console_enabled,
     )
     return SignalSafeServer(
         uvicorn.Config(

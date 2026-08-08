@@ -69,6 +69,32 @@ def test_healthz_is_unauthenticated() -> None:
         assert response.json()["profile"] == "test"
 
 
+def test_lab_page_follows_console_enabled(tmp_path: Path) -> None:
+    def app_for(*, console_enabled: bool) -> TestClient:
+        return TestClient(
+            create_panel_app(
+                PanelAppContext(
+                    ports=PanelRuntime(engine=_FakeEngine(), memory=_FakeMemory(), ai=_FakeAi(), config=_FakeConfig()),
+                    panel=_panel_config(),
+                    profile="test",
+                    store=PanelStore(tmp_path / f"ops-{console_enabled}"),
+                    console_enabled=console_enabled,
+                )
+            )
+        )
+
+    with app_for(console_enabled=True) as client:
+        response = client.get("/debug/lab")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert "AuroraBot Lab" in response.text
+        assert client.get("/debug/lab/lab.css").status_code == 200
+        assert client.get("/debug/lab/lab.js").status_code == 200
+
+    with app_for(console_enabled=False) as client:
+        assert client.get("/debug/lab").status_code == 404
+
+
 def test_login_logout_and_unauthorized(tmp_path: Path) -> None:
     client, store, bootstrap = _client(tmp_path)
 

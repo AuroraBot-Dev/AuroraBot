@@ -11,8 +11,13 @@ enabled = true
 host = "127.0.0.1"
 # HTTP 端口，1–65535
 port = 8765
-# 允许的跨域来源（前端开发服务器）
-allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# 允许的跨域来源（前端开发服务器，8764/8766 为面板前端左右护法）
+allowed_origins = [
+    "http://localhost:8764",
+    "http://127.0.0.1:8764",
+    "http://localhost:8766",
+    "http://127.0.0.1:8766",
+]
 # 启动后是否自动打开浏览器
 open_browser = false
 # 会话超时（秒）

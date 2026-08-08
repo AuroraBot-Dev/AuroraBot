@@ -24,6 +24,9 @@
   - `/api/auth/*`：面板认证（见 §6）。
   - `/api/ops/*`：RESTful 操作资源树（见 §2/§3），含聊天语义（见 §4）。
 - `PLATFORM_NAMES` 收敛为 `{"mcp"}`；dashboard 退出平台。
+- `GET /debug/lab`：ops 内置的 Lab 调试页（`ops/lab/` 静态目录：index.html + lab.css + lab.js，同源伺服，无需 CORS），
+  提供 GET/POST 操作的手动验证；跟随本地 Console 提供——`--headless` 或 console 禁用时不注册该路由。
+  Lab 只是操作树的调试 sidecar，不承担任何热路径职责。
 
 ### 2. 统一操作体系：RESTful 资源树为唯一真源，命令是文本同构形态
 
@@ -186,7 +189,7 @@ console 专属（scope=CONSOLE_ONLY）：`console.clear`（`/clear`）、`consol
 enabled = true
 host = "127.0.0.1"                    # 校验强制 loopback（沿用 dashboard 校验）
 port = 8765
-allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+allowed_origins = ["http://localhost:8764", "http://127.0.0.1:8764", "http://localhost:8766", "http://127.0.0.1:8766"]
 open_browser = false
 session_ttl_seconds = 604800
 max_upload_bytes = 10485760           # 附件上限，0 表示禁用附件
@@ -214,5 +217,5 @@ max_upload_bytes = 10485760           # 附件上限，0 表示禁用附件
 
 - **删除**：`src/platform/dashboard/`、`DashboardConfig`、`DashboardControlPort`/`DashboardDebugPort`、`PLATFORM_NAMES` 中 dashboard、`[platform.dashboard]`、`[storage.platform.dashboard]`、`debug_host`/`debug_port`、`/v1/debug/*`、`aur.dashboard.send` 能力、`ops/commands/` 旧命令文件（迁入 `ops/operations/`）。
 - **测试**：删除 `tests/test_dashboard.py` 与平台相关断言；新增：操作体系（REST/文本同构、路径与参数解析、envelope、错误码）、各域查询（memory/ai/config/prompt）、会话导出、面板认证（登录/未授权/附件/WS）、组合根单服务器启动；`test_dependency_boundaries.py` 的 ops 边界断言保留并扩展（ops 不 import platform）。
-- **前端**（仓库外）：聊天页改为 `POST /messages` + `WS /api/ops/stream` + `GET /messages`；登录指向 `/api/auth/login`；附件指向面板端点。
+- **前端**（仓库外）：聊天页改为 `POST /messages` + `WS /api/ops/stream` + `GET /messages`；登录指向 `/api/auth/login`；附件指向面板端点。仓库内只带 `ops/lab/index.html`（Lab 调试页，见 §1）。
 - 既有聊天历史不回迁（面板为全新后端，历史数据不回填；RFC 0217 的版本迁移只作用于 schema，不涉及面板数据回迁）；`data/platform/dashboard/` 遗留数据不再读取。

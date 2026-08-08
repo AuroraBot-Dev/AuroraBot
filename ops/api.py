@@ -26,6 +26,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ops.parser import coerce_value
@@ -66,6 +67,8 @@ class PanelAppContext:
     panel: "PanelConfig"
     profile: str
     store: PanelStore
+    console_enabled: bool = True
+    """本地 Console 是否启用（--headless 时关闭，Lab 页面跟随该开关）。"""
 
 
 class Credentials(BaseModel):
@@ -112,6 +115,13 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     @app.get("/api/health")
     def health() -> dict[str, object]:
         return {"ok": True, "status": "ok", "profile": context.profile}
+
+    # -- Lab 调试页（跟随本地 Console：--headless 时不提供）---------------
+
+    if context.console_enabled:
+        lab_dir = Path(__file__).resolve().parent / "lab"
+        if lab_dir.is_dir():
+            app.mount("/debug/lab", StaticFiles(directory=lab_dir, html=True), name="lab")
 
     # -- 认证 ------------------------------------------------------------
 

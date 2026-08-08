@@ -1,0 +1,265 @@
+:root {
+  color-scheme: dark;
+  --bg: #10151c;
+  --panel: #1a2230;
+  --border: #2b3a52;
+  --text: #e6edf5;
+  --muted: #8fa3bc;
+  --accent: #5aa2ff;
+  --ok: #46c07c;
+  --err: #ff6b6b;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    14px/1.6 system-ui,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+header h1 {
+  font-size: 15px;
+  margin: 0 10px 0 0;
+}
+
+input[type="text"],
+input[type="password"] {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  min-width: 200px;
+}
+
+input[type="password"] {
+  min-width: 300px;
+}
+
+button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1220;
+  font-weight: 600;
+}
+
+.status {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.err {
+  color: var(--err);
+}
+
+main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+aside {
+  width: 30%;
+  min-width: 240px;
+  max-width: 360px;
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+aside h2 {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group h3 {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.quick {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 2px;
+  align-items: center;
+}
+
+.quick button {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick .m {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  text-align: right;
+}
+
+.quick .m.post {
+  color: #d8a24a;
+}
+
+section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  display: block;
+}
+
+textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: 12px/1.5 var(--mono);
+}
+
+#response-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#response-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  margin-bottom: 8px;
+  min-height: 22px;
+}
+
+#response {
+  margin: 0;
+  background: #0c1118;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow: auto;
+  flex: 1;
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+}

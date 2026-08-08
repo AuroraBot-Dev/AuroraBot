@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AuroraBot Lab</title>
+    <link rel="stylesheet" href="lab.css" />
+  </head>
+
+  <body>
+    <header>
+      <h1>AuroraBot Lab</h1>
+      <input id="base-url" type="text" value="" spellcheck="false" placeholder="留空 = 同源（127.0.0.1:8765）" />
+      <button id="health-btn">健康检查</button>
+      <input
+        id="bootstrap-token"
+        type="password"
+        placeholder="bootstrap token (data/ops/Token.txt)"
+        spellcheck="false"
+      />
+      <button id="login-btn" class="primary">登录</button>
+      <button id="logout-btn">登出</button>
+      <span id="auth-status" class="status">未认证</span>
+    </header>
+
+    <main>
+      <aside>
+        <h2>快捷端点</h2>
+        <div id="quick-list"></div>
+        <p class="hint">本页由 ops 伺服于 /debug/lab，跟随本地 Console 启动（--headless 时不提供）。</p>
+      </aside>
+
+      <section>
+        <div class="card" id="request-card">
+          <h2>请求</h2>
+          <div class="row">
+            <select id="method">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+            <input
+              id="path"
+              type="text"
+              value="engine/status"
+              spellcheck="false"
+              placeholder="路径，如 engine/status（相对 /api/ops/）"
+            />
+            <button id="run-btn" class="primary">执行</button>
+          </div>
+          <label for="params">查询参数（GET，原样拼接在 ? 后面）</label>
+          <input id="params" type="text" placeholder="status=completed&amp;limit=10" spellcheck="false" />
+          <label for="body">请求体（POST，JSON）</label>
+          <textarea id="body" placeholder='{"text": "你好"}'></textarea>
+        </div>
+        <div class="card" id="response-wrap">
+          <h2>响应</h2>
+          <div id="response-head">尚未发起请求</div>
+          <pre id="response"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="lab.js"></script>
+  </body>
+</html>

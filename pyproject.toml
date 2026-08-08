@@ -30,6 +30,9 @@ aurora = "aurora.main:main"
 where = ["."]
 include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
 
+[tool.setuptools.package-data]
+ops = ["lab/*"]
+
 [dependency-groups]
 dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov", "donk>=1.1.0"]
 
