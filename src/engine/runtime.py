@@ -362,15 +362,15 @@ class AgentEngine:
     @staticmethod
     def _activity(row: Any) -> ActivityRequest:
         return ActivityRequest(
-            activity_id=str(row["activity_id"]),
-            task_id=str(row["task_id"]),
-            agent_id=str(row["agent_id"]),
-            kind=row["kind"],
-            request=json.loads(row["request_json"]),
-            status=ActivityStatus(row["status"]),
-            priority=int(row["priority"]),
-            idempotency_key=str(row["idempotency_key"]),
-            created_at=str(row["created_at"]),
+            activity_id=str(row.activity_id),
+            task_id=str(row.task_id),
+            agent_id=str(row.agent_id),
+            kind=row.kind,
+            request=json.loads(row.request_json),
+            status=ActivityStatus(row.status),
+            priority=int(row.priority),
+            idempotency_key=str(row.idempotency_key),
+            created_at=str(row.created_at),
         )
 
     async def _execute_model(self, activity: ActivityRequest) -> None:

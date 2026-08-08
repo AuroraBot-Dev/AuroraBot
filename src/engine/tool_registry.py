@@ -118,11 +118,11 @@ class ToolRegistry:
 
 
 def _execution_request(row: Any) -> ToolExecutionRequest:
-    """从持久化活动行构造工具执行请求（RFC 0211：无 ToolLease 中转）。"""
-    raw = json.loads(row["request_json"])
+    """从持久化活动实体构造工具执行请求（RFC 0211：无 ToolLease 中转）。"""
+    raw = json.loads(row.request_json)
     request = ToolRequest.from_dict(raw)
     return ToolExecutionRequest(
-        request_id=str(row["idempotency_key"]),
+        request_id=str(row.idempotency_key),
         session_id=str(raw.get("session_id", "")),
         capability=request.capability,
         parameters=request.parameters,

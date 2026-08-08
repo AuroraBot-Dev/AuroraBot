@@ -19,6 +19,7 @@ dependencies = [
     "prompt-toolkit>=3.0,<4",
     "mem0ai>=2.0.17",
     "chromadb>=1.5.9",
+    "sqlalchemy>=2.0",
 ]
 
 [project.scripts]

@@ -1,6 +1,6 @@
 """记忆引擎（RFC 0216）：短期窗口 + LLM 概要，长期 durable_facts（mem0 可选）。
 
-分层：
+分层（RFC 0217 起使用 SQLAlchemy ORM，物理 Schema 不变）：
 - ``memory_messages``：最近 N 条原始消息（窗口）；
 - ``session_memory``：窗口外压缩概要（LLM 生成，fast role）；
 - ``durable_facts``：长期事实（mem0 不可用时降级的关键词检索）。
@@ -8,10 +8,22 @@
 
 from __future__ import annotations
 
-import sqlite3
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from sqlalchemy import Index, Integer, String, UniqueConstraint, create_engine, delete, desc, event, func, select, text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.pool import NullPool
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
+
+    from sqlalchemy.engine import CursorResult, Engine
 
 from src.contracts import (
     MemoryContextSnapshot,
@@ -27,9 +39,6 @@ class _Summarizer(Protocol):
 
     async def get_response(self, role: str, inputs: list[dict]) -> dict[str, Any]: ...
 
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = get_logger("aurora.memory.service")
 _SUMMARY_LIMIT = 2400
@@ -48,6 +57,62 @@ class _Msg(StrEnum):
     )
 
 
+class _Base(DeclarativeBase):
+    """memory.sqlite3 的声明式基类。"""
+
+
+class MemoryReceiptRow(_Base):
+    """memory_receipts：终态投影幂等回执。"""
+
+    __tablename__ = "memory_receipts"
+
+    task_id: Mapped[str] = mapped_column("task_id", String, primary_key=True)
+    scope: Mapped[str] = mapped_column("scope", String, nullable=False)
+    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
+
+
+class SessionMemoryRow(_Base):
+    """session_memory：窗口外压缩概要（每 scope 一条）。"""
+
+    __tablename__ = "session_memory"
+
+    scope: Mapped[str] = mapped_column("scope", String, primary_key=True)
+    summary: Mapped[str] = mapped_column("summary", String, nullable=False)
+    updated_at: Mapped[str] = mapped_column("updated_at", String, nullable=False)
+
+
+class DurableFactRow(_Base):
+    """durable_facts：长期事实（UNIQUE(scope, content) 保证去重）。"""
+
+    __tablename__ = "durable_facts"
+    __table_args__ = (
+        UniqueConstraint("scope", "content"),
+        Index("idx_durable_facts_scope_created", "scope", desc("created_at")),
+    )
+
+    fact_id: Mapped[int] = mapped_column("fact_id", Integer, primary_key=True, autoincrement=True)
+    scope: Mapped[str] = mapped_column("scope", String, nullable=False)
+    content: Mapped[str] = mapped_column("content", String, nullable=False)
+    source_task_id: Mapped[str] = mapped_column("source_task_id", String, nullable=False)
+    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
+
+
+class MemoryMessageRow(_Base):
+    """memory_messages：最近 N 条原始消息（窗口）。"""
+
+    __tablename__ = "memory_messages"
+    __table_args__ = (
+        Index("idx_memory_messages_scope", "scope", "seq"),
+        {"sqlite_autoincrement": True},
+    )
+
+    seq: Mapped[int] = mapped_column("seq", Integer, primary_key=True, autoincrement=True)
+    scope: Mapped[str] = mapped_column("scope", String, nullable=False)
+    role: Mapped[str] = mapped_column("role", String, nullable=False)
+    content: Mapped[str] = mapped_column("content", String, nullable=False)
+    at: Mapped[str] = mapped_column("at", String, nullable=False)
+
+
 class MemoryService:
     """短期记忆（窗口+概要）+ 长期事实（可选 mem0）的组合实现。"""
 
@@ -63,33 +128,35 @@ class MemoryService:
         self._gateway: _Summarizer | None = gateway
         self._window_min = window_min
         self._window_max = window_max
-        self._database_path = memory_dir / "memory.sqlite3" if memory_dir is not None else None
+        self._engine: Engine | None = None
         if memory_dir is not None:
             memory_dir.mkdir(parents=True, exist_ok=True)
-            with self._connect() as connection:
-                self._initialize(connection)
+            self._engine = _build_engine(memory_dir / "memory.sqlite3")
+            with self._engine.begin() as connection:
+                connection.execute(text("PRAGMA journal_mode=WAL"))
+                connection.execute(text("PRAGMA journal_size_limit=524288"))
+                connection.execute(text("DROP TABLE IF EXISTS completed_tasks"))
+            _Base.metadata.create_all(self._engine, checkfirst=True)
         from src.memory.long_term import LongTermMemory
 
         self._long_term = LongTermMemory(memory_dir) if memory_dir is not None else None
 
     def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
-        if self._database_path is None:
+        if self._engine is None:
             return MemoryContextSnapshot()
         try:
-            with self._connect() as connection:
-                row = connection.execute(
-                    "SELECT summary FROM session_memory WHERE scope = ?", (query.scope,)
-                ).fetchone()
-                summary = str(row[0]) if row is not None else ""
-                rows = connection.execute(
-                    "SELECT role, content, at FROM memory_messages WHERE scope = ? ORDER BY seq DESC LIMIT ?",
-                    (query.scope, self._window_max),
-                ).fetchall()
-                window = tuple(
-                    MemoryMessage(str(row["role"]), str(row["content"]), str(row["at"])) for row in reversed(rows)
-                )
-                facts = self._select_facts(connection, query)
-        except sqlite3.Error as error:
+            with self._session() as session:
+                row = session.scalar(select(SessionMemoryRow.summary).where(SessionMemoryRow.scope == query.scope))
+                summary = str(row) if row is not None else ""
+                rows = session.execute(
+                    select(MemoryMessageRow.role, MemoryMessageRow.content, MemoryMessageRow.at)
+                    .where(MemoryMessageRow.scope == query.scope)
+                    .order_by(MemoryMessageRow.seq.desc())
+                    .limit(self._window_max)
+                ).all()
+                window = tuple(MemoryMessage(str(role), str(content), str(at)) for role, content, at in reversed(rows))
+                facts = self._select_facts(session, query)
+        except SQLAlchemyError as error:
             logger.warning("Memory recall failed error=%s", error)
             return MemoryContextSnapshot()
         summary = _clip(summary, query.max_characters)
@@ -105,64 +172,74 @@ class MemoryService:
 
     def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:
         """把一轮对话追加进窗口；溢出时把最旧消息浓缩进概要（LLM 摘要）。"""
-        if self._database_path is None or not content.strip():
+        if self._engine is None or not content.strip():
             return
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO memory_messages(scope, role, content, at) VALUES (?, ?, ?, ?)",
-                (scope, role, content, at),
-            )
-            count = int(
-                connection.execute("SELECT count(*) FROM memory_messages WHERE scope = ?", (scope,)).fetchone()[0]
+        with self._session() as session:
+            session.add(MemoryMessageRow(scope=scope, role=role, content=content, at=at))
+            count = (
+                session.scalar(
+                    select(func.count()).select_from(MemoryMessageRow).where(MemoryMessageRow.scope == scope)
+                )
+                or 0
             )
             if count > self._window_max:
-                self._condense(connection, scope, count - self._window_min)
+                self._condense(session, scope, count - self._window_min)
 
     def remember(self, entry: MemoryEntry) -> bool:
         """终态投影：幂等回执 + 长期事实（窗口消息由 append_turn 负责）。"""
-        if self._database_path is None or not entry.input_summary.strip():
+        if self._engine is None or not entry.input_summary.strip():
             return False
-        with self._connect() as connection:
-            cursor = connection.execute(
-                "INSERT OR IGNORE INTO memory_receipts(task_id, scope, created_at) VALUES (?, ?, ?)",
-                (entry.task_id, entry.scope, entry.created_at),
+        with self._session() as session:
+            result = session.execute(
+                sqlite_insert(MemoryReceiptRow)
+                .values(task_id=entry.task_id, scope=entry.scope, created_at=entry.created_at)
+                .on_conflict_do_nothing(index_elements=["task_id"])
             )
-            if cursor.rowcount == 0:
+            inserted = cast("CursorResult[Any]", result).rowcount
+            if inserted == 0:
                 return False
             for candidate in entry.fact_candidates:
                 fact = candidate.strip()
                 if fact:
-                    connection.execute(
-                        "INSERT OR IGNORE INTO durable_facts(scope, content, source_task_id, created_at) "
-                        "VALUES (?, ?, ?, ?)",
-                        (entry.scope, _clip(fact, 500), entry.task_id, entry.created_at),
+                    session.execute(
+                        sqlite_insert(DurableFactRow)
+                        .values(
+                            scope=entry.scope,
+                            content=_clip(fact, 500),
+                            source_task_id=entry.task_id,
+                            created_at=entry.created_at,
+                        )
+                        .on_conflict_do_nothing(index_elements=["scope", "content"])
                     )
         if self._long_term is not None and entry.outcome_summary:
             self._long_term.add(entry.scope, f"{entry.input_summary}\n{entry.outcome_summary}", entry.created_at)
         return True
 
-    def _condense(self, connection: sqlite3.Connection, scope: str, excess: int) -> None:
+    def _condense(self, session: Session, scope: str, excess: int) -> None:
         """把最旧 ``excess`` 条消息 + 现有概要浓缩为新概要（LLM 或规则截断）。"""
-        rows = connection.execute(
-            "SELECT role, content, at FROM memory_messages WHERE scope = ? ORDER BY seq ASC LIMIT ?",
-            (scope, excess),
-        ).fetchall()
+        rows = (
+            session.execute(
+                select(MemoryMessageRow)
+                .where(MemoryMessageRow.scope == scope)
+                .order_by(MemoryMessageRow.seq.asc())
+                .limit(excess)
+            )
+            .scalars()
+            .all()
+        )
         if not rows:
             return
-        existing = connection.execute("SELECT summary FROM session_memory WHERE scope = ?", (scope,)).fetchone()
-        summary = str(existing[0]) if existing else ""
-        oldest = [{"role": str(row["role"]), "content": str(row["content"]), "at": str(row["at"])} for row in rows]
+        existing = session.scalar(select(SessionMemoryRow.summary).where(SessionMemoryRow.scope == scope))
+        summary = str(existing) if existing else ""
+        oldest = [{"role": row.role, "content": row.content, "at": row.at} for row in rows]
         condensed = self._summarize(summary, oldest)
-        connection.execute(
-            "INSERT INTO session_memory(scope, summary, updated_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(scope) DO UPDATE SET summary=excluded.summary, updated_at=excluded.updated_at",
-            (scope, condensed, datetime.now(UTC).isoformat()),
+        updated_at = datetime.now(UTC).isoformat()
+        session.execute(
+            sqlite_insert(SessionMemoryRow)
+            .values(scope=scope, summary=condensed, updated_at=updated_at)
+            .on_conflict_do_update(index_elements=["scope"], set_={"summary": condensed, "updated_at": updated_at})
         )
-        connection.execute(
-            "DELETE FROM memory_messages WHERE scope = ? AND rowid IN ("
-            "SELECT rowid FROM memory_messages WHERE scope = ? ORDER BY seq ASC LIMIT ?)",
-            (scope, scope, excess),
-        )
+        session.execute(delete(MemoryMessageRow).where(MemoryMessageRow.seq.in_([row.seq for row in rows])))
 
     def _summarize(self, existing: str, messages: list[dict[str, Any]]) -> str:
         """LLM 浓缩（fast role）；网关不可用时规则截断。"""
@@ -178,54 +255,61 @@ class MemoryService:
         )
         try:
             result = asyncio.run(self._gateway.get_response("fast", [{"role": "user", "content": prompt}]))
-            text = str(result.get("text", "")).strip()
-            if text:
-                return _tail(text, _SUMMARY_LIMIT)
+            text_value = str(result.get("text", "")).strip()
+            if text_value:
+                return _tail(text_value, _SUMMARY_LIMIT)
         except Exception as error:
             logger.warning("memory summarization failed error_type=%s", type(error).__name__)
         combined = existing + "\n" + "\n".join(m["content"] for m in messages)
         return _tail(combined.strip(), _SUMMARY_LIMIT)
 
-    def _select_facts(self, connection: sqlite3.Connection, query: MemoryQuery) -> tuple[str, ...]:
-        rows = connection.execute(
-            "SELECT content FROM durable_facts WHERE scope IN (?, 'global') ORDER BY created_at DESC LIMIT ?",
-            (query.scope, max(query.fact_limit * 4, query.fact_limit)),
-        ).fetchall()
+    def _select_facts(self, session: Session, query: MemoryQuery) -> tuple[str, ...]:
+        rows = (
+            session.execute(
+                select(DurableFactRow.content)
+                .where(DurableFactRow.scope.in_((query.scope, "global")))
+                .order_by(DurableFactRow.created_at.desc())
+                .limit(max(query.fact_limit * 4, query.fact_limit))
+            )
+            .scalars()
+            .all()
+        )
         terms = {term.casefold() for term in query.query.split() if len(term) > 1}
         ranked = sorted(
-            (str(row[0]) for row in rows),
+            (str(value) for value in rows),
             key=lambda value: sum(term in value.casefold() for term in terms),
             reverse=True,
         )
         return tuple(ranked[: query.fact_limit])
 
-    def _connect(self) -> sqlite3.Connection:
-        assert self._database_path is not None
-        connection = sqlite3.connect(self._database_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        return connection
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        """事务上下文：成功提交，异常回滚。"""
+        assert self._engine is not None
+        with Session(self._engine, expire_on_commit=False) as session:
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
-    @staticmethod
-    def _initialize(connection: sqlite3.Connection) -> None:
-        connection.executescript(
-            "PRAGMA journal_mode=WAL;"
-            "PRAGMA journal_size_limit=524288;"
-            "DROP TABLE IF EXISTS completed_tasks;"
-            "CREATE TABLE IF NOT EXISTS memory_receipts("
-            "task_id TEXT PRIMARY KEY, scope TEXT NOT NULL, created_at TEXT NOT NULL);"
-            "CREATE TABLE IF NOT EXISTS session_memory("
-            "scope TEXT PRIMARY KEY, summary TEXT NOT NULL, updated_at TEXT NOT NULL);"
-            "CREATE TABLE IF NOT EXISTS durable_facts("
-            "fact_id INTEGER PRIMARY KEY, scope TEXT NOT NULL, content TEXT NOT NULL, "
-            "source_task_id TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(scope, content));"
-            "CREATE INDEX IF NOT EXISTS idx_durable_facts_scope_created "
-            "ON durable_facts(scope, created_at DESC);"
-            "CREATE TABLE IF NOT EXISTS memory_messages("
-            "seq INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL, role TEXT NOT NULL, "
-            "content TEXT NOT NULL, at TEXT NOT NULL);"
-            "CREATE INDEX IF NOT EXISTS idx_memory_messages_scope "
-            "ON memory_messages(scope, seq);"
-        )
+
+def _build_engine(database_path: Path) -> "Engine":
+    """构建同步 SQLite 引擎：NullPool + 默认隔离（读不占写锁）。"""
+    engine = create_engine(
+        f"sqlite:///{database_path}",
+        poolclass=NullPool,
+        connect_args={"timeout": 30},
+    )
+
+    def _set_busy_timeout(dbapi_connection: Any, _record: Any) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA busy_timeout = 30000")
+        cursor.close()
+
+    event.listen(engine, "connect", _set_busy_timeout)
+    return engine
 
 
 def _clip(value: str, limit: int) -> str:
