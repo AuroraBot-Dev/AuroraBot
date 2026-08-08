@@ -58,7 +58,20 @@
   `create_session/verify_session/delete_session/add_attachment/
   get_attachment/close` 公共方法签名不变。
 
-### 5. 行为与性能
+### 5. 版本化迁移框架（utils/migration + ops/migration）
+
+- 新增 `src/utils/migration.py`：`migrate_to(connection, *, current, target,
+  steps, set_version)` —— 从当前版本按序执行版本迁移步骤直到目标版本，
+  每步后推进版本号；`current > target`（库比代码新）与缺失步骤均拒绝，
+  防止静默漏迁移。
+- 每个版本间隔一个独立步骤文件：`ops/migration/v0_v1.py`（建表，v1 现状）、
+  `v1_v2.py`（v2 占位，未来 schema 演进时实现并注册）；`ops/migration/
+  __init__.py` 以 `STEPS: dict[int, MigrationStep]` + `TARGET_VERSION`
+  汇总版本序列。
+- 其他需要版本化存储的地方复用同一框架（engine 运行态仍按 RFC 0210
+  拒绝旧库，不迁移；如未来需要升级路径，同样以版本序列表达）。
+
+### 6. 行为与性能
 
 - 语义零变化：幂等、防抖、原子决策、claim 降级为原子 UPDATE、崩溃恢复全部不变。
 - 单次操作增加 µs 级 ORM 开销，相对秒级模型/工具调用可忽略（RFC 0210 结论不变）。

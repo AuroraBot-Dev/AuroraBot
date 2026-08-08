@@ -1,8 +1,9 @@
 """面板后端私有存储（RFC 0218 §6）：bootstrap Token、Bearer 会话与附件索引。
 
 位于 ops 包，数据落 ``data/ops/``（panel.sqlite3 + Token.txt + uploads/）。
-存储实现使用 SQLAlchemy 2.0 ORM（RFC 0217），物理 Schema v1 与 user_version
-迁移语义不变；ops 仍只依赖 contracts + utils 与通用依赖的边界。
+存储实现使用 SQLAlchemy 2.0 ORM（RFC 0217），Schema 演进经
+``ops/migration`` 版本序列（utils.migration 框架）；ops 仍只依赖
+contracts + utils 与通用依赖的边界。
 """
 
 from __future__ import annotations
@@ -18,11 +19,14 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import NullPool
 
+from src.utils.migration import migrate_to
+
+from . import migration
+
 if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
 
-_SCHEMA_VERSION = 1
 _TOKEN_BYTES = 32
 
 
@@ -97,15 +101,16 @@ class PanelStore:
         return token
 
     def _migrate(self) -> None:
-        """Schema v1 迁移：sessions 与 attachments 表（user_version 语义不变）。"""
+        """按版本序列迁移到 TARGET_VERSION（utils.migration 框架）。"""
         with self._engine.begin() as connection:
-            version = connection.exec_driver_sql("PRAGMA user_version").scalar()
-            if version == _SCHEMA_VERSION:
-                return
-            if version not in (0, 1):
-                raise RuntimeError(f"unsupported panel schema version: {version}")
-            _Base.metadata.create_all(bind=connection, checkfirst=True)
-            connection.exec_driver_sql(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            current = connection.exec_driver_sql("PRAGMA user_version").scalar() or 0
+            migrate_to(
+                connection,
+                current=current,
+                target=migration.TARGET_VERSION,
+                steps=migration.STEPS,
+                set_version=lambda c, version: c.exec_driver_sql(f"PRAGMA user_version = {version}"),
+            )
 
     @contextmanager
     def _session(self) -> Generator[Session, None, None]:
