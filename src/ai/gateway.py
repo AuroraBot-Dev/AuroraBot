@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from jsonschema import ValidationError, validate
 
+from src.ai.cost_store import CostStore
 from src.ai.execution import CostTracker, TaskManager
 from src.ai.models import (
     cache_available,
@@ -124,7 +125,7 @@ class ModelGatewayService:
         self.log_queries = configuration.model_logging.log_queries
         self.log_responses = configuration.model_logging.log_responses
         self._task_manager = TaskManager()
-        self.cost_tracker = CostTracker()
+        self.cost_tracker = CostTracker(store=CostStore(configuration.storage.ai))
 
         init_cache(configuration.storage.ai)
 

@@ -21,6 +21,8 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     import collections.abc
 
+    from src.ai.cost_store import CostStore
+
 
 logger = get_logger("aurora.ai.execution")
 
@@ -80,15 +82,22 @@ def _classify_exception(exc: Exception) -> GatewayError:  # noqa: PLR0911
 
 
 class CostTracker:
-    """调用费用记录与分类统计（RFC 0215：追踪所有完成的模型调用总费用）。"""
+    """调用费用记录与分类统计（RFC 0215：追踪所有完成的模型调用总费用）。
 
-    def __init__(self) -> None:
-        self._records: list[dict] = []
+    内存缓存 + SQLite 追加持久化：启动时经 ``CostStore`` 恢复历史，
+    ``add`` 同步写库，统计接口保持内存查询。
+    """
+
+    def __init__(self, store: "CostStore | None" = None) -> None:
+        self._store = store
+        self._records: list[dict] = list(store.load_records()) if store is not None else []
         self._lock = asyncio.Lock()
 
     async def add(self, record: dict) -> None:
         async with self._lock:
             self._records.append(record)
+            if self._store is not None:
+                self._store.append(record)
 
     async def total_cost(self) -> float:
         """全部已完成调用的总费用（USD）。"""

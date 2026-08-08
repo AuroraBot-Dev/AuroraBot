@@ -45,6 +45,12 @@ async def get_response(self, role: str, inputs: list[dict]) -> dict[str, Any]:
 
 - `ChatCaller._stream_and_collect` 删除取消分支（`is_cancelled`/CancelledError 传播），流式收集恒完整。
 - `CostTracker` 增加分类统计：`total_cost()`、`by_role()`、`by_model()`、`by_status()`（现有 `add`/`summary` 保留）。
+- **费用持久化**：与 engine/memory/ops 同一持久化体系（RFC 0217 §5）——`CostStore`
+  （`src/ai/cost_store.py`）以 SQLAlchemy ORM 声明 `cost_records` 表，落
+  `data/ai/cost.sqlite3`（WAL，`schema_meta` 版本号经 `utils.migration.initialize_storage`
+  统一初始化，迁移序列见 `src/ai/migration/`，当前 v1，只追加无更新路径）；
+  `CostTracker` 启动时从库恢复历史到内存缓存，`add` 同步写库，统计接口保持内存查询
+  （存储镜像：src/ai → `storage.ai`）。
 
 ### 5. `export_openai_client()`
 

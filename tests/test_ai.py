@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import text
 
 from src.ai import models
 from src.ai.execution import CostTracker, GatewayError
@@ -313,6 +314,48 @@ def test_cost_tracker() -> None:
         assert summary["by_role"]["fast"]["count"] == 2
 
     asyncio.run(scenario())
+
+
+def test_cost_tracker_persists_and_reloads(tmp_path: Path) -> None:
+    from src.ai.cost_store import CostStore
+
+    async def scenario() -> None:
+        first = CostTracker(store=CostStore(tmp_path / "ai"))
+        await first.add(
+            {
+                "role": "quality",
+                "model": "p/m",
+                "type": "completion",
+                "status": "completed",
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "cost": 0.3,
+            }
+        )
+        reloaded = CostTracker(store=CostStore(tmp_path / "ai"))
+        assert await reloaded.total_cost() == 0.3
+        assert await reloaded.by_role() == {"quality": {"count": 1, "cost": 0.3}}
+        assert await reloaded.by_status() == {"completed": {"count": 1, "cost": 0.3}}
+
+    asyncio.run(scenario())
+
+
+def test_cost_store_is_append_only_and_wal(tmp_path: Path) -> None:
+    from src.ai.cost_store import CostStore
+
+    store = CostStore(tmp_path / "ai")
+    store.append({"role": "fast", "model": "p/m", "type": "completion", "status": "completed", "cost": 0.1})
+    records = store.load_records()
+    assert len(records) == 1
+    assert records[0]["role"] == "fast"
+    assert records[0]["cost"] == 0.1
+    assert records[0]["created_at"]
+    with store._engine.connect() as connection:
+        journal_mode = connection.execute(text("PRAGMA journal_mode")).scalar()
+        version = connection.execute(text("SELECT version FROM schema_meta")).scalar()
+    assert journal_mode == "wal"
+    assert version == 1
+    store.close()
 
 
 def test_models_dev_capabilities_pricing_and_disk_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
