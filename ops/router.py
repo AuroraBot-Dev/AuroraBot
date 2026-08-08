@@ -43,24 +43,21 @@ class OperationRouter:
         method_mismatch 为 True 表示路径存在但方法不支持（HTTP 405 语义）。
         """
         cleaned = "/" + path.strip("/")
-        matched_spec: OperationSpec | None = None
-        matched_params: dict[str, str] = {}
+        matched: list[tuple[OperationSpec, dict[str, str]]] = []
         for spec in self._specs:
             if spec.path == "/":
                 if cleaned == "/":
-                    matched_spec = spec
+                    matched.append((spec, {}))
                 continue
-            template = self._routes[spec.path][0]
-            match = template.fullmatch(cleaned)
+            match = self._routes[spec.path][0].fullmatch(cleaned)
             if match is not None:
-                matched_spec = spec
-                matched_params = match.groupdict()
-                break
-        if matched_spec is None:
+                matched.append((spec, match.groupdict()))
+        if not matched:
             return None, None, False
-        if matched_spec.method != method:
-            return None, None, True
-        return matched_spec, matched_params, False
+        for spec, params in matched:
+            if spec.method == method:
+                return spec, params, False
+        return None, None, True
 
     async def execute(self, spec: OperationSpec, params: dict[str, Any]) -> OperationResult:
         """规范化参数并执行操作。"""
@@ -131,6 +128,8 @@ def _result_to_command(result: OperationResult) -> CommandResult:
     control = CommandControl.NONE
     if result.data is not None and result.data.get("control") == "shutdown_process":
         control = CommandControl.SHUTDOWN_PROCESS
+    if result.data is not None and result.data.get("control") == "clear_console":
+        control = CommandControl.CLEAR_CONSOLE
     return CommandResult(
         ok=result.ok,
         text=result.message if result.message is not None else _render(result),

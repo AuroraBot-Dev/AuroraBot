@@ -114,6 +114,58 @@ class PanelConfigQuery:
         return {"role": role, "text": str(text)}
 
 
+class PanelAiQuery:
+    """把 model_gateway 适配为 AiQueryPort；网关缺失时返回空统计。"""
+
+    def __init__(self, gateway: Any) -> None:
+        self._gateway = gateway
+
+    async def cost(self) -> dict[str, Any]:
+        if self._gateway is None:
+            return {"total_cost": 0.0, "by_role": {}, "by_model": {}, "by_status": {}}
+        tracker = getattr(self._gateway, "cost_tracker", None)
+        if tracker is None or not hasattr(tracker, "total_cost"):
+            return {"total_cost": 0.0, "by_role": {}, "by_model": {}, "by_status": {}}
+        return {
+            "total_cost": await tracker.total_cost(),
+            "by_role": await tracker.by_role(),
+            "by_model": await tracker.by_model(),
+            "by_status": await tracker.by_status(),
+        }
+
+    async def models(self) -> list[dict[str, Any]]:
+        if self._gateway is None or not hasattr(self._gateway, "models"):
+            return []
+        return await self._gateway.models()
+
+    def roles(self) -> list[dict[str, Any]]:
+        if self._gateway is None or not hasattr(self._gateway, "roles"):
+            return []
+        return self._gateway.roles()
+
+
+class PanelMemoryQuery:
+    """把 MemoryService 适配为 MemoryQueryPort；未启用时返回空视图。"""
+
+    def __init__(self, memory: Any) -> None:
+        self._memory = memory
+
+    def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
+        if self._memory is None:
+            return {"scope": scope, "window": [], "summaries": [], "facts": []}
+        return self._memory.history(scope=scope, limit=limit)
+
+    def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
+        if self._memory is None:
+            return []
+        return self._memory.search(query, scope=scope, limit=limit)
+
+    def status(self) -> dict[str, Any]:
+        if self._memory is None:
+            return {"enabled": False, "window_messages": 0, "summaries": 0, "facts": 0, "scopes": []}
+        return self._memory.status()
+
+
 @dataclass(slots=True)
 class AuroraRuntime:
     """向面板、操作体系与平台暴露窄端口，并代理 engine 的显式操作与只读查询。"""
@@ -135,8 +187,8 @@ class AuroraRuntime:
         config_query = PanelConfigQuery(self.configuration, self.prompt_catalog)
         return PanelRuntime(
             engine=self,
-            memory=self.memory,
-            ai=self.model_gateway,
+            memory=PanelMemoryQuery(self.memory),
+            ai=PanelAiQuery(self.model_gateway),
             config=config_query,
             shutdown=self.request_shutdown,
         )

@@ -12,7 +12,7 @@ import secrets
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -87,7 +87,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         allow_headers=["*"],
     )
 
-    async def current_session(authorization: Annotated[str | None, Header()] = None) -> str:
+    async def current_session(authorization: str | None = Header(None)) -> str:
         """认证依赖：校验 Bearer 会话 token。"""
         token = _bearer(authorization)
         if token is None or not store.verify_session(token):
@@ -115,13 +115,18 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         return {"token": token, **meta}
 
     @app.post("/api/auth/logout", status_code=204)
-    async def logout(_user: Annotated[str, Depends(current_session)]) -> None:
-        return None
+    async def logout(
+        _user: str = Depends(current_session),
+        authorization: str | None = Header(None),
+    ) -> None:
+        token = _bearer(authorization)
+        if token is not None:
+            store.delete_session(token)
 
     # -- 操作目录 --------------------------------------------------------
 
     @app.get("/api/ops")
-    async def catalog(_user: Annotated[str, Depends(current_session)]) -> dict[str, Any]:
+    async def catalog(_user: str = Depends(current_session)) -> dict[str, Any]:
         entries = catalog_entries()
         return {"operations": entries, "count": len(entries)}
 
@@ -129,8 +134,8 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
 
     @app.post("/api/ops/attachments")
     async def upload_attachment(
-        user: Annotated[str, Depends(current_session)],
-        file: Annotated[UploadFile, File()],
+        _user: str = Depends(current_session),
+        file: UploadFile = File(...),
     ) -> dict[str, Any]:
         if panel.max_upload_bytes <= 0:
             raise HTTPException(status_code=403, detail=_Msg.UPLOAD_DISABLED)
@@ -153,7 +158,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     @app.get("/api/ops/attachments/{attachment_id}/download")
     async def download_attachment(
         attachment_id: str,
-        user: Annotated[str, Depends(current_session)],
+        _user: str = Depends(current_session),
     ) -> FileResponse:
         record = store.get_attachment(attachment_id)
         if record is None:
@@ -176,7 +181,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             for key, value in query.items():
                 parameter = spec.parameter(key)
                 params[key] = coerce_value(value, parameter) if parameter is not None else value
-            return JSONResponse(await router.execute(spec, params))
+            return JSONResponse((await router.execute(spec, params)).to_dict())
         except ValueError as error:
             return JSONResponse(OperationResult.failure("PARSE_ERROR", str(error)).to_dict(), status_code=200)
 
@@ -184,7 +189,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     async def ops_get(
         rest: str,
         request: Request,
-        _user: Annotated[str, Depends(current_session)],
+        _user: str = Depends(current_session),
     ) -> JSONResponse:
         return await _dispatch("GET", rest, {key: value for key, value in request.query_params.items()})
 
@@ -192,7 +197,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     async def ops_post(
         rest: str,
         request: Request,
-        _user: Annotated[str, Depends(current_session)],
+        _user: str = Depends(current_session),
     ) -> JSONResponse:
         body = await request.json()
         if not isinstance(body, dict):

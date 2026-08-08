@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import TYPE_CHECKING
 
 from src.contracts import (
     CommandControl,
     InputOrigin,
     RuntimeInput,
+    new_amp,
 )
 from tests.support import create_test_runtime
 
@@ -28,16 +30,22 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
         try:
-            status = await runtime.route_input(_input("/status"))
+            status = await runtime.route_input(_input("/engine/status"))
             help_result = await runtime.route_input(_input("/help"))
             unknown = await runtime.route_input(_input("/does-not-exist"))
-            invalid = await runtime.route_input(_input("/pump 101"))
+            invalid = await runtime.route_input(_input("/engine/pump --max_turns 101"))
             invalid_quote = await runtime.route_input(_input('/say "unterminated'))
-            invalid_event_json = await runtime.route_input(_input("/event test.event --data nope"))
-            invalid_event_shape = await runtime.route_input(_input("/event test.event --data '[]'"))
-            event = await runtime.route_input(
-                _input("/event test.event --summary 'ambient test' --data '{\"ambient\":true}'")
-            )
+            invalid_event_json = await runtime.route_input(_input("/event --amp nope"))
+            invalid_event_shape = await runtime.route_input(_input("/event --amp '[]'"))
+            amp = new_amp(
+                event_type="test.event",
+                session_id="test:console",
+                summary="ambient test",
+                data={"ambient": True},
+                source_app="tests.console",
+                source_instance="commands",
+            ).to_dict()
+            event = await runtime.route_input(_input(f"/event --amp {json.dumps(amp)}"))
             missing_task = await runtime.route_input(_input("/task missing"))
             missing_agent = await runtime.route_input(_input("/agent missing"))
             bare = await runtime.route_input(_input("hello world"))
@@ -47,14 +55,14 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             quitting = await runtime.route_input(_input("/q"))
 
             assert status.ok and status.data is not None
-            assert help_result.ok and "/event" in (help_result.text or "")
+            assert help_result.ok and "engine.tasks" in (help_result.text or "")
             assert "/reload" not in (help_result.text or "")
             assert not unknown.ok
             assert not invalid.ok and "用法" in (invalid.text or "")
             assert not invalid_quote.ok
             assert not invalid_event_json.ok
             assert not invalid_event_shape.ok
-            assert event.message_id is not None
+            assert event.ok and event.data is not None and "message_id" in event.data
             assert not missing_task.ok and not missing_agent.ok
             assert bare.message_id is not None and not bare.publish_reply
             assert quoted.message_id is not None and not quoted.publish_reply
@@ -62,7 +70,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             assert clear_alias.control is CommandControl.CLEAR_CONSOLE
             assert quitting.control is CommandControl.SHUTDOWN_PROCESS
 
-            pumped = await runtime.route_input(_input("/pump 3"))
+            pumped = await runtime.route_input(_input("/engine/pump --max_turns 3"))
             assert pumped.ok and pumped.data is not None
             details = [runtime.task(task_id) for task_id in pumped.data["admitted_task_ids"]]
             detail = next(item for item in details if item is not None)
@@ -73,6 +81,20 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             agent_result = await runtime.route_input(_input(f"/agent {agent_id}"))
             assert task_result.ok and task_result.data is not None
             assert agent_result.ok and agent_result.data is not None
+
+            tasks = await runtime.route_input(_input("/tasks"))
+            agents = await runtime.route_input(_input("/agents"))
+            assert tasks.ok and tasks.data is not None and tasks.data["count"] >= 1
+            assert agents.ok and agents.data is not None and agents.data["count"] >= 1
+
+            memory_status = await runtime.route_input(_input("/memory/status"))
+            assert memory_status.ok and memory_status.data is not None
+            cost = await runtime.route_input(_input("/ai"))
+            assert cost.ok and cost.data is not None
+            profiles = await runtime.route_input(_input("/profiles"))
+            assert profiles.ok and profiles.data is not None and profiles.data["profiles"]
+            config_snapshot = await runtime.route_input(_input("/config"))
+            assert config_snapshot.ok and config_snapshot.data is not None
         finally:
             await runtime.shutdown()
 
@@ -112,10 +134,10 @@ def test_runtime_shutdown_request_and_idempotent_conversation(project_root: Path
         runtime.request_shutdown()
         request = RuntimeInput(
             text="hello",
-            origin=InputOrigin.DASHBOARD,
-            session_id="dashboard:owner",
-            source_app="platform.dashboard",
-            source_instance="local",
+            origin=InputOrigin.PANEL,
+            session_id="panel:owner",
+            source_app="panel.chat",
+            source_instance="web",
             actor_id="owner",
             idempotency_key="same-message",
             data={"channel": "owner_bot_chat"},

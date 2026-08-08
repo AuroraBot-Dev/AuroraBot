@@ -156,7 +156,7 @@ async def engine_pump(context: Any, params: dict[str, Any]) -> OperationResult:
     return OperationResult.success(await context.runtime.engine.pump(max_turns))
 
 
-@operation("POST", "/engine/shutdown", name="engine.shutdown", aliases=("/quit",), summary="请求进程关闭")
+@operation("POST", "/engine/shutdown", name="engine.shutdown", aliases=("/quit", "/q"), summary="请求进程关闭")
 async def engine_shutdown(context: Any, _params: dict[str, Any]) -> OperationResult:
     if context.runtime.shutdown is not None:
         context.runtime.shutdown()
