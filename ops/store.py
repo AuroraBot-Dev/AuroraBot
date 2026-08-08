@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from pathlib import Path
 
 _SCHEMA_VERSION = 1
@@ -91,7 +91,7 @@ class PanelStore:
             self._connection.execute("PRAGMA user_version = 1")
 
     @contextmanager
-    def _session(self) -> Iterator[sqlite3.Connection]:
+    def _session(self) -> Generator[sqlite3.Connection]:
         """事务上下文：成功提交，异常回滚。"""
         connection = self._connection
         try:

@@ -10,6 +10,7 @@ from ops.registry import catalog_entries, iter_operations
 from ops.router import OperationRouter
 from src.contracts import (
     CommandControl,
+    CommandResult,
     InputOrigin,
     OperationResult,
     OperationSpec,
@@ -288,6 +289,46 @@ def test_help_flag_renders_usage_without_executing() -> None:
         )
         assert alias_help.ok
         assert "POST /messages" in (alias_help.text or "")
+
+    asyncio.run(scenario())
+
+
+def test_short_flag_compacts_and_slices_output() -> None:
+    async def scenario() -> None:
+        router = OperationRouter(_runtime())
+
+        async def route(text: str) -> CommandResult:
+            return await router.route_text(
+                RuntimeInput(
+                    text=text,
+                    origin=InputOrigin.CONSOLE,
+                    session_id="s",
+                    source_app="t",
+                    source_instance="i",
+                )
+            )
+
+        full = await route("/engine/tasks")
+        compact = await route("/engine/tasks --short")
+        assert compact.ok and compact.text is not None
+        assert "\n" not in compact.text
+        assert "t-1" in compact.text
+
+        head = await route("/engine/tasks --short :50")
+        assert head.ok and head.text == (compact.text or "")[:50]
+
+        tail = await route("/engine/tasks --short=5:")
+        assert tail.ok and tail.text == (compact.text or "")[5:]
+
+        with_python_slice = await route("/engine/status --short 100:50")
+        assert with_python_slice.ok and with_python_slice.text == ""
+
+        invalid = await route("/engine/tasks --short 1x:2")
+        assert invalid.ok and invalid.text == compact.text
+
+        explicit = await route("/engine/tasks --short :50 --limit 1")
+        assert explicit.ok
+        assert explicit.text == (compact.text or "")[:50]
 
     asyncio.run(scenario())
 

@@ -115,8 +115,9 @@ class OperationRouter:
             return CommandResult(ok=True, text=usage(spec), data=None)
         except CommandParseError as error:
             return _result_to_command(OperationResult.failure("PARSE_ERROR", f"{error}\n用法: {usage(spec)}"))
+        short = params.pop("short", None)
         result = await self.execute(spec, params)
-        return _result_to_command(result)
+        return _result_to_command(result, short=short)
 
     async def _conversation(self, request: RuntimeInput, text: str) -> CommandResult:
         """纯文本作为对话消息提交。"""
@@ -137,7 +138,7 @@ class OperationRouter:
         return re.compile("^" + "/".join(segments) + "$"), tuple(names), spec
 
 
-def _result_to_command(result: OperationResult) -> CommandResult:
+def _result_to_command(result: OperationResult, *, short: str | None = None) -> CommandResult:
     """把 OperationResult 映射为 CommandResult（Console 传输层）。"""
     control = CommandControl.NONE
     if result.data is not None and result.data.get("control") == "shutdown_process":
@@ -147,7 +148,7 @@ def _result_to_command(result: OperationResult) -> CommandResult:
     message_id = result.data.get("message_id") if isinstance(result.data, dict) else None
     return CommandResult(
         ok=result.ok,
-        text=result.message if result.message is not None else _render(result),
+        text=result.message if result.message is not None else _render(result, short=short),
         data=result.data,
         message_id=str(message_id) if message_id is not None else None,
         publish_reply=message_id is None,
@@ -155,10 +156,17 @@ def _result_to_command(result: OperationResult) -> CommandResult:
     )
 
 
-def _render(result: OperationResult) -> str | None:
-    """把成功结果渲染为 console 可读文本（data 完整输出，嵌套 JSON 以 indent=2 格式化）。"""
+def _render(result: OperationResult, *, short: str | None = None) -> str | None:
+    """把成功结果渲染为 console 可读文本。
+
+    - 默认：data 完整输出，嵌套 JSON 以 indent=2 格式化。
+    - ``--short``：单行紧凑输出；空值表示全部输出，区间为 Python slice 语法（start:stop）。
+    """
     if result.data is None or not result.data:
         return None
+    if short is not None:
+        rendered = json.dumps(result.data, ensure_ascii=False, separators=(",", ":"))
+        return _apply_slice(rendered, short)
     operations = result.data.get("operations")
     if isinstance(operations, list):
         lines = [f"{op['method']:4} {op['path']:<40} {op['summary']}" for op in operations]
@@ -179,3 +187,18 @@ def _indent_json(value: Any) -> str:
     if len(lines) <= 1:
         return rendered
     return "\n".join([lines[0], *("  " + line for line in lines[1:])])
+
+
+def _apply_slice(text: str, spec: str) -> str:
+    """按 Python slice 语法（start:stop）截断紧凑输出；空值与非法区间保持完整。"""
+    if not spec:
+        return text
+    start_raw, separator, stop_raw = spec.partition(":")
+    if not separator:
+        return text
+    try:
+        start = int(start_raw) if start_raw else None
+        stop = int(stop_raw) if stop_raw else None
+    except ValueError:
+        return text
+    return text[start:stop]
