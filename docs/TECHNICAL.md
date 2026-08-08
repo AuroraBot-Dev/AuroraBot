@@ -12,7 +12,7 @@
 AuroraBot 是一个以 **Agent 为中心**的自主智能体框架。核心哲学：
 
 - **一条认知闭环**：`输入 → 防抖聚合 → 注意力初筛 → 本体意识委派 → 决策 → 模型/工具 → 记忆投影`。
-- **Agent 全同构**：一切 Agent（triage / gate / worker / memory）都由三元组实例化——
+- **Agent 全同构**：一切 Agent（triage / root / worker / memory）都由三元组实例化——
   ① 上下文（AgentContext）② 工具权限域（profile.capabilities）③ 逻辑实现类（BaseAgent 子类）。
 - **单一存储**：SQLite WAL 是运行态与终态的唯一权威，无 JSON 归档、无 JSONL 会话日志（RFC 0210）。
 - **单进程无租约**：一个事件循环独占，无 CAS/租约/线程池（RFC 0210）。
@@ -163,8 +163,8 @@ graph TD
 
 ```
 triage agent (depth 0, 无工具, 快模型)
-  └─ process → 委派 gate（depth 1，收 assignment + context_events 批次投影 + 记忆）
-       └─ gate（本体意识，全工具域）可继续委派 worker / memory
+  └─ process → 委派 root（depth 1，收 assignment + context_events 批次投影 + 记忆）
+       └─ root（本体意识，全工具域）可继续委派 worker / memory
             ├─ worker（同构子 agent，只收 assignment + 记忆 + 自己的结果）
             └─ memory（唯一获权 aurora.memory.remember 的 agent）
 ```

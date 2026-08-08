@@ -29,7 +29,7 @@
 
 - 防抖批次到期 → 创建轻量 Task，**triage agent 是该 Task 的根 agent（depth 0）**，首轮上下文 = 批次投影 + 记忆快照（复用 `task.started` 消息类型与 `handle_claim` 路径）。
 - triage 决策统一为 `AgentDecision`：
-  - **process** → 委派本体意识（`builtin.gate`，depth 1，首轮 `agent.assigned`）；triage 通过既有 `wait_for_children` 等待回报后完成，Task 终态判定、预算、因果记录零特判。
+  - **process** → 委派本体意识（`builtin.root`，depth 1，首轮 `agent.assigned`）；triage 通过既有 `wait_for_children` 等待回报后完成，Task 终态判定、预算、因果记录零特判。
   - **defer** → 批次回到 `DEFERRED`（`available_at = now + defer_seconds`，受 `TriageLimits` 钳制），Task 终态归档；批次到期后**每次尝试都是一个新的轻量 Task**，同一会话的多次尝试各留审计记录。
   - **discard** → 删除批次原始数据，Task 终态归档。
 - RFC 0202 的"admit 直接创建 Root Task"被"triage 创建 Task + 统一委派"取代。每次 triage 尝试独立成 Task，使 defer/discard 也有完整因果记录与崩溃恢复。
@@ -43,7 +43,7 @@
 
 ### 4. Triage 的逻辑类与权限域
 
-- 新增 `builtin.triage` profile：`implementation = "src.agents.handler:TriageAgent"`（新逻辑类：无工具、快模型、结构化输出、单轮），`capabilities = ∅`（空权限域），`model_role = "fast"`，`triage_control = true`，`can_delegate = true`，`child_profiles = ["builtin.gate"]`。
+- 新增 `builtin.triage` profile：`implementation = "src.agents.handler:TriageAgent"`（新逻辑类：无工具、快模型、结构化输出、单轮），`capabilities = ∅`（空权限域），`model_role = "fast"`，`triage_control = true`，`can_delegate = true`，`child_profiles = ["builtin.root"]`。
 - triage 的模型调用走 model Activity——与普通 Agent 完全同构，可审计、可恢复、受并发与预算约束。
 - **fail-open 保留**：triage 模型失败时，engine 以确定性规则直接委派本体意识（摘要 = 事件拼接），不静默丢失用户输入。
 - 已知的供应商瞬时噪声仍在 Platform/App 边界用确定性规则过滤（RFC 0202 不变），triage 内部不做规则判断。
@@ -56,7 +56,7 @@
 ### 6. 术语与预算
 
 - Task 根 agent = 入口 triage agent；**本体意识是 triage 委派的第一个子 agent**。
-- 委派链深度预算顺延一层（triage=0，gate=1，worker≤2 起）；`max_agents_per_task` / `max_children_per_agent` 语义不变。
+- 委派链深度预算顺延一层（triage=0，root=1，worker≤2 起）；`max_agents_per_task` / `max_children_per_agent` 语义不变。
 - Task 预算（interactive / autonomous）在 triage 创建 Task 时按批次特征确定（判定保留在批次投影中）。
 
 ## 结果

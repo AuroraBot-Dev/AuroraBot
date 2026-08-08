@@ -9,12 +9,12 @@ implementation = "src.agents.triage:TriageAgent"
 model_role = "fast"
 capabilities = []
 can_delegate = true
-child_profiles = ["builtin.gate"]
+child_profiles = ["builtin.root"]
 triage_control = true
 
-# Gate：本体意识，接收 Triage 委派并决定是否继续委派
+# Root：本体意识，接收 Triage 委派并决定是否继续委派
 [[agent]]
-id = "builtin.gate"
+id = "builtin.root"
 implementation = "src.agents.handler:ToolAgent"
 model_role = "quality"
 capabilities = ["*", "!aur.serv.memory.remember"]

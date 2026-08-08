@@ -20,7 +20,7 @@ Multiagent 拓扑（注意力初筛 → 本体意识 → 专精 worker）已分�
 | 角色 | 承担者 | 职责 | 委派方式 |
 | --- | --- | --- | --- |
 | 注意力 agent | `StructuredTriagePolicy` | 无工具、快模型的初筛：process / defer / discard，并提取 `memory_candidate` | 通过批次接纳（admit）交给本体意识，不使用 delegate 工具 |
-| 本体意识（Root） | Root Task + `builtin.gate` | admitted batch 的唯一入口；可独立完成，或显式委派 | `aurora.agent.delegate` |
+| 本体意识（Root） | Root Task + `builtin.root` | admitted batch 的唯一入口；可独立完成，或显式委派 | `aurora.agent.delegate` |
 | worker | 同构 ToolAgent + `builtin.worker` | 执行专精任务；只接收 assignment、自己的记忆快照与自己的结果 | 由本体意识（或获准的中间 Agent）委派 |
 | 记忆 agent（新增） | 同构 ToolAgent + `builtin.memory` | 唯一获权执行主动记忆写入 | 由本体意识（或获准的中间 Agent）委派 |
 
