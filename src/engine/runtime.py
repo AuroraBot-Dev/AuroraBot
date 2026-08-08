@@ -464,4 +464,6 @@ class AgentEngine:
             pending: tuple[asyncio.Task[None], ...] = (*self._model_activity_tasks, *self._memory_tasks)
             if self._model_dispatch_task is not None:
                 pending = (*pending, self._model_dispatch_task)
-            await asyncio.gather(*pending, return_exceptions=True)
+            loop = asyncio.get_running_loop()
+            current = [task for task in pending if task.get_loop() is loop]
+            await asyncio.gather(*current, return_exceptions=True)
