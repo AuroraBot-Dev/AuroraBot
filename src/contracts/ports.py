@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.contracts.configuration import AuroraConfig
     from src.contracts.event import CommandResult, OutputStreamPage, RuntimeInput
 
@@ -73,9 +75,9 @@ class MemoryQueryPort(Protocol):
 class AiQueryPort(Protocol):
     """模型网关（RFC 0215）的只读查询端口。"""
 
-    def cost(self) -> dict[str, Any]: ...
+    async def cost(self) -> dict[str, Any]: ...
 
-    def models(self) -> list[dict[str, Any]]: ...
+    async def models(self) -> list[dict[str, Any]]: ...
 
     def roles(self) -> list[dict[str, Any]]: ...
 
@@ -96,6 +98,7 @@ class PanelRuntime:
     memory: MemoryQueryPort
     ai: AiQueryPort
     config: ConfigQueryPort
+    shutdown: "Callable[[], None] | None" = None
 
 
 class ConsoleControlPort(InteractiveInputPort, Protocol):
