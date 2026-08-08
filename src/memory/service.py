@@ -141,6 +141,94 @@ class MemoryService:
 
         self._long_term = LongTermMemory(memory_dir) if memory_dir is not None else None
 
+    def history(self, *, scope: str | None = None, limit: int = 32) -> list[dict[str, Any]]:
+        """只读记忆历史（RFC 0218 观察）：窗口消息 + 概要 + 长期事实。"""
+        if self._engine is None:
+            return []
+        with self._session() as session:
+            window_query = select(MemoryMessageRow).order_by(MemoryMessageRow.seq.desc()).limit(limit)
+            if scope is not None:
+                window_query = window_query.where(MemoryMessageRow.scope == scope)
+            messages = session.execute(window_query).scalars().all()
+            summary_query = select(SessionMemoryRow).order_by(SessionMemoryRow.updated_at.desc())
+            if scope is not None:
+                summary_query = summary_query.where(SessionMemoryRow.scope == scope)
+            summaries = session.execute(summary_query).scalars().all()
+            facts_query = select(DurableFactRow).order_by(DurableFactRow.created_at.desc()).limit(limit)
+            if scope is not None:
+                facts_query = facts_query.where(DurableFactRow.scope.in_((scope, "global")))
+            facts = session.execute(facts_query).scalars().all()
+        return {
+            "scope": scope,
+            "window": [
+                {"scope": row.scope, "role": row.role, "content": row.content, "at": row.at}
+                for row in reversed(messages)
+            ],
+            "summaries": [{"scope": row.scope, "summary": row.summary, "updated_at": row.updated_at} for row in summaries],
+            "facts": [{"scope": row.scope, "content": row.content, "source_task_id": row.source_task_id, "created_at": row.created_at} for row in facts],
+        }
+
+    def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
+        """只读记忆检索（RFC 0218 观察）：对窗口消息与长期事实做词项匹配。"""
+        if self._engine is None or not query.strip():
+            return []
+        terms = {term.casefold() for term in query.split() if len(term) > 1}
+        if not terms:
+            return []
+        with self._session() as session:
+            message_rows = session.execute(select(MemoryMessageRow)).scalars().all()
+            fact_rows = session.execute(select(DurableFactRow)).scalars().all()
+        candidates: list[dict[str, Any]] = []
+        for row in message_rows:
+            if scope is not None and row.scope != scope:
+                continue
+            hits = sum(term in row.content.casefold() for term in terms)
+            if hits:
+                candidates.append(
+                    {
+                        "kind": "window",
+                        "scope": row.scope,
+                        "content": row.content,
+                        "role": row.role,
+                        "at": row.at,
+                        "hits": hits,
+                    }
+                )
+        for row in fact_rows:
+            if scope is not None and row.scope not in {scope, "global"}:
+                continue
+            hits = sum(term in row.content.casefold() for term in terms)
+            if hits:
+                candidates.append(
+                    {
+                        "kind": "fact",
+                        "scope": row.scope,
+                        "content": row.content,
+                        "source_task_id": row.source_task_id,
+                        "created_at": row.created_at,
+                        "hits": hits,
+                    }
+                )
+        candidates.sort(key=lambda item: item["hits"], reverse=True)
+        return candidates[:limit]
+
+    def status(self) -> dict[str, Any]:
+        """只读记忆统计（RFC 0218 观察）：窗口/概要/长期计数。"""
+        if self._engine is None:
+            return {"enabled": False, "window_messages": 0, "summaries": 0, "facts": 0, "scopes": []}
+        with self._session() as session:
+            window_messages = session.scalar(select(func.count()).select_from(MemoryMessageRow)) or 0
+            summaries = session.scalar(select(func.count()).select_from(SessionMemoryRow)) or 0
+            facts = session.scalar(select(func.count()).select_from(DurableFactRow)) or 0
+            scopes = session.execute(select(MemoryMessageRow.scope).distinct().order_by(MemoryMessageRow.scope)).scalars().all()
+        return {
+            "enabled": True,
+            "window_messages": window_messages,
+            "summaries": summaries,
+            "facts": facts,
+            "scopes": [str(value) for value in scopes],
+        }
+
     def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if self._engine is None:
             return MemoryContextSnapshot()

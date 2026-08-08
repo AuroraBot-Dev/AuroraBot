@@ -418,6 +418,31 @@ class AgentEngine:
         next_cursor = items[-1].cursor if items else cursor
         return OutputStreamPage(items=items, next_cursor=next_cursor)
 
+    def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
+        """Task 列表投影（RFC 0218 观察操作）。"""
+        rows = self.store.tasks(status=status, limit=limit)
+        return [row.to_dict() for row in rows]
+
+    def list_agents(self, *, limit: int = 64) -> list[dict[str, Any]]:
+        """Agent 列表投影。"""
+        return [row.to_dict() for row in self.store.agents(limit=limit)]
+
+    def query_events(
+        self,
+        *,
+        session_id: str | None = None,
+        task_id: str | None = None,
+        event_type: str | None = None,
+        after_id: int = 0,
+        limit: int = 64,
+    ) -> list[dict[str, Any]]:
+        """因果事件流查询（RFC 0218 观察操作）。"""
+        return list(self.store.query_events(session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit))
+
+    def session_export(self, session_id: str) -> dict[str, Any] | None:
+        """会话导出：因果事件与模型输出投影（RFC 0210/0218）。"""
+        return self.store.session_export(session_id)
+
     def has_work(self) -> bool:
         counts = self.store.counts()
         return (

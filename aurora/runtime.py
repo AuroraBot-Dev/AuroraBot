@@ -9,14 +9,16 @@ from __future__ import annotations
 import asyncio
 import importlib
 import signal
+import webbrowser
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
-from ops.api import create_debug_app
+from ops.api import PanelAppContext, create_panel_app
 from ops.runtime import AuroraRuntime
+from ops.store import PanelStore
 from src.ai import ModelGatewayService
 from src.config import get
 from src.contracts import (
@@ -37,7 +39,7 @@ from src.utils import (
 )
 
 if TYPE_CHECKING:
-    from src.contracts.configuration import AuroraConfig
+    from src.contracts.configuration import AuroraConfig, PanelConfig
     from src.contracts.platform import PlatformCleanup, PlatformFactory, PlatformHandle, PlatformServer
     from src.contracts.tool import ToolExecutorBinding
 
@@ -47,10 +49,9 @@ logger = get_logger("aurora.process")
 # -- 平台注册 ---------------------------------------------------------
 def _init_platforms() -> dict[str, PlatformFactory]:
     """显式注册平台工厂，使签名漂移在静态检查阶段失败。"""
-    from src.platform.dashboard import _create as create_dashboard
     from src.platform.mcp import _create as create_mcp
 
-    creators: dict[str, PlatformFactory] = {"dashboard": create_dashboard, "mcp": create_mcp}
+    creators: dict[str, PlatformFactory] = {"mcp": create_mcp}
     if creators.keys() != PLATFORM_NAMES:
         raise RuntimeError("platform factory registry does not match PlatformPreference")
     return creators
@@ -95,7 +96,7 @@ async def run_runtime(
     runtime = _create_runtime(configuration)
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
-    debug_server = _debug_server(runtime)
+    panel_server = _panel_server(runtime)
     failure: BaseException | None = None
     async with AsyncExitStack() as resources:
         resources.push_async_callback(_run_cleanup, runtime.shutdown)
@@ -112,7 +113,7 @@ async def run_runtime(
                     runtime,
                     stop,
                     handles,
-                    debug_server,
+                    panel_server,
                     console_enabled=console_enabled,
                 )
         finally:
@@ -200,7 +201,14 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
     memory_bindings = _build_memory_bindings(memory, engine)
-    return AuroraRuntime(configuration, engine, tool_bindings=memory_bindings, model_gateway=model_gateway)
+    return AuroraRuntime(
+        configuration,
+        engine,
+        tool_bindings=memory_bindings,
+        model_gateway=model_gateway,
+        memory=memory,
+        prompt_catalog=composer.catalog,
+    )
 
 
 def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
@@ -272,11 +280,11 @@ async def _run_platform_tasks(
     runtime: AuroraRuntime,
     stop: asyncio.Event,
     handles: dict[str, PlatformHandle],
-    debug_server: PlatformServer,
+    panel_server: PlatformServer | None,
     *,
     console_enabled: bool,
 ) -> BaseException | None:
-    """启动运行时循环和各平台后台任务，等待首个完成者并协调退出。"""
+    """启动运行时循环、面板与各平台后台任务，等待首个完成者并协调退出。"""
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
 
@@ -298,8 +306,10 @@ async def _run_platform_tasks(
     console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
     tasks.update(task for task in (console_task,) if task is not None)
 
-    debug_task = asyncio.create_task(debug_server.serve(), name="aurora-ops-debug-server")
-    tasks.add(debug_task)
+    panel_task: asyncio.Task[None] | None = None
+    if panel_server is not None:
+        panel_task = asyncio.create_task(panel_server.serve(), name="aurora-panel-server")
+        tasks.add(panel_task)
     stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
     tasks.add(stop_task)
 
@@ -313,7 +323,7 @@ async def _run_platform_tasks(
             *(_stop_server(servers[name], task) for name, task in server_tasks.items()),
             *(_await_task_exit(task) for task in platform_tasks.values()),
             *(_await_task_exit(task) for task in (console_task,) if task is not None),
-            _stop_server(debug_server, debug_task),
+            *((_stop_server(panel_server, panel_task),) if panel_task is not None else ()),
             _await_task_exit(runtime_task),
         )
 
@@ -421,19 +431,54 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
             signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
 
 
-# -- 调试服务器 --------------------------------------------------------
+# -- 面板服务器 --------------------------------------------------------
 
 
-def _debug_server(runtime: AuroraRuntime) -> uvicorn.Server:
-    """创建独立于 Platform 集合的 ops 调试服务器。"""
+def _panel_server(runtime: AuroraRuntime) -> uvicorn.Server | None:
+    """创建独立于 Platform 集合的面板后端服务器（RFC 0218 §1）。"""
     configuration = runtime.configuration
-    return SignalSafeServer(
+    panel = configuration.runtime.panel
+    if not panel.enabled:
+        return None
+    store = PanelStore(configuration.storage.ops)
+    context = PanelAppContext(
+        ports=runtime.panel_runtime(),
+        panel=panel,
+        profile=configuration.runtime.profile,
+        store=store,
+    )
+    server = SignalSafeServer(
         uvicorn.Config(
-            create_debug_app(runtime),
-            host=configuration.runtime.debug_host,
-            port=configuration.runtime.debug_port,
+            create_panel_app(context),
+            host=panel.host,
+            port=panel.port,
             log_level=configuration.logging_level.lower(),
             log_config=None,
             access_log=False,
         )
     )
+    if panel.open_browser:
+        server.background = lambda stop: _open_browser_when_ready(server, panel, stop)
+    return server
+
+
+async def _open_browser_when_ready(
+    server: "SignalSafeServer", configuration: PanelConfig, stop: asyncio.Event
+) -> None:
+    """服务器就绪后打开面板，并存活至统一停止。"""
+    while not server.started:
+        if server.should_exit or stop.is_set():
+            return
+        await asyncio.sleep(0.01)
+    if server.should_exit or stop.is_set():
+        return
+    await asyncio.to_thread(_open_panel_browser, configuration)
+    await stop.wait()
+
+
+def _open_panel_browser(configuration: PanelConfig) -> None:
+    """在默认浏览器中打开面板地址。"""
+    host = "127.0.0.1" if configuration.host in {"0.0.0.0", "::"} else configuration.host
+    if ":" in host:
+        host = f"[{host}]"
+    webbrowser.open(f"http://{host}:{configuration.port}")
