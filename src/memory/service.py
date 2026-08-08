@@ -33,8 +33,8 @@ if TYPE_CHECKING:
 
 logger = get_logger("aurora.memory.service")
 _SUMMARY_LIMIT = 2400
-_DEFAULT_WINDOW_MIN = 10
-_DEFAULT_WINDOW_MAX = 20
+_DEFAULT_WINDOW_MIN = 100
+_DEFAULT_WINDOW_MAX = 300
 
 
 class _Msg(StrEnum):

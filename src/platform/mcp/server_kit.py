@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from src.platform.mcp.server_spec import MCPServerSpec
 
 logger = get_logger("MCPServerKit")
+_STDOUT_LIMIT = 16 * 1024 * 1024
 _INHERITED_ENV = frozenset(
     {
         "APPDATA",
@@ -160,6 +161,7 @@ class MCPServerKit:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=_STDOUT_LIMIT,
             )
         except FileNotFoundError as exc:
             raise RuntimeError(_Msg.START_FAILED_IO.format(key=spec.key, command=spec.command, error=exc)) from exc
