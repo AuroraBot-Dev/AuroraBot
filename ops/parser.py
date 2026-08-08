@@ -72,7 +72,6 @@ def parse_text(spec: OperationSpec, tokens: tuple[str, ...], path_params: dict[s
     while index < len(rest):
         token = rest[index]
         if token == "--short":
-            # 统一紧凑输出：留空表示全部输出；区间为 Python slice 语法（start:stop）
             if index + 1 < len(rest) and not rest[index + 1].startswith("--"):
                 params["short"] = rest[index + 1]
                 index += 1
