@@ -261,6 +261,52 @@ class ModelGatewayService:
         await self._ensure_initialized()
         return await get_modalities_by_id(self._models[role])
 
+    async def cost(self) -> dict[str, Any]:
+        """费用分类统计（RFC 0218 观察操作）。"""
+        return {
+            "total_cost": await self.cost_tracker.total_cost(),
+            "by_role": await self.cost_tracker.by_role(),
+            "by_model": await self.cost_tracker.by_model(),
+            "by_status": await self.cost_tracker.by_status(),
+        }
+
+    async def models(self) -> list[dict[str, Any]]:
+        """角色-模型绑定、能力与模态（RFC 0218 观察操作）。"""
+        catalog: list[dict[str, Any]] = []
+        for role_id, model_id in self._models.items():
+            definition = self._configuration.model_definitions[role_id]
+            handler = self._handlers[role_id]
+            try:
+                input_modalities, output_modalities = await self.modalities_for(role_id)
+            except Exception as error:  # noqa: BLE001 - 模态查询失败不阻断目录
+                logger.debug("model modalities unavailable role=%s error_type=%s", role_id, type(error).__name__)
+                input_modalities, output_modalities = frozenset(), frozenset()
+            catalog.append(
+                {
+                    "role": role_id,
+                    "model": model_id,
+                    "provider": definition.provider,
+                    "endpoint": handler.endpoint,
+                    "capability_baseline": sorted(handler.capability_baseline),
+                    "capabilities": sorted(self._capabilities_for(role_id)),
+                    "input_modalities": sorted(input_modalities),
+                    "output_modalities": sorted(output_modalities),
+                }
+            )
+        return catalog
+
+    def roles(self) -> list[dict[str, Any]]:
+        """角色目录（RFC 0218 自描述）。"""
+        return [
+            {
+                "role": role_id,
+                "model": model_id,
+                "endpoint": self._handlers[role_id].endpoint,
+                "capability_baseline": sorted(self._handlers[role_id].capability_baseline),
+            }
+            for role_id, model_id in self._models.items()
+        ]
+
     def embed_sync(self, texts: list[str]) -> list[list[float]]:
         """同步 embedding（供记忆引擎的 mem0 自定义嵌入函数调用，RFC 0216）。"""
         import litellm

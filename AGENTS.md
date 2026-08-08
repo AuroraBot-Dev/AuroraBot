@@ -15,9 +15,9 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 ```text
 config/         TOML 核心配置、平台偏好、领域配置与 profile 覆盖
 aurora/         唯一进程 CLI、平台选择与生命周期组合
-ops/            热路径外的输入、命令路由、运行时监察与开发者调试接口
+ops/            面板后端（RFC 0218）：唯一 HTTP 路由、操作体系、认证与面板存储
 docs/rfc/       已接受 RFC 与阅读索引
-src/contracts/  无上层依赖的配置、AMP、Agent、模型与记忆契约
+src/contracts/  无上层依赖的配置、AMP、操作、Agent、模型与记忆契约
 src/prompt/     提示词目录、分层 DTO 与模型上下文呈现
 src/engine/     完整 Agent 热路径、状态、Activity、因果与 SQLite 运行态
 src/agents/     同构 Agent handler 与内建委派能力
@@ -25,7 +25,7 @@ src/ai/         宽泛模型网关
 src/memory/     自动记忆服务与持久化适配
 src/config/     TOML 加载、校验与配置快照
 src/console/    本地交互 Shell 与输出渲染（热路径外的只读渲染器）
-src/platform/   Dashboard、MCP 的协议、持久化、能力与效果适配
+src/platform/   MCP 的协议、持久化、能力与效果适配
 src/apps/       内建原生 AMP-MCP 应用
 src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
 src/utils/      无上层依赖的通用工具
@@ -44,10 +44,11 @@ tests/          契约、集成与回归测试
 
 ## Workspace and configuration
 
-- 数据持久化路径必须镜像包层级：`src/engine → data/engine`、`src/platform/mcp → data/platform/mcp`、
-  `src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；配置见 `storage.toml`。
-- engine 工作区固定为 `data/engine/inbox/`、`process/`、`archive/`（仅 Inbox 输入文件分类）；终态即留存于 SQLite（RFC 0210，无 JSON 归档与 JSONL 会话日志）。
-- 外部 AMP 摄入使用 JSON，生产者必须先写临时文件再原子改名；运行态与归档统一使用 SQLite WAL（Schema v9，不迁移旧库）。
+- 数据持久化路径必须镜像包层级：`src/engine → data/engine`、`ops → data/ops`、
+  `src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；
+  配置见 `storage.toml`。
+- engine 工作区固定为 `data/engine/runtime.sqlite3`（唯一运行态与终态，RFC 0210/0219/0220）；无 JSON 归档、JSONL 会话日志与文件投递箱。
+- 外部 AMP 摄入使用 JSON，生产者必须先写临时文件再原子改名；运行态与归档统一使用 SQLite WAL（Schema v9；数据库演进必须提供迁移步骤，历史版本按 RFC 0217 版本序列迁移，代码路径只访问当前版本形状）。
 - 会话可读性由 `causal_events` 提供；ops 可按需导出，不写入热路径日志文件。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
 - 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、

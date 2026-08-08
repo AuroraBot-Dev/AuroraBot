@@ -1,73 +1,107 @@
-"""传输无关运行时命令的声明式目录。"""
+"""操作注册表：装饰器收集、冲突校验与目录自描述（RFC 0218 §2）。
+
+操作以 ``@operation(...)`` 装饰器注册到模块级注册表；``iter_operations``
+在首次调用时自动加载 ``ops.operations`` 下的全部子模块（显式导入，保证装饰器执行）。
+"""
 
 from __future__ import annotations
 
-import argparse
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from src.contracts import (
-    CommandContext,
-    CommandResult,
-)
+from src.contracts import OperationResult, OperationScope, OperationSpec, ParameterSpec
 
-CommandHandler = Callable[[CommandContext, argparse.Namespace], Awaitable[CommandResult]]
-CommandConfigurator = Callable[[argparse.ArgumentParser], None]
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
-
-@dataclass(frozen=True, slots=True)
-class ConsoleCommand:
-    """控制台命令的声明式描述：名称、用法、参数配置与异步处理器。"""
-
-    names: tuple[str, ...]
-    usage: str
-    description: str
-    configure: CommandConfigurator
-    handler: CommandHandler
+_OPERATIONS: dict[str, OperationSpec] = {}
+_ALIASES: dict[str, str] = {}
+_LOADED = False
 
 
-def command_specs() -> tuple[ConsoleCommand, ...]:
-    """返回 Console 与 Dashboard 输入共用的命令集。"""
-    from ops.commands import (
-        agent,
-        ai,
-        clear,
-        event,
-        log,
-        pump,
-        say,
-        status,
-        task,
-    )
-    from ops.commands import (
-        help as help_command,
-    )
-    from ops.commands import (
-        quit as quit_command,
-    )
+def operation(
+    method: str,
+    path: str,
+    *,
+    name: str,
+    summary: str = "",
+    parameters: tuple[ParameterSpec, ...] = (),
+    aliases: tuple[str, ...] = (),
+    scope: OperationScope = OperationScope.ALL,
+) -> Callable[[Callable[..., Awaitable[OperationResult]]], Callable[..., Awaitable[OperationResult]]]:
+    """装饰器：把处理器注册为资源树上的一个操作。"""
 
-    return (
-        ConsoleCommand(
-            help_command.NAMES,
-            help_command.USAGE,
-            help_command.DESCRIPTION,
-            help_command.configure,
-            help_command.handle,
-        ),
-        ConsoleCommand(status.NAMES, status.USAGE, status.DESCRIPTION, status.configure, status.handle),
-        ConsoleCommand(ai.NAMES, ai.USAGE, ai.DESCRIPTION, ai.configure, ai.handle),
-        ConsoleCommand(say.NAMES, say.USAGE, say.DESCRIPTION, say.configure, say.handle),
-        ConsoleCommand(event.NAMES, event.USAGE, event.DESCRIPTION, event.configure, event.handle),
-        ConsoleCommand(pump.NAMES, pump.USAGE, pump.DESCRIPTION, pump.configure, pump.handle),
-        ConsoleCommand(task.NAMES, task.USAGE, task.DESCRIPTION, task.configure, task.handle),
-        ConsoleCommand(agent.NAMES, agent.USAGE, agent.DESCRIPTION, agent.configure, agent.handle),
-        ConsoleCommand(log.NAMES, log.USAGE, log.DESCRIPTION, log.configure, log.handle),
-        ConsoleCommand(clear.NAMES, clear.USAGE, clear.DESCRIPTION, clear.configure, clear.handle),
-        ConsoleCommand(
-            quit_command.NAMES,
-            quit_command.USAGE,
-            quit_command.DESCRIPTION,
-            quit_command.configure,
-            quit_command.handle,
-        ),
-    )
+    def decorator(handler: Callable[..., Awaitable[OperationResult]]) -> Callable[..., Awaitable[OperationResult]]:
+        spec = OperationSpec(
+            method=method,
+            path=path,
+            name=name,
+            summary=summary,
+            parameters=parameters,
+            aliases=aliases,
+            scope=scope,
+            handler=handler,
+        )
+        _register(spec)
+        return handler
+
+    return decorator
+
+
+def _register(spec: OperationSpec) -> None:
+    """注册操作并校验 path+method 唯一。"""
+    key = f"{spec.method} {spec.path}"
+    if key in _OPERATIONS:
+        raise RuntimeError(f"duplicate operation registration: {key}")
+    _OPERATIONS[key] = spec
+    for alias in spec.aliases:
+        if alias in _ALIASES:
+            raise RuntimeError(f"duplicate command alias: {alias}")
+        _ALIASES[alias] = key
+
+
+def iter_operations() -> tuple[OperationSpec, ...]:
+    """返回全部已注册操作（首次调用时加载子模块）。"""
+    _load_all()
+    return tuple(_OPERATIONS.values())
+
+
+def find_by_alias(alias: str) -> OperationSpec | None:
+    """按命令别名查找操作。"""
+    _load_all()
+    key = _ALIASES.get(alias)
+    return _OPERATIONS.get(key) if key is not None else None
+
+
+def catalog_entries() -> list[dict[str, Any]]:
+    """操作目录自描述（RFC 0218：/api/ops 与 /help 共用）。"""
+    return [
+        {
+            "method": spec.method,
+            "path": spec.path,
+            "name": spec.name,
+            "summary": spec.summary,
+            "aliases": list(spec.aliases),
+            "scope": spec.scope,
+            "parameters": [
+                {
+                    "name": parameter.name,
+                    "location": parameter.location,
+                    "kind": parameter.kind,
+                    "type": parameter.type,
+                    "required": parameter.required,
+                    "default": parameter.default,
+                }
+                for parameter in spec.parameters
+            ],
+        }
+        for spec in iter_operations()
+    ]
+
+
+def _load_all() -> None:
+    """显式导入全部操作子模块以触发注册。"""
+    global _LOADED
+    if _LOADED:
+        return
+    _LOADED = True
+    from ops.operations import ai, chat, config, console, engine, memory, system  # noqa: F401

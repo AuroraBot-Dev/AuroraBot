@@ -1,12 +1,15 @@
-"""持久化 Inbox、防抖批次、入口 Triage Task 与批次结算（Schema v9，RFC 0209/0210）。"""
+"""持久化 Inbox、防抖批次、入口 Triage Task 与批次结算（Schema v9，RFC 0217 ORM 实现）。"""
 
 from __future__ import annotations
 
-import json
-import sqlite3
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+from sqlalchemy import delete, func, select, update
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from src.contracts import (
     AgentStatus,
@@ -17,10 +20,18 @@ from src.contracts import (
     TriageBatch,
     TriageLimits,
 )
+from src.utils import bounded_summary
 
-from .base import RuntimeStoreBase, _json, utc_now
-
-_TRIAGE_SUMMARY_LIMIT = 600
+from .base import RuntimeStoreBase, _json, _loads, utc_now
+from .models import (
+    INBOX_DEFERRED,
+    INBOX_PENDING,
+    INBOX_TRIAGING,
+    AgentRow,
+    CausalEventRow,
+    InboxEventRow,
+    TaskRow,
+)
 
 
 class StoreInboxMixin(RuntimeStoreBase):
@@ -28,17 +39,22 @@ class StoreInboxMixin(RuntimeStoreBase):
 
     def enqueue_inbox(self, amp: AmpEnvelope, limits: TriageLimits) -> bool:
         """幂等写入事件，并为同会话 pending 批次刷新 quiet window。"""
-        now_dt = datetime.now(UTC)
-        now = now_dt.isoformat()
+        now = utc_now()
+        now_dt = datetime.fromisoformat(now)
         event_id = amp.header.message_id
-        with self.transaction() as connection:
-            if connection.execute(
-                "SELECT 1 FROM causal_events WHERE correlation_id = ? AND type = 'ingress.received'",
-                (event_id,),
-            ).fetchone():
+        with self.session() as session:
+            if (
+                session.scalar(
+                    select(CausalEventRow.event_id).where(
+                        CausalEventRow.correlation_id == event_id,
+                        CausalEventRow.event_type == "ingress.received",
+                    )
+                )
+                is not None
+            ):
                 return False
             self._insert_causal_event(
-                connection,
+                session,
                 event_type="ingress.received",
                 summary=amp.payload.summary,
                 payload={
@@ -49,92 +65,108 @@ class StoreInboxMixin(RuntimeStoreBase):
                 correlation_id=event_id,
                 now=now,
             )
-            first_row = connection.execute(
-                "SELECT min(created_at) FROM inbox_events WHERE session_id = ? AND status IN ('PENDING', 'DEFERRED')",
-                (amp.payload.session_id,),
-            ).fetchone()
-            first_at = datetime.fromisoformat(first_row[0]) if first_row and first_row[0] else now_dt
+            first_at = session.scalar(
+                select(func.min(InboxEventRow.created_at)).where(
+                    InboxEventRow.session_id == amp.payload.session_id,
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                )
+            )
+            first_dt = datetime.fromisoformat(first_at) if first_at else now_dt
             deadline = min(
                 now_dt + timedelta(seconds=limits.quiet_seconds),
-                first_at + timedelta(seconds=limits.max_wait_seconds),
+                first_dt + timedelta(seconds=limits.max_wait_seconds),
             ).isoformat()
-            connection.execute(
-                "UPDATE inbox_events SET status='PENDING', available_at=?, updated_at=? "
-                "WHERE session_id=? AND status IN ('PENDING', 'DEFERRED')",
-                (deadline, now, amp.payload.session_id),
+            session.execute(
+                update(InboxEventRow)
+                .where(
+                    InboxEventRow.session_id == amp.payload.session_id,
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                )
+                .values(status=INBOX_PENDING, available_at=deadline, updated_at=now)
             )
-            connection.execute(
-                "INSERT INTO inbox_events VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', NULL, ?, ?, ?)",
-                (
-                    event_id,
-                    amp.payload.session_id,
-                    amp.payload.type,
-                    amp.payload.summary,
-                    _json(amp.header.source),
-                    _json(amp.payload.data),
-                    10 if amp.payload.type == "system.tick" else 100,
-                    deadline,
-                    now,
-                    now,
-                ),
+            session.add(
+                InboxEventRow(
+                    event_id=event_id,
+                    session_id=amp.payload.session_id,
+                    event_type=amp.payload.type,
+                    summary=amp.payload.summary,
+                    source_json=_json(amp.header.source),
+                    data_json=_json(amp.payload.data),
+                    priority=10 if amp.payload.type == "system.tick" else 100,
+                    status=INBOX_PENDING,
+                    batch_id=None,
+                    available_at=deadline,
+                    created_at=now,
+                    updated_at=now,
+                )
             )
         return True
 
     def has_due_inbox(self) -> bool:
-        with self.connect() as connection:
-            return bool(
-                connection.execute(
-                    "SELECT 1 FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED') AND available_at <= ? LIMIT 1",
-                    (utc_now(),),
-                ).fetchone()
+        with self.session() as session:
+            row = session.scalar(
+                select(InboxEventRow.event_id)
+                .where(
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                    InboxEventRow.available_at <= utc_now(),
+                )
+                .limit(1)
             )
+            return row is not None
 
     def inbox_delay_seconds(self) -> float | None:
         now = datetime.now(UTC)
-        with self.connect() as connection:
-            row = connection.execute(
-                "SELECT min(available_at) FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED')"
-            ).fetchone()
-        if row is None or row[0] is None:
+        with self.session() as session:
+            first_at = session.scalar(
+                select(func.min(InboxEventRow.available_at)).where(
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED))
+                )
+            )
+        if first_at is None:
             return None
-        return max(0.0, (datetime.fromisoformat(str(row[0])) - now).total_seconds())
+        return max(0.0, (datetime.fromisoformat(str(first_at)) - now).total_seconds())
 
     def claim_triage_batches(self, limits: TriageLimits, limit: int) -> tuple[TriageBatch, ...]:
         """领取到期会话批次；模型 I/O 在事务外进行。"""
         batches: list[TriageBatch] = []
         now = utc_now()
-        with self.transaction() as connection:
-            sessions = connection.execute(
-                "SELECT session_id, min(created_at) AS first_at, max(priority) AS priority "
-                "FROM inbox_events WHERE status IN ('PENDING', 'DEFERRED') AND available_at <= ? "
-                "GROUP BY session_id ORDER BY priority DESC, first_at LIMIT ?",
-                (now, limit),
-            ).fetchall()
-            for session in sessions:
-                rows = connection.execute(
-                    "SELECT * FROM inbox_events WHERE session_id = ? "
-                    "AND status IN ('PENDING', 'DEFERRED') AND available_at <= ? "
-                    "ORDER BY created_at, event_id LIMIT ?",
-                    (session["session_id"], now, limits.max_batch_events),
-                ).fetchall()
-                event_budget = max(
-                    300,
-                    limits.max_batch_characters - len(str(session["session_id"])) - 500,
+        with self.session() as session:
+            session_rows = session.execute(
+                select(
+                    InboxEventRow.session_id,
+                    func.min(InboxEventRow.created_at).label("first_at"),
+                    func.max(InboxEventRow.priority).label("priority"),
                 )
-                selected = self._bounded_events(rows, event_budget)
+                .where(InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)), InboxEventRow.available_at <= now)
+                .group_by(InboxEventRow.session_id)
+                .order_by(func.max(InboxEventRow.priority).desc(), "first_at")
+                .limit(limit)
+            ).all()
+            for session_id, *_ in session_rows:
+                rows = session.execute(
+                    select(InboxEventRow)
+                    .where(
+                        InboxEventRow.session_id == session_id,
+                        InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                        InboxEventRow.available_at <= now,
+                    )
+                    .order_by(InboxEventRow.created_at, InboxEventRow.event_id)
+                    .limit(limits.max_batch_events)
+                ).scalars()
+                event_budget = max(300, limits.max_batch_characters - len(str(session_id)) - 500)
+                selected = self._bounded_events(tuple(rows), event_budget)
                 if not selected:
                     continue
                 batch_id = str(uuid4())
-                placeholders = ",".join("?" for _ in selected)
-                connection.execute(
-                    f"UPDATE inbox_events SET status='TRIAGING', batch_id=?, updated_at=? "
-                    f"WHERE event_id IN ({placeholders})",
-                    (batch_id, now, *(event.event_id for event in selected)),
+                session.execute(
+                    update(InboxEventRow)
+                    .where(InboxEventRow.event_id.in_([event.event_id for event in selected]))
+                    .values(status=INBOX_TRIAGING, batch_id=batch_id, updated_at=now)
                 )
                 batches.append(
                     TriageBatch(
                         batch_id=batch_id,
-                        session_id=str(session["session_id"]),
+                        session_id=str(session_id),
                         events=selected,
                         first_received_at=min(event.created_at for event in selected),
                     )
@@ -155,57 +187,61 @@ class StoreInboxMixin(RuntimeStoreBase):
         批次原始事件保留在 Inbox，由 triage agent 的决策在 apply_decision
         中结算；批次投影存入入口 agent 状态，供委派时向子 Agent 传递。
         """
-        now_dt = datetime.now(UTC)
-        now = now_dt.isoformat()
-        with self.transaction() as connection:
-            rows = connection.execute(
-                "SELECT * FROM inbox_events WHERE batch_id = ? AND status = 'TRIAGING' ORDER BY created_at, event_id",
-                (batch.batch_id,),
-            ).fetchall()
+        now = utc_now()
+        with self.session() as session:
+            rows = (
+                session.execute(
+                    select(InboxEventRow)
+                    .where(InboxEventRow.batch_id == batch.batch_id, InboxEventRow.status == INBOX_TRIAGING)
+                    .order_by(InboxEventRow.created_at, InboxEventRow.event_id)
+                )
+                .scalars()
+                .all()
+            )
             if not rows:
                 return None
             task_id = str(uuid4())
             agent_id = str(uuid4())
-            autonomous = all(str(row["type"]) == "system.tick" for row in rows)
+            autonomous = all(str(row.event_type) == "system.tick" for row in rows)
             budget = autonomous_budget if autonomous else interactive_budget
-            summary = _bounded_summary(batch.events)
-            connection.execute(
-                "INSERT INTO tasks (task_id, root_agent_id, root_message_id, session_id, root_summary, "
-                "autonomous, status, model_calls, tool_calls, max_model_calls, max_tool_calls, max_duration_seconds, "
-                "started_at, updated_at, termination_reason) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NULL)",
-                (
-                    task_id,
-                    agent_id,
-                    batch.batch_id,
-                    batch.session_id,
-                    summary,
-                    int(autonomous),
-                    TaskStatus.ACTIVE,
-                    budget.max_model_calls,
-                    budget.max_tool_calls,
-                    budget.max_duration_seconds,
-                    now,
-                    now,
-                ),
+            summary = bounded_summary([event.summary for event in batch.events])
+            session.add(
+                TaskRow(
+                    task_id=task_id,
+                    root_agent_id=agent_id,
+                    root_message_id=batch.batch_id,
+                    session_id=batch.session_id,
+                    root_summary=summary,
+                    autonomous=int(autonomous),
+                    status=TaskStatus.ACTIVE,
+                    model_calls=0,
+                    tool_calls=0,
+                    max_model_calls=budget.max_model_calls,
+                    max_tool_calls=budget.max_tool_calls,
+                    max_duration_seconds=budget.max_duration_seconds,
+                    started_at=now,
+                    updated_at=now,
+                    termination_reason=None,
+                )
             )
             events = _event_projection(batch.events)
-            connection.execute(
-                "INSERT INTO agents VALUES (?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?)",
-                (
-                    agent_id,
-                    task_id,
-                    triage_profile,
-                    "triage",
-                    AgentStatus.READY,
-                    _json({"batch_events": events}),
-                    now,
-                    now,
-                    summary,
-                ),
+            session.add(
+                AgentRow(
+                    agent_id=agent_id,
+                    task_id=task_id,
+                    parent_agent_id=None,
+                    profile_id=triage_profile,
+                    depth=0,
+                    assignment="triage",
+                    status=AgentStatus.READY,
+                    state_json=_json({"batch_events": events}),
+                    created_at=now,
+                    updated_at=now,
+                    last_summary=summary,
+                )
             )
             self._insert_message(
-                connection,
+                session,
                 task_id=task_id,
                 target_agent_id=agent_id,
                 message_type="task.started",
@@ -216,7 +252,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                 now=now,
             )
             self._insert_causal_event(
-                connection,
+                session,
                 event_type="task.started",
                 summary=summary,
                 payload={"batch_id": batch.batch_id, "event_ids": [event["event_id"] for event in events]},
@@ -230,7 +266,7 @@ class StoreInboxMixin(RuntimeStoreBase):
 
     @staticmethod
     def settle_batch(
-        connection: sqlite3.Connection,
+        session: Session,
         batch_id: str,
         mode: str,
         now: str,
@@ -239,28 +275,28 @@ class StoreInboxMixin(RuntimeStoreBase):
         """按 triage 决策结算批次：defer 回到 DEFERRED，delete 移除原始事件。"""
         if mode == "defer":
             available_at = (datetime.now(UTC) + timedelta(seconds=max(0.0, defer_seconds or 0.0))).isoformat()
-            connection.execute(
-                "UPDATE inbox_events SET status='DEFERRED', batch_id=NULL, available_at=?, updated_at=? "
-                "WHERE batch_id=?",
-                (available_at, now, batch_id),
+            session.execute(
+                update(InboxEventRow)
+                .where(InboxEventRow.batch_id == batch_id)
+                .values(status=INBOX_DEFERRED, batch_id=None, available_at=available_at, updated_at=now)
             )
         else:
-            connection.execute("DELETE FROM inbox_events WHERE batch_id = ?", (batch_id,))
+            session.execute(delete(InboxEventRow).where(InboxEventRow.batch_id == batch_id))
 
     @staticmethod
-    def _bounded_events(rows: list[Any], max_characters: int) -> tuple[InboxEvent, ...]:
+    def _bounded_events(rows: tuple[Any, ...], max_characters: int) -> tuple[InboxEvent, ...]:
         selected: list[InboxEvent] = []
         used = 0
         for row in rows:
             event = InboxEvent(
-                event_id=str(row["event_id"]),
-                session_id=str(row["session_id"]),
-                type=str(row["type"]),
-                summary=str(row["summary"]),
-                source=json.loads(row["source_json"]),
-                data=json.loads(row["data_json"]),
-                created_at=str(row["created_at"]),
-                priority=int(row["priority"]),
+                event_id=str(row.event_id),
+                session_id=str(row.session_id),
+                type=str(row.event_type),
+                summary=str(row.summary),
+                source=_loads(row.source_json),
+                data=_loads(row.data_json),
+                created_at=str(row.created_at),
+                priority=int(row.priority),
             )
             size = len(_json(event.to_dict()))
             if not selected and size > max_characters:
@@ -302,14 +338,6 @@ class StoreInboxMixin(RuntimeStoreBase):
                 priority=clipped.priority,
             )
         return clipped
-
-
-def _bounded_summary(events: tuple[InboxEvent, ...]) -> str:
-    """从批次事件拼接有界摘要，作为 Task 的 root_summary。"""
-    summary = "；".join(event.summary for event in events)
-    if len(summary) > _TRIAGE_SUMMARY_LIMIT:
-        summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
-    return summary or "Inbox event batch"
 
 
 def _event_projection(events: tuple[InboxEvent, ...]) -> list[dict[str, Any]]:

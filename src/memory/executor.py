@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -19,6 +18,7 @@ from src.contracts import (
     ToolExecutionRequest,
     tool_receipt_amp,
 )
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     from src.contracts.ports import ExternalAmpIngressPort
@@ -78,7 +78,7 @@ class MemoryToolExecutor:
             scope=request.session_id,
             input_summary=content.strip(),
             outcome_summary=None,
-            created_at=datetime.now(UTC).isoformat(),
+            created_at=utc_now(),
             fact_candidates=facts,
         )
         await asyncio.to_thread(self._memory.remember, entry)

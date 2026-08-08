@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import json
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -20,21 +19,21 @@ from src.contracts import (
     ModelBudget,
     ModelMessage,
     ModelResult,
+    TriageLimits,
 )
-from src.utils import get_logger
+from src.prompt import external_data
+from src.utils import bounded_summary, get_logger
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentContext
 
 logger = get_logger("aurora.agent.triage")
-_TRIAGE_SUMMARY_LIMIT = 600
-_DEFAULT_DEFER_SECONDS = 5.0
+_DEFAULT_DEFER_SECONDS = TriageLimits().defer_seconds
 
 
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
-    EXTERNAL_DATA = '<external-data encoding="json">\n{payload}\n</external-data>'
     UNEXPECTED_MESSAGE = "unexpected triage message type {message_type}"
     SYSTEM = """你是 Aurora 的事件 Triage。你只判断一个会话收件箱批次是否值得唤醒本体意识。
 process：用户消息、请求、任务结果或需要回应/行动的事实。
@@ -93,12 +92,7 @@ class TriageAgent(BaseAgent):
             context,
             messages=(
                 ModelMessage("system", _Msg.SYSTEM),
-                ModelMessage(
-                    "user",
-                    _Msg.EXTERNAL_DATA.format(
-                        payload=json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                    ),
-                ),
+                ModelMessage("user", external_data(payload)),
             ),
             tools=(),
             output_schema=_OUTPUT_SCHEMA,
@@ -164,11 +158,8 @@ def _candidate(value: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _fallback_summary(batch: dict[str, Any]) -> str:
-    """从批次事件拼接有界摘要。"""
+    """从批次事件投影拼接有界摘要。"""
     events = batch.get("events")
     if not isinstance(events, list):
-        return "Inbox event batch"
-    summary = "；".join(str(event.get("summary")) for event in events if isinstance(event, dict))
-    if len(summary) > _TRIAGE_SUMMARY_LIMIT:
-        summary = summary[: _TRIAGE_SUMMARY_LIMIT - 1] + "…"
-    return summary or "Inbox event batch"
+        return bounded_summary(())
+    return bounded_summary([str(event.get("summary")) for event in events if isinstance(event, dict)])

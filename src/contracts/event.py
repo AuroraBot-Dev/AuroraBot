@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.contracts.ports import RuntimeCommandPort
+    from src.contracts.ports import EngineQueryPort
 
 
 class InputOrigin(StrEnum):
     """交互输入来源。"""
 
     CONSOLE = "console"
-    DASHBOARD = "dashboard"
+    PANEL = "panel"
 
 
 class CommandControl(StrEnum):
@@ -68,7 +68,7 @@ class CommandResult:
 class CommandContext:
     """命令处理器使用的运行时和请求上下文。"""
 
-    runtime: RuntimeCommandPort
+    runtime: EngineQueryPort
     request: RuntimeInput
 
 
@@ -83,6 +83,10 @@ class OutputStreamItem:
     kind: str
     text: str
     at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为普通字典（面板输出与 console 渲染共用）。"""
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)

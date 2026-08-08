@@ -8,16 +8,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.contracts import (
     ActivityRequest,
-    ActivityStatus,
     AgentHandler,
     AgentInstance,
     AgentLimits,
@@ -39,10 +36,10 @@ from src.engine.authorize import apply_authorized_decision, apply_failure, handl
 from src.engine.debug import agent_detail as build_agent_detail
 from src.engine.debug import reject_active_legacy_workspace
 from src.engine.debug import task_detail as build_task_detail
-from src.engine.ingress import ingest_ready, persist_amp
+from src.engine.ingress import persist_amp
 from src.engine.store import SQLiteRuntimeStore
 from src.engine.tool_registry import ToolRegistry
-from src.utils import get_logger
+from src.utils import get_logger, utc_now
 
 logger = get_logger("aurora.engine")
 
@@ -112,12 +109,8 @@ class AgentEngine:
         self._memory_store = memory_store
         self._idle_wait_seconds = idle_wait_seconds
         self._workspace = Path(configuration.workspace)
-        self._inbox = self._workspace / "inbox"
-        self._archive = self._workspace / "archive"
-        for directory in (self._inbox, self._archive):
-            directory.mkdir(parents=True, exist_ok=True)
         reject_active_legacy_workspace(self._workspace)
-        self.store = SQLiteRuntimeStore(self._workspace / "process" / "runtime.sqlite3")
+        self.store = SQLiteRuntimeStore(self._workspace / "runtime.sqlite3")
         self.store.initialize()
         self._tools = tool_registry if tool_registry is not None else ToolRegistry(self.store)
         self._capability_catalog: CapabilityCatalogSnapshot | None = None
@@ -231,16 +224,9 @@ class AgentEngine:
             },
         )
 
-    def ingest(self) -> tuple[str, ...]:
-        """只把 AMP 写入持久化 Inbox，不创建 Task。"""
-        return ingest_ready(self)
-
-    # -- pump 闭环（单循环：同步短事务 + async I/O）-----------------------
-
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
             recoveries = await self._tools.recover_pending()
-            ingested = self.ingest()
             admitted = self._triage_inbox()
             expired = self.store.expire_tasks()
             processed, failed = self._pump_turns(max_turns)
@@ -248,7 +234,6 @@ class AgentEngine:
             self._ensure_model_dispatcher()
             self._project_memory()
             return {
-                "ingested_event_ids": ingested,
                 "admitted_task_ids": admitted,
                 "expired_task_ids": expired,
                 "processed_message_ids": processed,
@@ -320,7 +305,7 @@ class AgentEngine:
             scope,
             role=role,
             content=content,
-            at=datetime.now(UTC).isoformat(),
+            at=utc_now(),
         )
 
     def _project_memory(self) -> None:
@@ -351,27 +336,13 @@ class AgentEngine:
                 return
             tasks = []
             for row in activities:
-                activity = self._activity(row)
+                activity = self.store._activity(row)
                 task = asyncio.create_task(self._execute_model(activity), name=f"aurora-model-{activity.activity_id}")
                 self._model_activity_tasks[task] = activity.task_id
                 task.add_done_callback(self._model_activity_tasks.pop)
                 tasks.append(task)
             await asyncio.gather(*tasks, return_exceptions=True)
             self._wake.set()
-
-    @staticmethod
-    def _activity(row: Any) -> ActivityRequest:
-        return ActivityRequest(
-            activity_id=str(row["activity_id"]),
-            task_id=str(row["task_id"]),
-            agent_id=str(row["agent_id"]),
-            kind=row["kind"],
-            request=json.loads(row["request_json"]),
-            status=ActivityStatus(row["status"]),
-            priority=int(row["priority"]),
-            idempotency_key=str(row["idempotency_key"]),
-            created_at=str(row["created_at"]),
-        )
 
     async def _execute_model(self, activity: ActivityRequest) -> None:
         task = self.store.get_task(activity.task_id)
@@ -418,11 +389,39 @@ class AgentEngine:
         next_cursor = items[-1].cursor if items else cursor
         return OutputStreamPage(items=items, next_cursor=next_cursor)
 
+    def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
+        """Task 列表投影（RFC 0218 观察操作）。"""
+        rows = self.store.tasks(status=status, limit=limit)
+        return [row.to_dict() for row in rows]
+
+    def list_agents(self, *, limit: int = 64) -> list[dict[str, Any]]:
+        """Agent 列表投影。"""
+        return [row.to_dict() for row in self.store.agents(limit=limit)]
+
+    def query_events(
+        self,
+        *,
+        session_id: str | None = None,
+        task_id: str | None = None,
+        event_type: str | None = None,
+        after_id: int = 0,
+        limit: int = 64,
+    ) -> list[dict[str, Any]]:
+        """因果事件流查询（RFC 0218 观察操作）。"""
+        return list(
+            self.store.query_events(
+                session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit
+            )
+        )
+
+    def session_export(self, session_id: str) -> dict[str, Any] | None:
+        """会话导出：因果事件与模型输出投影（RFC 0210/0218）。"""
+        return self.store.session_export(session_id)
+
     def has_work(self) -> bool:
         counts = self.store.counts()
         return (
-            any(self._inbox.glob("*.json"))
-            or self.store.has_due_inbox()
+            self.store.has_due_inbox()
             or counts["pending_messages"] > 0
             or self.store.has_claimable_external_activity(self.limits.tool_concurrency)
             or self.store.has_recoverable_tool()

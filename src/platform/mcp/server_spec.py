@@ -6,12 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
-
-
-class _Msg(StrEnum):
-    TRANSPORT_STDIO_ONLY = "transport 只支持 'stdio'，收到 '{transport}'"
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,9 +29,6 @@ class MCPServerSpec:
     directory: Path = Path()
     """App 目录路径。"""
 
-    transport: str = "stdio"
-    """本地进程传输方式，只支持 ``stdio``。"""
-
     command: list[str] = field(default_factory=list)
     """启动命令，如 ``["uv", "run", "python", "-m", "apps.aurora-app-diary.mcp_server"]``。"""
 
@@ -49,10 +41,5 @@ class MCPServerSpec:
     enabled: bool = True
     """是否启用。"""
 
-    health_timeout_seconds: float = 10.0
-    """健康检查超时秒数。"""
-
-    def __post_init__(self) -> None:
-        """验证约束。"""
-        if self.transport != "stdio":
-            raise ValueError(_Msg.TRANSPORT_STDIO_ONLY.format(transport=self.transport))
+    health_poll_seconds: float = 10.0
+    """健康检查轮询间隔秒数。"""

@@ -19,11 +19,12 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert configuration.engine.workspace == configuration.storage.engine
     assert configuration.storage.memory == ROOT / "data" / "memory"
     assert configuration.storage.platform == ROOT / "data" / "platform"
-    assert configuration.storage.dashboard == ROOT / "data" / "platform" / "dashboard"
+    assert configuration.storage.ops == ROOT / "data" / "ops"
     assert configuration.storage.mcp == ROOT / "data" / "platform" / "mcp"
     assert configuration.storage.apps == ROOT / "data" / "platform" / "mcp" / "apps"
-    assert configuration.dashboard.database_path.parent == configuration.storage.dashboard
-    assert configuration.dashboard.upload_dir.parent == configuration.storage.dashboard
+    assert configuration.runtime.panel.host == "127.0.0.1"
+    assert configuration.runtime.panel.port == 8765  # noqa: PLR2004
+    assert configuration.runtime.panel.max_upload_bytes == 67108864  # noqa: PLR2004
     assert configuration.logging_dir == ROOT / "logs"
 
 
@@ -96,10 +97,10 @@ def test_non_finite_runtime_limits_are_rejected(project_root: Path, value: str) 
         load_configuration(project_root)
 
 
-def test_boolean_debug_port_is_rejected(project_root: Path) -> None:
+def test_boolean_panel_port_is_rejected(project_root: Path) -> None:
     path = project_root / "config" / "runtime.toml"
-    path.write_text(path.read_text(encoding="utf-8").replace("debug_port = 8765", "debug_port = true"))
-    with pytest.raises(ConfigurationError, match="debug_port"):
+    path.write_text(path.read_text(encoding="utf-8").replace("port = 8765", "port = true"))
+    with pytest.raises(ConfigurationError, match="port"):
         load_configuration(project_root)
 
 

@@ -29,11 +29,11 @@ AuroraBot 是一个以 **Agent 为中心**的自主智能体框架。核心哲�
 ```mermaid
 graph TD
     aurora["aurora/<br/>组合根：读配置、组装、启动、生命周期"]
-    ops["src/ops<br/>监察 sidecar：命令路由、调试 API、输入分发"]
+    ops["ops/<br/>面板后端：唯一 HTTP 路由、操作体系、认证与面板存储"]
     engine["src/engine<br/>AgentEngine 单循环运行时 + SQLite store"]
     agents["src/agents<br/>BaseAgent 子类 + 主动能力"]
     prompt["src/prompt<br/>提示词装配"]
-    platform["src/platform<br/>Dashboard / MCP 外部生态适配"]
+    platform["src/platform<br/>MCP 外部生态适配"]
     ai["src/ai<br/>模型网关"]
     memory["src/memory<br/>记忆服务（被动投影 + 主动工具）"]
     config["src/config<br/>TOML 加载与校验"]
@@ -113,9 +113,9 @@ graph TD
 用户输入
   │
   ▼
-① 平台（Console/Dashboard/MCP）→ engine.submit_amp(AMP)
+① 平台（Console/Panel/MCP）→ engine.submit_amp(AMP)
   │     AMP = {header.message_id, payload.{type, session_id, summary, data}}
-  │     或平台进程写 inbox/*.json → 下一轮 pump 拾取
+  │     （RFC 0219：无文件投递箱，全部直连 SQLite）
   ▼
 ② store.enqueue_inbox（store/inbox.py）
   │     幂等检查（causal_events 已有 ingress.received 则忽略）
@@ -123,7 +123,7 @@ graph TD
   ▼
 ③ engine.pump() 每轮六步（runtime.py:188）
   │  a. ToolRegistry.recover_pending()   恢复挂起的工具请求
-  │  b. ingest()                         收 inbox 文件 + 内存队列
+  │  b. （无 ingest 步骤：摄入已在 submit_amp 完成）
   │  c. _triage_inbox()                  到期批次 → 每个批次创建 1 个 Task + 1 个入口 triage agent
   │  d. _pump_turns()                    claim 消息 → handler → apply_decision
   │  e. 派发 model/tool 活动（async 后台）
@@ -330,13 +330,12 @@ engine/
 
 | 文件 | 内容 |
 | --- | --- |
-| `dashboard/` | FastAPI Web 平台：`api.py`（REST + WS 认证/聊天/附件）、`service.py`（ChatService）、`store.py`（自己的 SQLite）、`adapter.py`（`org.aurora.dashboard.send` 工具）、`routing.py`（输入路由）、`communication.py`（实时分发） |
 | `mcp/` | MCP 协议平台：`adapter.py`（Tool 发现 → capability ID = `{app.package}.{tool}`）、`client_manager.py`（stdio/HTTP 连接）、`server_kit.py`（本地 stdio MCP server 生命周期） |
 | `apps/` | 内建 MCP 应用（clock 等），由 platform/mcp 运行，数据在 `data/platform/mcp/apps` |
 
 **每个平台的统一协议**（`contracts/platform.py`）：`PlatformFactory._create(config, runtime) → PlatformHandle{bindings, server, background, cleanup}`；`aurora/runtime.py` 遍历注册表创建、收集绑定、统一启动/停止。
 
-### 4.10 `src/ops` — 监察层（热路径外）
+### 4.10 `ops/` — 面板后端（热路径外）
 
 **模式**：可 import 一切的 sidecar，只查不改。
 
@@ -384,7 +383,6 @@ engine/
 | 步骤 | 读 | 写 |
 | --- | --- | --- |
 | recover_pending | activities(tool PROCESSING) | 恢复回执 |
-| ingest | inbox/*.json | inbox_events + 文件移入 archive/inbox/ |
 | triage | inbox_events(到期批次) | TRIAGING → Task + agent + task.started |
 | expire_tasks | tasks(ACTIVE) | 超时 → BUDGET_EXHAUSTED |
 | turns | messages(PENDING) | PROCESSING → COMPLETED/ERROR；agent/activity/causal |
@@ -429,11 +427,9 @@ READY ──claim──▶ (处理中，无持久化中间态)
 
 | 载体 | 路径 | 内容 | 写入者 |
 | --- | --- | --- | --- |
-| SQLite WAL | `data/engine/process/runtime.sqlite3` | 运行态 + 终态（唯一权威） | engine store |
+| SQLite WAL | `data/engine/runtime.sqlite3` | 运行态 + 终态（唯一权威） | engine store |
 | SQLite WAL | `data/memory/memory.sqlite3` | 会话摘要/长期事实/幂等回执 | MemoryService |
-| SQLite WAL | `data/platform/dashboard/*.sqlite3` | 聊天/认证 | ChatStore |
-| JSON 文件 | `data/engine/inbox/*.json` | 外部 AMP 投递箱 | 平台进程 |
-| JSON 文件 | `data/engine/archive/inbox/{accepted,rejected,duplicate}` | 摄入文件分类 | engine ingest |
+| SQLite WAL | `data/ops/panel.sqlite3` | 面板会话/附件索引 | PanelStore（RFC 0218） |
 
 ### 6.2 何时落库（决策驱动）
 
@@ -454,7 +450,7 @@ WAL（Write-Ahead Logging）是 SQLite 的并发模式：写先追加到 `-wal` 
 
 | 域 | 格式 | 示例 |
 | --- | --- | --- |
-| 平台 | `aur.<平台注册名>.<方法>` | `aur.dashboard.send` |
+| 平台 MCP | `aur.mcp.<app_package>.<tool>` | `aur.mcp.org.aurora.clock.get_time` |
 | 平台 MCP | `aur.mcp.<app_package>.<tool>` | `aur.mcp.org.aurora.clock.get_time` |
 | 服务 | `aur.serv.<服务名>.<方法>` | `aur.serv.memory.remember` |
 | Agent 内建 | `aur.agent.<方法>` | `aur.agent.delegate` / `aur.agent.wait` / `aur.agent.speech` |
@@ -479,7 +475,7 @@ store.consume_tool_receipt → 完成活动 → agent 消息（complete_task 直
 "*"                        全部允许
 "!aurora.memory.remember"  排除（优先于一切正规则）
 "org.aurora.mcp.*"         前缀通配
-"org.aurora.dashboard.send" 精确 ID
+"aur.mcp.org.aurora.clock.get_time" 精确 ID
 ```
 
 ### 7.3 授权链
@@ -491,20 +487,24 @@ store.consume_tool_receipt → 完成活动 → agent 消息（complete_task 直
 
 ---
 
-## 8. Dashboard 后端与可视化配置编辑
+## 8. 面板后端与可视化配置编辑
 
-### 8.1 Dashboard 后端定位
+### 8.1 面板后端定位（RFC 0218）
 
-Dashboard 的 HTTP 后端就是 `src/platform/dashboard/api.py`（FastAPI），由 `SignalSafeServer`（utils/uvicorn.py 包装 uvicorn.Server）启动。它属于 dashboard 平台本身，提供：`/api/auth/*`（认证）、`/api/users`、`/api/messages/*`（聊天历史）、`/api/attachments/*`、`/ws`（实时）。
+ops 是系统唯一后端路由：单端口单认证的 FastAPI 根应用（`ops/api.py`，`SignalSafeServer` 启动）。
+提供 `/api/auth/*`（bootstrap token + Bearer 会话）、`/api/ops/*`（RESTful 操作资源树，与斜杠命令同构）、
+`/api/ops/attachments`（附件）、`WS /api/ops/stream`（输出流推送，与 console 同源）。
+聊天输入 = `POST /messages`（/say），聊天历史 = `GET /messages`（causal_events 投影）。
+会话与附件索引存 `data/ops/panel.sqlite3`；bootstrap token 存 `data/ops/Token.txt`。
 
 ### 8.2 可视化配置编辑的演化路径
 
 ```
-Dashboard 前端（新增配置页面）
-  │  GET/PUT /api/config/...
+面板前端（新增配置页面）
+  │  GET /api/ops/config/snapshot（读） / PUT /api/ops/config（写，待加）
   ▼
-src/platform/dashboard/api.py（新增路由，属于 dashboard 平台）
-  │  依赖注入 ConfigEditorPort（aurora 组合时注入，保持 platform 只依赖 contracts）
+ops/operations/config.py（操作体系内新增配置编辑操作）
+  │  依赖注入 ConfigEditorPort（aurora 组合时注入，保持 ops 只依赖 contracts）
   ▼
 src/config/（新增 editor.py 或扩展 registry）
   │  load_toml_text / validate_toml_text（复用 sections.py 校验） / atomic_save
@@ -512,11 +512,6 @@ src/config/（新增 editor.py 或扩展 registry）
 config/*.toml（写回）
   │  生效方式：重启（RFC 0206：配置变更通过重启生效；如需热重载需新 RFC）
 ```
-
-边界：`platform` 不直接 import `src/config`——通过 aurora 注入的 Port 间接使用，保持依赖铁律。
-
----
-
 ## 9. RFC 决策索引
 
 | RFC | 主题 | 现状 |
@@ -546,6 +541,6 @@ config/*.toml（写回）
 | 改调度 | engine/pump 六步顺序/条件 | store |
 | 改持久化 | store/（schema v9）| 需要 RFC |
 | 改决策语义 | store/decisions.py 8 分支 | 需要 RFC |
-| 加配置页面 | dashboard api + config editor（§8.2） | engine |
+| 加配置页面 | ops/operations/config.py 配置编辑操作（§8.2） | engine |
 
 **原则**：改 `contracts`/`store`/`engine` 的语义前先写 RFC；新增能力/平台/agent 只需实现 + 注册。

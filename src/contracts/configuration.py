@@ -61,23 +61,48 @@ class ConsoleConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PanelConfig:
+    """面板后端（RFC 0218）配置：唯一 HTTP 端口、认证与前端白名单。
+
+    PanelConfig object::
+
+        {
+            "enabled": true,
+            "host": "string",
+            "port": 0,
+            "allowed_origins": ["string", ...],
+            "open_browser": false,
+            "session_ttl_seconds": 0,
+            "max_upload_bytes": 0
+        }
+
+    """
+
+    enabled: bool
+    host: str
+    port: int
+    allowed_origins: tuple[str, ...]
+    open_browser: bool
+    session_ttl_seconds: int
+    max_upload_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeConfig:
-    """进程运行时配置：profile、调试服务地址与本地 Console 前端。
+    """进程运行时配置：profile、面板后端与本地 Console 前端。
 
     RuntimeConfig object::
 
         {
             "profile": "string",
-            "debug_host": "string",
-            "debug_port": 0,
+            "panel": PanelConfig,
             "console": ConsoleConfig
         }
 
     """
 
     profile: str
-    debug_host: str
-    debug_port: int
+    panel: "PanelConfig"
     console: "ConsoleConfig"
 
 
@@ -112,56 +137,6 @@ class AutonomyConfig:
     heartbeat_initial_seconds: float = 30.0
     heartbeat_min_seconds: float = 30.0
     heartbeat_max_seconds: float = 1800.0
-
-
-@dataclass(frozen=True, slots=True)
-class DashboardBotConfig:
-    """Dashboard Bot 身份配置。
-
-    DashboardBotConfig object::
-
-        {
-            "username": "string",
-            "display_name": "string",
-            "avatar_url": "string" | null
-        }
-
-    """
-
-    username: str
-    display_name: str
-    avatar_url: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class DashboardConfig:
-    """Dashboard 服务配置。
-
-    DashboardConfig object::
-
-        {
-            "host": "string",
-            "port": 0,
-            "database_path": "/path/to/db",
-            "upload_dir": "/path/to/uploads",
-            "max_upload_bytes": 0,
-            "session_ttl_seconds": 0,
-            "allowed_origins": ["string", ...],
-            "owner_username": "string",
-            "bot": DashboardBotConfig
-        }
-
-    """
-
-    host: str
-    port: int
-    database_path: Path
-    upload_dir: Path
-    max_upload_bytes: int
-    session_ttl_seconds: int
-    allowed_origins: tuple[str, ...]
-    owner_username: str
-    bot: DashboardBotConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,23 +240,6 @@ class ModelLoggingConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class DashboardPreference:
-    """Dashboard 平台偏好。
-
-    DashboardPreference object::
-
-        {
-            "enabled": false,
-            "open_browser": false
-        }
-
-    """
-
-    enabled: bool
-    open_browser: bool
-
-
-@dataclass(frozen=True, slots=True)
 class McpPreference:
     """MCP 平台偏好。
 
@@ -305,13 +263,11 @@ class PlatformPreference:
     PlatformPreference object::
 
         {
-            "dashboard": DashboardPreference,
             "mcp": McpPreference
         }
 
     """
 
-    dashboard: DashboardPreference
     mcp: McpPreference
 
 
@@ -331,7 +287,7 @@ class StorageConfig:
             "ai": "/path/to/data/ai",
             "memory": "/path/to/data/memory",
             "platform": "/path/to/data/platform",
-            "dashboard": "/path/to/data/platform/dashboard",
+            "ops": "/path/to/data/ops",
             "mcp": "/path/to/data/platform/mcp",
             "apps": "/path/to/data/platform/mcp/apps"
         }
@@ -343,7 +299,7 @@ class StorageConfig:
     ai: Path
     memory: Path
     platform: Path
-    dashboard: Path
+    ops: Path
     mcp: Path
     apps: Path
 
@@ -359,7 +315,6 @@ class AuroraConfig:
             "sources": [ConfigurationSource, ...],
             "runtime": RuntimeConfig,
             "engine": EngineConfig,
-            "dashboard": DashboardConfig,
             "preference": PlatformPreference,
             "logging_level": "string",
             "storage": StorageConfig,
@@ -378,7 +333,6 @@ class AuroraConfig:
     sources: tuple[ConfigurationSource, ...]
     runtime: RuntimeConfig
     engine: EngineConfig
-    dashboard: DashboardConfig
     preference: PlatformPreference
     logging_level: str
     logging_dir: Path

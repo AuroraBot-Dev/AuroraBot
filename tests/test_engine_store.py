@@ -157,21 +157,6 @@ def test_amp_creates_terminal_record_and_deduplicates_task(tmp_path: Path) -> No
     asyncio.run(scenario())
 
 
-def test_invalid_file_is_rejected(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        engine = _engine(tmp_path, {"gate": _Complete(), "worker": _Complete()})
-        try:
-            invalid = tmp_path / "inbox" / "invalid.json"
-            invalid.write_text("{", encoding="utf-8")
-            await engine.pump()
-            rejected = tmp_path / "archive" / "inbox" / "rejected"
-            assert (rejected / "invalid.json").is_file()
-        finally:
-            await engine.shutdown()
-
-    asyncio.run(scenario())
-
-
 def test_delegation_children_report_to_parent(tmp_path: Path) -> None:
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:

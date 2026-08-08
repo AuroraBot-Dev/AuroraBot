@@ -286,7 +286,7 @@ def test_triage_agent_requests_structured_output_without_tools(tmp_path: Path) -
             await engine.pump()
             rows = engine.store.claim_activities("model", 1)
             assert rows
-            request = ModelRequest.from_dict(json.loads(rows[0]["request_json"]))
+            request = ModelRequest.from_dict(json.loads(rows[0].request_json))
             assert request.tool_choice == "none"
             assert not request.tools
             assert request.output_schema is not None

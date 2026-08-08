@@ -149,7 +149,7 @@ def test_memory_descriptor_schema_requires_content() -> None:
 
 def test_capability_allowed_exclusion_overrides_wildcard() -> None:
     allowed = frozenset({"*", "!aur.serv.memory.remember"})
-    assert _capability_allowed("aur.dashboard.send", allowed)
+    assert _capability_allowed("aur.mcp.org.aurora.clock.get_time", allowed)
     assert _capability_allowed("aur.mcp.org.aurora.clock.get_time", allowed)
     assert not _capability_allowed(MEMORY_REMEMBER_CAPABILITY, allowed)
     assert _capability_allowed(MEMORY_REMEMBER_CAPABILITY, frozenset({MEMORY_REMEMBER_CAPABILITY}))

@@ -53,7 +53,7 @@ class PromptComposer:
             memory.append(
                 PromptSection(
                     "session_memory",
-                    _Msg.SESSION_MEMORY.format(content=_external(context.memory.summary)),
+                    _Msg.SESSION_MEMORY.format(content=external_data(context.memory.summary)),
                 )
             )
         if context.memory.window:
@@ -61,7 +61,7 @@ class PromptComposer:
                 PromptSection(
                     "memory_window",
                     _Msg.MEMORY_WINDOW.format(
-                        content=_external([f"{item.role}: {item.content}" for item in context.memory.window])
+                        content=external_data([f"{item.role}: {item.content}" for item in context.memory.window])
                     ),
                 )
             )
@@ -69,7 +69,7 @@ class PromptComposer:
             memory.append(
                 PromptSection(
                     "relevant_facts",
-                    _Msg.RELEVANT_FACTS.format(content=_external(context.memory.relevant_facts)),
+                    _Msg.RELEVANT_FACTS.format(content=external_data(context.memory.relevant_facts)),
                 )
             )
         user = [PromptSection("message", _message_text(context))]
@@ -87,11 +87,11 @@ def _message_text(context: AgentContext) -> str:
     if context.message.type == "task.started" and isinstance(payload.get("batch"), dict):
         # 入口 triage Task 的批次投影（RFC 0209）；TriageAgent 自构请求，此分支供通用渲染兜底
         admitted = {"events": payload["batch"].get("events", [])}
-        return _Msg.ADMITTED_EVENTS.format(content=_external(admitted))
+        return _Msg.ADMITTED_EVENTS.format(content=external_data(admitted))
     if context.message.type == "agent.assigned" and isinstance(payload.get("context_events"), list):
         # 入口 agent 委派时把有界批次投影交给本体意识（RFC 0209）
         assigned = {"instruction": context.agent.assignment, "events": payload["context_events"]}
-        return _Msg.ADMITTED_EVENTS.format(content=_external(assigned))
+        return _Msg.ADMITTED_EVENTS.format(content=external_data(assigned))
     if context.message.type.startswith("tool."):
         status = context.message.type.removeprefix("tool.")
         request = payload.get("request")
@@ -103,12 +103,22 @@ def _message_text(context: AgentContext) -> str:
         outcome_key = "result" if status == "succeeded" else "error"
         return _Msg.TOOL_RESULT.format(
             status=status,
-            content=_external({"request": request_fact, outcome_key: payload.get(outcome_key)}),
+            content=external_data({"request": request_fact, outcome_key: payload.get(outcome_key)}),
         )
     if context.message.type.startswith("child."):
-        return _Msg.CHILD_RESULT.format(content=_external(payload))
+        return _Msg.CHILD_RESULT.format(content=external_data(payload))
     value = context.task.root_summary if context.message.type == "task.started" else context.agent.assignment
-    return _Msg.CURRENT_MESSAGE.format(content=_external(value))
+    return _Msg.CURRENT_MESSAGE.format(content=external_data(value))
+
+
+def external_data(value: object) -> str:
+    """把外部数据编码为紧凑 JSON 并装入 external-data 模板（prompt 与 triage 共用）。
+
+    编码后转义 HTML 特殊字符，防止模型上下文注入。
+    """
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    encoded = encoded.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+    return _Msg.EXTERNAL_DATA.format(encoded=encoded)
 
 
 def _local_work(context: AgentContext) -> str:
@@ -125,11 +135,5 @@ def _local_work(context: AgentContext) -> str:
     if context.agent.parent_agent_id is None and not children:
         return ""
     return _Msg.LOCAL_WORK.format(
-        content=_external({"assignment": context.agent.assignment, "active_children": children})
+        content=external_data({"assignment": context.agent.assignment, "active_children": children})
     )
-
-
-def _external(value: object) -> str:
-    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    encoded = encoded.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
-    return _Msg.EXTERNAL_DATA.format(encoded=encoded)

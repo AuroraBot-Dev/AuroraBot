@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # -- enums ---------------------------------------------------------------
 
 
-class ErrorMsg(StrEnum):
+class _Msg(StrEnum):
     """Agent handler 或工具调用的错误码。"""
 
     AGENT_DECISION_REQUIRES_ONE_TRANSITION = "AgentDecision must contain exactly one atomic transition"
@@ -80,7 +80,7 @@ class CapabilityCatalogSnapshot:
     def __post_init__(self) -> None:
         identifiers = [item.id for item in self.capabilities]
         if len(identifiers) != len(set(identifiers)):
-            raise ValueError(ErrorMsg.CAPABILITY_IDS_MUST_BE_UNIQUE)
+            raise ValueError(_Msg.CAPABILITY_IDS_MUST_BE_UNIQUE)
 
     @property
     def by_id(self) -> MappingProxyType[str, CapabilityDescriptor]:
@@ -280,7 +280,7 @@ class AgentDecision:
             self.failure is not None,
         )
         if sum(transitions) != 1:
-            raise ValueError(ErrorMsg.AGENT_DECISION_REQUIRES_ONE_TRANSITION)
+            raise ValueError(_Msg.AGENT_DECISION_REQUIRES_ONE_TRANSITION)
 
     def to_dict(self) -> dict[str, Any]:
         """将决策序列化为因果事件载荷。"""

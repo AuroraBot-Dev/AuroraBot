@@ -13,13 +13,12 @@
 """
 
 from src.sandbox.base import SandboxResult, SecurityViolation
-from src.sandbox.manager import SandboxManager, _SandboxManagerProxy, get_sandbox_manager, sandbox_manager
+from src.sandbox.manager import SandboxManager, get_sandbox_manager, sandbox_manager
 
 __all__ = [
     "SandboxManager",
     "SandboxResult",
     "SecurityViolation",
-    "_SandboxManagerProxy",
     "get_sandbox_manager",
     "sandbox_manager",
 ]

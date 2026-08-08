@@ -29,10 +29,10 @@ engine 现有实现 3301 行，其中约 1500 行是历史累积与投机复杂�
 
 - **删除 JSON 终态归档与 JSONL 会话日志**：终态 Task 留在 SQLite（终态行即档案），由 `causal_events` 提供可读性；会话日志按需由 ops 从 causal_events 导出。取代 RFC 0201 的"先归档后清理"与 AGENTS.md 的 JSONL 约定。
 - 清理策略：终态行保留，可配置 TTL 由 ops 命令触发删除（不做热路径归档）。
-- 外部 AMP 文件摄入保留（platform 写 JSON → engine 读），但处理完即移入 rejected/duplicate 分类目录（现状不变）。
+- 外部 AMP 文件摄入保留（platform 写 JSON → engine 读），但处理完即移入 rejected/duplicate 分类目录（现状不变）。**该条款已被 RFC 0219 废弃**：inbox/archive 文件投递箱移除，摄入统一经 submit_amp SQLite 直连。
 - 审计去重：`causal_events.payload_json` 只存轻量摘要（决策种类、摘要文本、关联 ID），不再存完整请求；activities 仍存执行所需完整请求。
 
-### 3. Schema v9（全新，不迁移旧库）
+### 3. Schema v9（自即日起数据库必须考虑迁移）
 
 六表结构保留（tasks/agents/messages/activities/causal_events/inbox_events），删除列：
 
@@ -41,13 +41,17 @@ engine 现有实现 3301 行，其中约 1500 行是历史累积与投机复杂�
 - agents：删 `revision`（单进程无并发写）。
 - causal_events：删 `external_message_id`（幂等由 correlation_id 承担）、`causation_id` 保留。
 - tasks：删 `audience_ref`（未使用）；`root_message_id` 语义改为批次 ID（入口 triage 使用），保留。
-- 不接受旧库迁移：旧工作区直接拒绝启动（`reject_active_legacy_workspace` 保留为拒绝提示）。
+- 原"不接受旧库迁移"政策撤销：v1–v8 旧库按版本化迁移序列升级到 v9，迁移步骤重建自
+  历史演化档案（`src/engine/store/migration/`，见 RFC 0217 §5）；代码路径只访问 v9
+  形状、不兼容旧版本列，迁移在启动时单事务完成、任一版本步骤失败整体回滚。
+- 旧**进程目录**形态（records/episodes JSON）仍由 `reject_active_legacy_workspace`
+  拒绝，与 SQLite 版本迁移无关。
 
 ### 4. 运行时形态
 
 ```
 pump():
-  1. ingest          → Inbox 文件 + 内存队列 → inbox_events
+  1. ingest          → Inbox 文件 + 内存队列 → inbox_events（文件通道已被 0219 废弃）
   2. triage batches  → 到期批次创建入口 triage Task（同 RFC 0209）
   3. claim messages  → 原子 UPDATE 领取，同步执行 handler（事件循环内）
   4. apply decision  → 8 分支状态机（model/tool/delegate/complete/wait/defer/discard/fail）
@@ -82,7 +86,7 @@ pump():
 
 ## 兼容性
 
-- Schema 不迁移：旧 data/engine 工作区拒绝启动，需重建。
+- Schema v1–v8 旧库按版本序列迁移至 v9（RFC 0217 §5）；旧进程目录形态（records/episodes）仍需重建。
 - ops 命令与调试 API：`/task`、`/agent` 改读 SQLite 终态行（删除归档反查路径）；`/log` 会话导出改为 causal_events 投影。
 - 外部契约（AMP、配置、平台 Tool 协议、MemoryStore）不变。
-- 测试：删除迁移/租约/归档/JSONL 测试；pump 流程测试按语义重写；contracts/config/prompt/ai/platform/memory 测试保留。
+- 测试：删除租约/归档/JSONL 测试；迁移测试改为 v2/v7 样本库升级到 v9 的断言；pump 流程测试按语义重写；contracts/config/prompt/ai/platform/memory 测试保留。

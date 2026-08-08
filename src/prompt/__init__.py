@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.prompt.composer import PromptComposer
+from src.prompt.composer import PromptComposer, external_data
 from src.prompt.models import PromptCatalog, PromptDocument, PromptSection
 
 __all__ = [
@@ -10,4 +10,5 @@ __all__ = [
     "PromptComposer",
     "PromptDocument",
     "PromptSection",
+    "external_data",
 ]

@@ -21,7 +21,7 @@ from typing import Any
 
 from src.utils import get_logger
 
-logger = get_logger("Providers")
+logger = get_logger("aurora.ai.providers")
 
 
 @dataclass(frozen=True, slots=True)

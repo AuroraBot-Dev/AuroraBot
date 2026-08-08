@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from src.sandbox.base import SecurityViolation
@@ -16,7 +17,7 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     from src.sandbox.policy import AccessPolicy, AccessPolicySnapshot
 
-logger = get_logger("CodeInspector")
+logger = get_logger("aurora.sandbox.inspector")
 
 
 class CodeInspector:
@@ -136,9 +137,9 @@ class CodeInspector:
         violations.extend(self._check_type_introspection(tree))
 
         if violations:
-            logger.warning(f"安全检查发现 {len(violations)} 个违规")
+            logger.warning("安全检查发现 %d 个违规", len(violations))
             for v in violations:
-                logger.debug(f"  违规: {v.violation_type} - {v.detail}")
+                logger.debug("  违规: %s - %s", v.violation_type, v.detail)
         return violations
 
     def _check_dangerous_nodes(self, tree: ast.Module) -> list[SecurityViolation]:
@@ -282,8 +283,6 @@ class CodeInspector:
                     )
                 )
                 continue
-            from pathlib import Path
-
             mode = "r"
             if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
                 mode = str(node.args[1].value)

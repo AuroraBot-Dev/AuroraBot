@@ -1,6 +1,6 @@
-"""事务型 SQLite 仓库（Schema v9，RFC 0210）—— Agent 运行时持久化的唯一入口。
+"""事务型 SQLite 仓库（Schema v9，RFC 0217 ORM）—— Agent 运行时持久化的唯一入口。
 
-由聚焦职责的 Mixin 组合而成，所有写操作均以单一 SQLite 事务边界为界。
+由聚焦职责的 Mixin 组合而成，所有写操作均以单一 SQLAlchemy 事务边界为界。
 """
 
 from __future__ import annotations

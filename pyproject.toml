@@ -12,6 +12,7 @@ dependencies = [
     "tiktoken>=0.13.0",
     "rich>=15.0.0",
     "mcp[cli]>=1.27,<2",
+    "httpx>=0.28,<1",
     "fastapi>=0.115,<1",
     "uvicorn>=0.34,<1",
     "jsonschema>=4.23,<5",
@@ -19,6 +20,7 @@ dependencies = [
     "prompt-toolkit>=3.0,<4",
     "mem0ai>=2.0.17",
     "chromadb>=1.5.9",
+    "sqlalchemy>=2.0",
 ]
 
 [project.scripts]
@@ -133,6 +135,13 @@ allowed-confusables = [
     "PLR2004",
     "TC003",
 ]
+# 面板 API：工厂式 FastAPI 路由惯例；Annotated 依赖在本项目 FastAPI 版本
+# 与 `from __future__ import annotations` 组合下失效（RFC 0218 实测），使用经典写法。
+"tests/test_panel_api.py" = ["B008", "PLR2004"]
+# 文本解析：线性分支解析（类型转换/错误归一），复杂度集中在单函数。
+"ops/parser.py" = ["C901", "PLR0911", "PLR0912", "TRY301"]
+# 注册表：全局惰性加载标记与装饰器签名占位。
+"ops/registry.py" = ["ARG001", "PLW0603"]
 "src/config/loader.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003"]
 "src/engine/state.py" = [
     "BLE001",
@@ -152,20 +161,14 @@ allowed-confusables = [
     "TC003",
     "TRY004",
 ]
-"src/platform/dashboard/service.py" = ["C901", "PLR0912", "PLR2004", "TC001"]
 "src/platform/__init__.py" = ["A005"]
 "src/contracts/agent.py" = ["TC001"]
 "src/config/sections.py" = ["C901", "PLR0912", "PLR2004", "TC003"]
 "src/engine/runtime.py" = ["BLE001", "TC001"]
-"src/platform/dashboard/api.py" = ["C901", "PLR0912", "PLR0915", "TC003"]
-"src/platform/dashboard/store.py" = ["TC003", "TRY300"]
 "ops/runtime.py" = ["BLE001", "TC003"]
-"ops/api.py" = ["C901"]
+"ops/api.py" = ["C901", "B008", "FAST002", "PLR0915", "PLR0912"]
 "src/agents/handler.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
 "src/memory/service.py" = ["BLE001"]
-"src/platform/console/adapter.py" = ["TC001", "TRY004", "TRY301"]
-"src/platform/console/shell.py" = ["C901", "PLR0912", "TC003"]
-"src/platform/dashboard/adapter.py" = ["TC001", "TRY004", "TRY301"]
 "src/ai/gateway.py" = ["C901", "PLR0912", "TC001"]
 "src/apps/aurora-app-clock/service.py" = ["TC003"]
 "src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY004"]

@@ -1,4 +1,4 @@
-"""Agent、MCP App 和 Dashboard 段的解析器。"""
+"""Agent、MCP App 与面板配置段的解析器。"""
 
 from __future__ import annotations
 
@@ -15,10 +15,8 @@ from src.contracts import (
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
-    DashboardBotConfig,
-    DashboardConfig,
-    DashboardPreference,
     McpPreference,
+    PanelConfig,
     PlatformPreference,
     TaskLimits,
     TriageLimits,
@@ -48,19 +46,6 @@ class _Msg(StrEnum):
     APP_UNSUPPORTED_KEYS = "app has unsupported or missing keys"
     AUTONOMY_UNSUPPORTED_KEYS = "engine.autonomy has unsupported keys"
     CAPABILITY_PATTERN = "{label} must be an exact Tool ID, package.*, or *"
-    DASHBOARD_AVATAR_STRING = "dashboard.bot.avatar_url must be a string"
-    DASHBOARD_BOT_TABLE = "dashboard.bot must be a table"
-    DASHBOARD_DB_UPLOAD_OVERLAP = "dashboard database must not be stored in the upload directory"
-    DASHBOARD_LOOPBACK = "dashboard must bind to loopback"
-    DASHBOARD_ORIGINS_ARRAY = "dashboard.allowed_origins must be a non-empty string array"
-    DASHBOARD_OWNER_TABLE = "dashboard.owner must be a table"
-    DASHBOARD_OWNER_WHITESPACE = "dashboard.owner.username must not have leading or trailing whitespace"
-    DASHBOARD_PATH_OVERLAP = "dashboard data paths must not overlap the engine workspace"
-    DASHBOARD_PATH_SANDBOX = "dashboard data paths must stay within its storage directory"
-    DASHBOARD_PORT_INVALID = "dashboard.port must be a valid port"
-    DASHBOARD_TTL_POSITIVE = "dashboard.session_ttl_seconds must be a positive integer"
-    DASHBOARD_UPLOAD_POSITIVE = "dashboard.max_upload_bytes must be a positive integer"
-    DASHBOARD_USERNAME_DIFFER = "dashboard.owner.username must differ from dashboard.bot.username"
     DUPLICATE_AGENT = "duplicate Agent profile {agent_id}"
     ENGINE_LABEL_MODEL_CALLS = "engine.{label}.max_model_calls must be positive"
     ENGINE_LABEL_TOOL_CALLS = "engine.{label}.max_tool_calls must be positive"
@@ -72,6 +57,11 @@ class _Msg(StrEnum):
     MAX_DEPTH_EXCEEDS_MAX_AGENTS = "engine.agents.max_depth cannot exceed max_agents_per_task"
     MUST_BE_BOOLEAN = "{label} must be boolean"
     MUST_BE_DOTTED_NAME = "{label} must be a dotted name"
+    PANEL_LOOPBACK = "panel must bind to loopback"
+    PANEL_ORIGINS_ARRAY = "panel.allowed_origins must be a non-empty string array"
+    PANEL_PORT_INVALID = "panel.port must be a valid port"
+    PANEL_TTL_POSITIVE = "panel.session_ttl_seconds must be a positive integer"
+    PANEL_UPLOAD_NONNEGATIVE = "panel.max_upload_bytes must be a non-negative integer"
     STDIO_COMMAND_ARRAY = "stdio app.command must be a non-empty string array"
     STDIO_NO_URL = "stdio app may not declare url"
     STDIO_WORKING_DIR_REQUIRED = "stdio app.working_dir is required"
@@ -339,100 +329,45 @@ def _capability_pattern(value: object, label: str) -> str:
     return raw
 
 
-def _parse_dashboard(raw: dict[str, Any], root: Path, engine_workspace: Path) -> DashboardConfig:
-    """解析 Dashboard 配置段，校验端口、路径安全和 owner/bot 分离。"""
+def _parse_panel(raw: dict[str, Any]) -> PanelConfig:
+    """解析面板后端配置段（RFC 0218 §7），校验 loopback、端口与前端白名单。"""
     _require_keys(
         raw,
-        {
-            "enabled",
-            "open_browser",
-            "host",
-            "port",
-            "max_upload_bytes",
-            "session_ttl_seconds",
-            "allowed_origins",
-            "owner",
-            "bot",
-        },
-        "platform.dashboard",
+        {"enabled", "host", "port", "allowed_origins", "open_browser", "session_ttl_seconds", "max_upload_bytes"},
+        "runtime.panel",
     )
-    host = _string(raw["host"], "dashboard.host")
+    host = _string(raw["host"], "panel.host")
     port = raw["port"]
     if host not in {"127.0.0.1", "::1", "localhost"}:
-        raise ConfigurationError(_Msg.DASHBOARD_LOOPBACK)
+        raise ConfigurationError(_Msg.PANEL_LOOPBACK)
     if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
-        raise ConfigurationError(_Msg.DASHBOARD_PORT_INVALID)
+        raise ConfigurationError(_Msg.PANEL_PORT_INVALID)
     max_upload_bytes = raw["max_upload_bytes"]
     session_ttl_seconds = raw["session_ttl_seconds"]
-    if not isinstance(max_upload_bytes, int) or isinstance(max_upload_bytes, bool) or max_upload_bytes <= 0:
-        raise ConfigurationError(_Msg.DASHBOARD_UPLOAD_POSITIVE)
+    if not isinstance(max_upload_bytes, int) or isinstance(max_upload_bytes, bool) or max_upload_bytes < 0:
+        raise ConfigurationError(_Msg.PANEL_UPLOAD_NONNEGATIVE)
     if not isinstance(session_ttl_seconds, int) or isinstance(session_ttl_seconds, bool) or session_ttl_seconds <= 0:
-        raise ConfigurationError(_Msg.DASHBOARD_TTL_POSITIVE)
+        raise ConfigurationError(_Msg.PANEL_TTL_POSITIVE)
     origins = raw["allowed_origins"]
     if not isinstance(origins, list) or not origins or not all(isinstance(item, str) and item for item in origins):
-        raise ConfigurationError(_Msg.DASHBOARD_ORIGINS_ARRAY)
-    bot_raw = raw["bot"]
-    owner_raw = raw["owner"]
-    if not isinstance(bot_raw, dict):
-        raise ConfigurationError(_Msg.DASHBOARD_BOT_TABLE)
-    if not isinstance(owner_raw, dict):
-        raise ConfigurationError(_Msg.DASHBOARD_OWNER_TABLE)
-    _require_keys(owner_raw, {"username"}, "dashboard.owner")
-    _require_keys(bot_raw, {"username", "display_name", "avatar_url"}, "dashboard.bot")
-    owner_username = _string(owner_raw["username"], "dashboard.owner.username")
-    if owner_username != owner_username.strip():
-        raise ConfigurationError(_Msg.DASHBOARD_OWNER_WHITESPACE)
-    bot_username = _string(bot_raw["username"], "dashboard.bot.username")
-    if owner_username == bot_username:
-        raise ConfigurationError(_Msg.DASHBOARD_USERNAME_DIFFER)
-    avatar_url = bot_raw["avatar_url"]
-    if not isinstance(avatar_url, str):
-        raise ConfigurationError(_Msg.DASHBOARD_AVATAR_STRING)
-    database_path = (root / "chat.sqlite3").resolve()
-    upload_dir = (root / "uploads").resolve()
-    if not database_path.is_relative_to(root) or not upload_dir.is_relative_to(root):
-        raise ConfigurationError(_Msg.DASHBOARD_PATH_SANDBOX)
-    if database_path.is_relative_to(engine_workspace) or upload_dir.is_relative_to(engine_workspace):
-        raise ConfigurationError(_Msg.DASHBOARD_PATH_OVERLAP)
-    if database_path.is_relative_to(upload_dir):
-        raise ConfigurationError(_Msg.DASHBOARD_DB_UPLOAD_OVERLAP)
-    return DashboardConfig(
+        raise ConfigurationError(_Msg.PANEL_ORIGINS_ARRAY)
+    if not isinstance(raw["enabled"], bool) or not isinstance(raw["open_browser"], bool):
+        raise ConfigurationError(_Msg.MUST_BE_BOOLEAN.format(label="panel"))
+    return PanelConfig(
+        enabled=raw["enabled"],
         host=host,
         port=port,
-        database_path=database_path,
-        upload_dir=upload_dir,
-        max_upload_bytes=max_upload_bytes,
-        session_ttl_seconds=session_ttl_seconds,
         allowed_origins=tuple(origins),
-        owner_username=owner_username,
-        bot=DashboardBotConfig(
-            username=bot_username,
-            display_name=_string(bot_raw["display_name"], "dashboard.bot.display_name"),
-            avatar_url=avatar_url or None,
-        ),
+        open_browser=raw["open_browser"],
+        session_ttl_seconds=session_ttl_seconds,
+        max_upload_bytes=max_upload_bytes,
     )
 
 
 def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
-    """解析平台偏好配置段（dashboard / mcp 的启用和选项）。"""
+    """解析平台偏好配置段（mcp 的启用和选项）。"""
     _require_keys(platform, set(PLATFORM_NAMES), "platform")
-    dashboard = _table(platform["dashboard"], "platform.dashboard")
     mcp = _table(platform["mcp"], "platform.mcp")
-    _require_keys(
-        dashboard,
-        {
-            "enabled",
-            "open_browser",
-            "host",
-            "port",
-            "max_upload_bytes",
-            "session_ttl_seconds",
-            "allowed_origins",
-            "owner",
-            "bot",
-        },
-        "platform.dashboard",
-    )
     _require_keys(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
 
     def _bool(value: object, label: str) -> bool:
@@ -441,10 +376,6 @@ def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
         return value
 
     return PlatformPreference(
-        dashboard=DashboardPreference(
-            enabled=_bool(dashboard["enabled"], "platform.dashboard.enabled"),
-            open_browser=_bool(dashboard["open_browser"], "platform.dashboard.open_browser"),
-        ),
         mcp=McpPreference(
             enabled=_bool(mcp["enabled"], "platform.mcp.enabled"),
             terminal_logs=_bool(mcp["terminal_logs"], "platform.mcp.terminal_logs"),
