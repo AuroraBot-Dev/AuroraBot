@@ -4,12 +4,11 @@ data_root = "data"
 engine = "engine"
 ai = "ai"
 memory = "memory"
+# ops 面板后端（RFC 0218）私有数据目录（Token、会话与附件索引）
+ops = "ops"
 
 [storage.platform]
 data_dir = "platform"
-
-[storage.platform.dashboard]
-data_dir = "dashboard"
 
 [storage.platform.mcp]
 data_dir = "mcp"

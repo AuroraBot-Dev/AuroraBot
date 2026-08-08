@@ -14,7 +14,7 @@ class InputOrigin(StrEnum):
     """交互输入来源。"""
 
     CONSOLE = "console"
-    DASHBOARD = "dashboard"
+    PANEL = "panel"
 
 
 class CommandControl(StrEnum):

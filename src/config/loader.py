@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from src.config.files import read_toml_snapshot
 from src.config.helpers import _require_keys, _string
@@ -23,7 +23,7 @@ from src.config.sections import (
     _parse_agents,
     _parse_apps,
     _parse_autonomy,
-    _parse_dashboard,
+    _parse_panel,
     _parse_preference,
     _parse_task_budget,
     _parse_triage,
@@ -43,7 +43,7 @@ from src.contracts import (
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentProfile
-    from src.contracts.configuration import AppConfig, DashboardConfig, PlatformPreference
+    from src.contracts.configuration import AppConfig, PlatformPreference
 
 
 class _Msg(StrEnum):
@@ -58,7 +58,6 @@ class _Msg(StrEnum):
     ENGINE_MUST_BE_TABLE = "engine must be a table"
     ENGINE_UNSUPPORTED_KEYS = "engine has unsupported or missing keys"
     PLATFORMS_NO_PLATFORM_TABLE = "platforms.toml must contain a [platform] table"
-    DASHBOARD_MUST_BE_TABLE = "platform.dashboard must be a table"
     MODELS_MUST_BE_TABLE = "models must be a table"
     LOGGING_STORAGE_MUST_BE_TABLES = "logging and storage must be tables"
     STORAGE_PLATFORM_MUST_BE_TABLE = "storage.platform must be a table"
@@ -76,8 +75,6 @@ class _Msg(StrEnum):
     ROLE_CAPABILITIES_STRINGS = "models.roles.{role}.capabilities must contain strings"
     ENGINE_SUB_MUST_BE_TABLES = "engine autonomy, Agents and Task budgets must be tables"
     TRIAGE_UNKNOWN_ROLE = "engine.triage.model_role references unknown role {model_role}"
-    DEBUG_PORT_INVALID = "runtime.debug_port must be a valid port"
-    PROD_DEBUG_LOOPBACK = "production debug API must bind to loopback"
     ROOT_PROFILE_NOT_CONFIGURED = "engine.agents.root_profile is not configured"
     WORKER_PROFILE_NOT_CONFIGURED = "engine.agents.worker_profile is not configured"
     WORKSPACE_MISMATCH = "engine.workspace must match storage.engine"
@@ -134,19 +131,17 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     runtime_raw = merged_runtime.get("runtime", {})
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
-    runtime_allowed = {"profile", "debug_host", "debug_port", "console"}
+    runtime_allowed = {"profile", "panel", "console"}
     required_runtime = set(runtime_allowed)
     if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
         raise ConfigurationError(_Msg.RUNTIME_UNSUPPORTED_KEYS)
     if runtime_raw["profile"] != selected_profile:
         raise ConfigurationError(_Msg.PROFILE_VALUE_MISMATCH)
 
-    debug_port = runtime_raw["debug_port"]
-    if not isinstance(debug_port, int) or isinstance(debug_port, bool) or not 1 <= debug_port <= 65535:
-        raise ConfigurationError(_Msg.DEBUG_PORT_INVALID)
-    debug_host = _string(runtime_raw["debug_host"], "runtime.debug_host")
-    if selected_profile == "prod" and debug_host not in {"127.0.0.1", "::1", "localhost"}:
-        raise ConfigurationError(_Msg.PROD_DEBUG_LOOPBACK)
+    panel_raw = runtime_raw["panel"]
+    if not isinstance(panel_raw, dict):
+        raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
+    panel = _parse_panel(panel_raw)
     console_raw = runtime_raw["console"]
     if not isinstance(console_raw, dict):
         raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
@@ -159,7 +154,7 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
         enabled=console_raw["enabled"],
         terminal_logs=console_raw["terminal_logs"],
     )
-    return RuntimeConfig(profile=selected_profile, debug_host=debug_host, debug_port=debug_port, console=console)
+    return RuntimeConfig(profile=selected_profile, panel=panel, console=console)
 
 
 def _load_engine_raw(config_dir: Path, sources: list[ConfigurationSource]) -> dict[str, Any]:
@@ -259,7 +254,7 @@ class _StorageSnapshot:
     log_dir: Path
     storage: StorageConfig
     engine_dir: Path
-    dashboard_dir: Path
+    ops_dir: Path
 
 
 def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSource]) -> _StorageSnapshot:
@@ -274,11 +269,11 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
     if not isinstance(logging_raw, dict) or not isinstance(storage_raw, dict):
         raise ConfigurationError(_Msg.LOGGING_STORAGE_MUST_BE_TABLES)
     _require_keys(logging_raw, {"level", "log_dir"}, "logging")
-    _require_keys(storage_raw, {"data_root", "engine", "ai", "memory", "platform"}, "storage")
+    _require_keys(storage_raw, {"data_root", "engine", "ai", "memory", "ops", "platform"}, "storage")
     storage_platform_raw = storage_raw["platform"]
     if not isinstance(storage_platform_raw, dict):
         raise ConfigurationError(_Msg.STORAGE_PLATFORM_MUST_BE_TABLE)
-    _require_keys(storage_platform_raw, {"data_dir", "dashboard", "mcp"}, "storage.platform")
+    _require_keys(storage_platform_raw, {"data_dir", "mcp"}, "storage.platform")
 
     def storage_path(raw: object, label: str, *, parent: Path) -> Path:
         path = (parent / _string(raw, label)).resolve()
@@ -290,24 +285,20 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
     engine_dir = storage_path(storage_raw["engine"], "storage.engine", parent=data_root)
     ai_dir = storage_path(storage_raw["ai"], "storage.ai", parent=data_root)
     memory_dir = storage_path(storage_raw["memory"], "storage.memory", parent=data_root)
+    ops_dir = storage_path(storage_raw["ops"], "storage.ops", parent=data_root)
     platform_dir = storage_path(storage_platform_raw["data_dir"], "storage.platform.data_dir", parent=data_root)
-    dashboard_storage = storage_platform_raw["dashboard"]
     mcp_storage = storage_platform_raw["mcp"]
-    if not isinstance(dashboard_storage, dict) or not isinstance(mcp_storage, dict):
+    if not isinstance(mcp_storage, dict):
         raise ConfigurationError(_Msg.STORAGE_ENTRIES_MUST_BE_TABLES)
-    _require_keys(dashboard_storage, {"data_dir"}, "storage.platform.dashboard")
     _require_keys(mcp_storage, {"data_dir", "apps_dir"}, "storage.platform.mcp")
-    dashboard_dir = storage_path(
-        dashboard_storage["data_dir"], "storage.platform.dashboard.data_dir", parent=platform_dir
-    )
     mcp_dir = storage_path(mcp_storage["data_dir"], "storage.platform.mcp.data_dir", parent=platform_dir)
     apps_dir = storage_path(mcp_storage["apps_dir"], "storage.platform.mcp.apps_dir", parent=mcp_dir)
     package_directories = {
         "engine": engine_dir,
         "ai": ai_dir,
         "memory": memory_dir,
+        "ops": ops_dir,
         "platform": platform_dir,
-        "dashboard": dashboard_dir,
         "mcp": mcp_dir,
         "apps": apps_dir,
     }
@@ -322,23 +313,23 @@ def _load_storage(root: Path, config_dir: Path, sources: list[ConfigurationSourc
             ai=ai_dir,
             memory=memory_dir,
             platform=platform_dir,
-            dashboard=dashboard_dir,
+            ops=ops_dir,
             mcp=mcp_dir,
             apps=apps_dir,
         ),
         engine_dir=engine_dir,
-        dashboard_dir=dashboard_dir,
+        ops_dir=ops_dir,
     )
 
 
 # 允许的包含关系（含传递闭包）：目录可嵌套在声明过的祖先包之下
 _PACKAGE_STORAGE_CONTAINS: dict[str, frozenset[str]] = {
-    "platform": frozenset({"dashboard", "mcp", "apps"}),
+    "platform": frozenset({"mcp", "apps"}),
     "mcp": frozenset({"apps"}),
-    "dashboard": frozenset(),
     "engine": frozenset(),
     "ai": frozenset(),
     "memory": frozenset(),
+    "ops": frozenset(),
     "apps": frozenset(),
 }
 
@@ -360,23 +351,15 @@ def _validate_package_directories(package_directories: dict[str, Path]) -> None:
 def _load_platforms(
     config_dir: Path,
     sources: list[ConfigurationSource],
-    *,
-    dashboard_dir: Path,
-    engine_dir: Path,
-) -> tuple[PlatformPreference, DashboardConfig]:
-    """加载 platforms.toml，解析平台偏好与 Dashboard 配置。"""
+) -> PlatformPreference:
+    """加载 platforms.toml，解析平台偏好配置段。"""
     platforms_data, platforms_source = read_toml_snapshot(config_dir / "platforms.toml")
     sources.append(platforms_source)
     _require_keys(platforms_data, {"platform"}, "platforms.toml")
     platform_raw = platforms_data.get("platform")
     if not isinstance(platform_raw, dict):
         raise ConfigurationError(_Msg.PLATFORMS_NO_PLATFORM_TABLE)
-    dashboard_raw = platform_raw.get("dashboard")
-    if not isinstance(dashboard_raw, dict):
-        raise ConfigurationError(_Msg.DASHBOARD_MUST_BE_TABLE)
-    preference = _parse_preference(platform_raw)
-    dashboard = _parse_dashboard(cast("dict[str, Any]", dashboard_raw), dashboard_dir, engine_dir)
-    return preference, dashboard
+    return _parse_preference(platform_raw)
 
 
 def _load_agents_apps(
@@ -410,12 +393,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     model_definitions, model_providers, model_logging = _load_models(config_dir, sources)
     roles = frozenset(model_definitions)
     storage_snapshot = _load_storage(root, config_dir, sources)
-    preference, dashboard = _load_platforms(
-        config_dir,
-        sources,
-        dashboard_dir=storage_snapshot.dashboard_dir,
-        engine_dir=storage_snapshot.engine_dir,
-    )
+    preference = _load_platforms(config_dir, sources)
     agents, apps = _load_agents_apps(config_dir, sources, root=root, roles=roles)
     prompts = load_prompts(config_dir, sources, frozenset(agent.id for agent in agents))
 
@@ -460,7 +438,6 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
             interactive_budget=interactive_budget,
             autonomous_budget=autonomous_budget,
         ),
-        dashboard=dashboard,
         preference=preference,
         logging_level=storage_snapshot.level,
         logging_dir=storage_snapshot.log_dir,

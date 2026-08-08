@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from src.contracts.ports import DashboardControlPort, ExternalAmpIngressPort, InteractiveInputPort
+from src.contracts.ports import ExternalAmpIngressPort, InteractiveInputPort
 
 if TYPE_CHECKING:
     import asyncio
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from src.contracts.tool import ToolExecutorBinding
 
 
-class PlatformRuntimePort(ExternalAmpIngressPort, InteractiveInputPort, DashboardControlPort, Protocol):
+class PlatformRuntimePort(ExternalAmpIngressPort, InteractiveInputPort, Protocol):
     """平台创建和输入所需的组合运行时表面。"""
 
     configuration: AuroraConfig
