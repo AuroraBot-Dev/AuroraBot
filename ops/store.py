@@ -1,17 +1,22 @@
 """面板后端私有存储（RFC 0218 §6）：bootstrap Token、Bearer 会话与附件索引。
 
 位于 ops 包，数据落 ``data/ops/``（panel.sqlite3 + Token.txt + uploads/）。
-仅使用 stdlib sqlite3，保持 ops 只依赖 contracts + utils 的边界。
+存储实现使用 SQLAlchemy 2.0 ORM（RFC 0217），物理 Schema v1 与 user_version
+迁移语义不变；ops 仍只依赖 contracts + utils 与通用依赖的边界。
 """
 
 from __future__ import annotations
 
 import secrets
-import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+from sqlalchemy import Integer, String, create_engine, delete, select, text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.pool import NullPool
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -19,6 +24,33 @@ if TYPE_CHECKING:
 
 _SCHEMA_VERSION = 1
 _TOKEN_BYTES = 32
+
+
+class _Base(DeclarativeBase):
+    """panel.sqlite3 的声明式基类。"""
+
+
+class SessionRow(_Base):
+    """sessions：Bearer 会话（token 只存 SHA-256 摘要）。"""
+
+    __tablename__ = "sessions"
+
+    token_hash: Mapped[str] = mapped_column("token_hash", String, primary_key=True)
+    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
+    expires_at: Mapped[str] = mapped_column("expires_at", String, nullable=False)
+
+
+class AttachmentRow(_Base):
+    """attachments：上传附件索引。"""
+
+    __tablename__ = "attachments"
+
+    attachment_id: Mapped[str] = mapped_column("attachment_id", String, primary_key=True)
+    name: Mapped[str] = mapped_column("name", String, nullable=False)
+    mime: Mapped[str] = mapped_column("mime", String, nullable=False)
+    size: Mapped[int] = mapped_column("size", Integer, nullable=False)
+    stored_name: Mapped[str] = mapped_column("stored_name", String, nullable=False)
+    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
 
 
 class PanelStore:
@@ -31,9 +63,14 @@ class PanelStore:
         self._token_path = data_dir / "Token.txt"
         self._upload_dir = data_dir / "uploads"
         self._upload_dir.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self._database_path, check_same_thread=False)
-        self._connection.execute("PRAGMA journal_mode=WAL")
-        self._connection.execute("PRAGMA busy_timeout=30000")
+        self._engine = create_engine(
+            f"sqlite:///{self._database_path}",
+            poolclass=NullPool,
+            connect_args={"timeout": 30},
+        )
+        with self._engine.begin() as connection:
+            connection.execute(text("PRAGMA journal_mode=WAL"))
+            connection.execute(text("PRAGMA busy_timeout=30000"))
         self._migrate()
         self._bootstrap_token = self._load_or_create_token()
 
@@ -60,46 +97,26 @@ class PanelStore:
         return token
 
     def _migrate(self) -> None:
-        """Schema v1 迁移：sessions 与 attachments 表。"""
-        version = self._connection.execute("PRAGMA user_version").fetchone()[0]
-        if version == _SCHEMA_VERSION:
-            return
-        if version not in (0, 1):
-            raise RuntimeError(f"unsupported panel schema version: {version}")
-        with self._connection:
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sessions (
-                    token_hash TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
-                    expires_at TEXT NOT NULL
-                )
-                """
-            )
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS attachments (
-                    attachment_id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    mime TEXT NOT NULL,
-                    size INTEGER NOT NULL,
-                    stored_name TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-            self._connection.execute("PRAGMA user_version = 1")
+        """Schema v1 迁移：sessions 与 attachments 表（user_version 语义不变）。"""
+        with self._engine.begin() as connection:
+            version = connection.exec_driver_sql("PRAGMA user_version").scalar()
+            if version == _SCHEMA_VERSION:
+                return
+            if version not in (0, 1):
+                raise RuntimeError(f"unsupported panel schema version: {version}")
+            _Base.metadata.create_all(bind=connection, checkfirst=True)
+            connection.exec_driver_sql(f"PRAGMA user_version = {_SCHEMA_VERSION}")
 
     @contextmanager
-    def _session(self) -> Generator[sqlite3.Connection]:
+    def _session(self) -> Generator[Session, None, None]:
         """事务上下文：成功提交，异常回滚。"""
-        connection = self._connection
-        try:
-            yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
+        with Session(self._engine, expire_on_commit=False) as session:
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     # -- 认证 ------------------------------------------------------------
 
@@ -107,26 +124,35 @@ class PanelStore:
         """为登录 token 创建 Bearer 会话，返回会话元数据。"""
         now = datetime.now(UTC)
         expires = now + timedelta(seconds=ttl_seconds)
-        with self._session() as connection:
-            connection.execute(
-                "INSERT OR REPLACE INTO sessions(token_hash, created_at, expires_at) VALUES (?, ?, ?)",
-                (_digest(token), now.isoformat(), expires.isoformat()),
+        with self._session() as session:
+            session.execute(
+                sqlite_insert(SessionRow)
+                .values(
+                    token_hash=_digest(token),
+                    created_at=now.isoformat(),
+                    expires_at=expires.isoformat(),
+                )
+                .on_conflict_do_update(
+                    index_elements=["token_hash"],
+                    set_={
+                        "created_at": now.isoformat(),
+                        "expires_at": expires.isoformat(),
+                    },
+                )
             )
         return {"created_at": now.isoformat(), "expires_at": expires.isoformat()}
 
     def verify_session(self, token: str) -> bool:
         """校验 Bearer token：存在且未过期。"""
         now = datetime.now(UTC).isoformat()
-        with self._session() as connection:
-            row = connection.execute(
-                "SELECT expires_at FROM sessions WHERE token_hash = ?", (_digest(token),)
-            ).fetchone()
-        return row is not None and row[0] > now
+        with self._session() as session:
+            row = session.scalar(select(SessionRow.expires_at).where(SessionRow.token_hash == _digest(token)))
+        return row is not None and str(row) > now
 
     def delete_session(self, token: str) -> None:
         """销毁会话。"""
-        with self._session() as connection:
-            connection.execute("DELETE FROM sessions WHERE token_hash = ?", (_digest(token),))
+        with self._session() as session:
+            session.execute(delete(SessionRow).where(SessionRow.token_hash == _digest(token)))
 
     # -- 附件 ------------------------------------------------------------
 
@@ -134,23 +160,28 @@ class PanelStore:
         """登记附件并返回索引记录。"""
         attachment_id = str(uuid4().hex)
         created_at = datetime.now(UTC).isoformat()
-        with self._session() as connection:
-            connection.execute(
-                "INSERT INTO attachments(attachment_id, name, mime, size, stored_name, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (attachment_id, name, mime, size, stored_name, created_at),
+        with self._session() as session:
+            session.add(
+                AttachmentRow(
+                    attachment_id=attachment_id,
+                    name=name,
+                    mime=mime,
+                    size=size,
+                    stored_name=stored_name,
+                    created_at=created_at,
+                )
             )
         return self._attachment_row(attachment_id, name, mime, size, stored_name, created_at)
 
     def get_attachment(self, attachment_id: str) -> dict[str, Any] | None:
         """按 ID 查询附件索引。"""
-        with self._session() as connection:
-            row = connection.execute(
-                "SELECT attachment_id, name, mime, size, stored_name, created_at "
-                "FROM attachments WHERE attachment_id = ?",
-                (attachment_id,),
-            ).fetchone()
-        return self._attachment_row(*row) if row is not None else None
+        with self._session() as session:
+            row = session.scalar(select(AttachmentRow).where(AttachmentRow.attachment_id == attachment_id))
+        return (
+            self._attachment_row(row.attachment_id, row.name, row.mime, row.size, row.stored_name, row.created_at)
+            if row is not None
+            else None
+        )
 
     @staticmethod
     def _attachment_row(
@@ -166,8 +197,8 @@ class PanelStore:
         }
 
     def close(self) -> None:
-        """关闭数据库连接。"""
-        self._connection.close()
+        """关闭数据库引擎与连接池。"""
+        self._engine.dispose()
 
 
 def _digest(token: str) -> str:

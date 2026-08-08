@@ -308,7 +308,7 @@ def test_short_flag_compacts_and_slices_output() -> None:
                 )
             )
 
-        full = await route("/engine/tasks")
+        await route("/engine/tasks")
         compact = await route("/engine/tasks --short")
         assert compact.ok and compact.text is not None
         assert "\n" not in compact.text

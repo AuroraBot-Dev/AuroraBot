@@ -49,20 +49,29 @@
   `on_conflict_do_nothing`，幂等语义与 rowcount 判断不变。
 - `memory_dir=None` 时的内存降级路径不变。
 
-### 4. 行为与性能
+### 4. ops/store.py 重写为 ORM
+
+- `panel.sqlite3` 两表（`sessions/attachments`）改为 ORM 模型；
+  `PRAGMA user_version` 迁移语义（Schema v1、拒绝不支持版本）不变，
+  Token.txt 原子创建逻辑不变。
+- 共享连接改为每事务独立 Session（FastAPI 线程池下更安全）；
+  `create_session/verify_session/delete_session/add_attachment/
+  get_attachment/close` 公共方法签名不变。
+
+### 5. 行为与性能
 
 - 语义零变化：幂等、防抖、原子决策、claim 降级为原子 UPDATE、崩溃恢复全部不变。
 - 单次操作增加 µs 级 ORM 开销，相对秒级模型/工具调用可忽略（RFC 0210 结论不变）。
 
 ## 结果
 
-- engine/store 与 memory 不再出现手写 SQL；模型即 schema 声明，类型检查（pyright）
-  覆盖全部列名与查询。
+- engine/store、memory 与 ops/store 不再出现手写 SQL；模型即 schema 声明，
+  类型检查（pyright）覆盖全部列名与查询。
 - Schema v9 物理结构与既有数据库完全兼容；不迁移、不重建工作区。
 
 ## 兼容性
 
-- 行为契约不变：`SQLiteRuntimeStore` 与 `MemoryService` 公共方法签名、幂等与
-  事务边界、`data/engine` 与 `data/memory` 目录布局均不变。
+- 行为契约不变：`SQLiteRuntimeStore`、`MemoryService` 与 `PanelStore` 公共方法
+  签名、幂等与事务边界、`data/engine`、`data/memory` 与 `data/ops` 目录布局均不变。
 - 仅返回值访问方式变化（`row["x"]` → `row.x`），由 pyright 强制对齐。
 - 依赖：`sqlalchemy` 升级为直接依赖（已在 lock 内）。
