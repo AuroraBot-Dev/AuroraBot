@@ -2,8 +2,9 @@
 
 所有写操作均通过 session() 事务上下文执行（引擎级 isolation_level=IMMEDIATE，
 等价 RFC 0210 的 BEGIN IMMEDIATE）；单进程 asyncio 独占，无租约与乐观锁。
-初始化只接受全新 v9 库，旧库拒绝启动。connect()/transaction() 保留为原始
-sqlite3 逃生口（测试与调试直查 DB 用，热路径不使用）。
+初始化：全新库直接建 v9 Schema；v1–v8 旧库按版本序列迁移到 v9
+（src/engine/store/migration/，RFC 0217 §5）。connect()/transaction() 保留
+为原始 sqlite3 逃生口（测试与调试直查 DB 用，热路径不使用）。
 """
 
 from __future__ import annotations
@@ -12,12 +13,11 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import create_engine, event, select, update
+from sqlalchemy import create_engine, event, select, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -35,9 +35,9 @@ from src.contracts import (
     TaskStatus,
 )
 from src.utils import utc_now
+from src.utils.migration import migrate_to
 
 from .models import (
-    _SCHEMA_VERSION,
     ACT_PROCESSING,
     MSG_PENDING,
     MSG_PROCESSING,
@@ -46,14 +46,7 @@ from .models import (
     CausalEventRow,
     InboxEventRow,
     MessageRow,
-    SchemaMetaRow,
 )
-
-
-class _Msg(StrEnum):
-    """本文件内所有用户可见或日志输出的字符串常量。"""
-
-    UNSUPPORTED_SCHEMA = "不支持的 Agent 运行时数据库 Schema 版本（仅接受全新 v9，旧工作区请重建）"
 
 
 def _json(value: object) -> str:
@@ -72,6 +65,23 @@ def _configure_dbapi(dbapi_connection: Any, _record: Any) -> None:
     cursor.execute("PRAGMA foreign_keys = ON")
     cursor.execute("PRAGMA busy_timeout = 30000")
     cursor.close()
+
+
+def _read_schema_version(connection: Any) -> int:
+    """读取 schema_meta 版本号；无 schema_meta 表（全新库）视为 v0。"""
+    has_meta = connection.execute(
+        text("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'")
+    ).scalar()
+    if not has_meta:
+        return 0
+    version = connection.execute(text("SELECT version FROM schema_meta LIMIT 1")).scalar()
+    return int(version) if version is not None else 0
+
+
+def _write_schema_version(connection: Any, version: int) -> None:
+    """覆写 schema_meta 版本号（单行表，先清后写）。"""
+    connection.execute(text("DELETE FROM schema_meta"))
+    connection.execute(text("INSERT INTO schema_meta(version) VALUES (:version)"), {"version": version})
 
 
 class RuntimeStoreBase:
@@ -109,19 +119,33 @@ class RuntimeStoreBase:
             yield session
 
     def initialize(self) -> None:
-        """初始化运行时数据库：创建 v9 Schema，拒绝旧库。"""
+        """初始化运行时数据库：全新库建 v9 Schema，旧库按版本序列迁移到 v9。
+
+        版本号存于 schema_meta（无表 = v0 全新库）；v0 直接建表并写入
+        当前目标版本；v1–v8 旧库经 src/engine/store/migration/ 版本序列
+        升级到 v9（RFC 0217 §5）。迁移在单个事务中执行，任一版本步骤
+        失败整体回滚。
+        """
+        from . import migration
+
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA journal_size_limit = 1048576")
             connection.execute("PRAGMA auto_vacuum = INCREMENTAL")
-        Base.metadata.create_all(self._engine, checkfirst=True)
-        with self.session() as session:
-            version = session.scalar(select(SchemaMetaRow.c.version))
-            if version is None:
-                session.execute(SchemaMetaRow.insert().values(version=_SCHEMA_VERSION))
-            elif version != _SCHEMA_VERSION:
-                raise RuntimeError(_Msg.UNSUPPORTED_SCHEMA)
+        with self._engine.begin() as connection:
+            current = _read_schema_version(connection)
+            if current == 0:
+                Base.metadata.create_all(bind=connection, checkfirst=True)
+                _write_schema_version(connection, migration.TARGET_VERSION)
+                current = migration.TARGET_VERSION
+            migrate_to(
+                connection,
+                current=current,
+                target=migration.TARGET_VERSION,
+                steps=migration.STEPS,
+                set_version=_write_schema_version,
+            )
         self.recover_interrupted()
 
     def recover_interrupted(self) -> None:

@@ -1,7 +1,8 @@
 """Schema v9 ORM 模型（RFC 0217，物理结构同 RFC 0210 不变）。
 
 所有列名、类型、约束与索引（含部分唯一索引与 DESC 列序）逐一对齐
-Schema v9；`create_all(checkfirst=True)` 生成，旧库拒绝启动。
+Schema v9；`create_all(checkfirst=True)` 只用于全新库，旧库经版本序列
+迁移（src/engine/store/migration/，RFC 0217 §5）。
 """
 
 from __future__ import annotations

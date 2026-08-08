@@ -32,6 +32,7 @@ from src.contracts import (
     MemoryQuery,
 )
 from src.utils import get_logger
+from src.utils.migration import migrate_to
 
 
 class _Summarizer(Protocol):
@@ -132,14 +133,27 @@ class MemoryService:
         if memory_dir is not None:
             memory_dir.mkdir(parents=True, exist_ok=True)
             self._engine = _build_engine(memory_dir / "memory.sqlite3")
-            with self._engine.begin() as connection:
-                connection.execute(text("PRAGMA journal_mode=WAL"))
-                connection.execute(text("PRAGMA journal_size_limit=524288"))
-                connection.execute(text("DROP TABLE IF EXISTS completed_tasks"))
-            _Base.metadata.create_all(self._engine, checkfirst=True)
+            self._initialize()
         from src.memory.long_term import LongTermMemory
 
         self._long_term = LongTermMemory(memory_dir) if memory_dir is not None else None
+
+    def _initialize(self) -> None:
+        """WAL 配置 + 按版本序列迁移到 TARGET_VERSION（utils.migration 框架）。"""
+        from src.memory import migration
+
+        assert self._engine is not None
+        with self._engine.begin() as connection:
+            connection.execute(text("PRAGMA journal_mode=WAL"))
+            connection.execute(text("PRAGMA journal_size_limit=524288"))
+            current = connection.exec_driver_sql("PRAGMA user_version").scalar() or 0
+            migrate_to(
+                connection,
+                current=current,
+                target=migration.TARGET_VERSION,
+                steps=migration.STEPS,
+                set_version=lambda c, version: c.exec_driver_sql(f"PRAGMA user_version = {version}"),
+            )
 
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
         """只读记忆历史（RFC 0218 观察）：窗口消息 + 概要 + 长期事实。"""

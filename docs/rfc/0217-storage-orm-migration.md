@@ -30,7 +30,8 @@
   - `idx_messages_ready` 等复合索引的列序与 `DESC` 方向逐一保留；
   - CHECK（autonomous、kind、inbox status）、FK、UNIQUE、TEXT/INTEGER/REAL 类型一致。
 - `schema.py` 的 DDL 字符串删除，`Base.metadata.create_all(checkfirst=True)` 生成；
-  版本检查与"旧库拒绝启动"语义保留（仍只接受全新 v9）。
+- 版本检查语义保留：`current > target`（库比代码新）拒绝启动；旧库
+  （v1–v8）按版本序列迁移（仍只接受迁移后 v9 形状）。
 - 行转换：`_task/_agent/_message/_activity` 从"sqlite3.Row → 领域模型"改为
   "ORM 实体 → 领域模型"；所有内部写操作走 `Session` 事务（提交后属性不过期，
   `expire_on_commit=False`，外部可安全读取返回的实体）。
@@ -58,18 +59,25 @@
   `create_session/verify_session/delete_session/add_attachment/
   get_attachment/close` 公共方法签名不变。
 
-### 5. 版本化迁移框架（utils/migration + ops/migration）
+### 5. 版本化迁移框架（utils/migration + 各存储 migration 包）
 
 - 新增 `src/utils/migration.py`：`migrate_to(connection, *, current, target,
   steps, set_version)` —— 从当前版本按序执行版本迁移步骤直到目标版本，
   每步后推进版本号；`current > target`（库比代码新）与缺失步骤均拒绝，
   防止静默漏迁移。
-- 每个版本间隔一个独立步骤文件：`ops/migration/v0_v1.py`（建表，v1 现状）、
-  `v1_v2.py`（v2 占位，未来 schema 演进时实现并注册）；`ops/migration/
-  __init__.py` 以 `STEPS: dict[int, MigrationStep]` + `TARGET_VERSION`
-  汇总版本序列。
-- 其他需要版本化存储的地方复用同一框架（engine 运行态仍按 RFC 0210
-  拒绝旧库，不迁移；如未来需要升级路径，同样以版本序列表达）。
+- 每个版本间隔一个独立步骤文件（`v0_v1.py`、`v1_v2.py`…），在各存储的
+  `migration/` 子包中以 `STEPS: dict[int, MigrationStep]` +
+  `TARGET_VERSION` 汇总，全部存储统一实装：
+  - `ops/migration/`：面板存储，`user_version` 版本号，v0→v1 建表（v1 现状）；
+  - `src/memory/migration/`：记忆存储，`user_version` 版本号，v0→v1 建表
+    并清理遗留表（v1 现状）；
+  - `src/engine/store/migration/`：运行态存储，`schema_meta` 版本号（RFC 0210
+    契约），v0 全新库直接建表并写入当前目标版本 9；v1–v8 迁移步骤按历史演化
+    档案重建并全部注册（RFC 0210 §3 撤销"不迁移旧库"政策，自即日起数据库必须
+    考虑迁移），旧库启动时在单事务中按序升级到 v9，任一版本步骤失败整体回滚；
+    代码路径只访问 v9 形状，不兼容旧版本列。
+- 未来 Schema 演进：实现对应 `vN_vN+1.py`、注册并提升 `TARGET_VERSION`，
+  启动时从当前版本一路迁移到目标版本。
 
 ### 6. 行为与性能
 
@@ -80,7 +88,8 @@
 
 - engine/store、memory 与 ops/store 不再出现手写 SQL；模型即 schema 声明，
   类型检查（pyright）覆盖全部列名与查询。
-- Schema v9 物理结构与既有数据库完全兼容；不迁移、不重建工作区。
+- Schema v9 物理结构与迁移后数据库完全兼容；v1–v8 旧库经版本序列升级，
+  无需重建工作区（历史演化档案 v2→v4→v7→v9 由迁移步骤承接）。
 
 ## 兼容性
 

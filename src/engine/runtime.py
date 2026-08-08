@@ -39,7 +39,7 @@ from src.engine.authorize import apply_authorized_decision, apply_failure, handl
 from src.engine.debug import agent_detail as build_agent_detail
 from src.engine.debug import reject_active_legacy_workspace
 from src.engine.debug import task_detail as build_task_detail
-from src.engine.ingress import ingest_ready, persist_amp
+from src.engine.ingress import persist_amp
 from src.engine.store import SQLiteRuntimeStore
 from src.engine.tool_registry import ToolRegistry
 from src.utils import get_logger
@@ -112,10 +112,6 @@ class AgentEngine:
         self._memory_store = memory_store
         self._idle_wait_seconds = idle_wait_seconds
         self._workspace = Path(configuration.workspace)
-        self._inbox = self._workspace / "inbox"
-        self._archive = self._workspace / "archive"
-        for directory in (self._inbox, self._archive):
-            directory.mkdir(parents=True, exist_ok=True)
         reject_active_legacy_workspace(self._workspace)
         self.store = SQLiteRuntimeStore(self._workspace / "process" / "runtime.sqlite3")
         self.store.initialize()
@@ -231,16 +227,9 @@ class AgentEngine:
             },
         )
 
-    def ingest(self) -> tuple[str, ...]:
-        """只把 AMP 写入持久化 Inbox，不创建 Task。"""
-        return ingest_ready(self)
-
-    # -- pump 闭环（单循环：同步短事务 + async I/O）-----------------------
-
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
             recoveries = await self._tools.recover_pending()
-            ingested = self.ingest()
             admitted = self._triage_inbox()
             expired = self.store.expire_tasks()
             processed, failed = self._pump_turns(max_turns)
@@ -248,7 +237,6 @@ class AgentEngine:
             self._ensure_model_dispatcher()
             self._project_memory()
             return {
-                "ingested_event_ids": ingested,
                 "admitted_task_ids": admitted,
                 "expired_task_ids": expired,
                 "processed_message_ids": processed,
@@ -450,8 +438,7 @@ class AgentEngine:
     def has_work(self) -> bool:
         counts = self.store.counts()
         return (
-            any(self._inbox.glob("*.json"))
-            or self.store.has_due_inbox()
+            self.store.has_due_inbox()
             or counts["pending_messages"] > 0
             or self.store.has_claimable_external_activity(self.limits.tool_concurrency)
             or self.store.has_recoverable_tool()

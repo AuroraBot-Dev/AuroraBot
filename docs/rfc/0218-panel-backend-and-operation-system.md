@@ -215,4 +215,4 @@ max_upload_bytes = 10485760           # 附件上限，0 表示禁用附件
 - **删除**：`src/platform/dashboard/`、`DashboardConfig`、`DashboardControlPort`/`DashboardDebugPort`、`PLATFORM_NAMES` 中 dashboard、`[platform.dashboard]`、`[storage.platform.dashboard]`、`debug_host`/`debug_port`、`/v1/debug/*`、`aur.dashboard.send` 能力、`ops/commands/` 旧命令文件（迁入 `ops/operations/`）。
 - **测试**：删除 `tests/test_dashboard.py` 与平台相关断言；新增：操作体系（REST/文本同构、路径与参数解析、envelope、错误码）、各域查询（memory/ai/config/prompt）、会话导出、面板认证（登录/未授权/附件/WS）、组合根单服务器启动；`test_dependency_boundaries.py` 的 ops 边界断言保留并扩展（ops 不 import platform）。
 - **前端**（仓库外）：聊天页改为 `POST /messages` + `WS /api/ops/stream` + `GET /messages`；登录指向 `/api/auth/login`；附件指向面板端点。
-- 既有聊天历史不回迁（延续 RFC 0210 不迁移旧库精神）；`data/platform/dashboard/` 遗留数据不再读取。
+- 既有聊天历史不回迁（面板为全新后端，历史数据不回填；RFC 0217 的版本迁移只作用于 schema，不涉及面板数据回迁）；`data/platform/dashboard/` 遗留数据不再读取。
