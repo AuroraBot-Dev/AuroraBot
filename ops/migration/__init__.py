@@ -1,19 +1,17 @@
 """面板存储版本迁移序列（RFC 0217 §5）。
 
-每个版本一个步骤文件（v0_v1.py、v1_v2.py…），在 ``STEPS`` 注册后由
-:func:`src.utils.migration.migrate_to` 从当前版本按序执行到目标版本。
+版本号统一存于 ``schema_meta`` 表（utils.migration 读写）；当前目标
+版本为 1，初始 schema 即 v1，无历史迁移步骤（``STEPS`` 为空）。
+未来 Schema 演进时新增步骤文件（如 ``v1_v2.py``）并在 ``STEPS``
+注册、提升 ``TARGET_VERSION``。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .v0_v1 import migrate_v0_to_v1
-
 if TYPE_CHECKING:
     from src.utils.migration import MigrationStep
 
 TARGET_VERSION = 1
-STEPS: dict[int, "MigrationStep"] = {
-    0: migrate_v0_to_v1,
-}
+STEPS: dict[int, "MigrationStep"] = {}

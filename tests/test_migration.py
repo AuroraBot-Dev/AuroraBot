@@ -386,8 +386,22 @@ def test_memory_store_fresh_database_is_initialized_to_target_version(tmp_path: 
     directory = tmp_path / "memory"
     MemoryService(directory)
     with dbapi.connect(directory / "memory.sqlite3") as connection:
-        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert version == 1
-    assert {"memory_receipts", "session_memory", "durable_facts", "memory_messages"} <= tables
+    assert {"memory_receipts", "session_memory", "durable_facts", "memory_messages", "schema_meta"} <= tables
     MemoryService(directory)
+
+
+def test_panel_store_fresh_database_is_initialized_to_target_version(tmp_path: Path) -> None:
+    import sqlite3 as dbapi
+
+    from ops.store import PanelStore
+
+    directory = tmp_path / "panel"
+    PanelStore(directory)
+    with dbapi.connect(directory / "panel.sqlite3") as connection:
+        version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert version == 1
+    assert {"sessions", "attachments", "schema_meta"} <= tables

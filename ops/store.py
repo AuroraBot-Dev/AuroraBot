@@ -14,12 +14,12 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import Integer, String, create_engine, delete, select, text
+from sqlalchemy import Column, Integer, String, Table, create_engine, delete, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import NullPool
 
-from src.utils.migration import migrate_to
+from src.utils.migration import initialize_storage
 
 from . import migration
 
@@ -32,6 +32,13 @@ _TOKEN_BYTES = 32
 
 class _Base(DeclarativeBase):
     """panel.sqlite3 的声明式基类。"""
+
+
+SchemaMetaRow = Table(
+    "schema_meta",
+    _Base.metadata,
+    Column("version", Integer, nullable=False),
+)
 
 
 class SessionRow(_Base):
@@ -101,15 +108,13 @@ class PanelStore:
         return token
 
     def _migrate(self) -> None:
-        """按版本序列迁移到 TARGET_VERSION（utils.migration 框架）。"""
+        """统一初始化（initialize_storage：全新建表/旧库按版本序列迁移）。"""
         with self._engine.begin() as connection:
-            current = connection.exec_driver_sql("PRAGMA user_version").scalar() or 0
-            migrate_to(
+            initialize_storage(
                 connection,
-                current=current,
-                target=migration.TARGET_VERSION,
+                metadata=_Base.metadata,
                 steps=migration.STEPS,
-                set_version=lambda c, version: c.exec_driver_sql(f"PRAGMA user_version = {version}"),
+                target=migration.TARGET_VERSION,
             )
 
     @contextmanager

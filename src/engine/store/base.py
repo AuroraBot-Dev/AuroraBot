@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import create_engine, event, select, text, update
+from sqlalchemy import create_engine, event, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -35,13 +35,14 @@ from src.contracts import (
     TaskStatus,
 )
 from src.utils import utc_now
-from src.utils.migration import migrate_to
+from src.utils.migration import initialize_storage
 
 from .models import (
     ACT_PROCESSING,
     MSG_PENDING,
     MSG_PROCESSING,
     ActivityRow,
+    Base,
     CausalEventRow,
     InboxEventRow,
     MessageRow,
@@ -66,23 +67,6 @@ def _configure_dbapi(dbapi_connection: Any, _record: Any) -> None:
     cursor.close()
 
 
-def _read_schema_version(connection: Any) -> int:
-    """读取 schema_meta 版本号；无 schema_meta 表（全新库）视为 v0。"""
-    has_meta = connection.execute(
-        text("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'")
-    ).scalar()
-    if not has_meta:
-        return 0
-    version = connection.execute(text("SELECT version FROM schema_meta LIMIT 1")).scalar()
-    return int(version) if version is not None else 0
-
-
-def _write_schema_version(connection: Any, version: int) -> None:
-    """覆写 schema_meta 版本号（单行表，先清后写）。"""
-    connection.execute(text("DELETE FROM schema_meta"))
-    connection.execute(text("INSERT INTO schema_meta(version) VALUES (:version)"), {"version": version})
-
-
 class RuntimeStoreBase:
     """事务型持久化仓库基类。调用者将模型和平台 I/O 置于事务外部。"""
 
@@ -100,7 +84,7 @@ class RuntimeStoreBase:
         return connection
 
     @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(self) -> Generator[sqlite3.Connection]:
         """原始 sqlite3 事务逃生口（BEGIN IMMEDIATE，异常自动回滚）。"""
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -112,13 +96,13 @@ class RuntimeStoreBase:
             connection.commit()
 
     @contextmanager
-    def session(self) -> Iterator[Session]:
+    def session(self) -> Generator[Session]:
         """ORM 事务上下文：BEGIN IMMEDIATE，提交后属性不过期便于外部读取。"""
         with Session(self._engine, expire_on_commit=False) as session, session.begin():
             yield session
 
     def initialize(self) -> None:
-        """初始化运行时数据库：全新库建 v9 Schema，旧库按版本序列迁移到 v9。
+        """初始化运行时数据库：统一入口（utils.migration.initialize_storage）。
 
         版本号存于 schema_meta（无表 = v0 全新库）；v0 直接建表并写入
         当前目标版本；v1-v8 旧库经 src/engine/store/migration/ 版本序列
@@ -133,17 +117,11 @@ class RuntimeStoreBase:
             connection.execute("PRAGMA journal_size_limit = 1048576")
             connection.execute("PRAGMA auto_vacuum = INCREMENTAL")
         with self._engine.begin() as connection:
-            current = _read_schema_version(connection)
-            if current == 0:
-                migration.migrate_v0_to_current(connection)
-                _write_schema_version(connection, migration.TARGET_VERSION)
-                current = migration.TARGET_VERSION
-            migrate_to(
+            initialize_storage(
                 connection,
-                current=current,
-                target=migration.TARGET_VERSION,
+                metadata=Base.metadata,
                 steps=migration.STEPS,
-                set_version=_write_schema_version,
+                target=migration.TARGET_VERSION,
             )
         self.recover_interrupted()
 

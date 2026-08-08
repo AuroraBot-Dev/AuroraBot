@@ -13,7 +13,21 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from sqlalchemy import Index, Integer, String, UniqueConstraint, create_engine, delete, desc, event, func, select, text
+from sqlalchemy import (
+    Column,
+    Index,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+    create_engine,
+    delete,
+    desc,
+    event,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -32,7 +46,7 @@ from src.contracts import (
     MemoryQuery,
 )
 from src.utils import get_logger
-from src.utils.migration import migrate_to
+from src.utils.migration import initialize_storage
 
 
 class _Summarizer(Protocol):
@@ -60,6 +74,13 @@ class _Msg(StrEnum):
 
 class _Base(DeclarativeBase):
     """memory.sqlite3 的声明式基类。"""
+
+
+SchemaMetaRow = Table(
+    "schema_meta",
+    _Base.metadata,
+    Column("version", Integer, nullable=False),
+)
 
 
 class MemoryReceiptRow(_Base):
@@ -139,20 +160,19 @@ class MemoryService:
         self._long_term = LongTermMemory(memory_dir) if memory_dir is not None else None
 
     def _initialize(self) -> None:
-        """WAL 配置 + 按版本序列迁移到 TARGET_VERSION（utils.migration 框架）。"""
+        """WAL 配置 + 统一初始化（initialize_storage：全新建表/旧库按版本序列迁移）。"""
         from src.memory import migration
 
         assert self._engine is not None
         with self._engine.begin() as connection:
             connection.execute(text("PRAGMA journal_mode=WAL"))
             connection.execute(text("PRAGMA journal_size_limit=524288"))
-            current = connection.exec_driver_sql("PRAGMA user_version").scalar() or 0
-            migrate_to(
+            connection.execute(text("DROP TABLE IF EXISTS completed_tasks"))
+            initialize_storage(
                 connection,
-                current=current,
-                target=migration.TARGET_VERSION,
+                metadata=_Base.metadata,
                 steps=migration.STEPS,
-                set_version=lambda c, version: c.exec_driver_sql(f"PRAGMA user_version = {version}"),
+                target=migration.TARGET_VERSION,
             )
 
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:

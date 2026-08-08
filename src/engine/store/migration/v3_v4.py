@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._execute import execute_script
+from src.utils.migration import execute_script
 
 _SQL = """
 ALTER TABLE tasks ADD COLUMN audience_ref TEXT NOT NULL DEFAULT '';

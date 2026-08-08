@@ -53,31 +53,38 @@
 ### 4. ops/store.py 重写为 ORM
 
 - `panel.sqlite3` 两表（`sessions/attachments`）改为 ORM 模型；
-  `PRAGMA user_version` 迁移语义（Schema v1、拒绝不支持版本）不变，
+  `schema_meta` 版本号语义（Schema v1、拒绝不支持版本）不变，
   Token.txt 原子创建逻辑不变。
 - 共享连接改为每事务独立 Session（FastAPI 线程池下更安全）；
   `create_session/verify_session/delete_session/add_attachment/
   get_attachment/close` 公共方法签名不变。
 
-### 5. 版本化迁移框架（utils/migration + 各存储 migration 包）
+### 5. 版本化迁移框架（utils/migration：三存储统一的初始化和迁移体系）
 
-- 新增 `src/utils/migration.py`：`migrate_to(connection, *, current, target,
-  steps, set_version)` —— 从当前版本按序执行版本迁移步骤直到目标版本，
-  每步后推进版本号；`current > target`（库比代码新）与缺失步骤均拒绝，
-  防止静默漏迁移。
-- 每个版本间隔一个独立步骤文件（`v0_v1.py`、`v1_v2.py`…），在各存储的
+- `src/utils/migration.py` 是三个存储（运行态、记忆、面板）唯一共享的
+  初始化和迁移入口：
+  - `migrate_to(connection, *, current, target, steps, set_version)` ——
+    从当前版本按序执行版本迁移步骤直到目标版本，每步后推进版本号；
+    `current > target`（库比代码新）与缺失步骤均拒绝，防止静默漏迁移；
+  - `read_version`/`write_version` —— 版本号统一存于 `schema_meta` 表
+    （缺失表 = v0 全新库；RFC 0210 契约推广到全部存储）；
+  - `initialize_storage(connection, *, metadata, steps, target)` —— 统一
+    初始化入口：v0 全新库由 ORM `metadata.create_all` 建当前 Schema 并
+    直达目标版本（不重放历史步骤），已有库按版本序列迁移。
+- 每个版本间隔一个独立步骤文件（`v1_v2.py`、`v2_v3.py`…），在各存储的
   `migration/` 子包中以 `STEPS: dict[int, MigrationStep]` +
-  `TARGET_VERSION` 汇总，全部存储统一实装：
-  - `ops/migration/`：面板存储，`user_version` 版本号，v0→v1 建表（v1 现状）；
-  - `src/memory/migration/`：记忆存储，`user_version` 版本号，v0→v1 建表
-    并清理遗留表（v1 现状）；
-  - `src/engine/store/migration/`：运行态存储，`schema_meta` 版本号（RFC 0210
-    契约）；v1–v8 迁移步骤按历史演化档案重建并全部注册（RFC 0210 §3 撤销
-    "不迁移旧库"政策，自即日起数据库必须考虑迁移），旧库启动时在单事务中
-    按序升级到 v9，任一版本步骤失败整体回滚；代码路径只访问 v9 形状，不兼容
-    旧版本列。全新库（v0，无 `schema_meta` 表）不注册步骤，由 `v0_current.py`
-    直接建当前 Schema 并写入目标版本（RFC 0210：全新库出生即目标版本，
-    不重放历史）。
+  `TARGET_VERSION` 汇总；`STEPS` 只承载真实历史间隔，全新库不经步骤：
+  - `ops/migration/`：面板存储，v1 即初始 schema（`sessions/attachments`），
+    无历史步骤，`STEPS` 为空；
+  - `src/memory/migration/`：记忆存储，v1 即初始 schema 四表，无历史步骤，
+    `STEPS` 为空（启动时额外清理遗留 `completed_tasks` 表）；
+  - `src/engine/store/migration/`：运行态存储，v1–v8 迁移步骤按历史演化
+    档案重建并全部注册（RFC 0210 §3 撤销"不迁移旧库"政策，自即日起数据库
+    必须考虑迁移），旧库启动时在单事务中按序升级到 v9，任一版本步骤失败
+    整体回滚；代码路径只访问 v9 形状，不兼容旧版本列。
+- 三个存储的初始化路径同构：`initialize()`/`_migrate()` 只做连接级 PRAGMA
+  与存储特有动作（engine 的崩溃恢复、memory 的遗留表清理），版本检查、
+  建表与迁移全部委托 `initialize_storage`。
 - 未来 Schema 演进：实现对应 `vN_vN+1.py`、注册并提升 `TARGET_VERSION`，
   启动时从当前版本一路迁移到目标版本。
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._execute import execute_script
+from src.utils.migration import execute_script
 
 _SQL = """
 ALTER TABLE activities DROP COLUMN lease_until;
