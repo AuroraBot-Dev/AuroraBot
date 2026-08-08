@@ -22,6 +22,7 @@ RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、�
 16. [0215 AI 包外部接口](0215-ai-external-surface.md) - get_response 脱壳输出、词嵌入角色、模态查询、费用统计、导出 OpenAI client
 17. [0216 记忆引擎](0216-memory-engine.md) - 窗口+LLM 概要（短期）、mem0 长期记忆、MemoryStore 契约扩展
 18. [0217 存储实现迁移](0217-storage-orm-migration.md) - SQLAlchemy 2.0 ORM 取代裸 sqlite3 手写 SQL，Schema v9 契约不变
+19. [0218 面板后端与统一操作体系](0218-panel-backend-and-operation-system.md) - ops 唯一后端路由、RESTful 资源树与命令同构、dashboard 退出平台
 
 ## 规范优先级
 
