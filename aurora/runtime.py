@@ -188,7 +188,8 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         autonomous_budget=configuration.engine.autonomous_budget,
         triage=configuration.engine.triage,
     )
-    composer = PromptComposer(PromptCatalog.from_config(configuration.prompts))
+    prompt_catalog = PromptCatalog.from_config(configuration.prompts)
+    composer = PromptComposer(prompt_catalog)
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     model_gateway = ModelGatewayService(configuration)
@@ -207,7 +208,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         tool_bindings=memory_bindings,
         model_gateway=model_gateway,
         memory=memory,
-        prompt_catalog=composer.catalog,
+        prompt_catalog=prompt_catalog,
     )
 
 
@@ -307,9 +308,16 @@ async def _run_platform_tasks(
     tasks.update(task for task in (console_task,) if task is not None)
 
     panel_task: asyncio.Task[None] | None = None
+    panel_background: asyncio.Task[None] | None = None
     if panel_server is not None:
         panel_task = asyncio.create_task(panel_server.serve(), name="aurora-panel-server")
         tasks.add(panel_task)
+        if runtime.configuration.runtime.panel.open_browser:
+            panel_background = asyncio.create_task(
+                _open_browser_when_ready(panel_server, runtime.configuration.runtime.panel, stop),
+                name="aurora-panel-browser",
+            )
+            tasks.add(panel_background)
     stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
     tasks.add(stop_task)
 
@@ -319,11 +327,16 @@ async def _run_platform_tasks(
     finally:
         stop.set()
         await _cancel_task(stop_task)
+        panel_stop = (
+            (_stop_server(panel_server, panel_task),) if panel_server is not None and panel_task is not None else ()
+        )
+        panel_background_stop = (_await_task_exit(panel_background),) if panel_background is not None else ()
         await asyncio.gather(
             *(_stop_server(servers[name], task) for name, task in server_tasks.items()),
             *(_await_task_exit(task) for task in platform_tasks.values()),
             *(_await_task_exit(task) for task in (console_task,) if task is not None),
-            *((_stop_server(panel_server, panel_task),) if panel_task is not None else ()),
+            *panel_stop,
+            *panel_background_stop,
             _await_task_exit(runtime_task),
         )
 
@@ -434,7 +447,7 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
 # -- 面板服务器 --------------------------------------------------------
 
 
-def _panel_server(runtime: AuroraRuntime) -> uvicorn.Server | None:
+def _panel_server(runtime: AuroraRuntime) -> SignalSafeServer | None:
     """创建独立于 Platform 集合的面板后端服务器（RFC 0218 §1）。"""
     configuration = runtime.configuration
     panel = configuration.runtime.panel
@@ -447,7 +460,7 @@ def _panel_server(runtime: AuroraRuntime) -> uvicorn.Server | None:
         profile=configuration.runtime.profile,
         store=store,
     )
-    server = SignalSafeServer(
+    return SignalSafeServer(
         uvicorn.Config(
             create_panel_app(context),
             host=panel.host,
@@ -457,14 +470,9 @@ def _panel_server(runtime: AuroraRuntime) -> uvicorn.Server | None:
             access_log=False,
         )
     )
-    if panel.open_browser:
-        server.background = lambda stop: _open_browser_when_ready(server, panel, stop)
-    return server
 
 
-async def _open_browser_when_ready(
-    server: "SignalSafeServer", configuration: PanelConfig, stop: asyncio.Event
-) -> None:
+async def _open_browser_when_ready(server: "PlatformServer", configuration: PanelConfig, stop: asyncio.Event) -> None:
     """服务器就绪后打开面板，并存活至统一停止。"""
     while not server.started:
         if server.should_exit or stop.is_set():

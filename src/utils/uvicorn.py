@@ -27,7 +27,7 @@ class LifespanSafeApp:
     def __init__(self, app: Any) -> None:
         self._app = app
 
-    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
             with contextlib.suppress(asyncio.CancelledError):
                 await self._app(scope, receive, send)

@@ -23,8 +23,8 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert configuration.storage.mcp == ROOT / "data" / "platform" / "mcp"
     assert configuration.storage.apps == ROOT / "data" / "platform" / "mcp" / "apps"
     assert configuration.runtime.panel.host == "127.0.0.1"
-    assert configuration.runtime.panel.port == 8765
-    assert configuration.runtime.panel.max_upload_bytes == 67108864
+    assert configuration.runtime.panel.port == 8765  # noqa: PLR2004
+    assert configuration.runtime.panel.max_upload_bytes == 67108864  # noqa: PLR2004
     assert configuration.logging_dir == ROOT / "logs"
 
 

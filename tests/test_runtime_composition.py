@@ -27,7 +27,7 @@ def _preference(enabled: frozenset[str]) -> PlatformPreference:
     return PlatformPreference(mcp=McpPreference(enabled="mcp" in enabled, terminal_logs=False))
 
 
-def _panel_config(enabled: bool = False) -> object:
+def _panel_config(*, enabled: bool = False) -> object:
     return SimpleNamespace(enabled=enabled, host="127.0.0.1", port=8765, open_browser=False)
 
 
@@ -238,7 +238,8 @@ def test_platform_server_and_panel_stop_gracefully() -> None:
     """server 通过 should_exit、后台任务通过 stop 事件优雅退出。"""
     events: list[str] = []
     stop = asyncio.Event()
-    runtime = _Runtime(SimpleNamespace(), events)
+    configuration = SimpleNamespace(runtime=SimpleNamespace(panel=_panel_config(enabled=True)))
+    runtime = _Runtime(configuration, events)
 
     class FakeServer:
         def __init__(self) -> None:

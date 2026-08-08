@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.contracts import OperationResult, OperationScope, OperationSpec, ParameterSpec
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 _OPERATIONS: dict[str, OperationSpec] = {}
 _ALIASES: dict[str, str] = {}

@@ -6,7 +6,6 @@ ops 是系统唯一后端路由：单端口单认证；业务输出统一为 Ope
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import secrets
 from dataclasses import dataclass
@@ -14,7 +13,17 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -22,11 +31,11 @@ from pydantic import BaseModel
 from ops.parser import coerce_value
 from ops.registry import catalog_entries
 from ops.router import OperationRouter
-from ops.store import PanelStore
 from src.contracts import OperationResult, PanelRuntime
 from src.utils import LifespanSafeApp
 
 if TYPE_CHECKING:
+    from ops.store import PanelStore
     from src.contracts.configuration import PanelConfig
 
 _STREAM_POLL_SECONDS = 0.2
@@ -175,7 +184,8 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         if spec is None:
             code = _Msg.METHOD_NOT_ALLOWED if method_mismatch else _Msg.NOT_FOUND
             status = 405 if method_mismatch else 404
-            return JSONResponse(OperationResult.failure("NOT_FOUND" if not method_mismatch else "METHOD_NOT_ALLOWED", code).to_dict(), status_code=status)
+            code_name = "NOT_FOUND" if not method_mismatch else "METHOD_NOT_ALLOWED"
+            return JSONResponse(OperationResult.failure(code_name, code).to_dict(), status_code=status)
         try:
             params: dict[str, Any] = dict(path_params or {})
             for key, value in query.items():
@@ -191,7 +201,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         request: Request,
         _user: str = Depends(current_session),
     ) -> JSONResponse:
-        return await _dispatch("GET", rest, {key: value for key, value in request.query_params.items()})
+        return await _dispatch("GET", rest, dict(request.query_params))
 
     @app.post("/api/ops/{rest:path}")
     async def ops_post(

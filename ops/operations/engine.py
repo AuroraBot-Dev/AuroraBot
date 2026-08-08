@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from ops.registry import operation
 from src.contracts import (
     AmpValidationError,
     OperationResult,
-    OperationScope,
     ParameterKind,
     ParameterLocation,
     ParameterSpec,
 )
-
-from ops.registry import operation
 
 _MAX_PUMP_TURNS = 100
 

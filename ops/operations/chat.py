@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.contracts import InputOrigin, OperationResult, ParameterLocation, ParameterSpec, RuntimeInput
-
 from ops.registry import operation
+from src.contracts import InputOrigin, OperationResult, ParameterLocation, ParameterSpec, RuntimeInput
 
 _PANEL_SESSION_ID = "panel:owner"
 
@@ -74,6 +73,4 @@ async def messages_send(context: Any, params: dict[str, Any]) -> OperationResult
 )
 async def activities_stream(context: Any, params: dict[str, Any]) -> OperationResult:
     page = context.runtime.engine.output_stream(params.get("cursor", 0), limit=params.get("limit", 64))
-    return OperationResult.success(
-        {"items": [item.__dict__ for item in page.items], "next_cursor": page.next_cursor}
-    )
+    return OperationResult.success({"items": [item.__dict__ for item in page.items], "next_cursor": page.next_cursor})

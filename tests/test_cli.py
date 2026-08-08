@@ -32,11 +32,10 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
     ("flags", "expected_platforms", "expected_headless"),
     (
         (["--headless"], None, True),
-        (["--platform", "dashboard"], frozenset({"dashboard"}), False),
         (["--platform", "mcp"], frozenset({"mcp"}), False),
-        (["--platform", "dashboard", "--platform", "mcp"], frozenset({"dashboard", "mcp"}), False),
-        (["--headless", "--platform", "dashboard"], frozenset({"dashboard"}), True),
-        (["--headless", "--platform", "dashboard", "--platform", "mcp"], frozenset({"dashboard", "mcp"}), True),
+        (["--platform", "mcp", "--platform", "mcp"], frozenset({"mcp"}), False),
+        (["--headless", "--platform", "mcp"], frozenset({"mcp"}), True),
+        (["--headless", "--platform", "mcp"], frozenset({"mcp"}), True),
     ),
 )
 def test_cli_passes_each_exact_platform_set_once(

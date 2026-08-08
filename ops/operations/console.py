@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.contracts import OperationResult, OperationScope, ParameterLocation, ParameterSpec
-
-from src.utils import configure_console_logging, console_logging_status
-
 from ops.registry import operation
+from src.contracts import OperationResult, OperationScope, ParameterLocation, ParameterSpec
+from src.utils import configure_console_logging, console_logging_status
 
 
 @operation(

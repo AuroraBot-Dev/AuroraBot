@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.contracts import OperationResult
-
 from ops.registry import operation
+from src.contracts import OperationResult
 
 
 @operation("GET", "/ai/cost", name="ai.cost", aliases=("/ai",), summary="模型费用分类统计")

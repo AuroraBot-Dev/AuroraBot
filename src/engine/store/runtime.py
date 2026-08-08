@@ -129,7 +129,9 @@ class StoreRuntimeMixin(RuntimeStoreBase):
         rowid_column = literal_column("causal_events.rowid")
         statement = select(CausalEventRow, rowid_column).order_by(rowid_column).where(rowid_column > after_id)
         if session_id is not None:
-            statement = statement.where(CausalEventRow.task_id.in_(select(TaskRow.task_id).where(TaskRow.session_id == session_id)))
+            statement = statement.where(
+                CausalEventRow.task_id.in_(select(TaskRow.task_id).where(TaskRow.session_id == session_id))
+            )
         if task_id is not None:
             statement = statement.where(CausalEventRow.task_id == task_id)
         if event_type is not None:

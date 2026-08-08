@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 from ops.router import OperationRouter
 from src.contracts import (
     CommandResult,
-    InputOrigin,
     OperationResult,
     PanelRuntime,
     RuntimeInput,
@@ -24,7 +23,6 @@ if TYPE_CHECKING:
 
     from src.contracts.configuration import AuroraConfig
     from src.contracts.event import OutputStreamPage
-    from src.contracts.operation import OperationContext
     from src.contracts.tool import ToolExecutorBinding
     from src.engine.runtime import AgentEngine
 
@@ -50,7 +48,10 @@ class PanelConfigQuery:
                 "max_upload_bytes": config.runtime.panel.max_upload_bytes,
                 "allowed_origins": list(config.runtime.panel.allowed_origins),
             },
-            "console": {"enabled": config.runtime.console.enabled, "terminal_logs": config.runtime.console.terminal_logs},
+            "console": {
+                "enabled": config.runtime.console.enabled,
+                "terminal_logs": config.runtime.console.terminal_logs,
+            },
             "engine": {
                 "workspace": str(config.engine.workspace),
                 "interactive_budget": {

@@ -437,7 +437,11 @@ class AgentEngine:
         limit: int = 64,
     ) -> list[dict[str, Any]]:
         """因果事件流查询（RFC 0218 观察操作）。"""
-        return list(self.store.query_events(session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit))
+        return list(
+            self.store.query_events(
+                session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit
+            )
+        )
 
     def session_export(self, session_id: str) -> dict[str, Any] | None:
         """会话导出：因果事件与模型输出投影（RFC 0210/0218）。"""

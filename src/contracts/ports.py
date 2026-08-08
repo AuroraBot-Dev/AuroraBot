@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.contracts.configuration import AuroraConfig
     from src.contracts.event import CommandResult, OutputStreamPage, RuntimeInput
 
 
@@ -65,7 +64,7 @@ class EngineQueryPort(Protocol):
 class MemoryQueryPort(Protocol):
     """记忆引擎（RFC 0216）的只读查询端口。"""
 
-    def history(self, *, scope: str | None = None, limit: int = 32) -> list[dict[str, Any]]: ...
+    def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]: ...
 
     def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]: ...
 

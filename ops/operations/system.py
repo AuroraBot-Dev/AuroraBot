@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.contracts import OperationResult
-
 from ops.registry import catalog_entries, operation
+from src.contracts import OperationResult
 
 
 @operation("GET", "/", name="system.info", aliases=("/help", "/h"), summary="操作目录自描述")

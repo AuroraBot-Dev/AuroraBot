@@ -1,22 +1,21 @@
+# ruff: noqa: ARG002, PLR2004
 """操作体系：RESTful 资源树与文本命令同构（RFC 0218 §2/§3）。"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from ops.router import OperationRouter
 from ops.registry import catalog_entries, iter_operations
+from ops.router import OperationRouter
 from src.contracts import (
     CommandControl,
     InputOrigin,
     OperationResult,
+    OperationSpec,
     PanelRuntime,
     RuntimeInput,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class _FakeEngine:
@@ -74,7 +73,12 @@ class _FakeEngine:
 
 class _FakeMemory:
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
-        return {"scope": scope, "window": [{"role": "user", "content": "hi", "at": "now"}], "summaries": [], "facts": []}
+        return {
+            "scope": scope,
+            "window": [{"role": "user", "content": "hi", "at": "now"}],
+            "summaries": [],
+            "facts": [],
+        }
 
     def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
         return [{"kind": "fact", "content": query, "hits": 1}]
@@ -114,16 +118,19 @@ def _runtime() -> PanelRuntime:
     )
 
 
-def _specs() -> dict[str, Any]:
+def _specs() -> dict[tuple[str, str], OperationSpec]:
     return {(spec.method, spec.path): spec for spec in iter_operations()}
 
 
-async def _execute(router: OperationRouter, method: str, path: str, params: dict[str, Any]) -> OperationResult:
+async def _execute(
+    router: OperationRouter, method: str, path: str, params: dict[str, Any]
+) -> tuple[OperationResult, dict[str, Any]]:
     spec, path_params, mismatch = router.resolve(method, path)
     assert spec is not None and not mismatch
     merged = dict(path_params or {})
     merged.update(params)
-    return await router.execute(spec, merged)
+    result = await router.execute(spec, merged)
+    return result, result.data or {}
 
 
 def test_catalog_self_describes_resources() -> None:
@@ -148,36 +155,52 @@ def test_text_and_rest_share_parameters_and_envelope() -> None:
         engine = runtime.engine
 
         # REST 入口：路径参数
-        rest = await _execute(router, "GET", "/engine/tasks/t-1", {})
-        assert rest.ok and rest.data == engine.task("t-1")
+        rest, rest_data = await _execute(router, "GET", "/engine/tasks/t-1", {})
+        assert rest.ok and rest_data == engine.task("t-1")
 
         # 文本入口：同一操作的 alias + positional 参数
         text = await router.route_text(
-            RuntimeInput(text="/task t-1", origin=InputOrigin.CONSOLE, session_id="s", source_app="t", source_instance="i")
+            RuntimeInput(
+                text="/task t-1",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
         )
         assert text.ok and text.data == engine.task("t-1")
 
         # 文本入口：完整路径形态
         full = await router.route_text(
             RuntimeInput(
-                text="/engine/tasks/t-1", origin=InputOrigin.CONSOLE, session_id="s", source_app="t", source_instance="i"
+                text="/engine/tasks/t-1",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
             )
         )
         assert full.ok and full.data == engine.task("t-1")
 
         # REST：GET query 参数（int 转换）
-        tasks = await _execute(router, "GET", "/engine/tasks", {"limit": "10"})
-        assert tasks.ok and isinstance(tasks.data["count"], int)
+        tasks, tasks_data = await _execute(router, "GET", "/engine/tasks", {"limit": "10"})
+        assert tasks.ok and isinstance(tasks_data["count"], int)
 
         # 文本：--key value 与 REST query 同构
         text_tasks = await router.route_text(
-            RuntimeInput(text="/engine/tasks --limit 10", origin=InputOrigin.CONSOLE, session_id="s", source_app="t", source_instance="i")
+            RuntimeInput(
+                text="/engine/tasks --limit 10",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
         )
-        assert text_tasks.ok and text_tasks.data == tasks.data
+        assert text_tasks.ok and text_tasks.data == tasks_data
 
         # POST：JSON body 与 REST 同构
-        posted = await _execute(router, "POST", "/messages", {"text": "hello"})
-        assert posted.ok and posted.data["message_id"].startswith("conv:")
+        posted, posted_data = await _execute(router, "POST", "/messages", {"text": "hello"})
+        assert posted.ok and posted_data["message_id"].startswith("conv:")
 
     asyncio.run(scenario())
 
@@ -204,7 +227,13 @@ def test_parameter_validation_and_error_codes() -> None:
         assert not bad_type.ok and bad_type.data is None
 
         not_found = await router.route_text(
-            RuntimeInput(text="/unknown-thing", origin=InputOrigin.CONSOLE, session_id="s", source_app="t", source_instance="i")
+            RuntimeInput(
+                text="/unknown-thing",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
         )
         assert not not_found.ok and not_found.data is None
 
@@ -220,7 +249,6 @@ def test_parameter_validation_and_error_codes() -> None:
 def test_control_semantics_clear_and_shutdown() -> None:
     async def scenario() -> None:
         runtime = _runtime()
-        engine = runtime.engine
         router = OperationRouter(runtime)
 
         cleared = await router.route_text(
@@ -240,31 +268,31 @@ def test_domain_queries_memory_ai_config_prompt() -> None:
     async def scenario() -> None:
         router = OperationRouter(_runtime())
 
-        memory = await _execute(router, "GET", "/memory/history", {"scope": "s1"})
-        assert memory.ok and memory.data["window"][0]["content"] == "hi"
+        memory, memory_data = await _execute(router, "GET", "/memory/history", {"scope": "s1"})
+        assert memory.ok and memory_data["window"][0]["content"] == "hi"
 
-        search = await _execute(router, "GET", "/memory/search", {"query": "fact"})
-        assert search.ok and search.data["count"] == 1
+        search, search_data = await _execute(router, "GET", "/memory/search", {"query": "fact"})
+        assert search.ok and search_data["count"] == 1
 
-        cost = await _execute(router, "GET", "/ai/cost", {})
-        assert cost.ok and cost.data["total_cost"] == 1.5
+        cost, cost_data = await _execute(router, "GET", "/ai/cost", {})
+        assert cost.ok and cost_data["total_cost"] == 1.5
 
-        roles = await _execute(router, "GET", "/ai/roles", {})
-        assert roles.ok and roles.data["count"] == 1
+        roles, roles_data = await _execute(router, "GET", "/ai/roles", {})
+        assert roles.ok and roles_data["count"] == 1
 
-        profiles = await _execute(router, "GET", "/agents/profiles", {})
-        assert profiles.ok and profiles.data["profiles"][0]["id"] == "root"
+        profiles, profiles_data = await _execute(router, "GET", "/agents/profiles", {})
+        assert profiles.ok and profiles_data["profiles"][0]["id"] == "root"
 
-        prompt = await _execute(router, "GET", "/prompts/root", {})
-        assert prompt.ok and prompt.data["text"] == "prompt:root"
+        prompt, prompt_data = await _execute(router, "GET", "/prompts/root", {})
+        assert prompt.ok and prompt_data["text"] == "prompt:root"
 
-        missing_prompt = await _execute(router, "GET", "/prompts/missing", {})
+        missing_prompt, _ = await _execute(router, "GET", "/prompts/missing", {})
         assert not missing_prompt.ok and missing_prompt.code == "NOT_FOUND"
 
-        export = await _execute(router, "GET", "/engine/sessions/s1/export", {})
+        export, _ = await _execute(router, "GET", "/engine/sessions/s1/export", {})
         assert not export.ok and export.code == "NOT_FOUND"
 
-        events = await _execute(router, "GET", "/engine/events", {})
-        assert events.ok and events.data["count"] == 0
+        events, events_data = await _execute(router, "GET", "/engine/events", {})
+        assert events.ok and events_data["count"] == 0
 
     asyncio.run(scenario())

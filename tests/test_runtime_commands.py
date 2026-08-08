@@ -26,6 +26,9 @@ def _input(text: str) -> RuntimeInput:
     )
 
 
+# ruff: noqa: PLR0915
+
+
 def test_runtime_router_separates_commands_from_conversation(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
@@ -45,7 +48,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
                 source_app="tests.console",
                 source_instance="commands",
             ).to_dict()
-            event = await runtime.route_input(_input(f"/event --amp {json.dumps(amp)}"))
+            event = await runtime.route_input(_input(f"/event --amp '{json.dumps(amp)}'"))
             missing_task = await runtime.route_input(_input("/task missing"))
             missing_agent = await runtime.route_input(_input("/agent missing"))
             bare = await runtime.route_input(_input("hello world"))
@@ -55,7 +58,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             quitting = await runtime.route_input(_input("/q"))
 
             assert status.ok and status.data is not None
-            assert help_result.ok and "engine.tasks" in (help_result.text or "")
+            assert help_result.ok and "GET  /engine/tasks" in (help_result.text or "")
             assert "/reload" not in (help_result.text or "")
             assert not unknown.ok
             assert not invalid.ok and "用法" in (invalid.text or "")

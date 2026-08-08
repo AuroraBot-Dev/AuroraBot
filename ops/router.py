@@ -11,6 +11,8 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
+from ops.parser import CommandParseError, match_path, parse_text, split_text, usage, validate_params
+from ops.registry import find_by_alias, iter_operations
 from src.contracts import (
     CommandControl,
     CommandResult,
@@ -19,9 +21,6 @@ from src.contracts import (
     OperationSpec,
     RuntimeInput,
 )
-
-from ops.parser import CommandParseError, match_path, parse_text, split_text, usage, validate_params
-from ops.registry import find_by_alias, iter_operations
 
 if TYPE_CHECKING:
     from src.contracts.ports import PanelRuntime
@@ -66,7 +65,12 @@ class OperationRouter:
         except CommandParseError as error:
             return OperationResult.failure("PARSE_ERROR", f"{error}\n用法: {usage(spec)}")
         assert spec.handler is not None
-        return await spec.handler(OperationContext(self._runtime, None), normalized)
+        result = await spec.handler(OperationContext(self._runtime, None), normalized)
+        if result.code == "PARSE_ERROR" and result.message is not None and "用法" not in result.message:
+            return OperationResult(
+                ok=False, code="PARSE_ERROR", message=f"{result.message}\n用法: {usage(spec)}", data=None
+            )
+        return result
 
     async def route_text(self, request: RuntimeInput) -> CommandResult:
         """文本入口：斜杠命令走操作解析，否则走对话通道。
@@ -78,7 +82,7 @@ class OperationRouter:
             return await self._conversation(request, raw)
         return await self._command(request, raw)
 
-    async def _command(self, request: RuntimeInput, raw: str) -> CommandResult:
+    async def _command(self, request: RuntimeInput, raw: str) -> CommandResult:  # noqa: ARG002 - 预留请求上下文
         try:
             tokens = split_text(raw)
         except CommandParseError as error:
@@ -130,11 +134,13 @@ def _result_to_command(result: OperationResult) -> CommandResult:
         control = CommandControl.SHUTDOWN_PROCESS
     if result.data is not None and result.data.get("control") == "clear_console":
         control = CommandControl.CLEAR_CONSOLE
+    message_id = result.data.get("message_id") if isinstance(result.data, dict) else None
     return CommandResult(
         ok=result.ok,
         text=result.message if result.message is not None else _render(result),
         data=result.data,
-        publish_reply=True,
+        message_id=str(message_id) if message_id is not None else None,
+        publish_reply=message_id is None,
         control=control,
     )
 
@@ -143,6 +149,10 @@ def _render(result: OperationResult) -> str | None:
     """把成功结果渲染为 console 可读文本（data 的 JSON 摘要）。"""
     if result.data is None or not result.data:
         return None
+    operations = result.data.get("operations")
+    if isinstance(operations, list):
+        lines = [f"{op['method']:4} {op['path']:<40} {op['summary']}" for op in operations]
+        return "\n".join(lines)
     return "\n".join(f"{key}: {_compact(value)}" for key, value in result.data.items())
 
 

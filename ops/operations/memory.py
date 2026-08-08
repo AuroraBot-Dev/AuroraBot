@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.contracts import OperationResult, ParameterLocation, ParameterSpec
-
 from ops.registry import operation
+from src.contracts import OperationResult, ParameterLocation, ParameterSpec
 
 
 @operation(

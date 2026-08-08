@@ -6,14 +6,16 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
 
 _SCHEMA_VERSION = 1
 _TOKEN_BYTES = 32
@@ -53,8 +55,8 @@ class PanelStore:
         token = secrets.token_urlsafe(_TOKEN_BYTES)
         temporary = self._token_path.with_suffix(".tmp")
         temporary.write_text(token + "\n", encoding="utf-8")
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, self._token_path)
+        temporary.chmod(0o600)
+        temporary.replace(self._token_path)
         return token
 
     def _migrate(self) -> None:

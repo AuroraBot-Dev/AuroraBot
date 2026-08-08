@@ -346,11 +346,7 @@ def _parse_panel(raw: dict[str, Any]) -> PanelConfig:
     session_ttl_seconds = raw["session_ttl_seconds"]
     if not isinstance(max_upload_bytes, int) or isinstance(max_upload_bytes, bool) or max_upload_bytes < 0:
         raise ConfigurationError(_Msg.PANEL_UPLOAD_NONNEGATIVE)
-    if (
-        not isinstance(session_ttl_seconds, int)
-        or isinstance(session_ttl_seconds, bool)
-        or session_ttl_seconds <= 0
-    ):
+    if not isinstance(session_ttl_seconds, int) or isinstance(session_ttl_seconds, bool) or session_ttl_seconds <= 0:
         raise ConfigurationError(_Msg.PANEL_TTL_POSITIVE)
     origins = raw["allowed_origins"]
     if not isinstance(origins, list) or not origins or not all(isinstance(item, str) and item for item in origins):

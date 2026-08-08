@@ -141,10 +141,10 @@ class MemoryService:
 
         self._long_term = LongTermMemory(memory_dir) if memory_dir is not None else None
 
-    def history(self, *, scope: str | None = None, limit: int = 32) -> list[dict[str, Any]]:
+    def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
         """只读记忆历史（RFC 0218 观察）：窗口消息 + 概要 + 长期事实。"""
         if self._engine is None:
-            return []
+            return {"scope": scope, "window": [], "summaries": [], "facts": []}
         with self._session() as session:
             window_query = select(MemoryMessageRow).order_by(MemoryMessageRow.seq.desc()).limit(limit)
             if scope is not None:
@@ -164,8 +164,18 @@ class MemoryService:
                 {"scope": row.scope, "role": row.role, "content": row.content, "at": row.at}
                 for row in reversed(messages)
             ],
-            "summaries": [{"scope": row.scope, "summary": row.summary, "updated_at": row.updated_at} for row in summaries],
-            "facts": [{"scope": row.scope, "content": row.content, "source_task_id": row.source_task_id, "created_at": row.created_at} for row in facts],
+            "summaries": [
+                {"scope": row.scope, "summary": row.summary, "updated_at": row.updated_at} for row in summaries
+            ],
+            "facts": [
+                {
+                    "scope": row.scope,
+                    "content": row.content,
+                    "source_task_id": row.source_task_id,
+                    "created_at": row.created_at,
+                }
+                for row in facts
+            ],
         }
 
     def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
@@ -220,7 +230,8 @@ class MemoryService:
             window_messages = session.scalar(select(func.count()).select_from(MemoryMessageRow)) or 0
             summaries = session.scalar(select(func.count()).select_from(SessionMemoryRow)) or 0
             facts = session.scalar(select(func.count()).select_from(DurableFactRow)) or 0
-            scopes = session.execute(select(MemoryMessageRow.scope).distinct().order_by(MemoryMessageRow.scope)).scalars().all()
+            scope_statement = select(MemoryMessageRow.scope).distinct().order_by(MemoryMessageRow.scope)
+            scopes = session.execute(scope_statement).scalars().all()
         return {
             "enabled": True,
             "window_messages": window_messages,

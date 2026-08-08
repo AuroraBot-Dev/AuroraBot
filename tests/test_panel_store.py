@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from ops.store import PanelStore
 
@@ -17,7 +19,7 @@ def test_bootstrap_token_created_once_with_restricted_mode(tmp_path: Path) -> No
     token_path = data_dir / "Token.txt"
     assert token_path.exists()
     assert token_path.read_text(encoding="utf-8").strip() == token
-    assert os.stat(token_path).st_mode & 0o077 == 0
+    assert token_path.stat().st_mode & 0o077 == 0
 
     store.close()
 
@@ -52,6 +54,8 @@ def test_attachment_index_roundtrip(tmp_path: Path) -> None:
     assert record["attachment_id"]
     fetched = store.get_attachment(record["attachment_id"])
     assert fetched is not None
-    assert fetched["name"] == "a.txt" and fetched["mime"] == "text/plain" and fetched["size"] == 3
+    assert fetched["name"] == "a.txt"
+    assert fetched["mime"] == "text/plain"
+    assert fetched["size"] == 3  # noqa: PLR2004
     assert store.get_attachment("missing") is None
     store.close()

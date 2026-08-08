@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from ops.api import PanelAppContext, create_panel_app
 from ops.store import PanelStore
 from src.contracts import PanelRuntime
-
 from tests.test_operations import _FakeAi, _FakeConfig, _FakeEngine, _FakeMemory
 
 
@@ -55,12 +54,16 @@ def _login(client: TestClient, token: str) -> str:
 
 
 def test_healthz_is_unauthenticated() -> None:
-    with TestClient(create_panel_app(PanelAppContext(  # type: ignore[arg-type]
-        ports=PanelRuntime(engine=_FakeEngine(), memory=_FakeMemory(), ai=_FakeAi(), config=_FakeConfig()),
-        panel=_panel_config(),
-        profile="test",
-        store=PanelStore(Path("/tmp/opencode/panel-health")),
-    ))) as client:
+    with TestClient(
+        create_panel_app(
+            PanelAppContext(  # type: ignore[arg-type]
+                ports=PanelRuntime(engine=_FakeEngine(), memory=_FakeMemory(), ai=_FakeAi(), config=_FakeConfig()),
+                panel=_panel_config(),
+                profile="test",
+                store=PanelStore(Path("/tmp/opencode/panel-health")),
+            )
+        )
+    ) as client:
         response = client.get("/healthz")
         assert response.status_code == 200
         assert response.json()["profile"] == "test"

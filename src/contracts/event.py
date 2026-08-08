@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.contracts.ports import RuntimeCommandPort
+    from src.contracts.ports import EngineQueryPort
 
 
 class InputOrigin(StrEnum):
@@ -68,7 +68,7 @@ class CommandResult:
 class CommandContext:
     """命令处理器使用的运行时和请求上下文。"""
 
-    runtime: RuntimeCommandPort
+    runtime: EngineQueryPort
     request: RuntimeInput
 
 

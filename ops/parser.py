@@ -37,7 +37,7 @@ def match_path(tokens: tuple[str, ...], spec: OperationSpec) -> dict[str, str] |
     if len(raw_segments) != len(spec_segments):
         return None
     params: dict[str, str] = {}
-    for raw_segment, spec_segment in zip(raw_segments, spec_segments):
+    for raw_segment, spec_segment in zip(raw_segments, spec_segments, strict=True):
         if spec_segment.startswith("{") and spec_segment.endswith("}"):
             params[spec_segment[1:-1]] = raw_segment
         elif raw_segment != spec_segment:
@@ -139,5 +139,6 @@ def usage(spec: OperationSpec) -> str:
     for parameter in spec.parameters:
         required = "必填" if parameter.required else f"默认 {parameter.default}"
         location = {"path": "路径", "query": "查询", "body": "请求体"}[parameter.location]
-        pieces.append(f"  --{parameter.name} <{parameter.type}> ({location}，{required}){(' ' + parameter.help) if parameter.help else ''}")
+        suffix = f" {parameter.help}" if parameter.help else ""
+        pieces.append(f"  --{parameter.name} <{parameter.type}> ({location}，{required}){suffix}")
     return "\n".join(pieces)
