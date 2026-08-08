@@ -56,7 +56,7 @@ AuroraBot 是一个面向开发者的开源自主智能体框架。我们想做�
 
 ## 快速开始
 
-需要 Python 3.12、Git 和 [uv](https://docs.astral.sh/uv/)。当前推荐从源码运行。
+需要 Python 3.12（推荐，以上版本未经充分验证）、Git 和 [uv](https://docs.astral.sh/uv/)。当前推荐从源码运行。
 
 ```powershell
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git

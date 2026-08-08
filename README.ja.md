@@ -54,7 +54,7 @@ AuroraBot は、開発者向けのオープンソース自律エージェント�
 
 ## クイックスタート
 
-Python 3.12、Git、[uv](https://docs.astral.sh/uv/) が必要です。現在はソースからの実行を推奨します。
+Python 3.12（推奨。それ以上のバージョンは十分に検証されていません）、Git、[uv](https://docs.astral.sh/uv/) が必要です。現在はソースからの実行を推奨します。
 
 ```powershell
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git

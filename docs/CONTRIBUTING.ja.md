@@ -17,7 +17,7 @@ AuroraBot が探求するのは、単にモデルへ接続する方法だけで�
 
 ## 開発環境を準備する
 
-Python 3.12、Git、[uv](https://docs.astral.sh/uv/) が必要です。
+Python 3.12（推奨。それ以上のバージョンは十分に検証されていません）、Git、[uv](https://docs.astral.sh/uv/) が必要です。
 
 ```powershell
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git

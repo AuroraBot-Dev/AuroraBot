@@ -54,7 +54,7 @@ Models interpret and decide, but ordinary model text cannot directly change the 
 
 ## Quick start
 
-You need Python 3.12, Git, and [uv](https://docs.astral.sh/uv/). Running from source is currently recommended.
+You need Python 3.12 (recommended; higher versions are not fully verified), Git, and [uv](https://docs.astral.sh/uv/). Running from source is currently recommended.
 
 ```powershell
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git

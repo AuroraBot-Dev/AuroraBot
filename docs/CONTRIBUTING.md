@@ -16,7 +16,7 @@ AuroraBot 希望探索的不只是“如何接入一个模型”，而是一个 
 
 ## 准备开发环境
 
-需要 Python 3.12、Git 和 [uv](https://docs.astral.sh/uv/)。
+需要 Python 3.12（推荐，以上版本未经充分验证）、Git 和 [uv](https://docs.astral.sh/uv/)。
 
 ```powershell
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git

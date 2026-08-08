@@ -17,7 +17,7 @@ If you are unsure where to begin, open a Discussion or Issue describing the expe
 
 ## Prepare the development environment
 
-You need Python 3.12, Git, and [uv](https://docs.astral.sh/uv/).
+You need Python 3.12 (recommended; higher versions are not fully verified), Git, and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
