@@ -46,9 +46,19 @@ RFC 0200 确立了 Agent 中心热路径，但没有规定模型上下文和终�
 - SQLite 只保存活跃 Task、尚未完成的恢复状态和外部消息幂等墓碑。
 - 终态 Task 必须先原子写入 `archive/tasks/<task_id>.json`，再从 `tasks`、`agents`、`mailbox`、`activities` 和详细 `causal_events` 中清除。
 - 带 `external_message_id` 的因果记录在清除时压缩为无 Task 归属的墓碑，继续保证外部 AMP 和 Tool receipt 幂等。
-- `task_detail()` 和 `agent_detail()` 对已清除对象从 JSON 归档回读，保持 localhost 检查契约。
+- `task_detail()` 和 `agent_detail()` 对已清除对象从 JSON 归档回读，保持 ops 检查契约。
 - engine 使用增量 auto-vacuum、受限 WAL 和 checkpoint 回收已释放页；一次性 schema 迁移可以重建旧数据库以启用该策略。
 - models.dev 目录属于 `src.ai` 的共享能力缓存，不计入单 Task 归档；缓存实现使用 gzip 且只保留当前有效快照。
+
+### 存储层级与会话日志
+
+- 数据持久化路径镜像包层级：`src/engine → data/engine`、`src/platform/dashboard → data/platform/dashboard`、
+  `src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；
+  全部通过 `storage.toml` 声明，只允许声明过的祖先包含关系。
+- engine 新增追加式会话日志：`data/engine/sessions/<session_id>.jsonl`，每行一条 JSON 记录，
+  覆盖入站 AMP（`amp.in`）、Task 准入（`task.admitted`）与终态（`task.finished`），按 `session_id` 隔离。
+- 会话日志只追加、不回写，失败只记 warning，不参与热路径决策；SQLite 仍是运行态权威，
+  会话日志不承担任何恢复职责，热库清除规则不变。
 
 ## 结果
 

@@ -14,11 +14,11 @@
 - AMP 事件正文、SOUL 内容、用户内容、密钥和完整模型提示词默认不得写入 `INFO`。
 - 每一条与事件或效果相关的日志应包含稳定的记录 ID；不得只依赖自由文本关联。
 - `effect.requested`、`effect.succeeded` 与 `effect.failed` 的事实记录在 Kernel 工作区，不以日志作为唯一来源。
-- 模型计费、调用参数和原生响应的记录规则由 RFC 0005 定义。
+- 模型计费、调用参数和原生响应的记录规则由 AI 网关定义。
 - 项目代码统一通过 `src.utils.logging.get_logger()` 获取 logger；入口通过
   `configure_logging()` 应用 TOML 中的日志级别，不得另行调用 `logging.basicConfig()`。
 - `/log [on|off] [--level LEVEL]` 只控制当前进程的终端 handler；文件日志继续按 `aurora.toml` 级别记录，且运行时
-  调整不写回配置、不跨重启持久化。Console 启动默认来自 `platforms.toml` 的 `platform.console.terminal_logs`。
+  调整不写回配置、不跨重启持久化。Console 启动默认来自 `runtime.toml` 的 `runtime.console.terminal_logs`。
 - stdio MCP 子进程 stderr 通过父进程 logger 记录；`platform.mcp.terminal_logs` 可单独阻止这些诊断进入终端，
   但不影响文件日志。全局终端日志关闭时，该平台偏好不会重新开启终端输出。
 - 日志使用稳定的 `key=value` 上下文。适用时至少包含 `task_id`、`agent_id`、`message_id`，并补充

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 # 北京时区（UTC+8）
 _BEIJING_TZ = timezone(timedelta(hours=8))
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 logger = get_logger("aurora-app-clock.service")
 
@@ -52,7 +52,7 @@ _HEARTBEAT_ID = "aurora-heartbeat"
 
 def _state_path() -> Path:
     """获取持久化状态文件的路径。"""
-    base = Path(os.getenv("AURORA_APP_DATA_DIR", "data/app_data")) / "org.aurora.clock"
+    base = Path(os.getenv("AURORA_APP_DATA_DIR", "data/platform/mcp/apps")) / "org.aurora.clock"
     base.mkdir(parents=True, exist_ok=True)
     return base / "tasks.json"
 

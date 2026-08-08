@@ -2,22 +2,26 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from src.contracts.tool import ToolExecutionRequest
-from src.localhost.api import create_debug_app
+from ops.api import create_debug_app
+from src.contracts import ToolExecutionRequest
 from src.platform.dashboard import (
     DASHBOARD_SEND_CAPABILITY,
     DASHBOARD_SEND_DESCRIPTOR,
     ChatError,
     ChatService,
     DashboardPlatform,
+    _create,
+    _open_browser_when_ready,
 )
 from tests.support import create_test_runtime
 from tests.test_events import valid_amp
@@ -25,7 +29,9 @@ from tests.test_events import valid_amp
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.localhost.runtime import AuroraRuntime
+    from ops.runtime import AuroraRuntime
+    from src.contracts.configuration import DashboardConfig
+    from src.utils.uvicorn import SignalSafeServer
 
 
 async def _started_chat(runtime: AuroraRuntime) -> ChatService:
@@ -50,11 +56,22 @@ def _tool(request_id: str, text: str) -> ToolExecutionRequest:
     return ToolExecutionRequest(request_id, "any:session", DASHBOARD_SEND_CAPABILITY, {"text": text})
 
 
-def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
+def test_dashboard_tool_descriptor_and_receipts(project_root: Path) -> None:
+    """RFC 0211：执行后提交回执 AMP；平台内部幂等语义保留。"""
+
+    class Ingress:
+        def __init__(self) -> None:
+            self.amps: list[dict[str, object]] = []
+
+        async def submit_amp(self, value: dict[str, object]) -> str:
+            self.amps.append(value)
+            return ""
+
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
         chat = await _started_chat(runtime)
-        platform = DashboardPlatform(chat)
+        ingress = Ingress()
+        platform = DashboardPlatform(chat, ingress)  # type: ignore[arg-type]
         owner = await _owner(chat)
         owner_id = _user_id(owner)
         bot = next(item for item in await chat.list_users(owner_id) if item["is_bot"])
@@ -62,16 +79,21 @@ def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
         request = _tool("dashboard-1", "hello owner")
         queue = await chat.subscribe(owner_id)
         try:
-            first = await platform.execute_tool(request)
-            duplicate = await platform.execute_tool(request)
-            conflict = await platform.execute_tool(replace(request, parameters={"text": "different"}))
-            recovered = await platform.recover_tool(request)
-            missing = await platform.recover_tool(_tool("missing", "missing"))
-
-            assert first.status == duplicate.status == recovered.status == "succeeded"
-            assert first.result == duplicate.result == recovered.result
-            assert conflict.status == "failed" and conflict.error == "request_id_reused_with_different_content"
-            assert missing.status == "failed" and missing.error == "interrupted_before_dispatch"
+            await platform.execute_tool(request)
+            await platform.execute_tool(request)  # 幂等重放
+            await platform.execute_tool(replace(request, parameters={"text": "different"}))  # 冲突
+            await platform.execute_tool(_tool("missing", "  "))  # 校验失败（空文本）
+            payloads = [_payload(amp) for amp in ingress.amps]
+            assert [payload["type"] for payload in payloads] == [
+                "tool.succeeded",
+                "tool.succeeded",
+                "tool.failed",
+                "tool.failed",
+            ]
+            succeeded = [payload for payload in payloads if payload["type"] == "tool.succeeded"]
+            assert succeeded[0]["data"]["result"] == succeeded[1]["data"]["result"]
+            conflict = payloads[2]["data"]
+            assert conflict["error"] == "request_id_reused_with_different_content"
             pushed = queue.get_nowait()
             assert pushed["message"]["receiver_id"] == owner["user_id"]
             history = await chat.private_history(owner_id, bot_id, None, 30)
@@ -80,7 +102,7 @@ def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
             await chat.unsubscribe(owner_id, queue)
             await runtime.shutdown()
 
-    assert DASHBOARD_SEND_CAPABILITY == "org.aurora.dashboard.send"
+    assert DASHBOARD_SEND_CAPABILITY == "aur.dashboard.send"
     assert set(DASHBOARD_SEND_DESCRIPTOR.to_dict()) == {
         "id",
         "description",
@@ -90,11 +112,21 @@ def test_dashboard_tool_descriptor_and_recovery(project_root: Path) -> None:
     asyncio.run(scenario())
 
 
+def _payload(amp: dict[str, object]) -> dict[str, Any]:
+    value = amp["payload"]
+    assert isinstance(value, dict)
+    return value
+
+
 def test_only_owner_can_trigger_bot_and_attachments_are_rejected(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
-        chat = await _started_chat(runtime)
+        handle = await _create(runtime.configuration, runtime)
+        platform = cast("DashboardPlatform", handle.bindings[0].executor)
+        chat = platform._chat
         try:
+            token_path = runtime.configuration.dashboard.database_path.parent / "Token.txt"
+            assert token_path.stat().st_mode & 0o777 == 0o600
             owner = await _owner(chat)
             owner_id = _user_id(owner)
             bot = next(item for item in await chat.list_users(owner_id) if item["is_bot"])
@@ -139,7 +171,9 @@ def test_only_owner_can_trigger_bot_and_attachments_are_rejected(project_root: P
 def test_dashboard_owner_input_is_idempotent_amp(project_root: Path) -> None:
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
-        chat = await _started_chat(runtime)
+        handle = await _create(runtime.configuration, runtime)
+        platform = cast("DashboardPlatform", handle.bindings[0].executor)
+        chat = platform._chat
         try:
             owner = await _owner(chat)
             owner_id = _user_id(owner)
@@ -162,7 +196,7 @@ def test_dashboard_owner_input_is_idempotent_amp(project_root: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_independent_localhost_debug_app_drives_and_queries_engine(project_root: Path) -> None:
+def test_independent_ops_debug_app_drives_and_queries_engine(project_root: Path) -> None:
     runtime = create_test_runtime(project_root)
     app = create_debug_app(runtime)
     with TestClient(app) as client:  # pyright: ignore[reportArgumentType]
@@ -179,6 +213,59 @@ def test_independent_localhost_debug_app_drives_and_queries_engine(project_root:
         assert client.get(f"/v1/debug/agents/{agent_id}").status_code == 200
         assert client.get("/v1/debug/agents/missing").status_code == 404
         assert client.get("/v1/debug/tasks/missing").status_code == 404
-        assert client.get("/v1/debug/brain-context").status_code == 200
         assert client.get("/v1/debug/status").status_code == 200
     asyncio.run(runtime.shutdown())
+
+
+def test_browser_opens_once_server_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """浏览器在 server 就绪后打开一次，地址按 Dashboard 配置格式化。"""
+    opened: list[str] = []
+    opened_event = threading.Event()
+
+    def record_open(url: str) -> None:
+        opened.append(url)
+        opened_event.set()
+
+    monkeypatch.setattr("src.platform.dashboard.webbrowser.open", record_open)
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.started = False
+            self.should_exit = False
+
+    async def scenario() -> None:
+        server = cast("SignalSafeServer", FakeServer())
+        stop = asyncio.Event()
+        task = asyncio.create_task(
+            _open_browser_when_ready(server, cast("DashboardConfig", SimpleNamespace(host="::", port=8000)), stop)
+        )
+        await asyncio.sleep(0.05)
+        assert opened == []
+        server.started = True
+        assert await asyncio.to_thread(opened_event.wait, 1)
+        assert not task.done()
+        stop.set()
+        await asyncio.wait_for(task, timeout=1)
+
+    asyncio.run(scenario())
+    assert opened == ["http://127.0.0.1:8000"]
+
+
+def test_browser_aborts_when_server_stops_before_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """server 在就绪前停止时不再打开浏览器。"""
+    opened: list[str] = []
+    monkeypatch.setattr("src.platform.dashboard.webbrowser.open", opened.append)
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.started = False
+            self.should_exit = True
+
+    asyncio.run(
+        _open_browser_when_ready(
+            cast("SignalSafeServer", FakeServer()),
+            cast("DashboardConfig", SimpleNamespace(host="127.0.0.1", port=8000)),
+            asyncio.Event(),
+        )
+    )
+    assert opened == []

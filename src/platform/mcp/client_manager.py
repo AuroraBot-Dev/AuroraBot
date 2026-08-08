@@ -1,27 +1,20 @@
-"""MCP Client Manager — Brain 侧的 MCP 连接管理。
+"""MCP Client Manager — 与 MCP Server 建立 stdio 连接的客户端管理器。
 
 负责：
 - 建立与所有 MCP Server 的 stdio 连接
 - 维护 tools 列表缓存
 - 执行 tools/call
-- 可选：接收 notifications 并桥接到 EventBridge
+- 接收 notifications 并交给平台后台任务转发为 AMP 事件
 
-Notification 接收是可选增强：
-- 原生 Aurora App 可以主动推送 ``aurora/event`` 通知
-- 普通 MCP Server 不需要实现任何 Aurora 私有协议
-- 对于没有主动事件能力的 MCP Server，它是"可调用/可读取应用"，不是"主动感知源"
-
-Notification 接收方式：子类化 ``ClientSession``，重写
+原生 Aurora App 可以主动推送 ``aurora/event`` 通知；普通 MCP Server 不需要
+实现任何 Aurora 私有协议。接收方式：子类化 ``ClientSession``，重写
 ``_received_notification`` 方法（这是 MCP SDK 官方推荐的扩展点）。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -29,17 +22,21 @@ from typing import TYPE_CHECKING, Any
 import anyio
 from mcp import types
 from mcp.client.session import ClientSession
+from mcp.shared.exceptions import McpError
 from mcp.shared.message import SessionMessage
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
     from mcp.types import ServerNotification
     from mcp.types import Tool as MCPTool
 
     from src.platform.mcp.server_kit import MCPServerKit
 
 logger = get_logger("MCPClientManager")
+_NOTIFICATION_QUEUE_SIZE = 256
 
 
 class _Msg(StrEnum):
@@ -57,7 +54,16 @@ class MCPToolCallError(RuntimeError):
     """MCP tools/call 调用错误。"""
 
 
-NotificationHandler = Callable[[str, dict[str, object]], None]
+class MCPToolRejectedError(MCPToolCallError):
+    """Server 已返回明确的 tools/call 失败响应。"""
+
+
+_SHUTDOWN_GRACE_SECONDS = 1.5
+"""Server stdout 关闭后、判定为异常断开前的停机等待窗口。
+
+进程级信号（如整组 SIGTERM）会同时终止 Server 子进程与主进程，此时
+stdout 关闭先于客户端关机事件到达；保留一个短窗口以区分正常停机与意外崩溃。
+"""
 
 
 class _NotifiableClientSession(ClientSession):
@@ -124,7 +130,7 @@ class ClientConnection:
 
 
 class MCPClientManager:
-    """Brain 侧的 MCP 客户端管理器。
+    """与 MCP Server 建立客户端连接的管理器。
 
     Usage::
 
@@ -139,9 +145,10 @@ class MCPClientManager:
         self._server_kit = server_kit
         self._connections: dict[str, ClientConnection] = {}
         self._stop_event = asyncio.Event()
-        self._notification_handlers: dict[str, list[NotificationHandler]] = {}
-        # 通知队列：EventBridge 从此队列消费
-        self._notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue()
+        self.disconnected = asyncio.Event()
+        self._notification_queue: asyncio.Queue[tuple[str, str, dict[str, object]]] = asyncio.Queue(
+            _NOTIFICATION_QUEUE_SIZE
+        )
 
     @property
     def connections(self) -> dict[str, ClientConnection]:
@@ -150,37 +157,21 @@ class MCPClientManager:
 
     @property
     def notification_queue(self) -> asyncio.Queue[tuple[str, str, dict[str, object]]]:
-        """通知队列，供 EventBridge 消费。"""
+        """本地通知队列，由平台后台任务转发为 AMP 事件。"""
         return self._notification_queue
-
-    def on_notification(self, method: str, handler: NotificationHandler) -> Callable[[], None]:
-        """注册 notification 处理器。
-
-        Args:
-            method: notification method 名（如 ``aurora/event``）。
-            handler: 处理函数，接收 (server_key, params)。
-
-        Returns:
-            取消注册的闭包。
-        """
-        self._notification_handlers.setdefault(method, []).append(handler)
-        logger.debug("注册 notification handler: %s", method)
-
-        def _unregister() -> None:
-            handlers = self._notification_handlers.get(method, [])
-            if handler in handlers:
-                handlers.remove(handler)
-
-        return _unregister
 
     # ── 连接管理 ──
 
-    async def connect_all(self) -> None:
+    async def connect_all(self, timeouts: dict[str, float] | None = None) -> None:
         """建立与所有运行中 MCP Server 的客户端连接。"""
         for key, server_proc in self._server_kit.processes.items():
             if key in self._connections:
                 continue
-            await self._connect_one(key, server_proc)
+            connection = self._connect_one(key, server_proc)
+            if timeouts is None:
+                await connection
+            else:
+                await asyncio.wait_for(connection, timeout=timeouts[key])
 
     async def _connect_one(self, key: str, server_proc: object) -> None:
         """建立到 ServerKit 已启动进程的单个 MCP 连接。"""
@@ -202,25 +193,8 @@ class MCPClientManager:
             raise MCPToolCallError(_Msg.CONNECTION_FAILED.format(key=key, error=conn.error)) from conn.error
 
     async def _dispatch_notification(self, key: str, method: str, params: dict[str, object]) -> None:
-        """从 ``_NotifiableClientSession`` 接收通知并分派。
-
-        Args:
-            key: Server key。
-            method: notification method。
-            params: notification 参数。
-        """
-        # 1. 放入队列供 EventBridge 消费
+        """从 ``_NotifiableClientSession`` 接收通知并入队供平台转发。"""
         await self._notification_queue.put((key, method, params))
-
-        # 2. 分发给注册的同步 handlers
-        handlers = self._notification_handlers.get(method, [])
-        if handlers:
-            logger.debug("通知 %s (server: %s) -> %d handlers", method, key, len(handlers))
-            for handler in handlers:
-                try:
-                    handler(key, params)
-                except Exception:
-                    logger.exception("notification handler 异常: %s", method)
 
     async def _run_connection(
         self,
@@ -242,6 +216,8 @@ class MCPClientManager:
             conn.ready_event.set()
             if self._connections.get(key) is conn:
                 self._connections.pop(key, None)
+            if not self._stop_event.is_set():
+                self.disconnected.set()
             logger.info("MCP Client 已断开: %s (%s)", server_proc.spec.name, key)
 
     async def _run_stdio_session(
@@ -317,8 +293,11 @@ class MCPClientManager:
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if reader_task in done and not self._stop_event.is_set():
-                await reader_task
-                raise MCPToolCallError(_Msg.STDOUT_CLOSED.format(key=key))
+                try:
+                    await asyncio.wait_for(stop_wait_task, timeout=_SHUTDOWN_GRACE_SECONDS)
+                except TimeoutError:
+                    await reader_task
+                    raise MCPToolCallError(_Msg.STDOUT_CLOSED.format(key=key)) from None
         finally:
             if not stop_wait_task.done():
                 stop_wait_task.cancel()
@@ -415,6 +394,11 @@ class MCPClientManager:
         """列出所有已缓存的工具。"""
         return {key: list(conn.tools) for key, conn in self._connections.items()}
 
+    def is_connected(self, server_key: str) -> bool:
+        """返回指定 Server 是否仍有活跃会话。"""
+        connection = self._connections.get(server_key)
+        return connection is not None and connection.session is not None
+
     async def call_tool(
         self,
         server_key: str,
@@ -441,6 +425,9 @@ class MCPClientManager:
             )
         except TimeoutError:
             raise MCPToolCallError(_Msg.TOOL_CALL_TIMEOUT.format(server_key=server_key, raw_name=raw_name)) from None
+        except McpError as exc:
+            error_type = MCPToolCallError if exc.error.code == types.CONNECTION_CLOSED else MCPToolRejectedError
+            raise error_type(_Msg.TOOL_CALL_FAILED.format(server_key=server_key, raw_name=raw_name, error=exc)) from exc
         except Exception as exc:
             raise MCPToolCallError(
                 _Msg.TOOL_CALL_FAILED.format(server_key=server_key, raw_name=raw_name, error=exc)

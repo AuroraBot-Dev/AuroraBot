@@ -63,23 +63,20 @@ uv sync --no-dev
 Copy-Item .env.example .env
 
 # 既定設定に必要な DEEPSEEK_API_KEY を .env に追加
-uv run --no-dev --env-file .env aurora --console --mcp
+uv run --no-dev --env-file .env aurora start
 ```
 
 起動後はメッセージを入力できます。`/help` で command、`/status` で runtime state を確認できます。
 
 ```powershell
 # config/platforms.toml の既定 Platform 構成を使用
-uv run --no-dev --env-file .env aurora
+uv run --no-dev --env-file .env aurora start
 
-# ローカル Console のみ起動
-uv run --no-dev --env-file .env aurora --console
-
-# 外部 Platform なしで実行
-uv run --no-dev --env-file .env aurora --headless
+# ヘッドレス：ローカル Console を無効化、Platform 構成は変更なし
+uv run --no-dev --env-file .env aurora start --headless
 ```
 
-`--console`、`--dashboard`、`--mcp` のいずれかを指定すると、それらが正確な Platform 集合になり、既定値には追加されません。
+ローカル Console は `--platform` の選択では起動・停止しません。ヘッドレスでなく `[runtime.console].enabled = true` であれば常に動作します。`--platform` を指定すると、それらが正確な Platform 集合になり、既定値には追加されません。
 Dashboard の browser UI は別プロジェクトで、本リポジトリにはローカル backend と chat bridge が含まれます。
 
 ## カスタマイズと拡張

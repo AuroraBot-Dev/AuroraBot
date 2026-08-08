@@ -1,8 +1,6 @@
 """日志系统核心模块。
 
 提供统一的日志记录器工厂 ``get_logger()``，支持 Rich 美化控制台输出、文件轮转日志。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 import logging

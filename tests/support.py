@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.agents.triage import StructuredTriagePolicy
+from ops.runtime import AuroraRuntime
 from src.config.loader import load_configuration
-from src.contracts.agent import AgentContext, AgentDecision, Completion, EngineConfiguration
-from src.contracts.model import ModelResult, ModelUsage
-from src.contracts.triage import TriageLimits
+from src.contracts import (
+    AgentContext,
+    AgentDecision,
+    Completion,
+    EngineConfiguration,
+    ModelResult,
+    ModelUsage,
+    TriageLimits,
+)
 from src.engine.runtime import AgentEngine
-from src.localhost.runtime import AuroraRuntime
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,7 +57,18 @@ def create_test_runtime(root: Path) -> AuroraRuntime:
         engine_configuration,
         handlers,
         model_provider=TriageModelProvider(),
-        triage_policy=StructuredTriagePolicy(engine_configuration.triage),
     )
     engine.bind_tool_executors(())
-    return AuroraRuntime(configuration, engine)
+    return AuroraRuntime(
+        configuration,
+        engine,
+        model_gateway=_gateway_with_cost_tracker(),
+    )
+
+
+def _gateway_with_cost_tracker() -> object:
+    from types import SimpleNamespace
+
+    from src.ai.execution import CostTracker
+
+    return SimpleNamespace(cost_tracker=CostTracker())

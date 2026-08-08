@@ -6,21 +6,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
-
-
-class _Msg(StrEnum):
-    """本文件内所有用户可见或日志输出的字符串常量。"""
-
-    UNEXPECTED_OR_MISSING_KEYS = "{label} has unexpected {unexpected} or missing {missing} keys"
-    MISSING_REQUIRED_KEYS = "{label} is missing required keys: {missing}"
-    MUST_BE_TABLE = "{label} must be a table"
-    MUST_BE_NON_EMPTY_STRING = "{label} must be a non-empty string"
-    MUST_BE_POSITIVE = "{label} must be positive"
-
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -50,59 +38,39 @@ class ConfigurationSource:
     sha256: str
 
 
-def _require_keys(value: dict[str, Any], keys: set[str], label: str) -> None:
-    """检查字典键恰好为指定集合，不允许多余或缺失。"""
-    unexpected = set(value) - keys
-    missing = keys - set(value)
-    if unexpected or missing:
-        raise ConfigurationError(
-            _Msg.UNEXPECTED_OR_MISSING_KEYS.format(label=label, unexpected=sorted(unexpected), missing=sorted(missing))
-        )
-
-
-def _require_subset(data: dict[str, Any], required: set[str], label: str) -> None:
-    """检查字典至少包含指定的必需键。"""
-    missing = required - set(data)
-    if missing:
-        raise ConfigurationError(_Msg.MISSING_REQUIRED_KEYS.format(label=label, missing=sorted(missing)))
-
-
-def _table(value: object, label: str) -> dict[str, Any]:
-    """校验值为 TOML 表（dict）类型。"""
-    if not isinstance(value, dict):
-        raise ConfigurationError(_Msg.MUST_BE_TABLE.format(label=label))
-    return value
-
-
-def _string(value: object, label: str) -> str:
-    """校验值为非空字符串。"""
-    if not isinstance(value, str) or not value:
-        raise ConfigurationError(_Msg.MUST_BE_NON_EMPTY_STRING.format(label=label))
-    return value
-
-
-def _positive_number(value: object, label: str) -> float:
-    """校验值为正数（int 或 float），返回 float。"""
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
-        raise ConfigurationError(_Msg.MUST_BE_POSITIVE.format(label=label))
-    return float(value)
-
-
 # ---------------------------------------------------------------------------
 # 配置 DTO
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
+class ConsoleConfig:
+    """本地 Console 交互前端配置。
+
+    ConsoleConfig object::
+
+        {
+            "enabled": true,
+            "terminal_logs": false
+        }
+
+    """
+
+    enabled: bool
+    terminal_logs: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeConfig:
-    """进程运行时配置：profile 与调试服务地址。
+    """进程运行时配置：profile、调试服务地址与本地 Console 前端。
 
     RuntimeConfig object::
 
         {
             "profile": "string",
             "debug_host": "string",
-            "debug_port": 0
+            "debug_port": 0,
+            "console": ConsoleConfig
         }
 
     """
@@ -110,6 +78,7 @@ class RuntimeConfig:
     profile: str
     debug_host: str
     debug_port: int
+    console: "ConsoleConfig"
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +165,20 @@ class DashboardConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PromptConfig:
+    """启动时加载的不可变提示词内容及来源。"""
+
+    soul: str
+    world: str
+    agents: Mapping[str, str]
+    sources: tuple[ConfigurationSource, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "agents", MappingProxyType(dict(self.agents)))
+        object.__setattr__(self, "sources", tuple(self.sources))
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     """一个显式启用的 MCP 应用路由配置。
 
@@ -206,6 +189,7 @@ class AppConfig:
             "transport": "string",
             "working_dir": "/path/to/dir" | null,
             "command": ["string", ...],
+            "env_vars": ["ENV_VAR_NAME", ...],
             "url": "string" | null,
             "auth_env": "string" | null,
             "timeout_seconds": 0.0
@@ -217,6 +201,7 @@ class AppConfig:
     transport: str
     working_dir: Path | None
     command: tuple[str, ...]
+    env_vars: tuple[str, ...]
     url: str | None
     auth_env: str | None
     timeout_seconds: float
@@ -252,8 +237,7 @@ class ModelRoleConfig:
         {
             "provider": "string",
             "model": "string",
-            "capabilities": ["string", ...],
-            "endpoint": "chat_completions"
+            "capabilities": ["string", ...]
         }
 
     """
@@ -261,7 +245,6 @@ class ModelRoleConfig:
     provider: str
     model: str
     capabilities: frozenset[str] = frozenset()
-    endpoint: str = "chat_completions"
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,23 +262,6 @@ class ModelLoggingConfig:
 
     log_queries: bool
     log_responses: bool
-
-
-@dataclass(frozen=True, slots=True)
-class ConsolePreference:
-    """Console 平台偏好。
-
-    ConsolePreference object::
-
-        {
-            "enabled": false,
-            "terminal_logs": false
-        }
-
-    """
-
-    enabled: bool
-    terminal_logs: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,14 +305,12 @@ class PlatformPreference:
     PlatformPreference object::
 
         {
-            "console": ConsolePreference,
             "dashboard": DashboardPreference,
             "mcp": McpPreference
         }
 
     """
 
-    console: ConsolePreference
     dashboard: DashboardPreference
     mcp: McpPreference
 
@@ -357,15 +321,31 @@ PLATFORM_NAMES: frozenset[str] = frozenset(f.name for f in fields(PlatformPrefer
 
 @dataclass(frozen=True, slots=True)
 class StorageConfig:
-    """各实现包的私有持久化目录。"""
+    """各实现包的私有持久化目录；路径层级与包层级一致。
+
+    StorageConfig object::
+
+        {
+            "data_root": "/path/to/data",
+            "engine": "/path/to/data/engine",
+            "ai": "/path/to/data/ai",
+            "memory": "/path/to/data/memory",
+            "platform": "/path/to/data/platform",
+            "dashboard": "/path/to/data/platform/dashboard",
+            "mcp": "/path/to/data/platform/mcp",
+            "apps": "/path/to/data/platform/mcp/apps"
+        }
+
+    """
 
     data_root: Path
     engine: Path
     ai: Path
     memory: Path
-    apps: Path
-    console: Path
+    platform: Path
     dashboard: Path
+    mcp: Path
+    apps: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,6 +363,7 @@ class AuroraConfig:
             "preference": PlatformPreference,
             "logging_level": "string",
             "storage": StorageConfig,
+            "prompts": PromptConfig,
             "agents": [AgentProfile, ...],
             "model_roles": ["string", ...],
             "model_definitions": {"role": ModelRoleConfig, ...},
@@ -402,6 +383,7 @@ class AuroraConfig:
     logging_level: str
     logging_dir: Path
     storage: StorageConfig
+    prompts: PromptConfig
     agents: "tuple[AgentProfile, ...]"
     model_roles: frozenset[str]
     model_definitions: Mapping[str, ModelRoleConfig] = MappingProxyType({})

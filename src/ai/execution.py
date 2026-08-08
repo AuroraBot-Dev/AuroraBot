@@ -13,8 +13,6 @@
     )
     response = await gen
     print(gen.cost)
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -37,7 +35,7 @@ from enum import StrEnum
 
 from src.ai.models import compute_cost
 from src.ai.providers import missing_credentials_reason, resolve_model
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     import collections.abc
@@ -81,15 +79,6 @@ class GatewayError(Exception):
         self.retryable = retryable
 
 
-class CancelledWithPartialResponse(asyncio.CancelledError):
-    """流式任务被打断时抛出，携带已生成的部分响应与估算费用。"""
-
-    def __init__(self, partial_response: Any, cost: float) -> None:
-        super().__init__()
-        self.partial_response = partial_response
-        self.cost = cost
-
-
 def _exc_msg() -> str:
     import sys
 
@@ -123,6 +112,8 @@ def _classify_exception(exc: Exception) -> GatewayError:  # noqa: PLR0911
 
 
 class CostTracker:
+    """调用费用记录与分类统计（RFC 0215：追踪所有完成的模型调用总费用）。"""
+
     def __init__(self) -> None:
         self._records: list[dict] = []
         self._lock = asyncio.Lock()
@@ -131,29 +122,45 @@ class CostTracker:
         async with self._lock:
             self._records.append(record)
 
-    async def summary(self) -> dict:
+    async def total_cost(self) -> float:
+        """全部已完成调用的总费用（USD）。"""
         async with self._lock:
-            total = 0.0
-            by_role: dict[str, dict] = {}
-            by_model: dict[str, dict] = {}
-            for r in self._records:
-                total += r.get("cost", 0.0)
-                role = r["role"]
-                model = r["model"]
-                if role not in by_role:
-                    by_role[role] = {"count": 0, "cost": 0.0}
-                by_role[role]["count"] += 1
-                by_role[role]["cost"] += r.get("cost", 0.0)
-                if model not in by_model:
-                    by_model[model] = {"count": 0, "cost": 0.0}
-                by_model[model]["count"] += 1
-                by_model[model]["cost"] += r.get("cost", 0.0)
+            return round(sum(r.get("cost", 0.0) for r in self._records), 6)
+
+    async def by_role(self) -> dict[str, dict]:
+        """按角色分类统计。"""
+        async with self._lock:
+            return _aggregate(self._records, "role")
+
+    async def by_model(self) -> dict[str, dict]:
+        """按模型分类统计。"""
+        async with self._lock:
+            return _aggregate(self._records, "model")
+
+    async def by_status(self) -> dict[str, dict]:
+        """按调用状态分类统计（completed/cancelled）。"""
+        async with self._lock:
+            return _aggregate(self._records, "status")
+
+    async def summary(self) -> dict:
+        """汇总：总费用 + 角色/模型分类 + 原始记录。"""
+        async with self._lock:
             return {
-                "total_cost": total,
-                "by_role": by_role,
-                "by_model": by_model,
+                "total_cost": round(sum(r.get("cost", 0.0) for r in self._records), 6),
+                "by_role": _aggregate(self._records, "role"),
+                "by_model": _aggregate(self._records, "model"),
                 "records": list(self._records),
             }
+
+
+def _aggregate(records: list[dict], key: str) -> dict[str, dict]:
+    grouped: dict[str, dict] = {}
+    for record in records:
+        value = str(record.get(key, "unknown"))
+        group = grouped.setdefault(value, {"count": 0, "cost": 0.0})
+        group["count"] += 1
+        group["cost"] += record.get("cost", 0.0)
+    return grouped
 
 
 # ═══════════════════════════════════════════════════════════
@@ -175,20 +182,8 @@ class GenerationTask:
         self.response, self.cost = result
         return self.response
 
-    def cancel(self) -> bool:
-        return self._task.cancel()
-
     def done(self) -> bool:
         return self._task.done()
-
-    def plain(self) -> str:
-        if self.response is None:
-            return ""
-        try:
-            content = self.response.choices[0].message.content
-            return str(content) if content is not None else ""
-        except (AttributeError, IndexError, TypeError):
-            return ""
 
 
 # ═══════════════════════════════════════════════════════════
@@ -212,20 +207,6 @@ class TaskManager:
         task = asyncio.create_task(_run_and_cleanup())
         self._tasks[task_id] = task
         return GenerationTask(task_id, task)
-
-    def abort(self, task_id: str) -> bool:
-        task = self._tasks.get(task_id)
-        if task and not task.done():
-            task.cancel()
-            logger.debug("Task %s cancelled", task_id)
-            return True
-        return False
-
-    def abort_all(self) -> None:
-        for task in list(self._tasks.values()):
-            if not task.done():
-                task.cancel()
-        self._tasks.clear()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -395,22 +376,20 @@ class ModelCaller:
                 else:
                     logger.debug(
                         "LLM 响应:\n%s",
-                        json.dumps({"role": self.role, "cost": cost}, ensure_ascii=False, indent=2),
+                        json.dumps(
+                            {"role": self.role, "cost": cost},
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
                     )
                 return final_response, cost
 
-            # 被取消：构建部分响应并估算费用
+            # 被取消：记录已生成 token 的费用后继续传播取消
             if final_usage is not None:
-                cost = await _compute_and_track(final_usage.prompt_tokens, final_usage.completion_tokens, "cancelled")
+                await _compute_and_track(final_usage.prompt_tokens, final_usage.completion_tokens, "cancelled")
             else:
                 completion_tokens = sum(len(c.choices[0].delta.content or "") // 4 for c in chunks if c.choices)
-                cost = await _compute_and_track(prompt_tokens, completion_tokens, "cancelled")
-
-            try:
-                partial_response = stream_chunk_builder(chunks, messages=messages)
-            except Exception:  # noqa: BLE001
-                partial_response = None
-
-            raise CancelledWithPartialResponse(partial_response, cost)
+                await _compute_and_track(prompt_tokens, completion_tokens, "cancelled")
+            raise asyncio.CancelledError
 
         return self.tm.create_task(_stream_and_collect())

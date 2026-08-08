@@ -5,14 +5,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.utils import logging as aurora_logging
-from src.utils.logging import (
+from src.utils import (
     UnsupportedLoggingLevelError,
     configure_console_logging,
     configure_logging,
     console_logging_status,
     get_logger,
 )
+from src.utils import logging as aurora_logging
 
 if TYPE_CHECKING:
     from pathlib import Path

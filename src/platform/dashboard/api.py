@@ -9,8 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from src.contracts.configuration import DashboardConfig
-from src.contracts.ports import DashboardControlPort
+from src.contracts import (
+    DashboardConfig,
+    DashboardControlPort,
+)
 from src.platform.dashboard.service import ChatError, ChatService
 
 

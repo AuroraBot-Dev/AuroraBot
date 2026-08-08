@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 import sqlite3
 from enum import StrEnum
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 from rich.panel import Panel
 
-from src.utils.time import utc_now
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -190,15 +191,38 @@ class _Msg(StrEnum):
     OWNER_ALREADY_BOUND = "Dashboard 所有者已绑定到 {username}"
 
 
-def _print_token(token: str) -> None:
+def _print_token(token: str, path: Path) -> None:
     """在终端中以 Rich Panel 格式打印启动 Token 和保管提示。"""
     content = (
         f"[bold yellow]Token:[/bold yellow] [bold green]{token}[/bold green]\n\n"
         "[dim]请妥善保管 Token。\n"
-        "你也可以在 [bold]data/dashboard/Token.txt[/bold] 查看你的 Token。\n"
+        f"你也可以在 [bold]{path}[/bold] 查看你的 Token。\n"
         "如果不慎泄露，请删除 Token.txt 以重新生成。[/dim]"
     )
     console.print(Panel(content, title="Dashboard Auth"))
+
+
+def _create_token_file(path: Path) -> str | None:
+    """以私有权限完整写入临时文件，再原子发布首次启动 Token。"""
+    if path.exists():
+        path.chmod(0o600)
+        if path.stat().st_size:
+            return None
+        path.unlink()
+    token = new_token()
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(token)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+        return token
+    except FileExistsError:
+        return None
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class ChatStore:
@@ -241,13 +265,9 @@ class ChatStore:
                     f"BEGIN IMMEDIATE;\n{migration}\nPRAGMA user_version = {target_version};\nCOMMIT;"
                 )
         token_path = self.database_path.parent / "Token.txt"
-        try:
-            with token_path.open("x", encoding="utf-8") as token_file:
-                t = new_token()
-                token_file.write(t)
-                _print_token(t)
-        except FileExistsError:
-            pass
+        token = _create_token_file(token_path)
+        if token is not None:
+            _print_token(token, token_path)
 
     def bootstrap_token(self) -> str:
         """读取并返回启动 Token。"""
@@ -300,6 +320,81 @@ class ChatStore:
             connection.commit()
             assert cursor.lastrowid is not None
             return int(cursor.lastrowid)
+
+    def begin_tool_request(self, request_id: str, digest: str, text: str, now: str) -> tuple[sqlite3.Row, bool]:
+        """原子认领 Tool 请求，返回持久化行及是否由本次创建。"""
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "INSERT INTO dashboard_tool_requests(request_id, request_digest, text, status, created_at, updated_at) "
+                "VALUES (?, ?, ?, 'dispatch_started', ?, ?) ON CONFLICT(request_id) DO NOTHING",
+                (request_id, digest, text, now, now),
+            )
+            row = connection.execute(
+                "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+            connection.commit()
+            assert row is not None
+            return row, cursor.rowcount == 1
+
+    def complete_tool_message(
+        self,
+        *,
+        request_id: str,
+        message_id: str,
+        sender_id: int,
+        receiver_id: int,
+        text: str,
+        summary: str,
+        now: str,
+    ) -> tuple[sqlite3.Row, bool]:
+        """在一个事务中幂等写入消息并完成 Tool 台账。"""
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "INSERT INTO messages(client_message_id, sender_id, receiver_id, message_type, content, status, "
+                "source_tool_request_id, created_at) VALUES (?, ?, ?, 'text', ?, 'saved', ?, ?) "
+                "ON CONFLICT DO NOTHING",
+                (message_id, sender_id, receiver_id, text, request_id, now),
+            )
+            row = connection.execute(
+                "SELECT * FROM messages WHERE source_tool_request_id = ?", (request_id,)
+            ).fetchone()
+            connection.execute(
+                "UPDATE dashboard_tool_requests SET status = 'succeeded', summary = ?, external_message_id = ?, "
+                "updated_at = ? WHERE request_id = ?",
+                (summary, message_id, now, request_id),
+            )
+            connection.commit()
+            assert row is not None
+            return row, cursor.rowcount == 1
+
+    def recover_tool_request(self, request_id: str, now: str) -> sqlite3.Row | None:
+        """按已持久化消息对账中断的 Tool 台账，并返回确定结果。"""
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            request = connection.execute(
+                "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+            if request is None or request["status"] != "dispatch_started":
+                return request
+            message = connection.execute(
+                "SELECT client_message_id FROM messages WHERE source_tool_request_id = ?", (request_id,)
+            ).fetchone()
+            if message is None:
+                values = ("failed", "Dashboard 发送失败", "interrupted_before_dispatch", None, now, request_id)
+            else:
+                values = ("succeeded", "Dashboard 消息已发送", None, str(message["client_message_id"]), now, request_id)
+            connection.execute(
+                "UPDATE dashboard_tool_requests SET status = ?, summary = ?, error = ?, external_message_id = ?, "
+                "updated_at = ? WHERE request_id = ?",
+                values,
+            )
+            row = connection.execute(
+                "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+            connection.commit()
+            return row
 
     def ensure_bot(self, username: str, display_name: str, avatar_url: str | None) -> sqlite3.Row:
         """确保 Bot 用户存在，使用 upsert 语义更新显示名和头像。"""

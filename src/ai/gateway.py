@@ -1,4 +1,4 @@
-"""RFC 0005/0008 模型网关 —— Chat Completions / Responses 双通道调度。
+"""模型网关 —— Chat Completions / Responses 双通道调度。
 
 能力以 models.dev 为第一信息源；TOML 显式配置的 capabilities 作为高优覆盖。
 
@@ -11,8 +11,6 @@
     config = load_configuration(root, profile)
     service = ModelGatewayService(config)
     result = await service.complete(request)
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -25,22 +23,32 @@ from typing import TYPE_CHECKING, Any
 
 from jsonschema import ValidationError, validate
 
-from src.ai._channels import _complete_chat, _execute_responses_channel
-from src.ai._parsing import invalid_output_result
-from src.ai.execution import CostTracker, ModelCaller, TaskManager
-from src.ai.models import get_capabilities_by_id, init_cache
+from src.ai.execution import CostTracker, TaskManager
+from src.ai.models import (
+    cache_available,
+    get_capabilities_by_id,
+    get_modalities_by_id,
+    init_cache,
+    refresh_now,
+)
 from src.ai.providers import ProviderConfig, setup_providers
-from src.contracts.model import (
+from src.ai.roles import resolve
+from src.ai.roles.base import ChatCaller
+from src.contracts import (
     ModelBudgetError,
     ModelCapabilityError,
     ModelGatewayError,
+    ModelMessage,
     ModelRequest,
     ModelResult,
 )
-from src.utils.logging import get_logger
-from src.utils.serialization import extract_json_from_text
+from src.utils import (
+    extract_json_from_text,
+    get_logger,
+)
 
 if TYPE_CHECKING:
+    from src.ai.roles.base import RoleHandler
     from src.contracts.configuration import AuroraConfig
 
 
@@ -48,22 +56,32 @@ class _Msg(StrEnum):
     """本文件内所有异常与日志消息字符串常量。"""
 
     MODEL_FORMAT = "Model for role '{role}' must be in 'provider/model_name' format, got '{model}'"
-    UNKNOWN_ROLE = "Unknown role '{role}'. Available: {available}"
     UNKNOWN_MODEL_ROLE = "unknown model role: {role}"
     RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
     CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
     FORBIDDEN_PARAMETERS = "model parameters may not override controlled fields: {forbidden}"
-    NOT_NATIVE_RESPONSES_ENDPOINT = "role {role} does not use a native Responses endpoint"
-    LACKS_NATIVE_RESPONSES = "role {role} lacks native_responses"
-    LACKS_CAPABILITIES = "role {role} lacks capabilities: {missing}"
-    LACKS_TOOLS = "role {role} lacks tools"
-    CONTINUATION_MISMATCH = "model continuation does not match the selected role endpoint"
-    NO_STRUCTURED_OUTPUT = "structured output is unavailable and JSON-text fallback is not permitted"
+    CONTINUATION_MISMATCH = "model continuation does not match the selected role"
     MISSING_CREDENTIAL = "missing model credential: {env_var}"
     COST_BUDGET_EXCEEDED = "model cost exceeded max_cost_usd"
 
 
 logger = get_logger("aurora.model_gateway")
+
+
+def invalid_output_result(request: ModelRequest, diagnostic: str) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
+    """模型输出未通过结构化校验时的确定性回退（配置了则返回，否则仅诊断）。"""
+    if request.invalid_output_result is None:
+        return None, (diagnostic,)
+    try:
+        assert request.output_schema is not None
+        validate(request.invalid_output_result, request.output_schema)
+    except (AssertionError, ValidationError):
+        return None, (diagnostic, "configured invalid-output fallback did not match schema")
+    return request.invalid_output_result, (diagnostic, "returned configured no_action fallback")
+
+
+_COLD_START_REFRESH_SECONDS = 5.0
+"""冷启动时等待 models.dev 后台刷新的上限；超时后使用隐含能力继续对话。"""
 
 _FORBIDDEN_PARAMETERS = frozenset(
     {
@@ -124,16 +142,16 @@ class ModelGatewayService:
         if custom_providers:
             setup_providers(*custom_providers)
 
-        self._callers: dict[str, ModelCaller] = {
-            role: ModelCaller(model, role, self._task_manager, self) for role, model in self._models.items()
-        }
+        self._handlers: dict[str, RoleHandler] = {}
+        self._callers: dict[str, ChatCaller] = {}
+        for role_id, model in self._models.items():
+            handler_cls = resolve(role_id)  # RFC 0212：预设之外启动报错
+            self._handlers[role_id] = handler_cls()
+            self._callers[role_id] = ChatCaller(model, role_id, self._task_manager, self)
 
         self._capabilities: dict[str, frozenset[str]] = {}
         self._init_lock = asyncio.Lock()
         self._initialized = False
-
-        self._embedding_model = self._models.get("embedding", "")
-        self._reranker_model = self._models.get("reranker", "")
 
         logger.info(
             "model gateway created roles=%d providers=%d",
@@ -142,20 +160,24 @@ class ModelGatewayService:
         )
 
     async def initialize(self) -> None:
-        """异步解析各角色的能力（models.dev + TOML 覆盖）。"""
+        """异步解析各角色的能力（models.dev 缓存 + TOML 覆盖）。
+
+        不等待慢网络：冷启动时只给后台刷新一个短时限机会，超时后使用
+        隐含能力继续对话，并把相关角色标记为不确定（工具检查放宽）。
+        """
         if self._initialized:
             return
-        responses_count = 0
+        if not await cache_available():
+            await refresh_now(wait_seconds=_COLD_START_REFRESH_SECONDS)
         for role_id, model_id in self._models.items():
             definition = self._configuration.model_definitions[role_id]
-            caps = definition.capabilities or await get_capabilities_by_id(model_id)
-            if definition.endpoint == "responses":
-                caps = caps | frozenset({"native_responses"})
+            if definition.capabilities:
+                caps = definition.capabilities
+            else:
+                caps = await get_capabilities_by_id(model_id)
             self._capabilities[role_id] = caps
-            if definition.endpoint == "responses":
-                responses_count += 1
         self._initialized = True
-        logger.info("model gateway initialized roles=%d responses_roles=%d", len(self._models), responses_count)
+        logger.info("model gateway initialized roles=%d", len(self._models))
 
     async def _ensure_initialized(self) -> None:
         if self._initialized:
@@ -166,102 +188,108 @@ class ModelGatewayService:
             await self.initialize()
 
     def _capabilities_for(self, role_id: str) -> frozenset[str]:
-        """同步获取已解析能力；未初始化时退回 TOML 配置或隐含能力。"""
+        """已解析能力合并角色能力基线（RFC 0213）；未初始化时退回 TOML 配置或隐含能力。"""
+        baseline = self._handlers[role_id].capability_baseline
         if role_id in self._capabilities:
-            return self._capabilities[role_id]
+            return self._capabilities[role_id] | baseline
         definition = self._configuration.model_definitions.get(role_id)
         if definition is not None and definition.capabilities:
-            return definition.capabilities
-        return frozenset({"chat", "stream", "json_text_fallback"})
+            return definition.capabilities | baseline
+        return frozenset({"chat", "stream", "json_text_fallback"}) | baseline
 
-    # ── 角色 → 调用器映射 ──────────────────────────────────
+    # ── 角色 → 调用器映射（chat 通道使用）────────────────────
 
-    def use_model(self, role: str) -> ModelCaller:
-        role = role.lower()
-        if role not in self._callers:
-            raise ValueError(_Msg.UNKNOWN_ROLE.format(role=role, available=sorted(self._callers)))
+    def _caller_for(self, role: str) -> ChatCaller:
         return self._callers[role]
-
-    @property
-    def fast(self) -> ModelCaller:
-        return self.use_model("fast")
-
-    @property
-    def quality(self) -> ModelCaller:
-        return self.use_model("quality")
-
-    @property
-    def multimodal(self) -> ModelCaller:
-        return self.use_model("multimodal")
-
-    @property
-    def embedding(self) -> str:
-        return self._embedding_model
-
-    @property
-    def reranker(self) -> str:
-        return self._reranker_model
-
-    def export_config(self) -> dict[str, str]:
-        config: dict[str, str] = {role: caller.model for role, caller in self._callers.items()}
-        if self._embedding_model:
-            config["embedding"] = self._embedding_model
-        if self._reranker_model:
-            config["reranker"] = self._reranker_model
-        return config
-
-    async def cost_summary(self) -> dict[str, Any]:
-        return await self.cost_tracker.summary()
-
-    def abort_task(self, task_id: str) -> bool:
-        return self._task_manager.abort(task_id)
-
-    def abort_all(self) -> None:
-        self._task_manager.abort_all()
 
     # ── 能力协商 ──────────────────────────────────────────
 
     def negotiate(self, request: ModelRequest) -> frozenset[str]:
+        """契约与参数协商（RFC 0213/0215）。
+
+        模型基础能力假定满足（配置模型即信任它符合角色要求）；本方法只做
+        请求契约校验与结构化输出标记。结构化输出失败由通道的 JSON-text
+        fallback 兜底。
+        """
         role = self._configuration.model_definitions.get(request.role)
         if role is None:
             raise ModelCapabilityError(_Msg.UNKNOWN_MODEL_ROLE.format(role=request.role))
 
-        capabilities = self._capabilities_for(request.role)
-
         if request.retry_policy != "none":
             raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
-        if request.cancel_policy not in {"never", "on_external_activity"}:
+        if request.cancel_policy != "never":
             raise ModelCapabilityError(_Msg.CANCEL_POLICY_UNSUPPORTED)
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
         if forbidden:
             raise ModelCapabilityError(_Msg.FORBIDDEN_PARAMETERS.format(forbidden=forbidden))
-        if request.response_mode == "native" and role.endpoint != "responses":
-            raise ModelCapabilityError(_Msg.NOT_NATIVE_RESPONSES_ENDPOINT.format(role=request.role))
-        if role.endpoint == "responses" and "native_responses" not in capabilities:
-            raise ModelCapabilityError(_Msg.LACKS_NATIVE_RESPONSES.format(role=request.role))
-        if not request.required_capabilities <= capabilities:
-            missing = sorted(request.required_capabilities - capabilities)
-            raise ModelCapabilityError(_Msg.LACKS_CAPABILITIES.format(role=request.role, missing=missing))
-        if request.tools and "tools" not in capabilities:
-            raise ModelCapabilityError(_Msg.LACKS_TOOLS.format(role=request.role))
-        if request.continuation is not None and (
-            request.continuation.provider != role.provider or request.continuation.channel != role.endpoint
-        ):
+        if request.continuation is not None and request.continuation.provider != role.provider:
             raise ModelCapabilityError(_Msg.CONTINUATION_MISMATCH)
 
         negotiated = set(request.required_capabilities)
         if request.tools:
             negotiated.add("tools")
-        if role.endpoint == "responses":
-            negotiated.add("native_responses")
         if request.output_schema is not None:
-            if role.endpoint == "responses" or "structured_output" in capabilities:
-                negotiated.add("structured_output")
-            elif request.allow_json_text_fallback and "json_text_fallback" in capabilities:
-                negotiated.add("json_text_fallback")
-            else:
-                raise ModelCapabilityError(_Msg.NO_STRUCTURED_OUTPUT)
+            negotiated.add("structured_output")
         return frozenset(negotiated)
+
+    # ── 外部接口（RFC 0215）───────────────────────────────
+
+    async def get_response(self, role: str, inputs: list[Any]) -> dict[str, Any]:
+        """外部简单入口：传入 role 与 inputs，返回脱壳的纯粹输出。
+
+        - chat 类角色：``{"text", "tool_calls", "finish_reason"}``；
+        - embedding 角色：``{"embeddings", "model"}``（inputs 为文本数组）。
+        """
+        if self._handlers[role].endpoint == "embeddings":
+            vectors = await self._handlers[role].embed(self, [str(item) for item in inputs])
+            return {"embeddings": vectors, "model": self._models[role]}
+        request = ModelRequest(
+            role=role,
+            messages=tuple(
+                ModelMessage(str(item.get("role", "user")), str(item.get("content", ""))) for item in inputs
+            ),
+        )
+        result = await self.complete(request)
+        return {
+            "text": result.text,
+            "tool_calls": [call.to_dict() for call in result.tool_calls],
+            "finish_reason": result.finish_reason,
+        }
+
+    async def modalities_for(self, role: str) -> tuple[frozenset[str], frozenset[str]]:
+        """角色绑定模型的输入/输出模态（RFC 0215）。"""
+        await self._ensure_initialized()
+        return await get_modalities_by_id(self._models[role])
+
+    def embed_sync(self, texts: list[str]) -> list[list[float]]:
+        """同步 embedding（供记忆引擎的 mem0 自定义嵌入函数调用，RFC 0216）。"""
+        import litellm
+
+        from src.ai.providers import resolve_model
+
+        model_id = self._models.get("embedding")
+        if not model_id:
+            return []
+        resolved, provider_kwargs = resolve_model(model_id)
+        response = litellm.embedding(model=resolved, input=texts, **provider_kwargs)
+        data = response.get("data") if isinstance(response, dict) else getattr(response, "data", None)
+        if not isinstance(data, list):
+            return []
+        vectors: list[list[float]] = []
+        for item in data:
+            embedding = item.get("embedding") if isinstance(item, dict) else getattr(item, "embedding", None)
+            if isinstance(embedding, list):
+                vectors.append([float(value) for value in embedding])
+        return vectors
+
+    def export_openai_client(self) -> Any:
+        """导出 litellm 的 OpenAI 兼容 client，供 mem0 等外部库使用。
+
+        api_key 为占位符：实际凭据由 Provider 配置（环境变量）在调用时解析。
+        """
+        import litellm
+
+        return litellm.OpenAI(api_key="aurora-router")
 
     # ── 请求执行 ──────────────────────────────────────────
 
@@ -271,13 +299,14 @@ class ModelGatewayService:
         negotiated = self.negotiate(request)
         role = self._configuration.model_definitions[request.role]
         provider = self._configuration.model_providers[role.provider]
+        handler = self._handlers[request.role]
 
         logger.debug(
             "model gateway request model_role=%s provider=%s endpoint=%s messages=%d tools=%d "
             "continuation=%s output_schema=%s cancel_policy=%s parameter_keys=%s",
             request.role,
             role.provider,
-            role.endpoint,
+            handler.endpoint,
             len(request.messages),
             len(request.tools),
             request.continuation is not None,
@@ -294,10 +323,7 @@ class ModelGatewayService:
             )
             raise ModelGatewayError(_Msg.MISSING_CREDENTIAL.format(env_var=provider.secret_env))
 
-        if role.endpoint == "responses":
-            result = await _execute_responses_channel(self, request, role, negotiated)
-        else:
-            result = await _complete_chat(self, request, role, negotiated)
+        result = await handler.complete(self, request, role, negotiated)
 
         if request.budget.max_cost_usd is not None and result.cost_usd > request.budget.max_cost_usd:
             logger.warning(
@@ -312,7 +338,7 @@ class ModelGatewayService:
             "model gateway response model_role=%s endpoint=%s prompt_tokens=%d completion_tokens=%d "
             "cost_usd=%.6f tool_calls=%d finish_reason=%s duration_ms=%.1f",
             request.role,
-            role.endpoint,
+            handler.endpoint,
             result.usage.prompt_tokens,
             result.usage.completion_tokens,
             result.cost_usd,

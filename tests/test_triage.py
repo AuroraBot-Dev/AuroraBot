@@ -4,17 +4,22 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import (
+from src.agents.triage import TriageAgent
+from src.contracts import (
     AgentContext,
     AgentDecision,
     AgentLimits,
     AgentProfile,
     Completion,
     EngineConfiguration,
+    ModelRequest,
+    ModelResult,
+    ModelUsage,
     TaskLimits,
+    TaskStatus,
+    TriageLimits,
+    new_amp,
 )
-from src.contracts.amp import new_amp
-from src.contracts.triage import TriageAction, TriageDecision, TriageLimits
 from src.engine.runtime import AgentEngine
 from src.engine.store import SQLiteRuntimeStore
 
@@ -33,6 +38,96 @@ def _event(summary: str, *, session_id: str = "session", data: dict[str, object]
         source_app="test",
         source_instance="local",
     )
+
+
+def _profiles() -> tuple[AgentProfile, ...]:
+    return (
+        AgentProfile(
+            "triage",
+            "src.agents.triage:TriageAgent",
+            "fast",
+            frozenset(),
+            can_delegate=True,
+            child_profiles=frozenset({"gate"}),
+            triage_control=True,
+        ),
+        AgentProfile(
+            "gate",
+            "test",
+            "quality",
+            frozenset(),
+            can_delegate=False,
+            child_profiles=frozenset(),
+        ),
+    )
+
+
+def _configuration(workspace: Path) -> EngineConfiguration:
+    return EngineConfiguration(
+        str(workspace),
+        _profiles(),
+        AgentLimits(root_profile="triage", worker_profile="gate"),
+        TaskLimits(4, 4, 300),
+        TaskLimits(4, 4, 120),
+        TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+    )
+
+
+class _CompletingHandler:
+    def handle(self, context: AgentContext) -> AgentDecision:
+        return AgentDecision(completion=Completion(f"done: {context.agent.assignment}"))
+
+
+class _StructuredProvider:
+    """按请求序号返回预设结果：首个请求返回 triage 决策，其余返回 process。"""
+
+    def __init__(self, first: dict[str, object] | None = None, *, fail_first: bool = False) -> None:
+        self._first = first
+        self._fail_first = fail_first
+        self._calls = 0
+
+    async def complete(self, request: ModelRequest) -> ModelResult:
+        self._calls += 1
+        if self._fail_first and self._calls == 1:
+            raise RuntimeError("offline")
+        data = (
+            self._first
+            if self._calls == 1 and self._first is not None
+            else {
+                "action": "process",
+                "summary": "test batch",
+                "reason": "test input",
+            }
+        )
+        return ModelResult(
+            request.role,
+            frozenset({"chat", "structured_output"}),
+            "normalized",
+            "",
+            data,
+            ModelUsage(),
+            0.0,
+        )
+
+
+def _engine(workspace: Path, provider: _StructuredProvider) -> AgentEngine:
+    engine = AgentEngine(
+        _configuration(workspace),
+        {"triage": TriageAgent(), "gate": _CompletingHandler()},
+        model_provider=provider,
+    )
+    engine.bind_tool_executors(())
+    return engine
+
+
+async def _pump_until_terminal(engine: AgentEngine, task_id: str, max_rounds: int = 20) -> None:
+    for _ in range(max_rounds):
+        task = engine.get_task(task_id)
+        if task is None or task.terminal:
+            return
+        await engine.pump()
+        await asyncio.sleep(0)  # 让模型派发后台任务完成
+    raise AssertionError("task did not reach terminal state")
 
 
 def test_dynamic_debounce_batches_a_session_and_deduplicates(tmp_path: Path) -> None:
@@ -55,66 +150,148 @@ def test_dynamic_debounce_batches_a_session_and_deduplicates(tmp_path: Path) -> 
     asyncio.run(scenario())
 
 
-def test_triage_defer_discard_and_process_have_distinct_storage_effects(tmp_path: Path) -> None:
+def test_triage_process_delegates_gate_with_batch_context_and_completes(tmp_path: Path) -> None:
     async def scenario() -> None:
-        store = SQLiteRuntimeStore(tmp_path / "runtime.sqlite3")
-        store.initialize()
-        limits = TriageLimits(quiet_seconds=0, max_wait_seconds=0.001)
-        budget = TaskLimits(2, 1, 30)
+        engine = _engine(
+            tmp_path,
+            _StructuredProvider(
+                {
+                    "action": "process",
+                    "summary": "handle hello",
+                    "reason": "user",
+                    "memory_candidate": "prefers brevity",
+                }
+            ),
+        )
+        try:
+            await engine.submit_amp(_event("hello").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
 
-        assert store.enqueue_inbox(_event("wait"), limits)
-        await asyncio.sleep(0.001)
-        deferred = store.claim_triage_batches(limits, 1)[0]
-        assert (
-            store.apply_triage(
-                deferred,
-                TriageDecision(TriageAction.DEFER, "wait", "more context expected", defer_seconds=0.01),
-                root_profile="root",
-                interactive_budget=budget,
-                autonomous_budget=budget,
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+            assert engine.status()["inbox_events"] == 0
+
+            with engine.store.connect() as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload_json FROM messages WHERE task_id = ? AND type = 'agent.assigned'",
+                        (task_id,),
+                    ).fetchone()[0]
+                )
+            assert payload["instruction"] == "handle hello"
+            assert payload["context_events"][0]["summary"] == "hello"
+
+            entries = engine.completed_memory_entries()
+            candidates = [fact for entry in entries for fact in entry.fact_candidates]
+            assert "prefers brevity" in candidates
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_triage_defer_returns_batch_to_deferred_and_reclaims(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        engine = _engine(
+            tmp_path,
+            _StructuredProvider({"action": "defer", "summary": "wait", "reason": "more soon", "defer_seconds": 0.01}),
+        )
+        try:
+            await engine.submit_amp(_event("wait").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.CANCELLED
+            assert task.termination_reason == "triage.defer"
+            assert engine.status()["inbox_events"] == 1
+
+            await asyncio.sleep(0.012)
+            batches = engine.store.claim_triage_batches(engine.configuration.triage, 8)
+            assert len(batches) == 1
+            created = engine.store.create_triage_task(
+                batches[0],
+                triage_profile="triage",
+                interactive_budget=engine.configuration.interactive_budget,
+                autonomous_budget=engine.configuration.autonomous_budget,
                 priority=100,
             )
-            is None
-        )
-        assert store.claim_triage_batches(limits, 1) == ()
-        await asyncio.sleep(0.012)
-        discarded = store.claim_triage_batches(limits, 1)[0]
-        assert (
-            store.apply_triage(
-                discarded,
-                TriageDecision(TriageAction.DISCARD, "noise", "transient"),
-                root_profile="root",
-                interactive_budget=budget,
-                autonomous_budget=budget,
-                priority=100,
-            )
-            is None
-        )
-        assert store.counts()["inbox_events"] == 0
+            assert created is not None
+        finally:
+            await engine.shutdown()
 
-        assert store.enqueue_inbox(_event("do it"), limits)
-        await asyncio.sleep(0.001)
-        admitted = store.claim_triage_batches(limits, 1)[0]
-        task_id = store.apply_triage(
-            admitted,
-            TriageDecision(TriageAction.PROCESS, "do it", "user request", memory_candidate="prefers brevity"),
-            root_profile="root",
-            interactive_budget=budget,
-            autonomous_budget=budget,
-            priority=100,
+    asyncio.run(scenario())
+
+
+def test_triage_discard_removes_batch_events(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        engine = _engine(
+            tmp_path, _StructuredProvider({"action": "discard", "summary": "noise", "reason": "transient"})
         )
-        assert task_id is not None
-        assert store.counts()["inbox_events"] == 0
-        assert store.get_task(task_id) is not None
-        with store.connect() as connection:
-            payload = json.loads(
-                connection.execute(
-                    "SELECT payload_json FROM mailbox WHERE task_id = ? AND type = 'task.started'",
-                    (task_id,),
-                ).fetchone()[0]
-            )
-        assert payload["events"][0]["summary"] == "do it"
-        assert payload["triage"]["memory_candidate"] == "prefers brevity"
+        try:
+            await engine.submit_amp(_event("noise").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.CANCELLED
+            assert task.termination_reason == "triage.discard"
+            assert engine.status()["inbox_events"] == 0
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_triage_fail_open_delegates_on_model_failure(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        engine = _engine(tmp_path, _StructuredProvider(fail_first=True))
+        try:
+            await engine.submit_amp(_event("must survive").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+            assert engine.status()["inbox_events"] == 0
+            with engine.store.connect() as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload_json FROM messages WHERE task_id = ? AND type = 'agent.assigned'",
+                        (task_id,),
+                    ).fetchone()[0]
+                )
+            assert "must survive" in payload["instruction"]
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_triage_agent_requests_structured_output_without_tools(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        engine = _engine(tmp_path, _StructuredProvider({"action": "discard", "summary": "x", "reason": "y"}))
+        try:
+            await engine.submit_amp(_event("noise").to_dict())
+            await asyncio.sleep(0.001)
+            await engine.pump()
+            rows = engine.store.claim_activities("model", 1)
+            assert rows
+            request = ModelRequest.from_dict(json.loads(rows[0]["request_json"]))
+            assert request.tool_choice == "none"
+            assert not request.tools
+            assert request.output_schema is not None
+        finally:
+            await engine.shutdown()
 
     asyncio.run(scenario())
 
@@ -133,57 +310,5 @@ def test_oversized_event_is_bounded_before_triage_and_root(tmp_path: Path) -> No
         batch = store.claim_triage_batches(limits, 1)[0]
         assert len(json.dumps(batch.to_dict(), ensure_ascii=False, separators=(",", ":"))) <= _SMALL_BATCH_LIMIT
         assert batch.events[0].data["truncated"] is True
-
-    asyncio.run(scenario())
-
-
-def test_triage_failure_admits_user_input_instead_of_losing_it(tmp_path: Path) -> None:
-    class BrokenProvider:
-        async def complete(self, _request: object) -> object:
-            raise RuntimeError("offline")
-
-    class Policy:
-        def request(self, _batch: object) -> object:
-            return object()
-
-        def resolve(self, _batch: object, _result: object) -> object:
-            raise AssertionError
-
-    class Handler:
-        def handle(self, context: AgentContext) -> AgentDecision:
-            return AgentDecision(completion=Completion(context.task.root_summary))
-
-    async def scenario() -> None:
-        profile = AgentProfile(
-            "root",
-            "unused",
-            "quality",
-            frozenset(),
-            can_delegate=False,
-            child_profiles=frozenset(),
-        )
-        configuration = EngineConfiguration(
-            str(tmp_path / "engine"),
-            (profile,),
-            AgentLimits(root_profile="root", worker_profile="root"),
-            TaskLimits(1, 1, 30),
-            TaskLimits(1, 1, 30),
-            TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
-        )
-        engine = AgentEngine(
-            configuration,
-            {"root": Handler()},
-            model_provider=BrokenProvider(),  # type: ignore[arg-type]
-            triage_policy=Policy(),  # type: ignore[arg-type]
-        )
-        engine.bind_tool_executors(())
-        try:
-            await engine.submit_amp(_event("must survive").to_dict())
-            await asyncio.sleep(0.001)
-            result = await engine.pump()
-            assert len(result["admitted_task_ids"]) == 1
-            assert len(result["processed_message_ids"]) == 1
-        finally:
-            await engine.shutdown()
 
     asyncio.run(scenario())

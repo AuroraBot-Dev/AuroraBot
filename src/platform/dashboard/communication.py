@@ -10,8 +10,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
 
-from src.contracts.event import CommandControl
-from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
+from src.contracts import (
+    CommandControl,
+    ToolExecutionRequest,
+)
 from src.platform.dashboard.adapter import DASHBOARD_SEND_CAPABILITY
 from src.platform.dashboard.routing import (
     PrivateMessageInput,
@@ -19,8 +21,9 @@ from src.platform.dashboard.routing import (
     dashboard_input,
     is_conversation_command,
     is_quit_command,
+    message_to_api,
 )
-from src.utils.time import utc_now
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     import sqlite3
@@ -69,7 +72,7 @@ class DashboardCommunication:
         Args:
             configuration: Dashboard 配置。
             store: 聊天持久化存储。
-            input_port: 交互式输入端口，用于路由用户命令到 localhost。
+            input_port: 交互式输入端口，用于路由用户命令到 ops。
             bot_id: 获取 Bot 用户 ID 的回调。
             publish: 向指定用户推送消息的异步回调。
         """
@@ -102,7 +105,7 @@ class DashboardCommunication:
         *,
         created: bool,
     ) -> None:
-        """处理发送给 Bot 的消息：路由至 localhost 并持久化命令回复。
+        """处理发送给 Bot 的消息：路由至 ops 并持久化命令回复。
 
         仅处理文本消息；重复的旧命令不被重新路由。
 
@@ -172,28 +175,25 @@ class DashboardCommunication:
         message_row = await asyncio.to_thread(self._store.message_with_attachment, int(row["id"]))
         assert message_row is not None
         control = CommandControl.SHUTDOWN_PROCESS if is_quit_command(content) else CommandControl.NONE
-        message["_post_ack"] = {"reply": self._message(message_row), "control": control}
+        message["_post_ack"] = {"reply": message_to_api(message_row), "control": control}
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
+    async def execute_tool(self, request: ToolExecutionRequest) -> tuple[str, str, dict[str, Any] | None, str | None]:
         """执行 Dashboard Tool 请求：将文本消息发送给配置的所有者。
 
         含幂等性检查、验证、持久化和发布流程。
         """
-        existing = await asyncio.to_thread(
-            self._store.fetch_one, "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request.request_id,)
-        )
-        if existing is not None:
-            return self._tool_outcome(existing, request)
-
         error = self._validate_tool(request)
         text = request.parameters.get("text")
         now = await asyncio.to_thread(utc_now)
-        await asyncio.to_thread(
-            self._store.execute,
-            "INSERT INTO dashboard_tool_requests(request_id, request_digest, text, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, 'dispatch_started', ?, ?)",
-            (request.request_id, _request_digest(request), text if isinstance(text, str) else "", now, now),
+        record, created_request = await asyncio.to_thread(
+            self._store.begin_tool_request,
+            request.request_id,
+            _request_digest(request),
+            text if isinstance(text, str) else "",
+            now,
         )
+        if not created_request:
+            return self._tool_outcome(record, request)
         if error is not None:
             return await self._finish_failure(request.request_id, error)
 
@@ -206,39 +206,31 @@ class DashboardCommunication:
             return await self._finish_failure(request.request_id, "已配置的 Dashboard 所有者不可用")
         owner_id = int(owner["id"])
         message_id = str(uuid5(NAMESPACE_URL, f"aurora-dashboard-tool:{request.request_id}"))
+        summary = "Dashboard 消息已发送"
         message_row, created = await asyncio.to_thread(
-            self._store.create_message,
-            client_message_id=message_id,
+            self._store.complete_tool_message,
+            request_id=request.request_id,
+            message_id=message_id,
             sender_id=self._bot_id(),
             receiver_id=owner_id,
-            message_type="text",
-            content=str(text),
-            attachment_id=None,
-            source_tool_request_id=request.request_id,
-        )
-        summary = "Dashboard 消息已发送"
-        await asyncio.to_thread(
-            self._store.execute,
-            "UPDATE dashboard_tool_requests SET status = 'succeeded', summary = ?, external_message_id = ?, "
-            "updated_at = ? WHERE request_id = ?",
-            (summary, message_id, await asyncio.to_thread(utc_now), request.request_id),
+            text=str(text),
+            summary=summary,
+            now=await asyncio.to_thread(utc_now),
         )
         if created:
-            await self._publish(owner_id, {"type": "private_message", "message": self._message(message_row)})
-        return ToolOutcome(ToolOutcomeStatus.SUCCEEDED, summary, result={"message_id": message_id})
+            await self._publish(owner_id, {"type": "private_message", "message": message_to_api(message_row)})
+        return "succeeded", summary, {"message_id": message_id}, None
 
-    async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
+    async def recover_tool(self, request: ToolExecutionRequest) -> tuple[str, str, dict[str, Any] | None, str | None]:
         """恢复 Dashboard Tool 执行状态。
 
         用于故障恢复：查询持久化记录，若有已知结果则返回，否则返回中断错误。
         """
         row = await asyncio.to_thread(
-            self._store.fetch_one, "SELECT * FROM dashboard_tool_requests WHERE request_id = ?", (request.request_id,)
+            self._store.recover_tool_request, request.request_id, await asyncio.to_thread(utc_now)
         )
         if row is None:
-            return ToolOutcome(
-                ToolOutcomeStatus.FAILED, "Dashboard 发送在分发前被中断", error="interrupted_before_dispatch"
-            )
+            return "failed", "Dashboard 发送在分发前被中断", None, "interrupted_before_dispatch"
         return self._tool_outcome(row, request)
 
     @staticmethod
@@ -253,7 +245,7 @@ class DashboardCommunication:
             return "Dashboard 发送的 text 必须是非空字符串"
         return None
 
-    async def _finish_failure(self, request_id: str, error: str) -> ToolOutcome:
+    async def _finish_failure(self, request_id: str, error: str) -> tuple[str, str, dict[str, Any] | None, str | None]:
         """将 Tool 请求标记为失败并返回结果。"""
         summary = "Dashboard 发送失败"
         await asyncio.to_thread(
@@ -262,32 +254,24 @@ class DashboardCommunication:
             "WHERE request_id = ?",
             (summary, error, await asyncio.to_thread(utc_now), request_id),
         )
-        return ToolOutcome(ToolOutcomeStatus.FAILED, summary, error=error)
+        return "failed", summary, None, error
 
     @staticmethod
-    def _tool_outcome(row: sqlite3.Row, request: ToolExecutionRequest) -> ToolOutcome:
-        """从持久化记录构造 ToolOutcome，同时校验请求摘要的幂等性。"""
+    def _tool_outcome(
+        row: sqlite3.Row, request: ToolExecutionRequest
+    ) -> tuple[str, str, dict[str, Any] | None, str | None]:
+        """从持久化记录构造平台结果，同时校验请求摘要的幂等性。"""
         digest = row["request_digest"]
         if digest is None:
-            return ToolOutcome(
-                ToolOutcomeStatus.UNKNOWN, "Dashboard 发送标识未知", error="legacy_request_identity_unknown"
-            )
+            return "unknown", "Dashboard 发送标识未知", None, "legacy_request_identity_unknown"
         if str(digest) != _request_digest(request):
-            return ToolOutcome(
-                ToolOutcomeStatus.FAILED, "Dashboard Tool 幂等性冲突", error="request_id_reused_with_different_content"
-            )
+            return "failed", "Dashboard Tool 幂等性冲突", None, "request_id_reused_with_different_content"
         status = str(row["status"])
         if status == "dispatch_started":
-            return ToolOutcome(
-                ToolOutcomeStatus.UNKNOWN,
-                "Dashboard 消息投递结果未知",
-                error="dispatch_started_without_terminal_outcome",
-            )
+            return "unknown", "Dashboard 消息投递结果未知", None, "dispatch_started_without_terminal_outcome"
         if status == "succeeded":
-            return ToolOutcome(
-                ToolOutcomeStatus.SUCCEEDED, str(row["summary"]), result={"message_id": str(row["external_message_id"])}
-            )
-        return ToolOutcome(ToolOutcomeStatus.FAILED, str(row["summary"]), error=str(row["error"]))
+            return "succeeded", str(row["summary"]), {"message_id": str(row["external_message_id"])}, None
+        return "failed", str(row["summary"]), None, str(row["error"])
 
     async def _persist_command_reply(
         self,
@@ -319,22 +303,7 @@ class DashboardCommunication:
             content=text,
             attachment_id=None,
         )
-        return self._message(row)
-
-    @staticmethod
-    def _message(row: sqlite3.Row) -> dict[str, Any]:
-        """将数据库行转换为 API 消息字典格式。"""
-        return {
-            "message_id": int(row["id"]),
-            "client_message_id": str(row["client_message_id"]),
-            "sender_id": int(row["sender_id"]),
-            "receiver_id": int(row["receiver_id"]),
-            "message_type": str(row["message_type"]),
-            "content": row["content"],
-            "attachment": None,
-            "created_at": str(row["created_at"]),
-            "status": str(row["status"]),
-        }
+        return message_to_api(row)
 
 
 def _request_digest(request: ToolExecutionRequest) -> str:

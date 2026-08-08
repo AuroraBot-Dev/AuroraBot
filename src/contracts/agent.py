@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from src.contracts.memory import MemoryContextSnapshot
+from src.contracts.model import ToolDefinition
 from src.contracts.triage import TriageLimits
 
 if TYPE_CHECKING:
-    from src.contracts.model import ModelContinuation, ToolCall, ToolDefinition
+    from src.contracts.model import ModelRequest, ToolCall
 
 
 # -- enums ---------------------------------------------------------------
@@ -34,10 +36,9 @@ class TaskStatus(StrEnum):
 
 
 class AgentStatus(StrEnum):
+    """Agent 持久化基态；等待语义由 activities/children 派生（RFC 0205）。"""
+
     READY = "READY"
-    WAITING_MODEL = "WAITING_MODEL"
-    WAITING_TOOL = "WAITING_TOOL"
-    WAITING_CHILDREN = "WAITING_CHILDREN"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -98,7 +99,7 @@ class TaskLimits:
 
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
-    root_profile: str = "builtin.root"
+    root_profile: str = "builtin.triage"
     worker_profile: str = "builtin.worker"
     max_active_agents: int = 16
     max_agents_per_task: int = 8
@@ -108,7 +109,6 @@ class AgentLimits:
     model_concurrency: int = 4
     tool_concurrency: int = 8
     blocking_workers: int = 4
-    lease_seconds: float = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +119,7 @@ class AgentProfile:
     capabilities: frozenset[str]
     can_delegate: bool
     child_profiles: frozenset[str]
+    triage_control: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +147,24 @@ class ToolRequest:
     parameters: dict[str, Any]
     complete_task: bool = False
     tool_call_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "ToolRequest":
+        """从持久化的工具活动请求字典反序列化。"""
+        return cls(
+            capability=str(value["capability"]),
+            parameters=dict(value.get("parameters", {})),
+            complete_task=bool(value.get("complete_task", False)),
+            tool_call_id=value.get("tool_call_id"),
+        )
+
+
+def capability_tool_definition(descriptor: CapabilityDescriptor) -> ToolDefinition:
+    """保持外部 schema 原样，不再注入隐藏参数。"""
+    return ToolDefinition(descriptor.id, descriptor.description, deepcopy(descriptor.parameters_schema))
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,7 +224,6 @@ class AgentInstance:
     depth: int
     assignment: str
     status: AgentStatus
-    revision: int
     state: dict[str, Any]
     created_at: str
     updated_at: str
@@ -230,8 +248,6 @@ class AgentMessage:
     correlation_id: str
     priority: int
     status: MessageStatus
-    available_at: str
-    lease_until: str | None
     created_at: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -240,13 +256,17 @@ class AgentMessage:
 
 @dataclass(frozen=True, slots=True)
 class AgentDecision:
-    model_request: dict[str, Any] | None = None
+    model_request: "ModelRequest | None" = None
     tool_request: ToolRequest | None = None
     delegations: tuple[DelegationRequest, ...] = ()
     completion: Completion | None = None
     wait_for_children: bool = False
+    defer_seconds: float | None = None
+    discard: bool = False
     failure: str | None = None
     state_patch: dict[str, Any] = field(default_factory=dict)
+    memory_candidates: tuple[str, ...] = ()
+    summary: str = ""
 
     def __post_init__(self) -> None:
         transitions = (
@@ -255,10 +275,28 @@ class AgentDecision:
             bool(self.delegations),
             self.completion is not None,
             self.wait_for_children,
+            self.defer_seconds is not None,
+            self.discard,
             self.failure is not None,
         )
         if sum(transitions) != 1:
             raise ValueError(ErrorMsg.AGENT_DECISION_REQUIRES_ONE_TRANSITION)
+
+    def to_dict(self) -> dict[str, Any]:
+        """将决策序列化为因果事件载荷。"""
+        return {
+            "model_request": self.model_request.to_dict() if self.model_request is not None else None,
+            "tool_request": self.tool_request.to_dict() if self.tool_request is not None else None,
+            "delegations": [asdict(item) for item in self.delegations],
+            "completion": asdict(self.completion) if self.completion is not None else None,
+            "wait_for_children": self.wait_for_children,
+            "defer_seconds": self.defer_seconds,
+            "discard": self.discard,
+            "failure": self.failure,
+            "state_patch": self.state_patch,
+            "memory_candidates": list(self.memory_candidates),
+            "summary": self.summary,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,29 +309,20 @@ class ActivityRequest:
     status: ActivityStatus
     priority: int
     idempotency_key: str
-    lease_until: str | None
     created_at: str
 
 
 @dataclass(frozen=True, slots=True)
-class ToolLease:
-    activity_id: str
-    task_id: str
-    agent_id: str
-    request_id: str
-    session_id: str
-    capability: str
-    parameters: dict[str, Any]
-
-
-@dataclass(frozen=True, slots=True)
 class AgentContext:
+    """一次 Agent 轮次的只读快照；handler 不得修改任何字段。"""
+
     task: TaskState
     agent: AgentInstance
     message: AgentMessage
     children: tuple[AgentInstance, ...]
     profile: AgentProfile
     capabilities: tuple[CapabilityDescriptor, ...]
+    tool_definitions: tuple[ToolDefinition, ...] = ()
     memory: MemoryContextSnapshot = field(default_factory=MemoryContextSnapshot)
     pending_child_reports: bool = False
 
@@ -311,22 +340,4 @@ class Capability(Protocol):
 
     def tool_definitions(self, context: AgentContext) -> tuple["ToolDefinition", ...]: ...
 
-    def handle_tool(
-        self,
-        call: "ToolCall",
-        context: AgentContext,
-        continuation: "ModelContinuation | None" = None,
-        tools: tuple["ToolDefinition", ...] = (),
-    ) -> AgentDecision | None: ...
-
-
-class ToolQueue(Protocol):
-    async def claim_tool_requests(self) -> tuple[ToolLease, ...]: ...
-    async def tool_recovery_requests(self) -> tuple[ToolLease, ...]: ...
-
-
-class ModelActivityQueue(Protocol):
-    async def claim_model_requests(self, limit: int) -> tuple[ActivityRequest, ...]: ...
-    async def complete_model(
-        self, activity: ActivityRequest, result: dict[str, Any] | None, error: str | None
-    ) -> None: ...
+    def handle_tool(self, call: "ToolCall") -> AgentDecision | None: ...

@@ -1,8 +1,6 @@
 """MCP Server 启动规范。
 
 由已校验的 ``config/apps.toml`` App 配置构造。
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -33,9 +31,6 @@ class MCPServerSpec:
     name: str
     """人类可读名称，如 ``天气应用``。"""
 
-    version: str = "0.1.0"
-    """App 版本号。"""
-
     directory: Path = Path()
     """App 目录路径。"""
 
@@ -53,9 +48,6 @@ class MCPServerSpec:
 
     enabled: bool = True
     """是否启用。"""
-
-    startup: dict[str, object] = field(default_factory=dict)
-    """传递给本地 MCP Server 的启动参数。"""
 
     health_timeout_seconds: float = 10.0
     """健康检查超时秒数。"""

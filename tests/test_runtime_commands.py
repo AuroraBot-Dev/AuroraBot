@@ -3,7 +3,11 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from src.contracts.event import CommandControl, InputOrigin, RuntimeInput
+from src.contracts import (
+    CommandControl,
+    InputOrigin,
+    RuntimeInput,
+)
 from tests.support import create_test_runtime
 
 if TYPE_CHECKING:
@@ -44,6 +48,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
             assert status.ok and status.data is not None
             assert help_result.ok and "/event" in (help_result.text or "")
+            assert "/reload" not in (help_result.text or "")
             assert not unknown.ok
             assert not invalid.ok and "用法" in (invalid.text or "")
             assert not invalid_quote.ok
@@ -68,6 +73,26 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
             agent_result = await runtime.route_input(_input(f"/agent {agent_id}"))
             assert task_result.ok and task_result.data is not None
             assert agent_result.ok and agent_result.data is not None
+        finally:
+            await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_ai_command_reports_gateway_cost_stats(project_root: Path) -> None:
+    """/ai 返回模型网关的费用与分类统计（RFC 0215）。"""
+
+    async def scenario() -> None:
+        runtime = create_test_runtime(project_root)
+        try:
+            if runtime.model_gateway is not None:
+                tracker = runtime.model_gateway.cost_tracker
+                await tracker.add({"role": "fast", "model": "m1", "status": "completed", "cost": 0.5})
+            result = await runtime.route_input(_input("/ai"))
+            assert result.ok
+            assert result.data is not None
+            assert "total_cost" in result.data
+            assert "by_role" in result.data
         finally:
             await runtime.shutdown()
 
@@ -101,6 +126,20 @@ def test_runtime_shutdown_request_and_idempotent_conversation(project_root: Path
         assert stopped
         assert first.message_id == second.message_id
         assert len(pumped["admitted_task_ids"]) == 1
+        await runtime.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_stop_event_wakes_idle_runtime_immediately(project_root: Path) -> None:
+    async def scenario() -> None:
+        runtime = create_test_runtime(project_root)
+        runtime.engine._idle_wait_seconds = 60
+        stop = asyncio.Event()
+        task = asyncio.create_task(runtime.run_forever(stop))
+        await asyncio.sleep(0)
+        stop.set()
+        await asyncio.wait_for(task, timeout=1)
         await runtime.shutdown()
 
     asyncio.run(scenario())

@@ -5,26 +5,27 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from src.agents.triage import StructuredTriagePolicy
-from src.contracts.agent import (
+from src.contracts import (
     AgentContext,
     AgentDecision,
     AgentLimits,
     AgentProfile,
     Completion,
     EngineConfiguration,
+    MemoryContextSnapshot,
+    MemoryEntry,
+    MemoryQuery,
+    ModelRequest,
+    ModelResult,
+    ModelUsage,
     TaskLimits,
+    TriageLimits,
+    new_amp,
 )
-from src.contracts.amp import new_amp
-from src.contracts.memory import MemoryContextSnapshot, MemoryEntry, MemoryQuery
-from src.contracts.model import ModelResult, ModelUsage
-from src.contracts.triage import TriageLimits
 from src.engine.runtime import AgentEngine
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from src.contracts.model import ModelRequest
 
 
 class _CompletingHandler:
@@ -68,7 +69,6 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
             configuration,
             {profile.id: _CompletingHandler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
         )
         engine.bind_tool_executors(())
         try:
@@ -82,6 +82,7 @@ def test_engine_owns_complete_pump(tmp_path: Path) -> None:
                     source_instance="local",
                 ).to_dict()
             )
+            assert engine.status()["inbox_events"] == 1
             result = await engine.pump()
 
             assert message_id
@@ -107,6 +108,9 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
         def remember(self, entry: MemoryEntry) -> bool:
             events.append(("remember", entry))
             return True
+
+        def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:  # noqa: ARG002
+            events.append(("append_turn", role))
 
     class Handler:
         def handle(self, context: AgentContext) -> AgentDecision:
@@ -135,7 +139,6 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             configuration,
             {profile.id: Handler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
             memory_store=Memory(),
         )
         engine.bind_tool_executors(())
@@ -151,8 +154,10 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
                 ).to_dict()
             )
             interactive = await engine.pump()
+            await asyncio.sleep(0)  # 让异步记忆投影任务执行（RFC 0210 单循环）
             interactive_id = interactive["admitted_task_ids"][0]
-            assert [name for name, _value in events[:2]] == ["recall", "handler"]
+            # RFC 0216：user 窗口写入 → recall → handler → assistant 窗口写入
+            assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert [entry.task_id for entry in remembered if isinstance(entry, MemoryEntry)] == [interactive_id]
             recalled = next(value for name, value in events if name == "recall")
@@ -171,7 +176,7 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
             )
             autonomous = await engine.pump()
             autonomous_id = autonomous["admitted_task_ids"][0]
-            assert [name for name, _value in events[:2]] == ["recall", "handler"]
+            assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert all(isinstance(entry, MemoryEntry) and entry.task_id != autonomous_id for entry in remembered)
         finally:
@@ -184,7 +189,7 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
     class ModelRequestingHandler:
         def handle(self, context: AgentContext) -> AgentDecision:
             _ = context
-            return AgentDecision(model_request={"role": "test", "messages": []})
+            return AgentDecision(model_request=ModelRequest(role="test", messages=()))
 
     async def exercise() -> None:
         profile = AgentProfile(
@@ -207,7 +212,6 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
             configuration,
             {profile.id: ModelRequestingHandler()},
             model_provider=_UnusedModelProvider(),
-            triage_policy=StructuredTriagePolicy(configuration.triage),
         )
         engine.bind_tool_executors(())
         try:
@@ -237,6 +241,57 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
             detail = engine.task_detail(task_id)
             assert detail is not None
             assert detail["task"]["status"] == "ACTIVE"
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_engine_records_session_causality_in_sqlite(tmp_path: Path) -> None:
+    """RFC 0210：会话可读性由 causal_events 提供，不再写 JSONL。"""
+
+    async def exercise() -> None:
+        profile = AgentProfile(
+            id="test.root",
+            implementation="unused",
+            model_role="test",
+            capabilities=frozenset(),
+            can_delegate=False,
+            child_profiles=frozenset(),
+        )
+        configuration = EngineConfiguration(
+            workspace=str(tmp_path / "engine"),
+            profiles=(profile,),
+            limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
+            interactive_budget=TaskLimits(1, 1, 30.0),
+            autonomous_budget=TaskLimits(1, 1, 30.0),
+            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+        )
+        engine = AgentEngine(
+            configuration,
+            {profile.id: _CompletingHandler()},
+            model_provider=_UnusedModelProvider(),
+        )
+        engine.bind_tool_executors(())
+        try:
+            await engine.submit_amp(
+                new_amp(
+                    event_type="message.received",
+                    session_id="group/私聊:10001",
+                    summary="hello",
+                    data={"text": "hello"},
+                    source_app="org.aurora.qq",
+                    source_instance="mcp:org.aurora.qq",
+                ).to_dict()
+            )
+            result = await engine.pump()
+            assert len(result["admitted_task_ids"]) == 1
+            task_id = result["admitted_task_ids"][0]
+            detail = engine.task_detail(task_id)
+            assert detail is not None
+            types = [event["type"] for event in detail["events"]]
+            assert types == ["task.started", "agent.complete"]
+            assert not (tmp_path / "engine" / "sessions").exists()
         finally:
             await engine.shutdown()
 

@@ -11,8 +11,6 @@ DeepSeek 等 OpenAI 兼容 API）注册到 litellm 配置中。网关在发起 L
     from src.ai.providers import setup_providers
 
     setup_providers()  # 在网关初始化之前调用一次
-
-作者: [Churk-Ben](https://github.com/Churk-Ben)
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 logger = get_logger("Providers")
 

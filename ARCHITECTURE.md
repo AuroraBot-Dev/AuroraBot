@@ -1,5 +1,9 @@
 # 包依赖关系
 
+> **注意**：本文档是 RFC 0200 的详细实施规划（历史基准）。RFC 0210 重写 engine 后，
+> 完整的最新技术解析（架构图、子包模式、数据流转、持久化、工具域）见 **`docs/TECHNICAL.md`**。
+> 本文档中与 `docs/TECHNICAL.md` 或已接受 RFC 冲突的内容，以后两者为准。
+
 本文档描述 AuroraBot 源码包之间的导入依赖与硬边界。**持续与实现保持同步**。
 
 ## 指导原则
@@ -23,12 +27,8 @@
 
 ```python
 # 正确
-# 从 Agent 邮箱领取消息，CAS 获取租约
-def claim_message(self, lease_seconds: float) -> ClaimResult | None: ...
 
 # 错误
-# claim messages from agent mailbox with CAS lease
-def claim_message(self, lease_seconds: float) -> ClaimResult | None: ...
 ```
 
 ### 3. 硬编码文本上提为文件级枚举
@@ -102,19 +102,19 @@ raise RuntimeError("ToolAgent requires an installed PromptComposer")
 | 路径         | 包                                              | 角色                                                                   | 方向                                 |
 | ------------ | ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------ |
 | **热路径**   | `engine` → Ports → `platform` / `ai` / `memory` | Agent 认知闭环：事件摄入 → 决策 → 模型调用 → 工具执行 → 记忆           | 引擎通过注入的 Port 驱动适配器       |
-| **检查路径** | `localhost` → 所有包                            | 运行时状态监察、命令路由、调试接口、输入分发                           | `localhost` 检查一切，不被热路径依赖 |
-| **组合**     | `aurora`                                        | 进程入口：构造 engine + 注入 Port + 启动平台 + 挂载 localhost 命令路由 | 唯一组合根                           |
+| **检查路径** | `ops` → `contracts` / `utils`          | 运行时状态监察、命令路由、调试接口、输入分发                           | `ops` 经注入 Port 观察，不被热路径依赖 |
+| **组合**     | `aurora`                                        | 进程入口：构造 engine + 注入 Port + 启动平台 + 挂载 ops 命令路由 | 唯一组合根                           |
 
 ### 依赖全景
 
-箭头方向为「依赖者 → 被依赖者」。`localhost` 是监察 sidecar，注入所有需要检查的包，但**不在热路径中**——engine 的 pump 循环不经过 localhost。
+箭头方向为「依赖者 → 被依赖者」。`ops` 是监察 sidecar，只依赖 `contracts` + `utils`，**不在热路径中**——engine 的 pump 循环不经过 ops。
 
 ```mermaid
 graph TD
     aurora["aurora<br/>进程组合 · CLI"]
-    localhost["src/localhost<br/>运行时监察 · 命令路由 · 调试"]
+    ops["ops<br/>运行时监察 · 命令路由 · 调试"]
     engine["src/engine<br/>Agent 运行时引擎 · 状态 · 因果"]
-    platform["src/platform<br/>Console · Dashboard · MCP · NoneBot"]
+    platform["src/platform<br/>Dashboard · MCP · NoneBot"]
     ai["src/ai<br/>模型网关"]
     memory["src/memory<br/>记忆服务（自动）"]
     agents["src/agents<br/>Agent handler · 主动能力"]
@@ -125,7 +125,7 @@ graph TD
     sandbox["src/sandbox<br/>独立沙箱（未启用）"]
 
     aurora --> engine
-    aurora --> localhost
+    aurora --> ops
     aurora --> platform
     aurora --> ai
     aurora --> memory
@@ -133,15 +133,8 @@ graph TD
     aurora --> contracts
     aurora --> utils
 
-    localhost --> engine
-    localhost --> platform
-    localhost --> ai
-    localhost --> memory
-    localhost --> agents
-    localhost --> config
-    localhost --> prompt
-    localhost --> contracts
-    localhost --> utils
+    ops --> contracts
+    ops --> utils
 
     engine --> contracts
     engine --> utils
@@ -173,7 +166,7 @@ graph TD
     class contracts,prompt,config,memory,ai,agents,platform,utils leaf
     class engine engine
     class aurora proc
-    class localhost inspect
+    class ops inspect
     class sandbox iso
 ```
 
@@ -181,13 +174,13 @@ graph TD
 
 | 层           | 包              | 职责                                                                                               | 可依赖                     |
 | ------------ | --------------- | -------------------------------------------------------------------------------------------------- | -------------------------- |
-| **进程层**   | `aurora`        | 唯一进程 CLI、平台选择、生命周期组合、engine + Port 构造、挂载 localhost 命令路由与主事件循环      | 所有下层                   |
-| **监察层**   | `src/localhost` | 运行时状态检查、`/` 命令路由、调试 API、输入分发。**可自由 import 任何 src/ 包**                   | 所有底层（设计如此）       |
+| **进程层**   | `aurora`        | 唯一进程 CLI、平台选择、生命周期组合、engine + Port 构造、挂载 ops 命令路由与主事件循环      | 所有下层                   |
+| **监察层**   | `ops` | 运行时状态检查、`/` 命令路由、调试 API、输入分发。位于热路径之外，只依赖 `contracts` + `utils`                   | contracts、utils（RFC 0200）       |
 | **引擎层**   | `src/engine`    | Inbox 防抖、Triage、Task/Agent、邮箱、Activity、因果边界、SQLite                                   | contracts · utils          |
-| **适配层**   | `src/platform`  | Console / Dashboard / MCP / NoneBot 协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
+| **适配层**   | `src/platform`  | Dashboard / MCP / NoneBot 外部生态协议适配。实现 `ToolExecutor` 与 `ExternalAmpIngressPort` Port | contracts · utils          |
 | **模型层**   | `src/ai`        | 宽泛模型网关。实现 `ModelProvider` Port                                                            | contracts · utils          |
 | **记忆层**   | `src/memory`    | 有界会话摘要与长期事实投影。实现 `MemoryStore` Port                                                | contracts · utils          |
-| **认知层**   | `src/agents`    | Triage policy、同构 Agent handler + 主动能力（delegate / wait / speech）                           | prompt · contracts · utils |
+| **认知层**   | `src/agents`    | Triage 入口 agent、同构 Agent handler + 主动能力（delegate / wait / speech / memory）            | prompt · contracts · utils |
 | **配置层**   | `src/config`    | TOML 加载、校验、注册中心与热重载                                                                  | contracts                  |
 | **提示词层** | `src/prompt`    | 提示词目录、分层 DTO 与模型上下文装配                                                              | contracts                  |
 | **契约层**   | `src/contracts` | **所有**跨层共享的不可变 dataclass 与 Port Protocol                                                | 仅标准库                   |
@@ -198,30 +191,30 @@ graph TD
 
 ## 命令与输入路由
 
-用户输入从平台进入、经命令路由、到引擎执行，全程通过 **Port 注入** 避免平台层直接依赖 localhost。
+用户输入从平台进入、经命令路由、到引擎执行，全程通过 **Port 注入** 避免平台层直接依赖 ops。
 
 ### 机制
 
 1. `contracts/ports.py` 定义 `InteractiveInputPort` Protocol（`route_input(request) → CommandResult`）
 2. `contracts/event.py` 定义 `RuntimeInput`、`CommandResult`、`InputOrigin` 等 DTO
-3. `localhost` **实现** `InteractiveInputPort`（`CommandRouter` 是其内部组件）
-4. `aurora` 在构造时将 localhost 实例作为 `InteractiveInputPort` **注入**到需要交互输入的平台
-5. Platform 只 import `contracts`，通过注入的 Port 调用 `route_input()`，不 import `localhost`
+3. `ops` **实现** `InteractiveInputPort`（`CommandRouter` 是其内部组件）
+4. `aurora` 在构造时将 ops 实例作为 `InteractiveInputPort` **注入**到需要交互输入的平台
+5. Platform 只 import `contracts`，通过注入的 Port 调用 `route_input()`，不 import `ops`
 
 ### 完整流程
 
 ```
-Console (platform/console/shell.py)
+Console (src/console/shell.py)
   │  stdin 读取用户输入
-  │  import: contracts.event.RuntimeInput, contracts.ports.InteractiveInputPort
-  │  不 import: src.localhost
+  │  import: contracts.event.RuntimeInput, contracts.ports.ConsoleControlPort
+  │  不 import: ops
   │
   ▼
 ports.route_input(RuntimeInput)
-  │  ← aurora 在 run_runtime() 中将 localhost 实例注入到 console shell
+  │  ← aurora 在 run_runtime() 中将 ops 实例注入到 console shell
   │
   ▼
-localhost (CommandRouter)
+ops (CommandRouter)
   ├─ 非 `/` 前缀 → 转为 AMP → submit_amp() → engine._amp_queue
   └─ `/` 前缀  → shlex 分词 → 命令目录匹配 → 执行 handler → CommandResult
                    │
@@ -241,18 +234,18 @@ CommandResult
 Console shell 根据 CommandResult 决定输出内容 / 清屏 / 退出
 ```
 
-### 为什么 Platform 不 import localhost
+### 为什么 Platform 不 import ops
 
-如果 Platform 直接 import `src.localhost.router`：
+如果 Platform 直接 import `ops.router`：
 
-- Platform 变成 `platform → localhost → engine/ai/memory/...` 扇入链
-- localhost 的任何改动都可能波及 Platform
-- Platform 的单元测试需要 mock 整个 localhost 依赖树
+- Platform 变成 `platform → ops → engine/ai/memory/...` 扇入链
+- ops 的任何改动都可能波及 Platform
+- Platform 的单元测试需要 mock 整个 ops 依赖树
 
 如果 Platform 通过 Port 接收注入：
 
 - Platform 只依赖 `contracts`（Protocol + DTO）
-- Platform 与 localhost 完全解耦——替换 localhost 实现不需要改 Platform
+- Platform 与 ops 完全解耦——替换 ops 实现不需要改 Platform
 - Platform 单元测试只需 mock `InteractiveInputPort`
 
 `contracts/ports.py` 中仅一个 Protocol 即可完成注入：
@@ -268,10 +261,10 @@ class InteractiveInputPort(Protocol):
 Dashboard 同样接收注入的 `InteractiveInputPort`，用户在 Web 面板输入 `/status` 走完全相同的路由：
 
 ```
-Dashboard HTTP/WS → routing.py → InteractiveInputPort.route_input(RuntimeInput) → 同一条 localhost 路由
+Dashboard HTTP/WS → routing.py → InteractiveInputPort.route_input(RuntimeInput) → 同一条 ops 路由
 ```
 
-新增平台只需：构造函数接受 `InteractiveInputPort` 参数，`aurora` 负责注入。无需 import localhost。
+新增平台只需：构造函数接受 `InteractiveInputPort` 参数，`aurora` 负责注入。无需 import ops。
 
 ---
 
@@ -283,7 +276,7 @@ Aurora 的能力扩展分为三种正交类型：
 | ------------ | ------------------------------------- | ------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | **自动服务** | `src/memory/` 等，注入 engine 的 Port | 自动（pump hook）         | memory（记忆注入/回忆）、prompt assembly、因果记录          | 发生**于** Agent，不由 Agent 决策。像潜意识——Agent 不"调用"记忆，记忆结果自动出现在上下文中。            |
 | **主动能力** | `agents/capabilities/`                | Agent 决策（模型 token）  | delegate、wait、speech (TTS)                                | 由 Agent **主动选择**使用。是 Agent 认知决策空间的一部分——Agent 决定"我要委派"、"我要等待"、"我要朗读"。 |
-| **工具能力** | `platform/<name>/`                    | Agent 决策 → tool request | console.send、dashboard.send、MCP tools、NoneBot QQ actions | Agent 想要触发的**外部效果**。Agent 决定"我要在控制台输出这段文字"，工具系统执行。                       |
+| **工具能力** | `platform/<name>/`                    | Agent 决策 → tool request | dashboard.send、MCP tools、NoneBot QQ actions | Agent 想要触发的**外部效果**。Agent 决定"我要在 Dashboard 聊天里发送这段文字"，工具系统执行。本地 Console 不再属于工具能力：Bot 文本默认由 console 渲染。 |
 
 ### 三种类型的关系
 
@@ -366,7 +359,7 @@ contracts/
                      # ToolQueuePort, ToolCompletionPort, RuntimeCommandPort
   configuration.py   # AuroraConfig, PlatformPreference (及各平台配置片段)
   memory.py          # MemoryContextSnapshot, MemoryEntry, MemoryQuery, MemoryStore Protocol
-  triage.py          # InboxEvent, TriageBatch, TriageDecision, TriagePolicy
+  triage.py          # InboxEvent, TriageBatch, TriageLimits
 ```
 
 **关键约束**：
@@ -399,12 +392,12 @@ utils/
 
 ```
 config/
-  __init__.py        # init(root, profile) / get() → AuroraConfig / reload() / subscribe()
+  __init__.py        # init(root, profile) / get() → AuroraConfig
+  files.py           # TOML/Markdown 文件读取与 SHA-256 来源快照
   loader.py          # 按包名加载所有 config/*.toml，合并为单一不可变快照
+  prompts.py         # prompts.toml 与 Markdown 内容快照
   sections.py        # TOML 各节解析函数（_parse_agent_runtime, _parse_preference 等）
-  registry.py        # 配置注册中心：get() / init() / reload() / subscribe() / unsubscribe()
-  validator.py       # 未知键、类型不匹配、无效引用启动前失败
-  hot_reload.py      # 文件监听 + subscriber 通知
+  registry.py        # 配置注册中心：get() / init()
 ```
 
 加载的文件（一个包一个文件）：
@@ -417,7 +410,7 @@ config/
 | `platforms.toml` | platform     | `PlatformsConfig` (per-platform settings)      |
 | `agents.toml`    | agents       | `AgentsConfig` (profiles, capabilities)        |
 | `apps.toml`      | platform/mcp | `AppsConfig` (MCP connections)                 |
-| `prompts.toml`   | prompt       | `PromptsConfig` (fragment paths)               |
+| `prompts.toml`   | prompt       | `PromptConfig` (fragment content and sources)  |
 | `logging.toml`   | utils        | `LoggingConfig` (level, log_dir)               |
 | `storage.toml`   | 跨包         | `StorageConfig` (data_root, per-package paths) |
 
@@ -435,10 +428,9 @@ config/
 
 ```
 prompt/
-  __init__.py        # PromptComposer, load_prompt_catalog
-  models.py          # PromptSource, PromptCatalog — 从 prompts.toml 加载的不可变片段集合（含 CHANNEL_LABELS 等文本常量）
+  __init__.py        # PromptCatalog, PromptComposer
+  models.py          # PromptCatalog — 从启动配置快照构造的不可变片段集合
   composer.py        # PromptComposer — 从 AgentContext 装配 PromptDocument
-  loader.py          # load_prompt_catalog — TOML 提示词加载器
 ```
 
 **关键约束**：
@@ -456,13 +448,14 @@ prompt/
 memory/
   __init__.py
   service.py         # MemoryService — 单一 SQLite；会话摘要、长期事实、幂等回执
+  executor.py        # MemoryToolExecutor — 主动记忆写入的 ToolExecutor（RFC 0207，与自动投影同源）
 ```
 
 **构造与注入**：
 
 ```python
 memory_service = MemoryService(memory_dir)
-engine = AgentEngine(config, handlers, memory_store=memory_service, triage_policy=triage_policy)
+engine = AgentEngine(config, handlers, memory_store=memory_service)
 ```
 
 **关键约束**：
@@ -480,10 +473,10 @@ engine = AgentEngine(config, handlers, memory_store=memory_service, triage_polic
 ```
 engine/
   __init__.py
-  runtime.py          # AgentEngine — Inbox → Triage → Root/子代理 → Memory 完整闭环
+  runtime.py          # AgentEngine — 单循环无租约运行时（RFC 0210）
                        #   构造签名：
                        #     AgentEngine(configuration, handlers, *,
-                       #                 model_provider, triage_policy, memory_store=None,
+                       #                 model_provider, memory_store=None,
                        #                 idle_wait_seconds=1.0)
                        #   属性：
                        #     tasks(), get_task(), get_agent(), has_work(), status()
@@ -491,22 +484,20 @@ engine/
                        #   pump 闭环：
                        #     1. recover tools → tool_registry.recover()
                        #     2. ingest → 持久化 Inbox + 动态防抖
-                       #     3. triage → process / defer / discard
-                       #     4. process 批次创建 Root Task
-                       #     5. Agent turn / Tool / Model 调度
-                       #     6. 异步 Memory 投影 + 终态归档
+                       #     3. triage → 批次创建入口 triage Task（RFC 0209）
+                       #     4. Agent turn / Tool / Model 调度（triage 判断走正常链路）
+                       #     5. 异步 Memory 投影（终态留存 SQLite，RFC 0210）
+  authorize.py        # 决策构造、授权校验与应用（RFC 0208 拆包）
+  ingress.py          # AMP 持久化摄入与幂等回执（RFC 0208 拆包）
   tool_registry.py    # ToolRegistry — 管理多个 ToolExecutor 分发的引擎内部聚合类
-  commands.py         # 内部命令定义
   debug.py            # task_detail() / agent_detail() / 工作区校验
-  store/              # SQLite 运行态持久化子包
-    __init__.py       # SQLiteRuntimeStore — 组合多 Mixin 的 WAL facade
-    schema.py         # DDL (inbox_events, tasks, agents, mailbox, activities, causal_events)
-    base.py           # 基础 CRUD 操作
-    queries.py        # 查询（任务树、消息时间线、统计计数）
-    triage.py         # Inbox 摄入、防抖批次、Triage 决策与 admitted Task 创建
-    ingress.py        # Tool receipt 与 Agent mailbox 租赁
-    decisions.py      # AgentDecision 到状态变更的翻译
-    activities.py     # Activity CRUD（model + tool）
+  store/              # SQLite 运行态与终态留存子包（Schema v9，RFC 0210）
+    __init__.py       # SQLiteRuntimeStore — 组合 3 个 Mixin 的 WAL facade
+    schema.py         # DDL (inbox_events, tasks, agents, messages, activities, causal_events)
+    base.py           # 连接/事务/行映射/崩溃恢复
+    runtime.py        # 状态与查询（任务树、消息时间线、统计计数）
+    decisions.py      # AgentDecision 八分支状态机 + 消息/活动队列
+    inbox.py          # Inbox 摄入、防抖批次、入口 triage Task 与批次结算
 ```
 
 **AgentEngine 构造签名**：
@@ -519,7 +510,6 @@ class AgentEngine:
         handlers: dict[str, AgentHandler],
         *,
         model_provider: ModelProvider,         # 来自 contracts.model
-        triage_policy: TriagePolicy,           # 来自 contracts.triage
         tool_registry: ToolRegistry,           # 来自 contracts.tool（聚合多个 ToolExecutor）
         memory_store: MemoryStore | None = None, # 来自 contracts.memory
     ) -> None: ...
@@ -530,23 +520,22 @@ class AgentEngine:
 ```
 pump(max_turns):
   1. recover tools      → self._tool_registry.recover_pending()
-  2. ingest              → AMP 文件 + 内存队列写入 inbox_events
-  3. triage due batches  → 无工具模型判断 process / defer / discard
-  4. admit process       → 同会话批次创建一个 Root Task
-  5. execute turns       → handle_claim() 在线程池中并发执行
-  6. dispatch I/O        → ToolRegistry + ModelProvider
-  7. memory projection   → 后台更新会话摘要和长期事实
-  8. archive terminal    → 终态 Task JSON 原子写入 archive/
+  2. ingest              → AMP 文件 + 内存队列写入 inbox_events（同时追加会话 JSONL）
+  3. triage due batches  → 每个批次创建 Task 与入口 triage agent（RFC 0209，纯同步，无模型调用）
+  4. execute turns       → handle_claim() 在线程池中并发执行（triage 的模型判断走正常 model Activity）
+  5. dispatch I/O        → ToolRegistry + ModelProvider
+  6. memory projection   → 后台更新会话摘要和长期事实
+  7. 终态留存        → 终态 Task 留在 SQLite（无文件归档，RFC 0210）
 ```
 
 **关键约束**：
 
-- 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `src.localhost`
-- `runtime.py` 组合 EngineState、Triage、Agent turn 与 I/O 调度；Inbox 事务位于 `store/triage.py`。
+- 不 import `src.ai` / `src.platform` / `src.memory` / `src.agents` / `src.prompt` / `src.config` / `ops`
+- `runtime.py` 组合 Agent turn 与 I/O 调度；Inbox 事务位于 `store/inbox.py`（RFC 0209/0210）。
 - `store/` 是子包，`SQLiteRuntimeStore` 在其中组合多 Mixin，替换了文档中的单体 `store.py`。
 - 所有权通过 `contracts` 中的 Protocol 注入
 - `ToolRegistry` 是 engine 内部的聚合类（非 contracts），管理多个 `ToolExecutor` 实现的分发
-- engine 的 `status()` / `task_detail()` / `agent_detail()` 是透明查询接口，供 `localhost` 监察使用
+- engine 的 `status()` / `task_detail()` / `agent_detail()` 是透明查询接口，供 `ops` 监察使用
 
 ---
 
@@ -584,13 +573,14 @@ Agent 能力只包含**模型可自主决策使用的**能力——即 Agent 在
 ```
 agents/
   __init__.py
-  triage.py          # StructuredTriagePolicy — 无工具的批次接纳判断
+  triage.py          # TriageAgent — 注意力初筛入口 Agent（无工具、结构化输出、fail-open）
   handler.py         # ToolAgent — 基础 AgentHandler 实现
   capabilities/       # 主动能力（Agent 自主决策）
     __init__.py
     delegate.py       # DelegationCapability — 创建子 Agent 委派任务
     wait.py           # WaitCapability — 延迟执行
     speech.py         # SpeechCapability — 决定输出是否朗读，生成 tts.speak tool request
+    memory.py         # MemoryCapability — 主动记忆写入请求（RFC 0207，执行由 memory 层承担）
   tools.py            # Agent 内建工具的 CapabilityDescriptor 定义
 ```
 
@@ -637,11 +627,6 @@ speech.install_tts_config(enabled=config.agents.tts_enabled)
 ```
 platform/
   __init__.py
-  console/            # 终端平台
-    __init__.py
-    adapter.py        # ConsolePlatform — 实现 ToolExecutor (console.send) + RecoveryBinding
-    shell.py          # run_console(input_port, console_platform, stop_event)
-                      #   stdin 读取 → RuntimeInput → input_port.route_input() → CommandResult
   dashboard/          # Web 面板平台
     __init__.py
     adapter.py        # DashboardPlatform — 实现 ToolExecutor (dashboard.send)
@@ -673,20 +658,20 @@ platform/
 - 可选 `RecoveryBinding`：`recover_tool(request) → ToolOutcome`（幂等恢复）
 - 可选 event ingress：将外部事件（stdin、WebSocket、MCP notification、QQ 消息）转为 `AmpEnvelope` 并通过 `ExternalAmpIngressPort` 提交
 
-交互式平台（Console、Dashboard）的构造函数接受 `InteractiveInputPort` 注入（定义在 `contracts/ports.py`），用于将用户输入路由到 localhost 的命令系统：
+交互式平台（Dashboard）的构造函数接受 `InteractiveInputPort` 注入（定义在 `contracts/ports.py`），用于将用户输入路由到 ops 的命令系统；本地 Console 是独立于平台的运行时前端（见 `src/console`）：
 
 ```python
 # Console shell
 async def run_console(
-    input_port: InteractiveInputPort,   # ← aurora 注入 localhost 实例
-    console_platform: ConsolePlatform,
+    control: ConsoleControlPort,   # ← aurora 注入 ops 实例
+    query: RuntimeQueryPort,       # ← 只读输出流查询端口
     *,
     stop_event: asyncio.Event,
 ) -> None:
     while not stop_event.is_set():
         text = await read_stdin()
         request = RuntimeInput(text=text, origin=InputOrigin.CONSOLE, ...)
-        result = await input_port.route_input(request)  # ← 通过 Protocol 调用，不 import localhost
+        result = await control.route_input(request)  # ← 通过 Protocol 调用，不 import ops
         handle_result(result)
 ```
 
@@ -694,13 +679,11 @@ async def run_console(
 
 ```python
 # 1. 创建平台实例
-console = ConsolePlatform(db_path)
 dashboard = DashboardPlatform(chat_service)
 mcp = MCPPlatform(config)
 
 # 2. 收集 ToolExecutorBinding
 bindings = [
-    ToolExecutorBinding(CONSOLE_SEND_DESCRIPTOR, console, "platform.console", "local"),
     ToolExecutorBinding(DASHBOARD_SEND_DESCRIPTOR, dashboard, "platform.dashboard", "local"),
     *[ToolExecutorBinding(cap, mcp, "platform.mcp", instance) for cap in mcp.capability_catalog],
 ]
@@ -709,21 +692,23 @@ bindings = [
 engine.install_tool_registry(ToolRegistry(bindings))
 ```
 
+**Console 前端**：不注册 Tool 能力；`--headless` 或 `[runtime].console.enabled = false` 时不启动。启动时 shell 后台循环按游标轮询 `RuntimeQueryPort.output_stream()` 并打印 `Bot> <text>`，因此 Bot 文本不调用任何工具也会默认出现在本地终端。
+
 **新增平台只需**：在 `platform/<name>/` 中实现 `ToolExecutor` + event ingress，在 `aurora/runtime.py` 中注册。无需修改 contracts、engine、agents。
 
 ---
 
-### `src/localhost` — 监察层
+### `ops` — 监察层
 
-依赖**所有** `src/*` 包。`localhost` 是运行时监察 sidecar——它不在引擎热路径中，而是侧挂的**上帝式监察器**，负责：
+依赖 `src.contracts` 与 `src.utils`。`ops` 是运行时监察 sidecar——它不在引擎热路径中，而是侧挂的监察器，负责：
 
 - **命令路由**：解析 `/` 前缀命令，分发到确定性业务用例（`/status`、`/pump`、`/task`、`/agent`、`/help` 等）
 - **运行时检查**：读取 engine、platform、ai、memory 的状态快照
-- **调试 API**：`/v1/debug/*` 端点，提供脱敏的 Task/Agent/Brain 投影
+- **调试 API**：`/v1/debug/*` 端点，提供脱敏的 Task/Agent/运行态投影
 - **输入分发**：将纯文本从 Console / Dashboard 规范化为 AMP 并投递
 
 ```
-localhost/
+ops/
   __init__.py
   runtime.py          # AuroraRuntime — 组合根 light wrapper
                       #   持有 engine + command_router
@@ -743,12 +728,11 @@ localhost/
     log.py            # /log — 控制终端日志级别
     quit.py           # /quit — 优雅停止进程
     help.py           # /help — 显示命令列表
-    reload.py         # /reload — 配置热重载（待实现）
 ```
 
-> 注：`command_types.py` 和 `ports.py`（原 localhost 中的 DTO/Protocol）迁移到 `contracts/event.py` 和 `contracts/ports.py`。`tool_dispatcher.py` 迁移到 `engine/`——工具调度是热路径操作，属于引擎职责。`autonomy.py` 暂移除——自主额度等高可用性功能延后。
+> 注：`command_types.py` 和 `ports.py`（原 ops 中的 DTO/Protocol）迁移到 `contracts/event.py` 和 `contracts/ports.py`。`tool_dispatcher.py` 迁移到 `engine/`——工具调度是热路径操作，属于引擎职责。`autonomy.py` 暂移除——自主额度等高可用性功能延后。
 
-**localhost 的设计定位**：
+**ops 的设计定位**：
 
 ```
                           aurora (注入)
@@ -762,25 +746,25 @@ localhost/
                             │ contracts.ports.InteractiveInputPort
                             ▼
                      ┌──────────────┐
-                     │  localhost   │
+                     │  ops   │
                      │              │
-                     │ 命令路由      │
-                     │ 状态检查      │──────────→ engine (只读查询)
-                     │ 调试 API     │──────────→ platform / ai / memory (只读)
-                     │ 输入分发      │──────────→ engine (submit_amp)
-                     └──────────────┘
+                      │ 命令路由      │
+                      │ 状态检查      │──────────→ engine (只读查询，经 Port)
+                      │ 调试 API     │
+                      │ 输入分发      │──────────→ engine (submit_amp，经 Port)
+                      └──────────────┘
 ```
 
-`localhost` **在热路径之外**。engine 的 pump 循环不经过 localhost——engine 通过注入的 Port 直接调用 platform、ai、memory。`localhost` 与 engine 并行持有引用，仅用于命令路由、状态检查和输入分发。
+`ops` **在热路径之外**。engine 的 pump 循环不经过 ops——engine 通过注入的 Port 直接调用 platform、ai、memory。`ops` 只通过注入的 Port 持有 engine 等实例，仅用于命令路由、状态检查和输入分发。
 
-平台通过 `InteractiveInputPort`（定义在 `contracts/ports.py`）接收 localhost，而不是直接 import。详见 [命令与输入路由](#命令与输入路由)。
+平台通过 `InteractiveInputPort`（定义在 `contracts/ports.py`）接收 ops，而不是直接 import。详见 [命令与输入路由](#命令与输入路由)。
 
 **关键约束**：
 
-- `localhost` 可以自由 import 任何 `src/*` 包——它是监察器，需要全知
-- `localhost` 实现 `contracts.ports.InteractiveInputPort`——平台通过 Protocol 调用，不 import localhost
+- `ops` 只 import `src.contracts` / `src.utils` 与根级 `aurora` 注入的 Port——它是监察器，通过 Port 观察
+- `ops` 实现 `contracts.ports.InteractiveInputPort`——平台通过 Protocol 调用，不 import ops
 - 不 import `aurora/*`——进程组合层是最顶层
-- 不在 engine pump 热路径中——engine 不 import localhost
+- 不在 engine pump 热路径中——engine 不 import ops
 - `/` 命令不包含业务逻辑——命令 handler 读取状态、触发操作、返回结果，不做认知决策
 
 ---
@@ -808,24 +792,23 @@ aurora/
 ```
 run_runtime():
   1. 加载配置           → get_config()
-  2. 创建 PromptComposer → load_prompt_catalog() + PromptComposer()
+  2. 创建 PromptComposer → PromptCatalog.from_config() + PromptComposer()
   3. 创建 MemoryService  → MemoryService(memory_dir)    # 自动服务
-  4. 创建 TriagePolicy   → StructuredTriagePolicy(config.engine.triage)
+  4. 加载 TriageAgent    → 与其他 profile 同构走 _load_handler（RFC 0209）
   5. 创建主动能力        → DelegationCapability, WaitCapability, SpeechCapability
   6. 加载 AgentHandler   → _load_handler(spec, composer, capabilities)
   7. 创建 AI Gateway     → ModelGatewayService(config)
-  8. 创建平台适配器       → ConsolePlatform, DashboardPlatform, MCPPlatform
+  8. 创建平台适配器       → DashboardPlatform, MCPPlatform
   9. 收集 ToolBinding     → 各平台的 ToolExecutorBinding
   10. 构造 engine        → AgentEngine(config, handlers,
                             model_provider=...,
-                            triage_policy=...,
                             tool_registry=...,
                             memory_store=memory_service)
   11. 注册 ToolExecutors → engine.tool_registry.add_all(bindings)
-  12. 挂载 localhost     → AuroraRuntime(engine, model_gateway, memory_service, ...)
+  12. 挂载 ops     → AuroraRuntime(engine, model_gateway, memory_service, ...)
                             # AuroraRuntime 实现 contracts.ports.InteractiveInputPort
-  13. 注入 localhost 到平台 → console_shell(input_port=localhost, ...)
-                            # 平台通过 InteractiveInputPort Protocol 接收，不 import localhost
+  13. 注入 ops 到平台 → 平台通过 InteractiveInputPort Protocol 接收，不 import ops
+  14. 启动本地前端      → run_console(control=ops, query=ops)（非 headless 时）
    13. 启动主循环          → engine.run_forever() + 平台各自的事件循环
 ```
 
@@ -833,7 +816,7 @@ run_runtime():
 
 - 一个进程只有一个 engine 所有者
 - `run_forever()` 主事件循环由 `aurora` 管理
-- 命令路由（`/` 前缀判定）由 `localhost` 承担，`aurora` 只做最外层的循环管理
+- 命令路由（`/` 前缀判定）由 `ops` 承担，`aurora` 只做最外层的循环管理
 
 ---
 
@@ -863,25 +846,25 @@ sandbox/
 | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `src/` 不得导入 `aurora/`                                                                                 | 进程组合层是最顶层                                                      |
 | engine 不依赖 `prompt` / `config` / `ai` / `agents` / `platform` / `memory`                               | 外部服务通过 Port Protocol 注入，engine 只 import `contracts` + `utils` |
-| engine 不依赖 `localhost`                                                                                 | localhost 是监察 sidecar，不在热路径中                                  |
+| engine 不依赖 `ops`                                                                                 | ops 是监察 sidecar，不在热路径中                                  |
 | Platform / ai / memory 只依赖 `contracts` + `utils`                                                       | 适配器同级对等                                                          |
 | Agent handler 不直接写运行态 / 调用 Provider / 操作平台 Client                                            | 只返回 `AgentDecision`                                                  |
 | Agent 主动能力的外依赖通过 setter 注入，不 import 外部包                                                  | 保持 agents 包边界干净                                                  |
 | `contracts` 是所有跨层 DTO 和 Protocol 的唯一来源                                                         | 所有 Port 和跨层 DTO 统一在此                                           |
-| `localhost` 可自由导入任何 `src/*` 包                                                                     | 监察器需要全知                                                          |
+| `ops` 只 import `contracts` + `utils`                                                                     | 监察 sidecar，位于热路径之外，经 Port 观察 |
 | 依赖方向（热路径）：`contracts ← utils ← engine / ai / platform / memory / agents ← aurora`               | 实现包同级对等                                                          |
-| 依赖方向（检查路径）：`contracts ← utils ← engine / ai / platform / memory / agents ← localhost ← aurora` | localhost 挂在热路径侧面，只查不改                                      |
+| 依赖方向（检查路径）：`contracts ← utils ← engine / ai / platform / memory / agents ← ops ← aurora` | ops 挂在热路径侧面，只查不改                                      |
 
 ## 关键设计判断
 
-- **engine 是自包含的热路径引擎**：完整 pump 循环在 engine 内部，外部服务通过 Port 注入。engine 不需要 localhost。
-- **localhost 是监察 sidecar**：不在引擎热路径中。它可自由引入任何包，执行运行时状态检查、命令路由和调试接口。没有人依赖它；它依赖所有人。
+- **engine 是自包含的热路径引擎**：完整 pump 循环在 engine 内部，外部服务通过 Port 注入。engine 不需要 ops。
+- **ops 是监察 sidecar**：不在引擎热路径中。它只 import `contracts` + `utils`，通过注入的 Port 执行运行时状态检查、命令路由和调试接口。热路径不依赖它。
 - **`contracts` 是唯一的跨层契约来源**：所有 Port Protocol 和跨层 DTO 统一归入 contracts。
-- **所有适配器同级对等**：engine / ai / platform / memory / agents （除 localhost 外）只依赖 `contracts` + `utils`，彼此之间无直接 import。
+- **所有适配器同级对等**：engine / ai / platform / memory / agents / ops 只依赖 `contracts` + `utils`，彼此之间无直接 import。
 - **自动服务通过 Port 注入 engine**：记忆等自动服务在 pump hook 中被动触发，Agent 不参与决策——Agent "被记住"而非"决定记住"。
 - **主动能力通过 setter 注入 Agent handler**：delegate、wait、speech 等由 Agent 在 turn 内自主选择使用。
 - **工具平台按 Protocol 接入**：新增平台只需实现 `ToolExecutor` + event ingress，注册到 `aurora` 组合层。
-- **`aurora` 是唯一组合根**：创建所有实例、注入 Port、组装 localhost 监察器、运行主事件循环。
+- **`aurora` 是唯一组合根**：创建所有实例、注入 Port、组装 ops 监察器、运行主事件循环。
 - **`prompt` DTO 不下沉 contracts**：装配层内部 DTO 不是跨层契约。
 - **`sandbox` 完全孤立**：只依赖 utils，不被任何包导入。
 
@@ -891,23 +874,28 @@ sandbox/
 
 ```text
 data/
-  engine/          # runtime.sqlite3 (WAL), inbox/, archive/
+  engine/          # runtime.sqlite3 (WAL), inbox/, archive/（仅 Inbox 分类）
   memory/          # memory.sqlite3：会话摘要、长期事实、幂等回执
+  ai/              # models.dev 能力缓存
   platform/
-    console/       # Console 平台私有数据
     dashboard/     # Dashboard 数据库 + Token.txt
+    mcp/
+      apps/        # MCP 平台运行的内建应用私有数据（org.aurora.clock 等）
   logs/            # 日志文件
 ```
 
 ### 路径声明
 
-持久化路径通过 `config/storage.toml` 声明（详见 [配置](#配置) 节），与包名一致，内部扁平化。
+持久化路径通过 `config/storage.toml` 声明（详见 [配置](#配置) 节），路径层级镜像包层级：
+`src/engine → data/engine`、`src/platform/dashboard → data/platform/dashboard`、
+`src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`。
 
 ### 强制规则
 
 - 持久化路径不得在代码中硬编码。全部从 TOML 配置读取。
-- 路径以包名命名（`data/engine/`、`data/memory/` 等），内部扁平化——不超过两层。
-- 外部 AMP 与终态 Task 使用 JSON，先写临时文件再原子改名。运行态使用 SQLite WAL。
+- 路径以包名命名（`data/engine/`、`data/platform/mcp/` 等），允许的嵌套关系见 `storage.toml`。
+- 外部 AMP 摄入使用 JSON，先写临时文件再原子改名。运行态与终态统一使用 SQLite WAL（Schema v9）。
+- 无 JSON 归档与 JSONL 会话日志（RFC 0210）：终态即留存于 SQLite，会话可读性由 causal_events 提供。
 
 ## 配置
 
@@ -919,7 +907,7 @@ config/
   engine.toml           # 引擎级：workspace、Agent 限制、Task 预算、pump 并发
   models.toml           # AI 网关：Provider 定义、Role→模型端点映射
   platforms.toml        # 平台：各平台启停、私有安全配置、本地体验偏好
-  agents.toml           # Agent：profile、主动能力授权、委派边界
+  agents.toml           # Agent：profile、主动能力授权、委派边界（capabilities 支持 `!` 排除语义）
   apps.toml             # MCP：App 连接、transport、timeout
   prompts.toml          # 提示词：片段文件路径映射
   logging.toml          # 日志：级别、文件路径
@@ -953,7 +941,7 @@ port = 8765
 workspace = "data/engine"
 
 [engine.agents]
-root_profile = "builtin.gate"
+root_profile = "builtin.triage"  # 入口 triage agent（RFC 0209）
 worker_profile = "builtin.worker"
 max_active_agents = 16
 max_agents_per_task = 8
@@ -963,7 +951,6 @@ turn_concurrency = 8
 model_concurrency = 4
 tool_concurrency = 8
 blocking_workers = 4
-lease_seconds = 30.0
 [engine.triage]
 model_role = "fast"
 quiet_seconds = 0.4
@@ -990,15 +977,20 @@ max_duration_seconds = 120.0
 [storage]
 data_root = "data"
 
-# 各包的数据子目录，相对于 data_root，与包名一致，内部扁平化
+# 各包的数据子目录，相对 data_root，路径层级与包层级一致
 engine = "engine"
 memory = "memory"
 
-[storage.platform.console]
-data_dir = "platform/console"
+[storage.platform]
+data_dir = "platform"
 
 [storage.platform.dashboard]
-data_dir = "platform/dashboard"
+data_dir = "dashboard"
+
+[storage.platform.mcp]
+data_dir = "mcp"
+# MCP 平台运行内建应用的私有数据目录（相对 data_dir）
+apps_dir = "apps"
 ```
 
 #### `logging.toml` — 日志
@@ -1027,5 +1019,5 @@ log_dir = "logs"
 - 一个配置文件对应一个包职责，不交叉覆盖
 - 密钥仅来自环境变量，TOML 只声明环境变量名
 - 除 `AURORA_PROFILE` 外，环境变量不得静默覆盖 TOML
-- `src.config` 集中持有：`init(root, profile)` 在进程早期加载，`get()` 零参数获取不可变快照，支持 `reload()` 重载
+- `src.config` 集中持有：`init(root, profile)` 在进程早期加载，`get()` 零参数获取不可变快照；配置变更通过重启生效
 - 模块导入不得隐式读取配置或创建运行目录

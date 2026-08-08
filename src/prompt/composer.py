@@ -22,6 +22,7 @@ class _Msg(StrEnum):
     EXTERNAL_DATA = '<external-data encoding="json">\n{encoded}\n</external-data>'
     LOCAL_WORK = "当前局部工作：\n{content}"
     MISSING_AGENT_PROMPT = "missing prompt for Agent profile {profile_id}"
+    MEMORY_WINDOW = "[ 最近对话 ]\n{content}"
     RELEVANT_FACTS = "[ 相关长期事实 ]\n{content}"
     SESSION_MEMORY = "[ 会话摘要 ]\n{content}"
     TOOL_RESULT = "工具返回 {status}：\n{content}"
@@ -38,10 +39,6 @@ class PromptComposer:
     def __init__(self, catalog: PromptCatalog) -> None:
         self._catalog = catalog
 
-    @property
-    def catalog(self) -> PromptCatalog:
-        return self._catalog
-
     def request_document(self, context: AgentContext) -> PromptDocument:
         try:
             agent_prompt = self._catalog.agents[context.profile.id]
@@ -52,11 +49,20 @@ class PromptComposer:
             system.append(PromptSection("soul", self._catalog.soul))
         system.extend((PromptSection("world", self._catalog.world), PromptSection("agent_profile", agent_prompt)))
         memory: list[PromptSection] = []
-        if context.memory.session_summary.strip():
+        if context.memory.summary.strip():
             memory.append(
                 PromptSection(
                     "session_memory",
-                    _Msg.SESSION_MEMORY.format(content=_external(context.memory.session_summary)),
+                    _Msg.SESSION_MEMORY.format(content=_external(context.memory.summary)),
+                )
+            )
+        if context.memory.window:
+            memory.append(
+                PromptSection(
+                    "memory_window",
+                    _Msg.MEMORY_WINDOW.format(
+                        content=_external([f"{item.role}: {item.content}" for item in context.memory.window])
+                    ),
                 )
             )
         if context.memory.relevant_facts:
@@ -78,10 +84,14 @@ class PromptComposer:
 
 def _message_text(context: AgentContext) -> str:
     payload = context.message.payload
-    events = payload.get("events")
-    if context.message.type == "task.started" and isinstance(events, list):
-        admitted = {"triage": payload.get("triage"), "events": events}
+    if context.message.type == "task.started" and isinstance(payload.get("batch"), dict):
+        # 入口 triage Task 的批次投影（RFC 0209）；TriageAgent 自构请求，此分支供通用渲染兜底
+        admitted = {"events": payload["batch"].get("events", [])}
         return _Msg.ADMITTED_EVENTS.format(content=_external(admitted))
+    if context.message.type == "agent.assigned" and isinstance(payload.get("context_events"), list):
+        # 入口 agent 委派时把有界批次投影交给本体意识（RFC 0209）
+        assigned = {"instruction": context.agent.assignment, "events": payload["context_events"]}
+        return _Msg.ADMITTED_EVENTS.format(content=_external(assigned))
     if context.message.type.startswith("tool."):
         status = context.message.type.removeprefix("tool.")
         request = payload.get("request")

@@ -5,10 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from src.contracts.agent import ToolLease
     from src.contracts.configuration import AuroraConfig
-    from src.contracts.event import CommandResult, RuntimeInput
-    from src.contracts.tool import ToolOutcomeStatus
+    from src.contracts.event import CommandResult, OutputStreamPage, RuntimeInput
 
 
 class ExternalAmpIngressPort(Protocol):
@@ -46,13 +44,12 @@ class DashboardDebugPort(ExternalAmpIngressPort, Protocol):
 
     def agent(self, agent_id: str) -> dict[str, Any] | None: ...
 
-    def brain_context(self) -> dict[str, Any]: ...
-
 
 class RuntimeCommandPort(Protocol):
-    """localhost 命令处理器所需的最小运行时端口。"""
+    """ops 命令处理器所需的最小运行时端口。"""
 
     configuration: AuroraConfig
+    model_gateway: Any
 
     async def submit_amp(self, value: object) -> str: ...
 
@@ -67,26 +64,7 @@ class RuntimeCommandPort(Protocol):
     def agent(self, agent_id: str) -> dict[str, Any] | None: ...
 
 
-class ToolQueuePort(Protocol):
-    """engine 工具注册表所需的工具租约队列。"""
+class RuntimeQueryPort(Protocol):
+    """本地交互前端只读查询输出流与运行状态的端口。"""
 
-    async def claim_tool_requests(self) -> tuple[ToolLease, ...]: ...
-
-    async def tool_recovery_requests(self) -> tuple[ToolLease, ...]: ...
-
-
-class ToolCompletionPort(Protocol):
-    """engine 工具注册表写入执行结果的完成端口。"""
-
-    async def complete_tool(
-        self,
-        *,
-        request_id: str,
-        capability: str,
-        status: ToolOutcomeStatus,
-        summary: str,
-        result: dict[str, Any] | None,
-        error: str | None,
-        source_app: str,
-        source_instance: str,
-    ) -> None: ...
+    def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage: ...

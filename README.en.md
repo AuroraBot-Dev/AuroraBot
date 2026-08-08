@@ -63,23 +63,20 @@ uv sync --no-dev
 Copy-Item .env.example .env
 
 # Add the DEEPSEEK_API_KEY required by the default configuration to .env
-uv run --no-dev --env-file .env aurora --console --mcp
+uv run --no-dev --env-file .env aurora start
 ```
 
 Type a message after startup, use `/help` to discover commands, or `/status` to inspect the runtime.
 
 ```powershell
 # Use the default Platform set from config/platforms.toml
-uv run --no-dev --env-file .env aurora
+uv run --no-dev --env-file .env aurora start
 
-# Start only the local Console
-uv run --no-dev --env-file .env aurora --console
-
-# Run without an external Platform
-uv run --no-dev --env-file .env aurora --headless
+# Headless: disable the local Console, Platform set unchanged
+uv run --no-dev --env-file .env aurora start --headless
 ```
 
-When any of `--console`, `--dashboard`, or `--mcp` is present, those flags form the exact Platform set rather than extending the defaults. The Dashboard browser UI is maintained separately; this repository contains its local backend and chat bridge.
+The local Console is not toggled by `--platform`: it runs as long as the process is not headless and `[runtime.console].enabled = true`. When `--platform` is present, those platforms form the exact Platform set rather than extending the defaults. The Dashboard browser UI is maintained separately; this repository contains its local backend and chat bridge.
 
 ## Customize and extend
 

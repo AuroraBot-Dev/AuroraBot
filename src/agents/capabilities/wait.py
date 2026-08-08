@@ -1,17 +1,19 @@
-"""让模型通过 aurora.agent.wait 等待子 Agent 的 Capability。"""
+"""让模型通过 aur.agent.wait 等待子 Agent 的 Capability。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import AgentDecision
-from src.contracts.model import ToolDefinition
+from src.contracts import (
+    AgentDecision,
+    ToolDefinition,
+)
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentContext
     from src.contracts.model import ToolCall
 
-WAIT_TOOL = "aurora.agent.wait"
+WAIT_TOOL = "aur.agent.wait"
 
 _WAIT_DESCRIPTION = "手头暂无其他事情时，安静等待仍在工作的子 Agent 回来。"
 
@@ -23,7 +25,7 @@ _WAIT_SCHEMA: dict[str, object] = {
 
 
 class WaitCapability:
-    """模型通过 aurora.agent.wait 等待仍在工作的子 Agent。"""
+    """模型通过 aur.agent.wait 等待仍在工作的子 Agent。"""
 
     @property
     def tool_names(self) -> frozenset[str]:
@@ -36,13 +38,7 @@ class WaitCapability:
             return ()
         return (ToolDefinition(WAIT_TOOL, _WAIT_DESCRIPTION, _WAIT_SCHEMA),)
 
-    def handle_tool(
-        self,
-        call: ToolCall,
-        context: AgentContext,  # noqa: ARG002
-        continuation: object = None,  # noqa: ARG002
-        tools: tuple[object, ...] = (),  # noqa: ARG002
-    ) -> AgentDecision | None:
+    def handle_tool(self, call: ToolCall) -> AgentDecision | None:
         """处理等待工具调用，返回等待子 Agent 的决策。"""
         if call.name != WAIT_TOOL:
             return None

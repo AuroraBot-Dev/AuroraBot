@@ -1,4 +1,4 @@
-"""RFC 0005 定义的协议中立模型网关契约。"""
+"""协议中立模型网关契约。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ STRUCTURED_OUTPUT_NAME: Final = "aurora_result"
 # 模式、重试策略、取消策略、工具选择字面量类型
 ResponseMode = Literal["normalized", "native"]
 RetryPolicy = Literal["none"]
-CancelPolicy = Literal["never", "on_external_activity"]
+CancelPolicy = Literal["never"]
 ToolChoice = Literal["auto", "none", "required"]
 
 
@@ -82,7 +82,7 @@ class ModelRequest:
             "tool_choice": "auto" | "none" | "required",
             "parallel_tool_calls": false,
             "continuation": ModelContinuation | null,
-            "cancel_policy": "never" | "on_external_activity",
+            "cancel_policy": "never",
             "parameters": {"...": "..."}
         }
 

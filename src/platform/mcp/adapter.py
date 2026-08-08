@@ -9,18 +9,31 @@ import os
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
+from mcp import types
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared.exceptions import McpError
 
-from src.contracts.agent import CapabilityCatalogSnapshot, CapabilityDescriptor
-from src.contracts.amp import new_amp
-from src.contracts.configuration import AppConfig, AuroraConfig
-from src.contracts.ports import ExternalAmpIngressPort
-from src.contracts.tool import ToolExecutionRequest, ToolOutcome, ToolOutcomeStatus
-from src.platform.mcp.client_manager import MCPClientManager, MCPToolCallError, _NotifiableClientSession
+from src.contracts import (
+    AppConfig,
+    AuroraConfig,
+    CapabilityCatalogSnapshot,
+    CapabilityDescriptor,
+    ExternalAmpIngressPort,
+    ToolExecutionRequest,
+    new_amp,
+    tool_receipt_amp,
+)
+from src.platform.mcp.client_manager import (
+    MCPClientManager,
+    MCPToolCallError,
+    MCPToolRejectedError,
+    _NotifiableClientSession,
+)
 from src.platform.mcp.server_kit import MCPServerKit
 from src.platform.mcp.server_spec import MCPServerSpec
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 logger = get_logger("aurora.platform.mcp")
 _RESERVED_TOOL_EVENTS = frozenset({"tool.succeeded", "tool.failed", "tool.unknown"})
@@ -36,6 +49,7 @@ class _Msg(StrEnum):
     MISSING_INPUT_SCHEMA = "MCP tool 缺少 input schema: {package}.{raw_name}"
     DUPLICATE_CAPABILITY = "MCP capability 重复: {capability}"
     REMOTE_SESSION_UNAVAILABLE = "远程 MCP 会话不可用: {package}"
+    CONNECTION_LOST = "MCP 连接意外终止"
 
 
 @dataclass(slots=True)
@@ -43,17 +57,11 @@ class _RemoteConnection:
     """远程 Streamable HTTP MCP 连接的内部状态。"""
 
     app: AppConfig
-    """对应的 App 配置。"""
     session: _NotifiableClientSession | None = None
-    """活跃的 MCP ClientSession（连接成功时赋值）。"""
     tools: list[object] | None = None
-    """从远程 Server 获取的 Tool 列表缓存。"""
     ready: asyncio.Event | None = None
-    """连接初始化完成（成功或失败）时置位。"""
     error: BaseException | None = None
-    """连接过程中捕获的异常。"""
     task: asyncio.Task[None] | None = None
-    """后台运行的连接任务。"""
 
 
 class MCPPlatform:
@@ -65,12 +73,7 @@ class MCPPlatform:
     """
 
     def __init__(self, configuration: AuroraConfig, *, terminal_logs: bool = True) -> None:
-        """初始化 MCP 平台。
-
-        Args:
-            configuration: Aurora 核心配置（含 apps 列表）。
-            terminal_logs: 是否将 MCP Server stderr 输出到终端。
-        """
+        """初始化 MCP 平台及其连接状态。"""
         self._configuration = configuration
         self._kit = MCPServerKit(terminal_logs=terminal_logs)
         self._clients = MCPClientManager(self._kit)
@@ -81,6 +84,7 @@ class MCPPlatform:
         self._shutdown_complete = False
         self._shutdown_lock = asyncio.Lock()
         self._stop = asyncio.Event()
+        self._remote_disconnected = asyncio.Event()
         self._notification_task: asyncio.Task[None] | None = None
         self._ingress: ExternalAmpIngressPort | None = None
 
@@ -92,7 +96,7 @@ class MCPPlatform:
         2. 建立客户端连接并刷新工具列表
         3. 连接远程 HTTP Server
         4. 发现并注册所有能力
-        5. 启动内置心跳和通知转发任务
+        5. 启动内置心跳
 
         Args:
             ingress: 外部 AMP 事件入口，用于转发 MCP 通知。
@@ -106,20 +110,19 @@ class MCPPlatform:
             raise RuntimeError(_Msg.SHUTDOWN_RESTART_DENIED)
         self._ingress = ingress
         try:
-            startup_timeout = max((app.timeout_seconds for app in self._configuration.apps), default=30.0)
-            await self._kit.start_all(
-                [self._local_spec(app) for app in self._configuration.apps if app.transport == "stdio"]
-            )
-            await asyncio.wait_for(self._clients.connect_all(), timeout=startup_timeout)
-            await asyncio.wait_for(self._clients.refresh_tools(), timeout=startup_timeout)
+            self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
+            local_apps = [app for app in self._configuration.apps if app.transport == "stdio"]
+            await self._kit.start_all([self._local_spec(app) for app in local_apps])
+            await self._clients.connect_all({app.package: app.timeout_seconds for app in local_apps})
             remote_tasks = [
-                self._connect_remote(app) for app in self._configuration.apps if app.transport == "streamable_http"
+                asyncio.wait_for(self._connect_remote(app), timeout=app.timeout_seconds)
+                for app in self._configuration.apps
+                if app.transport == "streamable_http"
             ]
             if remote_tasks:
-                await asyncio.wait_for(asyncio.gather(*remote_tasks), timeout=startup_timeout)
+                await asyncio.gather(*remote_tasks)
             self._catalog = self._discover_capabilities()
             await self._start_builtin_heartbeat()
-            self._notification_task = asyncio.create_task(self._forward_local_notifications(), name="mcp-notifications")
             self._started = True
         except BaseException:
             await self.shutdown()
@@ -131,23 +134,30 @@ class MCPPlatform:
         )
         return self._catalog
 
+    async def run(self, stop: asyncio.Event) -> None:
+        """监视已建立连接；连接意外结束时让组合根关闭进程。"""
+        waiters = {
+            asyncio.create_task(stop.wait()),
+            asyncio.create_task(self._clients.disconnected.wait()),
+            asyncio.create_task(self._remote_disconnected.wait()),
+        }
+        try:
+            await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            if not stop.is_set():
+                raise RuntimeError(_Msg.CONNECTION_LOST)
+        finally:
+            for task in waiters:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
+
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
         """当前已发现的能力目录快照（只读）。"""
         return self._catalog
 
     def source_instance_for(self, capability: str) -> str:
-        """根据能力 ID 反查其所属的 App package。
-
-        Args:
-            capability: 能力 ID（格式 ``package.raw_name``）。
-
-        Returns:
-            所属 App 的 package 字符串。
-
-        Raises:
-            ValueError: 若能力 ID 未知。
-        """
+        """根据能力 ID 反查其所属的 App package。"""
         binding = self._tool_bindings.get(capability)
         if binding is None:
             raise ValueError(_Msg.UNKNOWN_CAPABILITY.format(capability=capability))
@@ -160,6 +170,7 @@ class MCPPlatform:
         为内置时钟应用注入心跳节律参数（由运行时 autonomy 配置控制）。
         """
         environment = {"AURORA_APP_DATA_DIR": str(self._configuration.storage.apps)}
+        environment.update({name: os.environ[name] for name in app.env_vars if name in os.environ})
         if app.package == "org.aurora.clock":
             autonomy = self._configuration.engine.autonomy
             environment.update(
@@ -181,7 +192,7 @@ class MCPPlatform:
 
     async def _start_builtin_heartbeat(self) -> None:
         """若已发现时钟应用能力，则启动内置心跳。"""
-        capability = "org.aurora.clock.start_heartbeat"
+        capability = "aur.mcp.org.aurora.clock.start_heartbeat"
         binding = self._tool_bindings.get(capability)
         if binding is None:
             return
@@ -250,6 +261,8 @@ class MCPPlatform:
                 connection.ready.set()
         finally:
             connection.session = None
+            if not self._stop.is_set():
+                self._remote_disconnected.set()
 
     def _discover_capabilities(self) -> CapabilityCatalogSnapshot:
         """扫描所有已连接 App 的 Tool 列表，构建统一能力目录。
@@ -267,7 +280,7 @@ class MCPPlatform:
                 schema = getattr(tool, "inputSchema", None)
                 if not isinstance(schema, dict):
                     raise RuntimeError(_Msg.MISSING_INPUT_SCHEMA.format(package=app.package, raw_name=raw_name))
-                capability = f"{app.package}.{raw_name}"
+                capability = f"aur.mcp.{app.package}.{raw_name}"
                 if capability in descriptors:
                     raise RuntimeError(_Msg.DUPLICATE_CAPABILITY.format(capability=capability))
                 description = getattr(tool, "description", "")
@@ -290,41 +303,78 @@ class MCPPlatform:
             return remote.tools or []
         return list(self._clients.list_all_tools().get(package, []))
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """执行 MCP Tool 调用：路由到正确的 Server 并返回结构化结果。
-
-        根据 capability ID 路由到对应 App 和 raw tool name。
-        支持 isError 检测并映射为失败结果。
-        """
+    async def execute_tool(self, request: ToolExecutionRequest) -> None:
+        """执行 MCP Tool 调用：路由到对应 Server，完成后提交回执 AMP（RFC 0211）。"""
+        status: str
+        summary: str
+        result: dict[str, Any] | None = None
+        error: str | None = None
         if not self._started:
-            return ToolOutcome(ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error="MCP 平台尚未启动")
-        binding = self._tool_bindings.get(request.capability)
-        if binding is None:
-            return ToolOutcome(
-                ToolOutcomeStatus.FAILED, "MCP Tool 不可用", error=f"未知的 MCP capability: {request.capability}"
+            status, summary, error = "failed", "MCP Tool 不可用", "MCP 平台尚未启动"
+        else:
+            binding = self._tool_bindings.get(request.capability)
+            if binding is None:
+                status, summary, error = (
+                    "failed",
+                    "MCP Tool 不可用",
+                    f"未知的 MCP capability: {request.capability}",
+                )
+            elif not self._is_connected(binding[0]):
+                status, summary, error = (
+                    "failed",
+                    "MCP Tool 不可用",
+                    f"MCP App 未连接: {binding[0]}",
+                )
+            else:
+                package, raw_name = binding
+                try:
+                    outcome = await self._call_tool(package, raw_name, request.parameters)
+                except Exception as call_error:
+                    if isinstance(call_error, MCPToolRejectedError) or (
+                        isinstance(call_error, McpError) and call_error.error.code != types.CONNECTION_CLOSED
+                    ):
+                        status, summary, error = (
+                            "failed",
+                            f"MCP Tool 执行失败: {request.capability}",
+                            str(call_error),
+                        )
+                    else:
+                        logger.exception(
+                            "MCP Tool 结果未知 request_id=%s capability=%s error_type=%s",
+                            request.request_id,
+                            request.capability,
+                            type(call_error).__name__,
+                        )
+                        status, summary, error = (
+                            "unknown",
+                            f"MCP Tool 结果未知: {request.capability}",
+                            f"{type(call_error).__name__}: {call_error}",
+                        )
+                else:
+                    if outcome.get("is_error") is True:
+                        detail = str(outcome.get("text") or outcome.get("content") or "MCP Tool 返回 isError")
+                        status, summary, error = (
+                            "failed",
+                            f"MCP Tool 执行失败: {request.capability}",
+                            detail,
+                        )
+                    else:
+                        status, summary, result = (
+                            "succeeded",
+                            f"MCP Tool 已执行: {request.capability}",
+                            _canonical_tool_result(outcome),
+                        )
+        assert self._ingress is not None
+        await self._ingress.submit_amp(
+            tool_receipt_amp(
+                status=status,
+                request=request,
+                summary=summary,
+                source_app="platform.mcp",
+                source_instance="local",
+                result=result,
+                error=error,
             )
-        package, raw_name = binding
-        try:
-            result = await self._call_tool(package, raw_name, request.parameters)
-        except Exception as error:
-            logger.exception(
-                "MCP Tool 结果未知 request_id=%s capability=%s error_type=%s",
-                request.request_id,
-                request.capability,
-                type(error).__name__,
-            )
-            return ToolOutcome(
-                ToolOutcomeStatus.UNKNOWN,
-                f"MCP Tool 结果未知: {request.capability}",
-                error=f"{type(error).__name__}: {error}",
-            )
-        if result.get("is_error") is True:
-            detail = str(result.get("text") or result.get("content") or "MCP Tool 返回 isError")
-            return ToolOutcome(ToolOutcomeStatus.FAILED, f"MCP Tool 执行失败: {request.capability}", error=detail)
-        return ToolOutcome(
-            ToolOutcomeStatus.SUCCEEDED,
-            f"MCP Tool 已执行: {request.capability}",
-            result=_canonical_tool_result(result),
         )
 
     async def _call_tool(self, package: str, raw_name: str, parameters: dict[str, Any]) -> dict[str, object]:
@@ -347,6 +397,11 @@ class MCPPlatform:
             parameters,
             timeout_seconds=self._app_timeout(package),
         )
+
+    def _is_connected(self, package: str) -> bool:
+        """检查本地或远程 App 是否仍有活跃会话。"""
+        remote = self._remote.get(package)
+        return remote.session is not None if remote is not None else self._clients.is_connected(package)
 
     def _app_timeout(self, package: str) -> float:
         """查询指定 App 的配置超时秒数。"""
@@ -374,6 +429,7 @@ class MCPPlatform:
         """
         if self._ingress is None or not any(app.package == package for app in self._configuration.apps):
             return
+        message_id: str | None = None
         if method == "notifications/message" and params.get("logger") == "aurora/event":
             raw_event = params.get("data")
             if not isinstance(raw_event, dict):
@@ -393,6 +449,16 @@ class MCPPlatform:
                 return
             if not isinstance(data, dict):
                 return
+            identity = raw_event.get("idempotency_key")
+            if not isinstance(identity, str) or not identity:
+                identity = json.dumps(raw_event, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+            identity = json.dumps(
+                {"package": package, "type": event_type, "session_id": session_id, "key": identity},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            message_id = str(uuid5(NAMESPACE_URL, f"aurora-mcp-event:{identity}"))
         else:
             if not isinstance(method, str) or not method or not isinstance(params, dict):
                 return
@@ -407,6 +473,7 @@ class MCPPlatform:
             data=data,
             source_app=package,
             source_instance=f"mcp:{package}",
+            message_id=message_id,
         )
         await self._ingress.submit_amp(event.to_dict())
 
@@ -438,16 +505,7 @@ class MCPPlatform:
 
 
 def _tool_result(result: object) -> dict[str, object]:
-    """将 MCP Tool 调用结果转换为统一的字典格式。
-
-    提取 content 中的文本内容，序列化结构化数据，并保留 isError 标记。
-
-    Args:
-        result: MCP SDK 的 Tool 调用返回值。
-
-    Returns:
-        包含 ``is_error``、``text``、``content``、``structured_content`` 的字典。
-    """
+    """将 MCP Tool 调用结果转换为统一字典。"""
     content = getattr(result, "content", [])
     text = "\n".join(str(value) for item in content if (value := getattr(item, "text", None)) is not None)
     return {

@@ -7,7 +7,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from src.contracts.model import ModelMessage
+from src.contracts import ModelMessage
 
 
 class _Msg(StrEnum):
@@ -20,24 +20,8 @@ class _Msg(StrEnum):
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
 
-
-@dataclass(frozen=True, slots=True)
-class PromptSource:
-    """提示词来源快照：文件路径和 SHA-256 摘要。
-
-    PromptSource object::
-
-        {
-            "path": "/path/to/file",
-            "sha256": "hex-digest"
-        }
-
-    """
-
-    path: Path
-    sha256: str
+    from src.contracts.configuration import ConfigurationSource, PromptConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +34,7 @@ class PromptCatalog:
             "soul": "string",
             "world": "string",
             "agents": {"profile_id": "prompt text", ...},
-            "sources": [PromptSource, ...]
+            "sources": [ConfigurationSource, ...]
         }
 
     """
@@ -58,7 +42,7 @@ class PromptCatalog:
     soul: str
     world: str
     agents: Mapping[str, str]
-    sources: tuple[PromptSource, ...]
+    sources: tuple[ConfigurationSource, ...]
 
     def __post_init__(self) -> None:
         if not isinstance(self.soul, str) or not isinstance(self.world, str) or not self.world.strip():
@@ -80,10 +64,15 @@ class PromptCatalog:
         soul: str,
         world: str,
         agents: Mapping[str, str],
-        sources: tuple[PromptSource, ...] = (),
+        sources: tuple[ConfigurationSource, ...] = (),
     ) -> "PromptCatalog":
         """工厂方法：创建校验通过的 PromptCatalog 实例。"""
         return cls(soul, world, agents, sources)
+
+    @classmethod
+    def from_config(cls, config: PromptConfig) -> "PromptCatalog":
+        """从启动时不可变配置创建提示词目录。"""
+        return cls(config.soul, config.world, config.agents, config.sources)
 
 
 @dataclass(frozen=True, slots=True)

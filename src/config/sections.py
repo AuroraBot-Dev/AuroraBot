@@ -7,31 +7,29 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
-from src.contracts.agent import AgentLimits, AgentProfile, TaskLimits
-from src.contracts.configuration import (
+from src.config.helpers import _positive_number, _require_keys, _string, _table
+from src.contracts import (
     PLATFORM_NAMES,
+    AgentLimits,
+    AgentProfile,
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
-    ConsolePreference,
     DashboardBotConfig,
     DashboardConfig,
     DashboardPreference,
     McpPreference,
     PlatformPreference,
-    _positive_number,
-    _require_keys,
-    _require_subset,
-    _string,
-    _table,
+    TaskLimits,
+    TriageLimits,
 )
-from src.contracts.triage import TriageLimits
 
 
 class _Msg(StrEnum):
     """本文件内所有用户可见或日志输出的字符串常量。"""
 
     AGENT_CAN_DELEGATE_BOOLEAN = "Agent {agent_id} can_delegate must be boolean"
+    AGENT_TRIAGE_CONTROL_BOOLEAN = "Agent {agent_id} triage_control must be boolean"
     AGENT_CAPABILITIES_STRINGS = "Agent {agent_id} capabilities must contain strings"
     AGENT_CHILD_PROFILES_STRINGS = "Agent {agent_id} child_profiles must contain strings"
     AGENT_DELEGATION_DISABLED = "Agent {agent_id} cannot declare child_profiles when delegation is disabled"
@@ -143,6 +141,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
     for raw in raw_agents:
         if not isinstance(raw, dict):
             raise ConfigurationError(_Msg.AGENT_MUST_BE_TABLE)
+        raw_triage_control = raw.pop("triage_control", None)
         _require_keys(
             raw,
             {"id", "implementation", "model_role", "capabilities", "can_delegate", "child_profiles"},
@@ -165,6 +164,9 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
             raise ConfigurationError(_Msg.AGENT_CHILD_PROFILES_STRINGS.format(agent_id=agent_id))
         if not isinstance(raw["can_delegate"], bool):
             raise ConfigurationError(_Msg.AGENT_CAN_DELEGATE_BOOLEAN.format(agent_id=agent_id))
+        triage_control = raw_triage_control
+        if triage_control is not None and not isinstance(triage_control, bool):
+            raise ConfigurationError(_Msg.AGENT_TRIAGE_CONTROL_BOOLEAN.format(agent_id=agent_id))
         agents.append(
             AgentProfile(
                 id=agent_id,
@@ -173,6 +175,7 @@ def _parse_agents(data: dict[str, Any], model_roles: frozenset[str]) -> tuple[Ag
                 capabilities=frozenset(capabilities),
                 can_delegate=raw["can_delegate"],
                 child_profiles=frozenset(children),
+                triage_control=bool(triage_control),
             )
         )
     for agent in agents:
@@ -194,8 +197,6 @@ def _parse_agent_runtime(raw: dict[str, Any]) -> AgentLimits:
         value = raw.get(name, getattr(defaults, name))
         if name in {"root_profile", "worker_profile"}:
             values[name] = _string(value, f"engine.agents.{name}")
-        elif name == "lease_seconds":
-            values[name] = _positive_number(value, f"engine.agents.{name}")
         elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ConfigurationError(_Msg.AGENTS_POSITIVE_INTEGER.format(name=name))
         else:
@@ -250,6 +251,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
             "transport",
             "working_dir",
             "command",
+            "env",
             "url",
             "auth_env",
             "timeout_seconds",
@@ -270,10 +272,15 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0 or not isfinite(timeout):
             raise ConfigurationError(_Msg.APP_TIMEOUT_POSITIVE)
         command = raw.get("command", [])
+        env_vars = raw.get("env", [])
         working_dir = raw.get("working_dir")
         url = raw.get("url")
         auth_env = raw.get("auth_env")
         parsed_auth_env = _string(auth_env, "app.auth_env") if auth_env is not None else None
+        if not isinstance(env_vars, list) or not all(isinstance(item, str) for item in env_vars):
+            raise ConfigurationError("app.env must contain unique environment variable names")
+        if len(env_vars) != len(set(env_vars)) or not all(item.isidentifier() for item in env_vars):
+            raise ConfigurationError("app.env must contain unique environment variable names")
         if transport == "stdio":
             if (
                 not isinstance(command, list)
@@ -297,6 +304,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
                     transport=transport,
                     working_dir=(root / working_dir).resolve() if isinstance(working_dir, str) else None,
                     command=tuple(command) if isinstance(command, list) else (),
+                    env_vars=tuple(env_vars),
                     url=url if isinstance(url, str) else None,
                     auth_env=parsed_auth_env,
                     timeout_seconds=float(timeout),
@@ -315,16 +323,20 @@ def _dotted_name(value: object, label: str) -> str:
 
 
 def _capability_pattern(value: object, label: str) -> str:
-    """校验能力模式：精确工具 ID、package.* 或 *。"""
-    capability = _string(value, label)
-    if capability == "*":
-        return capability
-    if "*" not in capability:
-        return _dotted_name(capability, label)
-    if capability.count("*") != 1 or not capability.endswith(".*"):
+    """校验能力模式：`!` 排除前缀、精确工具 ID、package.* 或 *（RFC 0207）。"""
+    raw = _string(value, label)
+    if raw.startswith("!"):
+        if len(raw) == 1:
+            raise ConfigurationError(_Msg.CAPABILITY_PATTERN.format(label=label))
+        return "!" + _capability_pattern(raw[1:], label)
+    if raw == "*":
+        return raw
+    if "*" not in raw:
+        return _dotted_name(raw, label)
+    if raw.count("*") != 1 or not raw.endswith(".*"):
         raise ConfigurationError(_Msg.CAPABILITY_PATTERN.format(label=label))
-    _dotted_name(capability[:-2], label)
-    return capability
+    _dotted_name(raw[:-2], label)
+    return raw
 
 
 def _parse_dashboard(raw: dict[str, Any], root: Path, engine_workspace: Path) -> DashboardConfig:
@@ -402,14 +414,26 @@ def _parse_dashboard(raw: dict[str, Any], root: Path, engine_workspace: Path) ->
 
 
 def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
-    """解析平台偏好配置段（console / dashboard / mcp 的启用和选项）。"""
+    """解析平台偏好配置段（dashboard / mcp 的启用和选项）。"""
     _require_keys(platform, set(PLATFORM_NAMES), "platform")
-    console = _table(platform["console"], "platform.console")
     dashboard = _table(platform["dashboard"], "platform.dashboard")
     mcp = _table(platform["mcp"], "platform.mcp")
-    _require_subset(console, {"enabled", "terminal_logs"}, "platform.console")
-    _require_subset(dashboard, {"enabled", "open_browser"}, "platform.dashboard")
-    _require_subset(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
+    _require_keys(
+        dashboard,
+        {
+            "enabled",
+            "open_browser",
+            "host",
+            "port",
+            "max_upload_bytes",
+            "session_ttl_seconds",
+            "allowed_origins",
+            "owner",
+            "bot",
+        },
+        "platform.dashboard",
+    )
+    _require_keys(mcp, {"enabled", "terminal_logs"}, "platform.mcp")
 
     def _bool(value: object, label: str) -> bool:
         if not isinstance(value, bool):
@@ -417,10 +441,6 @@ def _parse_preference(platform: dict[str, Any]) -> PlatformPreference:
         return value
 
     return PlatformPreference(
-        console=ConsolePreference(
-            enabled=_bool(console["enabled"], "platform.console.enabled"),
-            terminal_logs=_bool(console["terminal_logs"], "platform.console.terminal_logs"),
-        ),
         dashboard=DashboardPreference(
             enabled=_bool(dashboard["enabled"], "platform.dashboard.enabled"),
             open_browser=_bool(dashboard["open_browser"], "platform.dashboard.open_browser"),

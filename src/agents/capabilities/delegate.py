@@ -1,17 +1,20 @@
-"""让模型通过 aurora.agent.delegate 创建子 Agent 的 Capability。"""
+"""让模型通过 aur.agent.delegate 创建子 Agent 的 Capability。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.agent import AgentDecision, DelegationRequest
-from src.contracts.model import ToolDefinition
+from src.contracts import (
+    AgentDecision,
+    DelegationRequest,
+    ToolDefinition,
+)
 
 if TYPE_CHECKING:
     from src.contracts.agent import AgentContext
     from src.contracts.model import ToolCall
 
-DELEGATE_TOOL = "aurora.agent.delegate"
+DELEGATE_TOOL = "aur.agent.delegate"
 
 _DELEGATE_DESCRIPTION = "把一至四件彼此独立的工作托付给子 Agent；他们完成后会回来告诉我结果。"
 
@@ -45,7 +48,7 @@ _DELEGATE_SCHEMA: dict[str, object] = {
 
 
 class DelegationCapability:
-    """模型通过 aurora.agent.delegate 创建子 Agent。"""
+    """模型通过 aur.agent.delegate 创建子 Agent。"""
 
     @property
     def tool_names(self) -> frozenset[str]:
@@ -58,13 +61,7 @@ class DelegationCapability:
             return ()
         return (ToolDefinition(DELEGATE_TOOL, _DELEGATE_DESCRIPTION, _DELEGATE_SCHEMA),)
 
-    def handle_tool(
-        self,
-        call: ToolCall,
-        context: AgentContext,  # noqa: ARG002
-        continuation: object = None,  # noqa: ARG002
-        tools: tuple[object, ...] = (),  # noqa: ARG002
-    ) -> AgentDecision | None:
+    def handle_tool(self, call: ToolCall) -> AgentDecision | None:
         """处理委派工具调用，验证任务参数并返回委派决策。"""
         if call.name != DELEGATE_TOOL:
             return None

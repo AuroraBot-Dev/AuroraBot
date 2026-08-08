@@ -1,11 +1,14 @@
 """Dashboard 平台公开 API。
 
 导出自描述 ``_create``，组合根通过统一协议完成创建、工具绑定与任务调度。
+浏览器打开是平台自身的环境效果，由平台在服务就绪后执行。
 """
 
 from __future__ import annotations
 
 import asyncio
+import webbrowser
+from functools import partial
 from typing import TYPE_CHECKING
 
 from src.platform.dashboard.adapter import (
@@ -14,12 +17,15 @@ from src.platform.dashboard.adapter import (
     DashboardPlatform,
 )
 from src.platform.dashboard.api import create_app
-from src.platform.dashboard.server import SignalSafeServer
 from src.platform.dashboard.service import ChatError, ChatService
+from src.utils import (
+    LifespanSafeApp,
+    SignalSafeServer,
+)
 
 if TYPE_CHECKING:
-    from src.contracts.configuration import DashboardConfig
-    from src.platform import PlatformHandle
+    from src.contracts.configuration import AuroraConfig, DashboardConfig
+    from src.contracts.platform import PlatformHandle, PlatformRuntimePort
 
 __all__ = [
     "DASHBOARD_SEND_CAPABILITY",
@@ -31,48 +37,67 @@ __all__ = [
 ]
 
 
-async def _create(_config: object, runtime: object) -> "PlatformHandle":
+async def _create(config: "AuroraConfig", runtime: "PlatformRuntimePort") -> "PlatformHandle":
     """创建 Dashboard 平台句柄，含聊天服务、平台适配器与 HTTP 服务器。"""
-    from src.contracts.tool import ToolExecutorBinding
-    from src.platform import PlatformHandle
+    from src.contracts.platform import PlatformHandle
 
-    config = getattr(runtime, "configuration")  # noqa: B009  # type: ignore[union-attr]
-    dashboard_cfg: "DashboardConfig" = config.dashboard  # type: ignore[union-attr]
-    chat = ChatService(dashboard_cfg, config)  # type: ignore[arg-type]
+    dashboard_cfg = config.dashboard
+    chat = ChatService(dashboard_cfg, runtime)
     await chat.start()
-    dash = DashboardPlatform(chat)
-    server = _build_server(config, chat)
+    dash = DashboardPlatform(chat, runtime)
+    server = _build_server(config, runtime, chat)
+    background = (
+        None
+        if not config.preference.dashboard.open_browser
+        else partial(_open_browser_when_ready, server, dashboard_cfg)
+    )
 
     return PlatformHandle(
-        bindings=(
-            ToolExecutorBinding(
-                DASHBOARD_SEND_DESCRIPTOR,
-                dash,
-                source_app="platform.dashboard",
-                source_instance="local",
-                recovery=dash,
-            ),
-        ),
-        http_server=server,
-        spawn=lambda _rt, _stop: asyncio.ensure_future(server.serve()),
+        bindings=(dash.binding,),
+        server=server,
+        background=background,
     )
 
 
-def _build_server(config: object, chat: ChatService) -> "SignalSafeServer":
+async def _open_browser_when_ready(
+    server: "SignalSafeServer", configuration: "DashboardConfig", stop: asyncio.Event
+) -> None:
+    """服务器就绪后打开 Dashboard，并存活至统一停止。"""
+    while not server.started:
+        if server.should_exit or stop.is_set():
+            return
+        await asyncio.sleep(0.01)
+    if server.should_exit or stop.is_set():
+        return
+    await asyncio.to_thread(_open_dashboard_browser, configuration)
+    await stop.wait()
+
+
+def _open_dashboard_browser(configuration: "DashboardConfig") -> None:
+    """在默认浏览器中打开 Dashboard 地址。"""
+    host = "127.0.0.1" if configuration.host in {"0.0.0.0", "::"} else configuration.host
+    if ":" in host:
+        host = f"[{host}]"
+    webbrowser.open(f"http://{host}:{configuration.port}")
+
+
+def _build_server(config: "AuroraConfig", runtime: "PlatformRuntimePort", chat: ChatService) -> "SignalSafeServer":
     """构建带禁用信号捕获的 uvicorn HTTP 服务器。"""
     import uvicorn
 
-    cfg: "DashboardConfig" = config.dashboard  # type: ignore[union-attr]
+    cfg = config.dashboard
     uvc = uvicorn.Config(
-        create_app(
-            chat,
-            config,  # type: ignore[arg-type]
-            cfg,
-            profile=config.runtime.profile,  # type: ignore[union-attr]
+        LifespanSafeApp(
+            create_app(
+                chat,
+                runtime,
+                cfg,
+                profile=config.runtime.profile,
+            )
         ),
         host=cfg.host,
         port=cfg.port,
-        log_level=config.logging_level.lower(),  # type: ignore[union-attr]
+        log_level=config.logging_level.lower(),
         log_config=None,
         access_log=False,
     )

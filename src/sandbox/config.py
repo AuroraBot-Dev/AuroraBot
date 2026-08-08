@@ -16,7 +16,7 @@ import yaml
 
 from src.sandbox.base import SandboxConfigError
 from src.sandbox.paths import PROJECT_ROOT
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable

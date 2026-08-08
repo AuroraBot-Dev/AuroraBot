@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from src.platform.dashboard.communication import ChatError, DashboardCommunication
-from src.platform.dashboard.routing import PrivateMessageInput, is_conversation_command, message_matches
+from src.platform.dashboard.routing import (
+    PrivateMessageInput,
+    is_conversation_command,
+    message_matches,
+    message_to_api,
+)
 from src.platform.dashboard.store import ChatStore, new_token, token_digest
 
 if TYPE_CHECKING:
@@ -21,7 +26,7 @@ if TYPE_CHECKING:
 
     from src.contracts.configuration import DashboardConfig
     from src.contracts.ports import InteractiveInputPort
-    from src.contracts.tool import ToolExecutionRequest, ToolOutcome
+    from src.contracts.tool import ToolExecutionRequest
 
 _MESSAGE_TYPES = {"text", "image", "file", "audio", "video"}
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "text/")
@@ -31,6 +36,7 @@ _ALLOWED_MIME_TYPES = {
     "application/x-zip-compressed",
     "application/octet-stream",
 }
+_SUBSCRIBER_QUEUE_SIZE = 128
 
 
 class _Msg(StrEnum):
@@ -74,7 +80,7 @@ class ChatService:
 
         Args:
             configuration: Dashboard 配置。
-            input_port: 交互式输入端口，用于将用户命令路由到 localhost。
+            input_port: 交互式输入端口，用于将用户命令路由到 ops。
         """
         self.configuration = configuration
         self.store = ChatStore(configuration.database_path)
@@ -204,7 +210,7 @@ class ChatService:
             """,
             parameters,
         )
-        return [self._message(row) for row in reversed(rows)]
+        return [message_to_api(row) for row in reversed(rows)]
 
     async def sync_messages(self, current_user_id: int, after_id: int) -> list[dict[str, Any]]:
         """增量同步指定 ID 之后的消息，最多返回 200 条。"""
@@ -218,7 +224,7 @@ class ChatService:
             """,
             (max(0, after_id), current_user_id, current_user_id),
         )
-        return [self._message(row) for row in rows]
+        return [message_to_api(row) for row in rows]
 
     async def upload_attachment(self, owner_id: int, filename: str, mime_type: str, data: bytes) -> dict[str, Any]:
         """上传附件文件：校验大小和类型，原子写入磁盘，记录到数据库。
@@ -306,7 +312,7 @@ class ChatService:
         )
         message_row = await asyncio.to_thread(self.store.message_with_attachment, int(row["id"]))
         assert message_row is not None
-        message = self._message(message_row)
+        message = message_to_api(message_row)
         if not created and not message_matches(message, parsed):
             raise ChatError(_Msg.CODE_IDEMPOTENCY_CONFLICT, _Msg.IDEMPOTENCY_CONFLICT, 409)
         if not created and message["status"] == "saved":
@@ -379,20 +385,16 @@ class ChatService:
             raise ChatError(_Msg.CODE_ATTACHMENT_FORBIDDEN, _Msg.ATTACHMENT_UNAVAILABLE, 403)
         return attachment_id
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """执行 Dashboard Tool，委托给通信层处理。"""
+    async def execute_tool(self, request: ToolExecutionRequest) -> tuple[str, str, dict[str, Any] | None, str | None]:
+        """执行 Dashboard Tool，委托给通信层处理，返回 (状态, 摘要, 结果, 错误)。"""
         return await self._communication.execute_tool(request)
-
-    async def recover_tool(self, request: ToolExecutionRequest) -> ToolOutcome:
-        """恢复 Dashboard Tool 状态，委托给通信层处理。"""
-        return await self._communication.recover_tool(request)
 
     async def subscribe(self, user_id: int) -> asyncio.Queue[dict[str, Any]]:
         """为用户创建事件订阅队列。
 
         若用户首次订阅则广播上线通知。
         """
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(_SUBSCRIBER_QUEUE_SIZE)
         first = not self._subscribers.get(user_id)
         self._subscribers.setdefault(user_id, set()).add(queue)
         if first:
@@ -419,6 +421,8 @@ class ChatService:
         """向指定用户的所有订阅队列发布事件，支持排除特定队列。"""
         for queue in tuple(self._subscribers.get(user_id, ())):
             if queue is not exclude_queue:
+                if queue.full():
+                    queue.get_nowait()
                 queue.put_nowait(event)
 
     async def broadcast(self, event: dict[str, Any], *, exclude: int | None = None) -> None:
@@ -448,30 +452,6 @@ class ChatService:
             "avatar_url": row["avatar_url"],
             "online": bool(row["is_bot"]) or bool(self._subscribers.get(user_id)),
             "is_bot": bool(row["is_bot"]),
-        }
-
-    @staticmethod
-    def _message(row: sqlite3.Row) -> dict[str, Any]:
-        """将数据库消息行（含 JOIN 的附件字段）转换为 API 消息字典。"""
-        attachment = None
-        if row["attachment_id"] is not None:
-            attachment = {
-                "attachment_id": int(row["attachment_id"]),
-                "file_name": str(row["original_name"]),
-                "mime_type": str(row["mime_type"]),
-                "size": int(row["size"]),
-                "url": f"/api/attachments/{int(row['attachment_id'])}/download",
-            }
-        return {
-            "message_id": int(row["id"]),
-            "client_message_id": str(row["client_message_id"]),
-            "sender_id": int(row["sender_id"]),
-            "receiver_id": int(row["receiver_id"]),
-            "message_type": str(row["message_type"]),
-            "content": row["content"],
-            "attachment": attachment,
-            "created_at": str(row["created_at"]),
-            "status": str(row["status"]),
         }
 
     @staticmethod

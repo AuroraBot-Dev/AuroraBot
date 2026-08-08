@@ -65,35 +65,34 @@ uv sync --no-dev
 Copy-Item .env.example .env
 
 # 在 .env 中填写默认配置所需的 DEEPSEEK_API_KEY
-uv run --no-dev --env-file .env aurora --console --mcp
+uv run --no-dev --env-file .env aurora start
 ```
 
 启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
 
 ```powershell
 # 使用 config/platforms.toml 中的默认平台组合
-uv run --no-dev --env-file .env aurora
+uv run --no-dev --env-file .env aurora start
 
-# 只启动本地 Console
-uv run --no-dev --env-file .env aurora --console
-
-# 不启动外部平台
-uv run --no-dev --env-file .env aurora --headless
+# 无头模式：不启动本地 Console，平台组合不变
+uv run --no-dev --env-file .env aurora start --headless
 ```
 
-显式提供 `--console`、`--dashboard` 或 `--mcp` 时，它们组成精确的平台集合，不与默认值叠加。Dashboard 浏览器前端由独立项目提供，本仓库包含本地后端和聊天桥接。
+本地 Console 不随 `--platform` 选择启停：只要不是无头模式且 `[runtime.console].enabled = true`，它就会运行。
+
+显式提供 `--platform` 时，这些平台组成精确的平台集合，不与默认值叠加。Dashboard 浏览器前端由独立项目提供，本仓库包含本地后端和聊天桥接。
 
 ## 定制与扩展
 
-| 想改变什么                   | 从哪里开始               |
-| ---------------------------- | ------------------------ |
-| SOUL、世界说明与 Agent 提示词 | `config/prompts.toml`    |
-| 模型角色与 Provider          | `config/models.toml`     |
-| engine 限制与 Task 预算      | `config/engine.toml`     |
-| 持久化目录                   | `config/storage.toml`    |
-| 默认启动的平台               | `config/platforms.toml`  |
-| Agent 的模型、能力与委派范围 | `config/agents.toml`     |
-| 本地或远程 MCP 应用          | `config/apps.toml`       |
+| 想改变什么                    | 从哪里开始              |
+| ----------------------------- | ----------------------- |
+| SOUL、世界说明与 Agent 提示词 | `config/prompts.toml`   |
+| 模型角色与 Provider           | `config/models.toml`    |
+| engine 限制与 Task 预算       | `config/engine.toml`    |
+| 持久化目录                    | `config/storage.toml`   |
+| 默认启动的平台                | `config/platforms.toml` |
+| Agent 的模型、能力与委派范围  | `config/agents.toml`    |
+| 本地或远程 MCP 应用           | `config/apps.toml`      |
 
 结构配置使用 TOML，密钥只从环境变量读取。扩展可以从[扩展指南](extensions/README.md)和内建[Clock 应用](src/apps/aurora-app-clock/README.md)开始。
 

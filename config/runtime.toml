@@ -7,3 +7,9 @@ profile = "prod"
 debug_host = "127.0.0.1"
 # 调试 API 端口，1–65535
 debug_port = 8765
+
+[runtime.console]
+# 是否启动本地交互 Console（--headless 时始终关闭）
+enabled = true
+# 是否在终端输出运行时日志（仍写入文件）
+terminal_logs = false

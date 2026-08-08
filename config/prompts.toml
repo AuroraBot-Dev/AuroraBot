@@ -9,5 +9,7 @@ world = "prompts/WORLD.md"
 
 # Agent 层：按 profile id 映射到专用提示词片段
 [agent]
+"builtin.triage" = "prompts/agents/triage.md"
 "builtin.gate" = "prompts/agents/gate.md"
 "builtin.worker" = "prompts/agents/worker.md"
+"builtin.memory" = "prompts/agents/memory.md"

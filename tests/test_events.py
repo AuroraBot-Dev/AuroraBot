@@ -6,7 +6,10 @@ from uuid import uuid4
 
 import pytest
 
-from src.contracts.amp import AmpEnvelope, AmpValidationError
+from src.contracts import (
+    AmpEnvelope,
+    AmpValidationError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
