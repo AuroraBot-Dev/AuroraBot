@@ -1,5 +1,6 @@
 """包级 TOML 配置快照契约。"""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,19 @@ from src.config.loader import load_configuration
 from src.contracts import ConfigurationError
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_test_process_cannot_connect_repository_runtime_database() -> None:
+    probe = ROOT / "data" / "pytest-pollution-probe.sqlite3"
+    with pytest.raises(RuntimeError, match="must not access repository runtime data"):
+        sqlite3.connect(probe)
+    assert not probe.exists()
+
+
+def test_default_test_root_is_disposable(tmp_path: Path) -> None:
+    assert Path.cwd() == tmp_path
+    configuration = load_configuration(Path.cwd())
+    assert configuration.storage.data_root == tmp_path / "data"
 
 
 def test_configuration_uses_engine_and_storage_snapshots() -> None:
