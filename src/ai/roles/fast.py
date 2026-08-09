@@ -37,6 +37,10 @@ class FastRole(RoleHandler):
     ) -> ModelResult:
         capabilities = gateway._capabilities_for(request.role)
         messages, kwargs, alias_to_name = build_chat_kwargs(request, negotiated)
+        if role.provider == "deepseek":
+            extra_body = dict(kwargs.get("extra_body") or {})
+            extra_body.setdefault("thinking", {"type": "disabled"})
+            kwargs["extra_body"] = extra_body
         caller = gateway._caller_for(request.role)
         try:
             task, response = await complete_chat_with_fallback(

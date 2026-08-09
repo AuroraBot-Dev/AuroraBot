@@ -64,7 +64,6 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
     request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),), output_schema={"type": "object"})
     assert {"chat", "structured_output"} <= service.negotiate(request)
     assert "chat" in service.negotiate(ModelRequest(role="fast", messages=(), parallel_tool_calls=True))
-
     invalid = (
         (ModelRequest(role="missing", messages=()), "unknown model role"),
         (ModelRequest(role="fast", messages=(), retry_policy="retry"), "retry_policy"),  # type: ignore[arg-type]
@@ -78,6 +77,20 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
     for model_request, message in invalid:
         with pytest.raises(ModelCapabilityError, match=message):
             service.negotiate(model_request)
+
+
+def test_structured_output_negotiation_requires_capability(project_root: Path) -> None:
+    """模型不具备 structured_output 能力时，即使带 output_schema 也不协商该能力。"""
+    service = _service(project_root)
+    service._capabilities = {
+        "fast": frozenset({"chat", "stream", "json_text_fallback"}),
+        "quality": frozenset({"chat", "stream", "json_text_fallback", "reasoning"}),
+        "multimodal": frozenset({"chat", "stream", "vision"}),
+    }
+    request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),), output_schema={"type": "object"})
+    negotiated = service.negotiate(request)
+    assert "chat" in negotiated
+    assert "structured_output" not in negotiated
 
 
 def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:

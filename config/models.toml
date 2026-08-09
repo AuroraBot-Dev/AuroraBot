@@ -22,21 +22,24 @@ secret_env = "SILICONFLOW_API_KEY"
 
 
 # Role 定义：每个 role 绑定一个 provider 的具体 model
+# capabilities 显式覆盖 models.dev 派生；DeepSeek 拒绝 json_schema response_format，故不含 structured_output
 [models.roles.fast]
 provider = "deepseek"
 model = "deepseek-v4-flash"
+capabilities = ["chat", "stream", "json_text_fallback"]
 
 [models.roles.quality]
 provider = "deepseek"
 model = "deepseek-v4-pro"
+capabilities = ["chat", "stream", "json_text_fallback"]
 
 [models.roles.multimodal]
 provider = "xiaomi_mimo"
 model = "mimo-v2.5-pro"
 
 [models.roles.embedding]
-provider = "openai"
-model = "text-embedding-3-small"
+provider = "siliconflow"
+model = "BAAI/bge-m3"
 
 [models.logging]
 log_queries = false

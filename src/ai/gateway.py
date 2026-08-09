@@ -229,7 +229,7 @@ class ModelGatewayService:
         negotiated = set(request.required_capabilities)
         if request.tools:
             negotiated.add("tools")
-        if request.output_schema is not None:
+        if request.output_schema is not None and "structured_output" in self._capabilities_for(request.role):
             negotiated.add("structured_output")
         return frozenset(negotiated)
 
