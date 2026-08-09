@@ -1,16 +1,51 @@
 from __future__ import annotations
 
+import logging
+import os
 import sys
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from src.memory.long_term import LongTermMemory
+from src.memory.long_term import LongTermMemory, _Mem0ChromaHybridFilter
 from src.memory.service import MemoryService
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
+
+
+def test_mem0_telemetry_is_disabled_by_default() -> None:
+    """mem0 遥测默认关闭，避免 PostHog 数据外发与多客户端告警。"""
+    assert os.environ.get("MEM0_TELEMETRY", "").lower() == "false"
+
+
+def test_mem0_chroma_hybrid_warning_is_suppressed() -> None:
+    """Chroma 混合检索告知性告警被过滤；其他 mem0 告警仍透传。"""
+    mem0_logger = logging.getLogger("mem0.memory.main")
+    suppressors = [f for f in mem0_logger.filters if isinstance(f, _Mem0ChromaHybridFilter)]
+    assert suppressors
+    hybrid = mem0_logger.makeRecord(
+        mem0_logger.name,
+        logging.WARNING,
+        __file__,
+        1,
+        "The 'chroma' vector store does not support keyword search. "
+        "Hybrid (BM25) scoring will be disabled and search will use semantic similarity only.",
+        (),
+        None,
+    )
+    assert all(not item.filter(hybrid) for item in suppressors)
+    other = mem0_logger.makeRecord(
+        mem0_logger.name,
+        logging.WARNING,
+        __file__,
+        1,
+        "Failed to embed memory text",
+        (),
+        None,
+    )
+    assert all(item.filter(other) for item in suppressors)
 
 
 def test_memory_service_needs_no_model_or_embedding_credentials(tmp_path: Path) -> None:

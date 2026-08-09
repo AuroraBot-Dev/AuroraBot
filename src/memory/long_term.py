@@ -2,10 +2,16 @@
 
 向量语义检索，embedding 用 embedding role（litellm 同步 embedding）。
 mem0 依赖不可用或配置失败时降级为 None（回退 durable_facts 关键词检索）。
+
+mem0 默认把匿名遥测上报 PostHog 云，并在每次初始化时输出 Chroma 不支持
+关键词检索的一次性告知性告警；本模块在导入时禁用遥测（MEM0_TELEMETRY
+可显式开启）并挂接日志过滤器只丢弃该告知消息。
 """
 
 from __future__ import annotations
 
+import logging
+import os
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +22,20 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = get_logger("aurora.memory.long_term")
+
+os.environ.setdefault("MEM0_TELEMETRY", "false")
+
+
+class _Mem0ChromaHybridFilter(logging.Filter):
+    """只丢弃 mem0 对 Chroma 不支持关键词检索的一次性告知性告警。"""
+
+    _MESSAGE_MARKER = "does not support keyword search"
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return self._MESSAGE_MARKER not in record.getMessage()
+
+
+logging.getLogger("mem0.memory.main").addFilter(_Mem0ChromaHybridFilter())
 
 
 class _Msg(StrEnum):
