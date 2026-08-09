@@ -238,6 +238,9 @@ class AgentEngine:
             self._ensure_model_dispatcher()
             self._ensure_tool_dispatcher()
             self._project_memory()
+            # 让出控制权：后台模型/工具派发任务依赖事件循环调度，pump 无消息可
+            # 处理时若不让出，has_work 自旋会饿死派发任务与 console/平台任务
+            await asyncio.sleep(0)
             return {
                 "admitted_task_ids": admitted,
                 "expired_task_ids": expired,

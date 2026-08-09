@@ -399,9 +399,13 @@ def test_triage_agent_requests_structured_output_without_tools(tmp_path: Path) -
             await engine.submit_amp(_event("noise").to_dict())
             await asyncio.sleep(0.001)
             await engine.pump()
-            rows = engine.store.claim_activities("model", 1)
-            assert rows
-            request = ModelRequest.from_dict(json.loads(rows[0].request_json))
+            # 后台模型派发可能在 pump 返回前已领取活动，直接查询请求内容
+            with engine.store.connect() as connection:
+                row = connection.execute(
+                    "SELECT request_json FROM activities WHERE kind='model' ORDER BY created_at LIMIT 1"
+                ).fetchone()
+            assert row is not None
+            request = ModelRequest.from_dict(json.loads(row["request_json"]))
             assert request.tool_choice == "none"
             assert not request.tools
             assert request.output_schema is not None
