@@ -46,7 +46,7 @@ AuroraBot は、長期的にプロジェクトへ影響する判断を RFC に�
 中国語、英語、日本語の入口を同期してください。
 
 現在の runtime、package boundary、process composition は
-[RFC 0200](rfc/0200-agent-centered-runtime.md) に従います。
+唯一の設計基準である [RFC 0300](rfc/0300-unified-architecture-and-contracts.md) に従います。
 
 ## ループを壊さない
 

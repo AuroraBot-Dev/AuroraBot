@@ -1,4 +1,4 @@
-"""engine 域操作：运行态观察与注入推进（RFC 0218 §3）。"""
+"""engine 域操作：运行态观察与注入推进。"""
 
 from __future__ import annotations
 

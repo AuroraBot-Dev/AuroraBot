@@ -36,7 +36,7 @@ class TaskStatus(StrEnum):
 
 
 class AgentStatus(StrEnum):
-    """Agent 持久化基态；等待语义由 activities/children 派生（RFC 0205）。"""
+    """Agent 持久化基态；等待语义由 activities/children 派生。"""
 
     READY = "READY"
     COMPLETED = "COMPLETED"

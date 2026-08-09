@@ -1,7 +1,7 @@
-"""面板后端私有存储（RFC 0218 §6）：bootstrap Token、Bearer 会话与附件索引。
+"""面板后端私有存储：bootstrap Token、Bearer 会话与附件索引。
 
 位于 ops 包，数据落 ``data/ops/``（panel.sqlite3 + Token.txt + uploads/）。
-存储实现使用 SQLAlchemy 2.0 ORM（RFC 0217），Schema 演进经
+存储实现使用 SQLAlchemy 2.0 ORM，Schema 演进经
 ``ops/migration`` 版本序列（utils.migration 框架）；ops 仍只依赖
 contracts + utils 与通用依赖的边界。
 """

@@ -1,4 +1,4 @@
-"""角色域基础（RFC 0212/0213/0214）。
+"""角色域基础。
 
 - :class:`RoleHandler`：角色契约（endpoint / capability_baseline / adapt_request / complete）。
 - 共享**纯函数**：工具序列化、chat 通道的消息组装、调用封装（ChatCaller）与
@@ -58,12 +58,12 @@ _INVALID_TOOL_NAME = re.compile(r"[^A-Za-z0-9_-]+")
 
 
 class RoleHandler(ABC):
-    """角色契约（RFC 0212/0213）。
+    """角色契约。
 
     - ``endpoint``：通道（当前统一 ``chat_completions``）；
     - ``capability_baseline``：角色的能力侧重声明（并入该角色的能力集）；
     - ``adapt_request``：per-role 请求适配钩子（默认原样返回）；
-    - ``complete``：完整实现（每个角色文件自包含，RFC 0214）。
+    - ``complete``：完整实现（每个角色文件自包含）。
     """
 
     endpoint: ClassVar[str]
@@ -88,7 +88,7 @@ class RoleHandler(ABC):
         gateway: "ModelGatewayService",
         inputs: list[str],
     ) -> list[list[float]]:
-        """词嵌入调用（RFC 0215）；仅 embedding 角色实现。"""
+        """词嵌入调用；仅 embedding 角色实现。"""
         raise NotImplementedError
 
 

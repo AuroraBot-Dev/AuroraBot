@@ -1,4 +1,4 @@
-"""面板后端：认证、操作 REST、附件与输出流（RFC 0218 §1/§4/§6）。"""
+"""面板后端：认证、操作 REST、附件与输出流。"""
 
 from __future__ import annotations
 

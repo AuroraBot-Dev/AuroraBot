@@ -1,4 +1,4 @@
-"""engine 热路径之外的输入、操作体系与面板运行时组合（RFC 0218）。
+"""engine 热路径之外的输入、操作体系与面板运行时组合。
 
 ``AuroraRuntime`` 是组合根注入的运行时表面：实现 engine 交互与查询端口，
 并聚合 memory / ai / config 查询端口与进程停止回调，供面板与操作体系使用。
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 class PanelConfigQuery:
-    """配置快照与提示词的只读查询适配器（ConfigQueryPort，RFC 0218 §5）。"""
+    """配置快照与提示词的只读查询适配器（ConfigQueryPort）。"""
 
     def __init__(self, configuration: "AuroraConfig", prompt_catalog: Any) -> None:
         self._configuration = configuration

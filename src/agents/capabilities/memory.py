@@ -1,6 +1,6 @@
 """MemoryCapability — Agent 主动记忆写入的模型可见工具。
 
-工具定义由记忆执行器的 catalog descriptor 单一提供（RFC 0207），
+工具定义由记忆执行器的 catalog descriptor 单一提供，
 本能力只负责参数校验与 ToolRequest 构造，不持有任何存储实现。
 """
 

@@ -216,7 +216,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
 
 
 def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
-    """构造主动记忆写入的工具绑定（RFC 0207 记忆同源，RFC 0211 回执走 AMP）。"""
+    """构造记忆同源且通过 AMP 回执的主动记忆工具绑定。"""
     from src.contracts.tool import ToolExecutorBinding
     from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 
@@ -447,7 +447,7 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
 
 
 def _panel_server(runtime: AuroraRuntime, *, console_enabled: bool = True) -> SignalSafeServer | None:
-    """创建独立于 Platform 集合的面板后端服务器（RFC 0218 §1）。
+    """创建独立于 Platform 集合的面板后端服务器。
 
     console_enabled 控制 Lab 调试页（/debug/lab）是否随本地 Console 一起提供。
     """

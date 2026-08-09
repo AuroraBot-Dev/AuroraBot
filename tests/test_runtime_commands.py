@@ -105,7 +105,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
 
 def test_ai_command_reports_gateway_cost_stats(project_root: Path) -> None:
-    """/cost 返回模型网关的费用与分类统计（RFC 0215）。"""
+    """/cost 返回模型网关的费用与分类统计。"""
 
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)

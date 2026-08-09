@@ -1,4 +1,4 @@
-"""会话与输出操作：面板聊天语义（RFC 0218 §4，前端是 console 的 Web 分身）。"""
+"""会话与输出操作：面板聊天语义，前端是 console 的 Web 分身。"""
 
 from __future__ import annotations
 

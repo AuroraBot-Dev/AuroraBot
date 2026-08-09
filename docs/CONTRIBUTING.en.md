@@ -46,7 +46,7 @@ Small bug fixes, tests, writing improvements, and refactors that preserve public
 When public documentation changes, keep the Chinese, English, and Japanese entry points in sync.
 
 The runtime, package boundaries, and process composition follow
-[RFC 0200](rfc/0200-agent-centered-runtime.md).
+[RFC 0300](rfc/0300-unified-architecture-and-contracts.md), the sole architecture authority.
 
 ## Keep the loop intact
 

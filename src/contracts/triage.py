@@ -1,4 +1,4 @@
-"""持久化 Inbox、防抖批次与入口 Triage 上下文契约（RFC 0209）。"""
+"""持久化 Inbox、防抖批次与入口 Triage 上下文契约。"""
 
 from __future__ import annotations
 

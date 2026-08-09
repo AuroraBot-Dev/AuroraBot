@@ -1,33 +1,15 @@
 # AuroraBot RFC
 
-RFC 记录 AuroraBot 已接受的设计决定。涉及模块边界、事件、结构配置、扩展协议、模型调用、持久化语义或进程组合的改动，必须先更新或新增 RFC。
+`docs/rfc/0300-unified-architecture-and-contracts.md` 是 AuroraBot 唯一的 RFC 与设计基准。此前分散的 02xx 文件已合并，
+历史内容由 Git 保存，不再出现在当前工作树。
 
 ## 当前基准
 
-1. [0200 Agent 中心运行时架构](0200-agent-centered-runtime.md) - 包边界、Port 注入、engine 热路径、ops 监察与组合根
-2. [0201 有界上下文与运行态留存](0201-bounded-context-and-runtime-retention.md) - 会话级记忆、上下文预算、瞬时事件过滤与终态数据生命周期
-3. [0202 Triage、Root 与压缩记忆基线](0202-triage-root-memory-baseline.md) - 批量防抖摄入、Triage 决策、Root 上下文与三层信息存储（TriagePolicy 与 admit 路径已被 0209 取代）
-4. [0203 Agent 自由与运行时边界](0203-agent-freedom-boundary.md) - Prompt 人格、模型行动自由、效果安全与资源边界
-5. [0204 Console 本地交互前端](0204-console-local-frontend.md) - Console 脱离平台抽象，改为本地渲染器，Bot 文本默认输出（面板 Web 形态见 0218）
-6. [0205 Agent 状态机收敛与决策链路扁平化](0205-agent-state-and-decision-thinning.md) - 删除 Command 层、Agent 等待状态派生化、Schema v8 迁移（`waiting_on` 展示由面板提供，见 0218）
-7. [0206 运行时组合与配置快照收敛](0206-runtime-composition-and-configuration-hardening.md) - 强类型平台生命周期、单一启动配置快照与 MCP 边界（dashboard 相关条款被 0218 取代）
-8. [0207 Multiagent 委派链与同源记忆](0207-multiagent-delegation-and-unified-memory.md) - 注意力初筛、本体意识委派链、全员被动记忆与可委派记忆 agent 的同源记忆（注意力 agent 的具体形态由 0209 取代）
-9. [0208 层级重定性](0208-layer-reframing.md) - 启动环境、基础建设、能力、外部接入与运行实现五层语义；能力统一为 ToolExecutor；engine 瘦身方向
-10. [0209 Agent 全同构](0209-agent-isomorphism.md) - Triage 入口 agent、三元组实例化（上下文/权限域/逻辑类）、委派唯一化与 defer/discard transition
-11. [0210 最小 engine 重写](0210-minimal-engine-rewrite.md) - 单一 SQLite 即归档、无租约单进程并发、BaseAgent 基类、Schema v9 不迁移
-12. [0211 工具域统一与 AMP 化工具回执](0211-tool-domain-and-amp-receipts.md) - aur.* 域命名规范、工具结果统一走 AMP、删 ToolLease/RecoveryBinding/双端口
-13. [0212 AI 包总分结构](0212-ai-role-hierarchy.md) - 预设角色（roles/ 子包）、endpoint 归代码、配置只描述 model 绑定
-14. [0213 模型通道收敛与角色钩子](0213-model-channel-convergence.md) - 统一 chat_completions、协商简化、能力基线 + adapt_request
-15. [0214 角色域自洽](0214-role-domain-self-contained.md) - 每个角色自包含实现、共享纯函数收敛
-16. [0215 AI 包外部接口](0215-ai-external-surface.md) - get_response 脱壳输出、词嵌入角色、模态查询、费用统计、导出 OpenAI client
-17. [0216 记忆引擎](0216-memory-engine.md) - 窗口+LLM 概要（短期）、mem0 长期记忆、MemoryStore 契约扩展
-18. [0217 存储实现迁移](0217-storage-orm-migration.md) - SQLAlchemy 2.0 ORM 取代裸 sqlite3 手写 SQL，Schema v9 契约不变
-19. [0218 面板后端与统一操作体系](0218-panel-backend-and-operation-system.md) - ops 唯一后端路由、RESTful 资源树与命令同构、dashboard 退出平台
-20. [0219 废弃外部 AMP 文件摄入通道](0219-drop-file-ingress.md) - 移除 inbox/archive 目录与文件投递箱，摄入统一 SQLite 直连（取代 0210 保留条款）
-21. [0220 engine 运行库路径上提](0220-engine-workspace-runtime-sqlite.md) - `data/engine/runtime.sqlite3` 单一文件即运行态与终态（取代 0219 路径细节）
+- [0300 AuroraBot 统一架构与公共契约](0300-unified-architecture-and-contracts.md)
 
-## 规范优先级
+## 变更规则
 
-已接受 RFC 高于 README、注释、配置样例与现有实现。`ARCHITECTURE.md` 是 RFC 0200 的详细实施规划；两者冲突时以 RFC 为准。
-
-状态包括：草案、提议、已接受、已取代和已废弃。
+- 影响模块边界、事件、结构配置、扩展协议、模型调用、持久化语义或进程组合的改动，必须先更新 RFC 0300。
+- 除非先修改 RFC 0300 的治理规则，不新增并行编号 RFC。
+- 已接受 RFC 高于 `ARCHITECTURE.md`、`docs/TECHNICAL.md`、README、配置样例、代码注释和现有实现。
+- Python 源码与测试的注释和 docstring 禁止提及具体 RFC 编号或章节；局部说明必须直接描述行为和原因。

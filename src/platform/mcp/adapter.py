@@ -311,7 +311,7 @@ class MCPPlatform:
         return list(self._clients.list_all_tools().get(package, []))
 
     async def execute_tool(self, request: ToolExecutionRequest) -> None:
-        """执行 MCP Tool 调用：路由到对应 Server，完成后提交回执 AMP（RFC 0211）。"""
+        """执行 MCP Tool 调用：路由到对应 Server，完成后提交回执 AMP。"""
         status: str
         summary: str
         result: dict[str, Any] | None = None

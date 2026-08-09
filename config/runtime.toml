@@ -5,7 +5,7 @@
 profile = "prod"
 
 [runtime.panel]
-# 面板后端（RFC 0218）唯一 HTTP 服务：认证、操作资源树与聊天语义
+# 面板后端是唯一 HTTP 服务：提供认证、操作资源树与聊天语义
 enabled = true
 # HTTP 绑定地址，必须为 loopback
 host = "127.0.0.1"

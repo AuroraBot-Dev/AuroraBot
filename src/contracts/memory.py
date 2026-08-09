@@ -1,4 +1,4 @@
-"""记忆引擎契约（RFC 0216）：窗口 + 概要（短期）与长期事实。"""
+"""记忆引擎契约：窗口 + 概要（短期）与长期事实。"""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class MemoryQuery:
 
 @dataclass(frozen=True, slots=True)
 class MemoryMessage:
-    """记忆窗口中的一条原始消息（RFC 0216 短期历史）。"""
+    """记忆窗口中的一条原始消息（短期历史）。"""
 
     role: str
     content: str
@@ -53,7 +53,7 @@ class MemoryEntry:
 
 
 class MemoryStore(Protocol):
-    """engine 在 Agent turn 前后调用的记忆引擎端口（RFC 0216）。"""
+    """engine 在 Agent turn 前后调用的记忆引擎端口。"""
 
     def recall(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 

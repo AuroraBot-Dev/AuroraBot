@@ -1,4 +1,4 @@
-"""AI 费用存储版本迁移序列（RFC 0217 §5）。
+"""AI 费用存储版本迁移序列。
 
 版本号统一存于 ``schema_meta`` 表（utils.migration 读写）；当前目标
 版本为 1，初始 schema 即 v1，无历史迁移步骤（``STEPS`` 为空）。

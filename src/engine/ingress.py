@@ -1,7 +1,7 @@
-"""AMP 持久化摄入与工具回执（RFC 0208/0210/0211 拆包，RFC 0219 移除文件通道）。
+"""AMP 持久化摄入与工具回执。
 
 普通事件写入 inbox_events（防抖聚合）；工具回执（``tool.{status}``）不进入
-Inbox，直接匹配活动完成并投递 Agent 消息（RFC 0211：结果统一经 AMP 回 engine）。
+Inbox，直接匹配活动完成并投递 Agent 消息（结果统一经 AMP 回 engine）。
 所有摄入均经 ``submit_amp`` 直连 SQLite，无文件投递箱。
 """
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 def _ingest_amp(kernel: "AgentEngine", amp: AmpEnvelope, ingested: list[str]) -> None:
     if amp.payload.type in TOOL_EVENT_TYPES:
-        # 工具回执：匹配活动完成，不进入 Inbox（RFC 0211）
+        # 工具回执：匹配活动完成，不进入 Inbox
         kernel.consume_tool_receipt(amp)
         ingested.append(amp.header.message_id)
         return

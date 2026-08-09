@@ -1,4 +1,4 @@
-"""Agent 决策的构造、授权与原子应用（RFC 0208 拆包）。
+"""Agent 决策的构造、授权与原子应用（拆包）。
 
 从 runtime.py 拆出的纯函数集合：构造只读 AgentContext、按决策字段分派
 授权校验、将已授权决策交给 store 原子执行。不持有任何运行时状态。
@@ -50,7 +50,7 @@ def _policy_matches(capability: str, policy: str) -> bool:
 
 
 def _capability_allowed(capability: str, policies: frozenset[str]) -> bool:
-    """权限域匹配：`!` 前缀否定优先于 `*` 与前缀通配（RFC 0207 排除语义）。"""
+    """权限域匹配：`!` 前缀否定优先于 `*` 与前缀通配（排除语义）。"""
     if any(
         policy.startswith("!") and len(policy) > 1 and _policy_matches(capability, policy[1:]) for policy in policies
     ):
@@ -119,12 +119,12 @@ def apply_failure(kernel: "EngineState", message: Any, agent: AgentInstance, err
 def apply_authorized_decision(
     kernel: "EngineState", message: Any, agent: AgentInstance, profile_id: str, decision: AgentDecision
 ) -> None:
-    """按决策字段分派授权校验；校验通过后原样交给 store 原子执行（RFC 0205）。
+    """按决策字段分派授权校验；校验通过后原样交给 store 原子执行。
 
     completion/wait/failure 无需额外授权；wait 的等待前提校验在 store
     事务内原子完成。所有 resource 上界校验仍由 store 事务内执行。
     defer/discard 由 triage_control profile 专属，defer 的秒数在授权时
-    按 TriageLimits 钳制（RFC 0209）。
+    按 TriageLimits 钳制。
     """
     profile = kernel._profiles[profile_id]
     if decision.model_request is not None:

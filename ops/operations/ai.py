@@ -1,4 +1,4 @@
-"""ai 域操作：模型网关只读观察（RFC 0218 §3）。"""
+"""ai 域操作：模型网关只读观察。"""
 
 from __future__ import annotations
 

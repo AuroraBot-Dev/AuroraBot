@@ -1,4 +1,4 @@
-"""持久化 Inbox、防抖批次、入口 Triage Task 与批次结算（Schema v9，RFC 0217 ORM 实现）。"""
+"""持久化 Inbox、防抖批次、入口 Triage Task 与批次结算（Schema v9，SQLAlchemy ORM 实现）。"""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from .models import (
 
 
 class StoreInboxMixin(RuntimeStoreBase):
-    """AMP 在入口 triage Task 之前的唯一持久化入口（RFC 0209）。"""
+    """AMP 在入口 triage Task 之前的唯一持久化入口。"""
 
     def enqueue_inbox(self, amp: AmpEnvelope, limits: TriageLimits) -> bool:
         """幂等写入事件，并为同会话 pending 批次刷新 quiet window。"""
@@ -182,7 +182,7 @@ class StoreInboxMixin(RuntimeStoreBase):
         autonomous_budget: TaskLimits,
         priority: int,
     ) -> tuple[str, str] | None:
-        """防抖批次到期后创建 Task 与入口 triage agent（RFC 0209）。
+        """防抖批次到期后创建 Task 与入口 triage agent。
 
         批次原始事件保留在 Inbox，由 triage agent 的决策在 apply_decision
         中结算；批次投影存入入口 agent 状态，供委派时向子 Agent 传递。

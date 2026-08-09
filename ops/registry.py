@@ -1,4 +1,4 @@
-"""操作注册表：装饰器收集、冲突校验与目录自描述（RFC 0218 §2）。
+"""操作注册表：装饰器收集、冲突校验与目录自描述。
 
 操作以 ``@operation(...)`` 装饰器注册到模块级注册表；``iter_operations``
 在首次调用时自动加载 ``ops.operations`` 下的全部子模块（显式导入，保证装饰器执行）。
@@ -73,7 +73,7 @@ def find_by_alias(alias: str) -> OperationSpec | None:
 
 
 def catalog_entries() -> list[dict[str, Any]]:
-    """操作目录自描述（RFC 0218：/api/ops 与 /help 共用）。"""
+    """操作目录自描述（/api/ops 与 /help 共用）。"""
     return [
         {
             "method": spec.method,

@@ -80,7 +80,7 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
 
 
 def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
-    """RFC 0213：能力基线并入能力集；adapt_request 可改写请求。"""
+    """能力基线并入能力集；adapt_request 可改写请求。"""
 
     from src.ai.roles.base import RoleHandler
     from src.ai.roles.quality import QualityRole
@@ -105,7 +105,7 @@ def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
 
 
 def test_role_self_contained_implementation(project_root: Path) -> None:
-    """RFC 0214：角色文件自包含完整实现，可独立扩展（如音频输出）。"""
+    """角色文件自包含完整实现，可独立扩展（如音频输出）。"""
 
     class AudioMultimodalRole(RoleHandler):
         """模拟多模态角色的音频输出适配：完整实现，独立于其他角色。"""
@@ -140,7 +140,7 @@ def test_role_self_contained_implementation(project_root: Path) -> None:
 
 
 def test_get_response_returns_unwrapped_output(project_root: Path) -> None:
-    """RFC 0215：get_response 返回脱壳 dict（text/tool_calls/finish_reason）。"""
+    """get_response 返回脱壳 dict（text/tool_calls/finish_reason）。"""
     from src.ai.roles.embedding import EmbeddingRole
 
     service = _service(project_root)
@@ -179,7 +179,7 @@ def test_get_response_returns_unwrapped_output(project_root: Path) -> None:
 
 
 def test_export_openai_client_and_cost_stats(project_root: Path) -> None:
-    """RFC 0215：client 可导出；CostTracker 提供总费用与分类统计。"""
+    """client 可导出；CostTracker 提供总费用与分类统计。"""
     from src.ai.execution import CostTracker
 
     service = _service(project_root)
@@ -251,7 +251,7 @@ def test_parsing_maps_provider_tools_and_tool_calls() -> None:
     chat_defs, aliases = provider_tools(definitions, responses=False)
     alias = next(iter(aliases))
     assert alias == "org__example__echo"
-    # 双下划线替换与原始单下划线不混淆（RFC 0214 歧义消除）
+    # 双下划线替换与原始单下划线不混淆（歧义消除）
     assert _provider_tool_alias("aur_agent_delegate") == "aur_agent_delegate"
     assert _provider_tool_alias("aur.agent.delegate") == "aur__agent__delegate"
     assert _provider_tool_alias("aur_agent.delegate") == "aur_agent__delegate"
@@ -451,7 +451,7 @@ def test_gateway_cold_start_falls_back_and_opens_tools(project_root: Path, monke
     async def scenario() -> None:
         service = ModelGatewayService(load_configuration(project_root))
         try:
-            # 冷启动且 models.dev 不可用：能力假定满足（RFC 0215），协商不阻塞
+            # 冷启动且 models.dev 不可用：能力假定满足，协商不阻塞
             await service.initialize()
             request = ModelRequest(
                 role="fast",

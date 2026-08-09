@@ -1,6 +1,6 @@
-"""记忆引擎（RFC 0216）：短期窗口 + LLM 概要，长期 durable_facts（mem0 可选）。
+"""记忆引擎：短期窗口 + LLM 概要，长期 durable_facts（mem0 可选）。
 
-分层（RFC 0217 起使用 SQLAlchemy ORM，物理 Schema 不变）：
+存储使用 SQLAlchemy ORM，物理 Schema 不变：
 - ``memory_messages``：最近 N 条原始消息（窗口）；
 - ``session_memory``：窗口外压缩概要（LLM 生成，fast role）；
 - ``durable_facts``：长期事实（mem0 不可用时降级的关键词检索）。
@@ -49,7 +49,7 @@ from src.utils.migration import initialize_storage
 
 
 class _Summarizer(Protocol):
-    """概要生成所需的网关窄面（避免 memory 依赖 ai 包，RFC 0200 边界）。"""
+    """概要生成所需的网关窄面，保持 memory 不依赖 ai 包。"""
 
     async def get_response(self, role: str, inputs: list[dict]) -> dict[str, Any]: ...
 
@@ -175,7 +175,7 @@ class MemoryService:
             )
 
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
-        """只读记忆历史（RFC 0218 观察）：窗口消息 + 概要 + 长期事实。"""
+        """只读记忆历史（观察）：窗口消息 + 概要 + 长期事实。"""
         if self._engine is None:
             return {"scope": scope, "window": [], "summaries": [], "facts": []}
         with self._session() as session:
@@ -212,7 +212,7 @@ class MemoryService:
         }
 
     def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
-        """只读记忆检索（RFC 0218 观察）：对窗口消息与长期事实做词项匹配。"""
+        """只读记忆检索（观察）：对窗口消息与长期事实做词项匹配。"""
         if self._engine is None or not query.strip():
             return []
         terms = {term.casefold() for term in query.split() if len(term) > 1}
@@ -256,7 +256,7 @@ class MemoryService:
         return candidates[:limit]
 
     def status(self) -> dict[str, Any]:
-        """只读记忆统计（RFC 0218 观察）：窗口/概要/长期计数。"""
+        """只读记忆统计（观察）：窗口/概要/长期计数。"""
         if self._engine is None:
             return {"enabled": False, "window_messages": 0, "summaries": 0, "facts": 0, "scopes": []}
         with self._session() as session:

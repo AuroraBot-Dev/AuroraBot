@@ -1,4 +1,4 @@
-"""AgentEngine — 单进程 asyncio 独占的完整 Agent 运行时（RFC 0210）。
+"""AgentEngine — 单进程 asyncio 独占的完整 Agent 运行时。
 
 单一存储（SQLite v9 即归档）、无租约无乐观锁、无线程池。pump 循环全部在
 事件循环内同步执行（handler 是纯函数，模型/工具调用为 async），仅记忆
@@ -61,7 +61,7 @@ class _Msg(StrEnum):
 
 
 def _memory_turn_input(message: AgentMessage) -> str:
-    """从消息投影提取记忆窗口的 user 侧文本（RFC 0216）。"""
+    """从消息投影提取记忆窗口的 user 侧文本。"""
     payload = message.payload
     for key in ("batch", "context_events"):
         container = payload.get(key)
@@ -196,7 +196,7 @@ class AgentEngine:
         return amp.header.message_id
 
     def consume_tool_receipt(self, amp: AmpEnvelope) -> None:
-        """工具回执 AMP：校验并交给 store 幂等消费（RFC 0211）。"""
+        """工具回执 AMP：校验并交给 store 幂等消费。"""
         status = amp.payload.type.removeprefix("tool.")
         data = amp.payload.data
         request_id = data.get("request_id")
@@ -243,7 +243,7 @@ class AgentEngine:
             }
 
     def _triage_inbox(self) -> tuple[str, ...]:
-        """到期批次创建入口 triage Task；模型判断走正常 Agent turn 链路（RFC 0209）。"""
+        """到期批次创建入口 triage Task；模型判断走正常 Agent turn 链路。"""
         batches = self.store.claim_triage_batches(self.configuration.triage, self.limits.model_concurrency)
         created: list[str] = []
         for batch in batches:
@@ -298,7 +298,7 @@ class AgentEngine:
         return processed, failed
 
     def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
-        """记录一轮对话到记忆窗口（RFC 0216 短期历史）。"""
+        """记录一轮对话到记忆窗口（短期历史）。"""
         if self._memory_store is None or not content.strip():
             return
         self._memory_store.append_turn(
@@ -394,7 +394,7 @@ class AgentEngine:
         return self.store.recent_outputs_tail()
 
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
-        """Task 列表投影（RFC 0218 观察操作）。"""
+        """Task 列表投影（观察操作）。"""
         rows = self.store.tasks(status=status, limit=limit)
         return [row.to_dict() for row in rows]
 
@@ -411,7 +411,7 @@ class AgentEngine:
         after_id: int = 0,
         limit: int = 64,
     ) -> list[dict[str, Any]]:
-        """因果事件流查询（RFC 0218 观察操作）。"""
+        """因果事件流查询（观察操作）。"""
         return list(
             self.store.query_events(
                 session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit
@@ -419,7 +419,7 @@ class AgentEngine:
         )
 
     def session_export(self, session_id: str) -> dict[str, Any] | None:
-        """会话导出：因果事件与模型输出投影（RFC 0210/0218）。"""
+        """会话导出：因果事件与模型输出投影。"""
         return self.store.session_export(session_id)
 
     def has_work(self) -> bool:

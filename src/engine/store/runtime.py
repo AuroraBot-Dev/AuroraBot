@@ -1,4 +1,4 @@
-"""Task、Agent、消息与因果事件查询（Schema v9，RFC 0217 ORM 实现）。"""
+"""Task、Agent、消息与因果事件查询（Schema v9，SQLAlchemy ORM 实现）。"""
 
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ class StoreRuntimeMixin(RuntimeStoreBase):
         return tuple(self._causal_event(row) for row in rows)
 
     def session_export(self, session_id: str) -> dict[str, Any] | None:
-        """导出会话的因果事件与模型输出投影（RFC 0210 会话可读性）。"""
+        """导出会话的因果事件与模型输出投影（会话可读性）。"""
         events = self.query_events(session_id=session_id, limit=100000)
         if not events:
             return None

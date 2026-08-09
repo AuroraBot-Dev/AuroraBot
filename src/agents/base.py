@@ -1,4 +1,4 @@
-"""BaseAgent — 所有 Agent 逻辑类的共享基类（RFC 0210）。
+"""BaseAgent — 所有 Agent 逻辑类的共享基类。
 
 逻辑同构的代码化：模型请求装配、工具定义收集、Capability 调度与决策
 工厂方法统一由基类提供；子类只实现 handle() 的 turn 路由。

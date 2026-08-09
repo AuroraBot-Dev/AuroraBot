@@ -1,7 +1,7 @@
 """运行态存储 v6 → v7：新增 inbox_events 持久化 Inbox。
 
 建表与索引（``idx_inbox_due``/``idx_inbox_session``）逐一对齐 v7 档案，
-RFC 0209 的防抖批次与 triage 输入自此持久化。
+防抖批次与 triage 输入自此持久化。
 """
 
 from __future__ import annotations

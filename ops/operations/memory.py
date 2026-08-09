@@ -1,4 +1,4 @@
-"""memory 域操作：记忆引擎只读观察（RFC 0218 §3）。"""
+"""memory 域操作：记忆引擎只读观察。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""运行态存储 v8 → v9：删除冗余列（RFC 0210 精简）。
+"""运行态存储 v8 → v9：删除冗余列（精简）。
 
 - ``activities.lease_until``：租约机制移除，直接 DROP COLUMN；
 - ``agents.revision``：单进程无并发写，直接 DROP COLUMN；

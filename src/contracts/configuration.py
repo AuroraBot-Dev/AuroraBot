@@ -62,7 +62,7 @@ class ConsoleConfig:
 
 @dataclass(frozen=True, slots=True)
 class PanelConfig:
-    """面板后端（RFC 0218）配置：唯一 HTTP 端口、认证与前端白名单。
+    """面板后端配置：唯一 HTTP 端口、认证与前端白名单。
 
     PanelConfig object::
 

@@ -172,7 +172,7 @@ def test_clock_heartbeat_starts_after_builtin_discovery(project_root: Path) -> N
 
 
 def test_execute_tool_maps_success_failure_unknown_and_missing(project_root: Path) -> None:
-    """RFC 0211：execute_tool 提交回执 AMP（succeeded/failed/unknown 映射）。"""
+    """execute_tool 提交回执 AMP（succeeded/failed/unknown 映射）。"""
     _write_apps(project_root, "com.example.alpha")
 
     class _Ingress:

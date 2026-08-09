@@ -32,7 +32,7 @@ def test_service_without_memory_dir_falls_back_to_empty_context() -> None:
 
 
 def test_window_bounds_and_natural_forgetting(tmp_path: Path) -> None:
-    """RFC 0216：上下界批量压缩；压缩项被再次浓缩（自然遗忘）。"""
+    """上下界批量压缩；压缩项被再次浓缩（自然遗忘）。"""
     service = MemoryService(tmp_path, window_min=2, window_max=4)
     for index in range(1, 9):
         service.append_turn("session", role="user", content=f"question {index}", at=f"2026-01-0{index}")
@@ -80,7 +80,7 @@ def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
 
 
 class _ReceiptIngress:
-    """捕获回执 AMP 的假入口（RFC 0211）。"""
+    """捕获回执 AMP 的假入口。"""
 
     def __init__(self) -> None:
         self.amps: list[dict[str, object]] = []
@@ -156,7 +156,7 @@ def test_capability_allowed_exclusion_overrides_wildcard() -> None:
 
 
 def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) -> None:
-    """RFC 0207 全链路：本体意识委派记忆 agent → 工具请求 → executor 写入同一 SQLite。"""
+    """全链路：本体意识委派记忆 agent → 工具请求 → executor 写入同一 SQLite。"""
     from src.agents.capabilities import DelegationCapability, MemoryCapability
     from src.agents.handler import ToolAgent
     from src.agents.triage import TriageAgent

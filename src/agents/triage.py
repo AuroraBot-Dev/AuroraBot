@@ -1,4 +1,4 @@
-"""TriageAgent — 注意力初筛入口 agent（RFC 0209）。
+"""TriageAgent — 注意力初筛入口 agent。
 
 与其他 Agent 完全同构：通过三元组（上下文、工具权限域、逻辑实现类）实例化，
 首轮收到 task.started 批次投影，输出 AgentDecision：
@@ -133,7 +133,7 @@ class TriageAgent(BaseAgent):
         return self._complete(report.last_summary if report else context.task.root_summary)
 
     def _fail_open(self, context: AgentContext, reason: str) -> AgentDecision:
-        """模型或结构失败时按确定性规则直接委派本体意识（RFC 0209 fail-open）。"""
+        """模型或结构失败时按确定性规则直接委派本体意识（fail-open）。"""
         logger.warning("Triage fail-open task_id=%s reason=%s", context.task.task_id, reason)
         batch = context.message.payload.get("batch")
         summary = _fallback_summary(batch) if isinstance(batch, dict) else context.task.root_summary

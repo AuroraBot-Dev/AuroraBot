@@ -1,10 +1,9 @@
-"""engine 运行态存储版本迁移序列（RFC 0217 §5）。
+"""engine 运行态存储版本迁移序列。
 
-版本号统一存于 ``schema_meta`` 表（utils.migration 读写，RFC 0210
-契约）。当前目标版本为 9；v1-v8 迁移步骤按历史演化档案重建（RFC 0210
-§3：自即日起数据库必须考虑迁移，旧库启动时按序升级到 v9；代码路径只
-访问 v9 形状）。全新库（无 ``schema_meta``，v0）不注册步骤，由
-initialize_storage 直接建当前 Schema（RFC 0210：全新库出生即目标版本，
+版本号统一存于 ``schema_meta`` 表，由 utils.migration 读写。
+当前目标版本为 9；v1-v8 迁移步骤按历史演化档案重建。数据库演进必须提供迁移，旧库启动时按序升级到 v9，代码路径只
+访问 v9 形状。全新库（无 ``schema_meta``，v0）不注册步骤，由
+initialize_storage 直接建当前 Schema（全新库出生即目标版本，
 不重放历史）。未来 Schema 演进时在此新增步骤文件（如 ``v9_v10.py``）
 并在 ``STEPS`` 注册、提升 ``TARGET_VERSION``。
 """

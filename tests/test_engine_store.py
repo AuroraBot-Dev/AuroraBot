@@ -127,7 +127,7 @@ def _engine(
 
 
 def test_amp_creates_terminal_record_and_deduplicates_task(tmp_path: Path) -> None:
-    """提交 → 入口任务 → 完成：终态留存 SQLite（无文件归档，RFC 0210）。"""
+    """提交 → 入口任务 → 完成：终态留存 SQLite（无文件归档）。"""
 
     async def scenario() -> None:
         engine = _engine(tmp_path, {"gate": _Complete(), "worker": _Complete()})

@@ -1,4 +1,4 @@
-"""原子 Agent 决策提交、消息/活动队列与 Task 终止（Schema v9，RFC 0217 ORM 实现）。
+"""原子 Agent 决策提交、消息/活动队列与 Task 终止（Schema v9，SQLAlchemy ORM 实现）。
 
 apply_decision 在单一事务中原子执行一条已授权的 AgentDecision（模型、
 工具、委托、完成、等待、defer、discard、失败八种转换），并同时写入
@@ -104,7 +104,7 @@ def _decision_summary(decision: AgentDecision) -> str:
 
 
 def _decision_payload(decision: AgentDecision) -> dict[str, Any]:
-    """轻量因果载荷（RFC 0210）：只存审计摘要字段，不存完整请求。"""
+    """轻量因果载荷：只存审计摘要字段，不存完整请求。"""
     if decision.model_request is not None:
         return {
             "role": decision.model_request.role,
@@ -273,7 +273,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     )
                     payload: dict[str, Any] = {"instruction": instruction, "parent_agent_id": agent.agent_id}
                     if batch_events is not None:
-                        # 入口 agent 委派时，把有界批次投影交给子 Agent（RFC 0209）
+                        # 入口 agent 委派时，把有界批次投影交给子 Agent
                         payload["context_events"] = batch_events
                     child_message = self._insert_message(
                         session,
@@ -306,7 +306,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                 completion = decision.completion
                 status = AgentStatus.COMPLETED
                 if self._root_batch_events(state) is not None:
-                    # 入口 agent 直接完成（未委派）：按 process 语义结算批次（RFC 0209）
+                    # 入口 agent 直接完成（未委派）：按 process 语义结算批次
                     self.settle_batch(session, task_row.root_message_id, "delete", now)
                 if agent.parent_agent_id is not None:
                     result = ChildResult(
@@ -496,7 +496,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
         summary: str,
         payload: dict[str, Any],
     ) -> tuple[bool, str | None]:
-        """消费工具回执 AMP（RFC 0211）：幂等投递 tool.{status} 消息给请求方 Agent。
+        """消费工具回执 AMP：幂等投递 tool.{status} 消息给请求方 Agent。
 
         幂等键为 request_id：因果事件中已存在同类型回执则忽略（重放去重）。
         """
@@ -520,7 +520,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             row.updated_at = now
             request = _loads(row.request_json)
             if event_type == "tool.succeeded" and request.get("complete_task") is True:
-                # 工具成功后自动完成 Agent（RFC 0203 语义）：不投递 tool.succeeded 消息
+                # 工具成功后自动完成 Agent（语义）：不投递 tool.succeeded 消息
                 message_id = self._complete_agent_after_tool(session, row, summary, now)
             else:
                 message_id = self._insert_message(
@@ -645,7 +645,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
 
     @staticmethod
     def _require_triage_root(agent: AgentInstance, task_row: TaskRow) -> None:
-        """defer/discard 只允许入口 triage agent 发出（RFC 0209）。"""
+        """defer/discard 只允许入口 triage agent 发出。"""
         if agent.agent_id != task_row.root_agent_id:
             raise PermissionError(_Msg.TRIAGE_CONTROL_DENIED)
 

@@ -146,7 +146,7 @@ class ModelGatewayService:
         self._handlers: dict[str, RoleHandler] = {}
         self._callers: dict[str, ChatCaller] = {}
         for role_id, model in self._models.items():
-            handler_cls = resolve(role_id)  # RFC 0212：预设之外启动报错
+            handler_cls = resolve(role_id)  # 预设之外启动报错
             self._handlers[role_id] = handler_cls()
             self._callers[role_id] = ChatCaller(model, role_id, self._task_manager, self)
 
@@ -189,7 +189,7 @@ class ModelGatewayService:
             await self.initialize()
 
     def _capabilities_for(self, role_id: str) -> frozenset[str]:
-        """已解析能力合并角色能力基线（RFC 0213）；未初始化时退回 TOML 配置或隐含能力。"""
+        """已解析能力合并角色能力基线；未初始化时退回 TOML 配置或隐含能力。"""
         baseline = self._handlers[role_id].capability_baseline
         if role_id in self._capabilities:
             return self._capabilities[role_id] | baseline
@@ -206,7 +206,7 @@ class ModelGatewayService:
     # ── 能力协商 ──────────────────────────────────────────
 
     def negotiate(self, request: ModelRequest) -> frozenset[str]:
-        """契约与参数协商（RFC 0213/0215）。
+        """契约与参数协商。
 
         模型基础能力假定满足（配置模型即信任它符合角色要求）；本方法只做
         请求契约校验与结构化输出标记。结构化输出失败由通道的 JSON-text
@@ -233,7 +233,7 @@ class ModelGatewayService:
             negotiated.add("structured_output")
         return frozenset(negotiated)
 
-    # ── 外部接口（RFC 0215）───────────────────────────────
+    # ── 外部接口───────────────────────────────
 
     async def get_response(self, role: str, inputs: list[Any]) -> dict[str, Any]:
         """外部简单入口：传入 role 与 inputs，返回脱壳的纯粹输出。
@@ -258,12 +258,12 @@ class ModelGatewayService:
         }
 
     async def modalities_for(self, role: str) -> tuple[frozenset[str], frozenset[str]]:
-        """角色绑定模型的输入/输出模态（RFC 0215）。"""
+        """角色绑定模型的输入/输出模态。"""
         await self._ensure_initialized()
         return await get_modalities_by_id(self._models[role])
 
     async def cost(self) -> dict[str, Any]:
-        """费用分类统计（RFC 0218 观察操作）。"""
+        """费用分类统计（观察操作）。"""
         return {
             "total_cost": await self.cost_tracker.total_cost(),
             "by_role": await self.cost_tracker.by_role(),
@@ -272,7 +272,7 @@ class ModelGatewayService:
         }
 
     async def models(self) -> list[dict[str, Any]]:
-        """角色-模型绑定、能力与模态（RFC 0218 观察操作）。"""
+        """角色-模型绑定、能力与模态（观察操作）。"""
         catalog: list[dict[str, Any]] = []
         for role_id, model_id in self._models.items():
             definition = self._configuration.model_definitions[role_id]
@@ -297,7 +297,7 @@ class ModelGatewayService:
         return catalog
 
     def roles(self) -> list[dict[str, Any]]:
-        """角色目录（RFC 0218 自描述）。"""
+        """角色目录（自描述）。"""
         return [
             {
                 "role": role_id,
@@ -309,7 +309,7 @@ class ModelGatewayService:
         ]
 
     def embed_sync(self, texts: list[str]) -> list[list[float]]:
-        """同步 embedding（供记忆引擎的 mem0 自定义嵌入函数调用，RFC 0216）。"""
+        """同步 embedding（供记忆引擎的 mem0 自定义嵌入函数调用）。"""
         import litellm
 
         from src.ai.providers import resolve_model

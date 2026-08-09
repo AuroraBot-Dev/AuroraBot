@@ -24,7 +24,7 @@ class _Ingress:
 
     async def submit_amp(self, value: object) -> str:
         self.amps.append(value)  # type: ignore[arg-type]
-        # 模拟 engine.submit_amp 的回执消费路径（RFC 0211）
+        # 模拟 engine.submit_amp 的回执消费路径
         payload = value["payload"]  # type: ignore[index]
         data = payload["data"]
         self.store.consume_tool_receipt(

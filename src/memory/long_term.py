@@ -1,4 +1,4 @@
-"""长期记忆：mem0（RFC 0216）。
+"""长期记忆：mem0。
 
 向量语义检索，embedding 用 embedding role（litellm 同步 embedding）。
 mem0 依赖不可用或配置失败时降级为 None（回退 durable_facts 关键词检索）。

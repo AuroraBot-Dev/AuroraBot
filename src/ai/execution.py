@@ -82,7 +82,7 @@ def _classify_exception(exc: Exception) -> GatewayError:  # noqa: PLR0911
 
 
 class CostTracker:
-    """调用费用记录与分类统计（RFC 0215：追踪所有完成的模型调用总费用）。
+    """调用费用记录与分类统计（追踪所有完成的模型调用总费用）。
 
     内存缓存 + SQLite 追加持久化：启动时经 ``CostStore`` 恢复历史，
     ``add`` 同步写库，统计接口保持内存查询。

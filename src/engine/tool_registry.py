@@ -1,4 +1,4 @@
-"""能力路由表与活动派发（RFC 0211）。
+"""能力路由表与活动派发。
 
 ToolRegistry 是 capability ID → 执行器的一对一路由表：
 - 模型输出一致的 ``aur.*`` 工具 ID；
@@ -118,7 +118,7 @@ class ToolRegistry:
 
 
 def _execution_request(row: Any) -> ToolExecutionRequest:
-    """从持久化活动实体构造工具执行请求（RFC 0211：无 ToolLease 中转）。"""
+    """从持久化活动实体构造工具执行请求（无 ToolLease 中转）。"""
     raw = json.loads(row.request_json)
     request = ToolRequest.from_dict(raw)
     return ToolExecutionRequest(

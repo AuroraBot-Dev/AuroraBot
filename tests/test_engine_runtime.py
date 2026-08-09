@@ -154,9 +154,9 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
                 ).to_dict()
             )
             interactive = await engine.pump()
-            await asyncio.sleep(0)  # 让异步记忆投影任务执行（RFC 0210 单循环）
+            await asyncio.sleep(0)  # 让异步记忆投影任务执行（单循环）
             interactive_id = interactive["admitted_task_ids"][0]
-            # RFC 0216：user 窗口写入 → recall → handler → assistant 窗口写入
+            # user 窗口写入 → recall → handler → assistant 窗口写入
             assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
             remembered = [value for name, value in events if name == "remember"]
             assert [entry.task_id for entry in remembered if isinstance(entry, MemoryEntry)] == [interactive_id]
@@ -248,7 +248,7 @@ def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> No
 
 
 def test_engine_records_session_causality_in_sqlite(tmp_path: Path) -> None:
-    """RFC 0210：会话可读性由 causal_events 提供，不再写 JSONL。"""
+    """会话可读性由 causal_events 提供，不再写 JSONL。"""
 
     async def exercise() -> None:
         profile = AgentProfile(

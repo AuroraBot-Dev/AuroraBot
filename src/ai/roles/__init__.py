@@ -1,4 +1,4 @@
-"""预设角色注册表（RFC 0212）：role_id → RoleHandler 类。
+"""预设角色注册表：role_id → RoleHandler 类。
 
 配置中的 role 必须是预设之一（预设之外启动报错）；每个预设声明自己的
 通道（endpoint）与能力基线，模型绑定由 ``models.toml`` 配置决定。
@@ -30,7 +30,7 @@ ROLE_PRESETS: dict[str, type[RoleHandler]] = {
 
 
 def resolve(role_id: str) -> type[RoleHandler]:
-    """解析预设角色；未预设的 role 抛错（RFC 0212 预设之外不可用）。"""
+    """解析预设角色；未预设的 role 抛错（预设之外不可用）。"""
     handler = ROLE_PRESETS.get(role_id)
     if handler is None:
         raise ValueError(_Msg.UNKNOWN_ROLE.format(role=role_id, available=sorted(ROLE_PRESETS)))

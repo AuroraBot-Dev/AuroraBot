@@ -1,8 +1,8 @@
-"""Schema v9 ORM 模型（RFC 0217，物理结构同 RFC 0210 不变）。
+"""Schema v9 ORM 模型，保持既有物理结构不变。
 
 所有列名、类型、约束与索引（含部分唯一索引与 DESC 列序）逐一对齐
 Schema v9；`create_all(checkfirst=True)` 只用于全新库，旧库经版本序列
-迁移（src/engine/store/migration/，RFC 0217 §5）。
+迁移（src/engine/store/migration/）。
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class TaskRow(Base):
 
 
 class AgentRow(Base):
-    """agents：同构 Agent 实例（RFC 0209）。"""
+    """agents：同构 Agent 实例。"""
 
     __tablename__ = "agents"
     __table_args__ = (
@@ -147,7 +147,7 @@ class ActivityRow(Base):
 
 
 class CausalEventRow(Base):
-    """causal_events：轻量因果审计（会话可读性来源，RFC 0210）。"""
+    """causal_events：轻量因果审计（会话可读性来源）。"""
 
     __tablename__ = "causal_events"
     __table_args__ = (Index("idx_causal_task", "task_id", "created_at"),)
@@ -164,7 +164,7 @@ class CausalEventRow(Base):
 
 
 class InboxEventRow(Base):
-    """inbox_events：持久化 Inbox（防抖批次与 triage 输入，RFC 0209）。"""
+    """inbox_events：持久化 Inbox（防抖批次与 triage 输入）。"""
 
     __tablename__ = "inbox_events"
     __table_args__ = (

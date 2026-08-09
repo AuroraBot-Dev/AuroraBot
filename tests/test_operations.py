@@ -1,5 +1,5 @@
 # ruff: noqa: ARG002, PLR2004
-"""操作体系：RESTful 资源树与文本命令同构（RFC 0218 §2/§3）。"""
+"""操作体系：RESTful 资源树与文本命令同构。"""
 
 from __future__ import annotations
 

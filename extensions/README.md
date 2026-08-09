@@ -16,7 +16,7 @@ MCP 应用最接近 AuroraBot 的“感知器与执行器”：它可以提供�
 2. 在 `config/apps.toml` 中只声明 package、transport、连接或启动方式和超时。
 3. MCP Server 通过标准 `tools/list` 暴露工具，无需在 AuroraBot 中维护工具 allowlist。
 4. 在 `config/agents.toml` 中用精确 Tool ID、`package.*` 或 `*` 设置 Agent profile 的能力策略。
-5. 使用 `uv run --env-file .env aurora --platform dashboard --platform mcp` 启动并验证完整闭环。
+5. 使用 `uv run --env-file .env aurora start --platform mcp` 启动并验证完整闭环。
 
 内建 [Clock 应用](../src/apps/aurora-app-clock/README.md)展示了本地 stdio Server、工具发现、持久化任务和主动事件通知。
 
@@ -38,7 +38,7 @@ Agent profile 在 `config/agents.toml` 中显式配置，包括：
 
 ## 扩展边界
 
-- 不要直接读写 `data/kernel/`，也不要把 Provider 或平台 Client 对象放进 Agent 状态。
+- 不要直接读写 `data/engine/`，也不要把 Provider 或平台 Client 对象放进 Agent 状态。
 - 不要让模型普通文本直接触发环境效果；效果必须通过已声明的 Platform 能力执行。
 - 不要依赖目录扫描、热加载、签名验证或第三方 Python Platform 自动发现；当前版本没有这些契约。
 - 密钥只通过环境变量注入，结构和启用状态继续由 TOML 决定。

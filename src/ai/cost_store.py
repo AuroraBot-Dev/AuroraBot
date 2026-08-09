@@ -1,6 +1,6 @@
-"""模型调用费用持久化：``data/ai/cost.sqlite3``（RFC 0215 §4，存储镜像 src/ai → data/ai/）。
+"""模型调用费用持久化：``data/ai/cost.sqlite3``，存储镜像 src/ai → data/ai/。
 
-与 engine/memory/ops 同一持久化体系（RFC 0217 §5）：SQLAlchemy ORM 声明
+与 engine/memory/ops 同一持久化体系：SQLAlchemy ORM 声明
 Schema、``schema_meta`` 版本号、``utils.migration.initialize_storage`` 统一
 初始化入口。费用记录是只追加的审计日志，无更新/删除路径。
 """
