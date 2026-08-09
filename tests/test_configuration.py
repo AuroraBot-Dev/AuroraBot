@@ -27,6 +27,7 @@ def test_default_test_root_is_disposable(tmp_path: Path) -> None:
 def test_configuration_uses_engine_and_storage_snapshots() -> None:
     configuration = load_configuration(ROOT)
     source_names = {source.path.name for source in configuration.sources}
+    profiles = {profile.id: profile for profile in configuration.agents}
 
     assert {"runtime.toml", "engine.toml", "storage.toml", "logging.toml", "prompts.toml", "SOUL.md"} <= source_names
     assert configuration.engine.workspace == ROOT / "data" / "engine"
@@ -40,6 +41,10 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert configuration.runtime.panel.port == 8765  # noqa: PLR2004
     assert configuration.runtime.panel.max_upload_bytes == 67108864  # noqa: PLR2004
     assert configuration.logging_dir == ROOT / "logs"
+    assert profiles["builtin.triage"].child_profiles == frozenset({"builtin.fast", "builtin.root"})
+    assert profiles["builtin.fast"].model_role == "fast"
+    assert not profiles["builtin.fast"].can_delegate
+    assert profiles["builtin.fast"].child_profiles == frozenset()
 
 
 def test_profile_only_changes_runtime_snapshot() -> None:

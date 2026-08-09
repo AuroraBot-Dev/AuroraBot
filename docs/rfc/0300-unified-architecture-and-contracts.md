@@ -120,7 +120,11 @@ SQLite；不存在文件投递箱、inbox/archive 目录、JSON 归档或 JSONL 
 - 批次同时受事件条数和字符预算约束，超大事件必须在进入模型上下文前形成有界投影。
 - 每个到期批次创建一个 Task 和一个入口 triage Agent；Task 从 triage 开始，不存在旁路准入策略。
 - triage 无工具，只能 `process`、`defer` 或 `discard`。
-- `process` 通过普通委派创建 root Agent，并携带批次的有界事实投影。
+- `process` 必须同时选择一条获权认知路径，并通过普通委派携带批次的有界事实投影：清晰、低风险、可在短链路内完成的
+  事件交给绑定 fast role 且可以调用工具的 `builtin.fast`；复杂、含歧义、高影响、需要规划或可能委派的事件交给
+  `builtin.root`。不确定、字段缺失、非法目标及 fail-open 一律选择 `builtin.root`。
+- triage 只能在自身 `child_profiles` 中选择目标。`builtin.fast` 不得继续委派，避免快速路径退化为无界代理树；
+  `builtin.root` 保持现有 worker 与 memory 委派能力。
 - `defer` 必须给出下一次时间且受总 defer 上界约束；`discard` 删除原始 Inbox 数据。
 - 模型失败或结构化输出失败时 fail-open 为 `process`，不能静默丢失用户输入。
 - triage 可产生稳定事实候选，随因果记录进入终态记忆投影。
@@ -133,8 +137,9 @@ Agent 实例由三元组定义：
 2. `AgentProfile`：逻辑实现、模型角色、能力权限域、委派授权与资源边界；
 3. `BaseAgent` 子类：纯 handler，实现 `AgentContext → AgentDecision`。
 
-内建角色为 triage、root、worker 和 memory。root 是 admitted batch 的本体意识入口；worker 处理委派工作；memory 是只获
-主动记忆能力的专精 Agent。委派是创建子 Agent 的唯一方式，形成有界监督树。
+内建角色为 triage、fast、root、worker 和 memory。triage 在 fast 快脑与 root 主脑之间选择；fast 使用低延迟模型直接
+响应或调用工具且不能委派；root 是完整本体意识入口；worker 处理委派工作；memory 是只获主动记忆能力的专精 Agent。
+委派是创建子 Agent 的唯一方式，形成有界监督树。
 
 一次 `AgentDecision` 是一个原子状态迁移，只允许以下互斥主分支：模型请求、工具请求、委派、完成、等待、defer、
 discard 或失败。等待不是持久化状态，而由未终止 children、待处理报告和活跃 Activity 派生。
@@ -152,7 +157,7 @@ discard 或失败。等待不是持久化状态，而由未终止 children、待
 - engine 只约束真实效果：能力存在、Agent 获权、参数符合 schema、回执匹配请求且预算未耗尽。
 - 能力授权支持精确 ID、前缀通配、全通配和 `!` 排除，排除优先。
 - 模型调用数、工具调用数、Task 时长、并发数、上下文字符数、委派深度、总 Agent 数和子 Agent 数都是硬资源边界。
-- 新外部输入只唤醒对应工作，不自动取消正在运行的自主 Task。
+- 新外部输入只唤醒对应工作，不自动取消正在运行的自主 Task。交互 Task 的抢占遵循下一节的会话 revision 规则。
 
 ## 9. engine 运行与恢复
 
@@ -164,6 +169,22 @@ engine 使用单进程 asyncio 独占模型：无数据库租约、无乐观锁�
 4. 派发模型和工具 Activity；
 5. 对终态交互 Task 进行异步记忆投影；
 6. 更新可查询输出和因果投影。
+
+持续输入场景采用会话级有界抢占，而不是每条 AMP 都重启生成：
+
+- 每个 session 分别记录已观察 `observed_revision`、本轮冻结 `generation_revision` 与已发布 `committed_revision`；模型生成
+  期间到达的新事件进入带 watermark 的 delta，不隐式改写已经冻结的上下文。
+- 普通环境消息只进入 delta。直接点名、直接回复、明确纠正或使当前回复失效的高优先级事件才可以请求抢占；每次回复的
+  抢占次数和总等待时间必须有硬上界，达到边界后必须完成、静默或放弃，不能形成持续重启活锁。
+- 抢占使旧模型 Activity 进入 `SUPERSEDED` 终态，并向 Provider 传播取消。晚到结果只进入审计记录，不得恢复 Agent、
+  创建工具效果或进入用户可见输出。
+- 发布前必须以 generation revision 和最新 delta 执行提交校验：仍相关则发布，局部过时则形成有界修订，完全失效则放弃。
+  不支持撤回的平台只接收通过提交校验的最终输出；已经开始的外部效果不回滚。
+- 到达 quiet/max-wait 边界后冻结本轮 watermark，后续低优先级事件进入下一轮。调度按 session 公平分配，并使直接交互
+  高于自主与后台工作，保证持续大流量群聊中既能插话又不会独占全部并发。
+
+模型和工具派发不得使用整批完成屏障；任一并发槽释放后应立即按优先级领取下一项工作。工具效果默认不可抢占，只有能力
+契约明确支持取消且尚未越过提交屏障时才允许取消。
 
 启动恢复规则：PROCESSING 消息回到 PENDING；中断的模型 Activity 结束为 ERROR 并投递失败消息；工具 Activity 保留并
 由 ToolRegistry 恢复派发。恢复不得重复产生真实外部效果。

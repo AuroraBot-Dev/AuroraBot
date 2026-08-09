@@ -1,6 +1,6 @@
 # AuroraBot 演化路线图
 
-状态：P0 已收口，进入 P1
+状态：既有 P0 已收口；会话双工 P0 改造进行中
 日期：2026-08-09
 设计基准：[RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)
 
@@ -9,7 +9,7 @@
 AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、ops、MCP、记忆、模型网关和因果存储均有现行
 实现及回归测试。下一阶段不再进行无目标的架构重写，而是依次完成契约闭环、长期运行、真实集成验证和能力扩展。
 
-当前质量基线：
+最近一次已验证质量基线：
 
 - 完整质量命令通过，210 个测试通过；
 - `aurora`、`ops` 与 `src` 总语句覆盖率为 82.55%；
@@ -28,6 +28,20 @@ AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、
 
 收口证据：异步 LLM 概要、模型注入、scope 语义检索、关键词降级、统一预算、Lab 认证和质量命令范围均有回归测试；
 memory 已按纯数据 models、短期算法 short_term、异步编排 service 拆分。完整质量门为 210 tests / 82.55% coverage。
+
+### P0：会话双工与响应时效（进行中）
+
+1. [x] 在唯一 RFC 中定义 observed/generation/committed revision、watermark、delta、提交屏障和有界抢占。
+2. [x] Triage 获权选择 `builtin.fast` 快脑或 `builtin.root` 主脑；非法、缺失与 fail-open 保守进入 root。
+3. [ ] 持久化 session revision 与 generation watermark，并提供当前会话活动 generation 的唯一索引。
+4. [ ] 新 AMP 按优先级进入 delta；只有直接点名、明确纠正或语境失效事件请求抢占，且限制抢占次数和总等待。
+5. [ ] 将 Activity supersede 原子状态传播到 asyncio 与 Provider 取消，并拒绝晚到结果产生消息、工具或输出。
+6. [ ] 为外部效果和用户输出增加 revision 提交校验；不可撤回平台只发布最终 committed 输出。
+7. [ ] 移除模型与工具派发的整批完成屏障，实现空闲槽即时领取、交互优先和跨 session 公平调度。
+8. [ ] 覆盖持续群聊、重要消息插队、无限消息不活锁、晚到结果和不可取消工具效果的确定性场景。
+
+完成门槛：持续普通群聊下 Bot 能在有界时间内插话；直接交互可打断未提交的旧生成；任何 superseded generation 都不能
+产生用户可见输出或新的外部效果；单一高流量 session 不得饿死其他会话。
 
 ### P1：长期运行与交付
 

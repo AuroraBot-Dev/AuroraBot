@@ -90,7 +90,7 @@ SQLite、mem0、embedding 与语义检索等阻塞工作移出事件循环，han
 
 Agent 逻辑实现和模型可见主动能力：
 
-- `TriageAgent`：批次的 process/defer/discard；
+- `TriageAgent`：批次的 process/defer/discard，并在 fast 快脑与 root 主脑之间选择获权委派目标；
 - `ToolAgent`：模型请求、多 Tool call 可恢复链、委派和完成；
 - `capabilities/delegate.py`：创建同构子 Agent；
 - `capabilities/wait.py`：等待未终止 children；
@@ -174,8 +174,8 @@ submit_amp / submit_conversation
   → create_triage_task
   → triage model request
   → process/defer/discard
-  → process: delegate root
-  → root/worker model request
+  → process: delegate fast or root
+  → fast direct/tool response, or root/worker model request
   → text / tool / delegate / wait / complete
   → Activity dispatch
   → model.completed / tool.* / child.*
@@ -186,8 +186,18 @@ submit_amp / submit_conversation
 
 ### Inbox 与 Triage
 
-同一 session 的连续事件聚合成一个有界批次。入口 Task 的 root Agent 是 triage；process 后再创建本体意识 root。模型或
-结构化输出失败时 fail-open，保证输入不会静默消失。
+同一 session 的连续事件聚合成一个有界批次。入口 Task 的 root Agent 是 triage；process 后按结构化结果创建不能委派的
+fast 快脑或具备完整委派能力的 root 主脑。模型或结构化输出失败时 fail-open 到 root，保证输入不会静默消失，也不会把
+不确定任务错误压入快速路径。
+
+### 持续输入与有界抢占
+
+持续 AMP 不直接重启每一次生成。每个会话以 observed、generation、committed 三个 revision 和输入 watermark 区分最新事实、
+冻结生成上下文与已发布上下文；生成期间的新事件先进入 delta。只有直接点名、明确纠正或使当前回复失效的事件可以请求
+抢占，且抢占次数与总等待有硬上界。普通群聊消息在 max-wait 后切入下一轮，避免高流量会话让 Bot 永远无法插话。
+
+旧 generation 被取代后只能保留审计记录，不得创建消息、工具效果或用户输出。发布前执行 revision/delta 提交校验；不支持
+撤回的平台只接收最终提交结果。模型调度按空闲槽连续领取工作，不等待整批生成全部完成。
 
 ### Agent turn
 

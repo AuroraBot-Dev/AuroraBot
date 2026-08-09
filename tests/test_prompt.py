@@ -125,7 +125,13 @@ def test_prompt_catalog_loads_all_fragments_as_an_immutable_snapshot(project_roo
     catalog = PromptCatalog.from_config(load_configuration(project_root).prompts)
     assert catalog.soul
     assert catalog.world
-    assert set(catalog.agents) == {"builtin.root", "builtin.memory", "builtin.triage", "builtin.worker"}
+    assert set(catalog.agents) == {
+        "builtin.fast",
+        "builtin.root",
+        "builtin.memory",
+        "builtin.triage",
+        "builtin.worker",
+    }
     assert {source.path.name for source in catalog.sources} >= {"prompts.toml", "SOUL.md", "WORLD.md"}
     with pytest.raises(TypeError):
         catalog.agents["new"] = "prompt"  # type: ignore[index]
@@ -155,6 +161,7 @@ soul = "prompts/SOUL.md"
 world = "prompts/SOUL.md"
 
 [agent]
+"builtin.fast" = "prompts/agents/fast.md"
 "builtin.root" = "prompts/agents/root.md"
 "builtin.memory" = "prompts/agents/memory.md"
 "builtin.triage" = "prompts/agents/triage.md"
