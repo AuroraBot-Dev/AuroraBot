@@ -51,7 +51,7 @@ tests/          契约、集成与回归测试
   `src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；
   配置见 `storage.toml`。
 - engine 工作区固定为 `data/engine/runtime.sqlite3`，它是唯一运行态与终态；无 JSON 归档、JSONL 会话日志与文件投递箱。
-- 外部 AMP 通过 contracts 输入端口直连 SQLite；运行态与终态统一使用 SQLite WAL。Schema v9 的后续演进必须
+- 外部 AMP 通过 contracts 输入端口直连 SQLite；运行态与终态统一使用 SQLite WAL。Schema v10 的后续演进必须
   提供连续迁移步骤，代码路径只访问当前版本形状。
 - 会话可读性由 `causal_events` 提供；ops 可按需导出，不写入热路径日志文件。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。

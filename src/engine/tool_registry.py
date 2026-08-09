@@ -71,35 +71,70 @@ class ToolRegistry:
             raise ToolBindingError(_NOT_BOUND)
         return await self._dispatch(self._store.tool_recovery_activities())
 
-    async def execute_pending(self, limit: int) -> tuple[str, ...]:
-        """派发所有待处理的工具活动，返回派发数量对应的回执计数。"""
+    async def execute_pending(
+        self,
+        limit: int,
+        *,
+        wake: asyncio.Event | None = None,
+        recover: bool = False,
+    ) -> tuple[str, ...]:
+        """在同一并发预算内恢复旧活动并即时领取新活动，不设批次屏障。"""
         if self._bindings is None:
             raise ToolBindingError(_NOT_BOUND)
-        return await self._dispatch(self._store.claim_tool_activities(limit))
+        recovery = list(self._store.tool_recovery_activities()) if recover else []
+        running: set[asyncio.Task[str]] = set()
+        results: list[str] = []
+        while True:
+            if wake is not None:
+                wake.clear()
+            capacity = limit - len(running)
+            while capacity > 0 and recovery:
+                running.add(asyncio.create_task(self._dispatch_one(recovery.pop(0))))
+                capacity -= 1
+            for row in self._store.claim_tool_activities(capacity) if capacity > 0 else ():
+                running.add(asyncio.create_task(self._dispatch_one(row)))
+            if not running and not recovery:
+                return tuple(results)
+            wake_task: asyncio.Task[bool] | None = None
+            waiters: set[asyncio.Task[Any]] = set(running)
+            if wake is not None and len(running) < limit:
+                wake_task = asyncio.create_task(wake.wait())
+                waiters.add(wake_task)
+            done, _pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            completed_tasks = done & running
+            running.difference_update(completed_tasks)
+            if wake_task is not None and not wake_task.done():
+                wake_task.cancel()
+                await asyncio.gather(wake_task, return_exceptions=True)
+            completed = await asyncio.gather(*completed_tasks, return_exceptions=True)
+            failures = [result for result in completed if isinstance(result, BaseException)]
+            if failures:
+                raise failures[0]
+            results.extend(str(result) for result in completed)
 
     async def _dispatch(self, rows: tuple[Any, ...]) -> tuple[str, ...]:
         """并发派发多个活动行到对应执行器；异常与无匹配时兜底提交 failed 回执。"""
         if not rows:
             return ()
 
-        async def dispatch_one(row: Any) -> str:
-            assert self._bindings is not None
-            request = _execution_request(row)
-            binding = self._bindings.get(request.capability)
-            if binding is None:
-                await self._fail_receipt(request, _NO_EXECUTOR.format(capability=request.capability))
-                return request.request_id
-            try:
-                await binding.executor.execute_tool(request)
-            except Exception as error:  # noqa: BLE001 - executor 失败必须有确定性回执
-                await self._fail_receipt(request, f"{type(error).__name__}: {error}")
-            return request.request_id
-
-        results = await asyncio.gather(*(dispatch_one(row) for row in rows), return_exceptions=True)
+        results = await asyncio.gather(*(self._dispatch_one(row) for row in rows), return_exceptions=True)
         failures = [result for result in results if isinstance(result, BaseException)]
         if failures:
             raise failures[0]
         return tuple(results)  # type: ignore[return-value]
+
+    async def _dispatch_one(self, row: Any) -> str:
+        assert self._bindings is not None
+        request = _execution_request(row)
+        binding = self._bindings.get(request.capability)
+        if binding is None:
+            await self._fail_receipt(request, _NO_EXECUTOR.format(capability=request.capability))
+            return request.request_id
+        try:
+            await binding.executor.execute_tool(request)
+        except Exception as error:  # noqa: BLE001 - executor 失败必须有确定性回执
+            await self._fail_receipt(request, f"{type(error).__name__}: {error}")
+        return request.request_id
 
     async def _fail_receipt(self, request: ToolExecutionRequest, error: str) -> None:
         """兜底提交 failed 回执：完成活动并投递 tool.failed 消息。"""

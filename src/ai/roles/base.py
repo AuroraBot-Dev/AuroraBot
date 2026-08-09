@@ -227,7 +227,7 @@ class ChatCaller:
             )
             return cost
 
-        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901
+        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0912, PLR0915
             missing_reason = missing_credentials_reason(self.model)
             if missing_reason is not None:
                 raise GatewayError(missing_reason, retryable=False)
@@ -283,6 +283,7 @@ class ChatCaller:
             try:
                 response = await litellm.acompletion(**litellm_kwargs)
             except asyncio.CancelledError:
+                await _compute_and_track(0, 0, "cancelled")
                 raise
             except Exception as exc:
                 raise _classify_exception(exc) from exc
@@ -291,10 +292,20 @@ class ChatCaller:
             chunks: list = []
             final_usage: Any = None
 
-            async for chunk in response_stream:
-                chunks.append(chunk)
-                if hasattr(chunk, "usage") and chunk.usage is not None:
-                    final_usage = chunk.usage
+            try:
+                async for chunk in response_stream:
+                    chunks.append(chunk)
+                    if hasattr(chunk, "usage") and chunk.usage is not None:
+                        final_usage = chunk.usage
+            except asyncio.CancelledError:
+                raw_close = getattr(response, "aclose", None)
+                if callable(raw_close):
+                    close = cast("collections.abc.Callable[[], collections.abc.Awaitable[None]]", raw_close)
+                    await close()
+                pt = final_usage.prompt_tokens if final_usage else 0
+                ct = final_usage.completion_tokens if final_usage else 0
+                await _compute_and_track(pt, ct, "cancelled")
+                raise
 
             final_response = stream_chunk_builder(chunks, messages=messages)
             pt = final_usage.prompt_tokens if final_usage else 0

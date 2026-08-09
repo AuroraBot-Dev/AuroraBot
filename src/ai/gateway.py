@@ -218,7 +218,7 @@ class ModelGatewayService:
 
         if request.retry_policy != "none":
             raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
-        if request.cancel_policy != "never":
+        if request.cancel_policy not in {"never", "supersedable"}:
             raise ModelCapabilityError(_Msg.CANCEL_POLICY_UNSUPPORTED)
         forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
         if forbidden:

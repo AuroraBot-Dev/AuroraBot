@@ -1,17 +1,15 @@
-"""Task、Agent、消息与因果事件查询（Schema v9，SQLAlchemy ORM 实现）。"""
+"""Task、Agent、消息、会话 generation 与因果事件查询（Schema v10，SQLAlchemy ORM 实现）。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, literal_column, or_, select
+from sqlalchemy import func, literal_column, select
 
 from src.contracts import AgentInstance, TaskState
 
 from .base import RuntimeStoreBase, _loads, utc_now
 from .models import (
-    ACT_COMPLETED,
-    ACT_ERROR,
     ACT_PENDING,
     AGENT_TERMINAL,
     INBOX_DEFERRED,
@@ -23,6 +21,8 @@ from .models import (
     CausalEventRow,
     InboxEventRow,
     MessageRow,
+    OutputPublicationRow,
+    SessionLaneRow,
     TaskRow,
 )
 
@@ -145,41 +145,26 @@ class StoreRuntimeMixin(RuntimeStoreBase):
         return tuple(self._causal_event(row) for row in rows)
 
     def session_export(self, session_id: str) -> dict[str, Any] | None:
-        """导出会话的因果事件与模型输出投影（会话可读性）。"""
+        """导出会话因果事件与已通过 generation 提交屏障的输出。"""
         events = self.query_events(session_id=session_id, limit=100000)
         if not events:
             return None
-        task_ids = tuple(dict.fromkeys(event["task_id"] for event in events if event["task_id"]))
-        outputs: list[dict[str, Any]] = []
-        if task_ids:
-            rowid_column = literal_column("activities.rowid")
-            statement = (
-                select(ActivityRow, rowid_column)
-                .where(
-                    ActivityRow.task_id.in_(task_ids),
-                    ActivityRow.kind == "model",
-                    or_(ActivityRow.status == ACT_COMPLETED, ActivityRow.status == ACT_ERROR),
-                )
-                .order_by(rowid_column)
-            )
-            with self.session() as session:
-                activity_rows = session.execute(statement).all()
-            for activity, _rowid in activity_rows:
-                kind = "error"
-                text = str(activity.error) if activity.error else ""
-                result = _loads(activity.result_json)
-                if not activity.error and isinstance(result, dict) and isinstance(result.get("text"), str):
-                    kind = "model"
-                    text = result["text"]
-                outputs.append(
-                    {
-                        "activity_id": str(activity.activity_id),
-                        "task_id": str(activity.task_id),
-                        "kind": kind,
-                        "text": text,
-                        "at": str(activity.updated_at),
-                    }
-                )
+        with self.session() as session:
+            rows = session.scalars(
+                select(OutputPublicationRow)
+                .where(OutputPublicationRow.session_id == session_id)
+                .order_by(OutputPublicationRow.seq)
+            ).all()
+        outputs = [
+            {
+                "activity_id": str(row.activity_id),
+                "task_id": str(row.task_id),
+                "kind": str(row.kind),
+                "text": str(row.text),
+                "at": str(row.created_at),
+            }
+            for row in rows
+        ]
         return {"session_id": session_id, "events": events, "outputs": outputs}
 
     @staticmethod
@@ -199,66 +184,64 @@ class StoreRuntimeMixin(RuntimeStoreBase):
         }
 
     def recent_outputs(self, cursor: int = 0, *, limit: int = 64) -> tuple[dict[str, Any], ...]:
-        """返回游标之后新增的模型输出文本，按活动行 ID 单调排序。
-
-        kind 为 ``model`` 时取模型结果文本，为 ``error`` 时取失败信息；
-        空文本的条目也返回，以便游标持续前进。
-        """
-        rowid_column = literal_column("activities.rowid")
+        """返回提交屏障之后的单调用户输出流；superseded generation 永不进入此表。"""
         statement = (
-            select(ActivityRow, TaskRow.session_id, rowid_column)
-            .join(TaskRow, TaskRow.task_id == ActivityRow.task_id)
-            .where(
-                ActivityRow.kind == "model",
-                or_(ActivityRow.status == ACT_COMPLETED, ActivityRow.status == ACT_ERROR),
-                rowid_column > cursor,
-            )
-            .order_by(rowid_column)
+            select(OutputPublicationRow)
+            .where(OutputPublicationRow.seq > cursor)
+            .order_by(OutputPublicationRow.seq)
             .limit(limit)
         )
         with self.session() as session:
-            rows = session.execute(statement).all()
-        items: list[dict[str, Any]] = []
-        for activity, session_id, activity_rowid in rows:
-            kind = "error"
-            text = str(activity.error) if activity.error else ""
-            result = _loads(activity.result_json)
-            if not activity.error and isinstance(result, dict) and isinstance(result.get("text"), str):
-                kind = "model"
-                text = result["text"]
-            items.append(
-                {
-                    "cursor": int(activity_rowid),
-                    "activity_id": str(activity.activity_id),
-                    "task_id": str(activity.task_id),
-                    "session_id": str(session_id),
-                    "kind": kind,
-                    "text": text,
-                    "at": str(activity.updated_at),
-                }
-            )
-        return tuple(items)
+            rows = session.scalars(statement).all()
+        return tuple(
+            {
+                "cursor": int(row.seq),
+                "activity_id": str(row.activity_id),
+                "task_id": str(row.task_id),
+                "session_id": str(row.session_id),
+                "kind": str(row.kind),
+                "text": str(row.text),
+                "at": str(row.created_at),
+            }
+            for row in rows
+        )
 
     def recent_outputs_tail(self) -> int:
-        """当前输出流末尾游标（与 recent_outputs 同一筛选条件的最大行 ID）。"""
-        rowid_column = literal_column("activities.rowid")
-        statement = select(func.max(rowid_column)).where(
-            ActivityRow.kind == "model",
-            or_(ActivityRow.status == ACT_COMPLETED, ActivityRow.status == ACT_ERROR),
-        )
+        """当前已提交输出流的最大 publication sequence。"""
         with self.session() as session:
-            value = session.scalar(statement)
+            value = session.scalar(select(func.max(OutputPublicationRow.seq)))
         return int(value) if value is not None else 0
+
+    def session_lane(self, session_id: str) -> dict[str, Any] | None:
+        """返回会话 revision、watermark 与当前活动 generation。"""
+        with self.session() as session:
+            row = session.get(SessionLaneRow, session_id)
+            if row is None:
+                return None
+            return {
+                "session_id": str(row.session_id),
+                "observed_revision": int(row.observed_revision),
+                "generation_revision": int(row.generation_revision),
+                "committed_revision": int(row.committed_revision),
+                "generation_watermark": int(row.generation_watermark),
+                "active_task_id": row.active_task_id,
+                "interrupt_count": int(row.interrupt_count),
+                "generation_started_at": row.generation_started_at,
+                "updated_at": str(row.updated_at),
+            }
 
     def counts(self) -> dict[str, int]:
         with self.session() as session:
             inbox_total = session.scalar(select(func.count()).select_from(InboxEventRow)) or 0
             due_sessions = (
                 session.scalar(
-                    select(func.count(func.distinct(InboxEventRow.session_id))).where(
+                    select(func.count(func.distinct(InboxEventRow.session_id)))
+                    .where(
                         InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
                         InboxEventRow.available_at <= utc_now(),
+                        SessionLaneRow.active_task_id.is_(None),
                     )
+                    .join(SessionLaneRow, SessionLaneRow.session_id == InboxEventRow.session_id)
                 )
                 or 0
             )
@@ -293,6 +276,12 @@ class StoreRuntimeMixin(RuntimeStoreBase):
                 )
                 or 0
             )
+            active_generations = (
+                session.scalar(
+                    select(func.count()).select_from(SessionLaneRow).where(SessionLaneRow.active_task_id.is_not(None))
+                )
+                or 0
+            )
         return {
             "inbox_events": inbox_total,
             "due_inbox_sessions": due_sessions,
@@ -302,4 +291,5 @@ class StoreRuntimeMixin(RuntimeStoreBase):
             "pending_activities": pending_activities,
             "pending_model_activities": pending_model,
             "pending_tool_activities": pending_tool,
+            "active_generations": active_generations,
         }

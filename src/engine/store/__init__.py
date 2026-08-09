@@ -1,4 +1,4 @@
-"""事务型 SQLite 仓库（Schema v9，SQLAlchemy ORM）—— Agent 运行时持久化的唯一入口。
+"""事务型 SQLite 仓库（Schema v10，SQLAlchemy ORM）—— Agent 运行时持久化的唯一入口。
 
 由聚焦职责的 Mixin 组合而成，所有写操作均以单一 SQLAlchemy 事务边界为界。
 """

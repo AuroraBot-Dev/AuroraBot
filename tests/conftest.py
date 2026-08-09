@@ -11,8 +11,9 @@ import pytest
 _REPOSITORY_ROOT = Path(__file__).parents[1].resolve()
 _REPOSITORY_DATA = (_REPOSITORY_ROOT / "data").resolve()
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
-_PATH_MUTATION_EVENTS = frozenset(
+_GUARDED_EVENTS = frozenset(
     {
+        "open",
         "os.chmod",
         "os.link",
         "os.mkdir",
@@ -21,39 +22,56 @@ _PATH_MUTATION_EVENTS = frozenset(
         "os.rmdir",
         "os.symlink",
         "os.truncate",
+        "sqlite3.connect",
     }
 )
 
 
-def _audit_path(value: object) -> Path | None:
+def _audit_path(value: object, dir_fd: object = None) -> Path | None:
     if not isinstance(value, (str, bytes, os.PathLike)):
         return None
     raw = os.fsdecode(value)
     if raw.startswith("file:"):
         raw = raw.removeprefix("file:").partition("?")[0]
     try:
-        return Path(raw).resolve()
+        path = Path(raw)
+        if not path.is_absolute() and isinstance(dir_fd, int) and dir_fd >= 0:
+            path = Path(f"/proc/self/fd/{dir_fd}").readlink() / path
+        return path.resolve()
     except (OSError, RuntimeError, ValueError):
         return None
 
 
-def _targets_repository_data(values: tuple[Any, ...]) -> bool:
-    return any(path is not None and path.is_relative_to(_REPOSITORY_DATA) for path in map(_audit_path, values))
+def _targets_repository_data(values: tuple[tuple[Any, object], ...]) -> bool:
+    paths = (_audit_path(value, dir_fd) for value, dir_fd in values)
+    return any(path is not None and path.is_relative_to(_REPOSITORY_DATA) for path in paths)
 
 
-def _deny_repository_data_access(event: str, arguments: tuple[Any, ...]) -> None:
-    paths: tuple[Any, ...] = ()
+def _event_paths(event: str, arguments: tuple[Any, ...]) -> tuple[tuple[Any, object], ...]:  # noqa: PLR0911
     if event == "sqlite3.connect":
-        paths = arguments[:1]
-    elif event == "open":
+        return ((arguments[0], None),)
+    if event == "open":
         path, mode, flags = arguments
         writing = (isinstance(mode, str) and any(marker in mode for marker in "wax+")) or (
             isinstance(flags, int) and bool(flags & _WRITE_FLAGS)
         )
-        if writing:
-            paths = (path,)
-    elif event in _PATH_MUTATION_EVENTS:
-        paths = arguments[:2] if event in {"os.link", "os.rename", "os.symlink"} else arguments[:1]
+        return ((path, None),) if writing else ()
+    dir_fd_index = {"os.remove": 1, "os.rmdir": 1, "os.mkdir": 2, "os.chmod": 2}.get(event)
+    if dir_fd_index is not None:
+        return ((arguments[0], arguments[dir_fd_index]),)
+    if event == "os.truncate":
+        return ((arguments[0], None),)
+    if event in {"os.link", "os.rename"}:
+        return ((arguments[0], arguments[2]), (arguments[1], arguments[3]))
+    if event == "os.symlink":
+        return ((arguments[1], arguments[2]),)
+    return ()
+
+
+def _deny_repository_data_access(event: str, arguments: tuple[Any, ...]) -> None:
+    if event not in _GUARDED_EVENTS:
+        return
+    paths = _event_paths(event, arguments)
     if paths and _targets_repository_data(paths):
         raise RuntimeError(f"tests must not access repository runtime data: {_REPOSITORY_DATA}")
 

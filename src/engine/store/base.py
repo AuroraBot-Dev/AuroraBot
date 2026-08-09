@@ -1,4 +1,4 @@
-"""SQLAlchemy 引擎、Schema v9 初始化与实体转换，供所有 Store Mixin 共享。
+"""SQLAlchemy 引擎、Schema v10 初始化与实体转换，供所有 Store Mixin 共享。
 
 所有写操作均通过 session() 事务上下文执行（引擎级 isolation_level=IMMEDIATE，
 等价于 SQLite 的 BEGIN IMMEDIATE）；单进程 asyncio 独占，无租约与乐观锁。
@@ -49,6 +49,7 @@ from .models import (
     CausalEventRow,
     InboxEventRow,
     MessageRow,
+    TaskRow,
 )
 
 
@@ -108,8 +109,8 @@ class RuntimeStoreBase:
         """初始化运行时数据库：统一入口（utils.migration.initialize_storage）。
 
         版本号存于 schema_meta（无表 = v0 全新库）；v0 直接建表并写入
-        当前目标版本；v1-v8 旧库经 src/engine/store/migration/ 版本序列
-        升级到 v9。迁移在单个事务中执行，任一版本步骤
+        当前目标版本；v1-v9 旧库经 src/engine/store/migration/ 版本序列
+        升级到 v10。迁移在单个事务中执行，任一版本步骤
         失败整体回滚。
         """
         from . import migration
@@ -139,7 +140,12 @@ class RuntimeStoreBase:
             )
             session.execute(
                 update(InboxEventRow)
-                .where(InboxEventRow.status == INBOX_TRIAGING)
+                .where(
+                    InboxEventRow.status == INBOX_TRIAGING,
+                    InboxEventRow.batch_id.not_in(
+                        select(TaskRow.root_message_id).where(TaskRow.status == TaskStatus.ACTIVE)
+                    ),
+                )
                 .values(status=INBOX_PENDING, batch_id=None)
             )
             interrupted = session.execute(
@@ -228,6 +234,7 @@ class RuntimeStoreBase:
             priority=int(row.priority),
             idempotency_key=str(row.idempotency_key),
             created_at=str(row.created_at),
+            generation_revision=int(row.generation_revision),
         )
 
     @staticmethod

@@ -45,6 +45,8 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert profiles["builtin.fast"].model_role == "fast"
     assert not profiles["builtin.fast"].can_delegate
     assert profiles["builtin.fast"].child_profiles == frozenset()
+    assert configuration.engine.triage.max_interrupts == 2  # noqa: PLR2004
+    assert configuration.engine.triage.max_generation_seconds == 45.0  # noqa: PLR2004
 
 
 def test_profile_only_changes_runtime_snapshot() -> None:

@@ -270,7 +270,7 @@ triage agent (depth 0, 无工具, 快模型)
 
 ### 4.6 `src/engine` — 运行实现层（核心，只依赖 contracts + utils）
 
-**模式**：单进程 asyncio 独占、单一 SQLite v9、无租约无乐观锁（RFC 0300）。
+**模式**：单进程 asyncio 独占、单一 SQLite v10、无租约无乐观锁（RFC 0300）。
 
 ```
 engine/
@@ -531,7 +531,7 @@ config/*.toml（写回）
 | 加平台        | platform/<name>/ 实现 factory → aurora 注册                      | engine/agents      |
 | 换模型        | 替换 `model_provider` 注入                                       | engine             |
 | 改调度        | engine/pump 六步顺序/条件                                        | store              |
-| 改持久化      | store/（schema v9）                                              | 先更新 RFC 0300    |
+| 改持久化      | store/（schema v10）                                             | 先更新 RFC 0300    |
 | 改决策语义    | store/decisions.py 8 分支                                        | 先更新 RFC 0300    |
 | 加配置页面    | ops/operations/config.py 配置编辑操作（§8.2）                    | engine             |
 

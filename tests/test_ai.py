@@ -11,9 +11,10 @@ import pytest
 from sqlalchemy import text
 
 from src.ai import models
-from src.ai.execution import CostTracker, GatewayError
+from src.ai.execution import CostTracker, GatewayError, TaskManager
 from src.ai.gateway import ModelGatewayService, invalid_output_result
 from src.ai.roles.base import (
+    ChatCaller,
     RoleHandler,
     _provider_tool_alias,
     build_chat_kwargs,
@@ -312,6 +313,58 @@ def test_cost_tracker() -> None:
         summary = await tracker.summary()
         assert summary["total_cost"] == 0.75
         assert summary["by_role"]["fast"]["count"] == 2
+
+    asyncio.run(scenario())
+
+
+def test_chat_stream_cancellation_closes_provider_and_tracks_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Stream:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.closed = False
+
+        def __aiter__(self) -> Stream:
+            return self
+
+        async def __anext__(self) -> Any:
+            self.started.set()
+            await asyncio.Event().wait()
+            raise StopAsyncIteration
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class Gateway:
+        log_queries = False
+        log_responses = False
+
+        def __init__(self, cost_tracker: CostTracker) -> None:
+            self.cost_tracker = cost_tracker
+
+    stream = Stream()
+
+    async def fake_completion(**_kwargs: Any) -> Stream:
+        return stream
+
+    async def free_call(_model: str, _prompt_tokens: int, _completion_tokens: int) -> float:
+        return 0.0
+
+    monkeypatch.setattr("src.ai.roles.base.litellm.acompletion", fake_completion)
+    monkeypatch.setattr("src.ai.roles.base.compute_cost", free_call)
+
+    async def scenario() -> None:
+        tracker = CostTracker()
+        gateway = Gateway(tracker)
+        generation = ChatCaller("test", "fast", TaskManager(), gateway).acompletion([])
+        consumer = asyncio.ensure_future(generation)
+        await asyncio.wait_for(stream.started.wait(), 1)
+        consumer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await consumer
+        assert stream.closed
+        assert await tracker.by_status() == {"cancelled": {"count": 1, "cost": 0.0}}
 
     asyncio.run(scenario())
 

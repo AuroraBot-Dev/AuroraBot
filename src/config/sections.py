@@ -211,7 +211,7 @@ def _parse_triage(raw: dict[str, Any]) -> TriageLimits:
         value = raw[name]
         if name == "model_role":
             values[name] = _string(value, f"engine.triage.{name}")
-        elif name in {"max_batch_events", "max_batch_characters"}:
+        elif name in {"max_batch_events", "max_batch_characters", "max_interrupts"}:
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 raise ConfigurationError(_Msg.TRIAGE_POSITIVE_INTEGER.format(name=name))
             values[name] = value

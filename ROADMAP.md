@@ -1,6 +1,6 @@
 # AuroraBot 演化路线图
 
-状态：既有 P0 已收口；会话双工 P0 改造进行中
+状态：P0 已收口；进入长期运行与真实集成阶段
 日期：2026-08-09
 设计基准：[RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)
 
@@ -11,8 +11,8 @@ AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、
 
 最近一次已验证质量基线：
 
-- 完整质量命令通过，210 个测试通过；
-- `aurora`、`ops` 与 `src` 总语句覆盖率为 82.55%；
+- 完整质量命令通过，224 个测试通过；
+- `aurora`、`ops` 与 `src` 总语句覆盖率为 83.84%；
 - 依赖边界、SQLite 迁移、Triage、工具回执、多 Tool call、面板操作和费用持久化已有测试；
 - 项目仍处于 0.5 alpha，尚不应承诺公网多租户或无人值守生产运行。
 
@@ -27,21 +27,25 @@ AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、
 5. [x] `aurora check` 的 Ruff、format、Pyright 与 coverage 已覆盖根级 `ops/` 包。
 
 收口证据：异步 LLM 概要、模型注入、scope 语义检索、关键词降级、统一预算、Lab 认证和质量命令范围均有回归测试；
-memory 已按纯数据 models、短期算法 short_term、异步编排 service 拆分。完整质量门为 210 tests / 82.55% coverage。
+memory 已按纯数据 models、短期算法 short_term、异步编排 service 拆分。当前完整质量门为 224 tests / 83.84% coverage。
 
-### P0：会话双工与响应时效（进行中）
+### P0：会话双工与响应时效（2026-08-09 已完成）
 
 1. [x] 在唯一 RFC 中定义 observed/generation/committed revision、watermark、delta、提交屏障和有界抢占。
 2. [x] Triage 获权选择 `builtin.fast` 快脑或 `builtin.root` 主脑；非法、缺失与 fail-open 保守进入 root。
-3. [ ] 持久化 session revision 与 generation watermark，并提供当前会话活动 generation 的唯一索引。
-4. [ ] 新 AMP 按优先级进入 delta；只有直接点名、明确纠正或语境失效事件请求抢占，且限制抢占次数和总等待。
-5. [ ] 将 Activity supersede 原子状态传播到 asyncio 与 Provider 取消，并拒绝晚到结果产生消息、工具或输出。
-6. [ ] 为外部效果和用户输出增加 revision 提交校验；不可撤回平台只发布最终 committed 输出。
-7. [ ] 移除模型与工具派发的整批完成屏障，实现空闲槽即时领取、交互优先和跨 session 公平调度。
-8. [ ] 覆盖持续群聊、重要消息插队、无限消息不活锁、晚到结果和不可取消工具效果的确定性场景。
+3. [x] Schema v10 以 `session_lanes` 持久化 session revision、generation watermark 与唯一活动交互 Task。
+4. [x] 新 AMP 按优先级进入 delta；只有直接点名、明确纠正或语境失效事件请求抢占，且限制抢占次数和总等待。
+5. [x] 将 Activity supersede 原子状态传播到 asyncio 与 Provider 流取消，并以 Task/lane/revision 屏障拒绝晚到结果。
+6. [x] 工具回执与用户输出增加 generation 提交校验；不可撤回平台只读取 `output_publications` 单调提交流。
+7. [x] 移除模型与工具派发的整批完成屏障，实现空闲槽即时领取、交互优先和跨 session 公平调度。
+8. [x] 覆盖持续群聊、重要消息插队、抢占封顶、晚到结果隔离和不可取消工具效果的确定性场景。
 
-完成门槛：持续普通群聊下 Bot 能在有界时间内插话；直接交互可打断未提交的旧生成；任何 superseded generation 都不能
+完成门槛（已达到）：持续普通群聊下 Bot 能在有界时间内插话；直接交互可打断未提交的旧生成；任何 superseded generation 都不能
 产生用户可见输出或新的外部效果；单一高流量 session 不得饿死其他会话。
+
+收口证据：普通 delta 在当前 generation 运行时持续积累但不阻止其提交；定向纠正会取消旧 Provider 协程并重建包含完整
+上下文的 generation；抢占次数达到上限后当前回复必须完成；PROCESSING 的不可撤回工具阻止抢占；模型和工具槽位释放后
+无需等待同批慢任务即可领取其他 session。Schema v9 可连续迁移到 v10，旧 generation 永不进入用户输出提交流。
 
 ### P1：长期运行与交付
 

@@ -204,6 +204,7 @@ class AuroraRuntime:
         """将平台文本规范化为共享 AMP 后提交给 engine。"""
         data = dict(request.data)
         data["text"] = text
+        data.setdefault("attention", "direct")
         if request.actor_id is not None:
             data["actor_id"] = request.actor_id
         amp = new_amp(

@@ -163,23 +163,24 @@ discard 或失败。等待不是持久化状态，而由未终止 children、待
 
 engine 使用单进程 asyncio 独占模型：无数据库租约、无乐观锁、无多 owner 协调。一次 pump 按顺序执行：
 
-1. 恢复或派发待处理工具 Activity；
-2. 领取到期 Inbox 批次并创建 triage Task；
-3. 领取 Agent 消息，通过异步 MemoryStore 取得有界快照、构造上下文、调用 handler、授权并原子应用决策；
-4. 派发模型和工具 Activity；
-5. 对终态交互 Task 进行异步记忆投影；
-6. 更新可查询输出和因果投影。
+1. 领取无活动 generation 的到期 Inbox 批次并创建 triage Task；
+2. 领取 Agent 消息，通过异步 MemoryStore 取得有界快照、构造上下文、调用 handler、授权并原子应用决策；
+3. 唤醒模型与工具后台派发器；空闲槽立即领取下一项，不等待同批其余工作；
+4. 对终态交互 Task 进行异步记忆投影；
+5. 更新可查询输出和因果投影。
 
 持续输入场景采用会话级有界抢占，而不是每条 AMP 都重启生成：
 
-- 每个 session 分别记录已观察 `observed_revision`、本轮冻结 `generation_revision` 与已发布 `committed_revision`；模型生成
-  期间到达的新事件进入带 watermark 的 delta，不隐式改写已经冻结的上下文。
+- `session_lanes` 以 session 主键持久化 `observed_revision`、本轮冻结 `generation_revision`、已发布
+  `committed_revision`、`generation_watermark` 与唯一 `active_task_id`；生成期间到达的新事件进入 watermark 之后的 delta，
+  不隐式改写已经冻结的上下文，同一 session 不能并行存在两个交互 generation。
 - 普通环境消息只进入 delta。直接点名、直接回复、明确纠正或使当前回复失效的高优先级事件才可以请求抢占；每次回复的
   抢占次数和总等待时间必须有硬上界，达到边界后必须完成、静默或放弃，不能形成持续重启活锁。
-- 抢占使旧模型 Activity 进入 `SUPERSEDED` 终态，并向 Provider 传播取消。晚到结果只进入审计记录，不得恢复 Agent、
-  创建工具效果或进入用户可见输出。
-- 发布前必须以 generation revision 和最新 delta 执行提交校验：仍相关则发布，局部过时则形成有界修订，完全失效则放弃。
-  不支持撤回的平台只接收通过提交校验的最终输出；已经开始的外部效果不回滚。
+- 抢占使旧模型 Activity 进入 `SUPERSEDED` 终态，并向 asyncio 与 Provider 流传播取消。晚到模型结果和工具回执必须再次校验
+  Task、session lane 与 generation revision，不得恢复 Agent、创建后续工具效果或进入用户可见输出。
+- 普通 delta 不使已经冻结的回复失效，因此当前 generation 可以先提交并在下一轮消费 delta。接受的抢占会原子撤销旧
+  generation 的提交资格。用户输出只能先写入 `output_publications` 提交流，再由平台读取；不支持撤回的平台只接收该流中的
+  最终输出。已经进入 PROCESSING 的不可撤回工具效果不抢占，先完成效果，再在下一轮消费 delta。
 - 到达 quiet/max-wait 边界后冻结本轮 watermark，后续低优先级事件进入下一轮。调度按 session 公平分配，并使直接交互
   高于自主与后台工作，保证持续大流量群聊中既能插话又不会独占全部并发。
 
@@ -187,7 +188,7 @@ engine 使用单进程 asyncio 独占模型：无数据库租约、无乐观锁�
 契约明确支持取消且尚未越过提交屏障时才允许取消。
 
 启动恢复规则：PROCESSING 消息回到 PENDING；中断的模型 Activity 结束为 ERROR 并投递失败消息；工具 Activity 保留并
-由 ToolRegistry 恢复派发。恢复不得重复产生真实外部效果。
+由 ToolRegistry 后台恢复派发。恢复不得重复产生真实外部效果。
 
 MemoryStore 是异步 Port。SQLite 操作、概要模型调用、embedding 与语义检索不得作为同步网络或阻塞 I/O 运行在 engine
 事件循环中；实现应使用原生异步接口或受控工作线程。handler 只接收已经固定的记忆快照，不感知异步实现。
@@ -305,7 +306,9 @@ src/platform/mcp     → data/platform/mcp/
 src/apps via MCP     → data/platform/mcp/apps/
 ```
 
-SQLite 统一使用 WAL、busy timeout 和版本表。engine 当前 Schema 为 v9；ai、memory、ops 各自维护独立版本。实现使用
+SQLite 统一使用 WAL、busy timeout 和版本表。engine 当前 Schema 为 v10；ai、memory、ops 各自维护独立版本。v10 增加
+`session_lanes`、Inbox/Activity generation revision 与只追加的 `output_publications`，v9 数据库通过 `v9_v10` 连续迁移。
+实现使用
 SQLAlchemy 2.0 ORM；原始 sqlite3 连接只作为迁移、诊断或测试逃生口，不进入热路径业务操作。
 
 所有数据库演进必须提供 `vN_vN+1` 迁移步骤并提升目标版本。全新库直接创建当前 schema；旧库按连续版本序列在单事务

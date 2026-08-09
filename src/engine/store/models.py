@@ -1,7 +1,7 @@
-"""Schema v9 ORM 模型，保持既有物理结构不变。
+"""Schema v10 ORM 模型：会话 generation、抢占与输出提交状态。
 
 所有列名、类型、约束与索引（含部分唯一索引与 DESC 列序）逐一对齐
-Schema v9；`create_all(checkfirst=True)` 只用于全新库，旧库经版本序列
+Schema v10；`create_all(checkfirst=True)` 只用于全新库，旧库经版本序列
 迁移（src/engine/store/migration/）。
 """
 
@@ -23,7 +23,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.contracts import ActivityStatus, MessageStatus, TaskStatus
 
-_SCHEMA_VERSION = 9
+_SCHEMA_VERSION = 10
 
 
 class Base(DeclarativeBase):
@@ -60,6 +60,26 @@ class TaskRow(Base):
     termination_reason: Mapped[str | None] = mapped_column("termination_reason", String)
 
     agents: Mapped[list["AgentRow"]] = relationship(back_populates="task", passive_deletes=True)
+
+
+class SessionLaneRow(Base):
+    """session_lanes：单会话唯一活动 generation 与提交游标。"""
+
+    __tablename__ = "session_lanes"
+    __table_args__ = (
+        CheckConstraint("interrupt_count >= 0", name="session_lanes_interrupt_count_check"),
+        Index("idx_session_lanes_active", "active_task_id"),
+    )
+
+    session_id: Mapped[str] = mapped_column("session_id", String, primary_key=True)
+    observed_revision: Mapped[int] = mapped_column("observed_revision", Integer, nullable=False, default=0)
+    generation_revision: Mapped[int] = mapped_column("generation_revision", Integer, nullable=False, default=0)
+    committed_revision: Mapped[int] = mapped_column("committed_revision", Integer, nullable=False, default=0)
+    generation_watermark: Mapped[int] = mapped_column("generation_watermark", Integer, nullable=False, default=0)
+    active_task_id: Mapped[str | None] = mapped_column("active_task_id", String)
+    interrupt_count: Mapped[int] = mapped_column("interrupt_count", Integer, nullable=False, default=0)
+    generation_started_at: Mapped[str | None] = mapped_column("generation_started_at", String)
+    updated_at: Mapped[str] = mapped_column("updated_at", String, nullable=False)
 
 
 class AgentRow(Base):
@@ -115,11 +135,12 @@ class MessageRow(Base):
 
 
 class ActivityRow(Base):
-    """activities：模型/工具活动请求与结果（kind 与部分唯一索引见 v9）。"""
+    """activities：模型/工具活动请求、generation 归属与结果发布资格。"""
 
     __tablename__ = "activities"
     __table_args__ = (
         CheckConstraint("kind IN ('model', 'tool')", name="activities_kind_check"),
+        CheckConstraint("publishable IN (0, 1)", name="activities_publishable_check"),
         Index("idx_activities_ready", "kind", "status", desc("priority"), "created_at"),
         Index(
             "idx_activities_one_active_per_agent",
@@ -141,6 +162,12 @@ class ActivityRow(Base):
     updated_at: Mapped[str] = mapped_column("updated_at", String, nullable=False)
     result_json: Mapped[str | None] = mapped_column("result_json", String)
     error: Mapped[str | None] = mapped_column("error", String)
+    generation_revision: Mapped[int] = mapped_column(
+        "generation_revision", Integer, nullable=False, default=0, server_default=text("0")
+    )
+    publishable: Mapped[int] = mapped_column(
+        "publishable", Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     task: Mapped["TaskRow"] = relationship()
     agent: Mapped["AgentRow"] = relationship()
@@ -160,6 +187,21 @@ class CausalEventRow(Base):
     payload_json: Mapped[str] = mapped_column("payload_json", String, nullable=False)
     causation_id: Mapped[str | None] = mapped_column("causation_id", String)
     correlation_id: Mapped[str] = mapped_column("correlation_id", String, nullable=False)
+    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
+
+
+class OutputPublicationRow(Base):
+    """output_publications：通过 generation 提交屏障后的单调用户输出流。"""
+
+    __tablename__ = "output_publications"
+
+    seq: Mapped[int] = mapped_column("seq", Integer, primary_key=True, autoincrement=True)
+    activity_id: Mapped[str] = mapped_column("activity_id", String, nullable=False, unique=True)
+    task_id: Mapped[str] = mapped_column("task_id", String, nullable=False)
+    session_id: Mapped[str] = mapped_column("session_id", String, nullable=False)
+    generation_revision: Mapped[int] = mapped_column("generation_revision", Integer, nullable=False)
+    kind: Mapped[str] = mapped_column("kind", String, nullable=False)
+    text: Mapped[str] = mapped_column("text", String, nullable=False)
     created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
 
 
@@ -185,6 +227,7 @@ class InboxEventRow(Base):
     available_at: Mapped[str] = mapped_column("available_at", String, nullable=False)
     created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
     updated_at: Mapped[str] = mapped_column("updated_at", String, nullable=False)
+    revision: Mapped[int] = mapped_column("revision", Integer, nullable=False, default=0, server_default=text("0"))
 
 
 # -- 状态字面量：从 contracts 枚举生成，禁止手写 ---------------------------------
@@ -201,6 +244,7 @@ ACT_PROCESSING = ActivityStatus.PROCESSING
 ACT_COMPLETED = ActivityStatus.COMPLETED
 ACT_ERROR = ActivityStatus.ERROR
 ACT_CANCELLED = ActivityStatus.CANCELLED
+ACT_SUPERSEDED = ActivityStatus.SUPERSEDED
 ACT_ACTIVE = frozenset({ActivityStatus.PENDING, ActivityStatus.PROCESSING})
 TASK_ACTIVE = TaskStatus.ACTIVE
 INBOX_PENDING = "PENDING"

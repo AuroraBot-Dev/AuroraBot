@@ -23,6 +23,8 @@ defer_seconds = 5.0
 max_defer_seconds = 60.0
 max_batch_events = 24
 max_batch_characters = 12000
+max_interrupts = 2
+max_generation_seconds = 45.0
 
 [engine.autonomy]
 scan_seconds = 1.0

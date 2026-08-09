@@ -57,6 +57,7 @@ class ActivityStatus(StrEnum):
     COMPLETED = "COMPLETED"
     ERROR = "ERROR"
     CANCELLED = "CANCELLED"
+    SUPERSEDED = "SUPERSEDED"
 
 
 # -- 配置类型 ------------------------------------------------------------
@@ -310,6 +311,7 @@ class ActivityRequest:
     priority: int
     idempotency_key: str
     created_at: str
+    generation_revision: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -150,6 +150,44 @@ def test_dynamic_debounce_batches_a_session_and_deduplicates(tmp_path: Path) -> 
     asyncio.run(scenario())
 
 
+def test_recovery_preserves_active_task_batch_and_requeues_only_orphan_claim(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = SQLiteRuntimeStore(tmp_path / "runtime.sqlite3")
+        store.initialize()
+        limits = TriageLimits(quiet_seconds=0, max_wait_seconds=0.001)
+        assert store.enqueue_inbox(_event("active", session_id="active"), limits)
+        assert store.enqueue_inbox(_event("orphan", session_id="orphan"), limits)
+        await asyncio.sleep(0.001)
+        batches = store.claim_triage_batches(limits, 2)
+        by_session = {batch.session_id: batch for batch in batches}
+        active_batch = by_session["active"]
+        orphan_batch = by_session["orphan"]
+        created = store.create_triage_task(
+            active_batch,
+            triage_profile="triage",
+            interactive_budget=TaskLimits(4, 4, 300),
+            autonomous_budget=TaskLimits(4, 4, 120),
+            priority=100,
+        )
+        assert created is not None
+
+        store.recover_interrupted()
+        with store.connect() as connection:
+            active = connection.execute(
+                "SELECT status, batch_id FROM inbox_events WHERE session_id = 'active'"
+            ).fetchone()
+            orphan = connection.execute(
+                "SELECT status, batch_id FROM inbox_events WHERE session_id = 'orphan'"
+            ).fetchone()
+        assert active is not None and active["status"] == "TRIAGING"
+        assert active["batch_id"] == active_batch.batch_id
+        assert orphan is not None and orphan["status"] == "PENDING"
+        assert orphan["batch_id"] is None
+        assert orphan_batch.batch_id != active_batch.batch_id
+
+    asyncio.run(scenario())
+
+
 def test_triage_process_delegates_gate_with_batch_context_and_completes(tmp_path: Path) -> None:
     async def scenario() -> None:
         engine = _engine(
@@ -367,6 +405,7 @@ def test_triage_agent_requests_structured_output_without_tools(tmp_path: Path) -
             assert request.tool_choice == "none"
             assert not request.tools
             assert request.output_schema is not None
+            assert request.cancel_policy == "supersedable"
         finally:
             await engine.shutdown()
 

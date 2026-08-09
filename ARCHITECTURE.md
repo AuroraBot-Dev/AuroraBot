@@ -78,10 +78,10 @@ AgentEngine 和 SQLiteRuntimeStore 组成完整热路径：
 - `ingress.py`：AMP 持久化与工具回执分流；
 - `authorize.py`：权限检查与决策应用入口；
 - `tool_registry.py`：能力目录、派发和恢复；
-- `store/inbox.py`：Inbox、防抖、批次和 triage Task；
-- `store/decisions.py`：原子状态迁移、消息和 Activity；
-- `store/runtime.py`：Task、Agent、事件和会话查询；
-- `store/migration/`：Schema v9 历史版本迁移。
+- `store/inbox.py`：Inbox、防抖、session revision、批次和 triage Task；
+- `store/decisions.py`：generation 抢占、提交屏障、原子状态迁移、消息和 Activity；
+- `store/runtime.py`：Task、Agent、事件、session lane 和已提交输出查询；
+- `store/migration/`：Schema v10 历史版本迁移。
 
 engine 的同步存储调用运行在单进程事件循环所有权模型中。模型、工具和 MemoryStore 是 async；MemoryService 将
 SQLite、mem0、embedding 与语义检索等阻塞工作移出事件循环，handler 只接收已经固定的快照。
@@ -192,12 +192,14 @@ fast 快脑或具备完整委派能力的 root 主脑。模型或结构化输出
 
 ### 持续输入与有界抢占
 
-持续 AMP 不直接重启每一次生成。每个会话以 observed、generation、committed 三个 revision 和输入 watermark 区分最新事实、
-冻结生成上下文与已发布上下文；生成期间的新事件先进入 delta。只有直接点名、明确纠正或使当前回复失效的事件可以请求
-抢占，且抢占次数与总等待有硬上界。普通群聊消息在 max-wait 后切入下一轮，避免高流量会话让 Bot 永远无法插话。
+持续 AMP 不直接重启每一次生成。`session_lanes` 以会话主键保存 observed、generation、committed 三个 revision、输入
+watermark、活动 Task 与抢占预算；生成期间的新事件先进入 delta，同一会话最多一个交互 generation。只有直接点名、明确
+纠正或使当前回复失效的事件可以请求抢占，且抢占次数与总等待有硬上界。普通群聊消息在当前回复提交后切入下一轮，避免
+高流量会话让 Bot 永远无法插话。
 
-旧 generation 被取代后只能保留审计记录，不得创建消息、工具效果或用户输出。发布前执行 revision/delta 提交校验；不支持
-撤回的平台只接收最终提交结果。模型调度按空闲槽连续领取工作，不等待整批生成全部完成。
+旧 generation 被取代后只能保留审计记录，不得创建消息、工具效果或用户输出。模型、工具回执和输出发布都校验 Task、
+session lane 与 generation revision；用户侧只读取 `output_publications` 单调提交流。不支持撤回的平台因此看不到旧结果。
+PROCESSING 的不可撤回工具阻止抢占并先完成。模型和工具调度按空闲槽连续领取工作，跨 session 先公平分配，再填充余量。
 
 ### Agent turn
 

@@ -1,4 +1,4 @@
-"""持久化 Inbox、防抖批次、入口 Triage Task 与批次结算（Schema v9，SQLAlchemy ORM 实现）。"""
+"""持久化 Inbox、防抖批次、会话 generation 与入口 Triage Task（Schema v10，SQLAlchemy ORM 实现）。"""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from .models import (
     AgentRow,
     CausalEventRow,
     InboxEventRow,
+    SessionLaneRow,
     TaskRow,
 )
 
@@ -53,6 +54,24 @@ class StoreInboxMixin(RuntimeStoreBase):
                 is not None
             ):
                 return False
+            lane = session.get(SessionLaneRow, amp.payload.session_id)
+            if lane is None:
+                lane = SessionLaneRow(
+                    session_id=amp.payload.session_id,
+                    observed_revision=0,
+                    generation_revision=0,
+                    committed_revision=0,
+                    generation_watermark=0,
+                    active_task_id=None,
+                    interrupt_count=0,
+                    generation_started_at=None,
+                    updated_at=now,
+                )
+                session.add(lane)
+            lane.observed_revision += 1
+            lane.updated_at = now
+            revision = int(lane.observed_revision)
+            priority = _amp_priority(amp)
             self._insert_causal_event(
                 session,
                 event_type="ingress.received",
@@ -61,6 +80,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                     "session_id": amp.payload.session_id,
                     "source": amp.header.source,
                     "type": amp.payload.type,
+                    "revision": revision,
                 },
                 correlation_id=event_id,
                 now=now,
@@ -92,12 +112,13 @@ class StoreInboxMixin(RuntimeStoreBase):
                     summary=amp.payload.summary,
                     source_json=_json(amp.header.source),
                     data_json=_json(amp.payload.data),
-                    priority=10 if amp.payload.type == "system.tick" else 100,
+                    priority=priority,
                     status=INBOX_PENDING,
                     batch_id=None,
                     available_at=deadline,
                     created_at=now,
                     updated_at=now,
+                    revision=revision,
                 )
             )
         return True
@@ -106,9 +127,11 @@ class StoreInboxMixin(RuntimeStoreBase):
         with self.session() as session:
             row = session.scalar(
                 select(InboxEventRow.event_id)
+                .join(SessionLaneRow, SessionLaneRow.session_id == InboxEventRow.session_id)
                 .where(
                     InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
                     InboxEventRow.available_at <= utc_now(),
+                    SessionLaneRow.active_task_id.is_(None),
                 )
                 .limit(1)
             )
@@ -118,8 +141,11 @@ class StoreInboxMixin(RuntimeStoreBase):
         now = datetime.now(UTC)
         with self.session() as session:
             first_at = session.scalar(
-                select(func.min(InboxEventRow.available_at)).where(
-                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED))
+                select(func.min(InboxEventRow.available_at))
+                .join(SessionLaneRow, SessionLaneRow.session_id == InboxEventRow.session_id)
+                .where(
+                    InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)),
+                    SessionLaneRow.active_task_id.is_(None),
                 )
             )
         if first_at is None:
@@ -138,6 +164,8 @@ class StoreInboxMixin(RuntimeStoreBase):
                     func.max(InboxEventRow.priority).label("priority"),
                 )
                 .where(InboxEventRow.status.in_((INBOX_PENDING, INBOX_DEFERRED)), InboxEventRow.available_at <= now)
+                .join(SessionLaneRow, SessionLaneRow.session_id == InboxEventRow.session_id)
+                .where(SessionLaneRow.active_task_id.is_(None))
                 .group_by(InboxEventRow.session_id)
                 .order_by(func.max(InboxEventRow.priority).desc(), "first_at")
                 .limit(limit)
@@ -169,6 +197,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                         session_id=str(session_id),
                         events=selected,
                         first_received_at=min(event.created_at for event in selected),
+                        generation_revision=max(event.revision for event in selected),
                     )
                 )
         return tuple(batches)
@@ -189,6 +218,27 @@ class StoreInboxMixin(RuntimeStoreBase):
         """
         now = utc_now()
         with self.session() as session:
+            lane = session.get(SessionLaneRow, batch.session_id)
+            if lane is None:
+                lane = SessionLaneRow(
+                    session_id=batch.session_id,
+                    observed_revision=batch.generation_revision,
+                    generation_revision=0,
+                    committed_revision=0,
+                    generation_watermark=0,
+                    active_task_id=None,
+                    interrupt_count=0,
+                    generation_started_at=None,
+                    updated_at=now,
+                )
+                session.add(lane)
+            if lane.active_task_id is not None:
+                session.execute(
+                    update(InboxEventRow)
+                    .where(InboxEventRow.batch_id == batch.batch_id)
+                    .values(status=INBOX_PENDING, batch_id=None, updated_at=now)
+                )
+                return None
             rows = (
                 session.execute(
                     select(InboxEventRow)
@@ -224,6 +274,12 @@ class StoreInboxMixin(RuntimeStoreBase):
                     termination_reason=None,
                 )
             )
+            if not autonomous:
+                lane.active_task_id = task_id
+                lane.generation_revision = batch.generation_revision
+                lane.generation_watermark = batch.generation_revision
+                lane.generation_started_at = lane.generation_started_at or now
+                lane.updated_at = now
             events = _event_projection(batch.events)
             session.add(
                 AgentRow(
@@ -297,6 +353,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                 data=_loads(row.data_json),
                 created_at=str(row.created_at),
                 priority=int(row.priority),
+                revision=int(row.revision),
             )
             size = len(_json(event.to_dict()))
             if not selected and size > max_characters:
@@ -324,6 +381,7 @@ class StoreInboxMixin(RuntimeStoreBase):
             data={"truncated": True, "json_preview": data[:preview_budget]},
             created_at=event.created_at,
             priority=event.priority,
+            revision=event.revision,
         )
         while len(_json(clipped.to_dict())) > max_characters and preview_budget > 0:
             preview_budget //= 2
@@ -336,6 +394,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                 data={"truncated": True, "json_preview": data[:preview_budget]},
                 created_at=clipped.created_at,
                 priority=clipped.priority,
+                revision=clipped.revision,
             )
         return clipped
 
@@ -350,6 +409,19 @@ def _event_projection(events: tuple[InboxEvent, ...]) -> list[dict[str, Any]]:
             "source": event.source,
             "data": event.data,
             "created_at": event.created_at,
+            "revision": event.revision,
         }
         for event in events
     ]
+
+
+def _amp_priority(amp: AmpEnvelope) -> int:
+    if amp.payload.type == "system.tick":
+        return 10
+    data = amp.payload.data
+    attention = data.get("attention")
+    if attention in {"direct", "correction", "urgent"} or any(
+        data.get(name) is True for name in ("directed", "mentioned", "reply_to_bot")
+    ):
+        return 200
+    return 100

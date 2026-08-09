@@ -124,7 +124,7 @@ class BaseAgent(ABC):
             response_mode="normalized",
             tools=tools,
             parallel_tool_calls=True,
-            cancel_policy="never",
+            cancel_policy="supersedable",
             **cast("dict[str, Any]", optional),
         )
         return AgentDecision(model_request=request)

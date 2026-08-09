@@ -22,7 +22,7 @@ STRUCTURED_OUTPUT_NAME: Final = "aurora_result"
 # 模式、重试策略、取消策略、工具选择字面量类型
 ResponseMode = Literal["normalized", "native"]
 RetryPolicy = Literal["none"]
-CancelPolicy = Literal["never"]
+CancelPolicy = Literal["never", "supersedable"]
 ToolChoice = Literal["auto", "none", "required"]
 
 
