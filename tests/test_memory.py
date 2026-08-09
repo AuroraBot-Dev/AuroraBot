@@ -129,6 +129,30 @@ def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
     asyncio.run(exercise())
 
 
+def test_cross_domain_keeps_guaranteed_budget_against_large_own_window(tmp_path: Path) -> None:
+    """本域窗口很大时，跨域动态仍保留保障预算，不会被原文占满。"""
+    now = utc_now()
+
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, window_min=200, window_max=1000)
+        for index in range(400):
+            await service.append_turn("session", role="user", content=f"own {index:03d} " + "x" * 60, at=now)
+        await service.append_turn("group", role="user", content="group message", at=now)
+
+        recalled = await service.recall(MemoryQuery("", "session"))
+        total = (
+            len(recalled.summary)
+            + sum(len(message.content) for message in recalled.window)
+            + sum(len(item.summary) for item in recalled.remote_summaries)
+            + sum(len(message.content) for message in recalled.remote_window)
+            + sum(map(len, recalled.relevant_facts))
+        )
+        assert total <= 32000
+        assert any(message.content == "group message" for message in recalled.remote_window)
+
+    asyncio.run(exercise())
+
+
 def test_window_condensation_awaits_async_summarizer(tmp_path: Path) -> None:
     calls: list[list[dict[str, object]]] = []
 

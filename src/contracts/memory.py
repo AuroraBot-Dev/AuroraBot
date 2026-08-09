@@ -13,7 +13,7 @@ class MemoryQuery:
     query: str
     scope: str
     fact_limit: int = 4
-    max_characters: int = 3000
+    max_characters: int = 32000
     remote_tail: int = 20
     remote_recency_seconds: float = 21600.0
 

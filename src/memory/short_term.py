@@ -50,6 +50,8 @@ logger = get_logger("aurora.memory.short_term")
 _SUMMARY_LIMIT = 2400
 DEFAULT_WINDOW_MIN = 100
 DEFAULT_WINDOW_MAX = 300
+_REMOTE_BUDGET_DIVISOR = 3
+_REMOTE_BUDGET_MAX = 8000
 
 
 class ShortTermMemory:
@@ -205,19 +207,27 @@ def bounded_snapshot(
     facts: tuple[str, ...],
     limit: int,
 ) -> MemoryContextSnapshot:
-    """按本域概要、本域窗口、跨域概要、跨域尾部、相关事实的固定顺序消费统一字符预算。"""
+    """按本域概要、本域窗口、跨域概要、跨域尾部、相关事实的固定顺序消费统一字符预算。
+
+    本域窗口最多消费除去保障预算后的剩余部分：跨域动态与事实合计至少保留
+    ``min(remaining // 3, 8000)`` 字符，避免本域原文占满预算后跨域动态不可见。
+    """
     remaining = max(0, limit)
     bounded_summary = clip(summary, remaining)
     remaining -= len(bounded_summary)
 
+    floor = min(remaining // _REMOTE_BUDGET_DIVISOR, _REMOTE_BUDGET_MAX)
+    window_budget = max(0, remaining - floor)
     selected_window: list[MemoryMessage] = []
+    window_used = 0
     for message in reversed(window):
-        content = clip(message.content, remaining)
+        content = clip(message.content, window_budget - window_used)
         if not content:
             break
         selected_window.append(MemoryMessage(message.role, content, message.at))
-        remaining -= len(content)
+        window_used += len(content)
     selected_window.reverse()
+    remaining -= window_used
 
     selected_remote_summaries: list[RemoteSummary] = []
     for item in remote_summaries:
