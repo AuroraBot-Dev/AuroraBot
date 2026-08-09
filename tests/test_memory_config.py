@@ -6,7 +6,7 @@ import sys
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from src.memory.long_term import LongTermMemory, _Mem0ChromaHybridFilter
+from src.memory.long_term import LongTermMemory, _Mem0NoiseFilter
 from src.memory.service import MemoryService
 
 if TYPE_CHECKING:
@@ -20,31 +20,26 @@ def test_mem0_telemetry_is_disabled_by_default() -> None:
     assert os.environ.get("MEM0_TELEMETRY", "").lower() == "false"
 
 
-def test_mem0_chroma_hybrid_warning_is_suppressed() -> None:
-    """Chroma 混合检索告知性告警被过滤；其他 mem0 告警仍透传。"""
-    mem0_logger = logging.getLogger("mem0.memory.main")
-    suppressors = [f for f in mem0_logger.filters if isinstance(f, _Mem0ChromaHybridFilter)]
+def test_mem0_chroma_hybrid_and_spacy_warnings_are_suppressed() -> None:
+    """Chroma 混合检索与 spaCy 缺失的告知性告警被过滤；其他 mem0 告警仍透传。"""
+    suppressors = [f for f in logging.getLogger("mem0.memory.main").filters if isinstance(f, _Mem0NoiseFilter)]
+    suppressors += [f for f in logging.getLogger("mem0.utils.spacy_models").filters if isinstance(f, _Mem0NoiseFilter)]
     assert suppressors
-    hybrid = mem0_logger.makeRecord(
-        mem0_logger.name,
-        logging.WARNING,
-        __file__,
-        1,
+
+    def make_record(message: str) -> logging.LogRecord:
+        logger = logging.getLogger("mem0.memory.main")
+        return logger.makeRecord(logger.name, logging.WARNING, __file__, 1, message, (), None)
+
+    hybrid = make_record(
         "The 'chroma' vector store does not support keyword search. "
-        "Hybrid (BM25) scoring will be disabled and search will use semantic similarity only.",
-        (),
-        None,
+        "Hybrid (BM25) scoring will be disabled and search will use semantic similarity only."
+    )
+    spacy = make_record(
+        "Failed to load spaCy full model: spaCy is not installed. Install it with: pip install mem0ai[nlp]"
     )
     assert all(not item.filter(hybrid) for item in suppressors)
-    other = mem0_logger.makeRecord(
-        mem0_logger.name,
-        logging.WARNING,
-        __file__,
-        1,
-        "Failed to embed memory text",
-        (),
-        None,
-    )
+    assert all(not item.filter(spacy) for item in suppressors)
+    other = make_record("Failed to embed memory text")
     assert all(item.filter(other) for item in suppressors)
 
 

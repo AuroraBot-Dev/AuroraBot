@@ -3,9 +3,9 @@
 向量语义检索，embedding 用 embedding role（litellm 同步 embedding）。
 mem0 依赖不可用或配置失败时降级为 None（回退 durable_facts 关键词检索）。
 
-mem0 默认把匿名遥测上报 PostHog 云，并在每次初始化时输出 Chroma 不支持
-关键词检索的一次性告知性告警；本模块在导入时禁用遥测（MEM0_TELEMETRY
-可显式开启）并挂接日志过滤器只丢弃该告知消息。
+mem0 默认把匿名遥测上报 PostHog 云，并在初始化与检索时输出 Chroma 不支持
+关键词检索、spaCy 缺失等一次性告知性告警；本模块在导入时禁用遥测
+（MEM0_TELEMETRY 可显式开启）并挂接日志过滤器只丢弃这些已知噪音消息。
 """
 
 from __future__ import annotations
@@ -26,16 +26,22 @@ logger = get_logger("aurora.memory.long_term")
 os.environ.setdefault("MEM0_TELEMETRY", "false")
 
 
-class _Mem0ChromaHybridFilter(logging.Filter):
-    """只丢弃 mem0 对 Chroma 不支持关键词检索的一次性告知性告警。"""
+class _Mem0NoiseFilter(logging.Filter):
+    """丢弃 mem0 已知的告知性噪音消息，保留其余告警。
 
-    _MESSAGE_MARKER = "does not support keyword search"
+    Chroma 不支持关键词检索与 spaCy 缺失均为一次性告知；语义检索降级为纯向量，
+    关键词兜底由 durable facts 关键词排序承担，功能不受影响。
+    """
+
+    _NOISE_MARKERS = ("does not support keyword search", "Failed to load spaCy")
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return self._MESSAGE_MARKER not in record.getMessage()
+        message = record.getMessage()
+        return not any(marker in message for marker in self._NOISE_MARKERS)
 
 
-logging.getLogger("mem0.memory.main").addFilter(_Mem0ChromaHybridFilter())
+for _mem0_logger_name in ("mem0.memory.main", "mem0.utils.spacy_models"):
+    logging.getLogger(_mem0_logger_name).addFilter(_Mem0NoiseFilter())
 
 
 class _Msg(StrEnum):
