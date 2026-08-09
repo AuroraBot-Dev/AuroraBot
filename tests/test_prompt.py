@@ -21,6 +21,8 @@ from src.contracts import (
     ModelContinuation,
     ModelResult,
     ModelUsage,
+    RemoteMessage,
+    RemoteSummary,
     TaskState,
     TaskStatus,
     ToolCall,
@@ -210,14 +212,26 @@ def test_memory_sections_are_optional_and_removed_capability_is_absent() -> None
         _context(),
         memory=MemoryContextSnapshot(
             summary="用户问过 hello，Aurora 回答 hi",
+            remote_summaries=(RemoteSummary("qq:group:1", "群聊里的表情包话题", "2026-08-09T00:00:00+00:00"),),
+            remote_window=(
+                RemoteMessage("qq:group:1", "user", "watermelon 发了新表情包", "2026-08-09T00:00:00+00:00"),
+            ),
             relevant_facts=("remembered fact",),
         ),
     )
     with_memory = PromptComposer(catalog).request_document(context)
     assert without_memory.memory_system_sections == ()
-    assert {section.key for section in with_memory.memory_system_sections} == {"session_memory", "relevant_facts"}
+    assert {section.key for section in with_memory.memory_system_sections} == {
+        "session_memory",
+        "remote_summaries",
+        "remote_window",
+        "relevant_facts",
+    }
     assert "hello" in with_memory.memory_system_prompt
     assert "remembered fact" in with_memory.memory_system_prompt
+    # 跨域段渲染必须携带域标签，使模型明确消息来源域
+    assert "qq:group:1" in with_memory.memory_system_prompt
+    assert "watermelon 发了新表情包" in with_memory.memory_system_prompt
     assert [message.role for message in with_memory.messages()] == ["system", "system", "user"]
 
 

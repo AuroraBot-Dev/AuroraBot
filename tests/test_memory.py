@@ -16,6 +16,7 @@ from src.contracts import (
 from src.engine.authorize import _capability_allowed
 from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 from src.memory.service import MemoryService
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,7 +55,7 @@ def test_window_bounds_and_natural_forgetting(tmp_path: Path) -> None:
     asyncio.run(exercise())
 
 
-def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) -> None:
+def test_memory_is_idempotent_and_facts_shared_across_sessions(tmp_path: Path) -> None:
     service = MemoryService(tmp_path)
     first = MemoryEntry(
         "task-1",
@@ -65,16 +66,42 @@ def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) ->
         ("user prefers concise answers",),
     )
     duplicate = MemoryEntry("task-1", "session", "changed", "changed", "2026-01-03")
-    other = MemoryEntry("task-3", "other", "用户：other", "other answer", "2026-01-04")
+    other = MemoryEntry("task-3", "other", "用户：other", "other answer", "2026-01-04", ("other preference",))
 
     async def exercise() -> None:
         assert await service.remember(first)
         assert not await service.remember(duplicate)
         assert await service.remember(other)
 
-        recalled = await service.recall(MemoryQuery("concise", "session", fact_limit=1))
+        recalled = await service.recall(MemoryQuery("preference", "session", fact_limit=2))
+        # 其他会话的输入概要不泄漏进本会话概要
         assert "other answer" not in recalled.summary
-        assert recalled.relevant_facts == ("user prefers concise answers",)
+        # 长期事实全局共享：其他会话写入的事实在本会话可见
+        assert set(recalled.relevant_facts) == {"user prefers concise answers", "other preference"}
+
+    asyncio.run(exercise())
+
+
+def test_cross_domain_recent_activity_is_visible_within_recency_threshold(tmp_path: Path) -> None:
+    recent = utc_now()
+    stale = "2020-01-01T00:00:00+00:00"
+
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, window_min=1, window_max=2)
+        for index in range(3):
+            await service.append_turn("group", role="user", content=f"group message {index}", at=recent)
+        await service.append_turn("group-old", role="user", content="stale message", at=stale)
+        await service.remember(MemoryEntry("task", "group", "群聊内容", None, recent, ("group fact",)))
+
+        recalled = await service.recall(MemoryQuery("", "session", fact_limit=4))
+        # 阈值内有更新的域：概要 + 最近尾部可见；陈旧域被排除
+        assert {item.scope for item in recalled.remote_summaries} == {"group"}
+        assert [message.content for message in recalled.remote_window] == ["group message 2"]
+        # 跨域写入的长期事实全局可见
+        assert "group fact" in recalled.relevant_facts
+        # 本会话无任何原文
+        assert recalled.window == ()
+        assert "stale message" not in recalled.summary
 
     asyncio.run(exercise())
 
@@ -82,16 +109,22 @@ def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) ->
 def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
     async def exercise() -> None:
         service = MemoryService(tmp_path, window_min=1, window_max=2)
-        await service.append_turn("session", role="user", content="x" * 100, at="2026-01-01")
-        await service.append_turn("session", role="assistant", content="y" * 100, at="2026-01-02")
-        recalled = await service.recall(MemoryQuery("query", "session", max_characters=32))
+        await service.append_turn("session", role="user", content="s" * 10, at=utc_now())
+        await service.append_turn("group", role="user", content="g" * 40, at=utc_now())
+        recalled = await service.recall(
+            MemoryQuery("query", "session", max_characters=64, remote_recency_seconds=10**9)
+        )
         total = (
             len(recalled.summary)
             + sum(len(message.content) for message in recalled.window)
+            + sum(len(item.summary) for item in recalled.remote_summaries)
+            + sum(len(message.content) for message in recalled.remote_window)
             + sum(map(len, recalled.relevant_facts))
         )
-        assert total <= 32
-        assert [message.content for message in recalled.window] == ["y" * 31 + "…"]
+        assert total <= 64
+        assert [message.content for message in recalled.window] == ["s" * 10]
+        # 本域窗口之后仍有余量，跨域尾部按预算完整进入快照
+        assert [message.content for message in recalled.remote_window] == ["g" * 40]
 
     asyncio.run(exercise())
 

@@ -388,9 +388,49 @@ def test_memory_store_fresh_database_is_initialized_to_target_version(tmp_path: 
     with dbapi.connect(directory / "memory.sqlite3") as connection:
         version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    assert version == 1
+    assert version == 2  # noqa: PLR2004
     assert {"memory_receipts", "session_memory", "durable_facts", "memory_messages", "schema_meta"} <= tables
     MemoryService(directory)
+
+
+def test_memory_v1_facts_are_rescoped_to_global(tmp_path: Path) -> None:
+    """v1 存量按会话隔离的 facts 在迁移到 v2 后统一为 global，重复内容保留最早来源。"""
+    import sqlite3 as dbapi
+
+    from src.memory.service import MemoryService
+
+    directory = tmp_path / "memory"
+    directory.mkdir(parents=True)
+    with dbapi.connect(directory / "memory.sqlite3") as connection:
+        connection.executescript(
+            """
+            CREATE TABLE schema_meta (version INTEGER NOT NULL);
+            INSERT INTO schema_meta(version) VALUES (1);
+            CREATE TABLE memory_receipts (
+                task_id TEXT PRIMARY KEY, scope TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+            CREATE TABLE session_memory (
+                scope TEXT PRIMARY KEY, summary TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE TABLE durable_facts (
+                fact_id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL,
+                content TEXT NOT NULL, source_task_id TEXT NOT NULL, created_at TEXT NOT NULL,
+                UNIQUE(scope, content)
+            );
+            CREATE TABLE memory_messages (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL,
+                role TEXT NOT NULL, content TEXT NOT NULL, at TEXT NOT NULL
+            );
+            INSERT INTO durable_facts(scope, content, source_task_id, created_at)
+                VALUES ('qq:group:1', 'f1', 't1', '2026-01-01'), ('qq:private:2', 'f2', 't2', '2026-01-02');
+            """
+        )
+    MemoryService(directory)
+    with dbapi.connect(directory / "memory.sqlite3") as connection:
+        version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
+        facts = connection.execute("SELECT scope, content FROM durable_facts ORDER BY created_at").fetchall()
+    assert version == 2  # noqa: PLR2004
+    assert facts == [("global", "f1"), ("global", "f2")]
 
 
 def test_panel_store_fresh_database_is_initialized_to_target_version(tmp_path: Path) -> None:

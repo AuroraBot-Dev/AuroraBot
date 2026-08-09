@@ -23,6 +23,8 @@ class _Msg(StrEnum):
     LOCAL_WORK = "当前局部工作：\n{content}"
     MISSING_AGENT_PROMPT = "missing prompt for Agent profile {profile_id}"
     MEMORY_WINDOW = "[ 最近对话 ]\n{content}"
+    REMOTE_SUMMARIES = "[ 其他会话摘要 ]\n{content}"
+    REMOTE_WINDOW = "[ 其他会话最近动态 ]\n{content}"
     RELEVANT_FACTS = "[ 相关长期事实 ]\n{content}"
     SESSION_MEMORY = "[ 会话摘要 ]\n{content}"
     TOOL_RESULT = "工具返回 {status}：\n{content}"
@@ -62,6 +64,31 @@ class PromptComposer:
                     "memory_window",
                     _Msg.MEMORY_WINDOW.format(
                         content=external_data([f"{item.role}: {item.content}" for item in context.memory.window])
+                    ),
+                )
+            )
+        if context.memory.remote_summaries:
+            memory.append(
+                PromptSection(
+                    "remote_summaries",
+                    _Msg.REMOTE_SUMMARIES.format(
+                        content=external_data(
+                            [{"scope": item.scope, "summary": item.summary} for item in context.memory.remote_summaries]
+                        )
+                    ),
+                )
+            )
+        if context.memory.remote_window:
+            memory.append(
+                PromptSection(
+                    "remote_window",
+                    _Msg.REMOTE_WINDOW.format(
+                        content=external_data(
+                            [
+                                {"scope": item.scope, "role": item.role, "content": item.content}
+                                for item in context.memory.remote_window
+                            ]
+                        )
                     ),
                 )
             )

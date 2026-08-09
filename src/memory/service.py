@@ -1,9 +1,10 @@
-"""异步记忆编排：短期窗口、durable facts 与语义长期记忆。"""
+"""异步记忆编排：域内窗口/概要、跨域动态与全局长期事实。"""
 
 from __future__ import annotations
 
 import asyncio
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import create_engine, event, func, select, text
@@ -12,9 +13,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from src.contracts import MemoryContextSnapshot, MemoryEntry, MemoryQuery
+from src.contracts import (
+    MemoryContextSnapshot,
+    MemoryEntry,
+    MemoryQuery,
+    RemoteMessage,
+    RemoteSummary,
+)
 from src.memory.long_term import LongTermMemory
-from src.memory.models import Base, DurableFactRow, MemoryReceiptRow
+from src.memory.models import Base, DurableFactRow, MemoryMessageRow, MemoryReceiptRow, SessionMemoryRow
 from src.memory.short_term import (
     DEFAULT_WINDOW_MAX,
     DEFAULT_WINDOW_MIN,
@@ -161,11 +168,57 @@ class MemoryService:
         try:
             summary, window = self._short_term.load(query.scope)
             with self._session() as session:
+                remote_summaries = self._remote_summaries(session, query)
+                remote_window = self._remote_window(session, query)
                 facts = self._select_facts(session, query)
         except SQLAlchemyError as error:
             logger.warning("Memory recall failed error=%s", error)
             return MemoryContextSnapshot()
-        return bounded_snapshot(summary, window, facts, query.max_characters)
+        return bounded_snapshot(summary, window, remote_summaries, remote_window, facts, query.max_characters)
+
+    def _recency_cutoff(self, query: MemoryQuery) -> str:
+        """把时间阈值折算为 ISO 截止时刻；早于该时刻的域视为非活跃。"""
+        return (datetime.now(UTC) - timedelta(seconds=query.remote_recency_seconds)).isoformat()
+
+    def _remote_summaries(self, session: Session, query: MemoryQuery) -> tuple[RemoteSummary, ...]:
+        """读取时间阈值内有更新的其他会话域概要（按最近更新倒序）。"""
+        cutoff = self._recency_cutoff(query)
+        rows = session.execute(
+            select(SessionMemoryRow.scope, SessionMemoryRow.summary, SessionMemoryRow.updated_at)
+            .where(SessionMemoryRow.scope != query.scope, SessionMemoryRow.updated_at >= cutoff)
+            .order_by(SessionMemoryRow.updated_at.desc())
+        ).all()
+        return tuple(RemoteSummary(str(scope), str(summary), str(updated_at)) for scope, summary, updated_at in rows)
+
+    def _remote_window(self, session: Session, query: MemoryQuery) -> tuple[RemoteMessage, ...]:
+        """读取时间阈值内有更新的其他会话域最近尾部消息（时间正序合并）。"""
+        cutoff = self._recency_cutoff(query)
+        active_scopes = (
+            session.execute(
+                select(MemoryMessageRow.scope)
+                .where(MemoryMessageRow.scope != query.scope)
+                .group_by(MemoryMessageRow.scope)
+                .having(func.max(MemoryMessageRow.at) >= cutoff)
+            )
+            .scalars()
+            .all()
+        )
+        chunks: list[list[RemoteMessage]] = []
+        for scope in active_scopes:
+            rows = session.execute(
+                select(MemoryMessageRow.role, MemoryMessageRow.content, MemoryMessageRow.at)
+                .where(MemoryMessageRow.scope == scope)
+                .order_by(MemoryMessageRow.seq.desc())
+                .limit(query.remote_tail)
+            ).all()
+            chunk = [RemoteMessage(str(scope), str(role), str(content), str(at)) for role, content, at in rows]
+            chunk.reverse()
+            chunks.append(chunk)
+        merged = sorted(
+            (message for chunk in chunks for message in chunk),
+            key=lambda message: message.at,
+        )
+        return tuple(merged)
 
     async def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:
         """把一轮对话追加到短期窗口，并按需生成异步概要。"""
@@ -174,7 +227,7 @@ class MemoryService:
         await self._short_term.append_turn(scope, role=role, content=content, at=at)
 
     async def remember(self, entry: MemoryEntry) -> bool:
-        """幂等写入 durable facts，并异步投影到语义长期记忆。"""
+        """幂等写入全局 durable facts，并异步投影到语义长期记忆。"""
         if self._engine is None or not entry.input_summary.strip():
             return False
         inserted = await asyncio.to_thread(self._remember, entry)
@@ -185,7 +238,7 @@ class MemoryService:
                 if part.strip()
             )
             if content:
-                await asyncio.to_thread(self._long_term.add, entry.scope, content, entry.created_at)
+                await asyncio.to_thread(self._long_term.add, "global", content, entry.created_at)
         return inserted
 
     def _remember(self, entry: MemoryEntry) -> bool:
@@ -204,7 +257,7 @@ class MemoryService:
                     session.execute(
                         sqlite_insert(DurableFactRow)
                         .values(
-                            scope=entry.scope,
+                            scope="global",
                             content=clip(fact, 500),
                             source_task_id=entry.task_id,
                             created_at=entry.created_at,
@@ -225,7 +278,7 @@ class MemoryService:
             .all()
         )
         semantic = (
-            self._long_term.search(query.scope, query.query, query.fact_limit)
+            self._long_term.search("global", query.query, query.fact_limit)
             if self._long_term is not None and query.query.strip()
             else ()
         )

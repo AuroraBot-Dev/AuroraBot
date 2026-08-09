@@ -12,7 +12,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from src.contracts import MemoryContextSnapshot, MemoryMessage
+from src.contracts import MemoryContextSnapshot, MemoryMessage, RemoteMessage, RemoteSummary
 from src.memory.models import MemoryMessageRow, SessionMemoryRow
 from src.utils import get_logger, utc_now
 
@@ -200,10 +200,12 @@ class ShortTermMemory:
 def bounded_snapshot(
     summary: str,
     window: tuple[MemoryMessage, ...],
+    remote_summaries: tuple[RemoteSummary, ...],
+    remote_window: tuple[RemoteMessage, ...],
     facts: tuple[str, ...],
     limit: int,
 ) -> MemoryContextSnapshot:
-    """按概要、最新窗口、相关事实的固定顺序消费统一字符预算。"""
+    """按本域概要、本域窗口、跨域概要、跨域尾部、相关事实的固定顺序消费统一字符预算。"""
     remaining = max(0, limit)
     bounded_summary = clip(summary, remaining)
     remaining -= len(bounded_summary)
@@ -217,6 +219,23 @@ def bounded_snapshot(
         remaining -= len(content)
     selected_window.reverse()
 
+    selected_remote_summaries: list[RemoteSummary] = []
+    for item in remote_summaries:
+        content = clip(item.summary, remaining)
+        if not content:
+            break
+        selected_remote_summaries.append(RemoteSummary(item.scope, content, item.updated_at))
+        remaining -= len(content)
+
+    selected_remote_window: list[RemoteMessage] = []
+    for message in reversed(remote_window):
+        content = clip(message.content, remaining)
+        if not content:
+            break
+        selected_remote_window.append(RemoteMessage(message.scope, message.role, content, message.at))
+        remaining -= len(content)
+    selected_remote_window.reverse()
+
     selected_facts: list[str] = []
     for fact in facts:
         content = clip(fact, remaining)
@@ -224,7 +243,13 @@ def bounded_snapshot(
             break
         selected_facts.append(content)
         remaining -= len(content)
-    return MemoryContextSnapshot(bounded_summary, tuple(selected_window), tuple(selected_facts))
+    return MemoryContextSnapshot(
+        bounded_summary,
+        tuple(selected_window),
+        tuple(selected_remote_summaries),
+        tuple(selected_remote_window),
+        tuple(selected_facts),
+    )
 
 
 def clip(value: str, limit: int) -> str:

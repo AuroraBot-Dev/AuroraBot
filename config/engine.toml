@@ -17,8 +17,8 @@ blocking_workers = 4
 
 [engine.triage]
 model_role = "fast"
-quiet_seconds = 0.4
-max_wait_seconds = 1.5
+quiet_seconds = 3.0
+max_wait_seconds = 3.0
 defer_seconds = 5.0
 max_defer_seconds = 60.0
 max_batch_events = 24

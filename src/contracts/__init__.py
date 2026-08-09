@@ -63,6 +63,8 @@ from src.contracts.memory import (
     MemoryMessage,
     MemoryQuery,
     MemoryStore,
+    RemoteMessage,
+    RemoteSummary,
 )
 from src.contracts.model import (
     STRUCTURED_OUTPUT_NAME,
@@ -210,6 +212,8 @@ __all__ = [
     "PlatformRuntimePort",
     "PlatformServer",
     "PromptConfig",
+    "RemoteMessage",
+    "RemoteSummary",
     "ResponseMode",
     "RetryPolicy",
     "RuntimeConfig",
