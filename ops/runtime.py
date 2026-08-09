@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -20,8 +21,6 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    import asyncio
-
     from src.contracts.configuration import AuroraConfig
     from src.contracts.event import OutputStreamPage
     from src.contracts.tool import ToolExecutorBinding
@@ -157,10 +156,10 @@ class PanelMemoryQuery:
             return {"scope": scope, "window": [], "summaries": [], "facts": []}
         return self._memory.history(scope=scope, limit=limit)
 
-    def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
+    async def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
         if self._memory is None:
             return []
-        return self._memory.search(query, scope=scope, limit=limit)
+        return await asyncio.to_thread(self._memory.search, query, scope=scope, limit=limit)
 
     def status(self) -> dict[str, Any]:
         if self._memory is None:

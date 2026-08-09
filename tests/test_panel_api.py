@@ -54,45 +54,59 @@ def _login(client: TestClient, token: str) -> str:
 
 
 def test_healthz_is_unauthenticated() -> None:
+    store = PanelStore(Path("/tmp/opencode/panel-health"))
     with TestClient(
         create_panel_app(
             PanelAppContext(  # type: ignore[arg-type]
                 ports=PanelRuntime(engine=_FakeEngine(), memory=_FakeMemory(), ai=_FakeAi(), config=_FakeConfig()),
                 panel=_panel_config(),
                 profile="test",
-                store=PanelStore(Path("/tmp/opencode/panel-health")),
+                store=store,
             )
         )
     ) as client:
         response = client.get("/healthz")
         assert response.status_code == 200
         assert response.json()["profile"] == "test"
+        assert client.get("/api/health").status_code == 401
+        _login(client, store.bootstrap_token)
+        assert client.get("/api/health").status_code == 200
+    store.close()
 
 
 def test_lab_page_follows_console_enabled(tmp_path: Path) -> None:
-    def app_for(*, console_enabled: bool) -> TestClient:
-        return TestClient(
+    def app_for(*, console_enabled: bool) -> tuple[TestClient, PanelStore]:
+        store = PanelStore(tmp_path / f"ops-{console_enabled}")
+        client = TestClient(
             create_panel_app(
                 PanelAppContext(
                     ports=PanelRuntime(engine=_FakeEngine(), memory=_FakeMemory(), ai=_FakeAi(), config=_FakeConfig()),
                     panel=_panel_config(),
                     profile="test",
-                    store=PanelStore(tmp_path / f"ops-{console_enabled}"),
+                    store=store,
                     console_enabled=console_enabled,
                 )
             )
         )
+        return client, store
 
-    with app_for(console_enabled=True) as client:
+    client, store = app_for(console_enabled=True)
+    with client:
+        assert client.get("/debug/lab").status_code == 401
+        _login(client, store.bootstrap_token)
         response = client.get("/debug/lab")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/html")
         assert "AuroraBot Lab" in response.text
         assert client.get("/debug/lab/lab.css").status_code == 200
         assert client.get("/debug/lab/lab.js").status_code == 200
+        assert client.get("/debug/lab/unknown.js").status_code == 404
+    store.close()
 
-    with app_for(console_enabled=False) as client:
+    client, store = app_for(console_enabled=False)
+    with client:
         assert client.get("/debug/lab").status_code == 404
+    store.close()
 
 
 def test_login_logout_and_unauthorized(tmp_path: Path) -> None:

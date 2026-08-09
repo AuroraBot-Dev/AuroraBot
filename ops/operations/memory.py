@@ -28,7 +28,7 @@ async def memory_history(context: Any, params: dict[str, Any]) -> OperationResul
     "GET",
     "/memory/search",
     name="memory.search",
-    summary="记忆检索（词项匹配）",
+    summary="记忆检索（语义优先、词项降级）",
     parameters=(
         ParameterSpec("query", ParameterLocation.QUERY, required=True),
         ParameterSpec("scope", ParameterLocation.QUERY),
@@ -39,7 +39,7 @@ async def memory_search(context: Any, params: dict[str, Any]) -> OperationResult
     query = str(params["query"])
     if not query.strip():
         return OperationResult.failure("PARSE_ERROR", "query 不能为空")
-    results = context.runtime.memory.search(query, scope=params.get("scope"), limit=params.get("limit", 8))
+    results = await context.runtime.memory.search(query, scope=params.get("scope"), limit=params.get("limit", 8))
     return OperationResult.success({"results": results, "count": len(results)})
 
 

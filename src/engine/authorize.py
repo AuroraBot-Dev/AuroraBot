@@ -21,7 +21,7 @@ from src.contracts import (
     AgentMessage,
     AgentProfile,
     DelegationRequest,
-    MemoryQuery,
+    MemoryContextSnapshot,
     ModelRequest,
     TaskState,
     ToolRequest,
@@ -73,6 +73,7 @@ def handle_claim(
     message: AgentMessage,
     agent: AgentInstance,
     task: TaskState,
+    memory: MemoryContextSnapshot | None = None,
 ) -> tuple[AgentDecision, str]:
     """构造只读 AgentContext 并调用对应 handler，返回 (决策, 授权的 profile_id)。
 
@@ -99,7 +100,7 @@ def handle_claim(
         profile=profile,
         capabilities=descriptors,
         tool_definitions=tuple(capability_tool_definition(item) for item in descriptors),
-        memory=kernel.recall_memory(MemoryQuery(task.root_summary, task.session_id)),
+        memory=memory or MemoryContextSnapshot(),
         pending_child_reports=kernel.store.has_pending_child_reports(agent.agent_id),
     )
     return kernel._handlers[profile_id].handle(context), profile_id

@@ -83,8 +83,8 @@ AgentEngine 和 SQLiteRuntimeStore 组成完整热路径：
 - `store/runtime.py`：Task、Agent、事件和会话查询；
 - `store/migration/`：Schema v9 历史版本迁移。
 
-engine 的同步存储调用运行在单进程事件循环所有权模型中。模型和工具效果是 async；可能阻塞的外部记忆工作必须移出
-事件循环。
+engine 的同步存储调用运行在单进程事件循环所有权模型中。模型、工具和 MemoryStore 是 async；MemoryService 将
+SQLite、mem0、embedding 与语义检索等阻塞工作移出事件循环，handler 只接收已经固定的快照。
 
 ### `src/agents`
 
@@ -117,12 +117,15 @@ handler 只能读取 AgentContext 并返回 AgentDecision。
 
 同源记忆服务：
 
-- `service.py`：窗口、概要、durable facts、查询和终态投影；
+- `models.py`：纯 SQLAlchemy 数据声明，不包含服务或查询逻辑；
+- `short_term.py`：窗口、异步概要、词项窗口检索和统一字符预算；
+- `service.py`：异步 MemoryStore 编排、durable facts、查询门面和降级合并；
 - `long_term.py`：mem0/Chroma 语义记忆适配；
 - `executor.py`：主动记忆工具执行与 AMP 回执；
 - `migration/`：memory SQLite 版本。
 
-被动记忆和 memory Agent 写入同一数据源。MemoryContextSnapshot 在模型调用前固定。
+被动记忆和 memory Agent 写入同一数据源。MemoryContextSnapshot 在模型调用前固定；models 不依赖 service，短期算法不
+感知 engine 或 ai 的具体实现。
 
 ### `src.platform`
 
@@ -239,7 +242,8 @@ PromptDocument 最多由三层组成：
 稳定事实     → durable facts + mem0/Chroma 语义检索
 ```
 
-整个 MemoryContextSnapshot 必须满足统一字符预算；语义组件不可用时降级到 durable facts，并公开降级状态。
+整个 MemoryContextSnapshot 按概要、最新窗口、语义/关键词事实的顺序满足统一字符预算；语义组件不可用时降级到
+durable facts，并通过 memory status 公开降级状态。
 
 ## 7. 操作与输出
 
@@ -257,7 +261,8 @@ GET/POST /messages      会话历史与输入
 GET      /activities    输出流游标
 ```
 
-Panel 仅绑定 loopback。`/healthz` 无认证；其余页面、操作、附件和 WebSocket 都必须校验 session，WebSocket 还校验 Origin。
+Panel 仅绑定 loopback。`/healthz` 无认证，`/api/auth/login` 仅负责凭 bootstrap token 换取 session；其余页面、Lab、操作、
+附件和 WebSocket 都必须校验 Bearer 或同源 HttpOnly session cookie，WebSocket 还校验 Origin。
 
 Console 和 Panel 均消费 engine output stream，不维护第二份 Bot 输出。
 
@@ -268,6 +273,7 @@ data/
   engine/runtime.sqlite3
   ai/cost.sqlite3
   memory/memory.sqlite3
+  memory/mem0-history.sqlite3
   memory/chroma/
   ops/panel.sqlite3
   ops/Token.txt

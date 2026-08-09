@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from src.utils import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 logger = get_logger("aurora.memory.long_term")
@@ -21,6 +22,26 @@ class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
     MEM0_UNAVAILABLE = "mem0 不可用，长期记忆降级为 durable_facts 关键词检索"
+    NOT_CONFIGURED = "未注入 embedding 或聊天模型"
+
+
+class _GatewayEmbedder:
+    """把组合根注入的同步 embedding 函数适配为 mem0 embedder。"""
+
+    def __init__(self, embed_fn: "Callable[[list[str]], list[list[float]]]") -> None:
+        self._embed_fn = embed_fn
+
+    def embed(self, text: str, _memory_action: str | None = None) -> list[float]:
+        vectors = self._embed_fn([text])
+        if len(vectors) != 1 or not vectors[0]:
+            raise ValueError("embedding role returned no vector")
+        return vectors[0]
+
+    def embed_batch(self, texts: list[str], _memory_action: str = "add") -> list[list[float]]:
+        vectors = self._embed_fn(texts)
+        if len(vectors) != len(texts) or any(not vector for vector in vectors):
+            raise ValueError("embedding role returned an incomplete batch")
+        return vectors
 
 
 class LongTermMemory:
@@ -30,35 +51,50 @@ class LongTermMemory:
         self,
         memory_dir: "Path | None" = None,
         *,
-        embed_fn: object | None = None,
-        llm_model: str = "deepseek/deepseek-v4-pro",
+        embed_fn: "Callable[[list[str]], list[list[float]]] | None" = None,
+        llm_model: str | None = None,
     ) -> None:
-        self._embed_fn = embed_fn
         self._memory = None
+        self._reason: str | None = None
+        if memory_dir is None or embed_fn is None or not llm_model:
+            self._reason = _Msg.NOT_CONFIGURED
+            return
         try:
             from mem0 import Memory
 
             self._memory = Memory.from_config(self._config(memory_dir, llm_model))
+            self._memory.embedding_model = _GatewayEmbedder(embed_fn)
         except Exception as error:  # noqa: BLE001
+            self._reason = type(error).__name__
             logger.warning("%s reason=%s", _Msg.MEM0_UNAVAILABLE, type(error).__name__)
 
     def _config(
         self,
-        memory_dir: "Path | None",
+        memory_dir: "Path",
         llm_model: str,
     ) -> dict[str, Any]:
-        chroma_dir = str(memory_dir / "chroma") if memory_dir is not None else None
+        chroma_dir = str(memory_dir / "chroma")
         config: dict[str, Any] = {
             "llm": {"provider": "litellm", "config": {"model": llm_model}},
-        }
-        if self._embed_fn is not None:
-            config["embedder"] = {"provider": "custom", "config": {"embedding_func": self._embed_fn}}
-        if chroma_dir is not None:
-            config["vector_store"] = {
+            "embedder": {
+                "provider": "openai",
+                "config": {"model": "aurora-embedding-role", "api_key": "aurora-router"},
+            },
+            "history_db_path": str(memory_dir / "mem0-history.sqlite3"),
+            "vector_store": {
                 "provider": "chroma",
                 "config": {"collection_name": "aurora_memory", "path": chroma_dir},
-            }
+            },
+        }
         return config
+
+    def status(self) -> dict[str, object]:
+        """返回语义记忆是否可用及其降级原因。"""
+        return {
+            "enabled": self._memory is not None,
+            "degraded": self._memory is None or self._reason is not None,
+            "reason": self._reason,
+        }
 
     def add(self, scope: str, text: str, at: str) -> None:
         if self._memory is None:
@@ -66,14 +102,17 @@ class LongTermMemory:
         try:
             self._memory.add(text, user_id=scope, timestamp=at)
         except Exception as error:  # noqa: BLE001
+            self._reason = type(error).__name__
             logger.warning("mem0 add failed scope=%s error_type=%s", scope, type(error).__name__)
 
     def search(self, scope: str, query: str, limit: int = 4) -> tuple[str, ...]:
         if self._memory is None:
             return ()
         try:
-            results = self._memory.search(query, user_id=scope, top_k=limit)
+            results = self._memory.search(query, filters={"user_id": scope}, top_k=limit)
+            self._reason = None
         except Exception as error:  # noqa: BLE001
+            self._reason = type(error).__name__
             logger.warning("mem0 search failed scope=%s error_type=%s", scope, type(error).__name__)
             return ()
         memories: list[str] = []

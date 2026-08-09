@@ -196,7 +196,12 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     model_gateway = ModelGatewayService(configuration)
-    memory = MemoryService(configuration.storage.memory, gateway=model_gateway)
+    memory = MemoryService(
+        configuration.storage.memory,
+        gateway=model_gateway,
+        embed_fn=model_gateway.embed_sync,
+        llm_model=_configured_model(configuration, "quality"),
+    )
     engine = AgentEngine(
         engine_configuration,
         handlers,
@@ -228,6 +233,14 @@ def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["Too
             source_instance="local",
         ),
     )
+
+
+def _configured_model(configuration: AuroraConfig, role: str) -> str | None:
+    """返回角色绑定的完整 Provider/model 标识。"""
+    definition = configuration.model_definitions.get(role)
+    if definition is None:
+        return None
+    return f"{definition.provider}/{definition.model}"
 
 
 # -- 平台启动（统一循环）-----------------------------------------------

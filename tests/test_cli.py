@@ -25,7 +25,17 @@ def test_check_runs_all_groups_when_both_filters_are_set(monkeypatch: pytest.Mon
     arguments = argparse.Namespace(root=tmp_path, lint=True, test=True, fix=False, unsafe_fixes=False, check=False)
 
     assert check.execute(arguments) == 0
-    assert commands[-1] == ["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"]
+    assert all("ops/" in command for command in commands[:3])
+    assert commands[-1] == [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "-v",
+        "--cov=src",
+        "--cov=aurora",
+        "--cov=ops",
+    ]
 
 
 @pytest.mark.parametrize(

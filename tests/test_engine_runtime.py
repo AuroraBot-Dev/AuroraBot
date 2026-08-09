@@ -101,15 +101,15 @@ def test_engine_recalls_before_handler_and_remembers_only_interactive_completion
     events: list[tuple[str, object]] = []
 
     class Memory:
-        def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
+        async def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
             events.append(("recall", query))
             return MemoryContextSnapshot(relevant_facts=(f"memory:{query.query}",))
 
-        def remember(self, entry: MemoryEntry) -> bool:
+        async def remember(self, entry: MemoryEntry) -> bool:
             events.append(("remember", entry))
             return True
 
-        def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:  # noqa: ARG002
+        async def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:  # noqa: ARG002
             events.append(("append_turn", role))
 
     class Handler:

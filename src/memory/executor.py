@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -81,7 +80,7 @@ class MemoryToolExecutor:
             created_at=utc_now(),
             fact_candidates=facts,
         )
-        await asyncio.to_thread(self._memory.remember, entry)
+        await self._memory.remember(entry)
         await self._submit(request, "succeeded", _Msg.RECORDED)
 
     async def _submit(

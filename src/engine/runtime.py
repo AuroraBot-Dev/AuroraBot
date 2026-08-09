@@ -1,8 +1,8 @@
 """AgentEngine — 单进程 asyncio 独占的完整 Agent 运行时。
 
-单一存储（SQLite v9 即归档）、无租约无乐观锁、无线程池。pump 循环全部在
-事件循环内同步执行（handler 是纯函数，模型/工具调用为 async），仅记忆
-投影使用 to_thread 包装。终态 Task 留在 SQLite，不做文件归档。
+单一存储（SQLite v9 即归档）、无租约无乐观锁。store 与纯 handler 由单一
+事件循环串行拥有；模型、工具与记忆 Port 使用 async，记忆实现把阻塞 I/O
+委派到受控工作线程。终态 Task 留在 SQLite，不做文件归档。
 """
 
 from __future__ import annotations
@@ -147,11 +147,11 @@ class AgentEngine:
 
     # -- 记忆（被动服务）--------------------------------------------------
 
-    def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
+    async def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if self._memory_store is None:
             return MemoryContextSnapshot()
         try:
-            return self._memory_store.recall(query)
+            return await self._memory_store.recall(query)
         except Exception as error:
             logger.warning("Memory recall failed error_type=%s", type(error).__name__)
             return MemoryContextSnapshot()
@@ -229,7 +229,7 @@ class AgentEngine:
             recoveries = await self._tools.recover_pending()
             admitted = self._triage_inbox()
             expired = self.store.expire_tasks()
-            processed, failed = self._pump_turns(max_turns)
+            processed, failed = await self._pump_turns(max_turns)
             receipts = await self._tools.execute_pending(self.limits.tool_concurrency)
             self._ensure_model_dispatcher()
             self._project_memory()
@@ -263,7 +263,7 @@ class AgentEngine:
         )
         return created[0] if created is not None else None
 
-    def _pump_turns(self, max_turns: int | None) -> tuple[list[str], list[str]]:
+    async def _pump_turns(self, max_turns: int | None) -> tuple[list[str], list[str]]:
         limit = self.limits.turn_concurrency if max_turns is None else max_turns
         if limit <= 0:
             raise ValueError(_Msg.MAX_TURNS_POSITIVE)
@@ -275,11 +275,12 @@ class AgentEngine:
                 break
             message, agent, task = claim
             try:
-                self._append_memory_turn(task.session_id, "user", _memory_turn_input(message))
-                decision, profile_id = handle_claim(self, message, agent, task)
+                await self._append_memory_turn(task.session_id, "user", _memory_turn_input(message))
+                memory = await self.recall_memory(MemoryQuery(task.root_summary, task.session_id))
+                decision, profile_id = handle_claim(self, message, agent, task, memory)
                 apply_authorized_decision(self, message, agent, profile_id, decision)
                 if decision.completion is not None:
-                    self._append_memory_turn(task.session_id, "assistant", decision.completion.summary)
+                    await self._append_memory_turn(task.session_id, "assistant", decision.completion.summary)
                 processed.append(message.message_id)
             except Exception as error:
                 logger.log(
@@ -297,11 +298,11 @@ class AgentEngine:
                 failed.append(message.message_id)
         return processed, failed
 
-    def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
+    async def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
         """记录一轮对话到记忆窗口（短期历史）。"""
         if self._memory_store is None or not content.strip():
             return
-        self._memory_store.append_turn(
+        await self._memory_store.append_turn(
             scope,
             role=role,
             content=content,
@@ -319,7 +320,7 @@ class AgentEngine:
     async def _remember(self, entry: MemoryEntry) -> None:
         assert self._memory_store is not None
         try:
-            await asyncio.to_thread(self._memory_store.remember, entry)
+            await self._memory_store.remember(entry)
         except Exception as error:
             logger.warning("Memory remember failed task_id=%s error_type=%s", entry.task_id, type(error).__name__)
 

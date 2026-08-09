@@ -20,13 +20,13 @@ from fastapi import (
     Header,
     HTTPException,
     Request,
+    Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ops.parser import coerce_value
@@ -42,6 +42,8 @@ if TYPE_CHECKING:
 _STREAM_POLL_SECONDS = 0.2
 _STREAM_BATCH_LIMIT = 64
 _UPLOAD_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{0,64}$")
+_SESSION_COOKIE = "aurora_panel_session"
+_LAB_ASSETS = frozenset({"index.html", "lab.css", "lab.js", "logo.svg"})
 
 
 class _Msg(StrEnum):
@@ -99,9 +101,9 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         allow_headers=["*"],
     )
 
-    async def current_session(authorization: str | None = Header(None)) -> str:
+    async def current_session(request: Request, authorization: str | None = Header(None)) -> str:
         """认证依赖：校验 Bearer 会话 token。"""
-        token = _bearer(authorization)
+        token = _bearer(authorization) or request.cookies.get(_SESSION_COOKIE)
         if token is None or not store.verify_session(token):
             raise HTTPException(status_code=401, detail=_Msg.UNAUTHORIZED)
         return token
@@ -112,35 +114,55 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     # -- 健康检查（唯一无认证端点）---------------------------------------
 
     @app.get("/healthz")
-    @app.get("/api/health")
     def health() -> dict[str, object]:
         return {"ok": True, "status": "ok", "profile": context.profile}
+
+    @app.get("/api/health")
+    def authenticated_health(_user: str = Depends(current_session)) -> dict[str, object]:
+        return health()
 
     # -- Lab 调试页（跟随本地 Console：--headless 时不提供）---------------
 
     if context.console_enabled:
         lab_dir = Path(__file__).resolve().parent / "lab"
         if lab_dir.is_dir():
-            app.mount("/debug/lab", StaticFiles(directory=lab_dir, html=True), name="lab")
+
+            @app.get("/debug/lab", include_in_schema=False)
+            @app.get("/debug/lab/", include_in_schema=False)
+            async def lab_index(_user: str = Depends(current_session)) -> FileResponse:
+                return FileResponse(lab_dir / "index.html", media_type="text/html")
+
+            @app.get("/debug/lab/{asset_name}", include_in_schema=False)
+            async def lab_asset(asset_name: str, _user: str = Depends(current_session)) -> FileResponse:
+                if asset_name not in _LAB_ASSETS or asset_name == "index.html":
+                    raise HTTPException(status_code=404, detail=_Msg.NOT_FOUND)
+                return FileResponse(lab_dir / asset_name)
 
     # -- 认证 ------------------------------------------------------------
 
     @app.post("/api/auth/login")
-    async def login(payload: Credentials) -> dict[str, Any]:
+    async def login(response: Response, payload: Credentials) -> dict[str, Any]:
         if not secrets.compare_digest(payload.token_login, store.bootstrap_token):
             raise unauthorized(_Msg.INVALID_CREDENTIALS)
         token = secrets.token_urlsafe(32)
         meta = store.create_session(token, panel.session_ttl_seconds)
+        response.set_cookie(
+            _SESSION_COOKIE,
+            token,
+            max_age=panel.session_ttl_seconds,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
         return {"token": token, **meta}
 
     @app.post("/api/auth/logout", status_code=204)
     async def logout(
-        _user: str = Depends(current_session),
-        authorization: str | None = Header(None),
+        response: Response,
+        session_token: str = Depends(current_session),
     ) -> None:
-        token = _bearer(authorization)
-        if token is not None:
-            store.delete_session(token)
+        store.delete_session(session_token)
+        response.delete_cookie(_SESSION_COOKIE, path="/", httponly=True, samesite="strict")
 
     # -- 操作目录 --------------------------------------------------------
 
@@ -232,7 +254,8 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         if websocket.headers.get("origin") not in panel.allowed_origins:
             await websocket.close(code=4403)
             return
-        if not store.verify_session(token):
+        session_token = token or websocket.cookies.get(_SESSION_COOKIE, "")
+        if not store.verify_session(session_token):
             await websocket.close(code=4401)
             return
         await websocket.accept()

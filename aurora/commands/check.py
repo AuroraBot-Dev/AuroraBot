@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     import argparse
 
 NAME = "check"
-_PATHS = ["aurora/", "src/", "tests/"]
+_PATHS = ["aurora/", "ops/", "src/", "tests/"]
 
 
 def register(subparsers: Any) -> None:
@@ -50,7 +50,7 @@ def execute(arguments: argparse.Namespace) -> int:
 
     # 运行 pytest 检查
     if run_test:
-        commands.append(["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora"])
+        commands.append(["uv", "run", "--no-sync", "pytest", "-v", "--cov=src", "--cov=aurora", "--cov=ops"])
 
     failures = sum(run_process(command, arguments.root) != 0 for command in commands)
 

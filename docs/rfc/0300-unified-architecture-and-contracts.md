@@ -160,13 +160,16 @@ engine 使用单进程 asyncio 独占模型：无数据库租约、无乐观锁�
 
 1. 恢复或派发待处理工具 Activity；
 2. 领取到期 Inbox 批次并创建 triage Task；
-3. 领取 Agent 消息、构造上下文、调用 handler、授权并原子应用决策；
+3. 领取 Agent 消息，通过异步 MemoryStore 取得有界快照、构造上下文、调用 handler、授权并原子应用决策；
 4. 派发模型和工具 Activity；
 5. 对终态交互 Task 进行异步记忆投影；
 6. 更新可查询输出和因果投影。
 
 启动恢复规则：PROCESSING 消息回到 PENDING；中断的模型 Activity 结束为 ERROR 并投递失败消息；工具 Activity 保留并
 由 ToolRegistry 恢复派发。恢复不得重复产生真实外部效果。
+
+MemoryStore 是异步 Port。SQLite 操作、概要模型调用、embedding 与语义检索不得作为同步网络或阻塞 I/O 运行在 engine
+事件循环中；实现应使用原生异步接口或受控工作线程。handler 只接收已经固定的记忆快照，不感知异步实现。
 
 ## 10. 工具与能力
 
@@ -206,17 +209,22 @@ endpoint 与角色语义归代码。模型能力以 models.dev 为主要信息�
 记忆由一个 `MemoryStore` 同源承载，被动终态投影和主动 memory Agent 写入同一存储。模型调用前取得不可变快照，handler
 不能直接访问记忆实现。
 
+memory 包内部保持三类职责分离：`models.py` 只声明持久化数据形状，`short_term.py` 负责窗口、概要与预算算法，
+`long_term.py` 负责语义适配，`service.py` 只编排异步 Port、durable facts 与降级策略。数据模型不得反向依赖 service。
+
 记忆分三层：
 
 1. **窗口**：按 `session_id` 隔离的最近原始 user/assistant 消息；
 2. **概要**：窗口溢出后批量压缩较旧消息，反复压缩最早内容形成自然遗忘；
 3. **长期事实**：带 scope、来源和去重语义的稳定事实，优先使用语义检索，失败时降级为关键词检索。
 
-窗口使用上下界，超过上界时一次压缩回下界。概要使用 fast 角色生成；模型不可用时允许规则降级，但降级必须可观察。
-长期语义检索通过配置的 embedding 角色和 mem0/Chroma 实现，不得绕过模型配置硬编码 Provider。
+窗口使用上下界，超过上界时一次压缩回下界。概要通过异步 MemoryStore 调用 fast 角色生成；模型不可用时允许规则降级，
+但降级必须可观察。长期语义检索通过组合根注入配置的 embedding 角色，并使用配置的聊天角色驱动 mem0/Chroma；不得在
+memory 包内硬编码 Provider、模型或密钥。语义检索无结果或失败时，必须确定性回退到 durable facts 关键词排序。
 
 `MemoryQuery` 必须同时约束条数和整个快照的字符预算。summary、window 与 relevant facts 合计不能超过预算；选择顺序和
-裁剪必须确定且可测试。Prompt 只渲染有界记忆，不回放完整因果历史，也不重复渲染原生 tools schema。
+裁剪固定为概要、从新到旧选择的窗口、语义/关键词事实，窗口输出恢复时间正序；任一单项可在剩余预算内裁剪。Prompt
+只渲染有界记忆，不回放完整因果历史，也不重复渲染原生 tools schema。
 
 ## 13. Platform、MCP 与应用
 
@@ -247,8 +255,8 @@ Port，不直接导入具体实现包。
 
 Panel 是 ops 的 Web 形态，提供单一 FastAPI 应用：
 
-- `/healthz` 是唯一无认证端点；
-- 登录使用 `data/ops/Token.txt` bootstrap token 签发 Bearer session；
+- `/healthz` 是唯一公开业务信息的无认证端点；`/api/auth/login` 仅作为 bootstrap token 换取 session 的认证入口；
+- 登录使用 `data/ops/Token.txt` bootstrap token 签发 Bearer session，并可设置同源 HttpOnly session cookie；
 - 其余 HTTP、附件、Lab 和 WebSocket 端点全部要求有效 session；
 - WebSocket 同时校验 Origin 白名单；
 - Panel 只允许绑定 loopback；
@@ -263,7 +271,7 @@ Panel 是 ops 的 Web 形态，提供单一 FastAPI 应用：
 ```text
 src/engine           → data/engine/runtime.sqlite3
 src/ai               → data/ai/cost.sqlite3
-src/memory           → data/memory/memory.sqlite3 + data/memory/chroma/
+src/memory           → data/memory/memory.sqlite3 + data/memory/mem0-history.sqlite3 + data/memory/chroma/
 ops                  → data/ops/panel.sqlite3 + Token.txt + uploads/
 src/platform/mcp     → data/platform/mcp/
 src/apps via MCP     → data/platform/mcp/apps/

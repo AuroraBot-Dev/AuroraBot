@@ -84,7 +84,7 @@ class _FakeMemory:
             "facts": [],
         }
 
-    def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
+    async def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
         return [{"kind": "fact", "content": query, "hits": 1}]
 
     def status(self) -> dict[str, Any]:

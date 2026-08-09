@@ -1,165 +1,72 @@
-"""记忆引擎：短期窗口 + LLM 概要，长期 durable_facts（mem0 可选）。
-
-存储使用 SQLAlchemy ORM，物理 Schema 不变：
-- ``memory_messages``：最近 N 条原始消息（窗口）；
-- ``session_memory``：窗口外压缩概要（LLM 生成，fast role）；
-- ``durable_facts``：长期事实（mem0 不可用时降级的关键词检索）。
-"""
+"""异步记忆编排：短期窗口、durable facts 与语义长期记忆。"""
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import (
-    Column,
-    Index,
-    Integer,
-    String,
-    Table,
-    UniqueConstraint,
-    create_engine,
-    delete,
-    desc,
-    event,
-    func,
-    select,
-    text,
-)
+from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from src.contracts import MemoryContextSnapshot, MemoryEntry, MemoryQuery
+from src.memory.long_term import LongTermMemory
+from src.memory.models import Base, DurableFactRow, MemoryReceiptRow
+from src.memory.short_term import (
+    DEFAULT_WINDOW_MAX,
+    DEFAULT_WINDOW_MIN,
+    ShortTermMemory,
+    Summarizer,
+    bounded_snapshot,
+    clip,
+)
+from src.utils import get_logger
+from src.utils.migration import initialize_storage
+
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Generator, Sequence
     from pathlib import Path
 
     from sqlalchemy.engine import CursorResult, Engine
 
-from src.contracts import (
-    MemoryContextSnapshot,
-    MemoryEntry,
-    MemoryMessage,
-    MemoryQuery,
-)
-from src.utils import get_logger, utc_now
-from src.utils.migration import initialize_storage
-
-
-class _Summarizer(Protocol):
-    """概要生成所需的网关窄面，保持 memory 不依赖 ai 包。"""
-
-    async def get_response(self, role: str, inputs: list[dict]) -> dict[str, Any]: ...
-
 
 logger = get_logger("aurora.memory.service")
-_SUMMARY_LIMIT = 2400
-_DEFAULT_WINDOW_MIN = 100
-_DEFAULT_WINDOW_MAX = 300
-
-
-class _Msg(StrEnum):
-    """本文件内所有用户或模型可见的硬编码文本。"""
-
-    ELLIPSIS = "…"
-    SUMMARIZE_PROMPT = (
-        "你负责记忆浓缩：把『最早记忆项』与一批旧对话再次压缩为一条更浓缩的"
-        "记忆项（保留关键事实，丢弃已失去时效的细节）。\n"
-        "最早记忆项：\n{summary}\n\n旧对话：\n{messages}\n\n只输出新的记忆项文本。"
-    )
-
-
-class _Base(DeclarativeBase):
-    """memory.sqlite3 的声明式基类。"""
-
-
-SchemaMetaRow = Table(
-    "schema_meta",
-    _Base.metadata,
-    Column("version", Integer, nullable=False),
-)
-
-
-class MemoryReceiptRow(_Base):
-    """memory_receipts：终态投影幂等回执。"""
-
-    __tablename__ = "memory_receipts"
-
-    task_id: Mapped[str] = mapped_column("task_id", String, primary_key=True)
-    scope: Mapped[str] = mapped_column("scope", String, nullable=False)
-    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
-
-
-class SessionMemoryRow(_Base):
-    """session_memory：窗口外压缩概要（每 scope 一条）。"""
-
-    __tablename__ = "session_memory"
-
-    scope: Mapped[str] = mapped_column("scope", String, primary_key=True)
-    summary: Mapped[str] = mapped_column("summary", String, nullable=False)
-    updated_at: Mapped[str] = mapped_column("updated_at", String, nullable=False)
-
-
-class DurableFactRow(_Base):
-    """durable_facts：长期事实（UNIQUE(scope, content) 保证去重）。"""
-
-    __tablename__ = "durable_facts"
-    __table_args__ = (
-        UniqueConstraint("scope", "content"),
-        Index("idx_durable_facts_scope_created", "scope", desc("created_at")),
-    )
-
-    fact_id: Mapped[int] = mapped_column("fact_id", Integer, primary_key=True, autoincrement=True)
-    scope: Mapped[str] = mapped_column("scope", String, nullable=False)
-    content: Mapped[str] = mapped_column("content", String, nullable=False)
-    source_task_id: Mapped[str] = mapped_column("source_task_id", String, nullable=False)
-    created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
-
-
-class MemoryMessageRow(_Base):
-    """memory_messages：最近 N 条原始消息（窗口）。"""
-
-    __tablename__ = "memory_messages"
-    __table_args__ = (
-        Index("idx_memory_messages_scope", "scope", "seq"),
-        {"sqlite_autoincrement": True},
-    )
-
-    seq: Mapped[int] = mapped_column("seq", Integer, primary_key=True, autoincrement=True)
-    scope: Mapped[str] = mapped_column("scope", String, nullable=False)
-    role: Mapped[str] = mapped_column("role", String, nullable=False)
-    content: Mapped[str] = mapped_column("content", String, nullable=False)
-    at: Mapped[str] = mapped_column("at", String, nullable=False)
 
 
 class MemoryService:
-    """短期记忆（窗口+概要）+ 长期事实（可选 mem0）的组合实现。"""
+    """组合短期记忆、durable facts 与可降级语义长期记忆。"""
 
     def __init__(
         self,
         memory_dir: "Path | None" = None,
         *,
-        gateway: _Summarizer | None = None,
-        window_min: int = _DEFAULT_WINDOW_MIN,
-        window_max: int = _DEFAULT_WINDOW_MAX,
+        gateway: Summarizer | None = None,
+        embed_fn: "Callable[[list[str]], list[list[float]]] | None" = None,
+        llm_model: str | None = None,
+        window_min: int = DEFAULT_WINDOW_MIN,
+        window_max: int = DEFAULT_WINDOW_MAX,
     ) -> None:
-        self._memory_dir = memory_dir
-        self._gateway: _Summarizer | None = gateway
-        self._window_min = window_min
-        self._window_max = window_max
         self._engine: Engine | None = None
+        self._short_term: ShortTermMemory | None = None
         if memory_dir is not None:
             memory_dir.mkdir(parents=True, exist_ok=True)
             self._engine = _build_engine(memory_dir / "memory.sqlite3")
             self._initialize()
-        from src.memory.long_term import LongTermMemory
-
-        self._long_term = LongTermMemory(memory_dir) if memory_dir is not None else None
+            self._short_term = ShortTermMemory(
+                self._engine,
+                gateway=gateway,
+                window_min=window_min,
+                window_max=window_max,
+            )
+        self._long_term = (
+            LongTermMemory(memory_dir, embed_fn=embed_fn, llm_model=llm_model) if memory_dir is not None else None
+        )
 
     def _initialize(self) -> None:
-        """WAL 配置 + 统一初始化（initialize_storage：全新建表/旧库按版本序列迁移）。"""
+        """配置 WAL，并创建或迁移 memory SQLite。"""
         from src.memory import migration
 
         assert self._engine is not None
@@ -169,37 +76,24 @@ class MemoryService:
             connection.execute(text("DROP TABLE IF EXISTS completed_tasks"))
             initialize_storage(
                 connection,
-                metadata=_Base.metadata,
+                metadata=Base.metadata,
                 steps=migration.STEPS,
                 target=migration.TARGET_VERSION,
             )
 
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
-        """只读记忆历史（观察）：窗口消息 + 概要 + 长期事实。"""
-        if self._engine is None:
+        """只读记忆历史：窗口、概要与 durable facts。"""
+        if self._engine is None or self._short_term is None:
             return {"scope": scope, "window": [], "summaries": [], "facts": []}
+        short_term = self._short_term.history(scope=scope, limit=limit)
         with self._session() as session:
-            window_query = select(MemoryMessageRow).order_by(MemoryMessageRow.seq.desc()).limit(limit)
-            if scope is not None:
-                window_query = window_query.where(MemoryMessageRow.scope == scope)
-            messages = session.execute(window_query).scalars().all()
-            summary_query = select(SessionMemoryRow).order_by(SessionMemoryRow.updated_at.desc())
-            if scope is not None:
-                summary_query = summary_query.where(SessionMemoryRow.scope == scope)
-            summaries = session.execute(summary_query).scalars().all()
             facts_query = select(DurableFactRow).order_by(DurableFactRow.created_at.desc()).limit(limit)
             if scope is not None:
                 facts_query = facts_query.where(DurableFactRow.scope.in_((scope, "global")))
             facts = session.execute(facts_query).scalars().all()
         return {
             "scope": scope,
-            "window": [
-                {"scope": row.scope, "role": row.role, "content": row.content, "at": row.at}
-                for row in reversed(messages)
-            ],
-            "summaries": [
-                {"scope": row.scope, "summary": row.summary, "updated_at": row.updated_at} for row in summaries
-            ],
+            **short_term,
             "facts": [
                 {
                     "scope": row.scope,
@@ -212,115 +106,89 @@ class MemoryService:
         }
 
     def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
-        """只读记忆检索（观察）：对窗口消息与长期事实做词项匹配。"""
-        if self._engine is None or not query.strip():
+        """只读记忆检索：语义优先，合并窗口和 durable facts 词项结果。"""
+        if self._engine is None or self._short_term is None or not query.strip():
             return []
         terms = {term.casefold() for term in query.split() if len(term) > 1}
         if not terms:
             return []
+        semantic = self._long_term.search(scope, query, limit) if self._long_term is not None and scope else ()
+        candidates = [
+            {"kind": "semantic", "scope": scope, "content": content, "hits": len(terms) + 1} for content in semantic
+        ]
+        candidates.extend(self._short_term.keyword_candidates(terms, scope))
         with self._session() as session:
-            message_rows = session.execute(select(MemoryMessageRow)).scalars().all()
             fact_rows = session.execute(select(DurableFactRow)).scalars().all()
-        candidates: list[dict[str, Any]] = []
-        for row in message_rows:
-            if scope is not None and row.scope != scope:
-                continue
-            hits = sum(term in row.content.casefold() for term in terms)
-            if hits:
-                candidates.append(
-                    {
-                        "kind": "window",
-                        "scope": row.scope,
-                        "content": row.content,
-                        "role": row.role,
-                        "at": row.at,
-                        "hits": hits,
-                    }
-                )
-        for row in fact_rows:
-            if scope is not None and row.scope not in {scope, "global"}:
-                continue
-            hits = sum(term in row.content.casefold() for term in terms)
-            if hits:
-                candidates.append(
-                    {
-                        "kind": "fact",
-                        "scope": row.scope,
-                        "content": row.content,
-                        "source_task_id": row.source_task_id,
-                        "created_at": row.created_at,
-                        "hits": hits,
-                    }
-                )
+        candidates.extend(_durable_candidates(fact_rows, terms, scope))
         candidates.sort(key=lambda item: item["hits"], reverse=True)
-        return candidates[:limit]
+        return _unique_candidates(candidates, limit)
 
     def status(self) -> dict[str, Any]:
-        """只读记忆统计（观察）：窗口/概要/长期计数。"""
-        if self._engine is None:
-            return {"enabled": False, "window_messages": 0, "summaries": 0, "facts": 0, "scopes": []}
+        """只读记忆统计与语义降级状态。"""
+        if self._engine is None or self._short_term is None:
+            return {
+                "enabled": False,
+                "window_messages": 0,
+                "summaries": 0,
+                "facts": 0,
+                "scopes": [],
+                "semantic": {"enabled": False, "degraded": True, "reason": "memory disabled"},
+            }
+        window_messages, summaries, scopes = self._short_term.counts_and_scopes()
         with self._session() as session:
-            window_messages = session.scalar(select(func.count()).select_from(MemoryMessageRow)) or 0
-            summaries = session.scalar(select(func.count()).select_from(SessionMemoryRow)) or 0
             facts = session.scalar(select(func.count()).select_from(DurableFactRow)) or 0
-            scope_statement = select(MemoryMessageRow.scope).distinct().order_by(MemoryMessageRow.scope)
-            scopes = session.execute(scope_statement).scalars().all()
+        semantic = (
+            self._long_term.status()
+            if self._long_term is not None
+            else {"enabled": False, "degraded": True, "reason": "semantic memory not configured"}
+        )
         return {
             "enabled": True,
             "window_messages": window_messages,
             "summaries": summaries,
             "facts": facts,
-            "scopes": [str(value) for value in scopes],
+            "scopes": scopes,
+            "semantic": semantic,
         }
 
-    def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
-        if self._engine is None:
+    async def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
+        """异步取得统一预算约束下的记忆快照。"""
+        return await asyncio.to_thread(self._recall, query)
+
+    def _recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
+        if self._engine is None or self._short_term is None:
             return MemoryContextSnapshot()
         try:
+            summary, window = self._short_term.load(query.scope)
             with self._session() as session:
-                row = session.scalar(select(SessionMemoryRow.summary).where(SessionMemoryRow.scope == query.scope))
-                summary = str(row) if row is not None else ""
-                rows = session.execute(
-                    select(MemoryMessageRow.role, MemoryMessageRow.content, MemoryMessageRow.at)
-                    .where(MemoryMessageRow.scope == query.scope)
-                    .order_by(MemoryMessageRow.seq.desc())
-                    .limit(self._window_max)
-                ).all()
-                window = tuple(MemoryMessage(str(role), str(content), str(at)) for role, content, at in reversed(rows))
                 facts = self._select_facts(session, query)
         except SQLAlchemyError as error:
             logger.warning("Memory recall failed error=%s", error)
             return MemoryContextSnapshot()
-        summary = _clip(summary, query.max_characters)
-        remaining = max(0, query.max_characters - len(summary))
-        selected: list[str] = []
-        for fact in facts:
-            clipped = _clip(fact, remaining)
-            if not clipped:
-                break
-            selected.append(clipped)
-            remaining -= len(clipped)
-        return MemoryContextSnapshot(summary, window, tuple(selected))
+        return bounded_snapshot(summary, window, facts, query.max_characters)
 
-    def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:
-        """把一轮对话追加进窗口；溢出时把最旧消息浓缩进概要（LLM 摘要）。"""
-        if self._engine is None or not content.strip():
+    async def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:
+        """把一轮对话追加到短期窗口，并按需生成异步概要。"""
+        if self._short_term is None or not content.strip():
             return
-        with self._session() as session:
-            session.add(MemoryMessageRow(scope=scope, role=role, content=content, at=at))
-            count = (
-                session.scalar(
-                    select(func.count()).select_from(MemoryMessageRow).where(MemoryMessageRow.scope == scope)
-                )
-                or 0
-            )
-            if count > self._window_max:
-                self._condense(session, scope, count - self._window_min)
+        await self._short_term.append_turn(scope, role=role, content=content, at=at)
 
-    def remember(self, entry: MemoryEntry) -> bool:
-        """终态投影：幂等回执 + 长期事实（窗口消息由 append_turn 负责）。"""
+    async def remember(self, entry: MemoryEntry) -> bool:
+        """幂等写入 durable facts，并异步投影到语义长期记忆。"""
         if self._engine is None or not entry.input_summary.strip():
             return False
+        inserted = await asyncio.to_thread(self._remember, entry)
+        if inserted and self._long_term is not None:
+            content = "\n".join(
+                part
+                for part in (entry.input_summary, entry.outcome_summary or "", *entry.fact_candidates)
+                if part.strip()
+            )
+            if content:
+                await asyncio.to_thread(self._long_term.add, entry.scope, content, entry.created_at)
+        return inserted
+
+    def _remember(self, entry: MemoryEntry) -> bool:
         with self._session() as session:
             result = session.execute(
                 sqlite_insert(MemoryReceiptRow)
@@ -337,62 +205,13 @@ class MemoryService:
                         sqlite_insert(DurableFactRow)
                         .values(
                             scope=entry.scope,
-                            content=_clip(fact, 500),
+                            content=clip(fact, 500),
                             source_task_id=entry.task_id,
                             created_at=entry.created_at,
                         )
                         .on_conflict_do_nothing(index_elements=["scope", "content"])
                     )
-        if self._long_term is not None and entry.outcome_summary:
-            self._long_term.add(entry.scope, f"{entry.input_summary}\n{entry.outcome_summary}", entry.created_at)
         return True
-
-    def _condense(self, session: Session, scope: str, excess: int) -> None:
-        """把最旧 ``excess`` 条消息 + 现有概要浓缩为新概要（LLM 或规则截断）。"""
-        rows = (
-            session.execute(
-                select(MemoryMessageRow)
-                .where(MemoryMessageRow.scope == scope)
-                .order_by(MemoryMessageRow.seq.asc())
-                .limit(excess)
-            )
-            .scalars()
-            .all()
-        )
-        if not rows:
-            return
-        existing = session.scalar(select(SessionMemoryRow.summary).where(SessionMemoryRow.scope == scope))
-        summary = str(existing) if existing else ""
-        oldest = [{"role": row.role, "content": row.content, "at": row.at} for row in rows]
-        condensed = self._summarize(summary, oldest)
-        updated_at = utc_now()
-        session.execute(
-            sqlite_insert(SessionMemoryRow)
-            .values(scope=scope, summary=condensed, updated_at=updated_at)
-            .on_conflict_do_update(index_elements=["scope"], set_={"summary": condensed, "updated_at": updated_at})
-        )
-        session.execute(delete(MemoryMessageRow).where(MemoryMessageRow.seq.in_([row.seq for row in rows])))
-
-    def _summarize(self, existing: str, messages: list[dict[str, Any]]) -> str:
-        """LLM 浓缩（fast role）；网关不可用时规则截断。"""
-        combined = existing + "\n" + "\n".join(m["content"] for m in messages)
-        fallback = _tail(combined.strip(), _SUMMARY_LIMIT)
-        if self._gateway is None:
-            return fallback
-        import asyncio
-
-        prompt = _Msg.SUMMARIZE_PROMPT.format(
-            summary=existing or "（无）",
-            messages="\n".join(f"{m['role']}: {m['content']}" for m in messages),
-        )
-        try:
-            result = asyncio.run(self._gateway.get_response("fast", [{"role": "user", "content": prompt}]))
-            text_value = str(result.get("text", "")).strip()
-            if text_value:
-                return _tail(text_value, _SUMMARY_LIMIT)
-        except Exception as error:
-            logger.warning("memory summarization failed error_type=%s", type(error).__name__)
-        return fallback
 
     def _select_facts(self, session: Session, query: MemoryQuery) -> tuple[str, ...]:
         rows = (
@@ -405,17 +224,21 @@ class MemoryService:
             .scalars()
             .all()
         )
+        semantic = (
+            self._long_term.search(query.scope, query.query, query.fact_limit)
+            if self._long_term is not None and query.query.strip()
+            else ()
+        )
         terms = {term.casefold() for term in query.query.split() if len(term) > 1}
         ranked = sorted(
             (str(value) for value in rows),
             key=lambda value: sum(term in value.casefold() for term in terms),
             reverse=True,
         )
-        return tuple(ranked[: query.fact_limit])
+        return tuple(dict.fromkeys((*semantic, *ranked)))[: query.fact_limit]
 
     @contextmanager
-    def _session(self) -> Iterator[Session]:
-        """事务上下文：成功提交，异常回滚。"""
+    def _session(self) -> "Generator[Session]":
         assert self._engine is not None
         with Session(self._engine, expire_on_commit=False) as session:
             try:
@@ -426,8 +249,7 @@ class MemoryService:
                 raise
 
 
-def _build_engine(database_path: Path) -> "Engine":
-    """构建同步 SQLite 引擎：NullPool + 默认隔离（读不占写锁）。"""
+def _build_engine(database_path: "Path") -> "Engine":
     engine = create_engine(
         f"sqlite:///{database_path}",
         poolclass=NullPool,
@@ -443,15 +265,33 @@ def _build_engine(database_path: Path) -> "Engine":
     return engine
 
 
-def _clip(value: str, limit: int) -> str:
-    if limit <= 0:
-        return ""
-    if len(value) <= limit:
-        return value
-    return value[: max(0, limit - 1)] + _Msg.ELLIPSIS
+def _durable_candidates(rows: "Sequence[Any]", terms: set[str], scope: str | None) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        if scope is not None and row.scope not in {scope, "global"}:
+            continue
+        hits = sum(term in row.content.casefold() for term in terms)
+        if hits:
+            candidates.append(
+                {
+                    "kind": "fact",
+                    "scope": row.scope,
+                    "content": row.content,
+                    "source_task_id": row.source_task_id,
+                    "created_at": row.created_at,
+                    "hits": hits,
+                }
+            )
+    return candidates
 
 
-def _tail(value: str, limit: int) -> str:
-    if len(value) <= limit:
-        return value
-    return _Msg.ELLIPSIS + value[-(limit - 1) :]
+def _unique_candidates(candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in candidates:
+        content = str(item["content"])
+        if content in seen:
+            continue
+        seen.add(content)
+        unique.append(item)
+    return unique[:limit]

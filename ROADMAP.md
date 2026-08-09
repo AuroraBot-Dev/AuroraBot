@@ -1,6 +1,6 @@
 # AuroraBot 演化路线图
 
-状态：执行基线
+状态：P0 已收口，进入 P1
 日期：2026-08-09
 设计基准：[RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)
 
@@ -11,20 +11,23 @@ AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、
 
 当前质量基线：
 
-- 完整质量命令通过，207 个测试通过；
-- `src` 与 `aurora` 语句覆盖率为 81.69%；
+- 完整质量命令通过，210 个测试通过；
+- `aurora`、`ops` 与 `src` 总语句覆盖率为 82.55%；
 - 依赖边界、SQLite 迁移、Triage、工具回执、多 Tool call、面板操作和费用持久化已有测试；
 - 项目仍处于 0.5 alpha，尚不应承诺公网多租户或无人值守生产运行。
 
 ## 2. 优先问题
 
-### P0：契约与正确性
+### P0：契约与正确性（2026-08-09 已完成）
 
-1. 长期记忆写入 mem0，但 recall 尚未形成语义检索闭环，embedding role 也未注入长期记忆组件。
-2. 短期概要从事件循环内进入同步 `asyncio.run()` 路径，实际运行可能只能使用规则降级。
-3. `MemoryQuery.max_characters` 尚未约束原始消息窗口，整个记忆快照的硬上界不完整。
-4. Panel Lab 当前未纳入 Bearer 认证，与“只有 healthz 无认证”的契约不一致。
-5. `aurora check` 的 lint、format、type 与 coverage 范围尚未包含根级 `ops/` 包。
+1. [x] 组合根将配置的 embedding 与 quality 模型注入 LongTermMemory；recall 语义优先、durable facts 关键词降级。
+2. [x] MemoryStore 改为异步 Port，概要直接 await fast role，SQLite、mem0 与同步 embedding 移到工作线程。
+3. [x] `MemoryQuery.max_characters` 统一约束 summary、window 与 relevant facts，并采用确定性选择和裁剪顺序。
+4. [x] Panel Lab、静态资源与 `/api/health` 要求有效 session；登录设置同源 HttpOnly cookie，Bearer 仍受支持。
+5. [x] `aurora check` 的 Ruff、format、Pyright 与 coverage 已覆盖根级 `ops/` 包。
+
+收口证据：异步 LLM 概要、模型注入、scope 语义检索、关键词降级、统一预算、Lab 认证和质量命令范围均有回归测试；
+memory 已按纯数据 models、短期算法 short_term、异步编排 service 拆分。完整质量门为 210 tests / 82.55% coverage。
 
 ### P1：长期运行与交付
 
@@ -46,94 +49,96 @@ AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、
 
 目标：使唯一 RFC、实现、配置和用户文档指向同一系统。
 
-- 建立 RFC 0300 条款到实现与测试的可追踪矩阵。
-- 清理 README、TECHNICAL、Prompt、扩展指南和配置样例中的历史概念。
-- 将 `ops/` 纳入 Ruff、format、Pyright 和 coverage，增加文档相对链接检查。
-- 默认关闭未随仓库交付的外部 App，增加干净克隆启动说明。
-- 为 Panel Lab、WebSocket、记忆预算和事件过滤补充契约测试。
+[x] 建立 RFC 0300 条款到实现与测试的可追踪矩阵。
+[x] 清理 README、TECHNICAL、Prompt、扩展指南和配置样例中的历史概念。
+[x] 将 `ops/` 纳入 Ruff、format、Pyright 和 coverage，增加文档相对链接检查。
+[ ] 默认关闭未随仓库交付的外部 App，增加干净克隆启动说明。
+[x] 为 Panel Lab 和记忆预算补充契约测试。
+[ ] 为 WebSocket token、Origin、断连、游标和事件过滤补充契约测试。
 
 完成门槛：
 
-- 全仓不存在旧编号 RFC 引用；
-- 无已知“RFC 0300—实现”冲突未登记；
-- 干净克隆可按默认文档完成可预测启动；
-- `aurora check` 覆盖所有一方 Python 包。
+[x] 全仓不存在旧编号 RFC 引用；
+[x] 无已知“RFC 0300—实现”冲突未登记；
+[ ] 干净克隆可按默认文档完成可预测启动；
+[x] `aurora check` 覆盖所有一方 Python 包。
 
 ### M1：核心正确性（2–4 周）
 
 目标：闭合记忆、认证和平台摄入的核心承诺。
 
-- 重构 MemoryStore 的异步边界，确保摘要不阻塞 engine 事件循环。
-- 将模型配置、同步 embedding 和语义 search 注入 LongTermMemory。
-- 合并语义结果与 durable facts 降级，并公开健康与降级状态。
-- 对 summary、window、facts 实施统一字符预算和确定性裁剪。
-- 保护 Lab；补齐 WebSocket token、Origin、断连和游标测试。
-- 为 App 工作目录、命令、URL 和环境变量增加启动前置检查。
-- 实现可配置的供应商瞬时事件过滤。
+[x] 重构 MemoryStore 的异步边界，并拆分 models / short_term / service，确保摘要和语义 I/O 不阻塞 engine 事件循环。
+[x] 将模型配置、同步 embedding 和语义 search 注入 LongTermMemory。
+[x] 合并语义结果与 durable facts 降级，并公开健康与降级状态。
+[x] 对 summary、window、facts 实施统一字符预算和确定性裁剪。
+[x] 保护 Lab，并支持 Bearer 与同源 HttpOnly session cookie。
+[ ] 补齐 WebSocket token、Origin、断连和游标测试。
+[ ] 为 App 工作目录、命令、URL 和环境变量增加启动前置检查。
+[ ] 实现可配置的供应商瞬时事件过滤。
 
 完成门槛：
 
-- 记忆窗口、LLM 概要、语义检索、关键词降级可端到端验证；
-- engine pump 内不存在同步网络调用；
-- Panel 除 healthz 外全部端点经过认证测试；
-- 错误 App 配置在创建子进程前给出明确诊断。
+[x] 记忆窗口、LLM 概要、语义适配、关键词降级可通过确定性集成测试验证；
+[x] engine pump 内不存在同步网络调用；
+[x] Panel 除 `/healthz` 与 bootstrap 登录交换外的 HTTP 端点经过 session 认证测试；
+[ ] 错误 App 配置在创建子进程前给出明确诊断。
 
 ### M2：长期运行与恢复（4–8 周）
 
 目标：把“可以运行”提升为“可以持续运行并恢复”。
 
-- 实现由 ops 触发的终态 TTL、会话导出、WAL checkpoint 和清理操作。
-- 费用统计改为数据库聚合或有界缓存，避免启动加载完整历史。
-- 建立 engine、memory、ai、ops 数据库的一致备份与恢复流程。
-- 增加迁移失败回滚、进程中断、工具重复回执和 MCP 断线故障注入。
-- 建立 24/72 小时 soak test，观察队列、Task、Activity、数据库和后台任务增长。
+[ ] 实现由 ops 触发的终态 TTL、会话导出、WAL checkpoint 和清理操作。
+[ ] 费用统计改为数据库聚合或有界缓存，避免启动加载完整历史。
+[ ] 建立 engine、memory、ai、ops 数据库的一致备份与恢复流程。
+[ ] 增加迁移失败回滚、进程中断、工具重复回执和 MCP 断线故障注入。
+[ ] 建立 24/72 小时 soak test，观察队列、Task、Activity、数据库和后台任务增长。
 
 完成门槛：
 
-- 72 小时测试无无界队列、后台任务泄漏或非预期数据库增长；
-- 支持从备份恢复并继续消费已有 Activity；
-- 清理后外部消息与工具回执幂等仍成立。
+[ ] 72 小时测试无无界队列、后台任务泄漏或非预期数据库增长；
+[ ] 支持从备份恢复并继续消费已有 Activity；
+[ ] 清理后外部消息与工具回执幂等仍成立。
 
 ### M3：可观测与 Beta（6–10 周）
 
 目标：形成可诊断、可回归的 0.5 beta。
 
-- 在现有 ops 操作树中提供队列深度、Task 延迟、模型/工具耗时、失败率、记忆降级和存储容量投影。
-- 建立 fake Provider + 真实 stdio MCP 子进程的确定性 E2E 测试。
-- 为自主心跳、Triage、委派、多 Tool call、恢复和会话导出建立黄金路径场景。
-- 按状态迁移、查询和批次职责拆分 engine decisions。
-- 按本地/远程连接、通知、发现和执行职责拆分 MCP adapter。
+[ ] 在现有 ops 操作树中提供队列深度、Task 延迟、模型/工具耗时、失败率、记忆降级和存储容量投影。
+[ ] 建立 fake Provider + 真实 stdio MCP 子进程的确定性 E2E 测试。
+[ ] 为自主心跳、Triage、委派、多 Tool call、恢复和会话导出建立黄金路径场景。
+[ ] 按状态迁移、查询和批次职责拆分 engine decisions。
+[ ] 按本地/远程连接、通知、发现和执行职责拆分 MCP adapter。
 
 完成门槛：
 
-- Python 3.12–3.14 CI 全绿；
-- 核心 E2E 与故障场景稳定可复现；
-- 关键运行指标可从 ops 查询；
-- 发布 0.5 beta，并提供从 alpha 数据目录升级说明。
+[ ] Python 3.12–3.14 CI 全绿；
+[ ] 核心 E2E 与故障场景稳定可复现；
+[ ] 关键运行指标可从 ops 查询；
+[ ] 发布 0.5 beta，并提供从 alpha 数据目录升级说明。
 
 ### M4：能力扩展（Beta 后）
 
 目标：在稳定热路径上补充真正可用的环境能力。
 
-- 把附件引用解析、MIME 校验、内容读取和 multimodal role 串成完整链路。
-- 提供启用 Clock 的主动节律 profile 和可验证自主 Task 示例。
-- 为第三方 MCP App 建立版本、兼容性、健康检查和开发者脚手架。
-- sandbox 启用前完成威胁模型、权限策略、资源限制、产物回收和因果回执。
-- 删除无法进入授权执行链的长期占位能力。
+[ ] 把附件引用解析、MIME 校验、内容读取和 multimodal role 串成完整链路。
+[ ] 提供启用 Clock 的主动节律 profile 和可验证自主 Task 示例。
+[ ] 为第三方 MCP App 建立版本、兼容性、健康检查和开发者脚手架。
+[ ] sandbox 启用前完成威胁模型、权限策略、资源限制、产物回收和因果回执。
+[ ] 删除无法进入授权执行链的长期占位能力。
 
 完成门槛：
 
-- 新能力全部具备显式授权、参数 schema、预算、回执、因果记录和降级路径；
-- 发布 0.6，不扩大 engine 与 handler 的职责边界。
+[ ] 新能力全部具备显式授权、参数 schema、预算、回执、因果记录和降级路径；
+[ ] 发布 0.6，不扩大 engine 与 handler 的职责边界。
 
 ### M5：1.0 稳定性
 
 目标：给出长期可维护的公共承诺。
 
-- 版本化 AMP、Operation、配置与数据迁移兼容范围。
-- 固化备份、恢复、保留、安全和性能基准。
-- 发布稳定扩展指南和升级指南。
-- 继续保持 loopback、单 owner、单 engine 的部署模型；多租户若进入目标，必须先修改 RFC 0300 的进程与安全边界。
+[ ] 版本化 AMP、Operation、配置与数据迁移兼容范围。
+[ ] 固化备份、恢复、保留、安全和性能基准。
+[ ] 发布稳定扩展指南和升级指南。
+[ ] 继续保持 loopback、单 owner、单 engine 的部署模型；多租户若进入目标，必须先修改 RFC 0300 的进程与安全边界。
 
 ## 4. 暂不优先
 
