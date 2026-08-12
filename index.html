@@ -16,7 +16,7 @@
     <link rel="canonical" href="https://www.aurorabot.org/" />
     <script id="structured-data" type="application/ld+json"></script>
     <style>
-      @import url("assets/index.css");
+      @import url("assets/index.css?v=20260813");
     </style>
   </head>
   <body>
@@ -39,6 +39,39 @@
             rel="noopener noreferrer"
             data-i18n="header.githubVersion"
           ></a>
+          <div class="language-picker">
+            <button
+              class="icon-button language-toggle"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="language-menu"
+              data-i18n-attr="aria-label:header.languageLabel,title:header.languageLabel"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+              </svg>
+              <span class="language-code" data-language-code>中</span>
+            </button>
+            <div
+              class="language-menu"
+              id="language-menu"
+              role="menu"
+              hidden
+              data-i18n-attr="aria-label:header.languageMenuLabel"
+            >
+              <button type="button" role="menuitemradio" aria-checked="true" data-locale="zh-CN" lang="zh-CN">
+                中文
+              </button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-locale="en-US" lang="en-US">
+                English
+              </button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-locale="ja-JP" lang="ja-JP">
+                日本語
+              </button>
+            </div>
+          </div>
           <button
             class="icon-button theme-toggle"
             type="button"
@@ -301,8 +334,23 @@
     <script>
       (function () {
         var DEFAULT_LOCALE = "zh-CN";
+        var LOCALE_CODES = { "zh-CN": "中", "en-US": "EN", "ja-JP": "日" };
+        var LOCALE_ALIASES = {
+          zh: "zh-CN",
+          "zh-cn": "zh-CN",
+          "zh-hans": "zh-CN",
+          en: "en-US",
+          "en-us": "en-US",
+          ja: "ja-JP",
+          "ja-jp": "ja-JP",
+        };
         var root = document.documentElement;
         var themeButton = document.querySelector(".theme-toggle");
+        var languagePicker = document.querySelector(".language-picker");
+        var languageButton = document.querySelector(".language-toggle");
+        var languageMenu = document.querySelector(".language-menu");
+        var languageCode = document.querySelector("[data-language-code]");
+        var languageOptions = Array.from(document.querySelectorAll("[data-locale]"));
         var storedTheme = localStorage.getItem("aurora-theme");
         var activeMessages = null;
 
@@ -316,6 +364,10 @@
           activeMessages = messages;
           root.lang = messages.meta.locale;
           root.dir = messages.meta.direction;
+          languageCode.textContent = LOCALE_CODES[messages.meta.locale] || messages.meta.locale;
+          languageOptions.forEach(function (option) {
+            option.setAttribute("aria-checked", String(option.getAttribute("data-locale") === messages.meta.locale));
+          });
 
           document.querySelectorAll("[data-i18n]").forEach(function (element) {
             element.textContent = messageAt(messages, element.getAttribute("data-i18n"));
@@ -339,7 +391,11 @@
         }
 
         function normalizeLocale(locale) {
-          return String(locale || DEFAULT_LOCALE).replace(/[^A-Za-z0-9-]/g, "") || DEFAULT_LOCALE;
+          var normalized = String(locale || DEFAULT_LOCALE)
+            .replace(/_/g, "-")
+            .replace(/[^A-Za-z0-9-]/g, "")
+            .toLowerCase();
+          return LOCALE_ALIASES[normalized] || LOCALE_ALIASES[normalized.split("-")[0]] || DEFAULT_LOCALE;
         }
 
         function loadLocale(locale) {
@@ -357,10 +413,65 @@
 
         window.AuroraI18n = {
           load: function (locale) {
-            localStorage.setItem("aurora-locale", normalizeLocale(locale));
-            return loadLocale(locale);
+            var normalized = normalizeLocale(locale);
+            localStorage.setItem("aurora-locale", normalized);
+            return loadLocale(normalized);
           },
         };
+
+        function closeLanguageMenu(returnFocus) {
+          languageMenu.hidden = true;
+          languageButton.setAttribute("aria-expanded", "false");
+          if (returnFocus) languageButton.focus();
+        }
+
+        function openLanguageMenu() {
+          languageMenu.hidden = false;
+          languageButton.setAttribute("aria-expanded", "true");
+          var activeOption = languageOptions.find(function (option) {
+            return option.getAttribute("aria-checked") === "true";
+          });
+          (activeOption || languageOptions[0]).focus();
+        }
+
+        languageButton.addEventListener("click", function () {
+          if (languageMenu.hidden) openLanguageMenu();
+          else closeLanguageMenu(false);
+        });
+
+        languageButton.addEventListener("keydown", function (event) {
+          if (event.key !== "ArrowDown") return;
+          event.preventDefault();
+          openLanguageMenu();
+        });
+
+        languageMenu.addEventListener("keydown", function (event) {
+          var currentIndex = languageOptions.indexOf(document.activeElement);
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeLanguageMenu(true);
+          } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            var offset = event.key === "ArrowDown" ? 1 : -1;
+            languageOptions[(currentIndex + offset + languageOptions.length) % languageOptions.length].focus();
+          }
+        });
+
+        languageOptions.forEach(function (option) {
+          option.addEventListener("click", function () {
+            var locale = option.getAttribute("data-locale");
+            window.AuroraI18n.load(locale).then(function () {
+              var url = new URL(window.location.href);
+              url.searchParams.set("lang", locale);
+              window.history.replaceState(null, "", url);
+              closeLanguageMenu(true);
+            });
+          });
+        });
+
+        document.addEventListener("click", function (event) {
+          if (!languageMenu.hidden && !languagePicker.contains(event.target)) closeLanguageMenu(false);
+        });
 
         if (storedTheme === "dark" || storedTheme === "light") {
           root.setAttribute("data-theme", storedTheme);
@@ -390,6 +501,7 @@
         var requestedLocale =
           new URLSearchParams(window.location.search).get("lang") ||
           localStorage.getItem("aurora-locale") ||
+          navigator.language ||
           DEFAULT_LOCALE;
         loadLocale(requestedLocale).catch(function () {
           if (requestedLocale !== DEFAULT_LOCALE) return loadLocale(DEFAULT_LOCALE);

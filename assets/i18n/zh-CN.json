@@ -31,6 +31,8 @@
     "ways": "接入方式",
     "start": "快速开始",
     "githubVersion": "GitHub · 0.5 alpha",
+    "languageLabel": "切换语言",
+    "languageMenuLabel": "选择语言",
     "themeLabel": "切换明暗主题"
   },
   "hero": {
@@ -74,8 +76,8 @@
   },
   "ways": {
     "index": "02 · 接入方式",
-    "title": "一个 Runtime，多连接方式。",
-    "description": "Platform 负责连接不同环境，Agent 在所有入口中使用同一套认知与行动闭环。",
+    "title": "多种连接方式。",
+    "description": "Console、Panel 与 MCP / Headless 提供不同的接入入口，Agent 在所有入口中使用同一套认知与行动闭环。",
     "consoleLetter": "C",
     "consoleLabel": "Console",
     "consoleTitle": "本地 Console",
