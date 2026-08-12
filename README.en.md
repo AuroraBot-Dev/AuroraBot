@@ -18,6 +18,7 @@
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
+  <img src="https://img.shields.io/badge/Nightly-0.5%20alpha-6f5b95" alt="Nightly 0.5 alpha" />
 </p>
 
 ## What is AuroraBot?
@@ -44,11 +45,13 @@ Models interpret and decide, but ordinary model text cannot directly change the 
 
 ## Highlights
 
-- **Active runtime:** the built-in Clock MCP persists a heartbeat that creates budgeted autonomous Tasks and yields promptly to external interaction.
+- **Active runtime:** when enabled, the built-in Clock MCP persists a heartbeat that creates budgeted autonomous Tasks and yields promptly to external interaction.
 - **Continuing Tasks:** work can await models, capabilities, and child Agents, then resume with explicit budgets and terminal states.
 - **Multi-Agent collaboration:** homogeneous Agents form bounded supervision trees and can split complex work concurrently.
-- **Connections to the world:** Console, Dashboard, and MCP Platforms normalize inputs and expose authorized capabilities.
-- **Replaceable models:** model roles, Providers, Chat Completions, and Responses are selected through configuration.
+- **Evolving sessions:** revisions, watermarks, deltas, and commit barriers let new events enter active sessions while isolating superseded generations.
+- **Connections to the world:** Console, the local Panel backend, and MCP Platforms normalize inputs and expose authorized capabilities.
+- **Built-in memory:** short-term windows and summaries, global durable facts, and mem0/Chroma semantic retrieval form a degradable long-term memory path.
+- **Replaceable models:** fast, quality, multimodal, and embedding roles map to Providers through TOML; current conversational calls use Chat Completions semantics.
 - **Traceable action:** inputs, model calls, capability requests, outcomes, and termination reasons share one causal record.
 - **Configurable identity and ability:** SOUL, Agent profiles, model roles, Platforms, and MCP applications have focused entry points.
 
@@ -57,16 +60,21 @@ Models interpret and decide, but ordinary model text cannot directly change the 
 You need Python 3.12 (recommended; higher versions are not fully verified), Git, and [uv](https://docs.astral.sh/uv/). Running from source is currently recommended.
 
 ```powershell
-git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+git clone --branch nightly --single-branch https://github.com/AuroraBot-Dev/AuroraBot.git
 Set-Location AuroraBot
 uv sync --no-dev
 Copy-Item .env.example .env
+```
 
-# Add the DEEPSEEK_API_KEY required by the default configuration to .env
+Add the `DEEPSEEK_API_KEY` required by the default model configuration to `.env`. The current `config/apps.toml` enables
+the repository-external `org.aurora.qq` application by default. If `extensions/apps/Aurora-QQ` is not installed, set
+`enabled = false` in that application's `[[app]]` block first; strict configuration will otherwise stop startup.
+
+```powershell
 uv run --no-dev --env-file .env aurora start
 ```
 
-Type a message after startup, use `/help` to discover commands, or `/status` to inspect the runtime.
+Type a message after startup, use `/help` to discover commands, or `/engine/status` to inspect the runtime.
 
 ```powershell
 # Use the default Platform set from config/platforms.toml
@@ -76,7 +84,11 @@ uv run --no-dev --env-file .env aurora start
 uv run --no-dev --env-file .env aurora start --headless
 ```
 
-The local Console is not toggled by `--platform`: it runs as long as the process is not headless and `[runtime.console].enabled = true`. When `--platform` is present, those platforms form the exact Platform set rather than extending the defaults. The Dashboard browser UI is maintained separately; this repository contains its local backend and chat bridge.
+The local Console is not toggled by `--platform`: it runs as long as the process is not headless and
+`[runtime.console].enabled = true`. When `--platform` is present, those platforms form the exact Platform set rather than
+extending the defaults. The complete browser UI lives in the separate
+[AuroraBot Panel](https://github.com/AuroraBot-Dev/AuroraBot-panel) project; this repository only contains its loopback,
+single-owner backend and chat bridge.
 
 ## Customize and extend
 
@@ -90,19 +102,26 @@ The local Console is not toggled by `--platform`: it runs as long as the process
 | Agent models, capabilities, and delegation limits | `config/agents.toml`     |
 | Local or remote MCP applications                  | `config/apps.toml`       |
 
-Structural configuration uses TOML, and secrets come only from environment variables. Start with the [extension guide](extensions/README.md) and the built-in [Clock application](src/apps/aurora-app-clock/README.md).
+Structural configuration uses TOML, and secrets come only from environment variables. Start with the
+[extension guide](extensions/README.md) and the built-in [Clock application source](src/apps/aurora-app-clock/mcp_server.py).
 
 ## Current stage
 
-AuroraBot `0.4` is a developer preview for local exploration, runtime research, and extension development. It does not yet ship built-in long-term memory, attachment understanding, an Agent sandbox tool, or production-grade multi-tenant guarantees. Current capability and roadmap remain clearly separated; accepted RFCs and tests define public behavior.
+AuroraBot `0.5 alpha` on `nightly` is intended for local exploration, runtime research, and extension development.
+Attachments are stored and referenced but do not yet flow through a complete multimodal understanding path. Sandbox and
+speech are not wired into the authorized runtime, and stable MCP reconnect, terminal-data TTL, consistent backup, and
+public multi-tenant deployment are not current guarantees. Public behavior is defined by
+[RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md), contracts, and tests.
 
 ## Documentation
 
-- [AuroraBot documentation](https://www.aurorabot.org/)
+- [Getting started](https://www.aurorabot.org/start/getting-started)
+- [Current nightly status and boundaries](https://www.aurorabot.org/reference/nightly-status)
+- [Architecture](ARCHITECTURE.md) and [technical reference](TECHNICAL.md)
 - [Contributing guide](docs/CONTRIBUTING.en.md)
 - [Extending AuroraBot](extensions/README.md)
-- [Model gateway](src/ai/README.md)
 - [RFC reading guide](docs/rfc/README.md)
+- [Evolution roadmap](ROADMAP.md)
 - [Logging policy](LOGGING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
@@ -114,7 +133,7 @@ AuroraBot uses many excellent open-source projects:
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider integration and call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP applications and tool protocol                 |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Local Dashboard service                            |
+| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Local Panel backend                                |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console and terminal experience                    |
 | [jsonschema](https://github.com/python-jsonschema/jsonschema)                                                          | Capability argument validation                     |
 

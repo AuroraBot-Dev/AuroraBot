@@ -1,538 +1,308 @@
-# AuroraBot 技术解析——架构、数据流转与子包模式
+# AuroraBot 技术说明
 
-> 本文件是项目的完整技术解析：架构全景、每个子包的架构模式、运行时数据流转、
-> 持久化机制、工具域划分与演化指南。**持续与实现保持同步**。
->
-> 唯一设计基准：[RFC 0300](rfc/0300-unified-architecture-and-contracts.md)；本文档与其冲突时以 RFC 为准。
+本文描述 `nightly` 分支 0.5 alpha 的现行实现，帮助开发者定位包、数据流、状态、存储和扩展入口。唯一设计基准是
+[RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)；若本文、README 或代码注释与其冲突，以 RFC、跨层契约与测试为准。
 
----
+## 1. 运行时全景
 
-## 1. 系统总览
+AuroraBot 以 Agent 为中心，但 Agent 不拥有进程、Provider 或 Platform。完整闭环是：
 
-AuroraBot 是一个以 **Agent 为中心**的自主智能体框架。核心哲学：
-
-- **一条认知闭环**：`输入 → 防抖聚合 → 注意力初筛 → 本体意识委派 → 决策 → 模型/工具 → 记忆投影`。
-- **Agent 全同构**：一切 Agent（triage / root / worker / memory）都由三元组实例化——
-  ① 上下文（AgentContext）② 工具权限域（profile.capabilities）③ 逻辑实现类（BaseAgent 子类）。
-- **单一存储**：SQLite WAL 是运行态与终态的唯一权威，无 JSON 归档、无 JSONL 会话日志（RFC 0300）。
-- **单进程无租约**：一个事件循环独占，无 CAS/租约/线程池（RFC 0300）。
-- **能力统一**：所有执行效果（记忆写入、平台动作、模型调用）都是注入的 Port 或 ToolExecutor。
-
-当前规模：`src/` + `aurora/` 约 40 个源文件、~6800 行（其中 engine 核心 ~2600 行）。
-
----
-
-## 2. 分层架构全景
-
-### 2.1 依赖关系图
-
-```mermaid
-graph TD
-    aurora["aurora/<br/>组合根：读配置、组装、启动、生命周期"]
-    ops["ops/<br/>面板后端：唯一 HTTP 路由、操作体系、认证与面板存储"]
-    engine["src/engine<br/>AgentEngine 单循环运行时 + SQLite store"]
-    agents["src/agents<br/>BaseAgent 子类 + 主动能力"]
-    prompt["src/prompt<br/>提示词装配"]
-    platform["src/platform<br/>MCP 外部生态适配"]
-    ai["src/ai<br/>模型网关"]
-    memory["src/memory<br/>记忆服务（被动投影 + 主动工具）"]
-    config["src/config<br/>TOML 加载与校验"]
-    contracts["src/contracts<br/>唯一跨层契约（DTO + Port）"]
-    utils["src/utils<br/>纯通用工具"]
-    console["src/console<br/>本地 Shell 渲染（热路径外）"]
-    sandbox["src/sandbox<br/>独立沙箱（未启用）"]
-
-    aurora --> engine
-    aurora --> ops
-    aurora --> platform
-    aurora --> ai
-    aurora --> memory
-    aurora --> config
-    aurora --> console
-
-    ops --> engine
-    ops --> platform
-    ops --> ai
-    ops --> memory
-    ops --> agents
-    ops --> config
-    ops --> prompt
-    ops --> contracts
-    ops --> utils
-
-    engine --> contracts
-    engine --> utils
-    platform --> contracts
-    platform --> utils
-    ai --> contracts
-    ai --> utils
-    memory --> contracts
-    memory --> utils
-    agents --> prompt
-    agents --> contracts
-    agents --> utils
-    config --> contracts
-    prompt --> contracts
-    console --> contracts
-    console --> utils
-    sandbox --> utils
-
-    classDef leaf fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
-    classDef core fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
-    classDef proc fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
-    classDef inspect fill:#fff3e0,stroke:#e65100,color:#bf360c
-    class contracts,prompt,config,memory,ai,agents,platform,console,utils leaf
-    class engine core
-    class aurora proc
-    class ops inspect
+```text
+Console / Panel / MCP notification
+              │
+              ▼
+          AMP ingress
+              │
+              ▼
+Inbox → Triage → fast/root Agent → model/tool/child Activity
+  ▲                                      │
+  └──────── tool receipt / child result ─┘
+              │
+              ▼
+generation commit → output publication → memory projection
 ```
 
-### 2.2 五层角色（RFC 0300 重定性）
+核心性质：
 
-| 层       | 包                                         | 角色                                   | 关键约束                             |
-| -------- | ------------------------------------------ | -------------------------------------- | ------------------------------------ |
-| 启动环境 | `aurora`                                   | 进程"大前期"：配置快照、组合、生命周期 | 唯一认识所有包的层                   |
-| 基础建设 | `contracts`/`config`/`ai`/`prompt`/`utils` | 稳定接口与装配物                       | 无业务状态                           |
-| 能力     | `memory`/`sandbox`                         | Agent 可主动/被动调用的工具            | 实现 `ToolExecutor` 或 `MemoryStore` |
-| 外部接入 | `platform`/`apps`                          | 外部生态兼容层                         | 实现 `ToolExecutor` + `submit_amp`   |
-| 运行实现 | `engine`                                   | Agent 运行：状态/闭环/资源边界         | 只依赖 contracts + utils             |
+- 输入首先是环境事件；同一 `session_id` 的事件经过 quiet/max-wait 窗口聚合。
+- triage 是同构 Agent，负责 `process`、`defer`、`discard`，并在 `builtin.fast` 与 `builtin.root` 之间选择。
+- handler 只读取不可变 `AgentContext` 并返回 `AgentDecision`，不直接调用模型、数据库或外部客户端。
+- 模型和工具请求先持久化为 Activity，再由后台并发槽派发；工具结果以 `tool.*` AMP 回到 engine。
+- Task、Agent、消息、Activity、session lane、因果事件与用户输出均以 SQLite 为权威。
+- ops、Console 与 Panel 在热路径外，通过契约 Port 输入或查询。
 
-### 2.3 依赖铁律
+## 2. 包与依赖边界
 
-- `engine` 不 import `ai/platform/memory/agents/config/prompt/ops`——外部服务全部通过**构造参数注入**（`model_provider=`、`memory_store=`、`bind_tool_executors()`）。
-- `agents` 不 import engine/memory/platform——handler 只读 `AgentContext`、只返回 `AgentDecision`；主动能力只生成 `ToolRequest`。
-- `platform` 只 import contracts + utils。
-- `ops` 是唯一可自由 import 所有包的监察 sidecar，但**不在热路径**：engine 不依赖它。
-- `src/` 一律不 import `aurora/`。
+```text
+aurora                  组合根：配置、注入、启动、关闭
+├── src/config          严格 TOML → 不可变配置快照
+├── src/prompt          PromptDocument 装配
+├── src/ai              模型角色、Provider、费用与模型查询
+├── src/memory          短期/长期记忆与记忆 ToolExecutor
+├── src/platform        MCP 工具、通知和生命周期适配
+├── src/agents          同构 handler 与模型可见的主动能力
+├── src/engine          唯一 Agent 热路径与运行时存储
+├── ops                 操作树、Panel 后端、认证与附件索引
+└── src/console         本地交互与只读输出渲染
 
----
-
-## 3. 核心认知闭环：一条消息的一生
-
-```
-用户输入
-  │
-  ▼
-① 平台（Console/Panel/MCP）→ engine.submit_amp(AMP)
-  │     AMP = {header.message_id, payload.{type, session_id, summary, data}}
-  │     （RFC 0300：无文件投递箱，全部直连 SQLite）
-  ▼
-② store.enqueue_inbox（store/inbox.py）
-  │     幂等检查（causal_events 已有 ingress.received 则忽略）
-  │     写入 inbox_events（PENDING），并刷新同会话防抖窗口
-  ▼
-③ engine.pump() 每轮六步（runtime.py:188）
-  │  a. ToolRegistry.recover_pending()   恢复挂起的工具请求
-  │  b. （无 ingest 步骤：摄入已在 submit_amp 完成）
-  │  c. _triage_inbox()                  到期批次 → 每个批次创建 1 个 Task + 1 个入口 triage agent
-  │  d. _pump_turns()                    claim 消息 → handler → apply_decision
-  │  e. 派发 model/tool 活动（async 后台）
-  │  f. _project_memory()                终态任务 → 记忆投影（to_thread）
-  ▼
-④ 一条消息的 turn（_pump_turns 内，runtime.py:229）
-  │  store.claim_message()        原子领取 1 条 PENDING 消息（无租约，单进程独占）
-  │  handle_claim()               组装只读 AgentContext（含记忆快照、权限域过滤后的工具定义）
-  │  BaseAgent.handle(context)    返回 AgentDecision（8 种 transition 之一）
-  │  apply_authorized_decision()  权限校验（角色/工具/委派/triage_control）
-  │  store.apply_decision()       8 分支状态机，单事务原子落库
-  ▼
-⑤ 决策的 8 种结局（store/decisions.py:125）
-  │  model_request  → PENDING model 活动 → 后台 provider.complete → model.completed 消息
-  │  tool_request   → PENDING tool 活动 → ToolRegistry → 平台 executor → tool.{status} 回执
-  │  delegations    → 子 agent + agent.assigned 消息（入口 agent 附批次投影 context_events）
-  │  completion     → agent COMPLETED；根 agent 完成 → Task 终态
-  │  wait           → 等待子 agent 回报（派生语义，无持久化等待状态）
-  │  defer / discard→ 仅入口 triage agent；结算批次（DEFERRED / 删除）
-  │  failure        → agent FAILED；根失败 → Task ERROR
-  ▼
-⑥ 终态：Task 留在 SQLite（终态即归档）
-  │  记忆投影：root_summary + root 最后摘要 → MemoryService（独立 SQLite）
-  │  causal_events 完整记录：task.started → agent.{kind} → tool.{status}
-  ▼
-⑦ 查询：/task /agent /status /output_stream → store 只读投影（debug.py）
+src/contracts           跨层 DTO、枚举与 Port
+src/utils               无业务语义的通用工具
+src/sandbox             未启用的独立组件
 ```
 
-### 3.1 防抖与批次（RFC 0300）
+`tests/test_dependency_boundaries.py` 执行以下约束：
 
-- 同 `session_id` 的新事件刷新 quiet 窗口（`quiet_seconds`），但不超过首条事件的 max wait（`max_wait_seconds`）。
-- 到期后 `claim_triage_batches` 按会话聚合为 `TriageBatch`（有字符上界，单条超大事件截断）。
-- 批次被标记 TRIAGING，创建入口 Task（`create_triage_task`）：Task ACTIVE + triage agent（depth 0）+ `task.started` 消息（payload = `{batch: {...}}` 投影）。
-- **批次原始事件保留在 inbox_events**，由 triage 的决策结算（委派→删除、defer→DEFERRED、discard→删除、失败→删除、直接完成→删除）。
+- `engine → contracts + utils`；
+- `platform → contracts + utils`；
+- `ops → contracts + utils`；
+- `agents → prompt + contracts + utils`；
+- `src` 不导入 `aurora`；
+- `sandbox` 只依赖 `utils`，也不参与当前组合根。
 
-### 3.2 委派链（RFC 0300）
+`aurora` 是唯一认识所有具体包的层。具体 ModelProvider、MemoryStore、AgentHandler 和 ToolExecutor 均由构造参数或绑定注入。
 
-```
-triage agent (depth 0, 无工具, 快模型)
-  └─ process → 委派 root（depth 1，收 assignment + context_events 批次投影 + 记忆）
-       └─ root（本体意识，全工具域）可继续委派 worker / memory
-            ├─ worker（同构子 agent，只收 assignment + 记忆 + 自己的结果）
-            └─ memory（唯一获权 aurora.memory.remember 的 agent）
-```
+## 3. 核心数据流
 
-- 委派授权：`profile.can_delegate` + `child_profiles` 成员 + 深度/数量预算（store 事务内校验）。
-- 等待语义：`wait_for_children` 由数据库事实派生（非终态 children 或 pending child reports），无持久化状态。
-- 子 agent 回报：`child.completed` / `child.failed` 消息 → 父 agent 下一轮处理。
+### 3.1 摄入与 Triage
 
-### 3.3 模型与工具回执
+`submit_amp()` 先按 `message_id` 幂等落库。普通事件进入 `inbox_events`；工具回执不进入 Inbox，而是按 `request_id`
+直接匹配原 Activity。同会话事件刷新 quiet 窗口，但不会超过 max wait。到期批次成为一个入口 Task：
 
-| 环节         | 入口                                            | 出口                                                    |
-| ------------ | ----------------------------------------------- | ------------------------------------------------------- |
-| 模型         | `_dispatch_models` claim PENDING model 活动     | `model_provider.complete()` → `complete_model_activity` |
-| 模型失败     | provider 异常 / 进程中断                        | `model.failed` 消息（含 error）                         |
-| 工具         | `claim_tool_requests` → ToolRegistry 分派       | `binding.executor.execute_tool()` → `complete_tool`     |
-| 工具回执     | `complete_tool_activity`（幂等键 = request_id） | `tool.succeeded/failed/unknown` 消息                    |
-| 工具完成语义 | `complete_task=True` 且成功                     | **存储层直接完成 agent**（不投递消息，RFC 0300）        |
-
-- 模型活动：`complete_model_activity` 把 `ModelResult` 展开到消息 payload 顶层（`{activity_id, ...result}`）。
-- 工具幂等：`causal_events` 中已存在 `(correlation_id=request_id, type=tool.{status})` 则忽略重放。
-
-### 3.4 崩溃恢复（无租约版，RFC 0300）
-
-启动时 `store.initialize()` → `recover_interrupted()` 做一件事：
-
-- `messages`: PROCESSING → PENDING（消息可重新领取）
-- `inbox_events`: TRIAGING → PENDING（批次可重新聚合）
-- `activities`: model PROCESSING → ERROR 并投递 `model.failed`（agent 收到"interrupted_by_restart"）；tool PROCESSING 保留待恢复
-
----
-
-## 4. 子包架构模式详解
-
-### 4.1 `src/contracts` — 契约层（最底层，零依赖）
-
-**模式**：纯数据契约 + Port Protocol，全部 `@dataclass(frozen=True, slots=True)`。
-
-| 文件               | 内容                                                                                                                                                                                                                  |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent.py`         | Agent 状态机核心：`AgentContext`/`AgentDecision`（8 transition + 载荷）/`AgentProfile`（含 `triage_control`）/`TaskState`/`AgentInstance`/`AgentMessage`/`AgentLimits`/`DelegationRequest`/`ToolRequest`/`Completion` |
-| `amp.py`           | 外部事件信封 `AmpEnvelope` + `new_amp` 工厂                                                                                                                                                                           |
-| `model.py`         | `ModelRequest`/`ModelResult`/`ModelMessage`/`ModelContinuation`/`ModelProvider` Protocol                                                                                                                              |
-| `tool.py`          | `ToolExecutor`/`ToolOutcome`/`ToolExecutorBinding` + `MEMORY_REMEMBER_CAPABILITY` 线缆契约                                                                                                                            |
-| `memory.py`        | `MemoryStore` Protocol + `MemoryEntry`/`MemoryQuery`/`MemoryContextSnapshot`                                                                                                                                          |
-| `triage.py`        | `TriageBatch`/`InboxEvent`/`TriageLimits`（决策类型已删，RFC 0300）                                                                                                                                                   |
-| `event.py`         | `RuntimeInput`/`CommandResult`/`OutputStream*`                                                                                                                                                                        |
-| `ports.py`         | `InteractiveInputPort`/`ToolQueuePort`/`ToolCompletionPort`/`ExternalAmpIngressPort` 等                                                                                                                               |
-| `platform.py`      | 平台生命周期协议 `PlatformHandle`/`PlatformFactory`/`PlatformServer`                                                                                                                                                  |
-| `configuration.py` | `AuroraConfig` 及各配置片段 DTO                                                                                                                                                                                       |
-
-**关键认知**：`AgentDecision` 是唯一"决策语言"——任何 Agent（包括 triage）的输出都是它；`contracts` 里没有实现，只有形状。
-
-### 4.2 `src/utils` — 工具层（零依赖）
-
-| 文件               | 内容                                                                   |
-| ------------------ | ---------------------------------------------------------------------- |
-| `logging.py`       | `get_logger("aurora.<module>")` 统一日志工厂                           |
-| `serialization.py` | `extract_json_from_text`/`atomic_write_json`（先写临时文件再原子改名） |
-| `time.py`          | `utc_now` 等时间工具                                                   |
-| `uvicorn.py`       | `SignalSafeServer`（禁用信号捕获的 uvicorn 包装）                      |
-
-### 4.3 `src/config` — 配置层（只依赖 contracts）
-
-**模式**：启动时一次加载 → 不可变快照 → `get()` 零参数获取；变更靠重启生效（RFC 0300）。
-
-| 文件          | 内容                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `loader.py`   | 按包加载所有 `config/*.toml` + profile 覆盖（仅 runtime），合并为单一不可变 `AuroraConfig` |
-| `sections.py` | 各 TOML 节的严格解析与校验（键集合精确匹配、`triage_control` 可选、`!` 排除语义校验）      |
-| `prompts.py`  | prompts.toml 与 Markdown 片段内容快照（agent 映射必须精确匹配 profiles）                   |
-| `files.py`    | TOML/Markdown 读取与 SHA-256 来源快照                                                      |
-| `registry.py` | 注册中心 `init(root, profile)` / `get()`                                                   |
-
-**配置分布**（一包一文件）：`runtime`/`engine`/`models`/`platforms`/`agents`/`apps`/`prompts`/`logging`/`storage`。密钥仅来自环境变量。
-
-### 4.4 `src/prompt` — 提示词层（只依赖 contracts）
-
-**模式**：`PromptCatalog`（不可变片段集合）→ `PromptComposer`（从 AgentContext 装配三条消息）。
-
-- 一次模型调用最多三类消息：① stable system（soul/world/agent_profile）② memory system（会话摘要 + 相关长期事实，非空才存在）③ user（当前消息）。
-- `_message_text` 按消息类型渲染：`task.started` 的 `{batch}` 投影、`agent.assigned` 的 `context_events`、`tool.*` 回执、`child.*` 子代理回报。
-- 所有外部数据经 `_external()` 转义，防止提示词注入。
-
-### 4.5 `src/ai` — 模型层（总分结构，RFC 0300）
-
-**模式**：总控 + 预设角色 + 协议通道三层。
-
-| 层       | 文件                                      | 内容                                                                                                                                                                                |
-| -------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 总控     | `gateway.py`                              | `ModelGatewayService`：能力协商、角色路由、输出规范化、成本预算、冷启动                                                                                                             |
-| 预设角色 | `roles/`                                  | `fast`/`quality`/`multimodal`：每个角色文件**自包含完整实现**（RFC 0300）；`base.py` 提供共享纯函数（工具序列化/请求组装/ChatCaller/响应解析）；注册表 `ROLE_PRESETS` + `resolve()` |
-| 基础设施 | `models.py`/`providers.py`/`execution.py` | models.dev 缓存/Provider 注册/`TaskManager`/`CostTracker`                                                                                                                           |
-
-**关键语义（RFC 0300）**：统一 `chat_completions` 单通道；基础能力由 models.dev 自动派生，协商只做子集校验与结构化输出二选一；`endpoint` 归代码，`models.toml` 只配置 model 绑定。**角色自包含**：无共享通道类，每个角色文件有自己的 `complete` 实现，多样化改造（如 multimodal 的音频输出处理）只改对应角色文件；共享逻辑以纯函数复用。
-
-**外部接口（RFC 0300）**：
-
-- `get_response(role, inputs)`：脱壳输出——chat 角色返回 `{text, tool_calls, finish_reason}`，embedding 角色返回 `{embeddings, model}`；
-- 四类基础角色：快速 / 质量 / 多模态 / **词嵌入**（`EmbeddingRole`，`litellm.aembedding`）；
-- `modalities_for(role)`：模型输入/输出模态查询（models.dev）；
-- `cost_tracker`：`total_cost()` / `by_role()` / `by_model()` / `by_status()`；
-- `export_openai_client()`：导出 `litellm.OpenAI` 兼容 client（mem0 等库使用）。
-
-### 4.6 `src/engine` — 运行实现层（核心，只依赖 contracts + utils）
-
-**模式**：单进程 asyncio 独占、单一 SQLite v10、无租约无乐观锁（RFC 0300）。
-
-```
-engine/
-  runtime.py       # AgentEngine（459 行）——唯一编排者：pump 六步 + 模型/工具派发 + 记忆投影
-  authorize.py     # 纯函数：handle_claim（组装 AgentContext）+ 授权校验（角色/工具/委派/triage_control）
-  ingress.py       # 纯函数：AMP 文件摄入、幂等回执、文件分类归档
-  debug.py         # 只读投影：task_detail / agent_detail / 旧工作区拒绝
-  tool_registry.py # ToolRegistry——按 capability ID 分派执行器的唯一执行表
-  store/
-    __init__.py    # SQLiteRuntimeStore = StoreDecisionsMixin + StoreInboxMixin + StoreRuntimeMixin
-    schema.py      # DDL v9：tasks/agents/messages/activities/causal_events/inbox_events
-    base.py        # 连接/事务（BEGIN IMMEDIATE）/行映射/崩溃恢复/insert helpers
-    decisions.py   # apply_decision 8 分支状态机 + 消息/活动队列 + 工具回执幂等 + _end_task
-    inbox.py       # 摄入/防抖/批次/入口 triage Task/批次结算
-    runtime.py     # 只读查询：tasks/agents/messages/events/outputs/counts
-    status.py      # 状态字面量常量
+```text
+inbox_events(PENDING)
+  → claim_triage_batches
+  → Task(ACTIVE) + builtin.triage + task.started
+  → process: delegate builtin.fast 或 builtin.root
+  → defer: 批次回到延迟队列
+  → discard: 删除批次，不产生用户输出
 ```
 
-**AgentEngine 的职责边界**：
+批次有事件数与字符预算；单条超大摘要会被确定性截断。Triage 模型或结构化输出失败时 fail-open 到 root，避免静默丢失输入。
 
-- **做**：编排 pump、派发模型/工具、记忆投影、查询代理。
-- **不做**：认知决策（交给 handler）、外部 I/O（交给注入的 Port/Executor）、持久化细节（交给 store）。
+### 3.2 Agent turn 与决策
 
-**一个事务边界**：`apply_decision` 是唯一写入口——每条决策 + 其出站消息 + 因果事件在单事务内原子完成。队列 claim 也是单事务原子 UPDATE（无竞争）。
+每个 turn 原子领取一条 `PENDING` 消息并构造上下文：Task、Agent、children、记忆快照，以及 profile 授权后的 Tool 定义。
+handler 返回且仅返回一种 transition：
 
-### 4.7 `src/agents` — 认知层
+| transition      | 结果                                                                 |
+| --------------- | -------------------------------------------------------------------- |
+| `model_request` | 创建 model Activity                                                   |
+| `tool_request`  | 授权、schema 校验后创建 tool Activity                                 |
+| `delegations`   | 创建获权的 child Agent 与 `agent.assigned` 消息                       |
+| `completion`    | 完成 Agent；根完成时推进 Task 终态                                    |
+| `wait`          | 等待语义由未终止 children 或待处理 child report 派生                  |
+| `defer`         | 仅 triage 可用，延迟当前批次                                          |
+| `discard`       | 仅 triage 可用，丢弃当前批次                                          |
+| `failure`       | Agent 失败；根失败时 Task 进入 `ERROR`                                |
 
-**模式**：逻辑同构代码化——`BaseAgent` 基类（RFC 0300）。
+角色、工具、委派目标、深度、数量、Task 预算和 `triage_control` 均在应用决策前校验。决策、消息、Activity 与因果事件在单个存储事务中提交。
 
-| 文件            | 内容                                                                                                                                                                                     |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base.py`       | `BaseAgent`：composer 装配、`_request_model`（tools/output_schema/continuation 可选）、工具定义收集与唯一性检查、决策工厂（`_delegate`/`_complete`/`_fail`/`_wait`/`_defer`/`_discard`） |
-| `handler.py`    | `ToolAgent(BaseAgent)`：可恢复工具链状态机（模型响应中的多个 tool call 按序执行，恢复信息存 agent state）                                                                                |
-| `triage.py`     | `TriageAgent(BaseAgent)`：注意力初筛——结构化输出（无工具、快模型）、fail-open 委派                                                                                                       |
-| `capabilities/` | 主动能力：`delegate`/`wait`/`speech`/`memory`——模型可见的工具前端，只生成 `ToolRequest`                                                                                                  |
+### 3.3 模型与工具 Activity
 
-**Agent 三元组**（RFC 0300）：`AgentProfile`（agents.toml）= ① implementation（逻辑类）② capabilities（权限域）③ model_role（模型角色）；上下文由 `handle_claim` 构造。
+模型和工具 dispatcher 不等待整批慢任务结束：空闲槽出现后持续领取，先做跨 session 公平分配，再填充余量。
 
-**工具定义去重规则**：平台/记忆工具的定义由 catalog descriptor 单一提供（`handle_claim` 注入）；in-handler capabilities（delegate 等）自行追加；重复 ID 抛错。
+| 类型 | 请求路径 | 完成路径 |
+| ---- | -------- | -------- |
+| 模型 | `ModelRequest` → model Activity | Provider `complete()` → `model.completed` 或 `model.failed` |
+| 工具 | `ToolRequest` → ToolRegistry → ToolExecutor | executor 提交 `tool.succeeded`、`tool.failed` 或 `tool.unknown` AMP |
 
-### 4.8 `src/memory` — 记忆层（能力，双面）
+ToolAgent 会持久化同一次模型响应中的多个 Tool call，并按序恢复。每项调用都有真实 Tool result；链尾才恢复模型 continuation。
+重复工具回执按 `request_id` 幂等消费。`complete_task=true` 的成功工具可在存储层直接完成 Agent。
 
-**模式**：单一 `MemoryService`（memory.sqlite3）既是被动投影的目标，也是主动工具的存储（同源，RFC 0300）。
+### 3.4 持续输入与 generation 提交
 
-| 文件          | 内容                                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| `service.py`  | `MemoryStore` 实现：session_memory（有界滚动摘要）+ durable_facts（去重长期事实）+ memory_receipts（幂等） |
-| `executor.py` | `MemoryToolExecutor`：`aurora.memory.remember` 的执行器，scope=session_id，幂等键=request_id               |
+`session_lanes` 保存 observed、generation、committed revision、watermark、活动交互 Task 与抢占预算。同一会话最多一个交互
+generation；生成期间的新事件先进入 delta。
 
-**三条写入路径，同一存储**：
+- 普通新事件不重启当前生成，在当前结果提交后进入下一轮。
+- 直接点名、明确纠正或使当前回复失效的事件可申请有界抢占。
+- 抢占次数和 generation 总等待有硬上界；不可撤回且正在执行的工具会阻止抢占。
+- 被取代 generation 的模型结果、工具回执和用户输出会被提交屏障拒绝，只保留审计事实。
+- Console、Panel 与外部平台只消费 `output_publications` 单调提交流。
 
-1. 终态投影（engine `_project_memory` → `completed_memory_entries`，被动）
-2. Triage `memory_candidates`（随终态投影携带）
-3. 记忆 agent 主动写入（委派 → ToolRequest → ToolRegistry → MemoryToolExecutor）
+## 4. Agent 与 Prompt
 
-### 4.9 `src/platform` — 外部接入层
+### 4.1 Profile
 
-**模式**：每个平台 = `ToolExecutor`（工具执行）+ 可选 `submit_amp`（事件摄入）+ `PlatformHandle`（生命周期描述）。
+`config/agents.toml` 中每个 profile 由三部分组成：
 
-| 文件    | 内容                                                                                                                                                                        |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp/`  | MCP 协议平台：`adapter.py`（Tool 发现 → capability ID = `{app.package}.{tool}`）、`client_manager.py`（stdio/HTTP 连接）、`server_kit.py`（本地 stdio MCP server 生命周期） |
-| `apps/` | 内建 MCP 应用（clock 等），由 platform/mcp 运行，数据在 `data/platform/mcp/apps`                                                                                            |
+1. `implementation`：handler 类；
+2. `model_role`：使用的模型角色；
+3. `capabilities`：可见和可执行的能力范围。
 
-**每个平台的统一协议**（`contracts/platform.py`）：`PlatformFactory._create(config, runtime) → PlatformHandle{bindings, server, background, cleanup}`；`aurora/runtime.py` 遍历注册表创建、收集绑定、统一启动/停止。
+委派另外受 `can_delegate` 与 `child_profiles` 约束。现行 profile：
 
-### 4.10 `ops/` — 面板后端（热路径外）
+| ID               | 职责                                | 委派范围                         |
+| ---------------- | ----------------------------------- | -------------------------------- |
+| `builtin.triage` | 注意力初筛                          | `builtin.fast` / `builtin.root`  |
+| `builtin.fast`   | 低延迟直接回应或调用工具            | 无                               |
+| `builtin.root`   | 本体意识与复杂任务规划              | worker / memory                  |
+| `builtin.worker` | 执行具体子任务                      | worker                           |
+| `builtin.memory` | 唯一获权主动写入长期事实的 Agent    | 无                               |
 
-**模式**：可 import 一切的 sidecar，只查不改。
+### 4.2 PromptDocument
 
-| 文件                      | 内容                                                                                                |
-| ------------------------- | --------------------------------------------------------------------------------------------------- |
-| `runtime.py`              | `AuroraRuntime`——组合根 light wrapper，实现 `InteractiveInputPort`（route_input）、持有 engine 引用 |
-| `router.py`/`registry.py` | `/` 前缀命令路由与目录                                                                              |
-| `commands/`               | `/status` `/pump` `/say` `/event` `/task` `/agent` `/clear` `/log` `/quit` `/help`                  |
-| `api.py`                  | `/v1/debug/*` FastAPI 调试端点                                                                      |
+一次模型调用至多包含三层：
 
-**平台 ↔ ops 解耦**：平台通过 `InteractiveInputPort` 注入调用，不 import ops。
+1. stable system：SOUL、WORLD、Agent profile；
+2. optional memory system：会话概要、最近窗口、相关长期事实；
+3. current user：批次、assignment、工具回执或 child report。
 
-### 4.11 `src/console` — 本地前端（热路径外）
+外部事实以 JSON 数据边界编码；Tool schema 走模型原生 tools 参数，不在正文重复。continuation 属于模型协议状态，不写入人格提示词。
 
-只读渲染器：按游标轮询 `RuntimeQueryPort.output_stream()` 打印 `Bot> <text>`；非 headless 且 `runtime.console.enabled` 时启动。
+## 5. 模型网关
 
-### 4.12 `src/sandbox` — 独立沙箱（未启用）
+`src/ai` 按角色组织实现：
 
-只依赖 utils；代码执行/安全检查/路径隔离；当前运行时不启用（保留组件）。
+- `fast`：注意力初筛和短决策；
+- `quality`：复杂推理与主工作流；
+- `multimodal`：为后续多模态输入保留的角色；
+- `embedding`：记忆语义检索。
 
-### 4.13 `aurora` — 组合根
+模型与 Provider 绑定在 `config/models.toml`。模型能力优先从 models.dev 派生，TOML 的 `capabilities` 可显式覆盖；密钥只通过
+Provider 声明的环境变量注入。当前 chat 角色统一使用 Chat Completions 形状，embedding 使用独立 endpoint。
 
-**模式**：唯一进程入口，一次性组装。
+网关同时负责：
 
-| 文件                    | 内容                                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `main.py`/`registry.py` | CLI 子命令分发                                                                                                                        |
-| `runtime.py`            | `run_runtime()`：加载配置 → 构造 ModelGateway/MemoryService/ToolRegistry → 加载 handlers → 构造 AgentEngine → 平台注册表启动 → 主循环 |
-| `commands/`             | `check`（代码检查）、`donk`（版本）、`start`（启动）                                                                                  |
+- 工具定义与结构化输出能力协商；
+- 流式收集、continuation 与取消传播；
+- `models.dev` 能力/价格缓存；
+- `data/ai/cost.sqlite3` 中的调用费用记录；
+- 面向 ops 的角色、模型、费用和健康查询。
 
-**组装顺序**（aurora/runtime.py）：
+完整附件多模态链路尚未接通：Panel 可以保存附件并把引用送入输入数据，但运行时还未完成 MIME 解析、内容读取和 multimodal role 调用。
 
-```
-配置快照 → 记忆服务 → 平台注册 → capabilities → handlers(按 profile)
-→ AgentEngine(model_provider=, memory_store=) → bind_tool_executors(平台绑定 + 记忆绑定)
-→ AuroraRuntime(engine) → 平台启动 → run_forever
-```
+## 6. 记忆系统
 
----
+`MemoryService` 组合三类数据：
 
-## 5. 运行时数据流转详表
-
-### 5.1 每轮 pump 的读写
-
-| 步骤            | 读                               | 写                                                  |
-| --------------- | -------------------------------- | --------------------------------------------------- |
-| recover_pending | activities(tool PROCESSING)      | 恢复回执                                            |
-| triage          | inbox_events(到期批次)           | TRIAGING → Task + agent + task.started              |
-| expire_tasks    | tasks(ACTIVE)                    | 超时 → BUDGET_EXHAUSTED                             |
-| turns           | messages(PENDING)                | PROCESSING → COMPLETED/ERROR；agent/activity/causal |
-| execute_pending | activities(tool PENDING)         | PROCESSING → 回执 → tool.{status} 消息              |
-| model dispatch  | activities(model PENDING)        | PROCESSING → COMPLETED/ERROR → model.{status} 消息  |
-| memory 投影     | tasks(COMPLETED) + causal_events | MemoryService（独立库）                             |
-
-### 5.2 消息状态机（messages 表）
-
-```
-PENDING ──claim──▶ PROCESSING ──apply_decision──▶ COMPLETED
-   │                    │
-   └────fail_message────┴──▶ ERROR
+```text
+最近原文 window ──超限批量压缩──▶ session summary
+终态投影 / Memory Agent ────────▶ global durable facts
+durable facts ──embedding────────▶ mem0 + Chroma semantic memory
 ```
 
-### 5.3 任务状态机（tasks 表）
+- `short_term.py` 管理最近窗口、异步概要、关键词候选和统一字符预算。
+- `service.py` 编排终态投影、主动记忆、查询与降级合并。
+- `long_term.py` 适配 mem0/Chroma；embedding 与 quality 模型由组合根注入。
+- `executor.py` 执行 `aur.serv.memory.remember` 并通过 AMP 返回回执。
 
-```
-ACTIVE ──根完成──▶ COMPLETED / SILENT
-   │     ──defer──▶ CANCELLED (triage.defer)
-   │     ──discard─▶ CANCELLED (triage.discard)
-   │     ──预算──▶ BUDGET_EXHAUSTED
-   │     ──根失败─▶ ERROR
-   │     ──/cancel─▶ CANCELLED
-```
+语义检索优先，随后合并窗口与 durable facts 关键词候选。mem0、Chroma、embedding 或语义查询不可用时，仍能回退到
+durable facts 关键词检索；降级原因通过 `/memory/status` 查询。概要、窗口与相关事实共同服从 `MemoryQuery.max_characters`。
 
-### 5.4 Agent 状态机（agents 表）
+## 7. MCP 与能力授权
 
-```
-READY ──claim──▶ (处理中，无持久化中间态)
-  ├── completion ──▶ COMPLETED
-  ├── failure ──▶ FAILED
-  ├── 任务被终止 ──▶ CANCELLED
-  └── 其他决策 ──▶ READY（等待语义由 activities/children 派生，RFC 0300）
-```
+当前唯一 Platform 实现是 MCP，支持：
 
----
+- 本地 stdio Server；
+- HTTPS Streamable HTTP Server；
+- `tools/list` 动态发现与 JSON Schema 参数校验；
+- MCP notification 到 AMP 的归一化摄入。
 
-## 6. 持久化机制
+MCP Tool ID 为 `aur.mcp.<app-package>.<raw-tool-name>`。Agent profile 的能力策略支持精确 ID、前缀通配、`*`，以及优先级更高的
+`!` 排除规则。例如：
 
-### 6.1 载体与位置
-
-| 载体       | 路径                          | 内容                       | 写入者                 |
-| ---------- | ----------------------------- | -------------------------- | ---------------------- |
-| SQLite WAL | `data/engine/runtime.sqlite3` | 运行态 + 终态（唯一权威）  | engine store           |
-| SQLite WAL | `data/memory/memory.sqlite3`  | 会话摘要/长期事实/幂等回执 | MemoryService          |
-| SQLite WAL | `data/ops/panel.sqlite3`      | 面板会话/附件索引          | PanelStore（RFC 0300） |
-
-### 6.2 何时落库（决策驱动）
-
-- **所有状态变更都发生在 `apply_decision` 单事务内**——没有散落的写库逻辑。
-- 模型/工具回执：`complete_model_activity` / `complete_tool_activity` 各一个事务。
-- 摄入：`enqueue_inbox` 一个事务（含幂等与防抖窗口刷新）。
-- 队列 claim：`claim_message` / `claim_activities` 单事务原子 UPDATE。
-
-### 6.3 WAL 说明
-
-WAL（Write-Ahead Logging）是 SQLite 的并发模式：写先追加到 `-wal` 文件，checkpoint 时合并进主库。**它不是独立存储**——读写一致；engine 单写者，无并发冲突。崩溃时 WAL 自动重放。
-
----
-
-## 7. 工具域划分
-
-### 7.1 工具域命名（RFC 0300：一律 `aur.*`）
-
-| 域         | 格式                           | 示例                                                         |
-| ---------- | ------------------------------ | ------------------------------------------------------------ |
-| 平台 MCP   | `aur.mcp.<app_package>.<tool>` | `aur.mcp.org.aurora.clock.get_time`                          |
-| 平台 MCP   | `aur.mcp.<app_package>.<tool>` | `aur.mcp.org.aurora.clock.get_time`                          |
-| 服务       | `aur.serv.<服务名>.<方法>`     | `aur.serv.memory.remember`                                   |
-| Agent 内建 | `aur.agent.<方法>`             | `aur.agent.delegate` / `aur.agent.wait` / `aur.agent.speech` |
-
-所有工具汇入 `ToolRegistry`（capability ID → executor 的一对一路由表）；catalog descriptor 是授权与参数校验的唯一依据。
-
-### 7.1b 回执通道（RFC 0300：结果 = AMP）
-
-```
-engine → ToolRegistry → executor.execute_tool(request)（无返回值）
-                              │ 执行完成
-                              ▼
-executor → tool_receipt_amp() → submit_amp(tool.{status}) → engine 幂等消费
-                              │（request_id 幂等键）
-                              ▼
-store.consume_tool_receipt → 完成活动 → agent 消息（complete_task 直接完成）
+```toml
+capabilities = ["aur.mcp.org.aurora.clock.*", "!aur.mcp.org.aurora.clock.delete_task"]
 ```
 
-### 7.2 权限域语法（profile.capabilities）
+授权链是：`catalog ∩ profile.capabilities → descriptor 存在性 → JSON Schema → ToolExecutor`。模型普通文本不产生外部效果。
 
+MCP 当前只把 tools 与 notifications 接入 Agent 上下文；resources 与 prompts 尚未接通。HTTP 会话或 stdio 子进程断开会结束当前
+连接/进程，尚无稳定的自动重连与长期故障恢复保证。
+
+内建 Clock App 默认关闭。启用后提供时间、持久化定时任务和自主 heartbeat；外部输入到来时由 engine 的交互优先级接管。
+
+## 8. 操作树、Console 与 Panel
+
+`OperationSpec` 同时定义 REST 资源和斜杠命令；二者使用相同参数规范与 `OperationResult` envelope。常用入口：
+
+| 文本命令/资源                   | 用途                              |
+| ------------------------------- | --------------------------------- |
+| `/engine/status`                | Engine 运行态快照                 |
+| `/tasks`、`/task <id>`          | Task 列表与详情                   |
+| `/agents`、`/agent <id>`        | Agent 列表与详情                  |
+| `/events`、`/event <AMP JSON>`  | 因果事件查询与 AMP 注入           |
+| `/pump`                         | 显式推进 1–100 个 turn            |
+| `/say <text>`                   | 提交会话消息                      |
+| `/memory/status`                | 记忆统计与降级状态                |
+| `/log`、`/clear`、`/quit`       | Console 进程操作                  |
+| `/help`                         | 从 OperationSpec 生成操作目录     |
+
+Panel backend 默认绑定 `127.0.0.1:8765`，定位为本地、单 owner、单 engine：
+
+- `/healthz` 无认证；
+- bootstrap token 登录换取 Bearer 或同源 HttpOnly session cookie；
+- 其余页面、Lab、操作、附件和 WebSocket 需要 session；
+- WebSocket 额外校验 Origin，并按 cursor 推送与 Console 同源的输出流；
+- 完整浏览器前端位于独立 `AuroraBot-panel` 仓库，开发服务器默认使用 8766。
+
+它不是公网多租户服务，也不应直接暴露到不受信任网络。
+
+## 9. 持久化与恢复
+
+```text
+data/
+  engine/runtime.sqlite3        Task、Agent、消息、Activity、Inbox、lane、因果事件、输出
+  ai/cost.sqlite3               模型费用
+  memory/memory.sqlite3         window、summary、durable facts、记忆回执
+  memory/mem0-history.sqlite3   mem0 历史
+  memory/chroma/                向量索引
+  ops/panel.sqlite3             Panel session 与附件索引
+  ops/Token.txt                 bootstrap token
+  ops/uploads/                  附件文件
+  platform/mcp/apps/            MCP App 私有数据
 ```
-"*"                        全部允许
-"!aurora.memory.remember"  排除（优先于一切正规则）
-"org.aurora.mcp.*"         前缀通配
-"aur.mcp.org.aurora.clock.get_time" 精确 ID
+
+SQLite 使用 WAL 与连续 schema migration。运行时不读取历史 JSON/JSONL、文件 Inbox 或旧工作区格式。
+
+启动恢复时：
+
+- `PROCESSING` 消息回到 `PENDING`；
+- `TRIAGING` Inbox 事件回到 `PENDING`；
+- 中断的 model Activity 结束并产生 `model.failed`；
+- tool Activity 保留，交给 ToolRegistry 恢复并依赖回执幂等。
+
+终态 Task 和因果记录当前保留在数据库中。可执行 TTL、WAL checkpoint/清理、跨 engine/memory/ai/ops 的一致备份与恢复仍属于路线图。
+
+## 10. 配置与启动
+
+配置加载顺序：核心 TOML → `runtime.profile` 覆盖 → 路径解析与跨文件校验 → 不可变 `AuroraConfig`。未知键、越界或重叠路径、
+非法 Platform、无效 App 和未声明 Prompt 都会在加载时失败，而不是静默采用默认值；模型密钥缺失则在对应角色实际调用前给出明确错误。
+
+```powershell
+git clone --branch nightly --single-branch https://github.com/AuroraBot-Dev/AuroraBot.git
+Set-Location AuroraBot
+uv sync --no-dev
+Copy-Item .env.example .env
 ```
 
-### 7.3 授权链
+当前默认启用仓库外的 `org.aurora.qq` App。未安装 `extensions/apps/Aurora-QQ` 时，须先在 `config/apps.toml` 对应条目设置
+`enabled = false`。填写 `DEEPSEEK_API_KEY` 后启动：
 
-```
-模型看到的工具 = catalog 描述符 ∩ profile.capabilities（handle_claim 过滤）
-执行前检查    = _authorize_tool：权限域匹配 → descriptor 存在 → JSON Schema 校验
-```
-
----
-
-## 8. 面板后端与可视化配置编辑
-
-### 8.1 面板后端定位（RFC 0300）
-
-ops 是系统唯一后端路由：单端口单认证的 FastAPI 根应用（`ops/api.py`，`SignalSafeServer` 启动）。
-提供 `/api/auth/*`（bootstrap token + Bearer 会话）、`/api/ops/*`（RESTful 操作资源树，与斜杠命令同构）、
-`/api/ops/attachments`（附件）、`WS /api/ops/stream`（输出流推送，与 console 同源）。
-聊天输入 = `POST /messages`（/say），聊天历史 = `GET /messages`（causal_events 投影）。
-会话与附件索引存 `data/ops/panel.sqlite3`；bootstrap token 存 `data/ops/Token.txt`。
-
-### 8.2 可视化配置编辑的演化路径
-
-```
-面板前端（新增配置页面）
-  │  GET /api/ops/config/snapshot（读） / PUT /api/ops/config（写，待加）
-  ▼
-ops/operations/config.py（操作体系内新增配置编辑操作）
-  │  依赖注入 ConfigEditorPort（aurora 组合时注入，保持 ops 只依赖 contracts）
-  ▼
-src/config/（新增 editor.py 或扩展 registry）
-  │  load_toml_text / validate_toml_text（复用 sections.py 校验） / atomic_save
-  ▼
-config/*.toml（写回）
-  │  生效方式：重启（配置变更通过重启生效；热重载必须先更新 RFC 0300）
+```powershell
+uv run --no-dev --env-file .env aurora start
 ```
 
-## 9. 设计基准
+`--headless` 只关闭 Console。重复的 `--platform` 构成精确集合，不与 `config/platforms.toml` 默认值叠加。
 
-架构决策已经合并到唯一的 [RFC 0300](rfc/0300-unified-architecture-and-contracts.md)。本实施说明不再维护历史 RFC
-编号与替代关系；需要改变模块边界、公共契约、配置、持久化或运行时语义时，直接更新 RFC 0300，并同步本文档与测试。
+## 11. 改动入口与质量门
 
----
+| 改动                  | 首要位置                         | 约束                                      |
+| --------------------- | -------------------------------- | ----------------------------------------- |
+| 新 DTO 或 Port        | `src/contracts`                  | 先更新 RFC 0300，补边界/契约测试          |
+| 新决策或状态迁移      | `src/engine/store`               | 保持事务原子、恢复、幂等和 generation 屏障 |
+| 新 Agent 行为         | `src/agents` + prompts/profiles  | handler 仍只做 context → decision         |
+| 新模型角色            | `src/ai/roles`                   | 自包含 endpoint 与适配，补 gateway 测试   |
+| 新 MCP App            | `config/apps.toml` 或 extensions | 显式配置、稳定 package、环境变量白名单    |
+| 新 Platform           | contracts + platform + aurora    | Platform 不依赖 engine/ops                |
+| 新操作                | contracts/operation + ops        | REST 与文本入口同构                       |
+| 数据库变更            | models/schema + migration        | 连续迁移、回滚和当前形状测试              |
 
-## 10. 演化指南
+提交前运行：
 
-| 想做什么      | 改哪里                                                           | 不动哪里           |
-| ------------- | ---------------------------------------------------------------- | ------------------ |
-| 加工具        | 实现 `ToolExecutor` + catalog descriptor → `bind_tool_executors` | engine/agents 核心 |
-| 加 Agent 类型 | 继承 BaseAgent → agents.toml 加 profile → prompts.toml 加片段    | engine             |
-| 加平台        | platform/<name>/ 实现 factory → aurora 注册                      | engine/agents      |
-| 换模型        | 替换 `model_provider` 注入                                       | engine             |
-| 改调度        | engine/pump 六步顺序/条件                                        | store              |
-| 改持久化      | store/（schema v10）                                             | 先更新 RFC 0300    |
-| 改决策语义    | store/decisions.py 8 分支                                        | 先更新 RFC 0300    |
-| 加配置页面    | ops/operations/config.py 配置编辑操作（§8.2）                    | engine             |
+```powershell
+uv run aurora check
+```
 
-**原则**：改 `contracts`/`store`/`engine` 的语义前先写 RFC；新增能力/平台/agent 只需实现 + 注册。
+测试应离线、确定且可重复；Provider、时钟和 MCP 使用 fake。运行时语义变更还应验证事务边界、幂等、因果父子关系、恢复与晚到结果隔离。

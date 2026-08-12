@@ -10,7 +10,7 @@ AuroraBot が探求するのは、単にモデルへ接続する方法だけで�
 
 - **初めての貢献**：文書の改善、テスト追加、境界の明確な小さな Issue から始められます。
 - **Application 開発者**：組み込み Clock application を参考に、新しい MCP 能力を接続できます。
-- **Runtime 開発者**：Agent、Kernel、model gateway、Platform、ローカル体験を改善できます。
+- **Runtime 開発者**：Agent、engine、model gateway、Platform、ローカル体験を改善できます。
 - **設計への貢献**：実行可能な受け入れ条件を持つ RFC で、公開 contract や boundary を提案できます。
 
 入口が分からない場合は、改善したい体験を Discussion または Issue に書いてください。
@@ -26,7 +26,7 @@ uv sync --group dev
 Copy-Item .env.example .env
 
 # 実際のモデルを動かす時は .env に key を追加し、明示的に読み込む
-uv run --env-file .env aurora
+uv run --env-file .env aurora start
 ```
 
 テストと静的チェックには実際のモデル key は不要です。secret はローカル `.env` またはプロセス環境だけに置き、
@@ -38,7 +38,7 @@ AuroraBot は、長期的にプロジェクトへ影響する判断を RFC に�
 更新または追加してください。
 
 - module の責務や依存方向
-- AMP、Task、Agent、Activity、effect event の contract
+- AMP、Task、Agent、Activity、tool receipt、causal event の contract
 - TOML 設定、extension protocol、model call contract
 - Platform composition、process entry、persistence semantics
 
@@ -54,7 +54,7 @@ AuroraBot の行動を確実にするため、次の boundary を維持してく
 
 - Agent handler は `AgentContext` を読み、`AgentDecision` を返します。Provider や Platform client を直接呼びません。
 - 外部 effect は Platform が実行し、outcome を新しい event として返します。通常のモデル text は effect ではありません。
-- Kernel は event、state、mailbox、Activity、因果記録を管理しますが、認知内容は決めません。
+- engine は event、state、mailbox、Activity、因果記録を管理しますが、認知内容は決めません。
 - 構造設定は TOML、secret は環境変数だけという原則を維持します。
 - 共通ログは `src.utils.logging.get_logger()` を使い、完全な prompt、continuation、機密 payload を記録しません。
 
@@ -91,7 +91,7 @@ causal parentage も確認します。
 ## 提出前の確認
 
 - 文書またはテストから、動作の違いを理解できます。
-- 新しい動作が Agent、Kernel、Platform のループを保っています。
+- 新しい動作が Agent、engine、Platform のループを保っています。
 - 設定、README、module 文書、テスト、RFC が矛盾していません。
 - ログと fixture に実際の secret、会話、個人データがありません。
 - `uv run aurora check` が成功しています。実行できない項目は Pull Request に明記しています。

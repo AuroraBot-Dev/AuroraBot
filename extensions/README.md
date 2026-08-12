@@ -18,7 +18,7 @@ MCP 应用最接近 AuroraBot 的“感知器与执行器”：它可以提供�
 4. 在 `config/agents.toml` 中用精确 Tool ID、`package.*` 或 `*` 设置 Agent profile 的能力策略。
 5. 使用 `uv run --env-file .env aurora start --platform mcp` 启动并验证完整闭环。
 
-内建 [Clock 应用](../src/apps/aurora-app-clock/README.md)展示了本地 stdio Server、工具发现、持久化任务和主动事件通知。
+内建 [Clock 应用源码](../src/apps/aurora-app-clock/mcp_server.py)展示了本地 stdio Server、工具发现、持久化任务和主动事件通知。
 
 AuroraBot 会在启动时动态发现 Server 的全部工具，并以配置 package 为 raw tool name 添加前缀。第三方 App 不需要
 Aurora 专用的 kind、tool、publication 或 destination 配置。模型只有在 Agent profile 的能力策略允许时才能请求工具；

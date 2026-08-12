@@ -10,7 +10,7 @@ welcome.
 
 - **First contribution:** improve documentation, add tests, or pick a small issue with a clear boundary.
 - **Application developer:** use the built-in Clock application as a starting point for a new MCP capability.
-- **Runtime developer:** improve Agents, Kernel, the model gateway, Platforms, or the local experience.
+- **Runtime developer:** improve Agents, the engine, model gateway, Platforms, or local experience.
 - **Design contributor:** propose public contracts and boundaries through an RFC with executable acceptance criteria.
 
 If you are unsure where to begin, open a Discussion or Issue describing the experience you want to improve.
@@ -26,7 +26,7 @@ uv sync --group dev
 Copy-Item .env.example .env
 
 # Add keys to .env and load it explicitly when running a real model
-uv run --env-file .env aurora
+uv run --env-file .env aurora start
 ```
 
 Tests and static checks do not require real model keys. Keep secrets in the local `.env` file or process environment.
@@ -38,7 +38,7 @@ AuroraBot uses RFCs for decisions that shape the project over time. Update or ad
 changing:
 
 - module responsibilities or dependency direction;
-- AMP, Task, Agent, Activity, or effect-event contracts;
+- AMP, Task, Agent, Activity, tool-receipt, or causal-event contracts;
 - TOML configuration, extension protocols, or model-call contracts;
 - Platform composition, process entry, or persistence semantics.
 
@@ -54,7 +54,7 @@ A few boundaries make AuroraBot's actions reliable:
 
 - Agent handlers read `AgentContext` and return `AgentDecision`; they never call a Provider or Platform client directly.
 - Platforms execute external effects and return outcomes as new events. Ordinary model text is not an effect.
-- Kernel owns events, state, mailboxes, Activities, and causal records, but not cognitive content.
+- The engine owns events, state, mailboxes, Activities, and causal records, but not cognitive content.
 - Structural configuration remains in TOML, while secrets continue to come only from environment variables.
 - Shared logging uses `src.utils.logging.get_logger()` and excludes full prompts, continuations, and sensitive payloads.
 
@@ -91,7 +91,7 @@ transaction boundaries, idempotency, and causal parentage.
 ## Before submitting
 
 - A reader can understand the behavioral difference from documentation or tests.
-- New behavior preserves the loop between Agent, Kernel, and Platform.
+- New behavior preserves the loop between Agent, engine, and Platform.
 - Configuration, READMEs, module documentation, tests, and RFCs do not contradict one another.
 - Logs and fixtures contain no real secrets, conversations, or private data.
 - `uv run aurora check` passes, or the Pull Request clearly states what could not be run.
