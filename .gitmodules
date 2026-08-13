@@ -1,0 +1,6 @@
+[submodule "docs"]
+	path = docs
+	url = https://github.com/AuroraBot-Dev/docs.git
+[submodule "panel"]
+	path = panel
+	url = https://github.com/AuroraBot-Dev/panel.git

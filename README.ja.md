@@ -117,7 +117,7 @@ uv run --no-dev --env-file .env aurora start --headless
 - [クイックスタート](https://www.aurorabot.org/start/getting-started)
 - [Nightly の現在状態と境界](https://www.aurorabot.org/reference/nightly-status)
 - [Architecture](ARCHITECTURE.md) と [technical reference](TECHNICAL.md)
-- [コントリビューションガイド](docs/CONTRIBUTING.ja.md)
+- [コントリビューションガイド](CONTRIBUTING.ja.md)
 - [AuroraBot の拡張](extensions/README.md)
 - [RFC 読み方ガイド](docs/rfc/README.md)
 - [進化 roadmap](ROADMAP.md)

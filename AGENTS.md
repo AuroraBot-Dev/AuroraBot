@@ -6,6 +6,7 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 ## Architecture authority
 
 - `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准，定义当前完整架构与公共契约。
+- `docs/` 是 `AuroraBot-Dev/docs` 仓库的子模块，`docs/rfc/` 随子模块挂载；RFC 变更在 docs 仓库提交后，再在本仓库 bump 子模块指针。
 - RFC 0300 高于 README、注释、配置样例和现有代码。
 - 影响模块边界、事件、配置、扩展、模型调用、持久化或进程组合契约的改动，必须先更新 RFC 0300。
 - 除非先修改 RFC 0300 的治理规则，不得新增并行编号 RFC。
@@ -19,7 +20,8 @@ AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智
 config/         TOML 核心配置、平台偏好、领域配置与 profile 覆盖
 aurora/         唯一进程 CLI、平台选择与生命周期组合
 ops/            面板后端：唯一 HTTP 路由、操作体系、认证与面板存储
-docs/rfc/       唯一 RFC 与阅读索引
+docs/           AuroraBot-Dev/docs 子模块：文档站点；docs/rfc/ 唯一 RFC 与阅读索引
+panel/          AuroraBot-Dev/panel 子模块：面板前端
 src/contracts/  无上层依赖的配置、AMP、操作、Agent、模型与记忆契约
 src/prompt/     提示词目录、分层 DTO 与模型上下文呈现
 src/engine/     完整 Agent 热路径、状态、Activity、因果与 SQLite 运行态

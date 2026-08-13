@@ -118,7 +118,7 @@ public multi-tenant deployment are not current guarantees. Public behavior is de
 - [Getting started](https://www.aurorabot.org/start/getting-started)
 - [Current nightly status and boundaries](https://www.aurorabot.org/reference/nightly-status)
 - [Architecture](ARCHITECTURE.md) and [technical reference](TECHNICAL.md)
-- [Contributing guide](docs/CONTRIBUTING.en.md)
+- [Contributing guide](CONTRIBUTING.en.md)
 - [Extending AuroraBot](extensions/README.md)
 - [RFC reading guide](docs/rfc/README.md)
 - [Evolution roadmap](ROADMAP.md)
