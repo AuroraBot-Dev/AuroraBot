@@ -117,7 +117,7 @@ AuroraBot `0.5 alpha`（`nightly`）适合本地体验、运行时研究和扩�
 - [系统架构](ARCHITECTURE.md)与[技术说明](TECHNICAL.md)
 - [贡献指南](CONTRIBUTING.md)
 - [扩展 AuroraBot](extensions/README.md)
-- [RFC 阅读指南](docs/rfc/README.md)
+- [RFC 阅读指南](docs/rfc/index.md)
 - [演化路线图](ROADMAP.md)
 - [日志规范](LOGGING.md)
 - [社区行为准则](CODE_OF_CONDUCT.md)

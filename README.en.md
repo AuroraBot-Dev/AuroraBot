@@ -120,7 +120,7 @@ public multi-tenant deployment are not current guarantees. Public behavior is de
 - [Architecture](ARCHITECTURE.md) and [technical reference](TECHNICAL.md)
 - [Contributing guide](CONTRIBUTING.en.md)
 - [Extending AuroraBot](extensions/README.md)
-- [RFC reading guide](docs/rfc/README.md)
+- [RFC reading guide](docs/rfc/index.md)
 - [Evolution roadmap](ROADMAP.md)
 - [Logging policy](LOGGING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)

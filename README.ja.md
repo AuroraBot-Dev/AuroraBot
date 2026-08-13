@@ -119,7 +119,7 @@ uv run --no-dev --env-file .env aurora start --headless
 - [Architecture](ARCHITECTURE.md) と [technical reference](TECHNICAL.md)
 - [コントリビューションガイド](CONTRIBUTING.ja.md)
 - [AuroraBot の拡張](extensions/README.md)
-- [RFC 読み方ガイド](docs/rfc/README.md)
+- [RFC 読み方ガイド](docs/rfc/index.md)
 - [進化 roadmap](ROADMAP.md)
 - [ログ規約](LOGGING.md)
 - [行動規範](CODE_OF_CONDUCT.md)
