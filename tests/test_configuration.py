@@ -1,5 +1,6 @@
 """包级 TOML 配置快照契约。"""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,23 @@ from src.contracts import ConfigurationError
 ROOT = Path(__file__).parents[1]
 
 
+def test_test_process_cannot_connect_repository_runtime_database() -> None:
+    probe = ROOT / "data" / "pytest-pollution-probe.sqlite3"
+    with pytest.raises(RuntimeError, match="must not access repository runtime data"):
+        sqlite3.connect(probe)
+    assert not probe.exists()
+
+
+def test_default_test_root_is_disposable(tmp_path: Path) -> None:
+    assert Path.cwd() == tmp_path
+    configuration = load_configuration(Path.cwd())
+    assert configuration.storage.data_root == tmp_path / "data"
+
+
 def test_configuration_uses_engine_and_storage_snapshots() -> None:
     configuration = load_configuration(ROOT)
     source_names = {source.path.name for source in configuration.sources}
+    profiles = {profile.id: profile for profile in configuration.agents}
 
     assert {"runtime.toml", "engine.toml", "storage.toml", "logging.toml", "prompts.toml", "SOUL.md"} <= source_names
     assert configuration.engine.workspace == ROOT / "data" / "engine"
@@ -26,6 +41,12 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert configuration.runtime.panel.port == 8765  # noqa: PLR2004
     assert configuration.runtime.panel.max_upload_bytes == 67108864  # noqa: PLR2004
     assert configuration.logging_dir == ROOT / "logs"
+    assert profiles["builtin.triage"].child_profiles == frozenset({"builtin.fast", "builtin.root"})
+    assert profiles["builtin.fast"].model_role == "fast"
+    assert not profiles["builtin.fast"].can_delegate
+    assert profiles["builtin.fast"].child_profiles == frozenset()
+    assert configuration.engine.triage.max_interrupts == 2  # noqa: PLR2004
+    assert configuration.engine.triage.max_generation_seconds == 45.0  # noqa: PLR2004
 
 
 def test_profile_only_changes_runtime_snapshot() -> None:
@@ -123,10 +144,10 @@ def test_unknown_mcp_keys_and_invalid_env_names_are_rejected(project_root: Path)
 
 def test_prompt_agent_ids_do_not_collide_with_system_sections(project_root: Path) -> None:
     agents = project_root / "config" / "agents.toml"
-    renamed = agents.read_text(encoding="utf-8").replace("builtin.gate", "soul")
+    renamed = agents.read_text(encoding="utf-8").replace("builtin.root", "soul")
     agents.write_text(renamed)
     prompts = project_root / "config" / "prompts.toml"
-    prompts.write_text(prompts.read_text(encoding="utf-8").replace('"builtin.gate"', '"soul"'))
+    prompts.write_text(prompts.read_text(encoding="utf-8").replace('"builtin.root"', '"soul"'))
     engine = project_root / "config" / "engine.toml"
     engine.write_text(
         engine.read_text(encoding="utf-8").replace('root_profile = "builtin.triage"', 'root_profile = "soul"')

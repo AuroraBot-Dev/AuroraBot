@@ -20,6 +20,7 @@
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
+  <img src="https://img.shields.io/badge/Nightly-0.5%20alpha-6f5b95" alt="Nightly 0.5 alpha" />
 </p>
 
 ## 她是什么
@@ -46,11 +47,13 @@ AuroraBot 是一个面向开发者的开源自主智能体框架。我们想做�
 
 ## 主要能力
 
-- **主动运行**：内建 Clock MCP 持久化自主心跳并产生受预算约束的自主任务；外部输入到来时及时切回交互工作。
+- **主动运行**：启用内建 Clock MCP 后，可持久化自主心跳并产生受预算约束的自主任务；外部输入到来时及时切回交互工作。
 - **持续任务**：任务可以异步等待模型、工具和子 Agent，在结果返回后恢复，并有明确的预算与终态。
 - **多 Agent 协作**：同构 Agent 通过有界委派组成监督树，简单工作直接完成，复杂工作可以并行拆分。
-- **连接外部世界**：Console、Dashboard 和 MCP Platform 将不同来源统一为事件，并提供经过授权的环境能力。
-- **可替换模型**：模型角色、Provider、Chat Completions 与 Responses 通道由配置选择，不绑定单一模型服务。
+- **会话持续演进**：revision、watermark、delta 与提交屏障让新事件能进入正在进行的会话，并隔离被取代的旧生成。
+- **连接外部世界**：Console、本地 Panel 后端和 MCP Platform 将不同来源统一为事件，并提供经过授权的环境能力。
+- **内建记忆**：短期窗口与概要、全局 durable facts、mem0/Chroma 语义检索组成可降级的长期记忆链路。
+- **可替换模型**：fast、quality、multimodal、embedding 角色与 Provider 由 TOML 配置；当前对话调用统一使用 Chat Completions 语义。
 - **可追溯行动**：输入、模型调用、能力请求、执行结果和终止原因处于同一条因果记录中。
 - **人格与能力可配置**：SOUL、Agent profile、模型角色、平台组合和 MCP 应用各自拥有清晰配置入口。
 
@@ -59,16 +62,21 @@ AuroraBot 是一个面向开发者的开源自主智能体框架。我们想做�
 需要 Python 3.12（推荐，以上版本未经充分验证）、Git 和 [uv](https://docs.astral.sh/uv/)。当前推荐从源码运行。
 
 ```powershell
-git clone https://github.com/AuroraBot-Dev/AuroraBot.git
+git clone --branch nightly --single-branch https://github.com/AuroraBot-Dev/AuroraBot.git
 Set-Location AuroraBot
 uv sync --no-dev
 Copy-Item .env.example .env
+```
 
-# 在 .env 中填写默认配置所需的 DEEPSEEK_API_KEY
+在 `.env` 中填写默认模型所需的 `DEEPSEEK_API_KEY`。当前 `config/apps.toml` 默认启用仓库外的
+`org.aurora.qq` 扩展；如果没有安装 `extensions/apps/Aurora-QQ`，请先在对应 `[[app]]` 中设为
+`enabled = false`，否则启动会按严格配置规则失败。
+
+```powershell
 uv run --no-dev --env-file .env aurora start
 ```
 
-启动后可直接输入消息，使用 `/help` 查看命令，或用 `/status` 查看运行状态。
+启动后可直接输入消息，使用 `/help` 查看命令，或用 `/engine/status` 查看运行状态。
 
 ```powershell
 # 使用 config/platforms.toml 中的默认平台组合
@@ -80,7 +88,8 @@ uv run --no-dev --env-file .env aurora start --headless
 
 本地 Console 不随 `--platform` 选择启停：只要不是无头模式且 `[runtime.console].enabled = true`，它就会运行。
 
-显式提供 `--platform` 时，这些平台组成精确的平台集合，不与默认值叠加。Dashboard 浏览器前端由独立项目提供，本仓库包含本地后端和聊天桥接。
+显式提供 `--platform` 时，这些平台组成精确的平台集合，不与默认值叠加。完整浏览器前端由独立的
+[AuroraBot Panel](https://github.com/AuroraBot-Dev/AuroraBot-panel) 项目提供；本仓库只包含 loopback、本地单 owner 的后端与聊天桥接。
 
 ## 定制与扩展
 
@@ -94,19 +103,22 @@ uv run --no-dev --env-file .env aurora start --headless
 | Agent 的模型、能力与委派范围  | `config/agents.toml`    |
 | 本地或远程 MCP 应用           | `config/apps.toml`      |
 
-结构配置使用 TOML，密钥只从环境变量读取。扩展可以从[扩展指南](extensions/README.md)和内建[Clock 应用](src/apps/aurora-app-clock/README.md)开始。
+结构配置使用 TOML，密钥只从环境变量读取。扩展可以从[扩展指南](extensions/README.md)和内建
+[Clock 应用源码](src/apps/aurora-app-clock/mcp_server.py)开始。
 
 ## 当前阶段
 
-AuroraBot `0.4` 是开发者预览，适合本地体验、框架研究和扩展开发。当前版本尚未提供内建长期记忆、附件理解、Agent 沙箱工具或面向公网的多租户部署保证。我们会明确区分当前能力与路线图，公共行为以已接受 RFC 和测试为准。
+AuroraBot `0.5 alpha`（`nightly`）适合本地体验、运行时研究和扩展开发。当前附件只完成存储与引用传递，尚未形成完整多模态理解链路；sandbox 与 speech 尚未接入授权运行时；MCP 断线自动恢复、终态数据 TTL、一致备份，以及面向公网的多租户部署保证也不在当前承诺内。公共行为以 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)、契约与测试为准。
 
 ## 文档
 
-- [AuroraBot 文档站](https://www.aurorabot.org/)
-- [贡献指南](docs/CONTRIBUTING.md)
+- [快速开始](https://www.aurorabot.org/start/getting-started)
+- [Nightly 当前状态与边界](https://www.aurorabot.org/reference/nightly-status)
+- [系统架构](ARCHITECTURE.md)与[技术说明](TECHNICAL.md)
+- [贡献指南](CONTRIBUTING.md)
 - [扩展 AuroraBot](extensions/README.md)
-- [模型网关](src/ai/README.md)
-- [RFC 阅读指南](docs/rfc/README.md)
+- [RFC 阅读指南](docs/rfc/index.md)
+- [演化路线图](ROADMAP.md)
 - [日志规范](LOGGING.md)
 - [社区行为准则](CODE_OF_CONDUCT.md)
 
@@ -118,7 +130,7 @@ AuroraBot 使用了许多优秀的开源项目：
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | 模型 Provider 接入与调用基础设施 |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP 应用和工具协议               |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Dashboard 本地服务               |
+| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Panel 本地后端                    |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console 与终端体验               |
 | [jsonschema](https://github.com/python-jsonschema/jsonschema)                                                          | 能力参数校验                     |
 

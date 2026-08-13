@@ -1,7 +1,7 @@
-"""面板后端私有存储（RFC 0218 §6）：bootstrap Token、Bearer 会话与附件索引。
+"""面板后端私有存储：bootstrap Token、Bearer 会话与附件索引。
 
 位于 ops 包，数据落 ``data/ops/``（panel.sqlite3 + Token.txt + uploads/）。
-存储实现使用 SQLAlchemy 2.0 ORM（RFC 0217），Schema 演进经
+存储实现使用 SQLAlchemy 2.0 ORM，Schema 演进经
 ``ops/migration`` 版本序列（utils.migration 框架）；ops 仍只依赖
 contracts + utils 与通用依赖的边界。
 """
@@ -15,6 +15,8 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from rich.console import Console
+from rich.panel import Panel
 from sqlalchemy import Column, Integer, String, Table, create_engine, delete, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -30,6 +32,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _TOKEN_BYTES = 32
+_TOKEN_PRINT_CONSOLE = Console(highlight=False)
 
 
 class _Base(DeclarativeBase):
@@ -66,6 +69,17 @@ class AttachmentRow(_Base):
     created_at: Mapped[str] = mapped_column("created_at", String, nullable=False)
 
 
+def _print_bootstrap_token(token: str, token_path: "Path") -> None:
+    """首次生成 bootstrap token 时用 Rich Panel 展示（仅终端，不写入日志）。"""
+    content = (
+        f"[bold yellow]Token:[/bold yellow] [bold green]{token}[/bold green]\n\n"
+        "[dim]请妥善保管 Token。\n"
+        f"你也可以在 [bold]{token_path}[/bold] 查看你的 Token。\n"
+        "如果不慎泄露，请删除 Token.txt 以重新生成。[/dim]"
+    )
+    _TOKEN_PRINT_CONSOLE.print(Panel(content, title="Aurora Panel Auth"))
+
+
 class PanelStore:
     """面板会话与附件存储：Token 文件原子创建、会话生命周期与附件索引。"""
 
@@ -97,7 +111,7 @@ class PanelStore:
         return self._upload_dir
 
     def _load_or_create_token(self) -> str:
-        """读取或原子创建 Token.txt（0600）。"""
+        """读取或原子创建 Token.txt（0600）；首次生成时在控制台用 Rich Panel 展示。"""
         if self._token_path.exists():
             raw = self._token_path.read_text(encoding="utf-8").strip()
             if raw:
@@ -107,6 +121,7 @@ class PanelStore:
         temporary.write_text(token + "\n", encoding="utf-8")
         temporary.chmod(0o600)
         temporary.replace(self._token_path)
+        _print_bootstrap_token(token, self._token_path)
         return token
 
     def _migrate(self) -> None:

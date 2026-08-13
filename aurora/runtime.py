@@ -99,7 +99,7 @@ async def run_runtime(
     runtime = _create_runtime(configuration)
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
-    panel_server = _panel_server(runtime)
+    panel_server = _panel_server(runtime, console_enabled=console_enabled)
     failure: BaseException | None = None
     async with AsyncExitStack() as resources:
         resources.push_async_callback(_run_cleanup, runtime.shutdown)
@@ -196,7 +196,12 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     capabilities = _build_capabilities()
     handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     model_gateway = ModelGatewayService(configuration)
-    memory = MemoryService(configuration.storage.memory, gateway=model_gateway)
+    memory = MemoryService(
+        configuration.storage.memory,
+        gateway=model_gateway,
+        embed_fn=model_gateway.embed_sync,
+        llm_model=_configured_model(configuration, "quality"),
+    )
     engine = AgentEngine(
         engine_configuration,
         handlers,
@@ -216,7 +221,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
 
 
 def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
-    """构造主动记忆写入的工具绑定（RFC 0207 记忆同源，RFC 0211 回执走 AMP）。"""
+    """构造记忆同源且通过 AMP 回执的主动记忆工具绑定。"""
     from src.contracts.tool import ToolExecutorBinding
     from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 
@@ -228,6 +233,14 @@ def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["Too
             source_instance="local",
         ),
     )
+
+
+def _configured_model(configuration: AuroraConfig, role: str) -> str | None:
+    """返回角色绑定的完整 Provider/model 标识。"""
+    definition = configuration.model_definitions.get(role)
+    if definition is None:
+        return None
+    return f"{definition.provider}/{definition.model}"
 
 
 # -- 平台启动（统一循环）-----------------------------------------------
@@ -446,8 +459,11 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
 # -- 面板服务器 --------------------------------------------------------
 
 
-def _panel_server(runtime: AuroraRuntime) -> SignalSafeServer | None:
-    """创建独立于 Platform 集合的面板后端服务器（RFC 0218 §1）。"""
+def _panel_server(runtime: AuroraRuntime, *, console_enabled: bool = True) -> SignalSafeServer | None:
+    """创建独立于 Platform 集合的面板后端服务器。
+
+    console_enabled 控制 Lab 调试页（/debug/lab）是否随本地 Console 一起提供。
+    """
     configuration = runtime.configuration
     panel = configuration.runtime.panel
     if not panel.enabled:
@@ -458,6 +474,7 @@ def _panel_server(runtime: AuroraRuntime) -> SignalSafeServer | None:
         panel=panel,
         profile=configuration.runtime.profile,
         store=store,
+        console_enabled=console_enabled,
     )
     return SignalSafeServer(
         uvicorn.Config(

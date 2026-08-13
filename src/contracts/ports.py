@@ -1,4 +1,4 @@
-"""平台到组合层的窄端口契约（RFC 0218 面板后端）。
+"""平台到组合层的窄端口契约（面板后端）。
 
 端口按域拆分：engine 交互与查询、记忆查询、模型查询、配置查询。
 组合根将实现注入 ``PanelRuntime``，ops 面板与操作体系只经这些结构 Protocol 访问运行态。
@@ -44,6 +44,8 @@ class EngineQueryPort(Protocol):
 
     def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage: ...
 
+    def output_tail_cursor(self) -> int: ...
+
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]: ...
 
     def list_agents(self, *, limit: int = 64) -> list[dict[str, Any]]: ...
@@ -62,17 +64,17 @@ class EngineQueryPort(Protocol):
 
 
 class MemoryQueryPort(Protocol):
-    """记忆引擎（RFC 0216）的只读查询端口。"""
+    """记忆引擎的只读查询端口。"""
 
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]: ...
 
-    def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]: ...
+    async def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]: ...
 
     def status(self) -> dict[str, Any]: ...
 
 
 class AiQueryPort(Protocol):
-    """模型网关（RFC 0215）的只读查询端口。"""
+    """模型网关的只读查询端口。"""
 
     async def cost(self) -> dict[str, Any]: ...
 
@@ -82,7 +84,7 @@ class AiQueryPort(Protocol):
 
 
 class ConfigQueryPort(Protocol):
-    """启动配置快照（RFC 0206）与提示词的只读查询端口。"""
+    """启动配置快照与提示词的只读查询端口。"""
 
     def snapshot(self) -> dict[str, Any]: ...
 
@@ -91,7 +93,7 @@ class ConfigQueryPort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class PanelRuntime:
-    """操作体系可见的全部后端端口聚合（RFC 0218 §2/§5）。"""
+    """操作体系可见的全部后端端口聚合。"""
 
     engine: EngineQueryPort
     memory: MemoryQueryPort
@@ -110,3 +112,5 @@ class RuntimeQueryPort(Protocol):
     """本地交互前端只读查询输出流的端口。"""
 
     def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage: ...
+
+    def output_tail_cursor(self) -> int: ...

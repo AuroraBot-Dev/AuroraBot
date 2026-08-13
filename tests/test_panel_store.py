@@ -1,4 +1,4 @@
-"""面板私有存储：Token 原子创建、会话生命周期与附件索引（RFC 0218 §6）。"""
+"""面板私有存储：Token 原子创建、会话生命周期与附件索引。"""
 
 from __future__ import annotations
 

@@ -23,6 +23,8 @@ class _Msg(StrEnum):
     LOCAL_WORK = "当前局部工作：\n{content}"
     MISSING_AGENT_PROMPT = "missing prompt for Agent profile {profile_id}"
     MEMORY_WINDOW = "[ 最近对话 ]\n{content}"
+    REMOTE_SUMMARIES = "[ 其他会话摘要 ]\n{content}"
+    REMOTE_WINDOW = "[ 其他会话最近动态 ]\n{content}"
     RELEVANT_FACTS = "[ 相关长期事实 ]\n{content}"
     SESSION_MEMORY = "[ 会话摘要 ]\n{content}"
     TOOL_RESULT = "工具返回 {status}：\n{content}"
@@ -65,6 +67,31 @@ class PromptComposer:
                     ),
                 )
             )
+        if context.memory.remote_summaries:
+            memory.append(
+                PromptSection(
+                    "remote_summaries",
+                    _Msg.REMOTE_SUMMARIES.format(
+                        content=external_data(
+                            [{"scope": item.scope, "summary": item.summary} for item in context.memory.remote_summaries]
+                        )
+                    ),
+                )
+            )
+        if context.memory.remote_window:
+            memory.append(
+                PromptSection(
+                    "remote_window",
+                    _Msg.REMOTE_WINDOW.format(
+                        content=external_data(
+                            [
+                                {"scope": item.scope, "role": item.role, "content": item.content}
+                                for item in context.memory.remote_window
+                            ]
+                        )
+                    ),
+                )
+            )
         if context.memory.relevant_facts:
             memory.append(
                 PromptSection(
@@ -85,11 +112,11 @@ class PromptComposer:
 def _message_text(context: AgentContext) -> str:
     payload = context.message.payload
     if context.message.type == "task.started" and isinstance(payload.get("batch"), dict):
-        # 入口 triage Task 的批次投影（RFC 0209）；TriageAgent 自构请求，此分支供通用渲染兜底
+        # 入口 triage Task 的批次投影；TriageAgent 自构请求，此分支供通用渲染兜底
         admitted = {"events": payload["batch"].get("events", [])}
         return _Msg.ADMITTED_EVENTS.format(content=external_data(admitted))
     if context.message.type == "agent.assigned" and isinstance(payload.get("context_events"), list):
-        # 入口 agent 委派时把有界批次投影交给本体意识（RFC 0209）
+        # 入口 agent 委派时把有界批次投影交给本体意识
         assigned = {"instruction": context.agent.assignment, "events": payload["context_events"]}
         return _Msg.ADMITTED_EVENTS.format(content=external_data(assigned))
     if context.message.type.startswith("tool."):

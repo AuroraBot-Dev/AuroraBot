@@ -3,7 +3,7 @@
 workspace = "data/engine"
 
 [engine.agents]
-# 入口（triage）Agent profile：Task 从 triage 开始，process 时委派本体意识（RFC 0209）
+# 入口（triage）Agent profile：Task 从 triage 开始，process 时委派本体意识
 root_profile = "builtin.triage"
 worker_profile = "builtin.worker"
 max_active_agents = 16
@@ -17,12 +17,14 @@ blocking_workers = 4
 
 [engine.triage]
 model_role = "fast"
-quiet_seconds = 0.4
-max_wait_seconds = 1.5
+quiet_seconds = 3.0
+max_wait_seconds = 3.0
 defer_seconds = 5.0
 max_defer_seconds = 60.0
 max_batch_events = 24
 max_batch_characters = 12000
+max_interrupts = 2
+max_generation_seconds = 45.0
 
 [engine.autonomy]
 scan_seconds = 1.0

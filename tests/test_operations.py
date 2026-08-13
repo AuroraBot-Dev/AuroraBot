@@ -1,5 +1,5 @@
 # ruff: noqa: ARG002, PLR2004
-"""操作体系：RESTful 资源树与文本命令同构（RFC 0218 §2/§3）。"""
+"""操作体系：RESTful 资源树与文本命令同构。"""
 
 from __future__ import annotations
 
@@ -49,6 +49,9 @@ class _FakeEngine:
 
         return OutputStreamPage(items=(), next_cursor=cursor)
 
+    def output_tail_cursor(self) -> int:
+        return 0
+
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
         return [item["task"] for item in self.tasks.values()]
 
@@ -81,7 +84,7 @@ class _FakeMemory:
             "facts": [],
         }
 
-    def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
+    async def search(self, query: str, *, scope: str | None = None, limit: int = 8) -> list[dict[str, Any]]:
         return [{"kind": "fact", "content": query, "hits": 1}]
 
     def status(self) -> dict[str, Any]:

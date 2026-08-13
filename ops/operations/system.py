@@ -1,4 +1,4 @@
-"""system 域操作：目录自描述（RFC 0218 §3）。"""
+"""system 域操作：目录自描述。"""
 
 from __future__ import annotations
 

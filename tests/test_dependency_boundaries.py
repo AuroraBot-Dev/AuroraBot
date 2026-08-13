@@ -1,4 +1,4 @@
-"""RFC 0200 源码包导入边界。"""
+"""源码包导入边界。"""
 
 from __future__ import annotations
 

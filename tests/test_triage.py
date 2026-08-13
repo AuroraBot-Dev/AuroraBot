@@ -150,6 +150,44 @@ def test_dynamic_debounce_batches_a_session_and_deduplicates(tmp_path: Path) -> 
     asyncio.run(scenario())
 
 
+def test_recovery_preserves_active_task_batch_and_requeues_only_orphan_claim(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = SQLiteRuntimeStore(tmp_path / "runtime.sqlite3")
+        store.initialize()
+        limits = TriageLimits(quiet_seconds=0, max_wait_seconds=0.001)
+        assert store.enqueue_inbox(_event("active", session_id="active"), limits)
+        assert store.enqueue_inbox(_event("orphan", session_id="orphan"), limits)
+        await asyncio.sleep(0.001)
+        batches = store.claim_triage_batches(limits, 2)
+        by_session = {batch.session_id: batch for batch in batches}
+        active_batch = by_session["active"]
+        orphan_batch = by_session["orphan"]
+        created = store.create_triage_task(
+            active_batch,
+            triage_profile="triage",
+            interactive_budget=TaskLimits(4, 4, 300),
+            autonomous_budget=TaskLimits(4, 4, 120),
+            priority=100,
+        )
+        assert created is not None
+
+        store.recover_interrupted()
+        with store.connect() as connection:
+            active = connection.execute(
+                "SELECT status, batch_id FROM inbox_events WHERE session_id = 'active'"
+            ).fetchone()
+            orphan = connection.execute(
+                "SELECT status, batch_id FROM inbox_events WHERE session_id = 'orphan'"
+            ).fetchone()
+        assert active is not None and active["status"] == "TRIAGING"
+        assert active["batch_id"] == active_batch.batch_id
+        assert orphan is not None and orphan["status"] == "PENDING"
+        assert orphan["batch_id"] is None
+        assert orphan_batch.batch_id != active_batch.batch_id
+
+    asyncio.run(scenario())
+
+
 def test_triage_process_delegates_gate_with_batch_context_and_completes(tmp_path: Path) -> None:
     async def scenario() -> None:
         engine = _engine(
@@ -189,6 +227,83 @@ def test_triage_process_delegates_gate_with_batch_context_and_completes(tmp_path
             assert "prefers brevity" in candidates
         finally:
             await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_triage_routes_process_to_fast_or_root_and_falls_back_to_root(tmp_path: Path) -> None:
+    async def route_once(route: str, expected: str) -> None:
+        profiles = (
+            AgentProfile(
+                "triage",
+                "src.agents.triage:TriageAgent",
+                "fast",
+                frozenset(),
+                can_delegate=True,
+                child_profiles=frozenset({"builtin.fast", "builtin.root"}),
+                triage_control=True,
+            ),
+            AgentProfile(
+                "builtin.fast",
+                "test",
+                "fast",
+                frozenset({"*"}),
+                can_delegate=False,
+                child_profiles=frozenset(),
+            ),
+            AgentProfile(
+                "builtin.root",
+                "test",
+                "quality",
+                frozenset({"*"}),
+                can_delegate=False,
+                child_profiles=frozenset(),
+            ),
+        )
+        configuration = EngineConfiguration(
+            str(tmp_path / route.replace(".", "-")),
+            profiles,
+            AgentLimits(root_profile="triage", worker_profile="builtin.root"),
+            TaskLimits(4, 4, 300),
+            TaskLimits(4, 4, 120),
+            TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+        )
+        engine = AgentEngine(
+            configuration,
+            {
+                "triage": TriageAgent(),
+                "builtin.fast": _CompletingHandler(),
+                "builtin.root": _CompletingHandler(),
+            },
+            model_provider=_StructuredProvider(
+                {
+                    "action": "process",
+                    "summary": "handle now",
+                    "reason": "user input",
+                    "delegate_profile": route,
+                }
+            ),
+        )
+        engine.bind_tool_executors(())
+        try:
+            await engine.submit_amp(_event("hello").to_dict())
+            await asyncio.sleep(0.001)
+            result = await engine.pump()
+            task_id = result["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, task_id)
+            with engine.store.connect() as connection:
+                selected = connection.execute(
+                    "SELECT profile_id FROM agents WHERE task_id = ? AND parent_agent_id IS NOT NULL",
+                    (task_id,),
+                ).fetchone()[0]
+            assert selected == expected
+        finally:
+            await engine.shutdown()
+
+    async def scenario() -> None:
+        await route_once("builtin.fast", "builtin.fast")
+        await route_once("builtin.root", "builtin.root")
+        await route_once("unknown", "builtin.root")
 
     asyncio.run(scenario())
 
@@ -284,12 +399,17 @@ def test_triage_agent_requests_structured_output_without_tools(tmp_path: Path) -
             await engine.submit_amp(_event("noise").to_dict())
             await asyncio.sleep(0.001)
             await engine.pump()
-            rows = engine.store.claim_activities("model", 1)
-            assert rows
-            request = ModelRequest.from_dict(json.loads(rows[0].request_json))
+            # 后台模型派发可能在 pump 返回前已领取活动，直接查询请求内容
+            with engine.store.connect() as connection:
+                row = connection.execute(
+                    "SELECT request_json FROM activities WHERE kind='model' ORDER BY created_at LIMIT 1"
+                ).fetchone()
+            assert row is not None
+            request = ModelRequest.from_dict(json.loads(row["request_json"]))
             assert request.tool_choice == "none"
             assert not request.tools
             assert request.output_schema is not None
+            assert request.cancel_policy == "supersedable"
         finally:
             await engine.shutdown()
 

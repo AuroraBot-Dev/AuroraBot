@@ -1,13 +1,12 @@
-"""MemoryToolExecutor — 主动记忆写入工具执行器（RFC 0207/0211）。
+"""MemoryToolExecutor — 主动记忆写入工具执行器。
 
 主动写入与自动投影共用同一个 MemoryService（同源）；执行完成后经
-注入的 AMP 入口提交 tool.succeeded 回执（RFC 0211）。
+注入的 AMP 入口提交 tool.succeeded 回执。
 幂等：request_id 由 engine 的活动幂等键保证回执去重。
 """
 
 from __future__ import annotations
 
-import asyncio
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -81,7 +80,7 @@ class MemoryToolExecutor:
             created_at=utc_now(),
             fact_candidates=facts,
         )
-        await asyncio.to_thread(self._memory.remember, entry)
+        await self._memory.remember(entry)
         await self._submit(request, "succeeded", _Msg.RECORDED)
 
     async def _submit(

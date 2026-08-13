@@ -1,4 +1,4 @@
-"""记忆引擎契约（RFC 0216）：窗口 + 概要（短期）与长期事实。"""
+"""记忆引擎契约：域内窗口/概要、跨域动态与全局长期事实。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ class MemoryQuery:
     query: str
     scope: str
     fact_limit: int = 4
-    max_characters: int = 3000
+    max_characters: int = 32000
+    remote_tail: int = 20
+    remote_recency_seconds: float = 21600.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -21,7 +23,7 @@ class MemoryQuery:
 
 @dataclass(frozen=True, slots=True)
 class MemoryMessage:
-    """记忆窗口中的一条原始消息（RFC 0216 短期历史）。"""
+    """记忆窗口中的一条原始消息（短期历史）。"""
 
     role: str
     content: str
@@ -32,11 +34,38 @@ class MemoryMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class RemoteMessage:
+    """其他会话域窗口尾部的一条消息（跨域动态，带域标签）。"""
+
+    scope: str
+    role: str
+    content: str
+    at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteSummary:
+    """其他会话域最近一次压缩概要（带域标签与更新时间）。"""
+
+    scope: str
+    summary: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class MemoryContextSnapshot:
-    """模型调用前固定下来的三层记忆：概要 + 窗口原文 + 长期事实。"""
+    """模型调用前固定下来的记忆快照：本域概要/窗口 + 跨域动态 + 全局事实。"""
 
     summary: str = ""
     window: tuple[MemoryMessage, ...] = ()
+    remote_summaries: tuple[RemoteSummary, ...] = ()
+    remote_window: tuple[RemoteMessage, ...] = ()
     relevant_facts: tuple[str, ...] = ()
 
 
@@ -53,10 +82,10 @@ class MemoryEntry:
 
 
 class MemoryStore(Protocol):
-    """engine 在 Agent turn 前后调用的记忆引擎端口（RFC 0216）。"""
+    """engine 在 Agent turn 前后调用的记忆引擎端口。"""
 
-    def recall(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
+    async def recall(self, query: MemoryQuery) -> MemoryContextSnapshot: ...
 
-    def remember(self, entry: MemoryEntry) -> bool: ...
+    async def remember(self, entry: MemoryEntry) -> bool: ...
 
-    def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None: ...
+    async def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None: ...

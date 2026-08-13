@@ -211,7 +211,7 @@ def _parse_triage(raw: dict[str, Any]) -> TriageLimits:
         value = raw[name]
         if name == "model_role":
             values[name] = _string(value, f"engine.triage.{name}")
-        elif name in {"max_batch_events", "max_batch_characters"}:
+        elif name in {"max_batch_events", "max_batch_characters", "max_interrupts"}:
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 raise ConfigurationError(_Msg.TRIAGE_POSITIVE_INTEGER.format(name=name))
             values[name] = value
@@ -313,7 +313,7 @@ def _dotted_name(value: object, label: str) -> str:
 
 
 def _capability_pattern(value: object, label: str) -> str:
-    """校验能力模式：`!` 排除前缀、精确工具 ID、package.* 或 *（RFC 0207）。"""
+    """校验能力模式：`!` 排除前缀、精确工具 ID、package.* 或 *。"""
     raw = _string(value, label)
     if raw.startswith("!"):
         if len(raw) == 1:
@@ -330,7 +330,7 @@ def _capability_pattern(value: object, label: str) -> str:
 
 
 def _parse_panel(raw: dict[str, Any]) -> PanelConfig:
-    """解析面板后端配置段（RFC 0218 §7），校验 loopback、端口与前端白名单。"""
+    """解析面板后端配置段，校验 loopback、端口与前端白名单。"""
     _require_keys(
         raw,
         {"enabled", "host", "port", "allowed_origins", "open_browser", "session_ttl_seconds", "max_upload_bytes"},

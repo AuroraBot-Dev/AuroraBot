@@ -1,4 +1,4 @@
-"""操作体系契约：RESTful 资源树与文本命令同构（RFC 0218）。
+"""操作体系契约：RESTful 资源树与文本命令同构。
 
 同一 ``OperationSpec`` 同时表达 REST 端点（method + path + location 参数）
 与斜杠命令（别名 + positional/命名参数），双入口解析出同一 ``params``，

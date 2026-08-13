@@ -92,7 +92,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
             memory_status = await runtime.route_input(_input("/memory/status"))
             assert memory_status.ok and memory_status.data is not None
-            cost = await runtime.route_input(_input("/ai"))
+            cost = await runtime.route_input(_input("/cost"))
             assert cost.ok and cost.data is not None
             profiles = await runtime.route_input(_input("/profiles"))
             assert profiles.ok and profiles.data is not None and profiles.data["profiles"]
@@ -105,7 +105,7 @@ def test_runtime_router_separates_commands_from_conversation(project_root: Path)
 
 
 def test_ai_command_reports_gateway_cost_stats(project_root: Path) -> None:
-    """/ai 返回模型网关的费用与分类统计（RFC 0215）。"""
+    """/cost 返回模型网关的费用与分类统计。"""
 
     async def scenario() -> None:
         runtime = create_test_runtime(project_root)
@@ -113,7 +113,7 @@ def test_ai_command_reports_gateway_cost_stats(project_root: Path) -> None:
             if runtime.model_gateway is not None:
                 tracker = runtime.model_gateway.cost_tracker
                 await tracker.add({"role": "fast", "model": "m1", "status": "completed", "cost": 0.5})
-            result = await runtime.route_input(_input("/ai"))
+            result = await runtime.route_input(_input("/cost"))
             assert result.ok
             assert result.data is not None
             assert "total_cost" in result.data

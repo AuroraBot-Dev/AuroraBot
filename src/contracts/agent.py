@@ -36,7 +36,7 @@ class TaskStatus(StrEnum):
 
 
 class AgentStatus(StrEnum):
-    """Agent 持久化基态；等待语义由 activities/children 派生（RFC 0205）。"""
+    """Agent 持久化基态；等待语义由 activities/children 派生。"""
 
     READY = "READY"
     COMPLETED = "COMPLETED"
@@ -57,6 +57,7 @@ class ActivityStatus(StrEnum):
     COMPLETED = "COMPLETED"
     ERROR = "ERROR"
     CANCELLED = "CANCELLED"
+    SUPERSEDED = "SUPERSEDED"
 
 
 # -- 配置类型 ------------------------------------------------------------
@@ -310,6 +311,7 @@ class ActivityRequest:
     priority: int
     idempotency_key: str
     created_at: str
+    generation_revision: int = 0
 
 
 @dataclass(frozen=True, slots=True)

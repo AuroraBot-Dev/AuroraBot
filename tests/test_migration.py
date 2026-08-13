@@ -1,4 +1,4 @@
-"""版本化迁移框架：步骤顺序、版本推进与缺失/超前版本拒绝（RFC 0217 §5）。"""
+"""版本化迁移框架：步骤顺序、版本推进与缺失/超前版本拒绝。"""
 
 from __future__ import annotations
 
@@ -227,12 +227,21 @@ def test_engine_store_fresh_database_is_initialized_to_target_version(tmp_path: 
     with store.connect() as connection:
         version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    assert version == 9  # noqa: PLR2004
-    assert {"tasks", "agents", "messages", "activities", "causal_events", "inbox_events"} <= tables
+    assert version == 10  # noqa: PLR2004
+    assert {
+        "tasks",
+        "agents",
+        "messages",
+        "activities",
+        "causal_events",
+        "inbox_events",
+        "session_lanes",
+        "output_publications",
+    } <= tables
 
 
 def test_engine_store_database_newer_than_target_is_rejected(tmp_path: Path) -> None:
-    """库版本比代码支持更新（v10）时拒绝启动，防止静默漏迁移。"""
+    """库版本比代码支持更新（v11）时拒绝启动，防止静默漏迁移。"""
     import sqlite3 as dbapi
 
     from src.engine.store import SQLiteRuntimeStore
@@ -240,14 +249,14 @@ def test_engine_store_database_newer_than_target_is_rejected(tmp_path: Path) -> 
     path = tmp_path / "runtime.sqlite3"
     with dbapi.connect(path) as connection:
         connection.execute("CREATE TABLE schema_meta (version INTEGER NOT NULL)")
-        connection.execute("INSERT INTO schema_meta(version) VALUES (10)")
+        connection.execute("INSERT INTO schema_meta(version) VALUES (11)")
     store = SQLiteRuntimeStore(path)
     with pytest.raises(RuntimeError, match="newer than supported"):
         store.initialize()
 
 
-def test_engine_store_v2_database_migrates_to_v9(tmp_path: Path) -> None:
-    """v2 样本库（演化档案最早文档版本）经完整版本序列迁移到 v9。
+def test_engine_store_v2_database_migrates_to_v10(tmp_path: Path) -> None:
+    """v2 样本库（演化档案最早文档版本）经完整版本序列迁移到 v10。
 
     验证 kind 归一（effect → tool + legacy_kind）、audience 阶段建/撤、
     mailbox → messages、冗余列删除与索引重建。
@@ -306,8 +315,17 @@ def test_engine_store_v2_database_migrates_to_v9(tmp_path: Path) -> None:
         event = connection.execute("SELECT * FROM causal_events WHERE event_id = 'ev1'").fetchone()
         agent = connection.execute("SELECT * FROM agents WHERE agent_id = 'a1'").fetchone()
 
-    assert version == 9  # noqa: PLR2004
-    assert {"tasks", "agents", "messages", "activities", "causal_events", "inbox_events"} <= tables
+    assert version == 10  # noqa: PLR2004
+    assert {
+        "tasks",
+        "agents",
+        "messages",
+        "activities",
+        "causal_events",
+        "inbox_events",
+        "session_lanes",
+        "output_publications",
+    } <= tables
     assert {"mailbox", "situations", "reply_grants"} & tables == set()
     assert "audience_ref" not in columns["tasks"]
     assert "revision" not in columns["agents"]
@@ -328,8 +346,8 @@ def test_engine_store_v2_database_migrates_to_v9(tmp_path: Path) -> None:
     assert agent is not None and agent["agent_id"] == "a1"
 
 
-def test_engine_store_v7_database_migrates_to_v9(tmp_path: Path) -> None:
-    """v7 样本库（inbox 已存在、mailbox 租约列未删）迁移到 v9。"""
+def test_engine_store_v7_database_migrates_to_v10(tmp_path: Path) -> None:
+    """v7 样本库（inbox 已存在、mailbox 租约列未删）迁移到 v10。"""
     import sqlite3 as dbapi
 
     from src.engine.store import SQLiteRuntimeStore
@@ -370,12 +388,14 @@ def test_engine_store_v7_database_migrates_to_v9(tmp_path: Path) -> None:
         inbox = connection.execute("SELECT * FROM inbox_events WHERE event_id = 'in1'").fetchone()
         activity = connection.execute("SELECT * FROM activities WHERE activity_id = 'act1'").fetchone()
 
-    assert version == 9  # noqa: PLR2004
+    assert version == 10  # noqa: PLR2004
     assert "mailbox" not in tables
     assert "messages" in tables
     assert message is not None and message["correlation_id"] == "c1" and message["completed_at"] is None
     assert inbox is not None and inbox["status"] == "PENDING"
+    assert inbox["revision"] == 0
     assert activity is not None and activity["kind"] == "tool"
+    assert activity["generation_revision"] == 0
 
 
 def test_memory_store_fresh_database_is_initialized_to_target_version(tmp_path: Path) -> None:
@@ -388,9 +408,49 @@ def test_memory_store_fresh_database_is_initialized_to_target_version(tmp_path: 
     with dbapi.connect(directory / "memory.sqlite3") as connection:
         version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    assert version == 1
+    assert version == 2  # noqa: PLR2004
     assert {"memory_receipts", "session_memory", "durable_facts", "memory_messages", "schema_meta"} <= tables
     MemoryService(directory)
+
+
+def test_memory_v1_facts_are_rescoped_to_global(tmp_path: Path) -> None:
+    """v1 存量按会话隔离的 facts 在迁移到 v2 后统一为 global，重复内容保留最早来源。"""
+    import sqlite3 as dbapi
+
+    from src.memory.service import MemoryService
+
+    directory = tmp_path / "memory"
+    directory.mkdir(parents=True)
+    with dbapi.connect(directory / "memory.sqlite3") as connection:
+        connection.executescript(
+            """
+            CREATE TABLE schema_meta (version INTEGER NOT NULL);
+            INSERT INTO schema_meta(version) VALUES (1);
+            CREATE TABLE memory_receipts (
+                task_id TEXT PRIMARY KEY, scope TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+            CREATE TABLE session_memory (
+                scope TEXT PRIMARY KEY, summary TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE TABLE durable_facts (
+                fact_id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL,
+                content TEXT NOT NULL, source_task_id TEXT NOT NULL, created_at TEXT NOT NULL,
+                UNIQUE(scope, content)
+            );
+            CREATE TABLE memory_messages (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL,
+                role TEXT NOT NULL, content TEXT NOT NULL, at TEXT NOT NULL
+            );
+            INSERT INTO durable_facts(scope, content, source_task_id, created_at)
+                VALUES ('qq:group:1', 'f1', 't1', '2026-01-01'), ('qq:private:2', 'f2', 't2', '2026-01-02');
+            """
+        )
+    MemoryService(directory)
+    with dbapi.connect(directory / "memory.sqlite3") as connection:
+        version = connection.execute("SELECT version FROM schema_meta").fetchone()[0]
+        facts = connection.execute("SELECT scope, content FROM durable_facts ORDER BY created_at").fetchall()
+    assert version == 2  # noqa: PLR2004
+    assert facts == [("global", "f1"), ("global", "f2")]
 
 
 def test_panel_store_fresh_database_is_initialized_to_target_version(tmp_path: Path) -> None:

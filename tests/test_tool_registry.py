@@ -24,7 +24,7 @@ class _Ingress:
 
     async def submit_amp(self, value: object) -> str:
         self.amps.append(value)  # type: ignore[arg-type]
-        # 模拟 engine.submit_amp 的回执消费路径（RFC 0211）
+        # 模拟 engine.submit_amp 的回执消费路径
         payload = value["payload"]  # type: ignore[index]
         data = payload["data"]
         self.store.consume_tool_receipt(
@@ -97,7 +97,7 @@ def _insert_tool_activity(store: SQLiteRuntimeStore, *, request_id: str = "r1", 
             ("agent", "task", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
         )
         connection.execute(
-            "INSERT INTO activities VALUES (?, ?, ?, 'tool', ?, 'PENDING', 100, ?, ?, ?, NULL, NULL)",
+            "INSERT INTO activities VALUES (?, ?, ?, 'tool', ?, 'PENDING', 100, ?, ?, ?, NULL, NULL, 0, 0)",
             (
                 "activity",
                 "task",
@@ -107,6 +107,10 @@ def _insert_tool_activity(store: SQLiteRuntimeStore, *, request_id: str = "r1", 
                 "2026-01-01T00:00:00",
                 "2026-01-01T00:00:00",
             ),
+        )
+        connection.execute(
+            "INSERT INTO session_lanes VALUES ('session', 0, 0, 0, 0, 'task', 0, ?, ?)",
+            ("2026-01-01T00:00:00", "2026-01-01T00:00:00"),
         )
 
 

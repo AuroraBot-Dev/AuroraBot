@@ -1,6 +1,6 @@
 [project]
 name = "AuroraBot"
-version = "0.4.1"
+version = "0.5.0"
 description = "拥有主动节律、可持续工作且行动可追溯的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
@@ -18,9 +18,10 @@ dependencies = [
     "jsonschema>=4.23,<5",
     "python-multipart>=0.0.9",
     "prompt-toolkit>=3.0,<4",
-    "mem0ai>=2.0.17",
+    "mem0ai[nlp]>=2.0.17",
     "chromadb>=1.5.9",
     "sqlalchemy>=2.0",
+    "socksio>=1.0.0",
 ]
 
 [project.scripts]
@@ -29,6 +30,9 @@ aurora = "aurora.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
+
+[tool.setuptools.package-data]
+ops = ["lab/*"]
 
 [dependency-groups]
 dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov", "donk>=1.1.0"]
@@ -135,12 +139,8 @@ allowed-confusables = [
     "PLR2004",
     "TC003",
 ]
-# 面板 API：工厂式 FastAPI 路由惯例；Annotated 依赖在本项目 FastAPI 版本
-# 与 `from __future__ import annotations` 组合下失效（RFC 0218 实测），使用经典写法。
 "tests/test_panel_api.py" = ["B008", "PLR2004"]
-# 文本解析：线性分支解析（类型转换/错误归一），复杂度集中在单函数。
 "ops/parser.py" = ["C901", "PLR0911", "PLR0912", "TRY301"]
-# 注册表：全局惰性加载标记与装饰器签名占位。
 "ops/registry.py" = ["ARG001", "PLW0603"]
 "src/config/loader.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003"]
 "src/engine/state.py" = [

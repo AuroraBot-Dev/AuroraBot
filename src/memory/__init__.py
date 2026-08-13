@@ -1,4 +1,4 @@
-"""RFC 0200 定义的自动记忆服务与 MemoryStore 实现。"""
+"""自动记忆服务与 MemoryStore 实现。"""
 
 from __future__ import annotations
 

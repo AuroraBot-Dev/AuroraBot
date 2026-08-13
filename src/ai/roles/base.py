@@ -1,4 +1,4 @@
-"""角色域基础（RFC 0212/0213/0214）。
+"""角色域基础。
 
 - :class:`RoleHandler`：角色契约（endpoint / capability_baseline / adapt_request / complete）。
 - 共享**纯函数**：工具序列化、chat 通道的消息组装、调用封装（ChatCaller）与
@@ -58,12 +58,12 @@ _INVALID_TOOL_NAME = re.compile(r"[^A-Za-z0-9_-]+")
 
 
 class RoleHandler(ABC):
-    """角色契约（RFC 0212/0213）。
+    """角色契约。
 
     - ``endpoint``：通道（当前统一 ``chat_completions``）；
     - ``capability_baseline``：角色的能力侧重声明（并入该角色的能力集）；
     - ``adapt_request``：per-role 请求适配钩子（默认原样返回）；
-    - ``complete``：完整实现（每个角色文件自包含，RFC 0214）。
+    - ``complete``：完整实现（每个角色文件自包含）。
     """
 
     endpoint: ClassVar[str]
@@ -88,7 +88,7 @@ class RoleHandler(ABC):
         gateway: "ModelGatewayService",
         inputs: list[str],
     ) -> list[list[float]]:
-        """词嵌入调用（RFC 0215）；仅 embedding 角色实现。"""
+        """词嵌入调用；仅 embedding 角色实现。"""
         raise NotImplementedError
 
 
@@ -227,7 +227,7 @@ class ChatCaller:
             )
             return cost
 
-        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901
+        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0912, PLR0915
             missing_reason = missing_credentials_reason(self.model)
             if missing_reason is not None:
                 raise GatewayError(missing_reason, retryable=False)
@@ -283,6 +283,7 @@ class ChatCaller:
             try:
                 response = await litellm.acompletion(**litellm_kwargs)
             except asyncio.CancelledError:
+                await _compute_and_track(0, 0, "cancelled")
                 raise
             except Exception as exc:
                 raise _classify_exception(exc) from exc
@@ -291,10 +292,20 @@ class ChatCaller:
             chunks: list = []
             final_usage: Any = None
 
-            async for chunk in response_stream:
-                chunks.append(chunk)
-                if hasattr(chunk, "usage") and chunk.usage is not None:
-                    final_usage = chunk.usage
+            try:
+                async for chunk in response_stream:
+                    chunks.append(chunk)
+                    if hasattr(chunk, "usage") and chunk.usage is not None:
+                        final_usage = chunk.usage
+            except asyncio.CancelledError:
+                raw_close = getattr(response, "aclose", None)
+                if callable(raw_close):
+                    close = cast("collections.abc.Callable[[], collections.abc.Awaitable[None]]", raw_close)
+                    await close()
+                pt = final_usage.prompt_tokens if final_usage else 0
+                ct = final_usage.completion_tokens if final_usage else 0
+                await _compute_and_track(pt, ct, "cancelled")
+                raise
 
             final_response = stream_chunk_builder(chunks, messages=messages)
             pt = final_usage.prompt_tokens if final_usage else 0

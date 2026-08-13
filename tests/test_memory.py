@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from src.agents.capabilities.memory import MemoryCapability
 from src.contracts import (
@@ -16,6 +16,7 @@ from src.contracts import (
 from src.engine.authorize import _capability_allowed
 from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 from src.memory.service import MemoryService
+from src.utils import utc_now
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,30 +25,37 @@ if TYPE_CHECKING:
 
 
 def test_service_without_memory_dir_falls_back_to_empty_context() -> None:
-    service = MemoryService()
-    recalled = service.recall(MemoryQuery("anything", "session"))
-    assert recalled.summary == ""
-    assert recalled.window == ()
-    assert not service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01"))
+    async def exercise() -> None:
+        service = MemoryService()
+        recalled = await service.recall(MemoryQuery("anything", "session"))
+        assert recalled.summary == ""
+        assert recalled.window == ()
+        assert not await service.remember(MemoryEntry("task", "session", "hello", "hi", "2026-01-01"))
+
+    asyncio.run(exercise())
 
 
 def test_window_bounds_and_natural_forgetting(tmp_path: Path) -> None:
-    """RFC 0216：上下界批量压缩；压缩项被再次浓缩（自然遗忘）。"""
-    service = MemoryService(tmp_path, window_min=2, window_max=4)
-    for index in range(1, 9):
-        service.append_turn("session", role="user", content=f"question {index}", at=f"2026-01-0{index}")
+    """上下界批量压缩；压缩项被再次浓缩（自然遗忘）。"""
 
-    recalled = service.recall(MemoryQuery("", "session"))
-    # 窗口压缩回下界 2 条
-    assert [message.content for message in recalled.window] == ["question 7", "question 8"]
-    # 概要第一段为最早记忆的压缩项（含 question 1 的事实），随后分段
-    assert "question 1" in recalled.summary
-    # 首次压缩把最早的对话浓缩为第一段；后续压缩再次浓缩第一段（每次压缩重复处理）
-    assert recalled.summary.count("question 1") >= 1
-    assert "question 4" in recalled.summary or "question 5" in recalled.summary
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, window_min=2, window_max=4)
+        for index in range(1, 9):
+            await service.append_turn("session", role="user", content=f"question {index}", at=f"2026-01-0{index}")
+
+        recalled = await service.recall(MemoryQuery("", "session"))
+        # 窗口压缩回下界 2 条
+        assert [message.content for message in recalled.window] == ["question 7", "question 8"]
+        # 概要第一段为最早记忆的压缩项（含 question 1 的事实），随后分段
+        assert "question 1" in recalled.summary
+        # 首次压缩把最早的对话浓缩为第一段；后续压缩再次浓缩第一段（每次压缩重复处理）
+        assert recalled.summary.count("question 1") >= 1
+        assert "question 4" in recalled.summary or "question 5" in recalled.summary
+
+    asyncio.run(exercise())
 
 
-def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) -> None:
+def test_memory_is_idempotent_and_facts_shared_across_sessions(tmp_path: Path) -> None:
     service = MemoryService(tmp_path)
     first = MemoryEntry(
         "task-1",
@@ -58,29 +66,148 @@ def test_memory_is_idempotent_session_scoped_and_fact_bounded(tmp_path: Path) ->
         ("user prefers concise answers",),
     )
     duplicate = MemoryEntry("task-1", "session", "changed", "changed", "2026-01-03")
-    other = MemoryEntry("task-3", "other", "用户：other", "other answer", "2026-01-04")
+    other = MemoryEntry("task-3", "other", "用户：other", "other answer", "2026-01-04", ("other preference",))
 
-    assert service.remember(first)
-    assert not service.remember(duplicate)
-    assert service.remember(other)
+    async def exercise() -> None:
+        assert await service.remember(first)
+        assert not await service.remember(duplicate)
+        assert await service.remember(other)
 
-    recalled = service.recall(MemoryQuery("concise", "session", fact_limit=1))
-    assert "other answer" not in recalled.summary
-    assert recalled.relevant_facts == ("user prefers concise answers",)
+        recalled = await service.recall(MemoryQuery("preference", "session", fact_limit=2))
+        # 其他会话的输入概要不泄漏进本会话概要
+        assert "other answer" not in recalled.summary
+        # 长期事实全局共享：其他会话写入的事实在本会话可见
+        assert set(recalled.relevant_facts) == {"user prefers concise answers", "other preference"}
+
+    asyncio.run(exercise())
+
+
+def test_cross_domain_recent_activity_is_visible_within_recency_threshold(tmp_path: Path) -> None:
+    recent = utc_now()
+    stale = "2020-01-01T00:00:00+00:00"
+
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, window_min=1, window_max=2)
+        for index in range(3):
+            await service.append_turn("group", role="user", content=f"group message {index}", at=recent)
+        await service.append_turn("group-old", role="user", content="stale message", at=stale)
+        await service.remember(MemoryEntry("task", "group", "群聊内容", None, recent, ("group fact",)))
+
+        recalled = await service.recall(MemoryQuery("", "session", fact_limit=4))
+        # 阈值内有更新的域：概要 + 最近尾部可见；陈旧域被排除
+        assert {item.scope for item in recalled.remote_summaries} == {"group"}
+        assert [message.content for message in recalled.remote_window] == ["group message 2"]
+        # 跨域写入的长期事实全局可见
+        assert "group fact" in recalled.relevant_facts
+        # 本会话无任何原文
+        assert recalled.window == ()
+        assert "stale message" not in recalled.summary
+
+    asyncio.run(exercise())
 
 
 def test_memory_snapshot_obeys_total_character_budget(tmp_path: Path) -> None:
-    service = MemoryService(tmp_path, window_min=1, window_max=2)
-    service.append_turn("session", role="user", content="x" * 100, at="2026-01-01")
-    service.append_turn("session", role="assistant", content="y" * 100, at="2026-01-02")
-    recalled = service.recall(MemoryQuery("query", "session", max_characters=32))
-    # 概要裁剪到预算（窗口原文不裁剪，属设计语义）
-    assert len(recalled.summary) + sum(map(len, recalled.relevant_facts)) <= 32
-    assert len(recalled.window) == 2
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, window_min=1, window_max=2)
+        await service.append_turn("session", role="user", content="s" * 10, at=utc_now())
+        await service.append_turn("group", role="user", content="g" * 40, at=utc_now())
+        recalled = await service.recall(
+            MemoryQuery("query", "session", max_characters=64, remote_recency_seconds=10**9)
+        )
+        total = (
+            len(recalled.summary)
+            + sum(len(message.content) for message in recalled.window)
+            + sum(len(item.summary) for item in recalled.remote_summaries)
+            + sum(len(message.content) for message in recalled.remote_window)
+            + sum(map(len, recalled.relevant_facts))
+        )
+        assert total <= 64
+        assert [message.content for message in recalled.window] == ["s" * 10]
+        # 本域窗口之后仍有余量，跨域尾部按预算完整进入快照
+        assert [message.content for message in recalled.remote_window] == ["g" * 40]
+
+    asyncio.run(exercise())
+
+
+def test_cross_domain_keeps_guaranteed_budget_against_large_own_window(tmp_path: Path) -> None:
+    """本域窗口很大时，跨域动态仍保留保障预算，不会被原文占满。"""
+    now = utc_now()
+
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, window_min=200, window_max=1000)
+        for index in range(400):
+            await service.append_turn("session", role="user", content=f"own {index:03d} " + "x" * 60, at=now)
+        await service.append_turn("group", role="user", content="group message", at=now)
+
+        recalled = await service.recall(MemoryQuery("", "session"))
+        total = (
+            len(recalled.summary)
+            + sum(len(message.content) for message in recalled.window)
+            + sum(len(item.summary) for item in recalled.remote_summaries)
+            + sum(len(message.content) for message in recalled.remote_window)
+            + sum(map(len, recalled.relevant_facts))
+        )
+        assert total <= 32000
+        assert any(message.content == "group message" for message in recalled.remote_window)
+
+    asyncio.run(exercise())
+
+
+def test_window_condensation_awaits_async_summarizer(tmp_path: Path) -> None:
+    calls: list[list[dict[str, object]]] = []
+
+    class Gateway:
+        async def get_response(self, role: str, inputs: list[dict]) -> dict[str, Any]:
+            assert role == "fast"
+            assert asyncio.get_running_loop().is_running()
+            calls.append(inputs)
+            return {"text": "LLM 生成的会话概要"}
+
+    async def exercise() -> None:
+        service = MemoryService(tmp_path, gateway=Gateway(), window_min=1, window_max=2)
+        for index in range(3):
+            await service.append_turn("session", role="user", content=f"message {index}", at=str(index))
+        recalled = await service.recall(MemoryQuery("", "session"))
+        assert recalled.summary == "LLM 生成的会话概要"
+        assert [message.content for message in recalled.window] == ["message 2"]
+
+    asyncio.run(exercise())
+    assert len(calls) == 1
+
+
+def test_semantic_recall_precedes_and_falls_back_to_durable_facts(tmp_path: Path) -> None:
+    class LongTerm:
+        result: tuple[str, ...] = ("semantic preference",)
+
+        def add(self, scope: str, text: str, at: str) -> None:  # noqa: ARG002
+            return None
+
+        def search(self, scope: str, query: str, limit: int) -> tuple[str, ...]:  # noqa: ARG002
+            return self.result[:limit]
+
+        def status(self) -> dict[str, object]:
+            return {"enabled": True, "degraded": False, "reason": None}
+
+    async def exercise() -> None:
+        service = MemoryService(tmp_path)
+        long_term = LongTerm()
+        service._long_term = cast("Any", long_term)
+        await service.remember(
+            MemoryEntry("task", "session", "question", "answer", "2026-01-01", ("keyword preference",))
+        )
+
+        semantic = await service.recall(MemoryQuery("preference", "session", fact_limit=2))
+        assert semantic.relevant_facts == ("semantic preference", "keyword preference")
+
+        long_term.result = ()
+        fallback = await service.recall(MemoryQuery("keyword", "session", fact_limit=2))
+        assert fallback.relevant_facts == ("keyword preference",)
+
+    asyncio.run(exercise())
 
 
 class _ReceiptIngress:
-    """捕获回执 AMP 的假入口（RFC 0211）。"""
+    """捕获回执 AMP 的假入口。"""
 
     def __init__(self) -> None:
         self.amps: list[dict[str, object]] = []
@@ -108,7 +235,7 @@ def test_executor_writes_memory_and_submits_receipt(tmp_path: Path) -> None:
     )
     asyncio.run(executor.execute_tool(request))
     assert _receipt_of(ingress.amps[0])["type"] == "tool.succeeded"
-    recalled = service.recall(MemoryQuery("简洁", "session", fact_limit=4))
+    recalled = asyncio.run(service.recall(MemoryQuery("简洁", "session", fact_limit=4)))
     assert "用户偏好简洁回答" in recalled.relevant_facts
 
 
@@ -156,7 +283,7 @@ def test_capability_allowed_exclusion_overrides_wildcard() -> None:
 
 
 def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) -> None:
-    """RFC 0207 全链路：本体意识委派记忆 agent → 工具请求 → executor 写入同一 SQLite。"""
+    """全链路：本体意识委派记忆 agent → 工具请求 → executor 写入同一 SQLite。"""
     from src.agents.capabilities import DelegationCapability, MemoryCapability
     from src.agents.handler import ToolAgent
     from src.agents.triage import TriageAgent
@@ -275,7 +402,7 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
 
         # 记忆 agent 完成后，主动写入应已落库（同源 SQLite）
         await asyncio.sleep(0)
-        recalled = memory.recall(MemoryQuery("简洁", "session", fact_limit=4))
+        recalled = await memory.recall(MemoryQuery("简洁", "session", fact_limit=4))
         assert any("用户偏好简洁" in item.content for item in recalled.window)
 
     try:

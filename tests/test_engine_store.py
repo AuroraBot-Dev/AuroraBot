@@ -61,23 +61,31 @@ def _profiles() -> tuple[AgentProfile, ...]:
     )
 
 
-def _configuration(workspace: Path) -> EngineConfiguration:
+def _configuration(
+    workspace: Path,
+    *,
+    model_concurrency: int = 4,
+    triage: TriageLimits | None = None,
+) -> EngineConfiguration:
     return EngineConfiguration(
         str(workspace),
         _profiles(),
-        AgentLimits(root_profile="gate", worker_profile="worker"),
+        AgentLimits(root_profile="gate", worker_profile="worker", model_concurrency=model_concurrency),
         TaskLimits(8, 6, 300),
         TaskLimits(3, 2, 120),
-        TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
+        triage or TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
     )
 
 
-def _amp(summary: str = "hello"):
+def _amp(summary: str = "hello", *, session_id: str = "session", attention: str | None = None):
+    data = {"text": summary}
+    if attention is not None:
+        data["attention"] = attention
     return new_amp(
         event_type="message.received",
-        session_id="session",
+        session_id=session_id,
         summary=summary,
-        data={"text": summary},
+        data=data,
         source_app="test",
         source_instance="test",
     )
@@ -127,7 +135,7 @@ def _engine(
 
 
 def test_amp_creates_terminal_record_and_deduplicates_task(tmp_path: Path) -> None:
-    """提交 → 入口任务 → 完成：终态留存 SQLite（无文件归档，RFC 0210）。"""
+    """提交 → 入口任务 → 完成：终态留存 SQLite（无文件归档）。"""
 
     async def scenario() -> None:
         engine = _engine(tmp_path, {"gate": _Complete(), "worker": _Complete()})
@@ -415,6 +423,285 @@ def test_output_stream_returns_model_text_and_failures_ordered_by_cursor(tmp_pat
 
             assert engine.output_stream(page.next_cursor).items == ()
         finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_session_keeps_ordinary_amp_as_delta_and_publishes_before_followup(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "model.completed":
+                return AgentDecision(completion=Completion(str(context.message.payload["text"])))
+            return AgentDecision(model_request=ModelRequest(role="fast", messages=()))
+
+    class Provider:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.calls = 0
+
+        async def complete(self, request: ModelRequest) -> ModelResult:
+            _ = request
+            self.calls += 1
+            call = self.calls
+            if call == 1:
+                self.started.set()
+                await self.release.wait()
+            return ModelResult("fake", frozenset({"chat"}), "normalized", f"answer {call}", None, ModelUsage(), 0)
+
+    async def scenario() -> None:
+        provider = Provider()
+        engine = _engine(tmp_path, {"gate": Handler(), "worker": Handler()}, provider=provider)
+        try:
+            await engine.submit_amp(_amp("first").to_dict())
+            first = await engine.pump()
+            first_task_id = first["admitted_task_ids"][0]
+            await asyncio.wait_for(provider.started.wait(), 1)
+
+            await engine.submit_amp(_amp("ordinary follow-up").to_dict())
+            lane = engine.store.session_lane("session")
+            assert lane is not None
+            assert lane["active_task_id"] == first_task_id
+            assert lane["observed_revision"] == 2
+            assert lane["generation_watermark"] == 1
+            assert engine.get_task(first_task_id).status == TaskStatus.ACTIVE  # type: ignore[union-attr]
+
+            provider.release.set()
+            await _pump_until_terminal(engine, first_task_id)
+            first_page = engine.output_stream()
+            assert [item.text for item in first_page.items] == ["answer 1"]
+
+            followup = await engine.pump()
+            second_task_id = followup["admitted_task_ids"][0]
+            await _pump_until_terminal(engine, second_task_id)
+            second_page = engine.output_stream(first_page.next_cursor)
+            assert [item.text for item in second_page.items] == ["answer 2"]
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_direct_amp_supersedes_generation_cancels_provider_and_hides_old_output(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "model.completed":
+                return AgentDecision(completion=Completion(str(context.message.payload["text"])))
+            return AgentDecision(model_request=ModelRequest(role="fast", messages=(), cancel_policy="supersedable"))
+
+    class Provider:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.cancelled = asyncio.Event()
+            self.second_started = asyncio.Event()
+            self.release_second = asyncio.Event()
+            self.calls = 0
+
+        async def complete(self, request: ModelRequest) -> ModelResult:
+            _ = request
+            self.calls += 1
+            if self.calls == 1:
+                self.started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    self.cancelled.set()
+                    raise
+            if self.calls == 2:
+                self.second_started.set()
+                await self.release_second.wait()
+            return ModelResult("fake", frozenset({"chat"}), "normalized", "new answer", None, ModelUsage(), 0)
+
+    async def scenario() -> None:
+        provider = Provider()
+        configuration = _configuration(
+            tmp_path,
+            triage=TriageLimits(
+                quiet_seconds=0,
+                max_wait_seconds=0.001,
+                max_interrupts=1,
+                max_generation_seconds=30,
+            ),
+        )
+        engine = AgentEngine(
+            configuration,
+            {"gate": Handler(), "worker": Handler()},
+            model_provider=provider,
+        )
+        engine.bind_tool_executors(())
+        try:
+            await engine.submit_amp(_amp("stale").to_dict())
+            first = await engine.pump()
+            stale_task_id = first["admitted_task_ids"][0]
+            await asyncio.wait_for(provider.started.wait(), 1)
+
+            await engine.submit_amp(_amp("correction", attention="correction").to_dict())
+            await asyncio.wait_for(provider.cancelled.wait(), 1)
+            stale = engine.get_task(stale_task_id)
+            assert stale is not None and stale.status == TaskStatus.CANCELLED
+            assert stale.termination_reason == "superseded_by_revision:2"
+            stale_events = engine.store.events_for_task(stale_task_id)
+            assert "generation.late_result_ignored" in {event["type"] for event in stale_events}
+            with engine.store.connect() as connection:
+                statuses = {
+                    row["status"]
+                    for row in connection.execute(
+                        "SELECT status FROM activities WHERE task_id = ?",
+                        (stale_task_id,),
+                    )
+                }
+            assert "SUPERSEDED" in statuses
+            assert engine.output_stream().items == ()
+
+            replacement = await engine.pump()
+            replacement_task_id = replacement["admitted_task_ids"][0]
+            await asyncio.wait_for(provider.second_started.wait(), 1)
+
+            await engine.submit_amp(_amp("another urgent message", attention="urgent").to_dict())
+            await asyncio.sleep(0)
+            current = engine.get_task(replacement_task_id)
+            assert current is not None and current.status == TaskStatus.ACTIVE
+            assert provider.calls == 2
+
+            provider.release_second.set()
+            await _pump_until_terminal(engine, replacement_task_id)
+            page = engine.output_stream()
+            assert [item.text for item in page.items] == ["new answer"]
+            assert page.items[0].task_id == replacement_task_id
+            exported = engine.session_export("session")
+            assert exported is not None
+            assert [item["text"] for item in exported["outputs"]] == ["new answer"]
+            lane = engine.store.session_lane("session")
+            assert lane is not None and lane["committed_revision"] == 2
+            assert lane["observed_revision"] == 3
+            assert lane["interrupt_count"] == 0
+        finally:
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_processing_tool_blocks_supersede_until_irreversible_effect_finishes(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            _ = context
+            return AgentDecision(tool_request=ToolRequest("test.effect", {}, complete_task=True))
+
+    class Executor:
+        def __init__(self, engine: AgentEngine) -> None:
+            self.engine = engine
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def execute_tool(self, request: ToolExecutionRequest) -> None:
+            self.started.set()
+            await self.release.wait()
+            await self.engine.submit_amp(
+                tool_receipt_amp(
+                    status="succeeded",
+                    request=request,
+                    summary="effect committed",
+                    source_app="test",
+                    source_instance="local",
+                    result={"ok": True},
+                )
+            )
+
+    async def scenario() -> None:
+        engine = AgentEngine(
+            _configuration(tmp_path),
+            {"gate": Handler(), "worker": Handler()},
+            model_provider=_UnusedProvider(),
+        )
+        executor = Executor(engine)
+        engine.bind_tool_executors(
+            (
+                ToolExecutorBinding(
+                    CapabilityDescriptor("test.effect", "effect", {"type": "object"}),
+                    executor,
+                    "test",
+                    "local",
+                ),
+            )
+        )
+        try:
+            await engine.submit_amp(_amp("start effect").to_dict())
+            first = await engine.pump()
+            task_id = first["admitted_task_ids"][0]
+            await asyncio.wait_for(executor.started.wait(), 1)
+
+            await engine.submit_amp(_amp("correction", attention="correction").to_dict())
+            task = engine.get_task(task_id)
+            lane = engine.store.session_lane("session")
+            assert task is not None and task.status == TaskStatus.ACTIVE
+            assert lane is not None and lane["active_task_id"] == task_id
+            assert lane["observed_revision"] == 2
+            assert lane["generation_watermark"] == 1
+
+            executor.release.set()
+            await _pump_until_terminal(engine, task_id)
+            task = engine.get_task(task_id)
+            assert task is not None and task.status == TaskStatus.COMPLETED
+        finally:
+            executor.release.set()
+            await engine.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_model_dispatcher_refills_free_slot_without_waiting_for_slow_session(tmp_path: Path) -> None:
+    class Handler:
+        def handle(self, context: AgentContext) -> AgentDecision:
+            if context.message.type == "model.completed":
+                return AgentDecision(completion=Completion(str(context.message.payload["text"])))
+            return AgentDecision(model_request=ModelRequest(role="fast", messages=()))
+
+    class Provider:
+        def __init__(self) -> None:
+            self.slow_started = asyncio.Event()
+            self.third_started = asyncio.Event()
+            self.release_slow = asyncio.Event()
+            self.calls = 0
+
+        async def complete(self, request: ModelRequest) -> ModelResult:
+            _ = request
+            self.calls += 1
+            call = self.calls
+            if call == 1:
+                self.slow_started.set()
+                await self.release_slow.wait()
+            if call == 3:
+                self.third_started.set()
+            return ModelResult("fake", frozenset({"chat"}), "normalized", f"answer {call}", None, ModelUsage(), 0)
+
+    async def scenario() -> None:
+        provider = Provider()
+        configuration = _configuration(tmp_path, model_concurrency=2)
+        engine = AgentEngine(
+            configuration,
+            {"gate": Handler(), "worker": Handler()},
+            model_provider=provider,
+        )
+        engine.bind_tool_executors(())
+        try:
+            await engine.submit_amp(_amp("one", session_id="one").to_dict())
+            await engine.submit_amp(_amp("two", session_id="two").to_dict())
+            await engine.pump()
+            await asyncio.wait_for(provider.slow_started.wait(), 1)
+            for _ in range(10):
+                await engine.pump()
+                await asyncio.sleep(0)
+                if provider.calls >= 2:
+                    break
+            assert provider.calls >= 2
+
+            await engine.submit_amp(_amp("three", session_id="three").to_dict())
+            await engine.pump()
+            await asyncio.wait_for(provider.third_started.wait(), 1)
+            assert not provider.release_slow.is_set()
+        finally:
+            provider.release_slow.set()
             await engine.shutdown()
 
     asyncio.run(scenario())

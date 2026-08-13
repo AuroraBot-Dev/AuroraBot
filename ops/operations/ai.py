@@ -1,4 +1,4 @@
-"""ai 域操作：模型网关只读观察（RFC 0218 §3）。"""
+"""ai 域操作：模型网关只读观察。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from ops.registry import operation
 from src.contracts import OperationResult
 
 
-@operation("GET", "/ai/cost", name="ai.cost", aliases=("/ai",), summary="模型费用分类统计")
+@operation("GET", "/ai/cost", name="ai.cost", aliases=("/cost",), summary="模型费用分类统计")
 async def ai_cost(context: Any, _params: dict[str, Any]) -> OperationResult:
     return OperationResult.success(await context.runtime.ai.cost())
 

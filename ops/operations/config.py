@@ -1,4 +1,4 @@
-"""agents / config / prompt 域操作：配置快照与提示词观察（RFC 0218 §3）。"""
+"""agents / config / prompt 域操作：配置快照与提示词观察。"""
 
 from __future__ import annotations
 

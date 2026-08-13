@@ -1,8 +1,8 @@
-"""AgentEngine — 单进程 asyncio 独占的完整 Agent 运行时（RFC 0210）。
+"""AgentEngine — 单进程 asyncio 独占的完整 Agent 运行时。
 
-单一存储（SQLite v9 即归档）、无租约无乐观锁、无线程池。pump 循环全部在
-事件循环内同步执行（handler 是纯函数，模型/工具调用为 async），仅记忆
-投影使用 to_thread 包装。终态 Task 留在 SQLite，不做文件归档。
+单一存储（SQLite v10 即归档）、无租约无乐观锁。store 与纯 handler 由单一
+事件循环串行拥有；模型、工具与记忆 Port 使用 async，记忆实现把阻塞 I/O
+委派到受控工作线程。终态 Task 留在 SQLite，不做文件归档。
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ class _Msg(StrEnum):
 
 
 def _memory_turn_input(message: AgentMessage) -> str:
-    """从消息投影提取记忆窗口的 user 侧文本（RFC 0216）。"""
+    """从消息投影提取记忆窗口的 user 侧文本。"""
     payload = message.payload
     for key in ("batch", "context_events"):
         container = payload.get(key)
@@ -119,6 +119,10 @@ class AgentEngine:
         self._closed = False
         self._model_dispatch_task: asyncio.Task[None] | None = None
         self._model_activity_tasks: dict[asyncio.Task[None], str] = {}
+        self._model_dispatch_wake = asyncio.Event()
+        self._tool_dispatch_task: asyncio.Task[None] | None = None
+        self._tool_dispatch_wake = asyncio.Event()
+        self._tools_recovered = False
         self._memory_tasks: set[asyncio.Task[None]] = set()
         self._wake = asyncio.Event()
         logger.info(
@@ -147,11 +151,11 @@ class AgentEngine:
 
     # -- 记忆（被动服务）--------------------------------------------------
 
-    def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
+    async def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if self._memory_store is None:
             return MemoryContextSnapshot()
         try:
-            return self._memory_store.recall(query)
+            return await self._memory_store.recall(query)
         except Exception as error:
             logger.warning("Memory recall failed error_type=%s", type(error).__name__)
             return MemoryContextSnapshot()
@@ -191,12 +195,14 @@ class AgentEngine:
 
     async def submit_amp(self, value: object) -> str:
         amp = AmpEnvelope.parse(value)
-        persist_amp(self, amp)
+        if persist_amp(self, amp):
+            superseded = self.store.supersede_session_generation(amp, self.configuration.triage)
+            self._cancel_model_activities(superseded)
         self._wake.set()
         return amp.header.message_id
 
     def consume_tool_receipt(self, amp: AmpEnvelope) -> None:
-        """工具回执 AMP：校验并交给 store 幂等消费（RFC 0211）。"""
+        """工具回执 AMP：校验并交给 store 幂等消费。"""
         status = amp.payload.type.removeprefix("tool.")
         data = amp.payload.data
         request_id = data.get("request_id")
@@ -226,24 +232,26 @@ class AgentEngine:
 
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         async with self._pump_lock:
-            recoveries = await self._tools.recover_pending()
             admitted = self._triage_inbox()
             expired = self.store.expire_tasks()
-            processed, failed = self._pump_turns(max_turns)
-            receipts = await self._tools.execute_pending(self.limits.tool_concurrency)
+            processed, failed = await self._pump_turns(max_turns)
             self._ensure_model_dispatcher()
+            self._ensure_tool_dispatcher()
             self._project_memory()
+            # 让出控制权：后台模型/工具派发任务依赖事件循环调度，pump 无消息可
+            # 处理时若不让出，has_work 自旋会饿死派发任务与 console/平台任务
+            await asyncio.sleep(0)
             return {
                 "admitted_task_ids": admitted,
                 "expired_task_ids": expired,
                 "processed_message_ids": processed,
                 "failed_message_ids": failed,
-                "tool_recovery_receipts_emitted": recoveries,
-                "tool_receipts_emitted": receipts,
+                "model_dispatch_active": self._model_dispatch_task is not None,
+                "tool_dispatch_active": self._tool_dispatch_task is not None,
             }
 
     def _triage_inbox(self) -> tuple[str, ...]:
-        """到期批次创建入口 triage Task；模型判断走正常 Agent turn 链路（RFC 0209）。"""
+        """到期批次创建入口 triage Task；模型判断走正常 Agent turn 链路。"""
         batches = self.store.claim_triage_batches(self.configuration.triage, self.limits.model_concurrency)
         created: list[str] = []
         for batch in batches:
@@ -263,7 +271,7 @@ class AgentEngine:
         )
         return created[0] if created is not None else None
 
-    def _pump_turns(self, max_turns: int | None) -> tuple[list[str], list[str]]:
+    async def _pump_turns(self, max_turns: int | None) -> tuple[list[str], list[str]]:
         limit = self.limits.turn_concurrency if max_turns is None else max_turns
         if limit <= 0:
             raise ValueError(_Msg.MAX_TURNS_POSITIVE)
@@ -275,11 +283,12 @@ class AgentEngine:
                 break
             message, agent, task = claim
             try:
-                self._append_memory_turn(task.session_id, "user", _memory_turn_input(message))
-                decision, profile_id = handle_claim(self, message, agent, task)
+                await self._append_memory_turn(task.session_id, "user", _memory_turn_input(message))
+                memory = await self.recall_memory(MemoryQuery(task.root_summary, task.session_id))
+                decision, profile_id = handle_claim(self, message, agent, task, memory)
                 apply_authorized_decision(self, message, agent, profile_id, decision)
                 if decision.completion is not None:
-                    self._append_memory_turn(task.session_id, "assistant", decision.completion.summary)
+                    await self._append_memory_turn(task.session_id, "assistant", decision.completion.summary)
                 processed.append(message.message_id)
             except Exception as error:
                 logger.log(
@@ -297,11 +306,11 @@ class AgentEngine:
                 failed.append(message.message_id)
         return processed, failed
 
-    def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
-        """记录一轮对话到记忆窗口（RFC 0216 短期历史）。"""
+    async def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
+        """记录一轮对话到记忆窗口（短期历史）。"""
         if self._memory_store is None or not content.strip():
             return
-        self._memory_store.append_turn(
+        await self._memory_store.append_turn(
             scope,
             role=role,
             content=content,
@@ -319,30 +328,64 @@ class AgentEngine:
     async def _remember(self, entry: MemoryEntry) -> None:
         assert self._memory_store is not None
         try:
-            await asyncio.to_thread(self._memory_store.remember, entry)
+            await self._memory_store.remember(entry)
         except Exception as error:
             logger.warning("Memory remember failed task_id=%s error_type=%s", entry.task_id, type(error).__name__)
 
     # -- 模型派发 ---------------------------------------------------------
 
     def _ensure_model_dispatcher(self) -> None:
+        self._model_dispatch_wake.set()
         if self._model_dispatch_task is None or self._model_dispatch_task.done():
             self._model_dispatch_task = asyncio.create_task(self._dispatch_models(), name="aurora-model-activities")
 
     async def _dispatch_models(self) -> None:
+        running: set[asyncio.Task[None]] = set()
         while True:
-            activities = self.store.claim_activities("model", self.limits.model_concurrency)
-            if not activities:
-                return
-            tasks = []
-            for row in activities:
+            self._model_dispatch_wake.clear()
+            capacity = self.limits.model_concurrency - len(running)
+            for row in self.store.claim_activities("model", capacity) if capacity > 0 else ():
                 activity = self.store._activity(row)
                 task = asyncio.create_task(self._execute_model(activity), name=f"aurora-model-{activity.activity_id}")
-                self._model_activity_tasks[task] = activity.task_id
+                self._model_activity_tasks[task] = activity.activity_id
                 task.add_done_callback(self._model_activity_tasks.pop)
-                tasks.append(task)
-            await asyncio.gather(*tasks, return_exceptions=True)
+                running.add(task)
+            if not running:
+                return
+            wake_task: asyncio.Task[bool] | None = None
+            waiters: set[asyncio.Task[Any]] = set(running)
+            if len(running) < self.limits.model_concurrency:
+                wake_task = asyncio.create_task(self._model_dispatch_wake.wait())
+                waiters.add(wake_task)
+            done, _pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+            completed = done & running
+            running.difference_update(completed)
+            if wake_task is not None and not wake_task.done():
+                wake_task.cancel()
+                await asyncio.gather(wake_task, return_exceptions=True)
+            if completed:
+                await asyncio.gather(*completed, return_exceptions=True)
             self._wake.set()
+
+    def _ensure_tool_dispatcher(self) -> None:
+        self._tool_dispatch_wake.set()
+        if self._tool_dispatch_task is None or self._tool_dispatch_task.done():
+            self._tool_dispatch_task = asyncio.create_task(self._dispatch_tools(), name="aurora-tool-activities")
+
+    async def _dispatch_tools(self) -> None:
+        await self._tools.execute_pending(
+            self.limits.tool_concurrency,
+            wake=self._tool_dispatch_wake,
+            recover=not self._tools_recovered,
+        )
+        self._tools_recovered = True
+        self._wake.set()
+
+    def _cancel_model_activities(self, activity_ids: tuple[str, ...]) -> None:
+        targets = set(activity_ids)
+        for task, activity_id in tuple(self._model_activity_tasks.items()):
+            if activity_id in targets and not task.done():
+                task.cancel()
 
     async def _execute_model(self, activity: ActivityRequest) -> None:
         task = self.store.get_task(activity.task_id)
@@ -380,6 +423,7 @@ class AgentEngine:
             **self.store.counts(),
             "model_dispatch_active": self._model_dispatch_task is not None and not self._model_dispatch_task.done(),
             "active_model_activities": len(self._model_activity_tasks),
+            "tool_dispatch_active": self._tool_dispatch_task is not None and not self._tool_dispatch_task.done(),
         }
 
     def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage:
@@ -389,8 +433,12 @@ class AgentEngine:
         next_cursor = items[-1].cursor if items else cursor
         return OutputStreamPage(items=items, next_cursor=next_cursor)
 
+    def output_tail_cursor(self) -> int:
+        """当前输出流末尾游标：新前端从该游标起订阅，避免重放历史。"""
+        return self.store.recent_outputs_tail()
+
     def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
-        """Task 列表投影（RFC 0218 观察操作）。"""
+        """Task 列表投影（观察操作）。"""
         rows = self.store.tasks(status=status, limit=limit)
         return [row.to_dict() for row in rows]
 
@@ -407,7 +455,7 @@ class AgentEngine:
         after_id: int = 0,
         limit: int = 64,
     ) -> list[dict[str, Any]]:
-        """因果事件流查询（RFC 0218 观察操作）。"""
+        """因果事件流查询（观察操作）。"""
         return list(
             self.store.query_events(
                 session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit
@@ -415,7 +463,7 @@ class AgentEngine:
         )
 
     def session_export(self, session_id: str) -> dict[str, Any] | None:
-        """会话导出：因果事件与模型输出投影（RFC 0210/0218）。"""
+        """会话导出：因果事件与模型输出投影。"""
         return self.store.session_export(session_id)
 
     def has_work(self) -> bool:
@@ -428,7 +476,7 @@ class AgentEngine:
         )
 
     def cancel_task(self, task_id: str, reason: str) -> None:
-        self.store.cancel_task(task_id, reason)
+        self._cancel_model_activities(self.store.cancel_task(task_id, reason))
 
     # -- 生命周期 ---------------------------------------------------------
 
@@ -459,11 +507,15 @@ class AgentEngine:
             self._closed = True
             if self._model_dispatch_task is not None:
                 self._model_dispatch_task.cancel()
+            if self._tool_dispatch_task is not None:
+                self._tool_dispatch_task.cancel()
             for task in tuple(self._model_activity_tasks):
                 task.cancel()
             pending: tuple[asyncio.Task[None], ...] = (*self._model_activity_tasks, *self._memory_tasks)
             if self._model_dispatch_task is not None:
                 pending = (*pending, self._model_dispatch_task)
+            if self._tool_dispatch_task is not None:
+                pending = (*pending, self._tool_dispatch_task)
             loop = asyncio.get_running_loop()
             current = [task for task in pending if task.get_loop() is loop]
             await asyncio.gather(*current, return_exceptions=True)

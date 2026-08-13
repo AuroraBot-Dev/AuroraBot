@@ -1,4 +1,4 @@
-"""文本命令解析器：基于 ParameterSpec 把斜杠命令解析为规范化 params（RFC 0218 §2）。
+"""文本命令解析器：基于 ParameterSpec 把斜杠命令解析为规范化 params。
 
 文本表示与 REST 表示同构：路径参数即路径段，QUERY/BODY 参数用 ``--key value``
 或 ``--key=value``，FLAG 用 ``--key``。解析产物与 REST 入口是同一个 ``params``。

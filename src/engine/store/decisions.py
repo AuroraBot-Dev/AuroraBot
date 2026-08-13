@@ -1,4 +1,4 @@
-"""原子 Agent 决策提交、消息/活动队列与 Task 终止（Schema v9，RFC 0217 ORM 实现）。
+"""原子 Agent 决策提交、消息/活动队列与 Task 终止（Schema v10，SQLAlchemy ORM 实现）。
 
 apply_decision 在单一事务中原子执行一条已授权的 AgentDecision（模型、
 工具、委托、完成、等待、defer、discard、失败八种转换），并同时写入
@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, or_, select, update
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -26,6 +26,7 @@ from src.contracts import (
     ChildResult,
     MessageStatus,
     TaskStatus,
+    TriageLimits,
 )
 
 from .base import RuntimeStoreBase, _json, _loads, utc_now
@@ -37,8 +38,10 @@ from .models import (
     ACT_ERROR,
     ACT_PENDING,
     ACT_PROCESSING,
+    ACT_SUPERSEDED,
     AGENT_CANCELLED,
     AGENT_TERMINAL,
+    INBOX_PENDING,
     MSG_COMPLETED,
     MSG_ERROR,
     MSG_PENDING,
@@ -47,7 +50,10 @@ from .models import (
     ActivityRow,
     AgentRow,
     CausalEventRow,
+    InboxEventRow,
     MessageRow,
+    OutputPublicationRow,
+    SessionLaneRow,
     TaskRow,
 )
 
@@ -104,7 +110,7 @@ def _decision_summary(decision: AgentDecision) -> str:
 
 
 def _decision_payload(decision: AgentDecision) -> dict[str, Any]:
-    """轻量因果载荷（RFC 0210）：只存审计摘要字段，不存完整请求。"""
+    """轻量因果载荷：只存审计摘要字段，不存完整请求。"""
     if decision.model_request is not None:
         return {
             "role": decision.model_request.role,
@@ -163,6 +169,12 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                 raise RuntimeError(_Msg.MESSAGE_NOT_CLAIMED)
             if task_row is None or task_row.status != TaskStatus.ACTIVE:
                 raise RuntimeError(_Msg.TASK_NOT_ACTIVE)
+            generation_revision = 0
+            if not task_row.autonomous:
+                lane = session.get(SessionLaneRow, str(task_row.session_id))
+                if lane is None or lane.active_task_id != task_row.task_id:
+                    raise RuntimeError(_Msg.TASK_NOT_ACTIVE)
+                generation_revision = int(lane.generation_revision)
             agent_row = session.scalar(select(AgentRow).where(AgentRow.agent_id == agent.agent_id))
             if agent_row is None:
                 raise RuntimeError(_Msg.AGENT_ROW_MISSING.format(agent_id=agent.agent_id))
@@ -189,6 +201,8 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                             idempotency_key=activity_id,
                             created_at=now,
                             updated_at=now,
+                            generation_revision=generation_revision,
+                            publishable=0,
                         )
                     )
                     task_row.model_calls += 1
@@ -219,6 +233,8 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                             idempotency_key=request_id,
                             created_at=now,
                             updated_at=now,
+                            generation_revision=generation_revision,
+                            publishable=0,
                         )
                     )
                     task_row.tool_calls += 1
@@ -273,7 +289,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     )
                     payload: dict[str, Any] = {"instruction": instruction, "parent_agent_id": agent.agent_id}
                     if batch_events is not None:
-                        # 入口 agent 委派时，把有界批次投影交给子 Agent（RFC 0209）
+                        # 入口 agent 委派时，把有界批次投影交给子 Agent
                         payload["context_events"] = batch_events
                     child_message = self._insert_message(
                         session,
@@ -287,9 +303,6 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                         now=now,
                     )
                     created.extend((child_id, child_message))
-                if batch_events is not None:
-                    self.settle_batch(session, task_row.root_message_id, "delete", now)
-
             elif decision.defer_seconds is not None:
                 self._require_triage_root(agent, task_row)
                 self.settle_batch(session, task_row.root_message_id, "defer", now, decision.defer_seconds)
@@ -305,8 +318,10 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             elif decision.completion is not None:
                 completion = decision.completion
                 status = AgentStatus.COMPLETED
+                if not completion.silent:
+                    self._mark_model_publication(session, message)
                 if self._root_batch_events(state) is not None:
-                    # 入口 agent 直接完成（未委派）：按 process 语义结算批次（RFC 0209）
+                    # 入口 agent 直接完成（未委派）：按 process 语义结算批次
                     self.settle_batch(session, task_row.root_message_id, "delete", now)
                 if agent.parent_agent_id is not None:
                     result = ChildResult(
@@ -341,6 +356,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                 if failure is None:
                     raise ValueError(_Msg.UNSUPPORTED_DECISION)
                 status = AgentStatus.FAILED
+                self._mark_model_publication(session, message)
                 if self._root_batch_events(state) is not None:
                     # 入口 triage agent 失败：结算批次，避免 Inbox 残留（fail-open 已由 handler 兜底）
                     self.settle_batch(session, task_row.root_message_id, "delete", now)
@@ -388,6 +404,91 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
 
     # -- 消息与活动队列（无租约原子 claim）--------------------------------
 
+    @staticmethod
+    def _mark_model_publication(session: Session, message: AgentMessage) -> None:
+        if message.type not in {"model.completed", "model.failed"}:
+            return
+        activity_id = message.payload.get("activity_id")
+        if isinstance(activity_id, str):
+            session.execute(
+                update(ActivityRow)
+                .where(ActivityRow.activity_id == activity_id, ActivityRow.status.in_((ACT_COMPLETED, ACT_ERROR)))
+                .values(publishable=1)
+            )
+
+    def supersede_session_generation(self, amp: Any, limits: TriageLimits) -> tuple[str, ...]:
+        """高优先级 AMP 有界取代同会话未提交 generation，返回需取消的模型 Activity。"""
+        if not _requests_interrupt(amp):
+            return ()
+        now = utc_now()
+        now_dt = datetime.fromisoformat(now)
+        with self.session() as session:
+            lane = session.get(SessionLaneRow, amp.payload.session_id)
+            if lane is None or lane.active_task_id is None or lane.interrupt_count >= limits.max_interrupts:
+                return ()
+            task_row = session.get(TaskRow, lane.active_task_id)
+            if task_row is None or task_row.status != TASK_ACTIVE or task_row.autonomous:
+                return ()
+            started = datetime.fromisoformat(lane.generation_started_at or task_row.started_at)
+            if (now_dt - started).total_seconds() >= limits.max_generation_seconds:
+                return ()
+            processing_tool = session.scalar(
+                select(ActivityRow.activity_id)
+                .where(
+                    ActivityRow.task_id == task_row.task_id,
+                    ActivityRow.kind == "tool",
+                    ActivityRow.status == ACT_PROCESSING,
+                )
+                .limit(1)
+            )
+            if processing_tool is not None:
+                return ()
+            active_models = tuple(
+                session.scalars(
+                    select(ActivityRow).where(
+                        ActivityRow.task_id == task_row.task_id,
+                        ActivityRow.kind == "model",
+                        ActivityRow.status.in_(ACT_ACTIVE),
+                    )
+                )
+            )
+            if any(_loads(row.request_json).get("cancel_policy", "never") != "supersedable" for row in active_models):
+                return ()
+            processing_models = tuple(str(row.activity_id) for row in active_models if row.status == ACT_PROCESSING)
+            session.execute(
+                update(ActivityRow)
+                .where(
+                    ActivityRow.task_id == task_row.task_id,
+                    ActivityRow.kind == "model",
+                    ActivityRow.status.in_(ACT_ACTIVE),
+                )
+                .values(status=ACT_SUPERSEDED, error="superseded_by_new_context", updated_at=now)
+            )
+            lane.interrupt_count += 1
+            lane.updated_at = now
+            revision = int(lane.observed_revision)
+            self._insert_causal_event(
+                session,
+                event_type="generation.superseded",
+                summary=amp.payload.summary,
+                payload={
+                    "session_id": amp.payload.session_id,
+                    "observed_revision": revision,
+                    "interrupt_count": int(lane.interrupt_count),
+                },
+                task_id=str(task_row.task_id),
+                correlation_id=amp.header.message_id,
+                now=now,
+            )
+            self._end_task(
+                session,
+                str(task_row.task_id),
+                TaskStatus.CANCELLED,
+                f"superseded_by_revision:{revision}",
+                now,
+            )
+            return processing_models
+
     def claim_message(self) -> tuple[AgentMessage, AgentInstance, Any] | None:
         """原子领取一条可处理消息（含其 Agent 与 Task），单进程无竞争。"""
         with self.session() as session:
@@ -430,13 +531,37 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
     def claim_activities(self, kind: str, limit: int) -> tuple[Any, ...]:
         """原子领取指定类型的待处理活动，返回活动实体。"""
         with self.session() as session:
-            rows = session.execute(
-                select(ActivityRow)
+            candidates = session.execute(
+                select(ActivityRow, TaskRow.session_id)
                 .join(TaskRow, TaskRow.task_id == ActivityRow.task_id)
-                .where(ActivityRow.kind == kind, ActivityRow.status == ACT_PENDING, TaskRow.status == TASK_ACTIVE)
+                .outerjoin(SessionLaneRow, SessionLaneRow.session_id == TaskRow.session_id)
+                .where(
+                    ActivityRow.kind == kind,
+                    ActivityRow.status == ACT_PENDING,
+                    TaskRow.status == TASK_ACTIVE,
+                    or_(
+                        TaskRow.autonomous == 1,
+                        (
+                            (SessionLaneRow.active_task_id == TaskRow.task_id)
+                            & (SessionLaneRow.generation_revision == ActivityRow.generation_revision)
+                        ),
+                    ),
+                )
                 .order_by(ActivityRow.priority.desc(), ActivityRow.created_at)
-                .limit(limit)
-            ).scalars()
+            ).all()
+            rows: list[Any] = []
+            deferred: list[Any] = []
+            sessions: set[str] = set()
+            for row, session_id in candidates:
+                if str(session_id) in sessions:
+                    deferred.append(row)
+                    continue
+                rows.append(row)
+                sessions.add(str(session_id))
+                if len(rows) == limit:
+                    break
+            if len(rows) < limit:
+                rows.extend(deferred[: limit - len(rows)])
             result: list[Any] = []
             for row in rows:
                 row.status = ACT_PROCESSING
@@ -453,12 +578,31 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             )
             if row is None:
                 return
+            if row.status == ACT_SUPERSEDED:
+                self._record_late_model_result(session, row, error, now)
+                return
+            if row.status != ACT_PROCESSING:
+                return
+            task_row = session.scalar(select(TaskRow).where(TaskRow.task_id == row.task_id))
+            current = task_row is not None and task_row.status == TaskStatus.ACTIVE
+            if current and task_row is not None and not task_row.autonomous:
+                lane = session.get(SessionLaneRow, str(task_row.session_id))
+                current = (
+                    lane is not None
+                    and lane.active_task_id == task_row.task_id
+                    and lane.generation_revision == row.generation_revision
+                )
+            if not current:
+                row.status = ACT_SUPERSEDED
+                row.error = "late_result_for_superseded_generation"
+                row.updated_at = now
+                self._record_late_model_result(session, row, error, now)
+                return
             row.status = ACT_COMPLETED if error is None else ACT_ERROR
             row.result_json = _json(result) if result is not None else None
             row.error = error
             row.updated_at = now
-            task_row = session.scalar(select(TaskRow).where(TaskRow.task_id == row.task_id))
-            if task_row is not None and task_row.status == TaskStatus.ACTIVE:
+            if task_row is not None:
                 payload: dict[str, Any] = (
                     {"activity_id": activity_id, "error": error}
                     if error is not None
@@ -476,6 +620,20 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     now=now,
                 )
 
+    @staticmethod
+    def _record_late_model_result(session: Session, row: ActivityRow, error: str | None, now: str) -> None:
+        StoreDecisionsMixin._insert_causal_event(
+            session,
+            event_type="generation.late_result_ignored",
+            summary="late model result ignored",
+            payload={"activity_id": str(row.activity_id), "reported_error": error is not None},
+            task_id=str(row.task_id),
+            agent_id=str(row.agent_id),
+            causation_id=str(row.activity_id),
+            correlation_id=str(row.task_id),
+            now=now,
+        )
+
     def claim_tool_activities(self, limit: int) -> tuple[Any, ...]:
         return self.claim_activities("tool", limit)
 
@@ -484,7 +642,19 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             rows = session.execute(
                 select(ActivityRow)
                 .join(TaskRow, TaskRow.task_id == ActivityRow.task_id)
-                .where(ActivityRow.kind == "tool", ActivityRow.status == ACT_PROCESSING, TaskRow.status == TASK_ACTIVE)
+                .outerjoin(SessionLaneRow, SessionLaneRow.session_id == TaskRow.session_id)
+                .where(
+                    ActivityRow.kind == "tool",
+                    ActivityRow.status == ACT_PROCESSING,
+                    TaskRow.status == TASK_ACTIVE,
+                    or_(
+                        TaskRow.autonomous == 1,
+                        (
+                            (SessionLaneRow.active_task_id == TaskRow.task_id)
+                            & (SessionLaneRow.generation_revision == ActivityRow.generation_revision)
+                        ),
+                    ),
+                )
             ).scalars()
             return tuple(rows)
 
@@ -496,7 +666,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
         summary: str,
         payload: dict[str, Any],
     ) -> tuple[bool, str | None]:
-        """消费工具回执 AMP（RFC 0211）：幂等投递 tool.{status} 消息给请求方 Agent。
+        """消费工具回执 AMP：幂等投递 tool.{status} 消息给请求方 Agent。
 
         幂等键为 request_id：因果事件中已存在同类型回执则忽略（重放去重）。
         """
@@ -512,7 +682,18 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             row = session.scalar(
                 select(ActivityRow).where(ActivityRow.idempotency_key == request_id, ActivityRow.kind == "tool")
             )
-            if row is None:
+            if row is None or row.status != ACT_PROCESSING:
+                return False, None
+            task_row = session.get(TaskRow, str(row.task_id))
+            current = task_row is not None and task_row.status == TASK_ACTIVE
+            if current and task_row is not None and not task_row.autonomous:
+                lane = session.get(SessionLaneRow, str(task_row.session_id))
+                current = (
+                    lane is not None
+                    and lane.active_task_id == task_row.task_id
+                    and lane.generation_revision == row.generation_revision
+                )
+            if not current:
                 return False, None
             row.status = ACT_COMPLETED if event_type == "tool.succeeded" else ACT_ERROR
             row.result_json = _json(payload["result"]) if payload.get("result") is not None else None
@@ -520,7 +701,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             row.updated_at = now
             request = _loads(row.request_json)
             if event_type == "tool.succeeded" and request.get("complete_task") is True:
-                # 工具成功后自动完成 Agent（RFC 0203 语义）：不投递 tool.succeeded 消息
+                # 工具成功后自动完成 Agent（语义）：不投递 tool.succeeded 消息
                 message_id = self._complete_agent_after_tool(session, row, summary, now)
             else:
                 message_id = self._insert_message(
@@ -612,9 +793,20 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
 
     # -- Task 终止与预算 -----------------------------------------------
 
-    def cancel_task(self, task_id: str, reason: str) -> None:
+    def cancel_task(self, task_id: str, reason: str) -> tuple[str, ...]:
         with self.session() as session:
+            activities = tuple(
+                str(value)
+                for value in session.scalars(
+                    select(ActivityRow.activity_id).where(
+                        ActivityRow.task_id == task_id,
+                        ActivityRow.kind == "model",
+                        ActivityRow.status == ACT_PROCESSING,
+                    )
+                )
+            )
             self._end_task(session, task_id, TaskStatus.CANCELLED, reason, utc_now())
+            return activities
 
     def expire_tasks(self) -> tuple[str, ...]:
         """检查并终止所有超时的活跃 Task（duration 预算）。"""
@@ -645,7 +837,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
 
     @staticmethod
     def _require_triage_root(agent: AgentInstance, task_row: TaskRow) -> None:
-        """defer/discard 只允许入口 triage agent 发出（RFC 0209）。"""
+        """defer/discard 只允许入口 triage agent 发出。"""
         if agent.agent_id != task_row.root_agent_id:
             raise PermissionError(_Msg.TRIAGE_CONTROL_DENIED)
 
@@ -677,6 +869,35 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
     @staticmethod
     def _end_task(session: Session, task_id: str, status: TaskStatus, reason: str, now: str) -> None:
         """终止 Task：更新 Task 状态为终止态，级联取消所有非终态 Agent、消息和 Activity。"""
+        task_row = session.get(TaskRow, task_id)
+        if task_row is not None:
+            if reason.startswith("superseded_by_revision:"):
+                session.execute(
+                    update(InboxEventRow)
+                    .where(InboxEventRow.batch_id == task_row.root_message_id)
+                    .values(status=INBOX_PENDING, batch_id=None, available_at=now, updated_at=now)
+                )
+            else:
+                session.execute(delete(InboxEventRow).where(InboxEventRow.batch_id == task_row.root_message_id))
+        if (
+            task_row is not None
+            and task_row.status == TaskStatus.ACTIVE
+            and status in {TaskStatus.COMPLETED, TaskStatus.ERROR}
+        ):
+            StoreDecisionsMixin._publish_task_outputs(session, task_row, now)
+        if task_row is not None and not task_row.autonomous:
+            lane = session.get(SessionLaneRow, str(task_row.session_id))
+            if lane is not None and lane.active_task_id == task_id:
+                lane.active_task_id = None
+                lane.updated_at = now
+                if not reason.startswith("superseded_by_revision:"):
+                    if status in {TaskStatus.COMPLETED, TaskStatus.SILENT, TaskStatus.ERROR}:
+                        lane.committed_revision = max(
+                            int(lane.committed_revision),
+                            int(lane.generation_revision),
+                        )
+                    lane.interrupt_count = 0
+                    lane.generation_started_at = None
         session.execute(
             update(TaskRow)
             .where(TaskRow.task_id == task_id)
@@ -697,3 +918,44 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             .where(ActivityRow.task_id == task_id, ActivityRow.status.in_(ACT_ACTIVE))
             .values(status=ACT_CANCELLED, updated_at=now)
         )
+
+    @staticmethod
+    def _publish_task_outputs(session: Session, task_row: TaskRow, now: str) -> None:
+        rows = session.execute(
+            select(ActivityRow)
+            .where(
+                ActivityRow.task_id == task_row.task_id,
+                ActivityRow.publishable == 1,
+                ActivityRow.status.in_((ACT_COMPLETED, ACT_ERROR)),
+            )
+            .order_by(ActivityRow.created_at, ActivityRow.activity_id)
+        ).scalars()
+        for row in rows:
+            result = _loads(row.result_json)
+            kind = "error" if row.status == ACT_ERROR else "model"
+            text = str(row.error or "")
+            if kind == "model" and isinstance(result, dict):
+                text = str(result.get("text", ""))
+            session.add(
+                OutputPublicationRow(
+                    activity_id=str(row.activity_id),
+                    task_id=str(task_row.task_id),
+                    session_id=str(task_row.session_id),
+                    generation_revision=int(row.generation_revision),
+                    kind=kind,
+                    text=text,
+                    created_at=now,
+                )
+            )
+
+
+def _requests_interrupt(amp: Any) -> bool:
+    if amp.payload.type != "message.received":
+        return False
+    data = amp.payload.data
+    attention = data.get("attention")
+    if attention in {"direct", "correction", "urgent"}:
+        return True
+    if any(data.get(name) is True for name in ("directed", "mentioned", "reply_to_bot")):
+        return True
+    return ":private:" in amp.payload.session_id

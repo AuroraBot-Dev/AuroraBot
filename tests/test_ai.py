@@ -8,11 +8,13 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import text
 
 from src.ai import models
-from src.ai.execution import CostTracker, GatewayError
+from src.ai.execution import CostTracker, GatewayError, TaskManager
 from src.ai.gateway import ModelGatewayService, invalid_output_result
 from src.ai.roles.base import (
+    ChatCaller,
     RoleHandler,
     _provider_tool_alias,
     build_chat_kwargs,
@@ -62,7 +64,6 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
     request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),), output_schema={"type": "object"})
     assert {"chat", "structured_output"} <= service.negotiate(request)
     assert "chat" in service.negotiate(ModelRequest(role="fast", messages=(), parallel_tool_calls=True))
-
     invalid = (
         (ModelRequest(role="missing", messages=()), "unknown model role"),
         (ModelRequest(role="fast", messages=(), retry_policy="retry"), "retry_policy"),  # type: ignore[arg-type]
@@ -78,8 +79,22 @@ def test_gateway_negotiates_and_rejects_request_contracts(project_root: Path) ->
             service.negotiate(model_request)
 
 
+def test_structured_output_negotiation_requires_capability(project_root: Path) -> None:
+    """模型不具备 structured_output 能力时，即使带 output_schema 也不协商该能力。"""
+    service = _service(project_root)
+    service._capabilities = {
+        "fast": frozenset({"chat", "stream", "json_text_fallback"}),
+        "quality": frozenset({"chat", "stream", "json_text_fallback", "reasoning"}),
+        "multimodal": frozenset({"chat", "stream", "vision"}),
+    }
+    request = ModelRequest(role="fast", messages=(ModelMessage("user", "test"),), output_schema={"type": "object"})
+    negotiated = service.negotiate(request)
+    assert "chat" in negotiated
+    assert "structured_output" not in negotiated
+
+
 def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
-    """RFC 0213：能力基线并入能力集；adapt_request 可改写请求。"""
+    """能力基线并入能力集；adapt_request 可改写请求。"""
 
     from src.ai.roles.base import RoleHandler
     from src.ai.roles.quality import QualityRole
@@ -104,7 +119,7 @@ def test_role_baseline_and_adapt_request_hooks(project_root: Path) -> None:
 
 
 def test_role_self_contained_implementation(project_root: Path) -> None:
-    """RFC 0214：角色文件自包含完整实现，可独立扩展（如音频输出）。"""
+    """角色文件自包含完整实现，可独立扩展（如音频输出）。"""
 
     class AudioMultimodalRole(RoleHandler):
         """模拟多模态角色的音频输出适配：完整实现，独立于其他角色。"""
@@ -139,7 +154,7 @@ def test_role_self_contained_implementation(project_root: Path) -> None:
 
 
 def test_get_response_returns_unwrapped_output(project_root: Path) -> None:
-    """RFC 0215：get_response 返回脱壳 dict（text/tool_calls/finish_reason）。"""
+    """get_response 返回脱壳 dict（text/tool_calls/finish_reason）。"""
     from src.ai.roles.embedding import EmbeddingRole
 
     service = _service(project_root)
@@ -178,7 +193,7 @@ def test_get_response_returns_unwrapped_output(project_root: Path) -> None:
 
 
 def test_export_openai_client_and_cost_stats(project_root: Path) -> None:
-    """RFC 0215：client 可导出；CostTracker 提供总费用与分类统计。"""
+    """client 可导出；CostTracker 提供总费用与分类统计。"""
     from src.ai.execution import CostTracker
 
     service = _service(project_root)
@@ -250,7 +265,7 @@ def test_parsing_maps_provider_tools_and_tool_calls() -> None:
     chat_defs, aliases = provider_tools(definitions, responses=False)
     alias = next(iter(aliases))
     assert alias == "org__example__echo"
-    # 双下划线替换与原始单下划线不混淆（RFC 0214 歧义消除）
+    # 双下划线替换与原始单下划线不混淆（歧义消除）
     assert _provider_tool_alias("aur_agent_delegate") == "aur_agent_delegate"
     assert _provider_tool_alias("aur.agent.delegate") == "aur__agent__delegate"
     assert _provider_tool_alias("aur_agent.delegate") == "aur_agent__delegate"
@@ -313,6 +328,100 @@ def test_cost_tracker() -> None:
         assert summary["by_role"]["fast"]["count"] == 2
 
     asyncio.run(scenario())
+
+
+def test_chat_stream_cancellation_closes_provider_and_tracks_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Stream:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.closed = False
+
+        def __aiter__(self) -> Stream:
+            return self
+
+        async def __anext__(self) -> Any:
+            self.started.set()
+            await asyncio.Event().wait()
+            raise StopAsyncIteration
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class Gateway:
+        log_queries = False
+        log_responses = False
+
+        def __init__(self, cost_tracker: CostTracker) -> None:
+            self.cost_tracker = cost_tracker
+
+    stream = Stream()
+
+    async def fake_completion(**_kwargs: Any) -> Stream:
+        return stream
+
+    async def free_call(_model: str, _prompt_tokens: int, _completion_tokens: int) -> float:
+        return 0.0
+
+    monkeypatch.setattr("src.ai.roles.base.litellm.acompletion", fake_completion)
+    monkeypatch.setattr("src.ai.roles.base.compute_cost", free_call)
+
+    async def scenario() -> None:
+        tracker = CostTracker()
+        gateway = Gateway(tracker)
+        generation = ChatCaller("test", "fast", TaskManager(), gateway).acompletion([])
+        consumer = asyncio.ensure_future(generation)
+        await asyncio.wait_for(stream.started.wait(), 1)
+        consumer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await consumer
+        assert stream.closed
+        assert await tracker.by_status() == {"cancelled": {"count": 1, "cost": 0.0}}
+
+    asyncio.run(scenario())
+
+
+def test_cost_tracker_persists_and_reloads(tmp_path: Path) -> None:
+    from src.ai.cost_store import CostStore
+
+    async def scenario() -> None:
+        first = CostTracker(store=CostStore(tmp_path / "ai"))
+        await first.add(
+            {
+                "role": "quality",
+                "model": "p/m",
+                "type": "completion",
+                "status": "completed",
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "cost": 0.3,
+            }
+        )
+        reloaded = CostTracker(store=CostStore(tmp_path / "ai"))
+        assert await reloaded.total_cost() == 0.3
+        assert await reloaded.by_role() == {"quality": {"count": 1, "cost": 0.3}}
+        assert await reloaded.by_status() == {"completed": {"count": 1, "cost": 0.3}}
+
+    asyncio.run(scenario())
+
+
+def test_cost_store_is_append_only_and_wal(tmp_path: Path) -> None:
+    from src.ai.cost_store import CostStore
+
+    store = CostStore(tmp_path / "ai")
+    store.append({"role": "fast", "model": "p/m", "type": "completion", "status": "completed", "cost": 0.1})
+    records = store.load_records()
+    assert len(records) == 1
+    assert records[0]["role"] == "fast"
+    assert records[0]["cost"] == 0.1
+    assert records[0]["created_at"]
+    with store._engine.connect() as connection:
+        journal_mode = connection.execute(text("PRAGMA journal_mode")).scalar()
+        version = connection.execute(text("SELECT version FROM schema_meta")).scalar()
+    assert journal_mode == "wal"
+    assert version == 1
+    store.close()
 
 
 def test_models_dev_capabilities_pricing_and_disk_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -408,7 +517,7 @@ def test_gateway_cold_start_falls_back_and_opens_tools(project_root: Path, monke
     async def scenario() -> None:
         service = ModelGatewayService(load_configuration(project_root))
         try:
-            # 冷启动且 models.dev 不可用：能力假定满足（RFC 0215），协商不阻塞
+            # 冷启动且 models.dev 不可用：能力假定满足，协商不阻塞
             await service.initialize()
             request = ModelRequest(
                 role="fast",

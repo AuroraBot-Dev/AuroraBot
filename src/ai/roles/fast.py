@@ -1,4 +1,4 @@
-"""预设角色（RFC 0212/0213/0214）：fast = 低延迟快速决策。
+"""预设角色：fast = 低延迟快速决策。
 
 角色文件自包含完整实现；共享逻辑调用 :mod:`src.ai.roles.base` 纯函数。
 """
@@ -37,6 +37,10 @@ class FastRole(RoleHandler):
     ) -> ModelResult:
         capabilities = gateway._capabilities_for(request.role)
         messages, kwargs, alias_to_name = build_chat_kwargs(request, negotiated)
+        if role.provider == "deepseek":
+            extra_body = dict(kwargs.get("extra_body") or {})
+            extra_body.setdefault("thinking", {"type": "disabled"})
+            kwargs["extra_body"] = extra_body
         caller = gateway._caller_for(request.role)
         try:
             task, response = await complete_chat_with_fallback(

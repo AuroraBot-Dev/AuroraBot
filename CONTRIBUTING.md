@@ -9,7 +9,7 @@ AuroraBot 希望探索的不只是“如何接入一个模型”，而是一个 
 
 - **第一次贡献**：修正文档、补充测试，或选择边界清晰的小问题。
 - **应用开发者**：从内建 Clock 应用出发，为 AuroraBot 接入新的 MCP 能力。
-- **运行时开发者**：改进 Agent、Kernel、模型网关、Platform 或本地交互体验。
+- **运行时开发者**：改进 Agent、engine、模型网关、Platform 或本地交互体验。
 - **设计参与者**：对公共契约和模块边界提出 RFC，并通过可执行验收标准推动讨论。
 
 如果还不确定从哪里开始，可以先在 Discussion 或 Issue 中描述你希望改善的使用体验。
@@ -25,7 +25,7 @@ uv sync --group dev
 Copy-Item .env.example .env
 
 # 需要实际运行模型时，在 .env 中填写密钥并显式加载
-uv run --env-file .env aurora
+uv run --env-file .env aurora start
 ```
 
 仅运行测试和静态检查不需要真实模型密钥。密钥只写入本地 `.env` 或进程环境；不要提交密钥、真实对话、模型
@@ -36,14 +36,14 @@ continuation、工作区事件、上传文件或运行日志。
 AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `docs/rfc/` 中的 RFC：
 
 - 模块职责或依赖方向；
-- AMP、Task、Agent、Activity 或效果事件契约；
+- AMP、Task、Agent、Activity、工具回执或因果事件契约；
 - TOML 配置、扩展协议或模型调用契约；
 - 会改变平台组合、进程入口或持久化语义的行为。
 
 小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、
 英文和日文入口。
 
-当前运行时、包边界和进程组合以 [RFC 0200](rfc/0200-agent-centered-runtime.md) 为准。
+当前运行时、包边界和进程组合以唯一设计基准 [RFC 0300](rfc/0300-unified-architecture-and-contracts.md) 为准。
 
 ## 保持闭环完整
 
@@ -87,7 +87,7 @@ uv run pyright
 ## 提交前自查
 
 - 使用者能从文档或测试看懂改动带来的行为差异。
-- 新行为没有绕过 Agent、Kernel 和 Platform 之间的闭环。
+- 新行为没有绕过 Agent、engine 和 Platform 之间的闭环。
 - 配置、README、模块文档、测试和 RFC 没有互相矛盾。
 - 日志和测试夹具不包含真实密钥、会话或私人数据。
 - `uv run aurora check` 已通过，或 Pull Request 清楚解释了未运行的部分。

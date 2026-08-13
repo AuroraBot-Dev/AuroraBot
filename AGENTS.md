@@ -1,22 +1,27 @@
 # AuroraBot
 
 AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智能体框架。当前工作树只保存现行实现；设计判断以
-已接受 RFC 和当前公共契约为依据。
+唯一 RFC 和当前公共契约为依据。
 
 ## Architecture authority
 
-- `docs/rfc/` 是唯一设计基准，RFC 0200 定义 Agent 中心运行时、包边界与进程组合。
-- 已接受 RFC 高于 README、注释、配置样例和现有代码。
-- 影响模块边界、事件、配置、扩展或模型调用契约的改动，必须先更新或新增 RFC。
-- `ARCHITECTURE.md` 是 RFC 0200 的详细实施规划；冲突时以已接受 RFC 为准。
+- `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准，定义当前完整架构与公共契约。
+- `docs/` 是 `AuroraBot-Dev/docs` 仓库的子模块，`docs/rfc/` 随子模块挂载；RFC 变更在 docs 仓库提交后，再在本仓库 bump 子模块指针。
+- RFC 0300 高于 README、注释、配置样例和现有代码。
+- 影响模块边界、事件、配置、扩展、模型调用、持久化或进程组合契约的改动，必须先更新 RFC 0300。
+- 除非先修改 RFC 0300 的治理规则，不得新增并行编号 RFC。
+- Python 源码和测试的注释、模块 docstring、类 docstring 与函数 docstring 禁止提及具体 RFC 编号或章节；
+  应直接说明局部行为、原因和不变量。
+- `ARCHITECTURE.md` 是 RFC 0300 的实施说明；冲突时以 RFC 0300 为准。
 
 ## Project layout
 
 ```text
 config/         TOML 核心配置、平台偏好、领域配置与 profile 覆盖
 aurora/         唯一进程 CLI、平台选择与生命周期组合
-ops/            面板后端（RFC 0218）：唯一 HTTP 路由、操作体系、认证与面板存储
-docs/rfc/       已接受 RFC 与阅读索引
+ops/            面板后端：唯一 HTTP 路由、操作体系、认证与面板存储
+docs/           AuroraBot-Dev/docs 子模块：文档站点；docs/rfc/ 唯一 RFC 与阅读索引
+panel/          AuroraBot-Dev/panel 子模块：面板前端
 src/contracts/  无上层依赖的配置、AMP、操作、Agent、模型与记忆契约
 src/prompt/     提示词目录、分层 DTO 与模型上下文呈现
 src/engine/     完整 Agent 热路径、状态、Activity、因果与 SQLite 运行态
@@ -47,8 +52,9 @@ tests/          契约、集成与回归测试
 - 数据持久化路径必须镜像包层级：`src/engine → data/engine`、`ops → data/ops`、
   `src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；
   配置见 `storage.toml`。
-- engine 工作区固定为 `data/engine/runtime.sqlite3`（唯一运行态与终态，RFC 0210/0219/0220）；无 JSON 归档、JSONL 会话日志与文件投递箱。
-- 外部 AMP 摄入使用 JSON，生产者必须先写临时文件再原子改名；运行态与归档统一使用 SQLite WAL（Schema v9；数据库演进必须提供迁移步骤，历史版本按 RFC 0217 版本序列迁移，代码路径只访问当前版本形状）。
+- engine 工作区固定为 `data/engine/runtime.sqlite3`，它是唯一运行态与终态；无 JSON 归档、JSONL 会话日志与文件投递箱。
+- 外部 AMP 通过 contracts 输入端口直连 SQLite；运行态与终态统一使用 SQLite WAL。Schema v10 的后续演进必须
+  提供连续迁移步骤，代码路径只访问当前版本形状。
 - 会话可读性由 `causal_events` 提供；ops 可按需导出，不写入热路径日志文件。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
 - 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、

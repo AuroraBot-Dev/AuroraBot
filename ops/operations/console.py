@@ -1,4 +1,4 @@
-"""console 专属操作：终端控制语义（RFC 0218 §3，scope=CONSOLE_ONLY）。"""
+"""console 专属操作：终端控制语义，scope=CONSOLE_ONLY。"""
 
 from __future__ import annotations
 

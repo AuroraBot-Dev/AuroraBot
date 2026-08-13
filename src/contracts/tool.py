@@ -1,4 +1,4 @@
-"""工具执行、绑定与回执契约（RFC 0211：工具域统一与 AMP 化回执）。
+"""工具执行、绑定与回执契约（工具域统一与 AMP 化回执）。
 
 工具结果统一经 AMP（``tool.{status}``）回 engine：executor 只负责执行并
 通过 ``tool_receipt_amp`` 构造回执提交，engine 不再有内部完成端口。
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from src.contracts.agent import CapabilityDescriptor
 
 MEMORY_REMEMBER_CAPABILITY = "aur.serv.memory.remember"
-"""主动记忆写入工具 ID（RFC 0211 服务域命名）：agents 侧能力与 memory 侧执行器的跨层线缆契约。"""
+"""主动记忆写入工具 ID（服务域命名）：agents 侧能力与 memory 侧执行器的跨层线缆契约。"""
 
 _TOOL_STATUSES = frozenset({"succeeded", "failed", "unknown"})
 
@@ -69,7 +69,7 @@ def tool_receipt_amp(
     result: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
-    """构造工具回执 AMP（RFC 0211）：executor 执行完成后提交此信封。"""
+    """构造工具回执 AMP：executor 执行完成后提交此信封。"""
     if status not in _TOOL_STATUSES:
         raise ValueError(_Msg.INVALID_STATUS)
     if status == "succeeded" and error is not None:

@@ -365,7 +365,7 @@ async def get_model_info(model_id: str) -> dict[str, Any] | None:
 
 
 async def get_modalities_by_id(model_id: str) -> tuple[frozenset[str], frozenset[str]]:
-    """返回 models.dev 中模型的输入/输出模态（RFC 0215）。
+    """返回 models.dev 中模型的输入/输出模态。
 
     模态来自 models.dev 原始缓存的 ``modalities.input`` / ``modalities.output``；
     数据不可用时退回空集。

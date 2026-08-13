@@ -1,6 +1,6 @@
 # 日志规范
 
-本规范适用于 AuroraBot。日志用于诊断运行时，不替代事件记录、效果回执或审计文件。
+本规范适用于 AuroraBot。日志用于诊断运行时，不替代因果事件、Activity 或工具回执。
 
 | 级别      | 用途                                                            |
 | --------- | --------------------------------------------------------------- |
@@ -13,7 +13,7 @@
 
 - AMP 事件正文、SOUL 内容、用户内容、密钥和完整模型提示词默认不得写入 `INFO`。
 - 每一条与事件或效果相关的日志应包含稳定的记录 ID；不得只依赖自由文本关联。
-- `effect.requested`、`effect.succeeded` 与 `effect.failed` 的事实记录在 Kernel 工作区，不以日志作为唯一来源。
+- 工具请求记录在 Activity，`tool.succeeded`、`tool.failed` 与 `tool.unknown` 回执记录在 engine SQLite 的因果链中，不以日志作为唯一来源。
 - 模型计费、调用参数和原生响应的记录规则由 AI 网关定义。
 - 项目代码统一通过 `src.utils.logging.get_logger()` 获取 logger；入口通过
   `configure_logging()` 应用 TOML 中的日志级别，不得另行调用 `logging.basicConfig()`。
