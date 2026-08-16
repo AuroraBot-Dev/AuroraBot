@@ -111,6 +111,43 @@ class _FakeConfig:
             return None
         return {"role": role, "text": f"prompt:{role}"}
 
+    def extensions(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "ext-1",
+                "version": "1.0",
+                "enabled": True,
+                "factory": "aurora.builtin.control",
+                "faces": ["control_action"],
+                "capabilities": [],
+            }
+        ]
+
+    def apps(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "package": "app-1",
+                "enabled": False,
+                "transport": "stdio",
+                "working_dir": "src/apps/app-1",
+                "command": ["uv", "run", "app-1"],
+                "env": [],
+                "url": None,
+                "auth_env": None,
+                "timeout_seconds": 30,
+            }
+        ]
+
+    def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]:
+        if extension_id != "ext-1":
+            raise KeyError(f"id 未找到: {extension_id}")
+        return {"id": extension_id, "enabled": enabled, "requires_restart": True}
+
+    def set_app_enabled(self, package: str, *, enabled: bool) -> dict[str, Any]:
+        if package != "app-1":
+            raise KeyError(f"package 未找到: {package}")
+        return {"package": package, "enabled": enabled, "requires_restart": True}
+
 
 def _runtime() -> PanelRuntime:
     return PanelRuntime(
@@ -150,6 +187,50 @@ def test_catalog_self_describes_resources() -> None:
     assert ("POST", "/engine/shutdown") in names
     assert ("GET", "/engine/events") in names
     assert ("POST", "/engine/events") in names
+    assert ("GET", "/extensions") in names
+    assert ("POST", "/extensions/{extension_id}/enabled") in names
+    assert ("GET", "/apps") in names
+    assert ("POST", "/apps/{package}/enabled") in names
+
+
+def test_extensions_and_apps_list_and_toggle() -> None:
+    async def scenario() -> None:
+        router = OperationRouter(_runtime())
+
+        extensions, extensions_data = await _execute(router, "GET", "/extensions", {})
+        assert extensions.ok and extensions_data["count"] == 1
+        assert extensions_data["extensions"][0]["id"] == "ext-1"
+
+        apps, apps_data = await _execute(router, "GET", "/apps", {})
+        assert apps.ok and apps_data["count"] == 1
+        assert apps_data["apps"][0]["package"] == "app-1"
+
+        toggled_ext, toggled_ext_data = await _execute(router, "POST", "/extensions/ext-1/enabled", {"enabled": False})
+        assert toggled_ext.ok and toggled_ext_data == {
+            "id": "ext-1",
+            "enabled": False,
+            "requires_restart": True,
+        }
+
+        toggled_app, toggled_app_data = await _execute(router, "POST", "/apps/app-1/enabled", {"enabled": True})
+        assert toggled_app.ok and toggled_app_data == {
+            "package": "app-1",
+            "enabled": True,
+            "requires_restart": True,
+        }
+
+        missing_ext = await router.route_text(
+            RuntimeInput(
+                text="/extensions/missing/enabled --enabled true",
+                origin=InputOrigin.CONSOLE,
+                session_id="s",
+                source_app="t",
+                source_instance="i",
+            )
+        )
+        assert not missing_ext.ok and missing_ext.data is None
+
+    asyncio.run(scenario())
 
 
 def test_text_and_rest_share_parameters_and_envelope() -> None:

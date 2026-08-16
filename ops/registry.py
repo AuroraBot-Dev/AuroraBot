@@ -104,4 +104,4 @@ def _load_all() -> None:
     if _LOADED:
         return
     _LOADED = True
-    from ops.operations import ai, chat, config, console, engine, memory, system  # noqa: F401
+    from ops.operations import ai, apps, chat, config, console, engine, extensions, memory, system  # noqa: F401

@@ -9,8 +9,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid5
+
+import tomlkit
 
 from ops.router import OperationRouter
 from src.contracts import (
@@ -25,6 +28,36 @@ if TYPE_CHECKING:
     from src.contracts.event import OutputStreamPage
     from src.contracts.tool import EffectToolBinding
     from src.engine.runtime import AgentEngine
+
+
+def _config_dir(configuration: "AuroraConfig") -> Path:
+    """返回 TOML 配置目录（configuration.root 即仓库根）。"""
+    return configuration.root / "config"
+
+
+def _load_toml_document(path: Path) -> Any:
+    """读取 TOML 文档；文件不存在时抛出可读错误。"""
+    if not path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {path}")
+    return tomlkit.parse(path.read_text(encoding="utf-8"))
+
+
+def _write_toml_document(path: Path, document: Any) -> None:
+    """原子写入 TOML 文档，保留原注释与格式。"""
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    tmp_path.write_text(tomlkit.dumps(document), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _find_toml_item(document: Any, key: str, match: str, value: str) -> Any:
+    """在 TOML 数组表（[[key]]）中按唯一字段查找条目。"""
+    items = document.get(key)
+    if not isinstance(items, list):
+        raise TypeError(f"TOML 缺少 {key} 数组")
+    for item in items:
+        if isinstance(item, dict) and item.get(match) == value:
+            return item
+    raise KeyError(f"{match} 未找到: {value}")
 
 
 class PanelConfigQuery:
@@ -86,17 +119,8 @@ class PanelConfigQuery:
                 }
                 for agent in config.agents
             ],
-            "extensions": [
-                {
-                    "id": extension.id,
-                    "version": extension.version,
-                    "enabled": extension.enabled,
-                    "factory": extension.factory,
-                    "faces": sorted(face.value for face in extension.faces),
-                    "capabilities": sorted(extension.capabilities),
-                }
-                for extension in getattr(config, "extensions", ())
-            ],
+            "extensions": self.extensions(),
+            "apps": self.apps(),
             "models": {
                 "roles": sorted(config.model_roles),
                 "definitions": {
@@ -124,6 +148,87 @@ class PanelConfigQuery:
         if text is None:
             return None
         return {"role": role, "text": str(text)}
+
+    def extensions(self) -> list[dict[str, Any]]:
+        """返回 extensions.toml 的全部内建扩展声明（含禁用）。"""
+        path = _config_dir(self._configuration) / "extensions.toml"
+        document = _load_toml_document(path)
+        items = document.get("extension")
+        if not isinstance(items, list):
+            return []
+        extensions: list[dict[str, Any]] = []
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            item = dict(raw)
+            faces = item.get("faces", [])
+            capabilities = item.get("capabilities", [])
+            extensions.append(
+                {
+                    "id": item.get("id"),
+                    "version": item.get("version"),
+                    "enabled": item.get("enabled", False),
+                    "factory": item.get("factory"),
+                    "faces": sorted(str(face) for face in faces) if isinstance(faces, list) else [],
+                    "capabilities": sorted(str(capability) for capability in capabilities)
+                    if isinstance(capabilities, list)
+                    else [],
+                }
+            )
+        return extensions
+
+    def apps(self) -> list[dict[str, Any]]:
+        """返回 apps.toml 的全部 MCP 应用路由（含禁用）。"""
+        path = _config_dir(self._configuration) / "apps.toml"
+        document = _load_toml_document(path)
+        items = document.get("app")
+        if not isinstance(items, list):
+            return []
+        apps: list[dict[str, Any]] = []
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            item = dict(raw)
+            apps.append(
+                {
+                    "package": item.get("package"),
+                    "enabled": item.get("enabled", False),
+                    "transport": item.get("transport"),
+                    "working_dir": item.get("working_dir"),
+                    "command": list(item.get("command", [])),
+                    "env": list(item.get("env", [])),
+                    "url": item.get("url"),
+                    "auth_env": item.get("auth_env"),
+                    "timeout_seconds": item.get("timeout_seconds"),
+                }
+            )
+        return apps
+
+    def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]:
+        """切换 extensions.toml 中内建扩展的 enabled；重启后生效。"""
+        path = _config_dir(self._configuration) / "extensions.toml"
+        document = _load_toml_document(path)
+        item = _find_toml_item(document, "extension", "id", extension_id)
+        item["enabled"] = enabled
+        _write_toml_document(path, document)
+        return {
+            "id": extension_id,
+            "enabled": enabled,
+            "requires_restart": True,
+        }
+
+    def set_app_enabled(self, package: str, *, enabled: bool) -> dict[str, Any]:
+        """切换 apps.toml 中 MCP 应用的 enabled；重启后生效。"""
+        path = _config_dir(self._configuration) / "apps.toml"
+        document = _load_toml_document(path)
+        item = _find_toml_item(document, "app", "package", package)
+        item["enabled"] = enabled
+        _write_toml_document(path, document)
+        return {
+            "package": package,
+            "enabled": enabled,
+            "requires_restart": True,
+        }
 
 
 class PanelAiQuery:
