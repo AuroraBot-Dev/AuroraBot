@@ -105,7 +105,7 @@ class ContextContributor(Protocol):
 class OutputSink(Protocol):
     """只消费已提交的输出提交流，不参与决策。"""
 
-    def accept(self, page: OutputStreamPage) -> None: ...
+    async def accept(self, page: OutputStreamPage) -> None: ...
 
 
 class Projector(Protocol):

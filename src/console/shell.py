@@ -20,6 +20,7 @@ from prompt_toolkit.shortcuts import clear as clear_terminal
 from src.contracts import (
     CommandControl,
     InputOrigin,
+    OutputStreamPage,
     RuntimeInput,
 )
 from src.utils import get_logger
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
     from prompt_toolkit.input import Input
     from prompt_toolkit.output import Output
 
+    from src.contracts.extension import OutputSink
     from src.contracts.ports import ConsoleControlPort, RuntimeQueryPort
 
 
@@ -71,6 +73,19 @@ class _PromptReader:
         return await self.session.prompt_async("You> ")
 
 
+class ConsoleOutputSink:
+    """OutputSink 面：把已提交的输出流页面渲染到本地终端。"""
+
+    def __init__(self, output: Callable[[str], None] = print) -> None:
+        self._output = output
+
+    async def accept(self, page: OutputStreamPage) -> None:
+        for item in page.items:
+            if item.text:
+                prefix = "Bot! " if item.kind == "error" else "Bot> "
+                self._output(f"{prefix}{item.text}")
+
+
 async def run_console(
     control: ConsoleControlPort,
     query: RuntimeQueryPort,
@@ -97,7 +112,7 @@ async def run_console(
     output("AuroraBot local console; 输入 /help 查看命令。")
     prompt_reader = _PromptReader() if readline is None else None
     display = asyncio.create_task(
-        _display_messages(query, output, poll_seconds, query.output_tail_cursor()),
+        _pump_output_stream(query, (ConsoleOutputSink(output),), stop, poll_seconds),
         name="aurora-console-output",
     )
     logger.info("local console started")
@@ -190,19 +205,18 @@ def _clear_console(prompt_reader: _PromptReader | None, output: Callable[[str], 
         output("\033[2J\033[H")
 
 
-async def _display_messages(
+async def _pump_output_stream(
     query: RuntimeQueryPort,
-    output: Callable[[str], None],
+    sinks: tuple["OutputSink", ...],
+    stop: asyncio.Event,
     poll_seconds: float,
-    cursor: int,
 ) -> None:
-    """按游标轮询输出流并渲染 Bot 的用户可见文本。"""
-    while True:
+    """从 output tail 起按游标拉取提交流并分发给全部 OutputSink。"""
+    cursor = query.output_tail_cursor()
+    while not stop.is_set():
         page = query.output_stream(cursor)
-        for item in page.items:
-            if item.text:
-                prefix = "Bot! " if item.kind == "error" else "Bot> "
-                output(f"{prefix}{item.text}")
+        for sink in sinks:
+            await sink.accept(page)
         cursor = page.next_cursor
         await asyncio.sleep(poll_seconds)
 

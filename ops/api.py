@@ -38,6 +38,7 @@ from src.utils import LifespanSafeApp
 if TYPE_CHECKING:
     from ops.store import PanelStore
     from src.contracts.configuration import PanelConfig
+    from src.contracts.event import OutputStreamPage
 
 _STREAM_POLL_SECONDS = 0.2
 _STREAM_BATCH_LIMIT = 64
@@ -76,6 +77,17 @@ class Credentials(BaseModel):
     """登录凭据：bootstrap token。"""
 
     token_login: str
+
+
+class _WebSocketOutputSink:
+    """OutputSink 面：把已提交输出增量推送给单个 Panel WebSocket。"""
+
+    def __init__(self, websocket: WebSocket) -> None:
+        self._websocket = websocket
+
+    async def accept(self, page: "OutputStreamPage") -> None:
+        for item in page.items:
+            await self._websocket.send_json({"type": "output", "item": item.to_dict()})
 
 
 def _bearer(authorization: str | None) -> str | None:
@@ -256,12 +268,12 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             return
         await websocket.accept()
         # 从当前输出流末尾起订阅，不重放历史（历史归 GET /messages）
+        sink = _WebSocketOutputSink(websocket)
         cursor = context.ports.engine.output_tail_cursor()
         try:
             while True:
                 page = context.ports.engine.output_stream(cursor, limit=_STREAM_BATCH_LIMIT)
-                for item in page.items:
-                    await websocket.send_json({"type": "output", "item": item.to_dict()})
+                await sink.accept(page)
                 cursor = page.next_cursor
                 await asyncio.sleep(_STREAM_POLL_SECONDS)
         except WebSocketDisconnect:
