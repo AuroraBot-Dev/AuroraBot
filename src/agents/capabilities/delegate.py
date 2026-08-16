@@ -1,4 +1,4 @@
-"""让模型通过 aur.agent.delegate 创建子 Agent 的 Capability。"""
+"""让模型通过 aur.agent.delegate 创建子 Agent 的 ControlAction。"""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class DelegationCapability:
 
     @property
     def tool_names(self) -> frozenset[str]:
-        """返回此 Capability 注册的工具名称集合。"""
+        """返回此 ControlAction 注册的工具名称集合。"""
         return frozenset({DELEGATE_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:

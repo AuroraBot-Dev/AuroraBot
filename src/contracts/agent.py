@@ -335,7 +335,7 @@ class AgentHandler(Protocol):
     def handle(self, context: AgentContext) -> AgentDecision: ...
 
 
-class Capability(Protocol):
+class ControlAction(Protocol):
     @property
     def tool_names(self) -> frozenset[str]: ...
 

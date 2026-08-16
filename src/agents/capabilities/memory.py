@@ -33,7 +33,7 @@ class MemoryCapability:
 
     @property
     def tool_names(self) -> frozenset[str]:
-        """返回此 Capability 注册的工具名称集合。"""
+        """返回此 ControlAction 注册的工具名称集合。"""
         return frozenset({MEMORY_REMEMBER_CAPABILITY})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:  # noqa: ARG002

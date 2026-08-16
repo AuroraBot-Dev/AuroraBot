@@ -1,4 +1,4 @@
-"""让模型通过 aur.agent.wait 等待子 Agent 的 Capability。"""
+"""让模型通过 aur.agent.wait 等待子 Agent 的 ControlAction。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class WaitCapability:
 
     @property
     def tool_names(self) -> frozenset[str]:
-        """返回此 Capability 注册的工具名称集合。"""
+        """返回此 ControlAction 注册的工具名称集合。"""
         return frozenset({WAIT_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:

@@ -8,9 +8,9 @@ import pytest
 
 from src.contracts import (
     CapabilityDescriptor,
+    EffectTool,
+    EffectToolBinding,
     ToolExecutionRequest,
-    ToolExecutor,
-    ToolExecutorBinding,
     tool_receipt_amp,
 )
 from src.engine.store import SQLiteRuntimeStore
@@ -61,14 +61,14 @@ class _RecordingExecutor:
 def _binding(
     capability: str = "test.echo",
     *,
-    executor: ToolExecutor | None = None,
+    executor: EffectTool | None = None,
     store: SQLiteRuntimeStore | None = None,
-) -> ToolExecutorBinding:
+) -> EffectToolBinding:
     descriptor = CapabilityDescriptor(capability, "echo", {"type": "object"})
     if executor is None:
         assert store is not None
         executor = _RecordingExecutor(_Ingress(store))
-    return ToolExecutorBinding(descriptor, executor, "platform.test", "test")
+    return EffectToolBinding(descriptor, executor, "platform.test", "test")
 
 
 def _store(tmp_path: object) -> SQLiteRuntimeStore:

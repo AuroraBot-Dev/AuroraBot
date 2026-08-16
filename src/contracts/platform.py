@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import asyncio
 
     from src.contracts.configuration import AuroraConfig
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 
 class PlatformRuntimePort(ExternalAmpIngressPort, InteractiveInputPort, Protocol):
@@ -51,7 +51,7 @@ class PlatformFactory(Protocol):
 class PlatformHandle:
     """平台创建后交给组合根管理的资源和任务。"""
 
-    bindings: tuple[ToolExecutorBinding, ...] = ()
+    bindings: tuple[EffectToolBinding, ...] = ()
     cleanup: PlatformCleanup | None = None
     background: PlatformBackground | None = None
     server: PlatformServer | None = None

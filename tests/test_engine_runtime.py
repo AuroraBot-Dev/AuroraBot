@@ -13,6 +13,7 @@ from src.contracts import (
     AgentProfile,
     CapabilityDescriptor,
     Completion,
+    EffectToolBinding,
     EngineConfiguration,
     MemoryContextSnapshot,
     MemoryEntry,
@@ -23,7 +24,6 @@ from src.contracts import (
     TaskLimits,
     ToolCall,
     ToolExecutionRequest,
-    ToolExecutorBinding,
     ToolRequest,
     TriageLimits,
     new_amp,
@@ -405,7 +405,7 @@ def test_run_forever_dispatches_background_tool_activities(tmp_path: Path) -> No
         )
         engine.bind_tool_executors(
             (
-                ToolExecutorBinding(
+                EffectToolBinding(
                     CapabilityDescriptor(
                         "com.vendor.send",
                         "send a message",

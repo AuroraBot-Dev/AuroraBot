@@ -24,7 +24,7 @@ from src.config import get
 from src.contracts import (
     PLATFORM_NAMES,
     AgentHandler,
-    Capability,
+    ControlAction,
     EngineConfiguration,
     PlatformPreference,
 )
@@ -41,7 +41,7 @@ from src.utils import (
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig, PanelConfig
     from src.contracts.platform import PlatformCleanup, PlatformFactory, PlatformHandle, PlatformServer
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 logger = get_logger("aurora.process")
 
@@ -148,7 +148,9 @@ def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPr
 # -- Agent handler 加载 -------------------------------------------------
 
 
-def _load_handler(specification: str, composer: PromptComposer, capabilities: tuple[Capability, ...]) -> AgentHandler:
+def _load_handler(
+    specification: str, composer: PromptComposer, capabilities: tuple[ControlAction, ...]
+) -> AgentHandler:
     """加载 Agent handler，并注入提示词装配器与主动能力。"""
     module_name, separator, attribute = specification.partition(":")
     if not separator:
@@ -166,7 +168,7 @@ def _load_handler(specification: str, composer: PromptComposer, capabilities: tu
     return handler
 
 
-def _build_capabilities() -> tuple[Capability, ...]:
+def _build_capabilities() -> tuple[ControlAction, ...]:
     """构造 Agent 可主动选择的内建能力。"""
     from src.agents.capabilities.delegate import DelegationCapability
     from src.agents.capabilities.memory import MemoryCapability
@@ -219,13 +221,13 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     )
 
 
-def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
+def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["EffectToolBinding", ...]:
     """构造记忆同源且通过 AMP 回执的主动记忆工具绑定。"""
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
     from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 
     return (
-        ToolExecutorBinding(
+        EffectToolBinding(
             MEMORY_REMEMBER_DESCRIPTOR,
             MemoryToolExecutor(memory, ingress),  # type: ignore[arg-type]
             source_app="memory",
@@ -256,7 +258,7 @@ async def _start_platforms(
     """
     creators = _init_platforms()
     handles: dict[str, PlatformHandle] = {}
-    all_bindings: list[ToolExecutorBinding] = []
+    all_bindings: list[EffectToolBinding] = []
 
     for name in sorted(selected):
         creator = creators.get(name)

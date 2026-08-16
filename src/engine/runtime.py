@@ -46,7 +46,7 @@ logger = get_logger("aurora.engine")
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 
 class _Msg(StrEnum):
@@ -143,7 +143,7 @@ class AgentEngine:
     def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
         self._capability_catalog = catalog
 
-    def bind_tool_executors(self, bindings: tuple[ToolExecutorBinding, ...]) -> None:
+    def bind_tool_executors(self, bindings: tuple[EffectToolBinding, ...]) -> None:
         catalog = self._tools.bind(bindings)
         self.install_capability_catalog(CapabilityCatalogSnapshot(catalog.capabilities))
 

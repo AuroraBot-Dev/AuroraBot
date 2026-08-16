@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from ops.runtime import AuroraRuntime
     from src.contracts.platform import PlatformServer
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 
 def _preference(enabled: frozenset[str]) -> PlatformPreference:
@@ -33,9 +33,9 @@ def _panel_config(*, enabled: bool = False) -> object:
 
 class _Engine:
     def __init__(self) -> None:
-        self.bindings: tuple[ToolExecutorBinding, ...] | None = None
+        self.bindings: tuple[EffectToolBinding, ...] | None = None
 
-    def bind_tool_executors(self, bindings: tuple[ToolExecutorBinding, ...]) -> None:
+    def bind_tool_executors(self, bindings: tuple[EffectToolBinding, ...]) -> None:
         self.bindings = bindings
 
 
@@ -44,7 +44,7 @@ class _Runtime:
         self.configuration = configuration
         self.events = events
         self.engine = _Engine()
-        self.tool_bindings: tuple[ToolExecutorBinding, ...] = ()
+        self.tool_bindings: tuple[EffectToolBinding, ...] = ()
         self.stop_requester: Callable[[], None] | None = None
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:

@@ -17,6 +17,7 @@ from src.contracts import (
     CapabilityDescriptor,
     Completion,
     DelegationRequest,
+    EffectToolBinding,
     EngineConfiguration,
     ModelContinuation,
     ModelRequest,
@@ -26,7 +27,6 @@ from src.contracts import (
     TaskStatus,
     ToolCall,
     ToolExecutionRequest,
-    ToolExecutorBinding,
     ToolRequest,
     TriageLimits,
     new_amp,
@@ -122,7 +122,7 @@ def _engine(
     workspace: Path,
     handlers: dict[str, object],
     provider: object | None = None,
-    bindings: tuple[ToolExecutorBinding, ...] | Callable[[AgentEngine], tuple[ToolExecutorBinding, ...]] = (),
+    bindings: tuple[EffectToolBinding, ...] | Callable[[AgentEngine], tuple[EffectToolBinding, ...]] = (),
 ) -> AgentEngine:
     engine = AgentEngine(
         _configuration(workspace),
@@ -312,7 +312,7 @@ async def _chain_scenario(engine: AgentEngine) -> None:
     assert task.model_calls == 2
 
 
-def _binding(capability: str, engine: AgentEngine) -> ToolExecutorBinding:
+def _binding(capability: str, engine: AgentEngine) -> EffectToolBinding:
     class _Executor:
         async def execute_tool(self, request: ToolExecutionRequest) -> None:
             await engine.submit_amp(
@@ -326,7 +326,7 @@ def _binding(capability: str, engine: AgentEngine) -> ToolExecutorBinding:
                 )
             )
 
-    return ToolExecutorBinding(
+    return EffectToolBinding(
         CapabilityDescriptor(capability, "reply", {"type": "object"}),
         _Executor(),
         "test",
@@ -617,7 +617,7 @@ def test_processing_tool_blocks_supersede_until_irreversible_effect_finishes(tmp
         executor = Executor(engine)
         engine.bind_tool_executors(
             (
-                ToolExecutorBinding(
+                EffectToolBinding(
                     CapabilityDescriptor("test.effect", "effect", {"type": "object"}),
                     executor,
                     "test",
@@ -750,7 +750,7 @@ def test_handler_context_cannot_mutate_canonical_authorization_state(tmp_path: P
             tmp_path,
             {"gate": Hostile(), "worker": _Complete()},
             bindings=(
-                ToolExecutorBinding(
+                EffectToolBinding(
                     CapabilityDescriptor("forbidden.send", "forbidden", {"type": "object"}),
                     _NoopExecutor(),
                     "test",

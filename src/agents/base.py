@@ -1,6 +1,6 @@
 """BaseAgent — 所有 Agent 逻辑类的共享基类。
 
-逻辑同构的代码化：模型请求装配、工具定义收集、Capability 调度与决策
+逻辑同构的代码化：模型请求装配、工具定义收集、ControlAction 调度与决策
 工厂方法统一由基类提供；子类只实现 handle() 的 turn 路由。
 """
 
@@ -22,7 +22,7 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    from src.contracts.agent import AgentContext, Capability
+    from src.contracts.agent import AgentContext, ControlAction
     from src.contracts.model import ModelContinuation
     from src.prompt import PromptComposer
 
@@ -43,11 +43,11 @@ class BaseAgent(ABC):
         self,
         *,
         composer: "PromptComposer | None" = None,
-        capabilities: tuple["Capability", ...] = (),
+        capabilities: tuple["ControlAction", ...] = (),
     ) -> None:
         self._composer = composer
         self._capabilities = capabilities
-        self._dispatch: dict[str, "Capability"] = {}
+        self._dispatch: dict[str, "ControlAction"] = {}
         if capabilities:
             self._install_capabilities(capabilities)
 
@@ -57,14 +57,14 @@ class BaseAgent(ABC):
             raise RuntimeError(_Msg.COMPOSER_ALREADY_INSTALLED)
         self._composer = composer
 
-    def install_capabilities(self, capabilities: tuple["Capability", ...]) -> None:
-        """安装额外 Capability，仅可调用一次。"""
+    def install_capabilities(self, capabilities: tuple["ControlAction", ...]) -> None:
+        """安装额外 ControlAction，仅可调用一次。"""
         if self._capabilities or self._dispatch:
             raise RuntimeError(_Msg.CAPABILITIES_ALREADY_INSTALLED)
         self._install_capabilities(capabilities)
 
-    def _install_capabilities(self, capabilities: tuple["Capability", ...]) -> None:
-        """将 Capability 安装到内部调度表。"""
+    def _install_capabilities(self, capabilities: tuple["ControlAction", ...]) -> None:
+        """将 ControlAction 安装到内部调度表。"""
         self._capabilities = capabilities
         for cap in capabilities:
             self._dispatch.update(dict.fromkeys(cap.tool_names, cap))
@@ -76,7 +76,7 @@ class BaseAgent(ABC):
     # -- 共享装配 ---------------------------------------------------------
 
     def _collect_tool_definitions(self, context: "AgentContext") -> tuple[ToolDefinition, ...]:
-        """收集所有工具定义：预计算的运行时 Capability + 内建 Capability，并检查名称唯一性。"""
+        """收集所有工具定义：预计算的运行时 ControlAction + 内建 ControlAction，并检查名称唯一性。"""
         tools: list[ToolDefinition] = list(context.tool_definitions)
         for cap in self._capabilities:
             tools.extend(cap.tool_definitions(context))

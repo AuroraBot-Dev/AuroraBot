@@ -23,7 +23,7 @@ from src.contracts import (
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig
     from src.contracts.event import OutputStreamPage
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
     from src.engine.runtime import AgentEngine
 
 
@@ -173,7 +173,7 @@ class AuroraRuntime:
 
     configuration: "AuroraConfig"
     engine: "AgentEngine"
-    tool_bindings: tuple["ToolExecutorBinding", ...] = ()
+    tool_bindings: tuple["EffectToolBinding", ...] = ()
     model_gateway: Any = None
     memory: Any = None
     prompt_catalog: Any = None
