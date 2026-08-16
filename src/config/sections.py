@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +14,8 @@ from src.contracts import (
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
+    ExtensionConfig,
+    ExtensionFace,
     McpPreference,
     PanelConfig,
     PlatformPreference,
@@ -41,7 +42,6 @@ class _Msg(StrEnum):
     APP_MUST_BE_ARRAY = "app must be an array"
     APP_MUST_BE_TABLE = "app must be a table"
     APP_PACKAGE_UNIQUE = "app.package must be a unique dotted package name"
-    APP_TIMEOUT_POSITIVE = "app.timeout_seconds must be positive"
     APP_TRANSPORT_INVALID = "app.transport must be stdio or streamable_http"
     APP_UNSUPPORTED_KEYS = "app has unsupported or missing keys"
     AUTONOMY_UNSUPPORTED_KEYS = "engine.autonomy has unsupported keys"
@@ -50,6 +50,14 @@ class _Msg(StrEnum):
     ENGINE_LABEL_MODEL_CALLS = "engine.{label}.max_model_calls must be positive"
     ENGINE_LABEL_TOOL_CALLS = "engine.{label}.max_tool_calls must be positive"
     ENGINE_LABEL_UNSUPPORTED_KEYS = "engine.{label} has unsupported keys"
+    EXTENSION_MUST_BE_ARRAY = "extension must be an array"
+    EXTENSION_MUST_BE_TABLE = "extension must be a table"
+    EXTENSION_UNSUPPORTED_KEYS = "extension has unsupported or missing keys"
+    EXTENSION_ENABLED_BOOLEAN = "extension.enabled must be boolean"
+    EXTENSION_DUPLICATE_ID = "duplicate extension id {extension_id}"
+    EXTENSION_FACE_INVALID = "extension.faces contains unsupported face"
+    EXTENSION_FACE_STRINGS = "extension.faces must contain strings"
+    EXTENSION_CAPABILITY_STRINGS = "extension.capabilities must contain strings"
     HEARTBEAT_BOUNDS = "heartbeat_max_seconds must be at least heartbeat_min_seconds"
     HEARTBEAT_INITIAL_BOUNDS = "heartbeat_initial_seconds must be within heartbeat bounds"
     HTTP_NO_COMMAND_DIR = "streamable_http app may not declare command or working_dir"
@@ -258,18 +266,19 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
         transport = _string(raw["transport"], "app.transport")
         if transport not in {"stdio", "streamable_http"}:
             raise ConfigurationError(_Msg.APP_TRANSPORT_INVALID)
-        timeout = raw["timeout_seconds"]
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0 or not isfinite(timeout):
-            raise ConfigurationError(_Msg.APP_TIMEOUT_POSITIVE)
+        timeout = _positive_number(raw["timeout_seconds"], "app.timeout_seconds")
         command = raw.get("command", [])
         env_vars = raw.get("env", [])
         working_dir = raw.get("working_dir")
         url = raw.get("url")
         auth_env = raw.get("auth_env")
         parsed_auth_env = _string(auth_env, "app.auth_env") if auth_env is not None else None
-        if not isinstance(env_vars, list) or not all(isinstance(item, str) for item in env_vars):
-            raise ConfigurationError("app.env must contain unique environment variable names")
-        if len(env_vars) != len(set(env_vars)) or not all(item.isidentifier() for item in env_vars):
+        if (
+            not isinstance(env_vars, list)
+            or not all(isinstance(item, str) for item in env_vars)
+            or len(env_vars) != len(set(env_vars))
+            or not all(item.isidentifier() for item in env_vars)
+        ):
             raise ConfigurationError("app.env must contain unique environment variable names")
         if transport == "stdio":
             if (
@@ -297,10 +306,54 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
                     env_vars=tuple(env_vars),
                     url=url if isinstance(url, str) else None,
                     auth_env=parsed_auth_env,
-                    timeout_seconds=float(timeout),
+                    timeout_seconds=timeout,
                 )
             )
     return tuple(apps)
+
+
+def _parse_extensions(raw_extensions: object) -> tuple[ExtensionConfig, ...]:
+    """解析 extensions.toml 的内建扩展声明数组；factory 命中校验由组合根完成。"""
+    if not isinstance(raw_extensions, list):
+        raise ConfigurationError(_Msg.EXTENSION_MUST_BE_ARRAY)
+    allowed = {"id", "version", "enabled", "factory", "faces", "capabilities"}
+    required = {"id", "version", "enabled", "factory", "faces", "capabilities"}
+    extensions: list[ExtensionConfig] = []
+    identifiers: set[str] = set()
+    for raw in raw_extensions:
+        if not isinstance(raw, dict):
+            raise ConfigurationError(_Msg.EXTENSION_MUST_BE_TABLE)
+        if set(raw) - allowed or not required <= set(raw):
+            raise ConfigurationError(_Msg.EXTENSION_UNSUPPORTED_KEYS)
+        extension_id = _string(raw["id"], "extension.id")
+        if extension_id in identifiers:
+            raise ConfigurationError(_Msg.EXTENSION_DUPLICATE_ID.format(extension_id=extension_id))
+        identifiers.add(extension_id)
+        if not isinstance(raw["enabled"], bool):
+            raise ConfigurationError(_Msg.EXTENSION_ENABLED_BOOLEAN)
+        raw_faces = raw["faces"]
+        if not isinstance(raw_faces, list) or not all(isinstance(item, str) for item in raw_faces):
+            raise ConfigurationError(_Msg.EXTENSION_FACE_STRINGS)
+        try:
+            faces = frozenset(ExtensionFace(item) for item in raw_faces)
+        except ValueError as error:
+            raise ConfigurationError(_Msg.EXTENSION_FACE_INVALID) from error
+        raw_capabilities = raw["capabilities"]
+        if not isinstance(raw_capabilities, list) or not all(
+            isinstance(item, str) and item for item in raw_capabilities
+        ):
+            raise ConfigurationError(_Msg.EXTENSION_CAPABILITY_STRINGS)
+        extensions.append(
+            ExtensionConfig(
+                id=extension_id,
+                version=_string(raw["version"], "extension.version"),
+                enabled=raw["enabled"],
+                factory=_string(raw["factory"], "extension.factory"),
+                faces=faces,
+                capabilities=frozenset(raw_capabilities),
+            )
+        )
+    return tuple(extensions)
 
 
 def _dotted_name(value: object, label: str) -> str:

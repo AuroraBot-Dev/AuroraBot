@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from prompt_toolkit.input import DummyInput
 from prompt_toolkit.output import DummyOutput
 
-from src.console.shell import _display_messages, _PromptReader, run_console
+from src.console.shell import ConsoleOutputSink, _PromptReader, _pump_output_stream, run_console
 from src.contracts import (
     CommandResult,
     OutputStreamItem,
@@ -65,7 +65,11 @@ def test_console_renders_model_text_and_errors_without_tool_calls() -> None:
     rendered: list[str] = []
 
     async def scenario() -> None:
-        task = asyncio.create_task(_display_messages(query, rendered.append, 0.01, 0), name="render")
+        stop = asyncio.Event()
+        task = asyncio.create_task(
+            _pump_output_stream(query, (ConsoleOutputSink(rendered.append),), stop, 0.01),
+            name="render",
+        )
         await asyncio.sleep(0.05)
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

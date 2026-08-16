@@ -38,6 +38,21 @@ from .models import (
 class StoreInboxMixin(RuntimeStoreBase):
     """AMP 在入口 triage Task 之前的唯一持久化入口。"""
 
+    @staticmethod
+    def _new_session_lane(session_id: str, observed_revision: int, now: str) -> SessionLaneRow:
+        """构造一条尚未绑定活动 generation 的会话 lane。"""
+        return SessionLaneRow(
+            session_id=session_id,
+            observed_revision=observed_revision,
+            generation_revision=0,
+            committed_revision=0,
+            generation_watermark=0,
+            active_task_id=None,
+            interrupt_count=0,
+            generation_started_at=None,
+            updated_at=now,
+        )
+
     def enqueue_inbox(self, amp: AmpEnvelope, limits: TriageLimits) -> bool:
         """幂等写入事件，并为同会话 pending 批次刷新 quiet window。"""
         now = utc_now()
@@ -56,17 +71,7 @@ class StoreInboxMixin(RuntimeStoreBase):
                 return False
             lane = session.get(SessionLaneRow, amp.payload.session_id)
             if lane is None:
-                lane = SessionLaneRow(
-                    session_id=amp.payload.session_id,
-                    observed_revision=0,
-                    generation_revision=0,
-                    committed_revision=0,
-                    generation_watermark=0,
-                    active_task_id=None,
-                    interrupt_count=0,
-                    generation_started_at=None,
-                    updated_at=now,
-                )
+                lane = self._new_session_lane(amp.payload.session_id, 0, now)
                 session.add(lane)
             lane.observed_revision += 1
             lane.updated_at = now
@@ -220,17 +225,7 @@ class StoreInboxMixin(RuntimeStoreBase):
         with self.session() as session:
             lane = session.get(SessionLaneRow, batch.session_id)
             if lane is None:
-                lane = SessionLaneRow(
-                    session_id=batch.session_id,
-                    observed_revision=batch.generation_revision,
-                    generation_revision=0,
-                    committed_revision=0,
-                    generation_watermark=0,
-                    active_task_id=None,
-                    interrupt_count=0,
-                    generation_started_at=None,
-                    updated_at=now,
-                )
+                lane = self._new_session_lane(batch.session_id, batch.generation_revision, now)
                 session.add(lane)
             if lane.active_task_id is not None:
                 session.execute(
@@ -372,31 +367,21 @@ class StoreInboxMixin(RuntimeStoreBase):
         summary_limit = min(len(event.summary), max(80, max_characters // 8))
         summary = event.summary[:summary_limit]
         preview_budget = max(0, max_characters - len(summary) - 500)
-        clipped = InboxEvent(
-            event_id=event.event_id,
-            session_id=event.session_id,
-            type=event.type,
-            summary=summary,
-            source=event.source,
-            data={"truncated": True, "json_preview": data[:preview_budget]},
-            created_at=event.created_at,
-            priority=event.priority,
-            revision=event.revision,
-        )
-        while len(_json(clipped.to_dict())) > max_characters and preview_budget > 0:
-            preview_budget //= 2
+        while True:
             clipped = InboxEvent(
-                event_id=clipped.event_id,
-                session_id=clipped.session_id,
-                type=clipped.type,
-                summary=clipped.summary,
-                source=clipped.source,
+                event_id=event.event_id,
+                session_id=event.session_id,
+                type=event.type,
+                summary=summary,
+                source=event.source,
                 data={"truncated": True, "json_preview": data[:preview_budget]},
-                created_at=clipped.created_at,
-                priority=clipped.priority,
-                revision=clipped.revision,
+                created_at=event.created_at,
+                priority=event.priority,
+                revision=event.revision,
             )
-        return clipped
+            if preview_budget <= 0 or len(_json(clipped.to_dict())) <= max_characters:
+                return clipped
+            preview_budget //= 2
 
 
 def _event_projection(events: tuple[InboxEvent, ...]) -> list[dict[str, Any]]:

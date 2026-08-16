@@ -44,20 +44,47 @@ from src.utils import get_logger, utc_now
 logger = get_logger("aurora.engine")
 
 if TYPE_CHECKING:
+    from src.contracts.extension import ContextContributor, Projector
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
+
+
+def _merge_context_snapshots(snapshots: tuple[MemoryContextSnapshot, ...]) -> MemoryContextSnapshot:
+    """把多个 ContextContributor 的只读快照合并为固定上下文。
+
+    每个贡献者必须独立遵守 MemoryQuery 的预算与排序；合并不再裁剪，只做
+    按序拼接与去重。未来引入非记忆贡献时应扩展为 ContextPatch，而不是在
+    本函数里继续堆字段。
+    """
+    if not snapshots:
+        return MemoryContextSnapshot()
+    if len(snapshots) == 1:
+        return snapshots[0]
+
+    def dedupe(values: tuple[Any, ...]) -> tuple[Any, ...]:
+        return tuple(dict.fromkeys(values))
+
+    windows = dedupe(tuple(message for snapshot in snapshots for message in snapshot.window))
+    remote_summaries = dedupe(tuple(item for snapshot in snapshots for item in snapshot.remote_summaries))
+    remote_window = dedupe(tuple(item for snapshot in snapshots for item in snapshot.remote_window))
+    facts = dedupe(tuple(fact for snapshot in snapshots for fact in snapshot.relevant_facts))
+    return MemoryContextSnapshot(
+        summary="\n\n".join(snapshot.summary for snapshot in snapshots if snapshot.summary),
+        window=tuple(windows),
+        remote_summaries=tuple(remote_summaries),
+        remote_window=tuple(remote_window),
+        relevant_facts=tuple(facts),
+    )
 
 
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
-    RESERVED_EVENT_TYPE = "reserved internal event type: {amp_type}"
     HANDLERS_MISMATCH = "Agent handlers must exactly match configured profiles"
     ROOT_PROFILE_MISSING = "root Agent profile is not configured"
     MAX_TURNS_POSITIVE = "max_turns must be positive"
     INVALID_TOOL_OUTCOME = "invalid Tool outcome"
-    TOOL_COMPLETION_UNMATCHED = "Tool completion does not match an active request: {request_id}"
 
 
 def _memory_turn_input(message: AgentMessage) -> str:
@@ -85,6 +112,25 @@ def _memory_turn_input(message: AgentMessage) -> str:
     return message.type
 
 
+class _MemoryStoreProjector:
+    """把终态记忆事实投影到 MemoryStore 的引擎本地回退 Projector。"""
+
+    def __init__(self, memory_store: MemoryStore) -> None:
+        self._memory_store = memory_store
+
+    async def project(self, facts: tuple[dict[str, Any], ...]) -> None:
+        for raw in facts:
+            entry = MemoryEntry.from_dict(raw)
+            try:
+                await self._memory_store.remember(entry)
+            except Exception as error:
+                logger.warning(
+                    "Memory projector remember failed task_id=%s error_type=%s",
+                    entry.task_id,
+                    type(error).__name__,
+                )
+
+
 class AgentEngine:
     """组合持久化状态、模型、工具与自动记忆服务的完整 Agent 引擎。"""
 
@@ -96,6 +142,8 @@ class AgentEngine:
         model_provider: ModelProvider,
         tool_registry: ToolRegistry | None = None,
         memory_store: MemoryStore | None = None,
+        context_contributors: tuple[ContextContributor, ...] | None = None,
+        projectors: tuple[Projector, ...] | None = None,
         idle_wait_seconds: float = 1.0,
     ) -> None:
         self.configuration = configuration
@@ -107,6 +155,20 @@ class AgentEngine:
         self._handlers = handlers
         self._model_provider = model_provider
         self._memory_store = memory_store
+        self._context_contributors = (
+            tuple(context_contributors)
+            if context_contributors is not None
+            else (memory_store,)
+            if memory_store is not None
+            else ()
+        )
+        self._projectors = (
+            tuple(projectors)
+            if projectors is not None
+            else (_MemoryStoreProjector(memory_store),)
+            if memory_store is not None
+            else ()
+        )
         self._idle_wait_seconds = idle_wait_seconds
         self._workspace = Path(configuration.workspace)
         reject_active_legacy_workspace(self._workspace)
@@ -132,7 +194,7 @@ class AgentEngine:
             self.store.counts()["active_tasks"],
         )
 
-    # -- 配置与能力目录 ---------------------------------------------------
+    # === 配置与能力目录 ===
 
     @property
     def limits(self) -> AgentLimits:
@@ -145,20 +207,28 @@ class AgentEngine:
     def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
         self._capability_catalog = catalog
 
-    def bind_tool_executors(self, bindings: tuple[ToolExecutorBinding, ...]) -> None:
+    def bind_tool_executors(self, bindings: tuple[EffectToolBinding, ...]) -> None:
         catalog = self._tools.bind(bindings)
         self.install_capability_catalog(CapabilityCatalogSnapshot(catalog.capabilities))
 
-    # -- 记忆（被动服务）--------------------------------------------------
+    # === 记忆（被动服务） ===
 
     async def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
-        if self._memory_store is None:
+        if not self._context_contributors:
             return MemoryContextSnapshot()
-        try:
-            return await self._memory_store.recall(query)
-        except Exception as error:
-            logger.warning("Memory recall failed error_type=%s", type(error).__name__)
-            return MemoryContextSnapshot()
+        results = await asyncio.gather(
+            *(contributor.recall(query) for contributor in self._context_contributors),
+            return_exceptions=True,
+        )
+        snapshots = tuple(result for result in results if isinstance(result, MemoryContextSnapshot))
+        for contributor, result in zip(self._context_contributors, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "Context contributor recall failed contributor=%s error_type=%s",
+                    type(contributor).__name__,
+                    type(result).__name__,
+                )
+        return _merge_context_snapshots(snapshots)
 
     def completed_memory_entries(self) -> tuple[MemoryEntry, ...]:
         entries = []
@@ -191,7 +261,7 @@ class AgentEngine:
                 candidates.extend(str(item) for item in raw if isinstance(item, str) and item.strip())
         return tuple(dict.fromkeys(candidates))
 
-    # -- 摄入 -------------------------------------------------------------
+    # === 摄入 ===
 
     async def submit_amp(self, value: object) -> str:
         amp = AmpEnvelope.parse(value)
@@ -318,21 +388,29 @@ class AgentEngine:
         )
 
     def _project_memory(self) -> None:
-        if self._memory_store is None:
+        """把已提交终态事实分发给全部 Projector 贡献。"""
+        facts = tuple(entry.to_dict() for entry in self.completed_memory_entries())
+        if not facts:
             return
-        for entry in self.completed_memory_entries():
-            task = asyncio.create_task(self._remember(entry), name=f"aurora-memory-{entry.task_id}")
+        for index, projector in enumerate(self._projectors):
+            task = asyncio.create_task(
+                self._run_projector(projector, facts),
+                name=f"aurora-projector-{index}",
+            )
             self._memory_tasks.add(task)
             task.add_done_callback(self._memory_tasks.discard)
 
-    async def _remember(self, entry: MemoryEntry) -> None:
-        assert self._memory_store is not None
+    async def _run_projector(self, projector: Projector, facts: tuple[dict[str, Any], ...]) -> None:
         try:
-            await self._memory_store.remember(entry)
+            await projector.project(facts)
         except Exception as error:
-            logger.warning("Memory remember failed task_id=%s error_type=%s", entry.task_id, type(error).__name__)
+            logger.warning(
+                "Projector failed projector=%s error_type=%s",
+                type(projector).__name__,
+                type(error).__name__,
+            )
 
-    # -- 模型派发 ---------------------------------------------------------
+    # === 模型派发 ===
 
     def _ensure_model_dispatcher(self) -> None:
         self._model_dispatch_wake.set()
@@ -401,7 +479,7 @@ class AgentEngine:
             return
         self.store.complete_model_activity(activity.activity_id, result.to_dict(), None)
 
-    # -- 查询代理 ---------------------------------------------------------
+    # === 查询代理 ===
 
     def tasks(self) -> tuple[TaskState, ...]:
         return self.store.tasks()
@@ -478,7 +556,7 @@ class AgentEngine:
     def cancel_task(self, task_id: str, reason: str) -> None:
         self._cancel_model_activities(self.store.cancel_task(task_id, reason))
 
-    # -- 生命周期 ---------------------------------------------------------
+    # === 生命周期 ===
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         stop = stop_event or asyncio.Event()

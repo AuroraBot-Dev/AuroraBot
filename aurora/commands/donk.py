@@ -5,26 +5,15 @@ from __future__ import annotations
 import tomllib
 from typing import TYPE_CHECKING, Any
 
-import click
 from donk.main import cli as donk_cli
 
-from aurora.process import console
+from aurora.process import console, invoke_cli
 
 if TYPE_CHECKING:
     import argparse
     from pathlib import Path
 
 NAME = "donk"
-
-
-def _invoke(args: list[str]) -> int:
-    """在进程内调用 donk CLI，避免子进程 uv 环境解析开销。"""
-    try:
-        result = donk_cli.main(args=args, prog_name="donk", standalone_mode=False)
-    except click.ClickException as error:
-        console.print(f"[bold red]{error}[/bold red]")
-        return 1
-    return 0 if result is None else int(result)
 
 
 def _read_version(root: Path) -> str | None:
@@ -51,7 +40,7 @@ def execute(arguments: argparse.Namespace) -> int:
     """执行 donk 子命令的运行逻辑并输出版本更新结果。"""
     subcommand = arguments.donk_command
     pyproject = str((arguments.root / "pyproject.toml").resolve())
-    exit_code = _invoke([subcommand, pyproject])
+    exit_code = invoke_cli(donk_cli, [subcommand, pyproject], "donk")
     if exit_code != 0:
         console.print(f"[bold red]donk {subcommand} 执行失败[/bold red]")
         return exit_code

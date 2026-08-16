@@ -291,9 +291,9 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
         AgentLimits,
         AgentProfile,
         DelegationRequest,
+        EffectToolBinding,
         EngineConfiguration,
         TaskLimits,
-        ToolExecutorBinding,
         TriageLimits,
         new_amp,
     )
@@ -302,9 +302,7 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
     from tests.support import TriageModelProvider
 
     memory = MemoryService(tmp_path / "memory")
-    catalog = PromptCatalog.create(
-        soul="soul", world="world", agents={"gate": "gate", "memory": "memory", "worker": "worker"}
-    )
+    catalog = PromptCatalog(soul="soul", world="world", agents={"gate": "gate", "memory": "memory", "worker": "worker"})
     capabilities = (DelegationCapability(), MemoryCapability())
     composer = PromptComposer(catalog)
     gate = ToolAgent(composer=composer, capabilities=capabilities)
@@ -376,7 +374,7 @@ def test_memory_agent_full_chain_delegation_writes_same_store(tmp_path: Path) ->
         memory_store=memory,
     )
     engine.bind_tool_executors(
-        (ToolExecutorBinding(MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor(memory, engine), "memory", "local"),)
+        (EffectToolBinding(MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor(memory, engine), "memory", "local"),)
     )
 
     async def scenario() -> None:

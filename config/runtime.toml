@@ -1,4 +1,7 @@
-# 运行时配置 — 进程级别参数，可通过 profiles/<name>.toml 覆盖
+# 运行时配置 — 进程级别参数。
+#
+# 只有本文件可被 profiles/<name>.toml 覆盖；覆盖键不存在的字段会在启动前
+# 失败。Panel 接管配置编辑前，请勿把密钥或跨包结构写进本文件。
 
 [runtime]
 # 激活的 profile（prod / dev），控制 profile 文件的选择

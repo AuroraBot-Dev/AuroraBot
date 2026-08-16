@@ -23,7 +23,7 @@ from src.contracts import (
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig
     from src.contracts.event import OutputStreamPage
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
     from src.engine.runtime import AgentEngine
 
 
@@ -85,6 +85,17 @@ class PanelConfigQuery:
                     "triage_control": agent.triage_control,
                 }
                 for agent in config.agents
+            ],
+            "extensions": [
+                {
+                    "id": extension.id,
+                    "version": extension.version,
+                    "enabled": extension.enabled,
+                    "factory": extension.factory,
+                    "faces": sorted(face.value for face in extension.faces),
+                    "capabilities": sorted(extension.capabilities),
+                }
+                for extension in getattr(config, "extensions", ())
             ],
             "models": {
                 "roles": sorted(config.model_roles),
@@ -173,7 +184,7 @@ class AuroraRuntime:
 
     configuration: "AuroraConfig"
     engine: "AgentEngine"
-    tool_bindings: tuple["ToolExecutorBinding", ...] = ()
+    tool_bindings: tuple["EffectToolBinding", ...] = ()
     model_gateway: Any = None
     memory: Any = None
     prompt_catalog: Any = None
@@ -194,7 +205,7 @@ class AuroraRuntime:
             shutdown=self.request_shutdown,
         )
 
-    # -- 注入入口 --------------------------------------------------------
+    # === 注入入口 ===
 
     async def submit_amp(self, value: object) -> str:
         """将 AMP 原样提交给 engine 入口。"""
@@ -228,7 +239,7 @@ class AuroraRuntime:
         """路由普通会话或斜杠命令（文本入口）。"""
         return await self._router.route_text(request)
 
-    # -- 进程停止 --------------------------------------------------------
+    # === 进程停止 ===
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
         """注册组合根管理的进程停止回调。"""
@@ -239,7 +250,7 @@ class AuroraRuntime:
         if self._stop_requester is not None:
             self._stop_requester()
 
-    # -- 显式推进与运行态查询（EngineQueryPort）--------------------------
+    # === 显式推进与运行态查询（EngineQueryPort） ===
 
     async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
         """显式推进 engine，供命令和调试接口使用。"""

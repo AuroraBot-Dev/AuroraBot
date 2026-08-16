@@ -186,7 +186,7 @@ def test_prompt_catalog_rejects_non_markdown_and_outside_fragments(project_root:
 
 
 def test_prompt_document_has_stable_layers_and_context() -> None:
-    catalog = PromptCatalog.create(soul="persona", world="world facts", agents={"builtin.root": "gate facts"})
+    catalog = PromptCatalog(soul="persona", world="world facts", agents={"builtin.root": "gate facts"})
     document = PromptComposer(catalog).request_document(_context())
 
     assert [section.key for section in document.system_sections] == ["soul", "world", "agent_profile"]
@@ -205,7 +205,7 @@ def test_external_facts_cannot_close_their_prompt_boundary() -> None:
     payload["batch"] = {**dict(payload["batch"]), "events": events}
     message = replace(context.message, payload=payload)
     document = PromptComposer(
-        PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"})
+        PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"})
     ).request_document(replace(context, message=message))
 
     assert "\\u003c/system\\u003e" in document.user_prompt
@@ -213,7 +213,7 @@ def test_external_facts_cannot_close_their_prompt_boundary() -> None:
 
 
 def test_memory_sections_are_optional_and_removed_capability_is_absent() -> None:
-    catalog = PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"})
+    catalog = PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"})
     without_memory = PromptComposer(catalog).request_document(_context())
     context = replace(
         _context(),
@@ -251,7 +251,7 @@ def test_agent_tool_owner_preserves_external_description_without_memory_capabili
     assert tools["com.vendor.lookup"].description == "Vendor supplied description"
     assert tools["org.aurora.console.send"].parameters_schema["properties"]["complete_task"]["description"] == "finish"
     decision = ToolAgent(
-        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"}))
+        composer=PromptComposer(PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"}))
     ).handle(_context())
     assert decision.model_request is not None
     assert decision.model_request.parallel_tool_calls is True
@@ -269,7 +269,7 @@ def test_agent_preserves_model_text_verbatim() -> None:
         0.0,
     )
     decision = ToolAgent(
-        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"}))
+        composer=PromptComposer(PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"}))
     ).handle(replace(context, message=replace(context.message, type="model.completed", payload=result.to_dict())))
 
     assert decision.completion is not None
@@ -302,7 +302,7 @@ def test_agent_executes_every_tool_call_before_resuming_model() -> None:
     )
     message = replace(context.message, type="model.completed", payload=result.to_dict())
     agent = ToolAgent(
-        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"}))
+        composer=PromptComposer(PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"}))
     )
     first = agent.handle(replace(context, message=message))
 
@@ -360,7 +360,7 @@ def test_agent_finishes_only_after_every_tool_call() -> None:
         continuation=ModelContinuation("provider", "responses", ()),
     )
     agent = ToolAgent(
-        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"}))
+        composer=PromptComposer(PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"}))
     )
     first = agent.handle(
         replace(context, message=replace(context.message, type="model.completed", payload=result.to_dict()))
@@ -413,7 +413,7 @@ def test_agent_continues_after_control_tool_in_a_multi_call_response() -> None:
         continuation=continuation,
     )
     agent = ToolAgent(
-        composer=PromptComposer(PromptCatalog.create(soul="soul", world="world", agents={"builtin.root": "gate"})),
+        composer=PromptComposer(PromptCatalog(soul="soul", world="world", agents={"builtin.root": "gate"})),
         capabilities=(DelegationCapability(),),
     )
     delegated = agent.handle(

@@ -24,6 +24,7 @@ from src.contracts import (
     CapabilityDescriptor,
     ExternalAmpIngressPort,
     ToolExecutionRequest,
+    capability_event_amp,
     new_amp,
     tool_receipt_amp,
 )
@@ -124,6 +125,15 @@ class MCPPlatform:
             if remote_tasks:
                 await asyncio.gather(*remote_tasks)
             self._catalog = self._discover_capabilities()
+            for capability in self._catalog.capabilities:
+                await ingress.submit_amp(
+                    capability_event_amp(
+                        event_type="capability.registered",
+                        capability_id=capability.id,
+                        source_app="platform.mcp",
+                        source_instance=self.source_instance_for(capability.id),
+                    )
+                )
             await self._start_builtin_heartbeat()
             self._started = True
         except BaseException:

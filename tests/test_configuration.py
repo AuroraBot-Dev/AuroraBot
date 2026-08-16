@@ -29,7 +29,15 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     source_names = {source.path.name for source in configuration.sources}
     profiles = {profile.id: profile for profile in configuration.agents}
 
-    assert {"runtime.toml", "engine.toml", "storage.toml", "logging.toml", "prompts.toml", "SOUL.md"} <= source_names
+    assert {
+        "runtime.toml",
+        "engine.toml",
+        "storage.toml",
+        "logging.toml",
+        "prompts.toml",
+        "extensions.toml",
+        "SOUL.md",
+    } <= source_names
     assert configuration.engine.workspace == ROOT / "data" / "engine"
     assert configuration.engine.workspace == configuration.storage.engine
     assert configuration.storage.memory == ROOT / "data" / "memory"
@@ -47,6 +55,8 @@ def test_configuration_uses_engine_and_storage_snapshots() -> None:
     assert profiles["builtin.fast"].child_profiles == frozenset()
     assert configuration.engine.triage.max_interrupts == 2  # noqa: PLR2004
     assert configuration.engine.triage.max_generation_seconds == 45.0  # noqa: PLR2004
+    extension_ids = {item.id for item in configuration.extensions}
+    assert extension_ids == {"aurora.builtin.control", "aurora.builtin.memory"}
 
 
 def test_profile_only_changes_runtime_snapshot() -> None:
@@ -70,6 +80,7 @@ def test_profile_only_changes_runtime_snapshot() -> None:
         "storage.toml",
         "agents.toml",
         "apps.toml",
+        "extensions.toml",
         "profiles/prod.toml",
     ),
 )
@@ -77,6 +88,28 @@ def test_unknown_top_level_toml_keys_are_rejected(project_root: Path, filename: 
     path = project_root / "config" / filename
     path.write_text(f"{path.read_text(encoding='utf-8')}\n[unknown]\nvalue = true\n", encoding="utf-8")
     with pytest.raises(ConfigurationError, match=r"unexpected|unsupported"):
+        load_configuration(project_root)
+
+
+def test_invalid_extension_face_is_rejected(project_root: Path) -> None:
+    path = project_root / "config" / "extensions.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('faces = ["control_action"]', 'faces = ["unknown_face"]'),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigurationError, match="unsupported face"):
+        load_configuration(project_root)
+
+
+def test_duplicate_extension_id_is_rejected(project_root: Path) -> None:
+    path = project_root / "config" / "extensions.toml"
+    original = path.read_text(encoding="utf-8")
+    duplicate = original.replace(
+        'id = "aurora.builtin.memory"',
+        'id = "aurora.builtin.control"',
+    )
+    path.write_text(duplicate, encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="duplicate extension id"):
         load_configuration(project_root)
 
 

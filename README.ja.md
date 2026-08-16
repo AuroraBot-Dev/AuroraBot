@@ -108,7 +108,7 @@ uv run --no-dev --env-file .env aurora start --headless
 ## 現在の段階
 
 `nightly` の AuroraBot `0.5 alpha` は、ローカル体験、runtime 研究、拡張開発向けです。添付ファイルは保存と参照渡しまでで、
-完全な multimodal understanding chain はまだありません。sandbox と speech は authorized runtime に未接続です。
+完全な multimodal understanding chain はまだありません。sandbox は authorized runtime に未接続です。
 安定した MCP reconnect、終端データの TTL、一貫した backup、公開 multi-tenant deployment も現在の保証には含まれません。
 公開動作は [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)、contract、テストを基準とします。
 

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
+from aurora.assembly import CapabilityAssembly
 from ops.api import PanelAppContext, create_panel_app
 from ops.runtime import AuroraRuntime
 from ops.store import PanelStore
@@ -24,7 +25,7 @@ from src.config import get
 from src.contracts import (
     PLATFORM_NAMES,
     AgentHandler,
-    Capability,
+    ControlAction,
     EngineConfiguration,
     PlatformPreference,
 )
@@ -41,12 +42,12 @@ from src.utils import (
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig, PanelConfig
     from src.contracts.platform import PlatformCleanup, PlatformFactory, PlatformHandle, PlatformServer
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 logger = get_logger("aurora.process")
 
 
-# -- 平台注册 ---------------------------------------------------------
+# === 平台注册 ===
 
 
 def _init_platforms() -> dict[str, PlatformFactory]:
@@ -59,7 +60,7 @@ def _init_platforms() -> dict[str, PlatformFactory]:
     return creators
 
 
-# -- 内部辅助类型 -----------------------------------------------------
+# === 内部辅助类型 ===
 
 
 _SERVER_GRACE_SECONDS = 10.0
@@ -77,7 +78,7 @@ class _InstalledSignal:
     previous: object | None = None
 
 
-# -- 主入口 -----------------------------------------------------------
+# === 主入口 ===
 
 
 async def run_runtime(
@@ -132,7 +133,7 @@ def _platforms_label(selected: frozenset[str]) -> str:
     return ",".join(sorted(selected)) or "headless"
 
 
-# -- 平台选择 ---------------------------------------------------------
+# === 平台选择 ===
 
 
 def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPreference) -> frozenset[str]:
@@ -145,10 +146,12 @@ def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPr
     return frozenset(name for name in PLATFORM_NAMES if getattr(preference, name).enabled)
 
 
-# -- Agent handler 加载 -------------------------------------------------
+# === Agent handler 加载 ===
 
 
-def _load_handler(specification: str, composer: PromptComposer, capabilities: tuple[Capability, ...]) -> AgentHandler:
+def _load_handler(
+    specification: str, composer: PromptComposer, capabilities: tuple[ControlAction, ...]
+) -> AgentHandler:
     """加载 Agent handler，并注入提示词装配器与主动能力。"""
     module_name, separator, attribute = specification.partition(":")
     if not separator:
@@ -166,17 +169,7 @@ def _load_handler(specification: str, composer: PromptComposer, capabilities: tu
     return handler
 
 
-def _build_capabilities() -> tuple[Capability, ...]:
-    """构造 Agent 可主动选择的内建能力。"""
-    from src.agents.capabilities.delegate import DelegationCapability
-    from src.agents.capabilities.memory import MemoryCapability
-    from src.agents.capabilities.speech import SpeechCapability
-    from src.agents.capabilities.wait import WaitCapability
-
-    return DelegationCapability(), WaitCapability(), SpeechCapability(), MemoryCapability()
-
-
-# -- Engine / ops 构造 --------------------------------------------
+# === Engine / ops 构造 ===
 
 
 def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
@@ -193,8 +186,6 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     )
     prompt_catalog = PromptCatalog.from_config(configuration.prompts)
     composer = PromptComposer(prompt_catalog)
-    capabilities = _build_capabilities()
-    handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     model_gateway = ModelGatewayService(configuration)
     memory = MemoryService(
         configuration.storage.memory,
@@ -202,14 +193,20 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         embed_fn=model_gateway.embed_sync,
         llm_model=_configured_model(configuration, "quality"),
     )
+    assembly = CapabilityAssembly(configuration, memory=memory)
+    handlers = {
+        profile.id: _load_handler(profile.implementation, composer, assembly.control_actions) for profile in profiles
+    }
     engine = AgentEngine(
         engine_configuration,
         handlers,
         model_provider=model_gateway,
         memory_store=memory,
+        context_contributors=assembly.context_contributors,
+        projectors=assembly.projectors,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
-    memory_bindings = _build_memory_bindings(memory, engine)
+    memory_bindings = assembly.effect_bindings(engine)
     return AuroraRuntime(
         configuration,
         engine,
@@ -217,21 +214,6 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         model_gateway=model_gateway,
         memory=memory,
         prompt_catalog=prompt_catalog,
-    )
-
-
-def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
-    """构造记忆同源且通过 AMP 回执的主动记忆工具绑定。"""
-    from src.contracts.tool import ToolExecutorBinding
-    from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
-
-    return (
-        ToolExecutorBinding(
-            MEMORY_REMEMBER_DESCRIPTOR,
-            MemoryToolExecutor(memory, ingress),  # type: ignore[arg-type]
-            source_app="memory",
-            source_instance="local",
-        ),
     )
 
 
@@ -243,7 +225,7 @@ def _configured_model(configuration: AuroraConfig, role: str) -> str | None:
     return f"{definition.provider}/{definition.model}"
 
 
-# -- 平台启动（统一循环）-----------------------------------------------
+# === 平台启动（统一循环）===
 
 
 async def _start_platforms(
@@ -257,7 +239,7 @@ async def _start_platforms(
     """
     creators = _init_platforms()
     handles: dict[str, PlatformHandle] = {}
-    all_bindings: list[ToolExecutorBinding] = []
+    all_bindings: list[EffectToolBinding] = []
 
     for name in sorted(selected):
         creator = creators.get(name)
@@ -265,7 +247,7 @@ async def _start_platforms(
             raise ValueError(f"no platform creator registered for {name}")
         handle = await creator(runtime.configuration, runtime)
         handles[name] = handle
-        all_bindings.extend(handle.bindings)
+        all_bindings.extend(handle.effect_tools)
         if handle.cleanup is not None:
             resources.push_async_callback(_run_cleanup, handle.cleanup)
 
@@ -290,7 +272,7 @@ async def _start_platforms_until_stop(
         await asyncio.gather(*(_cancel_task(task) for task in (startup, stop_task)))
 
 
-# -- 任务执行与停止 ----------------------------------------------------
+# === 任务执行与停止 ===
 
 
 async def _run_platform_tasks(
@@ -305,7 +287,7 @@ async def _run_platform_tasks(
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
 
-    # 平台 server 通过 should_exit 优雅退出；background 必须持续运行到 stop。
+    # 平台 server 通过 should_exit 优雅退出；event_sources 必须持续运行到 stop。
     servers: dict[str, PlatformServer] = {}
     server_tasks: dict[str, asyncio.Task[None]] = {}
     platform_tasks: dict[str, asyncio.Task[None]] = {}
@@ -315,9 +297,9 @@ async def _run_platform_tasks(
             task = asyncio.create_task(handle.server.serve(), name=f"aurora-platform-{name}-server")
             server_tasks[name] = task
             tasks.add(task)
-        if handle.background is not None:
-            task = asyncio.create_task(handle.background(stop), name=f"aurora-platform-{name}-background")
-            platform_tasks[name] = task
+        for index, event_source in enumerate(handle.event_sources):
+            task = asyncio.create_task(event_source(stop), name=f"aurora-platform-{name}-eventsource-{index}")
+            platform_tasks[f"{name}:{index}"] = task
             tasks.add(task)
 
     console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
@@ -423,7 +405,7 @@ def _task_failure(
     return None
 
 
-# -- 信号处理 ----------------------------------------------------------
+# === 信号处理 ===
 
 
 def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:
@@ -456,7 +438,7 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
             signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
 
 
-# -- 面板服务器 --------------------------------------------------------
+# === 面板服务器 ===
 
 
 def _panel_server(runtime: AuroraRuntime, *, console_enabled: bool = True) -> SignalSafeServer | None:

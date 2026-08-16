@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.contracts.agent import CapabilityCatalogSnapshot
     from src.contracts.configuration import AuroraConfig
     from src.contracts.platform import PlatformHandle, PlatformRuntimePort
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 __all__ = ["MCPPlatform"]
 
@@ -27,18 +27,18 @@ async def _create(config: "AuroraConfig", runtime: "PlatformRuntimePort") -> "Pl
 
     bindings = _build_mcp_bindings(mcp, catalog)
     return PlatformHandle(
-        bindings=bindings,
+        effect_tools=bindings,
+        event_sources=(mcp.run,),
         cleanup=mcp.shutdown,
-        background=mcp.run,
     )
 
 
-def _build_mcp_bindings(mcp: MCPPlatform, catalog: "CapabilityCatalogSnapshot") -> tuple["ToolExecutorBinding", ...]:
+def _build_mcp_bindings(mcp: MCPPlatform, catalog: "CapabilityCatalogSnapshot") -> tuple["EffectToolBinding", ...]:
     """从 MCP 能力目录构建工具绑定元组。"""
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
     return tuple(
-        ToolExecutorBinding(
+        EffectToolBinding(
             capability,
             mcp,
             source_app="platform.mcp",

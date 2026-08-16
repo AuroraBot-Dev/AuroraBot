@@ -80,6 +80,13 @@ class MemoryEntry:
     created_at: str
     fact_candidates: tuple[str, ...] = ()
 
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> MemoryEntry:
+        return cls(**value)
+
 
 class MemoryStore(Protocol):
     """engine 在 Agent turn 前后调用的记忆引擎端口。"""

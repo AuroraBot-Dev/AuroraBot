@@ -5,12 +5,20 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from aurora.registry import register_commands
+from aurora.commands import check, donk, start
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+_COMMAND_MODULES = (check, donk, start)
+
+
+def register_commands(subparsers: Any) -> None:
+    """将所有已声明的命令模块注册到 argparse 子解析器中。"""
+    for module in _COMMAND_MODULES:
+        module.register(subparsers)
 
 
 def build_parser() -> argparse.ArgumentParser:

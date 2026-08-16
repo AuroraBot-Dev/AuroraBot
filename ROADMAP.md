@@ -7,13 +7,15 @@
 ## 1. 当前判断
 
 AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、ops、MCP、记忆、模型网关和因果存储均有现行
-实现及回归测试。下一阶段不再进行无目标的架构重写，而是依次完成契约闭环、长期运行、真实集成验证和能力扩展。
+实现及回归测试。扩展贡献模型（七端口 + Manifest/Lifecycle + CapabilityAssembly + `capability.*` 事件族）已在
+`refactor/extension-face` 分支落地。下一阶段不再进行无目标的架构重写，而是依次完成契约闭环、长期运行、真实
+集成验证和能力扩展。
 
 最近一次已验证质量基线：
 
-- 完整质量命令通过，224 个测试通过；
-- `aurora`、`ops` 与 `src` 总语句覆盖率为 83.84%；
-- 依赖边界、SQLite 迁移、Triage、工具回执、多 Tool call、面板操作和费用持久化已有测试；
+- 完整质量命令通过，233 个测试通过；
+- `aurora`、`ops` 与 `src` 总语句覆盖率为 84.18%；
+- 依赖边界、SQLite 迁移、Triage、工具回执、多 Tool call、面板操作、费用持久化与扩展装配已有测试；
 - 项目仍处于 0.5 alpha，尚不应承诺公网多租户或无人值守生产运行。
 
 ## 2. 优先问题
@@ -58,7 +60,7 @@ memory 已按纯数据 models、短期算法 short_term、异步编排 service �
 
 1. `src/engine/store/decisions.py` 与 `src/platform/mcp/adapter.py` 超过 500 行，需要按领域职责拆分。
 2. 附件目前完成存储和引用传递，但尚未形成多模态理解链路。
-3. sandbox 和 speech 保持未启用或占位状态，尚未完成运行时授权与效果回执设计。
+3. sandbox 保持未启用状态，尚未完成运行时授权与效果回执设计。
 
 ## 3. 里程碑
 
@@ -141,7 +143,7 @@ memory 已按纯数据 models、短期算法 short_term、异步编排 service �
 [ ] 提供启用 Clock 的主动节律 profile 和可验证自主 Task 示例。
 [ ] 为第三方 MCP App 建立版本、兼容性、健康检查和开发者脚手架。
 [ ] sandbox 启用前完成威胁模型、权限策略、资源限制、产物回收和因果回执。
-[ ] 删除无法进入授权执行链的长期占位能力。
+[x] 删除无法进入授权执行链的长期占位能力（Speech 决策壳已于深度减法阶段提前移除）。
 
 完成门槛：
 

@@ -5,9 +5,9 @@
 当前版本按序执行到目标版本，并在每一步之后推进版本号。
 
 版本号统一存于 ``schema_meta`` 表（缺失表 = v0 全新库），读写由
-:func:`read_version` / :func:`write_version` 承担；三个存储
-（engine 运行态、记忆、面板）的初始化都只调用 :func:`initialize_storage`
-这一个入口。步骤执行在调用方给出的事务上下文中进行。
+:func:`read_version` / :func:`write_version` 承担；engine、memory、ai 与
+ops 存储的初始化都只调用 :func:`initialize_storage` 这一个入口。步骤执行
+在调用方给出的事务上下文中进行。
 """
 
 from __future__ import annotations

@@ -43,18 +43,18 @@ class ToolExecutionRequest:
     parameters: dict[str, Any]
 
 
-class ToolExecutor(Protocol):
+class EffectTool(Protocol):
     """执行单个外部工具请求：执行完成后通过注入的 AMP 入口提交 tool.{status} 回执。"""
 
     async def execute_tool(self, request: ToolExecutionRequest) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
-class ToolExecutorBinding:
+class EffectToolBinding:
     """能力描述符与具体平台执行器的组合绑定（一对一路由表条目）。"""
 
     capability: CapabilityDescriptor
-    executor: ToolExecutor
+    executor: EffectTool
     source_app: str
     source_instance: str
 

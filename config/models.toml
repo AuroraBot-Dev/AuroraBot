@@ -1,6 +1,9 @@
-# 模型配置 — Provider 连接与角色端点映射
-# 能力由 models.dev 自动派生，TOML 中可显式 capabilities 来手工覆盖
-# 定价以 models.dev 为第一信息源
+# 模型配置 — Provider 连接与角色端点映射。
+#
+# 能力由 models.dev 自动派生，TOML 中可显式 capabilities 来手工覆盖；
+# 显式覆盖是“高优先覆盖”，不是并集替换之外的隐藏授权。定价以 models.dev
+# 为第一信息源。角色名（fast/quality/multimodal/embedding）由代码固定，
+# 新增角色不会自动获得 handler。
 
 # Provider 定义：密钥仅存于环境变量，TOML 只声明变量名
 [models.providers.deepseek]

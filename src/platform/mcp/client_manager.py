@@ -167,11 +167,6 @@ class MCPClientManager:
         )
 
     @property
-    def connections(self) -> dict[str, ClientConnection]:
-        """当前连接的映射。"""
-        return dict(self._connections)
-
-    @property
     def notification_queue(self) -> asyncio.Queue[tuple[str, str, dict[str, object]]]:
         """本地通知队列，由平台后台任务转发为 AMP 事件。"""
         return self._notification_queue

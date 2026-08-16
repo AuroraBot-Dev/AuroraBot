@@ -35,9 +35,7 @@ from src.utils import get_logger
 
 logger = get_logger("aurora.ai.models")
 
-# ═══════════════════════════════════════════════════════════
-# 常量
-# ═══════════════════════════════════════════════════════════
+# === 常量 ===
 
 MODELS_DEV_API = "https://models.dev/api.json"
 CACHE_TTL_SEC = 3600
@@ -54,9 +52,7 @@ _FIELD_CAPABILITY_MAP: dict[str, str] = {
 # 无歧义的基础能力
 _IMPLICIT_CAPABILITIES: frozenset[str] = frozenset({"chat", "stream", "json_text_fallback"})
 
-# ═══════════════════════════════════════════════════════════
-# 模块级状态
-# ═══════════════════════════════════════════════════════════
+# === 模块级状态 ===
 
 _cache_dir: Path | None = None
 _cache: dict[str, dict[str, Any]] | None = None
@@ -80,14 +76,17 @@ def _exc_msg() -> str:
     return f"{type(e).__name__}: {e}" if e is not None else "unknown"
 
 
-# ═══════════════════════════════════════════════════════════
-# 磁盘缓存
-# ═══════════════════════════════════════════════════════════
+# === 磁盘缓存 ===
 
 
 def _cache_file_path(timestamp: datetime) -> Path:
     assert _cache_dir is not None
     return _cache_dir / f"{_CACHE_FILE_PREFIX}{timestamp.strftime('%Y%m%d-%H')}.json.gz"
+
+
+def _is_cache_entry(path: Path) -> bool:
+    """判断路径是否为 models.dev 缓存文件（兼容旧版 .json 与当前 .json.gz）。"""
+    return path.is_file() and path.name.startswith(_CACHE_FILE_PREFIX) and path.name.endswith((".json", ".json.gz"))
 
 
 def _read_cache_file(path: Path) -> dict[str, Any] | None:
@@ -110,9 +109,7 @@ def _find_disk_cache() -> tuple[dict[str, Any] | None, bool]:
         return None, False
     now = time.time()
     for entry in sorted(_cache_dir.iterdir(), reverse=True):
-        if not entry.is_file() or not entry.name.startswith(_CACHE_FILE_PREFIX):
-            continue
-        if not entry.name.endswith((".json", ".json.gz")):
+        if not _is_cache_entry(entry):
             continue
         data = _read_cache_file(entry)
         if data is None:
@@ -138,17 +135,13 @@ def _write_cache(data: dict[str, Any]) -> None:
         return
 
     for entry in sorted(_cache_dir.iterdir()):
-        if not entry.is_file() or entry == new_path or not entry.name.startswith(_CACHE_FILE_PREFIX):
-            continue
-        if not entry.name.endswith((".json", ".json.gz")):
+        if entry == new_path or not _is_cache_entry(entry):
             continue
         with contextlib.suppress(OSError):
             entry.unlink()
 
 
-# ═══════════════════════════════════════════════════════════
-# 缓存加载与后台刷新
-# ═══════════════════════════════════════════════════════════
+# === 缓存加载与后台刷新 ===
 
 
 def _index_models(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -262,9 +255,7 @@ async def cache_available() -> bool:
     return bool(await _load_cache())
 
 
-# ═══════════════════════════════════════════════════════════
-# 公开 API — 定价（主信息源）
-# ═══════════════════════════════════════════════════════════
+# === 公开 API — 定价（主信息源） ===
 
 
 async def get_pricing_by_id(model_id: str) -> dict[str, Any] | None:
@@ -305,9 +296,7 @@ async def compute_cost(model_id: str, prompt_tokens: int, completion_tokens: int
     return (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
 
 
-# ═══════════════════════════════════════════════════════════
-# 公开 API — 能力（主信息源）
-# ═══════════════════════════════════════════════════════════
+# === 公开 API — 能力（主信息源） ===
 
 
 def _derive_capabilities(info: dict[str, Any]) -> frozenset[str]:
@@ -349,19 +338,6 @@ async def get_capabilities_by_id(model_id: str) -> frozenset[str]:
         logger.debug("models.dev 中未找到模型 %s，使用隐含能力", model_id)
         return _IMPLICIT_CAPABILITIES
     return _derive_capabilities(info)
-
-
-async def get_model_info(model_id: str) -> dict[str, Any] | None:
-    """返回 models.dev 中指定模型的完整原始信息。
-
-    Args:
-        model_id: 模型标识符，格式 ``provider/model_name``。
-
-    Returns:
-        模型信息字典；不存在时返回 ``None``。
-    """
-    models = await _load_cache()
-    return models.get(model_id)
 
 
 async def get_modalities_by_id(model_id: str) -> tuple[frozenset[str], frozenset[str]]:

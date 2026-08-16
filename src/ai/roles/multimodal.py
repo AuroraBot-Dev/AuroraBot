@@ -1,26 +1,19 @@
 """预设角色：multimodal = 多模态输入。
 
-能力基线声明 vision。多模态任务的特殊适配（如接受模型音频输出）在
-本文件内扩展，不影响其他角色——角色自包含实现示例。
+能力基线声明 vision。多模态任务的特殊适配（如接受模型音频输出）在本
+文件内通过 ``prepare_kwargs`` 扩展，不影响其他角色——角色自包含实现示例。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.ai.execution import GatewayError
-from src.ai.roles.base import (
-    RoleHandler,
-    build_chat_kwargs,
-    complete_chat_with_fallback,
-    parse_chat_response,
-)
-from src.contracts import ModelGatewayError, ModelResult
+from src.ai.roles.base import RoleHandler, complete_chat
 
 if TYPE_CHECKING:
     from src.ai.gateway import ModelGatewayService
     from src.contracts.configuration import ModelRoleConfig
-    from src.contracts.model import ModelRequest
+    from src.contracts.model import ModelRequest, ModelResult
 
 
 class MultimodalRole(RoleHandler):
@@ -36,15 +29,5 @@ class MultimodalRole(RoleHandler):
         role: "ModelRoleConfig",
         negotiated: frozenset[str],
     ) -> ModelResult:
-        # 多模态扩展点：如接受模型音频输出，可在 build_chat_kwargs 之后追加
-        # 音频输出参数，并在 parse_chat_response 之前处理音频内容。
-        capabilities = gateway._capabilities_for(request.role)
-        messages, kwargs, alias_to_name = build_chat_kwargs(request, negotiated)
-        caller = gateway._caller_for(request.role)
-        try:
-            task, response = await complete_chat_with_fallback(
-                caller, messages, request, kwargs, negotiated, capabilities
-            )
-        except GatewayError as error:
-            raise ModelGatewayError(str(error)) from error
-        return parse_chat_response(gateway, request, role, negotiated, response, task, alias_to_name)
+        # 多模态扩展点：传入 prepare_kwargs 追加音频输出等参数。
+        return await complete_chat(gateway, request, role, negotiated)

@@ -88,16 +88,15 @@ SQLite、mem0、embedding 与语义检索等阻塞工作移出事件循环，han
 
 ### `src/agents`
 
-Agent 逻辑实现和模型可见主动能力：
+Agent 逻辑实现和 ControlAction 主动决策能力：
 
 - `TriageAgent`：批次的 process/defer/discard，并在 fast 快脑与 root 主脑之间选择获权委派目标；
 - `ToolAgent`：模型请求、多 Tool call 可恢复链、委派和完成；
 - `capabilities/delegate.py`：创建同构子 Agent；
 - `capabilities/wait.py`：等待未终止 children；
-- `capabilities/memory.py`：生成主动记忆 ToolRequest；
-- `capabilities/speech.py`：尚未启用的朗读能力边界。
+- `capabilities/memory.py`：生成主动记忆 ToolRequest。
 
-handler 只能读取 AgentContext 并返回 AgentDecision。
+handler 只能读取 AgentContext 并返回 AgentDecision；ControlAction 遵守同一边界。
 
 ### `src.ai`
 
@@ -121,7 +120,8 @@ handler 只能读取 AgentContext 并返回 AgentDecision。
 - `short_term.py`：窗口、异步概要、词项窗口检索和统一字符预算；
 - `service.py`：异步 MemoryStore 编排、durable facts、查询门面和降级合并；
 - `long_term.py`：mem0/Chroma 语义记忆适配；
-- `executor.py`：主动记忆工具执行与 AMP 回执；
+- `executor.py`：EffectTool：主动记忆工具执行与 AMP 回执；
+- `projector.py`：Projector：终态 Task 事实的长期记忆投影；
 - `migration/`：memory SQLite 版本。
 
 被动记忆和 memory Agent 写入同一数据源。MemoryContextSnapshot 在模型调用前固定；models 不依赖 service，短期算法不
@@ -136,7 +136,9 @@ handler 只能读取 AgentContext 并返回 AgentDecision。
 - `server_kit.py`：本地子进程管理；
 - `server_spec.py`：启动描述。
 
-MCP 工具变为 `aur.mcp.*` 能力，执行结果通过 AMP 回到 engine。
+MCP 工具变为 `aur.mcp.*` EffectTool 能力，执行结果通过 AMP 回到 engine；连接监视与通知归一化是 EventSource 面，
+生命周期经 PlatformHandle 的 effect_tools/event_sources/cleanup 管理。能力发现后提交 `capability.registered`
+保留事件，只写因果事件、不进 Inbox。
 
 ### `ops`
 
@@ -146,9 +148,9 @@ MCP 工具变为 `aur.mcp.*` 能力，执行结果通过 AMP 回到 engine。
 - `parser.py`：文本参数解析；
 - `router.py`：文本命令与 REST 路由同构；
 - `operations/`：engine、memory、ai、config、messages 和 console 操作；
-- `api.py`：Panel 认证、操作路由、附件、Lab 和输出 WebSocket；
+- `api.py`：Panel 认证、操作路由、附件、Lab 和 OutputSink WebSocket；
 - `store.py`：bootstrap token、session 和附件索引；
-- `runtime.py`：组合各窄查询 Port。
+- `runtime.py`：InputGateway 路由与 Projector 窄查询 Port 组合。
 
 ops 不参与 pump，也不直接导入具体实现包。
 
@@ -157,12 +159,13 @@ ops 不参与 pump，也不直接导入具体实现包。
 唯一组合根：
 
 1. 加载配置快照；
-2. 创建 Prompt、Agent handler、ModelGateway 和 MemoryService；
-3. 创建 AgentEngine 并注入 Port；
-4. 创建选定 Platform 并绑定 ToolExecutor；
-5. 创建 Panel 和可选 Console；
-6. 运行共享停止信号；
-7. 按有界顺序关闭后台任务、server、平台和存储。
+2. 创建 Prompt、ModelGateway 和 MemoryService；
+3. 用 `CapabilityAssembly` 装配 ControlAction / ContextContributor / EffectTool / Projector；
+4. 创建 Agent handler 与 AgentEngine 并注入贡献；
+5. 创建选定 Platform（EventSource/EffectTool/Lifecycle）并绑定效果工具；
+6. 创建 Panel 和可选 Console（InputGateway/OutputSink）；
+7. 运行共享停止信号；
+8. 按有界顺序关闭后台任务、server、平台和存储。
 
 ## 4. 一条消息的生命周期
 

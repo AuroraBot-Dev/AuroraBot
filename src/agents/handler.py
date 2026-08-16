@@ -158,7 +158,7 @@ class ToolAgent(BaseAgent):
         chain: _ToolChain,
         descriptor: CapabilityDescriptor,
     ) -> AgentDecision:
-        """将模型工具调用转换为对应 Capability 的工具请求决策。"""
+        """将模型工具调用转换为对应 ControlAction 的工具请求决策。"""
         call = chain.call
         parameters = dict(call.arguments)
         complete_task = False

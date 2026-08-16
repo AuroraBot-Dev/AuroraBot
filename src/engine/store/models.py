@@ -230,9 +230,8 @@ class InboxEventRow(Base):
     revision: Mapped[int] = mapped_column("revision", Integer, nullable=False, default=0, server_default=text("0"))
 
 
-# -- 状态字面量：从 contracts 枚举生成，禁止手写 ---------------------------------
+# === 状态字面量：从 contracts 枚举生成，禁止手写 ===
 
-AGENT_READY = "READY"
 AGENT_CANCELLED = "CANCELLED"
 AGENT_TERMINAL = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 MSG_PENDING = MessageStatus.PENDING

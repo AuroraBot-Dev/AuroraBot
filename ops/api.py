@@ -38,6 +38,7 @@ from src.utils import LifespanSafeApp
 if TYPE_CHECKING:
     from ops.store import PanelStore
     from src.contracts.configuration import PanelConfig
+    from src.contracts.event import OutputStreamPage
 
 _STREAM_POLL_SECONDS = 0.2
 _STREAM_BATCH_LIMIT = 64
@@ -58,7 +59,6 @@ class _Msg(StrEnum):
     UPLOAD_TOO_LARGE = "文件超过大小限制"
     ATTACHMENT_NOT_FOUND = "附件未找到"
     INVALID_FILE_NAME = "非法文件名"
-    ORIGIN_FORBIDDEN = "Origin 不在白名单"
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +77,17 @@ class Credentials(BaseModel):
     """登录凭据：bootstrap token。"""
 
     token_login: str
+
+
+class _WebSocketOutputSink:
+    """OutputSink 面：把已提交输出增量推送给单个 Panel WebSocket。"""
+
+    def __init__(self, websocket: WebSocket) -> None:
+        self._websocket = websocket
+
+    async def accept(self, page: "OutputStreamPage") -> None:
+        for item in page.items:
+            await self._websocket.send_json({"type": "output", "item": item.to_dict()})
 
 
 def _bearer(authorization: str | None) -> str | None:
@@ -108,10 +119,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             raise HTTPException(status_code=401, detail=_Msg.UNAUTHORIZED)
         return token
 
-    def unauthorized(message: str) -> HTTPException:
-        return HTTPException(status_code=401, detail=message)
-
-    # -- 健康检查（唯一无认证端点）---------------------------------------
+    # === 健康检查（唯一无认证端点） ===
 
     @app.get("/healthz")
     def health() -> dict[str, object]:
@@ -121,7 +129,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     def authenticated_health(_user: str = Depends(current_session)) -> dict[str, object]:
         return health()
 
-    # -- Lab 调试页（跟随本地 Console：--headless 时不提供）---------------
+    # === Lab 调试页（跟随本地 Console：--headless 时不提供） ===
 
     if context.console_enabled:
         lab_dir = Path(__file__).resolve().parent / "lab"
@@ -138,12 +146,12 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
                     raise HTTPException(status_code=404, detail=_Msg.NOT_FOUND)
                 return FileResponse(lab_dir / asset_name)
 
-    # -- 认证 ------------------------------------------------------------
+    # === 认证 ===
 
     @app.post("/api/auth/login")
     async def login(response: Response, payload: Credentials) -> dict[str, Any]:
         if not secrets.compare_digest(payload.token_login, store.bootstrap_token):
-            raise unauthorized(_Msg.INVALID_CREDENTIALS)
+            raise HTTPException(status_code=401, detail=_Msg.INVALID_CREDENTIALS)
         token = secrets.token_urlsafe(32)
         meta = store.create_session(token, panel.session_ttl_seconds)
         response.set_cookie(
@@ -164,14 +172,14 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         store.delete_session(session_token)
         response.delete_cookie(_SESSION_COOKIE, path="/", httponly=True, samesite="strict")
 
-    # -- 操作目录 --------------------------------------------------------
+    # === 操作目录 ===
 
     @app.get("/api/ops")
     async def catalog(_user: str = Depends(current_session)) -> dict[str, Any]:
         entries = catalog_entries()
         return {"operations": entries, "count": len(entries)}
 
-    # -- 附件 ------------------------------------------------------------
+    # === 附件 ===
 
     @app.post("/api/ops/attachments")
     async def upload_attachment(
@@ -209,7 +217,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             raise HTTPException(status_code=404, detail=_Msg.ATTACHMENT_NOT_FOUND)
         return FileResponse(path, media_type=str(record["mime"]), filename=str(record["name"]))
 
-    # -- 操作资源树（catch-all 统一分发）----------------------------------
+    # === 操作资源树（catch-all 统一分发） ===
 
     async def _dispatch(method: str, rest: str, query: dict[str, str]) -> JSONResponse:
         spec, path_params, method_mismatch = router.resolve(method, rest)
@@ -246,7 +254,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             return JSONResponse(OperationResult.failure("PARSE_ERROR", _Msg.BAD_AMP_BODY).to_dict())
         return await _dispatch("POST", rest, body)
 
-    # -- 输出流推送 ------------------------------------------------------
+    # === 输出流推送 ===
 
     @app.websocket("/api/ops/stream")
     async def stream(websocket: WebSocket, token: str = "") -> None:
@@ -260,12 +268,12 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             return
         await websocket.accept()
         # 从当前输出流末尾起订阅，不重放历史（历史归 GET /messages）
+        sink = _WebSocketOutputSink(websocket)
         cursor = context.ports.engine.output_tail_cursor()
         try:
             while True:
                 page = context.ports.engine.output_stream(cursor, limit=_STREAM_BATCH_LIMIT)
-                for item in page.items:
-                    await websocket.send_json({"type": "output", "item": item.to_dict()})
+                await sink.accept(page)
                 cursor = page.next_cursor
                 await asyncio.sleep(_STREAM_POLL_SECONDS)
         except WebSocketDisconnect:

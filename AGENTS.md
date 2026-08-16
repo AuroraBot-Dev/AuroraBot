@@ -42,6 +42,10 @@ tests/          契约、集成与回归测试
 - engine 完整拥有事件、Task/Agent 状态、邮箱、Activity、模型/工具调度和因果热路径；具体实现通过 contracts Port 注入。
 - Agent handler 只能读取 `AgentContext` 并返回 `AgentDecision`；不得直接写运行态、调用 Provider 或平台 Client，
   也不得绕过 Activity 与因果记录。
+- 扩展贡献只经七类端口挂入 engine：`InputGateway` / `EventSource` / `ControlAction` / `ContextContributor` /
+  `EffectTool` / `OutputSink` / `Projector`；其中 `ControlAction` 遵守 handler 同一边界，`ContextContributor` /
+  `OutputSink` / `Projector` 只读，`EffectTool` 只经 Activity 与 `tool.*` 回执产生效果。
+- 进程内贡献 0.x 只允许官方内建扩展；第三方只能以 MCP/AMP 外部形态参与。
 - Platform 将外部生态归一化为 AMP 输入并执行环境效果；只依赖 contracts + utils，不得导入 ops 或 engine。
 - ops 位于热路径之外，只提供输入、命令、查询与调试 sidecar；只依赖 contracts + utils，engine 不依赖 ops。
 - 依赖方向固定为 `utils/contracts ← prompt/config/engine/ai/memory/platform/agents/ops ← aurora`；
@@ -58,7 +62,8 @@ tests/          契约、集成与回归测试
 - 会话可读性由 `causal_events` 提供；ops 可按需导出，不写入热路径日志文件。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
 - 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、
-  `prompts.toml`、`logging.toml` 与 `storage.toml`；profile 只覆盖 runtime。
+  `prompts.toml`、`logging.toml`、`storage.toml` 与 `extensions.toml`；profile 只覆盖 runtime。
+  `extensions.toml` 的 `factory` 只允许命中组合根内置注册表，声明与 manifest 不一致时启动失败。
 - 密钥仅来自环境变量；`.env` 只用于本地开发，不能定义结构或覆盖任意 TOML 值。
 
 ## Runtime and quality

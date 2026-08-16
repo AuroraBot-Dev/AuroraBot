@@ -41,9 +41,7 @@ class ProviderConfig:
     api_key_env: str = ""
 
 
-# ═══════════════════════════════════════════════════════════
-# 内置供应商定义
-# ═══════════════════════════════════════════════════════════
+# === 内置供应商定义 ===
 
 SILICONFLOW = ProviderConfig(
     prefix="siliconflow",
@@ -56,9 +54,7 @@ _registry: dict[str, ProviderConfig] = {}
 _setup_signature: tuple[tuple[str, str, str, str], ...] | None = None
 
 
-# ═══════════════════════════════════════════════════════════
-# 公开 API
-# ═══════════════════════════════════════════════════════════
+# === 公开 API ===
 
 
 def setup_providers(*providers: ProviderConfig) -> None:

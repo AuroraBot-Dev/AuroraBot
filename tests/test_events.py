@@ -9,6 +9,7 @@ import pytest
 from src.contracts import (
     AmpEnvelope,
     AmpValidationError,
+    capability_event_amp,
 )
 
 if TYPE_CHECKING:
@@ -63,3 +64,34 @@ def test_rejects_invalid_amp_shapes(mutation: Callable[[dict[str, object]], obje
     mutation(amp)
     with pytest.raises(AmpValidationError):
         AmpEnvelope.parse(amp)
+
+
+def test_capability_events_are_stable_idempotent_amp() -> None:
+    first = capability_event_amp(
+        event_type="capability.registered",
+        capability_id="aur.mcp.demo.tool",
+        source_app="platform.mcp",
+        source_instance="demo",
+    )
+    second = capability_event_amp(
+        event_type="capability.registered",
+        capability_id="aur.mcp.demo.tool",
+        source_app="platform.mcp",
+        source_instance="demo",
+    )
+
+    assert first["header"]["message_id"] == second["header"]["message_id"]
+    envelope = AmpEnvelope.parse(first)
+    assert envelope.payload.type == "capability.registered"
+    assert envelope.payload.session_id == "system:capabilities"
+    assert envelope.payload.data["capability_id"] == "aur.mcp.demo.tool"
+
+
+def test_capability_event_rejects_unknown_type() -> None:
+    with pytest.raises(ValueError, match="unsupported capability event"):
+        capability_event_amp(
+            event_type="capability.unknown",
+            capability_id="aur.mcp.demo.tool",
+            source_app="platform.mcp",
+            source_instance="demo",
+        )

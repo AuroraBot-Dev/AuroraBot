@@ -2,8 +2,9 @@
 
 - :class:`RoleHandler`：角色契约（endpoint / capability_baseline / adapt_request / complete）。
 - 共享**纯函数**：工具序列化、chat 通道的消息组装、调用封装（ChatCaller）与
-  响应解析。每个角色文件在自己的 ``complete`` 中调用它们——角色自包含，
-  多样化改造只改对应角色文件。
+  响应解析。
+- :func:`complete_chat`：标准 chat 角色的共享执行路径；角色文件仍各自实现
+  ``complete``，差异化改造通过 ``prepare_kwargs`` 只改对应角色文件。
 """
 
 from __future__ import annotations
@@ -92,9 +93,7 @@ class RoleHandler(ABC):
         raise NotImplementedError
 
 
-# ═══════════════════════════════════════════════════════════
-# 工具序列化（共享）
-# ═══════════════════════════════════════════════════════════
+# === 工具序列化（共享） ===
 
 
 def provider_tools(
@@ -168,9 +167,7 @@ def json_item(value: object) -> dict[str, Any]:
     return {"type": str(getattr(value, "type", "unknown"))}
 
 
-# ═══════════════════════════════════════════════════════════
-# chat 通道共享实现（角色文件在 complete 中调用）
-# ═══════════════════════════════════════════════════════════
+# === chat 通道共享实现（角色文件在 complete 中调用） ===
 
 
 class ChatCaller:
@@ -227,7 +224,7 @@ class ChatCaller:
             )
             return cost
 
-        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0912, PLR0915
+        async def _stream_and_collect() -> tuple[Any, float]:  # noqa: C901, PLR0915
             missing_reason = missing_credentials_reason(self.model)
             if missing_reason is not None:
                 raise GatewayError(missing_reason, retryable=False)
@@ -246,39 +243,18 @@ class ChatCaller:
             litellm_kwargs.update(provider_kwargs)
             litellm_kwargs.update(kwargs)
 
+            request_log: dict[str, Any] = {
+                "role": self.role,
+                "model": self.model,
+                "messages_count": len(messages),
+                "max_tokens": max_tokens,
+                "timeout": timeout,
+            }
             if self.gateway.log_queries:
-                logger.debug(
-                    "LLM 请求:\n%s",
-                    json.dumps(
-                        {
-                            "role": self.role,
-                            "model": self.model,
-                            "messages_count": len(messages),
-                            "max_tokens": max_tokens,
-                            "timeout": timeout,
-                            "messages": [
-                                {"role": m.get("role", "?"), "content": m.get("content", "<empty>")} for m in messages
-                            ],
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
-            else:
-                logger.debug(
-                    "LLM 请求:\n%s",
-                    json.dumps(
-                        {
-                            "role": self.role,
-                            "model": self.model,
-                            "messages_count": len(messages),
-                            "max_tokens": max_tokens,
-                            "timeout": timeout,
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
+                request_log["messages"] = [
+                    {"role": m.get("role", "?"), "content": m.get("content", "<empty>")} for m in messages
+                ]
+            logger.debug("LLM 请求:\n%s", json.dumps(request_log, ensure_ascii=False, indent=2))
 
             try:
                 response = await litellm.acompletion(**litellm_kwargs)
@@ -320,20 +296,10 @@ class ChatCaller:
             except (AttributeError, IndexError, TypeError):
                 pass
 
+            response_log: dict[str, Any] = {"role": self.role, "cost": cost}
             if self.gateway.log_responses:
-                logger.debug(
-                    "LLM 响应:\n%s",
-                    json.dumps(
-                        {"role": self.role, "cost": cost, "text": response_text},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
-            else:
-                logger.debug(
-                    "LLM 响应:\n%s",
-                    json.dumps({"role": self.role, "cost": cost}, ensure_ascii=False, indent=2),
-                )
+                response_log["text"] = response_text
+            logger.debug("LLM 响应:\n%s", json.dumps(response_log, ensure_ascii=False, indent=2))
             return final_response, cost
 
         return self.tm.create_task(_stream_and_collect())
@@ -361,6 +327,27 @@ def build_chat_kwargs(
             "json_schema": {"name": STRUCTURED_OUTPUT_NAME, "schema": request.output_schema},
         }
     return messages, kwargs, alias_to_name
+
+
+async def complete_chat(
+    gateway: "ModelGatewayService",
+    request: "ModelRequest",
+    role: "ModelRoleConfig",
+    negotiated: frozenset[str],
+    *,
+    prepare_kwargs: "collections.abc.Callable[[dict[str, Any]], dict[str, Any]] | None" = None,
+) -> ModelResult:
+    """执行标准 chat 角色路径：组装、调用、异常映射与响应解析（共享函数）。"""
+    capabilities = gateway._capabilities_for(request.role)
+    messages, kwargs, alias_to_name = build_chat_kwargs(request, negotiated)
+    if prepare_kwargs is not None:
+        kwargs = prepare_kwargs(kwargs)
+    caller = gateway._caller_for(request.role)
+    try:
+        task, response = await complete_chat_with_fallback(caller, messages, request, kwargs, negotiated, capabilities)
+    except GatewayError as error:
+        raise ModelGatewayError(str(error)) from error
+    return parse_chat_response(gateway, request, role, negotiated, response, task, alias_to_name)
 
 
 async def complete_chat_with_fallback(
@@ -442,9 +429,7 @@ def parse_chat_response(
     )
 
 
-# ═══════════════════════════════════════════════════════════
-# chat 响应解析（共享函数）
-# ═══════════════════════════════════════════════════════════
+# === chat 响应解析（共享函数） ===
 
 
 def chat_message(response: object) -> Any:

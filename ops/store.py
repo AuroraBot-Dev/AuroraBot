@@ -84,7 +84,6 @@ class PanelStore:
     """面板会话与附件存储：Token 文件原子创建、会话生命周期与附件索引。"""
 
     def __init__(self, data_dir: Path) -> None:
-        self._data_dir = data_dir
         data_dir.mkdir(parents=True, exist_ok=True)
         self._database_path = data_dir / "panel.sqlite3"
         self._token_path = data_dir / "Token.txt"
@@ -145,7 +144,7 @@ class PanelStore:
                 session.rollback()
                 raise
 
-    # -- 认证 ------------------------------------------------------------
+    # === 认证 ===
 
     def create_session(self, token: str, ttl_seconds: int) -> dict[str, str]:
         """为登录 token 创建 Bearer 会话，返回会话元数据。"""
@@ -181,7 +180,7 @@ class PanelStore:
         with self._session() as session:
             session.execute(delete(SessionRow).where(SessionRow.token_hash == _digest(token)))
 
-    # -- 附件 ------------------------------------------------------------
+    # === 附件 ===
 
     def add_attachment(self, *, name: str, mime: str, size: int, stored_name: str) -> dict[str, Any]:
         """登记附件并返回索引记录。"""

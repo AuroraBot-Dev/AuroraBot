@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 from src.contracts import (
     CapabilityCatalogSnapshot,
+    EffectToolBinding,
     ToolExecutionRequest,
-    ToolExecutorBinding,
     ToolRequest,
 )
 
@@ -42,7 +42,7 @@ class ToolRegistry:
 
     def __init__(self, store: "SQLiteRuntimeStore") -> None:
         self._store = store
-        self._bindings: dict[str, ToolExecutorBinding] | None = None
+        self._bindings: dict[str, EffectToolBinding] | None = None
 
     @property
     def capability_catalog(self) -> CapabilityCatalogSnapshot:
@@ -51,11 +51,11 @@ class ToolRegistry:
             return CapabilityCatalogSnapshot()
         return CapabilityCatalogSnapshot(tuple(item.capability for item in self._bindings.values()))
 
-    def bind(self, bindings: tuple[ToolExecutorBinding, ...]) -> CapabilityCatalogSnapshot:
+    def bind(self, bindings: tuple[EffectToolBinding, ...]) -> CapabilityCatalogSnapshot:
         """绑定工具执行器集合（仅限一次），形成一对一路由表。"""
         if self._bindings is not None:
             raise ToolBindingError(_ALREADY_BOUND)
-        by_capability: dict[str, ToolExecutorBinding] = {}
+        by_capability: dict[str, EffectToolBinding] = {}
         for binding in bindings:
             capability = binding.capability.id
             if capability in by_capability:
@@ -64,12 +64,6 @@ class ToolRegistry:
             by_capability[capability] = binding
         self._bindings = dict(sorted(by_capability.items()))
         return self.capability_catalog
-
-    async def recover_pending(self) -> tuple[str, ...]:
-        """重新派发所有 PROCESSING 工具活动（重启后重跑执行，回执幂等去重）。"""
-        if self._bindings is None:
-            raise ToolBindingError(_NOT_BOUND)
-        return await self._dispatch(self._store.tool_recovery_activities())
 
     async def execute_pending(
         self,

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import asyncio
 
     from src.contracts.configuration import AuroraConfig
-    from src.contracts.tool import ToolExecutorBinding
+    from src.contracts.tool import EffectToolBinding
 
 
 class PlatformRuntimePort(ExternalAmpIngressPort, InteractiveInputPort, Protocol):
@@ -30,7 +30,7 @@ class PlatformServer(Protocol):
 
 
 class PlatformBackground(Protocol):
-    """必须持续运行到 stop，且不得吞掉取消的后台协程。"""
+    """EventSource 面：持续运行到 stop，把环境事实归一化为 AMP。"""
 
     async def __call__(self, stop: asyncio.Event) -> None: ...
 
@@ -49,9 +49,13 @@ class PlatformFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class PlatformHandle:
-    """平台创建后交给组合根管理的资源和任务。"""
+    """平台创建后交给组合根管理的贡献与生命周期。
 
-    bindings: tuple[ToolExecutorBinding, ...] = ()
+    ``effect_tools`` 是 EffectTool 绑定；``event_sources`` 是 EventSource 面；
+    ``server`` 与 ``cleanup`` 是 Lifecycle 管理的长驻服务与清理回调。
+    """
+
+    effect_tools: tuple[EffectToolBinding, ...] = ()
+    event_sources: tuple[PlatformBackground, ...] = ()
     cleanup: PlatformCleanup | None = None
-    background: PlatformBackground | None = None
     server: PlatformServer | None = None

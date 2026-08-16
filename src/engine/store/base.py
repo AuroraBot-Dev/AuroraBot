@@ -2,7 +2,7 @@
 
 所有写操作均通过 session() 事务上下文执行（引擎级 isolation_level=IMMEDIATE，
 等价于 SQLite 的 BEGIN IMMEDIATE）；单进程 asyncio 独占，无租约与乐观锁。
-初始化：全新库直接建 v9 Schema；v1-v8 旧库按版本序列迁移到 v9
+初始化：全新库直接建当前 Schema；v1-v9 旧库按版本序列迁移到 v10
 （src/engine/store/migration/）。connect()/transaction() 保留
 为原始 sqlite3 逃生口（测试与调试直查 DB 用，热路径不使用）。
 """
@@ -104,6 +104,34 @@ class RuntimeStoreBase:
         """ORM 事务上下文：BEGIN IMMEDIATE，提交后属性不过期便于外部读取。"""
         with Session(self._engine, expire_on_commit=False) as session, session.begin():
             yield session
+
+    def record_reserved_event(
+        self,
+        *,
+        event_type: str,
+        message_id: str,
+        summary: str,
+        payload: dict[str, Any],
+    ) -> bool:
+        """把保留事件只写 causal_events（不进 Inbox），并按 (id, type) 幂等去重。"""
+        with self.session() as session:
+            exists = session.scalar(
+                select(CausalEventRow.event_id).where(
+                    CausalEventRow.correlation_id == message_id,
+                    CausalEventRow.event_type == event_type,
+                )
+            )
+            if exists is not None:
+                return False
+            self._insert_causal_event(
+                session,
+                event_type=event_type,
+                summary=summary,
+                payload=payload,
+                correlation_id=message_id,
+                now=utc_now(),
+            )
+        return True
 
     def initialize(self) -> None:
         """初始化运行时数据库：统一入口（utils.migration.initialize_storage）。
