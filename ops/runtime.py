@@ -86,6 +86,17 @@ class PanelConfigQuery:
                 }
                 for agent in config.agents
             ],
+            "extensions": [
+                {
+                    "id": extension.id,
+                    "version": extension.version,
+                    "enabled": extension.enabled,
+                    "factory": extension.factory,
+                    "faces": sorted(face.value for face in extension.faces),
+                    "capabilities": sorted(extension.capabilities),
+                }
+                for extension in getattr(config, "extensions", ())
+            ],
             "models": {
                 "roles": sorted(config.model_roles),
                 "definitions": {

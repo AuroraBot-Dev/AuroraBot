@@ -14,6 +14,8 @@ from src.contracts import (
     AppConfig,
     AutonomyConfig,
     ConfigurationError,
+    ExtensionConfig,
+    ExtensionFace,
     McpPreference,
     PanelConfig,
     PlatformPreference,
@@ -48,6 +50,14 @@ class _Msg(StrEnum):
     ENGINE_LABEL_MODEL_CALLS = "engine.{label}.max_model_calls must be positive"
     ENGINE_LABEL_TOOL_CALLS = "engine.{label}.max_tool_calls must be positive"
     ENGINE_LABEL_UNSUPPORTED_KEYS = "engine.{label} has unsupported keys"
+    EXTENSION_MUST_BE_ARRAY = "extension must be an array"
+    EXTENSION_MUST_BE_TABLE = "extension must be a table"
+    EXTENSION_UNSUPPORTED_KEYS = "extension has unsupported or missing keys"
+    EXTENSION_ENABLED_BOOLEAN = "extension.enabled must be boolean"
+    EXTENSION_DUPLICATE_ID = "duplicate extension id {extension_id}"
+    EXTENSION_FACE_INVALID = "extension.faces contains unsupported face"
+    EXTENSION_FACE_STRINGS = "extension.faces must contain strings"
+    EXTENSION_CAPABILITY_STRINGS = "extension.capabilities must contain strings"
     HEARTBEAT_BOUNDS = "heartbeat_max_seconds must be at least heartbeat_min_seconds"
     HEARTBEAT_INITIAL_BOUNDS = "heartbeat_initial_seconds must be within heartbeat bounds"
     HTTP_NO_COMMAND_DIR = "streamable_http app may not declare command or working_dir"
@@ -300,6 +310,50 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
                 )
             )
     return tuple(apps)
+
+
+def _parse_extensions(raw_extensions: object) -> tuple[ExtensionConfig, ...]:
+    """解析 extensions.toml 的内建扩展声明数组；factory 命中校验由组合根完成。"""
+    if not isinstance(raw_extensions, list):
+        raise ConfigurationError(_Msg.EXTENSION_MUST_BE_ARRAY)
+    allowed = {"id", "version", "enabled", "factory", "faces", "capabilities"}
+    required = {"id", "version", "enabled", "factory", "faces", "capabilities"}
+    extensions: list[ExtensionConfig] = []
+    identifiers: set[str] = set()
+    for raw in raw_extensions:
+        if not isinstance(raw, dict):
+            raise ConfigurationError(_Msg.EXTENSION_MUST_BE_TABLE)
+        if set(raw) - allowed or not required <= set(raw):
+            raise ConfigurationError(_Msg.EXTENSION_UNSUPPORTED_KEYS)
+        extension_id = _string(raw["id"], "extension.id")
+        if extension_id in identifiers:
+            raise ConfigurationError(_Msg.EXTENSION_DUPLICATE_ID.format(extension_id=extension_id))
+        identifiers.add(extension_id)
+        if not isinstance(raw["enabled"], bool):
+            raise ConfigurationError(_Msg.EXTENSION_ENABLED_BOOLEAN)
+        raw_faces = raw["faces"]
+        if not isinstance(raw_faces, list) or not all(isinstance(item, str) for item in raw_faces):
+            raise ConfigurationError(_Msg.EXTENSION_FACE_STRINGS)
+        try:
+            faces = frozenset(ExtensionFace(item) for item in raw_faces)
+        except ValueError as error:
+            raise ConfigurationError(_Msg.EXTENSION_FACE_INVALID) from error
+        raw_capabilities = raw["capabilities"]
+        if not isinstance(raw_capabilities, list) or not all(
+            isinstance(item, str) and item for item in raw_capabilities
+        ):
+            raise ConfigurationError(_Msg.EXTENSION_CAPABILITY_STRINGS)
+        extensions.append(
+            ExtensionConfig(
+                id=extension_id,
+                version=_string(raw["version"], "extension.version"),
+                enabled=raw["enabled"],
+                factory=_string(raw["factory"], "extension.factory"),
+                faces=faces,
+                capabilities=frozenset(raw_capabilities),
+            )
+        )
+    return tuple(extensions)
 
 
 def _dotted_name(value: object, label: str) -> str:

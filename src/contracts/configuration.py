@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from src.contracts.agent import AgentLimits, AgentProfile, TaskLimits
+    from src.contracts.extension import ExtensionFace
     from src.contracts.triage import TriageLimits
 
 
@@ -255,6 +256,31 @@ class McpPreference:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtensionConfig:
+    """extensions.toml 中一条内建扩展声明。
+
+    ExtensionConfig object::
+
+        {
+            "id": "string",
+            "version": "string",
+            "enabled": true,
+            "factory": "string",
+            "faces": ["ExtensionFace", ...],
+            "capabilities": ["string", ...]
+        }
+
+    """
+
+    id: str
+    version: str
+    enabled: bool
+    factory: str
+    faces: frozenset[ExtensionFace]
+    capabilities: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
 class PlatformPreference:
     """平台组合偏好。
 
@@ -322,7 +348,8 @@ class AuroraConfig:
             "model_definitions": {"role": ModelRoleConfig, ...},
             "model_providers": {"provider": ModelProviderConfig, ...},
             "model_logging": ModelLoggingConfig,
-            "apps": [AppConfig, ...]
+            "apps": [AppConfig, ...],
+            "extensions": [ExtensionConfig, ...]
         }
 
     """
@@ -342,3 +369,4 @@ class AuroraConfig:
     model_providers: Mapping[str, ModelProviderConfig] = MappingProxyType({})
     model_logging: ModelLoggingConfig = ModelLoggingConfig(log_queries=False, log_responses=False)
     apps: tuple[AppConfig, ...] = ()
+    extensions: tuple[ExtensionConfig, ...] = ()

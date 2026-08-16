@@ -23,6 +23,7 @@ from src.config.sections import (
     _parse_agents,
     _parse_apps,
     _parse_autonomy,
+    _parse_extensions,
     _parse_panel,
     _parse_preference,
     _parse_task_budget,
@@ -34,6 +35,7 @@ from src.contracts import (
     ConfigurationSource,
     ConsoleConfig,
     EngineConfig,
+    ExtensionConfig,
     ModelLoggingConfig,
     ModelProviderConfig,
     ModelRoleConfig,
@@ -378,6 +380,17 @@ def _load_agents_apps(
     return agents, apps
 
 
+def _load_extensions(
+    config_dir: Path,
+    sources: list[ConfigurationSource],
+) -> tuple[ExtensionConfig, ...]:
+    """加载 extensions.toml，解析内建扩展声明（factory 命中校验由组合根完成）。"""
+    extensions_data, extensions_source = read_toml_snapshot(config_dir / "extensions.toml")
+    sources.append(extensions_source)
+    _require_keys(extensions_data, {"extension"}, "extensions.toml")
+    return _parse_extensions(extensions_data["extension"])
+
+
 # === 组装入口 ===
 
 
@@ -394,6 +407,7 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
     storage_snapshot = _load_storage(root, config_dir, sources)
     preference = _load_platforms(config_dir, sources)
     agents, apps = _load_agents_apps(config_dir, sources, root=root, roles=roles)
+    extensions = _load_extensions(config_dir, sources)
     prompts = load_prompts(config_dir, sources, frozenset(agent.id for agent in agents))
 
     # 解析运行时子配置
@@ -448,4 +462,5 @@ def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:
         model_providers=MappingProxyType(model_providers),
         model_logging=model_logging,
         apps=apps,
+        extensions=extensions,
     )

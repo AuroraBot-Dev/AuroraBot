@@ -1,9 +1,9 @@
-"""组合根扩展装配：把 manifest 声明的扩展组装为 engine 可消费的贡献集合。
+"""组合根扩展装配：读取 extensions.toml 声明并组装为 engine 可消费贡献。
 
-装配结果包含引擎检查点需要的实现：Agent handler 使用的 ControlAction、
-模型调用前的 ContextContributor、执行效果使用的 EffectTool 绑定与终态
-Projector。平台、Console 与 ops 的 InputGateway/EventSource/OutputSink
-由既有组合根路径继续管理，最终汇入同一运行时。
+每个内建扩展在 TOML 中声明 id/version/enabled/factory/faces/capabilities，
+组合根只允许 factory 命中显式注册表；声明与注册表 manifest 不一致时启动
+失败。装配结果包含 ControlAction、ContextContributor、EffectTool 绑定与
+Projector；平台与 Console/ops 的其他贡献面由既有组合根路径管理。
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from src.agents.capabilities.wait import WaitCapability
 from src.contracts import (
     ContextContributor,
     ControlAction,
+    ExtensionConfig,
     ExtensionFace,
     ExtensionManifest,
     Projector,
@@ -26,6 +27,8 @@ from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
 from src.memory.projector import MemoryProjector
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.contracts.configuration import AuroraConfig
     from src.contracts.ports import ExternalAmpIngressPort
     from src.memory.service import MemoryService
@@ -61,20 +64,38 @@ class _BuiltinExtension:
     projectors: tuple[Projector, ...] = ()
 
 
-class CapabilityAssembly:
-    """把内建扩展组装为 engine 可注入的贡献集合。
+def _control_extension(memory: "MemoryService") -> _BuiltinExtension:
+    del memory
+    return _BuiltinExtension(_CONTROL_MANIFEST, (DelegationCapability(), WaitCapability()))
 
-    每个扩展都以 manifest 显式声明 faces 与 capabilities；重复的 manifest、
-    贡献能力 ID 在启动时拒绝。平台贡献仍经 PlatformHandle 汇入同一绑定目录。
+
+def _memory_extension(memory: "MemoryService") -> _BuiltinExtension:
+    return _BuiltinExtension(
+        _MEMORY_MANIFEST,
+        (MemoryCapability(),),
+        (memory,),
+        (MemoryProjector(memory),),
+    )
+
+
+_FACTORIES: dict[str, Callable[["MemoryService"], _BuiltinExtension]] = {
+    _CONTROL_MANIFEST.id: _control_extension,
+    _MEMORY_MANIFEST.id: _memory_extension,
+}
+"""内建扩展工厂注册表：TOML 的 factory 只允许命中这些显式条目。"""
+
+
+class CapabilityAssembly:
+    """把 extensions.toml 声明解析为 engine 可注入的贡献集合。
+
+    重复声明、未知 factory、声明与 manifest 不一致、重复 capability 都在
+    启动时拒绝；平台贡献仍经 PlatformHandle 汇入同一绑定目录。
     """
 
     def __init__(self, configuration: "AuroraConfig", *, memory: "MemoryService") -> None:
         self._configuration = configuration
         self._memory = memory
-        self._extensions = (
-            _BuiltinExtension(_CONTROL_MANIFEST, (DelegationCapability(), WaitCapability())),
-            _BuiltinExtension(_MEMORY_MANIFEST, (MemoryCapability(),), (memory,), (MemoryProjector(memory),)),
-        )
+        self._extensions = tuple(self._assemble(configuration.extensions))
         self._validate()
 
     @property
@@ -126,6 +147,19 @@ class CapabilityAssembly:
                 )
         return tuple(bindings)
 
+    def _assemble(self, declarations: tuple[ExtensionConfig, ...]) -> list[_BuiltinExtension]:
+        assembled: list[_BuiltinExtension] = []
+        for declaration in declarations:
+            if not declaration.enabled:
+                continue
+            factory = _FACTORIES.get(declaration.factory)
+            if factory is None:
+                raise RuntimeError(f"unknown builtin extension factory: {declaration.factory}")
+            extension = factory(self._memory)
+            _validate_declaration(declaration, extension.manifest)
+            assembled.append(extension)
+        return assembled
+
     def _validate(self) -> None:
         identifiers = [item.manifest.id for item in self._extensions]
         if len(identifiers) != len(set(identifiers)):
@@ -141,3 +175,18 @@ class CapabilityAssembly:
                 raise RuntimeError(f"extension {item.manifest.id} contributes context without the face")
             if item.projectors and ExtensionFace.PROJECTOR not in declared:
                 raise RuntimeError(f"extension {item.manifest.id} contributes projectors without the face")
+
+
+def _validate_declaration(declaration: ExtensionConfig, manifest: ExtensionManifest) -> None:
+    if declaration.id != manifest.id:
+        raise RuntimeError(f"extension factory mismatch: declared {declaration.id}, factory provides {manifest.id}")
+    if declaration.version != manifest.version:
+        raise RuntimeError(
+            f"extension version mismatch for {declaration.id}: declared {declaration.version}, "
+            f"factory provides {manifest.version}"
+        )
+    if declaration.faces != manifest.faces:
+        raise RuntimeError(f"extension faces mismatch for {declaration.id}")
+    declared_capabilities = frozenset(item.id for item in manifest.capabilities)
+    if declaration.capabilities != declared_capabilities:
+        raise RuntimeError(f"extension capabilities mismatch for {declaration.id}")
