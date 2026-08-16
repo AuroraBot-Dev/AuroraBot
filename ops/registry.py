@@ -114,5 +114,4 @@ def _load_all() -> None:
         extensions,
         memory,
         system,
-        terminal,
     )

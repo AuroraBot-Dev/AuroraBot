@@ -75,18 +75,6 @@ class _FakeEngine:
         return {"session_id": session_id, "events": self.sessions[session_id], "outputs": []}
 
 
-class _FakeTerminal:
-    async def route_input(self, request: RuntimeInput) -> CommandResult:
-        if request.text.startswith("/"):
-            return CommandResult(ok=True, text=f"executed: {request.text}", data={"ok": True})
-        return CommandResult(
-            ok=True,
-            text=None,
-            message_id="term-1",
-            publish_reply=False,
-        )
-
-
 class _FakeMemory:
     def history(self, *, scope: str | None = None, limit: int = 32) -> dict[str, Any]:
         return {
@@ -168,7 +156,6 @@ def _runtime() -> PanelRuntime:
         ai=_FakeAi(),
         config=_FakeConfig(),
         shutdown=lambda: None,
-        terminal=_FakeTerminal(),
     )
 
 
@@ -204,23 +191,6 @@ def test_catalog_self_describes_resources() -> None:
     assert ("POST", "/extensions/{extension_id}/enabled") in names
     assert ("GET", "/apps") in names
     assert ("POST", "/apps/{package}/enabled") in names
-    assert ("POST", "/terminal/input") in names
-
-
-def test_terminal_input_routes_text_and_commands() -> None:
-    async def scenario() -> None:
-        router = OperationRouter(_runtime())
-
-        command, command_data = await _execute(router, "POST", "/terminal/input", {"text": "/help"})
-        assert command.ok and command_data["text"] == "executed: /help"
-
-        message, message_data = await _execute(router, "POST", "/terminal/input", {"text": "hello"})
-        assert message.ok and message_data["message_id"] == "term-1"
-
-        empty, _ = await _execute(router, "POST", "/terminal/input", {"text": "  "})
-        assert not empty.ok
-
-    asyncio.run(scenario())
 
 
 def test_extensions_and_apps_list_and_toggle() -> None:

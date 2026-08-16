@@ -108,7 +108,6 @@ class PanelRuntime:
     ai: AiQueryPort
     config: ConfigQueryPort
     shutdown: "Callable[[], None] | None" = None
-    terminal: InteractiveInputPort | None = None
 
 
 class ConsoleControlPort(InteractiveInputPort, Protocol):
