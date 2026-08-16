@@ -137,6 +137,6 @@ def test_check_and_donk_do_not_initialize_config(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr("aurora.commands.start.init_config", fail_if_called)
     monkeypatch.setattr("aurora.commands.check.run_process", lambda _command, _root: 0)
-    monkeypatch.setattr("aurora.commands.donk._invoke", lambda *_args: 0)
+    monkeypatch.setattr("aurora.commands.donk.invoke_cli", lambda *_args: 0)
     assert run(["check", "--lint"]) == 0
     assert run(["donk", "show"]) == 0
