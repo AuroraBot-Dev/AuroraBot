@@ -1,3 +1,8 @@
+# engine 核心配置 — 热路径资源边界、Triage 防抖、自主节律与 Task 预算。
+#
+# 所有字段都在启动时严格校验；删除字段或写非法值会导致启动失败。
+# Panel 接管配置编辑前，请勿随意改动边界值：这些是防失控的硬约束。
+
 [engine]
 # engine 私有工作区；必须与 storage.engine 解析结果一致
 workspace = "data/engine"
@@ -5,38 +10,65 @@ workspace = "data/engine"
 [engine.agents]
 # 入口（triage）Agent profile：Task 从 triage 开始，process 时委派本体意识
 root_profile = "builtin.triage"
+# 通用委派默认目标；root 未指定 profile 时使用
 worker_profile = "builtin.worker"
+# 全局活跃 Agent 上限
 max_active_agents = 16
+# 单个 Task 内的 Agent 总数上限
 max_agents_per_task = 8
+# 监督树最大深度
 max_depth = 3
+# 单个 Agent 可创建的子 Agent 上限
 max_children_per_agent = 4
+# 每轮 pump 最多领取的 turn 数
 turn_concurrency = 8
+# 并发模型槽位
 model_concurrency = 4
+# 并发工具槽位
 tool_concurrency = 8
 
 [engine.triage]
+# Triage 使用的模型角色（必须是 models.toml 已定义角色）
 model_role = "fast"
+# 同会话事件防抖静默窗口（秒）
 quiet_seconds = 3.0
+# 首条事件之后的最长等待（秒）
 max_wait_seconds = 3.0
+# defer 决策默认延迟（秒）
 defer_seconds = 5.0
+# defer 决策允许的最大延迟（秒）
 max_defer_seconds = 60.0
+# 单批次最大事件数
 max_batch_events = 24
+# 单批次投影最大字符数
 max_batch_characters = 12000
+# 单次回复允许的最大抢占次数
 max_interrupts = 2
+# 单个 generation 的最长存活（秒）
 max_generation_seconds = 45.0
 
 [engine.autonomy]
+# engine 空闲扫描间隔（秒）
 scan_seconds = 1.0
+# Clock 心跳初始间隔（秒）；仅在 Clock App 启用并由其消费
 heartbeat_initial_seconds = 30.0
+# Clock 心跳下界（秒）
 heartbeat_min_seconds = 30.0
+# Clock 心跳上界（秒）
 heartbeat_max_seconds = 1800.0
 
 [engine.interactive_task]
+# 交互 Task 的模型调用预算
 max_model_calls = 8
+# 交互 Task 的工具调用预算
 max_tool_calls = 6
+# 交互 Task 的最长时长（秒）
 max_duration_seconds = 300.0
 
 [engine.autonomous_task]
+# 自主 Task 的模型调用预算
 max_model_calls = 3
+# 自主 Task 的工具调用预算
 max_tool_calls = 2
+# 自主 Task 的最长时长（秒）
 max_duration_seconds = 120.0

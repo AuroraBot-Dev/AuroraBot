@@ -62,7 +62,8 @@ tests/          契约、集成与回归测试
 - 会话可读性由 `causal_events` 提供；ops 可按需导出，不写入热路径日志文件。
 - 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
 - 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、
-  `prompts.toml`、`logging.toml` 与 `storage.toml`；profile 只覆盖 runtime。
+  `prompts.toml`、`logging.toml`、`storage.toml` 与 `extensions.toml`；profile 只覆盖 runtime。
+  `extensions.toml` 的 `factory` 只允许命中组合根内置注册表，声明与 manifest 不一致时启动失败。
 - 密钥仅来自环境变量；`.env` 只用于本地开发，不能定义结构或覆盖任意 TOML 值。
 
 ## Runtime and quality

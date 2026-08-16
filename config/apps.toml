@@ -1,5 +1,12 @@
-# MCP 应用配置
-# 每个 [[app]] 定义一个 MCP 服务（内建或远程）
+# MCP 应用配置 — 外部生态的工具与事件来源。
+#
+# 每个 [[app]] 定义一个 MCP 服务（内建或远程）。enabled = true 的应用必须
+# 在 working_dir 可解析：干净克隆默认启用 org.aurora.qq，若未安装
+# extensions/apps/Aurora-QQ，请先把该条目 enabled 改为 false。
+#
+# - stdio：启动本地子进程，stdout 只承载 MCP JSON-RPC，诊断写 stderr。
+# - streamable_http：连接远程 HTTPS 服务；此时不得声明 command/working_dir。
+# - env 是环境变量白名单，只透传明确点名的变量；密钥仍来自进程环境。
 
 # 内建 Clock 应用：提供时间查询与定时能力
 [[app]]
