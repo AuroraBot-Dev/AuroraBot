@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +40,6 @@ class _Msg(StrEnum):
     APP_MUST_BE_ARRAY = "app must be an array"
     APP_MUST_BE_TABLE = "app must be a table"
     APP_PACKAGE_UNIQUE = "app.package must be a unique dotted package name"
-    APP_TIMEOUT_POSITIVE = "app.timeout_seconds must be positive"
     APP_TRANSPORT_INVALID = "app.transport must be stdio or streamable_http"
     APP_UNSUPPORTED_KEYS = "app has unsupported or missing keys"
     AUTONOMY_UNSUPPORTED_KEYS = "engine.autonomy has unsupported keys"
@@ -258,18 +256,19 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
         transport = _string(raw["transport"], "app.transport")
         if transport not in {"stdio", "streamable_http"}:
             raise ConfigurationError(_Msg.APP_TRANSPORT_INVALID)
-        timeout = raw["timeout_seconds"]
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0 or not isfinite(timeout):
-            raise ConfigurationError(_Msg.APP_TIMEOUT_POSITIVE)
+        timeout = _positive_number(raw["timeout_seconds"], "app.timeout_seconds")
         command = raw.get("command", [])
         env_vars = raw.get("env", [])
         working_dir = raw.get("working_dir")
         url = raw.get("url")
         auth_env = raw.get("auth_env")
         parsed_auth_env = _string(auth_env, "app.auth_env") if auth_env is not None else None
-        if not isinstance(env_vars, list) or not all(isinstance(item, str) for item in env_vars):
-            raise ConfigurationError("app.env must contain unique environment variable names")
-        if len(env_vars) != len(set(env_vars)) or not all(item.isidentifier() for item in env_vars):
+        if (
+            not isinstance(env_vars, list)
+            or not all(isinstance(item, str) for item in env_vars)
+            or len(env_vars) != len(set(env_vars))
+            or not all(item.isidentifier() for item in env_vars)
+        ):
             raise ConfigurationError("app.env must contain unique environment variable names")
         if transport == "stdio":
             if (
@@ -297,7 +296,7 @@ def _parse_apps(raw_apps: object, root: Path) -> tuple[AppConfig, ...]:
                     env_vars=tuple(env_vars),
                     url=url if isinstance(url, str) else None,
                     auth_env=parsed_auth_env,
-                    timeout_seconds=float(timeout),
+                    timeout_seconds=timeout,
                 )
             )
     return tuple(apps)

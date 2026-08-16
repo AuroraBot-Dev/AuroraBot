@@ -42,7 +42,7 @@ class PromptCatalog:
     soul: str
     world: str
     agents: Mapping[str, str]
-    sources: tuple[ConfigurationSource, ...]
+    sources: tuple[ConfigurationSource, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.soul, str) or not isinstance(self.world, str) or not self.world.strip():
@@ -56,18 +56,6 @@ class PromptCatalog:
             raise ValueError(_Msg.INVALID_AGENT_PROMPTS)
         object.__setattr__(self, "agents", MappingProxyType(agents))
         object.__setattr__(self, "sources", tuple(self.sources))
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        soul: str,
-        world: str,
-        agents: Mapping[str, str],
-        sources: tuple[ConfigurationSource, ...] = (),
-    ) -> "PromptCatalog":
-        """工厂方法：创建校验通过的 PromptCatalog 实例。"""
-        return cls(soul, world, agents, sources)
 
     @classmethod
     def from_config(cls, config: PromptConfig) -> "PromptCatalog":

@@ -90,6 +90,11 @@ def _cache_file_path(timestamp: datetime) -> Path:
     return _cache_dir / f"{_CACHE_FILE_PREFIX}{timestamp.strftime('%Y%m%d-%H')}.json.gz"
 
 
+def _is_cache_entry(path: Path) -> bool:
+    """判断路径是否为 models.dev 缓存文件（兼容旧版 .json 与当前 .json.gz）。"""
+    return path.is_file() and path.name.startswith(_CACHE_FILE_PREFIX) and path.name.endswith((".json", ".json.gz"))
+
+
 def _read_cache_file(path: Path) -> dict[str, Any] | None:
     try:
         if path.name.endswith(".json.gz"):
@@ -110,9 +115,7 @@ def _find_disk_cache() -> tuple[dict[str, Any] | None, bool]:
         return None, False
     now = time.time()
     for entry in sorted(_cache_dir.iterdir(), reverse=True):
-        if not entry.is_file() or not entry.name.startswith(_CACHE_FILE_PREFIX):
-            continue
-        if not entry.name.endswith((".json", ".json.gz")):
+        if not _is_cache_entry(entry):
             continue
         data = _read_cache_file(entry)
         if data is None:
@@ -138,9 +141,7 @@ def _write_cache(data: dict[str, Any]) -> None:
         return
 
     for entry in sorted(_cache_dir.iterdir()):
-        if not entry.is_file() or entry == new_path or not entry.name.startswith(_CACHE_FILE_PREFIX):
-            continue
-        if not entry.name.endswith((".json", ".json.gz")):
+        if entry == new_path or not _is_cache_entry(entry):
             continue
         with contextlib.suppress(OSError):
             entry.unlink()

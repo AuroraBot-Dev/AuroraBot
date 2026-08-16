@@ -2,7 +2,7 @@
 
 所有写操作均通过 session() 事务上下文执行（引擎级 isolation_level=IMMEDIATE，
 等价于 SQLite 的 BEGIN IMMEDIATE）；单进程 asyncio 独占，无租约与乐观锁。
-初始化：全新库直接建 v9 Schema；v1-v8 旧库按版本序列迁移到 v9
+初始化：全新库直接建当前 Schema；v1-v9 旧库按版本序列迁移到 v10
 （src/engine/store/migration/）。connect()/transaction() 保留
 为原始 sqlite3 逃生口（测试与调试直查 DB 用，热路径不使用）。
 """

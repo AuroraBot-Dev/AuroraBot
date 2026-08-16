@@ -107,9 +107,6 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             raise HTTPException(status_code=401, detail=_Msg.UNAUTHORIZED)
         return token
 
-    def unauthorized(message: str) -> HTTPException:
-        return HTTPException(status_code=401, detail=message)
-
     # -- 健康检查（唯一无认证端点）---------------------------------------
 
     @app.get("/healthz")
@@ -142,7 +139,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     @app.post("/api/auth/login")
     async def login(response: Response, payload: Credentials) -> dict[str, Any]:
         if not secrets.compare_digest(payload.token_login, store.bootstrap_token):
-            raise unauthorized(_Msg.INVALID_CREDENTIALS)
+            raise HTTPException(status_code=401, detail=_Msg.INVALID_CREDENTIALS)
         token = secrets.token_urlsafe(32)
         meta = store.create_session(token, panel.session_ttl_seconds)
         response.set_cookie(

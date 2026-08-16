@@ -248,7 +248,7 @@ def test_complete_task_tool_finishes_without_resume(tmp_path: Path) -> None:
 
 
 def test_engine_persists_and_executes_every_model_tool_call(tmp_path: Path) -> None:
-    catalog = PromptCatalog.create(soul="soul", world="world", agents={"gate": "gate", "worker": "worker"})
+    catalog = PromptCatalog(soul="soul", world="world", agents={"gate": "gate", "worker": "worker"})
     agent = ToolAgent(composer=PromptComposer(catalog))
     engine = _engine(
         tmp_path,

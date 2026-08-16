@@ -132,8 +132,7 @@ def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], p
     if not isinstance(runtime_raw, dict):
         raise ConfigurationError(_Msg.RUNTIME_MUST_BE_TABLE)
     runtime_allowed = {"profile", "panel", "console"}
-    required_runtime = set(runtime_allowed)
-    if set(runtime_raw) - runtime_allowed or not required_runtime <= set(runtime_raw):
+    if set(runtime_raw) != runtime_allowed:
         raise ConfigurationError(_Msg.RUNTIME_UNSUPPORTED_KEYS)
     if runtime_raw["profile"] != selected_profile:
         raise ConfigurationError(_Msg.PROFILE_VALUE_MISMATCH)

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from sqlalchemy import delete, func, or_, select, update
@@ -324,25 +324,18 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     # 入口 agent 直接完成（未委派）：按 process 语义结算批次
                     self.settle_batch(session, task_row.root_message_id, "delete", now)
                 if agent.parent_agent_id is not None:
-                    result = ChildResult(
-                        child_agent_id=agent.agent_id,
-                        status="completed",
-                        summary=summary,
-                        artifacts=completion.artifacts,
-                        error=None,
+                    created.append(
+                        self._notify_parent(
+                            session,
+                            agent,
+                            message,
+                            status="completed",
+                            summary=summary,
+                            artifacts=completion.artifacts,
+                            priority=priority,
+                            now=now,
+                        )
                     )
-                    child_message = self._insert_message(
-                        session,
-                        task_id=agent.task_id,
-                        target_agent_id=agent.parent_agent_id,
-                        message_type="child.completed",
-                        payload=result.to_dict(),
-                        causation_id=message.message_id,
-                        correlation_id=agent.task_id,
-                        priority=priority,
-                        now=now,
-                    )
-                    created.append(child_message)
                 else:
                     task_status = TaskStatus.SILENT if completion.silent else TaskStatus.COMPLETED
                     self._end_task(session, agent.task_id, task_status, summary, now)
@@ -361,25 +354,18 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     # 入口 triage agent 失败：结算批次，避免 Inbox 残留（fail-open 已由 handler 兜底）
                     self.settle_batch(session, task_row.root_message_id, "delete", now)
                 if agent.parent_agent_id is not None:
-                    result = ChildResult(
-                        child_agent_id=agent.agent_id,
-                        status="failed",
-                        summary=summary,
-                        artifacts=(),
-                        error=failure,
+                    created.append(
+                        self._notify_parent(
+                            session,
+                            agent,
+                            message,
+                            status="failed",
+                            summary=summary,
+                            error=failure,
+                            priority=priority,
+                            now=now,
+                        )
                     )
-                    child_message = self._insert_message(
-                        session,
-                        task_id=agent.task_id,
-                        target_agent_id=agent.parent_agent_id,
-                        message_type="child.failed",
-                        payload=result.to_dict(),
-                        causation_id=message.message_id,
-                        correlation_id=agent.task_id,
-                        priority=priority,
-                        now=now,
-                    )
-                    created.append(child_message)
                 else:
                     self._end_task(session, agent.task_id, TaskStatus.ERROR, summary, now)
 
@@ -528,6 +514,59 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     now=now,
                 )
 
+    @staticmethod
+    def _active_generation_filter() -> Any:
+        """活动必须属于当前 generation：自主 Task 直接放行，交互 Task 校验 lane revision。"""
+        return or_(
+            TaskRow.autonomous == 1,
+            (
+                (SessionLaneRow.active_task_id == TaskRow.task_id)
+                & (SessionLaneRow.generation_revision == ActivityRow.generation_revision)
+            ),
+        )
+
+    def _generation_is_current(self, session: Session, task_row: TaskRow | None, generation_revision: int) -> bool:
+        """判断活动是否仍可提交：Task 活跃且 generation 未被打断或取代。"""
+        if task_row is None or task_row.status != TaskStatus.ACTIVE:
+            return False
+        if task_row.autonomous:
+            return True
+        lane = session.get(SessionLaneRow, str(task_row.session_id))
+        return (
+            lane is not None
+            and lane.active_task_id == task_row.task_id
+            and lane.generation_revision == generation_revision
+        )
+
+    def _notify_parent(
+        self,
+        session: Session,
+        agent: AgentInstance,
+        message: AgentMessage,
+        *,
+        status: Literal["completed", "failed"],
+        summary: str,
+        artifacts: tuple[Any, ...] = (),
+        error: str | None = None,
+        priority: int,
+        now: str,
+    ) -> str:
+        """构造 ChildResult 并向父 Agent 投递 ``child.{status}`` 消息。"""
+        target_agent_id = agent.parent_agent_id
+        assert target_agent_id is not None
+        payload = ChildResult(agent.agent_id, status, summary, artifacts, error).to_dict()
+        return self._insert_message(
+            session,
+            task_id=agent.task_id,
+            target_agent_id=target_agent_id,
+            message_type=f"child.{status}",
+            payload=payload,
+            causation_id=message.message_id,
+            correlation_id=agent.task_id,
+            priority=priority,
+            now=now,
+        )
+
     def claim_activities(self, kind: str, limit: int) -> tuple[Any, ...]:
         """原子领取指定类型的待处理活动，返回活动实体。"""
         with self.session() as session:
@@ -539,13 +578,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     ActivityRow.kind == kind,
                     ActivityRow.status == ACT_PENDING,
                     TaskRow.status == TASK_ACTIVE,
-                    or_(
-                        TaskRow.autonomous == 1,
-                        (
-                            (SessionLaneRow.active_task_id == TaskRow.task_id)
-                            & (SessionLaneRow.generation_revision == ActivityRow.generation_revision)
-                        ),
-                    ),
+                    self._active_generation_filter(),
                 )
                 .order_by(ActivityRow.priority.desc(), ActivityRow.created_at)
             ).all()
@@ -584,15 +617,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             if row.status != ACT_PROCESSING:
                 return
             task_row = session.scalar(select(TaskRow).where(TaskRow.task_id == row.task_id))
-            current = task_row is not None and task_row.status == TaskStatus.ACTIVE
-            if current and task_row is not None and not task_row.autonomous:
-                lane = session.get(SessionLaneRow, str(task_row.session_id))
-                current = (
-                    lane is not None
-                    and lane.active_task_id == task_row.task_id
-                    and lane.generation_revision == row.generation_revision
-                )
-            if not current:
+            if not self._generation_is_current(session, task_row, row.generation_revision):
                 row.status = ACT_SUPERSEDED
                 row.error = "late_result_for_superseded_generation"
                 row.updated_at = now
@@ -647,13 +672,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                     ActivityRow.kind == "tool",
                     ActivityRow.status == ACT_PROCESSING,
                     TaskRow.status == TASK_ACTIVE,
-                    or_(
-                        TaskRow.autonomous == 1,
-                        (
-                            (SessionLaneRow.active_task_id == TaskRow.task_id)
-                            & (SessionLaneRow.generation_revision == ActivityRow.generation_revision)
-                        ),
-                    ),
+                    self._active_generation_filter(),
                 )
             ).scalars()
             return tuple(rows)
@@ -685,15 +704,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             if row is None or row.status != ACT_PROCESSING:
                 return False, None
             task_row = session.get(TaskRow, str(row.task_id))
-            current = task_row is not None and task_row.status == TASK_ACTIVE
-            if current and task_row is not None and not task_row.autonomous:
-                lane = session.get(SessionLaneRow, str(task_row.session_id))
-                current = (
-                    lane is not None
-                    and lane.active_task_id == task_row.task_id
-                    and lane.generation_revision == row.generation_revision
-                )
-            if not current:
+            if not self._generation_is_current(session, task_row, row.generation_revision):
                 return False, None
             row.status = ACT_COMPLETED if event_type == "tool.succeeded" else ACT_ERROR
             row.result_json = _json(payload["result"]) if payload.get("result") is not None else None
