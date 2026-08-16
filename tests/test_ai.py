@@ -447,7 +447,6 @@ def test_models_dev_capabilities_pricing_and_disk_cache(tmp_path: Path, monkeypa
         assert await models.compute_cost("provider/model", 1_000_000, 500_000) == 4.0
         capabilities = await models.get_capabilities_by_id("provider/model")
         assert {"chat", "tools", "reasoning", "structured_output", "vision"} <= capabilities
-        assert await models.get_model_info("missing") is None
         assert await models.get_modalities_by_id("provider/model") == (frozenset({"text", "image"}), frozenset())
         assert await models.get_modalities_by_id("missing") == (frozenset(), frozenset())
 

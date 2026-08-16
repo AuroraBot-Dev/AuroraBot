@@ -351,19 +351,6 @@ async def get_capabilities_by_id(model_id: str) -> frozenset[str]:
     return _derive_capabilities(info)
 
 
-async def get_model_info(model_id: str) -> dict[str, Any] | None:
-    """返回 models.dev 中指定模型的完整原始信息。
-
-    Args:
-        model_id: 模型标识符，格式 ``provider/model_name``。
-
-    Returns:
-        模型信息字典；不存在时返回 ``None``。
-    """
-    models = await _load_cache()
-    return models.get(model_id)
-
-
 async def get_modalities_by_id(model_id: str) -> tuple[frozenset[str], frozenset[str]]:
     """返回 models.dev 中模型的输入/输出模态。
 

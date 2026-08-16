@@ -170,10 +170,9 @@ def _build_capabilities() -> tuple[Capability, ...]:
     """构造 Agent 可主动选择的内建能力。"""
     from src.agents.capabilities.delegate import DelegationCapability
     from src.agents.capabilities.memory import MemoryCapability
-    from src.agents.capabilities.speech import SpeechCapability
     from src.agents.capabilities.wait import WaitCapability
 
-    return DelegationCapability(), WaitCapability(), SpeechCapability(), MemoryCapability()
+    return DelegationCapability(), WaitCapability(), MemoryCapability()
 
 
 # -- Engine / ops 构造 --------------------------------------------

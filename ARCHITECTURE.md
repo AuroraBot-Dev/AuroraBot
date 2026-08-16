@@ -94,8 +94,7 @@ Agent 逻辑实现和模型可见主动能力：
 - `ToolAgent`：模型请求、多 Tool call 可恢复链、委派和完成；
 - `capabilities/delegate.py`：创建同构子 Agent；
 - `capabilities/wait.py`：等待未终止 children；
-- `capabilities/memory.py`：生成主动记忆 ToolRequest；
-- `capabilities/speech.py`：尚未启用的朗读能力边界。
+- `capabilities/memory.py`：生成主动记忆 ToolRequest。
 
 handler 只能读取 AgentContext 并返回 AgentDecision。
 

@@ -108,8 +108,8 @@ Structural configuration uses TOML, and secrets come only from environment varia
 ## Current stage
 
 AuroraBot `0.5 alpha` on `nightly` is intended for local exploration, runtime research, and extension development.
-Attachments are stored and referenced but do not yet flow through a complete multimodal understanding path. Sandbox and
-speech are not wired into the authorized runtime, and stable MCP reconnect, terminal-data TTL, consistent backup, and
+Attachments are stored and referenced but do not yet flow through a complete multimodal understanding path. Sandbox is
+not wired into the authorized runtime, and stable MCP reconnect, terminal-data TTL, consistent backup, and
 public multi-tenant deployment are not current guarantees. Public behavior is defined by
 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md), contracts, and tests.
 

@@ -58,7 +58,7 @@ memory 已按纯数据 models、短期算法 short_term、异步编排 service �
 
 1. `src/engine/store/decisions.py` 与 `src/platform/mcp/adapter.py` 超过 500 行，需要按领域职责拆分。
 2. 附件目前完成存储和引用传递，但尚未形成多模态理解链路。
-3. sandbox 和 speech 保持未启用或占位状态，尚未完成运行时授权与效果回执设计。
+3. sandbox 保持未启用状态，尚未完成运行时授权与效果回执设计。
 
 ## 3. 里程碑
 
@@ -141,7 +141,7 @@ memory 已按纯数据 models、短期算法 short_term、异步编排 service �
 [ ] 提供启用 Clock 的主动节律 profile 和可验证自主 Task 示例。
 [ ] 为第三方 MCP App 建立版本、兼容性、健康检查和开发者脚手架。
 [ ] sandbox 启用前完成威胁模型、权限策略、资源限制、产物回收和因果回执。
-[ ] 删除无法进入授权执行链的长期占位能力。
+[x] 删除无法进入授权执行链的长期占位能力（Speech 决策壳已于深度减法阶段提前移除）。
 
 完成门槛：
 

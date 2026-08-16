@@ -65,12 +65,6 @@ class ToolRegistry:
         self._bindings = dict(sorted(by_capability.items()))
         return self.capability_catalog
 
-    async def recover_pending(self) -> tuple[str, ...]:
-        """重新派发所有 PROCESSING 工具活动（重启后重跑执行，回执幂等去重）。"""
-        if self._bindings is None:
-            raise ToolBindingError(_NOT_BOUND)
-        return await self._dispatch(self._store.tool_recovery_activities())
-
     async def execute_pending(
         self,
         limit: int,

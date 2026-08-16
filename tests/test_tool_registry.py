@@ -173,7 +173,7 @@ def test_missing_executor_emits_failed_receipt(tmp_path: object) -> None:
     asyncio.run(scenario())
 
 
-def test_recover_pending_redispatchs_processing_activities(tmp_path: object) -> None:
+def test_recovery_redispatchs_processing_activities(tmp_path: object) -> None:
     async def scenario() -> None:
         store = _store(tmp_path)
         _insert_tool_activity(store, request_id="r1")
@@ -183,7 +183,7 @@ def test_recover_pending_redispatchs_processing_activities(tmp_path: object) -> 
         executor = _RecordingExecutor(ingress)
         registry = ToolRegistry(store)
         registry.bind((_binding(executor=executor),))
-        assert await registry.recover_pending() == ("r1",)
+        assert await registry.execute_pending(1, recover=True) == ("r1",)
         assert len(executor.requests) == 1
         assert len(ingress.amps) == 1
 
