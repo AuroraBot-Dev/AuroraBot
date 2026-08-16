@@ -47,7 +47,6 @@ class _Msg(StrEnum):
     NO_COMMAND = "Server {key} 没有配置启动命令"
     START_FAILED_IO = "启动 Server {key} 失败: 命令或临时目录不可用 {command} — {error}"
     START_FAILED_OS = "启动 Server {key} 失败: {error}"
-    NOT_RUNNING = "Server {key} 不在运行中，无法重启"
 
 
 def _ensure_tempdir() -> Path:

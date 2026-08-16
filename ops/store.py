@@ -84,7 +84,6 @@ class PanelStore:
     """面板会话与附件存储：Token 文件原子创建、会话生命周期与附件索引。"""
 
     def __init__(self, data_dir: Path) -> None:
-        self._data_dir = data_dir
         data_dir.mkdir(parents=True, exist_ok=True)
         self._database_path = data_dir / "panel.sqlite3"
         self._token_path = data_dir / "Token.txt"

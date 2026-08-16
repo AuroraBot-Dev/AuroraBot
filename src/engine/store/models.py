@@ -232,7 +232,6 @@ class InboxEventRow(Base):
 
 # -- 状态字面量：从 contracts 枚举生成，禁止手写 ---------------------------------
 
-AGENT_READY = "READY"
 AGENT_CANCELLED = "CANCELLED"
 AGENT_TERMINAL = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 MSG_PENDING = MessageStatus.PENDING

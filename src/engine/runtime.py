@@ -52,12 +52,10 @@ if TYPE_CHECKING:
 class _Msg(StrEnum):
     """本文件内所有用户或模型可见的硬编码文本。"""
 
-    RESERVED_EVENT_TYPE = "reserved internal event type: {amp_type}"
     HANDLERS_MISMATCH = "Agent handlers must exactly match configured profiles"
     ROOT_PROFILE_MISSING = "root Agent profile is not configured"
     MAX_TURNS_POSITIVE = "max_turns must be positive"
     INVALID_TOOL_OUTCOME = "invalid Tool outcome"
-    TOOL_COMPLETION_UNMATCHED = "Tool completion does not match an active request: {request_id}"
 
 
 def _memory_turn_input(message: AgentMessage) -> str:

@@ -58,7 +58,6 @@ class _Msg(StrEnum):
     UPLOAD_TOO_LARGE = "文件超过大小限制"
     ATTACHMENT_NOT_FOUND = "附件未找到"
     INVALID_FILE_NAME = "非法文件名"
-    ORIGIN_FORBIDDEN = "Origin 不在白名单"
 
 
 @dataclass(frozen=True, slots=True)

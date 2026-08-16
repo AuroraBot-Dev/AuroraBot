@@ -1,7 +1,7 @@
-"""SpeechCapability — 决定 Agent 回复是否应朗读。
+"""SpeechCapability — 未启用的朗读决策壳。
 
-Agent 在决策空间内自主选择是否发起 TTS 朗读。
-若启用，在 AgentDecision 中生成 aur.agent.speech 工具请求。
+当前没有 TTS 配置与执行器绑定，因此从不暴露 ``aur.agent.speech``
+工具定义；任何意外调用都确定性返回失败，避免生成悬空工具请求。
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from src.contracts import (
     AgentDecision,
     ToolDefinition,
-    ToolRequest,
 )
 
 if TYPE_CHECKING:
@@ -21,41 +20,15 @@ if TYPE_CHECKING:
 
 SPEECH_TOOL = "aur.agent.speech"
 
-_SPEECH_DESCRIPTION = "将回复文本朗读出来。"
-
-_SPEECH_SCHEMA: dict[str, object] = {
-    "type": "object",
-    "properties": {
-        "text": {
-            "type": "string",
-            "description": "需要朗读的文本内容。",
-        }
-    },
-    "required": ["text"],
-    "additionalProperties": False,
-}
-
 
 class _Msg(StrEnum):
     """SpeechCapability 内部错误消息。"""
 
     TTS_NOT_ENABLED = "aur.agent.speech is not enabled"
-    TEXT_REQUIRED = "aur.agent.speech requires a non-empty text string"
 
 
 class SpeechCapability:
-    """决定 Agent 回复是否应朗读，生成 aur.agent.speech 工具请求。"""
-
-    def __init__(self) -> None:
-        self._tts_enabled = False
-
-    def install_tts_config(self, *, enabled: bool) -> None:
-        """由进程组合根注入 TTS 配置。
-
-        Args:
-            enabled: 是否启用 TTS 朗读。
-        """
-        self._tts_enabled = enabled
+    """未启用的朗读决策壳：不暴露工具定义，调用即确定性失败。"""
 
     @property
     def tool_names(self) -> frozenset[str]:
@@ -63,24 +36,11 @@ class SpeechCapability:
         return frozenset({SPEECH_TOOL})
 
     def tool_definitions(self, context: AgentContext) -> tuple[ToolDefinition, ...]:  # noqa: ARG002
-        """仅在 TTS 启用时提供朗读工具定义。"""
-        if not self._tts_enabled:
-            return ()
-        return (ToolDefinition(SPEECH_TOOL, _SPEECH_DESCRIPTION, _SPEECH_SCHEMA),)
+        """TTS 未启用，不向模型暴露朗读工具定义。"""
+        return ()
 
     def handle_tool(self, call: ToolCall) -> AgentDecision | None:
-        """处理 aur.agent.speech 工具调用，验证参数并生成朗读工具请求。"""
+        """拒绝未启用的朗读工具调用。"""
         if call.name != SPEECH_TOOL:
             return None
-        if not self._tts_enabled:
-            return AgentDecision(failure=_Msg.TTS_NOT_ENABLED)
-        text = call.arguments.get("text")
-        if not isinstance(text, str) or not text.strip():
-            return AgentDecision(failure=_Msg.TEXT_REQUIRED)
-        return AgentDecision(
-            tool_request=ToolRequest(
-                capability=SPEECH_TOOL,
-                parameters={"text": text},
-                tool_call_id=call.call_id,
-            )
-        )
+        return AgentDecision(failure=_Msg.TTS_NOT_ENABLED)
