@@ -27,9 +27,9 @@ async def _create(config: "AuroraConfig", runtime: "PlatformRuntimePort") -> "Pl
 
     bindings = _build_mcp_bindings(mcp, catalog)
     return PlatformHandle(
-        bindings=bindings,
+        effect_tools=bindings,
+        event_sources=(mcp.run,),
         cleanup=mcp.shutdown,
-        background=mcp.run,
     )
 
 

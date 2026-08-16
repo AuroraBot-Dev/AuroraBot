@@ -268,7 +268,7 @@ def test_platform_server_and_panel_stop_gracefully() -> None:
 
     async def scenario() -> None:
         server = FakeServer()
-        handle = PlatformHandle(server=server, background=spinner)
+        handle = PlatformHandle(server=server, event_sources=(spinner,))
         stop_task = asyncio.create_task(asyncio.sleep(0), name="stop")
         panel_task = asyncio.create_task(asyncio.sleep(0), name="panel")
         await composition._run_platform_tasks(

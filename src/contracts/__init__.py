@@ -58,6 +58,7 @@ from src.contracts.event import (
     RuntimeInput,
 )
 from src.contracts.extension import (
+    CAPABILITY_EVENT_TYPES,
     ContextContributor,
     EventSource,
     ExtensionFace,
@@ -66,6 +67,7 @@ from src.contracts.extension import (
     InputGateway,
     OutputSink,
     Projector,
+    capability_event_amp,
 )
 from src.contracts.memory import (
     MemoryContextSnapshot,
@@ -137,6 +139,7 @@ from src.contracts.tool import (
 from src.contracts.triage import InboxEvent, TriageBatch, TriageLimits
 
 __all__ = [
+    "CAPABILITY_EVENT_TYPES",
     "MEMORY_REMEMBER_CAPABILITY",
     "PLATFORM_NAMES",
     "STRUCTURED_OUTPUT_NAME",
@@ -252,6 +255,7 @@ __all__ = [
     "TriageBatch",
     "TriageLimits",
     "append_tool_result",
+    "capability_event_amp",
     "capability_tool_definition",
     "new_amp",
     "tool_receipt_amp",

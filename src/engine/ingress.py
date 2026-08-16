@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import TOOL_EVENT_TYPES
+from src.contracts import CAPABILITY_EVENT_TYPES, TOOL_EVENT_TYPES
 
 if TYPE_CHECKING:
     from src.contracts import AmpEnvelope
@@ -20,6 +20,16 @@ def _ingest_amp(kernel: "AgentEngine", amp: AmpEnvelope, ingested: list[str]) ->
     if amp.payload.type in TOOL_EVENT_TYPES:
         # 工具回执：匹配活动完成，不进入 Inbox
         kernel.consume_tool_receipt(amp)
+        ingested.append(amp.header.message_id)
+        return
+    if amp.payload.type in CAPABILITY_EVENT_TYPES:
+        # 能力可见性事件：只写因果事件，不进入 Inbox 或触发 Triage
+        kernel.store.record_reserved_event(
+            event_type=amp.payload.type,
+            message_id=amp.header.message_id,
+            summary=amp.payload.summary,
+            payload=amp.payload.data,
+        )
         ingested.append(amp.header.message_id)
         return
     if kernel.store.enqueue_inbox(amp, kernel.configuration.triage):

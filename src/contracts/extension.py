@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
+from uuid import NAMESPACE_URL, uuid5
 
+from src.contracts.amp import new_amp
 from src.contracts.ports import ExternalAmpIngressPort, InteractiveInputPort
 
 if TYPE_CHECKING:
@@ -18,6 +20,42 @@ if TYPE_CHECKING:
     from src.contracts.agent import CapabilityDescriptor
     from src.contracts.event import OutputStreamPage
     from src.contracts.memory import MemoryContextSnapshot, MemoryQuery
+
+CAPABILITY_EVENT_TYPES = frozenset(
+    {
+        "capability.registered",
+        "capability.unavailable",
+        "capability.health_changed",
+    }
+)
+"""能力可见性保留事件族：只供观察，不进入 Inbox 或内部编排。"""
+
+
+def capability_event_amp(
+    *,
+    event_type: str,
+    capability_id: str,
+    source_app: str,
+    source_instance: str,
+    summary: str = "",
+    health: dict[str, Any] | None = None,
+    message_id: str | None = None,
+) -> dict[str, Any]:
+    """构造带稳定幂等键的能力可见性 AMP 事件。"""
+    if event_type not in CAPABILITY_EVENT_TYPES:
+        raise ValueError(f"unsupported capability event type: {event_type}")
+    data: dict[str, Any] = {"capability_id": capability_id}
+    if health is not None:
+        data["health"] = health
+    return new_amp(
+        event_type=event_type,
+        session_id="system:capabilities",
+        summary=summary or event_type,
+        data=data,
+        source_app=source_app,
+        source_instance=source_instance,
+        message_id=message_id or str(uuid5(NAMESPACE_URL, f"aurora-capability:{event_type}:{capability_id}")),
+    ).to_dict()
 
 
 class ExtensionFace(StrEnum):

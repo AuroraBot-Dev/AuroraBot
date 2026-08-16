@@ -246,7 +246,7 @@ async def _start_platforms(
             raise ValueError(f"no platform creator registered for {name}")
         handle = await creator(runtime.configuration, runtime)
         handles[name] = handle
-        all_bindings.extend(handle.bindings)
+        all_bindings.extend(handle.effect_tools)
         if handle.cleanup is not None:
             resources.push_async_callback(_run_cleanup, handle.cleanup)
 
@@ -286,7 +286,7 @@ async def _run_platform_tasks(
     runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
     tasks: set[asyncio.Task[None]] = {runtime_task}
 
-    # 平台 server 通过 should_exit 优雅退出；background 必须持续运行到 stop。
+    # 平台 server 通过 should_exit 优雅退出；event_sources 必须持续运行到 stop。
     servers: dict[str, PlatformServer] = {}
     server_tasks: dict[str, asyncio.Task[None]] = {}
     platform_tasks: dict[str, asyncio.Task[None]] = {}
@@ -296,9 +296,9 @@ async def _run_platform_tasks(
             task = asyncio.create_task(handle.server.serve(), name=f"aurora-platform-{name}-server")
             server_tasks[name] = task
             tasks.add(task)
-        if handle.background is not None:
-            task = asyncio.create_task(handle.background(stop), name=f"aurora-platform-{name}-background")
-            platform_tasks[name] = task
+        for index, event_source in enumerate(handle.event_sources):
+            task = asyncio.create_task(event_source(stop), name=f"aurora-platform-{name}-eventsource-{index}")
+            platform_tasks[f"{name}:{index}"] = task
             tasks.add(task)
 
     console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
