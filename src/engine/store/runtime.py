@@ -260,22 +260,19 @@ class StoreRuntimeMixin(RuntimeStoreBase):
                 session.scalar(select(func.count()).select_from(ActivityRow).where(ActivityRow.status == ACT_PENDING))
                 or 0
             )
-            pending_model = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(ActivityRow)
-                    .where(ActivityRow.kind == "model", ActivityRow.status == ACT_PENDING)
+
+            def _pending_activity_count(kind: str) -> int:
+                return (
+                    session.scalar(
+                        select(func.count())
+                        .select_from(ActivityRow)
+                        .where(ActivityRow.kind == kind, ActivityRow.status == ACT_PENDING)
+                    )
+                    or 0
                 )
-                or 0
-            )
-            pending_tool = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(ActivityRow)
-                    .where(ActivityRow.kind == "tool", ActivityRow.status == ACT_PENDING)
-                )
-                or 0
-            )
+
+            pending_model = _pending_activity_count("model")
+            pending_tool = _pending_activity_count("tool")
             active_generations = (
                 session.scalar(
                     select(func.count()).select_from(SessionLaneRow).where(SessionLaneRow.active_task_id.is_not(None))
