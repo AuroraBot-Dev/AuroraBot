@@ -42,6 +42,10 @@ tests/          契约、集成与回归测试
 - engine 完整拥有事件、Task/Agent 状态、邮箱、Activity、模型/工具调度和因果热路径；具体实现通过 contracts Port 注入。
 - Agent handler 只能读取 `AgentContext` 并返回 `AgentDecision`；不得直接写运行态、调用 Provider 或平台 Client，
   也不得绕过 Activity 与因果记录。
+- 扩展贡献只经七类端口挂入 engine：`InputGateway` / `EventSource` / `ControlAction` / `ContextContributor` /
+  `EffectTool` / `OutputSink` / `Projector`；其中 `ControlAction` 遵守 handler 同一边界，`ContextContributor` /
+  `OutputSink` / `Projector` 只读，`EffectTool` 只经 Activity 与 `tool.*` 回执产生效果。
+- 进程内贡献 0.x 只允许官方内建扩展；第三方只能以 MCP/AMP 外部形态参与。
 - Platform 将外部生态归一化为 AMP 输入并执行环境效果；只依赖 contracts + utils，不得导入 ops 或 engine。
 - ops 位于热路径之外，只提供输入、命令、查询与调试 sidecar；只依赖 contracts + utils，engine 不依赖 ops。
 - 依赖方向固定为 `utils/contracts ← prompt/config/engine/ai/memory/platform/agents/ops ← aurora`；

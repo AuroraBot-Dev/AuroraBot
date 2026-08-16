@@ -38,7 +38,7 @@ aurora                  组合根：配置、注入、启动、关闭
 ├── src/config          严格 TOML → 不可变配置快照
 ├── src/prompt          PromptDocument 装配
 ├── src/ai              模型角色、Provider、费用与模型查询
-├── src/memory          短期/长期记忆与记忆 ToolExecutor
+├── src/memory          短期/长期记忆与记忆 EffectTool
 ├── src/platform        MCP 工具、通知和生命周期适配
 ├── src/agents          同构 handler 与模型可见的主动能力
 ├── src/engine          唯一 Agent 热路径与运行时存储
@@ -59,7 +59,10 @@ src/sandbox             未启用的独立组件
 - `src` 不导入 `aurora`；
 - `sandbox` 只依赖 `utils`，也不参与当前组合根。
 
-`aurora` 是唯一认识所有具体包的层。具体 ModelProvider、MemoryStore、AgentHandler 和 ToolExecutor 均由构造参数或绑定注入。
+`aurora` 是唯一认识所有具体包的层。具体 ModelProvider、MemoryStore、AgentHandler 和 EffectTool 均由构造参数或绑定注入。
+扩展贡献经七类端口装配：`InputGateway` / `EventSource` / `ControlAction` / `ContextContributor` / `EffectTool` /
+`OutputSink` / `Projector`，每个扩展由 `ExtensionManifest` 声明 faces，由 `CapabilityAssembly` 在组合根汇成
+engine 检查点所需的贡献集合；`capability.*` 保留事件只写因果事件，不进 Inbox。
 
 ## 3. 核心数据流
 
@@ -104,7 +107,7 @@ handler 返回且仅返回一种 transition：
 | 类型 | 请求路径 | 完成路径 |
 | ---- | -------- | -------- |
 | 模型 | `ModelRequest` → model Activity | Provider `complete()` → `model.completed` 或 `model.failed` |
-| 工具 | `ToolRequest` → ToolRegistry → ToolExecutor | executor 提交 `tool.succeeded`、`tool.failed` 或 `tool.unknown` AMP |
+| 工具 | `ToolRequest` → ToolRegistry → EffectTool | executor 提交 `tool.succeeded`、`tool.failed` 或 `tool.unknown` AMP |
 
 ToolAgent 会持久化同一次模型响应中的多个 Tool call，并按序恢复。每项调用都有真实 Tool result；链尾才恢复模型 continuation。
 重复工具回执按 `request_id` 幂等消费。`complete_task=true` 的成功工具可在存储层直接完成 Agent。
@@ -206,7 +209,7 @@ MCP Tool ID 为 `aur.mcp.<app-package>.<raw-tool-name>`。Agent profile 的能�
 capabilities = ["aur.mcp.org.aurora.clock.*", "!aur.mcp.org.aurora.clock.delete_task"]
 ```
 
-授权链是：`catalog ∩ profile.capabilities → descriptor 存在性 → JSON Schema → ToolExecutor`。模型普通文本不产生外部效果。
+授权链是：`catalog ∩ profile.capabilities → descriptor 存在性 → JSON Schema → EffectTool`。模型普通文本不产生外部效果。
 
 MCP 当前只把 tools 与 notifications 接入 Agent 上下文；resources 与 prompts 尚未接通。HTTP 会话或 stdio 子进程断开会结束当前
 连接/进程，尚无稳定的自动重连与长期故障恢复保证。
