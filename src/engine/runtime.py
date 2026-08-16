@@ -44,9 +44,38 @@ from src.utils import get_logger, utc_now
 logger = get_logger("aurora.engine")
 
 if TYPE_CHECKING:
+    from src.contracts.extension import ContextContributor
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
     from src.contracts.tool import EffectToolBinding
+
+
+def _merge_context_snapshots(snapshots: tuple[MemoryContextSnapshot, ...]) -> MemoryContextSnapshot:
+    """把多个 ContextContributor 的只读快照合并为固定上下文。
+
+    每个贡献者必须独立遵守 MemoryQuery 的预算与排序；合并不再裁剪，只做
+    按序拼接与去重。未来引入非记忆贡献时应扩展为 ContextPatch，而不是在
+    本函数里继续堆字段。
+    """
+    if not snapshots:
+        return MemoryContextSnapshot()
+    if len(snapshots) == 1:
+        return snapshots[0]
+
+    def dedupe(values: tuple[Any, ...]) -> tuple[Any, ...]:
+        return tuple(dict.fromkeys(values))
+
+    windows = dedupe(tuple(message for snapshot in snapshots for message in snapshot.window))
+    remote_summaries = dedupe(tuple(item for snapshot in snapshots for item in snapshot.remote_summaries))
+    remote_window = dedupe(tuple(item for snapshot in snapshots for item in snapshot.remote_window))
+    facts = dedupe(tuple(fact for snapshot in snapshots for fact in snapshot.relevant_facts))
+    return MemoryContextSnapshot(
+        summary="\n\n".join(snapshot.summary for snapshot in snapshots if snapshot.summary),
+        window=tuple(windows),
+        remote_summaries=tuple(remote_summaries),
+        remote_window=tuple(remote_window),
+        relevant_facts=tuple(facts),
+    )
 
 
 class _Msg(StrEnum):
@@ -94,6 +123,7 @@ class AgentEngine:
         model_provider: ModelProvider,
         tool_registry: ToolRegistry | None = None,
         memory_store: MemoryStore | None = None,
+        context_contributors: tuple[ContextContributor, ...] | None = None,
         idle_wait_seconds: float = 1.0,
     ) -> None:
         self.configuration = configuration
@@ -105,6 +135,13 @@ class AgentEngine:
         self._handlers = handlers
         self._model_provider = model_provider
         self._memory_store = memory_store
+        self._context_contributors = (
+            tuple(context_contributors)
+            if context_contributors is not None
+            else (memory_store,)
+            if memory_store is not None
+            else ()
+        )
         self._idle_wait_seconds = idle_wait_seconds
         self._workspace = Path(configuration.workspace)
         reject_active_legacy_workspace(self._workspace)
@@ -150,13 +187,21 @@ class AgentEngine:
     # -- 记忆（被动服务）--------------------------------------------------
 
     async def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
-        if self._memory_store is None:
+        if not self._context_contributors:
             return MemoryContextSnapshot()
-        try:
-            return await self._memory_store.recall(query)
-        except Exception as error:
-            logger.warning("Memory recall failed error_type=%s", type(error).__name__)
-            return MemoryContextSnapshot()
+        results = await asyncio.gather(
+            *(contributor.recall(query) for contributor in self._context_contributors),
+            return_exceptions=True,
+        )
+        snapshots = tuple(result for result in results if isinstance(result, MemoryContextSnapshot))
+        for contributor, result in zip(self._context_contributors, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "Context contributor recall failed contributor=%s error_type=%s",
+                    type(contributor).__name__,
+                    type(result).__name__,
+                )
+        return _merge_context_snapshots(snapshots)
 
     def completed_memory_entries(self) -> tuple[MemoryEntry, ...]:
         entries = []

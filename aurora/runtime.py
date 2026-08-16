@@ -202,6 +202,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         handlers,
         model_provider=model_gateway,
         memory_store=memory,
+        context_contributors=assembly.context_contributors,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
     memory_bindings = assembly.effect_bindings(engine)
