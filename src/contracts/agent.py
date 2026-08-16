@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from src.contracts.model import ModelRequest, ToolCall
 
 
-# -- enums ---------------------------------------------------------------
+# === enums ===
 
 
 class _Msg(StrEnum):
@@ -60,7 +60,7 @@ class ActivityStatus(StrEnum):
     SUPERSEDED = "SUPERSEDED"
 
 
-# -- 配置类型 ------------------------------------------------------------
+# === 配置类型 ===
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +132,7 @@ class EngineConfiguration:
     triage: TriageLimits
 
 
-# -- Agent 动作 ----------------------------------------------------------
+# === Agent 动作 ===
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +186,7 @@ class ChildResult:
         return asdict(self)
 
 
-# -- 运行时状态 ---------------------------------------------------------
+# === 运行时状态 ===
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,7 +328,7 @@ class AgentContext:
     pending_child_reports: bool = False
 
 
-# -- Protocols ------------------------------------------------------------
+# === Protocols ===
 
 
 class AgentHandler(Protocol):

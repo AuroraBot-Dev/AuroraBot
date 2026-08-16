@@ -388,7 +388,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             )
         return tuple(created)
 
-    # -- 消息与活动队列（无租约原子 claim）--------------------------------
+    # === 消息与活动队列（无租约原子 claim） ===
 
     @staticmethod
     def _mark_model_publication(session: Session, message: AgentMessage) -> None:
@@ -802,7 +802,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
             )
             return row is not None
 
-    # -- Task 终止与预算 -----------------------------------------------
+    # === Task 终止与预算 ===
 
     def cancel_task(self, task_id: str, reason: str) -> tuple[str, ...]:
         with self.session() as session:
@@ -838,7 +838,7 @@ class StoreDecisionsMixin(StoreInboxMixin, RuntimeStoreBase):
                 expired.append(str(row.task_id))
         return tuple(expired)
 
-    # -- 内部辅助 -------------------------------------------------------
+    # === 内部辅助 ===
 
     @staticmethod
     def _root_batch_events(state: dict[str, Any]) -> list[Any] | None:

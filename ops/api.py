@@ -119,7 +119,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             raise HTTPException(status_code=401, detail=_Msg.UNAUTHORIZED)
         return token
 
-    # -- 健康检查（唯一无认证端点）---------------------------------------
+    # === 健康检查（唯一无认证端点） ===
 
     @app.get("/healthz")
     def health() -> dict[str, object]:
@@ -129,7 +129,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
     def authenticated_health(_user: str = Depends(current_session)) -> dict[str, object]:
         return health()
 
-    # -- Lab 调试页（跟随本地 Console：--headless 时不提供）---------------
+    # === Lab 调试页（跟随本地 Console：--headless 时不提供） ===
 
     if context.console_enabled:
         lab_dir = Path(__file__).resolve().parent / "lab"
@@ -146,7 +146,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
                     raise HTTPException(status_code=404, detail=_Msg.NOT_FOUND)
                 return FileResponse(lab_dir / asset_name)
 
-    # -- 认证 ------------------------------------------------------------
+    # === 认证 ===
 
     @app.post("/api/auth/login")
     async def login(response: Response, payload: Credentials) -> dict[str, Any]:
@@ -172,14 +172,14 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
         store.delete_session(session_token)
         response.delete_cookie(_SESSION_COOKIE, path="/", httponly=True, samesite="strict")
 
-    # -- 操作目录 --------------------------------------------------------
+    # === 操作目录 ===
 
     @app.get("/api/ops")
     async def catalog(_user: str = Depends(current_session)) -> dict[str, Any]:
         entries = catalog_entries()
         return {"operations": entries, "count": len(entries)}
 
-    # -- 附件 ------------------------------------------------------------
+    # === 附件 ===
 
     @app.post("/api/ops/attachments")
     async def upload_attachment(
@@ -217,7 +217,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             raise HTTPException(status_code=404, detail=_Msg.ATTACHMENT_NOT_FOUND)
         return FileResponse(path, media_type=str(record["mime"]), filename=str(record["name"]))
 
-    # -- 操作资源树（catch-all 统一分发）----------------------------------
+    # === 操作资源树（catch-all 统一分发） ===
 
     async def _dispatch(method: str, rest: str, query: dict[str, str]) -> JSONResponse:
         spec, path_params, method_mismatch = router.resolve(method, rest)
@@ -254,7 +254,7 @@ def create_panel_app(context: PanelAppContext) -> LifespanSafeApp:
             return JSONResponse(OperationResult.failure("PARSE_ERROR", _Msg.BAD_AMP_BODY).to_dict())
         return await _dispatch("POST", rest, body)
 
-    # -- 输出流推送 ------------------------------------------------------
+    # === 输出流推送 ===
 
     @app.websocket("/api/ops/stream")
     async def stream(websocket: WebSocket, token: str = "") -> None:

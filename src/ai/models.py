@@ -35,9 +35,7 @@ from src.utils import get_logger
 
 logger = get_logger("aurora.ai.models")
 
-# ═══════════════════════════════════════════════════════════
-# 常量
-# ═══════════════════════════════════════════════════════════
+# === 常量 ===
 
 MODELS_DEV_API = "https://models.dev/api.json"
 CACHE_TTL_SEC = 3600
@@ -54,9 +52,7 @@ _FIELD_CAPABILITY_MAP: dict[str, str] = {
 # 无歧义的基础能力
 _IMPLICIT_CAPABILITIES: frozenset[str] = frozenset({"chat", "stream", "json_text_fallback"})
 
-# ═══════════════════════════════════════════════════════════
-# 模块级状态
-# ═══════════════════════════════════════════════════════════
+# === 模块级状态 ===
 
 _cache_dir: Path | None = None
 _cache: dict[str, dict[str, Any]] | None = None
@@ -80,9 +76,7 @@ def _exc_msg() -> str:
     return f"{type(e).__name__}: {e}" if e is not None else "unknown"
 
 
-# ═══════════════════════════════════════════════════════════
-# 磁盘缓存
-# ═══════════════════════════════════════════════════════════
+# === 磁盘缓存 ===
 
 
 def _cache_file_path(timestamp: datetime) -> Path:
@@ -147,9 +141,7 @@ def _write_cache(data: dict[str, Any]) -> None:
             entry.unlink()
 
 
-# ═══════════════════════════════════════════════════════════
-# 缓存加载与后台刷新
-# ═══════════════════════════════════════════════════════════
+# === 缓存加载与后台刷新 ===
 
 
 def _index_models(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -263,9 +255,7 @@ async def cache_available() -> bool:
     return bool(await _load_cache())
 
 
-# ═══════════════════════════════════════════════════════════
-# 公开 API — 定价（主信息源）
-# ═══════════════════════════════════════════════════════════
+# === 公开 API — 定价（主信息源） ===
 
 
 async def get_pricing_by_id(model_id: str) -> dict[str, Any] | None:
@@ -306,9 +296,7 @@ async def compute_cost(model_id: str, prompt_tokens: int, completion_tokens: int
     return (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
 
 
-# ═══════════════════════════════════════════════════════════
-# 公开 API — 能力（主信息源）
-# ═══════════════════════════════════════════════════════════
+# === 公开 API — 能力（主信息源） ===
 
 
 def _derive_capabilities(info: dict[str, Any]) -> frozenset[str]:

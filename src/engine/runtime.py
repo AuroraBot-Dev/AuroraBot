@@ -194,7 +194,7 @@ class AgentEngine:
             self.store.counts()["active_tasks"],
         )
 
-    # -- 配置与能力目录 ---------------------------------------------------
+    # === 配置与能力目录 ===
 
     @property
     def limits(self) -> AgentLimits:
@@ -211,7 +211,7 @@ class AgentEngine:
         catalog = self._tools.bind(bindings)
         self.install_capability_catalog(CapabilityCatalogSnapshot(catalog.capabilities))
 
-    # -- 记忆（被动服务）--------------------------------------------------
+    # === 记忆（被动服务） ===
 
     async def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
         if not self._context_contributors:
@@ -261,7 +261,7 @@ class AgentEngine:
                 candidates.extend(str(item) for item in raw if isinstance(item, str) and item.strip())
         return tuple(dict.fromkeys(candidates))
 
-    # -- 摄入 -------------------------------------------------------------
+    # === 摄入 ===
 
     async def submit_amp(self, value: object) -> str:
         amp = AmpEnvelope.parse(value)
@@ -410,7 +410,7 @@ class AgentEngine:
                 type(error).__name__,
             )
 
-    # -- 模型派发 ---------------------------------------------------------
+    # === 模型派发 ===
 
     def _ensure_model_dispatcher(self) -> None:
         self._model_dispatch_wake.set()
@@ -479,7 +479,7 @@ class AgentEngine:
             return
         self.store.complete_model_activity(activity.activity_id, result.to_dict(), None)
 
-    # -- 查询代理 ---------------------------------------------------------
+    # === 查询代理 ===
 
     def tasks(self) -> tuple[TaskState, ...]:
         return self.store.tasks()
@@ -556,7 +556,7 @@ class AgentEngine:
     def cancel_task(self, task_id: str, reason: str) -> None:
         self._cancel_model_activities(self.store.cancel_task(task_id, reason))
 
-    # -- 生命周期 ---------------------------------------------------------
+    # === 生命周期 ===
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         stop = stop_event or asyncio.Event()

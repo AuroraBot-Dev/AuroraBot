@@ -73,7 +73,7 @@ class BaseAgent(ABC):
     def handle(self, context: "AgentContext") -> AgentDecision:
         """Agent 入口：根据消息类型路由到对应处理阶段。"""
 
-    # -- 共享装配 ---------------------------------------------------------
+    # === 共享装配 ===
 
     def _collect_tool_definitions(self, context: "AgentContext") -> tuple[ToolDefinition, ...]:
         """收集所有工具定义：预计算的运行时 ControlAction + 内建 ControlAction，并检查名称唯一性。"""
@@ -129,7 +129,7 @@ class BaseAgent(ABC):
         )
         return AgentDecision(model_request=request)
 
-    # -- 决策工厂 ---------------------------------------------------------
+    # === 决策工厂 ===
 
     @staticmethod
     def _delegate(

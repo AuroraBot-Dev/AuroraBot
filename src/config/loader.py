@@ -95,7 +95,7 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-# -- 分文件加载器 ---------------------------------------------------------
+# === 分文件加载器 ===
 
 
 def _load_runtime_config(config_dir: Path, sources: list[ConfigurationSource], profile: str | None) -> RuntimeConfig:
@@ -378,7 +378,7 @@ def _load_agents_apps(
     return agents, apps
 
 
-# -- 组装入口 -----------------------------------------------------------
+# === 组装入口 ===
 
 
 def load_configuration(root: Path, profile: str | None = None) -> AuroraConfig:

@@ -144,7 +144,7 @@ class PanelStore:
                 session.rollback()
                 raise
 
-    # -- 认证 ------------------------------------------------------------
+    # === 认证 ===
 
     def create_session(self, token: str, ttl_seconds: int) -> dict[str, str]:
         """为登录 token 创建 Bearer 会话，返回会话元数据。"""
@@ -180,7 +180,7 @@ class PanelStore:
         with self._session() as session:
             session.execute(delete(SessionRow).where(SessionRow.token_hash == _digest(token)))
 
-    # -- 附件 ------------------------------------------------------------
+    # === 附件 ===
 
     def add_attachment(self, *, name: str, mime: str, size: int, stored_name: str) -> dict[str, Any]:
         """登记附件并返回索引记录。"""
