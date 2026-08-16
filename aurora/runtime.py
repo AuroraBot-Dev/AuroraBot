@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 logger = get_logger("aurora.process")
 
 
-# -- 平台注册 ---------------------------------------------------------
+# === 平台注册 ===
 
 
 def _init_platforms() -> dict[str, PlatformFactory]:
@@ -60,7 +60,7 @@ def _init_platforms() -> dict[str, PlatformFactory]:
     return creators
 
 
-# -- 内部辅助类型 -----------------------------------------------------
+# === 内部辅助类型 ===
 
 
 _SERVER_GRACE_SECONDS = 10.0
@@ -78,7 +78,7 @@ class _InstalledSignal:
     previous: object | None = None
 
 
-# -- 主入口 -----------------------------------------------------------
+# === 主入口 ===
 
 
 async def run_runtime(
@@ -133,7 +133,7 @@ def _platforms_label(selected: frozenset[str]) -> str:
     return ",".join(sorted(selected)) or "headless"
 
 
-# -- 平台选择 ---------------------------------------------------------
+# === 平台选择 ===
 
 
 def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPreference) -> frozenset[str]:
@@ -146,7 +146,7 @@ def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPr
     return frozenset(name for name in PLATFORM_NAMES if getattr(preference, name).enabled)
 
 
-# -- Agent handler 加载 -------------------------------------------------
+# === Agent handler 加载 ===
 
 
 def _load_handler(
@@ -169,7 +169,7 @@ def _load_handler(
     return handler
 
 
-# -- Engine / ops 构造 --------------------------------------------
+# === Engine / ops 构造 ===
 
 
 def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
@@ -225,7 +225,7 @@ def _configured_model(configuration: AuroraConfig, role: str) -> str | None:
     return f"{definition.provider}/{definition.model}"
 
 
-# -- 平台启动（统一循环）-----------------------------------------------
+# === 平台启动（统一循环）===
 
 
 async def _start_platforms(
@@ -272,7 +272,7 @@ async def _start_platforms_until_stop(
         await asyncio.gather(*(_cancel_task(task) for task in (startup, stop_task)))
 
 
-# -- 任务执行与停止 ----------------------------------------------------
+# === 任务执行与停止 ===
 
 
 async def _run_platform_tasks(
@@ -405,7 +405,7 @@ def _task_failure(
     return None
 
 
-# -- 信号处理 ----------------------------------------------------------
+# === 信号处理 ===
 
 
 def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:
@@ -438,7 +438,7 @@ def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
             signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
 
 
-# -- 面板服务器 --------------------------------------------------------
+# === 面板服务器 ===
 
 
 def _panel_server(runtime: AuroraRuntime, *, console_enabled: bool = True) -> SignalSafeServer | None:
