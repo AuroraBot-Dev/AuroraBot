@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
+from aurora.assembly import CapabilityAssembly
 from ops.api import PanelAppContext, create_panel_app
 from ops.runtime import AuroraRuntime
 from ops.store import PanelStore
@@ -168,15 +169,6 @@ def _load_handler(
     return handler
 
 
-def _build_capabilities() -> tuple[ControlAction, ...]:
-    """构造 Agent 可主动选择的内建能力。"""
-    from src.agents.capabilities.delegate import DelegationCapability
-    from src.agents.capabilities.memory import MemoryCapability
-    from src.agents.capabilities.wait import WaitCapability
-
-    return DelegationCapability(), WaitCapability(), MemoryCapability()
-
-
 # -- Engine / ops 构造 --------------------------------------------
 
 
@@ -194,8 +186,6 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
     )
     prompt_catalog = PromptCatalog.from_config(configuration.prompts)
     composer = PromptComposer(prompt_catalog)
-    capabilities = _build_capabilities()
-    handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
     model_gateway = ModelGatewayService(configuration)
     memory = MemoryService(
         configuration.storage.memory,
@@ -203,6 +193,10 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         embed_fn=model_gateway.embed_sync,
         llm_model=_configured_model(configuration, "quality"),
     )
+    assembly = CapabilityAssembly(configuration, memory=memory)
+    handlers = {
+        profile.id: _load_handler(profile.implementation, composer, assembly.control_actions) for profile in profiles
+    }
     engine = AgentEngine(
         engine_configuration,
         handlers,
@@ -210,7 +204,7 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         memory_store=memory,
         idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
     )
-    memory_bindings = _build_memory_bindings(memory, engine)
+    memory_bindings = assembly.effect_bindings(engine)
     return AuroraRuntime(
         configuration,
         engine,
@@ -218,21 +212,6 @@ def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
         model_gateway=model_gateway,
         memory=memory,
         prompt_catalog=prompt_catalog,
-    )
-
-
-def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["EffectToolBinding", ...]:
-    """构造记忆同源且通过 AMP 回执的主动记忆工具绑定。"""
-    from src.contracts.tool import EffectToolBinding
-    from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
-
-    return (
-        EffectToolBinding(
-            MEMORY_REMEMBER_DESCRIPTOR,
-            MemoryToolExecutor(memory, ingress),  # type: ignore[arg-type]
-            source_app="memory",
-            source_instance="local",
-        ),
     )
 
 
