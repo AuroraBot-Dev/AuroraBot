@@ -111,7 +111,7 @@ class OutputSink(Protocol):
 class Projector(Protocol):
     """消费已提交因果事实，构造派生状态；不得反向写热路径。"""
 
-    def project(self, events: tuple[dict[str, Any], ...]) -> None: ...
+    async def project(self, facts: tuple[dict[str, Any], ...]) -> None: ...
 
 
 class ExtensionLifecycle(Protocol):

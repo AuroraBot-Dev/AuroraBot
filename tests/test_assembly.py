@@ -31,11 +31,13 @@ def test_assembly_declares_control_and_memory_faces(tmp_path: Path) -> None:
         ExtensionFace.CONTROL_ACTION,
         ExtensionFace.CONTEXT_CONTRIBUTOR,
         ExtensionFace.EFFECT_TOOL,
+        ExtensionFace.PROJECTOR,
     } <= manifests["aurora.builtin.memory"].faces
 
     assert len(assembly.control_actions) == _EXPECTED_CONTROL_ACTIONS
     assert len(assembly.context_contributors) == 1
     assert assembly.context_contributors[0] is not None
+    assert len(assembly.projectors) == 1
 
 
 def test_assembly_builds_memory_effect_binding(tmp_path: Path) -> None:

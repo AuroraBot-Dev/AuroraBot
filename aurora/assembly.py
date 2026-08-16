@@ -1,9 +1,9 @@
 """组合根扩展装配：把 manifest 声明的扩展组装为 engine 可消费的贡献集合。
 
-装配结果只包含引擎检查点需要的实现：Agent handler 使用的 ControlAction、
-模型调用前的 ContextContributor、执行效果使用的 EffectTool 绑定。平台、
-Console 与 ops 的 InputGateway/EventSource/OutputSink/Projector 由既有
-组合根路径继续管理，最终汇入同一运行时。
+装配结果包含引擎检查点需要的实现：Agent handler 使用的 ControlAction、
+模型调用前的 ContextContributor、执行效果使用的 EffectTool 绑定与终态
+Projector。平台、Console 与 ops 的 InputGateway/EventSource/OutputSink
+由既有组合根路径继续管理，最终汇入同一运行时。
 """
 
 from __future__ import annotations
@@ -19,9 +19,11 @@ from src.contracts import (
     ControlAction,
     ExtensionFace,
     ExtensionManifest,
+    Projector,
 )
 from src.contracts.tool import EffectToolBinding
 from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
+from src.memory.projector import MemoryProjector
 
 if TYPE_CHECKING:
     from src.contracts.configuration import AuroraConfig
@@ -42,6 +44,7 @@ _MEMORY_MANIFEST = ExtensionManifest(
             ExtensionFace.CONTROL_ACTION,
             ExtensionFace.CONTEXT_CONTRIBUTOR,
             ExtensionFace.EFFECT_TOOL,
+            ExtensionFace.PROJECTOR,
         }
     ),
     capabilities=(MEMORY_REMEMBER_DESCRIPTOR,),
@@ -55,6 +58,7 @@ class _BuiltinExtension:
     manifest: ExtensionManifest
     control_actions: tuple[ControlAction, ...] = ()
     context_contributors: tuple[ContextContributor, ...] = ()
+    projectors: tuple[Projector, ...] = ()
 
 
 class CapabilityAssembly:
@@ -69,7 +73,7 @@ class CapabilityAssembly:
         self._memory = memory
         self._extensions = (
             _BuiltinExtension(_CONTROL_MANIFEST, (DelegationCapability(), WaitCapability())),
-            _BuiltinExtension(_MEMORY_MANIFEST, (MemoryCapability(),), (memory,)),
+            _BuiltinExtension(_MEMORY_MANIFEST, (MemoryCapability(),), (memory,), (MemoryProjector(memory),)),
         )
         self._validate()
 
@@ -95,6 +99,15 @@ class CapabilityAssembly:
             if ExtensionFace.CONTEXT_CONTRIBUTOR in item.manifest.faces:
                 contributors.extend(item.context_contributors)
         return tuple(contributors)
+
+    @property
+    def projectors(self) -> tuple[Projector, ...]:
+        """所有声明 PROJECTOR 的扩展贡献。"""
+        projectors: list[Projector] = []
+        for item in self._extensions:
+            if ExtensionFace.PROJECTOR in item.manifest.faces:
+                projectors.extend(item.projectors)
+        return tuple(projectors)
 
     def effect_bindings(self, ingress: "ExternalAmpIngressPort") -> tuple[EffectToolBinding, ...]:
         """构造所有声明 EFFECT_TOOL 的扩展绑定。"""
@@ -126,3 +139,5 @@ class CapabilityAssembly:
                 raise RuntimeError(f"extension {item.manifest.id} contributes control actions without the face")
             if item.context_contributors and ExtensionFace.CONTEXT_CONTRIBUTOR not in declared:
                 raise RuntimeError(f"extension {item.manifest.id} contributes context without the face")
+            if item.projectors and ExtensionFace.PROJECTOR not in declared:
+                raise RuntimeError(f"extension {item.manifest.id} contributes projectors without the face")

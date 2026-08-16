@@ -44,7 +44,7 @@ from src.utils import get_logger, utc_now
 logger = get_logger("aurora.engine")
 
 if TYPE_CHECKING:
-    from src.contracts.extension import ContextContributor
+    from src.contracts.extension import ContextContributor, Projector
     from src.contracts.memory import MemoryStore
     from src.contracts.model import ModelProvider
     from src.contracts.tool import EffectToolBinding
@@ -112,6 +112,25 @@ def _memory_turn_input(message: AgentMessage) -> str:
     return message.type
 
 
+class _MemoryStoreProjector:
+    """把终态记忆事实投影到 MemoryStore 的引擎本地回退 Projector。"""
+
+    def __init__(self, memory_store: MemoryStore) -> None:
+        self._memory_store = memory_store
+
+    async def project(self, facts: tuple[dict[str, Any], ...]) -> None:
+        for raw in facts:
+            entry = MemoryEntry.from_dict(raw)
+            try:
+                await self._memory_store.remember(entry)
+            except Exception as error:
+                logger.warning(
+                    "Memory projector remember failed task_id=%s error_type=%s",
+                    entry.task_id,
+                    type(error).__name__,
+                )
+
+
 class AgentEngine:
     """组合持久化状态、模型、工具与自动记忆服务的完整 Agent 引擎。"""
 
@@ -124,6 +143,7 @@ class AgentEngine:
         tool_registry: ToolRegistry | None = None,
         memory_store: MemoryStore | None = None,
         context_contributors: tuple[ContextContributor, ...] | None = None,
+        projectors: tuple[Projector, ...] | None = None,
         idle_wait_seconds: float = 1.0,
     ) -> None:
         self.configuration = configuration
@@ -139,6 +159,13 @@ class AgentEngine:
             tuple(context_contributors)
             if context_contributors is not None
             else (memory_store,)
+            if memory_store is not None
+            else ()
+        )
+        self._projectors = (
+            tuple(projectors)
+            if projectors is not None
+            else (_MemoryStoreProjector(memory_store),)
             if memory_store is not None
             else ()
         )
@@ -361,19 +388,27 @@ class AgentEngine:
         )
 
     def _project_memory(self) -> None:
-        if self._memory_store is None:
+        """把已提交终态事实分发给全部 Projector 贡献。"""
+        facts = tuple(entry.to_dict() for entry in self.completed_memory_entries())
+        if not facts:
             return
-        for entry in self.completed_memory_entries():
-            task = asyncio.create_task(self._remember(entry), name=f"aurora-memory-{entry.task_id}")
+        for index, projector in enumerate(self._projectors):
+            task = asyncio.create_task(
+                self._run_projector(projector, facts),
+                name=f"aurora-projector-{index}",
+            )
             self._memory_tasks.add(task)
             task.add_done_callback(self._memory_tasks.discard)
 
-    async def _remember(self, entry: MemoryEntry) -> None:
-        assert self._memory_store is not None
+    async def _run_projector(self, projector: Projector, facts: tuple[dict[str, Any], ...]) -> None:
         try:
-            await self._memory_store.remember(entry)
+            await projector.project(facts)
         except Exception as error:
-            logger.warning("Memory remember failed task_id=%s error_type=%s", entry.task_id, type(error).__name__)
+            logger.warning(
+                "Projector failed projector=%s error_type=%s",
+                type(projector).__name__,
+                type(error).__name__,
+            )
 
     # -- 模型派发 ---------------------------------------------------------
 
