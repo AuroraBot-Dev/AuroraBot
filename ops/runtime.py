@@ -308,6 +308,7 @@ class AuroraRuntime:
             ai=PanelAiQuery(self.model_gateway),
             config=config_query,
             shutdown=self.request_shutdown,
+            terminal=self,
         )
 
     # === 注入入口 ===
