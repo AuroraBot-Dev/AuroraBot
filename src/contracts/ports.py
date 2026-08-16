@@ -84,11 +84,19 @@ class AiQueryPort(Protocol):
 
 
 class ConfigQueryPort(Protocol):
-    """启动配置快照与提示词的只读查询端口。"""
+    """启动配置快照、提示词与扩展/应用声明的查询端口。"""
 
     def snapshot(self) -> dict[str, Any]: ...
 
     def prompt_for(self, role: str) -> dict[str, Any] | None: ...
+
+    def extensions(self) -> list[dict[str, Any]]: ...
+
+    def apps(self) -> list[dict[str, Any]]: ...
+
+    def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]: ...
+
+    def set_app_enabled(self, package: str, *, enabled: bool) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True, slots=True)
