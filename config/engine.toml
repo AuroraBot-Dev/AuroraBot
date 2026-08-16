@@ -13,7 +13,6 @@ max_children_per_agent = 4
 turn_concurrency = 8
 model_concurrency = 4
 tool_concurrency = 8
-blocking_workers = 4
 
 [engine.triage]
 model_role = "fast"

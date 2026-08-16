@@ -109,7 +109,6 @@ class AgentLimits:
     turn_concurrency: int = 8
     model_concurrency: int = 4
     tool_concurrency: int = 8
-    blocking_workers: int = 4
 
 
 @dataclass(frozen=True, slots=True)
