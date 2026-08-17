@@ -1,167 +1,145 @@
 # AuroraBot 演化路线图
 
-状态：P0 已收口；进入长期运行与真实集成阶段
-日期：2026-08-09
+状态：0.6 alpha；七端口扩展基线已合并，进入契约闭环、可预测交付与长期运行阶段
+日期：2026-08-17
 设计基准：[RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)
 
 ## 1. 当前判断
 
-AuroraBot 已完成 Agent 中心运行时的主体迁移：engine、contracts、ops、MCP、记忆、模型网关和因果存储均有现行
-实现及回归测试。扩展贡献模型（七端口 + Manifest/Lifecycle + CapabilityAssembly + `capability.*` 事件族）已在
-`refactor/extension-face` 分支落地。下一阶段不再进行无目标的架构重写，而是依次完成契约闭环、长期运行、真实
-集成验证和能力扩展。
+AuroraBot 已完成 Agent 中心运行时、会话双工与七端口扩展贡献模型的主体迁移。`ExtensionManifest`、
+`ExtensionFace`、`CapabilityAssembly`、`extensions.toml` 和 `capability.*` 保留事件已经进入 `nightly` 主线；Memory、
+Console、Panel 与 MCP 也已显式映射到对应贡献面。下一阶段不再扩大架构名词，而是先让 RFC、公共 contracts、组合根和
+测试对每个贡献面的生命周期、装配与恢复给出同一答案。
 
-最近一次已验证质量基线：
+2026-08-17 验证基线：
 
-- 完整质量命令通过，233 个测试通过；
-- `aurora`、`ops` 与 `src` 总语句覆盖率为 84.18%；
-- 依赖边界、SQLite 迁移、Triage、工具回执、多 Tool call、面板操作、费用持久化与扩展装配已有测试；
-- 项目仍处于 0.5 alpha，尚不应承诺公网多租户或无人值守生产运行。
+- 当前版本为 `0.6.0`，Git 基线为 `v0.6.0-alpha.5`；
+- `uv run aurora check` 全部通过：242 个测试，语句覆盖率 84.43%；
+- Ruff、format、Pyright、依赖边界、Schema v10 迁移、Triage、generation 提交屏障、多 Tool call、费用持久化、
+  Panel HTTP 认证与扩展声明装配均有回归测试；
+- 项目仍是 alpha：不承诺公网多租户、无人值守生产运行、稳定第三方进程内 ABI 或长期数据治理。
 
-## 2. 优先问题
+## 2. 架构更新审计
 
-### P0：契约与正确性（2026-08-09 已完成）
+### 已对齐
 
-1. [x] 组合根将配置的 embedding 与 quality 模型注入 LongTermMemory；recall 语义优先、durable facts 关键词降级。
-2. [x] MemoryStore 改为异步 Port，概要直接 await fast role，SQLite、mem0 与同步 embedding 移到工作线程。
-3. [x] `MemoryQuery.max_characters` 统一约束 summary、window 与 relevant facts，并采用确定性选择和裁剪顺序。
-4. [x] Panel Lab、静态资源与 `/api/health` 要求有效 session；登录设置同源 HttpOnly cookie，Bearer 仍受支持。
-5. [x] `aurora check` 的 Ruff、format、Pyright 与 coverage 已覆盖根级 `ops/` 包。
+1. 七类贡献端口已经进入 contracts：`InputGateway`、`EventSource`、`ControlAction`、`ContextContributor`、
+   `EffectTool`、`OutputSink`、`Projector`。
+2. 内建 control 与 memory 扩展由 `extensions.toml` 声明，factory 只命中组合根注册表；版本、faces、capabilities 与
+   manifest 不一致时启动失败。
+3. Memory recall/remember/terminal projection 分别映射为 ContextContributor、EffectTool 与 Projector；Console 与
+   Panel 输出消费映射为 OutputSink；MCP 通过 PlatformHandle 暴露 EventSource 与 EffectTool。
+4. `capability.registered` 采用稳定幂等键，只写因果事件、不进入 Inbox；保留事件族已由 contracts 约束。
+5. 工具回执公共契约统一为 `tool.succeeded` / `tool.failed` / `tool.unknown`，文档不再使用未实现的
+   `tool.rejected` 名称。
 
-收口证据：异步 LLM 概要、模型注入、scope 语义检索、关键词降级、统一预算、Lab 认证和质量命令范围均有回归测试；
-memory 已按纯数据 models、短期算法 short_term、异步编排 service 拆分。当前完整质量门为 224 tests / 83.84% coverage。
+### 尚未闭环
 
-### P0：会话双工与响应时效（2026-08-09 已完成）
+1. RFC 的 Lifecycle 语义包含 mount/unmount/health/recover；现行 `ExtensionLifecycle` 仍是
+   start/shutdown/status，PlatformHandle 又使用 server/cleanup，尚未统一成一套生命周期契约。
+2. RFC 要求 Manifest 携带信任域与 EffectTool 授权策略附件；现行 `ExtensionManifest` 只有 id、version、faces、
+   capabilities 与 builtin 标志。
+3. `CapabilityAssembly` 当前统一装配内建 ControlAction、ContextContributor、EffectTool 与 Projector；
+   InputGateway、EventSource、OutputSink 和平台生命周期仍由既有组合路径接入，尚未形成 RFC 所述的单一装配结果。
+4. `capability.unavailable` 与 `capability.health_changed` 已保留但没有完整发布、恢复和查询闭环。
+5. 默认配置仍启用仓库外 Aurora-QQ；App 工作目录、命令和必需环境变量也没有全部在创建子进程前完成预检。
+6. Panel HTTP 认证已有测试，但 WebSocket token/cookie、Origin、断连和 cursor 的端到端契约测试仍缺失。
+7. 供应商瞬时事件过滤尚未形成核心 TOML 契约；长期 TTL、备份恢复、故障注入与 soak test 也未完成。
 
-1. [x] 在唯一 RFC 中定义 observed/generation/committed revision、watermark、delta、提交屏障和有界抢占。
-2. [x] Triage 获权选择 `builtin.fast` 快脑或 `builtin.root` 主脑；非法、缺失与 fail-open 保守进入 root。
-3. [x] Schema v10 以 `session_lanes` 持久化 session revision、generation watermark 与唯一活动交互 Task。
-4. [x] 新 AMP 按优先级进入 delta；只有直接点名、明确纠正或语境失效事件请求抢占，且限制抢占次数和总等待。
-5. [x] 将 Activity supersede 原子状态传播到 asyncio 与 Provider 流取消，并以 Task/lane/revision 屏障拒绝晚到结果。
-6. [x] 工具回执与用户输出增加 generation 提交校验；不可撤回平台只读取 `output_publications` 单调提交流。
-7. [x] 移除模型与工具派发的整批完成屏障，实现空闲槽即时领取、交互优先和跨 session 公平调度。
-8. [x] 覆盖持续群聊、重要消息插队、抢占封顶、晚到结果隔离和不可取消工具效果的确定性场景。
+## 3. 优先级
 
-完成门槛（已达到）：持续普通群聊下 Bot 能在有界时间内插话；直接交互可打断未提交的旧生成；任何 superseded generation 都不能
-产生用户可见输出或新的外部效果；单一高流量 session 不得饿死其他会话。
+### P0：扩展契约闭环
 
-收口证据：普通 delta 在当前 generation 运行时持续积累但不阻止其提交；定向纠正会取消旧 Provider 协程并重建包含完整
-上下文的 generation；抢占次数达到上限后当前回复必须完成；PROCESSING 的不可撤回工具阻止抢占；模型和工具槽位释放后
-无需等待同批慢任务即可领取其他 session。Schema v9 可连续迁移到 v10，旧 generation 永不进入用户输出提交流。
+1. [ ] 统一 ExtensionLifecycle 与 PlatformHandle 的启动、健康、恢复和关闭语义，并补失败回收测试。
+2. [ ] 补齐 Manifest 的信任域与 EffectTool 授权策略，或先修改 RFC 明确删减后的稳定公共形状。
+3. [ ] 让 CapabilityAssembly 产出七类贡献与生命周期的单一装配快照，移除平行的隐式装配路径。
+4. [ ] 为七类贡献分别增加重复检测、边界、关闭与恢复测试。
+5. [ ] 实现 `capability.unavailable` / `capability.health_changed` 的稳定发布与查询投影。
 
-### P1：长期运行与交付
+完成门槛：RFC、contracts、组合根和测试使用同一 Manifest/Lifecycle/Assembly 形状；每个已启用贡献都能从声明追踪到
+实现、运行状态、因果事件和有界关闭路径。
 
-1. 默认配置启用仓库外 Aurora-QQ 扩展，干净克隆无法保证默认组合自洽。
-2. 供应商瞬时事件的 TOML 过滤契约尚未在核心平台配置中闭环。
-3. 终态 Task、因果事件和费用记录缺少可执行的 TTL、聚合与清理操作。
-4. MCP 子进程生命周期、断线恢复、长期记忆和角色适配的真实集成覆盖不足。
+### P1：可预测交付
 
-### P2：演化成本
+1. [ ] 默认关闭未随仓库交付的 Aurora-QQ App，保证干净克隆不依赖仓库外目录。
+2. [ ] 在创建 MCP 子进程或远程会话前验证工作目录、命令、HTTPS URL 和必需环境变量，并指出具体 App。
+3. [ ] 补齐 WebSocket Bearer/cookie、Origin、断连、尾游标和增量顺序测试。
+4. [ ] 实现供应商瞬时事件的 TOML 过滤契约，并验证过滤只发生在外部归一化边界。
+5. [ ] 为 `extensions.toml` 禁用项增加 profile/能力引用诊断，避免在更晚阶段失败。
 
-1. `src/engine/store/decisions.py` 与 `src/platform/mcp/adapter.py` 超过 500 行，需要按领域职责拆分。
-2. 附件目前完成存储和引用传递，但尚未形成多模态理解链路。
-3. sandbox 保持未启用状态，尚未完成运行时授权与效果回执设计。
+完成门槛：干净克隆按快速开始可预测启动；错误 App 配置不创建进程；Panel 全部受保护入口都有认证与断连证据。
 
-## 3. 里程碑
+### P2：长期运行与恢复
 
-### M0：设计与交付收口（1–2 周）
+1. [ ] 实现由 ops 触发的终态 TTL、会话导出、WAL checkpoint 和清理操作。
+2. [ ] 费用统计改为数据库聚合或有界缓存，避免启动加载完整历史。
+3. [ ] 建立 engine、memory、ai、ops 数据库的一致备份与恢复流程。
+4. [ ] 增加迁移失败回滚、进程中断、工具重复回执和 MCP 断线故障注入。
+5. [ ] 建立 24/72 小时 soak test，观察队列、Task、Activity、数据库和后台任务增长。
 
-目标：使唯一 RFC、实现、配置和用户文档指向同一系统。
+完成门槛：72 小时测试无无界队列、后台任务泄漏或非预期数据库增长；可以从备份恢复并继续消费已有 Activity；清理后
+外部消息与工具回执幂等仍成立。
 
-[x] 建立 RFC 0300 条款到实现与测试的可追踪矩阵。
-[x] 清理 README、TECHNICAL、Prompt、扩展指南和配置样例中的历史概念。
-[x] 将 `ops/` 纳入 Ruff、format、Pyright 和 coverage，增加文档相对链接检查。
-[ ] 默认关闭未随仓库交付的外部 App，增加干净克隆启动说明。
-[x] 为 Panel Lab 和记忆预算补充契约测试。
-[ ] 为 WebSocket token、Origin、断连、游标和事件过滤补充契约测试。
+### P3：演化成本与能力扩展
 
-完成门槛：
+1. [ ] 按状态迁移、查询和批次职责拆分 972 行的 `src/engine/store/decisions.py`。
+2. [ ] 按本地/远程连接、通知、发现和执行职责拆分 539 行的 `src/platform/mcp/adapter.py`。
+3. [ ] 把附件引用解析、MIME 校验、内容读取和 multimodal role 串成完整链路。
+4. [ ] 为第三方 MCP App 建立版本、兼容性、健康检查和开发者脚手架。
+5. [ ] sandbox 启用前完成威胁模型、权限策略、资源限制、产物回收和因果回执。
 
-[x] 全仓不存在旧编号 RFC 引用；
-[x] 无已知“RFC 0300—实现”冲突未登记；
-[ ] 干净克隆可按默认文档完成可预测启动；
-[x] `aurora check` 覆盖所有一方 Python 包。
+## 4. 里程碑
 
-### M1：核心正确性（2–4 周）
+### M0：Agent 热路径与会话正确性（已完成）
 
-目标：闭合记忆、认证和平台摄入的核心承诺。
+- [x] 完成 AgentEngine、Activity、因果 SQLite 与连续 Schema v10 迁移。
+- [x] 完成异步 MemoryStore、语义/关键词降级和统一字符预算。
+- [x] 完成 fast/root Triage、revision/watermark/delta、提交屏障与有界抢占。
+- [x] 完成多 Tool call、即时补槽、跨 session 公平调度和晚到结果隔离。
+- [x] 将 `ops/` 纳入 Ruff、format、Pyright 与 coverage。
 
-[x] 重构 MemoryStore 的异步边界，并拆分 models / short_term / service，确保摘要和语义 I/O 不阻塞 engine 事件循环。
-[x] 将模型配置、同步 embedding 和语义 search 注入 LongTermMemory。
-[x] 合并语义结果与 durable facts 降级，并公开健康与降级状态。
-[x] 对 summary、window、facts 实施统一字符预算和确定性裁剪。
-[x] 保护 Lab，并支持 Bearer 与同源 HttpOnly session cookie。
-[ ] 补齐 WebSocket token、Origin、断连和游标测试。
-[ ] 为 App 工作目录、命令、URL 和环境变量增加启动前置检查。
-[ ] 实现可配置的供应商瞬时事件过滤。
+### M1：七端口契约收口（1–3 周）
 
-完成门槛：
+- [x] 引入七端口 contracts、Manifest、extensions.toml 与 CapabilityAssembly 基线。
+- [x] 映射 Memory、Console、Panel 和 MCP 的现行贡献面。
+- [x] 建立 `capability.*` 保留事件族与 `capability.registered` 幂等回归。
+- [ ] 收敛 Manifest 元数据与 Lifecycle 公共形状。
+- [ ] 形成七端口单一装配快照及完整重复/边界测试。
+- [ ] 闭合 unavailable/health_changed 的发布、投影与恢复语义。
 
-[x] 记忆窗口、LLM 概要、语义适配、关键词降级可通过确定性集成测试验证；
-[x] engine pump 内不存在同步网络调用；
-[x] Panel 除 `/healthz` 与 bootstrap 登录交换外的 HTTP 端点经过 session 认证测试；
-[ ] 错误 App 配置在创建子进程前给出明确诊断。
+### M2：交付与真实集成（2–5 周）
 
-### M2：长期运行与恢复（4–8 周）
+- [ ] 关闭默认外部 App 依赖并重验快速开始。
+- [ ] 完成 MCP App 启动预检与供应商事件过滤。
+- [ ] 完成 Panel WebSocket 认证、Origin、断连与 cursor 契约测试。
+- [ ] 建立 fake Provider + 真实 stdio MCP 子进程的确定性 E2E。
+- [ ] 为自主心跳、Triage、委派、多 Tool call、恢复和会话导出建立黄金路径。
 
-目标：把“可以运行”提升为“可以持续运行并恢复”。
+### M3：长期运行与 0.6 Beta（5–10 周）
 
-[ ] 实现由 ops 触发的终态 TTL、会话导出、WAL checkpoint 和清理操作。
-[ ] 费用统计改为数据库聚合或有界缓存，避免启动加载完整历史。
-[ ] 建立 engine、memory、ai、ops 数据库的一致备份与恢复流程。
-[ ] 增加迁移失败回滚、进程中断、工具重复回执和 MCP 断线故障注入。
-[ ] 建立 24/72 小时 soak test，观察队列、Task、Activity、数据库和后台任务增长。
+- [ ] 提供 TTL、checkpoint、清理、备份与恢复操作。
+- [ ] 增加关键指标、故障注入和 24/72 小时 soak test。
+- [ ] 拆分超过 500 行且职责混杂的主源码文件。
+- [ ] 让 Python 3.12–3.14 CI 全绿；当前 CI 只覆盖 3.12 与 3.13。
+- [ ] 发布 0.6 beta，并提供 alpha 数据目录升级说明。
 
-完成门槛：
+### M4：0.7 能力扩展（Beta 后）
 
-[ ] 72 小时测试无无界队列、后台任务泄漏或非预期数据库增长；
-[ ] 支持从备份恢复并继续消费已有 Activity；
-[ ] 清理后外部消息与工具回执幂等仍成立。
-
-### M3：可观测与 Beta（6–10 周）
-
-目标：形成可诊断、可回归的 0.5 beta。
-
-[ ] 在现有 ops 操作树中提供队列深度、Task 延迟、模型/工具耗时、失败率、记忆降级和存储容量投影。
-[ ] 建立 fake Provider + 真实 stdio MCP 子进程的确定性 E2E 测试。
-[ ] 为自主心跳、Triage、委派、多 Tool call、恢复和会话导出建立黄金路径场景。
-[ ] 按状态迁移、查询和批次职责拆分 engine decisions。
-[ ] 按本地/远程连接、通知、发现和执行职责拆分 MCP adapter。
-
-完成门槛：
-
-[ ] Python 3.12–3.14 CI 全绿；
-[ ] 核心 E2E 与故障场景稳定可复现；
-[ ] 关键运行指标可从 ops 查询；
-[ ] 发布 0.5 beta，并提供从 alpha 数据目录升级说明。
-
-### M4：能力扩展（Beta 后）
-
-目标：在稳定热路径上补充真正可用的环境能力。
-
-[ ] 把附件引用解析、MIME 校验、内容读取和 multimodal role 串成完整链路。
-[ ] 提供启用 Clock 的主动节律 profile 和可验证自主 Task 示例。
-[ ] 为第三方 MCP App 建立版本、兼容性、健康检查和开发者脚手架。
-[ ] sandbox 启用前完成威胁模型、权限策略、资源限制、产物回收和因果回执。
-[x] 删除无法进入授权执行链的长期占位能力（Speech 决策壳已于深度减法阶段提前移除）。
-
-完成门槛：
-
-[ ] 新能力全部具备显式授权、参数 schema、预算、回执、因果记录和降级路径；
-[ ] 发布 0.6，不扩大 engine 与 handler 的职责边界。
+- [ ] 完成附件多模态链路。
+- [ ] 提供启用 Clock 的主动节律 profile 和可验证自主 Task 示例。
+- [ ] 发布 MCP App 兼容、健康与脚手架规范。
+- [ ] 在威胁模型与授权闭环后决定是否启用 sandbox。
 
 ### M5：1.0 稳定性
 
-目标：给出长期可维护的公共承诺。
+- [ ] 版本化 AMP、Operation、配置与数据迁移兼容范围。
+- [ ] 固化备份、恢复、保留、安全和性能基准。
+- [ ] 发布稳定扩展指南和升级指南。
+- [ ] 继续保持 loopback、单 owner、单 engine 的部署模型；多租户若进入目标，必须先修改 RFC 0300 的进程与安全边界。
 
-[ ] 版本化 AMP、Operation、配置与数据迁移兼容范围。
-[ ] 固化备份、恢复、保留、安全和性能基准。
-[ ] 发布稳定扩展指南和升级指南。
-[ ] 继续保持 loopback、单 owner、单 engine 的部署模型；多租户若进入目标，必须先修改 RFC 0300 的进程与安全边界。
+## 5. 暂不优先
 
-## 4. 暂不优先
-
-- 不再次重写 engine；优先修复现有契约差距。
-- 不在 0.5 阶段承诺公网多租户。
-- 不在记忆、TTL、MCP 恢复和 E2E 尚未闭环前继续扩大能力数量。
+- 不再次重写 engine；优先关闭现有 RFC 与实现差距。
+- 不在 0.6 alpha 阶段承诺公网多租户。
+- 不在扩展生命周期、默认交付、TTL、MCP 恢复和 E2E 尚未闭环前继续扩大能力数量。
 - 不以降低测试门槛或放宽边界检查换取发布速度。

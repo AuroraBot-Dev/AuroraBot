@@ -20,7 +20,7 @@
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
-  <img src="https://img.shields.io/badge/Nightly-0.5%20alpha-6f5b95" alt="Nightly 0.5 alpha" />
+  <img src="https://img.shields.io/badge/Nightly-0.6%20alpha-6f5b95" alt="Nightly 0.6 alpha" />
 </p>
 
 ## 她是什么
@@ -108,7 +108,7 @@ uv run --no-dev --env-file .env aurora start --headless
 
 ## 当前阶段
 
-AuroraBot `0.5 alpha`（`nightly`）适合本地体验、运行时研究和扩展开发。当前附件只完成存储与引用传递，尚未形成完整多模态理解链路；sandbox 尚未接入授权运行时；MCP 断线自动恢复、终态数据 TTL、一致备份，以及面向公网的多租户部署保证也不在当前承诺内。公共行为以 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)、契约与测试为准。
+AuroraBot `0.6 alpha`（`nightly`）适合本地体验、运行时研究和扩展开发。当前附件只完成存储与引用传递，尚未形成完整多模态理解链路；七端口贡献模型尚在收口统一生命周期与装配快照；sandbox 尚未接入授权运行时；MCP 断线自动恢复、终态数据 TTL、一致备份，以及面向公网的多租户部署保证也不在当前承诺内。公共行为以 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)、契约与测试为准。
 
 ## 文档
 

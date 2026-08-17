@@ -1,6 +1,6 @@
 # AuroraBot 技术说明
 
-本文描述 `nightly` 分支 0.5 alpha 的现行实现，帮助开发者定位包、数据流、状态、存储和扩展入口。唯一设计基准是
+本文描述 `nightly` 分支 0.6 alpha 的现行实现，帮助开发者定位包、数据流、状态、存储和扩展入口。唯一设计基准是
 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)；若本文、README 或代码注释与其冲突，以 RFC、跨层契约与测试为准。
 
 ## 1. 运行时全景
@@ -61,8 +61,10 @@ src/sandbox             未启用的独立组件
 
 `aurora` 是唯一认识所有具体包的层。具体 ModelProvider、MemoryStore、AgentHandler 和 EffectTool 均由构造参数或绑定注入。
 扩展贡献经七类端口装配：`InputGateway` / `EventSource` / `ControlAction` / `ContextContributor` / `EffectTool` /
-`OutputSink` / `Projector`，每个扩展由 `ExtensionManifest` 声明 faces，由 `CapabilityAssembly` 在组合根汇成
-engine 检查点所需的贡献集合；`capability.*` 保留事件只写因果事件，不进 Inbox。
+`OutputSink` / `Projector`。内建 control 与 memory 扩展由 `ExtensionManifest` 声明 faces，并由
+`CapabilityAssembly` 汇成 ControlAction、ContextContributor、EffectTool 与 Projector；平台、Console 与 Panel 的
+EventSource、EffectTool、InputGateway 和 OutputSink 目前仍由组合根的既有路径接入。`capability.*` 保留事件只写因果
+事件，不进 Inbox；统一生命周期和七端口单一装配快照仍是路线图中的契约闭环项。
 
 ## 3. 核心数据流
 

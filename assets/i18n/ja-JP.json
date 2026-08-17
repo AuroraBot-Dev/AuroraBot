@@ -30,7 +30,7 @@
     "about": "Aurora について",
     "ways": "接続方法",
     "start": "クイックスタート",
-    "githubVersion": "GitHub · 0.5 alpha",
+    "githubVersion": "GitHub · 0.6 alpha",
     "languageLabel": "言語を切り替える",
     "languageMenuLabel": "言語を選択",
     "themeLabel": "ライト・ダークテーマを切り替える"
@@ -106,8 +106,8 @@
     "configComment": "# DEEPSEEK_API_KEY を追加。Aurora-QQ 未導入時は config/apps.toml で無効化",
     "runComment": "# Console と既定の MCP Platform を起動",
     "runCommand": "uv run --no-dev --env-file .env aurora start",
-    "previewLabel": "Nightly · 0.5 alpha",
-    "previewTitle": "現在は 0.5 alpha です。",
+    "previewLabel": "Nightly · 0.6 alpha",
+    "previewTitle": "現在は 0.6 alpha です。",
     "previewDescription": "ローカル体験、runtime 研究、拡張開発向けです。degrade 可能な長期記憶は利用できます。完全な添付ファイル理解、sandbox と speech runtime、安定した MCP reconnect、data TTL と一貫した backup、公開 multi-tenant 保証はまだ提供していません。",
     "boundaries": "現在の境界を確認"
   },

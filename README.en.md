@@ -18,7 +18,7 @@
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
-  <img src="https://img.shields.io/badge/Nightly-0.5%20alpha-6f5b95" alt="Nightly 0.5 alpha" />
+  <img src="https://img.shields.io/badge/Nightly-0.6%20alpha-6f5b95" alt="Nightly 0.6 alpha" />
 </p>
 
 ## What is AuroraBot?
@@ -107,9 +107,10 @@ Structural configuration uses TOML, and secrets come only from environment varia
 
 ## Current stage
 
-AuroraBot `0.5 alpha` on `nightly` is intended for local exploration, runtime research, and extension development.
+AuroraBot `0.6 alpha` on `nightly` is intended for local exploration, runtime research, and extension development.
 Attachments are stored and referenced but do not yet flow through a complete multimodal understanding path. Sandbox is
-not wired into the authorized runtime, and stable MCP reconnect, terminal-data TTL, consistent backup, and
+not wired into the authorized runtime, the seven-face contribution model is still converging on one lifecycle and
+assembly snapshot, and stable MCP reconnect, terminal-data TTL, consistent backup, and
 public multi-tenant deployment are not current guarantees. Public behavior is defined by
 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md), contracts, and tests.
 

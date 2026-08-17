@@ -160,12 +160,16 @@ ops 不参与 pump，也不直接导入具体实现包。
 
 1. 加载配置快照；
 2. 创建 Prompt、ModelGateway 和 MemoryService；
-3. 用 `CapabilityAssembly` 装配 ControlAction / ContextContributor / EffectTool / Projector；
+3. 用 `CapabilityAssembly` 装配内建 ControlAction / ContextContributor / EffectTool / Projector；
 4. 创建 Agent handler 与 AgentEngine 并注入贡献；
 5. 创建选定 Platform（EventSource/EffectTool/Lifecycle）并绑定效果工具；
 6. 创建 Panel 和可选 Console（InputGateway/OutputSink）；
 7. 运行共享停止信号；
 8. 按有界顺序关闭后台任务、server、平台和存储。
+
+七类贡献端口都已进入公共 contracts，但现行 `CapabilityAssembly` 尚未成为所有贡献与生命周期的唯一装配快照：
+InputGateway、EventSource、OutputSink 和 Platform 生命周期仍由组合根的既有路径接入。该差距已登记在路线图，不能把
+当前的 manifest 驱动内建装配误解为稳定的第三方进程内 ABI。
 
 ## 4. 一条消息的生命周期
 

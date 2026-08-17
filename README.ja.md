@@ -18,7 +18,7 @@
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
-  <img src="https://img.shields.io/badge/Nightly-0.5%20alpha-6f5b95" alt="Nightly 0.5 alpha" />
+  <img src="https://img.shields.io/badge/Nightly-0.6%20alpha-6f5b95" alt="Nightly 0.6 alpha" />
 </p>
 
 ## AuroraBot とは
@@ -107,9 +107,10 @@ uv run --no-dev --env-file .env aurora start --headless
 
 ## 現在の段階
 
-`nightly` の AuroraBot `0.5 alpha` は、ローカル体験、runtime 研究、拡張開発向けです。添付ファイルは保存と参照渡しまでで、
+`nightly` の AuroraBot `0.6 alpha` は、ローカル体験、runtime 研究、拡張開発向けです。添付ファイルは保存と参照渡しまでで、
 完全な multimodal understanding chain はまだありません。sandbox は authorized runtime に未接続です。
-安定した MCP reconnect、終端データの TTL、一貫した backup、公開 multi-tenant deployment も現在の保証には含まれません。
+七つの contribution face も単一 lifecycle と assembly snapshot への統合途中です。安定した MCP reconnect、終端データの
+TTL、一貫した backup、公開 multi-tenant deployment も現在の保証には含まれません。
 公開動作は [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md)、contract、テストを基準とします。
 
 ## ドキュメント
