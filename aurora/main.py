@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from aurora.commands import COMMAND_REGISTRARS
@@ -13,7 +14,8 @@ if TYPE_CHECKING:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot AgentTree experimental core")
+    parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot AgentTree 实验核心")
+    parser.add_argument("--root", type=Path, default=Path.cwd(), help="项目根目录")
     subparsers = parser.add_subparsers(dest="command")
     for register in COMMAND_REGISTRARS:
         register(subparsers)

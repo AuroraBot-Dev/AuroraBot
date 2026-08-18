@@ -33,7 +33,10 @@ message → model → assistant
 uv sync
 uv run aurora check
 uv run aurora about
+uv run aurora donk show
 ```
+
+`aurora check` 支持分别运行 lint 或测试，并可请求 Ruff 修复；`aurora donk show/major/minor/patch` 管理项目版本号。
 
 项目不内置联网 Model。应用通过 `aurora.assemble_runtime(configuration, model, tools)` 注入具体 Model 和 Tool；这样 Provider
 选择不会进入核心循环。

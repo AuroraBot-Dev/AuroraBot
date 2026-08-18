@@ -14,7 +14,7 @@ where = ["."]
 include = ["aurora", "aurora.*", "src", "src.*"]
 
 [dependency-groups]
-dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
+dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -1,21 +1,27 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from aurora.commands import about, check
+from aurora.commands import about, check, donk
+from aurora.commands.process import run_process
 from aurora.main import build_parser, run
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import pytest
 
 FAILED_EXIT_CODE = 3
-EXPECTED_COMMAND_CALLS = 2
+EXPECTED_LINT_COMMANDS = 3
+INTERRUPTED_EXIT_CODE = 130
 
 
-def test_bare_cli_and_about_are_non_effectful() -> None:
+def test_bare_cli_and_about_are_non_effectful(capsys: pytest.CaptureFixture[str]) -> None:
     assert run([]) == 0
     assert run(["about"]) == 0
+    output = capsys.readouterr().out
+    assert "AuroraBot AgentTree 实验核心" in output
+    assert "四角色对话" in output
 
 
 def test_each_command_registers_its_own_executor() -> None:
@@ -23,20 +29,94 @@ def test_each_command_registers_its_own_executor() -> None:
 
     about_arguments = parser.parse_args([about.NAME])
     check_arguments = parser.parse_args([check.NAME])
+    donk_arguments = parser.parse_args([donk.NAME, "show"])
 
     assert about_arguments.executor is about.execute
     assert check_arguments.executor is check.execute
+    assert donk_arguments.executor is donk.execute
 
 
-def test_check_command_stops_at_first_failed_stage(monkeypatch: pytest.MonkeyPatch) -> None:
-    return_codes = iter((0, FAILED_EXIT_CODE))
+def test_check_command_runs_all_selected_stages_and_summarizes_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    return_codes = iter((0, FAILED_EXIT_CODE, 0))
     calls: list[tuple[str, ...]] = []
 
-    def fake_run(command: tuple[str, ...], **_kwargs: object) -> SimpleNamespace:
+    def fake_run(command: tuple[str, ...], _root: Path) -> int:
         calls.append(command)
-        return SimpleNamespace(returncode=next(return_codes))
+        return next(return_codes)
 
-    monkeypatch.setattr(check.subprocess, "run", fake_run)
+    monkeypatch.setattr(check, "run_process", fake_run)
+    arguments = build_parser().parse_args([check.NAME, "--lint"])
 
-    assert check.execute(build_parser().parse_args([check.NAME])) == FAILED_EXIT_CODE
-    assert len(calls) == EXPECTED_COMMAND_CALLS
+    assert check.execute(arguments) == 1
+    assert len(calls) == EXPECTED_LINT_COMMANDS
+    assert "1 项检查失败" in capsys.readouterr().err
+
+
+def test_check_fix_flags_and_test_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command: tuple[str, ...], _root: Path) -> int:
+        calls.append(command)
+        return 0
+
+    monkeypatch.setattr(check, "run_process", fake_run)
+    parser = build_parser()
+
+    assert check.execute(parser.parse_args([check.NAME, "--lint", "--fix", "--unsafe-fixes"])) == 0
+    assert "--fix" in calls[0]
+    assert "--unsafe-fixes" in calls[0]
+    assert "--check" not in calls[1]
+
+    calls.clear()
+    assert check.execute(parser.parse_args([check.NAME, "--test"])) == 0
+    assert len(calls) == 1
+    assert "pytest" in calls[0]
+
+
+def test_donk_show_runs_tool_and_reports_chinese_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command: tuple[str, ...], _root: Path) -> int:
+        calls.append(command)
+        return 0
+
+    monkeypatch.setattr(donk, "run_process", fake_run)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), donk.NAME, "show"])
+
+    assert donk.execute(arguments) == 0
+    assert calls[0][3:5] == ("donk", "show")
+    assert "当前版本：1.2.3" in capsys.readouterr().out
+
+
+def test_donk_preserves_failure_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(donk, "run_process", lambda _command, _root: FAILED_EXIT_CODE)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), donk.NAME, "patch"])
+
+    assert donk.execute(arguments) == FAILED_EXIT_CODE
+
+
+def test_process_boundary_reports_failure_and_interrupt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class Result:
+        returncode = FAILED_EXIT_CODE
+
+    monkeypatch.setattr("aurora.commands.process.subprocess.run", lambda *_args, **_kwargs: Result())
+    assert run_process(("example",), tmp_path) == FAILED_EXIT_CODE
+    assert "命令失败" in capsys.readouterr().err
+
+    def interrupt(*_args: object, **_kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("aurora.commands.process.subprocess.run", interrupt)
+    assert run_process(("example",), tmp_path) == INTERRUPTED_EXIT_CODE

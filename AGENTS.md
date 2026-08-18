@@ -42,6 +42,12 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 当前不实现持久化、迁移、自动记忆、Inbox/Triage、并发/抢占、MCP、Platform、ops、Panel backend、sandbox、费用或生产化
 生命周期。重新加入任何一项前，先给出围绕 AgentTree 的真实用例、不变量和独立测试，不恢复旧兼容层。
 
+## Language and text
+
+- 项目文本以简体中文为默认和权威版本，包括 CLI 帮助与输出、错误说明、配置注释、默认 Prompt、README 和设计文档。
+- 代码标识符、协议字面量、外部 API 字段和必要的技术术语可以使用英文；面向人的完整句子优先使用中文。
+- 英文与日文翻译可以保留，但中文内容先更新；翻译冲突或落后时以中文为准。
+
 ## Runtime and quality
 
 - Python 3.12，使用 uv。
