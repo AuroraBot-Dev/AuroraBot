@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import argparse
 
 NAME = "check"
-_PATHS = ("aurora", "src", "tests")
+_PATHS = ("aurora", "ops", "src", "tests")
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -42,7 +42,7 @@ def execute(arguments: argparse.Namespace) -> int:
             )
         )
     if run_test:
-        commands.append(("uv", "run", "--no-sync", "pytest", "-q", "--cov=src", "--cov=aurora"))
+        commands.append(("uv", "run", "--no-sync", "pytest", "-q", "--cov=src", "--cov=aurora", "--cov=ops"))
     failures = sum(run_process(command, arguments.root) != 0 for command in commands)
     if failures:
         sys.stderr.write(f"\n{failures} 项检查失败。\n")

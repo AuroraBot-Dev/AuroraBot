@@ -20,6 +20,7 @@ message → model → assistant
 - 确定性的深度优先 AgentTree 循环；
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；
+- 同一操作资源目录提供 method/path 与斜杠文本入口，用于 AgentTree 监测、新运行和限定配置改动；
 - OpenAI-compatible `message → user` 纯适配；
 - 全离线 fake Model/Tool 测试。
 

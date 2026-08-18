@@ -4,14 +4,14 @@ version = "0.6.0"
 description = "以 AgentTree、同构 Agent 和四角色消息为核心的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
-dependencies = []
+dependencies = ["tomlkit>=0.15"]
 
 [project.scripts]
 aurora = "aurora.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["aurora", "aurora.*", "src", "src.*"]
+include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
 
 [dependency-groups]
 dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
@@ -66,7 +66,7 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "src", "tests"]
+include = ["aurora", "ops", "src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"

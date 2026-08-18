@@ -19,10 +19,11 @@ composition/{prompt,engine}.py 注册构造结果
         │
         ▼
 AuroraAssembly → AuroraRuntime.create_tree(message)
-        │
-        ▼
+        │                         ┌── OpsRuntime ← OperationSpec 注册目录
+        ├── AgentTree 快照 ──────→│   ├── method/path
+        │                         │   └── /斜杠文本
+        ▼                         └── ConfigAccess → config/（限定改动）
 AgentTreeRunner ─── PromptAssembler
-        │
         ├── Model.complete(ModelRequest)
         ├── Tool.execute(ToolCall)
         └── delegate → child AgentNode
@@ -42,6 +43,14 @@ aurora/
   composer.py      InstanceKey、组合上下文与只读实例集合
   runtime.py       执行项目组件注册并提供使用门面
   main.py          只解析顶层 CLI 并分派命令
+
+ops/
+  operations/      按领域注册操作资源
+  contracts.py     OperationSpec、结果与窄运行时端口
+  parser.py        斜杠文本参数解析
+  router.py        method/path 与文本共用路由
+  config.py        个人配置读取与限定写入
+  runtime.py       操作目录和端口门面
 ```
 
 `config.example/` 随源码发布，`config/` 只保存用户副本且不受 Git 跟踪。运行时不会隐式读取模板。配置模块不构造 Runner；
@@ -70,16 +79,28 @@ call 时完成节点，有 Tool call 时依次执行。普通工具结果追加�
 当前循环是单线程、内存内、无恢复的。这个限制用于保持语义透明；未来并发或持久化必须产生等价 AgentTree，而不能建立
 第二套运行模型。
 
+## Ops
+
+`runtime.ops` 是 AgentTree 热路径之外的统一监测与改动入口。同一份 `OperationSpec` 同时供
+`execute(method, path, params)` 和 `route_text("/command ...")` 使用，因此未来 HTTP、Console 或 Panel 适配器不再各自定义
+命令语义。当前目录覆盖操作自描述、运行状态、树与节点快照、新树启动、配置目录和配置读取。
+
+ops 通过协议接收组合根提供的能力，不导入 `aurora` 或 `src`。Runner 的观察回调只发布新的不可变 AgentTree；
+`AuroraRuntime` 保存每个 tree id 的最新快照，ops 不复制或修改树。配置改动仅限个人 `config/apps.toml` 与
+`config/extensions.toml` 的既有 `enabled` 字段，使用 TOML round-trip 写回以保留注释；`config.example/` 及未注册文件不可写。
+是否需要重启由操作结果中的 `restart_required` 明示。
+
 ## 包依赖
 
 ```text
 contracts ← prompt
     ▲         ▲
     ├── ai    │
-    └──── engine ← aurora
+    └──── engine ← aurora → ops
 ```
 
 - `contracts` 只依赖标准库；
 - `prompt` 和 `ai` 只依赖 contracts；
 - `engine` 只依赖 contracts 与 prompt；
+- `ops` 只依赖标准库和 tomlkit，与 `src` 互不导入；
 - `aurora` 负责配置和具体装配。

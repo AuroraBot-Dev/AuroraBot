@@ -46,9 +46,12 @@ class AuroraConfig:
 
     _values: Mapping[ConfigKey[object], object]
     _sources: tuple[ConfigSource, ...] = ()
+    _project_root: Path | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_values", MappingProxyType(dict(self._values)))
+        if self._project_root is not None:
+            object.__setattr__(self, "_project_root", self._project_root.resolve())
 
     def get[T](self, key: ConfigKey[T]) -> T:
         try:
@@ -63,7 +66,7 @@ class AuroraConfig:
         if stored_key not in values:
             raise KeyError(f"不能替换尚未注册的配置：{key.name}")
         values[stored_key] = value
-        return AuroraConfig(values, self._sources)
+        return AuroraConfig(values, self._sources, self._project_root)
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -72,6 +75,12 @@ class AuroraConfig:
     @property
     def sources(self) -> tuple[ConfigSource, ...]:
         return self._sources
+
+    @property
+    def project_root(self) -> Path:
+        if self._project_root is None:
+            raise RuntimeError("配置没有关联项目根目录")
+        return self._project_root
 
     def source(self, name: str) -> ConfigSource:
         for source in self._sources:
@@ -101,7 +110,7 @@ class ConfigCollector:
         self._values[cast("ConfigKey[object]", key)] = parser(self._project_root / relative_path)
 
     def build(self) -> AuroraConfig:
-        return AuroraConfig(self._values, tuple(self._sources))
+        return AuroraConfig(self._values, tuple(self._sources), self._project_root)
 
 
 type ConfigRegistrar = Callable[[ConfigCollector], None]
