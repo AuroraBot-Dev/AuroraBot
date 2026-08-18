@@ -1,599 +1,149 @@
-"""AgentEngine — 单进程 asyncio 独占的完整 Agent 运行时。
-
-单一存储（SQLite v10 即归档）、无租约无乐观锁。store 与纯 handler 由单一
-事件循环串行拥有；模型、工具与记忆 Port 使用 async，记忆实现把阻塞 I/O
-委派到受控工作线程。终态 Task 留在 SQLite，不做文件归档。
-"""
+"""AgentTree 的确定性单循环运行时。"""
 
 from __future__ import annotations
 
-import asyncio
-import logging
-from enum import StrEnum
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from src.contracts import (
-    ActivityRequest,
-    AgentHandler,
-    AgentInstance,
-    AgentLimits,
-    AgentMessage,
-    AmpEnvelope,
-    CapabilityCatalogSnapshot,
-    EngineConfiguration,
-    MemoryContextSnapshot,
-    MemoryEntry,
-    MemoryQuery,
+    AgentTree,
+    ChatMessage,
+    Model,
     ModelRequest,
-    OutputStreamItem,
-    OutputStreamPage,
-    TaskState,
-    TaskStatus,
-    TriageBatch,
+    Tool,
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    TreeStatus,
 )
-from src.engine.authorize import apply_authorized_decision, apply_failure, handle_claim
-from src.engine.debug import agent_detail as build_agent_detail
-from src.engine.debug import reject_active_legacy_workspace
-from src.engine.debug import task_detail as build_task_detail
-from src.engine.ingress import persist_amp
-from src.engine.store import SQLiteRuntimeStore
-from src.engine.tool_registry import ToolRegistry
-from src.utils import get_logger, utc_now
-
-logger = get_logger("aurora.engine")
 
 if TYPE_CHECKING:
-    from src.contracts.extension import ContextContributor, Projector
-    from src.contracts.memory import MemoryStore
-    from src.contracts.model import ModelProvider
-    from src.contracts.tool import EffectToolBinding
+    from collections.abc import Iterable
+
+    from src.prompt import PromptAssembler
+
+DELEGATE_TOOL = "delegate"
+DELEGATE_DEFINITION = ToolDefinition(
+    DELEGATE_TOOL,
+    "Create a child Agent for one focused assignment.",
+    {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "model": {"type": "string"},
+            "tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
+            "instruction": {"type": "string"},
+        },
+        "required": ["profile", "model", "instruction"],
+        "additionalProperties": False,
+    },
+)
 
 
-def _merge_context_snapshots(snapshots: tuple[MemoryContextSnapshot, ...]) -> MemoryContextSnapshot:
-    """把多个 ContextContributor 的只读快照合并为固定上下文。
-
-    每个贡献者必须独立遵守 MemoryQuery 的预算与排序；合并不再裁剪，只做
-    按序拼接与去重。未来引入非记忆贡献时应扩展为 ContextPatch，而不是在
-    本函数里继续堆字段。
-    """
-    if not snapshots:
-        return MemoryContextSnapshot()
-    if len(snapshots) == 1:
-        return snapshots[0]
-
-    def dedupe(values: tuple[Any, ...]) -> tuple[Any, ...]:
-        return tuple(dict.fromkeys(values))
-
-    windows = dedupe(tuple(message for snapshot in snapshots for message in snapshot.window))
-    remote_summaries = dedupe(tuple(item for snapshot in snapshots for item in snapshot.remote_summaries))
-    remote_window = dedupe(tuple(item for snapshot in snapshots for item in snapshot.remote_window))
-    facts = dedupe(tuple(fact for snapshot in snapshots for fact in snapshot.relevant_facts))
-    return MemoryContextSnapshot(
-        summary="\n\n".join(snapshot.summary for snapshot in snapshots if snapshot.summary),
-        window=tuple(windows),
-        remote_summaries=tuple(remote_summaries),
-        remote_window=tuple(remote_window),
-        relevant_facts=tuple(facts),
-    )
-
-
-class _Msg(StrEnum):
-    """本文件内所有用户或模型可见的硬编码文本。"""
-
-    HANDLERS_MISMATCH = "Agent handlers must exactly match configured profiles"
-    ROOT_PROFILE_MISSING = "root Agent profile is not configured"
-    MAX_TURNS_POSITIVE = "max_turns must be positive"
-    INVALID_TOOL_OUTCOME = "invalid Tool outcome"
-
-
-def _memory_turn_input(message: AgentMessage) -> str:
-    """从消息投影提取记忆窗口的 user 侧文本。"""
-    payload = message.payload
-    for key in ("batch", "context_events"):
-        container = payload.get(key)
-        if isinstance(container, dict):
-            container = container.get("events")
-        if isinstance(container, list):
-            summaries = [
-                str(item.get("summary", "")) for item in container if isinstance(item, dict) and item.get("summary")
-            ]
-            if summaries:
-                return "；".join(summaries)
-    if isinstance(payload.get("instruction"), str):
-        return payload["instruction"]
-    if message.type.startswith("tool."):
-        request = payload.get("request")
-        if isinstance(request, dict):
-            return f"{message.type}: {request.get('parameters', {})}"
-        return message.type
-    if isinstance(payload.get("summary"), str) and payload["summary"].strip():
-        return payload["summary"]
-    return message.type
-
-
-class _MemoryStoreProjector:
-    """把终态记忆事实投影到 MemoryStore 的引擎本地回退 Projector。"""
-
-    def __init__(self, memory_store: MemoryStore) -> None:
-        self._memory_store = memory_store
-
-    async def project(self, facts: tuple[dict[str, Any], ...]) -> None:
-        for raw in facts:
-            entry = MemoryEntry.from_dict(raw)
-            try:
-                await self._memory_store.remember(entry)
-            except Exception as error:
-                logger.warning(
-                    "Memory projector remember failed task_id=%s error_type=%s",
-                    entry.task_id,
-                    type(error).__name__,
-                )
-
-
-class AgentEngine:
-    """组合持久化状态、模型、工具与自动记忆服务的完整 Agent 引擎。"""
+class AgentTreeRunner:
+    """按深度优先顺序运行一棵 AgentTree，直到 root 终止。"""
 
     def __init__(
         self,
-        configuration: EngineConfiguration,
-        handlers: dict[str, AgentHandler],
+        model: Model,
+        assembler: PromptAssembler,
+        tools: Iterable[Tool] = (),
         *,
-        model_provider: ModelProvider,
-        tool_registry: ToolRegistry | None = None,
-        memory_store: MemoryStore | None = None,
-        context_contributors: tuple[ContextContributor, ...] | None = None,
-        projectors: tuple[Projector, ...] | None = None,
-        idle_wait_seconds: float = 1.0,
+        max_depth: int = 4,
+        max_nodes: int = 32,
+        max_steps: int = 256,
     ) -> None:
-        self.configuration = configuration
-        self._profiles = {profile.id: profile for profile in configuration.profiles}
-        if set(self._profiles) != set(handlers):
-            raise ValueError(_Msg.HANDLERS_MISMATCH)
-        if configuration.limits.root_profile not in self._profiles:
-            raise ValueError(_Msg.ROOT_PROFILE_MISSING)
-        self._handlers = handlers
-        self._model_provider = model_provider
-        self._memory_store = memory_store
-        self._context_contributors = (
-            tuple(context_contributors)
-            if context_contributors is not None
-            else (memory_store,)
-            if memory_store is not None
-            else ()
-        )
-        self._projectors = (
-            tuple(projectors)
-            if projectors is not None
-            else (_MemoryStoreProjector(memory_store),)
-            if memory_store is not None
-            else ()
-        )
-        self._idle_wait_seconds = idle_wait_seconds
-        self._workspace = Path(configuration.workspace)
-        reject_active_legacy_workspace(self._workspace)
-        self.store = SQLiteRuntimeStore(self._workspace / "runtime.sqlite3")
-        self.store.initialize()
-        self._tools = tool_registry if tool_registry is not None else ToolRegistry(self.store)
-        self._capability_catalog: CapabilityCatalogSnapshot | None = None
-        self._pump_lock = asyncio.Lock()
-        self._shutdown_lock = asyncio.Lock()
-        self._closed = False
-        self._model_dispatch_task: asyncio.Task[None] | None = None
-        self._model_activity_tasks: dict[asyncio.Task[None], str] = {}
-        self._model_dispatch_wake = asyncio.Event()
-        self._tool_dispatch_task: asyncio.Task[None] | None = None
-        self._tool_dispatch_wake = asyncio.Event()
-        self._tools_recovered = False
-        self._memory_tasks: set[asyncio.Task[None]] = set()
-        self._wake = asyncio.Event()
-        logger.info(
-            "Agent engine initialized workspace=%s profiles=%d active_tasks=%d",
-            self._workspace,
-            len(self._profiles),
-            self.store.counts()["active_tasks"],
-        )
+        if min(max_depth, max_nodes, max_steps) <= 0:
+            raise ValueError("runner limits must be positive")
+        registered = tuple(tools)
+        by_name = {tool.definition.name: tool for tool in registered}
+        if len(by_name) != len(registered):
+            raise ValueError("Tool names must be unique")
+        if DELEGATE_TOOL in by_name:
+            raise ValueError("delegate is reserved by AgentTreeRunner")
+        self._model = model
+        self._assembler = assembler
+        self._tools = MappingProxyType(by_name)
+        self._definitions = (DELEGATE_DEFINITION, *(tool.definition for tool in by_name.values()))
+        self._max_depth = max_depth
+        self._max_nodes = max_nodes
+        self._max_steps = max_steps
 
-    # === 配置与能力目录 ===
-
-    @property
-    def limits(self) -> AgentLimits:
-        return self.configuration.limits
-
-    @property
-    def capability_catalog(self) -> CapabilityCatalogSnapshot:
-        return self._capability_catalog or CapabilityCatalogSnapshot()
-
-    def install_capability_catalog(self, catalog: CapabilityCatalogSnapshot) -> None:
-        self._capability_catalog = catalog
-
-    def bind_tool_executors(self, bindings: tuple[EffectToolBinding, ...]) -> None:
-        catalog = self._tools.bind(bindings)
-        self.install_capability_catalog(CapabilityCatalogSnapshot(catalog.capabilities))
-
-    # === 记忆（被动服务） ===
-
-    async def recall_memory(self, query: MemoryQuery) -> MemoryContextSnapshot:
-        if not self._context_contributors:
-            return MemoryContextSnapshot()
-        results = await asyncio.gather(
-            *(contributor.recall(query) for contributor in self._context_contributors),
-            return_exceptions=True,
-        )
-        snapshots = tuple(result for result in results if isinstance(result, MemoryContextSnapshot))
-        for contributor, result in zip(self._context_contributors, results, strict=True):
-            if isinstance(result, BaseException):
-                logger.warning(
-                    "Context contributor recall failed contributor=%s error_type=%s",
-                    type(contributor).__name__,
-                    type(result).__name__,
-                )
-        return _merge_context_snapshots(snapshots)
-
-    def completed_memory_entries(self) -> tuple[MemoryEntry, ...]:
-        entries = []
-        for task in self.store.tasks():
-            if task.autonomous or task.status not in {TaskStatus.COMPLETED, TaskStatus.SILENT}:
+    async def run(self, tree: AgentTree) -> AgentTree:
+        current = tree
+        for _ in range(self._max_steps):
+            if current.status != TreeStatus.RUNNING:
+                return current
+            node = current.ready_node()
+            if node is None:
+                raise RuntimeError("running AgentTree has no ready node")
+            if node.pending_calls:
+                current = await self._execute_call(current, node.node_id, node.pending_calls[0])
                 continue
-            agent = self.store.get_agent(task.root_agent_id)
-            if agent is None:
-                continue
-            entries.append(
-                MemoryEntry(
-                    task_id=task.task_id,
-                    scope=task.session_id,
-                    input_summary=task.root_summary,
-                    outcome_summary=agent.last_summary or None,
-                    created_at=task.updated_at,
-                    fact_candidates=self._memory_candidates(task.task_id),
-                )
-            )
-        return tuple(entries)
-
-    def _memory_candidates(self, task_id: str) -> tuple[str, ...]:
-        candidates: list[str] = []
-        for event in self.store.events_for_task(task_id):
-            payload = event.get("payload")
-            if not isinstance(payload, dict):
-                continue
-            raw = payload.get("memory_candidates")
-            if isinstance(raw, list):
-                candidates.extend(str(item) for item in raw if isinstance(item, str) and item.strip())
-        return tuple(dict.fromkeys(candidates))
-
-    # === 摄入 ===
-
-    async def submit_amp(self, value: object) -> str:
-        amp = AmpEnvelope.parse(value)
-        if persist_amp(self, amp):
-            superseded = self.store.supersede_session_generation(amp, self.configuration.triage)
-            self._cancel_model_activities(superseded)
-        self._wake.set()
-        return amp.header.message_id
-
-    def consume_tool_receipt(self, amp: AmpEnvelope) -> None:
-        """工具回执 AMP：校验并交给 store 幂等消费。"""
-        status = amp.payload.type.removeprefix("tool.")
-        data = amp.payload.data
-        request_id = data.get("request_id")
-        if not isinstance(request_id, str) or not request_id:
-            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
-        capability = data.get("capability")
-        if not isinstance(capability, str) or not capability:
-            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
-        error = data.get("error")
-        result = data.get("result")
-        if (status == "succeeded" and error is not None) or (
-            status != "succeeded" and (not error or result is not None)
-        ):
-            raise ValueError(_Msg.INVALID_TOOL_OUTCOME)
-        self.store.consume_tool_receipt(
-            request_id=request_id,
-            event_type=amp.payload.type,
-            summary=amp.payload.summary,
-            payload={
-                "request_id": request_id,
-                "capability": capability,
-                "result": result,
-                "error": error,
-                "source": amp.header.source,
-            },
-        )
-
-    async def pump(self, max_turns: int | None = None) -> dict[str, Any]:
-        async with self._pump_lock:
-            admitted = self._triage_inbox()
-            expired = self.store.expire_tasks()
-            processed, failed = await self._pump_turns(max_turns)
-            self._ensure_model_dispatcher()
-            self._ensure_tool_dispatcher()
-            self._project_memory()
-            # 让出控制权：后台模型/工具派发任务依赖事件循环调度，pump 无消息可
-            # 处理时若不让出，has_work 自旋会饿死派发任务与 console/平台任务
-            await asyncio.sleep(0)
-            return {
-                "admitted_task_ids": admitted,
-                "expired_task_ids": expired,
-                "processed_message_ids": processed,
-                "failed_message_ids": failed,
-                "model_dispatch_active": self._model_dispatch_task is not None,
-                "tool_dispatch_active": self._tool_dispatch_task is not None,
-            }
-
-    def _triage_inbox(self) -> tuple[str, ...]:
-        """到期批次创建入口 triage Task；模型判断走正常 Agent turn 链路。"""
-        batches = self.store.claim_triage_batches(self.configuration.triage, self.limits.model_concurrency)
-        created: list[str] = []
-        for batch in batches:
-            task_id = self._create_triage_task(batch)
-            if task_id is not None:
-                created.append(task_id)
-        return tuple(created)
-
-    def _create_triage_task(self, batch: TriageBatch) -> str | None:
-        priority = max((event.priority for event in batch.events), default=100)
-        created = self.store.create_triage_task(
-            batch,
-            triage_profile=self.limits.root_profile,
-            interactive_budget=self.configuration.interactive_budget,
-            autonomous_budget=self.configuration.autonomous_budget,
-            priority=priority,
-        )
-        return created[0] if created is not None else None
-
-    async def _pump_turns(self, max_turns: int | None) -> tuple[list[str], list[str]]:
-        limit = self.limits.turn_concurrency if max_turns is None else max_turns
-        if limit <= 0:
-            raise ValueError(_Msg.MAX_TURNS_POSITIVE)
-        processed: list[str] = []
-        failed: list[str] = []
-        for _ in range(limit):
-            claim = self.store.claim_message()
-            if claim is None:
-                break
-            message, agent, task = claim
             try:
-                await self._append_memory_turn(task.session_id, "user", _memory_turn_input(message))
-                memory = await self.recall_memory(MemoryQuery(task.root_summary, task.session_id))
-                decision, profile_id = handle_claim(self, message, agent, task, memory)
-                apply_authorized_decision(self, message, agent, profile_id, decision)
-                if decision.completion is not None:
-                    await self._append_memory_turn(task.session_id, "assistant", decision.completion.summary)
-                processed.append(message.message_id)
+                definitions = tuple(definition for definition in self._definitions if definition.name in node.tools)
+                response = await self._model.complete(
+                    ModelRequest(node.model, self._assembler.assemble(current, node.node_id), definitions)
+                )
             except Exception as error:
-                logger.log(
-                    logging.ERROR,
-                    "Agent turn failed task_id=%s agent_id=%s message_id=%s error_type=%s",
-                    agent.task_id,
-                    agent.agent_id,
-                    message.message_id,
-                    type(error).__name__,
-                )
-                try:
-                    apply_failure(self, message, agent, f"{type(error).__name__}: {error}")
-                except Exception:
-                    self.store.fail_message(message.message_id, str(error))
-                failed.append(message.message_id)
-        return processed, failed
-
-    async def _append_memory_turn(self, scope: str, role: str, content: str) -> None:
-        """记录一轮对话到记忆窗口（短期历史）。"""
-        if self._memory_store is None or not content.strip():
-            return
-        await self._memory_store.append_turn(
-            scope,
-            role=role,
-            content=content,
-            at=utc_now(),
-        )
-
-    def _project_memory(self) -> None:
-        """把已提交终态事实分发给全部 Projector 贡献。"""
-        facts = tuple(entry.to_dict() for entry in self.completed_memory_entries())
-        if not facts:
-            return
-        for index, projector in enumerate(self._projectors):
-            task = asyncio.create_task(
-                self._run_projector(projector, facts),
-                name=f"aurora-projector-{index}",
-            )
-            self._memory_tasks.add(task)
-            task.add_done_callback(self._memory_tasks.discard)
-
-    async def _run_projector(self, projector: Projector, facts: tuple[dict[str, Any], ...]) -> None:
-        try:
-            await projector.project(facts)
-        except Exception as error:
-            logger.warning(
-                "Projector failed projector=%s error_type=%s",
-                type(projector).__name__,
-                type(error).__name__,
-            )
-
-    # === 模型派发 ===
-
-    def _ensure_model_dispatcher(self) -> None:
-        self._model_dispatch_wake.set()
-        if self._model_dispatch_task is None or self._model_dispatch_task.done():
-            self._model_dispatch_task = asyncio.create_task(self._dispatch_models(), name="aurora-model-activities")
-
-    async def _dispatch_models(self) -> None:
-        running: set[asyncio.Task[None]] = set()
-        while True:
-            self._model_dispatch_wake.clear()
-            capacity = self.limits.model_concurrency - len(running)
-            for row in self.store.claim_activities("model", capacity) if capacity > 0 else ():
-                activity = self.store._activity(row)
-                task = asyncio.create_task(self._execute_model(activity), name=f"aurora-model-{activity.activity_id}")
-                self._model_activity_tasks[task] = activity.activity_id
-                task.add_done_callback(self._model_activity_tasks.pop)
-                running.add(task)
-            if not running:
-                return
-            wake_task: asyncio.Task[bool] | None = None
-            waiters: set[asyncio.Task[Any]] = set(running)
-            if len(running) < self.limits.model_concurrency:
-                wake_task = asyncio.create_task(self._model_dispatch_wake.wait())
-                waiters.add(wake_task)
-            done, _pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
-            completed = done & running
-            running.difference_update(completed)
-            if wake_task is not None and not wake_task.done():
-                wake_task.cancel()
-                await asyncio.gather(wake_task, return_exceptions=True)
-            if completed:
-                await asyncio.gather(*completed, return_exceptions=True)
-            self._wake.set()
-
-    def _ensure_tool_dispatcher(self) -> None:
-        self._tool_dispatch_wake.set()
-        if self._tool_dispatch_task is None or self._tool_dispatch_task.done():
-            self._tool_dispatch_task = asyncio.create_task(self._dispatch_tools(), name="aurora-tool-activities")
-
-    async def _dispatch_tools(self) -> None:
-        await self._tools.execute_pending(
-            self.limits.tool_concurrency,
-            wake=self._tool_dispatch_wake,
-            recover=not self._tools_recovered,
-        )
-        self._tools_recovered = True
-        self._wake.set()
-
-    def _cancel_model_activities(self, activity_ids: tuple[str, ...]) -> None:
-        targets = set(activity_ids)
-        for task, activity_id in tuple(self._model_activity_tasks.items()):
-            if activity_id in targets and not task.done():
-                task.cancel()
-
-    async def _execute_model(self, activity: ActivityRequest) -> None:
-        task = self.store.get_task(activity.task_id)
-        if task is None or task.terminal:
-            return
-        try:
-            result = await self._model_provider.complete(ModelRequest.from_dict(activity.request))
-        except asyncio.CancelledError:
-            self.store.complete_model_activity(activity.activity_id, None, "cancelled")
-            raise
-        except Exception as error:
-            self.store.complete_model_activity(activity.activity_id, None, f"{type(error).__name__}: {error}")
-            return
-        self.store.complete_model_activity(activity.activity_id, result.to_dict(), None)
-
-    # === 查询代理 ===
-
-    def tasks(self) -> tuple[TaskState, ...]:
-        return self.store.tasks()
-
-    def get_task(self, task_id: str) -> TaskState | None:
-        return self.store.get_task(task_id)
-
-    def get_agent(self, agent_id: str) -> AgentInstance | None:
-        return self.store.get_agent(agent_id)
-
-    def task_detail(self, task_id: str) -> dict[str, Any] | None:
-        return build_task_detail(self.store, task_id)
-
-    def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
-        return build_agent_detail(self.store, agent_id)
-
-    def status(self) -> dict[str, Any]:
-        return {
-            **self.store.counts(),
-            "model_dispatch_active": self._model_dispatch_task is not None and not self._model_dispatch_task.done(),
-            "active_model_activities": len(self._model_activity_tasks),
-            "tool_dispatch_active": self._tool_dispatch_task is not None and not self._tool_dispatch_task.done(),
-        }
-
-    def output_stream(self, cursor: int = 0, *, limit: int = 64) -> OutputStreamPage:
-        """返回游标之后新增的用户可见模型输出（只读）。"""
-        rows = self.store.recent_outputs(cursor, limit=limit)
-        items = tuple(OutputStreamItem(**row) for row in rows)
-        next_cursor = items[-1].cursor if items else cursor
-        return OutputStreamPage(items=items, next_cursor=next_cursor)
-
-    def output_tail_cursor(self) -> int:
-        """当前输出流末尾游标：新前端从该游标起订阅，避免重放历史。"""
-        return self.store.recent_outputs_tail()
-
-    def list_tasks(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
-        """Task 列表投影（观察操作）。"""
-        rows = self.store.tasks(status=status, limit=limit)
-        return [row.to_dict() for row in rows]
-
-    def list_agents(self, *, limit: int = 64) -> list[dict[str, Any]]:
-        """Agent 列表投影。"""
-        return [row.to_dict() for row in self.store.agents(limit=limit)]
-
-    def query_events(
-        self,
-        *,
-        session_id: str | None = None,
-        task_id: str | None = None,
-        event_type: str | None = None,
-        after_id: int = 0,
-        limit: int = 64,
-    ) -> list[dict[str, Any]]:
-        """因果事件流查询（观察操作）。"""
-        return list(
-            self.store.query_events(
-                session_id=session_id, task_id=task_id, event_type=event_type, after_id=after_id, limit=limit
-            )
-        )
-
-    def session_export(self, session_id: str) -> dict[str, Any] | None:
-        """会话导出：因果事件与模型输出投影。"""
-        return self.store.session_export(session_id)
-
-    def has_work(self) -> bool:
-        counts = self.store.counts()
-        return (
-            self.store.has_due_inbox()
-            or counts["pending_messages"] > 0
-            or self.store.has_claimable_external_activity(self.limits.tool_concurrency)
-            or self.store.has_recoverable_tool()
-        )
-
-    def cancel_task(self, task_id: str, reason: str) -> None:
-        self._cancel_model_activities(self.store.cancel_task(task_id, reason))
-
-    # === 生命周期 ===
-
-    async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
-        stop = stop_event or asyncio.Event()
-        while not stop.is_set():
-            if self.has_work():
-                await self.pump()
+                current = current.fail(node.node_id, f"model failed: {error}")
                 continue
-            if self.store.counts()["pending_model_activities"] > 0:
-                self._ensure_model_dispatcher()
-            self._wake.clear()
-            delay = self.store.inbox_delay_seconds()
-            timeout = self._idle_wait_seconds if delay is None else min(self._idle_wait_seconds, max(delay, 0.01))
-            waiters = (asyncio.create_task(self._wake.wait()), asyncio.create_task(stop.wait()))
-            try:
-                await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-            finally:
-                for task in waiters:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*waiters, return_exceptions=True)
+            if response.role != "assistant":
+                current = current.fail(node.node_id, "model must return an assistant message")
+                continue
+            current = current.append(node.node_id, response)
+            if not response.tool_calls:
+                current = current.complete(node.node_id, response.content)
+        raise RuntimeError(f"AgentTree exceeded step limit {self._max_steps}")
 
-    async def shutdown(self) -> None:
-        async with self._shutdown_lock:
-            if self._closed:
-                return
-            self._closed = True
-            if self._model_dispatch_task is not None:
-                self._model_dispatch_task.cancel()
-            if self._tool_dispatch_task is not None:
-                self._tool_dispatch_task.cancel()
-            for task in tuple(self._model_activity_tasks):
-                task.cancel()
-            pending: tuple[asyncio.Task[None], ...] = (*self._model_activity_tasks, *self._memory_tasks)
-            if self._model_dispatch_task is not None:
-                pending = (*pending, self._model_dispatch_task)
-            if self._tool_dispatch_task is not None:
-                pending = (*pending, self._tool_dispatch_task)
-            loop = asyncio.get_running_loop()
-            current = [task for task in pending if task.get_loop() is loop]
-            await asyncio.gather(*current, return_exceptions=True)
+    async def _execute_call(self, tree: AgentTree, node_id: str, call: ToolCall) -> AgentTree:
+        if call.name not in tree.node(node_id).tools:
+            return tree.append(
+                node_id,
+                ChatMessage.tool(call.call_id, f"tool is not visible to this Agent: {call.name}", is_error=True),
+            )
+        if call.name == DELEGATE_TOOL:
+            return self._delegate(tree, node_id, call)
+        tool = self._tools.get(call.name)
+        if tool is None:
+            return tree.append(node_id, ChatMessage.tool(call.call_id, f"unknown tool: {call.name}", is_error=True))
+        try:
+            output = await tool.execute(call)
+        except Exception as error:
+            output = ToolOutput(f"tool failed: {error}", is_error=True)
+        return tree.append(node_id, ChatMessage.tool(call.call_id, output.content, is_error=output.is_error))
+
+    def _delegate(self, tree: AgentTree, node_id: str, call: ToolCall) -> AgentTree:
+        profile = call.arguments.get("profile")
+        model = call.arguments.get("model")
+        tool_names = call.arguments.get("tools", [])
+        instruction = call.arguments.get("instruction")
+        valid_tools = isinstance(tool_names, list) and all(isinstance(name, str) and name for name in tool_names)
+        if (
+            not isinstance(profile, str)
+            or not profile.strip()
+            or not isinstance(model, str)
+            or not model.strip()
+            or not valid_tools
+            or not isinstance(instruction, str)
+            or not instruction.strip()
+        ):
+            return tree.append(
+                node_id,
+                ChatMessage.tool(
+                    call.call_id,
+                    "delegate requires non-empty profile, model and instruction plus a string tools array",
+                    is_error=True,
+                ),
+            )
+        requested_tools = frozenset(tool_names)
+        available_tools = frozenset(definition.name for definition in self._definitions)
+        unknown_tools = requested_tools - available_tools
+        if unknown_tools:
+            names = ", ".join(sorted(unknown_tools))
+            return tree.append(node_id, ChatMessage.tool(call.call_id, f"unknown child tools: {names}", is_error=True))
+        if len(tree.nodes) >= self._max_nodes:
+            return tree.append(node_id, ChatMessage.tool(call.call_id, "AgentTree node limit reached", is_error=True))
+        if tree.depth(node_id) >= self._max_depth:
+            return tree.append(node_id, ChatMessage.tool(call.call_id, "AgentTree depth limit reached", is_error=True))
+        return tree.spawn(node_id, call, profile.strip(), model.strip(), requested_tools, instruction.strip())

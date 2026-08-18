@@ -1,7 +1,0 @@
-# 开发环境覆盖项。
-# 本文件只覆盖 runtime.toml 中的进程配置；文件名必须与其中 runtime.profile
-# 一致。日志级别通过 config/logging.toml 配置，不在此文件覆盖。
-# Panel 接管配置编辑前，请勿把模型、Agent、App 或存储结构写进本文件。
-
-[runtime]
-profile = "dev"

@@ -1,8 +1,5 @@
-"""AI 模型网关公开 API。
+"""Provider 协议边界适配。"""
 
-模型定价与能力以 models.dev 为第一信息源，数据缓存于 ``data/ai/`` 目录。
-"""
+from src.ai.openai import to_openai_messages, to_openai_tools
 
-from src.ai.gateway import ModelGatewayService
-
-__all__ = ["ModelGatewayService"]
+__all__ = ["to_openai_messages", "to_openai_tools"]

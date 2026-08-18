@@ -1,445 +1,207 @@
-"""AgentEngine 最小因果闭环。"""
-
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
 
-from src.agents.triage import TriageAgent
+import pytest
+
 from src.contracts import (
-    AgentContext,
-    AgentDecision,
-    AgentLimits,
-    AgentProfile,
-    CapabilityDescriptor,
-    Completion,
-    EffectToolBinding,
-    EngineConfiguration,
-    MemoryContextSnapshot,
-    MemoryEntry,
-    MemoryQuery,
+    AgentStatus,
+    AgentTree,
+    ChatMessage,
     ModelRequest,
-    ModelResult,
-    ModelUsage,
-    TaskLimits,
     ToolCall,
-    ToolExecutionRequest,
-    ToolRequest,
-    TriageLimits,
-    new_amp,
-    tool_receipt_amp,
+    ToolDefinition,
+    ToolOutput,
+    TreeStatus,
 )
-from src.engine.runtime import AgentEngine
+from src.engine import AgentTreeRunner
+from src.prompt import PromptAssembler, PromptCatalog
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-
-class _CompletingHandler:
-    def handle(self, context: AgentContext) -> AgentDecision:
-        return AgentDecision(completion=Completion(f"completed: {context.task.root_summary}"))
+EXPECTED_DELEGATION_NODES = 2
 
 
-class _UnusedModelProvider:
-    async def complete(self, request: ModelRequest) -> ModelResult:
-        return ModelResult(
-            request.role,
-            frozenset({"chat", "structured_output"}),
-            "normalized",
-            "",
-            {"action": "process", "summary": "hello", "reason": "test"},
-            ModelUsage(),
-            0.0,
+@dataclass(slots=True)
+class FakeModel:
+    responses: list[ChatMessage]
+    requests: list[ModelRequest] = field(default_factory=list)
+
+    async def complete(self, request: ModelRequest) -> ChatMessage:
+        self.requests.append(request)
+        return self.responses.pop(0)
+
+
+class EchoTool:
+    @property
+    def definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            "echo",
+            "Echo one value.",
+            {"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
         )
 
+    async def execute(self, call: ToolCall) -> ToolOutput:
+        return ToolOutput(str(call.arguments["value"]))
 
-def test_engine_owns_complete_pump(tmp_path: Path) -> None:
-    async def exercise() -> None:
-        profile = AgentProfile(
-            id="test.root",
-            implementation="unused",
-            model_role="test",
-            capabilities=frozenset(),
-            can_delegate=False,
-            child_profiles=frozenset(),
+
+class FailingTool(EchoTool):
+    async def execute(self, call: ToolCall) -> ToolOutput:
+        raise RuntimeError(str(call.arguments.get("error", "broken")))
+
+
+def _assembler() -> PromptAssembler:
+    return PromptAssembler(
+        PromptCatalog(
+            ("You are Aurora.",),
+            {"root": "Solve the whole task.", "worker": "Solve only the assigned part."},
         )
-        limits = AgentLimits(root_profile=profile.id, worker_profile=profile.id)
-        configuration = EngineConfiguration(
-            workspace=str(tmp_path / "engine"),
-            profiles=(profile,),
-            limits=limits,
-            interactive_budget=TaskLimits(1, 1, 30.0),
-            autonomous_budget=TaskLimits(1, 1, 30.0),
-            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
-        )
-        engine = AgentEngine(
-            configuration,
-            {profile.id: _CompletingHandler()},
-            model_provider=_UnusedModelProvider(),
-        )
-        engine.bind_tool_executors(())
-        try:
-            message_id = await engine.submit_amp(
-                new_amp(
-                    event_type="message.received",
-                    session_id="test-session",
-                    summary="hello",
-                    data={"text": "hello"},
-                    source_app="test",
-                    source_instance="local",
-                ).to_dict()
-            )
-            assert engine.status()["inbox_events"] == 1
-            result = await engine.pump()
-
-            assert message_id
-            assert len(result["admitted_task_ids"]) == 1
-            assert len(result["processed_message_ids"]) == 1
-            task = engine.task_detail(result["admitted_task_ids"][0])
-            assert task is not None
-            assert task["task"]["status"] == "COMPLETED"
-        finally:
-            await engine.shutdown()
-
-    asyncio.run(exercise())
+    )
 
 
-def test_engine_recalls_before_handler_and_remembers_only_interactive_completion(tmp_path: Path) -> None:
-    events: list[tuple[str, object]] = []
+def test_root_completes_one_message_assistant_loop() -> None:
+    model = FakeModel([ChatMessage.assistant("done")])
+    tree = AgentTree.create("tree", "root", "root", "root-model", "hello")
 
-    class Memory:
-        async def recall(self, query: MemoryQuery) -> MemoryContextSnapshot:
-            events.append(("recall", query))
-            return MemoryContextSnapshot(relevant_facts=(f"memory:{query.query}",))
+    result = asyncio.run(AgentTreeRunner(model, _assembler()).run(tree))
 
-        async def remember(self, entry: MemoryEntry) -> bool:
-            events.append(("remember", entry))
-            return True
-
-        async def append_turn(self, scope: str, *, role: str, content: str, at: str) -> None:  # noqa: ARG002
-            events.append(("append_turn", role))
-
-    class Handler:
-        def handle(self, context: AgentContext) -> AgentDecision:
-            events.append(("handler", context.task.root_summary))
-            assert context.memory.relevant_facts == (f"memory:{context.task.root_summary}",)
-            return AgentDecision(completion=Completion(f"completed: {context.task.root_summary}"))
-
-    async def exercise() -> None:
-        profile = AgentProfile(
-            "test.root",
-            "unused",
-            "test",
-            frozenset(),
-            can_delegate=False,
-            child_profiles=frozenset(),
-        )
-        configuration = EngineConfiguration(
-            workspace=str(tmp_path / "engine"),
-            profiles=(profile,),
-            limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
-            interactive_budget=TaskLimits(1, 1, 30.0),
-            autonomous_budget=TaskLimits(1, 1, 30.0),
-            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
-        )
-        engine = AgentEngine(
-            configuration,
-            {profile.id: Handler()},
-            model_provider=_UnusedModelProvider(),
-            memory_store=Memory(),
-        )
-        engine.bind_tool_executors(())
-        try:
-            await engine.submit_amp(
-                new_amp(
-                    event_type="message.received",
-                    session_id="interactive",
-                    summary="hello",
-                    data={"text": "hello"},
-                    source_app="test",
-                    source_instance="local",
-                ).to_dict()
-            )
-            interactive = await engine.pump()
-            await asyncio.sleep(0)  # 让异步记忆投影任务执行（单循环）
-            interactive_id = interactive["admitted_task_ids"][0]
-            # user 窗口写入 → recall → handler → assistant 窗口写入
-            assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
-            remembered = [value for name, value in events if name == "remember"]
-            assert [entry.task_id for entry in remembered if isinstance(entry, MemoryEntry)] == [interactive_id]
-            recalled = next(value for name, value in events if name == "recall")
-            assert isinstance(recalled, MemoryQuery) and recalled.scope == "interactive"
-
-            events.clear()
-            await engine.submit_amp(
-                new_amp(
-                    event_type="system.tick",
-                    session_id="autonomy",
-                    summary="tick",
-                    data={},
-                    source_app="engine",
-                    source_instance="local",
-                ).to_dict()
-            )
-            autonomous = await engine.pump()
-            autonomous_id = autonomous["admitted_task_ids"][0]
-            assert [name for name, _value in events[:3]] == ["append_turn", "recall", "handler"]
-            remembered = [value for name, value in events if name == "remember"]
-            assert all(isinstance(entry, MemoryEntry) and entry.task_id != autonomous_id for entry in remembered)
-        finally:
-            await engine.shutdown()
-
-    asyncio.run(exercise())
+    assert result.status == TreeStatus.COMPLETED
+    assert result.node("root").result == "done"
+    assert model.requests[0].model == "root-model"
+    assert [message.role for message in model.requests[0].messages] == ["system", "message"]
+    assert model.requests[0].tools == ()
 
 
-def test_external_input_does_not_cancel_an_autonomous_task(tmp_path: Path) -> None:
-    class ModelRequestingHandler:
-        def handle(self, context: AgentContext) -> AgentDecision:
-            _ = context
-            return AgentDecision(model_request=ModelRequest(role="test", messages=()))
+def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
+    model = FakeModel(
+        [
+            ChatMessage.assistant(tool_calls=(ToolCall("echo-1", "echo", {"value": "hello"}),)),
+            ChatMessage.assistant("finished"),
+        ]
+    )
+    tree = AgentTree.create("tree", "root", "root", "tool-model", "echo", tools=frozenset({"echo"}))
 
-    async def exercise() -> None:
-        profile = AgentProfile(
-            "test.root",
-            "unused",
-            "test",
-            frozenset(),
-            can_delegate=False,
-            child_profiles=frozenset(),
-        )
-        configuration = EngineConfiguration(
-            workspace=str(tmp_path / "engine"),
-            profiles=(profile,),
-            limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
-            interactive_budget=TaskLimits(4, 4, 30.0),
-            autonomous_budget=TaskLimits(4, 4, 30.0),
-            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
-        )
-        engine = AgentEngine(
-            configuration,
-            {profile.id: ModelRequestingHandler()},
-            model_provider=_UnusedModelProvider(),
-        )
-        engine.bind_tool_executors(())
-        try:
-            await engine.submit_amp(
-                new_amp(
-                    event_type="system.tick",
-                    session_id="autonomy",
-                    summary="tick",
-                    data={},
-                    source_app="engine",
-                    source_instance="local",
-                ).to_dict()
-            )
-            autonomous = await engine.pump()
-            task_id = autonomous["admitted_task_ids"][0]
+    result = asyncio.run(AgentTreeRunner(model, _assembler(), (EchoTool(),)).run(tree))
 
-            await engine.submit_amp(
-                new_amp(
-                    event_type="message.received",
-                    session_id="interactive",
-                    summary="hello",
-                    data={"text": "hello"},
-                    source_app="test",
-                    source_instance="local",
-                ).to_dict()
-            )
-            detail = engine.task_detail(task_id)
-            assert detail is not None
-            assert detail["task"]["status"] == "ACTIVE"
-        finally:
-            await engine.shutdown()
-
-    asyncio.run(exercise())
+    assert result.status == TreeStatus.COMPLETED
+    assert [message.role for message in result.node("root").messages] == [
+        "message",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+    assert result.node("root").messages[2].content == "hello"
+    assert [tool.name for tool in model.requests[0].tools] == ["echo"]
 
 
-def test_engine_records_session_causality_in_sqlite(tmp_path: Path) -> None:
-    """会话可读性由 causal_events 提供，不再写 JSONL。"""
+def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
+    delegate = ToolCall(
+        "delegate-1",
+        "delegate",
+        {"profile": "worker", "model": "small-model", "tools": [], "instruction": "inspect this"},
+    )
+    model = FakeModel(
+        [
+            ChatMessage.assistant(tool_calls=(delegate,)),
+            ChatMessage.assistant("child result"),
+            ChatMessage.assistant("root result"),
+        ]
+    )
+    tree = AgentTree.create(
+        "tree",
+        "root",
+        "root",
+        "large-model",
+        "delegate work",
+        tools=frozenset({"delegate"}),
+    )
 
-    async def exercise() -> None:
-        profile = AgentProfile(
-            id="test.root",
-            implementation="unused",
-            model_role="test",
-            capabilities=frozenset(),
-            can_delegate=False,
-            child_profiles=frozenset(),
-        )
-        configuration = EngineConfiguration(
-            workspace=str(tmp_path / "engine"),
-            profiles=(profile,),
-            limits=AgentLimits(root_profile=profile.id, worker_profile=profile.id),
-            interactive_budget=TaskLimits(1, 1, 30.0),
-            autonomous_budget=TaskLimits(1, 1, 30.0),
-            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
-        )
-        engine = AgentEngine(
-            configuration,
-            {profile.id: _CompletingHandler()},
-            model_provider=_UnusedModelProvider(),
-        )
-        engine.bind_tool_executors(())
-        try:
-            await engine.submit_amp(
-                new_amp(
-                    event_type="message.received",
-                    session_id="group/私聊:10001",
-                    summary="hello",
-                    data={"text": "hello"},
-                    source_app="org.aurora.qq",
-                    source_instance="mcp:org.aurora.qq",
-                ).to_dict()
-            )
-            result = await engine.pump()
-            assert len(result["admitted_task_ids"]) == 1
-            task_id = result["admitted_task_ids"][0]
-            detail = engine.task_detail(task_id)
-            assert detail is not None
-            types = [event["type"] for event in detail["events"]]
-            assert types == ["task.started", "agent.complete"]
-            assert not (tmp_path / "engine" / "sessions").exists()
-        finally:
-            await engine.shutdown()
+    result = asyncio.run(AgentTreeRunner(model, _assembler()).run(tree))
 
-    asyncio.run(exercise())
+    assert result.status == TreeStatus.COMPLETED
+    assert len(result.nodes) == EXPECTED_DELEGATION_NODES
+    child = result.nodes[1]
+    assert child.parent_id == "root"
+    assert child.model == "small-model"
+    assert child.status == AgentStatus.COMPLETED
+    assert [request.model for request in model.requests] == ["large-model", "small-model", "large-model"]
+    parent_tool = next(message for message in result.node("root").messages if message.role == "tool")
+    assert parent_tool.tool_call_id == "delegate-1"
+    assert parent_tool.content == "child result"
 
 
-class _ToolingModelProvider:
-    async def complete(self, request: ModelRequest) -> ModelResult:
-        if request.output_schema is not None:
-            return ModelResult(
-                request.role,
-                frozenset({"chat", "structured_output"}),
-                "normalized",
-                "",
-                {"action": "process", "summary": "hello", "reason": "test"},
-                ModelUsage(),
-                0.0,
-            )
-        return ModelResult(
-            request.role,
-            frozenset({"chat"}),
-            "normalized",
-            "",
-            None,
-            ModelUsage(),
-            0.0,
-            tool_calls=(ToolCall("call-1", "com.vendor.send", {"text": "reply"}),),
-            finish_reason="tool_calls",
-        )
+def test_tool_failure_is_a_tool_message_not_a_tree_failure() -> None:
+    model = FakeModel(
+        [
+            ChatMessage.assistant(tool_calls=(ToolCall("missing-1", "missing", {}),)),
+            ChatMessage.assistant("recovered"),
+        ]
+    )
+    tree = AgentTree.create("tree", "root", "root", "model", "try", tools=frozenset({"missing"}))
+
+    result = asyncio.run(AgentTreeRunner(model, _assembler()).run(tree))
+
+    assert result.status == TreeStatus.COMPLETED
+    tool_message = result.node("root").messages[2]
+    assert tool_message.role == "tool"
+    assert tool_message.is_error is True
+    assert tool_message.content == "unknown tool: missing"
 
 
-class _ReceiptToolExecutor:
-    def __init__(self, engine: AgentEngine) -> None:
-        self.engine = engine
+def test_model_failure_becomes_tree_failure() -> None:
+    class FailingModel:
+        async def complete(self, request: ModelRequest) -> ChatMessage:
+            raise RuntimeError(request.model)
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> None:
-        await self.engine.submit_amp(
-            tool_receipt_amp(
-                status="succeeded",
-                request=request,
-                summary="replied",
-                source_app="test",
-                source_instance="local",
-                result={"text": "ok"},
-            )
-        )
+    tree = AgentTree.create("tree", "root", "root", "model", "hello")
+    result = asyncio.run(AgentTreeRunner(FailingModel(), _assembler()).run(tree))
+
+    assert result.status == TreeStatus.FAILED
+    assert result.node("root").error == "model failed: model"
 
 
-class _ToolingRootHandler:
-    def handle(self, context: AgentContext) -> AgentDecision:
-        if context.message.type == "agent.assigned":
-            return AgentDecision(
-                tool_request=ToolRequest(
-                    capability="com.vendor.send",
-                    parameters={"text": "reply"},
-                    complete_task=False,
-                    tool_call_id="call-1",
-                )
-            )
-        if context.message.type == "tool.succeeded":
-            return AgentDecision(completion=Completion("replied"))
-        return AgentDecision(completion=Completion("done"))
+def test_tool_exception_and_hidden_tool_are_returned_to_model() -> None:
+    model = FakeModel(
+        [
+            ChatMessage.assistant(tool_calls=(ToolCall("fail", "echo", {"error": "broken"}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("hidden", "missing", {}),)),
+            ChatMessage.assistant("recovered"),
+        ]
+    )
+    tree = AgentTree.create("tree", "root", "root", "model", "hello", tools=frozenset({"echo"}))
+
+    result = asyncio.run(AgentTreeRunner(model, _assembler(), (FailingTool(),)).run(tree))
+
+    tools = [message for message in result.node("root").messages if message.role == "tool"]
+    assert tools[0].content == "tool failed: broken"
+    assert tools[1].content == "tool is not visible to this Agent: missing"
 
 
-def test_run_forever_dispatches_background_tool_activities(tmp_path: Path) -> None:
-    """run_forever 自旋时后台工具派发不得被饿死：工具活动必须被领取并执行。"""
-    calls: list[str] = []
+def test_runner_rejects_invalid_limits_duplicate_and_reserved_tools() -> None:
+    model = FakeModel([ChatMessage.assistant("done")])
+    with pytest.raises(ValueError, match="limits"):
+        AgentTreeRunner(model, _assembler(), max_steps=0)
+    with pytest.raises(ValueError, match="unique"):
+        AgentTreeRunner(model, _assembler(), (EchoTool(), EchoTool()))
 
-    class RecordingExecutor(_ReceiptToolExecutor):
-        async def execute_tool(self, request: ToolExecutionRequest) -> None:
-            calls.append(request.capability)
-            await super().execute_tool(request)
+    class DelegateTool(EchoTool):
+        @property
+        def definition(self) -> ToolDefinition:
+            return ToolDefinition("delegate", "Invalid override.", {})
 
-    async def exercise() -> None:
-        triage_profile = AgentProfile(
-            id="builtin.triage",
-            implementation="unused",
-            model_role="test",
-            capabilities=frozenset(),
-            can_delegate=True,
-            child_profiles=frozenset({"builtin.root"}),
-            triage_control=True,
-        )
-        root_profile = AgentProfile(
-            id="builtin.root",
-            implementation="unused",
-            model_role="test",
-            capabilities=frozenset({"*"}),
-            can_delegate=False,
-            child_profiles=frozenset(),
-        )
-        configuration = EngineConfiguration(
-            workspace=str(tmp_path / "engine"),
-            profiles=(triage_profile, root_profile),
-            limits=AgentLimits(root_profile=triage_profile.id, worker_profile=root_profile.id),
-            interactive_budget=TaskLimits(4, 4, 30.0),
-            autonomous_budget=TaskLimits(4, 4, 30.0),
-            triage=TriageLimits(quiet_seconds=0, max_wait_seconds=0.001),
-        )
-        engine = AgentEngine(
-            configuration,
-            {"builtin.triage": TriageAgent(), "builtin.root": _ToolingRootHandler()},
-            model_provider=_ToolingModelProvider(),
-        )
-        engine.bind_tool_executors(
-            (
-                EffectToolBinding(
-                    CapabilityDescriptor(
-                        "com.vendor.send",
-                        "send a message",
-                        {"type": "object", "properties": {"text": {"type": "string"}}},
-                    ),
-                    RecordingExecutor(engine),
-                    "test",
-                    "local",
-                ),
-            )
-        )
-        stop = asyncio.Event()
-        loop_task = asyncio.create_task(engine.run_forever(stop), name="runtime-loop")
-        try:
-            await engine.submit_amp(
-                new_amp(
-                    event_type="message.received",
-                    session_id="test-session",
-                    summary="hello",
-                    data={"text": "hello"},
-                    source_app="test",
-                    source_instance="local",
-                ).to_dict()
-            )
-            for _ in range(200):
-                await asyncio.sleep(0.05)
-                tasks = engine.tasks()
-                if tasks and all(task.terminal for task in tasks):
-                    break
-            assert calls == ["com.vendor.send"], f"tool executor not invoked: {calls}"
-            assert all(task.terminal for task in engine.tasks())
-        finally:
-            stop.set()
-            await asyncio.gather(loop_task, return_exceptions=True)
-            await engine.shutdown()
+    with pytest.raises(ValueError, match="reserved"):
+        AgentTreeRunner(model, _assembler(), (DelegateTool(),))
 
-    asyncio.run(exercise())
+
+def test_invalid_delegate_arguments_return_tool_error() -> None:
+    model = FakeModel(
+        [
+            ChatMessage.assistant(tool_calls=(ToolCall("delegate-1", "delegate", {}),)),
+            ChatMessage.assistant("recovered"),
+        ]
+    )
+    tree = AgentTree.create("tree", "root", "root", "model", "hello", tools=frozenset({"delegate"}))
+
+    result = asyncio.run(AgentTreeRunner(model, _assembler()).run(tree))
+
+    assert result.node("root").messages[2].is_error is True
+    assert "requires non-empty profile" in result.node("root").messages[2].content

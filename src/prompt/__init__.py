@@ -1,14 +1,6 @@
-"""提示词片段与同构 Agent 循环中每轮消息的装配。"""
+"""四角色提示词组装。"""
 
-from __future__ import annotations
+from src.prompt.composer import PromptAssembler
+from src.prompt.models import PromptCatalog
 
-from src.prompt.composer import PromptComposer, external_data
-from src.prompt.models import PromptCatalog, PromptDocument, PromptSection
-
-__all__ = [
-    "PromptCatalog",
-    "PromptComposer",
-    "PromptDocument",
-    "PromptSection",
-    "external_data",
-]
+__all__ = ["PromptAssembler", "PromptCatalog"]

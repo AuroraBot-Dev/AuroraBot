@@ -1,41 +1,20 @@
 [project]
 name = "AuroraBot"
 version = "0.6.0"
-description = "拥有主动节律、可持续工作且行动可追溯的自主智能体框架。"
+description = "以 AgentTree 探索自主智能体最小循环的实验性框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
-dependencies = [
-    "litellm>=1.83.14",
-    "pyyaml>=6.0.3",
-    "websockets<14.0",
-    "botocore>=1.43.12",
-    "tiktoken>=0.13.0",
-    "rich>=15.0.0",
-    "mcp[cli]>=1.27,<2",
-    "httpx>=0.28,<1",
-    "fastapi>=0.115,<1",
-    "uvicorn>=0.34,<1",
-    "jsonschema>=4.23,<5",
-    "python-multipart>=0.0.9",
-    "prompt-toolkit>=3.0,<4",
-    "mem0ai[nlp]>=2.0.17",
-    "chromadb>=1.5.9",
-    "sqlalchemy>=2.0",
-    "socksio>=1.0.0",
-]
+dependencies = []
 
 [project.scripts]
 aurora = "aurora.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
-
-[tool.setuptools.package-data]
-ops = ["lab/*"]
+include = ["aurora", "aurora.*", "src", "src.*"]
 
 [dependency-groups]
-dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov", "donk>=1.1.0"]
+dev = ["pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -43,7 +22,7 @@ testpaths = ["tests"]
 addopts = "-ra"
 
 [tool.coverage.report]
-fail_under = 75
+fail_under = 90
 
 [tool.ruff]
 line-length = 120
@@ -53,137 +32,44 @@ target-version = "py312"
 line-ending = "lf"
 
 [tool.ruff.lint]
-# For more rules, see https://docs.astral.sh/ruff/rules/.
 select = [
-    "F",     # Pyflakes
-    "W",     # pycodestyle warnings
-    "E",     # pycodestyle errors
-    "I",     # isort
-    "C90",   # mccabe
-    "N",     # pep8-naming
-    "PL",    # pylint
-    "UP",    # pyupgrade
-    "YTT",   # flake8-2020
-    "ANN",   # flake8-annotations
-    "ASYNC", # flake8-async
-    "BLE",   # flake8-blind-except
-    "FBT",   # flake8-boolean-trap
-    "B",     # flake8-bugbear
-    "A",     # flake8-builtins
-    "COM",   # flake8-commas
-    "C4",    # flake8-comprehensions
-    "DTZ",   # flake8-datetimez
-    "T10",   # flake8-debugger
-    "ICN",   # flake8-import-conventions
-    "PIE",   # flake8-pie
-    "T20",   # flake8-print
-    "PYI",   # flake8-pyi
-    "Q",     # flake8-quotes
-    "RSE",   # flake8-raise
-    "RET",   # flake8-return
-    "SIM",   # flake8-simplify
-    "SLOT",  # flake8-slots
-    "TID",   # flake8-tidy-imports
-    "TC",    # flake8-type-checking
-    "ARG",   # flake8-unused-arguments
-    "PTH",   # flake8-use-pathlib
-    # "ERA",   # eradicate
-    "FAST", # FastAPI
-    "PERF", # Perflint
-    "PGH",  # pygrep-hooks
-    "FURB", # refurb
-    "TRY",  # tryceratops
-    "RUF",  # Ruff-specific rules
+    "F",
+    "W",
+    "E",
+    "I",
+    "C90",
+    "N",
+    "PL",
+    "UP",
+    "ANN",
+    "ASYNC",
+    "BLE",
+    "B",
+    "COM",
+    "DTZ",
+    "T10",
+    "PIE",
+    "T20",
+    "PTH",
+    "RET",
+    "SIM",
+    "TC",
+    "RUF",
 ]
-ignore = [
-    "E402",  # module-import-not-at-top-of-file  # gateway configures env before importing litellm
-    "UP037", # quoted-annotation
-    # "RUF001",  # ambiguous-unicode-character-string
-    # "RUF002",  # ambiguous-unicode-character-docstring
-    # "RUF003",  # ambiguous-unicode-character-comment
-    # "ANN201",  # missing-return-type-undocumented-public-function
-    "ANN202",  # missing-return-type-private-function
-    "ANN401",  # any-type
-    "COM812",  # missing-trailing-comma
-    "PLC0415", # import-outside-top-level
-    "N999",    # forbidden-import-alias (allowed in __init__.py)
-    "TRY003",  # too-many-nested-blocks
-    "PLR0913", # too-many-arguments
-]
-allowed-confusables = [
-    "，",
-    "。",
-    "“",
-    "”",
-    "：",
-    "；",
-    "？",
-    "！",
-    "【",
-    "】",
-    "《",
-    "》",
-    "…",
-    "—",
-    "（",
-    "）",
-    "、",
-]
+ignore = ["ANN202", "COM812", "PLR0913"]
+allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/contracts/model.py" = ["TRY004"]
-"src/contracts/configuration*.py" = [
-    "C901",
-    "PLR0912",
-    "PLR0915",
-    "PLR2004",
-    "TC003",
-]
-"tests/test_panel_api.py" = ["B008", "PLR2004"]
-"ops/parser.py" = ["C901", "PLR0911", "PLR0912", "TRY301"]
-"ops/registry.py" = ["ARG001", "PLW0603"]
-"src/config/loader.py" = ["C901", "PLR0912", "PLR0915", "PLR2004", "TC003"]
-"src/engine/state.py" = [
-    "BLE001",
-    "C901",
-    "PLR0912",
-    "TC001",
-    "TC003",
-    "TRY004",
-    "TRY301",
-]
-"src/engine/store*.py" = [
-    "C901",
-    "PLR0911",
-    "PLR0912",
-    "PLR0915",
-    "TC001",
-    "TC003",
-    "TRY004",
-]
-"src/platform/__init__.py" = ["A005"]
-"src/contracts/agent.py" = ["TC001"]
-"src/config/sections.py" = ["C901", "PLR0912", "PLR2004", "TC003"]
-"src/engine/runtime.py" = ["BLE001", "TC001"]
-"ops/runtime.py" = ["BLE001", "TC003"]
-"ops/api.py" = ["C901", "B008", "FAST002", "PLR0915", "PLR0912"]
-"src/agents/handler.py" = ["C901", "PLR0911", "PLR0912", "PLR2004", "TC001"]
-"src/memory/service.py" = ["BLE001"]
-"src/ai/gateway.py" = ["C901", "PLR0912", "TC001"]
-"src/apps/aurora-app-clock/service.py" = ["TC003"]
-"src/platform/mcp/adapter.py" = ["BLE001", "C901", "PLR0911", "TC001", "TRY004"]
-"src/platform/mcp/client_manager.py" = ["C901"]
-
-
-[tool.ruff.lint.pyupgrade]
-keep-runtime-typing = true
+"src/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "ops", "src", "tests"]
+include = ["aurora", "src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
+venvPath = "."
+venv = ".venv"
 
 [build-system]
 requires = ["setuptools>=75"]
