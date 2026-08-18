@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
 
-from aurora import (
-    AuroraConfiguration,
-    PromptConfiguration,
-    RootAgentConfiguration,
-    assemble_runtime,
-    load_configuration,
-)
-from aurora.composition.engine import assemble_engine
-from aurora.composition.prompt import assemble_prompt
+from aurora import AuroraConfig, assemble_runtime, load_config
+from aurora.composer import CompositionContext, InstanceKey, compose
+from aurora.composition import compose_project
+from aurora.composition.engine import ENGINE_RUNNER
+from aurora.composition.prompt import PROMPT_ASSEMBLER
+from aurora.config import ConfigCollector, ConfigKey, collect_config
+from aurora.configuration.engine import ENGINE_CONFIG
+from aurora.configuration.prompt import PROMPT_CONFIG, PromptConfig
+from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.utils.toml import load_toml, text
 from src.contracts import ChatMessage, ModelRequest, TreeStatus
+
+EXPECTED_MAX_DEPTH = 4
 
 
 @dataclass(slots=True)
@@ -28,7 +31,8 @@ class FakeModel:
 
 
 def test_project_configuration_builds_complete_runtime() -> None:
-    configuration = load_configuration(Path(__file__).parents[1])
+    configuration = load_config(Path(__file__).parents[1])
+    runtime_configuration = configuration.get(RUNTIME_CONFIG)
     model = FakeModel()
     runtime = assemble_runtime(configuration, model)
 
@@ -36,33 +40,92 @@ def test_project_configuration_builds_complete_runtime() -> None:
 
     assert result.status == TreeStatus.COMPLETED
     assert result.tree_id == "tree"
-    assert result.node(configuration.root.node_id).model == configuration.root.model
-    assert model.requests[0].model == configuration.root.model
+    assert result.node(runtime_configuration.node_id).model == runtime_configuration.model
+    assert model.requests[0].model == runtime_configuration.model
     assert [tool.name for tool in model.requests[0].tools] == ["delegate"]
 
 
 def test_assembly_rejects_unavailable_root_tool() -> None:
-    configuration = load_configuration(Path(__file__).parents[1])
-    invalid = AuroraConfiguration(
-        RootAgentConfiguration(
-            configuration.root.node_id,
-            configuration.root.profile,
-            configuration.root.model,
-            frozenset({"missing"}),
-        ),
-        configuration.runner,
-        configuration.prompt,
+    configuration = load_config(Path(__file__).parents[1])
+    runtime = configuration.get(RUNTIME_CONFIG)
+    invalid = configuration.with_value(
+        RUNTIME_CONFIG,
+        replace(runtime, tools=frozenset({"missing"})),
     )
 
-    with pytest.raises(ValueError, match="unavailable tools"):
+    with pytest.raises(ValueError, match="不可用工具"):
         assemble_runtime(invalid, FakeModel())
 
 
 def test_configuration_is_pure_data_until_composition_stages_run() -> None:
-    configuration = load_configuration(Path(__file__).parents[1])
+    configuration = load_config(Path(__file__).parents[1])
+    prompt = configuration.get(PROMPT_CONFIG)
+    engine = configuration.get(ENGINE_CONFIG)
+    assembly = compose_project(configuration, FakeModel())
 
-    assert isinstance(configuration.prompt, PromptConfiguration)
-    assembler = assemble_prompt(configuration)
-    runner = assemble_engine(configuration, FakeModel(), assembler)
+    assert isinstance(configuration, AuroraConfig)
+    assert isinstance(prompt, PromptConfig)
+    assert engine.max_depth == EXPECTED_MAX_DEPTH
+    assert assembly.get(PROMPT_ASSEMBLER) is not None
+    assert assembly.get(ENGINE_RUNNER) is not None
 
-    assert runner is not None
+
+@dataclass(frozen=True, slots=True)
+class ExtraConfig:
+    value: str
+
+
+EXTRA_CONFIG = ConfigKey[ExtraConfig]("extra")
+EXTRA_INSTANCE = InstanceKey[str]("extra.instance")
+
+
+def test_new_toml_and_component_only_need_module_registrars(tmp_path: Path) -> None:
+    config_directory = tmp_path / "config"
+    config_directory.mkdir()
+    (config_directory / "extra.toml").write_text('value = "已接入"\n', encoding="utf-8")
+
+    def register_config(configs: ConfigCollector) -> None:
+        def parse(path: Path) -> ExtraConfig:
+            return ExtraConfig(text(load_toml(path), "value"))
+
+        configs.register(EXTRA_CONFIG, "config/extra.toml", parse)
+
+    def register_component(context: CompositionContext) -> None:
+        context.provide(EXTRA_INSTANCE, context.config.get(EXTRA_CONFIG).value)
+
+    configuration = collect_config(tmp_path, (register_config,))
+    assembly = compose(configuration, FakeModel(), (register_component,))
+
+    assert configuration.names == ("extra",)
+    assert assembly.get(EXTRA_INSTANCE) == "已接入"
+
+
+def test_registries_reject_duplicate_names_and_missing_dependencies(tmp_path: Path) -> None:
+    config_directory = tmp_path / "config"
+    config_directory.mkdir()
+    (config_directory / "extra.toml").write_text('value = "first"\n', encoding="utf-8")
+
+    def register_twice(configs: ConfigCollector) -> None:
+        def parser(path: Path) -> ExtraConfig:
+            return ExtraConfig(text(load_toml(path), "value"))
+
+        configs.register(EXTRA_CONFIG, "config/extra.toml", parser)
+        configs.register(EXTRA_CONFIG, "config/extra.toml", parser)
+
+    with pytest.raises(ValueError, match="配置重复注册"):
+        collect_config(tmp_path, (register_twice,))
+
+    configuration = collect_config(tmp_path, ())
+
+    def require_missing(context: CompositionContext) -> None:
+        context.require(EXTRA_INSTANCE)
+
+    with pytest.raises(KeyError, match="组合依赖尚未注册"):
+        compose(configuration, FakeModel(), (require_missing,))
+
+    def provide_twice(context: CompositionContext) -> None:
+        context.provide(EXTRA_INSTANCE, "first")
+        context.provide(EXTRA_INSTANCE, "second")
+
+    with pytest.raises(ValueError, match="实例重复注册"):
+        compose(configuration, FakeModel(), (provide_twice,))

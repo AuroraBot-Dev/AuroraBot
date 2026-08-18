@@ -1,0 +1,12 @@
+# 平台配置 — 平台组合的默认启用状态。
+#
+# `aurora start` 不带 --platform 时按这里决定默认平台集合；带 --platform
+# 时构成精确集合并覆盖 enabled。新增平台需要同时扩展代码注册表与契约，
+# 仅在这里加段不会生效。
+
+# MCP：模型上下文协议，子进程与远程服务管理
+[platform.mcp]
+# 默认是否启用 MCP 平台
+enabled = true
+# 是否在终端输出 MCP 子进程诊断（stdin/stdout 不受影响）
+terminal_logs = true

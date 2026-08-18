@@ -1,0 +1,20 @@
+# 提示词装配 — 片段路径映射。
+#
+# 路径相对 config/ 解析。提示词只负责人格与表达，不是授权边界；把要求写进
+# Prompt 不会绕过 profile 能力策略。Agent 段必须与 agents.toml 的 profile
+# id 对齐，缺失或引用未知 id 会在启动前失败。
+
+# 系统层：对所有 Agent 可见的公共文本
+[system]
+# 核心人格与行为准则
+soul = "prompts/SOUL.md"
+# 项目、团队与环境上下文
+world = "prompts/WORLD.md"
+
+# Agent 层：按 profile id 映射到专用提示词片段
+[agent]
+"builtin.triage" = "prompts/agents/triage.md"
+"builtin.fast" = "prompts/agents/fast.md"
+"builtin.root" = "prompts/agents/root.md"
+"builtin.worker" = "prompts/agents/worker.md"
+"builtin.memory" = "prompts/agents/memory.md"

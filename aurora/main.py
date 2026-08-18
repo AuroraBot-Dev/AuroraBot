@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot AgentTree 实验核心")
+    parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot 运行时")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="项目根目录")
     subparsers = parser.add_subparsers(dest="command")
     for register in COMMAND_REGISTRARS:

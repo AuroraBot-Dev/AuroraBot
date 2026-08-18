@@ -1,7 +1,6 @@
 # AuroraBot
 
-AuroraBot 当前是以 `AgentTree` 为核心的自主智能体实验框架。仓库处于架构收核阶段，不是待发布产品；只保留完整最小循环
-和项目级组合骨架。
+AuroraBot 是以 `AgentTree` 为核心的自主智能体框架。当前工作树只描述现行架构与实现；只保留完整最小循环和项目级组合骨架。
 
 ## Architecture authority
 
@@ -13,8 +12,11 @@ AuroraBot 当前是以 `AgentTree` 为核心的自主智能体实验框架。仓
 ## Project layout
 
 ```text
-config/         最小项目组合配置；apps.toml 仅作为尚未迁移的用户配置保留
-aurora/         项目级入口；commands / configuration / composition 分包与 runtime 门面
+config/         runtime / engine / prompt TOML；每个文件对应一个 configuration 模块
+aurora/         项目级入口、统一 Config/Composer、runtime 门面与 utils
+aurora/commands/       每个 CLI 命令一个注册模块
+aurora/configuration/  每个 TOML 一个解析与注册模块
+aurora/composition/    每个需构造实例的 src 子包一个注册模块
 src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
 src/prompt/     四角色 PromptAssembler
 src/engine/     AgentTree 的确定性单循环
@@ -35,18 +37,21 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。
+- 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
+- 无项目语义的共享功能放入 `aurora.utils`；并列命令、配置或组件不得把工具函数寄存在某个同级模块中。
 - 依赖方向固定为 `contracts ← prompt/ai ← engine ← aurora`；`src` 不导入 `aurora`。
 
-## Current exclusions
+## Current scope
 
 当前不实现持久化、迁移、自动记忆、Inbox/Triage、并发/抢占、MCP、Platform、ops、Panel backend、sandbox、费用或生产化
-生命周期。重新加入任何一项前，先给出围绕 AgentTree 的真实用例、不变量和独立测试，不恢复旧兼容层。
+生命周期。引入任何一项前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 
 ## Language and text
 
 - 项目文本以简体中文为默认和权威版本，包括 CLI 帮助与输出、错误说明、配置注释、默认 Prompt、README 和设计文档。
 - 代码标识符、协议字面量、外部 API 字段和必要的技术术语可以使用英文；面向人的完整句子优先使用中文。
 - 英文与日文翻译可以保留，但中文内容先更新；翻译冲突或落后时以中文为准。
+- 用户可见文本只描述当前身份、能力和限制，不使用实验、重构、旧版、迁移等历史阶段叙事。
 
 ## Runtime and quality
 

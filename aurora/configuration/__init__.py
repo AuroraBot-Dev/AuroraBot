@@ -1,17 +1,22 @@
-"""运行前组合配置的 DTO 与 TOML loader。"""
+"""TOML 配置目录；新增配置在此显式注册。"""
 
-from aurora.configuration.loader import load_configuration
-from aurora.configuration.models import (
-    AuroraConfiguration,
-    PromptConfiguration,
-    RootAgentConfiguration,
-    RunnerConfiguration,
-)
+from __future__ import annotations
 
-__all__ = [
-    "AuroraConfiguration",
-    "PromptConfiguration",
-    "RootAgentConfiguration",
-    "RunnerConfiguration",
-    "load_configuration",
-]
+from typing import TYPE_CHECKING
+
+from aurora.config import collect_config
+from aurora.configuration import engine, prompt, runtime
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from aurora.config import AuroraConfig
+
+CONFIG_REGISTRARS = (runtime.register, engine.register, prompt.register)
+
+
+def load_config(project_root: Path) -> AuroraConfig:
+    return collect_config(project_root, CONFIG_REGISTRARS)
+
+
+__all__ = ["CONFIG_REGISTRARS", "load_config"]

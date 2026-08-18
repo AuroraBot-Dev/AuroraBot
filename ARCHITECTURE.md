@@ -6,16 +6,17 @@ AuroraBot 当前只实现一个完整最小循环，同时保留项目级配置�
 ## 系统结构
 
 ```text
-config/aurora.toml
+config/{runtime,engine,prompt}.toml
+        │ 每个文件由同名模块注册
+        ▼
+AuroraConfig
+        │
+        ├── Model / Tools（由调用者注入）
+        ▼
+composition/{prompt,engine}.py 注册构造结果
         │
         ▼
-aurora.configuration.load_configuration
-        │
-        ▼
-aurora.composition.assemble_runtime ─── Model / Tools（由调用者注入）
-        │
-        ▼
-AuroraRuntime.create_tree(message)
+AuroraAssembly → AuroraRuntime.create_tree(message)
         │
         ▼
 AgentTreeRunner ─── PromptAssembler
@@ -25,21 +26,24 @@ AgentTreeRunner ─── PromptAssembler
         └── delegate → child AgentNode
 ```
 
-`aurora` 仍是项目的唯一组合根。收核删除的是旧组合中的生产化设施，不是“项目如何构造一套运行时”这件事本身。
+`aurora` 是项目的唯一组合根。配置合并、组件构造和最终运行入口各自只有一个权威路径。
 
 项目层按已确定的变化轴分包：
 
 ```text
 aurora/
   commands/        每个 CLI 命令独立注册与执行
-  configuration/   纯配置 DTO 与 TOML loader
-  composition/     prompt → engine → runtime 分阶段构造
-  runtime.py       组合完成后的使用门面
+  configuration/   每个 TOML 一个纯配置、解析与注册模块
+  composition/     每个需实例化的 src 子包一个构造与注册模块
+  utils/           子进程、TOML 字段读取等无项目语义工具
+  config.py        ConfigKey、AuroraConfig 与通用配置合并器
+  composer.py      InstanceKey、组合上下文与只读实例集合
+  runtime.py       执行项目组件注册并提供使用门面
   main.py          只解析顶层 CLI 并分派命令
 ```
 
-配置 loader 不构造 PromptCatalog 或 Runner；这些转换只发生在 composition。增加命令、配置节或组合阶段时新增对应模块，
-而不是扩张 `main.py` 或一个全能 assembly 函数。
+配置模块不构造 PromptCatalog 或 Runner；这些转换只发生在 composition。增加命令、TOML 配置或项目组件时，新增对应模块并在
+目录入口的注册元组增加一项；通用 Config、Composer、runtime 和 CLI main 不增加分支。
 
 ## AgentTree
 

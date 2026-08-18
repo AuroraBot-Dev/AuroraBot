@@ -1,7 +1,7 @@
 [project]
 name = "AuroraBot"
 version = "0.6.0"
-description = "以 AgentTree 探索自主智能体最小循环的实验性框架。"
+description = "以 AgentTree、同构 Agent 和四角色消息为核心的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
 dependencies = []

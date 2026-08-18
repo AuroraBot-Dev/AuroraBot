@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.commands import about, check, donk
-from aurora.commands.process import run_process
 from aurora.main import build_parser, run
+from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,8 +20,8 @@ def test_bare_cli_and_about_are_non_effectful(capsys: pytest.CaptureFixture[str]
     assert run([]) == 0
     assert run(["about"]) == 0
     output = capsys.readouterr().out
-    assert "AuroraBot AgentTree 实验核心" in output
-    assert "四角色对话" in output
+    assert "AuroraBot 运行时" in output
+    assert "四角色消息" in output
 
 
 def test_each_command_registers_its_own_executor() -> None:
@@ -111,12 +111,12 @@ def test_process_boundary_reports_failure_and_interrupt(
     class Result:
         returncode = FAILED_EXIT_CODE
 
-    monkeypatch.setattr("aurora.commands.process.subprocess.run", lambda *_args, **_kwargs: Result())
+    monkeypatch.setattr("aurora.utils.process.subprocess.run", lambda *_args, **_kwargs: Result())
     assert run_process(("example",), tmp_path) == FAILED_EXIT_CODE
     assert "命令失败" in capsys.readouterr().err
 
     def interrupt(*_args: object, **_kwargs: object) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("aurora.commands.process.subprocess.run", interrupt)
+    monkeypatch.setattr("aurora.utils.process.subprocess.run", interrupt)
     assert run_process(("example",), tmp_path) == INTERRUPTED_EXIT_CODE

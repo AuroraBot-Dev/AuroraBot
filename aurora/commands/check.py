@@ -1,11 +1,11 @@
-"""实现 ``aurora check``。"""
+"""实现 ``aurora check``"""
 
 from __future__ import annotations
 
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.commands.process import run_process
+from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
     import argparse

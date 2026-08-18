@@ -1,4 +1,4 @@
-"""实现 ``aurora donk`` 版本管理命令。"""
+"""实现 ``aurora donk`` 版本管理命令"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sys
 import tomllib
 from typing import TYPE_CHECKING
 
-from aurora.commands.process import run_process
+from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
     import argparse

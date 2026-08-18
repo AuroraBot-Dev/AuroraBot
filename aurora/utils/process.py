@@ -1,4 +1,4 @@
-"""CLI 命令共享的子进程执行边界。"""
+"""执行子进程并统一呈现退出状态。"""
 
 from __future__ import annotations
 

@@ -1,21 +1,12 @@
 """AuroraBot 配置、组合与项目级运行时。"""
 
-from aurora.composition import assemble_runtime
-from aurora.configuration import (
-    AuroraConfiguration,
-    PromptConfiguration,
-    RootAgentConfiguration,
-    RunnerConfiguration,
-    load_configuration,
-)
-from aurora.runtime import AuroraRuntime
+from aurora.config import AuroraConfig
+from aurora.configuration import load_config
+from aurora.runtime import AuroraRuntime, assemble_runtime
 
 __all__ = [
-    "AuroraConfiguration",
+    "AuroraConfig",
     "AuroraRuntime",
-    "PromptConfiguration",
-    "RootAgentConfiguration",
-    "RunnerConfiguration",
     "assemble_runtime",
-    "load_configuration",
+    "load_config",
 ]

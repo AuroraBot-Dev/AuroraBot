@@ -1,14 +1,13 @@
 # AuroraBot
 
-AuroraBot is currently an experimental core for one question: how can homogeneous Agents understand messages, use tools,
-delegate work, and resume through a tree-shaped runtime?
+AuroraBot is an autonomous-agent framework built around a tree of homogeneous Agents that understand messages, use tools,
+delegate work, and resume their parents.
 
 One run is one `AgentTree`. Root and child nodes share the same loop and differ only in system profile, initial message,
 visible tools, and LLM model. The core uses four domain roles: `system`, `message`, `assistant`, and `tool`.
 
-The repository deliberately excludes persistence, recovery, automatic memory, triage, MCP, the Panel backend, sandboxing,
-and production extension machinery. It retains the project composition path from `config/aurora.toml` through
-`assemble_runtime()` to `AuroraRuntime`.
+Runtime, engine, and prompt TOML files are registered by matching configuration modules and merged into one `AuroraConfig`.
+Matching composition modules construct the project instances used by `AuroraRuntime`.
 
 ```bash
 uv sync

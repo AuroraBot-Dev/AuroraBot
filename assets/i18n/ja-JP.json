@@ -103,7 +103,7 @@
     "directoryCommand": "Set-Location AuroraBot",
     "syncCommand": "uv sync --no-dev",
     "envCommand": "Copy-Item .env.example .env",
-    "configComment": "# DEEPSEEK_API_KEY を追加。Aurora-QQ 未導入時は config/apps.toml で無効化",
+    "configComment": "# 必要に応じて config/runtime.toml、engine.toml、prompt.toml を調整",
     "runComment": "# Console と既定の MCP Platform を起動",
     "runCommand": "uv run --no-dev --env-file .env aurora start",
     "previewLabel": "Nightly · 0.6 alpha",
