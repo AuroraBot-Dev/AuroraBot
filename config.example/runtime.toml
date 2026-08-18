@@ -2,16 +2,14 @@
 #
 # AgentTree 组合读取 runtime.tree；start 同时读取 runtime.console.enabled。
 
-[runtime.tree]
-# 当前 AgentTree 的 root 节点入口
-node_id = "root"
-profile = "builtin.root"
-model = "default"
-tools = ["delegate"]
-
 [runtime]
 # 激活的 profile（prod / dev），控制 profile 文件的选择
 profile = "prod"
+
+[runtime.tree]
+# 当前 AgentTree 的 root 节点入口
+node_id = "root"
+agent = "builtin.root"
 
 [runtime.panel]
 # 预留面板后端开关

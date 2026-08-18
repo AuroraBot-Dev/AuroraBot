@@ -5,18 +5,21 @@
 AuroraBot 是以树形同构 Agent 为核心的自主智能体框架。一组 Agent 通过消息、工具调用和委派共同完成一次运行。
 
 一次运行就是一棵 `AgentTree`；root 与 child 共用同一种循环，
-节点只因 system profile、初始 message、可见 tools 和使用的 LLM model 不同。
+节点从预定义 `AgentDefinition` 创建，并可因 system profile、初始 message、可见 tools 和使用的 LLM model 不同。
 
 ## 当前实现
 
 ```text
 message → model → assistant
                   ├── Tool call → tool result → model
-                  └── delegate → child Agent → tool result → parent
+                  └── aur.agent.delegate → child Agent → tool result → parent
 ```
 
 - 四个领域 role：`system / message / assistant / tool`；
 - 节点级 model 与 Tool 可见性；
+- 可复用 Agent 定义目录；同一 profile 可预定义不同 model、tools 与 child allowlist；
+- `aur.*` 统一工具域、不可变工具目录与唯一执行路由；
+- `aur.agent.delegate` 作为真实 Tool 产生显式树操作请求；
 - 确定性的深度优先 AgentTree 循环；
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；

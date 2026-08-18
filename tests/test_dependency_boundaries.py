@@ -11,12 +11,14 @@ _ROOT = Path(__file__).parents[1]
 _ALLOWED_SRC_IMPORTS = {
     "utils": frozenset({"src.utils"}),
     "contracts": frozenset({"src.contracts"}),
+    "agents": frozenset({"src.agents", "src.contracts"}),
     "prompt": frozenset({"src.contracts", "src.prompt"}),
+    "tools": frozenset({"src.agents", "src.contracts", "src.tools"}),
     "ai": frozenset({"src.ai", "src.contracts"}),
     "console": frozenset({"src.console"}),
-    "engine": frozenset({"src.contracts", "src.engine", "src.prompt"}),
+    "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools"}),
 }
-_REMOVED_PACKAGES = ("agents", "apps", "config", "memory", "platform", "sandbox")
+_REMOVED_PACKAGES = ("apps", "config", "memory", "platform", "sandbox")
 
 
 def test_src_dependency_direction_matches_minimal_architecture() -> None:

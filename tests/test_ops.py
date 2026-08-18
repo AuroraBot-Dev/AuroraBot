@@ -206,7 +206,7 @@ def test_assembled_runtime_exposes_live_tree_snapshots_and_ops(configured_projec
     assert initial.data["tree_count"] == 0  # type: ignore[index]
     assert listed.data["trees"][0]["status"] == "completed"  # type: ignore[index]
     assert detail.data["nodes"][0]["messages"][-1]["role"] == "assistant"  # type: ignore[index]
-    assert node.data["model"] == runtime.root.model  # type: ignore[index]
+    assert node.data["model"] == runtime.agents.get(runtime.root.agent).model  # type: ignore[index]
     with pytest.raises(ValueError, match="已存在"):
         asyncio.run(runtime.run("重复", tree_id="tree-live"))
 

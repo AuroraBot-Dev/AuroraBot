@@ -13,10 +13,11 @@ config.example/（源码模板） ──复制──→ config/（个人配置�
         ▼
 AuroraConfig
         │
+        ├── AgentCatalog（agents.toml 的无状态预定义原型）
         ├── Model（LiteLLM 配置构造或调用者注入）
-        ├── Tools（调用者注入）
+        ├── ToolRegistry（AgentCatalog → aur.agent.delegate + 调用者注入）
         ▼
-composition/{ai,prompt,console,engine}.py 注册构造结果
+composition/{agents,ai,prompt,console,tools,engine}.py 注册构造结果
         │
         ▼
 AuroraAssembly → AuroraRuntime.create_tree(message)
@@ -26,8 +27,9 @@ AuroraAssembly → AuroraRuntime.create_tree(message)
         ▼                         └── ConfigAccess → config/（限定改动）
 AgentTreeRunner ─── PromptAssembler
         ├── LiteLLMModelGateway.complete(ModelRequest)
-        ├── Tool.execute(ToolCall)
-        └── delegate → child AgentNode
+        └── ToolRegistry.execute(ToolCall)
+                ├── ToolOutput → tool message
+                └── DelegationRequest → child AgentNode
 
 aurora start
         ├── Console：普通文本 → 新 AgentTree
@@ -59,8 +61,13 @@ ops/
   runtime.py       操作目录和端口门面
 
 src/
+  agents/          AgentDefinition 的不可变目录与唯一解析
   ai/              LiteLLM 模型网关与 OpenAI-compatible 映射
   console/         可注入分派端口的本地异步终端
+  contracts/       AgentTree、四角色消息、Model 与 Tool 公共契约
+  engine/          AgentTree 的确定性最小循环
+  prompt/          四角色 PromptAssembler
+  tools/           aur.* 工具目录、唯一执行路由与框架内建工具
   utils/           标准库日志、时间、文本与 JSON 工具
 ```
 
@@ -73,6 +80,7 @@ Markdown Prompt 到 PromptCatalog 的转换只由 prompts 配置模块负责，�
 
 一棵树就是一次运行。节点具有相同结构与循环，但每个节点显式持有四类实例差异：
 
+- definition：创建本节点的预定义 Agent 原型 ID；
 - profile：决定本节点的 system prompt；
 - model：决定本节点每次请求使用的 LLM；
 - tools：决定本节点可见的 Tool 定义；
@@ -81,11 +89,21 @@ Markdown Prompt 到 PromptCatalog 的转换只由 prompts 配置模块负责，�
 节点只保存 `message / assistant / tool` transcript；唯一 system 消息由 `PromptAssembler` 在调用模型前根据全局 system 和
 profile 生成。这样 system 的来源可配置，而已经发生的对话仍保持追加式事实。
 
+`agents.toml` 预定义无运行状态的 `AgentDefinition`：稳定 ID、用途说明、profile、model、tools 和允许的 child definitions。
+它不是树外的活跃实例，不保存 transcript、parent 或状态。同一个 profile 可以形成多个不同 model/tools 组合；root 由
+`runtime.tree.agent` 选择，child 由 delegate 选择，并在创建时把定义事实复制到新的 AgentNode。
+
 ## 最小循环
 
 Runner 深度优先选择最新的 ready 节点。没有待处理 Tool call 时组装 prompt 并调用节点自己的 model；assistant 无 Tool
-call 时完成节点，有 Tool call 时依次执行。普通工具结果追加为 tool 消息；delegate 创建 child 并暂停 parent。child 结束后，
-结果以对应 delegate call id 的 tool 消息恢复 parent。root 结束即整棵树结束。
+call 时完成节点，有 Tool call 时交给唯一 `ToolRegistry` 依次执行。普通 `ToolOutput` 追加为 tool 消息；
+`aur.agent.delegate` 与其他工具一样由目录路由；其原生 schema 从 AgentCatalog 列出可选 definition ID 与用途说明，调用只需
+目标 Agent ID 和 instruction。它产生不持有 AgentTree 的 `DelegationRequest`，再由 Runner 校验 parent 的 child allowlist、
+从目标 definition 创建 child 并暂停 parent。child 结束后，结果以对应 Tool call id 的 tool 消息恢复 parent。root 结束即
+整棵树结束。
+
+Tool ID 统一使用来源稳定的 `aur.*` 域名。注册表在项目组合时把框架内建工具与调用者注入工具形成一个扁平、不可变目录，
+负责 ID 校验、重复拒绝、定义筛选、唯一分派与异常规范化；节点的 tools 集合只控制可见性，不复制定义或执行器。
 
 当前循环是单线程、内存内、无恢复的。这个限制用于保持语义透明；未来并发或持久化必须产生等价 AgentTree，而不能建立
 第二套运行模型。
@@ -114,15 +132,16 @@ ops 通过协议接收组合根提供的能力，不导入 `aurora` 或 `src`。
 ## 包依赖
 
 ```text
-utils   contracts ← prompt
-           ▲         ▲
-           ├── ai    │
+utils   contracts ← agents/prompt
+           ▲              ▲
+           ├── ai         │
+           ├── tools ─────┤
 console ───┴──── engine ← aurora → ops
 ```
 
 - `utils`、`contracts` 和 `console` 不依赖上层项目包；
 - `contracts` 只依赖标准库；
-- `prompt` 只依赖 contracts，`ai` 只依赖 contracts 与 LiteLLM；
-- `engine` 只依赖 contracts 与 prompt；
+- `agents` 和 `prompt` 只依赖 contracts，`tools` 依赖 contracts 与 agents，`ai` 只依赖 contracts 与 LiteLLM；
+- `engine` 只依赖 contracts、agents、prompt 与 tools；
 - `ops` 只依赖标准库和 tomlkit，与 `src` 互不导入；
 - `aurora` 负责配置和具体装配。

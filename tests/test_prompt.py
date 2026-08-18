@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.contracts import AgentTree, ChatMessage, ToolCall
+from src.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall
 from src.prompt import PromptAssembler, PromptCatalog
 
 
@@ -13,8 +13,12 @@ def _assembler(*, limit: int = 1_000) -> PromptAssembler:
     )
 
 
+def _agent(profile: str = "root") -> AgentDefinition:
+    return AgentDefinition("agent", "Test Agent.", profile, "quality-model", frozenset(), frozenset())
+
+
 def test_assembler_emits_one_system_then_node_transcript() -> None:
-    tree = AgentTree.create("tree", "root", "root", "quality-model", "hello")
+    tree = AgentTree.create("tree", "root", _agent(), "hello")
     tree = tree.append(
         "root",
         ChatMessage.assistant(tool_calls=(ToolCall("call-1", "clock", {}),)),
@@ -28,14 +32,14 @@ def test_assembler_emits_one_system_then_node_transcript() -> None:
 
 
 def test_assembler_fails_visibly_when_context_is_too_large() -> None:
-    tree = AgentTree.create("tree", "root", "root", "quality-model", "hello")
+    tree = AgentTree.create("tree", "root", _agent(), "hello")
 
     with pytest.raises(ValueError, match="prompt exceeds character limit"):
         _assembler(limit=10).assemble(tree, "root")
 
 
 def test_assembler_rejects_missing_profile() -> None:
-    tree = AgentTree.create("tree", "root", "missing", "quality-model", "hello")
+    tree = AgentTree.create("tree", "root", _agent("missing"), "hello")
 
     with pytest.raises(ValueError, match="missing prompt"):
         _assembler().assemble(tree, "root")

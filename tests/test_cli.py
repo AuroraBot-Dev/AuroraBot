@@ -118,7 +118,7 @@ def test_config_command_lists_and_shows_registered_sources(
     assert run(["--root", str(configured_project), config.NAME, "show", "runtime"]) == 0
     shown = capsys.readouterr().out
     assert "[runtime.tree]" in shown
-    assert 'profile = "builtin.root"' in shown
+    assert 'agent = "builtin.root"' in shown
 
 
 def test_config_command_rejects_unknown_name(

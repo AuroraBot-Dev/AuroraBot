@@ -10,10 +10,12 @@ import pytest
 from aurora import AuroraConfig, assemble_runtime, load_config
 from aurora.composer import CompositionContext, InstanceKey, compose
 from aurora.composition import compose_project
+from aurora.composition.agents import AGENTS
 from aurora.composition.ai import MODEL
 from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.config import ConfigCollector, ConfigKey, collect_config
+from aurora.configuration.agents import AGENTS_CONFIG, AgentsConfig
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
@@ -36,6 +38,8 @@ class FakeModel:
 def test_project_configuration_builds_complete_runtime(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     runtime_configuration = configuration.get(RUNTIME_CONFIG)
+    definitions = configuration.get(AGENTS_CONFIG).definitions
+    root_definition = next(item for item in definitions if item.definition_id == runtime_configuration.agent)
     model = FakeModel()
     runtime = assemble_runtime(configuration, model)
 
@@ -43,21 +47,57 @@ def test_project_configuration_builds_complete_runtime(configured_project: Path)
 
     assert result.status == TreeStatus.COMPLETED
     assert result.tree_id == "tree"
-    assert result.node(runtime_configuration.node_id).model == runtime_configuration.model
-    assert model.requests[0].model == runtime_configuration.model
-    assert [tool.name for tool in model.requests[0].tools] == ["delegate"]
+    assert result.node(runtime_configuration.node_id).definition_id == runtime_configuration.agent
+    assert result.node(runtime_configuration.node_id).model == root_definition.model
+    assert model.requests[0].model == root_definition.model
+    assert [tool.name for tool in model.requests[0].tools] == ["aur.agent.delegate"]
 
 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
     configuration = load_config(configured_project)
-    runtime = configuration.get(RUNTIME_CONFIG)
+    agents = configuration.get(AGENTS_CONFIG)
+    root = agents.definitions[0]
     invalid = configuration.with_value(
-        RUNTIME_CONFIG,
-        replace(runtime, tools=frozenset({"missing"})),
+        AGENTS_CONFIG,
+        AgentsConfig((replace(root, tools=frozenset({*root.tools, "aur.test.missing"})), *agents.definitions[1:])),
     )
 
     with pytest.raises(ValueError, match="不可用工具"):
         assemble_runtime(invalid, FakeModel())
+
+
+def test_assembly_rejects_invalid_root_profile_model_and_delegation_boundary(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    runtime = configuration.get(RUNTIME_CONFIG)
+    agents = configuration.get(AGENTS_CONFIG)
+    root = agents.definitions[0]
+
+    with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
+        assemble_runtime(configuration.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
+    with pytest.raises(ValueError, match="未知 prompt profile"):
+        assemble_runtime(
+            configuration.with_value(
+                AGENTS_CONFIG,
+                AgentsConfig((replace(root, profile="missing"), *agents.definitions[1:])),
+            ),
+            FakeModel(),
+        )
+    with pytest.raises(ValueError, match="未知 model endpoint"):
+        assemble_runtime(
+            configuration.with_value(
+                AGENTS_CONFIG,
+                AgentsConfig((replace(root, model="missing"), *agents.definitions[1:])),
+            ),
+            FakeModel(),
+        )
+    with pytest.raises(ValueError, match=r"children.*可见性不一致"):
+        assemble_runtime(
+            configuration.with_value(
+                AGENTS_CONFIG,
+                AgentsConfig((replace(root, tools=frozenset()), *agents.definitions[1:])),
+            ),
+            FakeModel(),
+        )
 
 
 def test_configuration_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
@@ -70,7 +110,20 @@ def test_configuration_is_pure_data_until_composition_stages_run(configured_proj
     assert isinstance(prompt, PromptConfig)
     assert engine.max_depth == EXPECTED_MAX_DEPTH
     assert assembly.get(PROMPT_ASSEMBLER) is not None
+    assert assembly.get(AGENTS) is not None
     assert assembly.get(ENGINE_RUNNER) is not None
+
+
+def test_predefined_agents_can_share_profile_with_different_models_and_tools(configured_project: Path) -> None:
+    agents = compose_project(load_config(configured_project), FakeModel()).get(AGENTS)
+    worker = agents.get("builtin.worker")
+    fast_worker = agents.get("builtin.fast-worker")
+
+    assert worker.profile_id == fast_worker.profile_id == "builtin.worker"
+    assert worker.model == "quality"
+    assert fast_worker.model == "fast"
+    assert worker.tools == frozenset({"aur.agent.delegate"})
+    assert fast_worker.tools == frozenset()
 
 
 def test_composition_builds_configured_model_when_caller_does_not_inject_one(configured_project: Path) -> None:

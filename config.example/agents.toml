@@ -1,58 +1,36 @@
-# Agent 定义 — profile、能力授权与委派边界。
+# Agent 定义 — 可复用、无运行状态的节点原型。
 #
-# 本文件定义同构 Agent 的 profile，而不是新的运行时类型。当前配置系统只读注册
-# 这些定义；AgentTree 组合只直接使用 runtime.tree 指定的 root profile。
-#
-# capabilities 支持：
-# - 精确能力 ID（如 "aur.serv.memory.remember"）
-# - 前缀通配（"package.*"）
-# - 全通配（"*"）
-# - `!` 排除；排除始终优先于允许规则。
-#
-# 这里保存未来能力目录与委派策略所需的结构事实，当前不执行能力授权或交叉校验。
+# 每个 definition 选择一个 system profile、model endpoint、可见 tools 和允许的 child definitions。
+# 同一个 profile 可以被多个 definition 复用；运行时 transcript、parent 和状态只存在于 AgentTree 的 AgentNode 中。
 
-# Triage：注意力初筛入口 agent，无工具、快模型，process 时在快脑与主脑之间选择
-[[agent]]
-id = "builtin.triage"
-implementation = "src.agents.triage:TriageAgent"
-model_role = "fast"
-capabilities = []
-can_delegate = true
-child_profiles = ["builtin.fast", "builtin.root"]
-triage_control = true
-
-# Fast：低延迟快脑，直接响应或调用工具，不继续扩张代理树
-[[agent]]
-id = "builtin.fast"
-implementation = "src.agents.handler:ToolAgent"
-model_role = "fast"
-capabilities = ["*", "!aur.serv.memory.remember"]
-can_delegate = false
-child_profiles = []
-
-# Root：本体意识，接收 Triage 委派并决定是否继续委派
 [[agent]]
 id = "builtin.root"
-implementation = "src.agents.handler:ToolAgent"
-model_role = "quality"
-capabilities = ["*", "!aur.serv.memory.remember"]
-can_delegate = true
-child_profiles = ["builtin.worker", "builtin.memory"]
+description = "总代理：理解完整任务、整合结果，并把独立工作委派给合适的专门 Agent。"
+profile = "builtin.root"
+model = "quality"
+tools = ["aur.agent.delegate"]
+children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
 
-# Worker：执行具体工作的通用 Agent
 [[agent]]
 id = "builtin.worker"
-implementation = "src.agents.handler:ToolAgent"
-model_role = "quality"
-capabilities = ["*", "!aur.serv.memory.remember"]
-can_delegate = true
-child_profiles = ["builtin.worker"]
+description = "通用执行者：深入完成一件边界明确的工作，并可请求独立审阅。"
+profile = "builtin.worker"
+model = "quality"
+tools = ["aur.agent.delegate"]
+children = ["builtin.reviewer"]
 
-# Memory：主动记忆写入的专精 Agent
 [[agent]]
-id = "builtin.memory"
-implementation = "src.agents.handler:ToolAgent"
-model_role = "quality"
-capabilities = ["aur.serv.memory.remember"]
-can_delegate = false
-child_profiles = []
+id = "builtin.fast-worker"
+description = "快速执行者：使用较快模型直接处理事实清楚、风险低的独立工作。"
+profile = "builtin.worker"
+model = "fast"
+tools = []
+children = []
+
+[[agent]]
+id = "builtin.reviewer"
+description = "独立审阅者：检查给定结果的事实、遗漏和边界，不继续扩张 AgentTree。"
+profile = "builtin.reviewer"
+model = "quality"
+tools = []
+children = []
