@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from src.contracts.tool import ToolDefinition
+
 ChatRole = Literal["system", "message", "assistant", "tool"]
 
 
@@ -70,20 +72,6 @@ class ChatMessage:
 
 
 @dataclass(frozen=True, slots=True)
-class ToolDefinition:
-    """模型可见的工具定义。"""
-
-    name: str
-    description: str
-    parameters: Mapping[str, Any]
-
-    def __post_init__(self) -> None:
-        if not self.name or not self.description:
-            raise ValueError("ToolDefinition requires name and description")
-        object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
-
-
-@dataclass(frozen=True, slots=True)
 class ModelRequest:
     """一次完整的四角色模型请求。"""
 
@@ -109,24 +97,3 @@ class Model(Protocol):
     """AgentTree 循环使用的唯一模型端口。"""
 
     async def complete(self, request: ModelRequest) -> ChatMessage: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ToolOutput:
-    """工具的规范化文本结果。"""
-
-    content: str
-    is_error: bool = False
-
-    def __post_init__(self) -> None:
-        if not self.content.strip():
-            raise ValueError("ToolOutput content must not be empty")
-
-
-class Tool(Protocol):
-    """普通环境工具的最小效果端口。"""
-
-    @property
-    def definition(self) -> ToolDefinition: ...
-
-    async def execute(self, call: ToolCall) -> ToolOutput: ...

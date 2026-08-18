@@ -5,11 +5,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.composer import InstanceKey
+from aurora.composition.agents import AGENTS
 from aurora.composition.ai import MODEL
 from aurora.composition.prompt import PROMPT_ASSEMBLER
+from aurora.composition.tools import TOOLS
 from aurora.configuration.engine import ENGINE_CONFIG
+from aurora.configuration.models import MODELS_CONFIG
+from aurora.configuration.prompts import PROMPTS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
-from src.engine import DELEGATE_TOOL, AgentTreeRunner
+from src.engine import AgentTreeRunner
+from src.tools import DELEGATE_TOOL
 
 if TYPE_CHECKING:
     from aurora.composer import CompositionContext
@@ -23,17 +28,30 @@ def register(context: CompositionContext) -> None:
     runtime = context.config.get(RUNTIME_CONFIG)
     assembler = context.require(PROMPT_ASSEMBLER)
     model = context.require(MODEL)
-    available = {DELEGATE_TOOL, *(tool.definition.name for tool in context.tools)}
-    missing = runtime.tools - available
-    if missing:
-        names = ", ".join(sorted(missing))
-        raise ValueError(f"root 引用了不可用工具：{names}")
+    agents = context.require(AGENTS)
+    tools = context.require(TOOLS)
+    prompts = context.config.get(PROMPTS_CONFIG).profiles
+    models = context.config.get(MODELS_CONFIG).endpoints
+    if runtime.agent not in agents.ids:
+        raise ValueError(f"root 引用了未知 Agent definition：{runtime.agent}")
+    for definition in agents.definitions:
+        if definition.profile_id not in prompts:
+            raise ValueError(f"{definition.definition_id} 引用了未知 prompt profile：{definition.profile_id}")
+        if definition.model not in models:
+            raise ValueError(f"{definition.definition_id} 引用了未知 model endpoint：{definition.model}")
+        missing = definition.tools - tools.names
+        if missing:
+            names = ", ".join(sorted(missing))
+            raise ValueError(f"{definition.definition_id} 引用了不可用工具：{names}")
+        if bool(definition.children) != (DELEGATE_TOOL in definition.tools):
+            raise ValueError(f"{definition.definition_id} 的 children 与 {DELEGATE_TOOL} 可见性不一致")
     context.provide(
         ENGINE_RUNNER,
         AgentTreeRunner(
             model,
             assembler,
-            context.tools,
+            agents,
+            tools,
             max_depth=configuration.max_depth,
             max_nodes=configuration.max_nodes,
             max_steps=configuration.max_steps,

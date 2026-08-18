@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from aurora.composer import InstanceKey
 from aurora.configuration.models import MODELS_CONFIG
-from aurora.configuration.runtime import RUNTIME_CONFIG
 from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
 from src.contracts import Model
 
@@ -30,5 +29,4 @@ def register(context: CompositionContext) -> None:
                 for endpoint_id, endpoint in configuration.endpoints.items()
             },
         )
-        model.validate_endpoint(context.config.get(RUNTIME_CONFIG).model)
     context.provide(MODEL, model)

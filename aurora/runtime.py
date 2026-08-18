@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from aurora.composition import compose_project
+from aurora.composition.agents import AGENTS
 from aurora.composition.console import TERMINAL_CONSOLE
 from aurora.composition.engine import ENGINE_RUNNER
 from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from aurora.config import AuroraConfig
+    from src.agents import AgentCatalog
     from src.contracts import Model, Tool
     from src.engine import AgentTreeRunner
 
@@ -38,6 +40,7 @@ class AuroraRuntime:
 
     runner: AgentTreeRunner
     root: RuntimeConfig
+    agents: AgentCatalog
     config: AuroraConfig
     console: TerminalConsole
     _trees: dict[str, AgentTree] = field(default_factory=dict, init=False, repr=False)
@@ -52,10 +55,8 @@ class AuroraRuntime:
         return AgentTree.create(
             tree_id or uuid4().hex,
             self.root.node_id,
-            self.root.profile,
-            self.root.model,
+            self.agents.get(self.root.agent),
             message,
-            tools=self.root.tools,
         )
 
     async def run(self, message: str, *, tree_id: str | None = None) -> AgentTree:
@@ -148,6 +149,7 @@ class AuroraRuntime:
             "node_id": node.node_id,
             "parent_id": node.parent_id,
             "parent_call_id": node.parent_call_id,
+            "definition_id": node.definition_id,
             "profile_id": node.profile_id,
             "model": node.model,
             "tools": sorted(node.tools),
@@ -177,6 +179,7 @@ def assemble_runtime(config: AuroraConfig, model: Model | None = None, tools: It
     return AuroraRuntime(
         assembly.get(ENGINE_RUNNER),
         config.get(RUNTIME_CONFIG),
+        assembly.get(AGENTS),
         config,
         assembly.get(TERMINAL_CONSOLE),
     )

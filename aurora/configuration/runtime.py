@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import boolean, load_toml, strings, table, text
+from aurora.utils.toml import boolean, load_toml, table, text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
     node_id: str
-    profile: str
-    model: str
-    tools: frozenset[str]
+    agent: str
     console_enabled: bool
 
 
@@ -36,8 +34,6 @@ def _parse(path: Path) -> RuntimeConfig:
     console = table(runtime, "console")
     return RuntimeConfig(
         text(tree, "node_id"),
-        text(tree, "profile"),
-        text(tree, "model"),
-        frozenset(strings(tree, "tools")),
+        text(tree, "agent"),
         boolean(console, "enabled"),
     )

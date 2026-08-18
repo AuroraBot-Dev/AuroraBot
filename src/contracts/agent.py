@@ -22,12 +22,33 @@ class TreeStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class AgentDefinition:
+    """创建同构 AgentNode 的无状态预定义原型。"""
+
+    definition_id: str
+    description: str
+    profile_id: str
+    model: str
+    tools: frozenset[str]
+    children: frozenset[str]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "tools", frozenset(self.tools))
+        object.__setattr__(self, "children", frozenset(self.children))
+        if not all((self.definition_id.strip(), self.description.strip(), self.profile_id.strip(), self.model.strip())):
+            raise ValueError("AgentDefinition requires definition_id, description, profile_id and model")
+        if any(not name for name in (*self.tools, *self.children)):
+            raise ValueError("AgentDefinition Tool and child IDs must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class AgentNode:
     """树中的一个同构 Agent 节点。"""
 
     node_id: str
     parent_id: str | None
     parent_call_id: str | None
+    definition_id: str
     profile_id: str
     model: str
     tools: frozenset[str]
@@ -39,8 +60,8 @@ class AgentNode:
     def __post_init__(self) -> None:
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", frozenset(self.tools))
-        if not self.node_id or not self.profile_id or not self.model:
-            raise ValueError("AgentNode requires node_id, profile_id and model")
+        if not self.node_id or not self.definition_id or not self.profile_id or not self.model:
+            raise ValueError("AgentNode requires node_id, definition_id, profile_id and model")
         if any(not name for name in self.tools):
             raise ValueError("AgentNode Tool names must not be empty")
         if self.parent_id is None and self.parent_call_id is not None:
@@ -116,13 +137,19 @@ class AgentTree:
         cls,
         tree_id: str,
         root_id: str,
-        profile_id: str,
-        model: str,
+        definition: AgentDefinition,
         initial_message: str,
-        *,
-        tools: frozenset[str] = frozenset(),
     ) -> AgentTree:
-        root = AgentNode(root_id, None, None, profile_id, model, tools, (ChatMessage.message(initial_message),))
+        root = AgentNode(
+            root_id,
+            None,
+            None,
+            definition.definition_id,
+            definition.profile_id,
+            definition.model,
+            definition.tools,
+            (ChatMessage.message(initial_message),),
+        )
         return cls(tree_id, root_id, (root,))
 
     def node(self, node_id: str) -> AgentNode:
@@ -150,22 +177,21 @@ class AgentTree:
         self,
         parent_id: str,
         call: ToolCall,
-        profile_id: str,
-        model: str,
-        tools: frozenset[str],
+        definition: AgentDefinition,
         instruction: str,
     ) -> AgentTree:
         parent = self.node(parent_id)
         if parent.status != AgentStatus.READY or call not in parent.pending_calls:
-            raise ValueError("delegate call must be pending on a ready parent")
+            raise ValueError("tree operation call must be pending on a ready parent")
         child_id = f"{self.tree_id}:{len(self.nodes)}"
         child = AgentNode(
             child_id,
             parent_id,
             call.call_id,
-            profile_id,
-            model,
-            tools,
+            definition.definition_id,
+            definition.profile_id,
+            definition.model,
+            definition.tools,
             (ChatMessage.message(instruction),),
         )
         nodes = tuple(

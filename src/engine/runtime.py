@@ -2,42 +2,25 @@
 
 from __future__ import annotations
 
-from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.contracts import (
     AgentTree,
     ChatMessage,
+    DelegationRequest,
     Model,
     ModelRequest,
-    Tool,
     ToolCall,
-    ToolDefinition,
     ToolOutput,
     TreeStatus,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
 
+    from src.agents import AgentCatalog
     from src.prompt import PromptAssembler
-
-DELEGATE_TOOL = "delegate"
-DELEGATE_DEFINITION = ToolDefinition(
-    DELEGATE_TOOL,
-    "Create a child Agent for one focused assignment.",
-    {
-        "type": "object",
-        "properties": {
-            "profile": {"type": "string"},
-            "model": {"type": "string"},
-            "tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
-            "instruction": {"type": "string"},
-        },
-        "required": ["profile", "model", "instruction"],
-        "additionalProperties": False,
-    },
-)
+    from src.tools import ToolRegistry
 
 
 class AgentTreeRunner:
@@ -47,7 +30,8 @@ class AgentTreeRunner:
         self,
         model: Model,
         assembler: PromptAssembler,
-        tools: Iterable[Tool] = (),
+        agents: AgentCatalog,
+        tools: ToolRegistry,
         *,
         max_depth: int = 4,
         max_nodes: int = 32,
@@ -55,21 +39,16 @@ class AgentTreeRunner:
     ) -> None:
         if min(max_depth, max_nodes, max_steps) <= 0:
             raise ValueError("runner limits must be positive")
-        registered = tuple(tools)
-        by_name = {tool.definition.name: tool for tool in registered}
-        if len(by_name) != len(registered):
-            raise ValueError("Tool names must be unique")
-        if DELEGATE_TOOL in by_name:
-            raise ValueError("delegate is reserved by AgentTreeRunner")
         self._model = model
         self._assembler = assembler
-        self._tools = MappingProxyType(by_name)
-        self._definitions = (DELEGATE_DEFINITION, *(tool.definition for tool in by_name.values()))
+        self._agents = agents
+        self._tools = tools
         self._max_depth = max_depth
         self._max_nodes = max_nodes
         self._max_steps = max_steps
 
     async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:
+        self._validate_definitions(tree)
         current = self._publish(tree, observer)
         for _ in range(self._max_steps):
             if current.status != TreeStatus.RUNNING:
@@ -84,7 +63,7 @@ class AgentTreeRunner:
                 )
                 continue
             try:
-                definitions = tuple(definition for definition in self._definitions if definition.name in node.tools)
+                definitions = self._tools.definitions_for(node.tools)
                 response = await self._model.complete(
                     ModelRequest(node.model, self._assembler.assemble(current, node.node_id), definitions)
                 )
@@ -105,54 +84,42 @@ class AgentTreeRunner:
             observer(tree)
         return tree
 
+    def _validate_definitions(self, tree: AgentTree) -> None:
+        for node in tree.nodes:
+            definition = self._agents.get(node.definition_id)
+            if (node.profile_id, node.model, node.tools) != (
+                definition.profile_id,
+                definition.model,
+                definition.tools,
+            ):
+                raise ValueError(f"AgentNode 与预定义原型不一致：{node.node_id}")
+
     async def _execute_call(self, tree: AgentTree, node_id: str, call: ToolCall) -> AgentTree:
         if call.name not in tree.node(node_id).tools:
             return tree.append(
                 node_id,
-                ChatMessage.tool(call.call_id, f"tool is not visible to this Agent: {call.name}", is_error=True),
+                ChatMessage.tool(call.call_id, f"当前 Agent 不可见此工具：{call.name}", is_error=True),
             )
-        if call.name == DELEGATE_TOOL:
-            return self._delegate(tree, node_id, call)
-        tool = self._tools.get(call.name)
-        if tool is None:
-            return tree.append(node_id, ChatMessage.tool(call.call_id, f"unknown tool: {call.name}", is_error=True))
-        try:
-            output = await tool.execute(call)
-        except Exception as error:
-            output = ToolOutput(f"tool failed: {error}", is_error=True)
-        return tree.append(node_id, ChatMessage.tool(call.call_id, output.content, is_error=output.is_error))
+        result = await self._tools.execute(call)
+        if isinstance(result, ToolOutput):
+            return tree.append(node_id, ChatMessage.tool(call.call_id, result.content, is_error=result.is_error))
+        return self._apply_delegation(tree, node_id, call, result)
 
-    def _delegate(self, tree: AgentTree, node_id: str, call: ToolCall) -> AgentTree:
-        profile = call.arguments.get("profile")
-        model = call.arguments.get("model")
-        tool_names = call.arguments.get("tools", [])
-        instruction = call.arguments.get("instruction")
-        valid_tools = isinstance(tool_names, list) and all(isinstance(name, str) and name for name in tool_names)
-        if (
-            not isinstance(profile, str)
-            or not profile.strip()
-            or not isinstance(model, str)
-            or not model.strip()
-            or not valid_tools
-            or not isinstance(instruction, str)
-            or not instruction.strip()
-        ):
+    def _apply_delegation(
+        self,
+        tree: AgentTree,
+        node_id: str,
+        call: ToolCall,
+        request: DelegationRequest,
+    ) -> AgentTree:
+        parent = self._agents.get(tree.node(node_id).definition_id)
+        if request.agent not in parent.children:
             return tree.append(
                 node_id,
-                ChatMessage.tool(
-                    call.call_id,
-                    "delegate requires non-empty profile, model and instruction plus a string tools array",
-                    is_error=True,
-                ),
+                ChatMessage.tool(call.call_id, f"当前 Agent 不允许委派给：{request.agent}", is_error=True),
             )
-        requested_tools = frozenset(tool_names)
-        available_tools = frozenset(definition.name for definition in self._definitions)
-        unknown_tools = requested_tools - available_tools
-        if unknown_tools:
-            names = ", ".join(sorted(unknown_tools))
-            return tree.append(node_id, ChatMessage.tool(call.call_id, f"unknown child tools: {names}", is_error=True))
         if len(tree.nodes) >= self._max_nodes:
-            return tree.append(node_id, ChatMessage.tool(call.call_id, "AgentTree node limit reached", is_error=True))
+            return tree.append(node_id, ChatMessage.tool(call.call_id, "AgentTree 已达到节点数上限", is_error=True))
         if tree.depth(node_id) >= self._max_depth:
-            return tree.append(node_id, ChatMessage.tool(call.call_id, "AgentTree depth limit reached", is_error=True))
-        return tree.spawn(node_id, call, profile.strip(), model.strip(), requested_tools, instruction.strip())
+            return tree.append(node_id, ChatMessage.tool(call.call_id, "AgentTree 已达到深度上限", is_error=True))
+        return tree.spawn(node_id, call, self._agents.get(request.agent), request.instruction)
