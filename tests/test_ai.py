@@ -82,6 +82,36 @@ def test_litellm_gateway_uses_explicit_endpoint_and_normalizes_tool_calls(
     assert calls[0]["api_key"] == "secret"
 
 
+def test_litellm_gateway_accepts_null_tool_calls_for_text_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def call(_parameters: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "你好！",
+                        "tool_calls": None,
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    model = LiteLLMModelGateway(
+        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid/v1", "TEST_MODEL_KEY")},
+        {"default": ModelEndpoint("provider", "model-name")},
+        caller=call,
+    )
+
+    request = ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+    response = asyncio.run(model.complete(request))
+
+    assert response.content == "你好！"
+    assert response.tool_calls == ()
+
+
 @pytest.mark.parametrize(
     ("providers", "endpoints", "message"),
     [

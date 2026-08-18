@@ -87,7 +87,8 @@ def _gateway_model(endpoint: ModelEndpoint, provider: ProviderEndpoint) -> str:
 
 
 async def _litellm_completion(parameters: dict[str, Any]) -> object:
-    return await litellm.acompletion(**parameters)
+    response = cast("Awaitable[object]", litellm.acompletion(**parameters))
+    return await response
 
 
 def _response_mapping(response: object) -> Mapping[str, Any]:
@@ -110,7 +111,9 @@ def _assistant_message(response: Mapping[str, Any]) -> ChatMessage:
         raise RuntimeError("模型响应缺少 assistant message")
     content = message.get("content")
     text = content if isinstance(content, str) else ""
-    raw_calls = message.get("tool_calls", [])
+    raw_calls = message.get("tool_calls")
+    if raw_calls is None:
+        raw_calls = []
     if not isinstance(raw_calls, list):
         raise RuntimeError("模型响应的 tool_calls 必须是数组")
     calls = tuple(_tool_call(raw) for raw in raw_calls)
