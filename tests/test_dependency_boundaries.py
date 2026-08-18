@@ -32,6 +32,26 @@ def test_removed_src_subpackages_do_not_return_as_empty_scaffolding() -> None:
     assert existing == []
 
 
+def test_project_configuration_does_not_construct_src_objects() -> None:
+    violations: list[str] = []
+    for path in (_ROOT / "aurora" / "configuration").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            module = _imported_module(node)
+            if module == "src" or module.startswith("src."):
+                violations.append(f"{path.relative_to(_ROOT)} imports {module}")
+    assert violations == []
+
+
+def test_cli_main_only_depends_on_command_directory() -> None:
+    path = _ROOT / "aurora" / "main.py"
+    aurora_imports = {
+        module
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if (module := _imported_module(node)).startswith("aurora.")
+    }
+    assert aurora_imports == {"aurora.commands"}
+
+
 def _imported_module(node: ast.AST) -> str:
     if isinstance(node, ast.ImportFrom):
         return node.module or ""

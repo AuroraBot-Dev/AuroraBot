@@ -14,7 +14,7 @@ AuroraBot 当前是以 `AgentTree` 为核心的自主智能体实验框架。仓
 
 ```text
 config/         最小项目组合配置；apps.toml 仅作为尚未迁移的用户配置保留
-aurora/         配置加载、依赖装配、项目级 runtime 与 CLI
+aurora/         项目级入口；commands / configuration / composition 分包与 runtime 门面
 src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
 src/prompt/     四角色 PromptAssembler
 src/engine/     AgentTree 的确定性单循环
@@ -33,7 +33,8 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 - `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务。
 - `AgentTreeRunner` 只依赖 contracts + prompt；普通 Tool 经端口执行，`delegate` 是唯一由 engine 解释的内建 Tool。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
-- `aurora` 是唯一组合根，负责 `config/aurora.toml → PromptCatalog → AgentTreeRunner → AuroraRuntime`。
+- `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
+  `commands` 按模块注册 CLI，`main.py` 只分派。
 - 依赖方向固定为 `contracts ← prompt/ai ← engine ← aurora`；`src` 不导入 `aurora`。
 
 ## Current exclusions

@@ -1,38 +1,19 @@
-"""组合根使用的一份最小 TOML 配置。"""
+"""把最小项目 TOML 解析为纯组合配置。"""
 
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from src.prompt import PromptCatalog
+from aurora.configuration.models import (
+    AuroraConfiguration,
+    PromptConfiguration,
+    RootAgentConfiguration,
+    RunnerConfiguration,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-@dataclass(frozen=True, slots=True)
-class RootAgentConfiguration:
-    node_id: str
-    profile: str
-    model: str
-    tools: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class RunnerConfiguration:
-    max_depth: int = 4
-    max_nodes: int = 32
-    max_steps: int = 256
-    max_prompt_characters: int = 32_000
-
-
-@dataclass(frozen=True, slots=True)
-class AuroraConfiguration:
-    root: RootAgentConfiguration
-    runner: RunnerConfiguration
-    prompt: PromptCatalog
 
 
 def load_configuration(project_root: Path) -> AuroraConfiguration:
@@ -56,7 +37,7 @@ def load_configuration(project_root: Path) -> AuroraConfiguration:
             _positive_integer(runner, "max_steps"),
             _positive_integer(runner, "max_prompt_characters"),
         ),
-        PromptCatalog(_strings(prompt, "system"), {key: str(value) for key, value in profiles.items()}),
+        PromptConfiguration(_strings(prompt, "system"), {key: str(value) for key, value in profiles.items()}),
     )
     if configuration.root.profile not in configuration.prompt.profiles:
         raise ValueError(f"missing prompt for root profile {configuration.root.profile}")

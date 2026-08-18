@@ -1,21 +1,17 @@
-"""AuroraBot 配置、组合与项目级运行时。"""
+"""运行前组合配置的 DTO 与 TOML loader。"""
 
-from aurora.composition import assemble_runtime
-from aurora.configuration import (
+from aurora.configuration.loader import load_configuration
+from aurora.configuration.models import (
     AuroraConfiguration,
     PromptConfiguration,
     RootAgentConfiguration,
     RunnerConfiguration,
-    load_configuration,
 )
-from aurora.runtime import AuroraRuntime
 
 __all__ = [
     "AuroraConfiguration",
-    "AuroraRuntime",
     "PromptConfiguration",
     "RootAgentConfiguration",
     "RunnerConfiguration",
-    "assemble_runtime",
     "load_configuration",
 ]

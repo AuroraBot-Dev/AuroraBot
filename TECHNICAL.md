@@ -32,8 +32,12 @@ tool 消息。模型边界失败使当前节点失败；child 失败作为 deleg
 
 ## 项目组合
 
-`config/aurora.toml` 定义 root 节点默认 profile/model/tools、runner 上界和 prompt 目录。`load_configuration()` 产生不可变
-配置，`assemble_runtime()` 校验 root 工具是否已经注入，构造 PromptAssembler、AgentTreeRunner 和 AuroraRuntime。
+`config/aurora.toml` 定义 root 节点默认 profile/model/tools、runner 上界和 prompt 目录。`configuration.loader` 只产生
+`configuration.models` 中的不可变 DTO，不导入或构造 PromptCatalog、AgentTreeRunner 等运行对象。
+
+`composition.prompt` 把 prompt 配置变为 PromptAssembler，`composition.engine` 校验 Tool 并构造 AgentTreeRunner，
+`composition.runtime` 最终产生 AuroraRuntime。CLI 的 about/check 分别位于 `commands/about.py` 和 `commands/check.py`，
+`main.py` 只负责统一注册和分派。
 
 Model 与 Tool 由组合调用者注入。当前仓库故意不提供联网 Provider 或生产进程生命周期，以免 Provider 选择再次侵入核心。
 

@@ -1,47 +1,33 @@
-"""AuroraBot 项目命令行入口。"""
+"""AuroraBot 项目命令的统一注册与分派入口。"""
 
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from aurora.commands import COMMAND_REGISTRARS
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-_CHECK_COMMANDS = (
-    ("uv", "run", "--no-sync", "ruff", "check", "aurora", "src", "tests"),
-    ("uv", "run", "--no-sync", "ruff", "format", "--check", "aurora", "src", "tests"),
-    ("uv", "run", "--no-sync", "pyright", "aurora", "src", "tests"),
-    ("uv", "run", "--no-sync", "pytest", "-q", "--cov=src", "--cov=aurora"),
-)
+    from collections.abc import Callable, Sequence
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="aurora", description="AuroraBot AgentTree experimental core")
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("check", help="run lint, format, type and behavior checks")
-    subparsers.add_parser("about", help="describe the current experimental core")
+    for register in COMMAND_REGISTRARS:
+        register(subparsers)
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     arguments = parser.parse_args(argv)
-    if arguments.command is None:
+    executor = getattr(arguments, "executor", None)
+    if executor is None:
         parser.print_help()
         return 0
-    if arguments.command == "about":
-        sys.stdout.write("AuroraBot currently explores one AgentTree + four-role chat loop.\n")
-        return 0
-    root = Path(__file__).parents[1]
-    for command in _CHECK_COMMANDS:
-        result = subprocess.run(command, cwd=root, check=False)
-        if result.returncode != 0:
-            return result.returncode
-    return 0
+    return cast("Callable[[argparse.Namespace], int]", executor)(arguments)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

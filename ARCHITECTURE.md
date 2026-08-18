@@ -9,10 +9,10 @@ AuroraBot 当前只实现一个完整最小循环，同时保留项目级配置�
 config/aurora.toml
         │
         ▼
-aurora.load_configuration
+aurora.configuration.load_configuration
         │
         ▼
-aurora.assemble_runtime ─── Model / Tools（由调用者注入）
+aurora.composition.assemble_runtime ─── Model / Tools（由调用者注入）
         │
         ▼
 AuroraRuntime.create_tree(message)
@@ -26,6 +26,20 @@ AgentTreeRunner ─── PromptAssembler
 ```
 
 `aurora` 仍是项目的唯一组合根。收核删除的是旧组合中的生产化设施，不是“项目如何构造一套运行时”这件事本身。
+
+项目层按已确定的变化轴分包：
+
+```text
+aurora/
+  commands/        每个 CLI 命令独立注册与执行
+  configuration/   纯配置 DTO 与 TOML loader
+  composition/     prompt → engine → runtime 分阶段构造
+  runtime.py       组合完成后的使用门面
+  main.py          只解析顶层 CLI 并分派命令
+```
+
+配置 loader 不构造 PromptCatalog 或 Runner；这些转换只发生在 composition。增加命令、配置节或组合阶段时新增对应模块，
+而不是扩张 `main.py` 或一个全能 assembly 函数。
 
 ## AgentTree
 

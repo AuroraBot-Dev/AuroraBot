@@ -6,7 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from aurora import AuroraConfiguration, RootAgentConfiguration, assemble_runtime, load_configuration
+from aurora import (
+    AuroraConfiguration,
+    PromptConfiguration,
+    RootAgentConfiguration,
+    assemble_runtime,
+    load_configuration,
+)
+from aurora.composition.engine import assemble_engine
+from aurora.composition.prompt import assemble_prompt
 from src.contracts import ChatMessage, ModelRequest, TreeStatus
 
 
@@ -48,3 +56,13 @@ def test_assembly_rejects_unavailable_root_tool() -> None:
 
     with pytest.raises(ValueError, match="unavailable tools"):
         assemble_runtime(invalid, FakeModel())
+
+
+def test_configuration_is_pure_data_until_composition_stages_run() -> None:
+    configuration = load_configuration(Path(__file__).parents[1])
+
+    assert isinstance(configuration.prompt, PromptConfiguration)
+    assembler = assemble_prompt(configuration)
+    runner = assemble_engine(configuration, FakeModel(), assembler)
+
+    assert runner is not None
