@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.composer import InstanceKey
-from aurora.configuration.prompt import PROMPT_CONFIG
+from aurora.configuration.prompts import PROMPTS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from src.prompt import PromptAssembler, PromptCatalog
 
@@ -17,7 +17,7 @@ PROMPT_ASSEMBLER = InstanceKey[PromptAssembler]("prompt.assembler")
 
 
 def register(context: CompositionContext) -> None:
-    configuration = context.config.get(PROMPT_CONFIG)
+    configuration = context.config.get(PROMPTS_CONFIG)
     runtime = context.config.get(RUNTIME_CONFIG)
     if runtime.profile not in configuration.profiles:
         raise ValueError(f"root profile 没有对应提示词：{runtime.profile}")

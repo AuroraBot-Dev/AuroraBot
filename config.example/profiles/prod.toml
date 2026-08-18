@@ -1,7 +1,4 @@
-# 生产环境覆盖项。
-# 本文件只覆盖 runtime.toml 中的进程配置；文件名必须与其中 runtime.profile
-# 一致。密钥通过环境变量注入，不写入此文件。
-# Panel 接管配置编辑前，请勿把模型、Agent、App 或存储结构写进本文件。
+# 生产环境 profile。当前作为独立只读配置注册，尚不覆盖 runtime.toml。
 
 [runtime]
 profile = "prod"

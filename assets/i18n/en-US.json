@@ -103,7 +103,7 @@
     "directoryCommand": "Set-Location AuroraBot",
     "syncCommand": "uv sync --no-dev",
     "envCommand": "Copy-Item .env.example .env",
-    "configComment": "# Adjust config/runtime.toml, engine.toml, and prompt.toml as needed",
+    "configComment": "# Copy config.example to personal config/, then inspect it with aurora config list/show",
     "runComment": "# Start the Console and default MCP Platform",
     "runCommand": "uv run --no-dev --env-file .env aurora start",
     "previewLabel": "Nightly · 0.6 alpha",

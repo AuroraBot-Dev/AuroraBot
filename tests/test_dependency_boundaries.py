@@ -46,11 +46,21 @@ def test_project_configuration_does_not_construct_src_objects() -> None:
 
 
 def test_each_project_toml_has_one_registered_configuration_module() -> None:
-    toml_names = {path.stem for path in (_ROOT / "config").glob("*.toml")}
-    module_names = {path.stem for path in (_ROOT / "aurora" / "configuration").glob("*.py") if path.stem != "__init__"}
-    registered_names = {register.__module__.rsplit(".", maxsplit=1)[-1] for register in CONFIG_REGISTRARS}
+    toml_names = {
+        path.relative_to(_ROOT / "config.example").with_suffix("").as_posix()
+        for path in (_ROOT / "config.example").rglob("*.toml")
+    }
+    module_names = {
+        path.relative_to(_ROOT / "aurora" / "configuration").with_suffix("").as_posix()
+        for path in (_ROOT / "aurora" / "configuration").rglob("*.py")
+        if path.stem != "__init__"
+    }
+    registered_names = {
+        register.__module__.removeprefix("aurora.configuration.").replace(".", "/") for register in CONFIG_REGISTRARS
+    }
 
     assert toml_names == module_names == registered_names
+    assert len(CONFIG_REGISTRARS) == len(registered_names)
 
 
 def test_each_composition_module_targets_a_src_package_and_is_registered() -> None:

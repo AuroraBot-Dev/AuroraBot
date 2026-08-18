@@ -1,10 +1,16 @@
 # engine 核心配置 — 热路径资源边界、Triage 防抖、自主节律与 Task 预算。
 #
-# 所有字段都在启动时严格校验；删除字段或写非法值会导致启动失败。
-# Panel 接管配置编辑前，请勿随意改动边界值：这些是防失控的硬约束。
+# 当前 AgentTree 组合只读取 engine.tree 并严格校验；其余小节作为后续能力的
+# 结构配置只读注册，尚不影响运行。
+
+[engine.tree]
+# 当前 AgentTree 单循环直接使用的边界
+max_depth = 4
+max_nodes = 32
+max_steps = 256
 
 [engine]
-# engine 私有工作区；必须与 storage.engine 解析结果一致
+# 预留的 engine 私有工作区
 workspace = "data/engine"
 
 [engine.agents]
@@ -28,7 +34,7 @@ model_concurrency = 4
 tool_concurrency = 8
 
 [engine.triage]
-# Triage 使用的模型角色（必须是 models.toml 已定义角色）
+# Triage 使用的模型角色
 model_role = "fast"
 # 同会话事件防抖静默窗口（秒）
 quiet_seconds = 3.0

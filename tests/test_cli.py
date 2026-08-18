@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.commands import about, check, donk
+from aurora.commands import about, check, config, donk
 from aurora.main import build_parser, run
 from aurora.utils.process import run_process
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 FAILED_EXIT_CODE = 3
 EXPECTED_LINT_COMMANDS = 3
 INTERRUPTED_EXIT_CODE = 130
+CONFIG_ERROR_EXIT_CODE = 2
 
 
 def test_bare_cli_and_about_are_non_effectful(capsys: pytest.CaptureFixture[str]) -> None:
@@ -29,11 +30,49 @@ def test_each_command_registers_its_own_executor() -> None:
 
     about_arguments = parser.parse_args([about.NAME])
     check_arguments = parser.parse_args([check.NAME])
+    config_arguments = parser.parse_args([config.NAME, "list"])
     donk_arguments = parser.parse_args([donk.NAME, "show"])
 
     assert about_arguments.executor is about.execute
     assert check_arguments.executor is check.execute
+    assert config_arguments.executor is config.execute
     assert donk_arguments.executor is donk.execute
+
+
+def test_config_command_lists_and_shows_registered_sources(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run(["--root", str(configured_project), config.NAME, "list"]) == 0
+    listing = capsys.readouterr().out
+    assert "runtime\tconfig/runtime.toml" in listing
+    assert "profiles.dev\tconfig/profiles/dev.toml" in listing
+
+    assert run(["--root", str(configured_project), config.NAME, "show", "runtime"]) == 0
+    shown = capsys.readouterr().out
+    assert "[runtime.tree]" in shown
+    assert 'profile = "builtin.root"' in shown
+
+
+def test_config_command_rejects_unknown_name(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run(["--root", str(configured_project), config.NAME, "show", "unknown"]) == CONFIG_ERROR_EXIT_CODE
+    assert "未知配置：unknown" in capsys.readouterr().err
+
+
+def test_config_command_reports_load_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_load(_root: Path) -> None:
+        raise ValueError("字段无效")
+
+    monkeypatch.setattr(config, "load_config", fail_load)
+
+    assert run([config.NAME, "list"]) == CONFIG_ERROR_EXIT_CODE
+    assert "配置加载失败：字段无效" in capsys.readouterr().err
 
 
 def test_check_command_runs_all_selected_stages_and_summarizes_failures(

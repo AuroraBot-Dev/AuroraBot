@@ -103,7 +103,7 @@
     "directoryCommand": "Set-Location AuroraBot",
     "syncCommand": "uv sync --no-dev",
     "envCommand": "Copy-Item .env.example .env",
-    "configComment": "# 按需调整 config/runtime.toml、engine.toml 和 prompt.toml",
+    "configComment": "# 复制 config.example 为个人 config/，再用 aurora config list/show 查看",
     "runComment": "# 启动 Console 与默认 MCP 平台",
     "runCommand": "uv run --no-dev --env-file .env aurora start",
     "previewLabel": "Nightly · 0.6 alpha",

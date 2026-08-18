@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.config import ConfigCollector, ConfigKey, collect_config
 from aurora.configuration.engine import ENGINE_CONFIG
-from aurora.configuration.prompt import PROMPT_CONFIG, PromptConfig
+from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.utils.toml import load_toml, text
 from src.contracts import ChatMessage, ModelRequest, TreeStatus
@@ -30,8 +31,8 @@ class FakeModel:
         return ChatMessage.assistant("done")
 
 
-def test_project_configuration_builds_complete_runtime() -> None:
-    configuration = load_config(Path(__file__).parents[1])
+def test_project_configuration_builds_complete_runtime(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
     runtime_configuration = configuration.get(RUNTIME_CONFIG)
     model = FakeModel()
     runtime = assemble_runtime(configuration, model)
@@ -45,8 +46,8 @@ def test_project_configuration_builds_complete_runtime() -> None:
     assert [tool.name for tool in model.requests[0].tools] == ["delegate"]
 
 
-def test_assembly_rejects_unavailable_root_tool() -> None:
-    configuration = load_config(Path(__file__).parents[1])
+def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
     runtime = configuration.get(RUNTIME_CONFIG)
     invalid = configuration.with_value(
         RUNTIME_CONFIG,
@@ -57,9 +58,9 @@ def test_assembly_rejects_unavailable_root_tool() -> None:
         assemble_runtime(invalid, FakeModel())
 
 
-def test_configuration_is_pure_data_until_composition_stages_run() -> None:
-    configuration = load_config(Path(__file__).parents[1])
-    prompt = configuration.get(PROMPT_CONFIG)
+def test_configuration_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    prompt = configuration.get(PROMPTS_CONFIG)
     engine = configuration.get(ENGINE_CONFIG)
     assembly = compose_project(configuration, FakeModel())
 
@@ -68,6 +69,14 @@ def test_configuration_is_pure_data_until_composition_stages_run() -> None:
     assert engine.max_depth == EXPECTED_MAX_DEPTH
     assert assembly.get(PROMPT_ASSEMBLER) is not None
     assert assembly.get(ENGINE_RUNNER) is not None
+
+
+def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
+    project_root = Path(__file__).parents[1]
+    shutil.copytree(project_root / "config.example", tmp_path / "config.example")
+
+    with pytest.raises(FileNotFoundError, match=r"config/runtime\.toml"):
+        load_config(tmp_path)
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, strings, text
+from aurora.utils.toml import load_toml, strings, table, text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,7 +30,7 @@ def register(configs: ConfigCollector) -> None:
 
 
 def _parse(path: Path) -> RuntimeConfig:
-    document = load_toml(path)
+    document = table(table(load_toml(path), "runtime"), "tree")
     return RuntimeConfig(
         text(document, "node_id"),
         text(document, "profile"),

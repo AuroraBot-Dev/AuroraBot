@@ -63,5 +63,5 @@ graphify-out/
 # cache
 .npm-cache/
 
-# personal config
+# personal config copied from config.example
 config/

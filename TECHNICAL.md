@@ -32,12 +32,16 @@ tool 消息。模型边界失败使当前节点失败；child 失败作为 deleg
 
 ## 项目组合
 
-`config/runtime.toml`、`engine.toml` 和 `prompt.toml` 分别定义 root 节点入口、runner 上界和 prompt 目录。同名
-`configuration` 模块定义不可变 DTO、解析器和注册函数；通用合并器按注册顺序产生 `AuroraConfig`，不认识具体文件或字段。
+`config.example/` 随源码发布，包含 runtime、engine、agents、models、prompts、apps、platforms、extensions、logging、storage
+和 profile 配置。用户复制为 `config/` 后生效；`config/` 被 Git 忽略，运行时不会回退读取模板。
+每个 TOML 都有同相对路径的 `configuration` 模块；通用合并器按注册顺序产生 `AuroraConfig`，不认识具体文件或字段。
+`runtime.tree`、`engine.tree` 和 prompts 目录由当前 AgentTree 组合直接消费，其余配置保持为只读项目事实。
 
 `composition.prompt` 构造 PromptAssembler，`composition.engine` 校验 Tool 并构造 AgentTreeRunner。两者把实例写入类型化组合
 上下文，`runtime.py` 从只读 `AuroraAssembly` 取得最终 runner。命令、配置和组件目录都采用“单模块 + 目录入口一条注册记录”
 的扩展方式；子进程执行等共享功能位于 `aurora.utils`。
+
+`aurora config list` 列出个人配置中的注册名称与源路径，`aurora config show <name>` 原样显示对应 TOML；两者都不修改文件。
 
 Model 与 Tool 由组合调用者注入。当前仓库故意不提供联网 Provider 或生产进程生命周期，以免 Provider 选择再次侵入核心。
 

@@ -1,16 +1,14 @@
-# 内建扩展声明 — CapabilityAssembly 的 TOML 输入。
+# 内建扩展声明 — 当前只读注册，尚未进入 AgentTree 组合。
 #
 # 每条 [[extension]] 声明一个官方内建扩展：
-# - id：扩展唯一标识；重复 id 会在启动前失败。
-# - version：扩展清单版本；修改 faces / capabilities 时必须同步递增。
-# - enabled：false 时该扩展不参与装配；若 Agent profile 或能力引用被禁用扩展，
-#   启动前会给出明确诊断（当前未实现引用诊断，请勿随意禁用）。
+# - id：扩展唯一标识。
+# - version：扩展清单版本。
+# - enabled：项目期望该扩展参与未来装配。
 # - factory：组合根内置工厂标识；不允许指向任意第三方模块字符串。
 # - faces：扩展启用的七端口贡献集合。
 # - capabilities：扩展向工具目录公开的能力 ID；实现 schema 由代码固定。
 #
-# Panel 接管配置编辑前，请勿删除条目或修改 faces/capabilities，否则启动将因
-# manifest 不一致失败。
+# 当前加载器保留原始文档，不执行 manifest 校验或扩展装配。
 
 # 认知控制：delegate / wait 两个 ControlAction 贡献
 [[extension]]

@@ -1,7 +1,7 @@
 # Agent 定义 — profile、能力授权与委派边界。
 #
-# 本文件定义同构 Agent 的 profile，而不是新的运行时类型。修改能力策略只会
-# 改变“谁可以看到并调用什么能力”，不会改变 handler 实现边界。
+# 本文件定义同构 Agent 的 profile，而不是新的运行时类型。当前配置系统只读注册
+# 这些定义；AgentTree 组合只直接使用 runtime.tree 指定的 root profile。
 #
 # capabilities 支持：
 # - 精确能力 ID（如 "aur.serv.memory.remember"）
@@ -9,11 +9,7 @@
 # - 全通配（"*"）
 # - `!` 排除；排除始终优先于允许规则。
 #
-# 能力还必须存在于运行时能力目录（extensions.toml / MCP 工具发现）才会生效；
-# 这里只是 profile 的授权域。
-#
-# Panel 接管配置编辑前，请勿删除 profile 或更改 id 引用，否则 engine.toml
-# 的 root_profile/worker_profile 与 child_profiles 交叉校验会启动失败。
+# 这里保存未来能力目录与委派策略所需的结构事实，当前不执行能力授权或交叉校验。
 
 # Triage：注意力初筛入口 agent，无工具、快模型，process 时在快脑与主脑之间选择
 [[agent]]

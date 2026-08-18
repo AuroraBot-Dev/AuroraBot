@@ -6,7 +6,9 @@ AuroraBot 当前只实现一个完整最小循环，同时保留项目级配置�
 ## 系统结构
 
 ```text
-config/{runtime,engine,prompt}.toml
+config.example/（源码模板） ──复制──→ config/（个人配置，Git 忽略）
+                                      │
+                         TOML + prompts/**/*.md
         │ 每个文件由同名模块注册
         ▼
 AuroraConfig
@@ -33,7 +35,7 @@ AgentTreeRunner ─── PromptAssembler
 ```text
 aurora/
   commands/        每个 CLI 命令独立注册与执行
-  configuration/   每个 TOML 一个纯配置、解析与注册模块
+  configuration/   每个 TOML 一个纯配置、解析与注册模块，目录层级与 config 对齐
   composition/     每个需实例化的 src 子包一个构造与注册模块
   utils/           子进程、TOML 字段读取等无项目语义工具
   config.py        ConfigKey、AuroraConfig 与通用配置合并器
@@ -42,7 +44,9 @@ aurora/
   main.py          只解析顶层 CLI 并分派命令
 ```
 
-配置模块不构造 PromptCatalog 或 Runner；这些转换只发生在 composition。增加命令、TOML 配置或项目组件时，新增对应模块并在
+`config.example/` 随源码发布，`config/` 只保存用户副本且不受 Git 跟踪。运行时不会隐式读取模板。配置模块不构造 Runner；
+Markdown Prompt 到 PromptCatalog 的转换只由 prompts 配置模块负责，运行实例转换发生在 composition。
+增加命令、TOML 配置或项目组件时，新增对应模块并在
 目录入口的注册元组增加一项；通用 Config、Composer、runtime 和 CLI main 不增加分支。
 
 ## AgentTree

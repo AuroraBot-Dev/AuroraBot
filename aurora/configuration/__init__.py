@@ -5,14 +5,28 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.config import collect_config
-from aurora.configuration import engine, prompt, runtime
+from aurora.configuration import agents, apps, engine, extensions, logging, models, platforms, prompts, runtime, storage
+from aurora.configuration.profiles import dev, prod
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora.config import AuroraConfig
 
-CONFIG_REGISTRARS = (runtime.register, engine.register, prompt.register)
+CONFIG_REGISTRARS = (
+    runtime.register,
+    engine.register,
+    agents.register,
+    models.register,
+    prompts.register,
+    apps.register,
+    platforms.register,
+    extensions.register,
+    logging.register,
+    storage.register,
+    dev.register,
+    prod.register,
+)
 
 
 def load_config(project_root: Path) -> AuroraConfig:

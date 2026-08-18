@@ -12,7 +12,8 @@ AuroraBot 是以 `AgentTree` 为核心的自主智能体框架。当前工作树
 ## Project layout
 
 ```text
-config/         runtime / engine / prompt TOML；每个文件对应一个 configuration 模块
+config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configuration 模块
+config/         从模板复制的个人生效配置，始终由 Git 忽略
 aurora/         项目级入口、统一 Config/Composer、runtime 门面与 utils
 aurora/commands/       每个 CLI 命令一个注册模块
 aurora/configuration/  每个 TOML 一个解析与注册模块

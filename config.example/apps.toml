@@ -1,8 +1,7 @@
 # MCP 应用配置 — 外部生态的工具与事件来源。
 #
-# 每个 [[app]] 定义一个 MCP 服务（内建或远程）。enabled = true 的应用必须
-# 在 working_dir 可解析：干净克隆默认启用 org.aurora.qq，若未安装
-# extensions/apps/Aurora-QQ，请先把该条目 enabled 改为 false。
+# 每个 [[app]] 定义一个 MCP 服务（内建或远程）。当前配置系统只读注册这些定义，
+# 不启动进程；enabled 表达项目偏好，不代表当前 AgentTree 已连接该应用。
 #
 # - stdio：启动本地子进程，stdout 只承载 MCP JSON-RPC，诊断写 stderr。
 # - streamable_http：连接远程 HTTPS 服务；此时不得声明 command/working_dir。
@@ -31,7 +30,7 @@ timeout_seconds = 60
 # Aurora-QQ：通过 OneBot 11 / NapCat 提供 QQ 消息、联系人和群管理能力
 [[app]]
 package = "org.aurora.qq"
-enabled = true
+enabled = false
 transport = "stdio"
 working_dir = "extensions/apps/Aurora-QQ"
 command = ["uv", "run", "--frozen", "aurora-qq-mcp"]

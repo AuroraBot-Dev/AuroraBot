@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, positive_integer
+from aurora.utils.toml import load_toml, positive_integer, table
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,7 +29,7 @@ def register(configs: ConfigCollector) -> None:
 
 
 def _parse(path: Path) -> EngineConfig:
-    document = load_toml(path)
+    document = table(table(load_toml(path), "engine"), "tree")
     return EngineConfig(
         positive_integer(document, "max_depth"),
         positive_integer(document, "max_nodes"),

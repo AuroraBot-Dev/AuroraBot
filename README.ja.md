@@ -6,11 +6,12 @@ AuroraBot は、同型 Agent が message を理解し、tool を使い、仕事�
 一回の実行は一つの `AgentTree` です。root と child は同じ loop を使い、system profile、最初の message、可視 tools、
 LLM model だけが異なります。domain role は `system / message / assistant / tool` の四種類です。
 
-runtime、engine、prompt の TOML は同名 configuration module から登録され、一つの `AuroraConfig` に統合されます。
-同名 composition module が `AuroraRuntime` で使う project instance を構築します。
+`config.example/` は source とともに配布され、user が Git 対象外の `config/` に copy します。runtime は template に fallback
+しません。project TOML と Markdown prompt は一つの `AuroraConfig` に統合され、`aurora config list/show` は読み取り専用です。
 
 ```bash
 uv sync
+cp -r config.example config
 uv run aurora check
 uv run aurora about
 ```

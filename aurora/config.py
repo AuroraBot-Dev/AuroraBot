@@ -23,10 +23,29 @@ class ConfigKey[T]:
 
 
 @dataclass(frozen=True, slots=True)
+class ConfigSource:
+    """记录一个注册配置的名称与项目相对路径。"""
+
+    name: str
+    relative_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class TomlDocument:
+    """尚未进入运行组合的只读 TOML 文档。"""
+
+    values: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
+
+
+@dataclass(frozen=True, slots=True)
 class AuroraConfig:
     """包含全部已注册配置值的只读集合。"""
 
     _values: Mapping[ConfigKey[object], object]
+    _sources: tuple[ConfigSource, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_values", MappingProxyType(dict(self._values)))
@@ -44,11 +63,21 @@ class AuroraConfig:
         if stored_key not in values:
             raise KeyError(f"不能替换尚未注册的配置：{key.name}")
         values[stored_key] = value
-        return AuroraConfig(values)
+        return AuroraConfig(values, self._sources)
 
     @property
     def names(self) -> tuple[str, ...]:
         return tuple(key.name for key in self._values)
+
+    @property
+    def sources(self) -> tuple[ConfigSource, ...]:
+        return self._sources
+
+    def source(self, name: str) -> ConfigSource:
+        for source in self._sources:
+            if source.name == name:
+                return source
+        raise KeyError(f"配置尚未注册：{name}")
 
 
 class ConfigCollector:
@@ -58,15 +87,21 @@ class ConfigCollector:
         self._project_root = project_root
         self._values: dict[ConfigKey[object], object] = {}
         self._names: set[str] = set()
+        self._paths: set[str] = set()
+        self._sources: list[ConfigSource] = []
 
     def register[T](self, key: ConfigKey[T], relative_path: str, parser: Callable[[Path], T]) -> None:
         if key.name in self._names:
             raise ValueError(f"配置重复注册：{key.name}")
+        if relative_path in self._paths:
+            raise ValueError(f"配置文件重复注册：{relative_path}")
         self._names.add(key.name)
+        self._paths.add(relative_path)
+        self._sources.append(ConfigSource(key.name, relative_path))
         self._values[cast("ConfigKey[object]", key)] = parser(self._project_root / relative_path)
 
     def build(self) -> AuroraConfig:
-        return AuroraConfig(self._values)
+        return AuroraConfig(self._values, tuple(self._sources))
 
 
 type ConfigRegistrar = Callable[[ConfigCollector], None]
