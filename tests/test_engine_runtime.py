@@ -71,6 +71,22 @@ def test_root_completes_one_message_assistant_loop() -> None:
     assert model.requests[0].tools == ()
 
 
+def test_runner_publishes_each_immutable_tree_transition() -> None:
+    model = FakeModel([ChatMessage.assistant("done")])
+    tree = AgentTree.create("tree", "root", "root", "root-model", "hello")
+    snapshots: list[AgentTree] = []
+
+    result = asyncio.run(AgentTreeRunner(model, _assembler()).run(tree, observer=snapshots.append))
+
+    assert [snapshot.status for snapshot in snapshots] == [
+        TreeStatus.RUNNING,
+        TreeStatus.RUNNING,
+        TreeStatus.COMPLETED,
+    ]
+    assert snapshots[0] is tree
+    assert snapshots[-1] is result
+
+
 def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
     model = FakeModel(
         [

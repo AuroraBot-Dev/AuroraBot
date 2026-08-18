@@ -23,9 +23,19 @@ def test_src_dependency_direction_matches_minimal_architecture() -> None:
         allowed = _ALLOWED_SRC_IMPORTS[package]
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             module = _imported_module(node)
-            if module == "aurora" or module.startswith("aurora."):
+            if module in {"aurora", "ops"} or module.startswith(("aurora.", "ops.")):
                 violations.append(f"{path.relative_to(_ROOT)} imports {module}")
             if module.startswith("src.") and _src_package(module) not in allowed:
+                violations.append(f"{path.relative_to(_ROOT)} imports {module}")
+    assert violations == []
+
+
+def test_ops_depends_on_neither_composition_root_nor_src() -> None:
+    violations: list[str] = []
+    for path in (_ROOT / "ops").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            module = _imported_module(node)
+            if module in {"aurora", "src"} or module.startswith(("aurora.", "src.")):
                 violations.append(f"{path.relative_to(_ROOT)} imports {module}")
     assert violations == []
 

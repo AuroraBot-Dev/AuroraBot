@@ -18,7 +18,7 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     from src.prompt import PromptAssembler
 
@@ -69,8 +69,8 @@ class AgentTreeRunner:
         self._max_nodes = max_nodes
         self._max_steps = max_steps
 
-    async def run(self, tree: AgentTree) -> AgentTree:
-        current = tree
+    async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:
+        current = self._publish(tree, observer)
         for _ in range(self._max_steps):
             if current.status != TreeStatus.RUNNING:
                 return current
@@ -78,7 +78,10 @@ class AgentTreeRunner:
             if node is None:
                 raise RuntimeError("running AgentTree has no ready node")
             if node.pending_calls:
-                current = await self._execute_call(current, node.node_id, node.pending_calls[0])
+                current = self._publish(
+                    await self._execute_call(current, node.node_id, node.pending_calls[0]),
+                    observer,
+                )
                 continue
             try:
                 definitions = tuple(definition for definition in self._definitions if definition.name in node.tools)
@@ -86,15 +89,21 @@ class AgentTreeRunner:
                     ModelRequest(node.model, self._assembler.assemble(current, node.node_id), definitions)
                 )
             except Exception as error:
-                current = current.fail(node.node_id, f"model failed: {error}")
+                current = self._publish(current.fail(node.node_id, f"model failed: {error}"), observer)
                 continue
             if response.role != "assistant":
-                current = current.fail(node.node_id, "model must return an assistant message")
+                current = self._publish(current.fail(node.node_id, "model must return an assistant message"), observer)
                 continue
-            current = current.append(node.node_id, response)
+            current = self._publish(current.append(node.node_id, response), observer)
             if not response.tool_calls:
-                current = current.complete(node.node_id, response.content)
+                current = self._publish(current.complete(node.node_id, response.content), observer)
         raise RuntimeError(f"AgentTree exceeded step limit {self._max_steps}")
+
+    @staticmethod
+    def _publish(tree: AgentTree, observer: Callable[[AgentTree], None] | None) -> AgentTree:
+        if observer is not None:
+            observer(tree)
+        return tree
 
     async def _execute_call(self, tree: AgentTree, node_id: str, call: ToolCall) -> AgentTree:
         if call.name not in tree.node(node_id).tools:
