@@ -27,6 +27,9 @@
 `ModelRequest` 明确携带节点 model、四角色消息和本节点可见的 Tool 定义。OpenAI-compatible adapter 只在协议边界把
 `message` 映射为 `user`。
 
+节点 model 是 `models.toml` 的端点 id。`LiteLLMModelGateway` 只按该 id 查找固定 provider/model；它不读取 profile，也不
+替 Runner 选择模型。`litellm` 与 `openai_compatible` provider 最终都经过 LiteLLM Chat Completions 调用。
+
 `Tool.execute(call)` 返回 `ToolOutput`。异常被规范化为错误 tool 消息，让模型决定是否恢复。未知或不可见工具同样返回错误
 tool 消息。模型边界失败使当前节点失败；child 失败作为 delegate tool 错误恢复 parent。
 
@@ -35,17 +38,19 @@ tool 消息。模型边界失败使当前节点失败；child 失败作为 deleg
 `config.example/` 随源码发布，包含 runtime、engine、agents、models、prompts、apps、platforms、extensions、logging、storage
 和 profile 配置。用户复制为 `config/` 后生效；`config/` 被 Git 忽略，运行时不会回退读取模板。
 每个 TOML 都有同相对路径的 `configuration` 模块；通用合并器按注册顺序产生 `AuroraConfig`，不认识具体文件或字段。
-`runtime.tree`、`engine.tree` 和 prompts 目录由当前 AgentTree 组合直接消费，其余配置保持为只读项目事实。
+`runtime.tree`、`runtime.console`、`engine.tree`、models 和 prompts 目录由当前组合直接消费，其余配置保持为项目事实。
 
-`composition.prompt` 构造 PromptAssembler，`composition.engine` 校验 Tool 并构造 AgentTreeRunner。两者把实例写入类型化组合
-上下文，`runtime.py` 从只读 `AuroraAssembly` 取得最终 runner。命令、配置和组件目录都采用“单模块 + 目录入口一条注册记录”
-的扩展方式；子进程执行等共享功能位于 `aurora.utils`。
+`composition.ai/prompt/console/engine` 分别构造模型网关、PromptAssembler、TerminalConsole 和 AgentTreeRunner。实例写入
+类型化组合上下文，`runtime.py` 从只读 `AuroraAssembly` 取得最终组件。命令、配置和组件目录都采用“单模块 + 目录入口一条
+注册记录”的扩展方式；下层无项目语义工具位于 `src.utils`，项目命令工具位于 `aurora.utils`。
 
 `aurora config list` 列出个人配置中的注册名称与源路径，`aurora config show <name>` 原样显示对应 TOML；两者都不修改文件。
 
-Model 与 Tool 由组合调用者注入。当前仓库故意不提供联网 Provider 或生产进程生命周期，以免 Provider 选择再次侵入核心。
+`aurora start` 首先读取项目根目录的 `.env`，但不覆盖已有进程环境变量，再加载 TOML 并组合运行时。它默认启动本地
+Console；普通文本发起新 AgentTree，斜杠文本进入 ops。`/exit`、EOF、SIGINT、SIGTERM 和
+`--headless` 使用同一组合与停止路径。调用者也可以显式注入 Model 和 Tool，供嵌入运行与离线测试使用。
 
 ## 验证
 
-测试覆盖：单节点完成、工具往返、未知工具恢复、树形委派、child 独立 model、四角色组装、OpenAI role 映射、非法树与
-call id、上下文上界以及配置到 runtime 的完整装配。全部测试使用 fake Model/Tool，离线执行。
+测试覆盖：单节点完成、工具往返、未知工具恢复、树形委派、child 独立 model、四角色组装、LiteLLM 参数映射、非法树与
+call id、Console 普通文本/操作/停止，以及配置到 start 的完整装配。效果测试使用 fake Model/Tool/Caller，离线执行。

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.composer import InstanceKey
+from aurora.composition.ai import MODEL
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
@@ -21,6 +22,7 @@ def register(context: CompositionContext) -> None:
     configuration = context.config.get(ENGINE_CONFIG)
     runtime = context.config.get(RUNTIME_CONFIG)
     assembler = context.require(PROMPT_ASSEMBLER)
+    model = context.require(MODEL)
     available = {DELEGATE_TOOL, *(tool.definition.name for tool in context.tools)}
     missing = runtime.tools - available
     if missing:
@@ -29,7 +31,7 @@ def register(context: CompositionContext) -> None:
     context.provide(
         ENGINE_RUNNER,
         AgentTreeRunner(
-            context.model,
+            model,
             assembler,
             context.tools,
             max_depth=configuration.max_depth,

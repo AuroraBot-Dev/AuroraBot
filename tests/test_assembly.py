@@ -10,6 +10,7 @@ import pytest
 from aurora import AuroraConfig, assemble_runtime, load_config
 from aurora.composer import CompositionContext, InstanceKey, compose
 from aurora.composition import compose_project
+from aurora.composition.ai import MODEL
 from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.config import ConfigCollector, ConfigKey, collect_config
@@ -17,6 +18,7 @@ from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.utils.toml import load_toml, text
+from src.ai import LiteLLMModelGateway
 from src.contracts import ChatMessage, ModelRequest, TreeStatus
 
 EXPECTED_MAX_DEPTH = 4
@@ -69,6 +71,12 @@ def test_configuration_is_pure_data_until_composition_stages_run(configured_proj
     assert engine.max_depth == EXPECTED_MAX_DEPTH
     assert assembly.get(PROMPT_ASSEMBLER) is not None
     assert assembly.get(ENGINE_RUNNER) is not None
+
+
+def test_composition_builds_configured_model_when_caller_does_not_inject_one(configured_project: Path) -> None:
+    assembly = compose_project(load_config(configured_project))
+
+    assert isinstance(assembly.get(MODEL), LiteLLMModelGateway)
 
 
 def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:

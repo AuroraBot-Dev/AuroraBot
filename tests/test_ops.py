@@ -9,7 +9,7 @@ import pytest
 
 from aurora import assemble_runtime, load_config
 from ops import ConfigAccess, ConfigSourceRef
-from ops.contracts import OperationResult, OpsPorts
+from ops.contracts import OperationControl, OperationResult, OpsPorts
 from ops.parser import CommandParseError, coerce_value, split_text
 from ops.registry import iter_operations
 from ops.router import OperationRouter, render_result
@@ -65,8 +65,16 @@ class FakeConfig:
         return {"id": extension_id, "enabled": enabled}
 
 
+@dataclass(slots=True)
+class FakeProcess:
+    shutdown_requested: bool = False
+
+    def request_shutdown(self) -> None:
+        self.shutdown_requested = True
+
+
 def _router() -> OperationRouter:
-    return OperationRouter(OpsPorts(FakeTrees(), FakeConfig()))
+    return OperationRouter(OpsPorts(FakeTrees(), FakeConfig(), FakeProcess()))
 
 
 def test_operation_catalog_and_method_path_router_share_registered_specs() -> None:
@@ -106,6 +114,20 @@ def test_text_router_supports_aliases_paths_named_values_and_help() -> None:
     assert "POST /trees" in help_result.message
     assert unknown.code == "NOT_FOUND"
     assert invalid.code == "PARSE_ERROR"
+
+
+def test_text_only_terminal_controls_use_the_same_operation_catalog() -> None:
+    process = FakeProcess()
+    router = OperationRouter(OpsPorts(FakeTrees(), FakeConfig(), process))
+
+    clear = asyncio.run(router.route_text("/clear"))
+    shutdown = asyncio.run(router.route_text("/exit"))
+    hidden_from_path = asyncio.run(router.execute_path("POST", "/console/clear"))
+
+    assert clear.control is OperationControl.CLEAR_CONSOLE
+    assert shutdown.control is OperationControl.SHUTDOWN_PROCESS
+    assert process.shutdown_requested is True
+    assert hidden_from_path.code == "NOT_FOUND"
 
 
 def test_router_returns_parse_and_operation_errors_in_chinese() -> None:

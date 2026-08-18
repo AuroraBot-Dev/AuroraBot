@@ -54,6 +54,13 @@ def positive_integer(table: TomlTable, key: str) -> int:
     return value
 
 
+def boolean(table: TomlTable, key: str) -> bool:
+    value = table.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"配置字段 {key} 必须是布尔值")
+    return value
+
+
 def string_mapping(table: TomlTable, key: str) -> Mapping[str, str]:
     value = table.get(key)
     if not isinstance(value, Mapping):

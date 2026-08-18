@@ -13,6 +13,12 @@ class OperationScope(StrEnum):
     TEXT_ONLY = "text_only"
 
 
+class OperationControl(StrEnum):
+    NONE = "none"
+    CLEAR_CONSOLE = "clear_console"
+    SHUTDOWN_PROCESS = "shutdown_process"
+
+
 class ParameterLocation(StrEnum):
     PATH = "path"
     QUERY = "query"
@@ -58,10 +64,15 @@ class ConfigRuntimePort(Protocol):
     def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]: ...
 
 
+class ProcessRuntimePort(Protocol):
+    def request_shutdown(self) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class OpsPorts:
     engine: TreeRuntimePort
     config: ConfigRuntimePort
+    process: ProcessRuntimePort
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,17 +86,30 @@ class OperationResult:
     code: str = "ok"
     message: str | None = None
     data: dict[str, Any] | None = field(default_factory=dict)
+    control: OperationControl = OperationControl.NONE
 
     @classmethod
-    def success(cls, data: dict[str, Any] | None = None, *, message: str | None = None) -> OperationResult:
-        return cls(True, message=message, data=data)
+    def success(
+        cls,
+        data: dict[str, Any] | None = None,
+        *,
+        message: str | None = None,
+        control: OperationControl = OperationControl.NONE,
+    ) -> OperationResult:
+        return cls(True, message=message, data=data, control=control)
 
     @classmethod
     def failure(cls, code: str, message: str) -> OperationResult:
         return cls(False, code=code, message=message, data=None)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"ok": self.ok, "code": self.code, "message": self.message, "data": self.data}
+        return {
+            "ok": self.ok,
+            "code": self.code,
+            "message": self.message,
+            "data": self.data,
+            "control": self.control,
+        }
 
 
 type OperationHandler = Callable[[OperationContext, dict[str, Any]], Awaitable[OperationResult]]

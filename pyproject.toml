@@ -4,7 +4,7 @@ version = "0.6.0"
 description = "以 AgentTree、同构 Agent 和四角色消息为核心的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
-dependencies = ["tomlkit>=0.15"]
+dependencies = ["litellm>=1.83.14", "prompt-toolkit>=3.0,<4", "python-dotenv>=1.2,<2", "tomlkit>=0.15"]
 
 [project.scripts]
 aurora = "aurora.main:main"
@@ -60,6 +60,8 @@ ignore = ["ANN202", "COM812", "PLR0913"]
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]
+"aurora/__init__.py" = ["PLC0415"]
+"aurora/commands/start.py" = ["PLC0415"]
 "src/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]

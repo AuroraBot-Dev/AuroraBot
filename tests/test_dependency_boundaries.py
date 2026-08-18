@@ -5,15 +5,18 @@ from pathlib import Path
 
 from aurora.composition import COMPOSITION_REGISTRARS
 from aurora.configuration import CONFIG_REGISTRARS
+from ops.registry import iter_operations
 
 _ROOT = Path(__file__).parents[1]
 _ALLOWED_SRC_IMPORTS = {
+    "utils": frozenset({"src.utils"}),
     "contracts": frozenset({"src.contracts"}),
     "prompt": frozenset({"src.contracts", "src.prompt"}),
     "ai": frozenset({"src.ai", "src.contracts"}),
+    "console": frozenset({"src.console"}),
     "engine": frozenset({"src.contracts", "src.engine", "src.prompt"}),
 }
-_REMOVED_PACKAGES = ("agents", "apps", "config", "console", "memory", "platform", "sandbox", "utils")
+_REMOVED_PACKAGES = ("agents", "apps", "config", "memory", "platform", "sandbox")
 
 
 def test_src_dependency_direction_matches_minimal_architecture() -> None:
@@ -80,6 +83,15 @@ def test_each_composition_module_targets_a_src_package_and_is_registered() -> No
 
     assert module_names == registered_names
     assert module_names <= src_names
+
+
+def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
+    module_names = {path.stem for path in (_ROOT / "ops" / "operations").glob("*.py") if path.stem != "__init__"}
+    registered_names = {
+        spec.handler.__module__.rsplit(".", maxsplit=1)[-1] for spec in iter_operations() if spec.handler is not None
+    }
+
+    assert module_names == registered_names
 
 
 def test_cli_main_only_depends_on_command_directory() -> None:

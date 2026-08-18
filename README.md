@@ -21,7 +21,8 @@ message → model → assistant
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；
 - 同一操作资源目录提供 method/path 与斜杠文本入口，用于 AgentTree 监测、新运行和限定配置改动；
-- OpenAI-compatible `message → user` 纯适配；
+- LiteLLM 统一模型网关与 OpenAI-compatible `message → user` 适配；
+- `aurora start` 本地异步终端、`--headless` 和统一停止路径；
 - 全离线 fake Model/Tool 测试。
 
 当前范围不包含数据库、恢复、自动记忆、Triage、MCP、Panel backend、sandbox 或生产化扩展体系。
@@ -34,6 +35,7 @@ message → model → assistant
 uv sync
 cp -r config.example config
 uv run aurora check
+uv run aurora start
 uv run aurora about
 uv run aurora config list
 uv run aurora donk show
@@ -43,7 +45,8 @@ uv run aurora donk show
 并可请求 Ruff 修复；`aurora config list/show` 只读查看个人配置；
 `aurora donk show/major/minor/patch` 管理项目版本号。
 
-项目不内置联网 Model。应用通过 `aurora.assemble_runtime(configuration, model, tools)` 注入具体 Model 和 Tool；这样 Provider
-选择不会进入核心循环。
+`aurora start` 在加载任何配置和组件前读取项目根目录的 `.env`，且不覆盖进程已有环境变量；随后从 `models.toml`
+构造 LiteLLM 模型网关，密钥只读取配置声明的环境变量。嵌入调用与测试仍可通过
+`aurora.assemble_runtime(configuration, model, tools)` 显式注入 Model 和 Tool；Provider 选择不会进入核心循环。
 
 架构以 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) 为准，实施结构见 [ARCHITECTURE.md](ARCHITECTURE.md)。

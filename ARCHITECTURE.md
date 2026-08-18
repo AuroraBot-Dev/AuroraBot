@@ -13,9 +13,10 @@ config.example/（源码模板） ──复制──→ config/（个人配置�
         ▼
 AuroraConfig
         │
-        ├── Model / Tools（由调用者注入）
+        ├── Model（LiteLLM 配置构造或调用者注入）
+        ├── Tools（调用者注入）
         ▼
-composition/{prompt,engine}.py 注册构造结果
+composition/{ai,prompt,console,engine}.py 注册构造结果
         │
         ▼
 AuroraAssembly → AuroraRuntime.create_tree(message)
@@ -24,9 +25,14 @@ AuroraAssembly → AuroraRuntime.create_tree(message)
         │                         │   └── /斜杠文本
         ▼                         └── ConfigAccess → config/（限定改动）
 AgentTreeRunner ─── PromptAssembler
-        ├── Model.complete(ModelRequest)
+        ├── LiteLLMModelGateway.complete(ModelRequest)
         ├── Tool.execute(ToolCall)
         └── delegate → child AgentNode
+
+aurora start
+        ├── Console：普通文本 → 新 AgentTree
+        ├── Console：/命令 → OpsRuntime
+        └── --headless / SIGINT / SIGTERM → 共享停止事件
 ```
 
 `aurora` 是项目的唯一组合根。配置合并、组件构造和最终运行入口各自只有一个权威路径。
@@ -51,6 +57,11 @@ ops/
   router.py        method/path 与文本共用路由
   config.py        个人配置读取与限定写入
   runtime.py       操作目录和端口门面
+
+src/
+  ai/              LiteLLM 模型网关与 OpenAI-compatible 映射
+  console/         可注入分派端口的本地异步终端
+  utils/           标准库日志、时间、文本与 JSON 工具
 ```
 
 `config.example/` 随源码发布，`config/` 只保存用户副本且不受 Git 跟踪。运行时不会隐式读取模板。配置模块不构造 Runner；
@@ -90,17 +101,28 @@ ops 通过协议接收组合根提供的能力，不导入 `aurora` 或 `src`。
 `config/extensions.toml` 的既有 `enabled` 字段，使用 TOML round-trip 写回以保留注释；`config.example/` 及未注册文件不可写。
 是否需要重启由操作结果中的 `restart_required` 明示。
 
+## Console 与 start
+
+`src.console.TerminalConsole` 只依赖 `TerminalDispatcher`，不导入 ops、engine 或 aurora。组合根把普通文本映射为新树操作，
+把斜杠文本交给同一 OperationSpec 目录，再把操作结果翻译为终端文本、清屏或停止控制。EOF、`/exit`、SIGINT 和 SIGTERM
+最终设置同一个停止事件。`--headless` 只禁用 Console，不建立第二条运行路径。
+
+`models.toml` 的 role 键是 AgentNode 和 ModelRequest 显式携带的模型端点 id。`composition.ai` 在没有调用者注入 Model 时构造
+`LiteLLMModelGateway`；`litellm` provider 映射为 `provider/model`，`openai_compatible` provider 映射为
+`openai/model + api_base`。密钥只在调用时从声明的环境变量读取。
+
 ## 包依赖
 
 ```text
-contracts ← prompt
-    ▲         ▲
-    ├── ai    │
-    └──── engine ← aurora → ops
+utils   contracts ← prompt
+           ▲         ▲
+           ├── ai    │
+console ───┴──── engine ← aurora → ops
 ```
 
+- `utils`、`contracts` 和 `console` 不依赖上层项目包；
 - `contracts` 只依赖标准库；
-- `prompt` 和 `ai` 只依赖 contracts；
+- `prompt` 只依赖 contracts，`ai` 只依赖 contracts 与 LiteLLM；
 - `engine` 只依赖 contracts 与 prompt；
 - `ops` 只依赖标准库和 tomlkit，与 `src` 互不导入；
 - `aurora` 负责配置和具体装配。

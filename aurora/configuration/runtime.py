@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, strings, table, text
+from aurora.utils.toml import boolean, load_toml, strings, table, text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,6 +20,7 @@ class RuntimeConfig:
     profile: str
     model: str
     tools: frozenset[str]
+    console_enabled: bool
 
 
 RUNTIME_CONFIG = ConfigKey[RuntimeConfig]("runtime")
@@ -30,10 +31,13 @@ def register(configs: ConfigCollector) -> None:
 
 
 def _parse(path: Path) -> RuntimeConfig:
-    document = table(table(load_toml(path), "runtime"), "tree")
+    runtime = table(load_toml(path), "runtime")
+    tree = table(runtime, "tree")
+    console = table(runtime, "console")
     return RuntimeConfig(
-        text(document, "node_id"),
-        text(document, "profile"),
-        text(document, "model"),
-        frozenset(strings(document, "tools")),
+        text(tree, "node_id"),
+        text(tree, "profile"),
+        text(tree, "model"),
+        frozenset(strings(tree, "tools")),
+        boolean(console, "enabled"),
     )

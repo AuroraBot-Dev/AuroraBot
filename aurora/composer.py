@@ -50,7 +50,7 @@ class CompositionContext:
     """向各组合模块提供配置、外部端口和已构造实例。"""
 
     config: AuroraConfig
-    model: Model
+    model: Model | None
     tools: tuple[Tool, ...]
     _instances: dict[InstanceKey[object], object] = field(default_factory=dict)
     _names: set[str] = field(default_factory=set)
@@ -77,7 +77,7 @@ type CompositionRegistrar = Callable[[CompositionContext], None]
 
 def compose(
     config: AuroraConfig,
-    model: Model,
+    model: Model | None,
     registrars: Iterable[CompositionRegistrar],
     tools: Iterable[Tool] = (),
 ) -> AuroraAssembly:

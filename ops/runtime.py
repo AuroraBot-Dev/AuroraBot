@@ -9,14 +9,14 @@ from ops.registry import catalog_entries
 from ops.router import OperationRouter
 
 if TYPE_CHECKING:
-    from ops.contracts import ConfigRuntimePort, TreeRuntimePort
+    from ops.contracts import ConfigRuntimePort, ProcessRuntimePort, TreeRuntimePort
 
 
 class OpsRuntime:
     """热路径外的统一操作运行时。"""
 
-    def __init__(self, engine: TreeRuntimePort, config: ConfigRuntimePort) -> None:
-        self._router = OperationRouter(OpsPorts(engine, config))
+    def __init__(self, engine: TreeRuntimePort, config: ConfigRuntimePort, process: ProcessRuntimePort) -> None:
+        self._router = OperationRouter(OpsPorts(engine, config, process))
 
     @property
     def catalog(self) -> list[dict[str, Any]]:

@@ -1,7 +1,6 @@
 # 运行时配置 — 进程级别参数。
 #
-# 当前 AgentTree 组合只读取 runtime.tree；其余小节与 profiles 作为进程能力的
-# 结构配置只读注册，尚不影响运行。
+# AgentTree 组合读取 runtime.tree；start 同时读取 runtime.console.enabled。
 
 [runtime.tree]
 # 当前 AgentTree 的 root 节点入口
@@ -36,7 +35,7 @@ session_ttl_seconds = 604800
 max_upload_bytes = 67108864
 
 [runtime.console]
-# 预留本地交互 Console 开关
+# start 默认是否启动本地交互终端；--headless 可在单次启动中禁用
 enabled = true
 # 预留终端日志开关
 terminal_logs = false

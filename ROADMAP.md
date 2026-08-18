@@ -9,6 +9,7 @@
 - [x] 节点级 profile、model、tools 和初始 message；
 - [x] 普通工具往返与 delegate child 恢复；
 - [x] 项目配置、组合根和离线端到端测试；
+- [x] LiteLLM 模型网关、本地 Console 与 start 统一生命周期；
 - [ ] 明确多 Tool call、child 失败和循环上界的黄金测试；
 - [ ] 用至少两个不同 Model adapter 验证 model 端口没有泄漏供应商语义；
 - [ ] 用至少两个真实 Tool 验证工具契约。

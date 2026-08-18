@@ -18,10 +18,13 @@ aurora/         项目级入口、统一 Config/Composer、runtime 门面与 uti
 aurora/commands/       每个 CLI 命令一个注册模块
 aurora/configuration/  每个 TOML 一个解析与注册模块
 aurora/composition/    每个需构造实例的 src 子包一个注册模块
+ops/            统一 OperationSpec 目录、运行监测与限定配置改动
+src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
 src/prompt/     四角色 PromptAssembler
 src/engine/     AgentTree 的确定性单循环
-src/ai/         Provider 协议边界的纯适配函数
+src/ai/         LiteLLM 模型网关与 Provider 协议映射
+src/console/    可注入文本分派端口的本地异步终端
 tests/          离线行为、组合与边界测试
 docs/           文档站点与唯一 RFC 子模块
 panel/          暂不参与当前 runtime 的独立前端子模块
@@ -39,13 +42,14 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。
 - 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
-- 无项目语义的共享功能放入 `aurora.utils`；并列命令、配置或组件不得把工具函数寄存在某个同级模块中。
-- 依赖方向固定为 `contracts ← prompt/ai ← engine ← aurora`；`src` 不导入 `aurora`。
+- 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
+- 依赖方向固定为 `utils/contracts ← prompt/ai ← engine ← aurora`、`console ← aurora`、`ops ← aurora`；`src` 不导入
+  `aurora` 或 `ops`，ops 不导入 src 或 aurora。
 
 ## Current scope
 
-当前不实现持久化、迁移、自动记忆、Inbox/Triage、并发/抢占、MCP、Platform、ops、Panel backend、sandbox、费用或生产化
-生命周期。引入任何一项前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
+当前实现 ops、LiteLLM Model、Console 与 start 的最小生命周期；不实现持久化、迁移、自动记忆、Inbox/Triage、并发/抢占、
+MCP、Platform、Panel backend、sandbox 或费用体系。引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 
 ## Language and text
 

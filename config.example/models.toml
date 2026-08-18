@@ -1,7 +1,7 @@
 # 模型配置 — Provider 连接与角色端点映射。
 #
-# 当前配置系统只读注册 Provider 与角色端点；Model 实例仍由 assemble_runtime
-# 的调用者注入，密钥不会从本文件读取。
+# start 从本文件构造 Model；测试和嵌入调用仍可显式注入 Model。
+# 密钥不会从本文件读取。
 
 # Provider 定义：密钥仅存于环境变量，TOML 只声明变量名
 [models.providers.deepseek]
@@ -24,6 +24,11 @@ secret_env = "SILICONFLOW_API_KEY"
 
 # Role 定义：每个 role 绑定一个 provider 的具体 model
 # capabilities 显式覆盖 models.dev 派生；DeepSeek 拒绝 json_schema response_format，故不含 structured_output
+[models.roles.default]
+provider = "deepseek"
+model = "deepseek-chat"
+capabilities = ["chat", "stream", "json_text_fallback"]
+
 [models.roles.fast]
 provider = "deepseek"
 model = "deepseek-v4-flash"

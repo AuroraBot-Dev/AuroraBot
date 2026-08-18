@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
-from aurora.commands import about, check, config, donk
+from aurora.commands import about, check, config, donk, start
 from aurora.main import build_parser, run
+from aurora.utils.environment import load_project_env
 from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
@@ -32,11 +34,76 @@ def test_each_command_registers_its_own_executor() -> None:
     check_arguments = parser.parse_args([check.NAME])
     config_arguments = parser.parse_args([config.NAME, "list"])
     donk_arguments = parser.parse_args([donk.NAME, "show"])
+    start_arguments = parser.parse_args([start.NAME, "--headless"])
 
     assert about_arguments.executor is about.execute
     assert check_arguments.executor is check.execute
     assert config_arguments.executor is config.execute
     assert donk_arguments.executor is donk.execute
+    assert start_arguments.executor is start.execute
+    assert "显示帮助并退出" in parser.format_help()
+
+
+def test_start_loads_configuration_and_runs_shared_lifecycle(
+    configured_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order: list[str] = []
+    calls: list[tuple[object, bool]] = []
+
+    def fake_load_env(root: Path) -> bool:
+        assert root == configured_project
+        order.append("env")
+        return True
+
+    original_load_config = start._load_configuration
+
+    def tracked_load_config(root: Path) -> object:
+        order.append("config")
+        return original_load_config(root)
+
+    async def fake_run(configuration: object, *, headless: bool) -> None:
+        order.append("runtime")
+        calls.append((configuration, headless))
+
+    monkeypatch.setattr(start, "load_project_env", fake_load_env)
+    monkeypatch.setattr(start, "_load_configuration", tracked_load_config)
+    monkeypatch.setattr(start, "_run_project", fake_run)
+
+    assert run(["--root", str(configured_project), start.NAME, "--headless"]) == 0
+    assert order == ["env", "config", "runtime"]
+    assert len(calls) == 1
+    assert calls[0][1] is True
+
+
+def test_project_env_only_fills_missing_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / ".env").write_text(
+        "AURORA_FROM_DOTENV=文件值\nAURORA_PROCESS_VALUE=文件值\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("AURORA_FROM_DOTENV", raising=False)
+    monkeypatch.setenv("AURORA_PROCESS_VALUE", "进程值")
+
+    assert load_project_env(tmp_path) is True
+    assert os.environ["AURORA_FROM_DOTENV"] == "文件值"
+    assert os.environ["AURORA_PROCESS_VALUE"] == "进程值"
+
+
+def test_missing_project_env_is_empty_input(tmp_path: Path) -> None:
+    assert load_project_env(tmp_path) is False
+
+
+def test_start_reports_configuration_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_load(_root: Path) -> None:
+        raise ValueError("模型配置错误")
+
+    monkeypatch.setattr(start, "_load_configuration", fail_load)
+
+    assert run([start.NAME, "--headless"]) == start.CONFIG_ERROR_EXIT_CODE
+    assert "启动失败：模型配置错误" in capsys.readouterr().err
 
 
 def test_config_command_lists_and_shows_registered_sources(

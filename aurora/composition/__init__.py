@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.composer import compose
-from aurora.composition import engine, prompt
+from aurora.composition import ai, console, engine, prompt
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -14,10 +14,10 @@ if TYPE_CHECKING:
     from aurora.config import AuroraConfig
     from src.contracts import Model, Tool
 
-COMPOSITION_REGISTRARS = (prompt.register, engine.register)
+COMPOSITION_REGISTRARS = (ai.register, prompt.register, console.register, engine.register)
 
 
-def compose_project(config: AuroraConfig, model: Model, tools: Iterable[Tool] = ()) -> AuroraAssembly:
+def compose_project(config: AuroraConfig, model: Model | None = None, tools: Iterable[Tool] = ()) -> AuroraAssembly:
     return compose(config, model, COMPOSITION_REGISTRARS, tools)
 
 
