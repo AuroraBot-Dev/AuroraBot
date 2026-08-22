@@ -20,17 +20,21 @@ from src.contracts import (
     WorldCommitInput,
     WorldDeltaPage,
     WorldFrontier,
+    WorldStreamPage,
 )
 from src.tools import (
     DELEGATE_TOOL,
+    WAIT_TOOL,
     WORLD_READ_TOOL,
     WORLD_TREES_TOOL,
     DelegateTool,
     ToolRegistrationError,
     ToolRegistry,
+    WaitTool,
     WorldReadTool,
     WorldTreesTool,
 )
+from src.tools.builtin import builtin_tools
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -153,6 +157,12 @@ class FakeJournal:
     async def initialize(self) -> None:
         raise NotImplementedError
 
+    async def cursor(self) -> int:
+        raise NotImplementedError
+
+    async def active_scopes(self, since: datetime) -> tuple[str, ...]:
+        raise NotImplementedError
+
     async def append_event(self, event: EnvironmentEvent) -> WorldCommit:
         raise NotImplementedError
 
@@ -171,6 +181,12 @@ class FakeJournal:
     async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]:
         self.queries.append((scope, after, limit))
         return tuple(item for item in self.commits_by_scope if item.scopes.get(scope, 0) > after)[:limit]
+
+    async def stream(self, after: int, limit: int) -> WorldStreamPage:
+        raise NotImplementedError
+
+    async def close(self) -> None:
+        return None
 
     async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
         return self.activity[:limit]
@@ -271,6 +287,28 @@ def test_world_trees_lists_forest_index_and_limits() -> None:
     assert payload["trees"][0]["tree_id"] == "a"
     assert payload["trees"][0]["commit_count"] == journal.activity[0].commit_count
     assert isinstance(too_many, ToolOutput) and too_many.is_error is True
+
+
+def test_wait_tool_sleeps_within_bounds_and_rejects_invalid_values() -> None:
+    tool = WaitTool()
+
+    started = asyncio.run(tool.execute(ToolCall("wait", WAIT_TOOL, {})))
+    invalid = asyncio.run(tool.execute(ToolCall("wait", WAIT_TOOL, {"seconds": -1})))
+    too_long = asyncio.run(tool.execute(ToolCall("wait", WAIT_TOOL, {"seconds": 61})))
+
+    assert isinstance(started, ToolOutput) and "已等待" in started.content
+    assert isinstance(invalid, ToolOutput) and invalid.is_error is True
+    assert isinstance(too_long, ToolOutput) and too_long.is_error is True
+
+
+def test_builtin_tools_form_the_default_catalog_before_external_tools() -> None:
+    journal = FakeJournal()
+    builtins = builtin_tools(agents=_agents(), journal=journal)
+    registry = ToolRegistry((*builtins, EchoTool()))
+
+    assert registry.names == frozenset(
+        {DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL, "aur.test.echo"}
+    )
 
 
 def test_world_tools_are_registered_under_service_domain_ids() -> None:

@@ -15,11 +15,13 @@ _ALLOWED_SRC_IMPORTS = {
     "prompt": frozenset({"src.contracts", "src.prompt"}),
     "tools": frozenset({"src.agents", "src.contracts", "src.tools"}),
     "ai": frozenset({"src.ai", "src.contracts"}),
-    "console": frozenset({"src.console"}),
+    "console": frozenset({"src.console", "src.contracts"}),
+    "cadence": frozenset({"src.cadence", "src.contracts"}),
     "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools"}),
+    "memory": frozenset({"src.contracts", "src.memory"}),
     "world": frozenset({"src.contracts", "src.world"}),
 }
-_REMOVED_PACKAGES = ("apps", "config", "memory", "platform", "sandbox")
+_REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 
 
 def test_src_dependency_direction_matches_minimal_architecture() -> None:

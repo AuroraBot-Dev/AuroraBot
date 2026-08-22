@@ -1,0 +1,16 @@
+# 节律策略 — 主动提交 cadence.tick，并按世界提交阈值唤起 AgentTree。
+#
+# 当前策略非常简单：每隔 tick_seconds 提交一次节律事件；
+# 每 evoke_every 个非 engine 世界提交唤起一棵 AgentTree（每批事件最多一次）。
+
+[cadence]
+# start 时是否启动 cadence 后台循环
+enabled = false
+# 节律唤起时使用的 Agent definition
+agent = "builtin.triage"
+# 每多少个世界提交唤起一棵 AgentTree
+evoke_every = 5
+# 节律事件间隔（秒）
+tick_seconds = 3600
+# 世界线轮询间隔（秒）
+poll_seconds = 0.25

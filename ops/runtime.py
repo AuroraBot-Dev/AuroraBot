@@ -9,14 +9,60 @@ from ops.registry import catalog_entries
 from ops.router import OperationRouter
 
 if TYPE_CHECKING:
-    from ops.contracts import ConfigRuntimePort, ProcessRuntimePort, TreeRuntimePort
+    from ops.contracts import (
+        AgentsRuntimePort,
+        AiRuntimePort,
+        CadenceRuntimePort,
+        ConfigRuntimePort,
+        ConsoleRuntimePort,
+        ContractsRuntimePort,
+        MemoryRuntimePort,
+        ProcessRuntimePort,
+        PromptRuntimePort,
+        ToolsRuntimePort,
+        TreeRuntimePort,
+        UtilsRuntimePort,
+        WorldRuntimePort,
+    )
 
 
 class OpsRuntime:
     """热路径外的统一操作运行时。"""
 
-    def __init__(self, engine: TreeRuntimePort, config: ConfigRuntimePort, process: ProcessRuntimePort) -> None:
-        self._router = OperationRouter(OpsPorts(engine, config, process))
+    def __init__(
+        self,
+        engine: TreeRuntimePort,
+        config: ConfigRuntimePort,
+        process: ProcessRuntimePort,
+        *,
+        agents: AgentsRuntimePort | None = None,
+        tools: ToolsRuntimePort | None = None,
+        prompt: PromptRuntimePort | None = None,
+        ai: AiRuntimePort | None = None,
+        world: WorldRuntimePort | None = None,
+        console: ConsoleRuntimePort | None = None,
+        utils: UtilsRuntimePort | None = None,
+        contracts: ContractsRuntimePort | None = None,
+        cadence: CadenceRuntimePort | None = None,
+        memory: MemoryRuntimePort | None = None,
+    ) -> None:
+        self._router = OperationRouter(
+            OpsPorts(
+                engine,
+                config,
+                process,
+                agents,
+                tools,
+                prompt,
+                ai,
+                world,
+                console,
+                utils,
+                contracts,
+                cadence,
+                memory,
+            )
+        )
 
     @property
     def catalog(self) -> list[dict[str, Any]]:

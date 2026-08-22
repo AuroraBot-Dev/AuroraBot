@@ -14,6 +14,10 @@ if TYPE_CHECKING:
 
 
 EXPECTED_EVENT_COUNT = 2
+_FIRST_PAGE_END = 2
+_COMMIT_COUNT = 3
+_RECENT_COMMIT_COUNT = 2
+_CADENCE_EVOKE_EVERY = 5
 
 
 def test_sqlalchemy_journal_persists_scoped_events_and_delta(tmp_path: Path) -> None:
@@ -131,6 +135,79 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
         assert index[0].first_seen <= index[0].last_seen
         assert index[0].first_seen == later and index[1].last_seen == earlier
         assert await journal.tree_index(1) == index[:1]
+        await journal.close()
+
+    asyncio.run(scenario())
+
+
+def test_sqlalchemy_journal_reports_cursor_and_recently_active_scopes(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await journal.initialize()
+        now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        await journal.append_commits(
+            (
+                WorldCommitInput(
+                    "new-1",
+                    "environment.message",
+                    "qq",
+                    "新消息",
+                    frozenset({"qq:new"}),
+                    WorldFrontier(),
+                    {},
+                    now,
+                ),
+                WorldCommitInput(
+                    "old-1",
+                    "environment.message",
+                    "qq",
+                    "旧消息",
+                    frozenset({"qq:old"}),
+                    WorldFrontier(),
+                    {},
+                    now - timedelta(hours=2),
+                ),
+            )
+        )
+
+        assert await journal.cursor() == _RECENT_COMMIT_COUNT
+        assert await journal.active_scopes(now - timedelta(hours=1)) == ("qq:new",)
+        await journal.close()
+
+    asyncio.run(scenario())
+
+
+def test_sqlalchemy_journal_streams_continuous_events_by_global_cursor(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await journal.initialize()
+        await journal.append_commits(
+            (
+                WorldCommitInput(
+                    "c-1", "engine.tree.started", "engine", "第一项", frozenset({"aurora:tree:a"}), WorldFrontier()
+                ),
+                WorldCommitInput(
+                    "c-2", "tool.requested", "engine", "第二项", frozenset({"aurora:tree:a"}), WorldFrontier()
+                ),
+                WorldCommitInput(
+                    "c-3", "environment.message", "qq", "第三项", frozenset({"qq:group"}), WorldFrontier()
+                ),
+            )
+        )
+
+        first = await journal.stream(0, 2)
+        second = await journal.stream(first.end, 10)
+        empty = await journal.stream(second.end, 10)
+
+        assert first.after == 0 and first.end == _FIRST_PAGE_END and first.has_more is True
+        assert [commit.commit_id for commit in first.commits] == ["c-1", "c-2"]
+        assert [commit.commit_id for commit in second.commits] == ["c-3"]
+        assert second.has_more is False
+        assert empty.commits == () and empty.after == empty.end == _COMMIT_COUNT
+        with pytest.raises(ValueError, match="after"):
+            await journal.stream(-1, 10)
+        with pytest.raises(ValueError, match="limit"):
+            await journal.stream(0, 0)
         await journal.close()
 
     asyncio.run(scenario())

@@ -12,6 +12,22 @@ tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"]
 children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
 
 [[agent]]
+id = "builtin.triage"
+description = "注意力初筛：判断最近世界事件是否值得处理，并选择进入根代理或快速通道。"
+prompt = "builtin.triage"
+model = "quality"
+tools = ["aur.agent.delegate"]
+children = ["builtin.root", "builtin.worker", "builtin.fast-worker"]
+
+[[agent]]
+id = "builtin.memory"
+description = "记忆专员：把托付的内容忠实写入长期记忆，不添加解读。"
+prompt = "builtin.memory"
+model = "quality"
+tools = []
+children = []
+
+[[agent]]
 id = "builtin.worker"
 description = "通用执行者：深入完成一件边界明确的工作，并可请求独立审阅。"
 prompt = "builtin.worker"

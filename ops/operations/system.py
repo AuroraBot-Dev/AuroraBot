@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from ops.contracts import (
     OperationControl,
@@ -12,6 +13,7 @@ from ops.contracts import (
     ParameterLocation,
     ParameterSpec,
 )
+from ops.operations import require_port
 from ops.registry import catalog_entries, operation
 from ops.utils import LOGO, format_catalog
 
@@ -46,6 +48,16 @@ async def catalog(context: OperationContext, params: dict[str, Any]) -> Operatio
 )
 async def shutdown(context: OperationContext, params: dict[str, Any]) -> OperationResult:
     _ = params
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is None:
+        assert port is not None
+        await port.record_event(
+            event_id=f"ops:process:shutdown:{uuid4().hex}",
+            kind="ops.process.shutdown_requested",
+            source="ops",
+            summary="请求停止 AuroraBot 进程",
+            scope="aurora:system",
+        )
     context.runtime.process.request_shutdown()
     return OperationResult.success(message="已请求停止 AuroraBot。", control=OperationControl.SHUTDOWN_PROCESS)
 

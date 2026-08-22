@@ -20,17 +20,21 @@ message → model → assistant
 - 可复用 Agent 定义目录；同一 prompt 可预定义不同 model、tools 与 child allowlist；
 - `aur.*` 统一工具域、不可变工具目录与唯一执行路由；
 - `aur.agent.delegate` 作为真实 Tool 产生显式树操作请求；
-- 持久化世界提交日志：per-scope 单调序号、观察前沿、delta 分页披露与 deferred 封口；
-- `aur.serv.world.read` 世界正文读取与 `aur.serv.world.trees` Bot 森林索引工具；
+- 世界线总线：`WorldReader / WorldWriter / WorldJournal` 窄端口、per-scope 单调序号、全局连续事件流、观察前沿与 delta 分页披露；
+- Console 输入先作为 `console.input` 进入世界线，终端输出不入世界线；
+- `aur.serv.world.read` 世界正文读取、`aur.serv.world.trees` Bot 森林索引与 `aur.builtin.wait`；
+- 简化记忆：最近一小时有活动的 scope 各返回最新 50 条提交，经 PromptAssembler 注入 system；
+- 节律 cadence：每小时提交一次 `cadence.tick`，每 5 个非 engine 世界提交唤起一棵 triage AgentTree；
+- `builtin.triage` 与 `builtin.memory` 两个 Agent 特化预设；
 - 确定性的深度优先 AgentTree 循环；
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；
-- 同一操作资源目录提供 method/path 与斜杠文本入口，用于 AgentTree 监测、新运行和限定配置改动；
+- 同一操作资源目录提供 method/path 与斜杠文本入口；engine、config、agents、tools、prompt、ai、world、console 均有 JSON 化 ops 路径；
 - LiteLLM 统一模型网关与 OpenAI-compatible role、Tool 名称适配；
 - `aurora start` 本地异步终端、`--headless` 和统一停止路径；
 - 全离线 fake Model/Tool 测试。
 
-当前范围不包含数据库、恢复、自动记忆、Triage、MCP、Panel backend、sandbox 或生产化扩展体系。
+当前范围不包含 MCP、Panel backend、sandbox 或生产化扩展体系。
 
 ## 开发
 
@@ -54,4 +58,5 @@ uv run aurora donk show
 构造 LiteLLM 模型网关，密钥只读取配置声明的环境变量。嵌入调用与测试仍可通过
 `aurora.assemble_runtime(configuration, model, tools)` 显式注入 Model 和 Tool；Provider 选择不会进入核心循环。
 
-架构以 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) 为准，实施结构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+架构以 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) 为准，实施结构见
+[架构文档](docs/architecture/index.md)：按包拆分，并以 [新包扩展基线](docs/architecture/packages/package-baseline.md) 作为新增模块的最低成本基线。

@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
-from src.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall
+from src.contracts import (
+    AgentDefinition,
+    AgentTree,
+    ChatMessage,
+    MemoryScopeSnapshot,
+    MemorySnapshot,
+    ToolCall,
+    WorldCommit,
+    WorldFrontier,
+)
 from src.prompt import PromptAssembler, PromptCatalog
 
 
@@ -43,6 +54,28 @@ def test_assembler_rejects_missing_agent_prompt() -> None:
 
     with pytest.raises(ValueError, match="missing Agent prompt"):
         _assembler().assemble(tree, "root")
+
+
+def test_assembler_injects_memory_snapshot_into_system() -> None:
+    commit = WorldCommit(
+        "c-1",
+        "environment.message",
+        "qq",
+        "有人发来消息",
+        datetime.now(UTC),
+        {"qq:group": 1},
+        WorldFrontier(),
+        {"message_id": 1},
+    )
+    memory = MemorySnapshot(commit.occurred_at, (MemoryScopeSnapshot("qq:group", 1, (commit,)),))
+    tree = AgentTree.create("tree", "root", _agent(), "hello")
+
+    messages = _assembler().assemble(tree, "root", memory=memory)
+
+    assert "最近一小时的世界活动" in messages[0].content
+    assert "scope：qq:group" in messages[0].content
+    assert "有人发来消息" in messages[0].content
+    assert '"message_id":1' in messages[0].content
 
 
 def test_prompt_catalog_and_assembler_require_non_empty_bounds() -> None:

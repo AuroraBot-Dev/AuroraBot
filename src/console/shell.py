@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -13,6 +15,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
 from src.console.models import TerminalControl
+from src.contracts import CONSOLE_INPUT, CONSOLE_SCOPE, WorldFrontier, WorldWriter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,7 +46,10 @@ class _PromptReader:
 
 
 class TerminalConsole:
-    """只通过文本分派端口工作的本地终端。"""
+    """本地终端；所有非空输入先进入世界线，再通过文本分派端口处理。"""
+
+    def __init__(self, world: WorldWriter | None = None) -> None:
+        self._world = world
 
     async def run(
         self,
@@ -69,6 +75,17 @@ class TerminalConsole:
                 raw = (result.text or "").strip()
                 if not raw:
                     continue
+                if self._world is not None:
+                    await self._world.append_commit(
+                        commit_id=f"console:{uuid4().hex}",
+                        kind=CONSOLE_INPUT,
+                        source="console",
+                        summary=raw,
+                        scopes=frozenset({CONSOLE_SCOPE}),
+                        based_on=WorldFrontier(),
+                        data={"text": raw},
+                        occurred_at=datetime.now(UTC),
+                    )
                 response = await dispatcher.dispatch_terminal(raw)
                 if response.control is TerminalControl.CLEAR:
                     _clear_console(prompt_reader, output)

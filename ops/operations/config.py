@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from ops.contracts import OperationResult, ParameterKind, ParameterLocation, ParameterSpec
+from ops.operations import require_port
 from ops.registry import operation
 
 if TYPE_CHECKING:
@@ -52,11 +54,24 @@ async def read(context: OperationContext, params: dict[str, Any]) -> OperationRe
     ),
 )
 async def set_app_enabled(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is not None:
+        return missing
+    assert port is not None
     try:
         result = context.runtime.config.set_app_enabled(str(params["package"]), enabled=bool(params["enabled"]))
     except (KeyError, ValueError) as error:
         return OperationResult.failure("CONFIG_ERROR", str(error))
-    return OperationResult.success(result, message="应用配置已更新")
+    if result["changed"] is True:
+        await port.record_event(
+            event_id=f"ops:config:apps:{params['package']}:{uuid4().hex}",
+            kind="ops.config.changed",
+            source="ops",
+            summary=f"应用启用状态已改为 {bool(params['enabled'])}",
+            scope="aurora:config",
+            data={"source": "apps", "package": str(params["package"]), "enabled": bool(params["enabled"])},
+        )
+    return OperationResult.success(result)
 
 
 @operation(
@@ -71,10 +86,27 @@ async def set_app_enabled(context: OperationContext, params: dict[str, Any]) -> 
     ),
 )
 async def set_extension_enabled(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is not None:
+        return missing
+    assert port is not None
     try:
         result = context.runtime.config.set_extension_enabled(
             str(params["extension_id"]), enabled=bool(params["enabled"])
         )
     except (KeyError, ValueError) as error:
         return OperationResult.failure("CONFIG_ERROR", str(error))
-    return OperationResult.success(result, message="扩展配置已更新")
+    if result["changed"] is True:
+        await port.record_event(
+            event_id=f"ops:config:extensions:{params['extension_id']}:{uuid4().hex}",
+            kind="ops.config.changed",
+            source="ops",
+            summary=f"扩展启用状态已改为 {bool(params['enabled'])}",
+            scope="aurora:config",
+            data={
+                "source": "extensions",
+                "extension_id": str(params["extension_id"]),
+                "enabled": bool(params["enabled"]),
+            },
+        )
+    return OperationResult.success(result)

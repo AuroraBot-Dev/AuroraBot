@@ -8,8 +8,10 @@ from aurora.composer import compose
 from aurora.composition import (
     agents,
     ai,
+    cadence,
     console,
     engine,
+    memory,
     prompt,
     tools,
     world,
@@ -22,12 +24,15 @@ if TYPE_CHECKING:
     from aurora.config import AuroraConfig
     from src.contracts import Model, Tool
 
+# world 是逻辑事件总线：组合时第一个实例化，后续组件只能通过同一实例键取得单例。
 COMPOSITION_REGISTRARS = (
+    world.register,
+    memory.register,
+    cadence.register,
     agents.register,
     ai.register,
     prompt.register,
     console.register,
-    world.register,
     tools.register,
     engine.register,
 )

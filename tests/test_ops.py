@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _MIN_OPERATION_COUNT = 9
+_CADENCE_EVOKE_EVERY = 5
 
 
 @dataclass(slots=True)
@@ -94,6 +95,40 @@ class FakeConfig:
         return {"id": extension_id, "enabled": enabled}
 
 
+class FakeWorldOps:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    async def world_stream(self, *, after: int = 0, limit: int = 64) -> dict[str, Any]:
+        return {"after": after, "limit": limit, "commits": []}
+
+    async def world_commit(self, commit_id: str) -> dict[str, Any] | None:
+        return {"commit_id": commit_id}
+
+    async def record_event(
+        self,
+        *,
+        event_id: str,
+        kind: str,
+        source: str,
+        summary: str,
+        scope: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]:
+        event = {
+            "event_id": event_id,
+            "kind": kind,
+            "source": source,
+            "summary": summary,
+            "scope": scope,
+            "data": data or {},
+            "occurred_at": occurred_at,
+        }
+        self.events.append(event)
+        return event
+
+
 @dataclass(slots=True)
 class FakeProcess:
     shutdown_requested: bool = False
@@ -103,7 +138,7 @@ class FakeProcess:
 
 
 def _router() -> OperationRouter:
-    return OperationRouter(OpsPorts(FakeTrees(), FakeConfig(), FakeProcess()))
+    return OperationRouter(OpsPorts(FakeTrees(), FakeConfig(), FakeProcess(), world=FakeWorldOps()))
 
 
 def test_operation_catalog_and_method_path_router_share_registered_specs() -> None:
@@ -252,6 +287,69 @@ def test_assembled_runtime_exposes_live_tree_snapshots_and_ops(configured_projec
     assert node.data["model"] == runtime.agents.get(runtime.root.agent).model  # type: ignore[index]
     with pytest.raises(ValueError, match="已存在"):
         asyncio.run(runtime.run("重复", tree_id="tree-live"))
+
+
+def test_subpackage_catalogs_are_available_as_json_terminal_commands(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+
+    agents = asyncio.run(runtime.ops.route_text("/agents"))
+    agent = asyncio.run(runtime.ops.route_text("/agent builtin.root"))
+    tools = asyncio.run(runtime.ops.route_text("/tools"))
+    prompts = asyncio.run(runtime.ops.route_text("/prompts"))
+    models = asyncio.run(runtime.ops.route_text("/models"))
+    console = asyncio.run(runtime.ops.route_text("/console"))
+    utils = asyncio.run(runtime.ops.route_text("/utils"))
+    contracts = asyncio.run(runtime.ops.route_text("/contracts"))
+    cadence = asyncio.run(runtime.ops.route_text("/cadence"))
+    memory = asyncio.run(runtime.ops.execute("GET", "/memory"))
+
+    assert agents.ok and agents.message is None and "builtin.root" in render_result(agents)
+    assert agent.ok and agent.data["model"] == "quality"  # type: ignore[index]
+    assert tools.ok and render_result(tools).startswith("{")
+    assert any(item["name"] == "aur.agent.delegate" for item in tools.data["tools"])  # type: ignore[index]
+    assert prompts.ok and "builtin.root" in prompts.data["agent_prompts"]  # type: ignore[index]
+    assert models.ok and any(item["endpoint_id"] == "quality" for item in models.data["endpoints"])  # type: ignore[index]
+    assert console.ok and console.data["input_to_worldline"] is True  # type: ignore[index]
+    assert console.data["output_to_worldline"] is False  # type: ignore[index]
+    assert utils.ok and render_result(utils).startswith("{")
+    assert "logging" in utils.data  # type: ignore[index]
+    assert contracts.ok and "AgentTree" in contracts.data["value_objects"]  # type: ignore[index]
+    assert "WorldJournal" in contracts.data["ports"]  # type: ignore[index]
+    assert cadence.ok and cadence.data["agent"] == "builtin.triage"  # type: ignore[index]
+    assert cadence.data["evoke_every"] == _CADENCE_EVOKE_EVERY  # type: ignore[index]
+    assert memory.ok and "window_start" in memory.data  # type: ignore[index]
+    assert asyncio.run(runtime.ops.execute("POST", "/cadence/trigger")).ok is True
+
+
+def test_config_mutation_ops_record_world_events(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+
+    changed = asyncio.run(
+        runtime.ops.route_text("/app-enable org.aurora.clock true")
+    )
+    unchanged = asyncio.run(
+        runtime.ops.route_text("/app-enable org.aurora.clock true")
+    )
+    commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
+
+    assert changed.ok is True and changed.message is None
+    assert unchanged.ok is True
+    assert [commit.kind for commit in commits] == ["ops.config.changed"]
+    assert commits[0].data["package"] == "org.aurora.clock"
+
+
+def test_world_stream_and_commit_ops_follow_the_worldline(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    asyncio.run(runtime.run("hello", tree_id="tree-stream"))
+
+    page = asyncio.run(runtime.ops.execute("GET", "/world/stream", {"after": "0", "limit": "20"}))
+    started = asyncio.run(runtime.ops.execute("GET", "/world/commits/tree-stream:tree:started"))
+
+    assert page.ok is True
+    assert page.data["commits"][0]["kind"] == "engine.tree.started"  # type: ignore[index]
+    assert any(commit["kind"] == "engine.tree.completed" for commit in page.data["commits"])  # type: ignore[index]
+    assert started.ok is True
+    assert started.data["kind"] == "engine.tree.started"  # type: ignore[index]
 
 
 def test_runtime_event_entry_commits_without_automatically_starting_a_tree(configured_project: Path) -> None:

@@ -28,6 +28,7 @@ class OperationRouter:
                 matched.append((spec, match.groupdict()))
         if not matched:
             return None, None, False
+        matched.sort(key=lambda item: _static_segments(item[0].path), reverse=True)
         normalized_method = method.upper()
         for spec, params in matched:
             if spec.method == normalized_method:
@@ -85,6 +86,10 @@ class OperationRouter:
             for segment in path.split("/")
         ]
         return re.compile("^" + "/".join(segments) + "$")
+
+
+def _static_segments(path: str) -> int:
+    return sum(not (segment.startswith("{") and segment.endswith("}")) for segment in path.split("/"))
 
 
 def render_result(result: OperationResult) -> str:

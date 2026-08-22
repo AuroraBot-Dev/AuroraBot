@@ -16,5 +16,5 @@ uv run aurora check
 uv run aurora about
 ```
 
-Concrete Models and Tools are injected by the caller. See [ARCHITECTURE.md](ARCHITECTURE.md) and the
+Concrete Models and Tools are injected by the caller. See [architecture docs](docs/architecture/index.md) and the
 [authoritative RFC](docs/rfc/0300-unified-architecture-and-contracts.md).

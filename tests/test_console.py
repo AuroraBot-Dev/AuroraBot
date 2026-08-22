@@ -3,15 +3,52 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from aurora import load_config, run_project
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
-from src.contracts import ChatMessage, ModelRequest
+from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, WorldCommit, WorldCommitInput, WorldFrontier
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from pathlib import Path
+
+
+class FakeWorld:
+    def __init__(self) -> None:
+        self.commits: list[WorldCommit] = []
+
+    async def append_commit(
+        self,
+        *,
+        commit_id: str,
+        kind: str,
+        source: str,
+        summary: str,
+        scopes: frozenset[str],
+        based_on: WorldFrontier,
+        data: Mapping[str, object],
+        occurred_at: datetime | None = None,
+    ) -> WorldCommit:
+        commit = WorldCommit(
+            commit_id,
+            kind,
+            source,
+            summary,
+            occurred_at or datetime.now(UTC),
+            {scope: 1 for scope in scopes},
+            based_on,
+            dict(data),
+        )
+        self.commits.append(commit)
+        return commit
+
+    async def append_event(self, event: EnvironmentEvent) -> WorldCommit:
+        raise NotImplementedError
+
+    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]:
+        raise NotImplementedError
 
 
 @dataclass(slots=True)
@@ -66,6 +103,27 @@ def test_terminal_console_routes_text_renders_controls_and_stops() -> None:
     assert "Bot> 收到：你好" in output
     assert "\033[2J\033[H" in output
     assert stop.is_set()
+
+
+def test_terminal_console_records_every_non_empty_input_to_worldline() -> None:
+    dispatcher = FakeDispatcher()
+    world = FakeWorld()
+    output: list[str] = []
+    stop = asyncio.Event()
+
+    asyncio.run(
+        TerminalConsole(world).run(
+            dispatcher,
+            stop_event=stop,
+            readline=_readline(["请处理", "/status", "/exit"]),
+            output=output.append,
+        )
+    )
+
+    assert [commit.summary for commit in world.commits] == ["请处理", "/status", "/exit"]
+    assert {scope for commit in world.commits for scope in commit.scopes} == {"aurora:console"}
+    assert {commit.kind for commit in world.commits} == {"console.input"}
+    assert dispatcher.inputs == ["请处理", "/status", "/exit"]
 
 
 def test_project_console_runs_message_tree_ops_and_shutdown(configured_project: Path) -> None:

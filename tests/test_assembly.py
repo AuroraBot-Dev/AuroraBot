@@ -12,10 +12,13 @@ from aurora.composer import CompositionContext, InstanceKey, compose
 from aurora.composition import compose_project
 from aurora.composition.agents import AGENTS
 from aurora.composition.ai import MODEL
+from aurora.composition.cadence import CADENCE
 from aurora.composition.engine import ENGINE_RUNNER
+from aurora.composition.memory import MEMORY
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.config import ConfigCollector, ConfigKey, collect_config
 from aurora.configuration.agents import AGENTS_CONFIG, AgentsConfig
+from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
@@ -55,6 +58,55 @@ def test_project_configuration_builds_complete_runtime(configured_project: Path)
         "aur.serv.world.read",
         "aur.serv.world.trees",
     ]
+
+
+def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configured_project: Path) -> None:
+    model = FakeModel()
+    runtime = assemble_runtime(load_config(configured_project), model)
+
+    async def scenario() -> None:
+        await runtime.world.initialize()
+        for index in range(5):
+            await runtime.submit_event_values(
+                event_id=f"event-{index}",
+                source="qq",
+                scope="qq:group-cadence",
+                kind="message",
+                summary=f"第 {index + 1} 条消息",
+            )
+        before = runtime.cadence_status()
+        await runtime.cadence_trigger()
+        after = runtime.cadence_status()
+
+        assert runtime.runtime_status()["trees"]["completed"] == 1
+        assert before["pending"] == 0 and after["pending"] == 0
+        assert after["cursor"] > before["cursor"]
+        assert model.requests[0].messages[1].content == "节律唤起：请初筛最近一小时的世界活动。"
+        tree = next(iter(runtime._trees.values()))
+        assert tree.node(tree.root_id).definition_id == "builtin.triage"
+
+    asyncio.run(scenario())
+
+
+def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    model = FakeModel()
+    runtime = assemble_runtime(configuration, model)
+
+    asyncio.run(runtime.run("hello", tree_id="tree-memory"))
+
+    assert "最近一小时的世界活动" in model.requests[0].messages[0].content
+
+
+def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    assembly = compose_project(configuration, FakeModel())
+    cadence = assembly.get(CADENCE)
+    memory = assembly.get(MEMORY)
+
+    assert cadence.enabled is configuration.get(CADENCE_CONFIG).enabled is False
+    assert cadence.agent == "builtin.triage"
+    assert memory is assembly.get(MEMORY)
 
 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:

@@ -16,6 +16,7 @@ from src.contracts import (
     WorldCommitInput,
     WorldDeltaPage,
     WorldFrontier,
+    WorldStreamPage,
 )
 from src.world.migration import STEPS, TARGET_VERSION
 from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommitRow, WorldCommitScopeRow
@@ -43,11 +44,16 @@ class SqlAlchemyWorldJournal:
         self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
         self._page_size = page_size
         self._lock = asyncio.Lock()
+        self._initialized = False
 
     async def initialize(self) -> None:
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        async with self._engine.begin() as connection:
-            await connection.run_sync(self._create_or_migrate)
+        async with self._lock:
+            if getattr(self, "_initialized", False):
+                return
+            self.database_path.parent.mkdir(parents=True, exist_ok=True)
+            async with self._engine.begin() as connection:
+                await connection.run_sync(self._create_or_migrate)
+            self._initialized = True
 
     @staticmethod
     def _create_or_migrate(connection: Connection) -> None:
@@ -67,6 +73,7 @@ class SqlAlchemyWorldJournal:
 
     async def close(self) -> None:
         await self._engine.dispose()
+        self._initialized = False
 
     async def append_event(self, event: EnvironmentEvent) -> WorldCommit:
         return await self.append_commit(
@@ -180,6 +187,28 @@ class SqlAlchemyWorldJournal:
             next_sequences[scope] = next_sequence + 1
         return sequences
 
+    async def cursor(self) -> int:
+        """返回世界线当前的全局 insertion cursor。"""
+        async with self._sessions() as session:
+            maximum = await session.scalar(select(func.max(WorldCommitRow.insertion_sequence)))
+            return int(maximum or 0)
+
+    async def active_scopes(self, since: datetime) -> tuple[str, ...]:
+        """返回从 since 起有提交活动的 scope，按最近活动排序。"""
+        since_utc = _as_utc(since).replace(tzinfo=None)
+        async with self._sessions() as session:
+            rows = await session.execute(
+                select(
+                    WorldCommitScopeRow.scope,
+                    func.max(WorldCommitRow.insertion_sequence).label("last_insertion"),
+                )
+                .join(WorldCommitRow, WorldCommitRow.commit_id == WorldCommitScopeRow.commit_id)
+                .where(WorldCommitRow.occurred_at >= since_utc)
+                .group_by(WorldCommitScopeRow.scope)
+                .order_by(func.max(WorldCommitRow.insertion_sequence).desc())
+            )
+        return tuple(str(row.scope) for row in rows)
+
     async def head(self, scopes: frozenset[str]) -> WorldFrontier:
         if not scopes:
             return WorldFrontier()
@@ -222,6 +251,28 @@ class SqlAlchemyWorldJournal:
                 result.append(await self._commit(session, row))
             return tuple(result)
 
+    async def stream(self, after: int, limit: int) -> WorldStreamPage:
+        """按全局 insertion cursor 读取连续事件流。"""
+        if after < 0:
+            raise ValueError("after must not be negative")
+        if limit < 1 or limit > _MAX_BODY_PAGE:
+            raise ValueError(f"limit must be within 1..{_MAX_BODY_PAGE}")
+        async with self._sessions() as session:
+            statement = (
+                select(WorldCommitRow)
+                .where(WorldCommitRow.insertion_sequence > after)
+                .order_by(WorldCommitRow.insertion_sequence)
+                .limit(limit + 1)
+            )
+            rows = list(await session.scalars(statement))
+            has_more = len(rows) > limit
+            page_rows = rows[:limit]
+            commits: tuple[WorldCommit, ...] = ()
+            for row in page_rows:
+                commits = (*commits, await self._commit(session, row))
+            end = max((row.insertion_sequence for row in page_rows), default=after)
+            return WorldStreamPage(after, end, commits, has_more)
+
     async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
         """从引擎提交的 tree_id 事实推导 Bot 森林索引，按最近活动排序。"""
         if limit < 1 or limit > _MAX_TREE_INDEX:
@@ -255,7 +306,7 @@ class SqlAlchemyWorldJournal:
                 if len(commits) == self._page_size:
                     break
             end_positions = {
-                scope: max((item.scopes.get(scope, 0) for item in commits), default=start.sequence(scope))
+                scope: max((*(item.scopes.get(scope, 0) for item in commits), start.sequence(scope)))
                 for scope in scopes
             }
             end = start.advance(end_positions)

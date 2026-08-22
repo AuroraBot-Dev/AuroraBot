@@ -10,6 +10,36 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
+# 稳定的世界 scope 与事件 kind 常量；scope 的实际归属由提交方决定，
+# world 只负责校验、编号与追加。
+SYSTEM_SCOPE = "aurora:system"
+CONFIG_SCOPE = "aurora:config"
+CONSOLE_SCOPE = "aurora:console"
+
+TREE_STARTED = "engine.tree.started"
+TREE_COMPLETED = "engine.tree.completed"
+TREE_FAILED = "engine.tree.failed"
+NODE_SPAWNED = "engine.node.spawned"
+NODE_COMPLETED = "engine.node.completed"
+NODE_FAILED = "engine.node.failed"
+MODEL_REQUESTED = "engine.model.requested"
+MODEL_COMPLETED = "engine.model.completed"
+MODEL_FAILED = "engine.model.failed"
+TOOL_REQUESTED = "tool.requested"
+TOOL_SUCCEEDED = "tool.succeeded"
+TOOL_FAILED = "tool.failed"
+OUTPUT_REQUESTED = "output.requested"
+OUTPUT_COMMITTED = "output.committed"
+WORLD_DELTA_DELIVERED = "engine.world.delta_delivered"
+CONSOLE_INPUT = "console.input"
+
+
+def tree_scope(tree_id: str) -> str:
+    """返回一次 AgentTree 运行的标准世界 scope。"""
+    if not tree_id.strip():
+        raise ValueError("tree_id must not be empty")
+    return f"aurora:tree:{tree_id}"
+
 
 @dataclass(frozen=True, slots=True)
 class WorldFrontier:
@@ -110,6 +140,46 @@ class WorldDeltaPage:
 
 
 @dataclass(frozen=True, slots=True)
+class MemoryScopeSnapshot:
+    """记忆查询中一个有近期活动的 scope 及其最近提交。"""
+
+    scope: str
+    head: int
+    commits: tuple[WorldCommit, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "commits", tuple(self.commits))
+        if not self.scope.strip() or self.head < 0:
+            raise ValueError("MemoryScopeSnapshot requires a non-empty scope and non-negative head")
+
+
+@dataclass(frozen=True, slots=True)
+class MemorySnapshot:
+    """按活跃 scope 分组的世界记忆快照。"""
+
+    window_start: datetime
+    scopes: tuple[MemoryScopeSnapshot, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "scopes", tuple(self.scopes))
+
+
+@dataclass(frozen=True, slots=True)
+class WorldStreamPage:
+    """按全局 insertion cursor 读取的一页连续事件流。"""
+
+    after: int
+    end: int
+    commits: tuple[WorldCommit, ...]
+    has_more: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "commits", tuple(self.commits))
+        if self.after < 0 or self.end < self.after:
+            raise ValueError("WorldStreamPage requires 0 <= after <= end")
+
+
+@dataclass(frozen=True, slots=True)
 class TreeActivity:
     """由世界日志推导出的一棵树的活动摘要。"""
 
@@ -139,24 +209,36 @@ class ToolScopes:
             raise ValueError("ToolScopes must not contain empty scopes")
 
 
-class WorldJournal(Protocol):
-    """世界事实与效果因果的唯一持久化端口。"""
+class WorldReader(Protocol):
+    """世界线的只读端口；供 prompt、memory、cadence 等消费者使用。"""
 
-    async def initialize(self) -> None: ...
-
-    async def append_event(self, event: EnvironmentEvent) -> WorldCommit: ...
-
-    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]: ...
+    async def cursor(self) -> int: ...
 
     async def head(self, scopes: frozenset[str]) -> WorldFrontier: ...
 
     async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage: ...
 
+    async def active_scopes(self, since: datetime) -> tuple[str, ...]: ...
+
     async def commit(self, commit_id: str) -> WorldCommit | None: ...
 
     async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]: ...
 
+    async def stream(self, after: int, limit: int) -> WorldStreamPage: ...
+
     async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]: ...
+
+
+class MemoryReader(Protocol):
+    """按活跃 scope 提供世界记忆快照的只读端口。"""
+
+    async def recall(self, *, now: datetime | None = None) -> MemorySnapshot: ...
+
+
+class WorldWriter(Protocol):
+    """世界线的只写端口；供 console、mcp、cadence 等生产者使用。"""
+
+    async def append_event(self, event: EnvironmentEvent) -> WorldCommit: ...
 
     async def append_commit(
         self,
@@ -170,3 +252,13 @@ class WorldJournal(Protocol):
         data: Mapping[str, Any],
         occurred_at: datetime | None = None,
     ) -> WorldCommit: ...
+
+    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]: ...
+
+
+class WorldJournal(WorldReader, WorldWriter, Protocol):
+    """世界事实与效果因果的唯一持久化端口。"""
+
+    async def initialize(self) -> None: ...
+
+    async def close(self) -> None: ...

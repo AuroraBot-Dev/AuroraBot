@@ -91,5 +91,19 @@ def _load_all() -> None:
     if _STATE.loaded:
         return
     _STATE.loaded = True
-    for module in ("ops.operations.config", "ops.operations.engine", "ops.operations.system"):
+    for module in (
+        "ops.operations.config",
+        "ops.operations.engine",
+        "ops.operations.system",
+        "ops.operations.agents",
+        "ops.operations.tools",
+        "ops.operations.prompt",
+        "ops.operations.ai",
+        "ops.operations.world",
+        "ops.operations.console",
+        "ops.operations.utils",
+        "ops.operations.contracts",
+        "ops.operations.cadence",
+        "ops.operations.memory",
+    ):
         importlib.import_module(module)

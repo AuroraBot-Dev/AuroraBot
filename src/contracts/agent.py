@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from src.contracts.model import ChatMessage, ToolCall
 from src.contracts.world import ToolScopes, WorldFrontier
@@ -25,6 +25,29 @@ class TreeStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class TreeLaunchRequest:
+    """cadence 等主动策略请求唤起一棵 AgentTree 的值对象。"""
+
+    message: str
+    tree_id: str | None = None
+    agent: str | None = None
+    frontier: WorldFrontier = field(default_factory=WorldFrontier)
+    caused_by: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.message.strip():
+            raise ValueError("TreeLaunchRequest requires a non-empty message")
+        if self.caused_by is not None and not self.caused_by.strip():
+            raise ValueError("TreeLaunchRequest caused_by must not be empty")
+
+
+class TreeLauncher(Protocol):
+    """接受一次 AgentTree 唤起请求的运行时端口。"""
+
+    async def launch_tree(self, request: TreeLaunchRequest) -> dict[str, object]: ...
 
 
 @dataclass(frozen=True, slots=True)

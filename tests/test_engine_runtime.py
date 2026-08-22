@@ -443,8 +443,19 @@ def test_world_read_tool_returns_bodies_and_forest_indexes_the_tree(tmp_path: Pa
     assert body["count"] == 1
     assert body["commits"][0]["summary"] == "第一条消息"
     assert environment == ("environment.message",)
-    assert tree_scope == ("tool.requested", "tool.succeeded", "output.requested", "output.committed")
-    assert [(item.tree_id, item.commit_count) for item in forest] == [("tree", 4)]
+    assert tree_scope == (
+        "engine.tree.started",
+        "engine.model.requested",
+        "engine.model.completed",
+        "tool.requested",
+        "tool.succeeded",
+        "engine.model.requested",
+        "engine.model.completed",
+        "output.requested",
+        "output.committed",
+        "engine.tree.completed",
+    )
+    assert [(item.tree_id, item.commit_count) for item in forest] == [("tree", 10)]
 
 
 def test_world_read_tool_first_batch_defers_until_delta_is_disclosed(tmp_path: Path) -> None:
@@ -486,4 +497,18 @@ def test_world_read_tool_first_batch_defers_until_delta_is_disclosed(tmp_path: P
     assert body["commits"][0]["summary"] == "第一条消息"
     assert body["commits"][1]["summary"] == "第二条消息"
     assert environment == ("environment.message", "environment.message")
-    assert tree_scope == ("tool.requested", "tool.succeeded", "output.requested", "output.committed")
+    assert tree_scope == (
+        "engine.tree.started",
+        "engine.model.requested",
+        "engine.model.completed",
+        "engine.world.delta_delivered",
+        "engine.model.requested",
+        "engine.model.completed",
+        "tool.requested",
+        "tool.succeeded",
+        "engine.model.requested",
+        "engine.model.completed",
+        "output.requested",
+        "output.committed",
+        "engine.tree.completed",
+    )

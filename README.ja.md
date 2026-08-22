@@ -16,4 +16,4 @@ uv run aurora check
 uv run aurora about
 ```
 
-詳細は [ARCHITECTURE.md](ARCHITECTURE.md) と [RFC](docs/rfc/0300-unified-architecture-and-contracts.md) を参照してください。
+詳細は [architecture docs](docs/architecture/index.md) と [RFC](docs/rfc/0300-unified-architecture-and-contracts.md) を参照してください。

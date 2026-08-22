@@ -84,11 +84,85 @@ class ProcessRuntimePort(Protocol):
     def request_shutdown(self) -> None: ...
 
 
+class AgentsRuntimePort(Protocol):
+    def agent_catalog(self) -> dict[str, Any]: ...
+
+    def agent_detail(self, agent_id: str) -> dict[str, Any] | None: ...
+
+
+class ToolsRuntimePort(Protocol):
+    def tool_catalog(self) -> dict[str, Any]: ...
+
+    def tool_detail(self, tool_id: str) -> dict[str, Any] | None: ...
+
+
+class PromptRuntimePort(Protocol):
+    def prompt_catalog(self) -> dict[str, Any]: ...
+
+    def prompt_detail(self, prompt_id: str) -> dict[str, Any] | None: ...
+
+
+class AiRuntimePort(Protocol):
+    def model_catalog(self) -> dict[str, Any]: ...
+
+    def model_detail(self, endpoint_id: str) -> dict[str, Any] | None: ...
+
+
+class WorldRuntimePort(Protocol):
+    async def world_stream(self, *, after: int = 0, limit: int = 64) -> dict[str, Any]: ...
+
+    async def world_commit(self, commit_id: str) -> dict[str, Any] | None: ...
+
+    async def record_event(
+        self,
+        *,
+        event_id: str,
+        kind: str,
+        source: str,
+        summary: str,
+        scope: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]: ...
+
+
+class ConsoleRuntimePort(Protocol):
+    def console_status(self) -> dict[str, Any]: ...
+
+
+class UtilsRuntimePort(Protocol):
+    def utils_status(self) -> dict[str, Any]: ...
+
+
+class ContractsRuntimePort(Protocol):
+    def contracts_status(self) -> dict[str, Any]: ...
+
+
+class CadenceRuntimePort(Protocol):
+    def cadence_status(self) -> dict[str, Any]: ...
+
+    async def cadence_trigger(self) -> dict[str, Any]: ...
+
+
+class MemoryRuntimePort(Protocol):
+    async def memory_snapshot(self) -> dict[str, Any]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class OpsPorts:
     engine: TreeRuntimePort
     config: ConfigRuntimePort
     process: ProcessRuntimePort
+    agents: AgentsRuntimePort | None = None
+    tools: ToolsRuntimePort | None = None
+    prompt: PromptRuntimePort | None = None
+    ai: AiRuntimePort | None = None
+    world: WorldRuntimePort | None = None
+    console: ConsoleRuntimePort | None = None
+    utils: UtilsRuntimePort | None = None
+    contracts: ContractsRuntimePort | None = None
+    cadence: CadenceRuntimePort | None = None
+    memory: MemoryRuntimePort | None = None
 
 
 @dataclass(frozen=True, slots=True)

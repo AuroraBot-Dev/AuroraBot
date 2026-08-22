@@ -8,6 +8,7 @@ from aurora.config import collect_config
 from aurora.configuration import (
     agents,
     apps,
+    cadence,
     engine,
     extensions,
     logging,
@@ -36,6 +37,7 @@ CONFIG_REGISTRARS = (
     logging.register,
     storage.register,
     profiles.register,
+    cadence.register,
 )
 
 

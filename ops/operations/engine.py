@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from ops.contracts import OperationResult, ParameterKind, ParameterLocation, ParameterSpec
+from ops.operations import require_port
 from ops.registry import operation
 
 if TYPE_CHECKING:
@@ -93,13 +95,24 @@ async def node(context: OperationContext, params: dict[str, Any]) -> OperationRe
     ),
 )
 async def start(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is not None:
+        return missing
+    assert port is not None
+    tree_id = str(params["tree_id"]) if params.get("tree_id") else None
+    await port.record_event(
+        event_id=f"ops:tree:{uuid4().hex}",
+        kind="ops.tree.requested",
+        source="ops",
+        summary=f"请求启动 AgentTree：{params['message']}",
+        scope="aurora:system",
+        data={"message": str(params["message"]), "requested_tree_id": tree_id},
+    )
     try:
-        result = await context.runtime.engine.start_tree(
-            str(params["message"]), tree_id=str(params["tree_id"]) if params.get("tree_id") else None
-        )
+        result = await context.runtime.engine.start_tree(str(params["message"]), tree_id=tree_id)
     except ValueError as error:
         return OperationResult.failure("INVALID_TREE", str(error))
-    return OperationResult.success(result, message="AgentTree 运行完成")
+    return OperationResult.success(result)
 
 
 @operation(

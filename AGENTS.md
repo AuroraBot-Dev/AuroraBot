@@ -5,6 +5,7 @@ AuroraBot 是以 `AgentTree` 为核心的自主智能体框架。当前工作树
 ## Architecture authority
 
 - `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准。
+- `docs/architecture/` 是按包拆分的实施架构说明；`docs/architecture/packages/package-baseline.md` 是新增模块/包的最低扩展成本基线。
 - `docs/` 是独立文档仓库的子模块；RFC 先在 docs 仓库提交，再由主仓库更新子模块指针。
 - 影响 AgentTree、四角色消息、模型/工具端口、配置或组合根的改动，必须先更新 RFC。
 - Python 源码和测试的注释与 docstring 不提具体 RFC 编号，直接说明局部不变量。
@@ -21,10 +22,13 @@ aurora/composition/    每个需构造实例的 src 子包一个注册模块
 ops/            统一 OperationSpec 目录、运行监测与限定配置改动
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
+src/agents/     不可变 AgentDefinition 目录与唯一解析
+src/tools/      工具注册表与框架内建工具
 src/prompt/     四角色 PromptAssembler
 src/engine/     AgentTree 的确定性单循环
 src/ai/         LiteLLM 模型网关与 Provider 协议映射
-src/console/    可注入文本分派端口的本地异步终端
+src/world/      WorldJournal 唯一持久化实现与 migration
+src/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
 docs/           文档站点与唯一 RFC 子模块
 panel/          暂不参与当前 runtime 的独立前端子模块
@@ -33,22 +37,26 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 ## Core boundaries
 
 - 一棵 `AgentTree` 表示一次完整运行；不再引入独立 Task、mailbox、Activity 或 continuation 作为平行运行模型。
-- root 与 child 使用同一种 `AgentNode` 和循环。实例只因 system profile、初始 message、可见 tools 和 LLM model 不同。
+- root 与 child 使用同一种 `AgentNode` 和循环。实例只因 prompt、初始 message、可见 tools 和 LLM model 不同。
 - `ChatMessage` 只允许 `system`、`message`、`assistant`、`tool` 四种领域 role；只有 Provider adapter 可把
   `message` 映射成协议的 `user`。
-- `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务。
-- `AgentTreeRunner` 只依赖 contracts + prompt；普通 Tool 经端口执行，`delegate` 是唯一由 engine 解释的内建 Tool。
+- `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务；未来需要世界上下文时只注入 `WorldReader`。
+- `AgentTreeRunner` 只执行给定树：依赖 contracts + agents + prompt + tools，并通过 `WorldJournal` 记录运行因果；普通 Tool 经端口执行，`delegate` 是唯一由 engine 解释的内建 Tool。
+- `src/world` 是逻辑事件总线，代码上是叶子；`WorldReader / WorldWriter / WorldJournal` 端口只属于 contracts，其他包不得 import 实现。
+- 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
+- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线。
+- 每个运行时包在 ops 中拥有窄 RuntimePort 和 method/path + 斜杠入口，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。
 - 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
-- 依赖方向固定为 `utils/contracts ← prompt/ai ← engine ← aurora`、`console ← aurora`、`ops ← aurora`；`src` 不导入
-  `aurora` 或 `ops`，ops 不导入 src 或 aurora。
+- 依赖方向固定为 `utils/contracts ← agents/prompt/ai/world`、`agents/contracts ← tools ← engine ← aurora`、
+  `console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`，ops 不导入 src 或 aurora。
 
 ## Current scope
 
-当前实现 ops、LiteLLM Model、Console 与 start 的最小生命周期；不实现持久化、迁移、自动记忆、Inbox/Triage、并发/抢占、
+当前实现 ops、LiteLLM Model、Console 与 start 的最小生命周期，以及 WorldJournal 持久化与 migration；不实现主动节律、自动记忆、Inbox/Triage、并发/抢占、
 MCP、Platform、Panel backend、sandbox 或费用体系。引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 
 ## Language and text
