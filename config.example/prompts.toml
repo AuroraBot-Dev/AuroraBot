@@ -1,7 +1,7 @@
 # 提示词装配 — 片段路径映射。
 #
 # 路径相对 config/ 解析。提示词只负责人格与表达，不是授权边界。当前加载器
-# 校验文件存在且非空，组合阶段校验每个 Agent definition 使用的 profile 已定义。
+# 校验文件存在且非空，组合阶段校验每个 Agent definition 使用的 prompt 已定义。
 
 # 当前 PromptAssembler 的显式字符上界
 max_characters = 32000
@@ -13,8 +13,8 @@ soul = "prompts/SOUL.md"
 # 项目、团队与环境上下文
 world = "prompts/WORLD.md"
 
-# Agent 层：按 profile id 映射到专用提示词片段
-[agent]
+# Agent 层：按 prompt id 映射到专用提示词片段
+[agent_prompts]
 "builtin.triage" = "prompts/agents/triage.md"
 "builtin.fast" = "prompts/agents/fast.md"
 "builtin.root" = "prompts/agents/root.md"

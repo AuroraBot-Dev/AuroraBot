@@ -23,7 +23,7 @@ def register(context: CompositionContext) -> None:
             AgentDefinition(
                 item.definition_id,
                 item.description,
-                item.profile,
+                item.prompt,
                 item.model,
                 item.tools,
                 item.children,

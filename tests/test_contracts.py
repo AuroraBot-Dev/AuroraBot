@@ -27,12 +27,12 @@ def _empty_assistant() -> ChatMessage:
 
 def _agent(
     definition_id: str = "root",
-    profile: str = "root",
+    prompt: str = "root",
     model: str = "model",
     tools: frozenset[str] = frozenset(),
     children: frozenset[str] = frozenset(),
 ) -> AgentDefinition:
-    return AgentDefinition(definition_id, "Test Agent.", profile, model, tools, children)
+    return AgentDefinition(definition_id, "Test Agent.", prompt, model, tools, children)
 
 
 def test_chat_message_accepts_exactly_four_roles() -> None:

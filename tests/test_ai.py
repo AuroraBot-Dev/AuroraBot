@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 
 import pytest
 
-from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint, to_openai_messages, to_openai_tools
+from src.ai import (
+    LiteLLMModelGateway,
+    ModelEndpoint,
+    ProviderEndpoint,
+    openai_tool_name_map,
+    to_openai_messages,
+    to_openai_tools,
+)
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition
+
+PROVIDER_TOOL_NAME_MAX_LENGTH = 64
 
 
 def test_openai_adapter_maps_only_message_role_to_user() -> None:
@@ -36,6 +46,75 @@ def test_openai_tool_adapter_preserves_native_schema() -> None:
             "function": {"name": "echo", "description": "Echo text.", "parameters": schema},
         }
     ]
+
+
+def test_openai_adapter_maps_domain_tool_id_to_provider_safe_name() -> None:
+    domain_name = "aur.agent.delegate"
+    aliases = openai_tool_name_map((domain_name,))
+    alias = aliases[domain_name]
+
+    assert alias != domain_name
+    assert re.fullmatch(r"[a-zA-Z0-9_-]+", alias)
+    assert "__" in alias
+    assert len(alias) <= PROVIDER_TOOL_NAME_MAX_LENGTH
+    assert (
+        to_openai_tools((ToolDefinition(domain_name, "委派", {"type": "object"}),), aliases)[0]["function"]["name"]
+        == alias
+    )
+
+
+def test_litellm_gateway_round_trips_domain_tool_names_in_definitions_history_and_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    domain_name = "aur.agent.delegate"
+    captured: list[dict[str, Any]] = []
+
+    async def call(parameters: dict[str, Any]) -> dict[str, Any]:
+        captured.append(parameters)
+        alias = parameters["tools"][0]["function"]["name"]
+        assert parameters["messages"][2]["tool_calls"][0]["function"]["name"] == alias
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": "call-next",
+                                "type": "function",
+                                "function": {"name": alias, "arguments": '{"agent":"builtin.worker"}'},
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    model = LiteLLMModelGateway(
+        {"deepseek": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {"quality": ModelEndpoint("deepseek", "deepseek-chat")},
+        caller=call,
+    )
+    response = asyncio.run(
+        model.complete(
+            ModelRequest(
+                "quality",
+                (
+                    ChatMessage.system("系统"),
+                    ChatMessage.message("消息"),
+                    ChatMessage.assistant(tool_calls=(ToolCall("call-prior", domain_name, {"agent": "worker"}),)),
+                    ChatMessage.tool("call-prior", "完成"),
+                ),
+                (ToolDefinition(domain_name, "委派", {"type": "object"}),),
+            )
+        )
+    )
+
+    provider_name = captured[0]["tools"][0]["function"]["name"]
+    assert re.fullmatch(r"[a-zA-Z0-9_-]+", provider_name)
+    assert response.tool_calls[0].name == domain_name
 
 
 def test_litellm_gateway_uses_explicit_endpoint_and_normalizes_tool_calls(

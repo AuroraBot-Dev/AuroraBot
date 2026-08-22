@@ -150,7 +150,7 @@ class AuroraRuntime:
             "parent_id": node.parent_id,
             "parent_call_id": node.parent_call_id,
             "definition_id": node.definition_id,
-            "profile_id": node.profile_id,
+            "prompt_id": node.prompt_id,
             "model": node.model,
             "tools": sorted(node.tools),
             "status": node.status.value,

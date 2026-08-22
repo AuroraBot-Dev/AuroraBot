@@ -1,0 +1,173 @@
+"""SQLAlchemy 驱动的持久化 WorldJournal。"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import func, insert, inspect, select, update
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+from src.contracts import EnvironmentEvent, WorldCommit, WorldDeltaPage, WorldFrontier
+from src.world.migration import STEPS, TARGET_VERSION
+from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommitRow, WorldCommitScopeRow
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from sqlalchemy.engine import Connection
+
+
+class SqlAlchemyWorldJournal:
+    """使用 SQLite 与 SQLAlchemy ORM 保存 Bot 的只追加世界提交。"""
+
+    def __init__(self, database_path: Path, *, page_size: int = 64) -> None:
+        if page_size <= 0:
+            raise ValueError("page_size must be positive")
+        self.database_path = database_path
+        self._engine: AsyncEngine = create_async_engine(
+            f"sqlite+aiosqlite:///{database_path}", connect_args={"timeout": 30}
+        )
+        self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
+        self._page_size = page_size
+        self._lock = asyncio.Lock()
+
+    async def initialize(self) -> None:
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        async with self._engine.begin() as connection:
+            await connection.run_sync(self._create_or_migrate)
+
+    @staticmethod
+    def _create_or_migrate(connection: Connection) -> None:
+        if not inspect(connection).has_table("schema_meta"):
+            Base.metadata.create_all(connection)
+            connection.execute(insert(SchemaMetaRow).values(singleton=1, version=TARGET_VERSION))
+            return
+        version = connection.execute(select(SchemaMetaRow.version).where(SchemaMetaRow.singleton == 1)).scalar_one()
+        if version > TARGET_VERSION:
+            raise RuntimeError(f"world schema version {version} is newer than supported {TARGET_VERSION}")
+        for current in range(version, TARGET_VERSION):
+            step = STEPS.get(current)
+            if step is None:
+                raise RuntimeError(f"missing world migration {current} -> {current + 1}")
+            step(connection)
+            connection.execute(update(SchemaMetaRow).where(SchemaMetaRow.singleton == 1).values(version=current + 1))
+
+    async def close(self) -> None:
+        await self._engine.dispose()
+
+    async def append_event(self, event: EnvironmentEvent) -> WorldCommit:
+        return await self.append_commit(
+            commit_id=event.event_id,
+            kind=f"environment.{event.kind}",
+            source=event.source,
+            summary=event.summary,
+            scopes=frozenset({event.scope}),
+            based_on=WorldFrontier(),
+            data=dict(event.data),
+            occurred_at=event.occurred_at,
+        )
+
+    async def append_commit(
+        self,
+        *,
+        commit_id: str,
+        kind: str,
+        source: str,
+        summary: str,
+        scopes: frozenset[str],
+        based_on: WorldFrontier,
+        data: dict[str, Any],
+        occurred_at: datetime | None = None,
+    ) -> WorldCommit:
+        if not all((commit_id.strip(), kind.strip(), source.strip(), summary.strip())) or not scopes:
+            raise ValueError("WorldCommit requires identity, summary and scopes")
+        async with self._lock, self._sessions.begin() as session:
+            existing = await session.scalar(select(WorldCommitRow).where(WorldCommitRow.commit_id == commit_id))
+            if existing is not None:
+                return await self._commit(session, existing)
+            sequences: dict[str, int] = {}
+            for scope in sorted(scopes):
+                maximum = await session.scalar(
+                    select(func.max(WorldCommitScopeRow.sequence)).where(WorldCommitScopeRow.scope == scope)
+                )
+                sequences[scope] = int(maximum or 0) + 1
+            row = WorldCommitRow(
+                commit_id=commit_id,
+                kind=kind,
+                source=source,
+                summary=summary,
+                occurred_at=occurred_at if occurred_at is not None else datetime.now(UTC),
+                payload=data,
+            )
+            session.add(row)
+            session.add_all(
+                WorldCommitScopeRow(commit_id=commit_id, scope=scope, sequence=sequence)
+                for scope, sequence in sequences.items()
+            )
+            session.add_all(
+                WorldCommitBaseRow(commit_id=commit_id, scope=scope, sequence=sequence)
+                for scope, sequence in based_on.positions.items()
+            )
+            await session.flush()
+            return WorldCommit(commit_id, kind, source, summary, row.occurred_at, sequences, based_on, data)
+
+    async def head(self, scopes: frozenset[str]) -> WorldFrontier:
+        if not scopes:
+            return WorldFrontier()
+        async with self._sessions() as session:
+            positions: dict[str, int] = {}
+            for scope in scopes:
+                maximum = await session.scalar(
+                    select(func.max(WorldCommitScopeRow.sequence)).where(WorldCommitScopeRow.scope == scope)
+                )
+                positions[scope] = int(maximum or 0)
+            return WorldFrontier(positions)
+
+    async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage:
+        if not scopes:
+            return WorldDeltaPage(start, start, (), False)
+        async with self._sessions() as session:
+            rows = await session.scalars(select(WorldCommitRow).order_by(WorldCommitRow.insertion_sequence))
+            commits: list[WorldCommit] = []
+            for row in rows:
+                commit = await self._commit(session, row)
+                if any(commit.scopes.get(scope, 0) > start.sequence(scope) for scope in scopes):
+                    commits.append(commit)
+                if len(commits) == self._page_size:
+                    break
+            end_positions = {
+                scope: max((item.scopes.get(scope, 0) for item in commits), default=start.sequence(scope))
+                for scope in scopes
+            }
+            end = start.advance(end_positions)
+            more = False
+            if len(commits) == self._page_size:
+                for row in await session.scalars(select(WorldCommitRow).order_by(WorldCommitRow.insertion_sequence)):
+                    commit = await self._commit(session, row)
+                    if any(commit.scopes.get(scope, 0) > end.sequence(scope) for scope in scopes):
+                        more = True
+                        break
+            return WorldDeltaPage(start, end, tuple(commits), more)
+
+    async def _commit(self, session: AsyncSession, row: WorldCommitRow) -> WorldCommit:
+        scope_rows = await session.scalars(
+            select(WorldCommitScopeRow).where(WorldCommitScopeRow.commit_id == row.commit_id)
+        )
+        base_rows = await session.scalars(
+            select(WorldCommitBaseRow).where(WorldCommitBaseRow.commit_id == row.commit_id)
+        )
+        scopes = {item.scope: item.sequence for item in scope_rows}
+        based_on = WorldFrontier({item.scope: item.sequence for item in base_rows})
+        occurred_at = row.occurred_at.replace(tzinfo=UTC) if row.occurred_at.tzinfo is None else row.occurred_at
+        return WorldCommit(
+            row.commit_id,
+            row.kind,
+            row.source,
+            row.summary,
+            occurred_at,
+            scopes,
+            based_on,
+            row.payload,
+        )

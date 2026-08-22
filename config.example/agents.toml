@@ -1,12 +1,12 @@
 # Agent 定义 — 可复用、无运行状态的节点原型。
 #
-# 每个 definition 选择一个 system profile、model endpoint、可见 tools 和允许的 child definitions。
-# 同一个 profile 可以被多个 definition 复用；运行时 transcript、parent 和状态只存在于 AgentTree 的 AgentNode 中。
+# 每个 definition 选择一个 Agent prompt、model endpoint、可见 tools 和允许的 child definitions。
+# 同一个 prompt 可以被多个 definition 复用；运行时 transcript、parent 和状态只存在于 AgentTree 的 AgentNode 中。
 
 [[agent]]
 id = "builtin.root"
 description = "总代理：理解完整任务、整合结果，并把独立工作委派给合适的专门 Agent。"
-profile = "builtin.root"
+prompt = "builtin.root"
 model = "quality"
 tools = ["aur.agent.delegate"]
 children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
@@ -14,7 +14,7 @@ children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
 [[agent]]
 id = "builtin.worker"
 description = "通用执行者：深入完成一件边界明确的工作，并可请求独立审阅。"
-profile = "builtin.worker"
+prompt = "builtin.worker"
 model = "quality"
 tools = ["aur.agent.delegate"]
 children = ["builtin.reviewer"]
@@ -22,7 +22,7 @@ children = ["builtin.reviewer"]
 [[agent]]
 id = "builtin.fast-worker"
 description = "快速执行者：使用较快模型直接处理事实清楚、风险低的独立工作。"
-profile = "builtin.worker"
+prompt = "builtin.worker"
 model = "fast"
 tools = []
 children = []
@@ -30,7 +30,7 @@ children = []
 [[agent]]
 id = "builtin.reviewer"
 description = "独立审阅者：检查给定结果的事实、遗漏和边界，不继续扩张 AgentTree。"
-profile = "builtin.reviewer"
+prompt = "builtin.reviewer"
 model = "quality"
 tools = []
 children = []

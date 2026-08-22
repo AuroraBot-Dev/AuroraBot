@@ -17,5 +17,5 @@ PROMPT_ASSEMBLER = InstanceKey[PromptAssembler]("prompt.assembler")
 
 def register(context: CompositionContext) -> None:
     configuration = context.config.get(PROMPTS_CONFIG)
-    catalog = PromptCatalog(configuration.system, configuration.profiles)
+    catalog = PromptCatalog(configuration.system, configuration.agent_prompts)
     context.provide(PROMPT_ASSEMBLER, PromptAssembler(catalog, max_characters=configuration.max_characters))

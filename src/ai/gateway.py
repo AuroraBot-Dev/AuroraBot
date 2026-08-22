@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import litellm
 
-from src.ai.openai import to_openai_messages, to_openai_tools
+from src.ai.openai import openai_tool_name_map, to_openai_messages, to_openai_tools
 from src.contracts import ChatMessage, ModelRequest, ToolCall
 
 type CompletionCaller = Callable[[dict[str, Any]], Awaitable[object]]
@@ -67,18 +67,24 @@ class LiteLLMModelGateway:
         api_key = os.getenv(provider.secret_env)
         if not api_key:
             raise RuntimeError(f"模型密钥环境变量尚未设置：{provider.secret_env}")
+        tool_names = openai_tool_name_map(
+            (
+                *(tool.name for tool in request.tools),
+                *(call.name for message in request.messages for call in message.tool_calls),
+            )
+        )
         parameters: dict[str, Any] = {
             "model": _gateway_model(endpoint, provider),
-            "messages": to_openai_messages(request.messages),
+            "messages": to_openai_messages(request.messages, tool_names),
             "api_key": api_key,
             "timeout": self._timeout_seconds,
         }
         if provider.adapter == "openai_compatible":
             parameters["api_base"] = provider.base_url
         if request.tools:
-            parameters["tools"] = to_openai_tools(request.tools)
+            parameters["tools"] = to_openai_tools(request.tools, tool_names)
         response = await self._caller(parameters)
-        return _assistant_message(_response_mapping(response))
+        return _assistant_message(_response_mapping(response), {alias: name for name, alias in tool_names.items()})
 
 
 def _gateway_model(endpoint: ModelEndpoint, provider: ProviderEndpoint) -> str:
@@ -102,7 +108,7 @@ def _response_mapping(response: object) -> Mapping[str, Any]:
     raise RuntimeError("LiteLLM 响应必须是对象")
 
 
-def _assistant_message(response: Mapping[str, Any]) -> ChatMessage:
+def _assistant_message(response: Mapping[str, Any], tool_names: Mapping[str, str]) -> ChatMessage:
     choices = response.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
         raise RuntimeError("模型响应缺少 choices[0]")
@@ -116,11 +122,11 @@ def _assistant_message(response: Mapping[str, Any]) -> ChatMessage:
         raw_calls = []
     if not isinstance(raw_calls, list):
         raise RuntimeError("模型响应的 tool_calls 必须是数组")
-    calls = tuple(_tool_call(raw) for raw in raw_calls)
+    calls = tuple(_tool_call(raw, tool_names) for raw in raw_calls)
     return ChatMessage.assistant(text, tool_calls=calls)
 
 
-def _tool_call(raw: object) -> ToolCall:
+def _tool_call(raw: object, tool_names: Mapping[str, str]) -> ToolCall:
     if not isinstance(raw, Mapping):
         raise RuntimeError("模型响应包含无效 Tool call")
     call_id = raw.get("id")
@@ -131,6 +137,9 @@ def _tool_call(raw: object) -> ToolCall:
     arguments = function.get("arguments", "{}")
     if not isinstance(name, str) or not name:
         raise RuntimeError("模型响应包含无名称 Tool call")
+    domain_name = tool_names.get(name)
+    if domain_name is None:
+        raise RuntimeError(f"模型响应引用了未知 Provider Tool 名称：{name}")
     if isinstance(arguments, str):
         try:
             decoded = json.loads(arguments)
@@ -140,4 +149,4 @@ def _tool_call(raw: object) -> ToolCall:
         decoded = arguments
     if not isinstance(decoded, Mapping):
         raise RuntimeError("模型响应的 Tool 参数必须是对象")
-    return ToolCall(call_id, name, cast("Mapping[str, Any]", decoded))
+    return ToolCall(call_id, domain_name, cast("Mapping[str, Any]", decoded))

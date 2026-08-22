@@ -30,13 +30,13 @@ def register(context: CompositionContext) -> None:
     model = context.require(MODEL)
     agents = context.require(AGENTS)
     tools = context.require(TOOLS)
-    prompts = context.config.get(PROMPTS_CONFIG).profiles
+    prompts = context.config.get(PROMPTS_CONFIG).agent_prompts
     models = context.config.get(MODELS_CONFIG).endpoints
     if runtime.agent not in agents.ids:
         raise ValueError(f"root 引用了未知 Agent definition：{runtime.agent}")
     for definition in agents.definitions:
-        if definition.profile_id not in prompts:
-            raise ValueError(f"{definition.definition_id} 引用了未知 prompt profile：{definition.profile_id}")
+        if definition.prompt_id not in prompts:
+            raise ValueError(f"{definition.definition_id} 引用了未知 Agent prompt：{definition.prompt_id}")
         if definition.model not in models:
             raise ValueError(f"{definition.definition_id} 引用了未知 model endpoint：{definition.model}")
         missing = definition.tools - tools.names

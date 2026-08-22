@@ -87,8 +87,8 @@ class AgentTreeRunner:
     def _validate_definitions(self, tree: AgentTree) -> None:
         for node in tree.nodes:
             definition = self._agents.get(node.definition_id)
-            if (node.profile_id, node.model, node.tools) != (
-                definition.profile_id,
+            if (node.prompt_id, node.model, node.tools) != (
+                definition.prompt_id,
                 definition.model,
                 definition.tools,
             ):

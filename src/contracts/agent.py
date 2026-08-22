@@ -27,7 +27,7 @@ class AgentDefinition:
 
     definition_id: str
     description: str
-    profile_id: str
+    prompt_id: str
     model: str
     tools: frozenset[str]
     children: frozenset[str]
@@ -35,8 +35,8 @@ class AgentDefinition:
     def __post_init__(self) -> None:
         object.__setattr__(self, "tools", frozenset(self.tools))
         object.__setattr__(self, "children", frozenset(self.children))
-        if not all((self.definition_id.strip(), self.description.strip(), self.profile_id.strip(), self.model.strip())):
-            raise ValueError("AgentDefinition requires definition_id, description, profile_id and model")
+        if not all((self.definition_id.strip(), self.description.strip(), self.prompt_id.strip(), self.model.strip())):
+            raise ValueError("AgentDefinition requires definition_id, description, prompt_id and model")
         if any(not name for name in (*self.tools, *self.children)):
             raise ValueError("AgentDefinition Tool and child IDs must not be empty")
 
@@ -49,7 +49,7 @@ class AgentNode:
     parent_id: str | None
     parent_call_id: str | None
     definition_id: str
-    profile_id: str
+    prompt_id: str
     model: str
     tools: frozenset[str]
     messages: tuple[ChatMessage, ...]
@@ -60,8 +60,8 @@ class AgentNode:
     def __post_init__(self) -> None:
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", frozenset(self.tools))
-        if not self.node_id or not self.definition_id or not self.profile_id or not self.model:
-            raise ValueError("AgentNode requires node_id, definition_id, profile_id and model")
+        if not self.node_id or not self.definition_id or not self.prompt_id or not self.model:
+            raise ValueError("AgentNode requires node_id, definition_id, prompt_id and model")
         if any(not name for name in self.tools):
             raise ValueError("AgentNode Tool names must not be empty")
         if self.parent_id is None and self.parent_call_id is not None:
@@ -145,7 +145,7 @@ class AgentTree:
             None,
             None,
             definition.definition_id,
-            definition.profile_id,
+            definition.prompt_id,
             definition.model,
             definition.tools,
             (ChatMessage.message(initial_message),),
@@ -189,7 +189,7 @@ class AgentTree:
             parent_id,
             call.call_id,
             definition.definition_id,
-            definition.profile_id,
+            definition.prompt_id,
             definition.model,
             definition.tools,
             (ChatMessage.message(instruction),),

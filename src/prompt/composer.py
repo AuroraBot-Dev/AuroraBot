@@ -23,10 +23,10 @@ class PromptAssembler:
     def assemble(self, tree: AgentTree, node_id: str) -> tuple[ChatMessage, ...]:
         node = tree.node(node_id)
         try:
-            profile = self._catalog.profiles[node.profile_id]
+            agent_prompt = self._catalog.agent_prompts[node.prompt_id]
         except KeyError as error:
-            raise ValueError(f"missing prompt for Agent profile {node.profile_id}") from error
-        system = ChatMessage.system("\n\n".join((*self._catalog.system, profile)))
+            raise ValueError(f"missing Agent prompt：{node.prompt_id}") from error
+        system = ChatMessage.system("\n\n".join((*self._catalog.system, agent_prompt)))
         messages = (system, *node.messages)
         size = sum(
             len(message.content)

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class AgentConfig:
     definition_id: str
     description: str
-    profile: str
+    prompt: str
     model: str
     tools: frozenset[str]
     children: frozenset[str]
@@ -51,7 +51,7 @@ def _parse(path: Path) -> AgentsConfig:
             AgentConfig(
                 text(item, "id"),
                 text(item, "description"),
-                text(item, "profile"),
+                text(item, "prompt"),
                 text(item, "model"),
                 frozenset(strings(item, "tools")),
                 frozenset(strings(item, "children")),

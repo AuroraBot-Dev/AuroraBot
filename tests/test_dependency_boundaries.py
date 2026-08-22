@@ -17,6 +17,7 @@ _ALLOWED_SRC_IMPORTS = {
     "ai": frozenset({"src.ai", "src.contracts"}),
     "console": frozenset({"src.console"}),
     "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools"}),
+    "world": frozenset({"src.contracts", "src.world"}),
 }
 _REMOVED_PACKAGES = ("apps", "config", "memory", "platform", "sandbox")
 

@@ -58,7 +58,7 @@ def _parse(path: Path) -> ModelsConfig:
     }
     endpoints = {
         endpoint_id: ModelEndpointConfig(text(endpoint, "provider"), text(endpoint, "model"))
-        for endpoint_id, endpoint in _named_tables(models, "roles").items()
+        for endpoint_id, endpoint in _named_tables(models, "endpoints").items()
     }
     if not providers or not endpoints:
         raise ValueError("models.toml 至少需要一个 provider 和一个模型端点")

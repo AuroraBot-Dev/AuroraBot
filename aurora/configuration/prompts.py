@@ -19,15 +19,15 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True)
 class PromptConfig:
     system: tuple[str, ...]
-    profiles: Mapping[str, str]
+    agent_prompts: Mapping[str, str]
     max_characters: int
 
     def __post_init__(self) -> None:
         if not self.system:
             raise ValueError("提示词配置至少需要一个 system 片段")
-        if not self.profiles:
-            raise ValueError("提示词配置至少需要一个 profile")
-        object.__setattr__(self, "profiles", MappingProxyType(dict(self.profiles)))
+        if not self.agent_prompts:
+            raise ValueError("提示词配置至少需要一个 Agent prompt")
+        object.__setattr__(self, "agent_prompts", MappingProxyType(dict(self.agent_prompts)))
 
 
 PROMPTS_CONFIG = ConfigKey[PromptConfig]("prompts")
@@ -40,10 +40,10 @@ def register(configs: ConfigCollector) -> None:
 def _parse(path: Path) -> PromptConfig:
     document = load_toml(path)
     system_paths = table(document, "system")
-    agent_paths = string_mapping(document, "agent")
+    agent_paths = string_mapping(document, "agent_prompts")
     return PromptConfig(
         tuple(_read_fragment(path.parent, text(system_paths, name)) for name in ("soul", "world")),
-        {profile: _read_fragment(path.parent, relative_path) for profile, relative_path in agent_paths.items()},
+        {prompt_id: _read_fragment(path.parent, relative_path) for prompt_id, relative_path in agent_paths.items()},
         positive_integer(document, "max_characters"),
     )
 

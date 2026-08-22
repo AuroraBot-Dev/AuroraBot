@@ -15,6 +15,14 @@ from src.contracts.tool import (
     ToolOutput,
     ToolResult,
 )
+from src.contracts.world import (
+    EnvironmentEvent,
+    ToolScopes,
+    WorldCommit,
+    WorldDeltaPage,
+    WorldFrontier,
+    WorldJournal,
+)
 
 __all__ = [
     "AgentDefinition",
@@ -24,6 +32,7 @@ __all__ = [
     "ChatMessage",
     "ChatRole",
     "DelegationRequest",
+    "EnvironmentEvent",
     "Model",
     "ModelRequest",
     "Tool",
@@ -31,5 +40,10 @@ __all__ = [
     "ToolDefinition",
     "ToolOutput",
     "ToolResult",
+    "ToolScopes",
     "TreeStatus",
+    "WorldCommit",
+    "WorldDeltaPage",
+    "WorldFrontier",
+    "WorldJournal",
 ]

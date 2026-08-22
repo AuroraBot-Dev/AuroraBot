@@ -66,7 +66,7 @@ def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> Non
         assemble_runtime(invalid, FakeModel())
 
 
-def test_assembly_rejects_invalid_root_profile_model_and_delegation_boundary(configured_project: Path) -> None:
+def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     runtime = configuration.get(RUNTIME_CONFIG)
     agents = configuration.get(AGENTS_CONFIG)
@@ -74,11 +74,11 @@ def test_assembly_rejects_invalid_root_profile_model_and_delegation_boundary(con
 
     with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
         assemble_runtime(configuration.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
-    with pytest.raises(ValueError, match="未知 prompt profile"):
+    with pytest.raises(ValueError, match="未知 Agent prompt"):
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, profile="missing"), *agents.definitions[1:])),
+                AgentsConfig((replace(root, prompt="missing"), *agents.definitions[1:])),
             ),
             FakeModel(),
         )
@@ -114,12 +114,12 @@ def test_configuration_is_pure_data_until_composition_stages_run(configured_proj
     assert assembly.get(ENGINE_RUNNER) is not None
 
 
-def test_predefined_agents_can_share_profile_with_different_models_and_tools(configured_project: Path) -> None:
+def test_predefined_agents_can_share_prompt_with_different_models_and_tools(configured_project: Path) -> None:
     agents = compose_project(load_config(configured_project), FakeModel()).get(AGENTS)
     worker = agents.get("builtin.worker")
     fast_worker = agents.get("builtin.fast-worker")
 
-    assert worker.profile_id == fast_worker.profile_id == "builtin.worker"
+    assert worker.prompt_id == fast_worker.prompt_id == "builtin.worker"
     assert worker.model == "quality"
     assert fast_worker.model == "fast"
     assert worker.tools == frozenset({"aur.agent.delegate"})

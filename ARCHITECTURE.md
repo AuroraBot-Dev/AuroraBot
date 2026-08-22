@@ -81,16 +81,16 @@ Markdown Prompt 到 PromptCatalog 的转换只由 prompts 配置模块负责，�
 一棵树就是一次运行。节点具有相同结构与循环，但每个节点显式持有四类实例差异：
 
 - definition：创建本节点的预定义 Agent 原型 ID；
-- profile：决定本节点的 system prompt；
+- prompt：决定本节点使用的 Agent 专属 prompt；
 - model：决定本节点每次请求使用的 LLM；
 - tools：决定本节点可见的 Tool 定义；
 - 第一条 message：root 的外部输入或 child 的局部 assignment。
 
 节点只保存 `message / assistant / tool` transcript；唯一 system 消息由 `PromptAssembler` 在调用模型前根据全局 system 和
-profile 生成。这样 system 的来源可配置，而已经发生的对话仍保持追加式事实。
+prompt 生成。这样 system 的来源可配置，而已经发生的对话仍保持追加式事实。
 
-`agents.toml` 预定义无运行状态的 `AgentDefinition`：稳定 ID、用途说明、profile、model、tools 和允许的 child definitions。
-它不是树外的活跃实例，不保存 transcript、parent 或状态。同一个 profile 可以形成多个不同 model/tools 组合；root 由
+`agents.toml` 预定义无运行状态的 `AgentDefinition`：稳定 ID、用途说明、prompt、model、tools 和允许的 child definitions。
+它不是树外的活跃实例，不保存 transcript、parent 或状态。同一个 prompt 可以形成多个不同 model/tools 组合；root 由
 `runtime.tree.agent` 选择，child 由 delegate 选择，并在创建时把定义事实复制到新的 AgentNode。
 
 ## 最小循环
@@ -102,7 +102,8 @@ call 时完成节点，有 Tool call 时交给唯一 `ToolRegistry` 依次执行
 从目标 definition 创建 child 并暂停 parent。child 结束后，结果以对应 Tool call id 的 tool 消息恢复 parent。root 结束即
 整棵树结束。
 
-Tool ID 统一使用来源稳定的 `aur.*` 域名。注册表在项目组合时把框架内建工具与调用者注入工具形成一个扁平、不可变目录，
+Tool ID 统一使用来源稳定的 `aur.*` 域名。Provider adapter 为仅接受受限函数名的协议生成稳定安全别名，并把模型响应映射回
+领域 Tool ID。注册表在项目组合时把框架内建工具与调用者注入工具形成一个扁平、不可变目录，
 负责 ID 校验、重复拒绝、定义筛选、唯一分派与异常规范化；节点的 tools 集合只控制可见性，不复制定义或执行器。
 
 当前循环是单线程、内存内、无恢复的。这个限制用于保持语义透明；未来并发或持久化必须产生等价 AgentTree，而不能建立
@@ -125,7 +126,7 @@ ops 通过协议接收组合根提供的能力，不导入 `aurora` 或 `src`。
 把斜杠文本交给同一 OperationSpec 目录，再把操作结果翻译为终端文本、清屏或停止控制。EOF、`/exit`、SIGINT 和 SIGTERM
 最终设置同一个停止事件。`--headless` 只禁用 Console，不建立第二条运行路径。
 
-`models.toml` 的 role 键是 AgentNode 和 ModelRequest 显式携带的模型端点 id。`composition.ai` 在没有调用者注入 Model 时构造
+`models.toml` 的 endpoint 键是 AgentNode 和 ModelRequest 显式携带的模型端点 id。`composition.ai` 在没有调用者注入 Model 时构造
 `LiteLLMModelGateway`；`litellm` provider 映射为 `provider/model`，`openai_compatible` provider 映射为
 `openai/model + api_base`。密钥只在调用时从声明的环境变量读取。
 

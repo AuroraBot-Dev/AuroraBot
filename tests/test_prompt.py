@@ -13,8 +13,8 @@ def _assembler(*, limit: int = 1_000) -> PromptAssembler:
     )
 
 
-def _agent(profile: str = "root") -> AgentDefinition:
-    return AgentDefinition("agent", "Test Agent.", profile, "quality-model", frozenset(), frozenset())
+def _agent(prompt: str = "root") -> AgentDefinition:
+    return AgentDefinition("agent", "Test Agent.", prompt, "quality-model", frozenset(), frozenset())
 
 
 def test_assembler_emits_one_system_then_node_transcript() -> None:
@@ -38,17 +38,17 @@ def test_assembler_fails_visibly_when_context_is_too_large() -> None:
         _assembler(limit=10).assemble(tree, "root")
 
 
-def test_assembler_rejects_missing_profile() -> None:
+def test_assembler_rejects_missing_agent_prompt() -> None:
     tree = AgentTree.create("tree", "root", _agent("missing"), "hello")
 
-    with pytest.raises(ValueError, match="missing prompt"):
+    with pytest.raises(ValueError, match="missing Agent prompt"):
         _assembler().assemble(tree, "root")
 
 
 def test_prompt_catalog_and_assembler_require_non_empty_bounds() -> None:
     with pytest.raises(ValueError, match="system fragment"):
         PromptCatalog((), {"root": "prompt"})
-    with pytest.raises(ValueError, match="profile prompt"):
+    with pytest.raises(ValueError, match="Agent prompt"):
         PromptCatalog(("system",), {})
     with pytest.raises(ValueError, match="must be positive"):
         PromptAssembler(PromptCatalog(("system",), {"root": "prompt"}), max_characters=0)

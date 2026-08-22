@@ -65,12 +65,12 @@ def _assembler() -> PromptAssembler:
 
 def _agent(
     definition_id: str = "root",
-    profile: str = "root",
+    prompt: str = "root",
     model: str = "model",
     tools: frozenset[str] = frozenset(),
     children: frozenset[str] = frozenset(),
 ) -> AgentDefinition:
-    return AgentDefinition(definition_id, f"{definition_id} Agent.", profile, model, tools, children)
+    return AgentDefinition(definition_id, f"{definition_id} Agent.", prompt, model, tools, children)
 
 
 def _runner(model: Model, definitions: tuple[AgentDefinition, ...], *tools: Tool) -> AgentTreeRunner:
