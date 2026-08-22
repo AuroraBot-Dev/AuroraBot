@@ -13,11 +13,11 @@ from aurora.configuration import (
     logging,
     models,
     platforms,
+    profiles,
     prompts,
     runtime,
     storage,
 )
-from aurora.configuration.profiles import dev, prod
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -35,8 +35,7 @@ CONFIG_REGISTRARS = (
     extensions.register,
     logging.register,
     storage.register,
-    dev.register,
-    prod.register,
+    profiles.register,
 )
 
 

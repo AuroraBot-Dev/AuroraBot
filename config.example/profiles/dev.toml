@@ -1,4 +1,0 @@
-# 开发环境 profile。当前作为独立只读配置注册，尚不覆盖 runtime.toml。
-
-[runtime]
-profile = "dev"

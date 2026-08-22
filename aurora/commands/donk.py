@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import sys
-import tomllib
 from typing import TYPE_CHECKING
 
+from aurora.utils.environment import get_project_version
 from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
     import argparse
-    from pathlib import Path
 
 NAME = "donk"
 _SUBCOMMANDS = {
@@ -37,16 +36,8 @@ def execute(arguments: argparse.Namespace) -> int:
     if exit_code != 0:
         sys.stderr.write(f"donk {subcommand} 执行失败。\n")
         return exit_code
-    version = _read_version(arguments.root)
+    version = get_project_version(arguments.root)
     if version is not None:
         label = "当前版本" if subcommand == "show" else "版本已更新为"
         sys.stdout.write(f"{label}：{version}\n")
     return 0
-
-
-def _read_version(root: Path) -> str | None:
-    try:
-        with (root / "pyproject.toml").open("rb") as stream:
-            return str(tomllib.load(stream)["project"]["version"])
-    except (OSError, KeyError, TypeError, tomllib.TOMLDecodeError):
-        return None
