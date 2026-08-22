@@ -114,7 +114,7 @@ def test_config_command_lists_and_shows_registered_sources(
     assert run(["--root", str(configured_project), config.NAME, "list"]) == 0
     listing = capsys.readouterr().out
     assert "runtime\tconfig/runtime.toml" in listing
-    assert "profiles.dev\tconfig/profiles/dev.toml" in listing
+    assert "profiles\tconfig/profiles.toml" in listing
 
     assert run(["--root", str(configured_project), config.NAME, "show", "runtime"]) == 0
     shown = capsys.readouterr().out

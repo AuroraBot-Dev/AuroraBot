@@ -15,7 +15,13 @@ if TYPE_CHECKING:
 _MAX_TREE_LIST_LIMIT = 1000
 
 
-@operation("GET", "/engine/status", name="engine.status", summary="查看 AgentTree 运行时状态", aliases=("/status",))
+@operation(
+    "GET",
+    "/engine/status",
+    name="engine.status",
+    summary="查看 AgentTree 运行时状态",
+    aliases=("/status",),
+)
 async def status(context: OperationContext, params: dict[str, Any]) -> OperationResult:
     _ = params
     return OperationResult.success(context.runtime.engine.runtime_status())

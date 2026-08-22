@@ -13,7 +13,12 @@ if TYPE_CHECKING:
     from ops.contracts import OperationContext
 
 
-@operation("GET", "/config", name="config.snapshot", summary="查看配置来源与可改动范围")
+@operation(
+    "GET",
+    "/config",
+    name="config.snapshot",
+    summary="查看配置来源与可改动范围",
+)
 async def snapshot(context: OperationContext, params: dict[str, Any]) -> OperationResult:
     _ = params
     return OperationResult.success(context.runtime.config.snapshot())
