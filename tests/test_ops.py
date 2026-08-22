@@ -46,6 +46,30 @@ class FakeTrees:
     def node_detail(self, tree_id: str, node_id: str) -> dict[str, Any] | None:
         return {"tree_id": tree_id, "node_id": node_id} if node_id == "root" else None
 
+    async def submit_event_values(
+        self,
+        *,
+        event_id: str,
+        source: str,
+        scope: str,
+        kind: str,
+        summary: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "event_id": event_id,
+            "source": source,
+            "scope": scope,
+            "kind": kind,
+            "summary": summary,
+            "data": data or {},
+            "occurred_at": occurred_at,
+        }
+
+    async def world_scope(self, scope: str) -> dict[str, Any]:
+        return {"scope": scope, "commits": []}
+
 
 class FakeConfig:
     def snapshot(self) -> dict[str, Any]:
@@ -209,6 +233,33 @@ def test_assembled_runtime_exposes_live_tree_snapshots_and_ops(configured_projec
     assert node.data["model"] == runtime.agents.get(runtime.root.agent).model  # type: ignore[index]
     with pytest.raises(ValueError, match="已存在"):
         asyncio.run(runtime.run("重复", tree_id="tree-live"))
+
+
+def test_runtime_event_entry_commits_without_automatically_starting_a_tree(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+
+    submitted = asyncio.run(
+        runtime.ops.execute(
+            "POST",
+            "/events",
+            {
+                "event_id": "qq-1",
+                "source": "qq",
+                "scope": "qq:group-1",
+                "kind": "message",
+                "summary": "有人发来消息",
+                "data": {"message_id": "1"},
+                "occurred_at": "2026-08-22T12:00:00+08:00",
+            },
+        )
+    )
+    status = asyncio.run(runtime.ops.execute("GET", "/engine/status"))
+    world = asyncio.run(runtime.ops.execute("GET", "/world/qq:group-1"))
+
+    assert submitted.ok is True
+    assert submitted.data["kind"] == "environment.message"  # type: ignore[index]
+    assert status.data["tree_count"] == 0  # type: ignore[index]
+    assert world.data["commits"][0]["summary"] == "有人发来消息"  # type: ignore[index]
 
 
 def test_parser_and_renderer_cover_invalid_shell_and_scalar_types() -> None:

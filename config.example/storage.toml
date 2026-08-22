@@ -1,6 +1,6 @@
 # 存储路径配置 — 各包私有持久化目录。
 #
-# 当前配置系统只读注册路径结构，AgentTree 仍以内存值对象运行，不创建这些目录。
+# 世界提交日志使用 SQLite；AgentTree 仍是内存中的不可变值对象。
 
 [storage]
 # 总数据根目录；所有包目录相对它解析
@@ -9,6 +9,7 @@ data_root = "data"
 engine = "engine"
 ai = "ai"
 memory = "memory"
+world = "world"
 # ops 面板后端私有数据目录（Token、会话与附件索引）
 ops = "ops"
 

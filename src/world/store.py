@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, insert, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.contracts import EnvironmentEvent, WorldCommit, WorldDeltaPage, WorldFrontier
+from src.contracts import EnvironmentEvent, WorldCommit, WorldCommitInput, WorldDeltaPage, WorldFrontier
 from src.world.migration import STEPS, TARGET_VERSION
 from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommitRow, WorldCommitScopeRow
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     from sqlalchemy.engine import Connection
@@ -78,40 +79,96 @@ class SqlAlchemyWorldJournal:
         summary: str,
         scopes: frozenset[str],
         based_on: WorldFrontier,
-        data: dict[str, Any],
+        data: Mapping[str, Any],
         occurred_at: datetime | None = None,
     ) -> WorldCommit:
-        if not all((commit_id.strip(), kind.strip(), source.strip(), summary.strip())) or not scopes:
-            raise ValueError("WorldCommit requires identity, summary and scopes")
+        return (
+            await self.append_commits(
+                (
+                    WorldCommitInput(
+                        commit_id,
+                        kind,
+                        source,
+                        summary,
+                        scopes,
+                        based_on,
+                        data,
+                        occurred_at,
+                    ),
+                )
+            )
+        )[0]
+
+    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]:
+        """原子追加一组提交，并在每个 scope 内连续分配 sequence。"""
+        if not inputs:
+            return ()
+        identifiers = [item.commit_id for item in inputs]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("WorldCommitInput commit IDs must be unique in one batch")
         async with self._lock, self._sessions.begin() as session:
-            existing = await session.scalar(select(WorldCommitRow).where(WorldCommitRow.commit_id == commit_id))
-            if existing is not None:
-                return await self._commit(session, existing)
-            sequences: dict[str, int] = {}
-            for scope in sorted(scopes):
+            next_sequences: dict[str, int] = {}
+            appended: list[WorldCommit] = []
+            for item in inputs:
+                statement = select(WorldCommitRow).where(WorldCommitRow.commit_id == item.commit_id)
+                existing = await session.scalar(statement)
+                if existing is not None:
+                    commit = await self._commit(session, existing)
+                    if not _matches_input(commit, item):
+                        raise ValueError(f"WorldCommit ID 已被不同内容使用：{item.commit_id}")
+                    appended.append(commit)
+                    continue
+                sequences = await self._allocate_sequences(session, item.scopes, next_sequences)
+                occurred_at = item.occurred_at or datetime.now(UTC)
+                row = WorldCommitRow(
+                    commit_id=item.commit_id,
+                    kind=item.kind,
+                    source=item.source,
+                    summary=item.summary,
+                    occurred_at=occurred_at,
+                    payload=dict(item.data),
+                )
+                session.add(row)
+                session.add_all(
+                    WorldCommitScopeRow(commit_id=item.commit_id, scope=scope, sequence=sequence)
+                    for scope, sequence in sequences.items()
+                )
+                session.add_all(
+                    WorldCommitBaseRow(commit_id=item.commit_id, scope=scope, sequence=sequence)
+                    for scope, sequence in item.based_on.positions.items()
+                )
+                appended.append(
+                    WorldCommit(
+                        item.commit_id,
+                        item.kind,
+                        item.source,
+                        item.summary,
+                        occurred_at,
+                        sequences,
+                        item.based_on,
+                        item.data,
+                    )
+                )
+            await session.flush()
+            return tuple(appended)
+
+    @staticmethod
+    async def _allocate_sequences(
+        session: AsyncSession,
+        scopes: frozenset[str],
+        next_sequences: dict[str, int],
+    ) -> dict[str, int]:
+        sequences: dict[str, int] = {}
+        for scope in sorted(scopes):
+            next_sequence = next_sequences.get(scope)
+            if next_sequence is None:
                 maximum = await session.scalar(
                     select(func.max(WorldCommitScopeRow.sequence)).where(WorldCommitScopeRow.scope == scope)
                 )
-                sequences[scope] = int(maximum or 0) + 1
-            row = WorldCommitRow(
-                commit_id=commit_id,
-                kind=kind,
-                source=source,
-                summary=summary,
-                occurred_at=occurred_at if occurred_at is not None else datetime.now(UTC),
-                payload=data,
-            )
-            session.add(row)
-            session.add_all(
-                WorldCommitScopeRow(commit_id=commit_id, scope=scope, sequence=sequence)
-                for scope, sequence in sequences.items()
-            )
-            session.add_all(
-                WorldCommitBaseRow(commit_id=commit_id, scope=scope, sequence=sequence)
-                for scope, sequence in based_on.positions.items()
-            )
-            await session.flush()
-            return WorldCommit(commit_id, kind, source, summary, row.occurred_at, sequences, based_on, data)
+                next_sequence = int(maximum or 0) + 1
+            sequences[scope] = next_sequence
+            next_sequences[scope] = next_sequence + 1
+        return sequences
 
     async def head(self, scopes: frozenset[str]) -> WorldFrontier:
         if not scopes:
@@ -171,3 +228,12 @@ class SqlAlchemyWorldJournal:
             based_on,
             row.payload,
         )
+
+
+def _matches_input(commit: WorldCommit, item: WorldCommitInput) -> bool:
+    return (
+        (commit.kind, commit.source, commit.summary) == (item.kind, item.source, item.summary)
+        and set(commit.scopes) == set(item.scopes)
+        and dict(commit.based_on.positions) == dict(item.based_on.positions)
+        and dict(commit.data) == dict(item.data)
+    )

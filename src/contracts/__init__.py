@@ -10,6 +10,7 @@ from src.contracts.model import (
 )
 from src.contracts.tool import (
     DelegationRequest,
+    ScopedTool,
     Tool,
     ToolDefinition,
     ToolOutput,
@@ -19,6 +20,7 @@ from src.contracts.world import (
     EnvironmentEvent,
     ToolScopes,
     WorldCommit,
+    WorldCommitInput,
     WorldDeltaPage,
     WorldFrontier,
     WorldJournal,
@@ -35,6 +37,7 @@ __all__ = [
     "EnvironmentEvent",
     "Model",
     "ModelRequest",
+    "ScopedTool",
     "Tool",
     "ToolCall",
     "ToolDefinition",
@@ -43,6 +46,7 @@ __all__ = [
     "ToolScopes",
     "TreeStatus",
     "WorldCommit",
+    "WorldCommitInput",
     "WorldDeltaPage",
     "WorldFrontier",
     "WorldJournal",

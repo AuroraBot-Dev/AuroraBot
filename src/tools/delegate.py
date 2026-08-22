@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import DelegationRequest, ToolCall, ToolDefinition, ToolOutput, ToolResult
+from src.contracts import DelegationRequest, ToolCall, ToolDefinition, ToolOutput, ToolResult, ToolScopes
 
 if TYPE_CHECKING:
     from src.agents import AgentCatalog
@@ -40,6 +40,10 @@ class DelegateTool:
     @property
     def definition(self) -> ToolDefinition:
         return self._definition
+
+    def resolve_scopes(self, call: ToolCall) -> ToolScopes:
+        _ = call
+        return ToolScopes()
 
     async def execute(self, call: ToolCall) -> ToolResult:
         agent = call.arguments.get("agent")

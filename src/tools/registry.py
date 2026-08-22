@@ -6,7 +6,7 @@ import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from src.contracts import DelegationRequest, ToolOutput
+from src.contracts import DelegationRequest, ToolOutput, ToolScopes
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -51,6 +51,19 @@ class ToolRegistry:
     def definitions_for(self, visible: frozenset[str]) -> tuple[ToolDefinition, ...]:
         """只返回节点获准且当前已注册的工具定义。"""
         return tuple(definition for name, definition in self._definitions.items() if name in visible)
+
+    def scopes_for(self, call: ToolCall) -> ToolScopes:
+        """解析一次 Tool 调用声明的额外观察与发布 scope。"""
+        tool = self._tools.get(call.name)
+        if tool is None:
+            return ToolScopes()
+        resolver = getattr(tool, "resolve_scopes", None)
+        if not callable(resolver):
+            return ToolScopes()
+        scopes = resolver(call)
+        if not isinstance(scopes, ToolScopes):
+            raise TypeError(f"工具 scope resolver 返回无效结果：{call.name}")
+        return scopes
 
     async def execute(self, call: ToolCall) -> ToolResult:
         """唯一分派一次调用，并把执行器边界错误规范化。"""

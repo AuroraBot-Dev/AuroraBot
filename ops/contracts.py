@@ -53,6 +53,20 @@ class TreeRuntimePort(Protocol):
 
     def node_detail(self, tree_id: str, node_id: str) -> dict[str, Any] | None: ...
 
+    async def submit_event_values(
+        self,
+        *,
+        event_id: str,
+        source: str,
+        scope: str,
+        kind: str,
+        summary: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def world_scope(self, scope: str) -> dict[str, Any]: ...
+
 
 class ConfigRuntimePort(Protocol):
     def snapshot(self) -> dict[str, Any]: ...

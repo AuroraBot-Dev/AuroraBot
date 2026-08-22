@@ -12,6 +12,7 @@ from aurora.composition import (
     engine,
     prompt,
     tools,
+    world,
 )
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ COMPOSITION_REGISTRARS = (
     prompt.register,
     console.register,
     tools.register,
+    world.register,
     engine.register,
 )
 

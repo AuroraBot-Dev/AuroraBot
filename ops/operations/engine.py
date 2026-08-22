@@ -94,3 +94,52 @@ async def start(context: OperationContext, params: dict[str, Any]) -> OperationR
     except ValueError as error:
         return OperationResult.failure("INVALID_TREE", str(error))
     return OperationResult.success(result, message="AgentTree 运行完成")
+
+
+@operation(
+    "POST",
+    "/events",
+    name="world.event",
+    summary="向 Bot 世界提交一条环境事实；不会自动启动 AgentTree",
+    parameters=(
+        ParameterSpec("event_id", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("source", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("scope", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("kind", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("summary", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("data", ParameterLocation.BODY, type="json", help="可选 JSON 对象"),
+        ParameterSpec("occurred_at", ParameterLocation.BODY, help="可选 ISO 8601 时间（必须含时区）"),
+    ),
+)
+async def event(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    data = params.get("data")
+    if data is not None and not isinstance(data, dict):
+        return OperationResult.failure("INVALID_EVENT", "data 必须是 JSON 对象")
+    try:
+        result = await context.runtime.engine.submit_event_values(
+            event_id=str(params["event_id"]),
+            source=str(params["source"]),
+            scope=str(params["scope"]),
+            kind=str(params["kind"]),
+            summary=str(params["summary"]),
+            data=data,
+            occurred_at=str(params["occurred_at"]) if params.get("occurred_at") else None,
+        )
+    except ValueError as error:
+        return OperationResult.failure("INVALID_EVENT", str(error))
+    return OperationResult.success(result, message="环境事实已提交；未自动启动 AgentTree")
+
+
+@operation(
+    "GET",
+    "/world/{scope}",
+    name="world.scope",
+    summary="查看一个世界 scope 的有界提交索引",
+    parameters=(ParameterSpec("scope", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),),
+)
+async def world_scope(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    scope = str(params["scope"])
+    try:
+        return OperationResult.success(await context.runtime.engine.world_scope(scope))
+    except ValueError as error:
+        return OperationResult.failure("INVALID_SCOPE", str(error))

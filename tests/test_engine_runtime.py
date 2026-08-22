@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -11,19 +13,29 @@ from src.contracts import (
     AgentStatus,
     AgentTree,
     ChatMessage,
+    EnvironmentEvent,
     Model,
     ModelRequest,
     Tool,
     ToolCall,
     ToolDefinition,
     ToolOutput,
+    ToolScopes,
     TreeStatus,
+    WorldFrontier,
+    WorldJournal,
 )
 from src.engine import AgentTreeRunner
 from src.prompt import PromptAssembler, PromptCatalog
 from src.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from src.world import SqlAlchemyWorldJournal
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 EXPECTED_DELEGATION_NODES = 2
+_SECOND_REQUEST = 2
+_EXPECTED_SCOPE_SEQUENCE = 5
 
 
 @dataclass(slots=True)
@@ -54,6 +66,35 @@ class FailingTool(EchoTool):
         raise RuntimeError(str(call.arguments.get("error", "broken")))
 
 
+class ScopedEchoTool(EchoTool):
+    def __init__(self, scope: str) -> None:
+        self.scope = scope
+        self.values: list[str] = []
+
+    def resolve_scopes(self, call: ToolCall) -> ToolScopes:
+        _ = call
+        return ToolScopes(observe=frozenset({self.scope}), publish=frozenset({self.scope}))
+
+    async def execute(self, call: ToolCall) -> ToolOutput:
+        value = str(call.arguments["value"])
+        self.values.append(value)
+        return ToolOutput(value)
+
+
+@dataclass(slots=True)
+class EventInjectingModel:
+    responses: list[ChatMessage]
+    journal: SqlAlchemyWorldJournal
+    event: EnvironmentEvent
+    requests: list[ModelRequest] = field(default_factory=list)
+
+    async def complete(self, request: ModelRequest) -> ChatMessage:
+        self.requests.append(request)
+        if len(self.requests) == _SECOND_REQUEST:
+            await self.journal.append_event(self.event)
+        return self.responses.pop(0)
+
+
 def _assembler() -> PromptAssembler:
     return PromptAssembler(
         PromptCatalog(
@@ -73,10 +114,15 @@ def _agent(
     return AgentDefinition(definition_id, f"{definition_id} Agent.", prompt, model, tools, children)
 
 
-def _runner(model: Model, definitions: tuple[AgentDefinition, ...], *tools: Tool) -> AgentTreeRunner:
+def _runner(
+    model: Model,
+    definitions: tuple[AgentDefinition, ...],
+    *tools: Tool,
+    world: WorldJournal | None = None,
+) -> AgentTreeRunner:
     agents = AgentCatalog(definitions)
     registry = ToolRegistry((DelegateTool(agents), *tools))
-    return AgentTreeRunner(model, _assembler(), agents, registry)
+    return AgentTreeRunner(model, _assembler(), agents, registry, world=world)
 
 
 def test_root_completes_one_message_assistant_loop() -> None:
@@ -276,3 +322,83 @@ def test_delegate_rejects_registered_agent_outside_parent_allowlist() -> None:
         "当前 Agent 不允许委派给：worker",
         is_error=True,
     )
+
+
+def test_world_delta_defers_a_tool_batch_then_the_next_batch_seals_its_frontier(tmp_path: Path) -> None:
+    async def scenario() -> tuple[AgentTree, ScopedEchoTool, tuple[str, ...]]:
+        scope = "qq:group-1"
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await journal.initialize()
+        first = EnvironmentEvent("event-1", "qq", scope, "message", datetime.now(UTC), "第一条消息")
+        await journal.append_event(first)
+        frontier = await journal.head(frozenset({scope}))
+        await journal.append_event(EnvironmentEvent("event-2", "qq", scope, "message", datetime.now(UTC), "第二条消息"))
+        tool = ScopedEchoTool(scope)
+        model = EventInjectingModel(
+            [
+                ChatMessage.assistant(
+                    tool_calls=(
+                        ToolCall("first-a", "aur.test.echo", {"value": "first-a"}),
+                        ToolCall("first-b", "aur.test.echo", {"value": "first-b"}),
+                    )
+                ),
+                ChatMessage.assistant(tool_calls=(ToolCall("second", "aur.test.echo", {"value": "second"}),)),
+                ChatMessage.assistant("完成"),
+            ],
+            journal,
+            EnvironmentEvent("event-3", "qq", scope, "message", datetime.now(UTC), "第三条消息"),
+        )
+        root = _agent(tools=frozenset({"aur.test.echo"}))
+        tree = AgentTree.create("tree", "root", root, "开始", frontier)
+        runner = _runner(model, (root,), tool, world=journal)
+        result = await runner.run(tree)
+        commits = await journal.delta(WorldFrontier(), frozenset({scope}))
+        await journal.close()
+        return result, tool, tuple(commit.kind for commit in commits.commits)
+
+    result, tool, commits = asyncio.run(scenario())
+    node = result.node("root")
+
+    assert result.status == TreeStatus.COMPLETED
+    assert tool.values == ["second"]
+    assert node.messages[2].is_error is True
+    assert '"kind":"world.delta"' in node.messages[2].content
+    assert [node.messages[index].tool_call_id for index in (2, 3)] == ["first-a", "first-b"]
+    assert node.observed_frontier.sequence("qq:group-1") == _EXPECTED_SCOPE_SEQUENCE
+    assert commits == (
+        "environment.message",
+        "environment.message",
+        "environment.message",
+        "tool.requested",
+        "tool.succeeded",
+    )
+
+
+def test_root_output_is_deferred_once_and_then_seals_the_observed_frontier(tmp_path: Path) -> None:
+    async def scenario() -> tuple[AgentTree, EventInjectingModel]:
+        scope = "qq:group-2"
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await journal.initialize()
+        await journal.append_event(EnvironmentEvent("event-1", "qq", scope, "message", datetime.now(UTC), "第一条"))
+        frontier = await journal.head(frozenset({scope}))
+        await journal.append_event(EnvironmentEvent("event-2", "qq", scope, "message", datetime.now(UTC), "第二条"))
+        model = EventInjectingModel(
+            [ChatMessage.assistant("草稿"), ChatMessage.assistant("最终回复")],
+            journal,
+            EnvironmentEvent("event-3", "qq", scope, "message", datetime.now(UTC), "第三条"),
+        )
+        root = _agent()
+        tree = AgentTree.create("tree", "root", root, "开始", frontier)
+        runner = _runner(model, (root,), world=journal)
+        result = await runner.run(tree)
+        await journal.close()
+        return result, model
+
+    result, model = asyncio.run(scenario())
+    node = result.node("root")
+
+    assert result.status == TreeStatus.COMPLETED
+    assert node.result == "最终回复"
+    assert [message.role for message in node.messages] == ["message", "assistant", "message", "assistant"]
+    assert '"kind":"world.delta"' in node.messages[2].content
+    assert len(model.requests) == _SECOND_REQUEST

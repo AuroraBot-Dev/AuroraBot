@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from src.contracts.model import ToolCall
+    from src.contracts.world import ToolScopes
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,3 +61,9 @@ class Tool(Protocol):
     def definition(self) -> ToolDefinition: ...
 
     async def execute(self, call: ToolCall) -> ToolResult: ...
+
+
+class ScopedTool(Tool, Protocol):
+    """可声明观察、发布世界域的可选 Tool 扩展契约。"""
+
+    def resolve_scopes(self, call: ToolCall) -> ToolScopes: ...

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from src.contracts.model import ChatMessage, ToolCall
+from src.contracts.world import ToolScopes, WorldFrontier
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class AgentStatus(StrEnum):
@@ -56,10 +62,16 @@ class AgentNode:
     status: AgentStatus = AgentStatus.READY
     result: str | None = None
     error: str | None = None
+    observed_frontier: WorldFrontier = field(default_factory=WorldFrontier)
+    reviewed_world_update: bool = False
+    sealed_call_ids: frozenset[str] = field(default_factory=frozenset)
+    sealed_call_scopes: Mapping[str, ToolScopes] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", frozenset(self.tools))
+        object.__setattr__(self, "sealed_call_ids", frozenset(self.sealed_call_ids))
+        object.__setattr__(self, "sealed_call_scopes", MappingProxyType(dict(self.sealed_call_scopes)))
         if not self.node_id or not self.definition_id or not self.prompt_id or not self.model:
             raise ValueError("AgentNode requires node_id, definition_id, prompt_id and model")
         if any(not name for name in self.tools):
@@ -72,16 +84,14 @@ class AgentNode:
             raise ValueError("AgentNode messages must start with message")
         if any(message.role == "system" for message in self.messages):
             raise ValueError("system messages are produced only by PromptAssembler")
-        if self.status == AgentStatus.COMPLETED and self.result is None:
-            raise ValueError("completed AgentNode requires result")
-        if self.status == AgentStatus.FAILED and not self.error:
-            raise ValueError("failed AgentNode requires error")
-        active_with_outcome = self.status in {AgentStatus.READY, AgentStatus.WAITING} and (
-            self.result is not None or self.error is not None
-        )
-        if active_with_outcome:
-            raise ValueError("active AgentNode cannot have result or error")
+        _validate_node_outcome(self)
         _validate_calls(self.messages)
+        if not self.sealed_call_ids <= {call.call_id for call in self.pending_calls}:
+            raise ValueError("sealed Tool calls must remain pending")
+        if set(self.sealed_call_scopes) != set(self.sealed_call_ids) or not all(
+            isinstance(scopes, ToolScopes) for scopes in self.sealed_call_scopes.values()
+        ):
+            raise ValueError("sealed Tool calls require resolved scopes")
 
     @property
     def terminal(self) -> bool:
@@ -139,6 +149,7 @@ class AgentTree:
         root_id: str,
         definition: AgentDefinition,
         initial_message: str,
+        frontier: WorldFrontier | None = None,
     ) -> AgentTree:
         root = AgentNode(
             root_id,
@@ -149,6 +160,7 @@ class AgentTree:
             definition.model,
             definition.tools,
             (ChatMessage.message(initial_message),),
+            observed_frontier=frontier or WorldFrontier(),
         )
         return cls(tree_id, root_id, (root,))
 
@@ -171,7 +183,89 @@ class AgentTree:
             raise ValueError("messages can be appended only to a ready node in a running tree")
         if message.role == "system":
             raise ValueError("system messages are produced only by PromptAssembler")
-        return self._replace_node(replace(node, messages=(*node.messages, message)))
+        sealed = node.sealed_call_ids
+        scopes = dict(node.sealed_call_scopes)
+        reviewed = node.reviewed_world_update
+        if message.role == "tool" and message.tool_call_id is not None:
+            sealed = sealed - {message.tool_call_id}
+            scopes.pop(message.tool_call_id, None)
+            if not sealed:
+                reviewed = False
+        return self._replace_node(
+            replace(
+                node,
+                messages=(*node.messages, message),
+                sealed_call_ids=sealed,
+                sealed_call_scopes=scopes,
+                reviewed_world_update=reviewed,
+            )
+        )
+
+    def observe(
+        self,
+        node_id: str,
+        message: ChatMessage,
+        frontier: WorldFrontier,
+        *,
+        reviewed: bool = True,
+    ) -> AgentTree:
+        """把世界更新作为可见事实追加，并推进本节点观察前沿。"""
+        node = self.node(node_id)
+        if message.role != "message":
+            raise ValueError("world observations must be message facts")
+        updated = replace(
+            node,
+            messages=(*node.messages, message),
+            observed_frontier=node.observed_frontier.advance(frontier.positions),
+            reviewed_world_update=reviewed,
+        )
+        return self._replace_node(updated)
+
+    def defer_tools_for_world(
+        self,
+        node_id: str,
+        call_ids: tuple[str, ...],
+        content: str,
+        frontier: WorldFrontier,
+        *,
+        reviewed: bool,
+    ) -> AgentTree:
+        """以 tool 结果交付世界 delta，并使下一次提案成为显式封口。"""
+        node = self.node(node_id)
+        pending = {call.call_id for call in node.pending_calls}
+        if not call_ids or len(call_ids) != len(set(call_ids)) or not set(call_ids) <= pending:
+            raise ValueError("world deferred Tool calls must be pending and unique")
+        updated = replace(
+            node,
+            messages=(*node.messages, *(ChatMessage.tool(call_id, content, is_error=True) for call_id in call_ids)),
+            observed_frontier=node.observed_frontier.advance(frontier.positions),
+            reviewed_world_update=reviewed,
+        )
+        return self._replace_node(updated)
+
+    def defer_tool_for_world(self, node_id: str, call_id: str, content: str, frontier: WorldFrontier) -> AgentTree:
+        """兼容单个 Tool 调用的世界更新交付。"""
+        return self.defer_tools_for_world(node_id, (call_id,), content, frontier, reviewed=True)
+
+    def advance_frontier(self, node_id: str, frontier: WorldFrontier) -> AgentTree:
+        """记录节点已经知晓的本次内部提交，不把它再次作为外部 delta 交付。"""
+        node = self.node(node_id)
+        return self._replace_node(replace(node, observed_frontier=node.observed_frontier.advance(frontier.positions)))
+
+    def seal_calls(self, node_id: str, call_ids: tuple[str, ...], scopes: Mapping[str, ToolScopes]) -> AgentTree:
+        """标记已通过新鲜度检查的一批 Tool 调用。"""
+        node = self.node(node_id)
+        pending = {call.call_id for call in node.pending_calls}
+        if not call_ids or len(call_ids) != len(set(call_ids)) or not set(call_ids) <= pending:
+            raise ValueError("sealed Tool calls must be pending and unique")
+        if set(scopes) != set(call_ids) or not all(isinstance(scope, ToolScopes) for scope in scopes.values()):
+            raise ValueError("sealed Tool calls require one resolved scope each")
+        return self._replace_node(replace(node, sealed_call_ids=frozenset(call_ids), sealed_call_scopes=dict(scopes)))
+
+    def clear_world_review(self, node_id: str) -> AgentTree:
+        """一次明确封口后的后续行动恢复普通新鲜度检查。"""
+        node = self.node(node_id)
+        return self._replace_node(replace(node, reviewed_world_update=False))
 
     def spawn(
         self,
@@ -193,6 +287,7 @@ class AgentTree:
             definition.model,
             definition.tools,
             (ChatMessage.message(instruction),),
+            observed_frontier=parent.observed_frontier,
         )
         nodes = tuple(
             replace(node, status=AgentStatus.WAITING) if node.node_id == parent_id else node for node in self.nodes
@@ -238,6 +333,15 @@ class AgentTree:
                 *parent.messages,
                 ChatMessage.tool(node.parent_call_id, content, is_error=node.status == AgentStatus.FAILED),
             ),
+            sealed_call_ids=parent.sealed_call_ids - {node.parent_call_id},
+            sealed_call_scopes={
+                call_id: scopes
+                for call_id, scopes in parent.sealed_call_scopes.items()
+                if call_id != node.parent_call_id
+            },
+            reviewed_world_update=(
+                False if parent.sealed_call_ids == {node.parent_call_id} else parent.reviewed_world_update
+            ),
         )
         return self._replace_node(resumed)
 
@@ -269,6 +373,18 @@ def _validate_calls(messages: tuple[ChatMessage, ...]) -> None:
             outstanding.remove(message.tool_call_id)
         elif outstanding:
             raise ValueError("only tool messages may follow unanswered Tool calls")
+
+
+def _validate_node_outcome(node: AgentNode) -> None:
+    if node.status == AgentStatus.COMPLETED and node.result is None:
+        raise ValueError("completed AgentNode requires result")
+    if node.status == AgentStatus.FAILED and not node.error:
+        raise ValueError("failed AgentNode requires error")
+    active_with_outcome = node.status in {AgentStatus.READY, AgentStatus.WAITING} and (
+        node.result is not None or node.error is not None
+    )
+    if active_with_outcome:
+        raise ValueError("active AgentNode cannot have result or error")
 
 
 def _depth(node_id: str, by_id: dict[str, AgentNode]) -> int:

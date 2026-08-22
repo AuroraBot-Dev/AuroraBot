@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import signal
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -12,12 +13,21 @@ from aurora.composition import compose_project
 from aurora.composition.agents import AGENTS
 from aurora.composition.console import TERMINAL_CONSOLE
 from aurora.composition.engine import ENGINE_RUNNER
+from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
 from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
 from ops.contracts import OperationControl, OperationResult
 from ops.router import render_result
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
-from src.contracts import AgentNode, AgentTree, ChatMessage
+from src.contracts import (
+    AgentNode,
+    AgentTree,
+    ChatMessage,
+    EnvironmentEvent,
+    WorldCommit,
+    WorldFrontier,
+    WorldJournal,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -43,6 +53,7 @@ class AuroraRuntime:
     agents: AgentCatalog
     config: AuroraConfig
     console: TerminalConsole
+    world: WorldJournal
     _trees: dict[str, AgentTree] = field(default_factory=dict, init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
     ops: OpsRuntime = field(init=False)
@@ -51,12 +62,19 @@ class AuroraRuntime:
         sources = tuple(ConfigSourceRef(source.name, source.relative_path) for source in self.config.sources)
         self.ops = OpsRuntime(self, ConfigAccess(self.config.project_root, sources), self)
 
-    def create_tree(self, message: str, *, tree_id: str | None = None) -> AgentTree:
+    def create_tree(
+        self,
+        message: str,
+        *,
+        tree_id: str | None = None,
+        frontier: WorldFrontier | None = None,
+    ) -> AgentTree:
         return AgentTree.create(
             tree_id or uuid4().hex,
             self.root.node_id,
             self.agents.get(self.root.agent),
             message,
+            frontier,
         )
 
     async def run(self, message: str, *, tree_id: str | None = None) -> AgentTree:
@@ -67,6 +85,45 @@ class AuroraRuntime:
 
     async def start_tree(self, message: str, *, tree_id: str | None = None) -> dict[str, Any]:
         return self._tree_dict(await self.run(message, tree_id=tree_id))
+
+    async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
+        """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
+        await self.world.initialize()
+        return self._commit_dict(await self.world.append_event(event))
+
+    async def submit_event_values(
+        self,
+        *,
+        event_id: str,
+        source: str,
+        scope: str,
+        kind: str,
+        summary: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]:
+        when = _parse_event_time(occurred_at) if occurred_at else datetime.now(UTC)
+        return await self.submit_event(EnvironmentEvent(event_id, source, scope, kind, when, summary, data or {}))
+
+    async def start_tree_from_event(self, event: EnvironmentEvent, *, tree_id: str | None = None) -> dict[str, Any]:
+        """显式以一条已提交环境事实启动认知；入口本身不形成自动循环。"""
+        await self.submit_event(event)
+        frontier = await self.world.head(frozenset({event.scope}))
+        tree = self.create_tree(event.summary, tree_id=tree_id, frontier=frontier)
+        if tree.tree_id in self._trees:
+            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
+        return self._tree_dict(await self.runner.run(tree, observer=self._record_tree))
+
+    async def world_scope(self, scope: str) -> dict[str, Any]:
+        """返回一个 scope 的有界提交索引，用于 ops 观察。"""
+        await self.world.initialize()
+        delta = await self.world.delta(WorldFrontier(), frozenset({scope}))
+        return {
+            "scope": scope,
+            "frontier": dict(delta.end.positions),
+            "has_more": delta.has_more,
+            "commits": [self._commit_dict(commit) for commit in delta.commits],
+        }
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
         self._stop_requester = requester
@@ -157,6 +214,8 @@ class AuroraRuntime:
             "result": node.result,
             "error": node.error,
             "messages": [AuroraRuntime._message_dict(message) for message in node.messages],
+            "observed_frontier": dict(node.observed_frontier.positions),
+            "reviewed_world_update": node.reviewed_world_update,
         }
 
     @staticmethod
@@ -172,6 +231,19 @@ class AuroraRuntime:
             ],
         }
 
+    @staticmethod
+    def _commit_dict(commit: WorldCommit) -> dict[str, Any]:
+        return {
+            "commit_id": commit.commit_id,
+            "kind": commit.kind,
+            "source": commit.source,
+            "summary": commit.summary,
+            "occurred_at": commit.occurred_at.isoformat(),
+            "scopes": dict(commit.scopes),
+            "based_on": dict(commit.based_on.positions),
+            "data": dict(commit.data),
+        }
+
 
 def assemble_runtime(config: AuroraConfig, model: Model | None = None, tools: Iterable[Tool] = ()) -> AuroraRuntime:
     """运行全部组件注册器，并取得完整运行时所需实例。"""
@@ -182,6 +254,7 @@ def assemble_runtime(config: AuroraConfig, model: Model | None = None, tools: It
         assembly.get(AGENTS),
         config,
         assembly.get(TERMINAL_CONSOLE),
+        assembly.get(WORLD_JOURNAL),
     )
 
 
@@ -227,3 +300,13 @@ def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:
 def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
     for item in installed:
         signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
+
+
+def _parse_event_time(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("occurred_at 必须是 ISO 8601 时间") from error
+    if parsed.tzinfo is None:
+        raise ValueError("occurred_at 必须包含时区")
+    return parsed.astimezone(UTC)

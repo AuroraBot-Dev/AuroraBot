@@ -78,6 +78,28 @@ class WorldCommit:
 
 
 @dataclass(frozen=True, slots=True)
+class WorldCommitInput:
+    """写入世界日志前的提交请求；由 journal 原子分配 scope sequence。"""
+
+    commit_id: str
+    kind: str
+    source: str
+    summary: str
+    scopes: frozenset[str]
+    based_on: WorldFrontier
+    data: Mapping[str, Any] = field(default_factory=dict)
+    occurred_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if not all((self.commit_id.strip(), self.kind.strip(), self.source.strip(), self.summary.strip())):
+            raise ValueError("WorldCommitInput requires non-empty identity and summary fields")
+        object.__setattr__(self, "scopes", frozenset(self.scopes))
+        if not self.scopes or any(not scope.strip() for scope in self.scopes):
+            raise ValueError("WorldCommitInput requires non-empty scopes")
+        object.__setattr__(self, "data", MappingProxyType(dict(self.data)))
+
+
+@dataclass(frozen=True, slots=True)
 class WorldDeltaPage:
     """从某个 frontier 起的一页已披露提交索引。"""
 
@@ -108,6 +130,8 @@ class WorldJournal(Protocol):
 
     async def append_event(self, event: EnvironmentEvent) -> WorldCommit: ...
 
+    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]: ...
+
     async def head(self, scopes: frozenset[str]) -> WorldFrontier: ...
 
     async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage: ...
@@ -122,4 +146,5 @@ class WorldJournal(Protocol):
         scopes: frozenset[str],
         based_on: WorldFrontier,
         data: Mapping[str, Any],
+        occurred_at: datetime | None = None,
     ) -> WorldCommit: ...

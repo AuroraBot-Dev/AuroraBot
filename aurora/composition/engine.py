@@ -9,6 +9,7 @@ from aurora.composition.agents import AGENTS
 from aurora.composition.ai import MODEL
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.composition.tools import TOOLS
+from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
@@ -30,6 +31,7 @@ def register(context: CompositionContext) -> None:
     model = context.require(MODEL)
     agents = context.require(AGENTS)
     tools = context.require(TOOLS)
+    world = context.require(WORLD_JOURNAL)
     prompts = context.config.get(PROMPTS_CONFIG).agent_prompts
     models = context.config.get(MODELS_CONFIG).endpoints
     if runtime.agent not in agents.ids:
@@ -52,6 +54,7 @@ def register(context: CompositionContext) -> None:
             assembler,
             agents,
             tools,
+            world=world,
             max_depth=configuration.max_depth,
             max_nodes=configuration.max_nodes,
             max_steps=configuration.max_steps,
