@@ -19,12 +19,13 @@ INTERRUPTED_EXIT_CODE = 130
 CONFIG_ERROR_EXIT_CODE = 2
 
 
-def test_bare_cli_and_about_are_non_effectful(capsys: pytest.CaptureFixture[str]) -> None:
+def test_bare_cli_and_about_show_ascii_art_without_effects(capsys: pytest.CaptureFixture[str]) -> None:
     assert run([]) == 0
     assert run(["about"]) == 0
     output = capsys.readouterr().out
     assert "AuroraBot 运行时" in output
-    assert "四角色消息" in output
+    assert "▄▀▀█ █  █ █▀▀▀ █▀▀█ █▀▀▀ ▄▀▀█ █▀▀█ █▀▀█ ▀█▀▀" in output
+    assert "▀▀▀▀ ▀▀▀▀ ▀    ▀▀▀▀ ▀    ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ▀▀▀" in output
 
 
 def test_each_command_registers_its_own_executor() -> None:
