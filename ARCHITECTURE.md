@@ -102,8 +102,10 @@ call 时完成节点，有 Tool call 时交给唯一 `ToolRegistry` 依次执行
 从目标 definition 创建 child 并暂停 parent。child 结束后，结果以对应 Tool call id 的 tool 消息恢复 parent。root 结束即
 整棵树结束。
 
-Tool ID 统一使用来源稳定的 `aur.*` 域名。Provider adapter 为仅接受受限函数名的协议生成稳定安全别名，并把模型响应映射回
-领域 Tool ID。注册表在项目组合时把框架内建工具与调用者注入工具形成一个扁平、不可变目录，
+Tool ID 统一使用来源稳定的 `aur.*` 域名。框架内建 `aur.agent.delegate` 创建 child；服务工具
+`aur.serv.world.read` / `aur.serv.world.trees` 由 WorldJournal 端口支撑，分别提供按 scope 有界读取提交正文（声明观察该
+scope，让未披露 delta 先送达）与列出从提交推导的 Bot 森林索引。Provider adapter 为仅接受受限函数名的协议生成稳定安全
+别名，并把模型响应映射回领域 Tool ID。注册表在项目组合时把框架内建工具与调用者注入工具形成一个扁平、不可变目录，
 负责 ID 校验、重复拒绝、定义筛选、唯一分派与异常规范化；节点的 tools 集合只控制可见性，不复制定义或执行器。
 
 当前循环是单线程、内存内、无恢复的。这个限制用于保持语义透明；未来并发或持久化必须产生等价 AgentTree，而不能建立

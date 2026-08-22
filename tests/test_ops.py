@@ -67,8 +67,13 @@ class FakeTrees:
             "occurred_at": occurred_at,
         }
 
-    async def world_scope(self, scope: str) -> dict[str, Any]:
-        return {"scope": scope, "commits": []}
+    async def world_scope(self, scope: str, *, after: int = 0) -> dict[str, Any]:
+        if after < 0:
+            raise ValueError("after 必须是不小于 0 的整数")
+        return {"scope": scope, "after": after, "commits": []}
+
+    async def forest(self, *, limit: int = 64) -> dict[str, Any]:
+        return {"runtime": [], "journal": [{"tree_id": "old-tree", "commit_count": 3, "limit": limit}]}
 
 
 class FakeConfig:
@@ -171,6 +176,20 @@ def test_router_returns_parse_and_operation_errors_in_chinese() -> None:
     assert bad_limit.code == "INVALID_LIMIT"
     assert absent_tree.code == absent_node.code == absent_config.code == "NOT_FOUND"
     assert absent_app.code == absent_extension.code == "CONFIG_ERROR"
+
+
+def test_world_index_is_resumable_and_forest_merges_runtime_and_journal() -> None:
+    router = _router()
+
+    world = asyncio.run(router.execute_path("GET", "/world/qq:group:1", {"after": "5"}))
+    forest = asyncio.run(router.execute_path("GET", "/forest", {"limit": "2"}))
+    forest_bad = asyncio.run(router.execute_path("GET", "/forest", {"limit": "0"}))
+    world_bad = asyncio.run(router.execute_path("GET", "/world/qq:group:1", {"after": "-1"}))
+
+    assert world.data == {"scope": "qq:group:1", "after": 5, "commits": []}
+    assert forest.data == {"runtime": [], "journal": [{"tree_id": "old-tree", "commit_count": 3, "limit": 2}]}
+    assert forest_bad.code == "INVALID_LIMIT"
+    assert world_bad.code == "INVALID_SCOPE"
 
 
 def test_config_access_reads_registered_personal_files_and_preserves_comments(configured_project: Path) -> None:

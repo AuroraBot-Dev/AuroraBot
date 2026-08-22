@@ -140,12 +140,30 @@ async def event(context: OperationContext, params: dict[str, Any]) -> OperationR
     "GET",
     "/world/{scope}",
     name="world.scope",
-    summary="查看一个世界 scope 的有界提交索引",
-    parameters=(ParameterSpec("scope", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),),
+    summary="查看一个世界 scope 从指定序号起的有界提交索引",
+    parameters=(
+        ParameterSpec("scope", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("after", ParameterLocation.QUERY, type="int", default=0, help="只返回序号大于该值的提交"),
+    ),
 )
 async def world_scope(context: OperationContext, params: dict[str, Any]) -> OperationResult:
     scope = str(params["scope"])
+    after = int(params["after"])
     try:
-        return OperationResult.success(await context.runtime.engine.world_scope(scope))
+        return OperationResult.success(await context.runtime.engine.world_scope(scope, after=after))
     except ValueError as error:
         return OperationResult.failure("INVALID_SCOPE", str(error))
+
+
+@operation(
+    "GET",
+    "/forest",
+    name="engine.forest",
+    summary="查看 Bot 森林：运行期已知树与世界日志推导的持久活动索引",
+    parameters=(ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64, help="最多返回的树数量"),),
+)
+async def forest(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    limit = int(params["limit"])
+    if limit < 1 or limit > _MAX_TREE_LIST_LIMIT:
+        return OperationResult.failure("INVALID_LIMIT", "limit 必须在 1 到 1000 之间")
+    return OperationResult.success(await context.runtime.engine.forest(limit=limit))

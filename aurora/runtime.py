@@ -24,6 +24,7 @@ from src.contracts import (
     AgentTree,
     ChatMessage,
     EnvironmentEvent,
+    TreeActivity,
     WorldCommit,
     WorldFrontier,
     WorldJournal,
@@ -114,15 +115,27 @@ class AuroraRuntime:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
         return self._tree_dict(await self.runner.run(tree, observer=self._record_tree))
 
-    async def world_scope(self, scope: str) -> dict[str, Any]:
-        """返回一个 scope 的有界提交索引，用于 ops 观察。"""
+    async def world_scope(self, scope: str, *, after: int = 0) -> dict[str, Any]:
+        """返回一个 scope 从指定序号起的有界提交索引，用于 ops 观察与环境适配器续读。"""
+        if after < 0:
+            raise ValueError("after 必须是不小于 0 的整数")
         await self.world.initialize()
-        delta = await self.world.delta(WorldFrontier(), frozenset({scope}))
+        delta = await self.world.delta(WorldFrontier({scope: after}), frozenset({scope}))
         return {
             "scope": scope,
+            "after": after,
             "frontier": dict(delta.end.positions),
             "has_more": delta.has_more,
             "commits": [self._commit_dict(commit) for commit in delta.commits],
+        }
+
+    async def forest(self, *, limit: int = 64) -> dict[str, Any]:
+        """返回 Bot 森林视图：运行期已知树与世界日志推导的持久活动索引。"""
+        await self.world.initialize()
+        activity = await self.world.tree_index(limit)
+        return {
+            "runtime": [self._tree_summary(tree) for tree in reversed(tuple(self._trees.values()))][:limit],
+            "journal": [self._activity_dict(item) for item in activity],
         }
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
@@ -242,6 +255,15 @@ class AuroraRuntime:
             "scopes": dict(commit.scopes),
             "based_on": dict(commit.based_on.positions),
             "data": dict(commit.data),
+        }
+
+    @staticmethod
+    def _activity_dict(activity: TreeActivity) -> dict[str, Any]:
+        return {
+            "tree_id": activity.tree_id,
+            "commit_count": activity.commit_count,
+            "first_seen": activity.first_seen.isoformat(),
+            "last_seen": activity.last_seen.isoformat(),
         }
 
 

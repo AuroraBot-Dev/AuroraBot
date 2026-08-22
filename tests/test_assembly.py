@@ -50,7 +50,11 @@ def test_project_configuration_builds_complete_runtime(configured_project: Path)
     assert result.node(runtime_configuration.node_id).definition_id == runtime_configuration.agent
     assert result.node(runtime_configuration.node_id).model == root_definition.model
     assert model.requests[0].model == root_definition.model
-    assert [tool.name for tool in model.requests[0].tools] == ["aur.agent.delegate"]
+    assert [tool.name for tool in model.requests[0].tools] == [
+        "aur.agent.delegate",
+        "aur.serv.world.read",
+        "aur.serv.world.trees",
+    ]
 
 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:

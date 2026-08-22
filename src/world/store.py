@@ -9,7 +9,14 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, insert, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.contracts import EnvironmentEvent, WorldCommit, WorldCommitInput, WorldDeltaPage, WorldFrontier
+from src.contracts import (
+    EnvironmentEvent,
+    TreeActivity,
+    WorldCommit,
+    WorldCommitInput,
+    WorldDeltaPage,
+    WorldFrontier,
+)
 from src.world.migration import STEPS, TARGET_VERSION
 from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommitRow, WorldCommitScopeRow
 
@@ -17,7 +24,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from sqlalchemy.engine import Connection
+    from sqlalchemy.engine import Connection, Row
+
+_MAX_BODY_PAGE = 256
+_MAX_TREE_INDEX = 1000
 
 
 class SqlAlchemyWorldJournal:
@@ -182,6 +192,56 @@ class SqlAlchemyWorldJournal:
                 positions[scope] = int(maximum or 0)
             return WorldFrontier(positions)
 
+    async def commit(self, commit_id: str) -> WorldCommit | None:
+        """按稳定 commit id 读取一次提交的完整正文；不存在时返回 None。"""
+        if not commit_id.strip():
+            raise ValueError("commit_id must not be empty")
+        async with self._sessions() as session:
+            row = await session.scalar(select(WorldCommitRow).where(WorldCommitRow.commit_id == commit_id))
+            return await self._commit(session, row) if row is not None else None
+
+    async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]:
+        """有界读取一个 scope 中序号大于 after 的提交正文，按写入顺序返回。"""
+        if not scope.strip():
+            raise ValueError("scope must not be empty")
+        if after < 0:
+            raise ValueError("after must not be negative")
+        if limit < 1 or limit > _MAX_BODY_PAGE:
+            raise ValueError(f"limit must be within 1..{_MAX_BODY_PAGE}")
+        async with self._sessions() as session:
+            statement = (
+                select(WorldCommitRow)
+                .join(WorldCommitScopeRow, WorldCommitScopeRow.commit_id == WorldCommitRow.commit_id)
+                .where(WorldCommitScopeRow.scope == scope, WorldCommitScopeRow.sequence > after)
+                .order_by(WorldCommitRow.insertion_sequence)
+                .limit(limit)
+            )
+            rows = await session.scalars(statement)
+            result: list[WorldCommit] = []
+            for row in rows:
+                result.append(await self._commit(session, row))
+            return tuple(result)
+
+    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
+        """从引擎提交的 tree_id 事实推导 Bot 森林索引，按最近活动排序。"""
+        if limit < 1 or limit > _MAX_TREE_INDEX:
+            raise ValueError(f"limit must be within 1..{_MAX_TREE_INDEX}")
+        async with self._sessions() as session:
+            tree_id = func.json_extract(WorldCommitRow.payload, "$.tree_id")
+            rows = await session.execute(
+                select(
+                    tree_id.label("tree_id"),
+                    func.count().label("commit_count"),
+                    func.min(WorldCommitRow.occurred_at).label("first_seen"),
+                    func.max(WorldCommitRow.occurred_at).label("last_seen"),
+                )
+                .where(tree_id.is_not(None), tree_id != "")
+                .group_by(tree_id)
+                .order_by(func.max(WorldCommitRow.occurred_at).desc())
+                .limit(limit)
+            )
+        return tuple(_tree_activity(row) for row in rows)
+
     async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage:
         if not scopes:
             return WorldDeltaPage(start, start, (), False)
@@ -237,3 +297,14 @@ def _matches_input(commit: WorldCommit, item: WorldCommitInput) -> bool:
         and dict(commit.based_on.positions) == dict(item.based_on.positions)
         and dict(commit.data) == dict(item.data)
     )
+
+
+def _tree_activity(row: Row[Any]) -> TreeActivity:
+    tree_id = row.tree_id
+    if not isinstance(tree_id, str):
+        raise RuntimeError("世界提交的 tree_id 必须是字符串")
+    return TreeActivity(tree_id, int(row.commit_count), _as_utc(row.first_seen), _as_utc(row.last_seen))
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)

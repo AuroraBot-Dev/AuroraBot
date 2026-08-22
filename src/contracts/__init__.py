@@ -19,6 +19,7 @@ from src.contracts.tool import (
 from src.contracts.world import (
     EnvironmentEvent,
     ToolScopes,
+    TreeActivity,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -44,6 +45,7 @@ __all__ = [
     "ToolOutput",
     "ToolResult",
     "ToolScopes",
+    "TreeActivity",
     "TreeStatus",
     "WorldCommit",
     "WorldCommitInput",

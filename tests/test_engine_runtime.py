@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -21,13 +22,14 @@ from src.contracts import (
     ToolDefinition,
     ToolOutput,
     ToolScopes,
+    TreeActivity,
     TreeStatus,
     WorldFrontier,
     WorldJournal,
 )
 from src.engine import AgentTreeRunner
 from src.prompt import PromptAssembler, PromptCatalog
-from src.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from src.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
 from src.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
@@ -402,3 +404,86 @@ def test_root_output_is_deferred_once_and_then_seals_the_observed_frontier(tmp_p
     assert [message.role for message in node.messages] == ["message", "assistant", "message", "assistant"]
     assert '"kind":"world.delta"' in node.messages[2].content
     assert len(model.requests) == _SECOND_REQUEST
+
+
+def test_world_read_tool_returns_bodies_and_forest_indexes_the_tree(tmp_path: Path) -> None:
+    async def scenario() -> tuple[AgentTree, tuple[str, ...], tuple[str, ...], tuple[TreeActivity, ...]]:
+        scope = "qq:group-read-1"
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await journal.initialize()
+        await journal.append_event(EnvironmentEvent("event-1", "qq", scope, "message", datetime.now(UTC), "第一条消息"))
+        frontier = await journal.head(frozenset({scope}))
+        read_tool = WorldReadTool(journal)
+        model = FakeModel(
+            [
+                ChatMessage.assistant(tool_calls=(ToolCall("read-1", WORLD_READ_TOOL, {"scope": scope, "after": 0}),)),
+                ChatMessage.assistant("完成"),
+            ]
+        )
+        root = _agent(tools=frozenset({WORLD_READ_TOOL}))
+        tree = AgentTree.create("tree", "root", root, "看看世界", frontier)
+        result = await _runner(model, (root,), read_tool, world=journal).run(tree)
+        environment = await journal.delta(WorldFrontier(), frozenset({scope}))
+        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:tree:tree"}))
+        forest = await journal.tree_index(10)
+        await journal.close()
+        return (
+            result,
+            tuple(commit.kind for commit in environment.commits),
+            tuple(commit.kind for commit in tree_scope.commits),
+            forest,
+        )
+
+    result, environment, tree_scope, forest = asyncio.run(scenario())
+    node = result.node("root")
+
+    assert result.status == TreeStatus.COMPLETED
+    assert [message.role for message in node.messages] == ["message", "assistant", "tool", "assistant"]
+    body = json.loads(node.messages[2].content)
+    assert body["count"] == 1
+    assert body["commits"][0]["summary"] == "第一条消息"
+    assert environment == ("environment.message",)
+    assert tree_scope == ("tool.requested", "tool.succeeded", "output.requested", "output.committed")
+    assert [(item.tree_id, item.commit_count) for item in forest] == [("tree", 4)]
+
+
+def test_world_read_tool_first_batch_defers_until_delta_is_disclosed(tmp_path: Path) -> None:
+    async def scenario() -> tuple[AgentTree, tuple[str, ...], tuple[str, ...]]:
+        scope = "qq:group-read-2"
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await journal.initialize()
+        await journal.append_event(EnvironmentEvent("event-1", "qq", scope, "message", datetime.now(UTC), "第一条消息"))
+        frontier = await journal.head(frozenset({scope}))
+        await journal.append_event(EnvironmentEvent("event-2", "qq", scope, "message", datetime.now(UTC), "第二条消息"))
+        read_tool = WorldReadTool(journal)
+        model = FakeModel(
+            [
+                ChatMessage.assistant(tool_calls=(ToolCall("read-1", WORLD_READ_TOOL, {"scope": scope, "after": 0}),)),
+                ChatMessage.assistant(tool_calls=(ToolCall("read-2", WORLD_READ_TOOL, {"scope": scope, "after": 0}),)),
+                ChatMessage.assistant("完成"),
+            ]
+        )
+        root = _agent(tools=frozenset({WORLD_READ_TOOL}))
+        tree = AgentTree.create("tree", "root", root, "看看世界", frontier)
+        result = await _runner(model, (root,), read_tool, world=journal).run(tree)
+        environment = await journal.delta(WorldFrontier(), frozenset({scope}))
+        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:tree:tree"}))
+        await journal.close()
+        return (
+            result,
+            tuple(commit.kind for commit in environment.commits),
+            tuple(commit.kind for commit in tree_scope.commits),
+        )
+
+    result, environment, tree_scope = asyncio.run(scenario())
+    node = result.node("root")
+
+    assert result.status == TreeStatus.COMPLETED
+    assert node.messages[2].is_error is True
+    assert '"kind":"world.delta"' in node.messages[2].content
+    assert node.messages[3].role == "assistant"
+    body = json.loads(node.messages[4].content)
+    assert body["commits"][0]["summary"] == "第一条消息"
+    assert body["commits"][1]["summary"] == "第二条消息"
+    assert environment == ("environment.message", "environment.message")
+    assert tree_scope == ("tool.requested", "tool.succeeded", "output.requested", "output.committed")

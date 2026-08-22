@@ -27,8 +27,8 @@ COMPOSITION_REGISTRARS = (
     ai.register,
     prompt.register,
     console.register,
-    tools.register,
     world.register,
+    tools.register,
     engine.register,
 )
 

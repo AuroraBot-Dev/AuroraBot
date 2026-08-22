@@ -8,7 +8,7 @@ id = "builtin.root"
 description = "总代理：理解完整任务、整合结果，并把独立工作委派给合适的专门 Agent。"
 prompt = "builtin.root"
 model = "quality"
-tools = ["aur.agent.delegate"]
+tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"]
 children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
 
 [[agent]]

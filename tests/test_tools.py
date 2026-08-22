@@ -1,12 +1,39 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from src.agents import AgentCatalog
-from src.contracts import AgentDefinition, DelegationRequest, ToolCall, ToolDefinition, ToolOutput
-from src.tools import DELEGATE_TOOL, DelegateTool, ToolRegistrationError, ToolRegistry
+from src.contracts import (
+    AgentDefinition,
+    DelegationRequest,
+    EnvironmentEvent,
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    TreeActivity,
+    WorldCommit,
+    WorldCommitInput,
+    WorldDeltaPage,
+    WorldFrontier,
+)
+from src.tools import (
+    DELEGATE_TOOL,
+    WORLD_READ_TOOL,
+    WORLD_TREES_TOOL,
+    DelegateTool,
+    ToolRegistrationError,
+    ToolRegistry,
+    WorldReadTool,
+    WorldTreesTool,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class EchoTool:
@@ -113,3 +140,141 @@ def test_delegate_rejects_invalid_arguments_as_tool_output(arguments: dict[str, 
 
     assert isinstance(result, ToolOutput)
     assert result.is_error is True
+
+
+class FakeJournal:
+    """实现 WorldJournal 协议的内存桩，只支持世界读取工具使用的查询。"""
+
+    def __init__(self, commits: tuple[WorldCommit, ...] = (), activity: tuple[TreeActivity, ...] = ()) -> None:
+        self.commits_by_scope = commits
+        self.activity = activity
+        self.queries: list[tuple[str, int, int]] = []
+
+    async def initialize(self) -> None:
+        raise NotImplementedError
+
+    async def append_event(self, event: EnvironmentEvent) -> WorldCommit:
+        raise NotImplementedError
+
+    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]:
+        raise NotImplementedError
+
+    async def head(self, scopes: frozenset[str]) -> WorldFrontier:
+        raise NotImplementedError
+
+    async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage:
+        raise NotImplementedError
+
+    async def commit(self, commit_id: str) -> WorldCommit | None:
+        raise NotImplementedError
+
+    async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]:
+        self.queries.append((scope, after, limit))
+        return tuple(item for item in self.commits_by_scope if item.scopes.get(scope, 0) > after)[:limit]
+
+    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
+        return self.activity[:limit]
+
+    async def append_commit(
+        self,
+        *,
+        commit_id: str,
+        kind: str,
+        source: str,
+        summary: str,
+        scopes: frozenset[str],
+        based_on: WorldFrontier,
+        data: Mapping[str, Any],
+        occurred_at: datetime | None = None,
+    ) -> WorldCommit:
+        raise NotImplementedError
+
+
+def _commit(commit_id: str, kind: str, scope: str, sequence: int, summary: str) -> WorldCommit:
+    return WorldCommit(
+        commit_id,
+        kind,
+        "test",
+        summary,
+        datetime.now(UTC),
+        {scope: sequence},
+        WorldFrontier(),
+        {"payload": sequence},
+    )
+
+
+def test_world_read_returns_bodies_and_declares_observed_scope() -> None:
+    journal = FakeJournal((_commit("c-1", "tool.succeeded", "scope", 1, "完成"),))
+    tool = WorldReadTool(journal)
+
+    scopes = tool.resolve_scopes(ToolCall("read", WORLD_READ_TOOL, {"scope": "scope"}))
+    result = asyncio.run(tool.execute(ToolCall("read", WORLD_READ_TOOL, {"scope": "scope", "after": 0, "limit": 5})))
+
+    assert scopes.observe == frozenset({"scope"})
+    assert journal.queries == [("scope", 0, 5)]
+    assert isinstance(result, ToolOutput) and result.is_error is False
+    payload = json.loads(result.content)
+    assert payload["count"] == 1
+    assert payload["commits"][0]["commit_id"] == "c-1"
+    assert payload["commits"][0]["data"] == {"payload": 1}
+    assert payload["commits"][0]["summary"] == "完成"
+
+
+def test_world_read_filters_kind_exactly_and_by_prefix() -> None:
+    journal = FakeJournal(
+        (
+            _commit("c-1", "environment.message", "scope", 1, "外部消息"),
+            _commit("c-2", "tool.succeeded", "scope", 2, "工具完成"),
+        )
+    )
+    tool = WorldReadTool(journal)
+
+    exact = asyncio.run(tool.execute(ToolCall("read", WORLD_READ_TOOL, {"scope": "scope", "kind": "tool.succeeded"})))
+    prefix = asyncio.run(tool.execute(ToolCall("read", WORLD_READ_TOOL, {"scope": "scope", "kind": "environment.*"})))
+
+    assert isinstance(exact, ToolOutput) and json.loads(exact.content)["commits"][0]["commit_id"] == "c-2"
+    assert isinstance(prefix, ToolOutput) and json.loads(prefix.content)["commits"][0]["commit_id"] == "c-1"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        {},
+        {"scope": ""},
+        {"scope": "scope", "after": -1},
+        {"scope": "scope", "limit": 0},
+        {"scope": "scope", "limit": 101},
+        {"scope": "scope", "kind": ""},
+    ),
+)
+def test_world_read_rejects_invalid_arguments_as_tool_output(arguments: dict[str, object]) -> None:
+    tool = WorldReadTool(FakeJournal())
+
+    result = asyncio.run(tool.execute(ToolCall("read", WORLD_READ_TOOL, arguments)))
+
+    assert isinstance(result, ToolOutput)
+    assert result.is_error is True
+
+
+def test_world_trees_lists_forest_index_and_limits() -> None:
+    journal = FakeJournal(activity=(TreeActivity("a", 2, datetime.now(UTC), datetime.now(UTC)),))
+    tool = WorldTreesTool(journal)
+
+    scopes = tool.resolve_scopes(ToolCall("trees", WORLD_TREES_TOOL, {}))
+    result = asyncio.run(tool.execute(ToolCall("trees", WORLD_TREES_TOOL, {"limit": 32})))
+    too_many = asyncio.run(tool.execute(ToolCall("trees", WORLD_TREES_TOOL, {"limit": 257})))
+
+    assert scopes.observe == frozenset()
+    assert isinstance(result, ToolOutput) and result.is_error is False
+    payload = json.loads(result.content)
+    assert payload["count"] == 1
+    assert payload["trees"][0]["tree_id"] == "a"
+    assert payload["trees"][0]["commit_count"] == journal.activity[0].commit_count
+    assert isinstance(too_many, ToolOutput) and too_many.is_error is True
+
+
+def test_world_tools_are_registered_under_service_domain_ids() -> None:
+    registry = ToolRegistry((WorldReadTool(FakeJournal()), WorldTreesTool(FakeJournal())))
+
+    assert registry.names == frozenset({WORLD_READ_TOOL, WORLD_TREES_TOOL})
+    assert [definition.name for definition in registry.definitions] == [WORLD_READ_TOOL, WORLD_TREES_TOOL]

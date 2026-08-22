@@ -20,6 +20,8 @@ message → model → assistant
 - 可复用 Agent 定义目录；同一 prompt 可预定义不同 model、tools 与 child allowlist；
 - `aur.*` 统一工具域、不可变工具目录与唯一执行路由；
 - `aur.agent.delegate` 作为真实 Tool 产生显式树操作请求；
+- 持久化世界提交日志：per-scope 单调序号、观察前沿、delta 分页披露与 deferred 封口；
+- `aur.serv.world.read` 世界正文读取与 `aur.serv.world.trees` Bot 森林索引工具；
 - 确定性的深度优先 AgentTree 循环；
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；
