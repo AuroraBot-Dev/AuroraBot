@@ -84,9 +84,7 @@ class FakeWriter:
         data: Mapping[str, object],
         occurred_at: datetime | None = None,
     ) -> WorldCommit:
-        self.inputs.append(
-            WorldCommitInput(commit_id, kind, source, summary, scopes, based_on, data, occurred_at)
-        )
+        self.inputs.append(WorldCommitInput(commit_id, kind, source, summary, scopes, based_on, data, occurred_at))
         return WorldCommit(
             commit_id,
             kind,

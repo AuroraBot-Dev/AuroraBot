@@ -37,9 +37,7 @@ async def stream(context: OperationContext, params: dict[str, Any]) -> Operation
         return missing
     assert port is not None
     try:
-        return OperationResult.success(
-            await port.world_stream(after=int(params["after"]), limit=int(params["limit"]))
-        )
+        return OperationResult.success(await port.world_stream(after=int(params["after"]), limit=int(params["limit"])))
     except ValueError as error:
         return OperationResult.failure("INVALID_STREAM", str(error))
 

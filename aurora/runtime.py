@@ -523,9 +523,7 @@ async def run_project(
     stop = stop_event or asyncio.Event()
     runtime.bind_stop_requester(stop.set)
     cadence_task = (
-        asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
-        if runtime.cadence.enabled
-        else None
+        asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence") if runtime.cadence.enabled else None
     )
     installed = _install_stop_handlers(stop) if stop_event is None else ()
     try:

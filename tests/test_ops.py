@@ -324,12 +324,8 @@ def test_subpackage_catalogs_are_available_as_json_terminal_commands(configured_
 def test_config_mutation_ops_record_world_events(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
 
-    changed = asyncio.run(
-        runtime.ops.route_text("/app-enable org.aurora.clock true")
-    )
-    unchanged = asyncio.run(
-        runtime.ops.route_text("/app-enable org.aurora.clock true")
-    )
+    changed = asyncio.run(runtime.ops.route_text("/app-enable org.aurora.clock true"))
+    unchanged = asyncio.run(runtime.ops.route_text("/app-enable org.aurora.clock true"))
     commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
 
     assert changed.ok is True and changed.message is None

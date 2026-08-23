@@ -306,9 +306,7 @@ def test_builtin_tools_form_the_default_catalog_before_external_tools() -> None:
     builtins = builtin_tools(agents=_agents(), journal=journal)
     registry = ToolRegistry((*builtins, EchoTool()))
 
-    assert registry.names == frozenset(
-        {DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL, "aur.test.echo"}
-    )
+    assert registry.names == frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL, "aur.test.echo"})
 
 
 def test_world_tools_are_registered_under_service_domain_ids() -> None:
