@@ -28,10 +28,18 @@ MODEL_FAILED = "engine.model.failed"
 TOOL_REQUESTED = "tool.requested"
 TOOL_SUCCEEDED = "tool.succeeded"
 TOOL_FAILED = "tool.failed"
+TOOL_UNKNOWN = "tool.unknown"
 OUTPUT_REQUESTED = "output.requested"
 OUTPUT_COMMITTED = "output.committed"
 WORLD_DELTA_DELIVERED = "engine.world.delta_delivered"
 CONSOLE_INPUT = "console.input"
+MCP_APP_STARTING = "mcp.app.starting"
+MCP_APP_READY = "mcp.app.ready"
+MCP_APP_FAILED = "mcp.app.failed"
+MCP_APP_DISCONNECTED = "mcp.app.disconnected"
+MCP_CATALOG_FROZEN = "mcp.catalog.frozen"
+MCP_CATALOG_CHANGED = "mcp.catalog.changed"
+MCP_EVENT_RECEIVED = "mcp.event.received"
 
 
 def tree_scope(tree_id: str) -> str:
@@ -39,6 +47,13 @@ def tree_scope(tree_id: str) -> str:
     if not tree_id.strip():
         raise ValueError("tree_id must not be empty")
     return f"aurora:tree:{tree_id}"
+
+
+def mcp_scope(package: str) -> str:
+    """返回一个 MCP App 的标准世界 scope。"""
+    if not package.strip():
+        raise ValueError("package must not be empty")
+    return f"aurora:mcp:{package}"
 
 
 @dataclass(frozen=True, slots=True)

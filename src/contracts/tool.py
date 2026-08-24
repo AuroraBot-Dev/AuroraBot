@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from src.contracts.model import ToolCall
     from src.contracts.world import ToolScopes
+
+
+class ToolStatus(StrEnum):
+    """一次工具调用的确定性结果状态。"""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +32,8 @@ class ToolDefinition:
     def __post_init__(self) -> None:
         if not self.name or not self.description:
             raise ValueError("ToolDefinition requires name and description")
-        object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
+        frozen = _freeze_json(self.parameters)
+        object.__setattr__(self, "parameters", cast("Mapping[str, Any]", frozen))
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,11 +41,18 @@ class ToolOutput:
     """工具调用的一次规范化文本结果。"""
 
     content: str
-    is_error: bool = False
+    status: ToolStatus = ToolStatus.SUCCEEDED
 
     def __post_init__(self) -> None:
         if not self.content.strip():
             raise ValueError("ToolOutput content must not be empty")
+        if not isinstance(self.status, ToolStatus):
+            raise TypeError("ToolOutput status must be a ToolStatus")
+
+    @property
+    def is_error(self) -> bool:
+        """failed 与 unknown 都作为可供模型处理的错误消息。"""
+        return self.status is not ToolStatus.SUCCEEDED
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,3 +83,11 @@ class ScopedTool(Tool, Protocol):
     """可声明观察、发布世界域的可选 Tool 扩展契约。"""
 
     def resolve_scopes(self, call: ToolCall) -> ToolScopes: ...
+
+
+def _freeze_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(item) for item in value)
+    return value
