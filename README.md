@@ -29,12 +29,16 @@ message → model → assistant
 - 确定性的深度优先 AgentTree 循环；
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；
-- 同一操作资源目录提供 method/path 与斜杠文本入口；engine、config、agents、tools、prompt、ai、world、console 均有 JSON 化 ops 路径；
+- 同一操作资源目录提供 method/path 与斜杠文本入口；engine、config、agents、tools、prompt、ai、world、console、cadence、memory、MCP 均有 JSON 化 ops 路径；
+- MCP Python SDK 2.x 客户端：支持 stdio 与 HTTPS Streamable HTTP、启动期完整发现并冻结 Tool 目录、运行期目录变化提示重启；
+- MCP Tool 进入统一 `aur.mcp.<package>.<raw_name>` 域；协商后的 `org.aurorabot/tool-contract` v1 把业务 scope
+  模板接入普通 world frontier，并保留 Tool 成功、失败和效果未知契约；
+- stdio App 经协商的 `org.aurorabot/world-events` 业务事件只追加 WorldJournal，是否唤起 AgentTree 仍由 cadence 决定；
 - LiteLLM 统一模型网关与 OpenAI-compatible role、Tool 名称适配；
 - `aurora start` 本地异步终端、`--headless` 和统一停止路径；
 - 全离线 fake Model/Tool 测试。
 
-当前范围不包含 MCP、Panel backend、sandbox 或生产化扩展体系。
+当前范围不包含 Panel backend、sandbox、通用扩展平台，以及 MCP sampling、elicitation、roots、Tasks 和非文本结果注入。
 
 ## 开发
 

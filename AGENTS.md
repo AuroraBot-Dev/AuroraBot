@@ -27,6 +27,7 @@ src/tools/      工具注册表与框架内建工具
 src/prompt/     四角色 PromptAssembler
 src/engine/     AgentTree 的确定性单循环
 src/ai/         LiteLLM 模型网关与 Provider 协议映射
+src/mcp/        MCP SDK 2.x 客户端适配、冻结工具目录与业务事件入口
 src/world/      WorldJournal 唯一持久化实现与 migration
 src/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
@@ -51,13 +52,14 @@ panel/          暂不参与当前 runtime 的独立前端子模块
   `commands` 按模块注册 CLI，`main.py` 只分派。
 - 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
-- 依赖方向固定为 `utils/contracts ← agents/prompt/ai/world`、`agents/contracts ← tools ← engine ← aurora`、
+- 依赖方向固定为 `utils/contracts ← agents/prompt/ai/world/mcp`、`agents/contracts ← tools ← engine ← aurora`、
   `console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`，ops 不导入 src 或 aurora。
 
 ## Current scope
 
-当前实现 ops、LiteLLM Model、Console 与 start 的最小生命周期，以及 WorldJournal 持久化与 migration；不实现主动节律、自动记忆、Inbox/Triage、并发/抢占、
-MCP、Platform、Panel backend、sandbox 或费用体系。引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
+当前实现 ops、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start 生命周期，以及 WorldJournal 持久化与 migration；
+不实现自动记忆、Inbox、并发/抢占、通用 Platform、Panel backend、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
+引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 
 ## Language and text
 
