@@ -4,12 +4,32 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from enum import StrEnum
+from types import MappingProxyType
 from typing import cast
 
 
 class _Msg(StrEnum):
     INVALID_JSON_OBJECT = "Invalid JSON object format"
+
+
+def freeze_json(value: object) -> object:
+    """递归冻结 JSON 形状，避免值对象通过嵌套容器被改写。"""
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: freeze_json(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(freeze_json(item) for item in value)
+    return value
+
+
+def thaw_json(value: object) -> object:
+    """把冻结的 JSON 形状还原为 provider/序列化器可接受的容器。"""
+    if isinstance(value, Mapping):
+        return {key: thaw_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [thaw_json(item) for item in value]
+    return value
 
 
 def extract_json_from_text(raw: str) -> dict[str, object] | None:
