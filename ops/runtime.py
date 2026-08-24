@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         ConfigRuntimePort,
         ConsoleRuntimePort,
         ContractsRuntimePort,
+        McpRuntimePort,
         MemoryRuntimePort,
         ProcessRuntimePort,
         PromptRuntimePort,
@@ -45,6 +46,7 @@ class OpsRuntime:
         contracts: ContractsRuntimePort | None = None,
         cadence: CadenceRuntimePort | None = None,
         memory: MemoryRuntimePort | None = None,
+        mcp: McpRuntimePort | None = None,
     ) -> None:
         self._router = OperationRouter(
             OpsPorts(
@@ -61,6 +63,7 @@ class OpsRuntime:
                 contracts,
                 cadence,
                 memory,
+                mcp,
             )
         )
 

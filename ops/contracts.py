@@ -148,6 +148,12 @@ class MemoryRuntimePort(Protocol):
     async def memory_snapshot(self) -> dict[str, Any]: ...
 
 
+class McpRuntimePort(Protocol):
+    def mcp_status(self) -> dict[str, Any]: ...
+
+    def mcp_app(self, package: str) -> dict[str, Any] | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class OpsPorts:
     engine: TreeRuntimePort
@@ -163,6 +169,7 @@ class OpsPorts:
     contracts: ContractsRuntimePort | None = None
     cadence: CadenceRuntimePort | None = None
     memory: MemoryRuntimePort | None = None
+    mcp: McpRuntimePort | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -105,5 +105,6 @@ def _load_all() -> None:
         "ops.operations.contracts",
         "ops.operations.cadence",
         "ops.operations.memory",
+        "ops.operations.mcp",
     ):
         importlib.import_module(module)
