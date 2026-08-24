@@ -11,6 +11,7 @@ from aurora.composition import (
     cadence,
     console,
     engine,
+    mcp,
     memory,
     prompt,
     tools,
@@ -20,13 +21,14 @@ from aurora.composition import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from aurora.composer import AuroraAssembly
+    from aurora.composer import AuroraAssembly, InstanceBinding
     from aurora.config import AuroraConfig
     from src.contracts import Model, Tool
 
 # world 是逻辑事件总线：组合时第一个实例化，后续组件只能通过同一实例键取得单例。
 COMPOSITION_REGISTRARS = (
     world.register,
+    mcp.register,
     memory.register,
     cadence.register,
     agents.register,
@@ -42,8 +44,9 @@ def compose_project(
     config: AuroraConfig,
     model: Model | None = None,
     tools: Iterable[Tool] = (),
+    instances: Iterable[InstanceBinding] = (),
 ) -> AuroraAssembly:
-    return compose(config, model, COMPOSITION_REGISTRARS, tools)
+    return compose(config, model, COMPOSITION_REGISTRARS, tools, instances)
 
 
 __all__ = ["COMPOSITION_REGISTRARS", "compose_project"]

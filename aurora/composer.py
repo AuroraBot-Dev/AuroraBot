@@ -55,6 +55,10 @@ class CompositionContext:
     _instances: dict[InstanceKey[object], object] = field(default_factory=dict)
     _names: set[str] = field(default_factory=set)
 
+    def contains[T](self, key: InstanceKey[T]) -> bool:
+        """返回一个分阶段预构造实例是否已经进入组合上下文。"""
+        return key.name in self._names
+
     def provide[T](self, key: InstanceKey[T], instance: T) -> None:
         if key.name in self._names:
             raise ValueError(f"实例重复注册：{key.name}")
@@ -73,6 +77,7 @@ class CompositionContext:
 
 
 type CompositionRegistrar = Callable[[CompositionContext], None]
+type InstanceBinding = tuple[InstanceKey[object], object]
 
 
 def compose(
@@ -80,9 +85,12 @@ def compose(
     model: Model | None,
     registrars: Iterable[CompositionRegistrar],
     tools: Iterable[Tool] = (),
+    instances: Iterable[InstanceBinding] = (),
 ) -> AuroraAssembly:
     """按显式注册顺序构造所有项目实例。"""
     context = CompositionContext(config, model, tuple(tools))
+    for key, instance in instances:
+        context.provide(key, instance)
     for register in registrars:
         register(context)
     return context.finish()
