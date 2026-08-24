@@ -1,11 +1,13 @@
 # MCP 应用配置 — 外部生态的工具与事件来源。
 #
-# 每个 [[app]] 定义一个 MCP 服务（内建或远程）。当前配置系统只读注册这些定义，
-# 不启动进程；enabled 表达项目偏好，不代表当前 AgentTree 已连接该应用。
+# 每个 [[app]] 定义一个 MCP 服务（内建或远程）。启动时会连接所有生效 App，
+# 完整发现并冻结工具目录；enabled 表达项目偏好，仍受 platform.mcp.enabled 总开关约束。
 #
 # - stdio：启动本地子进程，stdout 只承载 MCP JSON-RPC，诊断写 stderr。
-# - streamable_http：连接远程 HTTPS 服务；此时不得声明 command/working_dir。
-# - env 是环境变量白名单，只透传明确点名的变量；密钥仍来自进程环境。
+# - streamable_http：连接远程 HTTPS 服务；此时不得声明 command/working_dir/env，认证变量名使用 auth_env，
+#   当前也不得启用 world_events。
+# - env 是 stdio 子进程的环境变量白名单，只透传明确点名的变量；密钥仍来自进程环境。
+# - event_mode：disabled、world_events 或 legacy_aurora_event；默认模板不接收 App 主动事件。
 
 # 内建 Clock 应用：提供时间查询与定时能力
 [[app]]
@@ -16,6 +18,7 @@ working_dir = "src/apps/aurora-app-clock"
 command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
 env = []
 timeout_seconds = 30
+event_mode = "disabled"
 
 # Windows-MCP：Windows 桌面自动化（截屏、鼠标键盘、窗口控制等）
 [[app]]
@@ -26,6 +29,7 @@ working_dir = "extensions/apps/Windows-MCP"
 command = ["uv", "run", "windows-mcp", "serve"]
 env = []
 timeout_seconds = 60
+event_mode = "disabled"
 
 # Aurora-QQ：通过 OneBot 11 / NapCat 提供 QQ 消息、联系人和群管理能力
 [[app]]
@@ -36,3 +40,4 @@ working_dir = "extensions/apps/Aurora-QQ"
 command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
 env = ["AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG"]
 timeout_seconds = 60
+event_mode = "disabled"

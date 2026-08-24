@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -14,6 +14,7 @@ from src.contracts import (
     ToolCall,
     ToolDefinition,
     ToolOutput,
+    ToolStatus,
     TreeStatus,
 )
 
@@ -101,6 +102,39 @@ def test_tree_rejects_missing_parent() -> None:
 def test_model_value_objects_reject_empty_required_fields(factory: Callable[[], object], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         factory()
+
+
+def test_tool_output_has_three_statuses_and_derives_is_error() -> None:
+    succeeded = ToolOutput("done")
+    failed = ToolOutput("failed", status=ToolStatus.FAILED)
+    unknown = ToolOutput("unknown", status=ToolStatus.UNKNOWN)
+
+    assert succeeded.status is ToolStatus.SUCCEEDED
+    assert succeeded.is_error is False
+    assert failed.is_error is True
+    assert unknown.is_error is True
+    with pytest.raises(TypeError, match="ToolStatus"):
+        ToolOutput("invalid", status="failed")  # type: ignore[arg-type]
+
+
+def test_tool_definition_deep_freezes_nested_json_schema() -> None:
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"mode": {"type": "string", "enum": ["one", "two"]}},
+        "required": ["mode"],
+    }
+    definition = ToolDefinition("choose", "Choose a mode.", schema)
+
+    schema["properties"]["mode"]["enum"].append("mutated")
+    schema["required"].append("mutated")
+
+    mode = definition.parameters["properties"]["mode"]
+    assert mode["enum"] == ("one", "two")
+    assert definition.parameters["required"] == ("mode",)
+    with pytest.raises(TypeError):
+        mode["type"] = "integer"
+    with pytest.raises(TypeError):
+        cast("dict[str, Any]", definition.parameters)["new"] = True
 
 
 def test_assistant_rejects_duplicate_call_ids_in_one_message() -> None:

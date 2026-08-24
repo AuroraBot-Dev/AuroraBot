@@ -129,6 +129,29 @@ class FakeWorldOps:
         return event
 
 
+class FakeMcpOps:
+    def mcp_status(self) -> dict[str, Any]:
+        return {
+            "enabled": True,
+            "restart_required": False,
+            "tool_count": 1,
+            "apps": [{"package": "org.aurora.clock", "connected": True}],
+        }
+
+    def mcp_app(self, package: str) -> dict[str, Any] | None:
+        if package != "org.aurora.clock":
+            return None
+        return {
+            "package": package,
+            "configured": True,
+            "connected": True,
+            "protocol_version": "2026-07-28",
+            "tools": ["aur.mcp.org.aurora.clock.get_current_time"],
+            "last_error": None,
+            "restart_required": False,
+        }
+
+
 @dataclass(slots=True)
 class FakeProcess:
     shutdown_requested: bool = False
@@ -225,6 +248,25 @@ def test_world_index_is_resumable_and_forest_merges_runtime_and_journal() -> Non
     assert forest.data == {"runtime": [], "journal": [{"tree_id": "old-tree", "commit_count": 3, "limit": 2}]}
     assert forest_bad.code == "INVALID_LIMIT"
     assert world_bad.code == "INVALID_SCOPE"
+
+
+def test_mcp_operations_expose_read_only_status_and_missing_port() -> None:
+    missing_router = _router()
+    router = OperationRouter(OpsPorts(FakeTrees(), FakeConfig(), FakeProcess(), mcp=FakeMcpOps()))
+
+    unavailable = asyncio.run(missing_router.execute_path("GET", "/mcp"))
+    status = asyncio.run(router.route_text("/mcp"))
+    app = asyncio.run(router.execute_path("GET", "/mcp/org.aurora.clock"))
+    alias = asyncio.run(router.route_text("/mcp-app org.aurora.clock"))
+    absent = asyncio.run(router.execute_path("GET", "/mcp/org.aurora.missing"))
+    write = asyncio.run(router.execute_path("POST", "/mcp"))
+
+    assert unavailable.code == "NOT_AVAILABLE"
+    assert status.data["tool_count"] == 1  # type: ignore[index]
+    assert app.data == alias.data
+    assert app.data["protocol_version"] == "2026-07-28"  # type: ignore[index]
+    assert absent.code == "NOT_FOUND"
+    assert write.code == "METHOD_NOT_ALLOWED"
 
 
 def test_config_access_reads_registered_personal_files_and_preserves_comments(configured_project: Path) -> None:

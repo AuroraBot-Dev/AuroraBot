@@ -19,6 +19,7 @@ _ALLOWED_SRC_IMPORTS = {
     "cadence": frozenset({"src.cadence", "src.contracts"}),
     "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools"}),
     "memory": frozenset({"src.contracts", "src.memory"}),
+    "mcp": frozenset({"src.contracts", "src.mcp"}),
     "world": frozenset({"src.contracts", "src.world"}),
 }
 _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")

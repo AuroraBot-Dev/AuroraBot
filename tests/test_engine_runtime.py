@@ -22,8 +22,10 @@ from src.contracts import (
     ToolDefinition,
     ToolOutput,
     ToolScopes,
+    ToolStatus,
     TreeActivity,
     TreeStatus,
+    WorldCommit,
     WorldFrontier,
     WorldJournal,
 )
@@ -66,6 +68,15 @@ class EchoTool:
 class FailingTool(EchoTool):
     async def execute(self, call: ToolCall) -> ToolOutput:
         raise RuntimeError(str(call.arguments.get("error", "broken")))
+
+
+class UnknownTool(EchoTool):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def execute(self, call: ToolCall) -> ToolOutput:
+        self.calls += 1
+        return ToolOutput(str(call.arguments["value"]), status=ToolStatus.UNKNOWN)
 
 
 class ScopedEchoTool(EchoTool):
@@ -234,6 +245,36 @@ def test_tool_failure_is_a_tool_message_not_a_tree_failure() -> None:
     assert tool_message.role == "tool"
     assert tool_message.is_error is True
     assert tool_message.content == "未知工具：aur.test.missing"
+
+
+def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp_path: Path) -> None:
+    async def scenario() -> tuple[AgentTree, UnknownTool, tuple[WorldCommit, ...]]:
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        tool = UnknownTool()
+        model = FakeModel(
+            [
+                ChatMessage.assistant(tool_calls=(ToolCall("unknown-1", "aur.test.echo", {"value": "效果无法确认"}),)),
+                ChatMessage.assistant("已知悉不确定结果"),
+            ]
+        )
+        root = _agent(tools=frozenset({"aur.test.echo"}))
+        result = await _runner(model, (root,), tool, world=journal).run(
+            AgentTree.create("tree", "root", root, "执行一次")
+        )
+        commits = await journal.commits("aurora:tree:tree", 0, 100)
+        await journal.close()
+        return result, tool, commits
+
+    result, tool, commits = asyncio.run(scenario())
+    tool_message = result.node("root").messages[2]
+    result_commit = next(commit for commit in commits if commit.kind == "tool.unknown")
+
+    assert result.status is TreeStatus.COMPLETED
+    assert tool.calls == 1
+    assert tool_message.content == "效果无法确认"
+    assert tool_message.is_error is True
+    assert result_commit.data["status"] == ToolStatus.UNKNOWN.value
+    assert result_commit.data["is_error"] is True
 
 
 def test_model_failure_becomes_tree_failure() -> None:

@@ -15,6 +15,7 @@ from src.contracts import (
     ToolCall,
     ToolDefinition,
     ToolOutput,
+    ToolStatus,
     TreeActivity,
     WorldCommit,
     WorldCommitInput,
@@ -52,6 +53,11 @@ class EchoTool:
 class FailingTool(EchoTool):
     async def execute(self, call: ToolCall) -> ToolOutput:
         raise RuntimeError(str(call.arguments["error"]))
+
+
+class UnknownTool(EchoTool):
+    async def execute(self, call: ToolCall) -> ToolOutput:
+        return ToolOutput(str(call.arguments["value"]), status=ToolStatus.UNKNOWN)
 
 
 def _agents() -> AgentCatalog:
@@ -101,10 +107,14 @@ def test_registry_routes_calls_and_normalizes_boundary_failures() -> None:
     failed = asyncio.run(
         ToolRegistry((FailingTool(),)).execute(ToolCall("failed", "aur.test.echo", {"error": "broken"}))
     )
+    unknown = asyncio.run(
+        ToolRegistry((UnknownTool(),)).execute(ToolCall("unknown", "aur.test.echo", {"value": "uncertain"}))
+    )
 
     assert echo == ToolOutput("ok")
-    assert missing == ToolOutput("未知工具：aur.test.missing", is_error=True)
-    assert failed == ToolOutput("工具执行失败：broken", is_error=True)
+    assert missing == ToolOutput("未知工具：aur.test.missing", status=ToolStatus.FAILED)
+    assert failed == ToolOutput("工具执行失败：broken", status=ToolStatus.FAILED)
+    assert unknown == ToolOutput("uncertain", status=ToolStatus.UNKNOWN)
 
 
 def test_delegate_is_a_registered_tool_that_produces_a_tree_operation_request() -> None:
@@ -125,10 +135,10 @@ def test_delegate_is_a_registered_tool_that_produces_a_tree_operation_request() 
     assert result == DelegationRequest("worker", "检查一个边界")
     assert registry.definitions[0].name == DELEGATE_TOOL
     choices = registry.definitions[0].parameters["properties"]["agent"]["oneOf"]  # type: ignore[index]
-    assert choices == [
+    assert choices == (
         {"const": "root", "description": "总代理。"},
         {"const": "worker", "description": "通用执行者。"},
-    ]
+    )
 
 
 @pytest.mark.parametrize(
@@ -143,6 +153,7 @@ def test_delegate_rejects_invalid_arguments_as_tool_output(arguments: dict[str, 
     result = asyncio.run(DelegateTool(_agents()).execute(ToolCall("delegate", DELEGATE_TOOL, arguments)))
 
     assert isinstance(result, ToolOutput)
+    assert result.status is ToolStatus.FAILED
     assert result.is_error is True
 
 
@@ -269,6 +280,7 @@ def test_world_read_rejects_invalid_arguments_as_tool_output(arguments: dict[str
     result = asyncio.run(tool.execute(ToolCall("read", WORLD_READ_TOOL, arguments)))
 
     assert isinstance(result, ToolOutput)
+    assert result.status is ToolStatus.FAILED
     assert result.is_error is True
 
 

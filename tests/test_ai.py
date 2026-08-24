@@ -37,8 +37,13 @@ def test_openai_adapter_maps_only_message_role_to_user() -> None:
 
 
 def test_openai_tool_adapter_preserves_native_schema() -> None:
-    schema = {"type": "object", "properties": {"value": {"type": "string"}}}
-    result = to_openai_tools((ToolDefinition("echo", "Echo text.", schema),))
+    schema = {
+        "type": "object",
+        "properties": {"value": {"type": "string", "enum": ["one", "two"]}},
+        "required": ["value"],
+    }
+    definition = ToolDefinition("echo", "Echo text.", schema)
+    result = to_openai_tools((definition,))
 
     assert result == [
         {
@@ -46,6 +51,12 @@ def test_openai_tool_adapter_preserves_native_schema() -> None:
             "function": {"name": "echo", "description": "Echo text.", "parameters": schema},
         }
     ]
+    parameters = result[0]["function"]["parameters"]
+    assert isinstance(parameters, dict)
+    assert isinstance(parameters["properties"], dict)
+    assert isinstance(parameters["properties"]["value"]["enum"], list)
+    parameters["properties"]["value"]["enum"].append("provider-only")
+    assert definition.parameters["properties"]["value"]["enum"] == ("one", "two")
 
 
 def test_openai_adapter_maps_domain_tool_id_to_provider_safe_name() -> None:
