@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
-from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolResult, ToolScopes
+from src.contracts import (
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    ToolResult,
+    ToolScopes,
+    ToolStatus,
+)
 
 WAIT_TOOL = "aur.builtin.wait"
 _MAX_WAIT_SECONDS = 60.0
@@ -42,6 +49,9 @@ class WaitTool:
     async def execute(self, call: ToolCall) -> ToolResult:
         seconds = call.arguments.get("seconds", 1.0)
         if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not 0 <= seconds <= _MAX_WAIT_SECONDS:
-            return ToolOutput(f"等待参数无效：seconds 必须是 0 到 {_MAX_WAIT_SECONDS:g} 之间的数字", is_error=True)
+            return ToolOutput(
+                f"等待参数无效：seconds 必须是 0 到 {_MAX_WAIT_SECONDS:g} 之间的数字",
+                status=ToolStatus.FAILED,
+            )
         await asyncio.sleep(float(seconds))
         return ToolOutput(f"已等待 {float(seconds):g} 秒")

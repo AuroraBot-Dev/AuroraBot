@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import json
 
-from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolResult, ToolScopes, WorldCommit, WorldJournal
+from src.contracts import (
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    ToolResult,
+    ToolScopes,
+    ToolStatus,
+    WorldCommit,
+    WorldJournal,
+)
 
 WORLD_READ_TOOL = "aur.serv.world.read"
 WORLD_TREES_TOOL = "aur.serv.world.trees"
@@ -63,16 +72,17 @@ class WorldReadTool:
     async def execute(self, call: ToolCall) -> ToolResult:
         scope = call.arguments.get("scope")
         if not isinstance(scope, str) or not scope.strip():
-            return ToolOutput("世界读取参数无效：scope 必须是非空字符串", is_error=True)
+            return ToolOutput("世界读取参数无效：scope 必须是非空字符串", status=ToolStatus.FAILED)
         after = _non_negative_int(call.arguments.get("after"), 0)
         limit = _bounded_int(call.arguments.get("limit"), 20, _MAX_READ_LIMIT)
         if after is None or limit is None:
             return ToolOutput(
-                "世界读取参数无效：after 必须是不小于 0 的整数，limit 必须在 1 到 100 之间", is_error=True
+                "世界读取参数无效：after 必须是不小于 0 的整数，limit 必须在 1 到 100 之间",
+                status=ToolStatus.FAILED,
             )
         kind = call.arguments.get("kind")
         if kind is not None and (not isinstance(kind, str) or not kind.strip()):
-            return ToolOutput("世界读取参数无效：kind 必须是非空字符串", is_error=True)
+            return ToolOutput("世界读取参数无效：kind 必须是非空字符串", status=ToolStatus.FAILED)
         commits = await self._journal.commits(scope, after, limit)
         if kind is not None:
             commits = tuple(item for item in commits if _kind_matches(item.kind, kind))
@@ -123,7 +133,10 @@ class WorldTreesTool:
     async def execute(self, call: ToolCall) -> ToolResult:
         limit = _bounded_int(call.arguments.get("limit"), 32, _MAX_TREES_LIMIT)
         if limit is None:
-            return ToolOutput(f"森林索引参数无效：limit 必须在 1 到 {_MAX_TREES_LIMIT} 之间", is_error=True)
+            return ToolOutput(
+                f"森林索引参数无效：limit 必须在 1 到 {_MAX_TREES_LIMIT} 之间",
+                status=ToolStatus.FAILED,
+            )
         activity = await self._journal.tree_index(limit)
         return ToolOutput(
             json.dumps(

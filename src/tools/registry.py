@@ -6,7 +6,12 @@ import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from src.contracts import DelegationRequest, ToolOutput, ToolScopes
+from src.contracts import (
+    DelegationRequest,
+    ToolOutput,
+    ToolScopes,
+    ToolStatus,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -69,11 +74,11 @@ class ToolRegistry:
         """唯一分派一次调用，并把执行器边界错误规范化。"""
         tool = self._tools.get(call.name)
         if tool is None:
-            return ToolOutput(f"未知工具：{call.name}", is_error=True)
+            return ToolOutput(f"未知工具：{call.name}", status=ToolStatus.FAILED)
         try:
             result = await tool.execute(call)
         except Exception as error:  # noqa: BLE001 - 工具异常必须成为可供 Agent 处理的确定结果
-            return ToolOutput(f"工具执行失败：{error}", is_error=True)
+            return ToolOutput(f"工具执行失败：{error}", status=ToolStatus.FAILED)
         if not isinstance(result, (ToolOutput, DelegationRequest)):
-            return ToolOutput(f"工具返回了无效结果：{call.name}", is_error=True)
+            return ToolOutput(f"工具返回了无效结果：{call.name}", status=ToolStatus.FAILED)
         return result

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import DelegationRequest, ToolCall, ToolDefinition, ToolOutput, ToolResult, ToolScopes
+from src.contracts import (
+    DelegationRequest,
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    ToolResult,
+    ToolScopes,
+    ToolStatus,
+)
 
 if TYPE_CHECKING:
     from src.agents import AgentCatalog
@@ -54,7 +62,7 @@ class DelegateTool:
             or not isinstance(instruction, str)
             or not instruction.strip()
         ):
-            return ToolOutput("委派参数无效：agent 和 instruction 必须是非空字符串", is_error=True)
+            return ToolOutput("委派参数无效：agent 和 instruction 必须是非空字符串", status=ToolStatus.FAILED)
         if agent not in self._agents.ids:
-            return ToolOutput(f"未知 Agent definition：{agent}", is_error=True)
+            return ToolOutput(f"未知 Agent definition：{agent}", status=ToolStatus.FAILED)
         return DelegationRequest(agent, instruction.strip())
