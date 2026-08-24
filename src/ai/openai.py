@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable
 
     from src.contracts import ChatMessage, ToolDefinition
 
@@ -72,7 +73,7 @@ def to_openai_tools(
             "function": {
                 "name": aliases[tool.name],
                 "description": tool.description,
-                "parameters": dict(tool.parameters),
+                "parameters": _thaw_json(tool.parameters),
             },
         }
         for tool in tools
@@ -86,3 +87,11 @@ def _openai_tool_name(name: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9_-]", _INVALID_NAME_REPLACEMENT, name).strip("_") or "tool"
     prefix_length = _PROVIDER_TOOL_NAME_MAX_LENGTH - len(digest) - len(_ALIAS_SEPARATOR)
     return f"{slug[:prefix_length]}{_ALIAS_SEPARATOR}{digest}"
+
+
+def _thaw_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw_json(item) for item in value]
+    return value
