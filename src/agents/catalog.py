@@ -5,6 +5,10 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
@@ -34,6 +38,7 @@ class AgentCatalog:
         self._definitions: Mapping[str, AgentDefinition] = MappingProxyType(
             {definition_id: by_id[definition_id] for definition_id in sorted(by_id)}
         )
+        _logger.info("Agent 目录已冻结 definition_count=%d", len(self._definitions))
 
     @property
     def definitions(self) -> tuple[AgentDefinition, ...]:

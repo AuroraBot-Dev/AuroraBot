@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
 
@@ -92,5 +96,8 @@ def compose(
     for key, instance in instances:
         context.provide(key, instance)
     for register in registrars:
+        _logger.debug("执行组件注册 registrar=%s", register.__module__)
         register(context)
-    return context.finish()
+    assembly = context.finish()
+    _logger.info("项目组件装配完成 instance_count=%d", len(assembly.names))
+    return assembly

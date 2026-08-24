@@ -1,9 +1,7 @@
 # 日志配置 — 进程日志级别与目录。
-#
-# 当前配置系统只读注册本文件，尚未配置进程日志输出。
 
 [logging]
 # 日志级别：DEBUG / INFO / WARNING / ERROR；级别越粗，文件越省
 level = "INFO"
-# 预留日志目录；相对项目根
+# 轮转日志目录；必须相对项目根，固定写入 aurora.log
 log_dir = "logs"

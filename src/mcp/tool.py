@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING
 from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolScopes, ToolStatus, mcp_scope
 from src.mcp.models import McpCallRejectedError, McpCallResult, McpCallUnknownError, McpRemoteTool
 from src.mcp.scopes import render_scope_template, validate_scope_template
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from src.mcp.client import McpClientPort
@@ -73,8 +76,10 @@ class McpTool:
     async def execute(self, call: ToolCall) -> ToolOutput:
         preflight = self._preflight(call)
         if preflight is not None:
+            _logger.warning("MCP Tool 预检失败 tool=%s call_id=%s", call.name, call.call_id)
             return preflight
         if not self._client.connected:
+            _logger.warning("MCP Tool 未发送 tool=%s call_id=%s reason=disconnected", call.name, call.call_id)
             return ToolOutput("MCP App 当前未连接，调用未发送", status=ToolStatus.FAILED)
         try:
             result = await self._client.call_tool(
@@ -85,15 +90,25 @@ class McpTool:
         except asyncio.CancelledError:
             raise
         except McpCallRejectedError as error:
+            _logger.warning("MCP Tool 被拒绝 tool=%s call_id=%s", call.name, call.call_id)
             return ToolOutput(str(error), status=ToolStatus.FAILED)
         except McpCallUnknownError as error:
+            _logger.warning("MCP Tool 效果未知 tool=%s call_id=%s", call.name, call.call_id)
             return ToolOutput(str(error), status=ToolStatus.UNKNOWN)
         except Exception as error:  # noqa: BLE001 - alternate client boundary must preserve unknown effects
+            _logger.error(
+                "MCP Tool 调用失败 tool=%s call_id=%s error_type=%s",
+                call.name,
+                call.call_id,
+                type(error).__name__,
+            )
             return ToolOutput(
                 f"MCP 调用结果无法确认：{type(error).__name__}: {error}",
                 status=ToolStatus.UNKNOWN,
             )
-        return _normalize_result(result)
+        output = _normalize_result(result)
+        _logger.debug("MCP Tool 完成 tool=%s call_id=%s status=%s", call.name, call.call_id, output.status.value)
+        return output
 
     def _preflight(self, call: ToolCall) -> ToolOutput | None:
         if call.name != self.definition.name:

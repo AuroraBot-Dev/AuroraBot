@@ -18,8 +18,11 @@ from src.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
+from src.utils import get_logger
 from src.world.migration import STEPS, TARGET_VERSION
 from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommitRow, WorldCommitScopeRow
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -54,6 +57,7 @@ class SqlAlchemyWorldJournal:
             async with self._engine.begin() as connection:
                 await connection.run_sync(self._create_or_migrate)
             self._initialized = True
+            _logger.info("WorldJournal 已初始化 schema_version=%d", TARGET_VERSION)
 
     @staticmethod
     def _create_or_migrate(connection: Connection) -> None:
@@ -74,6 +78,7 @@ class SqlAlchemyWorldJournal:
     async def close(self) -> None:
         await self._engine.dispose()
         self._initialized = False
+        _logger.info("WorldJournal 已关闭")
 
     async def append_event(self, event: EnvironmentEvent) -> WorldCommit:
         return await self.append_commit(
@@ -167,6 +172,7 @@ class SqlAlchemyWorldJournal:
                     )
                 )
             await session.flush()
+            _logger.debug("世界提交已追加 commit_count=%d", len(appended))
             return tuple(appended)
 
     @staticmethod

@@ -27,6 +27,9 @@ from src.contracts import (
     tree_scope,
 )
 from src.engine.world_effects import EngineWorldEffects, render_delta
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -72,6 +75,7 @@ class AgentTreeRunner:
         return self._tools.definitions
 
     async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:
+        _logger.info("AgentTree 开始 tree_id=%s root_id=%s", tree.tree_id, tree.root_id)
         self._validate_definitions(tree)
         if self._world is not None:
             await self._world.initialize()
@@ -80,6 +84,12 @@ class AgentTreeRunner:
         current = self._publish(tree, observer)
         for _ in range(self._max_steps):
             if current.status != TreeStatus.RUNNING:
+                _logger.info(
+                    "AgentTree 结束 tree_id=%s status=%s node_count=%d",
+                    current.tree_id,
+                    current.status.value,
+                    len(current.nodes),
+                )
                 return current
             node = current.ready_node()
             if node is None:
@@ -98,6 +108,7 @@ class AgentTreeRunner:
                 "step limit exceeded",
                 {"tree_id": current.tree_id, "max_steps": self._max_steps},
             )
+        _logger.error("AgentTree 超出步数限制 tree_id=%s max_steps=%d", current.tree_id, self._max_steps)
         raise RuntimeError(f"AgentTree exceeded step limit {self._max_steps}")
 
     @staticmethod
@@ -130,6 +141,13 @@ class AgentTreeRunner:
             self._assembler.assemble(tree, node.node_id, memory=memory),
             self._tools.definitions_for(node.tools),
         )
+        _logger.debug(
+            "模型步骤开始 tree_id=%s node_id=%s model=%s step=%d",
+            tree.tree_id,
+            node.node_id,
+            node.model,
+            step_index,
+        )
         if self._world is not None:
             assert self._world_effects is not None
             await self._world_effects.append_commit(
@@ -149,6 +167,13 @@ class AgentTreeRunner:
         try:
             response = await self._model.complete(request)
         except Exception as error:
+            _logger.error(
+                "模型步骤失败 tree_id=%s node_id=%s model=%s error_type=%s",
+                tree.tree_id,
+                node.node_id,
+                node.model,
+                type(error).__name__,
+            )
             if self._world is not None:
                 assert self._world_effects is not None
                 await self._world_effects.append_commit(
@@ -167,6 +192,7 @@ class AgentTreeRunner:
             return await self._fail_node(tree, node.node_id, f"model failed: {error}")
         if response.role != "assistant":
             reason = "model must return an assistant message"
+            _logger.error("模型响应角色无效 tree_id=%s node_id=%s role=%s", tree.tree_id, node.node_id, response.role)
             if self._world is not None:
                 assert self._world_effects is not None
                 await self._world_effects.append_commit(
@@ -201,6 +227,12 @@ class AgentTreeRunner:
                 },
             )
         tree = tree.append(node.node_id, response)
+        _logger.debug(
+            "模型步骤完成 tree_id=%s node_id=%s tool_call_count=%d",
+            tree.tree_id,
+            node.node_id,
+            len(response.tool_calls),
+        )
         if model_commit is not None:
             tree = tree.advance_frontier(node.node_id, WorldFrontier(model_commit.scopes))
         tree = self._publish(tree, observer)
@@ -318,6 +350,12 @@ class AgentTreeRunner:
         if tree.depth(node_id) >= self._max_depth:
             return tree, ToolOutput("AgentTree 已达到深度上限", status=ToolStatus.FAILED)
         spawned = tree.spawn(node_id, call, self._agents.get(request.agent), request.instruction)
+        _logger.info(
+            "AgentNode 已委派 tree_id=%s parent_id=%s child_agent=%s",
+            tree.tree_id,
+            node_id,
+            request.agent,
+        )
         if self._world is not None:
             assert self._world_effects is not None
             child = spawned.node(f"{tree.tree_id}:{len(tree.nodes)}")

@@ -16,6 +16,9 @@ from prompt_toolkit.shortcuts import clear as clear_terminal
 
 from src.console.models import TerminalControl
 from src.contracts import CONSOLE_INPUT, CONSOLE_SCOPE, WorldFrontier, WorldWriter
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -60,6 +63,7 @@ class TerminalConsole:
         output: Callable[[str], None] = print,
     ) -> None:
         stop = stop_event or asyncio.Event()
+        _logger.info("本地终端启动")
         output("AuroraBot 本地终端；输入 /help 查看操作。")
         prompt_reader = _PromptReader() if readline is None else None
         terminal_context = patch_stdout(raw=True) if prompt_reader is not None else contextlib.nullcontext()
@@ -67,14 +71,17 @@ class TerminalConsole:
             while not stop.is_set():
                 result, stopped = await _read_input_or_stop(prompt_reader, readline, stop)
                 if stopped:
+                    _logger.info("本地终端收到停止请求")
                     return
                 if result.closed:
+                    _logger.info("本地终端输入已关闭")
                     output("")
                     stop.set()
                     return
                 raw = (result.text or "").strip()
                 if not raw:
                     continue
+                _logger.debug("本地终端收到非空输入 input_type=%s", "operation" if raw.startswith("/") else "message")
                 if self._world is not None:
                     await self._world.append_commit(
                         commit_id=f"console:{uuid4().hex}",
@@ -87,6 +94,7 @@ class TerminalConsole:
                         occurred_at=datetime.now(UTC),
                     )
                 response = await dispatcher.dispatch_terminal(raw)
+                _logger.debug("本地终端分派完成 is_error=%s control=%s", response.is_error, response.control.value)
                 if response.control is TerminalControl.CLEAR:
                     _clear_console(prompt_reader, output)
                     continue
@@ -94,6 +102,7 @@ class TerminalConsole:
                     prefix = "Aurora! " if response.is_error else "Bot> "
                     output(f"{prefix}{response.text}")
                 if response.control is TerminalControl.SHUTDOWN:
+                    _logger.info("本地终端请求进程关闭")
                     stop.set()
                     return
 

@@ -143,3 +143,35 @@ def activity_dict(activity: TreeActivity) -> dict[str, Any]:
         "first_seen": activity.first_seen.isoformat(),
         "last_seen": activity.last_seen.isoformat(),
     }
+
+
+def utils_status() -> dict[str, Any]:
+    """返回无项目语义的共享工具能力目录。"""
+    return {
+        "logging": ["configure_logging", "configure_console_logging", "console_logging_status", "get_logger"],
+        "serialization": ["extract_json_from_text", "freeze_json", "thaw_json"],
+        "text": ["bounded_summary"],
+        "time": ["utc_now", "utc_today"],
+    }
+
+
+def contracts_status() -> dict[str, Any]:
+    """返回公共契约的稳定能力目录。"""
+    return {
+        "value_objects": [
+            "AgentDefinition",
+            "AgentNode",
+            "AgentTree",
+            "ChatMessage",
+            "ModelRequest",
+            "ToolCall",
+            "ToolDefinition",
+            "ToolOutput",
+            "WorldCommit",
+            "WorldCommitInput",
+            "WorldDeltaPage",
+            "WorldFrontier",
+            "WorldStreamPage",
+        ],
+        "ports": ["Model", "Tool", "ScopedTool", "WorldReader", "WorldWriter", "WorldJournal"],
+    }

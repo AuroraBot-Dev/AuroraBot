@@ -11,16 +11,16 @@ _ROOT = Path(__file__).parents[1]
 _ALLOWED_SRC_IMPORTS = {
     "utils": frozenset({"src.utils"}),
     "contracts": frozenset({"src.contracts"}),
-    "agents": frozenset({"src.agents", "src.contracts"}),
+    "agents": frozenset({"src.agents", "src.contracts", "src.utils"}),
     "prompt": frozenset({"src.contracts", "src.prompt"}),
-    "tools": frozenset({"src.agents", "src.contracts", "src.tools"}),
-    "ai": frozenset({"src.ai", "src.contracts"}),
-    "console": frozenset({"src.console", "src.contracts"}),
-    "cadence": frozenset({"src.cadence", "src.contracts"}),
-    "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools"}),
-    "memory": frozenset({"src.contracts", "src.memory"}),
-    "mcp": frozenset({"src.contracts", "src.mcp"}),
-    "world": frozenset({"src.contracts", "src.world"}),
+    "tools": frozenset({"src.agents", "src.contracts", "src.tools", "src.utils"}),
+    "ai": frozenset({"src.ai", "src.contracts", "src.utils"}),
+    "console": frozenset({"src.console", "src.contracts", "src.utils"}),
+    "cadence": frozenset({"src.cadence", "src.contracts", "src.utils"}),
+    "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools", "src.utils"}),
+    "memory": frozenset({"src.contracts", "src.memory", "src.utils"}),
+    "mcp": frozenset({"src.contracts", "src.mcp", "src.utils"}),
+    "world": frozenset({"src.contracts", "src.utils", "src.world"}),
 }
 _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 

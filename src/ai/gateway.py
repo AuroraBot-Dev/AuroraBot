@@ -13,6 +13,9 @@ import litellm
 
 from src.ai.openai import openai_tool_name_map, to_openai_messages, to_openai_tools
 from src.contracts import ChatMessage, ModelRequest, ToolCall
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 type CompletionCaller = Callable[[dict[str, Any]], Awaitable[object]]
 
@@ -83,8 +86,23 @@ class LiteLLMModelGateway:
             parameters["api_base"] = provider.base_url
         if request.tools:
             parameters["tools"] = to_openai_tools(request.tools, tool_names)
-        response = await self._caller(parameters)
-        return _assistant_message(_response_mapping(response), {alias: name for name, alias in tool_names.items()})
+        _logger.debug(
+            "模型请求开始 endpoint=%s message_count=%d tool_count=%d",
+            request.model,
+            len(request.messages),
+            len(request.tools),
+        )
+        try:
+            response = await self._caller(parameters)
+            result = _assistant_message(
+                _response_mapping(response),
+                {alias: name for name, alias in tool_names.items()},
+            )
+        except Exception as error:
+            _logger.error("模型请求失败 endpoint=%s error_type=%s", request.model, type(error).__name__)
+            raise
+        _logger.debug("模型请求完成 endpoint=%s tool_call_count=%d", request.model, len(result.tool_calls))
+        return result
 
 
 def _gateway_model(endpoint: ModelEndpoint, provider: ProviderEndpoint) -> str:

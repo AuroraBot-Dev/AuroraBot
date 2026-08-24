@@ -7,6 +7,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from src.contracts import TreeLauncher, TreeLaunchRequest, WorldCommit, WorldFrontier, WorldReader, WorldWriter
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 CADENCE_SCOPE = "aurora:cadence"
 CADENCE_TICK = "cadence.tick"
@@ -74,6 +77,7 @@ class Cadence:
     async def run(self, stop_event: asyncio.Event) -> None:
         self._cursor = await self._reader.cursor()
         self._next_tick = asyncio.get_running_loop().time() + self.tick_every.total_seconds()
+        _logger.info("Cadence 启动 cursor=%d evoke_every=%d", self._cursor, self.evoke_every)
         while not stop_event.is_set():
             if asyncio.get_running_loop().time() >= self._next_tick:
                 await self._submit_tick()
@@ -81,12 +85,14 @@ class Cadence:
             await self.evaluate_once()
             if not stop_event.is_set():
                 await asyncio.sleep(self.poll_interval)
+        _logger.info("Cadence 已停止 cursor=%d", self._cursor)
 
     async def evaluate_once(self) -> None:
         """消费一页新事件；最多执行一次唤起判断。"""
         page = await self._reader.stream(self._cursor, self.page_size)
         if not page.commits:
             return
+        _logger.debug("Cadence 消费世界提交 commit_count=%d has_more=%s", len(page.commits), page.has_more)
         for commit in page.commits:
             self._cursor = page.end
             if not self._counts(commit):
@@ -111,6 +117,7 @@ class Cadence:
             data={"occurred_at": now.isoformat()},
             occurred_at=now,
         )
+        _logger.debug("Cadence tick 已提交")
 
     async def _evoke(self, caused_by: WorldCommit) -> None:
         assert self._launcher is not None, "cadence launcher has not been bound"
@@ -138,7 +145,9 @@ class Cadence:
                     caused_by=caused_by.commit_id,
                 )
             )
+            _logger.info("Cadence 已唤起 AgentTree tree_id=%s", tree_id)
         except Exception as error:  # noqa: BLE001 - 节律后台不得因唤起失败而退出
+            _logger.error("Cadence 唤起失败 tree_id=%s error_type=%s", tree_id, type(error).__name__)
             await self._writer.append_commit(
                 commit_id=f"cadence:tree:{tree_id}:failed",
                 kind=CADENCE_TREE_FAILED,

@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from aurora.configuration.logging import LOGGING_CONFIG
+from src.utils import configure_console_logging, configure_logging
+
 if TYPE_CHECKING:
     import asyncio
+
+    from aurora.config import AuroraConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +22,14 @@ class InstalledSignal:
 
     candidate: signal.Signals
     previous: object
+
+
+def configure_project_logging(config: AuroraConfig) -> None:
+    """在其他运行时效果前应用项目日志配置。"""
+    settings = config.get(LOGGING_CONFIG)
+    logfile = config.project_root / settings.log_dir / "aurora.log"
+    configure_console_logging(enabled=True, level=settings.level)
+    configure_logging(settings.level, logfile)
 
 
 def install_stop_handlers(stop: asyncio.Event) -> tuple[InstalledSignal, ...]:

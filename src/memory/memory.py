@@ -6,6 +6,9 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from src.contracts import MemoryScopeSnapshot, MemorySnapshot, WorldReader
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 DEFAULT_MEMORY_WINDOW = timedelta(hours=1)
 DEFAULT_COMMITS_PER_SCOPE = 50
@@ -34,6 +37,7 @@ class Memory:
         observed_at = (now or datetime.now(UTC)).astimezone(UTC)
         window_start = observed_at - self._window
         scopes = await self._reader.active_scopes(window_start)
+        _logger.debug("Memory recall 开始 active_scope_count=%d", len(scopes))
         snapshots: list[MemoryScopeSnapshot] = []
         for scope in scopes:
             frontier = await self._reader.head(frozenset({scope}))
@@ -41,7 +45,9 @@ class Memory:
             after = max(0, head - self._commits_per_scope)
             commits = await self._reader.commits(scope, after, self._commits_per_scope)
             snapshots.append(MemoryScopeSnapshot(scope, head, commits))
-        return MemorySnapshot(window_start, tuple(snapshots))
+        snapshot = MemorySnapshot(window_start, tuple(snapshots))
+        _logger.debug("Memory recall 完成 scope_count=%d", len(snapshot.scopes))
+        return snapshot
 
     @staticmethod
     def render(snapshot: MemorySnapshot) -> str:

@@ -22,7 +22,12 @@ from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
-from aurora.runtime_support import install_stop_handlers, parse_event_time, restore_stop_handlers
+from aurora.runtime_support import (
+    configure_project_logging,
+    install_stop_handlers,
+    parse_event_time,
+    restore_stop_handlers,
+)
 from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
 from ops.contracts import OperationControl
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
@@ -33,6 +38,9 @@ from src.contracts import (
     WorldJournal,
 )
 from src.mcp import McpRuntime, prepare_mcp
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -103,6 +111,7 @@ class AuroraRuntime:
         tree = self.create_tree(message, tree_id=tree_id)
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
+        _logger.info("AgentTree 已提交 tree_id=%s", tree.tree_id)
         return await self.runner.run(tree, observer=self._record_tree)
 
     async def start_tree(self, message: str, *, tree_id: str | None = None) -> dict[str, Any]:
@@ -125,7 +134,9 @@ class AuroraRuntime:
     async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
         await self.world.initialize()
-        return runtime_views.commit_dict(await self.world.append_event(event))
+        commit = await self.world.append_event(event)
+        _logger.debug("环境事件已提交 event_id=%s kind=%s", event.event_id, event.kind)
+        return runtime_views.commit_dict(commit)
 
     async def submit_event_values(
         self,
@@ -182,6 +193,8 @@ class AuroraRuntime:
 
     async def dispatch_terminal(self, text: str) -> TerminalResponse:
         command = text.startswith("/")
+        input_type = "operation" if command else "message"
+        _logger.debug("终端输入开始 input_type=%s", input_type)
         result = (
             await self.ops.route_text(text) if command else await self.ops.execute("POST", "/trees", {"message": text})
         )
@@ -191,6 +204,7 @@ class AuroraRuntime:
             OperationControl.SHUTDOWN_PROCESS: TerminalControl.SHUTDOWN,
         }[result.control]
         rendered, tree_failed = runtime_views.terminal_text(result, command=command)
+        _logger.debug("终端输入完成 input_type=%s ok=%s code=%s", input_type, result.ok, result.code)
         return TerminalResponse(rendered, control, is_error=not result.ok or tree_failed)
 
     def runtime_status(self) -> dict[str, Any]:
@@ -298,32 +312,10 @@ class AuroraRuntime:
         }
 
     def utils_status(self) -> dict[str, Any]:
-        return {
-            "logging": ["configure_logging", "configure_console_logging", "console_logging_status", "get_logger"],
-            "serialization": ["extract_json_from_text", "freeze_json", "thaw_json"],
-            "text": ["bounded_summary"],
-            "time": ["utc_now", "utc_today"],
-        }
+        return runtime_views.utils_status()
 
     def contracts_status(self) -> dict[str, Any]:
-        return {
-            "value_objects": [
-                "AgentDefinition",
-                "AgentNode",
-                "AgentTree",
-                "ChatMessage",
-                "ModelRequest",
-                "ToolCall",
-                "ToolDefinition",
-                "ToolOutput",
-                "WorldCommit",
-                "WorldCommitInput",
-                "WorldDeltaPage",
-                "WorldFrontier",
-                "WorldStreamPage",
-            ],
-            "ports": ["Model", "Tool", "ScopedTool", "WorldReader", "WorldWriter", "WorldJournal"],
-        }
+        return runtime_views.contracts_status()
 
     def cadence_status(self) -> dict[str, Any]:
         return self.cadence.status()
@@ -446,6 +438,8 @@ async def run_project(
     mcp_factory: McpClientFactory | None = None,
 ) -> AuroraRuntime:
     """先冻结 MCP 工具目录，再组合运行时并让 Console 或停止事件拥有进程前台。"""
+    configure_project_logging(config)
+    _logger.info("Aurora runtime 启动 headless=%s", headless)
     world = build_world(config)
     mcp: McpRuntime | None = None
     try:
@@ -457,9 +451,12 @@ async def run_project(
             world=world,
             factory=mcp_factory,
         )
+        _logger.info("MCP 工具目录已冻结 app_count=%d tool_count=%d", len(mcp.snapshot().apps), len(mcp.tools))
         runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp)
         await mcp.activate()
-    except BaseException:
+        _logger.info("Aurora runtime 装配完成")
+    except BaseException as error:
+        _logger.error("Aurora runtime 启动失败 error_type=%s", type(error).__name__)
         if mcp is not None:
             with suppress(Exception):
                 await mcp.close()
@@ -480,6 +477,7 @@ async def run_project(
         else:
             await stop.wait()
     finally:
+        _logger.info("Aurora runtime 开始关闭")
         runtime.bind_stop_requester(None)
         try:
             restore_stop_handlers(installed)
@@ -491,4 +489,5 @@ async def run_project(
                 await mcp.close()
             finally:
                 await world.close()
+        _logger.info("Aurora runtime 已关闭")
     return runtime
