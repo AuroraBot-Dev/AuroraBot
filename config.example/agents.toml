@@ -12,20 +12,38 @@
 #         worker → reviewer / fast-worker；其余节点不展开代理树。
 
 [[agent]]
+id = "builtin.triage"
+description = "注意力初筛：判断眼前世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
+prompt = "builtin.triage"
+model = "fast"
+tools = ["aur.agent.delegate"]
+children = ["builtin.root", "builtin.fast-worker"]
+
+[[agent]]
+id = "builtin.fast-worker"
+description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
+prompt = "builtin.fast"
+model = "fast"
+tools = [
+    "aur.mcp.org.aurora.qq.qq_send_*message",
+    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
+    "aur.mcp.org.aurora.qq.qq_get_*",
+    "aur.mcp.org.aurora.qq.qq_mark_*",
+]
+children = []
+
+[[agent]]
 id = "builtin.root"
-description = "总代理：理解完整任务、整合结果；QQ 行动与执行工作委派给 worker 或 fast-worker，关键结论可交 reviewer 审阅。"
+description = "总代理：理解完整任务、整合结果。"
 prompt = "builtin.root"
 model = "quality"
 tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"]
-children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
-
-[[agent]]
-id = "builtin.triage"
-description = "注意力初筛：判断批量世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
-prompt = "builtin.triage"
-model = "quality"
-tools = ["aur.agent.delegate"]
-children = ["builtin.root", "builtin.fast-worker"]
+children = [
+    "builtin.fast-worker",
+    "builtin.chat",
+    "builtin.worker",
+    "builtin.reviewer",
+]
 
 [[agent]]
 id = "builtin.chat"
@@ -43,21 +61,13 @@ id = "builtin.worker"
 description = "通用执行者：掌握全部 QQ 工具与世界读取，深入完成边界明确的独立工作，可继续委派轻量任务或审阅。"
 prompt = "builtin.worker"
 model = "quality"
-tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees", "aur.mcp.org.aurora.qq.*"]
-children = ["builtin.reviewer", "builtin.fast-worker"]
-
-[[agent]]
-id = "builtin.fast-worker"
-description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
-prompt = "builtin.fast"
-model = "fast"
 tools = [
-    "aur.mcp.org.aurora.qq.qq_send_*message",
-    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
-    "aur.mcp.org.aurora.qq.qq_get_*",
-    "aur.mcp.org.aurora.qq.qq_mark_*",
+    "aur.agent.delegate",
+    "aur.serv.world.read",
+    "aur.serv.world.trees",
+    "aur.mcp.org.aurora.qq.*",
 ]
-children = []
+children = ["builtin.reviewer", "builtin.fast-worker"]
 
 [[agent]]
 id = "builtin.reviewer"
