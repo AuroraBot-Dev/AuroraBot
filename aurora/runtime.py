@@ -18,6 +18,7 @@ from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.mcp import MCP_RUNTIME, build_mcp_specs
 from aurora.composition.memory import MEMORY
 from aurora.composition.world import WORLD_JOURNAL, build_world
+from aurora.configuration import load_config
 from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
@@ -91,6 +92,7 @@ class AuroraRuntime:
             cadence=self,
             memory=self,
             mcp=self,
+            config_reload=self,
         )
 
     def create_tree(
@@ -284,6 +286,12 @@ class AuroraRuntime:
             return {"prompt_id": "system", "fragments": list(prompts.system)}
         content = prompts.agent_prompts.get(prompt_id)
         return {"prompt_id": prompt_id, "content": content} if content is not None else None
+
+    def reload_config(self) -> dict[str, Any]:
+        """重新解析全部个人 TOML 并替换运行时配置；不重组任何已装配实例。"""
+        config = load_config(self.config.project_root)
+        self.config = config
+        return {"names": config.names, "sources": [source.name for source in config.sources]}
 
     def model_catalog(self) -> dict[str, Any]:
         models = self.config.get(MODELS_CONFIG)

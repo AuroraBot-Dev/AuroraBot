@@ -80,6 +80,10 @@ class ConfigRuntimePort(Protocol):
     def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]: ...
 
 
+class ConfigReloadPort(Protocol):
+    def reload_config(self) -> dict[str, Any]: ...
+
+
 class ProcessRuntimePort(Protocol):
     def request_shutdown(self) -> None: ...
 
@@ -170,6 +174,7 @@ class OpsPorts:
     cadence: CadenceRuntimePort | None = None
     memory: MemoryRuntimePort | None = None
     mcp: McpRuntimePort | None = None
+    config_reload: ConfigReloadPort | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         AgentsRuntimePort,
         AiRuntimePort,
         CadenceRuntimePort,
+        ConfigReloadPort,
         ConfigRuntimePort,
         ConsoleRuntimePort,
         ContractsRuntimePort,
@@ -47,6 +48,7 @@ class OpsRuntime:
         cadence: CadenceRuntimePort | None = None,
         memory: MemoryRuntimePort | None = None,
         mcp: McpRuntimePort | None = None,
+        config_reload: ConfigReloadPort | None = None,
     ) -> None:
         self._router = OperationRouter(
             OpsPorts(
@@ -64,6 +66,7 @@ class OpsRuntime:
                 cadence,
                 memory,
                 mcp,
+                config_reload,
             )
         )
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from aurora import assemble_runtime, load_config
+from aurora.configuration.models import MODELS_CONFIG
 from ops import ConfigAccess, ConfigSourceRef
 from ops.contracts import OperationControl, OperationResult, OpsPorts
 from ops.parser import CommandParseError, coerce_value, split_text
@@ -20,6 +21,8 @@ if TYPE_CHECKING:
 
 _MIN_OPERATION_COUNT = 9
 _CADENCE_EVOKE_EVERY = 5
+_MODEL_OUTPUT_BUDGET_BEFORE = 51200
+_MODEL_OUTPUT_BUDGET_AFTER = 12345
 
 
 @dataclass(slots=True)
@@ -374,6 +377,39 @@ def test_config_mutation_ops_record_world_events(configured_project: Path) -> No
     assert unchanged.ok is True
     assert [commit.kind for commit in commits] == ["ops.config.changed"]
     assert commits[0].data["package"] == "org.aurora.clock"
+
+
+def test_config_reload_reparses_toml_and_swaps_runtime_config(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    models_path = configured_project / "config" / "models.toml"
+    updated = models_path.read_text(encoding="utf-8").replace(
+        f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_BEFORE}",
+        f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_AFTER}",
+    )
+    models_path.write_text(updated, encoding="utf-8")
+
+    assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_BEFORE
+
+    result = asyncio.run(runtime.ops.execute("POST", "/config/reload"))
+
+    assert result.ok is True
+    assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_AFTER
+    assert result.data is not None and "names" in result.data
+    commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
+    assert [commit.kind for commit in commits] == ["ops.config.reloaded"]
+
+
+def test_config_reload_failure_keeps_previous_config(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    before = runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens
+    models_path = configured_project / "config" / "models.toml"
+    models_path.write_text("max_output_tokens = 非法\n[models", encoding="utf-8")
+
+    result = asyncio.run(runtime.ops.route_text("/reload"))
+
+    assert result.ok is False
+    assert result.code == "CONFIG_ERROR"
+    assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == before
 
 
 def test_world_stream_and_commit_ops_follow_the_worldline(configured_project: Path) -> None:

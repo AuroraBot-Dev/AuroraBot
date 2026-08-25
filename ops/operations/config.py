@@ -44,6 +44,37 @@ async def read(context: OperationContext, params: dict[str, Any]) -> OperationRe
 
 @operation(
     "POST",
+    "/config/reload",
+    name="config.reload",
+    summary="重新解析全部个人 TOML 并替换运行时配置；不重组已装配实例",
+    aliases=("/reload",),
+)
+async def reload(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    port, missing = require_port(context.runtime.config_reload, "config_reload")
+    if missing is not None:
+        return missing
+    assert port is not None
+    try:
+        result = port.reload_config()
+    except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
+        return OperationResult.failure("CONFIG_ERROR", str(error))
+    world, missing_world = require_port(context.runtime.world, "world")
+    if missing_world is None:
+        assert world is not None
+        await world.record_event(
+            event_id=f"ops:config:reload:{uuid4().hex}",
+            kind="ops.config.reloaded",
+            source="ops",
+            summary="个人配置已重新加载",
+            scope="aurora:config",
+            data={"sources": list(result.get("sources", ()))},
+        )
+    return OperationResult.success(result)
+
+
+@operation(
+    "POST",
     "/apps/{package}/enabled",
     name="config.app_enabled",
     summary="修改一个应用的启用状态",
