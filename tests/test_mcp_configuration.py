@@ -63,7 +63,10 @@ def test_template_exports_typed_frozen_mcp_configuration(configured_project: Pat
     assert isinstance(app_configuration, AppsConfig)
     assert len(app_configuration.apps) == _EXPECTED_TEMPLATE_APPS
     assert all(isinstance(app, AppConfig) for app in app_configuration.apps)
-    assert all(app.enabled is False and app.event_mode == "disabled" for app in app_configuration.apps)
+    assert all(app.enabled is False for app in app_configuration.apps)
+    assert app_configuration.apps[0].event_mode == "disabled"
+    assert app_configuration.apps[1].event_mode == "disabled"
+    assert app_configuration.apps[2].event_mode == "world_events"
     assert app_configuration.apps[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
     assert platform_configuration == PlatformsConfig(McpPlatformConfig(enabled=True, terminal_logs=True))
 

@@ -217,6 +217,7 @@ def test_reactive_rule_launches_immediately_with_business_frontier_and_exact_cur
     assert request.caused_by == commit.commit_id
     assert request.frontier == WorldFrontier({"qq:private:42": 7})
     assert "在吗" in request.message
+    assert '"user_id":"42"' in request.message
     assert cadence.status()["cursor"] == 1
     assert cadence.status()["pending"] == 0
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -31,7 +32,7 @@ DEFAULT_TICK_EVERY = timedelta(hours=1)
 DEFAULT_POLL_INTERVAL = 0.25
 DEFAULT_PAGE_SIZE = 1
 DEFAULT_LAUNCH_MESSAGE = "节律唤起：请初筛最近一小时的世界活动。"
-_REACTIVE_MESSAGE_PREFIX = "即时会话事件：请只生成要发给对方的回复正文。"
+_REACTIVE_MESSAGE_PREFIX = "即时会话事件：可以只生成回复正文，也可以用发送工具按人类节奏分多条发送。"
 _MCP_SCOPE_PREFIX = "aurora:mcp:"
 
 
@@ -248,9 +249,11 @@ def _business_frontier(commit: WorldCommit) -> WorldFrontier:
 
 
 def _reactive_message(commit: WorldCommit) -> str:
+    event_data = commit.data.get("data")
     details = {
         "source": commit.source,
         "summary": commit.summary,
         "event_kind": commit.data.get("event_kind"),
+        "event_data": event_data if isinstance(event_data, Mapping) else {},
     }
     return f"{_REACTIVE_MESSAGE_PREFIX}\n{json.dumps(details, ensure_ascii=False, separators=(',', ':'))}"

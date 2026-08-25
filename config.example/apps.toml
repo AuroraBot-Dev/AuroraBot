@@ -40,4 +40,4 @@ working_dir = "extensions/apps/Aurora-QQ"
 command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
 env = ["AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG"]
 timeout_seconds = 60
-event_mode = "disabled"
+event_mode = "world_events"

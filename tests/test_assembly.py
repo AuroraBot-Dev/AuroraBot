@@ -223,16 +223,42 @@ def test_configuration_is_pure_data_until_composition_stages_run(configured_proj
     assert assembly.get(ENGINE_RUNNER) is not None
 
 
-def test_predefined_agents_can_share_prompt_with_different_models_and_tools(configured_project: Path) -> None:
-    agents = compose_project(load_config(configured_project), FakeModel()).get(AGENTS)
+def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_project: Path) -> None:
+    qq_tools = (
+        FakeTool("aur.mcp.org.aurora.qq.qq_send_private_message"),
+        FakeTool("aur.mcp.org.aurora.qq.qq_send_group_message"),
+        FakeTool("aur.mcp.org.aurora.qq.qq_send_forward_message"),
+        FakeTool("aur.mcp.org.aurora.qq.qq_get_chat_history"),
+        FakeTool("aur.mcp.org.aurora.qq.qq_mark_chat_read"),
+        FakeTool("aur.mcp.org.aurora.qq.qq_delete_friend"),
+    )
+    agents = compose_project(load_config(configured_project), FakeModel(), tools=qq_tools).get(AGENTS)
+    triage = agents.get("builtin.triage")
+    root = agents.get("builtin.root")
     worker = agents.get("builtin.worker")
     fast_worker = agents.get("builtin.fast-worker")
+    reviewer = agents.get("builtin.reviewer")
 
-    assert worker.prompt_id == fast_worker.prompt_id == "builtin.worker"
+    assert triage.tools == frozenset({"aur.agent.delegate"})
+    assert triage.children == frozenset({"builtin.root", "builtin.fast-worker"})
+    assert root.tools == frozenset({"aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"})
+    assert root.children == frozenset({"builtin.worker", "builtin.fast-worker", "builtin.reviewer"})
     assert worker.model == "quality"
+    assert worker.children == frozenset({"builtin.reviewer", "builtin.fast-worker"})
+    assert "aur.mcp.org.aurora.qq.qq_send_private_message" in worker.tools
+    assert "aur.mcp.org.aurora.qq.qq_delete_friend" in worker.tools
     assert fast_worker.model == "fast"
-    assert worker.tools == frozenset({"aur.agent.delegate"})
-    assert fast_worker.tools == frozenset()
+    assert fast_worker.prompt_id == "builtin.fast"
+    assert fast_worker.children == frozenset()
+    assert fast_worker.tools == frozenset(
+        {
+            "aur.mcp.org.aurora.qq.qq_send_private_message",
+            "aur.mcp.org.aurora.qq.qq_send_group_message",
+            "aur.mcp.org.aurora.qq.qq_get_chat_history",
+            "aur.mcp.org.aurora.qq.qq_mark_chat_read",
+        }
+    )
+    assert reviewer.tools == frozenset() and reviewer.children == frozenset()
 
 
 def test_composition_builds_configured_model_when_caller_does_not_inject_one(configured_project: Path) -> None:
