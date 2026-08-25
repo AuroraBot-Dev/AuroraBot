@@ -98,7 +98,7 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
         assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
         tree = next(iter(runtime._trees.values()))
         assert tree.node(tree.root_id).definition_id == "builtin.triage"
-        assert echoed == ["Cadence> done"]
+        assert echoed == ["Cadence> [builtin.triage] done"]
 
     asyncio.run(scenario())
 
@@ -112,7 +112,7 @@ def test_launch_tree_echoes_root_text_without_external_delivery(configured_proje
         result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="builtin.triage"))
         assert "delivery" not in result
         assert result["status"] == "completed"
-        assert echoed == ["Cadence> done"]
+        assert echoed == ["Cadence> [builtin.triage] done"]
 
     asyncio.run(scenario())
 

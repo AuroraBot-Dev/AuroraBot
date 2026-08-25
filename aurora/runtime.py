@@ -35,7 +35,6 @@ from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import (
     AgentTree,
     EnvironmentEvent,
-    TreeStatus,
     WorldFrontier,
     WorldJournal,
 )
@@ -133,15 +132,23 @@ class AuroraRuntime:
         )
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        completed = await self.runner.run(tree, observer=self._record_tree)
-        self._echo_tree_output(completed)
+        printed: dict[str, int] = {}
+
+        def observer(current: AgentTree) -> None:
+            self._record_tree(current)
+            self._echo_node_texts(current, printed)
+
+        completed = await self.runner.run(tree, observer=observer)
         return runtime_views.tree_dict(completed)
 
-    def _echo_tree_output(self, tree: AgentTree) -> None:
-        # TODO: 后续用 rich 把整棵树的文本输出与工具调用 trace 到终端
-        result = tree.node(tree.root_id).result
-        if tree.status is TreeStatus.COMPLETED and result and result.strip():
-            self.output(f"Cadence> {result}")
+    def _echo_node_texts(self, tree: AgentTree, printed: dict[str, int]) -> None:
+        # TODO: 后续用 rich 美化输出并加入工具调用 trace
+        for node in tree.nodes:
+            seen = printed.get(node.node_id, 0)
+            for message in node.messages[seen:]:
+                if message.role == "assistant" and message.content.strip():
+                    self.output(f"Cadence> [{node.definition_id}] {message.content}")
+            printed[node.node_id] = len(node.messages)
 
     async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
