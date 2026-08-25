@@ -4,7 +4,7 @@
 # 校验文件存在且非空，组合阶段校验每个 Agent definition 使用的 prompt 已定义。
 
 # 当前 PromptAssembler 的显式字符上界
-max_characters = 32000
+max_characters = 128000
 
 # 系统层：对所有 Agent 可见的公共文本
 [system]
