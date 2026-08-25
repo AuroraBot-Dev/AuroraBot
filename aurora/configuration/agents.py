@@ -21,7 +21,7 @@ class AgentConfig:
     description: str
     prompt: str
     model: str
-    tools: frozenset[str]
+    tools: tuple[str, ...]
     children: frozenset[str]
 
 
@@ -53,7 +53,7 @@ def _parse(path: Path) -> AgentsConfig:
                 text(item, "description"),
                 text(item, "prompt"),
                 text(item, "model"),
-                frozenset(strings(item, "tools")),
+                strings(item, "tools"),
                 frozenset(strings(item, "children")),
             )
             for raw in raw_definitions

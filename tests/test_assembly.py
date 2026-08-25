@@ -24,7 +24,15 @@ from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.utils.toml import load_toml, text
 from src.ai import LiteLLMModelGateway
-from src.contracts import MCP_EVENT_RECEIVED, ChatMessage, ModelRequest, TreeStatus
+from src.contracts import (
+    MCP_EVENT_RECEIVED,
+    ChatMessage,
+    ModelRequest,
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    TreeStatus,
+)
 
 EXPECTED_MAX_DEPTH = 4
 
@@ -110,16 +118,60 @@ def test_cadence_and_memory_instances_are_composed_and_configured(configured_pro
     assert memory is assembly.get(MEMORY)
 
 
+@dataclass(frozen=True, slots=True)
+class FakeTool:
+    name: str
+
+    @property
+    def definition(self) -> ToolDefinition:
+        return ToolDefinition(self.name, "外部工具", {"type": "object"})
+
+    async def execute(self, call: ToolCall) -> ToolOutput:
+        return ToolOutput("ok")
+
+
+def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    agents = configuration.get(AGENTS_CONFIG)
+    root = agents.definitions[0]
+    with_wildcard = configuration.with_value(
+        AGENTS_CONFIG,
+        AgentsConfig(
+            (
+                replace(
+                    root,
+                    tools=tuple(
+                        (*root.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")
+                    ),
+                ),
+                *agents.definitions[1:],
+            )
+        ),
+    )
+    assembly = compose_project(
+        with_wildcard,
+        FakeModel(),
+        tools=(
+            FakeTool("aur.mcp.org.aurora.qq.qq_send_private_message"),
+            FakeTool("aur.mcp.org.aurora.qq.qq_send_group_message"),
+        ),
+    )
+    root_definition = assembly.get(AGENTS).get("builtin.root")
+
+    assert "aur.mcp.org.aurora.qq.qq_send_private_message" in root_definition.tools
+    assert "aur.mcp.org.aurora.qq.qq_send_group_message" not in root_definition.tools
+
+
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     agents = configuration.get(AGENTS_CONFIG)
     root = agents.definitions[0]
     invalid = configuration.with_value(
         AGENTS_CONFIG,
-        AgentsConfig((replace(root, tools=frozenset({*root.tools, "aur.test.missing"})), *agents.definitions[1:])),
+        AgentsConfig((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents.definitions[1:])),
     )
 
-    with pytest.raises(ValueError, match="不可用工具"):
+    with pytest.raises(ValueError, match="引用了未注册名称"):
         assemble_runtime(invalid, FakeModel())
 
 
@@ -151,7 +203,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, tools=frozenset()), *agents.definitions[1:])),
+                AgentsConfig((replace(root, tools=()), *agents.definitions[1:])),
             ),
             FakeModel(),
         )
