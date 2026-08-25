@@ -193,7 +193,7 @@ def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
     project_root = Path(__file__).parents[1]
     shutil.copytree(project_root / "config.example", tmp_path / "config.example")
 
-    with pytest.raises(FileNotFoundError, match=r"config/runtime\.toml"):
+    with pytest.raises(FileNotFoundError, match=r"config[\\/]+runtime\.toml"):
         load_config(tmp_path)
 
 
