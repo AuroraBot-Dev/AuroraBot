@@ -34,6 +34,7 @@ class ModelRuntimeConfig:
     attempt_timeout_seconds: float
     max_attempts: int
     total_timeout_seconds: float
+    max_output_tokens: int
 
     def __post_init__(self) -> None:
         values = (self.attempt_timeout_seconds, self.total_timeout_seconds)
@@ -41,6 +42,10 @@ class ModelRuntimeConfig:
             raise ValueError("模型 attempt 与总超时必须是正数")
         if self.total_timeout_seconds < self.attempt_timeout_seconds:
             raise ValueError("模型总超时不能小于单次 attempt 超时")
+        if not isinstance(self.max_output_tokens, int) or isinstance(self.max_output_tokens, bool):
+            raise ValueError("模型输出预算必须是正整数")
+        if self.max_output_tokens <= 0:
+            raise ValueError("模型输出预算必须是正整数")
         object.__setattr__(self, "attempt_timeout_seconds", float(self.attempt_timeout_seconds))
         object.__setattr__(self, "total_timeout_seconds", float(self.total_timeout_seconds))
 
@@ -90,6 +95,7 @@ def _parse(path: Path) -> ModelsConfig:
             _positive_number(runtime, "attempt_timeout_seconds"),
             positive_integer(runtime, "max_attempts"),
             _positive_number(runtime, "total_timeout_seconds"),
+            positive_integer(runtime, "max_output_tokens"),
         ),
     )
 

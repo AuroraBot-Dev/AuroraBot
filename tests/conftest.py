@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +11,9 @@ import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+# 测试必须离线：禁止 LiteLLM 在导入时拉取远程费用表
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
 _ROOT = Path(__file__).parents[1]
 

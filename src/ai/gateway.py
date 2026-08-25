@@ -47,6 +47,7 @@ class LiteLLMModelGateway:
         timeout_seconds: float = 30.0,
         max_attempts: int = 2,
         total_timeout_seconds: float = 60.0,
+        max_tokens: int | None = None,
     ) -> None:
         if timeout_seconds <= 0 or total_timeout_seconds <= 0:
             raise ValueError("模型请求超时必须大于零")
@@ -54,12 +55,15 @@ class LiteLLMModelGateway:
             raise ValueError("模型请求最大尝试次数必须大于零")
         if total_timeout_seconds < timeout_seconds:
             raise ValueError("模型请求总超时不能小于单次尝试超时")
+        if max_tokens is not None and max_tokens <= 0:
+            raise ValueError("模型输出预算必须大于零")
         self._providers = MappingProxyType(dict(providers))
         self._endpoints = MappingProxyType(dict(endpoints))
         self._caller = caller or _litellm_completion
         self._timeout_seconds = timeout_seconds
         self._max_attempts = max_attempts
         self._total_timeout_seconds = total_timeout_seconds
+        self._max_tokens = max_tokens
 
     def validate_endpoint(self, endpoint_id: str) -> None:
         endpoint = self._endpoints.get(endpoint_id)
@@ -93,6 +97,8 @@ class LiteLLMModelGateway:
             "timeout": self._timeout_seconds,
             "max_retries": 0,
         }
+        if self._max_tokens is not None:
+            parameters["max_tokens"] = self._max_tokens
         if provider.adapter == "openai_compatible":
             parameters["api_base"] = provider.base_url
         if request.tools:

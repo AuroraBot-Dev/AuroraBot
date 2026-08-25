@@ -20,6 +20,7 @@ from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition
 PROVIDER_TOOL_NAME_MAX_LENGTH = 64
 MODEL_ATTEMPT_TIMEOUT_SECONDS = 0.1
 MODEL_MAX_ATTEMPTS = 2
+MODEL_OUTPUT_BUDGET = 51200
 
 
 def test_openai_adapter_maps_only_message_role_to_user() -> None:
@@ -295,3 +296,42 @@ def test_litellm_gateway_enforces_total_deadline(monkeypatch: pytest.MonkeyPatch
 
     with pytest.raises(TimeoutError, match="总截止时间"):
         asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))
+
+
+def test_litellm_gateway_passes_output_budget_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def caller(parameters: dict[str, Any]) -> dict[str, Any]:
+        calls.append(parameters)
+        return {"choices": [{"message": {"role": "assistant", "content": "收到", "tool_calls": []}}]}
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    model = LiteLLMModelGateway(
+        {"provider": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {"default": ModelEndpoint("provider", "model")},
+        caller=caller,
+        max_tokens=MODEL_OUTPUT_BUDGET,
+    )
+
+    asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))
+
+    assert calls[0]["max_tokens"] == MODEL_OUTPUT_BUDGET
+
+
+def test_litellm_gateway_omits_output_budget_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def caller(parameters: dict[str, Any]) -> dict[str, Any]:
+        calls.append(parameters)
+        return {"choices": [{"message": {"role": "assistant", "content": "收到", "tool_calls": []}}]}
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    model = LiteLLMModelGateway(
+        {"provider": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {"default": ModelEndpoint("provider", "model")},
+        caller=caller,
+    )
+
+    asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))
+
+    assert "max_tokens" not in calls[0]

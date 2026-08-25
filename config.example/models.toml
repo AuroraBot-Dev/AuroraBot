@@ -52,7 +52,9 @@ log_queries = false
 log_responses = false
 
 # 模型调用边界：关闭 Provider SDK 隐式重试，由 Aurora 在总截止时间内控制有限尝试
+# 单次尝试最长 90 秒、最多 2 轮；max_output_tokens 是传给 Provider 的生成输出预算
 [models.runtime]
-attempt_timeout_seconds = 30
+attempt_timeout_seconds = 90
 max_attempts = 2
-total_timeout_seconds = 60
+total_timeout_seconds = 180
+max_output_tokens = 51200

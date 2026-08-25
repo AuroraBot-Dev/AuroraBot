@@ -31,5 +31,6 @@ def register(context: CompositionContext) -> None:
             timeout_seconds=configuration.runtime.attempt_timeout_seconds,
             max_attempts=configuration.runtime.max_attempts,
             total_timeout_seconds=configuration.runtime.total_timeout_seconds,
+            max_tokens=configuration.runtime.max_output_tokens,
         )
     context.provide(MODEL, model)
