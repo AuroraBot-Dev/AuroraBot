@@ -11,6 +11,7 @@ from src.cadence.cadence import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_TICK_EVERY,
     Cadence,
+    ReactiveRule,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "DEFAULT_POLL_INTERVAL",
     "DEFAULT_TICK_EVERY",
     "Cadence",
+    "ReactiveRule",
 ]

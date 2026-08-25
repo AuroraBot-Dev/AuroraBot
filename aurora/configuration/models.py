@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import TomlTable, load_toml, table, text
+from aurora.utils.toml import TomlTable, load_toml, positive_integer, table, text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,9 +30,26 @@ class ModelEndpointConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelRuntimeConfig:
+    attempt_timeout_seconds: float
+    max_attempts: int
+    total_timeout_seconds: float
+
+    def __post_init__(self) -> None:
+        values = (self.attempt_timeout_seconds, self.total_timeout_seconds)
+        if any(not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0 for value in values):
+            raise ValueError("模型 attempt 与总超时必须是正数")
+        if self.total_timeout_seconds < self.attempt_timeout_seconds:
+            raise ValueError("模型总超时不能小于单次 attempt 超时")
+        object.__setattr__(self, "attempt_timeout_seconds", float(self.attempt_timeout_seconds))
+        object.__setattr__(self, "total_timeout_seconds", float(self.total_timeout_seconds))
+
+
+@dataclass(frozen=True, slots=True)
 class ModelsConfig:
     providers: Mapping[str, ProviderConfig]
     endpoints: Mapping[str, ModelEndpointConfig]
+    runtime: ModelRuntimeConfig
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "providers", MappingProxyType(dict(self.providers)))
@@ -65,7 +82,16 @@ def _parse(path: Path) -> ModelsConfig:
     unknown = {endpoint.provider for endpoint in endpoints.values()} - providers.keys()
     if unknown:
         raise ValueError(f"模型端点引用了未知 provider：{', '.join(sorted(unknown))}")
-    return ModelsConfig(providers, endpoints)
+    runtime = table(models, "runtime")
+    return ModelsConfig(
+        providers,
+        endpoints,
+        ModelRuntimeConfig(
+            _positive_number(runtime, "attempt_timeout_seconds"),
+            positive_integer(runtime, "max_attempts"),
+            _positive_number(runtime, "total_timeout_seconds"),
+        ),
+    )
 
 
 def _named_tables(document: TomlTable, key: str) -> dict[str, TomlTable]:
@@ -85,3 +111,10 @@ def _optional_text(document: TomlTable, key: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"配置字段 {key} 必须是非空文本")
     return value.strip()
+
+
+def _positive_number(document: TomlTable, key: str) -> float:
+    value = document.get(key)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"配置字段 {key} 必须是正数")
+    return float(value)

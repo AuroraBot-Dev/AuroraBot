@@ -135,7 +135,8 @@ class AgentTreeRunner:
     ) -> AgentTree:
         step_index = sum(message.role == "assistant" for message in node.messages)
         prefix = f"{tree.tree_id}:{node.node_id}:model:{step_index}"
-        memory = await self._memory.recall() if self._memory is not None else None
+        memory_scopes = frozenset(node.observed_frontier.positions) or None
+        memory = await self._memory.recall(scopes=memory_scopes) if self._memory is not None else None
         request = ModelRequest(
             node.model,
             self._assembler.assemble(tree, node.node_id, memory=memory),

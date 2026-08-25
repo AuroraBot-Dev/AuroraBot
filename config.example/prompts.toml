@@ -17,6 +17,7 @@ world = "prompts/WORLD.md"
 [agent_prompts]
 "builtin.triage" = "prompts/agents/triage.md"
 "builtin.fast" = "prompts/agents/fast.md"
+"builtin.chat" = "prompts/agents/chat.md"
 "builtin.root" = "prompts/agents/root.md"
 "builtin.worker" = "prompts/agents/worker.md"
 "builtin.reviewer" = "prompts/agents/reviewer.md"

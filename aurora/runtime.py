@@ -22,6 +22,7 @@ from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
+from aurora.output_delivery import deliver_reactive_output
 from aurora.runtime_support import (
     configure_project_logging,
     install_stop_handlers,
@@ -129,7 +130,13 @@ class AuroraRuntime:
         )
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        return runtime_views.tree_dict(await self.runner.run(tree, observer=self._record_tree))
+        completed = await self.runner.run(tree, observer=self._record_tree)
+        result = runtime_views.tree_dict(completed)
+        if request.caused_by is not None and completed.status.value == "completed":
+            delivery = await deliver_reactive_output(self.world, self.mcp, completed, request.caused_by)
+            if delivery is not None:
+                result["delivery"] = delivery
+        return result
 
     async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
@@ -453,7 +460,7 @@ async def run_project(
         )
         _logger.info("MCP 工具目录已冻结 app_count=%d tool_count=%d", len(mcp.snapshot().apps), len(mcp.tools))
         runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp)
-        await mcp.activate()
+        await _activate_runtime(runtime, mcp)
         _logger.info("Aurora runtime 装配完成")
     except BaseException as error:
         _logger.error("Aurora runtime 启动失败 error_type=%s", type(error).__name__)
@@ -491,3 +498,10 @@ async def run_project(
                 await world.close()
         _logger.info("Aurora runtime 已关闭")
     return runtime
+
+
+async def _activate_runtime(runtime: AuroraRuntime, mcp: McpRuntime) -> None:
+    """先固定 Cadence cursor，再放行 MCP 业务事件。"""
+    if runtime.cadence.enabled:
+        await runtime.cadence.initialize()
+    await mcp.activate()

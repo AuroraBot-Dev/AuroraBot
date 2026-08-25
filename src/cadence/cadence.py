@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from src.contracts import TreeLauncher, TreeLaunchRequest, WorldCommit, WorldFrontier, WorldReader, WorldWriter
+from src.contracts import (
+    MCP_EVENT_RECEIVED,
+    TreeLauncher,
+    TreeLaunchRequest,
+    WorldCommit,
+    WorldFrontier,
+    WorldReader,
+    WorldWriter,
+)
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
@@ -19,12 +29,39 @@ CADENCE_TREE_FAILED = "cadence.tree_failed"
 DEFAULT_EVOKE_EVERY = 5
 DEFAULT_TICK_EVERY = timedelta(hours=1)
 DEFAULT_POLL_INTERVAL = 0.25
-DEFAULT_PAGE_SIZE = 64
+DEFAULT_PAGE_SIZE = 1
 DEFAULT_LAUNCH_MESSAGE = "节律唤起：请初筛最近一小时的世界活动。"
+_REACTIVE_MESSAGE_PREFIX = "即时会话事件：请只生成要发给对方的回复正文。"
+_MCP_SCOPE_PREFIX = "aurora:mcp:"
+
+
+@dataclass(frozen=True, slots=True)
+class ReactiveRule:
+    """把已提交的外部事件匹配到一个即时会话 Agent。"""
+
+    source: str
+    event_kind: str
+    agent: str
+    contains_any: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not all((self.source.strip(), self.event_kind.strip(), self.agent.strip())):
+            raise ValueError("ReactiveRule requires source, event_kind and agent")
+        terms = tuple(term.strip() for term in self.contains_any)
+        if any(not term for term in terms):
+            raise ValueError("ReactiveRule contains_any must not contain empty text")
+        object.__setattr__(self, "contains_any", terms)
+
+    def matches(self, commit: WorldCommit) -> bool:
+        if commit.kind != MCP_EVENT_RECEIVED or commit.source != self.source:
+            return False
+        if commit.data.get("event_kind") != self.event_kind:
+            return False
+        return not self.contains_any or any(term in commit.summary for term in self.contains_any)
 
 
 class Cadence:
-    """每 ``evoke_every`` 个非 engine 世界提交唤起一棵树，并按固定节律提交 tick。"""
+    """即时规则按提交唤起会话树，未匹配事件按阈值唤起批量树，并按固定节律提交 tick。"""
 
     def __init__(
         self,
@@ -38,13 +75,14 @@ class Cadence:
         tick_every: timedelta = DEFAULT_TICK_EVERY,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         page_size: int = DEFAULT_PAGE_SIZE,
+        reactive_rules: tuple[ReactiveRule, ...] = (),
     ) -> None:
         if evoke_every <= 0:
             raise ValueError("evoke_every must be positive")
         if tick_every <= timedelta(0):
             raise ValueError("tick_every must be positive")
-        if poll_interval <= 0 or page_size <= 0:
-            raise ValueError("poll_interval and page_size must be positive")
+        if poll_interval <= 0 or page_size != 1:
+            raise ValueError("poll_interval must be positive and page_size must equal one")
         self._reader = reader
         self._writer = writer
         self._launcher = launcher
@@ -54,9 +92,11 @@ class Cadence:
         self.tick_every = tick_every
         self.poll_interval = poll_interval
         self.page_size = page_size
+        self.reactive_rules = tuple(reactive_rules)
         self._cursor = 0
         self._pending = 0
         self._next_tick = 0.0
+        self._initialized = False
 
     def bind_launcher(self, launcher: TreeLauncher) -> None:
         self._launcher = launcher
@@ -71,12 +111,20 @@ class Cadence:
             "tick_seconds": int(self.tick_every.total_seconds()),
             "poll_seconds": self.poll_interval,
             "page_size": self.page_size,
+            "reactive_rule_count": len(self.reactive_rules),
             "next_tick": self._next_tick,
         }
 
-    async def run(self, stop_event: asyncio.Event) -> None:
+    async def initialize(self) -> None:
+        """在外部事件入口激活前固定起始 cursor，避免启动窗口漏事件。"""
+        if self._initialized:
+            return
         self._cursor = await self._reader.cursor()
         self._next_tick = asyncio.get_running_loop().time() + self.tick_every.total_seconds()
+        self._initialized = True
+
+    async def run(self, stop_event: asyncio.Event) -> None:
+        await self.initialize()
         _logger.info("Cadence 启动 cursor=%d evoke_every=%d", self._cursor, self.evoke_every)
         while not stop_event.is_set():
             if asyncio.get_running_loop().time() >= self._next_tick:
@@ -89,21 +137,37 @@ class Cadence:
 
     async def evaluate_once(self) -> None:
         """消费一页新事件；最多执行一次唤起判断。"""
-        page = await self._reader.stream(self._cursor, self.page_size)
-        if not page.commits:
-            return
-        _logger.debug("Cadence 消费世界提交 commit_count=%d has_more=%s", len(page.commits), page.has_more)
-        for commit in page.commits:
+        while True:
+            page = await self._reader.stream(self._cursor, self.page_size)
+            if not page.commits:
+                return
+            if len(page.commits) != 1:
+                raise RuntimeError("Cadence stream page 必须恰好包含一条提交")
+            commit = page.commits[0]
             self._cursor = page.end
+            rule = next((candidate for candidate in self.reactive_rules if candidate.matches(commit)), None)
+            if rule is not None:
+                await self._evoke(
+                    commit,
+                    agent=rule.agent,
+                    message=_reactive_message(commit),
+                    frontier=_business_frontier(commit),
+                    mode="reactive",
+                )
+                return
             if not self._counts(commit):
                 continue
             self._pending += 1
             if self._pending >= self.evoke_every:
                 self._pending = 0
-                await self._evoke(commit)
+                await self._evoke(
+                    commit,
+                    agent=self.agent,
+                    message=DEFAULT_LAUNCH_MESSAGE,
+                    frontier=WorldFrontier(),
+                    mode="batch",
+                )
                 return
-        if page.has_more:
-            await self.evaluate_once()
 
     async def _submit_tick(self) -> None:
         now = datetime.now(UTC)
@@ -119,7 +183,15 @@ class Cadence:
         )
         _logger.debug("Cadence tick 已提交")
 
-    async def _evoke(self, caused_by: WorldCommit) -> None:
+    async def _evoke(
+        self,
+        caused_by: WorldCommit,
+        *,
+        agent: str | None,
+        message: str,
+        frontier: WorldFrontier,
+        mode: str,
+    ) -> None:
         assert self._launcher is not None, "cadence launcher has not been bound"
         tree_id = f"cadence:{uuid4().hex}"
         try:
@@ -132,16 +204,18 @@ class Cadence:
                 based_on=await self._frontier(),
                 data={
                     "tree_id": tree_id,
-                    "agent": self.agent,
+                    "agent": agent,
                     "caused_by": caused_by.commit_id,
                     "evoke_every": self.evoke_every,
+                    "mode": mode,
                 },
             )
             await self._launcher.launch_tree(
                 TreeLaunchRequest(
-                    DEFAULT_LAUNCH_MESSAGE,
+                    message,
                     tree_id=tree_id,
-                    agent=self.agent,
+                    agent=agent,
+                    frontier=frontier,
                     caused_by=caused_by.commit_id,
                 )
             )
@@ -157,13 +231,26 @@ class Cadence:
                 based_on=await self._frontier(),
                 data={"tree_id": tree_id, "error": str(error)},
             )
-        finally:
-            # 跳过本次唤起产生的 engine 事件，避免树活动重新触发下一棵树。
-            self._cursor = await self._reader.cursor()
 
     async def _frontier(self) -> WorldFrontier:
         return await self._reader.head(frozenset({CADENCE_SCOPE}))
 
     @staticmethod
     def _counts(commit: WorldCommit) -> bool:
-        return not commit.kind.startswith("engine.")
+        return commit.kind == MCP_EVENT_RECEIVED
+
+
+def _business_frontier(commit: WorldCommit) -> WorldFrontier:
+    positions = {
+        scope: sequence for scope, sequence in commit.scopes.items() if not scope.startswith(_MCP_SCOPE_PREFIX)
+    }
+    return WorldFrontier(positions or commit.scopes)
+
+
+def _reactive_message(commit: WorldCommit) -> str:
+    details = {
+        "source": commit.source,
+        "summary": commit.summary,
+        "event_kind": commit.data.get("event_kind"),
+    }
+    return f"{_REACTIVE_MESSAGE_PREFIX}\n{json.dumps(details, ensure_ascii=False, separators=(',', ':'))}"

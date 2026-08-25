@@ -18,6 +18,8 @@ from src.ai import (
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition
 
 PROVIDER_TOOL_NAME_MAX_LENGTH = 64
+MODEL_ATTEMPT_TIMEOUT_SECONDS = 0.1
+MODEL_MAX_ATTEMPTS = 2
 
 
 def test_openai_adapter_maps_only_message_role_to_user() -> None:
@@ -243,3 +245,53 @@ def test_litellm_gateway_requires_secret_without_calling_network(monkeypatch: py
 
     with pytest.raises(RuntimeError, match="环境变量"):
         asyncio.run(model.complete(request))
+
+
+def test_litellm_gateway_disables_sdk_retries_and_bounds_aurora_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def caller(parameters: dict[str, Any]) -> dict[str, Any]:
+        calls.append(parameters)
+        if len(calls) == 1:
+            raise TimeoutError("first attempt stalled")
+        return {"choices": [{"message": {"role": "assistant", "content": "恢复了", "tool_calls": []}}]}
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    model = LiteLLMModelGateway(
+        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid", "TEST_MODEL_KEY")},
+        {"default": ModelEndpoint("provider", "model")},
+        caller=caller,
+        timeout_seconds=MODEL_ATTEMPT_TIMEOUT_SECONDS,
+        max_attempts=MODEL_MAX_ATTEMPTS,
+        total_timeout_seconds=0.2,
+    )
+
+    response = asyncio.run(
+        model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好"))))
+    )
+
+    assert response.content == "恢复了"
+    assert len(calls) == MODEL_MAX_ATTEMPTS
+    assert all(call["max_retries"] == 0 for call in calls)
+    assert all(call["timeout"] == MODEL_ATTEMPT_TIMEOUT_SECONDS for call in calls)
+
+
+def test_litellm_gateway_enforces_total_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def caller(_parameters: dict[str, Any]) -> dict[str, Any]:
+        await asyncio.Event().wait()
+        raise AssertionError("不可达")
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    model = LiteLLMModelGateway(
+        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid", "TEST_MODEL_KEY")},
+        {"default": ModelEndpoint("provider", "model")},
+        caller=caller,
+        timeout_seconds=0.02,
+        max_attempts=3,
+        total_timeout_seconds=0.03,
+    )
+
+    with pytest.raises(TimeoutError, match="总截止时间"):
+        asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))

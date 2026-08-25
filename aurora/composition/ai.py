@@ -28,5 +28,8 @@ def register(context: CompositionContext) -> None:
                 endpoint_id: ModelEndpoint(endpoint.provider, endpoint.model)
                 for endpoint_id, endpoint in configuration.endpoints.items()
             },
+            timeout_seconds=configuration.runtime.attempt_timeout_seconds,
+            max_attempts=configuration.runtime.max_attempts,
+            total_timeout_seconds=configuration.runtime.total_timeout_seconds,
         )
     context.provide(MODEL, model)

@@ -31,6 +31,10 @@ TOOL_FAILED = "tool.failed"
 TOOL_UNKNOWN = "tool.unknown"
 OUTPUT_REQUESTED = "output.requested"
 OUTPUT_COMMITTED = "output.committed"
+OUTPUT_DELIVERY_REQUESTED = "output.delivery.requested"
+OUTPUT_DELIVERY_SUCCEEDED = "output.delivery.succeeded"
+OUTPUT_DELIVERY_FAILED = "output.delivery.failed"
+OUTPUT_DELIVERY_UNKNOWN = "output.delivery.unknown"
 WORLD_DELTA_DELIVERED = "engine.world.delta_delivered"
 CONSOLE_INPUT = "console.input"
 MCP_APP_STARTING = "mcp.app.starting"
@@ -247,7 +251,12 @@ class WorldReader(Protocol):
 class MemoryReader(Protocol):
     """按活跃 scope 提供世界记忆快照的只读端口。"""
 
-    async def recall(self, *, now: datetime | None = None) -> MemorySnapshot: ...
+    async def recall(
+        self,
+        *,
+        now: datetime | None = None,
+        scopes: frozenset[str] | None = None,
+    ) -> MemorySnapshot: ...
 
 
 class WorldWriter(Protocol):

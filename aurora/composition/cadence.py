@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from aurora.composer import InstanceKey
 from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration.cadence import CADENCE_CONFIG
-from src.cadence import Cadence
+from src.cadence import Cadence, ReactiveRule
 
 if TYPE_CHECKING:
     from aurora.composer import CompositionContext
@@ -29,5 +29,9 @@ def register(context: CompositionContext) -> None:
             evoke_every=configuration.evoke_every,
             tick_every=timedelta(seconds=configuration.tick_seconds),
             poll_interval=configuration.poll_seconds,
+            reactive_rules=tuple(
+                ReactiveRule(rule.source, rule.event_kind, rule.agent, rule.contains_any)
+                for rule in configuration.reactive
+            ),
         ),
     )

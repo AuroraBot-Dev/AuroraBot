@@ -24,7 +24,7 @@ from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.utils.toml import load_toml, text
 from src.ai import LiteLLMModelGateway
-from src.contracts import ChatMessage, ModelRequest, TreeStatus
+from src.contracts import MCP_EVENT_RECEIVED, ChatMessage, ModelRequest, TreeStatus
 
 EXPECTED_MAX_DEPTH = 4
 
@@ -67,12 +67,13 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
     async def scenario() -> None:
         await runtime.world.initialize()
         for index in range(5):
-            await runtime.submit_event_values(
+            await runtime.record_event(
                 event_id=f"event-{index}",
-                source="qq",
+                source="mcp:org.example.background",
                 scope="qq:group-cadence",
-                kind="message",
+                kind=MCP_EVENT_RECEIVED,
                 summary=f"第 {index + 1} 条消息",
+                data={"event_kind": "qq.notice.background"},
             )
         before = runtime.cadence_status()
         await runtime.cadence_trigger()
@@ -104,7 +105,7 @@ def test_cadence_and_memory_instances_are_composed_and_configured(configured_pro
     cadence = assembly.get(CADENCE)
     memory = assembly.get(MEMORY)
 
-    assert cadence.enabled is configuration.get(CADENCE_CONFIG).enabled is False
+    assert cadence.enabled is configuration.get(CADENCE_CONFIG).enabled is True
     assert cadence.agent == "builtin.triage"
     assert memory is assembly.get(MEMORY)
 

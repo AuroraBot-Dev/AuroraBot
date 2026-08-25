@@ -12,6 +12,14 @@ tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"]
 children = ["builtin.worker", "builtin.fast-worker", "builtin.reviewer"]
 
 [[agent]]
+id = "builtin.chat"
+description = "即时会话回复：只生成将由运行时投递回原会话的简短回复正文。"
+prompt = "builtin.chat"
+model = "fast"
+tools = []
+children = []
+
+[[agent]]
 id = "builtin.triage"
 description = "注意力初筛：判断最近世界事件是否值得处理，并选择进入根代理或快速通道。"
 prompt = "builtin.triage"

@@ -32,18 +32,25 @@ class Memory:
         self._window = window
         self._commits_per_scope = commits_per_scope
 
-    async def recall(self, *, now: datetime | None = None) -> MemorySnapshot:
+    async def recall(
+        self,
+        *,
+        now: datetime | None = None,
+        scopes: frozenset[str] | None = None,
+    ) -> MemorySnapshot:
         """返回最近窗口内每个活跃 scope 的最新提交（含完整 data 细节）。"""
         observed_at = (now or datetime.now(UTC)).astimezone(UTC)
         window_start = observed_at - self._window
-        scopes = await self._reader.active_scopes(window_start)
-        _logger.debug("Memory recall 开始 active_scope_count=%d", len(scopes))
+        active = await self._reader.active_scopes(window_start)
+        selected = active if scopes is None else tuple(scope for scope in active if scope in scopes)
+        _logger.debug("Memory recall 开始 active_scope_count=%d selected_scope_count=%d", len(active), len(selected))
         snapshots: list[MemoryScopeSnapshot] = []
-        for scope in scopes:
+        for scope in selected:
             frontier = await self._reader.head(frozenset({scope}))
             head = frontier.sequence(scope)
             after = max(0, head - self._commits_per_scope)
-            commits = await self._reader.commits(scope, after, self._commits_per_scope)
+            recent = await self._reader.commits(scope, after, self._commits_per_scope)
+            commits = tuple(commit for commit in recent if commit.occurred_at >= window_start)
             snapshots.append(MemoryScopeSnapshot(scope, head, commits))
         snapshot = MemorySnapshot(window_start, tuple(snapshots))
         _logger.debug("Memory recall 完成 scope_count=%d", len(snapshot.scopes))
