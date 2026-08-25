@@ -350,9 +350,10 @@ def test_run_project_orders_world_discovery_assembly_and_reverse_shutdown(
             *,
             world: WorldJournal | None = None,
             mcp: McpRuntime | None = None,
+            output: Callable[[str], None] = print,
         ) -> AuroraRuntime:
             trace.append("assembly")
-            return original_assemble(configuration, model, tools, world=world, mcp=mcp)
+            return original_assemble(configuration, model, tools, world=world, mcp=mcp, output=output)
 
         monkeypatch.setattr(runtime_module, "build_world", lambda _config: world)
         monkeypatch.setattr(runtime_module, "assemble_runtime", traced_assemble)
@@ -397,8 +398,9 @@ def test_run_project_closes_mcp_then_world_when_assembly_fails(
             *,
             world: WorldJournal | None = None,
             mcp: McpRuntime | None = None,
+            output: Callable[[str], None] = print,
         ) -> AuroraRuntime:
-            _ = configuration, model, tools, world, mcp
+            _ = configuration, model, tools, world, mcp, output
             trace.append("assembly")
             raise RuntimeError("组合失败")
 

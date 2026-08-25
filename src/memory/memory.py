@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.contracts import MemoryScopeSnapshot, MemorySnapshot, WorldReader
 from src.utils import get_logger
+from src.utils.patterns import pattern_matches
 
 _logger = get_logger(__name__)
 
@@ -23,6 +24,8 @@ class Memory:
         *,
         window: timedelta = DEFAULT_MEMORY_WINDOW,
         commits_per_scope: int = DEFAULT_COMMITS_PER_SCOPE,
+        scope_include: tuple[str, ...] = (),
+        scope_exclude: tuple[str, ...] = (),
     ) -> None:
         if window <= timedelta(0):
             raise ValueError("memory window must be positive")
@@ -31,6 +34,10 @@ class Memory:
         self._reader = reader
         self._window = window
         self._commits_per_scope = commits_per_scope
+        self._scope_include = tuple(scope_include)
+        self._scope_exclude = tuple(scope_exclude)
+        for entry in (*self._scope_include, *self._scope_exclude):
+            pattern_matches(entry, "")
 
     async def recall(
         self,
@@ -43,6 +50,7 @@ class Memory:
         window_start = observed_at - self._window
         active = await self._reader.active_scopes(window_start)
         selected = active if scopes is None else tuple(scope for scope in active if scope in scopes)
+        selected = self._filter_scopes(selected)
         _logger.debug("Memory recall 开始 active_scope_count=%d selected_scope_count=%d", len(active), len(selected))
         snapshots: list[MemoryScopeSnapshot] = []
         for scope in selected:
@@ -56,10 +64,22 @@ class Memory:
         _logger.debug("Memory recall 完成 scope_count=%d", len(snapshot.scopes))
         return snapshot
 
+    def _filter_scopes(self, scopes: tuple[str, ...]) -> tuple[str, ...]:
+        if not self._scope_include and not self._scope_exclude:
+            return scopes
+        kept: list[str] = []
+        for scope in scopes:
+            if self._scope_include and _last_match(self._scope_include, scope) is not True:
+                continue
+            if self._scope_exclude and _last_match(self._scope_exclude, scope) is True:
+                continue
+            kept.append(scope)
+        return tuple(kept)
+
     @staticmethod
     def render(snapshot: MemorySnapshot) -> str:
         """把记忆快照渲染为 PromptAssembler 的 system 片段。"""
-        lines = ["## 最近一小时的世界活动"]
+        lines = ["## 最近时间窗口内的世界活动"]
         lines.append(f"窗口起点：{snapshot.window_start.isoformat()}")
         for scope in snapshot.scopes:
             lines.append(f"### scope：{scope.scope}（head={scope.head}）")
@@ -68,6 +88,14 @@ class Memory:
                 if commit.data:
                     lines.append(f"  数据：{_compact_json(dict(commit.data))}")
         return "\n".join(lines)
+
+
+def _last_match(patterns: tuple[str, ...], scope: str) -> bool | None:
+    decision: bool | None = None
+    for entry in patterns:
+        if pattern_matches(entry, scope):
+            decision = not entry.startswith("!")
+    return decision
 
 
 def _compact_json(value: object) -> str:

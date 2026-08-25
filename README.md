@@ -23,7 +23,7 @@ message → model → assistant
 - 世界线总线：`WorldReader / WorldWriter / WorldJournal` 窄端口、per-scope 单调序号、全局连续事件流、观察前沿与 delta 分页披露；
 - Console 输入先作为 `console.input` 进入世界线，终端输出不入世界线；
 - `aur.serv.world.read` 世界正文读取、`aur.serv.world.trees` Bot 森林索引与 `aur.builtin.wait`；
-- 简化记忆：最近一小时有活动的 scope 各返回最新 50 条提交，经 PromptAssembler 注入 system；
+- 简化记忆：最近时间窗口内有活动的 scope 各返回最新有限条提交，支持 scope 白名单/黑名单过滤，经 PromptAssembler 注入 system；超长上下文确定性截断并标记 TODO；
 - 节律 cadence：每小时提交一次 `cadence.tick`，每 5 个非 engine 世界提交唤起一棵 triage AgentTree；
 - `builtin.triage` 与 `builtin.memory` 两个 Agent 特化预设；
 - 确定性的深度优先 AgentTree 循环；

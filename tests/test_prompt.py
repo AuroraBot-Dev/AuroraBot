@@ -42,11 +42,49 @@ def test_assembler_emits_one_system_then_node_transcript() -> None:
     assert messages[0].content == ("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
 
 
-def test_assembler_fails_visibly_when_context_is_too_large() -> None:
+def test_assembler_truncates_system_with_todo_tag_when_context_is_too_large() -> None:
     tree = AgentTree.create("tree", "root", _agent(), "hello")
+    limit = 10
 
-    with pytest.raises(ValueError, match="prompt exceeds character limit"):
-        _assembler(limit=10).assemble(tree, "root")
+    messages = _assembler(limit=limit).assemble(tree, "root")
+
+    assert len(messages) == 1
+    assert messages[0].role == "system"
+    assert "TODO" in messages[0].content
+    assert len(messages[0].content) <= limit
+
+
+def test_assembler_truncates_oldest_transcript_messages_with_todo_marker() -> None:
+    tree = AgentTree.create("tree", "root", _agent(), "很长的初始消息" * 20)
+    tree = tree.append("root", ChatMessage.assistant("较早的回复" * 20))
+    tree = tree.append("root", ChatMessage.message("最新的世界事实"))
+    system_size = len("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
+    tag = "TODO：上下文超过长度上限，较早消息已截断"
+
+    messages = _assembler(limit=system_size + len(tag) + len("最新的世界事实") + 20).assemble(tree, "root")
+
+    assert [message.role for message in messages] == ["system", "message", "message"]
+    assert messages[1].content == tag
+    assert messages[2].content == "最新的世界事实"
+    assert sum(len(message.content) for message in messages) <= system_size + len(tag) + len("最新的世界事实") + 20
+
+
+def test_assembler_truncation_never_leaves_orphan_tool_message() -> None:
+    tree = AgentTree.create("tree", "root", _agent(), "初始消息" * 10)
+    tree = tree.append(
+        "root",
+        ChatMessage.assistant(tool_calls=(ToolCall("call-1", "clock", {}),)),
+    )
+    tree = tree.append("root", ChatMessage.tool("call-1", "12:00"))
+    tree = tree.append("root", ChatMessage.assistant("最终回复"))
+    system_size = len("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
+    tag = "TODO：上下文超过长度上限，较早消息已截断"
+
+    messages = _assembler(limit=system_size + len(tag) + len("最终回复")).assemble(tree, "root")
+
+    assert [message.role for message in messages] == ["system", "message", "assistant"]
+    assert messages[1].content == tag
+    assert messages[2].content == "最终回复"
 
 
 def test_assembler_rejects_missing_agent_prompt() -> None:
@@ -72,7 +110,7 @@ def test_assembler_injects_memory_snapshot_into_system() -> None:
 
     messages = _assembler().assemble(tree, "root", memory=memory)
 
-    assert "最近一小时的世界活动" in messages[0].content
+    assert "最近时间窗口内的世界活动" in messages[0].content
     assert "scope：qq:group" in messages[0].content
     assert "有人发来消息" in messages[0].content
     assert '"message_id":1' in messages[0].content

@@ -1,0 +1,19 @@
+# 记忆召回配置 — 决定哪些世界 scope 的近期提交进入模型上下文。
+#
+# scope_include / scope_exclude 是有序的 gitignore 风格模式列表，按顺序求值：
+#   - `*` 匹配段内任意字符，`**` 单独成段匹配任意深度，`?` 匹配单个字符，支持 [a-z] 字符类；
+#   - `!` 前缀在列表内排除此前匹配的项，最后一条匹配的模式决定结果；
+#   - scope_include 非空时只召回匹配的 scope，为空表示全部允许；
+#   - scope_exclude 在 scope_include 结果上继续排除匹配的 scope。
+# scope 名是提交方声明的世界域，例如 aurora:mcp:org.aurora.qq、aurora:console、aurora:tree:<tree_id>。
+# 常见做法：include 只留业务 scope（如 "**" 加排除），或直接用 exclude 排除内部运行 scope。
+
+[memory]
+# 召回时间窗口（分钟）
+window_minutes = 60
+# 每个 scope 最多读取的最近提交数
+commits_per_scope = 50
+# 白名单；空数组 = 不限制
+scope_include = []
+# 黑名单；在 scope_include 结果上继续排除
+scope_exclude = []

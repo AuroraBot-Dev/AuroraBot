@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     "GET",
     "/memory",
     name="memory.snapshot",
-    summary="查看最近一小时活跃 scope 的最新提交记忆",
+    summary="查看最近时间窗口内活跃 scope 的最新提交记忆",
     aliases=("/memory",),
 )
 async def snapshot(context: OperationContext, params: dict[str, Any]) -> OperationResult:

@@ -23,7 +23,6 @@ from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
-from aurora.output_delivery import deliver_reactive_output
 from aurora.runtime_support import (
     configure_project_logging,
     install_stop_handlers,
@@ -36,6 +35,7 @@ from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import (
     AgentTree,
     EnvironmentEvent,
+    TreeStatus,
     WorldFrontier,
     WorldJournal,
 )
@@ -70,6 +70,7 @@ class AuroraRuntime:
     cadence: Cadence
     memory: Memory
     mcp: McpRuntime
+    output: Callable[[str], None] = field(default=print)
     _trees: dict[str, AgentTree] = field(default_factory=dict, init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
     ops: OpsRuntime = field(init=False)
@@ -133,12 +134,14 @@ class AuroraRuntime:
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
         completed = await self.runner.run(tree, observer=self._record_tree)
-        result = runtime_views.tree_dict(completed)
-        if request.caused_by is not None and completed.status.value == "completed":
-            delivery = await deliver_reactive_output(self.world, self.mcp, completed, request.caused_by)
-            if delivery is not None:
-                result["delivery"] = delivery
-        return result
+        self._echo_tree_output(completed)
+        return runtime_views.tree_dict(completed)
+
+    def _echo_tree_output(self, tree: AgentTree) -> None:
+        # TODO: 后续用 rich 把整棵树的文本输出与工具调用 trace 到终端
+        result = tree.node(tree.root_id).result
+        if tree.status is TreeStatus.COMPLETED and result and result.strip():
+            self.output(f"Cadence> {result}")
 
     async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
@@ -419,6 +422,7 @@ def assemble_runtime(
     *,
     world: WorldJournal | None = None,
     mcp: McpRuntime | None = None,
+    output: Callable[[str], None] = print,
 ) -> AuroraRuntime:
     """运行全部组件注册器，并取得完整运行时所需实例。"""
     instances: list[InstanceBinding] = []
@@ -438,6 +442,7 @@ def assemble_runtime(
         assembly.get(CADENCE),
         assembly.get(MEMORY),
         assembly.get(MCP_RUNTIME),
+        output=output,
     )
 
 
@@ -467,7 +472,7 @@ async def run_project(
             factory=mcp_factory,
         )
         _logger.info("MCP 工具目录已冻结 app_count=%d tool_count=%d", len(mcp.snapshot().apps), len(mcp.tools))
-        runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp)
+        runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp, output=output)
         await _activate_runtime(runtime, mcp)
         _logger.info("Aurora runtime 装配完成")
     except BaseException as error:

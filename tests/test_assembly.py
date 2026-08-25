@@ -20,6 +20,7 @@ from aurora.config import ConfigCollector, ConfigKey, collect_config
 from aurora.configuration.agents import AGENTS_CONFIG, AgentsConfig
 from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
+from aurora.configuration.memory import MEMORY_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.utils.toml import load_toml, text
@@ -31,10 +32,13 @@ from src.contracts import (
     ToolCall,
     ToolDefinition,
     ToolOutput,
+    TreeLaunchRequest,
     TreeStatus,
 )
 
 EXPECTED_MAX_DEPTH = 4
+EXPECTED_WINDOW_MINUTES = 60
+EXPECTED_COMMITS_PER_SCOPE = 50
 
 
 @dataclass(slots=True)
@@ -70,7 +74,8 @@ def test_project_configuration_builds_complete_runtime(configured_project: Path)
 
 def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configured_project: Path) -> None:
     model = FakeModel()
-    runtime = assemble_runtime(load_config(configured_project), model)
+    echoed: list[str] = []
+    runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
         await runtime.world.initialize()
@@ -90,9 +95,24 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
         assert runtime.runtime_status()["trees"]["completed"] == 1
         assert before["pending"] == 0 and after["pending"] == 0
         assert after["cursor"] > before["cursor"]
-        assert model.requests[0].messages[1].content == "节律唤起：请初筛最近一小时的世界活动。"
+        assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
         tree = next(iter(runtime._trees.values()))
         assert tree.node(tree.root_id).definition_id == "builtin.triage"
+        assert echoed == ["Cadence> done"]
+
+    asyncio.run(scenario())
+
+
+def test_launch_tree_echoes_root_text_without_external_delivery(configured_project: Path) -> None:
+    model = FakeModel()
+    echoed: list[str] = []
+    runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
+
+    async def scenario() -> None:
+        result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="builtin.triage"))
+        assert "delivery" not in result
+        assert result["status"] == "completed"
+        assert echoed == ["Cadence> done"]
 
     asyncio.run(scenario())
 
@@ -104,7 +124,7 @@ def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path
 
     asyncio.run(runtime.run("hello", tree_id="tree-memory"))
 
-    assert "最近一小时的世界活动" in model.requests[0].messages[0].content
+    assert "最近时间窗口内的世界活动" in model.requests[0].messages[0].content
 
 
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
@@ -112,10 +132,15 @@ def test_cadence_and_memory_instances_are_composed_and_configured(configured_pro
     assembly = compose_project(configuration, FakeModel())
     cadence = assembly.get(CADENCE)
     memory = assembly.get(MEMORY)
+    memory_config = configuration.get(MEMORY_CONFIG)
 
     assert cadence.enabled is configuration.get(CADENCE_CONFIG).enabled is True
     assert cadence.agent == "builtin.triage"
     assert memory is assembly.get(MEMORY)
+    assert memory_config.window_minutes == EXPECTED_WINDOW_MINUTES
+    assert memory_config.commits_per_scope == EXPECTED_COMMITS_PER_SCOPE
+    assert memory_config.scope_include == ()
+    assert memory_config.scope_exclude == ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,18 +158,19 @@ class FakeTool:
 def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     agents = configuration.get(AGENTS_CONFIG)
-    root = agents.definitions[0]
     with_wildcard = configuration.with_value(
         AGENTS_CONFIG,
         AgentsConfig(
-            (
+            tuple(
                 replace(
-                    root,
+                    item,
                     tools=tuple(
-                        (*root.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")
+                        (*item.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")
                     ),
-                ),
-                *agents.definitions[1:],
+                )
+                if item.definition_id == "builtin.root"
+                else item
+                for item in agents.definitions
             )
         ),
     )
@@ -242,7 +268,7 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
     assert triage.tools == frozenset({"aur.agent.delegate"})
     assert triage.children == frozenset({"builtin.root", "builtin.fast-worker"})
     assert root.tools == frozenset({"aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"})
-    assert root.children == frozenset({"builtin.worker", "builtin.fast-worker", "builtin.reviewer"})
+    assert root.children == frozenset({"builtin.worker", "builtin.fast-worker", "builtin.reviewer", "builtin.chat"})
     assert worker.model == "quality"
     assert worker.children == frozenset({"builtin.reviewer", "builtin.fast-worker"})
     assert "aur.mcp.org.aurora.qq.qq_send_private_message" in worker.tools

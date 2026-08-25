@@ -10,6 +10,8 @@ from src.contracts import AgentTree, ChatMessage, MemorySnapshot
 if TYPE_CHECKING:
     from src.prompt.models import PromptCatalog
 
+_TRUNCATION_TAG = "TODO：上下文超过长度上限，较早消息已截断"
+
 
 class PromptAssembler:
     """无 I/O、无记忆旁路的确定性提示词组装器。"""
@@ -37,21 +39,21 @@ class PromptAssembler:
             fragments.append(self._render_memory(memory))
         system = ChatMessage.system("\n\n".join((*fragments, agent_prompt)))
         messages = (system, *node.messages)
-        size = sum(
-            len(message.content)
-            + sum(
-                len(call.call_id) + len(call.name) + len(json.dumps(dict(call.arguments)))
-                for call in message.tool_calls
-            )
-            for message in messages
-        )
-        if size > self._max_characters:
-            raise ValueError(f"prompt exceeds character limit: {size} > {self._max_characters}")
-        return messages
+        if _total_size(messages) <= self._max_characters:
+            return messages
+        if len(system.content) + len(_TRUNCATION_TAG) > self._max_characters:
+            return (ChatMessage.system(_bounded(system.content, _TRUNCATION_TAG, self._max_characters)),)
+        kept = list(node.messages)
+        budget = self._max_characters - len(system.content) - len(_TRUNCATION_TAG)
+        while kept and _total_size(kept) > budget:
+            kept.pop(0)
+        while kept and kept[0].role == "tool":
+            kept.pop(0)
+        return (system, ChatMessage.message(_TRUNCATION_TAG), *kept)
 
     @staticmethod
     def _render_memory(memory: MemorySnapshot) -> str:
-        lines = ["## 最近一小时的世界活动", f"窗口起点：{memory.window_start.isoformat()}"]
+        lines = ["## 最近时间窗口内的世界活动", f"窗口起点：{memory.window_start.isoformat()}"]
         for scope in memory.scopes:
             lines.append(f"### scope：{scope.scope}（head={scope.head}）")
             for commit in scope.commits:
@@ -59,3 +61,19 @@ class PromptAssembler:
                 if commit.data:
                     lines.append(f"  数据：{json.dumps(dict(commit.data), ensure_ascii=False, separators=(',', ':'))}")
         return "\n".join(lines)
+
+
+def _message_size(message: ChatMessage) -> int:
+    return len(message.content) + sum(
+        len(call.call_id) + len(call.name) + len(json.dumps(dict(call.arguments))) for call in message.tool_calls
+    )
+
+
+def _total_size(messages: tuple[ChatMessage, ...] | list[ChatMessage]) -> int:
+    return sum(_message_size(message) for message in messages)
+
+
+def _bounded(content: str, tag: str, limit: int) -> str:
+    if len(tag) >= limit:
+        return tag[:limit]
+    return f"{content[: limit - len(tag)]}{tag}"

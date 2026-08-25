@@ -31,7 +31,7 @@ DEFAULT_EVOKE_EVERY = 5
 DEFAULT_TICK_EVERY = timedelta(hours=1)
 DEFAULT_POLL_INTERVAL = 0.25
 DEFAULT_PAGE_SIZE = 1
-DEFAULT_LAUNCH_MESSAGE = "节律唤起：请初筛最近一小时的世界活动。"
+DEFAULT_LAUNCH_MESSAGE = "节律唤起：请初筛最近时间窗口内的世界活动。"
 _REACTIVE_MESSAGE_PREFIX = "即时会话事件：可以只生成回复正文，也可以用发送工具按人类节奏分多条发送。"
 _MCP_SCOPE_PREFIX = "aurora:mcp:"
 
