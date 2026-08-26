@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from aurora.commands import about, check, config, donk, start
+from aurora.commands import about, check, config, donk, setup, start
 from aurora.main import build_parser, run
 from aurora.utils.environment import load_project_env
 from aurora.utils.process import run_process
@@ -17,6 +17,7 @@ FAILED_EXIT_CODE = 3
 EXPECTED_LINT_COMMANDS = 3
 INTERRUPTED_EXIT_CODE = 130
 CONFIG_ERROR_EXIT_CODE = 2
+SETUP_PYTHON_STEPS = 2
 
 
 def test_bare_cli_and_about_show_ascii_art_without_effects(capsys: pytest.CaptureFixture[str]) -> None:
@@ -35,12 +36,14 @@ def test_each_command_registers_its_own_executor() -> None:
     check_arguments = parser.parse_args([check.NAME])
     config_arguments = parser.parse_args([config.NAME, "list"])
     donk_arguments = parser.parse_args([donk.NAME, "show"])
+    setup_arguments = parser.parse_args([setup.NAME])
     start_arguments = parser.parse_args([start.NAME, "--headless"])
 
     assert about_arguments.executor is about.execute
     assert check_arguments.executor is check.execute
     assert config_arguments.executor is config.execute
     assert donk_arguments.executor is donk.execute
+    assert setup_arguments.executor is setup.execute
     assert start_arguments.executor is start.execute
     assert "显示帮助并退出" in parser.format_help()
 
@@ -208,6 +211,107 @@ def test_donk_preserves_failure_code(tmp_path: Path, monkeypatch: pytest.MonkeyP
     arguments = build_parser().parse_args(["--root", str(tmp_path), donk.NAME, "patch"])
 
     assert donk.execute(arguments) == FAILED_EXIT_CODE
+
+
+def test_setup_bootstraps_dependencies_submodules_and_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / "config.example" / "runtime.toml").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".env.example").write_text("DEEPSEEK_API_KEY=\n", encoding="utf-8")
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(setup, "run_process", fake_run)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
+
+    assert setup.execute(arguments) == 0
+    assert (tmp_path / "config" / "runtime.toml").read_text(encoding="utf-8") == "x = 1\n"
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "DEEPSEEK_API_KEY=\n"
+    assert calls == [
+        (("uv", "sync"), tmp_path),
+        (("git", "submodule", "update", "--init", "docs", "panel"), tmp_path),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "docs"),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "panel"),
+    ]
+
+
+def test_setup_keeps_existing_personal_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "runtime.toml").write_text("personal\n", encoding="utf-8")
+    (tmp_path / ".env.example").write_text("DEEPSEEK_API_KEY=\n", encoding="utf-8")
+    monkeypatch.setattr(setup, "run_process", lambda _command, _root: 0)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
+
+    assert setup.execute(arguments) == 0
+    assert (tmp_path / "config" / "runtime.toml").read_text(encoding="utf-8") == "personal\n"
+    assert "config/ 已存在" in capsys.readouterr().out
+
+
+def test_setup_keeps_existing_env_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / ".env").write_text("KEEP=1\n", encoding="utf-8")
+    monkeypatch.setattr(setup, "run_process", lambda _command, _root: 0)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
+
+    assert setup.execute(arguments) == 0
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "KEEP=1\n"
+    assert ".env 已存在" in capsys.readouterr().out
+
+
+def test_setup_reports_missing_config_template(tmp_path: Path) -> None:
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
+
+    assert setup.execute(arguments) == 1
+
+
+def test_setup_stops_on_first_failed_step(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / ".env.example").write_text("DEEPSEEK_API_KEY=\n", encoding="utf-8")
+    monkeypatch.setattr(setup, "run_process", lambda _command, _root: FAILED_EXIT_CODE)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
+
+    assert setup.execute(arguments) == 1
+    assert "同步 Python 依赖失败。" in capsys.readouterr().err
+
+
+def test_setup_skips_node_dependencies_without_pnpm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / ".env.example").write_text("DEEPSEEK_API_KEY=\n", encoding="utf-8")
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(setup, "run_process", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", lambda _name: None)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
+
+    assert setup.execute(arguments) == 0
+    assert len(calls) == SETUP_PYTHON_STEPS
+    assert "未找到 pnpm" in capsys.readouterr().err
 
 
 def test_process_boundary_reports_failure_and_interrupt(

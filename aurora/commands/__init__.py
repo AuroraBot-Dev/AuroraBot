@@ -5,6 +5,7 @@ from aurora.commands import (
     check,
     config,
     donk,
+    setup,
     start,
 )
 
@@ -14,6 +15,7 @@ COMMAND_REGISTRARS = (
     check.register,
     config.register,
     donk.register,
+    setup.register,
 )
 
 __all__ = ["COMMAND_REGISTRARS"]
