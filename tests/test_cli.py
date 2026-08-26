@@ -227,6 +227,7 @@ def test_setup_bootstraps_dependencies_submodules_and_config(
         return 0
 
     monkeypatch.setattr(setup, "run_process", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", lambda _name: "/usr/bin/pnpm")
     arguments = build_parser().parse_args(["--root", str(tmp_path), setup.NAME])
 
     assert setup.execute(arguments) == 0
