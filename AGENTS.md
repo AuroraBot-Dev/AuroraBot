@@ -19,7 +19,7 @@ aurora/         项目级入口、统一 Config/Composer、runtime 门面与 uti
 aurora/commands/       每个 CLI 命令一个注册模块
 aurora/configuration/  每个 TOML 一个解析与注册模块
 aurora/composition/    每个需构造实例的 src 子包一个注册模块
-ops/            统一 OperationSpec 目录、运行监测与限定配置改动
+ops/            统一 OperationSpec 目录、运行监测、限定配置改动与本地 Panel HTTP
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
 src/agents/     不可变 AgentDefinition 目录与唯一解析
@@ -32,7 +32,7 @@ src/world/      WorldJournal 唯一持久化实现与 migration
 src/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
 docs/           文档站点与唯一 RFC 子模块
-panel/          暂不参与当前 runtime 的独立前端子模块
+panel/          消费同一 ops 目录的独立前端子模块
 ```
 
 ## Core boundaries
@@ -57,8 +57,9 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 
 ## Current scope
 
-当前实现 ops、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start 生命周期，以及 WorldJournal 持久化与 migration；
-不实现自动记忆、Inbox、并发/抢占、通用 Platform、Panel backend、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
+当前实现 ops（含本地 Panel HTTP 后端与 Token 登录）、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start 生命周期，
+以及 WorldJournal 持久化与 migration；panel 子模块是消费同一 ops 目录的 Vue 前端；
+不实现 Panel 附件与 WebSocket、自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
 引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 
 ## Language and text
@@ -73,5 +74,5 @@ panel/          暂不参与当前 runtime 的独立前端子模块
 - Python 3.12，使用 uv。
 - Ruff 行宽 120，LF，双引号；公开 API 有类型注解；值对象优先 frozen + slots dataclass。
 - 主源码文件不超过 500 行；不以 lint ignore 掩盖核心复杂度。
-- 测试必须离线、确定、无数据库、无网络、无环境变量依赖；Model 和 Tool 使用 fake。
+- 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 与 Panel 会话的临时 SQLite 集成测试外不使用数据库。
 - 提交前运行 `uv run aurora check`。
