@@ -120,6 +120,10 @@ def coerce_value(value: object, parameter: ParameterSpec) -> object:
 
 
 def validate_params(spec: OperationSpec, params: dict[str, Any]) -> dict[str, Any]:
+    known = {parameter.name for parameter in spec.parameters}
+    unknown = sorted(set(params) - known)
+    if unknown:
+        raise CommandParseError(f"未知参数：{', '.join(unknown)}")
     normalized = dict(params)
     for parameter in spec.parameters:
         if parameter.name in normalized:

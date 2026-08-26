@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+import tomlkit
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -21,4 +22,12 @@ _ROOT = Path(__file__).parents[1]
 @pytest.fixture
 def configured_project(tmp_path: Path) -> Iterator[Path]:
     shutil.copytree(_ROOT / "config.example", tmp_path / "config")
+    _disable_panel(tmp_path)
     yield tmp_path
+
+
+def _disable_panel(root: Path) -> None:
+    path = root / "config" / "runtime.toml"
+    document = tomlkit.parse(path.read_text(encoding="utf-8"))
+    document["runtime"]["panel"]["enabled"] = False
+    path.write_text(tomlkit.dumps(document), encoding="utf-8")

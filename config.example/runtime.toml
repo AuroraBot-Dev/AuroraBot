@@ -12,13 +12,15 @@ node_id = "root"
 agent = "builtin.root"
 
 [runtime.panel]
-# 预留面板后端开关
+# 本地运维面板后端开关；关闭时只禁用 HTTP 接入，不影响 Console
 enabled = true
 # HTTP 绑定地址，必须为 loopback
 host = "127.0.0.1"
 # HTTP 端口，1–65535
 port = 8765
-# 允许的跨域来源（前端开发服务器，8764/8766 为面板前端左右护法）
+# 面板前端地址（open_browser 与终端登录提示使用），必须属于 allowed_origins
+frontend_url = "http://localhost:8766"
+# 允许的跨域来源（面板前端开发服务器）
 allowed_origins = [
     "http://localhost:8764",
     "http://127.0.0.1:8764",
@@ -29,8 +31,6 @@ allowed_origins = [
 open_browser = false
 # 会话超时（秒）
 session_ttl_seconds = 604800
-# 附件上传最大字节数，0 表示禁用附件
-max_upload_bytes = 67108864
 
 [runtime.console]
 # start 默认是否启动本地交互终端；--headless 可在单次启动中禁用

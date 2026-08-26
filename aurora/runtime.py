@@ -23,7 +23,10 @@ from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
+from aurora.configuration.storage import STORAGE_CONFIG
+from aurora.panel_runtime import PanelRuntime, close_panel, run_panel
 from aurora.runtime_support import (
+    InstalledSignal,
     configure_project_logging,
     install_stop_handlers,
     parse_event_time,
@@ -484,18 +487,22 @@ async def run_project(
         _logger.info("Aurora runtime 装配完成")
     except BaseException as error:
         _logger.error("Aurora runtime 启动失败 error_type=%s", type(error).__name__)
-        if mcp is not None:
-            with suppress(Exception):
-                await mcp.close()
-        with suppress(Exception):
-            await world.close()
+        await _close_failed_startup(mcp, world)
         raise
 
     stop = stop_event or asyncio.Event()
     cadence_task: asyncio.Task[None] | None = None
+    panel: PanelRuntime | None = None
     installed = ()
     try:
         runtime.bind_stop_requester(stop.set)
+        panel = await run_panel(
+            runtime.root.panel,
+            runtime.ops,
+            storage=config.get(STORAGE_CONFIG),
+            project_root=config.project_root,
+            profile=runtime.root.profile,
+        )
         if runtime.cadence.enabled:
             cadence_task = asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
         installed = install_stop_handlers(stop) if stop_event is None else ()
@@ -504,20 +511,40 @@ async def run_project(
         else:
             await stop.wait()
     finally:
-        _logger.info("Aurora runtime 开始关闭")
-        runtime.bind_stop_requester(None)
-        try:
-            restore_stop_handlers(installed)
-        finally:
-            if cadence_task is not None:
-                cadence_task.cancel()
-                await asyncio.gather(cadence_task, return_exceptions=True)
-            try:
-                await mcp.close()
-            finally:
-                await world.close()
-        _logger.info("Aurora runtime 已关闭")
+        await _shutdown_project(runtime, panel, cadence_task, installed, mcp, world)
     return runtime
+
+
+async def _close_failed_startup(mcp: McpRuntime | None, world: WorldJournal) -> None:
+    if mcp is not None:
+        with suppress(Exception):
+            await mcp.close()
+    with suppress(Exception):
+        await world.close()
+
+
+async def _shutdown_project(
+    runtime: AuroraRuntime,
+    panel: PanelRuntime | None,
+    cadence_task: asyncio.Task[None] | None,
+    installed: tuple[InstalledSignal, ...],
+    mcp: McpRuntime,
+    world: WorldJournal,
+) -> None:
+    _logger.info("Aurora runtime 开始关闭")
+    runtime.bind_stop_requester(None)
+    try:
+        restore_stop_handlers(installed)
+    finally:
+        await close_panel(panel)
+        if cadence_task is not None:
+            cadence_task.cancel()
+            await asyncio.gather(cadence_task, return_exceptions=True)
+        try:
+            await mcp.close()
+        finally:
+            await world.close()
+    _logger.info("Aurora runtime 已关闭")
 
 
 async def _activate_runtime(runtime: AuroraRuntime, mcp: McpRuntime) -> None:

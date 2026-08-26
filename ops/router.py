@@ -35,13 +35,16 @@ class OperationRouter:
                 return spec, params, False
         return None, None, True
 
-    async def execute(self, spec: OperationSpec, params: dict[str, Any]) -> OperationResult:
+    async def execute_resolved(self, spec: OperationSpec, params: dict[str, Any]) -> OperationResult:
         try:
             normalized = validate_params(spec, params)
         except CommandParseError as error:
             return OperationResult.failure("PARSE_ERROR", _with_usage(spec, str(error)))
         assert spec.handler is not None
         return await spec.handler(OperationContext(self._runtime), normalized)
+
+    async def execute(self, spec: OperationSpec, params: dict[str, Any]) -> OperationResult:
+        return await self.execute_resolved(spec, params)
 
     async def execute_path(self, method: str, path: str, params: dict[str, Any] | None = None) -> OperationResult:
         spec, path_params, mismatch = self.resolve(method, path)
@@ -51,7 +54,7 @@ class OperationRouter:
             return OperationResult.failure("NOT_FOUND", f"操作不存在：{path}")
         merged = {} if params is None else dict(params)
         merged.update(path_params or {})
-        return await self.execute(spec, merged)
+        return await self.execute_resolved(spec, merged)
 
     async def route_text(self, raw: str) -> OperationResult:
         try:
@@ -77,7 +80,7 @@ class OperationRouter:
             return OperationResult.success(message=usage(spec))
         except CommandParseError as error:
             return OperationResult.failure("PARSE_ERROR", _with_usage(spec, str(error)))
-        return await self.execute(spec, params)
+        return await self.execute_resolved(spec, params)
 
     @staticmethod
     def _compile(path: str) -> re.Pattern[str]:

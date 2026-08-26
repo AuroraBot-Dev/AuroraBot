@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ops.contracts import OperationResult, OpsPorts
+from ops.contracts import OperationResult, OperationSpec, OpsPorts
 from ops.registry import catalog_entries
 from ops.router import OperationRouter
 
@@ -76,6 +76,12 @@ class OpsRuntime:
 
     async def execute(self, method: str, path: str, params: dict[str, Any] | None = None) -> OperationResult:
         return await self._router.execute_path(method, path, params)
+
+    def resolve(self, method: str, path: str) -> tuple[OperationSpec | None, dict[str, str] | None, bool]:
+        return self._router.resolve(method, path)
+
+    async def execute_resolved(self, spec: OperationSpec, params: dict[str, Any]) -> OperationResult:
+        return await self._router.execute_resolved(spec, params)
 
     async def route_text(self, raw: str) -> OperationResult:
         return await self._router.route_text(raw)

@@ -10,7 +10,7 @@ engine = "engine"
 ai = "ai"
 memory = "memory"
 world = "world"
-# ops 面板后端私有数据目录（Token、会话与附件索引）
+# ops Panel 后端私有数据目录（bootstrap Token 与 session 摘要）
 ops = "ops"
 
 [storage.platform]

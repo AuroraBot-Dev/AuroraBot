@@ -30,6 +30,7 @@ message → model → assistant
 - 完整项目 TOML 与 Markdown Prompt 经显式注册合并为 `AuroraConfig`；
 - 每个需实例化的 `src` 子包通过独立 composition 模块接入组合根；
 - 同一操作资源目录提供 method/path 与斜杠文本入口；engine、config、agents、tools、prompt、ai、world、console、cadence、memory、MCP 均有 JSON 化 ops 路径；
+- 本地 Panel 后端：loopback HTTP、bootstrap Token 换限时 Bearer session、精确 Origin/Host 校验，Panel 前端与终端共用同一 ops 目录；
 - MCP Python SDK 2.x 客户端：支持 stdio 与 HTTPS Streamable HTTP、启动期完整发现并冻结 Tool 目录、运行期目录变化提示重启；
 - MCP Tool 进入统一 `aur.mcp.<package>.<raw_name>` 域；协商后的 `org.aurorabot/tool-contract` v1 把业务 scope
   模板接入普通 world frontier，并保留 Tool 成功、失败和效果未知契约；
@@ -38,7 +39,7 @@ message → model → assistant
 - `aurora start` 本地异步终端、`--headless` 和统一停止路径；
 - 全离线 fake Model/Tool 测试。
 
-当前范围不包含 Panel backend、sandbox、通用扩展平台，以及 MCP sampling、elicitation、roots、Tasks 和非文本结果注入。
+当前范围不包含 Panel 附件与 WebSocket、sandbox、通用扩展平台，以及 MCP sampling、elicitation、roots、Tasks 和非文本结果注入。
 
 ## 开发
 

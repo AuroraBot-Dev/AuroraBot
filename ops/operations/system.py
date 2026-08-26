@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     name="system.catalog",
     summary="列出全部可用操作",
     aliases=("/help", "/h"),
-    parameters=(ParameterSpec("detail", ParameterLocation.BODY, ParameterKind.FLAG, help="输出完整 JSON"),),
+    parameters=(ParameterSpec("detail", ParameterLocation.QUERY, ParameterKind.FLAG, help="输出完整 JSON"),),
 )
 async def catalog(context: OperationContext, params: dict[str, Any]) -> OperationResult:
     _ = context
