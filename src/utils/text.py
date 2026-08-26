@@ -13,4 +13,4 @@ def bounded_summary(summaries: Sequence[str], *, limit: int = 600) -> str:
     summary = "；".join(summaries)
     if len(summary) > limit:
         summary = summary[: limit - 1] + "…"
-    return summary or "Inbox event batch"
+    return summary or "暂无摘要"

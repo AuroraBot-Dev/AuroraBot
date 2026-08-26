@@ -1,25 +1,49 @@
-"""ai 域操作：模型网关只读观察。"""
+"""模型网关配置的只读监测操作。"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
+from ops.contracts import OperationResult, ParameterKind, ParameterLocation, ParameterSpec
+from ops.operations import require_port
 from ops.registry import operation
-from src.contracts import OperationResult
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from ops.contracts import OperationContext
 
 
-@operation("GET", "/ai/cost", name="ai.cost", aliases=("/cost",), summary="模型费用分类统计")
-async def ai_cost(context: Any, _params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success(await context.runtime.ai.cost())
+@operation(
+    "GET",
+    "/models",
+    name="ai.models",
+    summary="列出模型 provider 与 endpoint",
+    aliases=("/models",),
+)
+async def catalog(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    port, missing = require_port(context.runtime.ai, "ai")
+    if missing is not None:
+        return missing
+    assert port is not None
+    return OperationResult.success(port.model_catalog())
 
 
-@operation("GET", "/ai/models", name="ai.models", aliases=("/models",), summary="角色-模型绑定、能力与模态")
-async def ai_models(context: Any, _params: dict[str, Any]) -> OperationResult:
-    models = await context.runtime.ai.models()
-    return OperationResult.success({"models": models, "count": len(models)})
-
-
-@operation("GET", "/ai/roles", name="ai.roles", aliases=("/roles",), summary="角色目录")
-async def ai_roles(context: Any, _params: dict[str, Any]) -> OperationResult:
-    roles = context.runtime.ai.roles()
-    return OperationResult.success({"roles": roles, "count": len(roles)})
+@operation(
+    "GET",
+    "/models/{endpoint_id}",
+    name="ai.model",
+    summary="查看一个模型 endpoint",
+    aliases=("/model",),
+    parameters=(ParameterSpec("endpoint_id", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),),
+)
+async def detail(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.ai, "ai")
+    if missing is not None:
+        return missing
+    assert port is not None
+    result = port.model_detail(str(params["endpoint_id"]))
+    if result is None:
+        return OperationResult.failure("NOT_FOUND", f"模型 endpoint 不存在：{params['endpoint_id']}")
+    return OperationResult.success(result)

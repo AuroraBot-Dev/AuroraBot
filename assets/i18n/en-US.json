@@ -30,7 +30,7 @@
     "about": "Meet Aurora",
     "ways": "Connect",
     "start": "Get started",
-    "githubVersion": "GitHub · 0.5 alpha",
+    "githubVersion": "GitHub · 0.6 alpha",
     "languageLabel": "Switch language",
     "languageMenuLabel": "Choose a language",
     "themeLabel": "Toggle light and dark theme"
@@ -103,11 +103,11 @@
     "directoryCommand": "Set-Location AuroraBot",
     "syncCommand": "uv sync --no-dev",
     "envCommand": "Copy-Item .env.example .env",
-    "configComment": "# Add DEEPSEEK_API_KEY; disable Aurora-QQ in config/apps.toml if it is not installed",
+    "configComment": "# Copy config.example to personal config/, then inspect it with aurora config list/show",
     "runComment": "# Start the Console and default MCP Platform",
     "runCommand": "uv run --no-dev --env-file .env aurora start",
-    "previewLabel": "Nightly · 0.5 alpha",
-    "previewTitle": "Currently at 0.5 alpha.",
+    "previewLabel": "Nightly · 0.6 alpha",
+    "previewTitle": "Currently at 0.6 alpha.",
     "previewDescription": "Suited to local exploration, runtime research, and extension development. Degradable long-term memory is available; complete attachment understanding, sandbox and speech runtime support, stable MCP reconnect, data TTL and consistent backup, and public multi-tenant guarantees are not.",
     "boundaries": "See current boundaries"
   },

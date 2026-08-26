@@ -1,64 +1,43 @@
-"""实现 ``aurora donk`` 子命令。"""
+"""实现 ``aurora donk`` 版本管理命令"""
 
 from __future__ import annotations
 
-import tomllib
-from typing import TYPE_CHECKING, Any
+import sys
+from typing import TYPE_CHECKING
 
-import click
-from donk.main import cli as donk_cli
-
-from aurora.process import console
+from aurora.utils.environment import get_project_version
+from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
     import argparse
-    from pathlib import Path
 
 NAME = "donk"
+_SUBCOMMANDS = {
+    "show": "显示当前版本号",
+    "major": "升级主版本号",
+    "minor": "升级次版本号",
+    "patch": "升级修订版本号",
+}
 
 
-def _invoke(args: list[str]) -> int:
-    """在进程内调用 donk CLI，避免子进程 uv 环境解析开销。"""
-    try:
-        result = donk_cli.main(args=args, prog_name="donk", standalone_mode=False)
-    except click.ClickException as error:
-        console.print(f"[bold red]{error}[/bold red]")
-        return 1
-    return 0 if result is None else int(result)
-
-
-def _read_version(root: Path) -> str | None:
-    """读取 pyproject.toml 当前版本号，失败或不可用时返回 None。"""
-    try:
-        with (root / "pyproject.toml").open("rb") as file:
-            return str(tomllib.load(file)["project"]["version"])
-    except (OSError, KeyError, tomllib.TOMLDecodeError):
-        return None
-
-
-def register(subparsers: Any) -> None:
-    """向子解析器注册 donk 命令及其 show/major/minor/patch 子命令。"""
-    parser = subparsers.add_parser(NAME, help="自动版本管理")
-    sub = parser.add_subparsers(dest="donk_command", required=True)
-    sub.add_parser("show", help="显示当前版本号")
-    sub.add_parser("major", help="升级主版本号")
-    sub.add_parser("minor", help="升级次版本号")
-    sub.add_parser("patch", help="升级修订版本号")
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = subparsers.add_parser(NAME, help="管理项目版本号")
+    commands = parser.add_subparsers(dest="donk_command", required=True)
+    for name, help_text in _SUBCOMMANDS.items():
+        commands.add_parser(name, help=help_text)
     parser.set_defaults(executor=execute)
 
 
 def execute(arguments: argparse.Namespace) -> int:
-    """执行 donk 子命令的运行逻辑并输出版本更新结果。"""
-    subcommand = arguments.donk_command
-    pyproject = str((arguments.root / "pyproject.toml").resolve())
-    exit_code = _invoke([subcommand, pyproject])
+    subcommand = str(arguments.donk_command)
+    pyproject = (arguments.root / "pyproject.toml").resolve()
+    command = ("uv", "run", "--no-sync", "donk", subcommand, str(pyproject))
+    exit_code = run_process(command, arguments.root)
     if exit_code != 0:
-        console.print(f"[bold red]donk {subcommand} 执行失败[/bold red]")
+        sys.stderr.write(f"donk {subcommand} 执行失败。\n")
         return exit_code
-    version = _read_version(arguments.root)
-    if subcommand == "show":
-        if version:
-            console.print(f"[bold green]当前版本:[/bold green] [bold cyan]{version}[/bold cyan]")
-    elif version:
-        console.print(f"[bold green]版本已更新为:[/bold green] [bold cyan]{version}[/bold cyan]")
+    version = get_project_version(arguments.root)
+    if version is not None:
+        label = "当前版本" if subcommand == "show" else "版本已更新为"
+        sys.stdout.write(f"{label}：{version}\n")
     return 0

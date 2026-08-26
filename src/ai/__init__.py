@@ -1,8 +1,13 @@
-"""AI 模型网关公开 API。
+"""Provider 协议边界与 LiteLLM 模型网关。"""
 
-模型定价与能力以 models.dev 为第一信息源，数据缓存于 ``data/ai/`` 目录。
-"""
+from src.ai.gateway import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
+from src.ai.openai import openai_tool_name_map, to_openai_messages, to_openai_tools
 
-from src.ai.gateway import ModelGatewayService
-
-__all__ = ["ModelGatewayService"]
+__all__ = [
+    "LiteLLMModelGateway",
+    "ModelEndpoint",
+    "ProviderEndpoint",
+    "openai_tool_name_map",
+    "to_openai_messages",
+    "to_openai_tools",
+]

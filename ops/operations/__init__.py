@@ -1,5 +1,10 @@
-"""操作体系：RESTful 资源树与命令文本同构的操作目录。
+"""内建操作目录；各模块通过装饰器注册资源。"""
 
-子模块按域组织，路径镜像 src 包层级：engine / memory / ai / agents / config / prompt，
-以及会话与输出（面板聊天语义）。各子模块被 ``ops.registry._load_all`` 显式导入。
-"""
+from ops.contracts import OperationResult
+
+
+def require_port[Port](port: Port | None, name: str) -> tuple[Port | None, OperationResult | None]:
+    """返回已组合的窄端口，或一个统一的 NOT_AVAILABLE 操作结果。"""
+    if port is not None:
+        return port, None
+    return None, OperationResult.failure("NOT_AVAILABLE", f"{name} 端口尚未装配")

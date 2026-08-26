@@ -1,0 +1,10 @@
+# 平台配置 — MCP 客户端的总开关与诊断偏好。
+#
+# 此文件只描述具体 MCP 适配器，不定义通用 Platform 层。
+
+# MCP：模型上下文协议，子进程与远程服务管理
+[platform.mcp]
+# 默认是否启用 MCP 平台
+enabled = true
+# 是否在终端输出 MCP 子进程诊断（stdin/stdout 不受影响）
+terminal_logs = true

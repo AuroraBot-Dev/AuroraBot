@@ -1,42 +1,50 @@
-"""实现 ``aurora start`` 子命令。"""
+"""实现 ``aurora start``。"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+import sys
+from typing import TYPE_CHECKING
 
-from src.config import init as init_config
-from src.contracts import PLATFORM_NAMES
+from aurora.utils.environment import load_project_env
 
 if TYPE_CHECKING:
     import argparse
+    from pathlib import Path
+
+    from aurora.config import AuroraConfig
 
 NAME = "start"
+CONFIG_ERROR_EXIT_CODE = 2
+INTERRUPTED_EXIT_CODE = 130
 
 
-def register(subparsers: Any) -> None:
-    """向子解析器注册 start 命令及其 headless/platform 选项。"""
-    parser = subparsers.add_parser(NAME, help="启动 Aurora 运行时")
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="启用无头模式",
-    )
-    parser.add_argument(
-        "--platform",
-        action="append",
-        choices=sorted(PLATFORM_NAMES),
-        metavar="NAME",
-        help="启用指定平台",
-    )
+def _load_configuration(project_root: Path) -> AuroraConfig:
+    from aurora.configuration import load_config
+
+    return load_config(project_root)
+
+
+async def _run_project(configuration: AuroraConfig, *, headless: bool) -> None:
+    from aurora.runtime import run_project
+
+    await run_project(configuration, headless=headless)
+
+
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = subparsers.add_parser(NAME, help="启动 AuroraBot 运行时")
+    parser.add_argument("--headless", action="store_true", help="不启动本地交互终端")
     parser.set_defaults(executor=execute)
 
 
 def execute(arguments: argparse.Namespace) -> int:
-    """加载配置并按指定的平台集合启动 Aurora 运行时并等待其停止。"""
-    from aurora.runtime import run_runtime
-
-    init_config(arguments.root, arguments.profile)
-    selected = frozenset(arguments.platform) if arguments.platform else None
-    asyncio.run(run_runtime(selected, headless=arguments.headless))
+    try:
+        load_project_env(arguments.root)
+        configuration = _load_configuration(arguments.root)
+        asyncio.run(_run_project(configuration, headless=arguments.headless))
+    except KeyboardInterrupt:
+        return INTERRUPTED_EXIT_CODE
+    except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
+        sys.stderr.write(f"启动失败：{error}\n")
+        return CONFIG_ERROR_EXIT_CODE
     return 0

@@ -1,7 +1,6 @@
-"""本地 Console 交互前端公开 API。"""
+"""本地异步终端公开 API。"""
 
-from __future__ import annotations
+from src.console.models import TerminalControl, TerminalDispatcher, TerminalResponse
+from src.console.shell import TerminalConsole
 
-from src.console.shell import run_console
-
-__all__ = ["run_console"]
+__all__ = ["TerminalConsole", "TerminalControl", "TerminalDispatcher", "TerminalResponse"]

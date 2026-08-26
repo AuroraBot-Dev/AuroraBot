@@ -1,64 +1,137 @@
 from __future__ import annotations
 
-import logging
+import ast
+import asyncio
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from src.utils import (
-    UnsupportedLoggingLevelError,
-    configure_console_logging,
-    configure_logging,
-    console_logging_status,
-    get_logger,
-)
-from src.utils import logging as aurora_logging
+from aurora import assemble_runtime, load_config
+from aurora.configuration.logging import LOGGING_CONFIG, LoggingConfig
+from aurora.runtime_support import configure_project_logging
+from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
+from src.tools import ToolRegistry
+from src.utils import configure_console_logging
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from src.contracts import ToolResult
+
+_ROOT = Path(__file__).parents[1]
+_LOGGED_RUNTIME_MODULES = (
+    "aurora/composer.py",
+    "aurora/runtime.py",
+    "src/agents/catalog.py",
+    "src/ai/gateway.py",
+    "src/cadence/cadence.py",
+    "src/console/shell.py",
+    "src/engine/runtime.py",
+    "src/mcp/client.py",
+    "src/mcp/runtime.py",
+    "src/mcp/tool.py",
+    "src/memory/memory.py",
+    "src/tools/registry.py",
+    "src/world/store.py",
+)
 
 
-def test_terminal_visibility_filter_does_not_hide_file_audit(tmp_path: Path) -> None:
-    terminal = aurora_logging._create_stream_handler()
-    logfile = tmp_path / "mcp.log"
-    file_handler = aurora_logging._create_file_handler(logfile)
-    record = logging.LogRecord("MCPServerKit", logging.INFO, __file__, 1, "child diagnostic", (), None)
-    record.aurora_terminal = False
-    try:
-        assert terminal.filter(record) is False
-        assert file_handler.filter(record)
-        file_handler.handle(record)
-    finally:
-        terminal.close()
-        file_handler.close()
-    assert "child diagnostic" in logfile.read_text(encoding="utf-8")
+@dataclass(slots=True)
+class _Model:
+    result: str
+
+    async def complete(self, request: ModelRequest) -> ChatMessage:
+        del request
+        return ChatMessage.assistant(self.result)
 
 
-def test_runtime_configuration_updates_existing_and_future_loggers(tmp_path: Path) -> None:
-    logfile = tmp_path / "aurora.log"
-    existing = get_logger("aurora.test.logging.existing")
-    configure_logging("ERROR", logfile)
-    future = get_logger("aurora.test.logging.future")
+class _FailingTool:
+    definition = ToolDefinition(
+        "aur.test.logging",
+        "日志边界测试工具",
+        {"type": "object", "properties": {"token": {"type": "string"}}},
+    )
 
-    assert existing.level == logging.ERROR
-    assert future.level == logging.ERROR
-    assert any(hasattr(handler, "baseFilename") for handler in existing.handlers)
-
-    configure_console_logging(enabled=False, level="DEBUG")
-    status = console_logging_status()
-    assert status == {"enabled": False, "console_level": "debug", "file_level": "error"}
-    marker = "file-audit-survives-console-off"
-    existing.error(marker)
-    for handler in existing.handlers:
-        handler.flush()
-    assert marker in logfile.read_text(encoding="utf-8")
-
-    configure_console_logging(enabled=True)
-    configure_logging("INFO")
+    async def execute(self, call: ToolCall) -> ToolResult:
+        del call
+        raise RuntimeError("secret-in-exception")
 
 
-def test_logging_levels_accept_warn_and_reject_unknown() -> None:
-    assert aurora_logging._level_number("warn") == logging.WARNING
-    assert aurora_logging._level_name(logging.DEBUG) == "DEBUG"
-    with pytest.raises(UnsupportedLoggingLevelError):
-        aurora_logging._level_number("verbose")
+def test_logging_configuration_is_typed_and_project_relative(configured_project: Path) -> None:
+    settings = load_config(configured_project).get(LOGGING_CONFIG)
+
+    assert settings == LoggingConfig("INFO", "logs")
+
+
+@pytest.mark.parametrize(
+    ("level", "log_dir"),
+    (
+        ("TRACE", "logs"),
+        ("INFO", "/tmp/logs"),
+        ("INFO", "../logs"),
+        ("INFO", "C:\\logs"),
+    ),
+)
+def test_logging_configuration_rejects_invalid_values(
+    configured_project: Path,
+    level: str,
+    log_dir: str,
+) -> None:
+    (configured_project / "config" / "logging.toml").write_text(
+        f'[logging]\nlevel = "{level}"\nlog_dir = "{log_dir.replace(chr(92), chr(92) * 2)}"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError):
+        load_config(configured_project)
+
+
+def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_details(
+    configured_project: Path,
+) -> None:
+    configuration = load_config(configured_project)
+    configure_project_logging(configuration)
+    configure_console_logging(enabled=False)
+    runtime = assemble_runtime(configuration, _Model("secret-in-model-result"))
+
+    async def scenario() -> None:
+        await asyncio.wait_for(runtime.run("secret-in-message", tree_id="logging-tree"), timeout=5)
+        result = await ToolRegistry((_FailingTool(),)).execute(
+            ToolCall("logging-call", "aur.test.logging", {"token": "secret-in-arguments"})
+        )
+        assert isinstance(result, ToolOutput)
+        assert result.is_error
+        await runtime.world.close()
+
+    asyncio.run(scenario())
+    logfile = configured_project / "logs" / "aurora.log"
+    content = logfile.read_text(encoding="utf-8")
+
+    assert "AgentTree 开始 tree_id=logging-tree" in content
+    assert "工具调用失败 tool=aur.test.logging call_id=logging-call error_type=RuntimeError" in content
+    assert "secret-in-message" not in content
+    assert "secret-in-model-result" not in content
+    assert "secret-in-arguments" not in content
+    assert "secret-in-exception" not in content
+
+
+def test_key_runtime_modules_use_the_unified_logging_facility() -> None:
+    violations: list[str] = []
+    for relative in _LOGGED_RUNTIME_MODULES:
+        tree = ast.parse((_ROOT / relative).read_text(encoding="utf-8"))
+        imports_facility = any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "src.utils"
+            and any(alias.name == "get_logger" for alias in node.names)
+            for node in ast.walk(tree)
+        )
+        emits = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"debug", "info", "warning", "error", "critical"}
+            for node in ast.walk(tree)
+        )
+        if not imports_facility or not emits:
+            violations.append(relative)
+
+    assert violations == []

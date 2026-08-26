@@ -1,7 +1,5 @@
-"""自动记忆服务与 MemoryStore 实现。"""
+"""世界线驱动的简化记忆。"""
 
-from __future__ import annotations
+from src.memory.memory import DEFAULT_COMMITS_PER_SCOPE, DEFAULT_MEMORY_WINDOW, Memory
 
-from src.memory.service import MemoryService
-
-__all__ = ["MemoryService"]
+__all__ = ["DEFAULT_COMMITS_PER_SCOPE", "DEFAULT_MEMORY_WINDOW", "Memory"]

@@ -1,46 +1,30 @@
-"""console 专属操作：终端控制语义，scope=CONSOLE_ONLY。"""
+"""本地终端的世界线接入状态监测。"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
+from ops.contracts import OperationResult
+from ops.operations import require_port
 from ops.registry import operation
-from src.contracts import OperationResult, OperationScope, ParameterLocation, ParameterSpec
-from src.utils import configure_console_logging, console_logging_status
 
+if TYPE_CHECKING:
+    from typing import Any
 
-@operation(
-    "POST",
-    "/console/clear",
-    name="console.clear",
-    aliases=("/clear", "/cls"),
-    summary="清空终端屏幕",
-    scope=OperationScope.CONSOLE_ONLY,
-)
-async def console_clear(_context: Any, _params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success({"control": "clear_console", "cleared": True})
+    from ops.contracts import OperationContext
 
 
 @operation(
     "GET",
-    "/console/log",
-    name="console.log.status",
-    aliases=("/log",),
-    summary="终端日志状态",
-    scope=OperationScope.CONSOLE_ONLY,
+    "/console",
+    name="console.status",
+    summary="查看终端世界线接入状态",
+    aliases=("/console",),
 )
-async def console_log_status(_context: Any, _params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success(console_logging_status())
-
-
-@operation(
-    "POST",
-    "/console/log",
-    name="console.log.set",
-    summary="开关终端日志",
-    parameters=(ParameterSpec("enabled", ParameterLocation.BODY, type="bool", required=True),),
-    scope=OperationScope.CONSOLE_ONLY,
-)
-async def console_log_set(_context: Any, params: dict[str, Any]) -> OperationResult:
-    configure_console_logging(enabled=bool(params["enabled"]))
-    return OperationResult.success({"enabled": bool(params["enabled"])})
+async def status(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    port, missing = require_port(context.runtime.console, "console")
+    if missing is not None:
+        return missing
+    assert port is not None
+    return OperationResult.success(port.console_status())

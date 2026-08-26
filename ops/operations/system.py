@@ -1,14 +1,75 @@
-"""system 域操作：目录自描述。"""
+"""操作目录与系统自描述。"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
+from ops.contracts import (
+    OperationControl,
+    OperationResult,
+    OperationScope,
+    ParameterKind,
+    ParameterLocation,
+    ParameterSpec,
+)
+from ops.operations import require_port
 from ops.registry import catalog_entries, operation
-from src.contracts import OperationResult
+from ops.utils import LOGO, format_catalog
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from ops.contracts import OperationContext
 
 
-@operation("GET", "/", name="system.info", aliases=("/help", "/h"), summary="操作目录自描述")
-async def system_info(_context: Any, _params: dict[str, Any]) -> OperationResult:
-    entries = catalog_entries()
-    return OperationResult.success({"operations": entries, "count": len(entries)})
+@operation(
+    "GET",
+    "/",
+    name="system.catalog",
+    summary="列出全部可用操作",
+    aliases=("/help", "/h"),
+    parameters=(ParameterSpec("detail", ParameterLocation.QUERY, ParameterKind.FLAG, help="输出完整 JSON"),),
+)
+async def catalog(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = context
+    data = {"operations": catalog_entries()}
+    if params.get("detail"):
+        return OperationResult.success(data)
+    return OperationResult.success(data, message="\n" + LOGO + format_catalog())
+
+
+@operation(
+    "POST",
+    "/process/shutdown",
+    name="system.shutdown",
+    summary="请求停止 AuroraBot 进程",
+    aliases=("/shutdown", "/exit", "/quit", "/q"),
+)
+async def shutdown(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is None:
+        assert port is not None
+        await port.record_event(
+            event_id=f"ops:process:shutdown:{uuid4().hex}",
+            kind="ops.process.shutdown_requested",
+            source="ops",
+            summary="请求停止 AuroraBot 进程",
+            scope="aurora:system",
+        )
+    context.runtime.process.request_shutdown()
+    return OperationResult.success(message="已请求停止 AuroraBot。", control=OperationControl.SHUTDOWN_PROCESS)
+
+
+@operation(
+    "POST",
+    "/console/clear",
+    name="system.clear",
+    summary="清空本地终端",
+    aliases=("/clear", "/cls"),
+    scope=OperationScope.TEXT_ONLY,
+)
+async def clear(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = context, params
+    return OperationResult.success(control=OperationControl.CLEAR_CONSOLE)

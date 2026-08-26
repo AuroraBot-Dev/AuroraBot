@@ -1,0 +1,24 @@
+# 存储路径配置 — 各包私有持久化目录。
+#
+# 世界提交日志使用 SQLite；AgentTree 仍是内存中的不可变值对象。
+
+[storage]
+# 总数据根目录；所有包目录相对它解析
+data_root = "data"
+# 各实现包的私有持久化目录；相对 data_root，路径层级与包层级一致
+engine = "engine"
+ai = "ai"
+memory = "memory"
+world = "world"
+# ops Panel 后端私有数据目录（bootstrap Token 与 session 摘要）
+ops = "ops"
+
+[storage.platform]
+# platform 包的私有数据根目录
+data_dir = "platform"
+
+[storage.platform.mcp]
+# MCP 平台数据目录（相对 storage.platform.data_dir）
+data_dir = "mcp"
+# MCP 平台运行内建应用的私有数据目录（相对 data_dir）
+apps_dir = "apps"

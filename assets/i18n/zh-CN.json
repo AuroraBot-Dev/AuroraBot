@@ -30,7 +30,7 @@
     "about": "她是什么",
     "ways": "接入方式",
     "start": "快速开始",
-    "githubVersion": "GitHub · 0.5 alpha",
+    "githubVersion": "GitHub · 0.6 alpha",
     "languageLabel": "切换语言",
     "languageMenuLabel": "选择语言",
     "themeLabel": "切换明暗主题"
@@ -103,11 +103,11 @@
     "directoryCommand": "Set-Location AuroraBot",
     "syncCommand": "uv sync --no-dev",
     "envCommand": "Copy-Item .env.example .env",
-    "configComment": "# 填写 DEEPSEEK_API_KEY；未安装 Aurora-QQ 时先在 config/apps.toml 关闭它",
+    "configComment": "# 复制 config.example 为个人 config/，再用 aurora config list/show 查看",
     "runComment": "# 启动 Console 与默认 MCP 平台",
     "runCommand": "uv run --no-dev --env-file .env aurora start",
-    "previewLabel": "Nightly · 0.5 alpha",
-    "previewTitle": "当前为 0.5 alpha。",
+    "previewLabel": "Nightly · 0.6 alpha",
+    "previewTitle": "当前为 0.6 alpha。",
     "previewDescription": "适合本地体验、运行时研究和扩展开发。已提供可降级长期记忆；完整附件理解、沙箱与语音运行时、稳定 MCP 重连、数据 TTL/一致备份和公网多租户保证尚未提供。",
     "boundaries": "查看当前边界"
   },
