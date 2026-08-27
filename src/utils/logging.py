@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 MAX_LOGFILE_SIZE = 102400
 MAX_LOGFILE_BACKUPS = 5
+_NAME_WIDTH = 24
 _LEVEL_NUMBERS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 _OFF_LEVEL = 51
 
@@ -132,13 +133,13 @@ def _replace_console(level: int) -> None:
 
 
 def _format_console(record: Record) -> str:
-    name = record["extra"].get("name", "aurora")
-    return f"{{level}} \t{name} \t| {{message}}\n{{exception}}"
+    name = str(record["extra"].get("name", "aurora"))
+    return f"<level>{{level: <8}}</level> <cyan>{name:<{_NAME_WIDTH}}</cyan> | {{message}}\n{{exception}}"
 
 
 def _format_file(record: Record) -> str:
-    name = record["extra"].get("name", "aurora")
-    return f"{{time:%m-%d %H:%M:%S}} [{{level}}] \t{name} \t| {{message}}\n{{exception}}"
+    name = str(record["extra"].get("name", "aurora"))
+    return f"{{time:%m-%d %H:%M:%S}} {{level: <8}} {name:<{_NAME_WIDTH}} | {{message}}\n{{exception}}"
 
 
 def _level_number(level: int | str) -> int:
