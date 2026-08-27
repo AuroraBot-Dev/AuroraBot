@@ -1,4 +1,4 @@
-"""把运行时领域对象投影为 ops 与终端使用的 JSON 数据。"""
+"""投影运行时领域对象为 ops 与终端使用的 JSON 数据。"""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def agent_dict(definition: AgentDefinition) -> dict[str, Any]:
 
 
 def tool_dict(definition: ToolDefinition) -> dict[str, Any]:
-    """投影工具定义，并把冻结 JSON 恢复为普通容器。"""
+    """投影工具定义，并恢复冻结 JSON 为普通容器。"""
     return {
         "name": definition.name,
         "description": definition.description,
@@ -58,7 +58,7 @@ def mcp_app_dict(snapshot: McpAppSnapshot) -> dict[str, Any]:
 
 
 def terminal_text(result: OperationResult, *, command: bool) -> tuple[str, bool]:
-    """把 ops 结果压缩为终端文本及树失败标记。"""
+    """压缩 ops 结果为终端文本及树失败标记。"""
     if command or not result.ok or result.data is None:
         return render_result(result), False
     root_id = result.data.get("root_id")

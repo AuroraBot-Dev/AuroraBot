@@ -1,4 +1,4 @@
-"""AuroraBot 进程退出码约定。"""
+"""约定 AuroraBot 进程退出码。"""
 
 EXIT_FAILURE = 1
 EXIT_CONFIG_ERROR = 2

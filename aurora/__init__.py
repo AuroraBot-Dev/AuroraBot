@@ -1,4 +1,4 @@
-"""AuroraBot 配置、组合与项目级运行时。"""
+"""提供 AuroraBot 的配置、组合与项目级运行时。"""
 
 from __future__ import annotations
 

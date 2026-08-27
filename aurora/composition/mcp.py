@@ -1,4 +1,4 @@
-"""把 MCP 纯配置转换为异步启动说明并注册冻结运行时。"""
+"""构造并导出 ``src.mcp`` 的项目实例。"""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def register(context: CompositionContext) -> None:
 
 
 def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
-    """把纯 DTO 与当前进程的显式凭据映射为协议适配说明。"""
+    """映射纯 DTO 与当前进程的显式凭据为协议适配说明。"""
     apps = config.get(APPS_CONFIG).apps
     platform = config.get(PLATFORMS_CONFIG).mcp
     project_root = config.project_root.resolve()

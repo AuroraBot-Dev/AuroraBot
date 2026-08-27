@@ -1,4 +1,4 @@
-"""命令注册、校验、argparse 装配与分派：命令层组合根。"""
+"""命令组合根：校验命令规格，装配 argparse 解析器并分派执行。"""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ class CommandRegistry:
 
 
 def build_registry(bindings: Iterable[CommandBinding]) -> CommandRegistry:
-    """把命令目录的显式元组注册固化为校验过的只读目录。"""
+    """固化命令目录的显式元组注册为校验过的只读目录。"""
     return CommandRegistry(tuple(bindings))
 
 

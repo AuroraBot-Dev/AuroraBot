@@ -1,4 +1,4 @@
-"""把 Panel 纯配置解析为 ops.panel 运行实例并管理启动提示。"""
+"""解析 Panel 纯配置为 ops.panel 运行实例，并管理启动提示。"""
 
 from __future__ import annotations
 

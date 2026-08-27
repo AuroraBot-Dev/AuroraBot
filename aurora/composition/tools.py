@@ -17,7 +17,7 @@ TOOLS = InstanceKey[ToolRegistry]("tools.registry")
 
 
 def register(context: CompositionContext) -> None:
-    """把框架内建工具与外部注入工具组成唯一目录。"""
+    """组成框架内建工具与外部注入工具的唯一目录。"""
     journal = context.require(WORLD_JOURNAL)
     agents = context.require(AGENTS)
     context.provide(

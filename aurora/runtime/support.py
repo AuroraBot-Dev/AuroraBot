@@ -1,4 +1,4 @@
-"""运行时入口使用的进程级辅助函数。"""
+"""提供运行时入口使用的进程级辅助函数。"""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def configure_project_logging(config: AuroraConfig) -> None:
 
 
 def install_stop_handlers(stop: asyncio.Event) -> tuple[InstalledSignal, ...]:
-    """安装把进程终止信号转为异步停止事件的处理器。"""
+    """安装信号处理器，使进程终止信号转为异步停止事件。"""
     installed: list[InstalledSignal] = []
     try:
         for candidate in (signal.SIGINT, signal.SIGTERM):
