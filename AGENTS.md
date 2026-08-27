@@ -1,71 +1,78 @@
 # AuroraBot
 
-AuroraBot 是以因果事件、同构 Agent 和主动节律为核心的自主智能体框架。当前工作树只保存现行实现；设计判断以
-唯一 RFC 和当前公共契约为依据。
+AuroraBot 是以 `AgentTree` 为核心的自主智能体框架。当前工作树只描述现行架构与实现；只保留完整最小循环和项目级组合骨架。
 
 ## Architecture authority
 
-- `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准，定义当前完整架构与公共契约。
-- `docs/` 是 `AuroraBot-Dev/docs` 仓库的子模块，`docs/rfc/` 随子模块挂载；RFC 变更在 docs 仓库提交后，再在本仓库 bump 子模块指针。
-- RFC 0300 高于 README、注释、配置样例和现有代码。
-- 影响模块边界、事件、配置、扩展、模型调用、持久化或进程组合契约的改动，必须先更新 RFC 0300。
-- 除非先修改 RFC 0300 的治理规则，不得新增并行编号 RFC。
-- Python 源码和测试的注释、模块 docstring、类 docstring 与函数 docstring 禁止提及具体 RFC 编号或章节；
-  应直接说明局部行为、原因和不变量。
-- `ARCHITECTURE.md` 是 RFC 0300 的实施说明；冲突时以 RFC 0300 为准。
+- `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准。
+- `docs/architecture/` 是按包拆分的实施架构说明；`docs/architecture/packages/package-baseline.md` 是新增模块/包的最低扩展成本基线。
+- `docs/` 是独立文档仓库的子模块；RFC 先在 docs 仓库提交，再由主仓库更新子模块指针。
+- 影响 AgentTree、四角色消息、模型/工具端口、配置或组合根的改动，必须先更新 RFC。
+- Python 源码和测试的注释与 docstring 不提具体 RFC 编号，直接说明局部不变量。
 
 ## Project layout
 
 ```text
-config/         TOML 核心配置、平台偏好、领域配置与 profile 覆盖
-aurora/         唯一进程 CLI、平台选择与生命周期组合
-ops/            面板后端：唯一 HTTP 路由、操作体系、认证与面板存储
-docs/           AuroraBot-Dev/docs 子模块：文档站点；docs/rfc/ 唯一 RFC 与阅读索引
-panel/          AuroraBot-Dev/panel 子模块：面板前端
-src/contracts/  无上层依赖的配置、AMP、操作、Agent、模型与记忆契约
-src/prompt/     提示词目录、分层 DTO 与模型上下文呈现
-src/engine/     完整 Agent 热路径、状态、Activity、因果与 SQLite 运行态
-src/agents/     同构 Agent handler 与内建委派能力
-src/ai/         宽泛模型网关
-src/memory/     自动记忆服务与持久化适配
-src/config/     TOML 加载、校验与配置快照
-src/console/    本地交互 Shell 与输出渲染（热路径外的只读渲染器）
-src/platform/   MCP 的协议、持久化、能力与效果适配
-src/apps/       内建原生 AMP-MCP 应用
-src/sandbox/    独立沙箱组件；当前 Agent 运行时不启用
-src/utils/      无上层依赖的通用工具
-tests/          契约、集成与回归测试
+config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configuration 模块
+config/         从模板复制的个人生效配置，始终由 Git 忽略
+aurora/         项目级入口、统一 Config/Composer、runtime 门面与 utils
+aurora/commands/       每个 CLI 命令一个注册模块
+aurora/configuration/  每个 TOML 一个解析与注册模块
+aurora/composition/    每个需构造实例的 src 子包一个注册模块
+ops/            统一 OperationSpec 目录、运行监测、限定配置改动与本地 Panel HTTP
+src/utils/      无上层依赖的日志、时间、文本与序列化工具
+src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
+src/agents/     不可变 AgentDefinition 目录与唯一解析
+src/tools/      工具注册表与框架内建工具
+src/prompt/     四角色 PromptAssembler
+src/engine/     AgentTree 的确定性单循环
+src/ai/         LiteLLM 模型网关与 Provider 协议映射
+src/mcp/        MCP SDK 2.x 客户端适配、冻结工具目录与业务事件入口
+src/world/      WorldJournal 唯一持久化实现与 migration
+src/console/    输入先入世界线的本地异步终端
+tests/          离线行为、组合与边界测试
+docs/           文档站点与唯一 RFC 子模块
+panel/          消费同一 ops 目录的独立前端子模块
 ```
 
-## Hard boundaries
+## Core boundaries
 
-- engine 完整拥有事件、Task/Agent 状态、邮箱、Activity、模型/工具调度和因果热路径；具体实现通过 contracts Port 注入。
-- Agent handler 只能读取 `AgentContext` 并返回 `AgentDecision`；不得直接写运行态、调用 Provider 或平台 Client，
-  也不得绕过 Activity 与因果记录。
-- Platform 将外部生态归一化为 AMP 输入并执行环境效果；只依赖 contracts + utils，不得导入 ops 或 engine。
-- ops 位于热路径之外，只提供输入、命令、查询与调试 sidecar；只依赖 contracts + utils，engine 不依赖 ops。
-- 依赖方向固定为 `utils/contracts ← prompt/config/engine/ai/memory/platform/agents/ops ← aurora`；
-  `src` 不得反向导入进程组合层。
+- 一棵 `AgentTree` 表示一次完整运行；不再引入独立 Task、mailbox、Activity 或 continuation 作为平行运行模型。
+- root 与 child 使用同一种 `AgentNode` 和循环。实例只因 prompt、初始 message、可见 tools 和 LLM model 不同。
+- `ChatMessage` 只允许 `system`、`message`、`assistant`、`tool` 四种领域 role；只有 Provider adapter 可把
+  `message` 映射成协议的 `user`。
+- `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务；未来需要世界上下文时只注入 `WorldReader`。
+- `AgentTreeRunner` 只执行给定树：依赖 contracts + agents + prompt + tools，并通过 `WorldJournal` 记录运行因果；普通 Tool 经端口执行，`delegate` 是唯一由 engine 解释的内建 Tool。
+- `src/world` 是逻辑事件总线，代码上是叶子；`WorldReader / WorldWriter / WorldJournal` 端口只属于 contracts，其他包不得 import 实现。
+- 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
+- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线。
+- 每个运行时包在 ops 中拥有窄 RuntimePort 和 method/path + 斜杠入口，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
+- model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
+- `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
+  `commands` 按模块注册 CLI，`main.py` 只分派。
+- 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
+- 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
+- 依赖方向固定为 `utils/contracts ← agents/prompt/ai/world/mcp`、`agents/contracts ← tools ← engine ← aurora`、
+  `console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`，ops 不导入 src 或 aurora。
 
-## Workspace and configuration
+## Current scope
 
-- 数据持久化路径必须镜像包层级：`src/engine → data/engine`、`ops → data/ops`、
-  `src/platform/mcp → data/platform/mcp`、`src/apps（由 platform/mcp 运行）→ data/platform/mcp/apps`；
-  配置见 `storage.toml`。
-- engine 工作区固定为 `data/engine/runtime.sqlite3`，它是唯一运行态与终态；无 JSON 归档、JSONL 会话日志与文件投递箱。
-- 外部 AMP 通过 contracts 输入端口直连 SQLite；运行态与终态统一使用 SQLite WAL。Schema v10 的后续演进必须
-  提供连续迁移步骤，代码路径只访问当前版本形状。
-- 会话可读性由 `causal_events` 提供；ops 可按需导出，不写入热路径日志文件。
-- 所有结构性配置使用 TOML；JSON 不得承担主配置职责。
-- 配置按包拆分为 `runtime.toml`、`engine.toml`、`models.toml`、`platforms.toml`、`agents.toml`、`apps.toml`、
-  `prompts.toml`、`logging.toml` 与 `storage.toml`；profile 只覆盖 runtime。
-- 密钥仅来自环境变量；`.env` 只用于本地开发，不能定义结构或覆盖任意 TOML 值。
+当前实现 ops（含本地 Panel HTTP 后端与 Token 登录）、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start 生命周期，
+以及 WorldJournal 持久化与 migration；panel 子模块是消费同一 ops 目录的 Vue 前端；
+不实现 Panel 附件与 WebSocket、自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
+引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
+
+## Language and text
+
+- 项目文本以简体中文为默认和权威版本，包括 CLI 帮助与输出、错误说明、配置注释、默认 Prompt、README 和设计文档。
+- 代码标识符、协议字面量、外部 API 字段和必要的技术术语可以使用英文；面向人的完整句子优先使用中文。
+- 英文与日文翻译可以保留，但中文内容先更新；翻译冲突或落后时以中文为准。
+- 用户可见文本只描述当前身份、能力和限制，不使用实验、重构、旧版、迁移等历史阶段叙事。
 
 ## Runtime and quality
 
-- `uv run aurora start` 使用 preference 默认组合；`--platform`（可重复）构成精确平台集合，`--headless` 只禁用本地 Console、不改变平台组合。裸 `aurora` 只展示用法。
-- Python 3.12（推荐，以上版本未经充分验证），包管理使用 `uv`。
-- Ruff 行宽 120，LF，双引号；公开 API 提供类型注解，dataclass 优先 `slots=True`。
-- 主源码文件原则上不超过 500 行；超过 500 行的文件必须考虑架构是否合理或是否应该根据总分结构分包。
-- 日志统一使用 `src.utils.logging.get_logger()`，级别与字段边界见 `LOGGING.md`。
-- 提交前执行 `uv run aurora check`；按改动风险补充定向测试与完整 `uv run pytest`。
+- Python 3.12，使用 uv。
+- Ruff 行宽 120，LF，双引号；公开 API 有类型注解；值对象优先 frozen + slots dataclass。
+- 主源码文件不超过 500 行；不以 lint ignore 掩盖核心复杂度。
+- 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 与 Panel 会话的临时 SQLite 集成测试外不使用数据库。
+- 提交前运行 `uv run aurora check`。

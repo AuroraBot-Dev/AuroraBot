@@ -1,0 +1,86 @@
+# Agent 定义 — 可复用、无运行状态的节点原型。
+#
+# 每个 definition 选择一个 Agent prompt、model endpoint、可见 tools 和允许的 child definitions。
+# tools 是有序的 gitignore 风格模式列表，按顺序对全部已注册工具 ID 求值，最后一条匹配项决定可见性：
+#   - `*` 匹配段内任意字符，`**` 单独成段匹配任意深度，`?` 匹配单个字符，支持 [a-z] 字符类；
+#   - `!` 前缀排除此前已匹配的工具，如 "!aur.mcp.org.aurora.qq.qq_send_group_message"；
+#   - 精确工具 ID 未注册时报错；通配模式未匹配任何工具仅记录警告（例如对应 MCP App 未启用）。
+# 同一个 prompt 可以被多个 definition 复用；运行时 transcript、parent 和状态只存在于 AgentTree 的 AgentNode 中。
+#
+# 派发链：triage（初筛）→ root（总代理）/ fast-worker（快路）；
+#         root（总代理）→ worker（重活）/ fast-worker（快活）/ reviewer（审阅）；
+#         worker → reviewer / fast-worker；其余节点不展开代理树。
+
+[[agent]]
+id = "builtin.triage"
+description = "注意力初筛：判断眼前世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
+prompt = "builtin.triage"
+model = "fast"
+tools = ["aur.agent.delegate"]
+children = ["builtin.root", "builtin.fast-worker"]
+
+[[agent]]
+id = "builtin.fast-worker"
+description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
+prompt = "builtin.fast"
+model = "fast"
+tools = [
+    "aur.mcp.org.aurora.qq.qq_send_*message",
+    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
+    "aur.mcp.org.aurora.qq.qq_get_*",
+    "aur.mcp.org.aurora.qq.qq_mark_*",
+]
+children = []
+
+[[agent]]
+id = "builtin.root"
+description = "总代理：理解完整任务、整合结果。"
+prompt = "builtin.root"
+model = "quality"
+tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"]
+children = [
+    "builtin.fast-worker",
+    "builtin.chat",
+    "builtin.worker",
+    "builtin.reviewer",
+]
+
+[[agent]]
+id = "builtin.chat"
+description = "即时会话回复：生成回复正文，或用发送工具像人类一样分多条投递回原会话。"
+prompt = "builtin.chat"
+model = "fast"
+tools = [
+    "aur.mcp.org.aurora.qq.qq_send_*message",
+    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
+]
+children = []
+
+[[agent]]
+id = "builtin.worker"
+description = "通用执行者：掌握全部 QQ 工具与世界读取，深入完成边界明确的独立工作，可继续委派轻量任务或审阅。"
+prompt = "builtin.worker"
+model = "quality"
+tools = [
+    "aur.agent.delegate",
+    "aur.serv.world.read",
+    "aur.serv.world.trees",
+    "aur.mcp.org.aurora.qq.*",
+]
+children = ["builtin.reviewer", "builtin.fast-worker"]
+
+[[agent]]
+id = "builtin.reviewer"
+description = "独立审阅者：检查给定结果的事实、遗漏和边界，返回简洁可执行的结论。"
+prompt = "builtin.reviewer"
+model = "quality"
+tools = []
+children = []
+
+[[agent]]
+id = "builtin.memory"
+description = "记忆专员：忠实整理长期记忆内容；当前未接入持久化端口，暂不参与派发。"
+prompt = "builtin.memory"
+model = "quality"
+tools = []
+children = []

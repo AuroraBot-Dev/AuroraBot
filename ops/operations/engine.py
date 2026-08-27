@@ -1,161 +1,182 @@
-"""engine 域操作：运行态观察与注入推进。"""
+"""AgentTree 运行监测与新运行入口。"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
+from ops.contracts import OperationResult, ParameterKind, ParameterLocation, ParameterSpec
+from ops.operations import require_port
 from ops.registry import operation
-from src.contracts import (
-    AmpValidationError,
-    OperationResult,
-    ParameterKind,
-    ParameterLocation,
-    ParameterSpec,
-)
 
-_MAX_PUMP_TURNS = 100
+if TYPE_CHECKING:
+    from typing import Any
 
+    from ops.contracts import OperationContext
 
-@operation("GET", "/engine/status", name="engine.status", summary="运行态快照")
-async def engine_status(context: Any, _params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success({"status": context.runtime.engine.status()})
+_MAX_TREE_LIST_LIMIT = 1000
 
 
 @operation(
     "GET",
-    "/engine/tasks",
-    name="engine.tasks",
-    aliases=("/tasks",),
-    summary="Task 列表（状态筛选、分页）",
+    "/engine/status",
+    name="engine.status",
+    summary="查看 AgentTree 运行时状态",
+    aliases=("/status",),
+)
+async def status(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    return OperationResult.success(context.runtime.engine.runtime_status())
+
+
+@operation(
+    "GET",
+    "/trees",
+    name="engine.trees",
+    summary="列出已观测的 AgentTree",
     parameters=(
-        ParameterSpec("status", ParameterLocation.QUERY, help="按状态筛选"),
-        ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64),
+        ParameterSpec("status", ParameterLocation.QUERY, help="按 running/completed/failed 过滤"),
+        ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64, help="最多返回的树数量"),
     ),
 )
-async def engine_tasks(context: Any, params: dict[str, Any]) -> OperationResult:
-    tasks = context.runtime.engine.list_tasks(status=params.get("status"), limit=params.get("limit", 64))
-    return OperationResult.success({"tasks": tasks, "count": len(tasks)})
-
-
-@operation(
-    "GET",
-    "/engine/tasks/{task_id}",
-    name="task.get",
-    aliases=("/task",),
-    summary="Task 详情（预算、监督树、waiting_on、因果摘要）",
-    parameters=(ParameterSpec("task_id", ParameterLocation.PATH, kind=ParameterKind.POSITIONAL, required=True),),
-)
-async def task_get(context: Any, params: dict[str, Any]) -> OperationResult:
-    task_id = str(params["task_id"])
-    value = context.runtime.engine.task(task_id)
-    if value is None:
-        return OperationResult.failure("NOT_FOUND", f"Task 未找到: {task_id}")
-    return OperationResult.success(value)
-
-
-@operation(
-    "GET",
-    "/engine/agents",
-    name="engine.agents",
-    aliases=("/agents",),
-    summary="Agent 列表",
-    parameters=(ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64),),
-)
-async def engine_agents(context: Any, params: dict[str, Any]) -> OperationResult:
-    agents = context.runtime.engine.list_agents(limit=params.get("limit", 64))
-    return OperationResult.success({"agents": agents, "count": len(agents)})
-
-
-@operation(
-    "GET",
-    "/engine/agents/{agent_id}",
-    name="agent.get",
-    aliases=("/agent",),
-    summary="Agent 详情",
-    parameters=(ParameterSpec("agent_id", ParameterLocation.PATH, kind=ParameterKind.POSITIONAL, required=True),),
-)
-async def agent_get(context: Any, params: dict[str, Any]) -> OperationResult:
-    agent_id = str(params["agent_id"])
-    value = context.runtime.engine.agent(agent_id)
-    if value is None:
-        return OperationResult.failure("NOT_FOUND", f"Agent 未找到: {agent_id}")
-    return OperationResult.success(value)
-
-
-@operation(
-    "GET",
-    "/engine/events",
-    name="engine.events",
-    aliases=("/events",),
-    summary="因果事件流查询",
-    parameters=(
-        ParameterSpec("session_id", ParameterLocation.QUERY),
-        ParameterSpec("task_id", ParameterLocation.QUERY),
-        ParameterSpec("event_type", ParameterLocation.QUERY),
-        ParameterSpec("after_id", ParameterLocation.QUERY, type="int", default=0),
-        ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64),
-    ),
-)
-async def engine_events(context: Any, params: dict[str, Any]) -> OperationResult:
-    events = context.runtime.engine.query_events(
-        session_id=params.get("session_id"),
-        task_id=params.get("task_id"),
-        event_type=params.get("event_type"),
-        after_id=params.get("after_id", 0),
-        limit=params.get("limit", 64),
+async def trees(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    status_filter = params.get("status")
+    limit = int(params["limit"])
+    if limit < 1 or limit > _MAX_TREE_LIST_LIMIT:
+        return OperationResult.failure("INVALID_LIMIT", "limit 必须在 1 到 1000 之间")
+    return OperationResult.success(
+        {"trees": context.runtime.engine.list_trees(status=str(status_filter) if status_filter else None, limit=limit)}
     )
-    return OperationResult.success({"events": events, "count": len(events)})
-
-
-@operation(
-    "POST",
-    "/engine/events",
-    name="engine.event.submit",
-    aliases=("/event", "/e"),
-    summary="注入任意 AMP 事件",
-    parameters=(ParameterSpec("amp", ParameterLocation.BODY, type="json", required=True),),
-)
-async def engine_event_submit(context: Any, params: dict[str, Any]) -> OperationResult:
-    try:
-        message_id = await context.runtime.engine.submit_amp(params["amp"])
-    except AmpValidationError as error:
-        return OperationResult.failure("INVALID_AMP", f"AMP 校验失败: {error}")
-    return OperationResult.success({"message_id": message_id})
 
 
 @operation(
     "GET",
-    "/engine/sessions/{session_id}/export",
-    name="session.export",
-    aliases=("/export",),
-    summary="会话导出：因果事件与模型输出投影",
-    parameters=(ParameterSpec("session_id", ParameterLocation.PATH, kind=ParameterKind.POSITIONAL, required=True),),
+    "/trees/{tree_id}",
+    name="engine.tree",
+    summary="查看一棵 AgentTree 的完整快照",
+    parameters=(ParameterSpec("tree_id", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),),
 )
-async def session_export(context: Any, params: dict[str, Any]) -> OperationResult:
-    session_id = str(params["session_id"])
-    value = context.runtime.engine.session_export(session_id)
-    if value is None:
-        return OperationResult.failure("NOT_FOUND", f"会话未找到: {session_id}")
-    return OperationResult.success(value)
+async def tree(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    tree_id = str(params["tree_id"])
+    detail = context.runtime.engine.tree_detail(tree_id)
+    if detail is None:
+        return OperationResult.failure("NOT_FOUND", f"AgentTree 不存在：{tree_id}")
+    return OperationResult.success(detail)
+
+
+@operation(
+    "GET",
+    "/trees/{tree_id}/nodes/{node_id}",
+    name="engine.node",
+    summary="查看 AgentTree 中的一个 Agent 节点",
+    parameters=(
+        ParameterSpec("tree_id", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("node_id", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),
+    ),
+)
+async def node(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    tree_id = str(params["tree_id"])
+    node_id = str(params["node_id"])
+    detail = context.runtime.engine.node_detail(tree_id, node_id)
+    if detail is None:
+        return OperationResult.failure("NOT_FOUND", f"Agent 节点不存在：{tree_id}/{node_id}")
+    return OperationResult.success(detail)
 
 
 @operation(
     "POST",
-    "/engine/pump",
-    name="engine.pump",
-    aliases=("/pump", "/p"),
-    summary="显式推进 engine（1-100 turns）",
-    parameters=(ParameterSpec("max_turns", ParameterLocation.BODY, type="int", default=8),),
+    "/trees",
+    name="engine.start",
+    summary="启动一棵新的 AgentTree",
+    aliases=("/run",),
+    parameters=(
+        ParameterSpec("message", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("tree_id", ParameterLocation.BODY, help="可选的运行标识"),
+    ),
 )
-async def engine_pump(context: Any, params: dict[str, Any]) -> OperationResult:
-    max_turns = int(params.get("max_turns", 8))
-    if not 1 <= max_turns <= _MAX_PUMP_TURNS:
-        return OperationResult.failure("PARSE_ERROR", f"max_turns 必须在 1 到 {_MAX_PUMP_TURNS} 之间")
-    return OperationResult.success(await context.runtime.engine.pump(max_turns))
+async def start(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is not None:
+        return missing
+    assert port is not None
+    tree_id = str(params["tree_id"]) if params.get("tree_id") else None
+    await port.record_event(
+        event_id=f"ops:tree:{uuid4().hex}",
+        kind="ops.tree.requested",
+        source="ops",
+        summary=f"请求启动 AgentTree：{params['message']}",
+        scope="aurora:system",
+        data={"message": str(params["message"]), "requested_tree_id": tree_id},
+    )
+    try:
+        result = await context.runtime.engine.start_tree(str(params["message"]), tree_id=tree_id)
+    except ValueError as error:
+        return OperationResult.failure("INVALID_TREE", str(error))
+    return OperationResult.success(result)
 
 
-@operation("POST", "/engine/shutdown", name="engine.shutdown", aliases=("/quit", "/q"), summary="请求进程关闭")
-async def engine_shutdown(context: Any, _params: dict[str, Any]) -> OperationResult:
-    if context.runtime.shutdown is not None:
-        context.runtime.shutdown()
-    return OperationResult.success({"control": "shutdown_process", "shutdown": True})
+@operation(
+    "POST",
+    "/events",
+    name="world.event",
+    summary="向 Bot 世界提交一条环境事实；不会自动启动 AgentTree",
+    parameters=(
+        ParameterSpec("event_id", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("source", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("scope", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("kind", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("summary", ParameterLocation.BODY, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("data", ParameterLocation.BODY, type="json", help="可选 JSON 对象"),
+        ParameterSpec("occurred_at", ParameterLocation.BODY, help="可选 ISO 8601 时间（必须含时区）"),
+    ),
+)
+async def event(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    data = params.get("data")
+    if data is not None and not isinstance(data, dict):
+        return OperationResult.failure("INVALID_EVENT", "data 必须是 JSON 对象")
+    try:
+        result = await context.runtime.engine.submit_event_values(
+            event_id=str(params["event_id"]),
+            source=str(params["source"]),
+            scope=str(params["scope"]),
+            kind=str(params["kind"]),
+            summary=str(params["summary"]),
+            data=data,
+            occurred_at=str(params["occurred_at"]) if params.get("occurred_at") else None,
+        )
+    except ValueError as error:
+        return OperationResult.failure("INVALID_EVENT", str(error))
+    return OperationResult.success(result, message="环境事实已提交；未自动启动 AgentTree")
+
+
+@operation(
+    "GET",
+    "/world/{scope}",
+    name="world.scope",
+    summary="查看一个世界 scope 从指定序号起的有界提交索引",
+    parameters=(
+        ParameterSpec("scope", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("after", ParameterLocation.QUERY, type="int", default=0, help="只返回序号大于该值的提交"),
+    ),
+)
+async def world_scope(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    scope = str(params["scope"])
+    after = int(params["after"])
+    try:
+        return OperationResult.success(await context.runtime.engine.world_scope(scope, after=after))
+    except ValueError as error:
+        return OperationResult.failure("INVALID_SCOPE", str(error))
+
+
+@operation(
+    "GET",
+    "/forest",
+    name="engine.forest",
+    summary="查看 Bot 森林：运行期已知树与世界日志推导的持久活动索引",
+    parameters=(ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=64, help="最多返回的树数量"),),
+)
+async def forest(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    limit = int(params["limit"])
+    if limit < 1 or limit > _MAX_TREE_LIST_LIMIT:
+        return OperationResult.failure("INVALID_LIMIT", "limit 必须在 1 到 1000 之间")
+    return OperationResult.success(await context.runtime.engine.forest(limit=limit))

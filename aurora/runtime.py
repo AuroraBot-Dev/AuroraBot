@@ -1,508 +1,554 @@
-"""按照平台选择规则组合一个运行时实例。
-
-组合根通过统一的 ``PlatformHandle`` 协议管理所有平台的生命周期：
-创建、工具绑定、任务启动和优雅停止均无需感知具体平台类型。
-"""
+"""组合项目实例并提供 AuroraBot 运行入口。"""
 
 from __future__ import annotations
 
 import asyncio
-import importlib
-import signal
-import webbrowser
-from contextlib import AsyncExitStack
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
-import uvicorn
-
-from ops.api import PanelAppContext, create_panel_app
-from ops.runtime import AuroraRuntime
-from ops.store import PanelStore
-from src.ai import ModelGatewayService
-from src.config import get
+from aurora import runtime_views
+from aurora.composition import compose_project
+from aurora.composition.agents import AGENTS
+from aurora.composition.cadence import CADENCE
+from aurora.composition.console import TERMINAL_CONSOLE
+from aurora.composition.engine import ENGINE_RUNNER
+from aurora.composition.mcp import MCP_RUNTIME, build_mcp_specs
+from aurora.composition.memory import MEMORY
+from aurora.composition.world import WORLD_JOURNAL, build_world
+from aurora.configuration import load_config
+from aurora.configuration.models import MODELS_CONFIG
+from aurora.configuration.platforms import PLATFORMS_CONFIG
+from aurora.configuration.prompts import PROMPTS_CONFIG
+from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
+from aurora.configuration.storage import STORAGE_CONFIG
+from aurora.panel_runtime import PanelRuntime, close_panel, run_panel
+from aurora.runtime_support import (
+    InstalledSignal,
+    configure_project_logging,
+    install_stop_handlers,
+    parse_event_time,
+    restore_stop_handlers,
+)
+from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
+from ops.contracts import OperationControl
+from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import (
-    PLATFORM_NAMES,
-    AgentHandler,
-    Capability,
-    EngineConfiguration,
-    PlatformPreference,
+    AgentTree,
+    EnvironmentEvent,
+    WorldFrontier,
+    WorldJournal,
 )
-from src.engine.runtime import AgentEngine
-from src.memory.service import MemoryService
-from src.prompt import PromptCatalog, PromptComposer
-from src.utils import (
-    SignalSafeServer,
-    configure_console_logging,
-    configure_logging,
-    get_logger,
-)
+from src.mcp import McpRuntime, prepare_mcp
+from src.utils import get_logger
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from src.contracts.configuration import AuroraConfig, PanelConfig
-    from src.contracts.platform import PlatformCleanup, PlatformFactory, PlatformHandle, PlatformServer
-    from src.contracts.tool import ToolExecutorBinding
+    from collections.abc import Callable, Iterable
 
-logger = get_logger("aurora.process")
-
-
-# -- 平台注册 ---------------------------------------------------------
-
-
-def _init_platforms() -> dict[str, PlatformFactory]:
-    """显式注册平台工厂，使签名漂移在静态检查阶段失败。"""
-    from src.platform.mcp import _create as create_mcp
-
-    creators: dict[str, PlatformFactory] = {"mcp": create_mcp}
-    if creators.keys() != PLATFORM_NAMES:
-        raise RuntimeError("platform factory registry does not match PlatformPreference")
-    return creators
+    from aurora.composer import InstanceBinding
+    from aurora.config import AuroraConfig
+    from src.agents import AgentCatalog
+    from src.cadence import Cadence
+    from src.contracts import Model, Tool, TreeLaunchRequest
+    from src.engine import AgentTreeRunner
+    from src.mcp import McpClientFactory
+    from src.memory import Memory
 
 
-# -- 内部辅助类型 -----------------------------------------------------
+@dataclass(slots=True)
+class AuroraRuntime:
+    """保留项目级构造边界，同时只运行 AgentTree 核心。"""
+
+    runner: AgentTreeRunner
+    root: RuntimeConfig
+    agents: AgentCatalog
+    config: AuroraConfig
+    console: TerminalConsole
+    world: WorldJournal
+    cadence: Cadence
+    memory: Memory
+    mcp: McpRuntime
+    output: Callable[[str], None] = field(default=print)
+    _trees: dict[str, AgentTree] = field(default_factory=dict, init=False, repr=False)
+    _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
+    ops: OpsRuntime = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.cadence.bind_launcher(self)
+        sources = tuple(ConfigSourceRef(source.name, source.relative_path) for source in self.config.sources)
+        self.ops = OpsRuntime(
+            self,
+            ConfigAccess(self.config.project_root, sources),
+            self,
+            agents=self,
+            tools=self,
+            prompt=self,
+            ai=self,
+            world=self,
+            console=self,
+            utils=self,
+            contracts=self,
+            cadence=self,
+            memory=self,
+            mcp=self,
+            config_reload=self,
+        )
+
+    def create_tree(
+        self,
+        message: str,
+        *,
+        tree_id: str | None = None,
+        frontier: WorldFrontier | None = None,
+    ) -> AgentTree:
+        return AgentTree.create(
+            tree_id or uuid4().hex,
+            self.root.node_id,
+            self.agents.get(self.root.agent),
+            message,
+            frontier,
+        )
+
+    async def run(self, message: str, *, tree_id: str | None = None) -> AgentTree:
+        tree = self.create_tree(message, tree_id=tree_id)
+        if tree.tree_id in self._trees:
+            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
+        _logger.info("AgentTree 已提交 tree_id=%s", tree.tree_id)
+        return await self.runner.run(tree, observer=self._record_tree)
+
+    async def start_tree(self, message: str, *, tree_id: str | None = None) -> dict[str, Any]:
+        return runtime_views.tree_dict(await self.run(message, tree_id=tree_id))
+
+    async def launch_tree(self, request: TreeLaunchRequest) -> dict[str, Any]:
+        """cadence 等主动策略的统一唤起入口。"""
+        definition = self.agents.get(request.agent or self.root.agent)
+        tree = AgentTree.create(
+            request.tree_id or uuid4().hex,
+            self.root.node_id,
+            definition,
+            request.message,
+            request.frontier,
+        )
+        if tree.tree_id in self._trees:
+            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
+        printed: dict[str, int] = {}
+
+        def observer(current: AgentTree) -> None:
+            self._record_tree(current)
+            self._echo_node_texts(current, printed)
+
+        completed = await self.runner.run(tree, observer=observer)
+        return runtime_views.tree_dict(completed)
+
+    def _echo_node_texts(self, tree: AgentTree, printed: dict[str, int]) -> None:
+        # TODO: 后续用 rich 美化输出并加入工具调用 trace
+        for node in tree.nodes:
+            seen = printed.get(node.node_id, 0)
+            for message in node.messages[seen:]:
+                if message.role == "assistant" and message.content.strip():
+                    self.output(f"Cadence> [{node.definition_id}] {message.content}")
+            printed[node.node_id] = len(node.messages)
+
+    async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
+        """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
+        await self.world.initialize()
+        commit = await self.world.append_event(event)
+        _logger.debug("环境事件已提交 event_id=%s kind=%s", event.event_id, event.kind)
+        return runtime_views.commit_dict(commit)
+
+    async def submit_event_values(
+        self,
+        *,
+        event_id: str,
+        source: str,
+        scope: str,
+        kind: str,
+        summary: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]:
+        when = parse_event_time(occurred_at) if occurred_at else datetime.now(UTC)
+        return await self.submit_event(EnvironmentEvent(event_id, source, scope, kind, when, summary, data or {}))
+
+    async def start_tree_from_event(self, event: EnvironmentEvent, *, tree_id: str | None = None) -> dict[str, Any]:
+        """显式以一条已提交环境事实启动认知；入口本身不形成自动循环。"""
+        await self.submit_event(event)
+        frontier = await self.world.head(frozenset({event.scope}))
+        tree = self.create_tree(event.summary, tree_id=tree_id, frontier=frontier)
+        if tree.tree_id in self._trees:
+            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
+        return runtime_views.tree_dict(await self.runner.run(tree, observer=self._record_tree))
+
+    async def world_scope(self, scope: str, *, after: int = 0) -> dict[str, Any]:
+        """返回一个 scope 从指定序号起的有界提交索引，用于 ops 观察与环境适配器续读。"""
+        if after < 0:
+            raise ValueError("after 必须是不小于 0 的整数")
+        await self.world.initialize()
+        delta = await self.world.delta(WorldFrontier({scope: after}), frozenset({scope}))
+        return {
+            "scope": scope,
+            "after": after,
+            "frontier": dict(delta.end.positions),
+            "has_more": delta.has_more,
+            "commits": [runtime_views.commit_dict(commit) for commit in delta.commits],
+        }
+
+    async def forest(self, *, limit: int = 64) -> dict[str, Any]:
+        """返回 Bot 森林视图：运行期已知树与世界日志推导的持久活动索引。"""
+        await self.world.initialize()
+        activity = await self.world.tree_index(limit)
+        return {
+            "runtime": [runtime_views.tree_summary(tree) for tree in reversed(tuple(self._trees.values()))][:limit],
+            "journal": [runtime_views.activity_dict(item) for item in activity],
+        }
+
+    def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
+        self._stop_requester = requester
+
+    def request_shutdown(self) -> None:
+        if self._stop_requester is not None:
+            self._stop_requester()
+
+    async def dispatch_terminal(self, text: str) -> TerminalResponse:
+        command = text.startswith("/")
+        input_type = "operation" if command else "message"
+        _logger.debug("终端输入开始 input_type=%s", input_type)
+        result = (
+            await self.ops.route_text(text) if command else await self.ops.execute("POST", "/trees", {"message": text})
+        )
+        control = {
+            OperationControl.NONE: TerminalControl.NONE,
+            OperationControl.CLEAR_CONSOLE: TerminalControl.CLEAR,
+            OperationControl.SHUTDOWN_PROCESS: TerminalControl.SHUTDOWN,
+        }[result.control]
+        rendered, tree_failed = runtime_views.terminal_text(result, command=command)
+        _logger.debug("终端输入完成 input_type=%s ok=%s code=%s", input_type, result.ok, result.code)
+        return TerminalResponse(rendered, control, is_error=not result.ok or tree_failed)
+
+    def runtime_status(self) -> dict[str, Any]:
+        statuses = {"running": 0, "completed": 0, "failed": 0}
+        for tree in self._trees.values():
+            statuses[tree.status.value] += 1
+        return {"tree_count": len(self._trees), "trees": statuses}
+
+    def list_trees(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
+        trees = reversed(tuple(self._trees.values()))
+        return [runtime_views.tree_summary(tree) for tree in trees if status is None or tree.status.value == status][
+            :limit
+        ]
+
+    def tree_detail(self, tree_id: str) -> dict[str, Any] | None:
+        tree = self._trees.get(tree_id)
+        return runtime_views.tree_dict(tree) if tree is not None else None
+
+    def node_detail(self, tree_id: str, node_id: str) -> dict[str, Any] | None:
+        tree = self._trees.get(tree_id)
+        if tree is None:
+            return None
+        try:
+            node = tree.node(node_id)
+        except KeyError:
+            return None
+        return runtime_views.node_dict(node)
+
+    def agent_catalog(self) -> dict[str, Any]:
+        return {"agents": [runtime_views.agent_dict(definition) for definition in self.agents.definitions]}
+
+    def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
+        try:
+            definition = self.agents.get(agent_id)
+        except ValueError:
+            return None
+        return runtime_views.agent_dict(definition)
+
+    def tool_catalog(self) -> dict[str, Any]:
+        return {"tools": [runtime_views.tool_dict(definition) for definition in self.runner.tool_definitions]}
+
+    def tool_detail(self, tool_id: str) -> dict[str, Any] | None:
+        definition = next((item for item in self.runner.tool_definitions if item.name == tool_id), None)
+        return runtime_views.tool_dict(definition) if definition is not None else None
+
+    def mcp_status(self) -> dict[str, Any]:
+        snapshot = self.mcp.snapshot()
+        return {
+            "platform_enabled": snapshot.platform_enabled,
+            "restart_required": snapshot.restart_required,
+            "tool_ids": list(snapshot.tool_ids),
+            "apps": [runtime_views.mcp_app_dict(app) for app in snapshot.apps],
+        }
+
+    def mcp_app(self, package: str) -> dict[str, Any] | None:
+        snapshot = self.mcp.app(package)
+        return runtime_views.mcp_app_dict(snapshot) if snapshot is not None else None
+
+    def prompt_catalog(self) -> dict[str, Any]:
+        prompts = self.config.get(PROMPTS_CONFIG)
+        return {
+            "system": list(prompts.system),
+            "agent_prompts": dict(prompts.agent_prompts),
+            "max_characters": prompts.max_characters,
+        }
+
+    def prompt_detail(self, prompt_id: str) -> dict[str, Any] | None:
+        prompts = self.config.get(PROMPTS_CONFIG)
+        if prompt_id == "system":
+            return {"prompt_id": "system", "fragments": list(prompts.system)}
+        content = prompts.agent_prompts.get(prompt_id)
+        return {"prompt_id": prompt_id, "content": content} if content is not None else None
+
+    def reload_config(self) -> dict[str, Any]:
+        """重新解析全部个人 TOML 并替换运行时配置；不重组任何已装配实例。"""
+        config = load_config(self.config.project_root)
+        self.config = config
+        return {"names": config.names, "sources": [source.name for source in config.sources]}
+
+    def model_catalog(self) -> dict[str, Any]:
+        models = self.config.get(MODELS_CONFIG)
+        return {
+            "providers": [
+                {
+                    "provider_id": provider_id,
+                    "adapter": provider.adapter,
+                    "secret_env": provider.secret_env,
+                    "base_url": provider.base_url,
+                }
+                for provider_id, provider in models.providers.items()
+            ],
+            "endpoints": [
+                {"endpoint_id": endpoint_id, "provider": endpoint.provider, "model": endpoint.model}
+                for endpoint_id, endpoint in models.endpoints.items()
+            ],
+        }
+
+    def model_detail(self, endpoint_id: str) -> dict[str, Any] | None:
+        models = self.config.get(MODELS_CONFIG)
+        endpoint = models.endpoints.get(endpoint_id)
+        if endpoint is None:
+            return None
+        provider = models.providers[endpoint.provider]
+        return {
+            "endpoint_id": endpoint_id,
+            "provider": endpoint.provider,
+            "model": endpoint.model,
+            "adapter": provider.adapter,
+            "secret_env": provider.secret_env,
+            "base_url": provider.base_url,
+        }
+
+    def utils_status(self) -> dict[str, Any]:
+        return runtime_views.utils_status()
+
+    def contracts_status(self) -> dict[str, Any]:
+        return runtime_views.contracts_status()
+
+    def cadence_status(self) -> dict[str, Any]:
+        return self.cadence.status()
+
+    async def cadence_trigger(self) -> dict[str, Any]:
+        await self.world.initialize()
+        before = self.cadence.status()
+        await self.cadence.evaluate_once()
+        return {"before": before, "after": self.cadence.status()}
+
+    async def memory_snapshot(self) -> dict[str, Any]:
+        await self.world.initialize()
+        snapshot = await self.memory.recall()
+        return {
+            "window_start": snapshot.window_start.isoformat(),
+            "scopes": [
+                {
+                    "scope": scope.scope,
+                    "head": scope.head,
+                    "commits": [runtime_views.commit_dict(commit) for commit in scope.commits],
+                }
+                for scope in snapshot.scopes
+            ],
+        }
+
+    def console_status(self) -> dict[str, Any]:
+        return {
+            "enabled": self.root.console_enabled,
+            "input_to_worldline": True,
+            "output_to_worldline": False,
+            "scope": "aurora:console",
+        }
+
+    async def world_stream(self, *, after: int = 0, limit: int = 64) -> dict[str, Any]:
+        if after < 0:
+            raise ValueError("after 必须是不小于 0 的整数")
+        await self.world.initialize()
+        page = await self.world.stream(after, limit)
+        return {
+            "after": page.after,
+            "end": page.end,
+            "has_more": page.has_more,
+            "commits": [runtime_views.commit_dict(commit) for commit in page.commits],
+        }
+
+    async def world_commit(self, commit_id: str) -> dict[str, Any] | None:
+        await self.world.initialize()
+        commit = await self.world.commit(commit_id)
+        return runtime_views.commit_dict(commit) if commit is not None else None
+
+    async def record_event(
+        self,
+        *,
+        event_id: str,
+        kind: str,
+        source: str,
+        summary: str,
+        scope: str,
+        data: dict[str, Any] | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]:
+        """向世界线追加一条提交方已确定 scope 的通用事件。"""
+        await self.world.initialize()
+        frontier = await self.world.head(frozenset({scope}))
+        when = parse_event_time(occurred_at) if occurred_at else datetime.now(UTC)
+        commit = await self.world.append_commit(
+            commit_id=event_id,
+            kind=kind,
+            source=source,
+            summary=summary,
+            scopes=frozenset({scope}),
+            based_on=frontier,
+            data=data or {},
+            occurred_at=when,
+        )
+        return runtime_views.commit_dict(commit)
+
+    def _record_tree(self, tree: AgentTree) -> None:
+        self._trees[tree.tree_id] = tree
 
 
-_SERVER_GRACE_SECONDS = 10.0
-"""平台 server 优雅退出的等待上限，超时后强制取消。"""
-_CANCEL_GRACE_SECONDS = 1.0
-"""取消后的有界回收等待上限。"""
+def assemble_runtime(
+    config: AuroraConfig,
+    model: Model | None = None,
+    tools: Iterable[Tool] = (),
+    *,
+    world: WorldJournal | None = None,
+    mcp: McpRuntime | None = None,
+    output: Callable[[str], None] = print,
+) -> AuroraRuntime:
+    """运行全部组件注册器，并取得完整运行时所需实例。"""
+    instances: list[InstanceBinding] = []
+    if world is not None:
+        instances.append((WORLD_JOURNAL, world))
+    if mcp is not None:
+        instances.append((MCP_RUNTIME, mcp))
+    external_tools = (*tuple(tools), *(mcp.tools if mcp is not None else ()))
+    assembly = compose_project(config, model, external_tools, instances)
+    return AuroraRuntime(
+        assembly.get(ENGINE_RUNNER),
+        config.get(RUNTIME_CONFIG),
+        assembly.get(AGENTS),
+        config,
+        assembly.get(TERMINAL_CONSOLE),
+        assembly.get(WORLD_JOURNAL),
+        assembly.get(CADENCE),
+        assembly.get(MEMORY),
+        assembly.get(MCP_RUNTIME),
+        output=output,
+    )
 
 
-@dataclass(frozen=True, slots=True)
-class _InstalledSignal:
-    """已注册的信号处理器快照，用于启动与恢复。"""
-
-    candidate: signal.Signals
-    loop_owned: bool
-    previous: object | None = None
-
-
-# -- 主入口 -----------------------------------------------------------
-
-
-async def run_runtime(
-    platforms: frozenset[str] | None,
+async def run_project(
+    config: AuroraConfig,
+    model: Model | None = None,
+    tools: Iterable[Tool] = (),
     *,
     headless: bool = False,
     stop_event: asyncio.Event | None = None,
-) -> None:
-    """围绕一个共享运行时和停止事件，启动精确的平台组合并运行至停止。
+    readline: Callable[[str], str] | None = None,
+    output: Callable[[str], None] = print,
+    mcp_factory: McpClientFactory | None = None,
+) -> AuroraRuntime:
+    """先冻结 MCP 工具目录，再组合运行时并让 Console 或停止事件拥有进程前台。"""
+    configure_project_logging(config)
+    _logger.info("Aurora runtime 启动 headless=%s", headless)
+    world = build_world(config)
+    mcp: McpRuntime | None = None
+    try:
+        await world.initialize()
+        platform = config.get(PLATFORMS_CONFIG).mcp
+        mcp = await prepare_mcp(
+            build_mcp_specs(config),
+            platform_enabled=platform.enabled,
+            world=world,
+            factory=mcp_factory,
+        )
+        _logger.info("MCP 工具目录已冻结 app_count=%d tool_count=%d", len(mcp.snapshot().apps), len(mcp.tools))
+        runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp, output=output)
+        await _activate_runtime(runtime, mcp)
+        _logger.info("Aurora runtime 装配完成")
+    except BaseException as error:
+        _logger.error("Aurora runtime 启动失败 error_type=%s", type(error).__name__)
+        await _close_failed_startup(mcp, world)
+        raise
 
-    headless 只禁用本地 Console，不改变平台组合。
-    """
-    configuration = get()
-    selected = _selected_platforms(platforms, configuration.preference)
-    console_enabled = not headless and configuration.runtime.console.enabled
-    configure_logging(configuration.logging_level, configuration.logging_dir / "aurora.log")
-    configure_console_logging(enabled=configuration.runtime.console.terminal_logs)
-
-    runtime = _create_runtime(configuration)
     stop = stop_event or asyncio.Event()
-    runtime.bind_stop_requester(stop.set)
-    panel_server = _panel_server(runtime, console_enabled=console_enabled)
-    failure: BaseException | None = None
-    async with AsyncExitStack() as resources:
-        resources.push_async_callback(_run_cleanup, runtime.shutdown)
-        installed_signals = _install_stop_handlers(stop) if stop_event is None else ()
+    cadence_task: asyncio.Task[None] | None = None
+    panel: PanelRuntime | None = None
+    installed = ()
+    try:
+        runtime.bind_stop_requester(stop.set)
+        panel = await run_panel(
+            runtime.root.panel,
+            runtime.ops,
+            storage=config.get(STORAGE_CONFIG),
+            project_root=config.project_root,
+            profile=runtime.root.profile,
+        )
+        if runtime.cadence.enabled:
+            cadence_task = asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
+        installed = install_stop_handlers(stop) if stop_event is None else ()
+        if not headless and runtime.root.console_enabled:
+            await runtime.console.run(runtime, stop_event=stop, readline=readline, output=output)
+        else:
+            await stop.wait()
+    finally:
+        await _shutdown_project(runtime, panel, cadence_task, installed, mcp, world)
+    return runtime
+
+
+async def _close_failed_startup(mcp: McpRuntime | None, world: WorldJournal) -> None:
+    if mcp is not None:
+        with suppress(Exception):
+            await mcp.close()
+    with suppress(Exception):
+        await world.close()
+
+
+async def _shutdown_project(
+    runtime: AuroraRuntime,
+    panel: PanelRuntime | None,
+    cadence_task: asyncio.Task[None] | None,
+    installed: tuple[InstalledSignal, ...],
+    mcp: McpRuntime,
+    world: WorldJournal,
+) -> None:
+    _logger.info("Aurora runtime 开始关闭")
+    runtime.bind_stop_requester(None)
+    try:
+        restore_stop_handlers(installed)
+    finally:
+        await close_panel(panel)
+        if cadence_task is not None:
+            cadence_task.cancel()
+            await asyncio.gather(cadence_task, return_exceptions=True)
         try:
-            handles = await _start_platforms_until_stop(runtime, selected, resources, stop)
-            if handles is not None:
-                logger.info(
-                    "process started platforms=%s profile=%s",
-                    _platforms_label(selected),
-                    runtime.configuration.runtime.profile,
-                )
-                failure = await _run_platform_tasks(
-                    runtime,
-                    stop,
-                    handles,
-                    panel_server,
-                    console_enabled=console_enabled,
-                )
+            await mcp.close()
         finally:
-            runtime.bind_stop_requester(None)
-            _restore_stop_handlers(installed_signals)
-    logger.info("process stopped platforms=%s", _platforms_label(selected))
-    if failure is not None:
-        raise failure
-
-
-def _platforms_label(selected: frozenset[str]) -> str:
-    """平台集合的日志标签，空集合表示为 headless。"""
-    return ",".join(sorted(selected)) or "headless"
-
-
-# -- 平台选择 ---------------------------------------------------------
-
-
-def _selected_platforms(platforms: frozenset[str] | None, preference: PlatformPreference) -> frozenset[str]:
-    """由用户指定的平台或配置偏好推导出本次应启用的平台集合。"""
-    if platforms is not None:
-        unknown = platforms - PLATFORM_NAMES
-        if unknown:
-            raise ValueError(f"unknown platforms: {sorted(unknown)}")
-        return platforms
-    return frozenset(name for name in PLATFORM_NAMES if getattr(preference, name).enabled)
-
-
-# -- Agent handler 加载 -------------------------------------------------
-
-
-def _load_handler(specification: str, composer: PromptComposer, capabilities: tuple[Capability, ...]) -> AgentHandler:
-    """加载 Agent handler，并注入提示词装配器与主动能力。"""
-    module_name, separator, attribute = specification.partition(":")
-    if not separator:
-        raise ValueError(f"Agent implementation must use module:attribute syntax: {specification}")
-    implementation = getattr(importlib.import_module(module_name), attribute)
-    handler: Any = implementation()
-    installer = getattr(handler, "install_prompt_composer", None)
-    if callable(installer):
-        installer(composer)
-    cap_installer = getattr(handler, "install_capabilities", None)
-    if callable(cap_installer):
-        cap_installer(capabilities)
-    if not callable(getattr(handler, "handle", None)):
-        raise TypeError(f"Agent implementation does not provide handle(): {specification}")
-    return handler
-
-
-def _build_capabilities() -> tuple[Capability, ...]:
-    """构造 Agent 可主动选择的内建能力。"""
-    from src.agents.capabilities.delegate import DelegationCapability
-    from src.agents.capabilities.memory import MemoryCapability
-    from src.agents.capabilities.speech import SpeechCapability
-    from src.agents.capabilities.wait import WaitCapability
-
-    return DelegationCapability(), WaitCapability(), SpeechCapability(), MemoryCapability()
-
-
-# -- Engine / ops 构造 --------------------------------------------
-
-
-def _create_runtime(configuration: AuroraConfig) -> AuroraRuntime:
-    """在唯一组合根创建 Agent、Provider、自动服务、engine 与 ops。"""
-    profiles = configuration.agents
-    limits = configuration.engine.agents
-    engine_configuration = EngineConfiguration(
-        workspace=str(configuration.engine.workspace),
-        profiles=profiles,
-        limits=limits,
-        interactive_budget=configuration.engine.interactive_budget,
-        autonomous_budget=configuration.engine.autonomous_budget,
-        triage=configuration.engine.triage,
-    )
-    prompt_catalog = PromptCatalog.from_config(configuration.prompts)
-    composer = PromptComposer(prompt_catalog)
-    capabilities = _build_capabilities()
-    handlers = {profile.id: _load_handler(profile.implementation, composer, capabilities) for profile in profiles}
-    model_gateway = ModelGatewayService(configuration)
-    memory = MemoryService(
-        configuration.storage.memory,
-        gateway=model_gateway,
-        embed_fn=model_gateway.embed_sync,
-        llm_model=_configured_model(configuration, "quality"),
-    )
-    engine = AgentEngine(
-        engine_configuration,
-        handlers,
-        model_provider=model_gateway,
-        memory_store=memory,
-        idle_wait_seconds=configuration.engine.autonomy.scan_seconds,
-    )
-    memory_bindings = _build_memory_bindings(memory, engine)
-    return AuroraRuntime(
-        configuration,
-        engine,
-        tool_bindings=memory_bindings,
-        model_gateway=model_gateway,
-        memory=memory,
-        prompt_catalog=prompt_catalog,
-    )
-
-
-def _build_memory_bindings(memory: MemoryService, ingress: object) -> tuple["ToolExecutorBinding", ...]:
-    """构造记忆同源且通过 AMP 回执的主动记忆工具绑定。"""
-    from src.contracts.tool import ToolExecutorBinding
-    from src.memory.executor import MEMORY_REMEMBER_DESCRIPTOR, MemoryToolExecutor
-
-    return (
-        ToolExecutorBinding(
-            MEMORY_REMEMBER_DESCRIPTOR,
-            MemoryToolExecutor(memory, ingress),  # type: ignore[arg-type]
-            source_app="memory",
-            source_instance="local",
-        ),
-    )
-
-
-def _configured_model(configuration: AuroraConfig, role: str) -> str | None:
-    """返回角色绑定的完整 Provider/model 标识。"""
-    definition = configuration.model_definitions.get(role)
-    if definition is None:
-        return None
-    return f"{definition.provider}/{definition.model}"
-
-
-# -- 平台启动（统一循环）-----------------------------------------------
-
-
-async def _start_platforms(
-    runtime: AuroraRuntime,
-    selected: frozenset[str],
-    resources: AsyncExitStack,
-) -> dict[str, PlatformHandle]:
-    """遍历已注册的平台描述符，为选中的平台创建实例并收集工具绑定与清理回调。
-
-    平台的 server 与后台任务不在此启动，统一由 ``_run_platform_tasks`` 调度。
-    """
-    creators = _init_platforms()
-    handles: dict[str, PlatformHandle] = {}
-    all_bindings: list[ToolExecutorBinding] = []
-
-    for name in sorted(selected):
-        creator = creators.get(name)
-        if creator is None:
-            raise ValueError(f"no platform creator registered for {name}")
-        handle = await creator(runtime.configuration, runtime)
-        handles[name] = handle
-        all_bindings.extend(handle.bindings)
-        if handle.cleanup is not None:
-            resources.push_async_callback(_run_cleanup, handle.cleanup)
-
-    all_bindings.extend(runtime.tool_bindings)
-    runtime.engine.bind_tool_executors(tuple(all_bindings))
-    return handles
-
-
-async def _start_platforms_until_stop(
-    runtime: AuroraRuntime,
-    selected: frozenset[str],
-    resources: AsyncExitStack,
-    stop: asyncio.Event,
-) -> dict[str, PlatformHandle] | None:
-    """竞速启动平台与停止信号。"""
-    startup = asyncio.create_task(_start_platforms(runtime, selected, resources), name="aurora-platform-startup")
-    stop_task = asyncio.create_task(stop.wait(), name="aurora-startup-stop")
-    try:
-        done, _pending = await asyncio.wait({startup, stop_task}, return_when=asyncio.FIRST_COMPLETED)
-        return startup.result() if startup in done else None
-    finally:
-        await asyncio.gather(*(_cancel_task(task) for task in (startup, stop_task)))
-
-
-# -- 任务执行与停止 ----------------------------------------------------
-
-
-async def _run_platform_tasks(
-    runtime: AuroraRuntime,
-    stop: asyncio.Event,
-    handles: dict[str, PlatformHandle],
-    panel_server: PlatformServer | None,
-    *,
-    console_enabled: bool,
-) -> BaseException | None:
-    """启动运行时循环、面板与各平台后台任务，等待首个完成者并协调退出。"""
-    runtime_task = asyncio.create_task(runtime.run_forever(stop), name="aurora-runtime-loop")
-    tasks: set[asyncio.Task[None]] = {runtime_task}
-
-    # 平台 server 通过 should_exit 优雅退出；background 必须持续运行到 stop。
-    servers: dict[str, PlatformServer] = {}
-    server_tasks: dict[str, asyncio.Task[None]] = {}
-    platform_tasks: dict[str, asyncio.Task[None]] = {}
-    for name, handle in handles.items():
-        if handle.server is not None:
-            servers[name] = handle.server
-            task = asyncio.create_task(handle.server.serve(), name=f"aurora-platform-{name}-server")
-            server_tasks[name] = task
-            tasks.add(task)
-        if handle.background is not None:
-            task = asyncio.create_task(handle.background(stop), name=f"aurora-platform-{name}-background")
-            platform_tasks[name] = task
-            tasks.add(task)
-
-    console_task: asyncio.Task[None] | None = _spawn_console(runtime, stop, enabled=console_enabled)
-    tasks.update(task for task in (console_task,) if task is not None)
-
-    panel_task: asyncio.Task[None] | None = None
-    panel_background: asyncio.Task[None] | None = None
-    if panel_server is not None:
-        panel_task = asyncio.create_task(panel_server.serve(), name="aurora-panel-server")
-        tasks.add(panel_task)
-        if runtime.configuration.runtime.panel.open_browser:
-            panel_background = asyncio.create_task(
-                _open_browser_when_ready(panel_server, runtime.configuration.runtime.panel, stop),
-                name="aurora-panel-browser",
-            )
-            tasks.add(panel_background)
-    stop_task = asyncio.create_task(_wait_for_stop(stop), name="aurora-stop-watcher")
-    tasks.add(stop_task)
-
-    try:
-        done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        return _task_failure(done, stop_task, stop)
-    finally:
-        stop.set()
-        await _cancel_task(stop_task)
-        panel_stop = (
-            (_stop_server(panel_server, panel_task),) if panel_server is not None and panel_task is not None else ()
-        )
-        panel_background_stop = (_await_task_exit(panel_background),) if panel_background is not None else ()
-        await asyncio.gather(
-            *(_stop_server(servers[name], task) for name, task in server_tasks.items()),
-            *(_await_task_exit(task) for task in platform_tasks.values()),
-            *(_await_task_exit(task) for task in (console_task,) if task is not None),
-            *panel_stop,
-            *panel_background_stop,
-            _await_task_exit(runtime_task),
-        )
-
-
-async def _wait_for_stop(stop: asyncio.Event) -> None:
-    """挂起直到 stop 事件被设置。"""
-    await stop.wait()
-
-
-def _spawn_console(runtime: AuroraRuntime, stop: asyncio.Event, *, enabled: bool) -> asyncio.Task[None] | None:
-    """按运行时配置创建本地 Console 前端任务（headless 或配置禁用时不启动）。"""
-    if not enabled:
-        return None
-    from src.console import run_console
-
-    return asyncio.create_task(run_console(runtime, runtime, stop_event=stop), name="aurora-console")
-
-
-async def _stop_server(server: PlatformServer, task: asyncio.Task[None]) -> None:
-    """请求 server 退出且不让其原异常中断其他资源清理。"""
-    server.should_exit = True
-    await _await_task_exit(task)
-
-
-async def _await_task_exit(task: asyncio.Task[None]) -> None:
-    """有界等待任务退出，超时后取消并吸收原任务异常。"""
-    if not task.done():
-        await asyncio.wait({task}, timeout=_SERVER_GRACE_SECONDS)
-    if not task.done():
-        task.cancel()
-        await asyncio.wait({task}, timeout=_CANCEL_GRACE_SECONDS)
-    if task.done():
-        await asyncio.gather(task, return_exceptions=True)
-    else:
-        logger.error("task ignored cancellation task=%s", task.get_name())
-
-
-async def _cancel_task(task: asyncio.Task[Any]) -> None:
-    """立即取消任务并有界回收（等待窗口内未退出则由 _await_task_exit 二次取消）。"""
-    if not task.done():
-        task.cancel()
-    await _await_task_exit(task)
-
-
-async def _run_cleanup(cleanup: PlatformCleanup) -> None:
-    """在统一期限内执行资源清理回调。"""
-    task = asyncio.create_task(cleanup(), name="aurora-resource-cleanup")
-    await _await_task_exit(task)
-    if not task.done() or task.cancelled():
-        raise TimeoutError("resource cleanup did not finish")
-    if error := task.exception():
-        raise error
-
-
-def _task_failure(
-    done: set[asyncio.Task[None]], stop_task: asyncio.Task[None], stop: asyncio.Event
-) -> BaseException | None:
-    """从已完成的任务中提取异常或检测意外退出。"""
-    for task in done:
-        if task is stop_task or task.cancelled():
-            continue
-        try:
-            task.result()
-        except BaseException as error:  # noqa: BLE001
-            return error
-        if not stop.is_set():
-            return RuntimeError(f"{task.get_name()} stopped unexpectedly")
-    return None
-
-
-# -- 信号处理 ----------------------------------------------------------
-
-
-def _install_stop_handlers(stop: asyncio.Event) -> tuple[_InstalledSignal, ...]:
-    """在事件循环上安装 SIGINT/SIGTERM 信号处理器。"""
-    loop = asyncio.get_running_loop()
-    installed: list[_InstalledSignal] = []
-    for candidate in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(candidate, stop.set)
-        except (NotImplementedError, RuntimeError):
-            previous = signal.getsignal(candidate)
-
-            def handle_signal(_signum: int, _frame: object, *, event: asyncio.Event = stop) -> None:
-                loop.call_soon_threadsafe(event.set)
-
-            signal.signal(candidate, handle_signal)
-            installed.append(_InstalledSignal(candidate=candidate, loop_owned=False, previous=previous))
-        else:
-            installed.append(_InstalledSignal(candidate=candidate, loop_owned=True))
-    return tuple(installed)
-
-
-def _restore_stop_handlers(installed: tuple[_InstalledSignal, ...]) -> None:
-    """恢复之前安装的信号处理器。"""
-    loop = asyncio.get_running_loop()
-    for item in installed:
-        if item.loop_owned:
-            loop.remove_signal_handler(item.candidate)
-        else:
-            signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
-
-
-# -- 面板服务器 --------------------------------------------------------
-
-
-def _panel_server(runtime: AuroraRuntime, *, console_enabled: bool = True) -> SignalSafeServer | None:
-    """创建独立于 Platform 集合的面板后端服务器。
-
-    console_enabled 控制 Lab 调试页（/debug/lab）是否随本地 Console 一起提供。
-    """
-    configuration = runtime.configuration
-    panel = configuration.runtime.panel
-    if not panel.enabled:
-        return None
-    store = PanelStore(configuration.storage.ops)
-    context = PanelAppContext(
-        ports=runtime.panel_runtime(),
-        panel=panel,
-        profile=configuration.runtime.profile,
-        store=store,
-        console_enabled=console_enabled,
-    )
-    return SignalSafeServer(
-        uvicorn.Config(
-            create_panel_app(context),
-            host=panel.host,
-            port=panel.port,
-            log_level=configuration.logging_level.lower(),
-            log_config=None,
-            access_log=False,
-        )
-    )
-
-
-async def _open_browser_when_ready(server: "PlatformServer", configuration: PanelConfig, stop: asyncio.Event) -> None:
-    """服务器就绪后打开面板，并存活至统一停止。"""
-    while not server.started:
-        if server.should_exit or stop.is_set():
-            return
-        await asyncio.sleep(0.01)
-    if server.should_exit or stop.is_set():
-        return
-    await asyncio.to_thread(_open_panel_browser, configuration)
-    await stop.wait()
-
-
-def _open_panel_browser(configuration: PanelConfig) -> None:
-    """在默认浏览器中打开面板地址。"""
-    host = "127.0.0.1" if configuration.host in {"0.0.0.0", "::"} else configuration.host
-    if ":" in host:
-        host = f"[{host}]"
-    webbrowser.open(f"http://{host}:{configuration.port}")
+            await world.close()
+    _logger.info("Aurora runtime 已关闭")
+
+
+async def _activate_runtime(runtime: AuroraRuntime, mcp: McpRuntime) -> None:
+    """先固定 Cadence cursor，再放行 MCP 业务事件。"""
+    if runtime.cadence.enabled:
+        await runtime.cadence.initialize()
+    await mcp.activate()

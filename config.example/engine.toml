@@ -1,0 +1,6 @@
+# AgentTree 确定性单循环的资源边界。
+
+[engine.tree]
+max_depth = 4
+max_nodes = 32
+max_steps = 256

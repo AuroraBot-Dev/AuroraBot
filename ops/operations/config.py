@@ -1,47 +1,143 @@
-"""agents / config / prompt 域操作：配置快照与提示词观察。"""
+"""配置监测与显式开放的开关操作。"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
+from ops.contracts import OperationResult, ParameterKind, ParameterLocation, ParameterSpec
+from ops.operations import require_port
 from ops.registry import operation
-from src.contracts import OperationResult, ParameterKind, ParameterLocation, ParameterSpec
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from ops.contracts import OperationContext
 
 
 @operation(
     "GET",
-    "/agents/profiles",
-    name="agents.profiles",
-    aliases=("/profiles",),
-    summary="Agent profile 目录",
-)
-async def agents_profiles(context: Any, _params: dict[str, Any]) -> OperationResult:
-    snapshot = context.runtime.config.snapshot()
-    return OperationResult.success({"profiles": snapshot.get("agents", [])})
-
-
-@operation(
-    "GET",
-    "/config/snapshot",
+    "/config",
     name="config.snapshot",
-    aliases=("/config",),
-    summary="启动配置快照（脱敏）",
+    summary="查看配置来源与可改动范围",
 )
-async def config_snapshot(context: Any, _params: dict[str, Any]) -> OperationResult:
+async def snapshot(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
     return OperationResult.success(context.runtime.config.snapshot())
 
 
 @operation(
     "GET",
-    "/prompts/{role}",
-    name="prompt.get",
-    aliases=("/prompt",),
-    summary="角色提示词查看（soul / world / profile_id）",
-    parameters=(ParameterSpec("role", ParameterLocation.PATH, kind=ParameterKind.POSITIONAL, required=True),),
+    "/config/{name}",
+    name="config.read",
+    summary="读取一个已注册的个人 TOML 配置",
+    aliases=("/config-show",),
+    parameters=(ParameterSpec("name", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),),
 )
-async def prompt_get(context: Any, params: dict[str, Any]) -> OperationResult:
-    role = str(params["role"])
-    value = context.runtime.config.prompt_for(role)
-    if value is None:
-        return OperationResult.failure("NOT_FOUND", f"提示词未找到: {role}")
-    return OperationResult.success(value)
+async def read(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    name = str(params["name"])
+    document = context.runtime.config.read(name)
+    if document is None:
+        return OperationResult.failure("NOT_FOUND", f"配置尚未注册：{name}")
+    return OperationResult.success(document)
+
+
+@operation(
+    "POST",
+    "/config/reload",
+    name="config.reload",
+    summary="重新解析全部个人 TOML 并替换运行时配置；不重组已装配实例",
+    aliases=("/reload",),
+)
+async def reload(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    port, missing = require_port(context.runtime.config_reload, "config_reload")
+    if missing is not None:
+        return missing
+    assert port is not None
+    try:
+        result = port.reload_config()
+    except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
+        return OperationResult.failure("CONFIG_ERROR", str(error))
+    world, missing_world = require_port(context.runtime.world, "world")
+    if missing_world is None:
+        assert world is not None
+        await world.record_event(
+            event_id=f"ops:config:reload:{uuid4().hex}",
+            kind="ops.config.reloaded",
+            source="ops",
+            summary="个人配置已重新加载",
+            scope="aurora:config",
+            data={"sources": list(result.get("sources", ()))},
+        )
+    return OperationResult.success(result)
+
+
+@operation(
+    "POST",
+    "/apps/{package}/enabled",
+    name="config.app_enabled",
+    summary="修改一个应用的启用状态",
+    aliases=("/app-enable",),
+    parameters=(
+        ParameterSpec("package", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("enabled", ParameterLocation.BODY, type="bool", required=True, help="true 或 false"),
+    ),
+)
+async def set_app_enabled(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is not None:
+        return missing
+    assert port is not None
+    try:
+        result = context.runtime.config.set_app_enabled(str(params["package"]), enabled=bool(params["enabled"]))
+    except (KeyError, ValueError) as error:
+        return OperationResult.failure("CONFIG_ERROR", str(error))
+    if result["changed"] is True:
+        await port.record_event(
+            event_id=f"ops:config:apps:{params['package']}:{uuid4().hex}",
+            kind="ops.config.changed",
+            source="ops",
+            summary=f"应用启用状态已改为 {bool(params['enabled'])}",
+            scope="aurora:config",
+            data={"source": "apps", "package": str(params["package"]), "enabled": bool(params["enabled"])},
+        )
+    return OperationResult.success(result)
+
+
+@operation(
+    "POST",
+    "/extensions/{extension_id}/enabled",
+    name="config.extension_enabled",
+    summary="修改一个扩展的启用状态",
+    aliases=("/extension-enable",),
+    parameters=(
+        ParameterSpec("extension_id", ParameterLocation.PATH, ParameterKind.POSITIONAL, required=True),
+        ParameterSpec("enabled", ParameterLocation.BODY, type="bool", required=True, help="true 或 false"),
+    ),
+)
+async def set_extension_enabled(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    port, missing = require_port(context.runtime.world, "world")
+    if missing is not None:
+        return missing
+    assert port is not None
+    try:
+        result = context.runtime.config.set_extension_enabled(
+            str(params["extension_id"]), enabled=bool(params["enabled"])
+        )
+    except (KeyError, ValueError) as error:
+        return OperationResult.failure("CONFIG_ERROR", str(error))
+    if result["changed"] is True:
+        await port.record_event(
+            event_id=f"ops:config:extensions:{params['extension_id']}:{uuid4().hex}",
+            kind="ops.config.changed",
+            source="ops",
+            summary=f"扩展启用状态已改为 {bool(params['enabled'])}",
+            scope="aurora:config",
+            data={
+                "source": "extensions",
+                "extension_id": str(params["extension_id"]),
+                "enabled": bool(params["enabled"]),
+            },
+        )
+    return OperationResult.success(result)

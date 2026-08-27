@@ -1,419 +1,234 @@
-"""模型网关 —— Chat Completions / Responses 双通道调度。
-
-能力以 models.dev 为第一信息源；TOML 显式配置的 capabilities 作为高优覆盖。
-
-用法::
-
-    from src.ai.gateway import ModelGatewayService
-    from src.config import load_configuration
-    from src.contracts.model import ModelRequest
-
-    config = load_configuration(root, profile)
-    service = ModelGatewayService(config)
-    result = await service.complete(request)
-"""
+"""由显式模型端点驱动的 LiteLLM 模型网关。"""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
-import time
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from time import monotonic
+from types import MappingProxyType
+from typing import Any, cast
 
-from jsonschema import ValidationError, validate
+import litellm
 
-from src.ai.cost_store import CostStore
-from src.ai.execution import CostTracker, TaskManager
-from src.ai.models import (
-    cache_available,
-    get_capabilities_by_id,
-    get_modalities_by_id,
-    init_cache,
-    refresh_now,
-)
-from src.ai.providers import ProviderConfig, setup_providers
-from src.ai.roles import resolve
-from src.ai.roles.base import ChatCaller
-from src.contracts import (
-    ModelBudgetError,
-    ModelCapabilityError,
-    ModelGatewayError,
-    ModelMessage,
-    ModelRequest,
-    ModelResult,
-)
-from src.utils import (
-    extract_json_from_text,
-    get_logger,
-)
+from src.ai.openai import openai_tool_name_map, to_openai_messages, to_openai_tools
+from src.contracts import ChatMessage, ModelRequest, ToolCall
+from src.utils import get_logger
 
-if TYPE_CHECKING:
-    from src.ai.roles.base import RoleHandler
-    from src.contracts.configuration import AuroraConfig
+_logger = get_logger(__name__)
+
+type CompletionCaller = Callable[[dict[str, Any]], Awaitable[object]]
 
 
-class _Msg(StrEnum):
-    """本文件内所有异常与日志消息字符串常量。"""
-
-    MODEL_FORMAT = "Model for role '{role}' must be in 'provider/model_name' format, got '{model}'"
-    UNKNOWN_MODEL_ROLE = "unknown model role: {role}"
-    RETRY_POLICY_UNSUPPORTED = "only retry_policy=none is supported"
-    CANCEL_POLICY_UNSUPPORTED = "unsupported model cancellation policy"
-    FORBIDDEN_PARAMETERS = "model parameters may not override controlled fields: {forbidden}"
-    CONTINUATION_MISMATCH = "model continuation does not match the selected role"
-    MISSING_CREDENTIAL = "missing model credential: {env_var}"
-    COST_BUDGET_EXCEEDED = "model cost exceeded max_cost_usd"
+@dataclass(frozen=True, slots=True)
+class ProviderEndpoint:
+    adapter: str
+    base_url: str | None
+    secret_env: str
 
 
-logger = get_logger("aurora.model_gateway")
+@dataclass(frozen=True, slots=True)
+class ModelEndpoint:
+    provider: str
+    model: str
 
 
-def invalid_output_result(request: ModelRequest, diagnostic: str) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
-    """模型输出未通过结构化校验时的确定性回退（配置了则返回，否则仅诊断）。"""
-    if request.invalid_output_result is None:
-        return None, (diagnostic,)
-    try:
-        assert request.output_schema is not None
-        validate(request.invalid_output_result, request.output_schema)
-    except (AssertionError, ValidationError):
-        return None, (diagnostic, "configured invalid-output fallback did not match schema")
-    return request.invalid_output_result, (diagnostic, "returned configured no_action fallback")
+class LiteLLMModelGateway:
+    """按 ModelRequest.model 精确选择配置端点，再统一交给 LiteLLM。"""
 
+    def __init__(
+        self,
+        providers: Mapping[str, ProviderEndpoint],
+        endpoints: Mapping[str, ModelEndpoint],
+        *,
+        caller: CompletionCaller | None = None,
+        timeout_seconds: float = 30.0,
+        max_attempts: int = 2,
+        total_timeout_seconds: float = 60.0,
+        max_tokens: int | None = None,
+    ) -> None:
+        if timeout_seconds <= 0 or total_timeout_seconds <= 0:
+            raise ValueError("模型请求超时必须大于零")
+        if max_attempts <= 0:
+            raise ValueError("模型请求最大尝试次数必须大于零")
+        if total_timeout_seconds < timeout_seconds:
+            raise ValueError("模型请求总超时不能小于单次尝试超时")
+        if max_tokens is not None and max_tokens <= 0:
+            raise ValueError("模型输出预算必须大于零")
+        self._providers = MappingProxyType(dict(providers))
+        self._endpoints = MappingProxyType(dict(endpoints))
+        self._caller = caller or _litellm_completion
+        self._timeout_seconds = timeout_seconds
+        self._max_attempts = max_attempts
+        self._total_timeout_seconds = total_timeout_seconds
+        self._max_tokens = max_tokens
 
-_COLD_START_REFRESH_SECONDS = 5.0
-"""冷启动时等待 models.dev 后台刷新的上限；超时后使用隐含能力继续对话。"""
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        endpoint = self._endpoints.get(endpoint_id)
+        if endpoint is None:
+            raise ValueError(f"模型端点尚未配置：{endpoint_id}")
+        provider = self._providers.get(endpoint.provider)
+        if provider is None:
+            raise ValueError(f"模型端点引用了未知 provider：{endpoint.provider}")
+        if provider.adapter not in {"litellm", "openai_compatible"}:
+            raise ValueError(f"模型端点 {endpoint_id} 使用了尚未实现的 adapter：{provider.adapter}")
+        if provider.adapter == "openai_compatible" and provider.base_url is None:
+            raise ValueError(f"OpenAI-compatible provider 缺少 base_url：{endpoint.provider}")
 
-_FORBIDDEN_PARAMETERS = frozenset(
-    {
-        "model",
-        "api_key",
-        "api_base",
-        "base_url",
-        "tools",
-        "tool_choice",
-        "parallel_tool_calls",
-        "store",
-        "previous_response_id",
-        "input",
-        "messages",
-        "include",
-        "max_tokens",
-        "max_output_tokens",
-        "response_format",
-        "stream",
-        "stream_options",
-        "text",
-        "timeout",
-    }
-)
-
-
-class ModelGatewayService:
-    """基于能力协商的模型边界，调度 Chat Completions / Responses 通道。"""
-
-    def __init__(self, configuration: "AuroraConfig") -> None:
-        self._configuration = configuration
-        self._models: dict[str, str] = {
-            role: f"{definition.provider}/{definition.model}"
-            for role, definition in configuration.model_definitions.items()
-        }
-        for role, model in self._models.items():
-            if "/" not in model:
-                raise ValueError(_Msg.MODEL_FORMAT.format(role=role, model=model))
-
-        self.log_queries = configuration.model_logging.log_queries
-        self.log_responses = configuration.model_logging.log_responses
-        self._task_manager = TaskManager()
-        self.cost_tracker = CostTracker(store=CostStore(configuration.storage.ai))
-
-        init_cache(configuration.storage.ai)
-
-        # 注册 OpenAI 兼容自定义供应商
-        custom_providers = tuple(
-            ProviderConfig(
-                prefix=provider.id,
-                litellm_provider="openai",
-                api_base=provider.base_url or "",
-                api_key_env=provider.secret_env,
+    async def complete(self, request: ModelRequest) -> ChatMessage:
+        self.validate_endpoint(request.model)
+        endpoint = self._endpoints[request.model]
+        provider = self._providers[endpoint.provider]
+        api_key = os.getenv(provider.secret_env)
+        if not api_key:
+            raise RuntimeError(f"模型密钥环境变量尚未设置：{provider.secret_env}")
+        tool_names = openai_tool_name_map(
+            (
+                *(tool.name for tool in request.tools),
+                *(call.name for message in request.messages for call in message.tool_calls),
             )
-            for provider in configuration.model_providers.values()
-            if provider.adapter == "openai_compatible"
         )
-        if custom_providers:
-            setup_providers(*custom_providers)
-
-        self._handlers: dict[str, RoleHandler] = {}
-        self._callers: dict[str, ChatCaller] = {}
-        for role_id, model in self._models.items():
-            handler_cls = resolve(role_id)  # 预设之外启动报错
-            self._handlers[role_id] = handler_cls()
-            self._callers[role_id] = ChatCaller(model, role_id, self._task_manager, self)
-
-        self._capabilities: dict[str, frozenset[str]] = {}
-        self._init_lock = asyncio.Lock()
-        self._initialized = False
-
-        logger.info(
-            "model gateway created roles=%d providers=%d",
-            len(configuration.model_definitions),
-            len(configuration.model_providers),
-        )
-
-    async def initialize(self) -> None:
-        """异步解析各角色的能力（models.dev 缓存 + TOML 覆盖）。
-
-        不等待慢网络：冷启动时只给后台刷新一个短时限机会，超时后使用
-        隐含能力继续对话，并把相关角色标记为不确定（工具检查放宽）。
-        """
-        if self._initialized:
-            return
-        if not await cache_available():
-            await refresh_now(wait_seconds=_COLD_START_REFRESH_SECONDS)
-        for role_id, model_id in self._models.items():
-            definition = self._configuration.model_definitions[role_id]
-            if definition.capabilities:
-                caps = definition.capabilities
-            else:
-                caps = await get_capabilities_by_id(model_id)
-            self._capabilities[role_id] = caps
-        self._initialized = True
-        logger.info("model gateway initialized roles=%d", len(self._models))
-
-    async def _ensure_initialized(self) -> None:
-        if self._initialized:
-            return
-        async with self._init_lock:
-            if self._initialized:
-                return
-            await self.initialize()
-
-    def _capabilities_for(self, role_id: str) -> frozenset[str]:
-        """已解析能力合并角色能力基线；未初始化时退回 TOML 配置或隐含能力。"""
-        baseline = self._handlers[role_id].capability_baseline
-        if role_id in self._capabilities:
-            return self._capabilities[role_id] | baseline
-        definition = self._configuration.model_definitions.get(role_id)
-        if definition is not None and definition.capabilities:
-            return definition.capabilities | baseline
-        return frozenset({"chat", "stream", "json_text_fallback"}) | baseline
-
-    # ── 角色 → 调用器映射（chat 通道使用）────────────────────
-
-    def _caller_for(self, role: str) -> ChatCaller:
-        return self._callers[role]
-
-    # ── 能力协商 ──────────────────────────────────────────
-
-    def negotiate(self, request: ModelRequest) -> frozenset[str]:
-        """契约与参数协商。
-
-        模型基础能力假定满足（配置模型即信任它符合角色要求）；本方法只做
-        请求契约校验与结构化输出标记。结构化输出失败由通道的 JSON-text
-        fallback 兜底。
-        """
-        role = self._configuration.model_definitions.get(request.role)
-        if role is None:
-            raise ModelCapabilityError(_Msg.UNKNOWN_MODEL_ROLE.format(role=request.role))
-
-        if request.retry_policy != "none":
-            raise ModelCapabilityError(_Msg.RETRY_POLICY_UNSUPPORTED)
-        if request.cancel_policy not in {"never", "supersedable"}:
-            raise ModelCapabilityError(_Msg.CANCEL_POLICY_UNSUPPORTED)
-        forbidden = sorted(_FORBIDDEN_PARAMETERS & request.parameters.keys())
-        if forbidden:
-            raise ModelCapabilityError(_Msg.FORBIDDEN_PARAMETERS.format(forbidden=forbidden))
-        if request.continuation is not None and request.continuation.provider != role.provider:
-            raise ModelCapabilityError(_Msg.CONTINUATION_MISMATCH)
-
-        negotiated = set(request.required_capabilities)
+        parameters: dict[str, Any] = {
+            "model": _gateway_model(endpoint, provider),
+            "messages": to_openai_messages(request.messages, tool_names),
+            "api_key": api_key,
+            "timeout": self._timeout_seconds,
+            "max_retries": 0,
+        }
+        if self._max_tokens is not None:
+            parameters["max_tokens"] = self._max_tokens
+        if provider.adapter == "openai_compatible":
+            parameters["api_base"] = provider.base_url
         if request.tools:
-            negotiated.add("tools")
-        if request.output_schema is not None and "structured_output" in self._capabilities_for(request.role):
-            negotiated.add("structured_output")
-        return frozenset(negotiated)
-
-    # ── 外部接口───────────────────────────────
-
-    async def get_response(self, role: str, inputs: list[Any]) -> dict[str, Any]:
-        """外部简单入口：传入 role 与 inputs，返回脱壳的纯粹输出。
-
-        - chat 类角色：``{"text", "tool_calls", "finish_reason"}``；
-        - embedding 角色：``{"embeddings", "model"}``（inputs 为文本数组）。
-        """
-        if self._handlers[role].endpoint == "embeddings":
-            vectors = await self._handlers[role].embed(self, [str(item) for item in inputs])
-            return {"embeddings": vectors, "model": self._models[role]}
-        request = ModelRequest(
-            role=role,
-            messages=tuple(
-                ModelMessage(str(item.get("role", "user")), str(item.get("content", ""))) for item in inputs
-            ),
-        )
-        result = await self.complete(request)
-        return {
-            "text": result.text,
-            "tool_calls": [call.to_dict() for call in result.tool_calls],
-            "finish_reason": result.finish_reason,
-        }
-
-    async def modalities_for(self, role: str) -> tuple[frozenset[str], frozenset[str]]:
-        """角色绑定模型的输入/输出模态。"""
-        await self._ensure_initialized()
-        return await get_modalities_by_id(self._models[role])
-
-    async def cost(self) -> dict[str, Any]:
-        """费用分类统计（观察操作）。"""
-        return {
-            "total_cost": await self.cost_tracker.total_cost(),
-            "by_role": await self.cost_tracker.by_role(),
-            "by_model": await self.cost_tracker.by_model(),
-            "by_status": await self.cost_tracker.by_status(),
-        }
-
-    async def models(self) -> list[dict[str, Any]]:
-        """角色-模型绑定、能力与模态（观察操作）。"""
-        catalog: list[dict[str, Any]] = []
-        for role_id, model_id in self._models.items():
-            definition = self._configuration.model_definitions[role_id]
-            handler = self._handlers[role_id]
-            try:
-                input_modalities, output_modalities = await self.modalities_for(role_id)
-            except Exception as error:  # noqa: BLE001 - 模态查询失败不阻断目录
-                logger.debug("model modalities unavailable role=%s error_type=%s", role_id, type(error).__name__)
-                input_modalities, output_modalities = frozenset(), frozenset()
-            catalog.append(
-                {
-                    "role": role_id,
-                    "model": model_id,
-                    "provider": definition.provider,
-                    "endpoint": handler.endpoint,
-                    "capability_baseline": sorted(handler.capability_baseline),
-                    "capabilities": sorted(self._capabilities_for(role_id)),
-                    "input_modalities": sorted(input_modalities),
-                    "output_modalities": sorted(output_modalities),
-                }
-            )
-        return catalog
-
-    def roles(self) -> list[dict[str, Any]]:
-        """角色目录（自描述）。"""
-        return [
-            {
-                "role": role_id,
-                "model": model_id,
-                "endpoint": self._handlers[role_id].endpoint,
-                "capability_baseline": sorted(self._handlers[role_id].capability_baseline),
-            }
-            for role_id, model_id in self._models.items()
-        ]
-
-    def embed_sync(self, texts: list[str]) -> list[list[float]]:
-        """同步 embedding（供记忆引擎的 mem0 自定义嵌入函数调用）。"""
-        import litellm
-
-        from src.ai.providers import resolve_model
-
-        model_id = self._models.get("embedding")
-        if not model_id:
-            return []
-        resolved, provider_kwargs = resolve_model(model_id)
-        response = litellm.embedding(model=resolved, input=texts, **provider_kwargs)
-        data = response.get("data") if isinstance(response, dict) else getattr(response, "data", None)
-        if not isinstance(data, list):
-            return []
-        vectors: list[list[float]] = []
-        for item in data:
-            embedding = item.get("embedding") if isinstance(item, dict) else getattr(item, "embedding", None)
-            if isinstance(embedding, list):
-                vectors.append([float(value) for value in embedding])
-        return vectors
-
-    def export_openai_client(self) -> Any:
-        """导出 litellm 的 OpenAI 兼容 client，供 mem0 等外部库使用。
-
-        api_key 为占位符：实际凭据由 Provider 配置（环境变量）在调用时解析。
-        """
-        import litellm
-
-        return litellm.OpenAI(api_key="aurora-router")
-
-    # ── 请求执行 ──────────────────────────────────────────
-
-    async def complete(self, request: ModelRequest) -> ModelResult:
-        await self._ensure_initialized()
-        started = time.monotonic()
-        negotiated = self.negotiate(request)
-        role = self._configuration.model_definitions[request.role]
-        provider = self._configuration.model_providers[role.provider]
-        handler = self._handlers[request.role]
-
-        logger.debug(
-            "model gateway request model_role=%s provider=%s endpoint=%s messages=%d tools=%d "
-            "continuation=%s output_schema=%s cancel_policy=%s parameter_keys=%s",
-            request.role,
-            role.provider,
-            handler.endpoint,
+            parameters["tools"] = to_openai_tools(request.tools, tool_names)
+        _logger.debug(
+            "模型请求开始 endpoint=%s message_count=%d tool_count=%d",
+            request.model,
             len(request.messages),
             len(request.tools),
-            request.continuation is not None,
-            request.output_schema is not None,
-            request.cancel_policy,
-            sorted(request.parameters),
         )
-        if not os.getenv(provider.secret_env):
-            logger.warning(
-                "model credential unavailable model_role=%s provider=%s credential_env=%s",
-                request.role,
-                role.provider,
-                provider.secret_env,
+        started = monotonic()
+        try:
+            async with asyncio.timeout(self._total_timeout_seconds):
+                response = await self._complete_with_attempts(request.model, parameters)
+        except TimeoutError as error:
+            elapsed = monotonic() - started
+            _logger.error("模型请求超过总截止时间 endpoint=%s elapsed_seconds=%.3f", request.model, elapsed)
+            raise TimeoutError(f"模型请求超过总截止时间：{self._total_timeout_seconds:g} 秒") from error
+        except Exception as error:
+            elapsed = monotonic() - started
+            _logger.error(
+                "模型请求失败 endpoint=%s error_type=%s elapsed_seconds=%.3f",
+                request.model,
+                type(error).__name__,
+                elapsed,
             )
-            raise ModelGatewayError(_Msg.MISSING_CREDENTIAL.format(env_var=provider.secret_env))
-
-        result = await handler.complete(self, request, role, negotiated)
-
-        if request.budget.max_cost_usd is not None and result.cost_usd > request.budget.max_cost_usd:
-            logger.warning(
-                "model cost budget exceeded model_role=%s cost_usd=%.6f limit_usd=%.6f",
-                request.role,
-                result.cost_usd,
-                request.budget.max_cost_usd,
-            )
-            raise ModelBudgetError(_Msg.COST_BUDGET_EXCEEDED)
-
-        logger.debug(
-            "model gateway response model_role=%s endpoint=%s prompt_tokens=%d completion_tokens=%d "
-            "cost_usd=%.6f tool_calls=%d finish_reason=%s duration_ms=%.1f",
-            request.role,
-            handler.endpoint,
-            result.usage.prompt_tokens,
-            result.usage.completion_tokens,
-            result.cost_usd,
+            raise
+        result = _assistant_message(
+            _response_mapping(response),
+            {alias: name for name, alias in tool_names.items()},
+        )
+        _logger.debug(
+            "模型请求完成 endpoint=%s tool_call_count=%d elapsed_seconds=%.3f",
+            request.model,
             len(result.tool_calls),
-            result.finish_reason,
-            (time.monotonic() - started) * 1000,
+            monotonic() - started,
         )
         return result
 
-    # ── 输出规范化 ────────────────────────────────────────
-
-    def _normalize_output(
-        self, text: str, request: ModelRequest, negotiated: frozenset[str]
-    ) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
-        if request.output_schema is None:
-            return None, ()
-        parsed = extract_json_from_text(text)
-        if parsed is None:
-            logger.warning("model output normalization failed model_role=%s reason=no_json_object", request.role)
-            return invalid_output_result(request, "model output did not contain a JSON object")
-        try:
-            validate(parsed, request.output_schema)
-        except ValidationError as error:
-            logger.warning(
-                "model output normalization failed model_role=%s reason=schema_validation validator=%s",
-                request.role,
-                error.validator,
+    async def _complete_with_attempts(self, endpoint_id: str, parameters: dict[str, Any]) -> object:
+        for attempt in range(1, self._max_attempts + 1):
+            started = monotonic()
+            try:
+                async with asyncio.timeout(self._timeout_seconds):
+                    response = await self._caller(parameters)
+            except Exception as error:
+                elapsed = monotonic() - started
+                if attempt >= self._max_attempts:
+                    raise
+                _logger.warning(
+                    "模型请求尝试失败，准备重试 endpoint=%s attempt=%d max_attempts=%d error_type=%s "
+                    "elapsed_seconds=%.3f",
+                    endpoint_id,
+                    attempt,
+                    self._max_attempts,
+                    type(error).__name__,
+                    elapsed,
+                )
+                continue
+            _logger.debug(
+                "模型请求尝试完成 endpoint=%s attempt=%d max_attempts=%d elapsed_seconds=%.3f",
+                endpoint_id,
+                attempt,
+                self._max_attempts,
+                monotonic() - started,
             )
-            return invalid_output_result(request, f"model output failed JSON Schema validation: {error.message}")
-        mode = "structured_output" if "structured_output" in negotiated else "json_text_fallback"
-        return parsed, (f"output mode: {mode}",)
+            return response
+        raise AssertionError("模型请求尝试循环未返回")
+
+
+def _gateway_model(endpoint: ModelEndpoint, provider: ProviderEndpoint) -> str:
+    prefix = "openai" if provider.adapter == "openai_compatible" else endpoint.provider
+    return f"{prefix}/{endpoint.model}"
+
+
+async def _litellm_completion(parameters: dict[str, Any]) -> object:
+    response = cast("Awaitable[object]", litellm.acompletion(**parameters))
+    return await response
+
+
+def _response_mapping(response: object) -> Mapping[str, Any]:
+    if isinstance(response, Mapping):
+        return cast("Mapping[str, Any]", response)
+    dump = getattr(response, "model_dump", None)
+    if callable(dump):
+        value = dump()
+        if isinstance(value, Mapping):
+            return cast("Mapping[str, Any]", value)
+    raise RuntimeError("LiteLLM 响应必须是对象")
+
+
+def _assistant_message(response: Mapping[str, Any], tool_names: Mapping[str, str]) -> ChatMessage:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
+        raise RuntimeError("模型响应缺少 choices[0]")
+    message = choices[0].get("message")
+    if not isinstance(message, Mapping):
+        raise RuntimeError("模型响应缺少 assistant message")
+    content = message.get("content")
+    text = content if isinstance(content, str) else ""
+    raw_calls = message.get("tool_calls")
+    if raw_calls is None:
+        raw_calls = []
+    if not isinstance(raw_calls, list):
+        raise RuntimeError("模型响应的 tool_calls 必须是数组")
+    calls = tuple(_tool_call(raw, tool_names) for raw in raw_calls)
+    return ChatMessage.assistant(text, tool_calls=calls)
+
+
+def _tool_call(raw: object, tool_names: Mapping[str, str]) -> ToolCall:
+    if not isinstance(raw, Mapping):
+        raise RuntimeError("模型响应包含无效 Tool call")
+    call_id = raw.get("id")
+    function = raw.get("function")
+    if not isinstance(call_id, str) or not call_id or not isinstance(function, Mapping):
+        raise RuntimeError("模型响应包含无效 Tool call")
+    name = function.get("name")
+    arguments = function.get("arguments", "{}")
+    if not isinstance(name, str) or not name:
+        raise RuntimeError("模型响应包含无名称 Tool call")
+    domain_name = tool_names.get(name)
+    if domain_name is None:
+        raise RuntimeError(f"模型响应引用了未知 Provider Tool 名称：{name}")
+    if isinstance(arguments, str):
+        try:
+            decoded = json.loads(arguments)
+        except json.JSONDecodeError as error:
+            raise RuntimeError("模型响应的 Tool 参数不是有效 JSON") from error
+    else:
+        decoded = arguments
+    if not isinstance(decoded, Mapping):
+        raise RuntimeError("模型响应的 Tool 参数必须是对象")
+    return ToolCall(call_id, domain_name, cast("Mapping[str, Any]", decoded))

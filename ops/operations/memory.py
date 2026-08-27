@@ -1,48 +1,30 @@
-"""memory 域操作：记忆引擎只读观察。"""
+"""世界线记忆快照的只读监测操作。"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
+from ops.contracts import OperationResult
+from ops.operations import require_port
 from ops.registry import operation
-from src.contracts import OperationResult, ParameterLocation, ParameterSpec
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from ops.contracts import OperationContext
 
 
 @operation(
     "GET",
-    "/memory/history",
-    name="memory.history",
-    summary="记忆历史（窗口、概要与长期事实）",
-    parameters=(
-        ParameterSpec("scope", ParameterLocation.QUERY),
-        ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=32),
-    ),
+    "/memory",
+    name="memory.snapshot",
+    summary="查看最近时间窗口内活跃 scope 的最新提交记忆",
+    aliases=("/memory",),
 )
-async def memory_history(context: Any, params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success(
-        context.runtime.memory.history(scope=params.get("scope"), limit=params.get("limit", 32))
-    )
-
-
-@operation(
-    "GET",
-    "/memory/search",
-    name="memory.search",
-    summary="记忆检索（语义优先、词项降级）",
-    parameters=(
-        ParameterSpec("query", ParameterLocation.QUERY, required=True),
-        ParameterSpec("scope", ParameterLocation.QUERY),
-        ParameterSpec("limit", ParameterLocation.QUERY, type="int", default=8),
-    ),
-)
-async def memory_search(context: Any, params: dict[str, Any]) -> OperationResult:
-    query = str(params["query"])
-    if not query.strip():
-        return OperationResult.failure("PARSE_ERROR", "query 不能为空")
-    results = await context.runtime.memory.search(query, scope=params.get("scope"), limit=params.get("limit", 8))
-    return OperationResult.success({"results": results, "count": len(results)})
-
-
-@operation("GET", "/memory/status", name="memory.status", summary="记忆存储统计")
-async def memory_status(context: Any, _params: dict[str, Any]) -> OperationResult:
-    return OperationResult.success(context.runtime.memory.status())
+async def snapshot(context: OperationContext, params: dict[str, Any]) -> OperationResult:
+    _ = params
+    port, missing = require_port(context.runtime.memory, "memory")
+    if missing is not None:
+        return missing
+    assert port is not None
+    return OperationResult.success(await port.memory_snapshot())
