@@ -1,6 +1,6 @@
 [project]
 name = "AuroraBot"
-version = "0.6.0"
+version = "0.7.0"
 description = "以 AgentTree、同构 Agent 和四角色消息为核心的自主智能体框架。"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
