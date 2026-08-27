@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import argparse
     from pathlib import Path
 
-    from aurora.utils.command_spec import CommandSpec
+    from aurora.commander import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "setup",

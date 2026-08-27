@@ -100,14 +100,14 @@ def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
     assert module_names == registered_names
 
 
-def test_cli_main_only_depends_on_command_directory() -> None:
+def test_cli_main_only_dispatches_through_command_layer() -> None:
     path = _ROOT / "aurora" / "main.py"
     aurora_imports = {
         module
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         if (module := _imported_module(node)).startswith("aurora.")
     }
-    assert aurora_imports == {"aurora.commands"}
+    assert aurora_imports == {"aurora.commands", "aurora.commander"}
 
 
 def _imported_module(node: ast.AST) -> str:

@@ -2,18 +2,32 @@ from __future__ import annotations
 
 import os
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from aurora.commands import about, check, config, donk, setup, start
-from aurora.main import build_parser, run
+import pytest
+
+from aurora.commander import build_parser as _build_parser
+from aurora.commander import build_registry
+from aurora.commander import run as _run
+from aurora.commands import DEFAULT_REGISTRY, CommandSpec, about, check, config, donk, setup, start
 from aurora.utils.environment import load_project_env
 from aurora.utils.exit_code import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 from aurora.utils.process import run_process
 
 if TYPE_CHECKING:
+    import argparse
     from pathlib import Path
 
-    import pytest
+
+def build_parser() -> argparse.ArgumentParser:
+    """以默认命令目录构建顶层解析器。"""
+    return _build_parser(DEFAULT_REGISTRY)
+
+
+def run(arguments: list[str] | None = None) -> int:
+    """按默认命令目录运行 CLI 输入，与 aurora.main.main 的分派一致。"""
+    return _run(arguments, registry=DEFAULT_REGISTRY)
+
 
 FAILED_EXIT_CODE = 3
 EXPECTED_LINT_COMMANDS = 3
@@ -344,3 +358,27 @@ def test_process_boundary_reports_failure_and_interrupt(
 
     monkeypatch.setattr("aurora.utils.process.subprocess.run", interrupt)
     assert run_process(("example",), tmp_path) == EXIT_INTERRUPTED
+
+
+def test_commander_runs_a_custom_registry(capsys: pytest.CaptureFixture[str]) -> None:
+    registry = build_registry(((about.COMMAND, about.execute),))
+
+    assert _run(["about"], registry=registry) == 0
+    assert "AuroraBot 是下一代自主智能体框架" in capsys.readouterr().out
+
+
+def test_commander_rejects_duplicate_command_names() -> None:
+    with pytest.raises(ValueError, match="命令重复注册"):
+        build_registry(((about.COMMAND, about.execute), (about.COMMAND, about.execute)))
+
+
+def test_commander_rejects_unknown_spec_fields_and_empty_names() -> None:
+    with pytest.raises(ValueError, match="未知字段"):
+        build_registry(((cast("CommandSpec", {**about.COMMAND, "surprise": 1}), about.execute),))
+    with pytest.raises(ValueError, match="命令名称不能为空"):
+        build_registry(((cast("CommandSpec", {"name": "  "}), about.execute),))
+
+
+def test_commander_rejects_non_callable_executor() -> None:
+    with pytest.raises(ValueError, match="必须绑定可调用执行器"):
+        build_registry(((about.COMMAND, cast("Any", "not-callable")),))

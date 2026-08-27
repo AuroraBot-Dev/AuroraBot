@@ -12,7 +12,7 @@ from aurora.utils.process import run_process
 if TYPE_CHECKING:
     import argparse
 
-    from aurora.utils.command_spec import CommandSpec
+    from aurora.commander import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "donk",
