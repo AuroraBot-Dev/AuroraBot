@@ -21,13 +21,14 @@ timeout_seconds = 30
 event_mode = "disabled"
 
 # Windows-MCP：Windows 桌面自动化（截屏、鼠标键盘、窗口控制等）
+# 其 PostHog 匿名遥测默认开启，使用 ANONYMIZED_TELEMETRY=false 关闭；变量需在启动 aurora 的进程环境中预先设置。
 [[app]]
 package = "com.github.windows_mcp"
 enabled = false
 transport = "stdio"
 working_dir = "extensions/apps/Windows-MCP"
 command = ["uv", "run", "windows-mcp", "serve"]
-env = []
+env = ["ANONYMIZED_TELEMETRY"]
 timeout_seconds = 60
 event_mode = "disabled"
 

@@ -24,6 +24,8 @@ from src.contracts.tool import (
     ToolOutput,
     ToolResult,
     ToolStatus,
+    is_valid_mcp_tool_id,
+    is_valid_tool_id,
 )
 from src.contracts.world import (
     CONFIG_SCOPE,
@@ -132,6 +134,8 @@ __all__ = [
     "WorldReader",
     "WorldStreamPage",
     "WorldWriter",
+    "is_valid_mcp_tool_id",
+    "is_valid_tool_id",
     "mcp_scope",
     "tree_scope",
 ]
