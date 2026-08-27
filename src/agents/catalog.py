@@ -38,7 +38,7 @@ class AgentCatalog:
         self._definitions: Mapping[str, AgentDefinition] = MappingProxyType(
             {definition_id: by_id[definition_id] for definition_id in sorted(by_id)}
         )
-        _logger.info("Agent 目录已冻结 definition_count=%d", len(self._definitions))
+        _logger.info("Agent 目录已冻结 definition_count={}", len(self._definitions))
 
     @property
     def definitions(self) -> tuple[AgentDefinition, ...]:

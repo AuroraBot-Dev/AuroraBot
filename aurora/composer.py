@@ -96,8 +96,8 @@ def compose(
     for key, instance in instances:
         context.provide(key, instance)
     for register in registrars:
-        _logger.debug("执行组件注册 registrar=%s", register.__module__)
+        _logger.debug("执行组件注册 registrar={}", register.__module__)
         register(context)
     assembly = context.finish()
-    _logger.info("项目组件装配完成 instance_count=%d", len(assembly.names))
+    _logger.info("项目组件装配完成 instance_count={}", len(assembly.names))
     return assembly

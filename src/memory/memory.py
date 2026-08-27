@@ -51,7 +51,7 @@ class Memory:
         active = await self._reader.active_scopes(window_start)
         selected = active if scopes is None else tuple(scope for scope in active if scope in scopes)
         selected = self._filter_scopes(selected)
-        _logger.debug("Memory recall 开始 active_scope_count=%d selected_scope_count=%d", len(active), len(selected))
+        _logger.debug("Memory recall 开始 active_scope_count={} selected_scope_count={}", len(active), len(selected))
         snapshots: list[MemoryScopeSnapshot] = []
         for scope in selected:
             frontier = await self._reader.head(frozenset({scope}))
@@ -61,7 +61,7 @@ class Memory:
             commits = tuple(commit for commit in recent if commit.occurred_at >= window_start)
             snapshots.append(MemoryScopeSnapshot(scope, head, commits))
         snapshot = MemorySnapshot(window_start, tuple(snapshots))
-        _logger.debug("Memory recall 完成 scope_count=%d", len(snapshot.scopes))
+        _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))
         return snapshot
 
     def _filter_scopes(self, scopes: tuple[str, ...]) -> tuple[str, ...]:

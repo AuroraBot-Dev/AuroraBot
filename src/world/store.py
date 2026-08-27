@@ -57,7 +57,7 @@ class SqlAlchemyWorldJournal:
             async with self._engine.begin() as connection:
                 await connection.run_sync(self._create_or_migrate)
             self._initialized = True
-            _logger.info("WorldJournal 已初始化 schema_version=%d", TARGET_VERSION)
+            _logger.info("WorldJournal 已初始化 schema_version={}", TARGET_VERSION)
 
     @staticmethod
     def _create_or_migrate(connection: Connection) -> None:
@@ -172,7 +172,7 @@ class SqlAlchemyWorldJournal:
                     )
                 )
             await session.flush()
-            _logger.debug("世界提交已追加 commit_count=%d", len(appended))
+            _logger.debug("世界提交已追加 commit_count={}", len(appended))
             return tuple(appended)
 
     @staticmethod

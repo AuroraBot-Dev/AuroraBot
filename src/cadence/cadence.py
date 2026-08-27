@@ -126,7 +126,7 @@ class Cadence:
 
     async def run(self, stop_event: asyncio.Event) -> None:
         await self.initialize()
-        _logger.info("Cadence 启动 cursor=%d evoke_every=%d", self._cursor, self.evoke_every)
+        _logger.info("Cadence 启动 cursor={} evoke_every={}", self._cursor, self.evoke_every)
         while not stop_event.is_set():
             if asyncio.get_running_loop().time() >= self._next_tick:
                 await self._submit_tick()
@@ -134,7 +134,7 @@ class Cadence:
             await self.evaluate_once()
             if not stop_event.is_set():
                 await asyncio.sleep(self.poll_interval)
-        _logger.info("Cadence 已停止 cursor=%d", self._cursor)
+        _logger.info("Cadence 已停止 cursor={}", self._cursor)
 
     async def evaluate_once(self) -> None:
         """消费一页新事件；最多执行一次唤起判断。"""
@@ -220,9 +220,9 @@ class Cadence:
                     caused_by=caused_by.commit_id,
                 )
             )
-            _logger.info("Cadence 已唤起 AgentTree tree_id=%s", tree_id)
+            _logger.info("Cadence 已唤起 AgentTree tree_id={}", tree_id)
         except Exception as error:  # noqa: BLE001 - 节律后台不得因唤起失败而退出
-            _logger.error("Cadence 唤起失败 tree_id=%s error_type=%s", tree_id, type(error).__name__)
+            _logger.error("Cadence 唤起失败 tree_id={} error_type={}", tree_id, type(error).__name__)
             await self._writer.append_commit(
                 commit_id=f"cadence:tree:{tree_id}:failed",
                 kind=CADENCE_TREE_FAILED,

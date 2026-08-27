@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.116,<1",
     "httpx2>=2.5,<3",
     "litellm>=1.83.14",
+    "loguru>=0.7,<1",
     "mcp>=2,<3",
     "pydantic>=2.12,<3",
     "prompt-toolkit>=3.0,<4",
@@ -69,7 +70,7 @@ select = [
     "TC",
     "RUF",
 ]
-ignore = ["ANN202", "COM812", "PLR0913"]
+ignore = ["ANN202", "COM812", "PLR0913", "PLE1205", "PLE1206"]  # PLE1205/1206 按标准库 % 占位统计，与 loguru 的 {} 风格冲突
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]

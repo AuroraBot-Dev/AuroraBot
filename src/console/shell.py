@@ -81,7 +81,7 @@ class TerminalConsole:
                 raw = (result.text or "").strip()
                 if not raw:
                     continue
-                _logger.debug("本地终端收到非空输入 input_type=%s", "operation" if raw.startswith("/") else "message")
+                _logger.debug("本地终端收到非空输入 input_type={}", "operation" if raw.startswith("/") else "message")
                 if self._world is not None:
                     await self._world.append_commit(
                         commit_id=f"console:{uuid4().hex}",
@@ -94,7 +94,7 @@ class TerminalConsole:
                         occurred_at=datetime.now(UTC),
                     )
                 response = await dispatcher.dispatch_terminal(raw)
-                _logger.debug("本地终端分派完成 is_error=%s control=%s", response.is_error, response.control.value)
+                _logger.debug("本地终端分派完成 is_error={} control={}", response.is_error, response.control.value)
                 if response.control is TerminalControl.CLEAR:
                     _clear_console(prompt_reader, output)
                     continue

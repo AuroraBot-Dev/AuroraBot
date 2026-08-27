@@ -104,7 +104,7 @@ class LiteLLMModelGateway:
         if request.tools:
             parameters["tools"] = to_openai_tools(request.tools, tool_names)
         _logger.debug(
-            "模型请求开始 endpoint=%s message_count=%d tool_count=%d",
+            "模型请求开始 endpoint={} message_count={} tool_count={}",
             request.model,
             len(request.messages),
             len(request.tools),
@@ -115,12 +115,12 @@ class LiteLLMModelGateway:
                 response = await self._complete_with_attempts(request.model, parameters)
         except TimeoutError as error:
             elapsed = monotonic() - started
-            _logger.error("模型请求超过总截止时间 endpoint=%s elapsed_seconds=%.3f", request.model, elapsed)
+            _logger.error("模型请求超过总截止时间 endpoint={} elapsed_seconds={:.3f}", request.model, elapsed)
             raise TimeoutError(f"模型请求超过总截止时间：{self._total_timeout_seconds:g} 秒") from error
         except Exception as error:
             elapsed = monotonic() - started
             _logger.error(
-                "模型请求失败 endpoint=%s error_type=%s elapsed_seconds=%.3f",
+                "模型请求失败 endpoint={} error_type={} elapsed_seconds={:.3f}",
                 request.model,
                 type(error).__name__,
                 elapsed,
@@ -131,7 +131,7 @@ class LiteLLMModelGateway:
             {alias: name for name, alias in tool_names.items()},
         )
         _logger.debug(
-            "模型请求完成 endpoint=%s tool_call_count=%d elapsed_seconds=%.3f",
+            "模型请求完成 endpoint={} tool_call_count={} elapsed_seconds={:.3f}",
             request.model,
             len(result.tool_calls),
             monotonic() - started,
@@ -149,8 +149,8 @@ class LiteLLMModelGateway:
                 if attempt >= self._max_attempts:
                     raise
                 _logger.warning(
-                    "模型请求尝试失败，准备重试 endpoint=%s attempt=%d max_attempts=%d error_type=%s "
-                    "elapsed_seconds=%.3f",
+                    "模型请求尝试失败，准备重试 endpoint={} attempt={} max_attempts={} error_type={} "
+                    "elapsed_seconds={:.3f}",
                     endpoint_id,
                     attempt,
                     self._max_attempts,
@@ -159,7 +159,7 @@ class LiteLLMModelGateway:
                 )
                 continue
             _logger.debug(
-                "模型请求尝试完成 endpoint=%s attempt=%d max_attempts=%d elapsed_seconds=%.3f",
+                "模型请求尝试完成 endpoint={} attempt={} max_attempts={} elapsed_seconds={:.3f}",
                 endpoint_id,
                 attempt,
                 self._max_attempts,

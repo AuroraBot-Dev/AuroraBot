@@ -1,125 +1,155 @@
-"""基于标准库的统一日志配置。"""
+"""基于 loguru 的统一线程安全日志配置。"""
 
 from __future__ import annotations
 
-import logging
+import sys
+import threading
 from dataclasses import dataclass
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-FILE_FORMAT = "%(asctime)s [%(levelname)s] %(name)s | %(message)s"
-CONSOLE_FORMAT = "%(levelname)s %(name)s | %(message)s"
-DATETIME_FORMAT = "%m-%d %H:%M:%S"
+from loguru import logger as _loguru_logger
+
+_loguru_logger.remove()
+
+if TYPE_CHECKING:
+    from loguru import Logger, Record
+
 MAX_LOGFILE_SIZE = 102400
 MAX_LOGFILE_BACKUPS = 5
-_FILE_HANDLER = "_aurora_file_handler"
-_CONSOLE_HANDLER = "_aurora_console_handler"
-_OFF_LEVEL = logging.CRITICAL + 1
+_LEVEL_NUMBERS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+_OFF_LEVEL = 51
 
 
 class UnsupportedLoggingLevelError(ValueError): ...
 
 
 @dataclass(slots=True)
+class _Sink:
+    """一个已注册 loguru sink 的句柄与生效级别。"""
+
+    handle: int
+    level: int
+    path: Path | None = None
+
+
+@dataclass(slots=True)
 class _LoggingState:
-    console_level: int = logging.INFO
-    file_level: int = logging.INFO
+    console_level: int = 20
+    file_level: int = 20
     console_enabled: bool = True
     logfile: Path | None = None
+    console: _Sink | None = None
+    file: _Sink | None = None
 
 
 _state = _LoggingState()
-_logger_names: set[str] = set()
+_lock = threading.Lock()
 
 
 def get_logger(
     name: str | None = None,
     level: int | str | None = None,
     logfile: str | Path | None = None,
-) -> logging.Logger:
-    """取得由 AuroraBot 统一管理的非传播 Logger。"""
+) -> Logger:
+    """取得绑定模块名的 loguru Logger，输出跟随全局 sink 配置。"""
     logger_name = name or __package__ or "aurora"
-    _logger_names.add(logger_name)
-    logger = logging.getLogger(logger_name)
-    logger.propagate = False
-    if not logger.handlers:
-        console = logging.StreamHandler()
-        setattr(console, _CONSOLE_HANDLER, True)
-        console.setFormatter(logging.Formatter(CONSOLE_FORMAT, DATETIME_FORMAT))
-        logger.addHandler(console)
-    if logfile is not None:
-        _state.logfile = Path(logfile)
     if level is not None:
-        normalized = _level_number(level)
-        _state.console_level = normalized
-        _state.file_level = normalized
-    _apply(logger)
-    return logger
+        configure_logging(level, logfile)
+    elif logfile is not None:
+        configure_logging(_state.file_level, logfile)
+    with _lock:
+        _configure_sinks()
+    return _loguru_logger.bind(name=logger_name)
 
 
 def configure_logging(level: int | str, logfile: str | Path | None = None) -> None:
     """更新后续和既有 Logger 的级别与可选轮转文件。"""
     normalized = _level_number(level)
-    _state.console_level = normalized
-    _state.file_level = normalized
-    if logfile is not None:
-        _state.logfile = Path(logfile)
-    for name in tuple(_logger_names):
-        _apply(logging.getLogger(name), rebuild_file=logfile is not None)
+    with _lock:
+        _state.console_level = normalized
+        _state.file_level = normalized
+        if logfile is not None:
+            _state.logfile = Path(logfile)
+        _configure_sinks()
 
 
 def configure_console_logging(*, enabled: bool | None = None, level: int | str | None = None) -> None:
     """单独调整终端日志，不改变文件日志级别。"""
-    if enabled is not None:
-        _state.console_enabled = enabled
-    if level is not None:
-        _state.console_level = _level_number(level)
-    for name in tuple(_logger_names):
-        _apply(logging.getLogger(name))
+    with _lock:
+        if enabled is not None:
+            _state.console_enabled = enabled
+        if level is not None:
+            _state.console_level = _level_number(level)
+        _configure_sinks()
 
 
 def console_logging_status() -> dict[str, bool | str]:
-    return {
-        "enabled": _state.console_enabled,
-        "console_level": logging.getLevelName(_state.console_level).lower(),
-        "file_level": logging.getLevelName(_state.file_level).lower(),
-    }
+    with _lock:
+        return {
+            "enabled": _state.console_enabled,
+            "console_level": _level_name(_state.console_level),
+            "file_level": _level_name(_state.file_level),
+        }
 
 
-def _apply(logger: logging.Logger, *, rebuild_file: bool = False) -> None:
-    if rebuild_file:
-        for handler in tuple(logger.handlers):
-            if getattr(handler, _FILE_HANDLER, False):
-                logger.removeHandler(handler)
-                handler.close()
-    if _state.logfile is not None and not any(getattr(item, _FILE_HANDLER, False) for item in logger.handlers):
-        _state.logfile.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(
-            _state.logfile,
-            maxBytes=MAX_LOGFILE_SIZE,
-            backupCount=MAX_LOGFILE_BACKUPS,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(logging.Formatter(FILE_FORMAT, DATETIME_FORMAT))
-        setattr(file_handler, _FILE_HANDLER, True)
-        logger.addHandler(file_handler)
-    active: list[int] = []
-    for handler in logger.handlers:
-        if getattr(handler, _CONSOLE_HANDLER, False):
-            handler.setLevel(_state.console_level if _state.console_enabled else _OFF_LEVEL)
-            if _state.console_enabled:
-                active.append(_state.console_level)
-        elif getattr(handler, _FILE_HANDLER, False):
-            handler.setLevel(_state.file_level)
-            active.append(_state.file_level)
-    logger.setLevel(min(active, default=_OFF_LEVEL))
+def _configure_sinks() -> None:
+    """在锁内对齐 console 与轮转文件 sink，使其与状态一致。"""
+    console_level = _state.console_level if _state.console_enabled else _OFF_LEVEL
+    if _state.console is None or _state.console.level != console_level:
+        _replace_console(console_level)
+    if _state.logfile is not None:
+        file = _state.file
+        if file is None or file.level != _state.file_level or file.path != _state.logfile:
+            if file is not None:
+                _loguru_logger.remove(file.handle)
+                _state.file = None
+            _state.logfile.parent.mkdir(parents=True, exist_ok=True)
+            _state.file = _Sink(
+                _loguru_logger.add(
+                    str(_state.logfile),
+                    format=_format_file,
+                    level=_state.file_level,
+                    encoding="utf-8",
+                    rotation=MAX_LOGFILE_SIZE,
+                    retention=MAX_LOGFILE_BACKUPS,
+                ),
+                _state.file_level,
+                _state.logfile,
+            )
+    elif _state.file is not None:
+        _loguru_logger.remove(_state.file.handle)
+        _state.file = None
+
+
+def _replace_console(level: int) -> None:
+    if _state.console is not None:
+        _loguru_logger.remove(_state.console.handle)
+    _state.console = _Sink(
+        _loguru_logger.add(sys.stderr, format=_format_console, level=level),
+        level,
+    )
+
+
+def _format_console(record: Record) -> str:
+    name = record["extra"].get("name", "aurora")
+    return f"{{level}} \t{name} \t| {{message}}\n{{exception}}"
+
+
+def _format_file(record: Record) -> str:
+    name = record["extra"].get("name", "aurora")
+    return f"{{time:%m-%d %H:%M:%S}} [{{level}}] \t{name} \t| {{message}}\n{{exception}}"
 
 
 def _level_number(level: int | str) -> int:
     if isinstance(level, int):
         return level
     normalized = "WARNING" if level.upper() == "WARN" else level.upper()
-    value = logging.getLevelNamesMapping().get(normalized)
+    value = _LEVEL_NUMBERS.get(normalized)
     if value is None:
         raise UnsupportedLoggingLevelError(level)
     return value
+
+
+def _level_name(number: int) -> str:
+    return next((name.lower() for name, value in _LEVEL_NUMBERS.items() if value == number), "unknown")

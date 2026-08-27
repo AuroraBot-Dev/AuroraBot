@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import pytest
+from loguru import logger as _loguru_logger
 
 from src.utils import (
     NamePatternError,
@@ -43,8 +44,6 @@ def test_standard_logging_updates_console_and_rotating_file(tmp_path: Path) -> N
     configure_logging("INFO", logfile)
     configure_console_logging(enabled=False)
     logger.info("日志已写入")
-    for handler in logger.handlers:
-        handler.flush()
 
     assert "日志已写入" in logfile.read_text(encoding="utf-8")
     assert console_logging_status() == {
@@ -95,29 +94,19 @@ def test_resolve_names_applies_ordered_patterns_with_last_match_wins() -> None:
     assert resolve_names(_TOOLS, ()) == frozenset()
 
 
-class _RecordingHandler(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__()
-        self.messages: list[str] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.messages.append(record.getMessage())
-
-
 def test_resolve_names_rejects_unmatched_exact_and_warns_unmatched_wildcards() -> None:
     with pytest.raises(NamePatternError, match="引用了未注册名称"):
         resolve_names(_TOOLS, ("aur.test.missing",), label="agent-x")
 
-    handler = _RecordingHandler()
-    logger = logging.getLogger("src.utils.patterns")
-    logger.addHandler(handler)
+    captured: list[str] = []
+    sink_id = _loguru_logger.add(captured.append, format="{message}")
     try:
         resolved = resolve_names(_TOOLS, ("aur.mcp.org.aurora.wx.*",))
     finally:
-        logger.removeHandler(handler)
+        _loguru_logger.remove(sink_id)
 
     assert resolved == frozenset()
-    assert any("未匹配任何已注册名称" in message for message in handler.messages)
+    assert any("未匹配任何已注册名称" in message for message in captured)
 
 
 def test_pattern_matches_and_rejects_invalid_patterns() -> None:

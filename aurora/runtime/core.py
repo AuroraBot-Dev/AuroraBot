@@ -91,7 +91,7 @@ class AuroraRuntime:
         tree = self.create_tree(message, tree_id=tree_id)
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        _logger.info("AgentTree 已提交 tree_id=%s", tree.tree_id)
+        _logger.info("AgentTree 已提交 tree_id={}", tree.tree_id)
         return await self.runner.run(tree, observer=self._record_tree)
 
     async def start_tree(self, message: str, *, tree_id: str | None = None) -> dict[str, Any]:
@@ -131,7 +131,7 @@ class AuroraRuntime:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
         await self.world.initialize()
         commit = await self.world.append_event(event)
-        _logger.debug("环境事件已提交 event_id=%s kind=%s", event.event_id, event.kind)
+        _logger.debug("环境事件已提交 event_id={} kind={}", event.event_id, event.kind)
         return views.commit_dict(commit)
 
     async def submit_event_values(
@@ -190,7 +190,7 @@ class AuroraRuntime:
     async def dispatch_terminal(self, text: str) -> TerminalResponse:
         command = text.startswith("/")
         input_type = "operation" if command else "message"
-        _logger.debug("终端输入开始 input_type=%s", input_type)
+        _logger.debug("终端输入开始 input_type={}", input_type)
         result = (
             await self.ops.route_text(text) if command else await self.ops.execute("POST", "/trees", {"message": text})
         )
@@ -200,7 +200,7 @@ class AuroraRuntime:
             OperationControl.SHUTDOWN_PROCESS: TerminalControl.SHUTDOWN,
         }[result.control]
         rendered, tree_failed = views.terminal_text(result, command=command)
-        _logger.debug("终端输入完成 input_type=%s ok=%s code=%s", input_type, result.ok, result.code)
+        _logger.debug("终端输入完成 input_type={} ok={} code={}", input_type, result.ok, result.code)
         return TerminalResponse(rendered, control, is_error=not result.ok or tree_failed)
 
     def runtime_status(self) -> dict[str, Any]:

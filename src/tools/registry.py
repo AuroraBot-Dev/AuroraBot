@@ -43,7 +43,7 @@ class ToolRegistry:
         names = tuple(sorted(bindings))
         self._tools = MappingProxyType({name: bindings[name] for name in names})
         self._definitions = MappingProxyType({name: definitions[name] for name in names})
-        _logger.info("工具目录已冻结 tool_count=%d", len(self._tools))
+        _logger.info("工具目录已冻结 tool_count={}", len(self._tools))
 
     @property
     def names(self) -> frozenset[str]:
@@ -76,21 +76,21 @@ class ToolRegistry:
         """唯一分派一次调用，并把执行器边界错误规范化。"""
         tool = self._tools.get(call.name)
         if tool is None:
-            _logger.warning("工具调用被拒绝 tool=%s reason=unknown", call.name)
+            _logger.warning("工具调用被拒绝 tool={} reason=unknown", call.name)
             return ToolOutput(f"未知工具：{call.name}", status=ToolStatus.FAILED)
-        _logger.debug("工具调用开始 tool=%s call_id=%s", call.name, call.call_id)
+        _logger.debug("工具调用开始 tool={} call_id={}", call.name, call.call_id)
         try:
             result = await tool.execute(call)
         except Exception as error:  # noqa: BLE001 - 工具异常必须成为可供 Agent 处理的确定结果
             _logger.error(
-                "工具调用失败 tool=%s call_id=%s error_type=%s",
+                "工具调用失败 tool={} call_id={} error_type={}",
                 call.name,
                 call.call_id,
                 type(error).__name__,
             )
             return ToolOutput(f"工具执行失败：{error}", status=ToolStatus.FAILED)
         if not isinstance(result, (ToolOutput, DelegationRequest)):
-            _logger.error("工具返回类型无效 tool=%s call_id=%s", call.name, call.call_id)
+            _logger.error("工具返回类型无效 tool={} call_id={}", call.name, call.call_id)
             return ToolOutput(f"工具返回了无效结果：{call.name}", status=ToolStatus.FAILED)
-        _logger.debug("工具调用完成 tool=%s call_id=%s result_type=%s", call.name, call.call_id, type(result).__name__)
+        _logger.debug("工具调用完成 tool={} call_id={} result_type={}", call.name, call.call_id, type(result).__name__)
         return result

@@ -42,7 +42,7 @@ def resolve_names(names: Iterable[str], patterns: Iterable[str], *, label: str |
         if entry.startswith("!") or _matches_any(entry, available):
             continue
         if _has_wildcards(entry):
-            _logger.warning("%s未匹配任何已注册名称的模式：%s", prefix, entry)
+            _logger.warning("{}未匹配任何已注册名称的模式：{}", prefix, entry)
         else:
             raise NamePatternError(f"{prefix}引用了未注册名称：{entry}")
     rules = tuple(_compile(entry) for entry in patterns)

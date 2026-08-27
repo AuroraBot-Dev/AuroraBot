@@ -45,7 +45,7 @@ async def run_project(
 ) -> AuroraRuntime:
     """先冻结 MCP 工具目录，再组合运行时并让 Console 或停止事件拥有进程前台。"""
     configure_project_logging(config)
-    _logger.info("Aurora runtime 启动 headless=%s", headless)
+    _logger.info("Aurora runtime 启动 headless={}", headless)
     world = build_world(config)
     mcp: McpRuntime | None = None
     try:
@@ -57,12 +57,12 @@ async def run_project(
             world=world,
             factory=mcp_factory,
         )
-        _logger.info("MCP 工具目录已冻结 app_count=%d tool_count=%d", len(mcp.snapshot().apps), len(mcp.tools))
+        _logger.info("MCP 工具目录已冻结 app_count={} tool_count={}", len(mcp.snapshot().apps), len(mcp.tools))
         runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp, output=output)
         await _activate_runtime(runtime, mcp)
         _logger.info("Aurora runtime 装配完成")
     except BaseException as error:
-        _logger.error("Aurora runtime 启动失败 error_type=%s", type(error).__name__)
+        _logger.error("Aurora runtime 启动失败 error_type={}", type(error).__name__)
         await _close_failed_startup(mcp, world)
         raise
 

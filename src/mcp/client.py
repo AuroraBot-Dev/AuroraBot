@@ -164,7 +164,7 @@ class SdkMcpClient:
         return self._connected
 
     async def list_tools(self, *, cursor: str | None = None) -> McpToolsPage:
-        _logger.debug("MCP tools/list 开始 cursor_present=%s", cursor is not None)
+        _logger.debug("MCP tools/list 开始 cursor_present={}", cursor is not None)
         result = await self._client.list_tools(cursor=cursor, cache_mode="bypass")
         page = McpToolsPage(
             tuple(
@@ -178,13 +178,13 @@ class SdkMcpClient:
             ),
             result.next_cursor,
         )
-        _logger.debug("MCP tools/list 完成 tool_count=%d has_next=%s", len(page.tools), page.next_cursor is not None)
+        _logger.debug("MCP tools/list 完成 tool_count={} has_next={}", len(page.tools), page.next_cursor is not None)
         return page
 
     async def call_tool(self, name: str, arguments: Mapping[str, Any], timeout_seconds: float) -> McpCallResult:
         if not self._connected:
             raise McpCallRejectedError("MCP App 当前未连接，调用未发送")
-        _logger.debug("MCP tools/call 开始 tool=%s", name)
+        _logger.debug("MCP tools/call 开始 tool={}", name)
         try:
             result = await self._client.session.call_tool(
                 name,
@@ -195,7 +195,7 @@ class SdkMcpClient:
         except asyncio.CancelledError:
             raise
         except MCPError as error:
-            _logger.warning("MCP tools/call 协议失败 tool=%s code=%s", name, error.code)
+            _logger.warning("MCP tools/call 协议失败 tool={} code={}", name, error.code)
             if error.code == CONNECTION_CLOSED:
                 await self._mark_disconnected(str(error))
                 raise McpCallUnknownError(f"MCP 连接已中断，调用效果未知：{error}") from error
@@ -205,7 +205,7 @@ class SdkMcpClient:
                 raise McpCallRejectedError(f"MCP Server 明确拒绝调用：{error}") from error
             raise McpCallUnknownError(f"MCP Server 错误无法确认调用效果：{error}") from error
         except Exception as error:
-            _logger.error("MCP tools/call 失败 tool=%s error_type=%s", name, type(error).__name__)
+            _logger.error("MCP tools/call 失败 tool={} error_type={}", name, type(error).__name__)
             raise McpCallUnknownError(f"MCP 调用结果无法确认：{type(error).__name__}: {error}") from error
         if isinstance(result, InputRequiredResult):
             raise McpCallUnknownError("MCP Tool 请求 input_required，当前调用效果无法确认")
@@ -222,7 +222,7 @@ class SdkMcpClient:
             ),
             _result_effect_unknown(result, negotiated=self._tool_contract),
         )
-        _logger.debug("MCP tools/call 完成 tool=%s is_error=%s", name, normalized.is_error)
+        _logger.debug("MCP tools/call 完成 tool={} is_error={}", name, normalized.is_error)
         return normalized
 
     async def bind_observers(
@@ -321,7 +321,7 @@ class SdkMcpClientFactory:
         resources = AsyncExitStack()
         callbacks = _Callbacks()
         gate = InboundEventGate(event_handler)
-        _logger.info("MCP SDK client 连接开始 package=%s transport=%s", spec.package, spec.transport.value)
+        _logger.info("MCP SDK client 连接开始 package={} transport={}", spec.package, spec.transport.value)
 
         async def message_handler(message: object) -> None:
             if isinstance(message, ToolListChangedNotification):
@@ -354,7 +354,7 @@ class SdkMcpClientFactory:
             raise
         wrapper = SdkMcpClient(client, resources, callbacks, gate, tool_contract=tool_contract)
         callbacks.disconnected = wrapper._mark_disconnected
-        _logger.info("MCP SDK client 连接完成 package=%s protocol=%s", spec.package, client.protocol_version)
+        _logger.info("MCP SDK client 连接完成 package={} protocol={}", spec.package, client.protocol_version)
         return wrapper
 
     @staticmethod

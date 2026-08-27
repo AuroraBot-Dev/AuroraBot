@@ -75,7 +75,7 @@ class AgentTreeRunner:
         return self._tools.definitions
 
     async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:
-        _logger.info("AgentTree 开始 tree_id=%s root_id=%s", tree.tree_id, tree.root_id)
+        _logger.info("AgentTree 开始 tree_id={} root_id={}", tree.tree_id, tree.root_id)
         self._validate_definitions(tree)
         if self._world is not None:
             await self._world.initialize()
@@ -85,7 +85,7 @@ class AgentTreeRunner:
         for _ in range(self._max_steps):
             if current.status != TreeStatus.RUNNING:
                 _logger.info(
-                    "AgentTree 结束 tree_id=%s status=%s node_count=%d",
+                    "AgentTree 结束 tree_id={} status={} node_count={}",
                     current.tree_id,
                     current.status.value,
                     len(current.nodes),
@@ -108,7 +108,7 @@ class AgentTreeRunner:
                 "step limit exceeded",
                 {"tree_id": current.tree_id, "max_steps": self._max_steps},
             )
-        _logger.error("AgentTree 超出步数限制 tree_id=%s max_steps=%d", current.tree_id, self._max_steps)
+        _logger.error("AgentTree 超出步数限制 tree_id={} max_steps={}", current.tree_id, self._max_steps)
         raise RuntimeError(f"AgentTree exceeded step limit {self._max_steps}")
 
     @staticmethod
@@ -143,7 +143,7 @@ class AgentTreeRunner:
             self._tools.definitions_for(node.tools),
         )
         _logger.debug(
-            "模型步骤开始 tree_id=%s node_id=%s model=%s step=%d",
+            "模型步骤开始 tree_id={} node_id={} model={} step={}",
             tree.tree_id,
             node.node_id,
             node.model,
@@ -169,7 +169,7 @@ class AgentTreeRunner:
             response = await self._model.complete(request)
         except Exception as error:
             _logger.error(
-                "模型步骤失败 tree_id=%s node_id=%s model=%s error_type=%s",
+                "模型步骤失败 tree_id={} node_id={} model={} error_type={}",
                 tree.tree_id,
                 node.node_id,
                 node.model,
@@ -193,7 +193,7 @@ class AgentTreeRunner:
             return await self._fail_node(tree, node.node_id, f"model failed: {error}")
         if response.role != "assistant":
             reason = "model must return an assistant message"
-            _logger.error("模型响应角色无效 tree_id=%s node_id=%s role=%s", tree.tree_id, node.node_id, response.role)
+            _logger.error("模型响应角色无效 tree_id={} node_id={} role={}", tree.tree_id, node.node_id, response.role)
             if self._world is not None:
                 assert self._world_effects is not None
                 await self._world_effects.append_commit(
@@ -229,7 +229,7 @@ class AgentTreeRunner:
             )
         tree = tree.append(node.node_id, response)
         _logger.debug(
-            "模型步骤完成 tree_id=%s node_id=%s tool_call_count=%d",
+            "模型步骤完成 tree_id={} node_id={} tool_call_count={}",
             tree.tree_id,
             node.node_id,
             len(response.tool_calls),
@@ -352,7 +352,7 @@ class AgentTreeRunner:
             return tree, ToolOutput("AgentTree 已达到深度上限", status=ToolStatus.FAILED)
         spawned = tree.spawn(node_id, call, self._agents.get(request.agent), request.instruction)
         _logger.info(
-            "AgentNode 已委派 tree_id=%s parent_id=%s child_agent=%s",
+            "AgentNode 已委派 tree_id={} parent_id={} child_agent={}",
             tree.tree_id,
             node_id,
             request.agent,

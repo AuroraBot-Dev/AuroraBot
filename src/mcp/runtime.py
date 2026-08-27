@@ -149,7 +149,7 @@ class McpRuntime:
             for record in self._records:
                 if record.client is not None:
                     record.client.activate_events()
-            _logger.info("MCP runtime 已激活 app_count=%d tool_count=%d", len(self._records), len(self._tools))
+            _logger.info("MCP runtime 已激活 app_count={} tool_count={}", len(self._records), len(self._tools))
 
     async def close(self) -> None:
         """逆序且幂等地关闭 SDK Client 和 stdio/HTTP 资源。"""
@@ -168,7 +168,7 @@ class McpRuntime:
                     await record.client.close()
                 except Exception as error:  # noqa: BLE001 - one cleanup failure must not skip remaining clients
                     _logger.error(
-                        "MCP App 关闭失败 package=%s error_type=%s",
+                        "MCP App 关闭失败 package={} error_type={}",
                         record.spec.package,
                         type(error).__name__,
                     )
@@ -193,7 +193,7 @@ class McpRuntime:
             record.restart_required = True
             record.change_sequence += 1
             sequence = record.change_sequence
-            _logger.warning("MCP 工具目录变化 package=%s restart_required=true", package)
+            _logger.warning("MCP 工具目录变化 package={} restart_required=true", package)
             await self._append_status(
                 record,
                 MCP_CATALOG_CHANGED,
@@ -220,7 +220,7 @@ class McpRuntime:
             record.restart_required = True
             record.change_sequence += 1
             sequence = record.change_sequence
-            _logger.warning("MCP App 连接中断 package=%s", package)
+            _logger.warning("MCP App 连接中断 package={}", package)
             await self._append_status(
                 record,
                 MCP_APP_DISCONNECTED,
@@ -236,7 +236,7 @@ class McpRuntime:
                 raise McpStartupError(invalid.spec.package, "catalog/freeze", self._startup_invalid_detail(invalid))
             self._tools = tuple(tools_by_id[name] for name in sorted(tools_by_id))
             self._phase = _RuntimePhase.PREPARED
-            _logger.info("MCP 工具目录冻结 tool_count=%d", len(self._tools))
+            _logger.info("MCP 工具目录冻结 tool_count={}", len(self._tools))
 
     def _startup_invalid_record(self) -> _AppRecord | None:
         return next(
@@ -292,7 +292,7 @@ async def prepare_mcp(
     records = tuple(_AppRecord(spec, platform_enabled and spec.enabled, McpAppState.DISABLED) for spec in specs)
     _reject_duplicate_packages(records)
     runtime = McpRuntime(platform_enabled, records, (), world, uuid4().hex)
-    _logger.info("MCP 准备开始 enabled=%s app_count=%d", platform_enabled, len(records))
+    _logger.info("MCP 准备开始 enabled={} app_count={}", platform_enabled, len(records))
     client_factory = factory or SdkMcpClientFactory()
     tools_by_id: dict[str, Tool] = {}
     try:
@@ -325,7 +325,7 @@ async def _prepare_app(
 ) -> None:
     package = record.spec.package
     record.state = McpAppState.STARTING
-    _logger.info("MCP App 启动 package=%s transport=%s", package, record.spec.transport.value)
+    _logger.info("MCP App 启动 package={} transport={}", package, record.spec.transport.value)
     await runtime._append_status(record, MCP_APP_STARTING, f"正在连接 MCP App：{package}", "starting", {})
     phase = "connect"
     try:
@@ -356,7 +356,7 @@ async def _prepare_app(
             record.tool_ids = tuple(binding.definition.name for binding in bindings)
             record.state = McpAppState.READY
             _logger.info(
-                "MCP App 就绪 package=%s protocol=%s tool_count=%d",
+                "MCP App 就绪 package={} protocol={} tool_count={}",
                 package,
                 client.protocol_version,
                 len(bindings),
@@ -371,7 +371,7 @@ async def _prepare_app(
     except asyncio.CancelledError:
         raise
     except Exception as error:
-        _logger.error("MCP App 启动失败 package=%s phase=%s error_type=%s", package, phase, type(error).__name__)
+        _logger.error("MCP App 启动失败 package={} phase={} error_type={}", package, phase, type(error).__name__)
         record.state = McpAppState.UNAVAILABLE
         record.last_error = f"{type(error).__name__}: {error}"
         with suppress(Exception):
@@ -439,7 +439,7 @@ async def _append_inbound_event(world: WorldWriter, package: str, event: McpInbo
         data={"event_id": event.event_id, "event_kind": event.kind, "data": dict(event.data)},
         occurred_at=event.occurred_at.astimezone(UTC),
     )
-    _logger.debug("MCP 业务事件已接收 package=%s event_id=%s kind=%s", package, event.event_id, event.kind)
+    _logger.debug("MCP 业务事件已接收 package={} event_id={} kind={}", package, event.event_id, event.kind)
 
 
 def _reject_duplicate_packages(records: tuple[_AppRecord, ...]) -> None:
