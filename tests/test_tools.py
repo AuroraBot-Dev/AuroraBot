@@ -98,6 +98,24 @@ def test_registry_rejects_non_domain_and_duplicate_tool_ids() -> None:
         ToolRegistry((EchoTool(), EchoTool()))
 
 
+def test_registry_accepts_uppercase_mcp_raw_name_but_keeps_framework_ids_lowercase() -> None:
+    class McpCamelTool(EchoTool):
+        @property
+        def definition(self) -> ToolDefinition:
+            return ToolDefinition("aur.mcp.com.github.windows_mcp.Screenshot", "第三方大写工具名。", {})
+
+    class UpperBuiltinTool(EchoTool):
+        @property
+        def definition(self) -> ToolDefinition:
+            return ToolDefinition("aur.agent.Foo", "框架工具名必须保持小写。", {})
+
+    registry = ToolRegistry((McpCamelTool(),))
+    assert "aur.mcp.com.github.windows_mcp.Screenshot" in registry.names
+    assert "aur.mcp.com.github.windows_mcp.Screenshot" in [d.name for d in registry.definitions]
+    with pytest.raises(ToolRegistrationError, match=r"aur\.\*"):
+        ToolRegistry((UpperBuiltinTool(),))
+
+
 def test_registry_routes_calls_and_normalizes_boundary_failures() -> None:
     with pytest.raises(ToolRegistrationError, match="重复注册"):
         ToolRegistry((EchoTool(), FailingTool()))

@@ -163,12 +163,12 @@ def test_mcp_tool_rejects_wrong_route_and_disconnected_client_without_sending() 
 
 
 def test_bind_mcp_tool_rejects_invalid_name_and_non_object_schema_without_rewriting() -> None:
-    with pytest.raises(ValueError, match="合法小写 Aurora ID"):
-        bind_mcp_tool("org.example.tools", McpRemoteTool("MixedCase", None, {"type": "object"}))
-    with pytest.raises(ValueError, match="合法小写 Aurora ID"):
+    with pytest.raises(ValueError, match="合法 Aurora 工具 ID"):
         bind_mcp_tool("org.example.tools", McpRemoteTool(" valid_name", None, {"type": "object"}))
-    with pytest.raises(ValueError, match="合法小写 Aurora ID"):
+    with pytest.raises(ValueError, match="合法 Aurora 工具 ID"):
         bind_mcp_tool("org.example.tools", McpRemoteTool("valid_name ", None, {"type": "object"}))
+    with pytest.raises(ValueError, match="合法 Aurora 工具 ID"):
+        bind_mcp_tool("Org.example.tools", McpRemoteTool("valid_name", None, {"type": "object"}))
     with pytest.raises(ValueError, match="input schema 必须是 object"):
         bind_mcp_tool("org.example.tools", McpRemoteTool("valid", None, {"type": "array"}))
 
@@ -176,6 +176,21 @@ def test_bind_mcp_tool_rejects_invalid_name_and_non_object_schema_without_rewrit
     assert binding.raw_name == "valid_name"
     assert binding.definition.name == "aur.mcp.org.example.tools.valid_name"
     assert binding.definition.description == "MCP 工具：valid_name"
+
+
+def test_bind_mcp_tool_keeps_third_party_camelcase_raw_name_without_rewriting() -> None:
+    binding = bind_mcp_tool(
+        "com.github.windows_mcp",
+        McpRemoteTool("Screenshot", "截取屏幕", {"type": "object", "properties": {}}),
+    )
+
+    assert binding.raw_name == "Screenshot"
+    assert binding.definition.name == "aur.mcp.com.github.windows_mcp.Screenshot"
+    assert binding.definition.description == "截取屏幕"
+
+    mixed = bind_mcp_tool("com.github.windows_mcp", McpRemoteTool("WaitFor", None, {"type": "object"}))
+    assert mixed.raw_name == "WaitFor"
+    assert mixed.definition.name == "aur.mcp.com.github.windows_mcp.WaitFor"
 
 
 def test_mcp_remote_tool_and_definition_deep_freeze_nested_json() -> None:

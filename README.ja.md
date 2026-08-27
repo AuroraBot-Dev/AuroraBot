@@ -9,10 +9,8 @@
 </p>
 
 <p align="center">
-  <em>Agent に、自分自身の生活を。</em>
+  <em>Bot に、自分自身の生活を。</em>
 </p>
-
-<p align="center">イベントの平等 · 同構 Agent の協調 · 能動的なリズム</p>
 
 <p align="center">
   <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-AuroraBot-181717?logo=github" alt="GitHub" /></a>
@@ -24,108 +22,59 @@
 
 ## AuroraBot とは
 
-AuroraBot は、開発者向けのオープンソース自律エージェント・フレームワークです。目指すのは機能を増やした ChatBot ではなく、持続的に存在し、自分のリズムを持ち、環境の中で判断して行動できる Agent です。
+AuroraBot は、Agent に「生活」できる実行環境を提供する Bot フレームワークです。私たちが目指すのは、道具のような Agent ではなく、持続的に存在し、自分のリズムを形成し、環境の中で自律的に判断して行動する Bot です。
 
-一回の実行は一つの `AgentTree` です。root と child は同じ決定論的な loop を使い、事前定義された `AgentDefinition` から作成され、prompt、最初の message、可視 tools、LLM model だけが異なります。
-
-私たちは Agent を「彼女」と呼びます。これは文章上の演出だけではありません。AuroraBot は呼ばれた時だけ存在する便利な道具ではなく、デジタル生命が persona、state、boundary を持ち、必要な時に人や外部世界とつながりながら、自分の仕事を続けられる runtime を提供します。
+彼女は自分自身の人格と状態を持ち、必要な時に人や外部世界とつながることができます。彼女の世界では、すべてのメッセージに「媒介」があります。あなたが彼女に送るメッセージも、まずアプリケーション通知にならなければなりません〜
 
 ## 設計思想
 
-### 自分自身の生活を持つ Agent
+### Bot を中心にすべてを設計する
 
-会話だけが世界ではありません。誰もメッセージを送らない間も時間は進み、application は event を発生させます。能動的なリズム（cadence）により、Agent は明確な予算と境界の中で、今考えるべきか、行動すべきかを判断します。入力欄の後ろに永遠に留まることはありません。
+AuroraBot は Bot を世界の主体として扱います。呼び出されるインターフェースではなく、彼女は存在し続け、自分自身の人格・状態・境界を持ち、すべての設計は彼女の生活を中心に展開します。この原則はアーキテクチャで次の三つに現れます：
 
-### 環境の変化を平等に扱う
-
-ユーザーのメッセージ、時間の経過、application event、child Agent の結果、effect receipt は、すべて外部世界の変化です。同じ event boundary（worldline）から認知へ入り、ユーザーから届いたという理由だけで、疑問を持てない最上位命令にはなりません。
-
-平等とは、schedule の優先度がないという意味ではありません。対話処理は優先でき、権限と安全規則も常に有効です。大切なのは、Agent が何が起きたかを理解してから、返事、行動、委任、沈黙を選ぶことです。
-
-### 判断と行動を分離する
-
-モデルは理解と判断を担いますが、通常の model text が直接環境を変えることはありません。外部 action は宣言済みの能力、引数検証、実行を通り、outcome は新しい event として Agent に戻ります。自律性と制御可能性は両立します。
-
-## 主な能力
-
-```text
-message → model → assistant
-                  ├── Tool call → tool result → model
-                  └── aur.agent.delegate → child Agent → tool result → parent
-```
-
-- **能動的な runtime**：cadence が時間そのものを入力にします。メッセージがなくても、Agent は自分のリズムで呼び出され、行動すべきかを判断します；
-- **同構 Agent の協調**：root と child は同じ loop を使い、`aur.agent.delegate` が本当の Tool として child Agent を委任し、複雑な仕事を AgentTree に分解します；
-- **イベントの平等**：ユーザーのメッセージ、時間の経過、application event が同じ worldline から認知へ入ります。scope をまたぐ連続 event stream と observation frontier が Agent を外界と同期させます；
-- **外部世界との接続**：ローカル Console、Panel backend、MCP SDK 2.x client（stdio / HTTPS Streamable HTTP）がさまざまな source を event に統一します；
-- **組み込み記憶**：最近活動した scope の最新 commit が PromptAssembler 経由で system に注入され、過長な context は決定論的に truncate されます；
-- **交換可能なモデル**：LiteLLM による統一 model gateway が role と Provider を TOML で設定し、secret は環境変数だけから読み取ります；
-- **追跡可能な行動**：入力、model call、tool request、outcome が一つの因果記録（WorldJournal）につながります；
-- **設定可能な人格と能力**：SOUL、WORLD、Agent prompt、model role、tool 可視性を個別に設定できます；
-- **統一 operation catalog**：engine、world、ai、console、cadence、memory、MCP などの runtime 能力が、method/path とスラッシュ文字列エントリ（ops）を提供します；
-- **完全オフラインのテスト**：fake Model/Tool により、テストは決定論的で、オフライン、ネットワーク不要です。
-
-スコープには、Panel の添付ファイルと WebSocket、sandbox、汎用 extension platform、MCP の sampling・elicitation・roots・Tasks・非テキスト結果注入は含まれません。
+- **彼女が世界を持ち、tree は彼女の実行にすぎない**：Bot は追記型の世界ジャーナル（WorldJournal）と複数の `AgentTree` を持ちます。1 本の tree は 1 回の実行にすぎず、彼女と並行する別の主体ではありません。チャット、タスク、委任はすべて彼女の生活の中の出来事であり、出来事が終わっても彼女は存在し続けます。
+- **すべての入力に媒介がある**：彼女に影響を与える変化は、必ず最初に世界イベントにならなければなりません。あなたが彼女に送るメッセージも、`console.input` として彼女の世界にコミットされます。アプリケーションイベント、MCP の報告、ツール結果、時間の経過も同様です。彼女はインターフェースに応答しているのではなく、世界を経験しています。
+- **彼女は理解してから決める**：ユーザーからのメッセージは、その出所だけで自動的に最上位の命令にはなりません。彼女はまず何が起こったかを理解し、それから応答、行動、委任、沈黙を選びます。モデルは理解と判断だけを担い、外部行動は宣言された Tool を通して実行され、結果は新しいイベントとして彼女の世界に戻ります。
 
 ## クイックスタート
 
-Python 3.12、Git、[uv](https://docs.astral.sh/uv/) が必要です：
+### 1. このリポジトリをクローン
+
+Python 3.12、Git、[uv](https://docs.astral.sh/uv/) が必要です
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 cd AuroraBot
-uv sync
-cp -r config.example config
-cp .env.example .env
-uv run aurora start
+./scripts/linux/setup.sh
+# macOS: ./scripts/macos/setup.command;
+# Windows: .\scripts\windows\setup.ps1.
 ```
 
-`aurora start` はプロジェクトルートの `.env` を読み込み（`.env` に既定モデルが必要とする `DEEPSEEK_API_KEY` などを設定）、`models.toml` から model gateway を作成します。起動後はメッセージを入力して会話できます。`/help` で操作を確認し、`/exit` で終了します。ローカル Console を起動しない場合は `--headless` を付けます：
+`setup.sh` は aurora をユーザーのツールディレクトリにインストールし、依存関係、個人設定、docs/panel サブモジュールの初期化を行います。
+
+### 2. 必要な設定を記入
+
+`.env` に既定モデルが必要とするキー（例：`DEEPSEEK_API_KEY`）を記入します
+
+### 3. ターミナルから起動
 
 ```bash
-uv run aurora start --headless
+aurora start
 ```
 
-## カスタマイズと拡張
+起動後はメッセージを入力して会話できます。`/help` で操作を確認し、`/exit` で終了します。
 
-| 変更したいもの                             | 最初に見る場所                              |
-| ------------------------------------------ | ------------------------------------------- |
-| SOUL、世界、Agent prompt                   | `config/prompts.toml`、`config/prompts/`    |
-| model role と Provider                     | `config/models.toml`                        |
-| Agent 定義と委任範囲                       | `config/agents.toml`                        |
-| engine 制限と tree 構造                    | `config/engine.toml`、`config/runtime.toml` |
-| リズムと記憶                               | `config/cadence.toml`、`config/memory.toml` |
-| ローカルまたはリモート MCP application     | `config/apps.toml`                          |
-| ログと永続化 path                          | `config/logging.toml`、`config/storage.toml` |
+## AIGC
 
-構造設定には TOML を使い、secret は環境変数だけから読み取ります。
+このプロジェクトには、大規模言語モデルや拡散モデルなどの生成モデルの支援を受けて書かれたコードが含まれており、人間によるレビューを経ています。
 
-## 開発
+## コントリビューション
 
-`config.example/` は source とともに配布され、コピーした `config/` は個人設定で Git の管理外です。よく使うコマンド：
-
-```bash
-uv run aurora check        # lint、型、テスト
-uv run aurora about        # AuroraBot について
-uv run aurora config list  # 登録済み設定の一覧
-uv run aurora setup        # 完全ブートストラップ：依存関係、submodule、panel
-```
-
-設計の基準は [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) です。実装構造は
-[アーキテクチャドキュメント](docs/architecture/index.md)（パッケージ別）を参照してください。
-
-## ドキュメント
-
-- [クイックスタート](docs/start/getting-started.md)
-- [設定](docs/start/configuration.md)
-- [アーキテクチャ概要](docs/architecture/index.md)
-- [現在の実装状態](docs/reference/nightly-status.md)
-- [コントリビューションガイド](CONTRIBUTING.ja.md)
-- [行動規範](CODE_OF_CONDUCT.md)
+[AuroraBot へのコントリビューション](CONTRIBUTING.ja.md)と [AuroraBot ドキュメントサイト](https://www.aurorabot.org)をご覧ください。コントリビューションを行うことで、プロジェクトの[行動規範](CODE_OF_CONDUCT.md)に同意したことになります。
 
 ## オープンソースへの謝辞
 
-AuroraBot は、多くの優れたオープンソース・プロジェクトを利用しています。
+AuroraBot は、多くの優れたオープンソース・プロジェクトなしには生まれませんでした：
 
 | プロジェクト                                                                                                           | AuroraBot での用途                        |
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
@@ -135,8 +84,7 @@ AuroraBot は、多くの優れたオープンソース・プロジェクトを�
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console と terminal experience            |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal 永続化                       |
 
-この分野を探求する他のオープンソース Agent/Bot プロジェクトにも感謝します。特に
-[MaiBot](https://github.com/MaiM-with-u/MaiBot) の「デジタル生命」という考え方は、AuroraBot の初期構想に大きな影響を与えました。
+この分野を探求する他のオープンソース Agent/Bot プロジェクトにも感謝します。特に [MaiBot](https://github.com/MaiM-with-u/MaiBot) の「デジタル生命」という考え方は、AuroraBot の初期構想に大きな影響を与えました。
 
 ## ライセンス
 

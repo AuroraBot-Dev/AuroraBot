@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -11,6 +10,7 @@ from src.contracts import (
     ToolOutput,
     ToolScopes,
     ToolStatus,
+    is_valid_tool_id,
 )
 from src.utils import get_logger
 
@@ -20,8 +20,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from src.contracts import Tool, ToolCall, ToolDefinition, ToolResult
-
-_TOOL_ID = re.compile(r"aur(?:\.[a-z][a-z0-9_-]*){2,}")
 
 
 class ToolRegistrationError(ValueError):
@@ -36,7 +34,7 @@ class ToolRegistry:
         definitions: dict[str, ToolDefinition] = {}
         for tool in tools:
             definition = tool.definition
-            if _TOOL_ID.fullmatch(definition.name) is None:
+            if not is_valid_tool_id(definition.name):
                 raise ToolRegistrationError(f"工具 ID 不符合 aur.* 域规范：{definition.name}")
             if definition.name in bindings:
                 raise ToolRegistrationError(f"工具重复注册：{definition.name}")

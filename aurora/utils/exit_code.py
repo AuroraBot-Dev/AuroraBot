@@ -1,0 +1,5 @@
+"""AuroraBot 进程退出码约定。"""
+
+EXIT_FAILURE = 1
+EXIT_CONFIG_ERROR = 2
+EXIT_INTERRUPTED = 130
