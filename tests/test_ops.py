@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurora import assemble_runtime, load_config
+from aurora import AuroraRuntime, assemble_runtime, load_config
 from aurora.configuration.models import MODELS_CONFIG
 from ops import ConfigAccess, ConfigSourceRef
 from ops.contracts import OperationControl, OperationResult, OpsPorts
@@ -23,6 +23,11 @@ _MIN_OPERATION_COUNT = 9
 _CADENCE_EVOKE_EVERY = 1
 _MODEL_OUTPUT_BUDGET_BEFORE = 51200
 _MODEL_OUTPUT_BUDGET_AFTER = 12345
+
+
+def _close_runtime(runtime: AuroraRuntime) -> None:
+    """在独立事件循环中释放 WorldJournal 的 aiosqlite 连接，避免线程在循环关闭后回调。"""
+    asyncio.run(runtime.world.close())
 
 
 @dataclass(slots=True)
@@ -319,138 +324,155 @@ def test_config_access_rejects_personal_directory_symlink(tmp_path: Path) -> Non
 
 def test_assembled_runtime_exposes_live_tree_snapshots_and_ops(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    try:
+        initial = asyncio.run(runtime.ops.execute("GET", "/engine/status"))
+        result = asyncio.run(runtime.run("你好", tree_id="tree-live"))
+        listed = asyncio.run(runtime.ops.route_text("/trees"))
+        detail = asyncio.run(runtime.ops.execute("GET", "/trees/tree-live"))
+        node = asyncio.run(runtime.ops.execute("GET", f"/trees/tree-live/nodes/{result.root_id}"))
 
-    initial = asyncio.run(runtime.ops.execute("GET", "/engine/status"))
-    result = asyncio.run(runtime.run("你好", tree_id="tree-live"))
-    listed = asyncio.run(runtime.ops.route_text("/trees"))
-    detail = asyncio.run(runtime.ops.execute("GET", "/trees/tree-live"))
-    node = asyncio.run(runtime.ops.execute("GET", f"/trees/tree-live/nodes/{result.root_id}"))
-
-    assert initial.data["tree_count"] == 0  # type: ignore[index]
-    assert listed.data["trees"][0]["status"] == "completed"  # type: ignore[index]
-    assert detail.data["nodes"][0]["messages"][-1]["role"] == "assistant"  # type: ignore[index]
-    assert node.data["model"] == runtime.agents.get(runtime.root.agent).model  # type: ignore[index]
-    with pytest.raises(ValueError, match="已存在"):
-        asyncio.run(runtime.run("重复", tree_id="tree-live"))
+        assert initial.data["tree_count"] == 0  # type: ignore[index]
+        assert listed.data["trees"][0]["status"] == "completed"  # type: ignore[index]
+        assert detail.data["nodes"][0]["messages"][-1]["role"] == "assistant"  # type: ignore[index]
+        assert node.data["model"] == runtime.agents.get(runtime.root.agent).model  # type: ignore[index]
+        with pytest.raises(ValueError, match="已存在"):
+            asyncio.run(runtime.run("重复", tree_id="tree-live"))
+    finally:
+        _close_runtime(runtime)
 
 
 def test_subpackage_catalogs_are_available_as_json_terminal_commands(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    try:
+        agents = asyncio.run(runtime.ops.route_text("/agents"))
+        agent = asyncio.run(runtime.ops.route_text("/agent builtin.root"))
+        tools = asyncio.run(runtime.ops.route_text("/tools"))
+        prompts = asyncio.run(runtime.ops.route_text("/prompts"))
+        models = asyncio.run(runtime.ops.route_text("/models"))
+        console = asyncio.run(runtime.ops.route_text("/console"))
+        utils = asyncio.run(runtime.ops.route_text("/utils"))
+        contracts = asyncio.run(runtime.ops.route_text("/contracts"))
+        cadence = asyncio.run(runtime.ops.route_text("/cadence"))
+        memory = asyncio.run(runtime.ops.execute("GET", "/memory"))
 
-    agents = asyncio.run(runtime.ops.route_text("/agents"))
-    agent = asyncio.run(runtime.ops.route_text("/agent builtin.root"))
-    tools = asyncio.run(runtime.ops.route_text("/tools"))
-    prompts = asyncio.run(runtime.ops.route_text("/prompts"))
-    models = asyncio.run(runtime.ops.route_text("/models"))
-    console = asyncio.run(runtime.ops.route_text("/console"))
-    utils = asyncio.run(runtime.ops.route_text("/utils"))
-    contracts = asyncio.run(runtime.ops.route_text("/contracts"))
-    cadence = asyncio.run(runtime.ops.route_text("/cadence"))
-    memory = asyncio.run(runtime.ops.execute("GET", "/memory"))
-
-    assert agents.ok and agents.message is None and "builtin.root" in render_result(agents)
-    assert agent.ok and agent.data["model"] == "quality"  # type: ignore[index]
-    assert tools.ok and render_result(tools).startswith("{")
-    assert any(item["name"] == "aur.agent.delegate" for item in tools.data["tools"])  # type: ignore[index]
-    assert prompts.ok and "builtin.root" in prompts.data["agent_prompts"]  # type: ignore[index]
-    assert models.ok and any(item["endpoint_id"] == "quality" for item in models.data["endpoints"])  # type: ignore[index]
-    assert console.ok and console.data["input_to_worldline"] is True  # type: ignore[index]
-    assert console.data["output_to_worldline"] is False  # type: ignore[index]
-    assert utils.ok and render_result(utils).startswith("{")
-    assert "logging" in utils.data  # type: ignore[index]
-    assert contracts.ok and "AgentTree" in contracts.data["value_objects"]  # type: ignore[index]
-    assert "WorldJournal" in contracts.data["ports"]  # type: ignore[index]
-    assert cadence.ok and cadence.data["agent"] == "builtin.triage"  # type: ignore[index]
-    assert cadence.data["evoke_every"] == _CADENCE_EVOKE_EVERY  # type: ignore[index]
-    assert memory.ok and "window_start" in memory.data  # type: ignore[index]
-    assert asyncio.run(runtime.ops.execute("POST", "/cadence/trigger")).ok is True
+        assert agents.ok and agents.message is None and "builtin.root" in render_result(agents)
+        assert agent.ok and agent.data["model"] == "quality"  # type: ignore[index]
+        assert tools.ok and render_result(tools).startswith("{")
+        assert any(item["name"] == "aur.agent.delegate" for item in tools.data["tools"])  # type: ignore[index]
+        assert prompts.ok and "builtin.root" in prompts.data["agent_prompts"]  # type: ignore[index]
+        assert models.ok and any(item["endpoint_id"] == "quality" for item in models.data["endpoints"])  # type: ignore[index]
+        assert console.ok and console.data["input_to_worldline"] is True  # type: ignore[index]
+        assert console.data["output_to_worldline"] is False  # type: ignore[index]
+        assert utils.ok and render_result(utils).startswith("{")
+        assert "logging" in utils.data  # type: ignore[index]
+        assert contracts.ok and "AgentTree" in contracts.data["value_objects"]  # type: ignore[index]
+        assert "WorldJournal" in contracts.data["ports"]  # type: ignore[index]
+        assert cadence.ok and cadence.data["agent"] == "builtin.triage"  # type: ignore[index]
+        assert cadence.data["evoke_every"] == _CADENCE_EVOKE_EVERY  # type: ignore[index]
+        assert memory.ok and "window_start" in memory.data  # type: ignore[index]
+        assert asyncio.run(runtime.ops.execute("POST", "/cadence/trigger")).ok is True
+    finally:
+        _close_runtime(runtime)
 
 
 def test_config_mutation_ops_record_world_events(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    try:
+        changed = asyncio.run(runtime.ops.route_text("/app-enable org.aurora.clock true"))
+        unchanged = asyncio.run(runtime.ops.route_text("/app-enable org.aurora.clock true"))
+        commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
 
-    changed = asyncio.run(runtime.ops.route_text("/app-enable org.aurora.clock true"))
-    unchanged = asyncio.run(runtime.ops.route_text("/app-enable org.aurora.clock true"))
-    commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
-
-    assert changed.ok is True and changed.message is None
-    assert unchanged.ok is True
-    assert [commit.kind for commit in commits] == ["ops.config.changed"]
-    assert commits[0].data["package"] == "org.aurora.clock"
+        assert changed.ok is True and changed.message is None
+        assert unchanged.ok is True
+        assert [commit.kind for commit in commits] == ["ops.config.changed"]
+        assert commits[0].data["package"] == "org.aurora.clock"
+    finally:
+        _close_runtime(runtime)
 
 
 def test_config_reload_reparses_toml_and_swaps_runtime_config(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
-    models_path = configured_project / "config" / "models.toml"
-    updated = models_path.read_text(encoding="utf-8").replace(
-        f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_BEFORE}",
-        f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_AFTER}",
-    )
-    models_path.write_text(updated, encoding="utf-8")
+    try:
+        models_path = configured_project / "config" / "models.toml"
+        updated = models_path.read_text(encoding="utf-8").replace(
+            f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_BEFORE}",
+            f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_AFTER}",
+        )
+        models_path.write_text(updated, encoding="utf-8")
 
-    assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_BEFORE
+        assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_BEFORE
 
-    result = asyncio.run(runtime.ops.execute("POST", "/config/reload"))
+        result = asyncio.run(runtime.ops.execute("POST", "/config/reload"))
 
-    assert result.ok is True
-    assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_AFTER
-    assert result.data is not None and "names" in result.data
-    commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
-    assert [commit.kind for commit in commits] == ["ops.config.reloaded"]
+        assert result.ok is True
+        assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_AFTER
+        assert result.data is not None and "names" in result.data
+        commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
+        assert [commit.kind for commit in commits] == ["ops.config.reloaded"]
+    finally:
+        _close_runtime(runtime)
 
 
 def test_config_reload_failure_keeps_previous_config(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
-    before = runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens
-    models_path = configured_project / "config" / "models.toml"
-    models_path.write_text("max_output_tokens = 非法\n[models", encoding="utf-8")
+    try:
+        before = runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens
+        models_path = configured_project / "config" / "models.toml"
+        models_path.write_text("max_output_tokens = 非法\n[models", encoding="utf-8")
 
-    result = asyncio.run(runtime.ops.route_text("/reload"))
+        result = asyncio.run(runtime.ops.route_text("/reload"))
 
-    assert result.ok is False
-    assert result.code == "CONFIG_ERROR"
-    assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == before
+        assert result.ok is False
+        assert result.code == "CONFIG_ERROR"
+        assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == before
+    finally:
+        _close_runtime(runtime)
 
 
 def test_world_stream_and_commit_ops_follow_the_worldline(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
-    asyncio.run(runtime.run("hello", tree_id="tree-stream"))
+    try:
+        asyncio.run(runtime.run("hello", tree_id="tree-stream"))
 
-    page = asyncio.run(runtime.ops.execute("GET", "/world/stream", {"after": "0", "limit": "20"}))
-    started = asyncio.run(runtime.ops.execute("GET", "/world/commits/tree-stream:tree:started"))
+        page = asyncio.run(runtime.ops.execute("GET", "/world/stream", {"after": "0", "limit": "20"}))
+        started = asyncio.run(runtime.ops.execute("GET", "/world/commits/tree-stream:tree:started"))
 
-    assert page.ok is True
-    assert page.data["commits"][0]["kind"] == "engine.tree.started"  # type: ignore[index]
-    assert any(commit["kind"] == "engine.tree.completed" for commit in page.data["commits"])  # type: ignore[index]
-    assert started.ok is True
-    assert started.data["kind"] == "engine.tree.started"  # type: ignore[index]
+        assert page.ok is True
+        assert page.data["commits"][0]["kind"] == "engine.tree.started"  # type: ignore[index]
+        assert any(commit["kind"] == "engine.tree.completed" for commit in page.data["commits"])  # type: ignore[index]
+        assert started.ok is True
+        assert started.data["kind"] == "engine.tree.started"  # type: ignore[index]
+    finally:
+        _close_runtime(runtime)
 
 
 def test_runtime_event_entry_commits_without_automatically_starting_a_tree(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
-
-    submitted = asyncio.run(
-        runtime.ops.execute(
-            "POST",
-            "/events",
-            {
-                "event_id": "qq-1",
-                "source": "qq",
-                "scope": "qq:group-1",
-                "kind": "message",
-                "summary": "有人发来消息",
-                "data": {"message_id": "1"},
-                "occurred_at": "2026-08-22T12:00:00+08:00",
-            },
+    try:
+        submitted = asyncio.run(
+            runtime.ops.execute(
+                "POST",
+                "/events",
+                {
+                    "event_id": "qq-1",
+                    "source": "qq",
+                    "scope": "qq:group-1",
+                    "kind": "message",
+                    "summary": "有人发来消息",
+                    "data": {"message_id": "1"},
+                    "occurred_at": "2026-08-22T12:00:00+08:00",
+                },
+            )
         )
-    )
-    status = asyncio.run(runtime.ops.execute("GET", "/engine/status"))
-    world = asyncio.run(runtime.ops.execute("GET", "/world/qq:group-1"))
+        status = asyncio.run(runtime.ops.execute("GET", "/engine/status"))
+        world = asyncio.run(runtime.ops.execute("GET", "/world/qq:group-1"))
 
-    assert submitted.ok is True
-    assert submitted.data["kind"] == "environment.message"  # type: ignore[index]
-    assert status.data["tree_count"] == 0  # type: ignore[index]
-    assert world.data["commits"][0]["summary"] == "有人发来消息"  # type: ignore[index]
+        assert submitted.ok is True
+        assert submitted.data["kind"] == "environment.message"  # type: ignore[index]
+        assert status.data["tree_count"] == 0  # type: ignore[index]
+        assert world.data["commits"][0]["summary"] == "有人发来消息"  # type: ignore[index]
+    finally:
+        _close_runtime(runtime)
 
 
 def test_parser_and_renderer_cover_invalid_shell_and_scalar_types() -> None:

@@ -58,7 +58,7 @@ children = []
 
 [[agent]]
 id = "builtin.worker"
-description = "通用执行者：掌握全部 QQ 工具与世界读取，深入完成边界明确的独立工作，可继续委派轻量任务或审阅。"
+description = "通用执行者：掌握全部 QQ、Windows 桌面自动化工具与世界读取，深入完成边界明确的独立工作，可继续委派轻量任务或审阅。"
 prompt = "builtin.worker"
 model = "quality"
 tools = [
@@ -66,6 +66,7 @@ tools = [
     "aur.serv.world.read",
     "aur.serv.world.trees",
     "aur.mcp.org.aurora.qq.*",
+    "aur.mcp.com.github.windows_mcp.*",
 ]
 children = ["builtin.reviewer", "builtin.fast-worker"]
 

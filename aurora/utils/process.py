@@ -7,6 +7,8 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from aurora.utils.exit_code import EXIT_FAILURE, EXIT_INTERRUPTED
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
@@ -19,9 +21,9 @@ def run_process(command: Sequence[str], root: Path) -> int:
         result = subprocess.run(_resolve_command(command), cwd=root, check=False)
     except FileNotFoundError:
         sys.stderr.write(f"未找到命令 {command[0]}，请先安装并加入 PATH 后重试。\n")
-        return 1
+        return EXIT_FAILURE
     except KeyboardInterrupt:
-        return 130
+        return EXIT_INTERRUPTED
     if result.returncode != 0:
         sys.stderr.write(f"命令失败，退出码 {result.returncode}。\n")
     return result.returncode

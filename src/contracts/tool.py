@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -11,6 +12,19 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 if TYPE_CHECKING:
     from src.contracts.model import ToolCall
     from src.contracts.world import ToolScopes
+
+_AUR_TOOL_ID = re.compile(r"aur(?:\.[a-z][a-z0-9_-]*){2,}")
+_MCP_TOOL_ID = re.compile(r"aur\.mcp\.[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\.[A-Za-z][A-Za-z0-9_-]*")
+
+
+def is_valid_tool_id(name: str) -> bool:
+    """框架命名保持小写；MCP raw name 段属于第三方外部事实，允许大写风格。"""
+    return _AUR_TOOL_ID.fullmatch(name) is not None or _MCP_TOOL_ID.fullmatch(name) is not None
+
+
+def is_valid_mcp_tool_id(name: str) -> bool:
+    """校验 ``aur.mcp.<package>.<raw_name>``：package 段小写，raw name 段允许大写。"""
+    return _MCP_TOOL_ID.fullmatch(name) is not None
 
 
 class ToolStatus(StrEnum):
