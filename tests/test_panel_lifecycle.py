@@ -10,10 +10,10 @@ import pytest
 import tomlkit
 
 from aurora import load_config
-from aurora import runtime as runtime_module
-from aurora.configuration.runtime import PanelConfig
+from aurora.configuration.runtime import RUNTIME_CONFIG, PanelConfig
 from aurora.configuration.storage import StorageConfig
-from aurora.panel_runtime import run_panel
+from aurora.runtime import run as runtime_module
+from aurora.runtime.panel import run_panel
 from src.contracts import ChatMessage, ModelRequest
 
 
@@ -113,7 +113,7 @@ def test_run_panel_serves_notices_then_opens_frontend(monkeypatch: pytest.Monkey
         session_ttl_seconds=3600,
     )
     fake = FakePanelRuntime(trace)
-    monkeypatch.setattr("aurora.panel_runtime.build_panel_runtime", lambda *_a, **_k: fake)
+    monkeypatch.setattr("aurora.runtime.panel.build_panel_runtime", lambda *_a, **_k: fake)
 
     result = asyncio.run(
         run_panel(
@@ -184,7 +184,7 @@ def test_run_project_serves_panel_and_closes_before_world(
 def test_run_project_without_panel_skips_server_and_notice(
     configured_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    panel_config = load_config(configured_project).get(runtime_module.RUNTIME_CONFIG).panel
+    panel_config = load_config(configured_project).get(RUNTIME_CONFIG).panel
     assert panel_config.enabled is False
     trace: list[str] = []
     _trace_resource_close(monkeypatch, trace)

@@ -1,62 +1,36 @@
-"""组合项目实例并提供 AuroraBot 运行入口。"""
+"""项目级运行时门面：持有全部已装配实例并实现每个 ops 端口。"""
 
 from __future__ import annotations
 
-import asyncio
-from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from aurora import runtime_views
-from aurora.composition import compose_project
-from aurora.composition.agents import AGENTS
-from aurora.composition.cadence import CADENCE
-from aurora.composition.console import TERMINAL_CONSOLE
-from aurora.composition.engine import ENGINE_RUNNER
-from aurora.composition.mcp import MCP_RUNTIME, build_mcp_specs
-from aurora.composition.memory import MEMORY
-from aurora.composition.world import WORLD_JOURNAL, build_world
 from aurora.configuration import load_config
 from aurora.configuration.models import MODELS_CONFIG
-from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
-from aurora.configuration.runtime import RUNTIME_CONFIG, RuntimeConfig
-from aurora.configuration.storage import STORAGE_CONFIG
-from aurora.panel_runtime import PanelRuntime, close_panel, run_panel
-from aurora.runtime_support import (
-    InstalledSignal,
-    configure_project_logging,
-    install_stop_handlers,
-    parse_event_time,
-    restore_stop_handlers,
-)
+from aurora.runtime import views
+from aurora.runtime.support import parse_event_time
 from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
 from ops.contracts import OperationControl
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
-from src.contracts import (
-    AgentTree,
-    EnvironmentEvent,
-    WorldFrontier,
-    WorldJournal,
-)
-from src.mcp import McpRuntime, prepare_mcp
+from src.contracts import AgentTree, EnvironmentEvent, WorldFrontier
 from src.utils import get_logger
 
-_logger = get_logger(__name__)
-
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
 
-    from aurora.composer import InstanceBinding
     from aurora.config import AuroraConfig
+    from aurora.configuration.runtime import RuntimeConfig
     from src.agents import AgentCatalog
     from src.cadence import Cadence
-    from src.contracts import Model, Tool, TreeLaunchRequest
+    from src.contracts import TreeLaunchRequest, WorldJournal
     from src.engine import AgentTreeRunner
-    from src.mcp import McpClientFactory
+    from src.mcp import McpRuntime
     from src.memory import Memory
+
+_logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -121,7 +95,7 @@ class AuroraRuntime:
         return await self.runner.run(tree, observer=self._record_tree)
 
     async def start_tree(self, message: str, *, tree_id: str | None = None) -> dict[str, Any]:
-        return runtime_views.tree_dict(await self.run(message, tree_id=tree_id))
+        return views.tree_dict(await self.run(message, tree_id=tree_id))
 
     async def launch_tree(self, request: TreeLaunchRequest) -> dict[str, Any]:
         """cadence 等主动策略的统一唤起入口。"""
@@ -142,7 +116,7 @@ class AuroraRuntime:
             self._echo_node_texts(current, printed)
 
         completed = await self.runner.run(tree, observer=observer)
-        return runtime_views.tree_dict(completed)
+        return views.tree_dict(completed)
 
     def _echo_node_texts(self, tree: AgentTree, printed: dict[str, int]) -> None:
         # TODO: 后续用 rich 美化输出并加入工具调用 trace
@@ -158,7 +132,7 @@ class AuroraRuntime:
         await self.world.initialize()
         commit = await self.world.append_event(event)
         _logger.debug("环境事件已提交 event_id=%s kind=%s", event.event_id, event.kind)
-        return runtime_views.commit_dict(commit)
+        return views.commit_dict(commit)
 
     async def submit_event_values(
         self,
@@ -181,7 +155,7 @@ class AuroraRuntime:
         tree = self.create_tree(event.summary, tree_id=tree_id, frontier=frontier)
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        return runtime_views.tree_dict(await self.runner.run(tree, observer=self._record_tree))
+        return views.tree_dict(await self.runner.run(tree, observer=self._record_tree))
 
     async def world_scope(self, scope: str, *, after: int = 0) -> dict[str, Any]:
         """返回一个 scope 从指定序号起的有界提交索引，用于 ops 观察与环境适配器续读。"""
@@ -194,7 +168,7 @@ class AuroraRuntime:
             "after": after,
             "frontier": dict(delta.end.positions),
             "has_more": delta.has_more,
-            "commits": [runtime_views.commit_dict(commit) for commit in delta.commits],
+            "commits": [views.commit_dict(commit) for commit in delta.commits],
         }
 
     async def forest(self, *, limit: int = 64) -> dict[str, Any]:
@@ -202,8 +176,8 @@ class AuroraRuntime:
         await self.world.initialize()
         activity = await self.world.tree_index(limit)
         return {
-            "runtime": [runtime_views.tree_summary(tree) for tree in reversed(tuple(self._trees.values()))][:limit],
-            "journal": [runtime_views.activity_dict(item) for item in activity],
+            "runtime": [views.tree_summary(tree) for tree in reversed(tuple(self._trees.values()))][:limit],
+            "journal": [views.activity_dict(item) for item in activity],
         }
 
     def bind_stop_requester(self, requester: Callable[[], None] | None) -> None:
@@ -225,7 +199,7 @@ class AuroraRuntime:
             OperationControl.CLEAR_CONSOLE: TerminalControl.CLEAR,
             OperationControl.SHUTDOWN_PROCESS: TerminalControl.SHUTDOWN,
         }[result.control]
-        rendered, tree_failed = runtime_views.terminal_text(result, command=command)
+        rendered, tree_failed = views.terminal_text(result, command=command)
         _logger.debug("终端输入完成 input_type=%s ok=%s code=%s", input_type, result.ok, result.code)
         return TerminalResponse(rendered, control, is_error=not result.ok or tree_failed)
 
@@ -237,13 +211,11 @@ class AuroraRuntime:
 
     def list_trees(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]:
         trees = reversed(tuple(self._trees.values()))
-        return [runtime_views.tree_summary(tree) for tree in trees if status is None or tree.status.value == status][
-            :limit
-        ]
+        return [views.tree_summary(tree) for tree in trees if status is None or tree.status.value == status][:limit]
 
     def tree_detail(self, tree_id: str) -> dict[str, Any] | None:
         tree = self._trees.get(tree_id)
-        return runtime_views.tree_dict(tree) if tree is not None else None
+        return views.tree_dict(tree) if tree is not None else None
 
     def node_detail(self, tree_id: str, node_id: str) -> dict[str, Any] | None:
         tree = self._trees.get(tree_id)
@@ -253,24 +225,24 @@ class AuroraRuntime:
             node = tree.node(node_id)
         except KeyError:
             return None
-        return runtime_views.node_dict(node)
+        return views.node_dict(node)
 
     def agent_catalog(self) -> dict[str, Any]:
-        return {"agents": [runtime_views.agent_dict(definition) for definition in self.agents.definitions]}
+        return {"agents": [views.agent_dict(definition) for definition in self.agents.definitions]}
 
     def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
         try:
             definition = self.agents.get(agent_id)
         except ValueError:
             return None
-        return runtime_views.agent_dict(definition)
+        return views.agent_dict(definition)
 
     def tool_catalog(self) -> dict[str, Any]:
-        return {"tools": [runtime_views.tool_dict(definition) for definition in self.runner.tool_definitions]}
+        return {"tools": [views.tool_dict(definition) for definition in self.runner.tool_definitions]}
 
     def tool_detail(self, tool_id: str) -> dict[str, Any] | None:
         definition = next((item for item in self.runner.tool_definitions if item.name == tool_id), None)
-        return runtime_views.tool_dict(definition) if definition is not None else None
+        return views.tool_dict(definition) if definition is not None else None
 
     def mcp_status(self) -> dict[str, Any]:
         snapshot = self.mcp.snapshot()
@@ -278,12 +250,12 @@ class AuroraRuntime:
             "platform_enabled": snapshot.platform_enabled,
             "restart_required": snapshot.restart_required,
             "tool_ids": list(snapshot.tool_ids),
-            "apps": [runtime_views.mcp_app_dict(app) for app in snapshot.apps],
+            "apps": [views.mcp_app_dict(app) for app in snapshot.apps],
         }
 
     def mcp_app(self, package: str) -> dict[str, Any] | None:
         snapshot = self.mcp.app(package)
-        return runtime_views.mcp_app_dict(snapshot) if snapshot is not None else None
+        return views.mcp_app_dict(snapshot) if snapshot is not None else None
 
     def prompt_catalog(self) -> dict[str, Any]:
         prompts = self.config.get(PROMPTS_CONFIG)
@@ -340,10 +312,10 @@ class AuroraRuntime:
         }
 
     def utils_status(self) -> dict[str, Any]:
-        return runtime_views.utils_status()
+        return views.utils_status()
 
     def contracts_status(self) -> dict[str, Any]:
-        return runtime_views.contracts_status()
+        return views.contracts_status()
 
     def cadence_status(self) -> dict[str, Any]:
         return self.cadence.status()
@@ -363,7 +335,7 @@ class AuroraRuntime:
                 {
                     "scope": scope.scope,
                     "head": scope.head,
-                    "commits": [runtime_views.commit_dict(commit) for commit in scope.commits],
+                    "commits": [views.commit_dict(commit) for commit in scope.commits],
                 }
                 for scope in snapshot.scopes
             ],
@@ -386,13 +358,13 @@ class AuroraRuntime:
             "after": page.after,
             "end": page.end,
             "has_more": page.has_more,
-            "commits": [runtime_views.commit_dict(commit) for commit in page.commits],
+            "commits": [views.commit_dict(commit) for commit in page.commits],
         }
 
     async def world_commit(self, commit_id: str) -> dict[str, Any] | None:
         await self.world.initialize()
         commit = await self.world.commit(commit_id)
-        return runtime_views.commit_dict(commit) if commit is not None else None
+        return views.commit_dict(commit) if commit is not None else None
 
     async def record_event(
         self,
@@ -419,136 +391,7 @@ class AuroraRuntime:
             data=data or {},
             occurred_at=when,
         )
-        return runtime_views.commit_dict(commit)
+        return views.commit_dict(commit)
 
     def _record_tree(self, tree: AgentTree) -> None:
         self._trees[tree.tree_id] = tree
-
-
-def assemble_runtime(
-    config: AuroraConfig,
-    model: Model | None = None,
-    tools: Iterable[Tool] = (),
-    *,
-    world: WorldJournal | None = None,
-    mcp: McpRuntime | None = None,
-    output: Callable[[str], None] = print,
-) -> AuroraRuntime:
-    """运行全部组件注册器，并取得完整运行时所需实例。"""
-    instances: list[InstanceBinding] = []
-    if world is not None:
-        instances.append((WORLD_JOURNAL, world))
-    if mcp is not None:
-        instances.append((MCP_RUNTIME, mcp))
-    external_tools = (*tuple(tools), *(mcp.tools if mcp is not None else ()))
-    assembly = compose_project(config, model, external_tools, instances)
-    return AuroraRuntime(
-        assembly.get(ENGINE_RUNNER),
-        config.get(RUNTIME_CONFIG),
-        assembly.get(AGENTS),
-        config,
-        assembly.get(TERMINAL_CONSOLE),
-        assembly.get(WORLD_JOURNAL),
-        assembly.get(CADENCE),
-        assembly.get(MEMORY),
-        assembly.get(MCP_RUNTIME),
-        output=output,
-    )
-
-
-async def run_project(
-    config: AuroraConfig,
-    model: Model | None = None,
-    tools: Iterable[Tool] = (),
-    *,
-    headless: bool = False,
-    stop_event: asyncio.Event | None = None,
-    readline: Callable[[str], str] | None = None,
-    output: Callable[[str], None] = print,
-    mcp_factory: McpClientFactory | None = None,
-) -> AuroraRuntime:
-    """先冻结 MCP 工具目录，再组合运行时并让 Console 或停止事件拥有进程前台。"""
-    configure_project_logging(config)
-    _logger.info("Aurora runtime 启动 headless=%s", headless)
-    world = build_world(config)
-    mcp: McpRuntime | None = None
-    try:
-        await world.initialize()
-        platform = config.get(PLATFORMS_CONFIG).mcp
-        mcp = await prepare_mcp(
-            build_mcp_specs(config),
-            platform_enabled=platform.enabled,
-            world=world,
-            factory=mcp_factory,
-        )
-        _logger.info("MCP 工具目录已冻结 app_count=%d tool_count=%d", len(mcp.snapshot().apps), len(mcp.tools))
-        runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp, output=output)
-        await _activate_runtime(runtime, mcp)
-        _logger.info("Aurora runtime 装配完成")
-    except BaseException as error:
-        _logger.error("Aurora runtime 启动失败 error_type=%s", type(error).__name__)
-        await _close_failed_startup(mcp, world)
-        raise
-
-    stop = stop_event or asyncio.Event()
-    cadence_task: asyncio.Task[None] | None = None
-    panel: PanelRuntime | None = None
-    installed = ()
-    try:
-        runtime.bind_stop_requester(stop.set)
-        panel = await run_panel(
-            runtime.root.panel,
-            runtime.ops,
-            storage=config.get(STORAGE_CONFIG),
-            project_root=config.project_root,
-            profile=runtime.root.profile,
-        )
-        if runtime.cadence.enabled:
-            cadence_task = asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
-        installed = install_stop_handlers(stop) if stop_event is None else ()
-        if not headless and runtime.root.console_enabled:
-            await runtime.console.run(runtime, stop_event=stop, readline=readline, output=output)
-        else:
-            await stop.wait()
-    finally:
-        await _shutdown_project(runtime, panel, cadence_task, installed, mcp, world)
-    return runtime
-
-
-async def _close_failed_startup(mcp: McpRuntime | None, world: WorldJournal) -> None:
-    if mcp is not None:
-        with suppress(Exception):
-            await mcp.close()
-    with suppress(Exception):
-        await world.close()
-
-
-async def _shutdown_project(
-    runtime: AuroraRuntime,
-    panel: PanelRuntime | None,
-    cadence_task: asyncio.Task[None] | None,
-    installed: tuple[InstalledSignal, ...],
-    mcp: McpRuntime,
-    world: WorldJournal,
-) -> None:
-    _logger.info("Aurora runtime 开始关闭")
-    runtime.bind_stop_requester(None)
-    try:
-        restore_stop_handlers(installed)
-    finally:
-        await close_panel(panel)
-        if cadence_task is not None:
-            cadence_task.cancel()
-            await asyncio.gather(cadence_task, return_exceptions=True)
-        try:
-            await mcp.close()
-        finally:
-            await world.close()
-    _logger.info("Aurora runtime 已关闭")
-
-
-async def _activate_runtime(runtime: AuroraRuntime, mcp: McpRuntime) -> None:
-    """先固定 Cadence cursor，再放行 MCP 业务事件。"""
-    if runtime.cadence.enabled:
-        await runtime.cadence.initialize()
-    await mcp.activate()

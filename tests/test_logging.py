@@ -10,7 +10,7 @@ import pytest
 
 from aurora import assemble_runtime, load_config
 from aurora.configuration.logging import LOGGING_CONFIG, LoggingConfig
-from aurora.runtime_support import configure_project_logging
+from aurora.runtime.support import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
 from src.tools import ToolRegistry
 from src.utils import configure_console_logging
@@ -21,7 +21,8 @@ if TYPE_CHECKING:
 _ROOT = Path(__file__).parents[1]
 _LOGGED_RUNTIME_MODULES = (
     "aurora/composer.py",
-    "aurora/runtime.py",
+    "aurora/runtime/core.py",
+    "aurora/runtime/run.py",
     "src/agents/catalog.py",
     "src/ai/gateway.py",
     "src/cadence/cadence.py",

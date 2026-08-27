@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-import aurora.runtime as runtime_module
 from aurora.composition import compose_project
 from aurora.composition.mcp import build_mcp_specs
 from aurora.configuration import load_config
 from aurora.configuration.apps import APPS_CONFIG, AppConfig, AppsConfig
 from aurora.configuration.platforms import PLATFORMS_CONFIG, McpPlatformConfig, PlatformsConfig
 from aurora.runtime import AuroraRuntime, assemble_runtime, run_project
+from aurora.runtime import run as runtime_module
 from src.contracts import (
     ChatMessage,
     EnvironmentEvent,
