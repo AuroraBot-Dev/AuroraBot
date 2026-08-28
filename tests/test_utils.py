@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import pytest
 from loguru import logger as _loguru_logger
 
+from aurora.utils.environment import get_git_revision
+from aurora.utils.platform import detect_os, is_linux, is_macos, is_windows
 from src.utils import (
     NamePatternError,
     UnsupportedLoggingLevelError,
@@ -123,3 +125,43 @@ def test_pattern_matches_and_rejects_invalid_patterns() -> None:
         resolve_names(_TOOLS, ("aur.[z-a].*",))
     with pytest.raises(NamePatternError, match="嵌套"):
         resolve_names(_TOOLS, ("aur.[[a].*",))
+
+
+def test_platform_detection_maps_known_and_unknown_systems(monkeypatch: pytest.MonkeyPatch) -> None:
+    cases = [
+        ("win32", "Windows", (False, False, True)),
+        ("darwin", "macOS", (False, True, False)),
+        ("linux", "Linux", (True, False, False)),
+    ]
+    for platform_value, expected_name, flags in cases:
+        monkeypatch.setattr("sys.platform", platform_value)
+        assert detect_os() == expected_name
+        assert (is_linux(), is_macos(), is_windows()) == flags
+
+    monkeypatch.setattr("sys.platform", "freebsd")
+    assert detect_os() == "freebsd"
+
+
+def test_get_git_revision_returns_short_hash_or_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class Result:
+        returncode = 0
+        stdout = "abc1234\n"
+
+    def fake_run(_command: object, **_kwargs: object) -> Result:
+        return Result()
+
+    monkeypatch.setattr("aurora.utils.environment.subprocess.run", fake_run)
+    assert get_git_revision(tmp_path) == "abc1234"
+
+    class FailedResult:
+        returncode = 128
+        stdout = ""
+
+    monkeypatch.setattr("aurora.utils.environment.subprocess.run", lambda *_a, **_k: FailedResult())
+    assert get_git_revision(tmp_path) is None
+
+    def interrupted(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError
+
+    monkeypatch.setattr("aurora.utils.environment.subprocess.run", interrupted)
+    assert get_git_revision(tmp_path) is None

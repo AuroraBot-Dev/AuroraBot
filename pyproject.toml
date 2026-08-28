@@ -1,7 +1,8 @@
 [project]
 name = "AuroraBot"
 version = "0.7.0"
-description = "以 AgentTree、同构 Agent 和四角色消息为核心的自主智能体框架。"
+description = "以 AgentTree 为核心的自主智能体框架，为 Bot 提供可以持续生活、自主判断与行动的运行环境。"
+license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
 dependencies = [
@@ -88,7 +89,7 @@ venvPath = "."
 venv = ".venv"
 
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.uv]

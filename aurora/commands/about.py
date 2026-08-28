@@ -5,8 +5,12 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
+from aurora.utils.environment import get_git_revision, get_project_version
+from aurora.utils.platform import detect_os
+
 if TYPE_CHECKING:
     import argparse
+    from pathlib import Path
 
     from aurora.commander import CommandSpec
 
@@ -23,39 +27,28 @@ LOGO = """\
 """
 
 ABOUT = """\
-AuroraBot 是下一代自主智能体框架。
+你说得对, 但是 AuroraBot 是新一代内驱式, 自主决策的 Bot 框架,
+它为 Agent 提供可以"生活"的运行环境. 她有自己的人格、状态, 可
+以在需要时与人和外部世界建立联系.  在她的世界里, 所有的消息都
+有一个"媒介": 你发给她的消息也必须先成为一个应用通知喔~
 
-我们想做的不是一个能力更多的聊天机器人，而是一个能够持续存在、形成自己的节律，并在环境中自主判断和行动的 Agent。
-
-我们习惯称她为“她”。
-
-这不只是文案风格：AuroraBot 的目标不是制造一个随叫随到的工具人，而是为数字生命提供一套可以生活的运行环境。
-
-她可以有自己的人格、状态和边界，也可以在需要时与人和外部世界建立联系。
-
-* 设计哲学 *
-
-- 一个有自己生活的智能体
-
-对 AuroraBot 来说，对话不是世界的全部。即使没有人发送消息，时间仍在流逝，应用仍会产生事件，尚未完成的工作仍可继续。
-
-主动节律让她能够在预算和边界内自行判断是否需要思考或行动，而不是永远停在输入框后面。
-
-- 平等看待环境变化
-
-用户消息、时间变化、应用事件、子 Agent 结果和行动回执，本质上都是外部世界发生的变化。
-
-它们通过同一套事件入口进入认知过程，不会因为来自用户，就自动变成不可质疑的最高指令。
-
-- 判断与行动分开
-
-模型负责理解和决策，但普通模型文本不能直接改变环境。
-
-外部行动必须经过已声明的能力、参数校验和 Platform 执行，结果再作为新事件回到 Agent。这样，自主并不意味着不可控。
-
+文档站:     https://www.aurorabot.org/
+项目地址:   https://www.github.com/AuroraBot-Dev/AuroraBot
+爱发电:     https://ifdian.net/a/aurorabot
 """
 
 
-def execute(_arguments: argparse.Namespace) -> int:
-    sys.stdout.write(LOGO + "\n" + ABOUT)
+def _info_line(root: Path) -> str:
+    version = get_project_version(root)
+    revision = get_git_revision(root)
+    parts = [f"系统：{detect_os()}"]
+    if version is not None:
+        parts.append(f"版本：{version}")
+    if revision is not None:
+        parts.append(f"提交：{revision}")
+    return " | ".join(parts)
+
+
+def execute(arguments: argparse.Namespace) -> int:
+    sys.stdout.write(LOGO + "\n" + _info_line(arguments.root) + "\n\n" + ABOUT + "\n")
     return 0

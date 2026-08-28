@@ -44,6 +44,24 @@ def test_bare_cli_and_about_show_ascii_art_without_effects(capsys: pytest.Captur
     assert "▀▀▀▀ ▀▀▀▀ ▀    ▀▀▀▀ ▀    ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ▀▀▀" in output
 
 
+def test_about_reports_os_version_and_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
+    monkeypatch.setattr(about, "detect_os", lambda: "测试系统")
+    monkeypatch.setattr(about, "get_project_version", lambda _root: "1.2.3")
+    monkeypatch.setattr(about, "get_git_revision", lambda _root: "abc1234")
+
+    assert run(["--root", str(tmp_path), about.COMMAND["name"]]) == 0
+    output = capsys.readouterr().out
+    assert "系统：测试系统" in output
+    assert "版本：1.2.3" in output
+    assert "提交：abc1234" in output
+    assert "AuroraBot" in output
+
+
 def test_missing_subcommand_prints_command_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert run([config.COMMAND["name"]]) == 0
     output = capsys.readouterr().out
@@ -369,7 +387,7 @@ def test_commander_runs_a_custom_registry(capsys: pytest.CaptureFixture[str]) ->
     registry = build_registry(((about.COMMAND, about.execute),))
 
     assert _run(["about"], registry=registry) == 0
-    assert "AuroraBot 是下一代自主智能体框架" in capsys.readouterr().out
+    assert "AuroraBot" in capsys.readouterr().out
 
 
 def test_commander_rejects_duplicate_command_names() -> None:
