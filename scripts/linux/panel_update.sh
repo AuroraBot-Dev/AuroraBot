@@ -5,16 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PANEL_DIR="$REPO_ROOT/panel"
 
+if [ -e "$PANEL_DIR/.git" ] && ! git -C "$PANEL_DIR" diff --quiet 2>/dev/null; then
+  echo "Error: panel 子模块有未提交的更改。请先提交或暂存后再更新。" >&2
+  exit 1
+fi
+
 git -C "$REPO_ROOT" submodule update --init --remote panel
 
 if ! git -C "$REPO_ROOT" diff --quiet -- panel; then
-  echo "Note: panel submodule pointer changed. Commit it in the AuroraBot repository: git add panel && git commit" >&2
+  echo "Note: panel 子模块指针已变更。请在 AuroraBot 仓库中提交: git add panel && git commit" >&2
 fi
 
 cd "$PANEL_DIR"
 
 if ! command -v pnpm &>/dev/null; then
-  echo "Error: pnpm is not installed. Install it with: npm install -g pnpm" >&2
+  echo "Error: 未找到 pnpm。请先安装: npm install -g pnpm" >&2
   exit 1
 fi
 

@@ -10,7 +10,7 @@ git -C "$REPO_ROOT" submodule update --init panel
 cd "$PANEL_DIR"
 
 if ! command -v pnpm &>/dev/null; then
-  echo "Error: pnpm is not installed. Install it with: npm install -g pnpm" >&2
+  echo "Error: 未找到 pnpm。请先安装: npm install -g pnpm" >&2
   exit 1
 fi
 

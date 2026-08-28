@@ -8,15 +8,11 @@ PANEL_DIR="$REPO_ROOT/panel"
 cd "$PANEL_DIR"
 
 if ! command -v pnpm &>/dev/null; then
-  echo "Error: pnpm is not installed. Install it with: npm install -g pnpm" >&2
+  echo "Error: 未找到 pnpm。请先安装: npm install -g pnpm" >&2
   exit 1
 fi
 
-if [ ! -d node_modules ]; then
-  echo "Error: dependencies are missing. Run scripts/linux/panel_setup.sh first." >&2
-  exit 1
-fi
-
+pnpm install --frozen-lockfile
 pnpm build
 
 echo "Build complete: $PANEL_DIR/apps/web/dist"

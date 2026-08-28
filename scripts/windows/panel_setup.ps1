@@ -11,7 +11,7 @@ git -C $RepoRoot submodule update --init panel
 Set-Location $PanelDir
 
 if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-    Write-Error "pnpm is not installed. Install it with: npm install -g pnpm"
+    Write-Error "未找到 pnpm。请先安装: npm install -g pnpm"
     exit 1
 }
 

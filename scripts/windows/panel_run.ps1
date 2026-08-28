@@ -9,12 +9,7 @@ $PanelDir  = Join-Path $RepoRoot "panel"
 Set-Location $PanelDir
 
 if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-    Write-Error "pnpm is not installed. Install it with: npm install -g pnpm"
-    exit 1
-}
-
-if (-not (Test-Path "node_modules")) {
-    Write-Error "Dependencies are missing. Run scripts\windows\panel_setup.ps1 first."
+    Write-Error "未找到 pnpm。请先安装: npm install -g pnpm"
     exit 1
 }
 
@@ -22,7 +17,8 @@ try {
     $null = Invoke-WebRequest -Uri "http://127.0.0.1:8765/healthz" -TimeoutSec 2 -UseBasicParsing
 }
 catch {
-    Write-Warning "AuroraBot backend is not reachable at http://127.0.0.1:8765. Start it with 'uv run aurora start' in the repository root first."
+    Write-Warning "AuroraBot 后端不可达: http://127.0.0.1:8765。请先在仓库根目录运行 uv run aurora start 启动后端。"
 }
 
+pnpm install --frozen-lockfile
 pnpm dev

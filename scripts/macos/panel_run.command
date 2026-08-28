@@ -8,18 +8,14 @@ PANEL_DIR="$REPO_ROOT/panel"
 cd "$PANEL_DIR"
 
 if ! command -v pnpm &>/dev/null; then
-  echo "Error: pnpm is not installed. Install it with: npm install -g pnpm" >&2
-  exit 1
-fi
-
-if [ ! -d node_modules ]; then
-  echo "Error: dependencies are missing. Run scripts/macos/panel_setup.command first." >&2
+  echo "Error: 未找到 pnpm。请先安装: npm install -g pnpm" >&2
   exit 1
 fi
 
 if ! curl -fsS http://127.0.0.1:8765/healthz >/dev/null 2>&1; then
-  echo "Warning: AuroraBot backend is not reachable at http://127.0.0.1:8765." >&2
-  echo "Start it with \"uv run aurora start\" in the repository root first." >&2
+  echo "Warning: AuroraBot 后端不可达: http://127.0.0.1:8765" >&2
+  echo "请先在仓库根目录运行 uv run aurora start 启动后端。" >&2
 fi
 
+pnpm install --frozen-lockfile
 pnpm dev

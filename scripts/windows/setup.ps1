@@ -21,7 +21,13 @@ if (-not (Confirm-Action "确认将 aurora 安装到用户工具目录 $ToolBin 
     exit 1
 }
 
-uv tool install --editable --force $RepoRoot
+$tomlContent = Get-Content "$RepoRoot\pyproject.toml" -Raw
+$indexUrl = if ($tomlContent -match 'index-url\s*=\s*"([^"]+)"') { $Matches[1] } else { "" }
+if ($indexUrl) {
+    uv tool install --editable --force --index-url $indexUrl $RepoRoot
+} else {
+    uv tool install --editable --force $RepoRoot
+}
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
