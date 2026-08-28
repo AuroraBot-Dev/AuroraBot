@@ -1,72 +1,39 @@
 name: Auto Alpha Release
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  push:
+    tags:
+      - "v*-alpha.*"
 
 permissions:
   contents: write
 
-concurrency:
-  group: auto-alpha-release
-  cancel-in-progress: false
-
 jobs:
-  tag-and-pre-release:
-    if: >-
-      ${{
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'nightly'
-      }}
+  verify-and-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout commit
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      - name: Create alpha tag and GitHub pre-release
+      - name: Verify tag version matches pyproject.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${TAG_VERSION%%-*}"
+          PROJECT_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match pyproject.toml version ($PROJECT_VERSION)"
+            exit 1
+          fi
+
+          echo "Version verified: $TAG_VERSION"
+
+      - name: Create GitHub pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python - <<'PY'
-          import re
-          import subprocess
-          import tomllib
-          from pathlib import Path
-
-          def git(*args: str) -> str:
-              return subprocess.check_output(["git", *args], text=True).strip()
-
-          with Path("pyproject.toml").open("rb") as f:
-              version = tomllib.load(f)["project"]["version"]
-
-          prefix = f"v{version}-alpha."
-          head_sha = git("rev-parse", "HEAD")
-          head_tags = [tag for tag in git("tag", "--points-at", head_sha).splitlines() if tag]
-
-          if any(re.fullmatch(rf"{re.escape(prefix)}\d+", tag) for tag in head_tags):
-              print(f"Alpha tag already exists for this commit: {', '.join(head_tags)}")
-              raise SystemExit(0)
-
-          pattern = re.compile(rf"{re.escape(prefix)}(\d+)$")
-          versions = []
-          for tag in git("tag", "-l", f"{prefix}*").splitlines():
-              match = pattern.fullmatch(tag)
-              if match:
-                  versions.append(int(match.group(1)))
-
-          next_tag = f"{prefix}{max(versions, default=0) + 1}"
-
-          subprocess.check_call(["git", "config", "user.name", "github-actions[bot]"])
-          subprocess.check_call(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"])
-          subprocess.check_call(["git", "tag", "-a", next_tag, "-m", f"Auto alpha pre-release for nightly ({head_sha})"])
-          subprocess.check_call(["git", "push", "origin", next_tag])
-          subprocess.check_call(["gh", "release", "create", next_tag, "--prerelease", "--generate-notes"])
-
-          print(f"Created tag and pre-release {next_tag} for {head_sha}")
-          PY
