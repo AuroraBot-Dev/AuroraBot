@@ -24,7 +24,11 @@ def __getattr__(name: str) -> object:
         from aurora.config import AuroraConfig
         from aurora.configuration import load_config
 
-        return {"AuroraConfig": AuroraConfig, "load_config": load_config}[name]
+        return {
+            "AuroraConfig": AuroraConfig,
+            "load_config": load_config,
+        }[name]
+
     if name in {"AuroraRuntime", "assemble_runtime", "run_project"}:
         from aurora.runtime import AuroraRuntime, assemble_runtime, run_project
 
@@ -33,4 +37,5 @@ def __getattr__(name: str) -> object:
             "assemble_runtime": assemble_runtime,
             "run_project": run_project,
         }[name]
+
     raise AttributeError(f"模块 {__name__!r} 没有属性 {name!r}")

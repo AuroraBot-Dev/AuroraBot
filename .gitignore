@@ -57,6 +57,7 @@ extensions/
 .codegraph/
 *.code-workspace
 .claude/
+.agents/
 CLAUDE.md
 graphify-out/
 
