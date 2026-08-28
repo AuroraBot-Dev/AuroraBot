@@ -127,6 +127,36 @@ def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path
     assert "最近时间窗口内的世界活动" in model.requests[0].messages[0].content
 
 
+def test_echo_node_texts_traces_tool_calls(configured_project: Path) -> None:
+    echoed: list[str] = []
+    runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=echoed.append)
+    tree = runtime.create_tree("开始")
+    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("c1", "aur.test.echo", {"value": "hi"}),)))
+    tree = tree.append("root", ChatMessage.tool("c1", "hi"))
+    tree = tree.append("root", ChatMessage.assistant("完成"))
+
+    runtime._echo_node_texts(tree, {})
+
+    assert echoed == [
+        "  → [builtin.root] aur.test.echo",
+        "  ← [builtin.root] hi",
+        "Cadence> [builtin.root] 完成",
+    ]
+
+
+def test_echo_node_texts_renders_rich_for_terminal_sink(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    tree = runtime.create_tree("开始")
+    tree = tree.append("root", ChatMessage.assistant("完成"))
+
+    runtime._echo_node_texts(tree, {})
+
+    assert "Cadence> [builtin.root] 完成" in capsys.readouterr().out
+
+
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     assembly = compose_project(configuration, FakeModel())

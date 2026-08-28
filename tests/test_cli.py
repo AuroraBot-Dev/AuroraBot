@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import os
 import re
-from typing import TYPE_CHECKING, Any, cast
+import runpy
+from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -14,10 +17,6 @@ from aurora.utils import pnpm
 from aurora.utils.environment import load_project_env
 from aurora.utils.exit_code import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 from aurora.utils.process import run_process
-
-if TYPE_CHECKING:
-    import argparse
-    from pathlib import Path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -159,6 +158,32 @@ def test_start_reports_configuration_failure(
     assert "启动失败：模型配置错误" in capsys.readouterr().err
 
 
+def test_start_runs_real_shared_lifecycle(
+    configured_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, bool]] = []
+
+    async def fake_run_project(configuration: object, *, headless: bool) -> None:
+        calls.append((configuration, headless))
+
+    monkeypatch.setattr("aurora.runtime.run_project", fake_run_project)
+
+    assert run(["--root", str(configured_project), start.COMMAND["name"], "--headless"]) == 0
+    assert len(calls) == 1
+    assert calls[0][1] is True
+
+
+def test_start_maps_keyboard_interrupt_to_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def interrupted(configuration: object, *, headless: bool) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(start, "_load_configuration", lambda _root: object())
+    monkeypatch.setattr(start, "_run_project", interrupted)
+
+    assert run([start.COMMAND["name"], "--headless"]) == EXIT_INTERRUPTED
+
+
 def test_config_command_lists_and_shows_registered_sources(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
@@ -193,6 +218,36 @@ def test_config_command_reports_load_error(
 
     assert run([config.COMMAND["name"], "list"]) == EXIT_CONFIG_ERROR
     assert "配置加载失败：字段无效" in capsys.readouterr().err
+
+
+def test_config_show_reports_unreadable_source_file(
+    configured_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configuration = config.load_config(configured_project)
+    monkeypatch.setattr(config, "load_config", lambda _root: configuration)
+    (configured_project / "config" / "runtime.toml").unlink()
+
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == EXIT_CONFIG_ERROR
+    assert "无法读取配置 runtime" in capsys.readouterr().err
+
+
+def test_config_show_ends_output_with_newline_for_unterminated_source(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = configured_project / "config" / "runtime.toml"
+    path.write_text(path.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8")
+
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == 0
+    assert capsys.readouterr().out.endswith("\n")
+
+
+def test_config_execute_rejects_unknown_subcommand(configured_project: Path) -> None:
+    arguments = argparse.Namespace(root=configured_project, subcommand="bogus", name=None)
+
+    assert config.execute(arguments) == EXIT_CONFIG_ERROR
 
 
 def test_check_command_runs_all_selected_stages_and_summarizes_failures(
@@ -260,6 +315,31 @@ def test_donk_preserves_failure_code(tmp_path: Path, monkeypatch: pytest.MonkeyP
     arguments = build_parser().parse_args(["--root", str(tmp_path), donk.COMMAND["name"], "patch"])
 
     assert donk.execute(arguments) == FAILED_EXIT_CODE
+
+
+def test_donk_rejects_unknown_subcommand(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
+    monkeypatch.setattr(donk, "run_process", lambda _command, _root: 0)
+
+    assert donk.execute(argparse.Namespace(root=tmp_path, subcommand="bump")) == EXIT_FAILURE
+    assert "未知子命令：bump" in capsys.readouterr().err
+
+
+def test_donk_version_update_reports_new_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
+    monkeypatch.setattr(donk, "run_process", lambda _command, _root: 0)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), donk.COMMAND["name"], "patch"])
+
+    assert donk.execute(arguments) == 0
+    assert "版本已更新为：1.2.3" in capsys.readouterr().out
 
 
 def test_setup_bootstraps_dependencies_submodules_and_config(
@@ -492,3 +572,14 @@ def test_submodule_command_preserves_failure_code(
 def test_commander_rejects_empty_passthrough_help() -> None:
     with pytest.raises(ValueError, match="透传参数帮助文本不能为空"):
         build_registry(((cast("CommandSpec", {**docs.COMMAND, "passthrough": "  "}), docs.execute),))
+
+
+def test_python_dash_m_aurora_dispatches_through_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+
+    def fake_main(argv: object = None) -> None:
+        calls.append(argv)
+
+    monkeypatch.setattr("aurora.main.main", fake_main)
+    runpy.run_path(str(Path(__file__).parents[1] / "aurora" / "__main__.py"), run_name="__main__")
+    assert calls == [None]

@@ -7,6 +7,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from rich.console import Console
+from rich.markup import escape as markup_escape
+
 from aurora.configuration import load_config
 from aurora.configuration.models import MODELS_CONFIG
 from aurora.configuration.prompts import PROMPTS_CONFIG
@@ -16,7 +19,7 @@ from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
 from ops.contracts import OperationControl
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import AgentTree, EnvironmentEvent, WorldFrontier
-from src.utils import get_logger
+from src.utils import bounded_summary, get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -25,7 +28,7 @@ if TYPE_CHECKING:
     from aurora.configuration.runtime import RuntimeConfig
     from src.agents import AgentCatalog
     from src.cadence import Cadence
-    from src.contracts import TreeLaunchRequest, WorldJournal
+    from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest, WorldJournal
     from src.engine import AgentTreeRunner
     from src.mcp import McpRuntime
     from src.memory import Memory
@@ -119,13 +122,42 @@ class AuroraRuntime:
         return views.tree_dict(completed)
 
     def _echo_node_texts(self, tree: AgentTree, printed: dict[str, int]) -> None:
-        # TODO: 后续用 rich 美化输出并加入工具调用 trace
+        console = Console(highlight=False) if self.output is print else None
         for node in tree.nodes:
             seen = printed.get(node.node_id, 0)
             for message in node.messages[seen:]:
-                if message.role == "assistant" and message.content.strip():
-                    self.output(f"Cadence> [{node.definition_id}] {message.content}")
+                self._echo_message(node, message, console)
             printed[node.node_id] = len(node.messages)
+
+    def _echo_message(self, node: AgentNode, message: ChatMessage, console: Console | None) -> None:
+        tag = node.definition_id
+        if message.role == "assistant":
+            if message.content.strip():
+                self._echo_line("Cadence>", tag, message.content, console)
+            for call in message.tool_calls:
+                self._echo_line("→", tag, call.name, console, indent=True)
+        elif message.role == "tool":
+            summary = bounded_summary((message.content,))
+            label = "失败" if message.is_error else "←"
+            self._echo_line(label, tag, summary, console, indent=True)
+
+    def _echo_line(
+        self,
+        prefix: str,
+        tag: str,
+        content: str,
+        console: Console | None,
+        *,
+        indent: bool = False,
+    ) -> None:
+        marker = f"{'  ' if indent else ''}{prefix}"
+        if console is None:
+            self.output(f"{marker} [{tag}] {content}")
+            return
+        console.print(
+            f"[bold]{marker}[/bold] [cyan]\\[{markup_escape(tag)}][/cyan] {markup_escape(content)}",
+            highlight=False,
+        )
 
     async def submit_event(self, event: EnvironmentEvent) -> dict[str, Any]:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""

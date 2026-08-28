@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING
+from types import MappingProxyType
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from loguru import logger as _loguru_logger
@@ -17,9 +18,11 @@ from src.utils import (
     configure_logging,
     console_logging_status,
     extract_json_from_text,
+    freeze_json,
     get_logger,
     pattern_matches,
     resolve_names,
+    thaw_json,
     utc_now,
     utc_today,
 )
@@ -35,8 +38,43 @@ def test_text_json_and_time_helpers_keep_small_shared_behaviors() -> None:
     assert extract_json_from_text('说明```json\n{"value": 1}\n```') == {"value": 1}
     assert extract_json_from_text('{"line": "a\nb"}') == {"line": "a\nb"}
     assert extract_json_from_text("没有 JSON") is None
+    assert extract_json_from_text("") is None
+    assert extract_json_from_text("   ") is None
     assert datetime.fromisoformat(utc_now()).tzinfo is not None
     assert date.fromisoformat(utc_today()) <= datetime.now(UTC).date()
+
+
+def test_json_roundtrip_freezes_and_thaws_nested_containers() -> None:
+    value = {"outer": [1, {"inner": 2}], "flag": True, "text": "x"}
+    frozen = cast("MappingProxyType[str, object]", freeze_json(value))
+    outer = cast("tuple[object, ...]", frozen["outer"])
+
+    assert isinstance(outer[1], MappingProxyType)
+    with pytest.raises(TypeError):
+        cast("list[object]", outer)[0] = 9
+    with pytest.raises(TypeError):
+        cast("dict[str, object]", frozen)["flag"] = False
+
+    thawed = cast("dict[str, object]", thaw_json(frozen))
+    assert thawed == value
+    assert isinstance(cast("list[object]", thawed["outer"])[1], dict)
+
+
+_SCALAR_VALUE = 42
+
+
+def test_json_helpers_pass_through_scalars() -> None:
+    assert freeze_json(_SCALAR_VALUE) == _SCALAR_VALUE
+    assert freeze_json("text") == "text"
+    assert thaw_json(None) is None
+    assert thaw_json("text") == "text"
+
+
+def test_extract_json_escapes_raw_control_characters_inside_strings() -> None:
+    assert extract_json_from_text('{"a": "x\ty"}') == {"a": "x\ty"}
+    assert extract_json_from_text('{"a": "x\ry"}') == {"a": "x\ry"}
+    assert extract_json_from_text('{"a": "x\n\ty"}') == {"a": "x\n\ty"}
+    assert extract_json_from_text(r'{"a": "x\y"}') is None
 
 
 def test_standard_logging_updates_console_and_rotating_file(tmp_path: Path) -> None:

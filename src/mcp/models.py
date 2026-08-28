@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
+from src.utils import freeze_json
+
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
     from pathlib import Path
 
@@ -123,9 +125,9 @@ class McpRemoteTool:
     tool_contract: object | None = None
 
     def __post_init__(self) -> None:
-        schema = _freeze_json(self.input_schema)
+        schema = freeze_json(self.input_schema)
         object.__setattr__(self, "input_schema", cast("Mapping[str, Any]", schema))
-        object.__setattr__(self, "tool_contract", _freeze_json(self.tool_contract))
+        object.__setattr__(self, "tool_contract", freeze_json(self.tool_contract))
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,11 +212,3 @@ class McpCallRejectedError(RuntimeError):
 
 class McpCallUnknownError(RuntimeError):
     """请求可能已经送达，但真实效果无法确认。"""
-
-
-def _freeze_json(value: object) -> object:
-    if isinstance(value, Mapping):
-        return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze_json(item) for item in value)
-    return value
