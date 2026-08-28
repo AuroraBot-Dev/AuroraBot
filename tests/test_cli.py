@@ -9,7 +9,8 @@ import pytest
 from aurora.commander import build_parser as _build_parser
 from aurora.commander import build_registry
 from aurora.commander import run as _run
-from aurora.commands import DEFAULT_REGISTRY, CommandSpec, about, check, config, donk, setup, start
+from aurora.commands import DEFAULT_REGISTRY, CommandSpec, about, check, config, docs, donk, panel, setup, start
+from aurora.utils import pnpm
 from aurora.utils.environment import load_project_env
 from aurora.utils.exit_code import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 from aurora.utils.process import run_process
@@ -64,6 +65,8 @@ def test_each_command_registers_its_own_executor() -> None:
     donk_arguments = parser.parse_args([donk.COMMAND["name"], "show"])
     setup_arguments = parser.parse_args([setup.COMMAND["name"]])
     start_arguments = parser.parse_args([start.COMMAND["name"], "--headless"])
+    docs_arguments = parser.parse_args([docs.COMMAND["name"], "build", "--", "--base", "/foo"])
+    panel_arguments = parser.parse_args([panel.COMMAND["name"], "dev"])
 
     assert about_arguments.executor is about.execute
     assert check_arguments.executor is check.execute
@@ -71,6 +74,8 @@ def test_each_command_registers_its_own_executor() -> None:
     assert donk_arguments.executor is donk.execute
     assert setup_arguments.executor is setup.execute
     assert start_arguments.executor is start.execute
+    assert docs_arguments.executor is docs.execute
+    assert panel_arguments.executor is panel.execute
     assert "显示帮助并退出" in parser.format_help()
 
 
@@ -382,3 +387,90 @@ def test_commander_rejects_unknown_spec_fields_and_empty_names() -> None:
 def test_commander_rejects_non_callable_executor() -> None:
     with pytest.raises(ValueError, match="必须绑定可调用执行器"):
         build_registry(((about.COMMAND, cast("Any", "not-callable")),))
+
+
+def test_docs_command_passes_script_and_passthrough_to_pnpm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "package.json").write_text("{}\n", encoding="utf-8")
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(pnpm, "run_process", fake_run)
+    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    arguments = build_parser().parse_args(
+        ["--root", str(tmp_path), docs.COMMAND["name"], "build", "--", "--base", "/foo"]
+    )
+
+    assert docs.execute(arguments) == 0
+    assert calls == [(("pnpm", "build", "--base", "/foo"), tmp_path / "docs")]
+
+
+def test_panel_command_passes_passthrough_without_separator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "panel").mkdir()
+    (tmp_path / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(pnpm, "run_process", fake_run)
+    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    arguments = build_parser().parse_args(["--root", str(tmp_path), panel.COMMAND["name"], "dev", "--port", "5173"])
+
+    assert panel.execute(arguments) == 0
+    assert calls == [(("pnpm", "dev", "--port", "5173"), tmp_path / "panel")]
+
+
+def test_submodule_command_reports_uninitialized_submodule(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = build_parser().parse_args(["--root", str(tmp_path), docs.COMMAND["name"], "dev"])
+
+    assert docs.execute(arguments) == EXIT_FAILURE
+    assert "docs 子模块未初始化" in capsys.readouterr().err
+
+
+def test_submodule_command_reports_missing_pnpm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "panel").mkdir()
+    (tmp_path / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: None)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), panel.COMMAND["name"], "dev"])
+
+    assert panel.execute(arguments) == EXIT_FAILURE
+    assert "未找到 pnpm" in capsys.readouterr().err
+
+
+def test_submodule_command_preserves_failure_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "package.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(pnpm, "run_process", lambda _command, _root: FAILED_EXIT_CODE)
+    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    arguments = build_parser().parse_args(["--root", str(tmp_path), docs.COMMAND["name"], "dev"])
+
+    assert docs.execute(arguments) == FAILED_EXIT_CODE
+
+
+def test_commander_rejects_empty_passthrough_help() -> None:
+    with pytest.raises(ValueError, match="透传参数帮助文本不能为空"):
+        build_registry(((cast("CommandSpec", {**docs.COMMAND, "passthrough": "  "}), docs.execute),))

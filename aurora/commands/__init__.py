@@ -11,7 +11,9 @@ from aurora.commands import (
     about,
     check,
     config,
+    docs,
     donk,
+    panel,
     setup,
     start,
 )
@@ -21,7 +23,9 @@ COMMAND_SPECS = (
     (about.COMMAND, about.execute),
     (check.COMMAND, check.execute),
     (config.COMMAND, config.execute),
+    (docs.COMMAND, docs.execute),
     (donk.COMMAND, donk.execute),
+    (panel.COMMAND, panel.execute),
     (setup.COMMAND, setup.execute),
 )
 

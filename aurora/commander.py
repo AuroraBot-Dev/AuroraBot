@@ -16,13 +16,14 @@ _REPLACEMENTS = {
     "options:": "选项：",
     "show this help message and exit": "显示帮助并退出",
 }
-_SPEC_FIELDS = frozenset({"name", "help", "options", "args", "subcommands"})
+_SPEC_FIELDS = frozenset({"name", "help", "options", "args", "subcommands", "passthrough"})
 
 
 class SubcommandSpec(TypedDict, total=False):
     help: str
     options: dict[str, str | dict[str, Any]]
     args: dict[str, str]
+    passthrough: str
     subcommands: dict[str, SubcommandSpec]
 
 
@@ -56,6 +57,9 @@ def _validate_spec(spec: SubcommandSpec, label: str) -> None:
     for arg in spec.get("args", {}):
         if not arg.strip():
             raise ValueError(f"{label} 包含空位置参数名")
+    passthrough = spec.get("passthrough")
+    if passthrough is not None and not passthrough.strip():
+        raise ValueError(f"{label} 的透传参数帮助文本不能为空")
     for name, sub_spec in spec.get("subcommands", {}).items():
         if not name.strip():
             raise ValueError(f"{label} 包含空子命令名")
@@ -144,6 +148,9 @@ def _apply_spec(
         for name, sub_spec in subcommands.items():
             _apply_spec(actions.add_parser(name, help=sub_spec.get("help")), sub_spec, executor)
     else:
+        passthrough = spec.get("passthrough")
+        if passthrough is not None:
+            parser.add_argument("passthrough", nargs=argparse.REMAINDER, help=str(passthrough))
         parser.set_defaults(executor=executor)
 
 

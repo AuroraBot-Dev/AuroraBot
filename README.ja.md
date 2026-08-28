@@ -50,7 +50,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` は aurora をユーザーのツールディレクトリにインストールし、依存関係、個人設定、docs/panel サブモジュールの初期化を行います。
+`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、docs/panel サブモジュールの初期化を行います。
 
 ### 2. 必要な設定を記入
 

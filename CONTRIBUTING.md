@@ -30,7 +30,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会把 aurora 安装到用户工具目录，并完成依赖同步、个人配置以及 docs/panel 子模块引导。
+`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 docs/panel 子模块引导。
 
 ### 2. 填写必要配置
 

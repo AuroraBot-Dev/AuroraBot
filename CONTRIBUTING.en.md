@@ -29,7 +29,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` installs aurora into your user tool directory and bootstraps dependencies, personal configuration, and the docs/panel submodules.
+`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the docs/panel submodules.
 
 ### 2. Fill in the required configuration
 
