@@ -6,6 +6,11 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Resolve-Path "$ScriptDir\..\.."
 $PanelDir  = Join-Path $RepoRoot "panel"
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error "未找到 git。请先安装 git。"
+    exit 1
+}
+
 git -C $RepoRoot submodule update --init panel
 
 Set-Location $PanelDir

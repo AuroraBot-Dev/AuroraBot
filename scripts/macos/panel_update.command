@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PANEL_DIR="$REPO_ROOT/panel"
 
+if ! command -v git &>/dev/null; then
+  echo "Error: 未找到 git。请先安装 git。" >&2
+  exit 1
+fi
+
 if [ -e "$PANEL_DIR/.git" ] && ! git -C "$PANEL_DIR" diff --quiet 2>/dev/null; then
   echo "Error: panel 子模块有未提交的更改。请先提交或暂存后再更新。" >&2
   exit 1
