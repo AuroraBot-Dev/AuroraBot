@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, positive_integer, strings, table
+from aurora.utils.toml import check_positive_integer, load_toml, positive_integer, strings, table, text_array
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,6 +20,12 @@ class MemoryConfig:
     commits_per_scope: int
     scope_include: tuple[str, ...]
     scope_exclude: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        check_positive_integer(self.window_minutes, "window_minutes")
+        check_positive_integer(self.commits_per_scope, "commits_per_scope")
+        text_array(self.scope_include, "scope_include")
+        text_array(self.scope_exclude, "scope_exclude")
 
 
 MEMORY_CONFIG = ConfigKey[MemoryConfig]("memory")

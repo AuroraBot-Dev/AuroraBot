@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import TomlTable, load_toml, strings, text
+from aurora.utils.toml import (
+    load_toml,
+    non_empty_text,
+    strings,
+    table_array,
+    text,
+    text_array,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,13 +30,20 @@ class AgentConfig:
     tools: tuple[str, ...]
     children: frozenset[str]
 
+    def __post_init__(self) -> None:
+        non_empty_text(self.definition_id, "definition_id")
+        non_empty_text(self.description, "description")
+        non_empty_text(self.prompt, "prompt")
+        non_empty_text(self.model, "model")
+        text_array(self.tools, "tools")
+        text_array(tuple(self.children), "children")
+
 
 @dataclass(frozen=True, slots=True)
 class AgentsConfig:
     definitions: tuple[AgentConfig, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "definitions", tuple(self.definitions))
         if not self.definitions:
             raise ValueError("agents.toml 至少需要一个 Agent definition")
 
@@ -43,9 +56,7 @@ def register(configs: ConfigCollector) -> None:
 
 
 def _parse(path: Path) -> AgentsConfig:
-    raw_definitions = load_toml(path).get("agent")
-    if not isinstance(raw_definitions, tuple) or any(not isinstance(item, Mapping) for item in raw_definitions):
-        raise ValueError("agents.toml 的 agent 必须是非空表数组")
+    raw_definitions = table_array(load_toml(path), "agent")
     return AgentsConfig(
         tuple(
             AgentConfig(
@@ -56,7 +67,6 @@ def _parse(path: Path) -> AgentsConfig:
                 strings(item, "tools"),
                 frozenset(strings(item, "children")),
             )
-            for raw in raw_definitions
-            for item in (cast("TomlTable", raw),)
+            for item in raw_definitions
         )
     )

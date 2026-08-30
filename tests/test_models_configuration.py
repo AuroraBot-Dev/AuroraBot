@@ -58,7 +58,7 @@ def test_models_parses_exact_values(tmp_path: Path) -> None:
 @pytest.mark.parametrize("field", ("attempt_timeout_seconds", "total_timeout_seconds"))
 def test_models_reject_non_positive_timeouts(tmp_path: Path, field: str) -> None:
     content = _MODELS.replace(f"{field} = 90", f"{field} = 0").replace(f"{field} = 180", f"{field} = 0")
-    with pytest.raises(ValueError, match="必须是正数"):
+    with pytest.raises(ValueError, match="必须是有限正数"):
         _load_models(tmp_path, content)
 
 
@@ -104,7 +104,7 @@ def test_models_reject_non_positive_output_budget(tmp_path: Path) -> None:
 
 
 def test_model_runtime_rejects_non_positive_timeouts() -> None:
-    with pytest.raises(ValueError, match="超时"):
+    with pytest.raises(ValueError, match="必须是有限正数"):
         ModelRuntimeConfig(0.0, 2, 180.0, 51200)
 
 
@@ -114,10 +114,10 @@ def test_model_runtime_rejects_total_shorter_than_attempt() -> None:
 
 
 def test_model_runtime_rejects_non_integer_output_budget() -> None:
-    with pytest.raises(ValueError, match="输出预算"):
+    with pytest.raises(ValueError, match="必须是正整数"):
         ModelRuntimeConfig(90.0, 2, 180.0, True)
 
 
 def test_model_runtime_rejects_zero_output_budget() -> None:
-    with pytest.raises(ValueError, match="输出预算"):
+    with pytest.raises(ValueError, match="必须是正整数"):
         ModelRuntimeConfig(90.0, 2, 180.0, 0)

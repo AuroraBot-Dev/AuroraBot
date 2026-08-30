@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, positive_integer, table
+from aurora.utils.toml import (
+    check_positive_integer,
+    load_toml,
+    positive_integer,
+    table,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,6 +24,11 @@ class EngineConfig:
     max_depth: int
     max_nodes: int
     max_steps: int
+
+    def __post_init__(self) -> None:
+        check_positive_integer(self.max_depth, "max_depth")
+        check_positive_integer(self.max_nodes, "max_nodes")
+        check_positive_integer(self.max_steps, "max_steps")
 
 
 ENGINE_CONFIG = ConfigKey[EngineConfig]("engine")

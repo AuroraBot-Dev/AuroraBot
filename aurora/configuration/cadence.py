@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import TomlTable, boolean, load_toml, positive_integer, table, text
+from aurora.utils.toml import (
+    TomlTable,
+    boolean,
+    check_positive_integer,
+    check_positive_number,
+    load_toml,
+    non_empty_text,
+    optional_strings,
+    optional_table_array,
+    positive_integer,
+    positive_number,
+    table,
+    text,
+    text_array,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,6 +35,12 @@ class ReactiveRuleConfig:
     agent: str
     contains_any: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        non_empty_text(self.source, "source")
+        non_empty_text(self.event_kind, "event_kind")
+        non_empty_text(self.agent, "agent")
+        text_array(self.contains_any, "contains_any")
+
 
 @dataclass(frozen=True, slots=True)
 class CadenceConfig:
@@ -31,6 +50,12 @@ class CadenceConfig:
     tick_seconds: int
     poll_seconds: float
     reactive: tuple[ReactiveRuleConfig, ...]
+
+    def __post_init__(self) -> None:
+        non_empty_text(self.agent, "agent")
+        check_positive_integer(self.evoke_every, "evoke_every")
+        check_positive_integer(self.tick_seconds, "tick_seconds")
+        check_positive_number(self.poll_seconds, "poll_seconds")
 
 
 CADENCE_CONFIG = ConfigKey[CadenceConfig]("cadence")
@@ -42,35 +67,26 @@ def register(configs: ConfigCollector) -> None:
 
 def _parse(path: Path) -> CadenceConfig:
     cadence = table(load_toml(path), "cadence")
-    poll_seconds = cadence.get("poll_seconds")
-    if not isinstance(poll_seconds, (int, float)) or isinstance(poll_seconds, bool) or poll_seconds <= 0:
-        raise ValueError("配置字段 poll_seconds 必须是正数")
     return CadenceConfig(
         boolean(cadence, "enabled"),
         text(cadence, "agent"),
         positive_integer(cadence, "evoke_every"),
         positive_integer(cadence, "tick_seconds"),
-        float(poll_seconds),
+        positive_number(cadence, "poll_seconds"),
         _reactive_rules(cadence),
     )
 
 
 def _reactive_rules(cadence: TomlTable) -> tuple[ReactiveRuleConfig, ...]:
-    raw_rules = cadence.get("reactive", ())
-    if not isinstance(raw_rules, tuple) or any(not isinstance(item, Mapping) for item in raw_rules):
-        raise ValueError("cadence.reactive 必须是表数组")
+    raw_rules = optional_table_array(cadence, "reactive")
     rules: list[ReactiveRuleConfig] = []
-    for raw in raw_rules:
-        item = cast("TomlTable", raw)
-        raw_terms = item.get("contains_any", ())
-        if not isinstance(raw_terms, tuple) or any(not isinstance(term, str) or not term.strip() for term in raw_terms):
-            raise ValueError("cadence.reactive.contains_any 必须是非空文本数组")
+    for item in raw_rules:
         rules.append(
             ReactiveRuleConfig(
                 text(item, "source"),
                 text(item, "event_kind"),
                 text(item, "agent"),
-                tuple(term.strip() for term in raw_terms),
+                optional_strings(item, "contains_any"),
             )
         )
     return tuple(rules)

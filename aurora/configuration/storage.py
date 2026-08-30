@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, table, text
+from aurora.utils.toml import check_relative_directory, load_toml, table, text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,6 +20,11 @@ class StorageConfig:
     world: str
     ops: str
 
+    def __post_init__(self) -> None:
+        check_relative_directory(self.data_root, "storage.data_root")
+        check_relative_directory(self.world, "storage.world")
+        check_relative_directory(self.ops, "storage.ops")
+
 
 STORAGE_CONFIG = ConfigKey[StorageConfig]("storage")
 
@@ -31,17 +36,7 @@ def register(configs: ConfigCollector) -> None:
 def _parse(path: Path) -> StorageConfig:
     storage = table(load_toml(path), "storage")
     return StorageConfig(
-        _relative_directory(text(storage, "data_root"), "storage.data_root"),
-        _relative_directory(text(storage, "world"), "storage.world"),
-        _relative_directory(text(storage, "ops"), "storage.ops"),
+        text(storage, "data_root"),
+        text(storage, "world"),
+        text(storage, "ops"),
     )
-
-
-def _relative_directory(value: str, field: str) -> str:
-    normalized = value.replace("\\", "/")
-    drive_absolute = normalized[1:2] == ":" and normalized[:1].isalpha()
-    if normalized.startswith("/") or drive_absolute:
-        raise ValueError(f"{field} 必须是项目内相对目录")
-    if any(part == ".." for part in normalized.split("/")):
-        raise ValueError(f"{field} 必须是项目内相对目录")
-    return normalized

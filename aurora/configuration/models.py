@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from aurora.config import ConfigKey
-from aurora.utils.toml import TomlTable, load_toml, positive_integer, table, text
+from aurora.utils.toml import (
+    check_positive_integer,
+    check_positive_number,
+    load_toml,
+    named_tables,
+    optional_text,
+    positive_integer,
+    positive_number,
+    table,
+    text,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     from aurora.config import ConfigCollector
@@ -37,15 +47,11 @@ class ModelRuntimeConfig:
     max_output_tokens: int
 
     def __post_init__(self) -> None:
-        values = (self.attempt_timeout_seconds, self.total_timeout_seconds)
-        if any(not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0 for value in values):
-            raise ValueError("模型 attempt 与总超时必须是正数")
+        check_positive_number(self.attempt_timeout_seconds, "attempt_timeout_seconds")
+        check_positive_number(self.total_timeout_seconds, "total_timeout_seconds")
         if self.total_timeout_seconds < self.attempt_timeout_seconds:
             raise ValueError("模型总超时不能小于单次 attempt 超时")
-        if not isinstance(self.max_output_tokens, int) or isinstance(self.max_output_tokens, bool):
-            raise ValueError("模型输出预算必须是正整数")
-        if self.max_output_tokens <= 0:
-            raise ValueError("模型输出预算必须是正整数")
+        check_positive_integer(self.max_output_tokens, "max_output_tokens")
         object.__setattr__(self, "attempt_timeout_seconds", float(self.attempt_timeout_seconds))
         object.__setattr__(self, "total_timeout_seconds", float(self.total_timeout_seconds))
 
@@ -74,13 +80,13 @@ def _parse(path: Path) -> ModelsConfig:
         provider_id: ProviderConfig(
             text(provider, "adapter"),
             text(provider, "secret_env"),
-            _optional_text(provider, "base_url"),
+            optional_text(provider, "base_url"),
         )
-        for provider_id, provider in _named_tables(models, "providers").items()
+        for provider_id, provider in named_tables(models, "providers").items()
     }
     endpoints = {
         endpoint_id: ModelEndpointConfig(text(endpoint, "provider"), text(endpoint, "model"))
-        for endpoint_id, endpoint in _named_tables(models, "endpoints").items()
+        for endpoint_id, endpoint in named_tables(models, "endpoints").items()
     }
     if not providers or not endpoints:
         raise ValueError("models.toml 至少需要一个 provider 和一个模型端点")
@@ -92,35 +98,9 @@ def _parse(path: Path) -> ModelsConfig:
         providers,
         endpoints,
         ModelRuntimeConfig(
-            _positive_number(runtime, "attempt_timeout_seconds"),
+            positive_number(runtime, "attempt_timeout_seconds"),
             positive_integer(runtime, "max_attempts"),
-            _positive_number(runtime, "total_timeout_seconds"),
+            positive_number(runtime, "total_timeout_seconds"),
             positive_integer(runtime, "max_output_tokens"),
         ),
     )
-
-
-def _named_tables(document: TomlTable, key: str) -> dict[str, TomlTable]:
-    values = table(document, key)
-    result: dict[str, TomlTable] = {}
-    for name, value in values.items():
-        if not isinstance(name, str) or not name.strip() or not isinstance(value, Mapping):
-            raise ValueError(f"配置字段 {key} 必须只包含命名表")
-        result[name.strip()] = cast("TomlTable", value)
-    return result
-
-
-def _optional_text(document: TomlTable, key: str) -> str | None:
-    value = document.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"配置字段 {key} 必须是非空文本")
-    return value.strip()
-
-
-def _positive_number(document: TomlTable, key: str) -> float:
-    value = document.get(key)
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
-        raise ValueError(f"配置字段 {key} 必须是正数")
-    return float(value)

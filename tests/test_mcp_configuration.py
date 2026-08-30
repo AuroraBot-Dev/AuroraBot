@@ -160,7 +160,7 @@ def test_stdio_working_directory_must_stay_relative_to_project(tmp_path: Path, w
 
 @pytest.mark.parametrize("env", ('["BAD-NAME"]', '["TOKEN", "TOKEN"]', '["变量"]', "[1]"))
 def test_stdio_environment_is_an_ascii_unique_name_allowlist(tmp_path: Path, env: str) -> None:
-    with pytest.raises(ValueError, match=r"环境变量名|文本数组"):
+    with pytest.raises(ValueError, match=r"环境变量名|文本数组|不得重复"):
         _load_apps(tmp_path, _STDIO.replace('["CLOCK_TOKEN"]', env))
 
 
