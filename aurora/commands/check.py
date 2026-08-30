@@ -5,8 +5,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.utils.exit_code import EXIT_FAILURE
-from aurora.utils.process import run_process
+from aurora.utils.process import EXIT_FAILURE, run_process
 
 if TYPE_CHECKING:
     import argparse

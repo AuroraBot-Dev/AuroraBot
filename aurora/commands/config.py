@@ -7,7 +7,7 @@ import tomllib
 from typing import TYPE_CHECKING
 
 from aurora.configuration import load_config
-from aurora.utils.exit_code import EXIT_CONFIG_ERROR
+from aurora.utils.process import EXIT_CONFIG_ERROR
 
 if TYPE_CHECKING:
     import argparse

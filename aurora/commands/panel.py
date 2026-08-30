@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.utils.pnpm import run_pnpm
+from aurora.utils.process import run_pnpm
 
 if TYPE_CHECKING:
     import argparse

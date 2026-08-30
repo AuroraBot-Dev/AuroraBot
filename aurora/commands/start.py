@@ -7,7 +7,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from aurora.utils.environment import load_project_env
-from aurora.utils.exit_code import EXIT_CONFIG_ERROR, EXIT_INTERRUPTED
+from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_INTERRUPTED
 
 if TYPE_CHECKING:
     import argparse

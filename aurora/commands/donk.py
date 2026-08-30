@@ -5,9 +5,8 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.utils.environment import get_project_version
-from aurora.utils.exit_code import EXIT_FAILURE
-from aurora.utils.process import run_process
+from aurora.utils.process import EXIT_FAILURE, run_process
+from aurora.utils.project import get_project_version
 
 if TYPE_CHECKING:
     import argparse
@@ -28,7 +27,7 @@ COMMAND: CommandSpec = {
 
 def execute(arguments: argparse.Namespace) -> int:
     subcommand = str(arguments.subcommand)
-    pyproject = (arguments.root / "pyproject.toml").resolve()
+    pyproject = arguments.root / "pyproject.toml"
     command = ("uv", "run", "--no-sync", "donk", subcommand, str(pyproject))
     exit_code = run_process(command, arguments.root)
     if exit_code != 0:

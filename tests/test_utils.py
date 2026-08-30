@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from loguru import logger as _loguru_logger
 
-from aurora.utils.environment import get_git_revision
 from aurora.utils.platform import detect_os, is_linux, is_macos, is_windows
+from aurora.utils.project import get_git_revision
 from src.utils import (
     NamePatternError,
     UnsupportedLoggingLevelError,
@@ -188,18 +188,18 @@ def test_get_git_revision_returns_short_hash_or_none(tmp_path: Path, monkeypatch
     def fake_run(_command: object, **_kwargs: object) -> Result:
         return Result()
 
-    monkeypatch.setattr("aurora.utils.environment.subprocess.run", fake_run)
+    monkeypatch.setattr("aurora.utils.project.subprocess.run", fake_run)
     assert get_git_revision(tmp_path) == "abc1234"
 
     class FailedResult:
         returncode = 128
         stdout = ""
 
-    monkeypatch.setattr("aurora.utils.environment.subprocess.run", lambda *_a, **_k: FailedResult())
+    monkeypatch.setattr("aurora.utils.project.subprocess.run", lambda *_a, **_k: FailedResult())
     assert get_git_revision(tmp_path) is None
 
     def interrupted(*_args: object, **_kwargs: object) -> None:
         raise FileNotFoundError
 
-    monkeypatch.setattr("aurora.utils.environment.subprocess.run", interrupted)
+    monkeypatch.setattr("aurora.utils.project.subprocess.run", interrupted)
     assert get_git_revision(tmp_path) is None

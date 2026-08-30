@@ -13,10 +13,9 @@ from aurora.commander import build_parser as _build_parser
 from aurora.commander import build_registry
 from aurora.commander import run as _run
 from aurora.commands import DEFAULT_REGISTRY, CommandSpec, about, check, config, docs, donk, panel, setup, start
-from aurora.utils import pnpm
+from aurora.utils import process
 from aurora.utils.environment import load_project_env
-from aurora.utils.exit_code import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
-from aurora.utils.process import run_process
+from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED, run_process
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -422,7 +421,7 @@ def test_setup_stops_on_first_failed_step(
     assert "同步 Python 依赖失败。" in capsys.readouterr().err
 
 
-def test_setup_skips_node_dependencies_without_pnpm(
+def test_setup_skips_node_dependencies_without_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -487,7 +486,7 @@ def test_commander_rejects_non_callable_executor() -> None:
         build_registry(((about.COMMAND, cast("Any", "not-callable")),))
 
 
-def test_docs_command_passes_script_and_passthrough_to_pnpm(
+def test_docs_command_passes_script_and_passthrough_to_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -500,8 +499,7 @@ def test_docs_command_passes_script_and_passthrough_to_pnpm(
         calls.append((command, root))
         return 0
 
-    monkeypatch.setattr(pnpm, "run_process", fake_run)
-    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    monkeypatch.setattr(process, "run_process", fake_run)
     arguments = build_parser().parse_args(
         ["--root", str(tmp_path), docs.COMMAND["name"], "build", "--", "--base", "/foo"]
     )
@@ -523,8 +521,7 @@ def test_panel_command_passes_passthrough_without_separator(
         calls.append((command, root))
         return 0
 
-    monkeypatch.setattr(pnpm, "run_process", fake_run)
-    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    monkeypatch.setattr(process, "run_process", fake_run)
     arguments = build_parser().parse_args(["--root", str(tmp_path), panel.COMMAND["name"], "dev", "--port", "5173"])
 
     assert panel.execute(arguments) == 0
@@ -542,18 +539,22 @@ def test_submodule_command_reports_uninitialized_submodule(
     assert "docs 子模块未初始化" in capsys.readouterr().err
 
 
-def test_submodule_command_reports_missing_pnpm(
+def test_submodule_command_reports_missing_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     (tmp_path / "panel").mkdir()
     (tmp_path / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
-    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: None)
+
+    def raise_file_not_found(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError
+
+    monkeypatch.setattr("aurora.utils.process.subprocess.run", raise_file_not_found)
     arguments = build_parser().parse_args(["--root", str(tmp_path), panel.COMMAND["name"], "dev"])
 
     assert panel.execute(arguments) == EXIT_FAILURE
-    assert "未找到 pnpm" in capsys.readouterr().err
+    assert "未找到" in capsys.readouterr().err
 
 
 def test_submodule_command_preserves_failure_code(
@@ -562,8 +563,7 @@ def test_submodule_command_preserves_failure_code(
 ) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "package.json").write_text("{}\n", encoding="utf-8")
-    monkeypatch.setattr(pnpm, "run_process", lambda _command, _root: FAILED_EXIT_CODE)
-    monkeypatch.setattr(pnpm.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    monkeypatch.setattr(process, "run_process", lambda _command, _root: FAILED_EXIT_CODE)
     arguments = build_parser().parse_args(["--root", str(tmp_path), docs.COMMAND["name"], "dev"])
 
     assert docs.execute(arguments) == FAILED_EXIT_CODE

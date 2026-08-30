@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.utils.environment import get_git_revision, get_project_version
 from aurora.utils.platform import detect_os
+from aurora.utils.project import get_git_revision, get_project_version
 
 if TYPE_CHECKING:
     import argparse
