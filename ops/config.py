@@ -46,7 +46,7 @@ class ConfigAccess:
                 {"name": source.name, "path": source.relative_path, "exists": self._path(source).is_file()}
                 for source in self._sources.values()
             ],
-            "writable": {"apps": ["enabled"], "extensions": ["enabled"]},
+            "writable": {"apps": ["enabled"]},
         }
 
     def read(self, name: str) -> dict[str, Any] | None:
@@ -60,9 +60,6 @@ class ConfigAccess:
 
     def set_app_enabled(self, package: str, *, enabled: bool) -> dict[str, Any]:
         return self._set_enabled("apps", "app", "package", package, enabled)
-
-    def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]:
-        return self._set_enabled("extensions", "extension", "id", extension_id, enabled)
 
     def _set_enabled(
         self,

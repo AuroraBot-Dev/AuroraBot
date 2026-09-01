@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora import assemble_runtime, load_config
-from aurora.configuration.logging import LOGGING_CONFIG, LoggingConfig
+from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.configuration.storage import STORAGE_CONFIG
 from aurora.runtime.support import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
 from src.tools import ToolRegistry
@@ -59,27 +60,20 @@ class _FailingTool:
 
 
 def test_logging_configuration_is_typed_and_project_relative(configured_project: Path) -> None:
-    settings = load_config(configured_project).get(LOGGING_CONFIG)
+    runtime = load_config(configured_project).get(RUNTIME_CONFIG)
 
-    assert settings == LoggingConfig("INFO", "logs")
+    assert runtime.log_level == "INFO"
+    storage = load_config(configured_project).get(STORAGE_CONFIG)
+    assert storage.resolve("logs") == "data/logs"
 
 
-@pytest.mark.parametrize(
-    ("level", "log_dir"),
-    (
-        ("TRACE", "logs"),
-        ("INFO", "/tmp/logs"),
-        ("INFO", "../logs"),
-        ("INFO", "C:\\logs"),
-    ),
-)
-def test_logging_configuration_rejects_invalid_values(
+@pytest.mark.parametrize("level", ("TRACE", "warn", "WARN", ""))
+def test_logging_configuration_rejects_invalid_levels(
     configured_project: Path,
     level: str,
-    log_dir: str,
 ) -> None:
-    (configured_project / "config" / "logging.toml").write_text(
-        f'[logging]\nlevel = "{level}"\nlog_dir = "{log_dir.replace(chr(92), chr(92) * 2)}"\n',
+    (configured_project / "config" / "runtime.toml").write_text(
+        (f'[runtime]\nprofile = "prod"\nnode_id = "root"\nagent = "builtin.root"\nlog_level = "{level}"\n'),
         encoding="utf-8",
     )
 
@@ -105,7 +99,7 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
         await runtime.world.close()
 
     asyncio.run(scenario())
-    logfile = configured_project / "logs" / "aurora.log"
+    logfile = configured_project / load_config(configured_project).get(STORAGE_CONFIG).resolve("logs") / "aurora.log"
     content = logfile.read_text(encoding="utf-8")
 
     assert "AgentTree 开始 tree_id=logging-tree" in content

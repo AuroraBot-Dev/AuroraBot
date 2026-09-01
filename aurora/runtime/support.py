@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import signal
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora.configuration.logging import LOGGING_CONFIG
+from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.configuration.storage import STORAGE_CONFIG
 from src.utils import configure_console_logging, configure_logging
 
 if TYPE_CHECKING:
@@ -26,10 +26,10 @@ class InstalledSignal:
 
 def configure_project_logging(config: AuroraConfig) -> None:
     """在其他运行时效果前应用项目日志配置。"""
-    settings = config.get(LOGGING_CONFIG)
-    logfile = config.project_root / settings.log_dir / "aurora.log"
-    configure_console_logging(enabled=True, level=settings.level)
-    configure_logging(settings.level, logfile)
+    runtime = config.get(RUNTIME_CONFIG)
+    logfile = config.project_root / config.get(STORAGE_CONFIG).resolve("logs") / "aurora.log"
+    configure_console_logging(enabled=True, level=runtime.log_level)
+    configure_logging(runtime.log_level, logfile)
 
 
 def install_stop_handlers(stop: asyncio.Event) -> tuple[InstalledSignal, ...]:
@@ -54,14 +54,3 @@ def restore_stop_handlers(installed: tuple[InstalledSignal, ...]) -> None:
     """恢复入口启动前的进程信号处理器。"""
     for item in installed:
         signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
-
-
-def parse_event_time(value: str) -> datetime:
-    """解析带时区的 ISO 8601 事件时间并归一化为 UTC。"""
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as error:
-        raise ValueError("occurred_at 必须是 ISO 8601 时间") from error
-    if parsed.tzinfo is None:
-        raise ValueError("occurred_at 必须包含时区")
-    return parsed.astimezone(UTC)

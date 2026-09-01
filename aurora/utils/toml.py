@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 type TomlTable = Mapping[str, object]
 
-_MAX_PORT = 65535
 _WINDOWS_DRIVE_PREFIX_LENGTH = 3
 
 
@@ -68,22 +67,6 @@ def boolean(table: TomlTable, key: str) -> bool:
     return value
 
 
-def string_mapping(table: TomlTable, key: str) -> Mapping[str, str]:
-    value = table.get(key)
-    if not isinstance(value, Mapping):
-        raise ValueError(f"配置字段 {key} 必须是表")
-    result: dict[str, str] = {}
-    for item_key, item_value in value.items():
-        valid_key = isinstance(item_key, str) and bool(item_key.strip())
-        valid_value = isinstance(item_value, str) and bool(item_value.strip())
-        if not valid_key or not valid_value:
-            raise ValueError(f"配置字段 {key} 必须只包含非空文本键值")
-        assert isinstance(item_key, str)
-        assert isinstance(item_value, str)
-        result[item_key.strip()] = item_value.strip()
-    return result
-
-
 def positive_number(table: TomlTable, key: str) -> float:
     value = table.get(key)
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
@@ -97,50 +80,12 @@ def optional_text(table: TomlTable, key: str) -> str | None:
     return text(table, key)
 
 
-def raw_strings(table: TomlTable, key: str) -> tuple[str, ...]:
-    value = table.get(key)
-    if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) or not item.strip() for item in value):
-        raise ValueError(f"配置字段 {key} 必须是文本数组")
-    return tuple(value)
-
-
-def named_tables(document: TomlTable, key: str) -> Mapping[str, TomlTable]:
-    values = table(document, key)
-    result: dict[str, TomlTable] = {}
-    for name, value in values.items():
-        if not isinstance(name, str) or not name.strip() or not isinstance(value, Mapping):
-            raise ValueError(f"配置字段 {key} 必须只包含命名表")
-        result[name.strip()] = cast("TomlTable", value)
-    return result
-
-
 def require_fields(document: TomlTable, allowed: frozenset[str], required: frozenset[str], label: str) -> None:
     names = set(document)
     unexpected = names - allowed
     missing = required - names
     if unexpected or missing:
         raise ValueError(f"{label} 字段不匹配：未知 {sorted(unexpected)}，缺少 {sorted(missing)}")
-
-
-def require_exact_fields(document: TomlTable, expected: frozenset[str], label: str) -> None:
-    names = set(document)
-    if names != expected:
-        raise ValueError(f"{label} 字段不匹配：未知 {sorted(names - expected)}，缺少 {sorted(expected - names)}")
-
-
-def non_empty_text(value: str, field_name: str) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"配置字段 {field_name} 必须是非空文本")
-
-
-def text_array(value: tuple[str, ...], field_name: str) -> None:
-    if not isinstance(value, tuple) or any(not isinstance(item, str) or not item.strip() for item in value):
-        raise ValueError(f"配置字段 {field_name} 必须是文本数组")
-
-
-def check_positive_integer(value: int, field_name: str) -> None:
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise ValueError(f"配置字段 {field_name} 必须是正整数")
 
 
 def check_positive_number(value: float, field_name: str) -> None:
@@ -155,44 +100,9 @@ def table_array(document: TomlTable, key: str) -> tuple[TomlTable, ...]:
     return tuple(cast("TomlTable", item) for item in value)
 
 
-def optional_table_array(document: TomlTable, key: str) -> tuple[TomlTable, ...]:
-    value = document.get(key, ())
-    if not isinstance(value, tuple) or any(not isinstance(item, Mapping) for item in value):
-        raise ValueError(f"配置字段 {key} 必须是表数组")
-    return tuple(cast("TomlTable", item) for item in value)
-
-
-def optional_strings(table: TomlTable, key: str) -> tuple[str, ...]:
-    if key not in table:
-        return ()
-    return strings(table, key)
-
-
-def check_loopback_host(host: str, field_name: str) -> None:
-    loopback_hosts = frozenset({"127.0.0.1", "::1", "localhost"})
-    if host not in loopback_hosts:
-        raise ValueError(f"配置字段 {field_name} 必须是 loopback 地址（127.0.0.1、::1 或 localhost）")
-
-
-def check_port(port: int, field_name: str) -> None:
-    check_positive_integer(port, field_name)
-    if port > _MAX_PORT:
-        raise ValueError(f"配置字段 {field_name} 必须在 1 到 {_MAX_PORT} 之间")
-
-
 def check_unique_items(items: tuple[str, ...], field_name: str) -> None:
     if len(items) != len(set(items)):
         raise ValueError(f"配置字段 {field_name} 不得重复")
-
-
-def check_http_origin(value: str, field_name: str) -> None:
-    parts = urlsplit(value)
-    if parts.scheme not in {"http", "https"} or not parts.netloc:
-        raise ValueError(f"配置字段 {field_name} 必须是明确的 http(s) 来源")
-    if parts.path not in {"", "/"} or parts.query or parts.fragment:
-        raise ValueError(f"配置字段 {field_name} 不得包含路径、查询或片段")
-    if parts.username or parts.password:
-        raise ValueError(f"配置字段 {field_name} 不得包含凭据")
 
 
 def check_relative_directory(value: str, field_name: str) -> None:

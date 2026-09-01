@@ -190,12 +190,14 @@ def test_config_command_lists_and_shows_registered_sources(
     assert run(["--root", str(configured_project), config.COMMAND["name"], "list"]) == 0
     listing = capsys.readouterr().out
     assert re.search(r"^runtime\s+\|\s+config/runtime\.toml$", listing, re.MULTILINE)
-    assert re.search(r"^profiles\s+\|\s+config/profiles\.toml$", listing, re.MULTILINE)
+    assert re.search(r"^providers\s+\|\s+config/providers\.toml$", listing, re.MULTILINE)
+    assert re.search(r"^endpoints\s+\|\s+config/endpoints\.toml$", listing, re.MULTILINE)
 
     assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == 0
     shown = capsys.readouterr().out
-    assert "[runtime.tree]" in shown
-    assert 'agent = "builtin.root"' in shown
+    assert "[runtime]" in shown
+    assert 'node_id = "root"' in shown
+    assert 'log_level = "INFO"' in shown
 
 
 def test_config_command_rejects_unknown_name(

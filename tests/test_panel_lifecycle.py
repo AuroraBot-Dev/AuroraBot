@@ -10,8 +10,8 @@ import pytest
 import tomlkit
 
 from aurora import load_config
-from aurora.configuration.runtime import RUNTIME_CONFIG, PanelConfig
-from aurora.configuration.storage import StorageConfig
+from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configuration.storage import StorageConfig, StorageEntry
 from aurora.runtime import run as runtime_module
 from aurora.runtime.panel import run_panel
 from src.contracts import ChatMessage, ModelRequest
@@ -50,10 +50,13 @@ class FakePanelRuntime:
 
 
 def _enable_panel(root: Path, *, open_browser: bool = False) -> None:
-    path = root / "config" / "runtime.toml"
+    path = root / "config" / "platforms.toml"
     document = tomlkit.parse(path.read_text(encoding="utf-8"))
-    document["runtime"]["panel"]["enabled"] = True
-    document["runtime"]["panel"]["open_browser"] = open_browser
+    platforms = document["platform"]
+    for platform in platforms:
+        if platform.get("id") == "builtin.panel":
+            platform["enabled"] = True
+            platform["config"]["open_browser"] = open_browser
     path.write_text(tomlkit.dumps(document), encoding="utf-8")
 
 
@@ -103,14 +106,18 @@ def _run_headless(root: Path, stop: asyncio.Event) -> object:
 
 def test_run_panel_serves_notices_then_opens_frontend(monkeypatch: pytest.MonkeyPatch) -> None:
     trace: list[str] = []
-    panel_config = PanelConfig(
+    panel_config = PlatformConfig(
+        id="builtin.panel",
         enabled=True,
-        host="127.0.0.1",
-        port=8765,
-        frontend_url="http://localhost:8766",
-        allowed_origins=("http://localhost:8766",),
-        open_browser=True,
-        session_ttl_seconds=3600,
+        logging="INFO",
+        config={
+            "host": "127.0.0.1",
+            "port": 8765,
+            "frontend_url": "http://localhost:8766",
+            "allowed_origins": ("http://localhost:8766",),
+            "open_browser": True,
+            "session_ttl_seconds": 3600,
+        },
     )
     fake = FakePanelRuntime(trace)
     monkeypatch.setattr("aurora.runtime.panel.build_panel_runtime", lambda *_a, **_k: fake)
@@ -119,7 +126,7 @@ def test_run_panel_serves_notices_then_opens_frontend(monkeypatch: pytest.Monkey
         run_panel(
             panel_config,
             cast("Any", None),
-            storage=StorageConfig("data", "world", "ops"),
+            storage=StorageConfig((StorageEntry("DATA_ROOT", "data"), StorageEntry("ops", "%DATA_ROOT%/ops"))),
             project_root=Path(),
             profile="prod",
             notice=lambda settings, store: trace.append("panel.notice"),
@@ -132,21 +139,13 @@ def test_run_panel_serves_notices_then_opens_frontend(monkeypatch: pytest.Monkey
 
 
 def test_run_panel_disabled_returns_none_without_serving() -> None:
-    panel_config = PanelConfig(
-        enabled=False,
-        host="127.0.0.1",
-        port=8765,
-        frontend_url=None,
-        allowed_origins=(),
-        open_browser=False,
-        session_ttl_seconds=3600,
-    )
+    panel_config = PlatformConfig(id="builtin.panel", enabled=False, logging="INFO")
 
     result = asyncio.run(
         run_panel(
             panel_config,
             cast("Any", None),
-            storage=StorageConfig("data", "world", "ops"),
+            storage=StorageConfig((StorageEntry("DATA_ROOT", "data"), StorageEntry("ops", "%DATA_ROOT%/ops"))),
             project_root=Path(),
             profile="prod",
         )
@@ -184,7 +183,9 @@ def test_run_project_serves_panel_and_closes_before_world(
 def test_run_project_without_panel_skips_server_and_notice(
     configured_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    panel_config = load_config(configured_project).get(RUNTIME_CONFIG).panel
+    panel_config = next(
+        item for item in load_config(configured_project).get(PLATFORMS_CONFIG) if item.id == "builtin.panel"
+    )
     assert panel_config.enabled is False
     trace: list[str] = []
     _trace_resource_close(monkeypatch, trace)

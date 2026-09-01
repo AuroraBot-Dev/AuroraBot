@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from aurora.composition import compose_project
+from aurora.composition.ai import MODEL
 from aurora.composition.mcp import build_mcp_specs
 from aurora.configuration import load_config
 from aurora.configuration.apps import APPS_CONFIG, AppConfig, AppsConfig
-from aurora.configuration.platforms import PLATFORMS_CONFIG, McpPlatformConfig, PlatformsConfig
+from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.runtime import AuroraRuntime, assemble_runtime, run_project
 from aurora.runtime import run as runtime_module
 from src.contracts import (
@@ -237,7 +238,15 @@ def _active_config(project_root: Path) -> AuroraConfig:
                 ),
             )
         ),
-    ).with_value(PLATFORMS_CONFIG, PlatformsConfig(McpPlatformConfig(enabled=True, terminal_logs=False)))
+    ).with_value(PLATFORMS_CONFIG, _active_platforms())
+
+
+def _active_platforms() -> tuple[PlatformConfig, ...]:
+    return (
+        PlatformConfig("builtin.console", True, "INFO"),
+        PlatformConfig("builtin.panel", True, "INFO"),
+        PlatformConfig("builtin.mcp", True, "INFO"),
+    )
 
 
 def test_build_mcp_specs_only_forwards_whitelisted_environment_and_hides_credentials(
@@ -276,7 +285,7 @@ def test_build_mcp_specs_only_forwards_whitelisted_environment_and_hides_credent
                 )
             ),
         )
-        .with_value(PLATFORMS_CONFIG, PlatformsConfig(McpPlatformConfig(enabled=True, terminal_logs=False)))
+        .with_value(PLATFORMS_CONFIG, _active_platforms())
     )
 
     local, remote = build_mcp_specs(config)
@@ -296,7 +305,7 @@ def test_sync_compose_rejects_active_mcp_app_without_async_discovery(configured_
     config = _active_config(configured_project)
 
     with pytest.raises(ValueError, match="必须先经过异步连接与完整工具发现"):
-        compose_project(config, FakeModel())
+        compose_project(config, ((MODEL, FakeModel()),))
 
 
 def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_registry(
@@ -320,7 +329,7 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
             assert runtime.world is world
             assert runtime.mcp is mcp
             assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
-            assert runtime.tool_detail(_TOOL_ID) == {
+            assert runtime.tools_ops.tool_detail(_TOOL_ID) == {
                 "name": _TOOL_ID,
                 "description": "连通性检查",
                 "parameters": {"type": "object", "properties": {}},

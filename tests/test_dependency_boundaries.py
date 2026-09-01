@@ -3,8 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from aurora.composition import COMPOSITION_REGISTRARS
-from aurora.configuration import CONFIG_REGISTRARS
+from aurora.composition import COMPOSITION_SPECS
+from aurora.configuration import CONFIG_SPECS
 from ops.registry import iter_operations
 
 _ROOT = Path(__file__).parents[1]
@@ -74,18 +74,16 @@ def test_each_project_toml_has_one_registered_configuration_module() -> None:
         for path in (_ROOT / "aurora" / "configuration").rglob("*.py")
         if path.stem != "__init__"
     }
-    registered_names = {
-        register.__module__.removeprefix("aurora.configuration.").replace(".", "/") for register in CONFIG_REGISTRARS
-    }
+    registered_names = {spec.name for spec in CONFIG_SPECS}
 
     assert toml_names == module_names == registered_names
-    assert len(CONFIG_REGISTRARS) == len(registered_names)
+    assert len(CONFIG_SPECS) == len(registered_names)
 
 
 def test_each_composition_module_targets_a_src_package_and_is_registered() -> None:
     module_names = {path.stem for path in (_ROOT / "aurora" / "composition").glob("*.py") if path.stem != "__init__"}
     src_names = {path.name for path in (_ROOT / "src").iterdir() if path.is_dir() and not path.name.startswith("__")}
-    registered_names = {register.__module__.rsplit(".", maxsplit=1)[-1] for register in COMPOSITION_REGISTRARS}
+    registered_names = {spec.register.__module__.rsplit(".", maxsplit=1)[-1] for spec in COMPOSITION_SPECS}
 
     assert module_names == registered_names
     assert module_names <= src_names

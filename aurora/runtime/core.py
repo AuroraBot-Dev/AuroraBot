@@ -1,4 +1,4 @@
-"""项目级运行时门面：持有全部已装配实例并实现每个 ops 端口。"""
+"""项目级运行时门面：持有全部已装配实例并实现引擎、进程与配置重载端口。"""
 
 from __future__ import annotations
 
@@ -10,22 +10,32 @@ from uuid import uuid4
 from rich.console import Console
 from rich.markup import escape as markup_escape
 
+from aurora import views
 from aurora.configuration import load_config
-from aurora.configuration.models import MODELS_CONFIG
-from aurora.configuration.prompts import PROMPTS_CONFIG
-from aurora.runtime import views
-from aurora.runtime.support import parse_event_time
+from aurora.views import UtilsOps
 from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
 from ops.contracts import OperationControl
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import AgentTree, EnvironmentEvent, WorldFrontier
-from src.utils import bounded_summary, get_logger
+from src.utils import bounded_summary, get_logger, parse_event_time
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from aurora.config import AuroraConfig
     from aurora.configuration.runtime import RuntimeConfig
+    from aurora.views import ContractsOps
+    from ops.contracts import (
+        AgentsRuntimePort,
+        AiRuntimePort,
+        CadenceRuntimePort,
+        ConsoleRuntimePort,
+        McpRuntimePort,
+        MemoryRuntimePort,
+        PromptRuntimePort,
+        ToolsRuntimePort,
+        WorldRuntimePort,
+    )
     from src.agents import AgentCatalog
     from src.cadence import Cadence
     from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest, WorldJournal
@@ -49,6 +59,16 @@ class AuroraRuntime:
     cadence: Cadence
     memory: Memory
     mcp: McpRuntime
+    agents_ops: AgentsRuntimePort
+    tools_ops: ToolsRuntimePort
+    prompt_ops: PromptRuntimePort
+    ai_ops: AiRuntimePort
+    world_ops: WorldRuntimePort
+    console_ops: ConsoleRuntimePort
+    cadence_ops: CadenceRuntimePort
+    memory_ops: MemoryRuntimePort
+    mcp_ops: McpRuntimePort
+    contracts_ops: ContractsOps
     output: Callable[[str], None] = field(default=print)
     _trees: dict[str, AgentTree] = field(default_factory=dict, init=False, repr=False)
     _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
@@ -61,17 +81,17 @@ class AuroraRuntime:
             self,
             ConfigAccess(self.config.project_root, sources),
             self,
-            agents=self,
-            tools=self,
-            prompt=self,
-            ai=self,
-            world=self,
-            console=self,
-            utils=self,
-            contracts=self,
-            cadence=self,
-            memory=self,
-            mcp=self,
+            agents=self.agents_ops,
+            tools=self.tools_ops,
+            prompt=self.prompt_ops,
+            ai=self.ai_ops,
+            world=self.world_ops,
+            console=self.console_ops,
+            utils=UtilsOps(),
+            contracts=self.contracts_ops,
+            cadence=self.cadence_ops,
+            memory=self.memory_ops,
+            mcp=self.mcp_ops,
             config_reload=self,
         )
 
@@ -259,171 +279,11 @@ class AuroraRuntime:
             return None
         return views.node_dict(node)
 
-    def agent_catalog(self) -> dict[str, Any]:
-        return {"agents": [views.agent_dict(definition) for definition in self.agents.definitions]}
-
-    def agent_detail(self, agent_id: str) -> dict[str, Any] | None:
-        try:
-            definition = self.agents.get(agent_id)
-        except ValueError:
-            return None
-        return views.agent_dict(definition)
-
-    def tool_catalog(self) -> dict[str, Any]:
-        return {"tools": [views.tool_dict(definition) for definition in self.runner.tool_definitions]}
-
-    def tool_detail(self, tool_id: str) -> dict[str, Any] | None:
-        definition = next((item for item in self.runner.tool_definitions if item.name == tool_id), None)
-        return views.tool_dict(definition) if definition is not None else None
-
-    def mcp_status(self) -> dict[str, Any]:
-        snapshot = self.mcp.snapshot()
-        return {
-            "platform_enabled": snapshot.platform_enabled,
-            "restart_required": snapshot.restart_required,
-            "tool_ids": list(snapshot.tool_ids),
-            "apps": [views.mcp_app_dict(app) for app in snapshot.apps],
-        }
-
-    def mcp_app(self, package: str) -> dict[str, Any] | None:
-        snapshot = self.mcp.app(package)
-        return views.mcp_app_dict(snapshot) if snapshot is not None else None
-
-    def prompt_catalog(self) -> dict[str, Any]:
-        prompts = self.config.get(PROMPTS_CONFIG)
-        return {
-            "system": list(prompts.system),
-            "agent_prompts": dict(prompts.agent_prompts),
-            "max_characters": prompts.max_characters,
-        }
-
-    def prompt_detail(self, prompt_id: str) -> dict[str, Any] | None:
-        prompts = self.config.get(PROMPTS_CONFIG)
-        if prompt_id == "system":
-            return {"prompt_id": "system", "fragments": list(prompts.system)}
-        content = prompts.agent_prompts.get(prompt_id)
-        return {"prompt_id": prompt_id, "content": content} if content is not None else None
-
     def reload_config(self) -> dict[str, Any]:
         """重新解析全部个人 TOML 并替换运行时配置；不重组任何已装配实例。"""
         config = load_config(self.config.project_root)
         self.config = config
         return {"names": config.names, "sources": [source.name for source in config.sources]}
-
-    def model_catalog(self) -> dict[str, Any]:
-        models = self.config.get(MODELS_CONFIG)
-        return {
-            "providers": [
-                {
-                    "provider_id": provider_id,
-                    "adapter": provider.adapter,
-                    "secret_env": provider.secret_env,
-                    "base_url": provider.base_url,
-                }
-                for provider_id, provider in models.providers.items()
-            ],
-            "endpoints": [
-                {"endpoint_id": endpoint_id, "provider": endpoint.provider, "model": endpoint.model}
-                for endpoint_id, endpoint in models.endpoints.items()
-            ],
-        }
-
-    def model_detail(self, endpoint_id: str) -> dict[str, Any] | None:
-        models = self.config.get(MODELS_CONFIG)
-        endpoint = models.endpoints.get(endpoint_id)
-        if endpoint is None:
-            return None
-        provider = models.providers[endpoint.provider]
-        return {
-            "endpoint_id": endpoint_id,
-            "provider": endpoint.provider,
-            "model": endpoint.model,
-            "adapter": provider.adapter,
-            "secret_env": provider.secret_env,
-            "base_url": provider.base_url,
-        }
-
-    def utils_status(self) -> dict[str, Any]:
-        return views.utils_status()
-
-    def contracts_status(self) -> dict[str, Any]:
-        return views.contracts_status()
-
-    def cadence_status(self) -> dict[str, Any]:
-        return self.cadence.status()
-
-    async def cadence_trigger(self) -> dict[str, Any]:
-        await self.world.initialize()
-        before = self.cadence.status()
-        await self.cadence.evaluate_once()
-        return {"before": before, "after": self.cadence.status()}
-
-    async def memory_snapshot(self) -> dict[str, Any]:
-        await self.world.initialize()
-        snapshot = await self.memory.recall()
-        return {
-            "window_start": snapshot.window_start.isoformat(),
-            "scopes": [
-                {
-                    "scope": scope.scope,
-                    "head": scope.head,
-                    "commits": [views.commit_dict(commit) for commit in scope.commits],
-                }
-                for scope in snapshot.scopes
-            ],
-        }
-
-    def console_status(self) -> dict[str, Any]:
-        return {
-            "enabled": self.root.console_enabled,
-            "input_to_worldline": True,
-            "output_to_worldline": False,
-            "scope": "aurora:console",
-        }
-
-    async def world_stream(self, *, after: int = 0, limit: int = 64) -> dict[str, Any]:
-        if after < 0:
-            raise ValueError("after 必须是不小于 0 的整数")
-        await self.world.initialize()
-        page = await self.world.stream(after, limit)
-        return {
-            "after": page.after,
-            "end": page.end,
-            "has_more": page.has_more,
-            "commits": [views.commit_dict(commit) for commit in page.commits],
-        }
-
-    async def world_commit(self, commit_id: str) -> dict[str, Any] | None:
-        await self.world.initialize()
-        commit = await self.world.commit(commit_id)
-        return views.commit_dict(commit) if commit is not None else None
-
-    async def record_event(
-        self,
-        *,
-        event_id: str,
-        kind: str,
-        source: str,
-        summary: str,
-        scope: str,
-        data: dict[str, Any] | None = None,
-        occurred_at: str | None = None,
-    ) -> dict[str, Any]:
-        """向世界线追加一条提交方已确定 scope 的通用事件。"""
-        await self.world.initialize()
-        frontier = await self.world.head(frozenset({scope}))
-        when = parse_event_time(occurred_at) if occurred_at else datetime.now(UTC)
-        commit = await self.world.append_commit(
-            commit_id=event_id,
-            kind=kind,
-            source=source,
-            summary=summary,
-            scopes=frozenset({scope}),
-            based_on=frontier,
-            data=data or {},
-            occurred_at=when,
-        )
-        return views.commit_dict(commit)
 
     def _record_tree(self, tree: AgentTree) -> None:
         self._trees[tree.tree_id] = tree

@@ -19,8 +19,8 @@ from aurora.utils.toml import (
     non_empty_text_array,
     optional_text,
     positive_number,
-    raw_strings,
     require_fields,
+    strings,
     table_array,
     text,
 )
@@ -121,8 +121,8 @@ def _parse_app(raw: TomlTable) -> AppConfig:
         return AppConfig(
             **common,
             working_dir=text(raw, "working_dir"),
-            command=raw_strings(raw, "command"),
-            env=raw_strings(raw, "env"),
+            command=strings(raw, "command"),
+            env=strings(raw, "env"),
         )
     return AppConfig(
         **common,

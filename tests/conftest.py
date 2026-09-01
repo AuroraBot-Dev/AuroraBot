@@ -27,7 +27,10 @@ def configured_project(tmp_path: Path) -> Iterator[Path]:
 
 
 def _disable_panel(root: Path) -> None:
-    path = root / "config" / "runtime.toml"
+    path = root / "config" / "platforms.toml"
     document = tomlkit.parse(path.read_text(encoding="utf-8"))
-    document["runtime"]["panel"]["enabled"] = False
+    platforms = document["platform"]
+    for platform in platforms:
+        if platform.get("id") == "builtin.panel":
+            platform["enabled"] = False
     path.write_text(tomlkit.dumps(document), encoding="utf-8")

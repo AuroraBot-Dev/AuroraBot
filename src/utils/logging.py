@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import threading
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,6 +21,17 @@ MAX_LOGFILE_BACKUPS = 5
 _NAME_WIDTH = 24
 _LEVEL_NUMBERS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 _OFF_LEVEL = 51
+
+
+class LogLevel(StrEnum):
+    """进程与平台日志级别；NONE 表示不启用日志。"""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+    NONE = "NONE"
 
 
 class UnsupportedLoggingLevelError(ValueError): ...
@@ -142,10 +154,15 @@ def _format_file(record: Record) -> str:
     return f"{{time:%m-%d %H:%M:%S}} {{level: <8}} {name:<{_NAME_WIDTH}} | {{message}}\n{{exception}}"
 
 
-def _level_number(level: int | str) -> int:
+def _level_number(level: int | str | LogLevel) -> int:
     if isinstance(level, int):
         return level
-    normalized = "WARNING" if level.upper() == "WARN" else level.upper()
+    if isinstance(level, LogLevel):
+        if level is LogLevel.NONE:
+            return _OFF_LEVEL
+        normalized = level.value
+    else:
+        normalized = "WARNING" if level.upper() == "WARN" else level.upper()
     value = _LEVEL_NUMBERS.get(normalized)
     if value is None:
         raise UnsupportedLoggingLevelError(level)

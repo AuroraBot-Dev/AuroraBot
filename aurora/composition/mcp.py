@@ -3,35 +3,67 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from aurora.composer import InstanceKey
+from aurora.composer import InstanceKey, ModuleSpec
 from aurora.configuration.apps import APPS_CONFIG
-from aurora.configuration.platforms import PLATFORMS_CONFIG
+from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.views import mcp_app_dict
 from src.mcp import McpAppSpec, McpEventMode, McpRuntime, McpTransport
 
 if TYPE_CHECKING:
     from aurora.composer import CompositionContext
     from aurora.config import AuroraConfig
 
+_MCP_PLATFORM_ID = "builtin.mcp"
+
+
+def _mcp_platform(config: AuroraConfig) -> PlatformConfig:
+    return next(item for item in config.get(PLATFORMS_CONFIG) if item.id == _MCP_PLATFORM_ID)
+
+
+class McpOps:
+    """McpRuntime 的窄 ops 端口适配器。"""
+
+    def __init__(self, runtime: McpRuntime) -> None:
+        self._runtime = runtime
+
+    def mcp_status(self) -> dict[str, Any]:
+        snapshot = self._runtime.snapshot()
+        return {
+            "platform_enabled": snapshot.platform_enabled,
+            "restart_required": snapshot.restart_required,
+            "tool_ids": list(snapshot.tool_ids),
+            "apps": [mcp_app_dict(app) for app in snapshot.apps],
+        }
+
+    def mcp_app(self, package: str) -> dict[str, Any] | None:
+        snapshot = self._runtime.app(package)
+        return mcp_app_dict(snapshot) if snapshot is not None else None
+
 
 MCP_RUNTIME = InstanceKey[McpRuntime]("mcp.runtime")
+MCP_OPS = InstanceKey[McpOps]("mcp.ops")
 
 
-def register(context: CompositionContext) -> None:
+def _register(context: CompositionContext) -> None:
     """接收异步阶段已冻结的 runtime；无生效 App 时可同步构造禁用快照。"""
-    if context.contains(MCP_RUNTIME):
-        return
-    platforms = context.config.get(PLATFORMS_CONFIG)
-    specs = build_mcp_specs(context.config)
-    context.provide(MCP_RUNTIME, McpRuntime.disabled(specs, platform_enabled=platforms.mcp.enabled))
+    if not context.contains(MCP_RUNTIME):
+        platform = _mcp_platform(context.config)
+        runtime = McpRuntime.disabled(build_mcp_specs(context.config), platform_enabled=platform.enabled)
+        context.provide(MCP_RUNTIME, runtime)
+    context.provide(MCP_OPS, McpOps(context.require(MCP_RUNTIME)))
+
+
+MODULE_SPEC = ModuleSpec(key=MCP_RUNTIME, requires=(), register=_register)
 
 
 def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
     """映射纯 DTO 与当前进程的显式凭据为协议适配说明。"""
     apps = config.get(APPS_CONFIG).apps
-    platform = config.get(PLATFORMS_CONFIG).mcp
+    platform = _mcp_platform(config)
     project_root = config.project_root.resolve()
+    terminal_logs = platform.logging != "NONE"
     specs: list[McpAppSpec] = []
     for app in apps:
         transport = McpTransport(app.transport)
@@ -50,7 +82,7 @@ def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
                     app.enabled,
                     transport,
                     app.timeout_seconds,
-                    platform.terminal_logs,
+                    terminal_logs,
                     event_mode,
                     command=app.command,
                     working_dir=working_dir,
@@ -69,13 +101,10 @@ def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
                 app.enabled,
                 transport,
                 app.timeout_seconds,
-                platform.terminal_logs,
+                terminal_logs,
                 event_mode,
                 url=app.url,
                 auth_token=auth_token,
             )
         )
     return tuple(specs)
-
-
-__all__ = ["MCP_RUNTIME", "build_mcp_specs", "register"]

@@ -1,10 +1,10 @@
-"""项目组件目录；需要构造实例的下层包在此显式注册。"""
+"""项目组件目录；需要构造实例的下层包在此声明规格并由拓扑排序驱动装配。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.composer import compose
+from aurora.composer import ModuleSpec, compose
 from aurora.composition import (
     agents,
     ai,
@@ -23,30 +23,23 @@ if TYPE_CHECKING:
 
     from aurora.composer import AuroraAssembly, InstanceBinding
     from aurora.config import AuroraConfig
-    from src.contracts import Model, Tool
 
-# world 是逻辑事件总线：组合时第一个实例化，后续组件只能通过同一实例键取得单例。
-COMPOSITION_REGISTRARS = (
-    world.register,
-    mcp.register,
-    memory.register,
-    cadence.register,
-    agents.register,
-    ai.register,
-    prompt.register,
-    console.register,
-    tools.register,
-    engine.register,
+COMPOSITION_SPECS: tuple[ModuleSpec, ...] = (
+    world.MODULE_SPEC,
+    mcp.MODULE_SPEC,
+    memory.MODULE_SPEC,
+    cadence.MODULE_SPEC,
+    agents.MODULE_SPEC,
+    ai.MODULE_SPEC,
+    prompt.MODULE_SPEC,
+    console.MODULE_SPEC,
+    tools.MODULE_SPEC,
+    engine.MODULE_SPEC,
 )
 
 
 def compose_project(
     config: AuroraConfig,
-    model: Model | None = None,
-    tools: Iterable[Tool] = (),
     instances: Iterable[InstanceBinding] = (),
 ) -> AuroraAssembly:
-    return compose(config, model, COMPOSITION_REGISTRARS, tools, instances)
-
-
-__all__ = ["COMPOSITION_REGISTRARS", "compose_project"]
+    return compose(config, COMPOSITION_SPECS, instances)

@@ -8,20 +8,19 @@ from pathlib import Path
 import pytest
 
 from aurora import AuroraConfig, assemble_runtime, load_config
-from aurora.composer import CompositionContext, InstanceKey, compose
+from aurora.composer import CompositionContext, InstanceKey, ModuleSpec, compose
 from aurora.composition import compose_project
-from aurora.composition.agents import AGENTS
+from aurora.composition.agents import AGENTS, EXTERNAL_TOOLS
 from aurora.composition.ai import MODEL
 from aurora.composition.cadence import CADENCE
 from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.memory import MEMORY
 from aurora.composition.prompt import PROMPT_ASSEMBLER
-from aurora.config import ConfigCollector, ConfigKey, collect_config
+from aurora.config import ConfigSpec, assemble_config
 from aurora.configuration.agents import AGENTS_CONFIG, AgentsConfig
 from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.memory import MEMORY_CONFIG
-from aurora.configuration.prompts import PROMPTS_CONFIG, PromptConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.utils.toml import load_toml, text
 from src.ai import LiteLLMModelGateway
@@ -53,8 +52,8 @@ class FakeModel:
 def test_project_configuration_builds_complete_runtime(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     runtime_configuration = configuration.get(RUNTIME_CONFIG)
-    definitions = configuration.get(AGENTS_CONFIG).definitions
-    root_definition = next(item for item in definitions if item.definition_id == runtime_configuration.agent)
+    definitions = configuration.get(AGENTS_CONFIG).agents
+    root_definition = next(item for item in definitions if item.id == runtime_configuration.agent)
     model = FakeModel()
     runtime = assemble_runtime(configuration, model)
 
@@ -80,7 +79,7 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
     async def scenario() -> None:
         await runtime.world.initialize()
         for index in range(5):
-            await runtime.record_event(
+            await runtime.world_ops.record_event(
                 event_id=f"event-{index}",
                 source="mcp:org.example.background",
                 scope="qq:group-cadence",
@@ -88,9 +87,9 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
                 summary=f"第 {index + 1} 条消息",
                 data={"event_kind": "qq.notice.background"},
             )
-        before = runtime.cadence_status()
-        await runtime.cadence_trigger()
-        after = runtime.cadence_status()
+        before = runtime.cadence_ops.cadence_status()
+        await runtime.cadence_ops.cadence_trigger()
+        after = runtime.cadence_ops.cadence_status()
 
         assert runtime.runtime_status()["trees"]["completed"] == 1
         assert before["pending"] == 0 and after["pending"] == 0
@@ -159,7 +158,7 @@ def test_echo_node_texts_renders_rich_for_terminal_sink(
 
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
     configuration = load_config(configured_project)
-    assembly = compose_project(configuration, FakeModel())
+    assembly = compose_project(configuration, ((MODEL, FakeModel()),))
     cadence = assembly.get(CADENCE)
     memory = assembly.get(MEMORY)
     memory_config = configuration.get(MEMORY_CONFIG)
@@ -198,19 +197,19 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
                         (*item.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")
                     ),
                 )
-                if item.definition_id == "builtin.root"
+                if item.id == "builtin.root"
                 else item
-                for item in agents.definitions
+                for item in agents.agents
             )
         ),
     )
+    qq_tools = (
+        FakeTool("aur.mcp.org.aurora.qq.qq_send_private_message"),
+        FakeTool("aur.mcp.org.aurora.qq.qq_send_group_message"),
+    )
     assembly = compose_project(
         with_wildcard,
-        FakeModel(),
-        tools=(
-            FakeTool("aur.mcp.org.aurora.qq.qq_send_private_message"),
-            FakeTool("aur.mcp.org.aurora.qq.qq_send_group_message"),
-        ),
+        ((MODEL, FakeModel()), (EXTERNAL_TOOLS, qq_tools)),
     )
     root_definition = assembly.get(AGENTS).get("builtin.root")
 
@@ -221,10 +220,10 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     agents = configuration.get(AGENTS_CONFIG)
-    root = agents.definitions[0]
+    root = agents.agents[0]
     invalid = configuration.with_value(
         AGENTS_CONFIG,
-        AgentsConfig((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents.definitions[1:])),
+        AgentsConfig((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents.agents[1:])),
     )
 
     with pytest.raises(ValueError, match="引用了未注册名称"):
@@ -235,7 +234,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
     configuration = load_config(configured_project)
     runtime = configuration.get(RUNTIME_CONFIG)
     agents = configuration.get(AGENTS_CONFIG)
-    root = agents.definitions[0]
+    root = agents.agents[0]
 
     with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
         assemble_runtime(configuration.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
@@ -243,7 +242,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, prompt="missing"), *agents.definitions[1:])),
+                AgentsConfig((replace(root, prompt="missing"), *agents.agents[1:])),
             ),
             FakeModel(),
         )
@@ -251,7 +250,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, model="missing"), *agents.definitions[1:])),
+                AgentsConfig((replace(root, model="missing"), *agents.agents[1:])),
             ),
             FakeModel(),
         )
@@ -259,7 +258,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, tools=()), *agents.definitions[1:])),
+                AgentsConfig((replace(root, tools=()), *agents.agents[1:])),
             ),
             FakeModel(),
         )
@@ -267,12 +266,10 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
 
 def test_configuration_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
     configuration = load_config(configured_project)
-    prompt = configuration.get(PROMPTS_CONFIG)
     engine = configuration.get(ENGINE_CONFIG)
-    assembly = compose_project(configuration, FakeModel())
+    assembly = compose_project(configuration, ((MODEL, FakeModel()),))
 
     assert isinstance(configuration, AuroraConfig)
-    assert isinstance(prompt, PromptConfig)
     assert engine.max_depth == EXPECTED_MAX_DEPTH
     assert assembly.get(PROMPT_ASSEMBLER) is not None
     assert assembly.get(AGENTS) is not None
@@ -288,7 +285,9 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
         FakeTool("aur.mcp.org.aurora.qq.qq_mark_chat_read"),
         FakeTool("aur.mcp.org.aurora.qq.qq_delete_friend"),
     )
-    agents = compose_project(load_config(configured_project), FakeModel(), tools=qq_tools).get(AGENTS)
+    agents = compose_project(load_config(configured_project), ((MODEL, FakeModel()), (EXTERNAL_TOOLS, qq_tools))).get(
+        AGENTS
+    )
     triage = agents.get("builtin.triage")
     root = agents.get("builtin.root")
     worker = agents.get("builtin.worker")
@@ -336,7 +335,11 @@ class ExtraConfig:
     value: str
 
 
-EXTRA_CONFIG = ConfigKey[ExtraConfig]("extra")
+EXTRA_CONFIG = ConfigSpec[ExtraConfig](
+    name="extra",
+    path="config/extra.toml",
+    parse=lambda path: ExtraConfig(text(load_toml(path), "value")),
+)
 EXTRA_INSTANCE = InstanceKey[str]("extra.instance")
 
 
@@ -345,17 +348,12 @@ def test_new_toml_and_component_only_need_module_registrars(tmp_path: Path) -> N
     config_directory.mkdir()
     (config_directory / "extra.toml").write_text('value = "已接入"\n', encoding="utf-8")
 
-    def register_config(configs: ConfigCollector) -> None:
-        def parse(path: Path) -> ExtraConfig:
-            return ExtraConfig(text(load_toml(path), "value"))
-
-        configs.register(EXTRA_CONFIG, "config/extra.toml", parse)
-
     def register_component(context: CompositionContext) -> None:
         context.provide(EXTRA_INSTANCE, context.config.get(EXTRA_CONFIG).value)
 
-    configuration = collect_config(tmp_path, (register_config,))
-    assembly = compose(configuration, FakeModel(), (register_component,))
+    configuration = assemble_config(tmp_path, (EXTRA_CONFIG,))
+    spec = ModuleSpec(key=EXTRA_INSTANCE, requires=(), register=register_component)
+    assembly = compose(configuration, (spec,), ((MODEL, FakeModel()),))
 
     assert configuration.names == ("extra",)
     assert assembly.get(EXTRA_INSTANCE) == "已接入"
@@ -366,27 +364,33 @@ def test_registries_reject_duplicate_names_and_missing_dependencies(tmp_path: Pa
     config_directory.mkdir()
     (config_directory / "extra.toml").write_text('value = "first"\n', encoding="utf-8")
 
-    def register_twice(configs: ConfigCollector) -> None:
-        def parser(path: Path) -> ExtraConfig:
-            return ExtraConfig(text(load_toml(path), "value"))
-
-        configs.register(EXTRA_CONFIG, "config/extra.toml", parser)
-        configs.register(EXTRA_CONFIG, "config/extra.toml", parser)
+    duplicate = ConfigSpec[ExtraConfig](
+        name="extra",
+        path="config/extra.toml",
+        parse=lambda path: ExtraConfig(text(load_toml(path), "value")),
+    )
 
     with pytest.raises(ValueError, match="配置重复注册"):
-        collect_config(tmp_path, (register_twice,))
+        assemble_config(tmp_path, (duplicate, duplicate))
 
-    configuration = collect_config(tmp_path, ())
+    configuration = assemble_config(tmp_path, ())
 
     def require_missing(context: CompositionContext) -> None:
         context.require(EXTRA_INSTANCE)
 
+    dummy_key = InstanceKey[str]("dummy.missing")
     with pytest.raises(KeyError, match="组合依赖尚未注册"):
-        compose(configuration, FakeModel(), (require_missing,))
+        compose(
+            configuration, (ModuleSpec(key=dummy_key, requires=(), register=require_missing),), ((MODEL, FakeModel()),)
+        )
 
     def provide_twice(context: CompositionContext) -> None:
         context.provide(EXTRA_INSTANCE, "first")
         context.provide(EXTRA_INSTANCE, "second")
 
     with pytest.raises(ValueError, match="实例重复注册"):
-        compose(configuration, FakeModel(), (provide_twice,))
+        compose(
+            configuration,
+            (ModuleSpec(key=EXTRA_INSTANCE, requires=(), register=provide_twice),),
+            ((MODEL, FakeModel()),),
+        )

@@ -61,6 +61,12 @@ class ReactiveRule:
         return not self.contains_any or any(term in commit.summary for term in self.contains_any)
 
 
+DEFAULT_REACTIVE_RULES: tuple[ReactiveRule, ...] = (
+    ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "builtin.chat"),
+    ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "builtin.chat", ("小光", "夜曦光")),
+)
+
+
 class Cadence:
     """即时规则按提交唤起会话树，未匹配事件按阈值唤起批量树，并按固定节律提交 tick。"""
 

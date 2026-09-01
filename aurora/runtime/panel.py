@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import webbrowser
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ops.panel import PanelServer, PanelSettings, PanelStore, create_panel_app, print_panel_notice
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from aurora.configuration.runtime import PanelConfig
+    from aurora.configuration.platforms import PlatformConfig
     from aurora.configuration.storage import StorageConfig
     from ops.runtime import OpsRuntime
 
@@ -25,11 +25,11 @@ class PanelRuntime:
 
 
 def panel_data_directory(storage: StorageConfig, project_root: Path) -> Path:
-    return project_root / storage.data_root / storage.ops
+    return project_root / storage.resolve("ops")
 
 
 def build_panel_runtime(
-    panel: PanelConfig,
+    panel: PlatformConfig,
     ops: OpsRuntime,
     *,
     storage: StorageConfig,
@@ -39,15 +39,15 @@ def build_panel_runtime(
     if not panel.enabled:
         return None
     settings = PanelSettings(
-        host=panel.host,
-        port=panel.port,
-        allowed_origins=panel.allowed_origins,
-        session_ttl_seconds=panel.session_ttl_seconds,
+        host=str(panel.settings("host", "127.0.0.1")),
+        port=cast("int", panel.settings("port", 8765)),
+        allowed_origins=cast("tuple[str, ...]", panel.settings("allowed_origins", ())),
+        session_ttl_seconds=cast("int", panel.settings("session_ttl_seconds", 604800)),
         profile=profile,
     )
     store = PanelStore(
         panel_data_directory(storage, project_root),
-        session_ttl_seconds=panel.session_ttl_seconds,
+        session_ttl_seconds=settings.session_ttl_seconds,
     )
     return PanelRuntime(settings, store, PanelServer(create_panel_app(ops, store, settings), settings))
 
@@ -57,7 +57,7 @@ def open_panel_frontend(url: str) -> None:
 
 
 async def run_panel(
-    panel: PanelConfig,
+    panel: PlatformConfig,
     ops: OpsRuntime,
     *,
     storage: StorageConfig,
@@ -71,8 +71,8 @@ async def run_panel(
         return None
     await runtime.server.start()
     notice(runtime.settings, runtime.store)
-    if panel.open_browser and panel.frontend_url is not None:
-        open_frontend(panel.frontend_url)
+    if bool(panel.settings("open_browser", False)) and panel.settings("frontend_url") is not None:
+        open_frontend(str(panel.settings("frontend_url")))
     return runtime
 
 
