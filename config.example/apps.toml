@@ -1,3 +1,4 @@
+# 内建 Clock 应用
 [[app]]
 package = "org.aurora.clock"
 enabled = false
