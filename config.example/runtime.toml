@@ -1,39 +1,5 @@
-# 运行时配置 — 进程级别参数。
-#
-# AgentTree 组合读取 runtime.tree；start 同时读取 runtime.console.enabled。
-
 [runtime]
-# 激活的 profile（prod / dev），控制 profile 文件的选择
 profile = "prod"
-
-[runtime.tree]
-# 当前 AgentTree 的 root 节点入口
 node_id = "root"
 agent = "builtin.root"
-
-[runtime.panel]
-# 本地运维面板后端开关；关闭时只禁用 HTTP 接入，不影响 Console
-enabled = true
-# HTTP 绑定地址，必须为 loopback
-host = "127.0.0.1"
-# HTTP 端口，1–65535
-port = 8765
-# 面板前端地址（open_browser 与终端登录提示使用），必须属于 allowed_origins
-frontend_url = "http://localhost:8766"
-# 允许的跨域来源（面板前端开发服务器）
-allowed_origins = [
-    "http://localhost:8764",
-    "http://127.0.0.1:8764",
-    "http://localhost:8766",
-    "http://127.0.0.1:8766",
-]
-# 启动后是否自动打开浏览器
-open_browser = false
-# 会话超时（秒）
-session_ttl_seconds = 604800
-
-[runtime.console]
-# start 默认是否启动本地交互终端；--headless 可在单次启动中禁用
-enabled = true
-# 预留终端日志开关
-terminal_logs = false
+log_level = "INFO"

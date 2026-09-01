@@ -1,7 +1,0 @@
-# 环境 profile 配置。
-
-[dev]
-profile = "dev"
-
-[prod]
-profile = "prod"

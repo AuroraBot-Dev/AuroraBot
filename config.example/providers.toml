@@ -1,0 +1,20 @@
+[[provider]]
+name = "deepseek"
+adapter = "litellm"
+secret_env = "DEEPSEEK_API_KEY"
+
+[[provider]]
+name = "xiaomi_mimo"
+adapter = "litellm"
+secret_env = "XIAOMI_MIMO_API_KEY"
+
+[[provider]]
+name = "openai"
+adapter = "litellm"
+secret_env = "OPENAI_API_KEY"
+
+[[provider]]
+name = "siliconflow"
+adapter = "openai_compatible"
+base_url = "https://api.siliconflow.cn/v1"
+secret_env = "SILICONFLOW_API_KEY"

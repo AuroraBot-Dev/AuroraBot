@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
-from aurora.config import ConfigKey
+from aurora.config import ConfigSpec
 from aurora.utils.toml import (
     TomlTable,
     boolean,
@@ -27,8 +27,6 @@ from aurora.utils.toml import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from aurora.config import ConfigCollector
 
 type McpTransport = Literal["stdio", "streamable_http"]
 type McpEventMode = Literal["disabled", "world_events", "legacy_aurora_event"]
@@ -99,13 +97,6 @@ class AppsConfig:
         check_unique_items(tuple(packages), "app.package")
 
 
-APPS_CONFIG = ConfigKey[AppsConfig]("apps")
-
-
-def register(configs: ConfigCollector) -> None:
-    configs.register(APPS_CONFIG, "config/apps.toml", _parse)
-
-
 def _parse(path: Path) -> AppsConfig:
     document = load_toml(path)
     require_fields(document, frozenset({"app"}), frozenset({"app"}), "apps.toml")
@@ -114,16 +105,11 @@ def _parse(path: Path) -> AppsConfig:
 
 
 def _parse_app(raw: TomlTable) -> AppConfig:
-    transport_value = text(raw, "transport")
-    if transport_value not in _TRANSPORTS:
-        raise ValueError("app.transport 必须是 stdio 或 streamable_http")
-    transport = cast("McpTransport", transport_value)
+    transport = cast("McpTransport", text(raw, "transport"))
     allowed = _STDIO_FIELDS if transport == "stdio" else _HTTP_FIELDS
     required = (_STDIO_FIELDS - {"event_mode"}) if transport == "stdio" else (_COMMON_FIELDS - {"event_mode"}) | {"url"}
     require_fields(raw, allowed, required, f"{transport} app")
     event_mode_value = optional_text(raw, "event_mode") or "disabled"
-    if event_mode_value not in _EVENT_MODES:
-        raise ValueError("app.event_mode 不受支持")
     common = {
         "package": text(raw, "package"),
         "enabled": boolean(raw, "enabled"),
@@ -151,4 +137,8 @@ def _validate_environment_names(values: tuple[str, ...], label: str) -> None:
         check_environment_name(item, label)
 
 
-__all__ = ["APPS_CONFIG", "AppConfig", "AppsConfig", "McpEventMode", "McpTransport", "register"]
+APPS_CONFIG = ConfigSpec[AppsConfig](
+    name="apps",
+    path="config/apps.toml",
+    parse=_parse,
+)

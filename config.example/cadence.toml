@@ -1,29 +1,6 @@
-# 节律策略 — 主动提交 cadence.tick，并按世界提交阈值唤起 AgentTree。
-#
-# 匹配 reactive 规则的 MCP 事件立即唤起会话树；其余 MCP 业务事件逐条唤起 triage，
-# 同时每隔 tick_seconds 提交一次节律事件。
-
 [cadence]
-# start 时是否启动 cadence 后台循环
 enabled = true
-# 节律唤起时使用的 Agent definition
 agent = "builtin.triage"
-# 每条未命中即时规则的 MCP 业务事件唤起一棵 AgentTree
 evoke_every = 1
-# 节律事件间隔（秒）
 tick_seconds = 3600
-# 世界线轮询间隔（秒）
 poll_seconds = 0.25
-
-# 私聊即时进入轻量会话 Agent
-[[cadence.reactive]]
-source = "mcp:org.aurora.qq"
-event_kind = "qq.message.private"
-agent = "builtin.chat"
-
-# 群聊只在明确叫到 Bot 名字时即时回复
-[[cadence.reactive]]
-source = "mcp:org.aurora.qq"
-event_kind = "qq.message.group"
-agent = "builtin.chat"
-contains_any = ["小光", "夜曦光"]

@@ -1,49 +1,54 @@
-"""解析并注册 ``config/platforms.toml`` 的 MCP 客户端偏好。"""
+"""解析并注册 ``config/platforms.toml`` 的可拓展平台对象。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
 
-from aurora.config import ConfigKey
-from aurora.utils.toml import boolean, load_toml, require_exact_fields, table
+from aurora.config import (
+    ConfigSpec,
+    TableArrayShape,
+    boolean_field,
+    optional_table_field,
+    optional_text_field,
+    text_field,
+)
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from aurora.config import ConfigCollector
+_PLATFORM_IDS = frozenset({"builtin.console", "builtin.panel", "builtin.mcp"})
 
 
 @dataclass(frozen=True, slots=True)
-class McpPlatformConfig:
-    """MCP 客户端总开关与终端诊断偏好。"""
+class PlatformConfig:
+    """一个可拓展的平台声明；enabled 与 logging 只解析，暂不驱动实现。"""
 
+    id: str
     enabled: bool
-    terminal_logs: bool
+    logging: str | None = None
+    config: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.id not in _PLATFORM_IDS:
+            raise ValueError(f"未知平台 id：{self.id}")
+        normalized = self.logging or "INFO"
+        if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NONE"}:
+            raise ValueError("platform.logging 必须是日志级别或 NONE")
+        object.__setattr__(self, "logging", normalized)
+
+    def settings(self, key: str, default: object = None) -> object:
+        """读取平台私有配置；暂不做类型检查。"""
+        return self.config.get(key, default)
 
 
-@dataclass(frozen=True, slots=True)
-class PlatformsConfig:
-    """当前项目支持的平台适配偏好。"""
-
-    mcp: McpPlatformConfig
-
-
-PLATFORMS_CONFIG = ConfigKey[PlatformsConfig]("platforms")
-
-
-def register(configs: ConfigCollector) -> None:
-    configs.register(PLATFORMS_CONFIG, "config/platforms.toml", _parse)
-
-
-def _parse(path: Path) -> PlatformsConfig:
-    document = load_toml(path)
-    require_exact_fields(document, frozenset({"platform"}), "platforms.toml")
-    platform = table(document, "platform")
-    require_exact_fields(platform, frozenset({"mcp"}), "platform")
-    mcp = table(platform, "mcp")
-    require_exact_fields(mcp, frozenset({"enabled", "terminal_logs"}), "platform.mcp")
-    return PlatformsConfig(McpPlatformConfig(boolean(mcp, "enabled"), boolean(mcp, "terminal_logs")))
-
-
-__all__ = ["PLATFORMS_CONFIG", "McpPlatformConfig", "PlatformsConfig", "register"]
+PLATFORMS_CONFIG = ConfigSpec[tuple[PlatformConfig, ...]](
+    name="platforms",
+    path="config/platforms.toml",
+    shape=TableArrayShape(
+        path=("platform",),
+        fields=(
+            text_field("id"),
+            boolean_field("enabled"),
+            optional_text_field("logging"),
+            optional_table_field("config"),
+        ),
+        model=PlatformConfig,
+    ),
+)
