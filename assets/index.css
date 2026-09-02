@@ -16,6 +16,24 @@
   unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF;
 }
 
+@font-face {
+  font-family: "Punctuation SC";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: local("PingFang SC Regular"), local("Noto Sans CJK SC"), local("Microsoft YaHei");
+  unicode-range: U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
+}
+
+@font-face {
+  font-family: "Punctuation SC";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: local("PingFang SC Regular"), local("Noto Sans CJK SC"), local("Microsoft YaHei");
+  unicode-range: U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
+}
+
 :root {
   color-scheme: light;
   --paper: #f5f4ed;
@@ -30,6 +48,8 @@
   --line-soft: #e5e3d8;
   --serif: "KingHwa", "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif CJK TC", "Songti SC", STSong,
     SimSun, "Iowan Old Style", Charter, Georgia, serif;
+  --vp-font-family-base: "Punctuation SC", "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --ui: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", sans-serif;
   --mono: "SFMono-Regular", ui-monospace, Consolas, "Cascadia Mono", "Liberation Mono",
@@ -120,9 +140,9 @@ strong {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--serif);
-  font-size: 19px;
-  font-weight: 500;
+  font-family: var(--vp-font-family-base);
+  font-size: 18px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -151,28 +171,37 @@ strong {
   transition: border-color var(--ease), color var(--ease), background-color var(--ease);
 }
 
-.icon-button svg {
+.icon-button .icon {
+  display: inline-block;
   width: 16px;
   height: 16px;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) no-repeat center / contain;
+  mask: var(--icon) no-repeat center / contain;
+}
+
+.icon-language {
+  --icon: url("icons/language.svg");
+}
+
+.icon-moon {
+  --icon: url("icons/moon.svg");
+}
+
+.icon-sun {
+  --icon: url("icons/sun.svg");
+}
+
+.icon-docs {
+  --icon: url("icons/docs.svg");
+}
+
+.icon-github {
+  --icon: url("icons/github.svg");
 }
 
 .language-picker {
   position: relative;
-}
-
-.language-toggle {
-  width: auto;
-  min-width: 52px;
-  padding: 0 10px;
-  grid-auto-flow: column;
-  gap: 6px;
-}
-
-.language-code {
-  min-width: 16px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
 }
 
 .language-menu {
@@ -218,13 +247,9 @@ strong {
   transform: translateY(-50%);
 }
 
-.sun,
-:root[data-theme="dark"] .moon {
+:root:not([data-theme="dark"]) .icon-button .icon-sun,
+:root[data-theme="dark"] .icon-button .icon-moon {
   display: none;
-}
-
-:root[data-theme="dark"] .sun {
-  display: block;
 }
 
 .hero {
