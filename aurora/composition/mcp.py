@@ -60,7 +60,7 @@ MODULE_SPEC = ModuleSpec(key=MCP_RUNTIME, requires=(), register=_register)
 
 def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
     """映射纯 DTO 与当前进程的显式凭据为协议适配说明。"""
-    apps = config.get(APPS_CONFIG).apps
+    apps = config.get(APPS_CONFIG)
     platform = _mcp_platform(config)
     project_root = config.project_root.resolve()
     terminal_logs = platform.logging != "NONE"

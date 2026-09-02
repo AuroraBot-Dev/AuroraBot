@@ -6,7 +6,7 @@ import pytest
 
 from aurora import load_config
 from aurora.config import assemble_config
-from aurora.configuration.apps import APPS_CONFIG, AppConfig, AppsConfig
+from aurora.configuration.apps import APPS_CONFIG, AppConfig
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from src.mcp import McpAppSpec, McpEventMode, McpTransport
 
@@ -41,7 +41,7 @@ _EXPECTED_TIMEOUT_SECONDS = 30.0
 _TEMPLATE_PANEL_PORT = 8765
 
 
-def _load_apps(tmp_path: Path, content: str) -> AppsConfig:
+def _load_apps(tmp_path: Path, content: str) -> tuple[AppConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "apps.toml").write_text(content, encoding="utf-8")
@@ -60,14 +60,13 @@ def test_template_exports_typed_frozen_mcp_configuration(configured_project: Pat
     app_configuration = configuration.get(APPS_CONFIG)
     platform_configuration = configuration.get(PLATFORMS_CONFIG)
 
-    assert isinstance(app_configuration, AppsConfig)
-    assert len(app_configuration.apps) == _EXPECTED_TEMPLATE_APPS
-    assert all(isinstance(app, AppConfig) for app in app_configuration.apps)
-    assert all(app.enabled is False for app in app_configuration.apps)
-    assert app_configuration.apps[0].event_mode == "disabled"
-    assert app_configuration.apps[1].event_mode == "disabled"
-    assert app_configuration.apps[2].event_mode == "world_events"
-    assert app_configuration.apps[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
+    assert len(app_configuration) == _EXPECTED_TEMPLATE_APPS
+    assert all(isinstance(app, AppConfig) for app in app_configuration)
+    assert all(app.enabled is False for app in app_configuration)
+    assert app_configuration[0].event_mode == "disabled"
+    assert app_configuration[1].event_mode == "disabled"
+    assert app_configuration[2].event_mode == "world_events"
+    assert app_configuration[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
     assert [item.id for item in platform_configuration] == ["builtin.console", "builtin.panel", "builtin.mcp"]
     assert all(item.enabled for item in platform_configuration if item.id != "builtin.panel")
     assert all(item.logging == "INFO" for item in platform_configuration)
@@ -80,7 +79,7 @@ def test_template_exports_typed_frozen_mcp_configuration(configured_project: Pat
 @pytest.mark.parametrize("event_mode", ("disabled", "world_events", "legacy_aurora_event"))
 def test_stdio_accepts_each_event_mode_and_project_relative_directory(tmp_path: Path, event_mode: str) -> None:
     configuration = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"', f'event_mode = "{event_mode}"'))
-    app = configuration.apps[0]
+    app = configuration[0]
 
     assert app.package == "org.example.clock"
     assert app.working_dir == "extensions/clock"
@@ -90,8 +89,8 @@ def test_stdio_accepts_each_event_mode_and_project_relative_directory(tmp_path: 
 
 
 def test_streamable_http_uses_https_and_optional_auth_environment(tmp_path: Path) -> None:
-    with_auth = _load_apps(tmp_path, _HTTP).apps[0]
-    without_auth = _load_apps(tmp_path, _HTTP.replace('auth_env = "MCP_BEARER_TOKEN"\n', "")).apps[0]
+    with_auth = _load_apps(tmp_path, _HTTP)[0]
+    without_auth = _load_apps(tmp_path, _HTTP.replace('auth_env = "MCP_BEARER_TOKEN"\n', ""))[0]
 
     assert with_auth.url == "https://mcp.example.org/rpc"
     assert with_auth.auth_env == "MCP_BEARER_TOKEN"
@@ -116,7 +115,7 @@ def test_streamable_http_rejects_world_events_in_config_dto_and_runtime_spec(tmp
 
 
 def test_empty_app_directory_is_valid(tmp_path: Path) -> None:
-    assert _load_apps(tmp_path, "app = []\n") == AppsConfig(())
+    assert _load_apps(tmp_path, "app = []\n") == ()
 
 
 @pytest.mark.parametrize(
@@ -134,7 +133,7 @@ def test_apps_rejects_unknown_missing_and_invalid_topology(tmp_path: Path, conte
 
 
 def test_missing_event_mode_defaults_to_disabled_for_existing_personal_config(tmp_path: Path) -> None:
-    app = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"\n', "")).apps[0]
+    app = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"\n', ""))[0]
 
     assert app.event_mode == "disabled"
 

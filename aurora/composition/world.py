@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from aurora.composer import InstanceKey, ModuleSpec
-from aurora.configuration.storage import STORAGE_CONFIG
+from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
 from aurora.views import commit_dict
 from src.contracts import WorldJournal
 from src.utils import parse_event_time
@@ -83,6 +83,5 @@ MODULE_SPEC = ModuleSpec(key=WORLD_JOURNAL, requires=(), register=_register)
 
 def build_world(config: AuroraConfig) -> WorldJournal:
     """为异步启动阶段构造尚未初始化的唯一 WorldJournal。"""
-    storage = config.get(STORAGE_CONFIG)
-    database_path = config.project_root / storage.resolve("world") / "world.sqlite3"
+    database_path = config.project_root / resolve_directory(config.get(STORAGE_CONFIG), "world") / "world.sqlite3"
     return SqlAlchemyWorldJournal(database_path)

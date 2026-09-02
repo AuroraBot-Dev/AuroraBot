@@ -17,7 +17,7 @@ from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.memory import MEMORY
 from aurora.composition.prompt import PROMPT_ASSEMBLER
 from aurora.config import ConfigSpec, assemble_config
-from aurora.configuration.agents import AGENTS_CONFIG, AgentsConfig
+from aurora.configuration.agents import AGENTS_CONFIG
 from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.memory import MEMORY_CONFIG
@@ -52,7 +52,7 @@ class FakeModel:
 def test_project_configuration_builds_complete_runtime(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     runtime_configuration = configuration.get(RUNTIME_CONFIG)
-    definitions = configuration.get(AGENTS_CONFIG).agents
+    definitions = configuration.get(AGENTS_CONFIG)
     root_definition = next(item for item in definitions if item.id == runtime_configuration.agent)
     model = FakeModel()
     runtime = assemble_runtime(configuration, model)
@@ -189,18 +189,14 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
     agents = configuration.get(AGENTS_CONFIG)
     with_wildcard = configuration.with_value(
         AGENTS_CONFIG,
-        AgentsConfig(
-            tuple(
-                replace(
-                    item,
-                    tools=tuple(
-                        (*item.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")
-                    ),
-                )
-                if item.id == "builtin.root"
-                else item
-                for item in agents.agents
+        tuple(
+            replace(
+                item,
+                tools=tuple((*item.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")),
             )
+            if item.id == "builtin.root"
+            else item
+            for item in agents
         ),
     )
     qq_tools = (
@@ -220,10 +216,10 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
     configuration = load_config(configured_project)
     agents = configuration.get(AGENTS_CONFIG)
-    root = agents.agents[0]
+    root = agents[0]
     invalid = configuration.with_value(
         AGENTS_CONFIG,
-        AgentsConfig((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents.agents[1:])),
+        tuple((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents[1:])),
     )
 
     with pytest.raises(ValueError, match="引用了未注册名称"):
@@ -234,7 +230,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
     configuration = load_config(configured_project)
     runtime = configuration.get(RUNTIME_CONFIG)
     agents = configuration.get(AGENTS_CONFIG)
-    root = agents.agents[0]
+    root = agents[0]
 
     with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
         assemble_runtime(configuration.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
@@ -242,7 +238,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, prompt="missing"), *agents.agents[1:])),
+                tuple((replace(root, prompt="missing"), *agents[1:])),
             ),
             FakeModel(),
         )
@@ -250,7 +246,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, model="missing"), *agents.agents[1:])),
+                tuple((replace(root, model="missing"), *agents[1:])),
             ),
             FakeModel(),
         )
@@ -258,7 +254,7 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(
             configuration.with_value(
                 AGENTS_CONFIG,
-                AgentsConfig((replace(root, tools=()), *agents.agents[1:])),
+                tuple((replace(root, tools=()), *agents[1:])),
             ),
             FakeModel(),
         )

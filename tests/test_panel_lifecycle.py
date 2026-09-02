@@ -11,7 +11,7 @@ import tomlkit
 
 from aurora import load_config
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
-from aurora.configuration.storage import StorageConfig, StorageEntry
+from aurora.configuration.storage import StorageEntry
 from aurora.runtime import run as runtime_module
 from aurora.runtime.panel import run_panel
 from src.contracts import ChatMessage, ModelRequest
@@ -126,7 +126,7 @@ def test_run_panel_serves_notices_then_opens_frontend(monkeypatch: pytest.Monkey
         run_panel(
             panel_config,
             cast("Any", None),
-            storage=StorageConfig((StorageEntry("DATA_ROOT", "data"), StorageEntry("ops", "%DATA_ROOT%/ops"))),
+            storage=(StorageEntry("DATA_ROOT", "data"), StorageEntry("ops", "%DATA_ROOT%/ops")),
             project_root=Path(),
             profile="prod",
             notice=lambda settings, store: trace.append("panel.notice"),
@@ -145,7 +145,7 @@ def test_run_panel_disabled_returns_none_without_serving() -> None:
         run_panel(
             panel_config,
             cast("Any", None),
-            storage=StorageConfig((StorageEntry("DATA_ROOT", "data"), StorageEntry("ops", "%DATA_ROOT%/ops"))),
+            storage=(StorageEntry("DATA_ROOT", "data"), StorageEntry("ops", "%DATA_ROOT%/ops")),
             project_root=Path(),
             profile="prod",
         )

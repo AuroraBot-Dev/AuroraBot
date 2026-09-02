@@ -7,7 +7,7 @@ import pytest
 from aurora import load_config
 from aurora.config import assemble_config
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
-from aurora.configuration.storage import STORAGE_CONFIG, StorageConfig
+from aurora.configuration.storage import STORAGE_CONFIG, StorageEntry, resolve_directory
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,7 +45,7 @@ def _load_platforms(tmp_path: Path, content: str) -> tuple[PlatformConfig, ...]:
     return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
 
 
-def _load_storage(tmp_path: Path, content: str) -> StorageConfig:
+def _load_storage(tmp_path: Path, content: str) -> tuple[StorageEntry, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "storage.toml").write_text(content, encoding="utf-8")
@@ -69,11 +69,11 @@ def test_template_exports_typed_panel_platform_configuration(configured_project:
 def test_template_exports_typed_storage_paths(configured_project: Path) -> None:
     storage = load_config(configured_project).get(STORAGE_CONFIG)
 
-    assert storage.resolve("DATA_ROOT") == "data"
-    assert storage.resolve("world") == "data/world"
-    assert storage.resolve("ops") == "data/ops"
-    assert storage.resolve("logs") == "data/logs"
-    assert [entry.name for entry in storage.entries] == ["DATA_ROOT", "world", "ops", "logs"]
+    assert resolve_directory(storage, "DATA_ROOT") == "data"
+    assert resolve_directory(storage, "world") == "data/world"
+    assert resolve_directory(storage, "ops") == "data/ops"
+    assert resolve_directory(storage, "logs") == "data/logs"
+    assert [entry.name for entry in storage] == ["DATA_ROOT", "world", "ops", "logs"]
 
 
 def test_panel_platform_parses_config_dict(tmp_path: Path) -> None:
@@ -107,7 +107,7 @@ def test_storage_rejects_non_project_relative_directories(tmp_path: Path, path: 
     storage = _load_storage(tmp_path, content)
 
     with pytest.raises(ValueError, match="项目内相对目录"):
-        storage.resolve("ops")
+        resolve_directory(storage, "ops")
 
 
 def test_storage_rejects_unknown_variable_reference(tmp_path: Path) -> None:
@@ -115,7 +115,7 @@ def test_storage_rejects_unknown_variable_reference(tmp_path: Path) -> None:
     storage = _load_storage(tmp_path, content)
 
     with pytest.raises(ValueError, match="未声明的变量"):
-        storage.resolve("ops")
+        resolve_directory(storage, "ops")
 
 
 def test_storage_rejects_cyclic_variable_reference(tmp_path: Path) -> None:
@@ -123,4 +123,4 @@ def test_storage_rejects_cyclic_variable_reference(tmp_path: Path) -> None:
     storage = _load_storage(tmp_path, content)
 
     with pytest.raises(ValueError, match="循环引用"):
-        storage.resolve("A")
+        resolve_directory(storage, "A")

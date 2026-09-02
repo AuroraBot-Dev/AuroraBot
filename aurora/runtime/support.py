@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.configuration.storage import STORAGE_CONFIG
+from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
 from src.utils import configure_console_logging, configure_logging
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ class InstalledSignal:
 def configure_project_logging(config: AuroraConfig) -> None:
     """在其他运行时效果前应用项目日志配置。"""
     runtime = config.get(RUNTIME_CONFIG)
-    logfile = config.project_root / config.get(STORAGE_CONFIG).resolve("logs") / "aurora.log"
+    logfile = config.project_root / resolve_directory(config.get(STORAGE_CONFIG), "logs") / "aurora.log"
     configure_console_logging(enabled=True, level=runtime.log_level)
     configure_logging(runtime.log_level, logfile)
 

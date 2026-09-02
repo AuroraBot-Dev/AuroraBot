@@ -86,22 +86,13 @@ class AppConfig:
             _validate_environment_names((self.auth_env,), "app.auth_env")
 
 
-@dataclass(frozen=True, slots=True)
-class AppsConfig:
-    """全部已配置 MCP App 的不可变目录。"""
-
-    apps: tuple[AppConfig, ...]
-
-    def __post_init__(self) -> None:
-        packages = [app.package for app in self.apps]
-        check_unique_items(tuple(packages), "app.package")
-
-
-def _parse(path: Path) -> AppsConfig:
+def _parse(path: Path) -> tuple[AppConfig, ...]:
     document = load_toml(path)
     require_fields(document, frozenset({"app"}), frozenset({"app"}), "apps.toml")
     raw_apps = table_array(document, "app")
-    return AppsConfig(tuple(_parse_app(item) for item in raw_apps))
+    apps = tuple(_parse_app(item) for item in raw_apps)
+    check_unique_items(tuple(app.package for app in apps), "app.package")
+    return apps
 
 
 def _parse_app(raw: TomlTable) -> AppConfig:
@@ -137,7 +128,7 @@ def _validate_environment_names(values: tuple[str, ...], label: str) -> None:
         check_environment_name(item, label)
 
 
-APPS_CONFIG = ConfigSpec[AppsConfig](
+APPS_CONFIG = ConfigSpec[tuple[AppConfig, ...]](
     name="apps",
     path="config/apps.toml",
     parse=_parse,

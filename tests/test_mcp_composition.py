@@ -11,7 +11,7 @@ from aurora.composition import compose_project
 from aurora.composition.ai import MODEL
 from aurora.composition.mcp import build_mcp_specs
 from aurora.configuration import load_config
-from aurora.configuration.apps import APPS_CONFIG, AppConfig, AppsConfig
+from aurora.configuration.apps import APPS_CONFIG, AppConfig
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.runtime import AuroraRuntime, assemble_runtime, run_project
 from aurora.runtime import run as runtime_module
@@ -225,18 +225,16 @@ def _active_config(project_root: Path) -> AuroraConfig:
     config = load_config(project_root)
     return config.with_value(
         APPS_CONFIG,
-        AppsConfig(
-            (
-                AppConfig(
-                    package=_PACKAGE,
-                    enabled=True,
-                    transport="stdio",
-                    event_mode="disabled",
-                    timeout_seconds=5,
-                    working_dir="mcp-server",
-                    command=("fake-mcp",),
-                ),
-            )
+        (
+            AppConfig(
+                package=_PACKAGE,
+                enabled=True,
+                transport="stdio",
+                event_mode="disabled",
+                timeout_seconds=5,
+                working_dir="mcp-server",
+                command=("fake-mcp",),
+            ),
         ),
     ).with_value(PLATFORMS_CONFIG, _active_platforms())
 
@@ -261,28 +259,26 @@ def test_build_mcp_specs_only_forwards_whitelisted_environment_and_hides_credent
         load_config(configured_project)
         .with_value(
             APPS_CONFIG,
-            AppsConfig(
-                (
-                    AppConfig(
-                        package="org.example.local",
-                        enabled=True,
-                        transport="stdio",
-                        event_mode="disabled",
-                        timeout_seconds=5,
-                        working_dir="mcp-server",
-                        command=("fake-mcp",),
-                        env=("AURORA_MCP_ALLOWED",),
-                    ),
-                    AppConfig(
-                        package="org.example.remote",
-                        enabled=True,
-                        transport="streamable_http",
-                        event_mode="disabled",
-                        timeout_seconds=5,
-                        url="https://mcp.example.test/rpc",
-                        auth_env="AURORA_MCP_HTTP_TOKEN",
-                    ),
-                )
+            (
+                AppConfig(
+                    package="org.example.local",
+                    enabled=True,
+                    transport="stdio",
+                    event_mode="disabled",
+                    timeout_seconds=5,
+                    working_dir="mcp-server",
+                    command=("fake-mcp",),
+                    env=("AURORA_MCP_ALLOWED",),
+                ),
+                AppConfig(
+                    package="org.example.remote",
+                    enabled=True,
+                    transport="streamable_http",
+                    event_mode="disabled",
+                    timeout_seconds=5,
+                    url="https://mcp.example.test/rpc",
+                    auth_env="AURORA_MCP_HTTP_TOKEN",
+                ),
             ),
         )
         .with_value(PLATFORMS_CONFIG, _active_platforms())

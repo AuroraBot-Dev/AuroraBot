@@ -10,7 +10,7 @@ import pytest
 
 from aurora import assemble_runtime, load_config
 from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.configuration.storage import STORAGE_CONFIG
+from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
 from aurora.runtime.support import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
 from src.tools import ToolRegistry
@@ -64,7 +64,7 @@ def test_logging_configuration_is_typed_and_project_relative(configured_project:
 
     assert runtime.log_level == "INFO"
     storage = load_config(configured_project).get(STORAGE_CONFIG)
-    assert storage.resolve("logs") == "data/logs"
+    assert resolve_directory(storage, "logs") == "data/logs"
 
 
 @pytest.mark.parametrize("level", ("TRACE", "warn", "WARN", ""))
@@ -99,7 +99,11 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
         await runtime.world.close()
 
     asyncio.run(scenario())
-    logfile = configured_project / load_config(configured_project).get(STORAGE_CONFIG).resolve("logs") / "aurora.log"
+    logfile = (
+        configured_project
+        / resolve_directory(load_config(configured_project).get(STORAGE_CONFIG), "logs")
+        / "aurora.log"
+    )
     content = logfile.read_text(encoding="utf-8")
 
     assert "AgentTree 开始 tree_id=logging-tree" in content

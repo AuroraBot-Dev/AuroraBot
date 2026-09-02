@@ -6,6 +6,7 @@ import webbrowser
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+from aurora.configuration.storage import resolve_directory
 from ops.panel import PanelServer, PanelSettings, PanelStore, create_panel_app, print_panel_notice
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora.configuration.platforms import PlatformConfig
-    from aurora.configuration.storage import StorageConfig
+    from aurora.configuration.storage import StorageEntry
     from ops.runtime import OpsRuntime
 
 
@@ -24,15 +25,15 @@ class PanelRuntime:
     server: PanelServer
 
 
-def panel_data_directory(storage: StorageConfig, project_root: Path) -> Path:
-    return project_root / storage.resolve("ops")
+def panel_data_directory(storage: tuple[StorageEntry, ...], project_root: Path) -> Path:
+    return project_root / resolve_directory(storage, "ops")
 
 
 def build_panel_runtime(
     panel: PlatformConfig,
     ops: OpsRuntime,
     *,
-    storage: StorageConfig,
+    storage: tuple[StorageEntry, ...],
     project_root: Path,
     profile: str,
 ) -> PanelRuntime | None:
@@ -60,7 +61,7 @@ async def run_panel(
     panel: PlatformConfig,
     ops: OpsRuntime,
     *,
-    storage: StorageConfig,
+    storage: tuple[StorageEntry, ...],
     project_root: Path,
     profile: str,
     notice: Callable[[PanelSettings, PanelStore], None] = print_panel_notice,

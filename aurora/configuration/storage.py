@@ -30,23 +30,7 @@ class StorageEntry:
     description: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class StorageConfig:
-    """命名存储目录集合；resolve() 展开 ``%VAR%`` 引用并规整路径。"""
-
-    entries: tuple[StorageEntry, ...]
-
-    def resolve(self, name: str) -> str:
-        """按 name 查找目录并递归展开变量，返回规整后的项目相对路径。"""
-        by_name = {entry.name: entry for entry in self.entries}
-        if name not in by_name:
-            raise ValueError(f"storage 目录尚未声明：{name}")
-        resolved = _expand(by_name, name, set())
-        check_relative_directory(resolved, f"storage.{name}")
-        return _normalize(resolved)
-
-
-def _parse(path: Path) -> StorageConfig:
+def _parse(path: Path) -> tuple[StorageEntry, ...]:
     raw_entries = table_array(load_toml(path), "storage")
     entries = tuple(
         StorageEntry(
@@ -61,7 +45,17 @@ def _parse(path: Path) -> StorageConfig:
         raise ValueError("storage.toml 至少需要声明一个目录")
     if len(names) != len(set(names)):
         raise ValueError("storage 目录名不能重复")
-    return StorageConfig(entries)
+    return entries
+
+
+def resolve_directory(entries: tuple[StorageEntry, ...], name: str) -> str:
+    """按 name 查找目录并递归展开变量，返回规整后的项目相对路径。"""
+    by_name = {entry.name: entry for entry in entries}
+    if name not in by_name:
+        raise ValueError(f"storage 目录尚未声明：{name}")
+    resolved = _expand(by_name, name, set())
+    check_relative_directory(resolved, f"storage.{name}")
+    return _normalize(resolved)
 
 
 def _expand(
@@ -90,7 +84,7 @@ def _normalize(path: str) -> str:
     return "/".join(parts)
 
 
-STORAGE_CONFIG = ConfigSpec[StorageConfig](
+STORAGE_CONFIG = ConfigSpec[tuple[StorageEntry, ...]](
     name="storage",
     path="config/storage.toml",
     parse=_parse,

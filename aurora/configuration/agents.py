@@ -22,12 +22,7 @@ class AgentConfig:
     children: frozenset[str]
 
 
-@dataclass(frozen=True, slots=True)
-class AgentsConfig:
-    agents: tuple[AgentConfig, ...]
-
-
-AGENTS_CONFIG = ConfigSpec[AgentsConfig](
+AGENTS_CONFIG = ConfigSpec[tuple[AgentConfig, ...]](
     name="agents",
     path="config/agents.toml",
     shape=TableArrayShape(
@@ -41,6 +36,5 @@ AGENTS_CONFIG = ConfigSpec[AgentsConfig](
             strings_field("children", transform=frozenset),
         ),
         model=AgentConfig,
-        container=AgentsConfig,
     ),
 )

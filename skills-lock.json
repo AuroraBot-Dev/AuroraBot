@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "archify/SKILL.md",
       "computedHash": "db2c8625426455a3f5ab52f65b627a16dbf6b1d623162575fb27ac87392ac3e7"
+    },
+    "kami": {
+      "source": "tw93/kami",
+      "sourceType": "github",
+      "skillPath": "plugins/kami/skills/kami/SKILL.md",
+      "computedHash": "5896b343898d5aa70a9243fe015617b4c77fa3470c5a8432f02de62fb68dba2c"
     }
   }
 }

@@ -41,7 +41,6 @@ _BUILTIN_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TRE
 
 
 def _register(context: CompositionContext) -> None:
-    configuration = context.config.get(AGENTS_CONFIG)
     external: tuple[Tool, ...] = context.require(EXTERNAL_TOOLS) if context.contains(EXTERNAL_TOOLS) else ()
     available = _BUILTIN_NAMES | frozenset(tool.definition.name for tool in external)
     agents = AgentCatalog(
@@ -53,7 +52,7 @@ def _register(context: CompositionContext) -> None:
             resolve_names(available, item.tools, label=item.id),
             item.children,
         )
-        for item in configuration.agents
+        for item in context.config.get(AGENTS_CONFIG)
     )
     context.provide(AGENTS, agents)
     context.provide(AGENTS_OPS, AgentOps(agents))
