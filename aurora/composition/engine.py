@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from aurora.composer import InstanceKey, ModuleSpec
-from aurora.composition.agents import AGENTS
-from aurora.composition.ai import MODEL
-from aurora.composition.memory import MEMORY
-from aurora.composition.prompt import PROMPT_ASSEMBLER
-from aurora.composition.tools import TOOLS
-from aurora.composition.world import WORLD_JOURNAL
+from aurora.composer import InstanceKey, PackageSpec
 from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.endpoints import ENDPOINTS_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
@@ -23,8 +17,18 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from aurora.composer import CompositionContext
-    from src.contracts import AgentDefinition
+    from src.agents import AgentCatalog
+    from src.contracts import AgentDefinition, Model, WorldJournal
+    from src.memory import Memory
+    from src.prompt import PromptAssembler
+    from src.tools import ToolRegistry
 
+PROMPT_ASSEMBLER_NAME = "prompt.assembler"
+MODEL_NAME = "ai.model"
+AGENTS_NAME = "agents.catalog"
+TOOLS_NAME = "tools.registry"
+WORLD_JOURNAL_NAME = "world.journal"
+MEMORY_NAME = "memory.reader"
 
 ENGINE_RUNNER = InstanceKey[AgentTreeRunner]("engine.runner")
 
@@ -58,15 +62,15 @@ def _validate_cross_references(
             raise ValueError(f"{definition.definition_id} 的 children 与 {DELEGATE_TOOL} 可见性不一致")
 
 
-def _register(context: CompositionContext) -> None:
+def construct(context: CompositionContext) -> None:
     configuration = context.config.get(ENGINE_CONFIG)
     runtime = context.config.get(RUNTIME_CONFIG)
-    assembler = context.require(PROMPT_ASSEMBLER)
-    model = context.require(MODEL)
-    agents = context.require(AGENTS)
-    tools = context.require(TOOLS)
-    world = context.require(WORLD_JOURNAL)
-    memory = context.require(MEMORY)
+    assembler = cast("PromptAssembler", context.require_name(PROMPT_ASSEMBLER_NAME))
+    model = cast("Model", context.require_name(MODEL_NAME))
+    agents = cast("AgentCatalog", context.require_name(AGENTS_NAME))
+    tools = cast("ToolRegistry", context.require_name(TOOLS_NAME))
+    world = cast("WorldJournal", context.require_name(WORLD_JOURNAL_NAME))
+    memory = cast("Memory", context.require_name(MEMORY_NAME))
     prompts = assembler.catalog.agent_prompts
     endpoint_ids = frozenset(endpoint.name for endpoint in context.config.get(ENDPOINTS_CONFIG))
     cadence_agent = context.config.get(CADENCE_CONFIG).agent
@@ -96,8 +100,16 @@ def _register(context: CompositionContext) -> None:
     )
 
 
-MODULE_SPEC = ModuleSpec(
+PACKAGE_SPEC = PackageSpec(
     key=ENGINE_RUNNER,
-    requires=(PROMPT_ASSEMBLER, MODEL, AGENTS, TOOLS, WORLD_JOURNAL, MEMORY),
-    register=_register,
+    provides=(ENGINE_RUNNER,),
+    requires=(
+        PROMPT_ASSEMBLER_NAME,
+        MODEL_NAME,
+        AGENTS_NAME,
+        TOOLS_NAME,
+        WORLD_JOURNAL_NAME,
+        MEMORY_NAME,
+    ),
+    register=construct,
 )

@@ -1,4 +1,4 @@
-"""实例组合根：提供类型化实例注册与读取。"""
+"""实例组合根：提供类型化实例注册与读取，并冻结 ``AuroraConfig`` 为最终组装产物。"""
 
 from __future__ import annotations
 
@@ -29,52 +29,64 @@ class InstanceKey[T]:
 
 @dataclass(frozen=True, slots=True)
 class AuroraAssembly:
-    """组合完成后的只读实例集合。"""
+    """组合完成后的只读产物：``AuroraConfig`` 与全部已构造实例。
 
-    _instances: Mapping[InstanceKey[object], object]
+    config 在构造阶段即被各代表模块的 construct 读取；装入 assembly 是为了让 runtime
+    拿到单一对象后自行按键拆取所需实例与配置。
+    """
+
+    config: AuroraConfig
+    _instances: Mapping[str, object]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_instances", MappingProxyType(dict(self._instances)))
 
     def get[T](self, key: InstanceKey[T]) -> T:
         try:
-            instance = self._instances[cast("InstanceKey[object]", key)]
+            instance = self._instances[key.name]
         except KeyError as error:
             raise KeyError(f"实例尚未注册：{key.name}") from error
         return cast("T", instance)
 
     @property
     def names(self) -> tuple[str, ...]:
-        return tuple(key.name for key in self._instances)
+        return tuple(self._instances)
 
 
 @dataclass(slots=True)
 class CompositionContext:
-    """向各组合模块提供配置与已构造实例。"""
+    """向各代表模块提供配置与已构造实例。"""
 
     config: AuroraConfig
-    _instances: dict[InstanceKey[object], object] = field(default_factory=dict)
+    _instances: dict[str, object] = field(default_factory=dict)
     _names: set[str] = field(default_factory=set)
 
     def contains[T](self, key: InstanceKey[T]) -> bool:
         """返回一个分阶段预构造实例是否已经进入组合上下文。"""
         return key.name in self._names
 
+    def contains_name(self, name: str) -> bool:
+        """按键名返回分阶段预构造实例是否已经进入组合上下文。"""
+        return name in self._names
+
     def provide[T](self, key: InstanceKey[T], instance: T) -> None:
         if key.name in self._names:
             raise ValueError(f"实例重复注册：{key.name}")
         self._names.add(key.name)
-        self._instances[cast("InstanceKey[object]", key)] = instance
+        self._instances[key.name] = instance
 
     def require[T](self, key: InstanceKey[T]) -> T:
+        return cast("T", self.require_name(key.name))
+
+    def require_name(self, name: str) -> object:
+        """按键名读取已构造实例；代表模块用它拉取兄弟包的实例而不引入其模块。"""
         try:
-            instance = self._instances[cast("InstanceKey[object]", key)]
+            return self._instances[name]
         except KeyError as error:
-            raise KeyError(f"组合依赖尚未注册：{key.name}") from error
-        return cast("T", instance)
+            raise KeyError(f"组合依赖尚未注册：{name}") from error
 
     def finish(self) -> AuroraAssembly:
-        return AuroraAssembly(self._instances)
+        return AuroraAssembly(self.config, self._instances)
 
 
 type CompositionRegistrar = Callable[[CompositionContext], None]
@@ -88,6 +100,54 @@ class ModuleSpec:
     key: InstanceKey[object]
     requires: tuple[InstanceKey[object], ...]
     register: CompositionRegistrar
+
+
+@dataclass(frozen=True, slots=True)
+class PackageSpec:
+    """一个 src 包的组合代表：自持键、按名声明依赖、构造器。
+
+    代表模块只导出自身包的键；兄弟包的实例一律按键名声明并到构造期由
+    CompositionContext 提供，因此各代表模块之间不需要运行时相互 import。
+    """
+
+    key: InstanceKey[object]
+    provides: tuple[InstanceKey[object], ...]
+    requires: tuple[str, ...]
+    register: CompositionRegistrar
+
+    def __post_init__(self) -> None:
+        provided_names = {item.name for item in self.provides}
+        if self.key.name not in provided_names:
+            raise ValueError(f"代表主键 {self.key.name} 必须包含在 provides 中")
+        for name in self.requires:
+            if not name.strip():
+                raise ValueError("依赖键名不能为空")
+
+
+def build_module_specs(packages: Iterable[PackageSpec]) -> tuple[ModuleSpec, ...]:
+    """由包级代表规格合成可拓扑装配的模块规格。
+
+    requires 以键名声明；这里校验每个依赖键名有且只有一个提供者，并把键名解析为
+    提供包的代表主键，作为模块规格之间的依赖边。
+    """
+    listed = tuple(packages)
+    owners: dict[str, PackageSpec] = {}
+    for package in listed:
+        for key in package.provides:
+            if key.name in owners:
+                raise ValueError(f"实例键被多个代表模块声明提供：{key.name}")
+            owners[key.name] = package
+
+    resolved: list[ModuleSpec] = []
+    for package in listed:
+        deps: list[InstanceKey[object]] = []
+        for name in package.requires:
+            owner = owners.get(name)
+            if owner is None:
+                raise ValueError(f"{package.key.name} 依赖的实例键没有提供者：{name}")
+            deps.append(owner.key)
+        resolved.append(ModuleSpec(key=package.key, requires=tuple(deps), register=package.register))
+    return tuple(resolved)
 
 
 def _validate_dependencies(specs: tuple[ModuleSpec, ...]) -> None:

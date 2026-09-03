@@ -1,8 +1,11 @@
-"""项目级运行时门面：持有全部已装配实例并实现引擎、进程与配置重载端口。"""
+"""项目级进程门面：持有 AuroraAssembly，运行 AgentTree 并实现 ops 的进程面协议。
+
+ops 业务（监测端口与 JSON 投影）全部归 ops 侧：本模块只向 OpsRuntime 提供 AuroraAssembly
+并实现 TreeRuntimePort / ProcessRuntimePort / ConfigReloadPort 三个进程面协议。
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -10,90 +13,52 @@ from uuid import uuid4
 from rich.console import Console
 from rich.markup import escape as markup_escape
 
-from aurora import views
+from aurora.composition.agents import AGENTS
+from aurora.composition.cadence import CADENCE
+from aurora.composition.console import TERMINAL_CONSOLE
+from aurora.composition.engine import ENGINE_RUNNER
+from aurora.composition.mcp import MCP_RUNTIME
+from aurora.composition.memory import MEMORY
+from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration import load_config
-from aurora.views import UtilsOps
-from ops import ConfigAccess, ConfigSourceRef, OpsRuntime
+from aurora.configuration.runtime import RUNTIME_CONFIG
+from ops import views
 from ops.contracts import OperationControl
-from src.console import TerminalConsole, TerminalControl, TerminalResponse
+from ops.runtime import OpsRuntime
+from src.console import TerminalControl, TerminalResponse
 from src.contracts import AgentTree, EnvironmentEvent, WorldFrontier
 from src.utils import bounded_summary, get_logger, parse_event_time
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from aurora.config import AuroraConfig
+    from aurora.composer import AuroraAssembly
     from aurora.configuration.runtime import RuntimeConfig
-    from aurora.views import ContractsOps
-    from ops.contracts import (
-        AgentsRuntimePort,
-        AiRuntimePort,
-        CadenceRuntimePort,
-        ConsoleRuntimePort,
-        McpRuntimePort,
-        MemoryRuntimePort,
-        PromptRuntimePort,
-        ToolsRuntimePort,
-        WorldRuntimePort,
-    )
-    from src.agents import AgentCatalog
-    from src.cadence import Cadence
-    from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest, WorldJournal
-    from src.engine import AgentTreeRunner
-    from src.mcp import McpRuntime
-    from src.memory import Memory
+    from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest
 
 _logger = get_logger(__name__)
 
 
-@dataclass(slots=True)
 class AuroraRuntime:
     """保留项目级构造边界，同时只运行 AgentTree 核心。"""
 
-    runner: AgentTreeRunner
-    root: RuntimeConfig
-    agents: AgentCatalog
-    config: AuroraConfig
-    console: TerminalConsole
-    world: WorldJournal
-    cadence: Cadence
-    memory: Memory
-    mcp: McpRuntime
-    agents_ops: AgentsRuntimePort
-    tools_ops: ToolsRuntimePort
-    prompt_ops: PromptRuntimePort
-    ai_ops: AiRuntimePort
-    world_ops: WorldRuntimePort
-    console_ops: ConsoleRuntimePort
-    cadence_ops: CadenceRuntimePort
-    memory_ops: MemoryRuntimePort
-    mcp_ops: McpRuntimePort
-    contracts_ops: ContractsOps
-    output: Callable[[str], None] = field(default=print)
-    _trees: dict[str, AgentTree] = field(default_factory=dict, init=False, repr=False)
-    _stop_requester: Callable[[], None] | None = field(default=None, init=False, repr=False)
-    ops: OpsRuntime = field(init=False)
-
-    def __post_init__(self) -> None:
+    def __init__(self, assembly: AuroraAssembly, *, output: Callable[[str], None] = print) -> None:
+        config = assembly.config
+        self.assembly = assembly
+        self.runner = assembly.get(ENGINE_RUNNER)
+        self.root: RuntimeConfig = config.get(RUNTIME_CONFIG)
+        self.agents = assembly.get(AGENTS)
+        self.config = config
+        self.console = assembly.get(TERMINAL_CONSOLE)
+        self.world = assembly.get(WORLD_JOURNAL)
+        self.cadence = assembly.get(CADENCE)
+        self.memory = assembly.get(MEMORY)
+        self.mcp = assembly.get(MCP_RUNTIME)
+        self.output = output
+        self._trees: dict[str, AgentTree] = {}
+        self._stop_requester: Callable[[], None] | None = None
         self.cadence.bind_launcher(self)
-        sources = tuple(ConfigSourceRef(source.name, source.relative_path) for source in self.config.sources)
-        self.ops = OpsRuntime(
-            self,
-            ConfigAccess(self.config.project_root, sources),
-            self,
-            agents=self.agents_ops,
-            tools=self.tools_ops,
-            prompt=self.prompt_ops,
-            ai=self.ai_ops,
-            world=self.world_ops,
-            console=self.console_ops,
-            utils=UtilsOps(),
-            contracts=self.contracts_ops,
-            cadence=self.cadence_ops,
-            memory=self.memory_ops,
-            mcp=self.mcp_ops,
-            config_reload=self,
-        )
+        self.ops = OpsRuntime(assembly, process=self)
 
     def create_tree(
         self,

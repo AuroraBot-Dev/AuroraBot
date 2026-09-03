@@ -1,10 +1,10 @@
-"""项目组件目录；需要构造实例的下层包在此声明规格并由拓扑排序驱动装配。"""
+"""项目组件目录；各 src 包以同名模块为代表声明 provides/requires/construct，由注册表合成并拓扑装配。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.composer import ModuleSpec, compose
+from aurora.composer import PackageSpec, build_module_specs, compose
 from aurora.composition import (
     agents,
     ai,
@@ -24,18 +24,20 @@ if TYPE_CHECKING:
     from aurora.composer import AuroraAssembly, InstanceBinding
     from aurora.config import AuroraConfig
 
-COMPOSITION_SPECS: tuple[ModuleSpec, ...] = (
-    world.MODULE_SPEC,
-    mcp.MODULE_SPEC,
-    memory.MODULE_SPEC,
-    cadence.MODULE_SPEC,
-    agents.MODULE_SPEC,
-    ai.MODULE_SPEC,
-    prompt.MODULE_SPEC,
-    console.MODULE_SPEC,
-    tools.MODULE_SPEC,
-    engine.MODULE_SPEC,
+PACKAGE_SPECS: tuple[PackageSpec, ...] = (
+    world.PACKAGE_SPEC,
+    mcp.PACKAGE_SPEC,
+    memory.PACKAGE_SPEC,
+    cadence.PACKAGE_SPEC,
+    agents.PACKAGE_SPEC,
+    ai.PACKAGE_SPEC,
+    prompt.PACKAGE_SPEC,
+    console.PACKAGE_SPEC,
+    tools.PACKAGE_SPEC,
+    engine.PACKAGE_SPEC,
 )
+
+COMPOSITION_SPECS = build_module_specs(PACKAGE_SPECS)
 
 
 def compose_project(

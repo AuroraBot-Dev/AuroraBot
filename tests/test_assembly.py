@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from aurora import AuroraConfig, assemble_runtime, load_config
-from aurora.composer import CompositionContext, InstanceKey, ModuleSpec, compose
+from aurora.composer import CompositionContext, InstanceKey, ModuleSpec, PackageSpec, build_module_specs, compose
 from aurora.composition import compose_project
 from aurora.composition.agents import AGENTS, EXTERNAL_TOOLS
 from aurora.composition.ai import MODEL
@@ -77,9 +77,12 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
+        world_port = runtime.ops.ports.world
+        cadence_port = runtime.ops.ports.cadence
+        assert world_port is not None and cadence_port is not None
         await runtime.world.initialize()
         for index in range(5):
-            await runtime.world_ops.record_event(
+            await world_port.record_event(
                 event_id=f"event-{index}",
                 source="mcp:org.example.background",
                 scope="qq:group-cadence",
@@ -87,9 +90,9 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
                 summary=f"第 {index + 1} 条消息",
                 data={"event_kind": "qq.notice.background"},
             )
-        before = runtime.cadence_ops.cadence_status()
-        await runtime.cadence_ops.cadence_trigger()
-        after = runtime.cadence_ops.cadence_status()
+        before = cadence_port.cadence_status()
+        await cadence_port.cadence_trigger()
+        after = cadence_port.cadence_status()
 
         assert runtime.runtime_status()["trees"]["completed"] == 1
         assert before["pending"] == 0 and after["pending"] == 0
@@ -390,3 +393,68 @@ def test_registries_reject_duplicate_names_and_missing_dependencies(tmp_path: Pa
             (ModuleSpec(key=EXTRA_INSTANCE, requires=(), register=provide_twice),),
             ((MODEL, FakeModel()),),
         )
+
+
+def _noop_register(context: CompositionContext) -> None:
+    del context
+
+
+def test_assembly_bundles_the_project_configuration(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    assembly = compose_project(configuration, ((MODEL, FakeModel()),))
+
+    assert assembly.config is configuration
+
+
+def test_composition_registry_rejects_duplicate_providers(tmp_path: Path) -> None:
+    duplicate_a = InstanceKey[str]("dup.slot")
+    duplicate_b = InstanceKey[str]("dup.slot")
+
+    with pytest.raises(ValueError, match="多个代表模块声明提供"):
+        build_module_specs(
+            (
+                PackageSpec(key=duplicate_a, provides=(duplicate_a,), requires=(), register=_noop_register),
+                PackageSpec(key=duplicate_b, provides=(duplicate_b,), requires=(), register=_noop_register),
+            )
+        )
+
+
+def test_composition_registry_rejects_missing_provider(tmp_path: Path) -> None:
+    key = InstanceKey[str]("dummy.self")
+
+    with pytest.raises(ValueError, match=r"没有提供者：missing\.slot"):
+        build_module_specs(
+            (PackageSpec(key=key, provides=(key,), requires=("missing.slot",), register=_noop_register),)
+        )
+
+
+def test_composition_registry_resolves_requires_to_owner_primary_key(tmp_path: Path) -> None:
+    owner_key = InstanceKey[str]("owner.primary")
+    owner_ops = InstanceKey[str]("owner.ops")
+    dependent_key = InstanceKey[str]("dependent.primary")
+    specs = build_module_specs(
+        (
+            PackageSpec(key=owner_key, provides=(owner_key, owner_ops), requires=(), register=_noop_register),
+            PackageSpec(
+                key=dependent_key,
+                provides=(dependent_key,),
+                requires=(owner_ops.name,),
+                register=_noop_register,
+            ),
+        )
+    )
+    dependent_spec = next(spec for spec in specs if spec.key is dependent_key)
+
+    assert [item.name for item in dependent_spec.requires] == [owner_key.name]
+
+
+def test_context_requires_instances_by_name(tmp_path: Path) -> None:
+    config_directory = tmp_path / "config"
+    config_directory.mkdir()
+    key = InstanceKey[str]("name.slot")
+    context = CompositionContext(assemble_config(tmp_path, ()))
+    context.provide(key, "已接通")
+
+    assert context.require_name(key.name) == "已接通"
+    with pytest.raises(KeyError, match=r"组合依赖尚未注册：name\.missing"):
+        context.require_name("name.missing")

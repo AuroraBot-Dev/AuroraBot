@@ -8,44 +8,68 @@ from aurora.configuration import CONFIG_SPECS
 from ops.registry import iter_operations
 
 _ROOT = Path(__file__).parents[1]
-_ALLOWED_SRC_IMPORTS = {
-    "utils": frozenset({"src.utils"}),
-    "contracts": frozenset({"src.contracts"}),
-    "agents": frozenset({"src.agents", "src.contracts", "src.utils"}),
-    "prompt": frozenset({"src.contracts", "src.prompt"}),
-    "tools": frozenset({"src.agents", "src.contracts", "src.tools", "src.utils"}),
-    "ai": frozenset({"src.ai", "src.contracts", "src.utils"}),
-    "console": frozenset({"src.console", "src.contracts", "src.utils"}),
-    "cadence": frozenset({"src.cadence", "src.contracts", "src.utils"}),
-    "engine": frozenset({"src.agents", "src.contracts", "src.engine", "src.prompt", "src.tools", "src.utils"}),
-    "memory": frozenset({"src.contracts", "src.memory", "src.utils"}),
-    "mcp": frozenset({"src.contracts", "src.mcp", "src.utils"}),
-    "world": frozenset({"src.contracts", "src.utils", "src.world"}),
+_SRC_BASE_ALLOWED = {
+    package: {f"src.{package}", "src.contracts", "src.utils"}
+    for package in ("agents", "prompt", "tools", "ai", "console", "cadence", "engine", "memory", "mcp", "world")
+}
+_SRC_BASE_ALLOWED.update({"contracts": {"src.contracts"}, "utils": {"src.utils"}})
+_TYPE_ONLY_SRC = {
+    "engine": {"src.agents", "src.prompt", "src.tools"},
+    "tools": {"src.agents"},
 }
 _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 
 
-def test_src_dependency_direction_matches_minimal_architecture() -> None:
+def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
+    """功能 src 包运行时只能依赖 contracts/utils/自身；跨包能力只允许 TYPE_CHECKING。"""
     violations: list[str] = []
     for path in (_ROOT / "src").rglob("*.py"):
         package = path.relative_to(_ROOT / "src").parts[0]
-        allowed = _ALLOWED_SRC_IMPORTS[package]
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            module = _imported_module(node)
+        base = _SRC_BASE_ALLOWED[package]
+        type_only = base | _TYPE_ONLY_SRC.get(package, frozenset())
+        for module, guarded in _imports_of(path):
             if module in {"aurora", "ops"} or module.startswith(("aurora.", "ops.")):
                 violations.append(f"{path.relative_to(_ROOT)} imports {module}")
-            if module.startswith("src.") and _src_package(module) not in allowed:
-                violations.append(f"{path.relative_to(_ROOT)} imports {module}")
+            if not module.startswith("src.") or _src_package(module) == f"src.{package}":
+                continue
+            allowed = type_only if guarded else base
+            if _src_package(module) not in {_src_package(item) for item in allowed}:
+                tag = "typecheck" if guarded else "runtime"
+                violations.append(f"{path.relative_to(_ROOT)} {tag} imports {module}")
     assert violations == []
 
 
-def test_ops_depends_on_neither_composition_root_nor_src() -> None:
+def test_ops_only_touches_leaf_infrastructure_and_assembly_types() -> None:
+    """ops 作为 backend：运行时只许 import 组合/配置叶子与 contracts/utils；src 功能包仅 TYPE_CHECKING。
+
+    允许集固定为 aurora.composer/config/configuration 与 src.contracts/src.utils；aurora.runtime、
+    aurora.composition、aurora.views 以及 src 功能包不得进入 ops 的运行时导入。
+    """
+    aurora_runtime_allowed = ("aurora.composer", "aurora.config", "aurora.configuration")
     violations: list[str] = []
     for path in (_ROOT / "ops").rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            module = _imported_module(node)
-            if module in {"aurora", "src"} or module.startswith(("aurora.", "src.")):
-                violations.append(f"{path.relative_to(_ROOT)} imports {module}")
+        for module, guarded in _imports_of(path):
+            if module.startswith("src.") and not guarded and _src_package(module) not in {"src.contracts", "src.utils"}:
+                violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
+            if module in {"aurora", "src"} or module.startswith(("aurora.", "ops.operations.aurora")):
+                if guarded:
+                    continue
+                allowed = any(module == prefix or module.startswith(f"{prefix}.") for prefix in aurora_runtime_allowed)
+                if module == "aurora" or not allowed:
+                    violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
+    assert violations == []
+
+
+def test_composition_representatives_do_not_import_sibling_representatives_at_runtime() -> None:
+    """组合代表模块之间只经注册表/实例互联；兄弟模块只允许 TYPE_CHECKING。"""
+    violations: list[str] = []
+    composition_directory = _ROOT / "aurora" / "composition"
+    for path in composition_directory.glob("*.py"):
+        if path.stem == "__init__":
+            continue
+        for module, guarded in _imports_of(path):
+            if module.startswith("aurora.composition.") and not guarded:
+                violations.append(f"{path.relative_to(_ROOT)} runtime imports 兄弟代表模块 {module}")
     assert violations == []
 
 
@@ -106,6 +130,36 @@ def test_cli_main_only_dispatches_through_command_layer() -> None:
         if (module := _imported_module(node)).startswith("aurora.")
     }
     assert aurora_imports == {"aurora.commands", "aurora.commander"}
+
+
+def _imports_of(path: Path) -> list[tuple[str, bool]]:
+    """返回文件内 (模块名, 是否处于 TYPE_CHECKING 守卫) 的导入序列。"""
+    found: list[tuple[str, bool]] = []
+
+    def walk(node: ast.AST, guarded: bool) -> None:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if module := _imported_module(node):
+                found.append((module, guarded))
+            return
+        if isinstance(node, ast.If) and _is_type_check_test(node.test):
+            for child in node.body:
+                walk(child, True)
+            for child in node.orelse:
+                walk(child, False)
+            return
+        for child in ast.iter_child_nodes(node):
+            walk(child, guarded)
+
+    walk(ast.parse(path.read_text(encoding="utf-8")), False)
+    return found
+
+
+def _is_type_check_test(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id == "TYPE_CHECKING"
+    if isinstance(node, ast.Attribute):
+        return node.attr == "TYPE_CHECKING"
+    return False
 
 
 def _imported_module(node: ast.AST) -> str:

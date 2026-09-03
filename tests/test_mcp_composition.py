@@ -325,7 +325,9 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
             assert runtime.world is world
             assert runtime.mcp is mcp
             assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
-            assert runtime.tools_ops.tool_detail(_TOOL_ID) == {
+            tools_port = runtime.ops.ports.tools
+            assert tools_port is not None
+            assert tools_port.tool_detail(_TOOL_ID) == {
                 "name": _TOOL_ID,
                 "description": "连通性检查",
                 "parameters": {"type": "object", "properties": {}},

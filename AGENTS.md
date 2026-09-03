@@ -29,10 +29,13 @@ config/         从模板复制的个人生效配置，始终由 Git 忽略
 aurora/         项目级入口、统一 Config/Composer、runtime 门面与项目工具
 aurora/commands/       每个 CLI 命令一个注册模块
 aurora/configuration/  每个 TOML 一个解析与注册模块
-aurora/composition/    每个需构造实例的 src 子包一个注册模块
-aurora/runtime/        AuroraRuntime 门面：全部 ops 端口、echo 输出与进程生命周期
+aurora/composer.py        组合根实现：类型化 InstanceKey、CompositionContext、PackageSpec/ModuleSpec、AuroraAssembly
+aurora/composition/        每个 src 功能包一个同名代表模块（provides/requires/construct），由注册表合成
+aurora/runtime/        AuroraRuntime 进程门面：AgentTree 运行/echo/停止与 config reload（ops 的 process 协议）
 aurora/utils/          项目级进程、环境、平台与 TOML 工具
 ops/            统一 OperationSpec 目录、运行监测、限定配置改动与本地 Panel HTTP
+ops/ports.py    从 AuroraAssembly 派生实例化窄端口的 ops backend 端口层
+ops/views.py    ops 侧领域→JSON 投影（tree/commit/tool/agent 等）
 ops/operations/       每个运行时包一个 JSON 化操作注册模块
 ops/panel/      Panel 会话、Token 与本地 HTTP 后端
 ops/utils/      ops 层的格式化与资源工具
@@ -73,14 +76,24 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
   二者不得保存或解释另一套认知运行状态。
 - Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线。
 - 每个运行时包在 ops 中拥有窄 RuntimePort 和 method/path + 斜杠入口，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
+- ops 是持有 `AuroraAssembly` 的 backend：路由、监测端口与 JSON 投影全在 ops 侧（`ops/views.py`、`ops/ports.py`），
+  `OpsRuntime(assembly, process)` 从 assembly 派生实例化窄端口；只有进程面能力（树运行/echo、停止、config reload）由
+  `aurora.runtime` 实现并作为 process 协议传入。aurora 不书写 ops 适配器或领域→JSON 投影。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。
 - 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
+- 组合模块是 src 功能包的唯一代表：每个 `aurora/composition/<pkg>.py` 只导出自身键、`provides`、`requires`（兄弟键名字符串）
+  与 `construct`；兄弟能力一律在构造期经 `CompositionContext.require_name` 取已构造实例，代表模块之间不允许运行时相互 import
+  （类型检查可 TYPE_CHECKING）。注册表校验每个键名只有一个提供者并把 requires 解析为依赖边的代表主键。合成产物
+  `AuroraAssembly` 同时冻结 `AuroraConfig` 与全部实例，供 runtime 拆取。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
-- 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子；`agents/prompt/ai/console/cadence/memory/mcp/world` 只依赖
-  contracts、自身与 utils；`tools ← engine ← aurora`，`console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`，
-  ops 不导入 src 或 aurora。具体允许集由 `tests/test_dependency_boundaries.py` 固化。
+- 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`agents/prompt/ai/console/cadence/memory/
+  mcp/world/engine/tools` 功能包运行时只依赖 contracts、utils 与自身，跨包能力只允许类型检查期（TYPE_CHECKING）引用，真正的能力
+  调用靠组合层注入的实例完成；`tools ← engine ← aurora`，`console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`。
+  ops 是持有 `AuroraAssembly` 的 backend：运行时只许 import `aurora.composer`/`aurora.config`/`aurora.configuration` 与
+  `src.contracts`/`src.utils`，src 功能包与 aurora.runtime/composition/views 不得进入 ops 运行时导入（类型位置允许
+  TYPE_CHECKING）。具体允许集由 `tests/test_dependency_boundaries.py` 固化。
 
 ## Current scope
 

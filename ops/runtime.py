@@ -1,74 +1,37 @@
-"""组合 ops 端口、操作注册表与双入口路由。"""
+"""组合 ops 端口、操作注册表与双入口路由。
+
+OpsRuntime 直接持有唯一的 AuroraAssembly 与进程面协议对象：实例化窄端口由
+ops.ports 从 assembly 派生，aurora 不再把适配器装配进 ops。
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ops.contracts import OperationResult, OperationSpec, OpsPorts
+from ops.ports import build_ops_ports
 from ops.registry import catalog_entries
 from ops.router import OperationRouter
 
 if TYPE_CHECKING:
-    from ops.contracts import (
-        AgentsRuntimePort,
-        AiRuntimePort,
-        CadenceRuntimePort,
-        ConfigReloadPort,
-        ConfigRuntimePort,
-        ConsoleRuntimePort,
-        ContractsRuntimePort,
-        McpRuntimePort,
-        MemoryRuntimePort,
-        ProcessRuntimePort,
-        PromptRuntimePort,
-        ToolsRuntimePort,
-        TreeRuntimePort,
-        UtilsRuntimePort,
-        WorldRuntimePort,
-    )
+    from aurora.composer import AuroraAssembly
+    from ops.contracts import OperationResult, OperationSpec, OpsPorts
 
 
 class OpsRuntime:
     """热路径外的统一操作运行时。"""
 
-    def __init__(
-        self,
-        engine: TreeRuntimePort,
-        config: ConfigRuntimePort,
-        process: ProcessRuntimePort,
-        *,
-        agents: AgentsRuntimePort | None = None,
-        tools: ToolsRuntimePort | None = None,
-        prompt: PromptRuntimePort | None = None,
-        ai: AiRuntimePort | None = None,
-        world: WorldRuntimePort | None = None,
-        console: ConsoleRuntimePort | None = None,
-        utils: UtilsRuntimePort | None = None,
-        contracts: ContractsRuntimePort | None = None,
-        cadence: CadenceRuntimePort | None = None,
-        memory: MemoryRuntimePort | None = None,
-        mcp: McpRuntimePort | None = None,
-        config_reload: ConfigReloadPort | None = None,
-    ) -> None:
-        self._router = OperationRouter(
-            OpsPorts(
-                engine,
-                config,
-                process,
-                agents,
-                tools,
-                prompt,
-                ai,
-                world,
-                console,
-                utils,
-                contracts,
-                cadence,
-                memory,
-                mcp,
-                config_reload,
-            )
-        )
+    def __init__(self, assembly: AuroraAssembly, process: object) -> None:
+        self._assembly = assembly
+        self._ports = build_ops_ports(assembly, process, process, process)
+        self._router = OperationRouter(self._ports)
+
+    @property
+    def assembly(self) -> AuroraAssembly:
+        return self._assembly
+
+    @property
+    def ports(self) -> OpsPorts:
+        return self._ports
 
     @property
     def catalog(self) -> list[dict[str, Any]]:

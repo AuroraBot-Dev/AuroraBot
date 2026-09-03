@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from aurora.composer import InstanceKey, ModuleSpec
+from aurora.composer import InstanceKey, PackageSpec
 from aurora.configuration.apps import APPS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
-from aurora.views import mcp_app_dict
 from src.mcp import McpAppSpec, McpEventMode, McpRuntime, McpTransport
 
 if TYPE_CHECKING:
@@ -17,45 +16,27 @@ if TYPE_CHECKING:
 
 _MCP_PLATFORM_ID = "builtin.mcp"
 
+MCP_RUNTIME = InstanceKey[McpRuntime]("mcp.runtime")
+
 
 def _mcp_platform(config: AuroraConfig) -> PlatformConfig:
     return next(item for item in config.get(PLATFORMS_CONFIG) if item.id == _MCP_PLATFORM_ID)
 
 
-class McpOps:
-    """McpRuntime 的窄 ops 端口适配器。"""
-
-    def __init__(self, runtime: McpRuntime) -> None:
-        self._runtime = runtime
-
-    def mcp_status(self) -> dict[str, Any]:
-        snapshot = self._runtime.snapshot()
-        return {
-            "platform_enabled": snapshot.platform_enabled,
-            "restart_required": snapshot.restart_required,
-            "tool_ids": list(snapshot.tool_ids),
-            "apps": [mcp_app_dict(app) for app in snapshot.apps],
-        }
-
-    def mcp_app(self, package: str) -> dict[str, Any] | None:
-        snapshot = self._runtime.app(package)
-        return mcp_app_dict(snapshot) if snapshot is not None else None
-
-
-MCP_RUNTIME = InstanceKey[McpRuntime]("mcp.runtime")
-MCP_OPS = InstanceKey[McpOps]("mcp.ops")
-
-
-def _register(context: CompositionContext) -> None:
+def construct(context: CompositionContext) -> None:
     """接收异步阶段已冻结的 runtime；无生效 App 时可同步构造禁用快照。"""
     if not context.contains(MCP_RUNTIME):
         platform = _mcp_platform(context.config)
         runtime = McpRuntime.disabled(build_mcp_specs(context.config), platform_enabled=platform.enabled)
         context.provide(MCP_RUNTIME, runtime)
-    context.provide(MCP_OPS, McpOps(context.require(MCP_RUNTIME)))
 
 
-MODULE_SPEC = ModuleSpec(key=MCP_RUNTIME, requires=(), register=_register)
+PACKAGE_SPEC = PackageSpec(
+    key=MCP_RUNTIME,
+    provides=(MCP_RUNTIME,),
+    requires=(),
+    register=construct,
+)
 
 
 def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:

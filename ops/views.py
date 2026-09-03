@@ -1,4 +1,8 @@
-"""投影运行时领域对象为 ops 与终端使用的 JSON 数据。"""
+"""投影运行时领域对象为 ops 与终端使用的 JSON 数据。
+
+ops 作为持有 AuroraAssembly 的 backend：领域→JSON 投影全部归 ops 所有，aurora 不书写
+这些 ops 业务，只消费这里的投影函数。
+"""
 
 from __future__ import annotations
 
@@ -19,6 +23,38 @@ if TYPE_CHECKING:
         WorldCommit,
     )
     from src.mcp import McpAppSnapshot
+
+
+def utils_status() -> dict[str, Any]:
+    """返回无项目语义的共享工具能力目录。"""
+    return {
+        "logging": ["configure_logging", "configure_console_logging", "console_logging_status", "get_logger"],
+        "serialization": ["extract_json_from_text", "freeze_json", "thaw_json"],
+        "text": ["bounded_summary"],
+        "time": ["utc_now", "utc_today"],
+    }
+
+
+def contracts_status() -> dict[str, Any]:
+    """返回公共契约的稳定能力目录。"""
+    return {
+        "value_objects": [
+            "AgentDefinition",
+            "AgentNode",
+            "AgentTree",
+            "ChatMessage",
+            "ModelRequest",
+            "ToolCall",
+            "ToolDefinition",
+            "ToolOutput",
+            "WorldCommit",
+            "WorldCommitInput",
+            "WorldDeltaPage",
+            "WorldFrontier",
+            "WorldStreamPage",
+        ],
+        "ports": ["Model", "Tool", "ScopedTool", "WorldReader", "WorldWriter", "WorldJournal"],
+    }
 
 
 def agent_dict(definition: AgentDefinition) -> dict[str, Any]:
@@ -143,49 +179,3 @@ def activity_dict(activity: TreeActivity) -> dict[str, Any]:
         "first_seen": activity.first_seen.isoformat(),
         "last_seen": activity.last_seen.isoformat(),
     }
-
-
-def utils_status() -> dict[str, Any]:
-    """返回无项目语义的共享工具能力目录。"""
-    return {
-        "logging": ["configure_logging", "configure_console_logging", "console_logging_status", "get_logger"],
-        "serialization": ["extract_json_from_text", "freeze_json", "thaw_json"],
-        "text": ["bounded_summary"],
-        "time": ["utc_now", "utc_today"],
-    }
-
-
-class UtilsOps:
-    """共享工具能力的无状态窄 ops 端口适配器。"""
-
-    def utils_status(self) -> dict[str, Any]:
-        return utils_status()
-
-
-def contracts_status() -> dict[str, Any]:
-    """返回公共契约的稳定能力目录。"""
-    return {
-        "value_objects": [
-            "AgentDefinition",
-            "AgentNode",
-            "AgentTree",
-            "ChatMessage",
-            "ModelRequest",
-            "ToolCall",
-            "ToolDefinition",
-            "ToolOutput",
-            "WorldCommit",
-            "WorldCommitInput",
-            "WorldDeltaPage",
-            "WorldFrontier",
-            "WorldStreamPage",
-        ],
-        "ports": ["Model", "Tool", "ScopedTool", "WorldReader", "WorldWriter", "WorldJournal"],
-    }
-
-
-class ContractsOps:
-    """公共契约的无状态窄 ops 端口适配器。"""
-
-    def contracts_status(self) -> dict[str, Any]:
-        return contracts_status()
