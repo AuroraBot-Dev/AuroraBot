@@ -109,10 +109,11 @@ APPS_CONFIG = ConfigKey[AppsConfig]("apps")
 
 
 def register(configs: ConfigCollector) -> None:
-    configs.register(APPS_CONFIG, "config/apps.toml", _parse)
+    configs.register(APPS_CONFIG, "config/apps.toml", load_apps_config)
 
 
-def _parse(path: Path) -> AppsConfig:
+def load_apps_config(path: Path) -> AppsConfig:
+    """读取并校验一份完整的 apps.toml。"""
     document = load_toml(path)
     _require_fields(document, frozenset({"app"}), frozenset({"app"}), "apps.toml")
     raw_apps = document["app"]
@@ -208,4 +209,12 @@ def _validate_https_url(value: str) -> None:
         raise ValueError("streamable_http app.url 必须是不含凭据或片段的 HTTPS URL")
 
 
-__all__ = ["APPS_CONFIG", "AppConfig", "AppsConfig", "McpEventMode", "McpTransport", "register"]
+__all__ = [
+    "APPS_CONFIG",
+    "AppConfig",
+    "AppsConfig",
+    "McpEventMode",
+    "McpTransport",
+    "load_apps_config",
+    "register",
+]
