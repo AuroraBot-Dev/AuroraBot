@@ -1,29 +1,26 @@
 """从唯一 AuroraAssembly 构造 ops 所需的实例化窄端口。
 
 ops 作为 backend 自持全部监测业务：世界、目录、节律与平台事实都从 assembly 的实例或
-配置直接派生；aurora 不再装配这些端口。engine/process/config_reload 属于进程面，
-由调用方以协议对象传入（AuroraRuntime 实现），本模块不 import aurora 实现。
+配置直接派生；aurora 不再装配这些端口。
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from aurora.composer import InstanceKey
 from aurora.configuration.endpoints import ENDPOINTS_CONFIG
+from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.providers import PROVIDERS_CONFIG
 from ops.config import ConfigAccess, ConfigSourceRef
 from ops.contracts import OpsPorts
 from ops.views import agent_dict, commit_dict, contracts_status, mcp_app_dict, tool_dict, utils_status
-from src.utils import parse_event_time
 
 if TYPE_CHECKING:
     from typing import Protocol
 
     from aurora.composer import AuroraAssembly
-    from ops.contracts import ConfigReloadPort, ProcessRuntimePort, TreeRuntimePort
     from src.agents import AgentCatalog
     from src.cadence import Cadence
     from src.contracts import WorldJournal
@@ -44,6 +41,7 @@ PROMPT_KEY: InstanceKey[PromptAssembler] = InstanceKey("prompt.assembler")
 MEMORY_KEY: InstanceKey[Memory] = InstanceKey("memory.reader")
 CADENCE_KEY: InstanceKey[Cadence] = InstanceKey("cadence.runtime")
 MCP_KEY: InstanceKey[McpRuntime] = InstanceKey("mcp.runtime")
+ENGINE_KEY: InstanceKey[object] = InstanceKey("engine.runner")
 
 _CONSOLE_PLATFORM_ID = "builtin.console"
 
@@ -71,32 +69,20 @@ class WorldPort:
         commit = await self._world.commit(commit_id)
         return commit_dict(commit) if commit is not None else None
 
-    async def record_event(
-        self,
-        *,
-        event_id: str,
-        kind: str,
-        source: str,
-        summary: str,
-        scope: str,
-        data: dict[str, Any] | None = None,
-        occurred_at: str | None = None,
-    ) -> dict[str, Any]:
-        """向世界线追加一条提交方已确定 scope 的通用事件。"""
-        await self._world.initialize()
-        frontier = await self._world.head(frozenset({scope}))
-        when = parse_event_time(occurred_at) if occurred_at else datetime.now(UTC)
-        commit = await self._world.append_commit(
-            commit_id=event_id,
-            kind=kind,
-            source=source,
-            summary=summary,
-            scopes=frozenset({scope}),
-            based_on=frontier,
-            data=data or {},
-            occurred_at=when,
-        )
-        return commit_dict(commit)
+
+class EnginePort:
+    """已冻结 Engine 配置的窄监测端口。"""
+
+    def __init__(self, configuration: object) -> None:
+        self._configuration = configuration
+
+    def engine_status(self) -> dict[str, Any]:
+        configuration = cast("Any", self._configuration)
+        return {
+            "max_depth": configuration.max_depth,
+            "max_nodes": configuration.max_nodes,
+            "max_steps": configuration.max_steps,
+        }
 
 
 class AgentsPort:
@@ -207,18 +193,11 @@ class ConsolePort:
 class CadencePort:
     """Cadence 实例的窄监测端口。"""
 
-    def __init__(self, cadence: Cadence, world: WorldJournal) -> None:
+    def __init__(self, cadence: Cadence) -> None:
         self._cadence = cadence
-        self._world = world
 
     def cadence_status(self) -> dict[str, Any]:
         return self._cadence.status()
-
-    async def cadence_trigger(self) -> dict[str, Any]:
-        await self._world.initialize()
-        before = self._cadence.status()
-        await self._cadence.evaluate_once()
-        return {"before": before, "after": self._cadence.status()}
 
 
 class MemoryPort:
@@ -280,11 +259,8 @@ class ContractsPort:
 
 def build_ops_ports(
     assembly: AuroraAssembly,
-    engine: object,
-    process: object,
-    config_reload: object,
 ) -> OpsPorts:
-    """把 assembly 的实例/配置与进程面协议组装成 handlers 可见的 OpsPorts。"""
+    """把 assembly 的实例与配置组装成 handlers 可见的只读 OpsPorts。"""
     config = assembly.config
     config_access = ConfigAccess(
         config.project_root,
@@ -297,14 +273,14 @@ def build_ops_ports(
     memory = _get(assembly, MEMORY_KEY)
     cadence = _get(assembly, CADENCE_KEY)
     mcp = _get(assembly, MCP_KEY)
+    engine = _get(assembly, ENGINE_KEY)
     platform_console = next(
         (item for item in config.get(PLATFORMS_CONFIG) if item.id == _CONSOLE_PLATFORM_ID),
         None,
     )
     return OpsPorts(
-        engine=cast("TreeRuntimePort", engine),
+        engine=EnginePort(config.get(ENGINE_CONFIG)) if engine is not None else None,
         config=config_access,
-        process=cast("ProcessRuntimePort", process),
         agents=AgentsPort(agents) if agents is not None else None,
         tools=ToolsPort(tools) if tools is not None else None,
         prompt=PromptPort(assembler) if assembler is not None else None,
@@ -313,10 +289,9 @@ def build_ops_ports(
         console=ConsolePort(platform_console) if platform_console is not None else None,
         utils=UtilsPort(),
         contracts=ContractsPort(),
-        cadence=CadencePort(cadence, world) if cadence is not None and world is not None else None,
+        cadence=CadencePort(cadence) if cadence is not None else None,
         memory=MemoryPort(memory, world) if memory is not None and world is not None else None,
         mcp=McpPort(mcp) if mcp is not None else None,
-        config_reload=cast("ConfigReloadPort", config_reload),
     )
 
 

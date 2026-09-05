@@ -18,6 +18,7 @@ from aurora.runtime.support import (
     install_stop_handlers,
     restore_stop_handlers,
 )
+from ops.runtime import OpsRuntime
 from src.mcp import McpRuntime, prepare_mcp
 from src.utils import get_logger
 
@@ -73,18 +74,30 @@ async def run_project(
     stop = stop_event or asyncio.Event()
     cadence_task: asyncio.Task[None] | None = None
     panel: PanelRuntime | None = None
+    panel_lock = asyncio.Lock()
     installed = ()
+
+    async def serve_panel() -> str:
+        nonlocal panel
+        async with panel_lock:
+            if panel is not None:
+                return "Panel 后端已经在运行。"
+            panel_platform = _platform(config, _PANEL_PLATFORM_ID)
+            started = await run_panel(
+                panel_platform,
+                OpsRuntime(runtime.assembly),
+                storage=config.get(STORAGE_CONFIG),
+                project_root=config.project_root,
+                profile=runtime.root.profile,
+            )
+            if started is None:
+                raise RuntimeError("Panel 后端已在配置中禁用")
+            panel = started
+            return "Panel 后端已启动。"
+
     try:
-        runtime.bind_stop_requester(stop.set)
-        panel_platform = _platform(config, _PANEL_PLATFORM_ID)
+        runtime.bind_serve_requester(serve_panel)
         console_platform = _platform(config, _CONSOLE_PLATFORM_ID)
-        panel = await run_panel(
-            panel_platform,
-            runtime.ops,
-            storage=config.get(STORAGE_CONFIG),
-            project_root=config.project_root,
-            profile=runtime.root.profile,
-        )
         if runtime.cadence.enabled:
             cadence_task = asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
         installed = install_stop_handlers(stop) if stop_event is None else ()
@@ -93,6 +106,7 @@ async def run_project(
         else:
             await stop.wait()
     finally:
+        runtime.bind_serve_requester(None)
         await _shutdown_project(runtime, panel, cadence_task, installed, mcp, world)
     return runtime
 
@@ -114,7 +128,6 @@ async def _shutdown_project(
     world: WorldJournal,
 ) -> None:
     _logger.info("Aurora runtime 开始关闭")
-    runtime.bind_stop_requester(None)
     try:
         restore_stop_handlers(installed)
     finally:

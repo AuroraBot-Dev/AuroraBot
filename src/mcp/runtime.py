@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC
 from enum import StrEnum
@@ -14,11 +13,7 @@ from uuid import uuid4
 
 from src.contracts import (
     MCP_APP_DISCONNECTED,
-    MCP_APP_FAILED,
-    MCP_APP_READY,
-    MCP_APP_STARTING,
     MCP_CATALOG_CHANGED,
-    MCP_CATALOG_FROZEN,
     MCP_EVENT_RECEIVED,
     WorldFrontier,
     mcp_scope,
@@ -301,15 +296,6 @@ async def prepare_mcp(
                 continue
             await _prepare_app(runtime, record, tools_by_id, client_factory, world)
         await runtime._freeze(tools_by_id)
-        for record in records:
-            if record.state is McpAppState.READY:
-                await runtime._append_status(
-                    record,
-                    MCP_CATALOG_FROZEN,
-                    f"MCP 工具目录已冻结：{record.spec.package}",
-                    "catalog-frozen",
-                    {"tool_ids": list(record.tool_ids), "tool_count": len(record.tool_ids)},
-                )
         return runtime
     except BaseException:
         await runtime.close()
@@ -326,7 +312,6 @@ async def _prepare_app(
     package = record.spec.package
     record.state = McpAppState.STARTING
     _logger.info("MCP App 启动 package={} transport={}", package, record.spec.transport.value)
-    await runtime._append_status(record, MCP_APP_STARTING, f"正在连接 MCP App：{package}", "starting", {})
     phase = "connect"
     try:
         async with asyncio.timeout(record.spec.timeout_seconds):
@@ -361,27 +346,12 @@ async def _prepare_app(
                 client.protocol_version,
                 len(bindings),
             )
-        await runtime._append_status(
-            record,
-            MCP_APP_READY,
-            f"MCP App 已就绪：{package}",
-            "ready",
-            {"protocol_version": client.protocol_version, "tool_count": len(bindings)},
-        )
     except asyncio.CancelledError:
         raise
     except Exception as error:
         _logger.error("MCP App 启动失败 package={} phase={} error_type={}", package, phase, type(error).__name__)
         record.state = McpAppState.UNAVAILABLE
         record.last_error = f"{type(error).__name__}: {error}"
-        with suppress(Exception):
-            await runtime._append_status(
-                record,
-                MCP_APP_FAILED,
-                f"MCP App 启动失败：{package}",
-                "failed",
-                {"phase": phase, "error": record.last_error},
-            )
         raise McpStartupError(package, phase, record.last_error) from error
 
 

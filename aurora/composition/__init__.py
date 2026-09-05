@@ -25,23 +25,20 @@ if TYPE_CHECKING:
     from aurora.config import AuroraConfig
 
 PACKAGE_SPECS: tuple[PackageSpec, ...] = (
-    world.PACKAGE_SPEC,
-    mcp.PACKAGE_SPEC,
-    memory.PACKAGE_SPEC,
-    cadence.PACKAGE_SPEC,
     agents.PACKAGE_SPEC,
     ai.PACKAGE_SPEC,
-    prompt.PACKAGE_SPEC,
+    cadence.PACKAGE_SPEC,
     console.PACKAGE_SPEC,
-    tools.PACKAGE_SPEC,
     engine.PACKAGE_SPEC,
+    mcp.PACKAGE_SPEC,
+    memory.PACKAGE_SPEC,
+    prompt.PACKAGE_SPEC,
+    tools.PACKAGE_SPEC,
+    world.PACKAGE_SPEC,
 )
 
 COMPOSITION_SPECS = build_module_specs(PACKAGE_SPECS)
 
 
-def compose_project(
-    config: AuroraConfig,
-    instances: Iterable[InstanceBinding] = (),
-) -> AuroraAssembly:
+def compose_project(config: AuroraConfig, instances: Iterable[InstanceBinding] = ()) -> AuroraAssembly:
     return compose(config, COMPOSITION_SPECS, instances)

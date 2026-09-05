@@ -121,8 +121,8 @@ def create_panel_app(runtime: OpsRuntime, store: PanelStore, settings: PanelSett
     app.add_api_route("/api/auth/login", api.login, methods=["POST"])
     app.add_api_route("/api/auth/logout", api.logout, methods=["POST"])
     app.add_api_route("/api/ops", api.operations, methods=["GET"])
-    app.add_api_route("/api/ops/", api.execute_operation, methods=["GET", "POST"])
-    app.add_api_route("/api/ops/{rest:path}", api.execute_operation, methods=["GET", "POST"])
+    app.add_api_route("/api/ops/", api.execute_operation, methods=["GET"])
+    app.add_api_route("/api/ops/{rest:path}", api.execute_operation, methods=["GET"])
     return app
 
 
@@ -157,16 +157,7 @@ async def _request_params(
         return invalid, {}
     params: dict[str, Any] = {**path_params, **query}
     body = await request.body()
-    if request.method == "GET":
-        return (_parse_failure("GET 操作不接受请求体"), {}) if body else (None, params)
-    invalid, payload = await _json_body(request)
-    if invalid is not None:
-        return invalid, {}
-    for name, value in payload.items():
-        if locations.get(name) is not ParameterLocation.BODY:
-            return _source_failure(name, "body"), {}
-        params[name] = value
-    return None, params
+    return (_parse_failure("GET 操作不接受请求体"), {}) if body else (None, params)
 
 
 def _query_params(
@@ -180,19 +171,6 @@ def _query_params(
             return _source_failure(name, "query"), {}
         params[name] = value
     return None, params
-
-
-async def _json_body(request: Request) -> tuple[OperationResult | None, dict[str, Any]]:
-    content_type = request.headers.get("Content-Type", "").partition(";")[0].strip().casefold()
-    if content_type != "application/json" and not content_type.endswith("+json"):
-        return _parse_failure("POST 操作需要 JSON object 请求体"), {}
-    try:
-        payload = await request.json()
-    except ValueError:
-        return _parse_failure("POST 请求体不是有效 JSON"), {}
-    if not isinstance(payload, dict):
-        return _parse_failure("POST JSON 必须是 object"), {}
-    return None, payload
 
 
 def _source_failure(name: str, source: str) -> OperationResult:

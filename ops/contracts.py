@@ -10,13 +10,6 @@ from typing import Any, Protocol
 
 class OperationScope(StrEnum):
     ALL = "all"
-    TEXT_ONLY = "text_only"
-
-
-class OperationControl(StrEnum):
-    NONE = "none"
-    CLEAR_CONSOLE = "clear_console"
-    SHUTDOWN_PROCESS = "shutdown_process"
 
 
 class ParameterLocation(StrEnum):
@@ -42,48 +35,14 @@ class ParameterSpec:
     help: str = ""
 
 
-class TreeRuntimePort(Protocol):
-    async def start_tree(self, message: str, *, tree_id: str | None = None) -> dict[str, Any]: ...
-
-    def runtime_status(self) -> dict[str, Any]: ...
-
-    def list_trees(self, *, status: str | None = None, limit: int = 64) -> list[dict[str, Any]]: ...
-
-    def tree_detail(self, tree_id: str) -> dict[str, Any] | None: ...
-
-    def node_detail(self, tree_id: str, node_id: str) -> dict[str, Any] | None: ...
-
-    async def submit_event_values(
-        self,
-        *,
-        event_id: str,
-        source: str,
-        scope: str,
-        kind: str,
-        summary: str,
-        data: dict[str, Any] | None = None,
-        occurred_at: str | None = None,
-    ) -> dict[str, Any]: ...
-
-    async def world_scope(self, scope: str, *, after: int = 0) -> dict[str, Any]: ...
-
-    async def forest(self, *, limit: int = 64) -> dict[str, Any]: ...
+class EngineRuntimePort(Protocol):
+    def engine_status(self) -> dict[str, Any]: ...
 
 
 class ConfigRuntimePort(Protocol):
     def snapshot(self) -> dict[str, Any]: ...
 
     def read(self, name: str) -> dict[str, Any] | None: ...
-
-    def set_app_enabled(self, package: str, *, enabled: bool) -> dict[str, Any]: ...
-
-
-class ConfigReloadPort(Protocol):
-    def reload_config(self) -> dict[str, Any]: ...
-
-
-class ProcessRuntimePort(Protocol):
-    def request_shutdown(self) -> None: ...
 
 
 class AgentsRuntimePort(Protocol):
@@ -115,18 +74,6 @@ class WorldRuntimePort(Protocol):
 
     async def world_commit(self, commit_id: str) -> dict[str, Any] | None: ...
 
-    async def record_event(
-        self,
-        *,
-        event_id: str,
-        kind: str,
-        source: str,
-        summary: str,
-        scope: str,
-        data: dict[str, Any] | None = None,
-        occurred_at: str | None = None,
-    ) -> dict[str, Any]: ...
-
 
 class ConsoleRuntimePort(Protocol):
     def console_status(self) -> dict[str, Any]: ...
@@ -143,8 +90,6 @@ class ContractsRuntimePort(Protocol):
 class CadenceRuntimePort(Protocol):
     def cadence_status(self) -> dict[str, Any]: ...
 
-    async def cadence_trigger(self) -> dict[str, Any]: ...
-
 
 class MemoryRuntimePort(Protocol):
     async def memory_snapshot(self) -> dict[str, Any]: ...
@@ -158,9 +103,8 @@ class McpRuntimePort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class OpsPorts:
-    engine: TreeRuntimePort
+    engine: EngineRuntimePort | None
     config: ConfigRuntimePort
-    process: ProcessRuntimePort
     agents: AgentsRuntimePort | None = None
     tools: ToolsRuntimePort | None = None
     prompt: PromptRuntimePort | None = None
@@ -172,7 +116,6 @@ class OpsPorts:
     cadence: CadenceRuntimePort | None = None
     memory: MemoryRuntimePort | None = None
     mcp: McpRuntimePort | None = None
-    config_reload: ConfigReloadPort | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +129,6 @@ class OperationResult:
     code: str = "ok"
     message: str | None = None
     data: dict[str, Any] | None = field(default_factory=dict)
-    control: OperationControl = OperationControl.NONE
 
     @classmethod
     def success(
@@ -194,9 +136,8 @@ class OperationResult:
         data: dict[str, Any] | None = None,
         *,
         message: str | None = None,
-        control: OperationControl = OperationControl.NONE,
     ) -> OperationResult:
-        return cls(True, message=message, data=data, control=control)
+        return cls(True, message=message, data=data)
 
     @classmethod
     def failure(cls, code: str, message: str) -> OperationResult:
@@ -208,7 +149,6 @@ class OperationResult:
             "code": self.code,
             "message": self.message,
             "data": self.data,
-            "control": self.control,
         }
 
 

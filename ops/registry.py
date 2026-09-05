@@ -41,6 +41,10 @@ def operation(
 
 
 def _register(spec: OperationSpec) -> None:
+    if spec.method != "GET":
+        raise ValueError(f"ops 只允许注册 GET 观察操作：{spec.method} {spec.path}")
+    if any(parameter.location.value == "body" for parameter in spec.parameters):
+        raise ValueError(f"GET 观察操作不能声明 body 参数：{spec.path}")
     key = f"{spec.method} {spec.path}"
     if key in _OPERATIONS:
         raise RuntimeError(f"操作重复注册：{key}")

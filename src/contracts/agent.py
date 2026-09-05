@@ -47,7 +47,7 @@ class TreeLaunchRequest:
 class TreeLauncher(Protocol):
     """接受一次 AgentTree 唤起请求的运行时端口。"""
 
-    async def launch_tree(self, request: TreeLaunchRequest) -> dict[str, object]: ...
+    async def launch_tree(self, request: TreeLaunchRequest) -> AgentTree: ...
 
 
 @dataclass(frozen=True, slots=True)

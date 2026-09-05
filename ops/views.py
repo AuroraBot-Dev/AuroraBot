@@ -1,27 +1,13 @@
-"""投影运行时领域对象为 ops 与终端使用的 JSON 数据。
-
-ops 作为持有 AuroraAssembly 的 backend：领域→JSON 投影全部归 ops 所有，aurora 不书写
-这些 ops 业务，只消费这里的投影函数。
-"""
+"""投影 Assembly 中的领域对象为 ops JSON 数据。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ops.router import render_result
 from src.utils import thaw_json
 
 if TYPE_CHECKING:
-    from ops.contracts import OperationResult
-    from src.contracts import (
-        AgentDefinition,
-        AgentNode,
-        AgentTree,
-        ChatMessage,
-        ToolDefinition,
-        TreeActivity,
-        WorldCommit,
-    )
+    from src.contracts import AgentDefinition, ToolDefinition, WorldCommit
     from src.mcp import McpAppSnapshot
 
 
@@ -93,70 +79,6 @@ def mcp_app_dict(snapshot: McpAppSnapshot) -> dict[str, Any]:
     }
 
 
-def terminal_text(result: OperationResult, *, command: bool) -> tuple[str, bool]:
-    """压缩 ops 结果为终端文本及树失败标记。"""
-    if command or not result.ok or result.data is None:
-        return render_result(result), False
-    root_id = result.data.get("root_id")
-    nodes = result.data.get("nodes")
-    if not isinstance(root_id, str) or not isinstance(nodes, list):
-        return render_result(result), False
-    root = next((node for node in nodes if isinstance(node, dict) and node.get("node_id") == root_id), None)
-    if root is None:
-        return render_result(result), False
-    failed = root.get("status") == "failed"
-    text = root.get("error") if failed else root.get("result")
-    return str(text) if text is not None else render_result(result), failed
-
-
-def tree_summary(tree: AgentTree) -> dict[str, Any]:
-    """投影 AgentTree 的有界摘要。"""
-    return {
-        "tree_id": tree.tree_id,
-        "root_id": tree.root_id,
-        "status": tree.status.value,
-        "node_count": len(tree.nodes),
-    }
-
-
-def tree_dict(tree: AgentTree) -> dict[str, Any]:
-    """投影 AgentTree 及其全部节点。"""
-    return {**tree_summary(tree), "nodes": [node_dict(node) for node in tree.nodes]}
-
-
-def node_dict(node: AgentNode) -> dict[str, Any]:
-    """投影一个 AgentNode。"""
-    return {
-        "node_id": node.node_id,
-        "parent_id": node.parent_id,
-        "parent_call_id": node.parent_call_id,
-        "definition_id": node.definition_id,
-        "prompt_id": node.prompt_id,
-        "model": node.model,
-        "tools": sorted(node.tools),
-        "status": node.status.value,
-        "result": node.result,
-        "error": node.error,
-        "messages": [message_dict(message) for message in node.messages],
-        "observed_frontier": dict(node.observed_frontier.positions),
-        "reviewed_world_update": node.reviewed_world_update,
-    }
-
-
-def message_dict(message: ChatMessage) -> dict[str, Any]:
-    """投影一条四角色领域消息。"""
-    return {
-        "role": message.role,
-        "content": message.content,
-        "tool_call_id": message.tool_call_id,
-        "is_error": message.is_error,
-        "tool_calls": [
-            {"call_id": call.call_id, "name": call.name, "arguments": dict(call.arguments)}
-            for call in message.tool_calls
-        ],
-    }
-
-
 def commit_dict(commit: WorldCommit) -> dict[str, Any]:
     """投影一条世界提交。"""
     return {
@@ -168,14 +90,4 @@ def commit_dict(commit: WorldCommit) -> dict[str, Any]:
         "scopes": dict(commit.scopes),
         "based_on": dict(commit.based_on.positions),
         "data": dict(commit.data),
-    }
-
-
-def activity_dict(activity: TreeActivity) -> dict[str, Any]:
-    """投影世界日志推导出的树活动摘要。"""
-    return {
-        "tree_id": activity.tree_id,
-        "commit_count": activity.commit_count,
-        "first_seen": activity.first_seen.isoformat(),
-        "last_seen": activity.last_seen.isoformat(),
     }

@@ -1,7 +1,7 @@
 """组合 ops 端口、操作注册表与双入口路由。
 
-OpsRuntime 直接持有唯一的 AuroraAssembly 与进程面协议对象：实例化窄端口由
-ops.ports 从 assembly 派生，aurora 不再把适配器装配进 ops。
+OpsRuntime 直接持有唯一的 AuroraAssembly：只读实例化窄端口由 ops.ports 从
+assembly 派生，aurora 不再把适配器装配进 ops。
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ if TYPE_CHECKING:
 class OpsRuntime:
     """热路径外的统一操作运行时。"""
 
-    def __init__(self, assembly: AuroraAssembly, process: object) -> None:
+    def __init__(self, assembly: AuroraAssembly) -> None:
         self._assembly = assembly
-        self._ports = build_ops_ports(assembly, process, process, process)
+        self._ports = build_ops_ports(assembly)
         self._router = OperationRouter(self._ports)
 
     @property
@@ -45,6 +45,3 @@ class OpsRuntime:
 
     async def execute_resolved(self, spec: OperationSpec, params: dict[str, Any]) -> OperationResult:
         return await self._router.execute_resolved(spec, params)
-
-    async def route_text(self, raw: str) -> OperationResult:
-        return await self._router.route_text(raw)

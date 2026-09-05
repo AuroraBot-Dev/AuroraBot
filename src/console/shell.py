@@ -64,7 +64,7 @@ class TerminalConsole:
     ) -> None:
         stop = stop_event or asyncio.Event()
         _logger.info("本地终端启动")
-        output("AuroraBot 本地终端；输入 /help 查看操作。")
+        output("AuroraBot 本地终端；输入 /help 查看本地命令。")
         prompt_reader = _PromptReader() if readline is None else None
         terminal_context = patch_stdout(raw=True) if prompt_reader is not None else contextlib.nullcontext()
         with terminal_context:
