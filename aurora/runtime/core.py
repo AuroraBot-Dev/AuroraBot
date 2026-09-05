@@ -1,4 +1,8 @@
-"""项目级进程门面：持有 AuroraAssembly 并运行 AgentTree。"""
+"""项目级进程门面：持有已装配实例并运行 AgentTree。
+
+本模块不读取任何 ``aurora.composition`` 键或 ``aurora.configuration`` 规格；
+协作者由 ``aurora.runtime.assembly`` 从单一 ``AuroraAssembly`` 解析后注入。
+"""
 
 from __future__ import annotations
 
@@ -8,14 +12,6 @@ from uuid import uuid4
 from rich.console import Console
 from rich.markup import escape as markup_escape
 
-from aurora.composition.agents import AGENTS
-from aurora.composition.cadence import CADENCE
-from aurora.composition.console import TERMINAL_CONSOLE
-from aurora.composition.engine import ENGINE_RUNNER
-from aurora.composition.mcp import MCP_RUNTIME
-from aurora.composition.memory import MEMORY
-from aurora.composition.world import WORLD_JOURNAL
-from aurora.configuration.runtime import RUNTIME_CONFIG
 from src.console import TerminalControl, TerminalResponse
 from src.contracts import AgentTree, EnvironmentEvent, WorldCommit, WorldFrontier
 from src.utils import bounded_summary, get_logger
@@ -25,30 +21,47 @@ if TYPE_CHECKING:
 
     from aurora.composer import AuroraAssembly
     from aurora.configuration.runtime import RuntimeConfig
-    from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest
+    from src.agents import AgentCatalog
+    from src.cadence import Cadence
+    from src.console import TerminalConsole
+    from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest, WorldJournal
+    from src.engine import AgentTreeRunner
+    from src.mcp import McpRuntime
+    from src.memory import Memory
 
 _logger = get_logger(__name__)
 
 
 class AuroraRuntime:
-    """保留项目级构造边界，同时只运行 AgentTree 核心。"""
+    """保留项目级运行边界；协作者由装配层从 Assembly 注入。"""
 
-    def __init__(self, assembly: AuroraAssembly, *, output: Callable[[str], None] = print) -> None:
-        config = assembly.config
+    def __init__(
+        self,
+        assembly: AuroraAssembly,
+        *,
+        runner: AgentTreeRunner,
+        agents: AgentCatalog,
+        root: RuntimeConfig,
+        console: TerminalConsole,
+        world: WorldJournal,
+        cadence: Cadence,
+        memory: Memory,
+        mcp: McpRuntime,
+        output: Callable[[str], None] = print,
+    ) -> None:
         self.assembly = assembly
-        self.runner = assembly.get(ENGINE_RUNNER)
-        self.root: RuntimeConfig = config.get(RUNTIME_CONFIG)
-        self.agents = assembly.get(AGENTS)
-        self.config = config
-        self.console = assembly.get(TERMINAL_CONSOLE)
-        self.world = assembly.get(WORLD_JOURNAL)
-        self.cadence = assembly.get(CADENCE)
-        self.memory = assembly.get(MEMORY)
-        self.mcp = assembly.get(MCP_RUNTIME)
+        self.config = assembly.config
+        self.runner = runner
+        self.agents = agents
+        self.root = root
+        self.console = console
+        self.world = world
+        self.cadence = cadence
+        self.memory = memory
+        self.mcp = mcp
         self.output = output
         self._trees: dict[str, AgentTree] = {}
         self._serve_requester: Callable[[], Awaitable[str]] | None = None
-        self.cadence.bind_launcher(self)
 
     def create_tree(
         self,

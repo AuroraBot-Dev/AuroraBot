@@ -85,6 +85,9 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。
+- `aurora.runtime` 是唯一进程边界：`assembly.py` 是唯一从 `AuroraAssembly` 拆取实例键与配置规格的装配适配点；运行门面
+  `core.py` 只持有被注入的协作者（runner/agents/root/console/world/cadence/memory/mcp）与通用 `assembly`/`config`，不 import
+  组合键或配置规格，也不随新增组合模块增长。
 - 命令、配置、组合与 ops 操作模块都按包目录自动发现：新增并列项只增加该能力自己的一个模块与配套 TOML/测试，不再修改目录入口、
   Tool 聚合方或 runtime 分支；发现范围只含随 AuroraBot 安装的内部包，不做第三方 entry point 或 manifest。
 - 组合模块是 src 功能包的唯一代表：每个 `aurora/composition/<pkg>.py` 导出唯一 `PACKAGE_SPEC`，声明自身键、`provides`、

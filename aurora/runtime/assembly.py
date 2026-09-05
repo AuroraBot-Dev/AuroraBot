@@ -1,16 +1,25 @@
-"""从单一 AuroraAssembly（含 AuroraConfig）构造进程门面。"""
+"""从单一 AuroraAssembly（含 AuroraConfig）构造进程门面。
+
+本模块是唯一读取 ``aurora.composition`` 键与配置规格的运行时装配点：
+进程门面本身只依赖注入的协作者，不随新增组合模块增长。
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from aurora.composition import compose_project, compose_project_managed
+from aurora.composition.agents import AGENTS
 from aurora.composition.ai import MODEL
+from aurora.composition.cadence import CADENCE
+from aurora.composition.console import TERMINAL_CONSOLE
+from aurora.composition.engine import ENGINE_RUNNER
 from aurora.composition.mcp import MCP_CLIENT_FACTORY, MCP_RUNTIME
+from aurora.composition.memory import MEMORY
 from aurora.composition.world import WORLD_JOURNAL
+from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.contributions import TOOL_CONTRIBUTIONS
 from aurora.runtime.core import AuroraRuntime
-from src.mcp import McpClientFactory
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -76,4 +85,17 @@ def runtime_from_assembly(
     output: Callable[[str], None] = print,
 ) -> AuroraRuntime:
     """把已组合完成的 assembly（实例 + AuroraConfig）构造为进程门面。"""
-    return AuroraRuntime(assembly, output=output)
+    runtime = AuroraRuntime(
+        assembly,
+        runner=assembly.get(ENGINE_RUNNER),
+        agents=assembly.get(AGENTS),
+        root=assembly.config.get(RUNTIME_CONFIG),
+        console=assembly.get(TERMINAL_CONSOLE),
+        world=assembly.get(WORLD_JOURNAL),
+        cadence=assembly.get(CADENCE),
+        memory=assembly.get(MEMORY),
+        mcp=assembly.get(MCP_RUNTIME),
+        output=output,
+    )
+    runtime.cadence.bind_launcher(runtime)
+    return runtime

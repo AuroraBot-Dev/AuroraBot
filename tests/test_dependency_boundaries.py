@@ -122,6 +122,23 @@ def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
     assert module_names == registered_names
 
 
+def test_runtime_core_only_accepts_collaborators_injected_from_assembly() -> None:
+    """进程门面 core.py 不得运行时 import composition 键或 configuration 规格；装配只在 assembly.py。"""
+    violations: list[str] = []
+    runtime_directory = _ROOT / "aurora" / "runtime"
+    for path in runtime_directory.glob("*.py"):
+        if path.stem == "assembly":
+            continue
+        for module, guarded in _imports_of(path):
+            if guarded:
+                continue
+            if module == "aurora.composition" or module.startswith("aurora.composition."):
+                violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
+            if module.startswith("aurora.configuration.") and path.stem not in {"support", "run", "panel"}:
+                violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
+    assert violations == []
+
+
 def test_cli_main_only_dispatches_through_command_layer() -> None:
     path = _ROOT / "aurora" / "main.py"
     aurora_imports = {
