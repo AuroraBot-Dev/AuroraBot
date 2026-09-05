@@ -9,6 +9,7 @@ from __future__ import annotations
 from aurora.commander import CommandSpec, SubcommandSpec, build_registry
 from aurora.commands import (
     about,
+    app,
     check,
     config,
     docs,
@@ -20,6 +21,7 @@ from aurora.commands import (
 
 COMMAND_SPECS = (
     (start.COMMAND, start.execute),
+    (app.COMMAND, app.execute),
     (about.COMMAND, about.execute),
     (check.COMMAND, check.execute),
     (config.COMMAND, config.execute),
