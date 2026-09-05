@@ -19,6 +19,7 @@ MEMORY = InstanceKey[Memory]("memory.reader")
 
 
 def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.memory`` 的项目实例。"""
     configuration = context.config.get(MEMORY_CONFIG)
     journal = cast("WorldJournal", context.require_name(WORLD_JOURNAL_NAME))
     memory = Memory(

@@ -17,6 +17,7 @@ TERMINAL_CONSOLE = InstanceKey[TerminalConsole]("console.terminal")
 
 
 def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.console`` 的项目实例。"""
     world = cast("WorldWriter", context.require_name(WORLD_JOURNAL_NAME))
     context.provide(TERMINAL_CONSOLE, TerminalConsole(world))
 

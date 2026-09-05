@@ -19,13 +19,6 @@ _SYSTEM_PREFIX = "system."
 PROMPT_ASSEMBLER = InstanceKey[PromptAssembler]("prompt.assembler")
 
 
-def construct(context: CompositionContext) -> None:
-    prompts = context.config.get(PROMPTS_CONFIG)
-    system, agent_prompts = _read_prompts(context.config, prompts)
-    catalog = PromptCatalog(system, agent_prompts)
-    context.provide(PROMPT_ASSEMBLER, PromptAssembler(catalog))
-
-
 def _read_prompts(
     config: AuroraConfig,
     prompts: tuple[PromptConfig, ...],
@@ -51,6 +44,14 @@ def _read_fragment(prompts_directory: Path, source: str) -> str:
     if not value:
         raise ValueError(f"提示词文件不能为空：{source}")
     return value
+
+
+def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.prompt`` 的项目实例。"""
+    prompts = context.config.get(PROMPTS_CONFIG)
+    system, agent_prompts = _read_prompts(context.config, prompts)
+    catalog = PromptCatalog(system, agent_prompts)
+    context.provide(PROMPT_ASSEMBLER, PromptAssembler(catalog))
 
 
 PACKAGE_SPEC = PackageSpec(

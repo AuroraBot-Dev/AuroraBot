@@ -17,6 +17,7 @@ MODEL = InstanceKey[Model]("ai.model")
 
 
 def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.ai`` 的项目实例。"""
     providers = context.config.get(PROVIDERS_CONFIG)
     endpoints = context.config.get(ENDPOINTS_CONFIG)
     if not context.contains(MODEL):

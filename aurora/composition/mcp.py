@@ -23,22 +23,6 @@ def _mcp_platform(config: AuroraConfig) -> PlatformConfig:
     return next(item for item in config.get(PLATFORMS_CONFIG) if item.id == _MCP_PLATFORM_ID)
 
 
-def construct(context: CompositionContext) -> None:
-    """接收异步阶段已冻结的 runtime；无生效 App 时可同步构造禁用快照。"""
-    if not context.contains(MCP_RUNTIME):
-        platform = _mcp_platform(context.config)
-        runtime = McpRuntime.disabled(build_mcp_specs(context.config), platform_enabled=platform.enabled)
-        context.provide(MCP_RUNTIME, runtime)
-
-
-PACKAGE_SPEC = PackageSpec(
-    key=MCP_RUNTIME,
-    provides=(MCP_RUNTIME,),
-    requires=(),
-    register=construct,
-)
-
-
 def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
     """映射纯 DTO 与当前进程的显式凭据为协议适配说明。"""
     apps = config.get(APPS_CONFIG)
@@ -89,3 +73,19 @@ def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
             )
         )
     return tuple(specs)
+
+
+def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.mcp`` 的项目实例。"""
+    if not context.contains(MCP_RUNTIME):
+        platform = _mcp_platform(context.config)
+        runtime = McpRuntime.disabled(build_mcp_specs(context.config), platform_enabled=platform.enabled)
+        context.provide(MCP_RUNTIME, runtime)
+
+
+PACKAGE_SPEC = PackageSpec(
+    key=MCP_RUNTIME,
+    provides=(MCP_RUNTIME,),
+    requires=(),
+    register=construct,
+)

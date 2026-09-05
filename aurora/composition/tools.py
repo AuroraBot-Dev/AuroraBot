@@ -21,7 +21,7 @@ TOOLS = InstanceKey[ToolRegistry]("tools.registry")
 
 
 def construct(context: CompositionContext) -> None:
-    """组成框架内建工具与外部注入工具的唯一目录。"""
+    """构造并注册 ``src.tools`` 的项目实例。"""
     journal = cast("WorldJournal", context.require_name(WORLD_JOURNAL_NAME))
     agents = cast("AgentCatalog", context.require_name(AGENTS_NAME))
     external = context.require_name(EXTERNAL_TOOLS_NAME) if context.contains_name(EXTERNAL_TOOLS_NAME) else ()

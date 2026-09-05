@@ -16,7 +16,14 @@ if TYPE_CHECKING:
 WORLD_JOURNAL = InstanceKey[WorldJournal]("world.journal")
 
 
+def build_world(config: AuroraConfig) -> WorldJournal:
+    """为异步启动阶段构造尚未初始化的唯一 WorldJournal。"""
+    database_path = config.project_root / resolve_directory(config.get(STORAGE_CONFIG), "world") / "world.sqlite3"
+    return SqlAlchemyWorldJournal(database_path)
+
+
 def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.world`` 的项目实例。"""
     if not context.contains(WORLD_JOURNAL):
         context.provide(WORLD_JOURNAL, build_world(context.config))
 
@@ -27,9 +34,3 @@ PACKAGE_SPEC = PackageSpec(
     requires=(),
     register=construct,
 )
-
-
-def build_world(config: AuroraConfig) -> WorldJournal:
-    """为异步启动阶段构造尚未初始化的唯一 WorldJournal。"""
-    database_path = config.project_root / resolve_directory(config.get(STORAGE_CONFIG), "world") / "world.sqlite3"
-    return SqlAlchemyWorldJournal(database_path)

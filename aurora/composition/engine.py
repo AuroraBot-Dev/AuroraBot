@@ -63,6 +63,7 @@ def _validate_cross_references(
 
 
 def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.engine`` 的项目实例。"""
     configuration = context.config.get(ENGINE_CONFIG)
     runtime = context.config.get(RUNTIME_CONFIG)
     assembler = cast("PromptAssembler", context.require_name(PROMPT_ASSEMBLER_NAME))

@@ -19,6 +19,7 @@ CADENCE = InstanceKey[Cadence]("cadence.runtime")
 
 
 def construct(context: CompositionContext) -> None:
+    """构造并注册 ``src.cadence`` 的项目实例。"""
     configuration = context.config.get(CADENCE_CONFIG)
     journal = cast("WorldJournal", context.require_name(WORLD_JOURNAL_NAME))
     cadence = Cadence(
