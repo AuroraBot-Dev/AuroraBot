@@ -31,14 +31,14 @@ aurora/commands/       每个 CLI 命令一个注册模块
 aurora/configuration/  每个 TOML 一个解析与注册模块
 aurora/composer.py        组合根实现：类型化 InstanceKey、CompositionContext、PackageSpec/ModuleSpec、AuroraAssembly
 aurora/composition/        每个 src 功能包一个同名代表模块（provides/requires/construct），由注册表合成
-aurora/runtime/        AuroraRuntime 进程门面：AgentTree 运行/echo/停止与 config reload（ops 的 process 协议）
+aurora/runtime/        AuroraRuntime 进程门面：AgentTree 运行、Console 本地分派与进程生命周期
 aurora/utils/          项目级进程、环境、平台与 TOML 工具
-ops/            统一 OperationSpec 目录、运行监测、限定配置改动与本地 Panel HTTP
+ops/            只读 OperationSpec 观察目录与本地 Panel HTTP
 ops/ports.py    从 AuroraAssembly 派生实例化窄端口的 ops backend 端口层
-ops/views.py    ops 侧领域→JSON 投影（tree/commit/tool/agent 等）
+ops/views.py    ops 侧领域→JSON 投影（commit/tool/agent 等）
 ops/operations/       每个运行时包一个 JSON 化操作注册模块
 ops/panel/      Panel 会话、Token 与本地 HTTP 后端
-ops/utils/      ops 层的格式化与资源工具
+ops/parser.py   GET 操作参数校验与类型转换
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
 src/agents/     不可变 AgentDefinition 目录与唯一解析
@@ -74,11 +74,12 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
 - 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
 - `src/cadence` 只按世界提交请求唤起一棵 AgentTree；`src/memory` 只消费 `WorldReader` 生成 PromptAssembler 的显式输入；
   二者不得保存或解释另一套认知运行状态。
-- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线。
-- 每个运行时包在 ops 中拥有窄 RuntimePort 和 method/path + 斜杠入口，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
+- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线；`/help`、`/clear`、`/quit`、`/serve`
+  是不经过 ops 的本地命令。
+- 每个已开放观察域在 ops 中拥有窄 RuntimePort 和 GET method/path，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
 - ops 是持有 `AuroraAssembly` 的 backend：路由、监测端口与 JSON 投影全在 ops 侧（`ops/views.py`、`ops/ports.py`），
-  `OpsRuntime(assembly, process)` 从 assembly 派生实例化窄端口；只有进程面能力（树运行/echo、停止、config reload）由
-  `aurora.runtime` 实现并作为 process 协议传入。aurora 不书写 ops 适配器或领域→JSON 投影。
+  `OpsRuntime(assembly)` 从 assembly 派生只读实例化窄端口；不开放 Tree、世界写入、配置修改、Cadence 触发或进程控制。
+  Panel 后端只在 Console 显式执行 `/serve` 后于同一事件循环启动。aurora 不书写 ops 适配器或领域→JSON 投影。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。

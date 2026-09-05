@@ -15,6 +15,7 @@ from aurora.configuration.apps import APPS_CONFIG, AppConfig
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.runtime import AuroraRuntime, assemble_runtime, run_project
 from aurora.runtime import run as runtime_module
+from ops.runtime import OpsRuntime
 from src.contracts import (
     ChatMessage,
     EnvironmentEvent,
@@ -325,7 +326,7 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
             assert runtime.world is world
             assert runtime.mcp is mcp
             assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
-            tools_port = runtime.ops.ports.tools
+            tools_port = OpsRuntime(runtime.assembly).ports.tools
             assert tools_port is not None
             assert tools_port.tool_detail(_TOOL_ID) == {
                 "name": _TOOL_ID,

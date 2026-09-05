@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora import load_config, run_project
+from aurora import assemble_runtime, load_config, run_project
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, WorldCommit, WorldCommitInput, WorldFrontier
 
@@ -99,7 +99,7 @@ def test_terminal_console_routes_text_renders_controls_and_stops() -> None:
     )
 
     assert dispatcher.inputs == ["你好", "/clear", "/exit"]
-    assert output[0] == "AuroraBot 本地终端；输入 /help 查看操作。"
+    assert output[0] == "AuroraBot 本地终端；输入 /help 查看本地命令。"
     assert "Bot> 收到：你好" in output
     assert "\033[2J\033[H" in output
     assert stop.is_set()
@@ -126,7 +126,7 @@ def test_terminal_console_records_every_non_empty_input_to_worldline() -> None:
     assert dispatcher.inputs == ["请处理", "/status", "/exit"]
 
 
-def test_project_console_runs_message_tree_ops_and_shutdown(configured_project: Path) -> None:
+def test_project_console_runs_message_tree_and_local_commands(configured_project: Path) -> None:
     output: list[str] = []
     model = FakeModel()
     stop = asyncio.Event()
@@ -136,7 +136,7 @@ def test_project_console_runs_message_tree_ops_and_shutdown(configured_project: 
             load_config(configured_project),
             model,
             stop_event=stop,
-            readline=_readline(["请处理", "/status", "/exit"]),
+            readline=_readline(["请处理", "/help", "/quit"]),
             output=output.append,
         )
     )
@@ -145,8 +145,31 @@ def test_project_console_runs_message_tree_ops_and_shutdown(configured_project: 
     assert model.requests[0].messages[1].content == "请处理"
     assert runtime.runtime_status()["trees"]["completed"] == 1
     assert "Bot> 全链路完成" in output
-    assert any('"tree_count": 1' in line for line in output)
+    assert "Bot> 本地命令：/help /clear /quit /serve" in output
     assert stop.is_set()
+
+
+def test_runtime_serve_command_uses_injected_local_callback(configured_project: Path) -> None:
+    runtime = assemble_runtime(load_config(configured_project), FakeModel())
+    calls = 0
+
+    async def serve() -> str:
+        nonlocal calls
+        calls += 1
+        return "Panel 后端已启动。"
+
+    runtime.bind_serve_requester(serve)
+    try:
+        response = asyncio.run(runtime.dispatch_terminal("/serve"))
+        unknown = asyncio.run(runtime.dispatch_terminal("/status"))
+
+        assert response.text == "Panel 后端已启动。"
+        assert response.is_error is False
+        assert calls == 1
+        assert unknown.is_error is True
+        assert runtime.runtime_status()["tree_count"] == 0
+    finally:
+        asyncio.run(runtime.world.close())
 
 
 def test_project_headless_waits_only_for_shared_stop_event(configured_project: Path) -> None:

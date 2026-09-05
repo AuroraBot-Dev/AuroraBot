@@ -4,17 +4,19 @@ import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-import pytest
 import tomlkit
 
 from aurora import load_config
-from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configuration.platforms import PlatformConfig
 from aurora.configuration.storage import StorageEntry
 from aurora.runtime import run as runtime_module
 from aurora.runtime.panel import run_panel
 from src.contracts import ChatMessage, ModelRequest
+
+if TYPE_CHECKING:
+    import pytest
 
 
 @dataclass(slots=True)
@@ -154,7 +156,7 @@ def test_run_panel_disabled_returns_none_without_serving() -> None:
     assert result is None
 
 
-def test_run_project_serves_panel_and_closes_before_world(
+def test_run_project_only_serves_panel_after_local_command_and_closes_before_world(
     configured_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_panel(configured_project)
@@ -169,25 +171,33 @@ def test_run_project_serves_panel_and_closes_before_world(
 
     monkeypatch.setattr(runtime_module, "run_panel", fake_run_panel)
     _trace_resource_close(monkeypatch, trace)
-    stop = asyncio.Event()
-    stop.set()
+    output: list[str] = []
+    inputs = iter(["/serve", "/serve", "/quit"])
 
-    _run_headless(configured_project, stop)
+    asyncio.run(
+        runtime_module.run_project(
+            load_config(configured_project),
+            FakeModel(),
+            readline=lambda _prompt: next(inputs),
+            output=output.append,
+        )
+    )
 
+    assert trace.count("panel.serve") == 1
     assert trace.index("panel.serve") < trace.index("panel.notice")
     assert trace.index("panel.notice") < trace.index("panel.close")
     assert trace.index("panel.close") < trace.index("mcp.close")
     assert trace.index("mcp.close") < trace.index("world.close")
+    assert "Bot> Panel 后端已经在运行。" in output
 
 
-def test_run_project_without_panel_skips_server_and_notice(
-    configured_project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    panel_config = next(
-        item for item in load_config(configured_project).get(PLATFORMS_CONFIG) if item.id == "builtin.panel"
-    )
-    assert panel_config.enabled is False
+def test_run_project_never_starts_panel_implicitly(configured_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     trace: list[str] = []
+
+    async def unexpected_panel(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Panel 不应自动启动")
+
+    monkeypatch.setattr(runtime_module, "run_panel", unexpected_panel)
     _trace_resource_close(monkeypatch, trace)
     stop = asyncio.Event()
     stop.set()
@@ -197,9 +207,7 @@ def test_run_project_without_panel_skips_server_and_notice(
     assert trace == ["mcp.close", "world.close"]
 
 
-def test_run_project_closes_mcp_and_world_when_panel_start_fails(
-    configured_project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_local_serve_failure_does_not_stop_bot(configured_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_panel(configured_project)
     trace: list[str] = []
     fake = FakePanelRuntime(trace, fail=True)
@@ -209,11 +217,18 @@ def test_run_project_closes_mcp_and_world_when_panel_start_fails(
 
     monkeypatch.setattr(runtime_module, "run_panel", failing_panel)
     _trace_resource_close(monkeypatch, trace)
-    stop = asyncio.Event()
-    stop.set()
-
-    with pytest.raises(RuntimeError, match="绑定失败"):
-        _run_headless(configured_project, stop)
+    output: list[str] = []
+    inputs = iter(["/serve", "/quit"])
+    runtime = asyncio.run(
+        runtime_module.run_project(
+            load_config(configured_project),
+            FakeModel(),
+            readline=lambda _prompt: next(inputs),
+            output=output.append,
+        )
+    )
 
     assert "panel.notice" not in trace
+    assert runtime.runtime_status()["tree_count"] == 0
+    assert any("Panel 后端启动失败：绑定失败" in line for line in output)
     assert trace[-2:] == ["mcp.close", "world.close"]

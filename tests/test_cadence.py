@@ -10,6 +10,8 @@ import pytest
 from src.cadence import CADENCE_SCOPE, CADENCE_TICK, Cadence, ReactiveRule
 from src.contracts import (
     MCP_EVENT_RECEIVED,
+    AgentDefinition,
+    AgentTree,
     EnvironmentEvent,
     TreeActivity,
     TreeLaunchRequest,
@@ -116,11 +118,25 @@ class FakeLauncher:
     requests: list[TreeLaunchRequest] = field(default_factory=list)
     failure: Exception | None = None
 
-    async def launch_tree(self, request: TreeLaunchRequest) -> dict[str, object]:
+    async def launch_tree(self, request: TreeLaunchRequest) -> AgentTree:
         if self.failure is not None:
             raise self.failure
         self.requests.append(request)
-        return {"tree_id": request.tree_id, "status": "running"}
+        definition = AgentDefinition(
+            definition_id=request.agent or "builtin.root",
+            description="cadence 测试原型",
+            prompt_id="builtin.root",
+            model="fake",
+            tools=frozenset(),
+            children=frozenset(),
+        )
+        return AgentTree.create(
+            request.tree_id or "root",
+            "root",
+            definition,
+            request.message,
+            request.frontier,
+        )
 
 
 def _page(after: int, commits: tuple[WorldCommit, ...], *, end: int | None = None) -> WorldStreamPage:

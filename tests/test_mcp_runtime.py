@@ -11,7 +11,6 @@ import pytest
 from src.contracts import (
     MCP_APP_DISCONNECTED,
     MCP_CATALOG_CHANGED,
-    MCP_CATALOG_FROZEN,
     MCP_EVENT_RECEIVED,
     EnvironmentEvent,
     ToolCall,
@@ -255,12 +254,7 @@ def test_prepare_mcp_reads_every_page_then_publishes_one_frozen_catalog() -> Non
                 "aur.mcp.org.example.clock.zeta",
                 "aur.mcp.org.example.clock.alpha",
             )
-            frozen = [commit for commit in world.commits if commit.kind == MCP_CATALOG_FROZEN]
-            assert len(frozen) == 1
-            assert frozen[0].data == {
-                "tool_ids": list(snapshot.apps[0].tool_ids),
-                "tool_count": 2,
-            }
+            assert world.commits == []
             assert client.catalog_changed is not None and client.disconnected is not None
             await runtime.activate()
             assert client.events_active is True
@@ -347,7 +341,7 @@ def test_startup_failure_closes_opened_clients_in_reverse_without_freezing_parti
         assert first.catalog_changed is not None and second.catalog_changed is not None
         assert first.disconnected is not None and second.disconnected is not None
         assert first.events_active is second.events_active is False
-        assert all(commit.kind != MCP_CATALOG_FROZEN for commit in world.commits)
+        assert world.commits == []
 
     asyncio.run(scenario())
 

@@ -24,6 +24,7 @@ _HTTP_OK = 200
 _HTTP_NO_CONTENT = 204
 _HTTP_BAD_REQUEST = 400
 _HTTP_UNAUTHORIZED = 401
+_HTTP_METHOD_NOT_ALLOWED = 405
 _HTTP_INTERNAL_ERROR = 500
 
 
@@ -48,15 +49,6 @@ class FakeOpsRuntime:
                 ParameterSpec("detail", ParameterLocation.QUERY),
             ),
         )
-        self.write = OperationSpec(
-            "POST",
-            "/items/{item_id}",
-            "items.write",
-            parameters=(
-                ParameterSpec("item_id", ParameterLocation.PATH, required=True),
-                ParameterSpec("value", ParameterLocation.BODY, required=True),
-            ),
-        )
         self.failure = OperationSpec(
             "GET",
             "/failures/{code}",
@@ -74,8 +66,6 @@ class FakeOpsRuntime:
         if len(segments) == _SEGMENT_COUNT and segments[0] == "items":
             if method == "GET":
                 return self.read, {"item_id": segments[1]}, False
-            if method == "POST":
-                return self.write, {"item_id": segments[1]}, False
             return None, None, True
         if len(segments) == _SEGMENT_COUNT and segments[0] == "failures" and method == "GET":
             return self.failure, {"code": segments[1]}, False
@@ -195,8 +185,8 @@ def test_panel_api_authentication_ops_and_logout(tmp_path: Path) -> None:
     assert login.status == _HTTP_OK and set(login.json()) == {"token", "created_at", "expires_at"}
     assert catalog.json() == {"operations": FakeOpsRuntime().catalog}
     assert read.json()["data"] == {"item_id": "item-1", "detail": "yes"}
-    assert read.json()["control"] == "none"
-    assert write.json()["data"] == {"item_id": "item-1", "value": "updated"}
+    assert "control" not in read.json()
+    assert write.status == _HTTP_METHOD_NOT_ALLOWED
 
     logout = _request(app, "POST", "/api/auth/logout", headers=authorization)
     assert logout.status == _HTTP_NO_CONTENT and logout.body == b""
@@ -204,7 +194,7 @@ def test_panel_api_authentication_ops_and_logout(tmp_path: Path) -> None:
     asyncio.run(store.close())
 
 
-def test_panel_api_rejects_wrong_parameter_sources_and_body_shapes(tmp_path: Path) -> None:
+def test_panel_api_rejects_wrong_parameter_sources_bodies_and_post(tmp_path: Path) -> None:
     async def setup() -> PanelStore:
         tokens = iter(("bootstrap", "session"))
         store = PanelStore(tmp_path, session_ttl_seconds=60, token_factory=lambda: next(tokens))
@@ -234,15 +224,9 @@ def test_panel_api_rejects_wrong_parameter_sources_and_body_shapes(tmp_path: Pat
     )
     missing_json = _request(app, "POST", "/api/ops/items/one", headers=auth)
 
-    assert {wrong_query.status, get_body.status, wrong_body.status, array_body.status, missing_json.status} == {400}
-    assert all(
-        response.json()["code"] == "PARSE_ERROR"
-        for response in (wrong_query, get_body, wrong_body, array_body, missing_json)
-    )
-    assert all(
-        response.json()["control"] == "none"
-        for response in (wrong_query, get_body, wrong_body, array_body, missing_json)
-    )
+    assert wrong_query.status == get_body.status == _HTTP_BAD_REQUEST
+    assert wrong_query.json()["code"] == get_body.json()["code"] == "PARSE_ERROR"
+    assert {wrong_body.status, array_body.status, missing_json.status} == {_HTTP_METHOD_NOT_ALLOWED}
     asyncio.run(store.close())
 
 
@@ -275,7 +259,7 @@ def test_panel_api_maps_operation_statuses(tmp_path: Path, code: str, status: in
         headers={"authorization": "Bearer session"},
     )
     assert response.status == status
-    assert response.json()["control"] == "none"
+    assert "control" not in response.json()
     asyncio.run(store.close())
 
 
@@ -315,7 +299,6 @@ def test_panel_api_returns_generic_500_and_validates_cors_and_host(tmp_path: Pat
         "code": "INTERNAL_ERROR",
         "message": "服务器内部错误。",
         "data": None,
-        "control": "none",
     }
     assert "secret failure detail" not in crashed.body.decode()
     assert allowed_cors.status == _HTTP_OK

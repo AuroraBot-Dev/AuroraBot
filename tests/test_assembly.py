@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,7 @@ from src.contracts import (
     ToolOutput,
     TreeLaunchRequest,
     TreeStatus,
+    WorldFrontier,
 )
 
 EXPECTED_MAX_DEPTH = 4
@@ -77,26 +79,28 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
-        world_port = runtime.ops.ports.world
-        cadence_port = runtime.ops.ports.cadence
-        assert world_port is not None and cadence_port is not None
         await runtime.world.initialize()
         for index in range(5):
-            await world_port.record_event(
-                event_id=f"event-{index}",
+            await runtime.world.append_commit(
+                commit_id=f"event-{index}",
                 source="mcp:org.example.background",
-                scope="qq:group-cadence",
                 kind=MCP_EVENT_RECEIVED,
                 summary=f"第 {index + 1} 条消息",
+                scopes=frozenset({"qq:group-cadence"}),
+                based_on=WorldFrontier(),
                 data={"event_kind": "qq.notice.background"},
+                occurred_at=datetime.now(UTC),
             )
-        before = cadence_port.cadence_status()
-        await cadence_port.cadence_trigger()
-        after = cadence_port.cadence_status()
+        before = runtime.cadence.status()
+        await runtime.cadence.evaluate_once()
+        after = runtime.cadence.status()
 
         assert runtime.runtime_status()["trees"]["completed"] == 1
         assert before["pending"] == 0 and after["pending"] == 0
-        assert after["cursor"] > before["cursor"]
+        after_cursor = after["cursor"]
+        before_cursor = before["cursor"]
+        assert isinstance(after_cursor, int) and isinstance(before_cursor, int)
+        assert after_cursor > before_cursor
         assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
         tree = next(iter(runtime._trees.values()))
         assert tree.node(tree.root_id).definition_id == "builtin.triage"
@@ -112,8 +116,7 @@ def test_launch_tree_echoes_root_text_without_external_delivery(configured_proje
 
     async def scenario() -> None:
         result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="builtin.triage"))
-        assert "delivery" not in result
-        assert result["status"] == "completed"
+        assert result.status is TreeStatus.COMPLETED
         assert echoed == ["Cadence> [builtin.triage] done"]
 
     asyncio.run(scenario())
