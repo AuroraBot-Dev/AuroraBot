@@ -5,15 +5,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora.composition import compose_project
-from aurora.composition.agents import AGENTS
-from aurora.composition.cadence import CADENCE
-from aurora.composition.console import TERMINAL_CONSOLE
+from aurora.composition.agents import AGENTS, AGENTS_OPS, EXTERNAL_TOOLS
+from aurora.composition.ai import AI_OPS, MODEL
+from aurora.composition.cadence import CADENCE, CADENCE_OPS
+from aurora.composition.console import CONSOLE_OPS, TERMINAL_CONSOLE
 from aurora.composition.engine import ENGINE_RUNNER
-from aurora.composition.mcp import MCP_RUNTIME
-from aurora.composition.memory import MEMORY
-from aurora.composition.world import WORLD_JOURNAL
+from aurora.composition.mcp import MCP_OPS, MCP_RUNTIME
+from aurora.composition.memory import MEMORY, MEMORY_OPS
+from aurora.composition.prompt import PROMPT_OPS
+from aurora.composition.tools import TOOLS_OPS
+from aurora.composition.world import WORLD_JOURNAL, WORLD_OPS
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.runtime.core import AuroraRuntime
+from aurora.views import ContractsOps
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -39,8 +43,12 @@ def assemble_runtime(
         instances.append((WORLD_JOURNAL, world))
     if mcp is not None:
         instances.append((MCP_RUNTIME, mcp))
+    if model is not None:
+        instances.append((MODEL, model))
     external_tools = (*tuple(tools), *(mcp.tools if mcp is not None else ()))
-    assembly = compose_project(config, model, external_tools, instances)
+    if external_tools:
+        instances.append((EXTERNAL_TOOLS, external_tools))
+    assembly = compose_project(config, instances)
     return AuroraRuntime(
         assembly.get(ENGINE_RUNNER),
         config.get(RUNTIME_CONFIG),
@@ -51,5 +59,15 @@ def assemble_runtime(
         assembly.get(CADENCE),
         assembly.get(MEMORY),
         assembly.get(MCP_RUNTIME),
+        assembly.get(AGENTS_OPS),
+        assembly.get(TOOLS_OPS),
+        assembly.get(PROMPT_OPS),
+        assembly.get(AI_OPS),
+        assembly.get(WORLD_OPS),
+        assembly.get(CONSOLE_OPS),
+        assembly.get(CADENCE_OPS),
+        assembly.get(MEMORY_OPS),
+        assembly.get(MCP_OPS),
+        ContractsOps(),
         output=output,
     )

@@ -1,104 +1,47 @@
-"""解析 ``config/runtime.toml`` 的 root Agent 入口与 Panel 配置。"""
+"""解析 ``config/runtime.toml`` 的进程级运行时配置。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-from urllib.parse import urlsplit
 
-from aurora.config import ConfigKey
-from aurora.utils.toml import TomlTable, boolean, load_toml, positive_integer, strings, table, text
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from aurora.config import ConfigCollector
-
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
-_MAX_PORT = 65535
-
-
-@dataclass(frozen=True, slots=True)
-class PanelConfig:
-    enabled: bool
-    host: str
-    port: int
-    frontend_url: str | None
-    allowed_origins: tuple[str, ...]
-    open_browser: bool
-    session_ttl_seconds: int
+from aurora.config import (
+    ConfigSpec,
+    TableShape,
+    text_field,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
+    """进程级 root Agent 入口与统一日志级别。"""
+
+    profile: str
     node_id: str
     agent: str
-    console_enabled: bool
-    panel: PanelConfig
-    profile: str
+    log_level: str
+
+    def __post_init__(self) -> None:
+        if not self.profile.strip():
+            raise ValueError("profile 不能为空")
+        if not self.node_id.strip():
+            raise ValueError("node_id 不能为空")
+        if not self.agent.strip():
+            raise ValueError("agent 不能为空")
+        if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NONE"}:
+            raise ValueError("log_level 必须是日志级别或 NONE")
 
 
-RUNTIME_CONFIG = ConfigKey[RuntimeConfig]("runtime")
-
-
-def register(configs: ConfigCollector) -> None:
-    configs.register(RUNTIME_CONFIG, "config/runtime.toml", _parse)
-
-
-def _parse(path: Path) -> RuntimeConfig:
-    runtime = table(load_toml(path), "runtime")
-    tree = table(runtime, "tree")
-    console = table(runtime, "console")
-    return RuntimeConfig(
-        text(tree, "node_id"),
-        text(tree, "agent"),
-        boolean(console, "enabled"),
-        _parse_panel(table(runtime, "panel")),
-        text(runtime, "profile"),
-    )
-
-
-def _parse_panel(panel: TomlTable) -> PanelConfig:
-    enabled = boolean(panel, "enabled")
-    host = text(panel, "host")
-    if host not in _LOOPBACK_HOSTS:
-        raise ValueError("runtime.panel.host 必须是 loopback 地址（127.0.0.1、::1 或 localhost）")
-    port = positive_integer(panel, "port")
-    if port > _MAX_PORT:
-        raise ValueError("runtime.panel.port 必须在 1 到 65535 之间")
-    origins = strings(panel, "allowed_origins")
-    for origin in origins:
-        _validate_origin(origin, "runtime.panel.allowed_origins")
-    if len(set(origins)) != len(origins):
-        raise ValueError("runtime.panel.allowed_origins 不得重复")
-    frontend_value = panel.get("frontend_url")
-    frontend_url: str | None = None
-    if frontend_value is not None:
-        if not isinstance(frontend_value, str) or not frontend_value.strip():
-            raise ValueError("runtime.panel.frontend_url 必须是非空文本")
-        frontend_url = frontend_value.strip()
-        _validate_origin(frontend_url, "runtime.panel.frontend_url")
-        if frontend_url not in origins:
-            raise ValueError("runtime.panel.frontend_url 必须属于 allowed_origins")
-    open_browser = boolean(panel, "open_browser")
-    if open_browser and frontend_url is None:
-        raise ValueError("runtime.panel.open_browser 需要显式 frontend_url")
-    return PanelConfig(
-        enabled,
-        host,
-        port,
-        frontend_url,
-        origins,
-        open_browser,
-        positive_integer(panel, "session_ttl_seconds"),
-    )
-
-
-def _validate_origin(value: str, field: str) -> None:
-    parts = urlsplit(value)
-    if parts.scheme not in {"http", "https"} or not parts.netloc:
-        raise ValueError(f"{field} 必须是明确的 http(s) 来源")
-    if parts.path not in {"", "/"} or parts.query or parts.fragment:
-        raise ValueError(f"{field} 不得包含路径、查询或片段")
-    if parts.username or parts.password:
-        raise ValueError(f"{field} 不得包含凭据")
+RUNTIME_CONFIG = ConfigSpec[RuntimeConfig](
+    name="runtime",
+    path="config/runtime.toml",
+    shape=TableShape(
+        path=("runtime",),
+        fields=(
+            text_field("profile"),
+            text_field("node_id"),
+            text_field("agent"),
+            text_field("log_level"),
+        ),
+        model=RuntimeConfig,
+    ),
+)

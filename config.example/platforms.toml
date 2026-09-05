@@ -1,10 +1,27 @@
-# 平台配置 — MCP 客户端的总开关与诊断偏好。
-#
-# 此文件只描述具体 MCP 适配器，不定义通用 Platform 层。
-
-# MCP：模型上下文协议，子进程与远程服务管理
-[platform.mcp]
-# 默认是否启用 MCP 平台
+[[platform]]
+id = "builtin.console"
 enabled = true
-# 是否在终端输出 MCP 子进程诊断（stdin/stdout 不受影响）
-terminal_logs = true
+logging = "INFO"
+
+[[platform]]
+id = "builtin.panel"
+enabled = true
+logging = "INFO"
+
+[platform.config]
+host = "127.0.0.1"
+port = 8765
+frontend_url = "http://localhost:8766"
+allowed_origins = [
+  "http://localhost:8764",
+  "http://127.0.0.1:8764",
+  "http://localhost:8766",
+  "http://127.0.0.1:8766",
+]
+open_browser = false
+session_ttl_seconds = 604800
+
+[[platform]]
+id = "builtin.mcp"
+enabled = true
+logging = "INFO"

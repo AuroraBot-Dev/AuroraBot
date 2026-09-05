@@ -3,15 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from aurora.config import ConfigKey
-from aurora.utils.toml import load_toml, positive_integer, strings, table
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from aurora.config import ConfigCollector
+from aurora.config import ConfigSpec, TableShape, positive_integer_field, strings_field
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,18 +15,17 @@ class MemoryConfig:
     scope_exclude: tuple[str, ...]
 
 
-MEMORY_CONFIG = ConfigKey[MemoryConfig]("memory")
-
-
-def register(configs: ConfigCollector) -> None:
-    configs.register(MEMORY_CONFIG, "config/memory.toml", _parse)
-
-
-def _parse(path: Path) -> MemoryConfig:
-    memory = table(load_toml(path), "memory")
-    return MemoryConfig(
-        positive_integer(memory, "window_minutes"),
-        positive_integer(memory, "commits_per_scope"),
-        strings(memory, "scope_include"),
-        strings(memory, "scope_exclude"),
-    )
+MEMORY_CONFIG = ConfigSpec[MemoryConfig](
+    name="memory",
+    path="config/memory.toml",
+    shape=TableShape(
+        path=("memory",),
+        fields=(
+            positive_integer_field("window_minutes"),
+            positive_integer_field("commits_per_scope"),
+            strings_field("scope_include"),
+            strings_field("scope_exclude"),
+        ),
+        model=MemoryConfig,
+    ),
+)

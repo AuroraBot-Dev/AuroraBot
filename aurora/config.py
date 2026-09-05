@@ -1,25 +1,181 @@
-"""配置组合根：合并显式注册的项目配置成一个只读配置对象。"""
+"""配置组合根：按声明式规格合并项目配置成一个只读配置对象。"""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
+
+from aurora.utils.toml import (
+    boolean,
+    load_toml,
+    optional_text,
+    positive_integer,
+    positive_number,
+    strings,
+    table,
+    table_array,
+    text,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Iterable
     from pathlib import Path
+
+    from aurora.utils.toml import TomlTable
+
+
+class FieldKind(StrEnum):
+    """声明式字段类型；决定提取与基础校验。"""
+
+    TEXT = "text"
+    OPTIONAL_TEXT = "optional_text"
+    STRINGS = "strings"
+    BOOLEAN = "boolean"
+    POSITIVE_INTEGER = "positive_integer"
+    POSITIVE_NUMBER = "positive_number"
+    OPTIONAL_TABLE = "optional_table"
 
 
 @dataclass(frozen=True, slots=True)
-class ConfigKey[T]:
-    """为一个配置值提供稳定且可类型化的名称。"""
+class Field:
+    """声明一个表内字段的类型与目标 DTO 参数。"""
 
     name: str
+    kind: FieldKind
+    target: str | None = None
+    transform: Callable[..., object] | None = None
+
+
+def text_field(name: str, *, target: str | None = None) -> Field:
+    return Field(name, FieldKind.TEXT, target=target)
+
+
+def optional_text_field(name: str, *, target: str | None = None) -> Field:
+    return Field(name, FieldKind.OPTIONAL_TEXT, target=target)
+
+
+def strings_field(
+    name: str,
+    *,
+    target: str | None = None,
+    transform: Callable[..., object] | None = None,
+) -> Field:
+    return Field(name, FieldKind.STRINGS, target=target, transform=transform)
+
+
+def boolean_field(name: str, *, target: str | None = None) -> Field:
+    return Field(name, FieldKind.BOOLEAN, target=target)
+
+
+def positive_integer_field(name: str, *, target: str | None = None) -> Field:
+    return Field(name, FieldKind.POSITIVE_INTEGER, target=target)
+
+
+def positive_number_field(name: str, *, target: str | None = None) -> Field:
+    return Field(name, FieldKind.POSITIVE_NUMBER, target=target)
+
+
+def optional_table_field(name: str, *, target: str | None = None) -> Field:
+    return Field(name, FieldKind.OPTIONAL_TABLE, target=target)
+
+
+def _optional_table(item: TomlTable, key: str) -> dict[str, object]:
+    value = item.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"配置字段 {key} 必须是表")
+    return dict(value)
+
+
+_FIELD_EXTRACTORS: dict[FieldKind, Callable[[TomlTable, str], object]] = {
+    FieldKind.TEXT: text,
+    FieldKind.OPTIONAL_TEXT: optional_text,
+    FieldKind.STRINGS: strings,
+    FieldKind.BOOLEAN: boolean,
+    FieldKind.POSITIVE_INTEGER: positive_integer,
+    FieldKind.POSITIVE_NUMBER: positive_number,
+    FieldKind.OPTIONAL_TABLE: _optional_table,
+}
+
+
+def _extract_field(item: TomlTable, field: Field) -> object:
+    extractor = _FIELD_EXTRACTORS.get(field.kind)
+    if extractor is None:
+        raise ValueError(f"不支持的字段类型：{field.kind}")
+    value = extractor(item, field.name)
+    if field.transform is not None:
+        value = field.transform(value)
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class TableShape[T]:
+    """声明式主形状：一段表路径 + 字段集 → 一个 DTO。"""
+
+    path: tuple[str, ...]
+    fields: tuple[Field, ...]
+    model: type[T]
+
+    def extract(self, document: TomlTable) -> object:
+        current = document
+        for name in self.path:
+            current = table(current, name)
+        values = {field.target or field.name: _extract_field(current, field) for field in self.fields}
+        return self.model(**values)
+
+
+@dataclass(frozen=True, slots=True)
+class TableArrayShape[T]:
+    """声明式表数组形状：[[...]] 每项一个 DTO → 可选容器 DTO。"""
+
+    path: tuple[str, ...]
+    fields: tuple[Field, ...]
+    model: type[T]
+    container: Callable[[tuple[T, ...]], object] | None = None
+
+    def extract(self, document: TomlTable) -> object:
+        current = document
+        for name in self.path[:-1]:
+            current = table(current, name)
+        raw_items = table_array(current, self.path[-1])
+        items = [
+            self.model(**{field.target or field.name: _extract_field(item, field) for field in self.fields})
+            for item in raw_items
+        ]
+        result: object = tuple(items)
+        if self.container is not None:
+            result = self.container(result)
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigSpec[T]:
+    """一个配置文件的声明式规格；本身兼作类型化键。"""
+
+    name: str
+    path: str
+    shape: TableShape[Any] | TableArrayShape[Any] | None = None
+    parse: Callable[[Path], T] | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
-            raise ValueError("配置键名称不能为空")
+            raise ValueError("配置名称不能为空")
+        if not self.path.strip():
+            raise ValueError("配置路径不能为空")
+        if self.shape is None and self.parse is None:
+            raise ValueError(f"{self.name} 必须声明 shape 或 parse")
+
+    def load(self, project_root: Path) -> T:
+        path = project_root / self.path
+        if self.shape is not None:
+            return cast("T", self.shape.extract(load_toml(path)))
+        if self.parse is not None:
+            return self.parse(path)
+        raise ValueError(f"{self.name} 必须声明 shape 或 parse")
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,20 +187,10 @@ class ConfigSource:
 
 
 @dataclass(frozen=True, slots=True)
-class TomlDocument:
-    """尚未进入运行组合的只读 TOML 文档。"""
-
-    values: Mapping[str, object]
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
-
-
-@dataclass(frozen=True, slots=True)
 class AuroraConfig:
     """包含全部已注册配置值的只读集合。"""
 
-    _values: Mapping[ConfigKey[object], object]
+    _values: Mapping[ConfigSpec[object], object]
     _sources: tuple[ConfigSource, ...] = ()
     _project_root: Path | None = None
 
@@ -53,24 +199,24 @@ class AuroraConfig:
         if self._project_root is not None:
             object.__setattr__(self, "_project_root", self._project_root.resolve())
 
-    def get[T](self, key: ConfigKey[T]) -> T:
+    def get[T](self, spec: ConfigSpec[T]) -> T:
         try:
-            value = self._values[cast("ConfigKey[object]", key)]
+            value = self._values[cast("ConfigSpec[object]", spec)]
         except KeyError as error:
-            raise KeyError(f"配置尚未注册：{key.name}") from error
+            raise KeyError(f"配置尚未注册：{spec.name}") from error
         return cast("T", value)
 
-    def with_value[T](self, key: ConfigKey[T], value: T) -> AuroraConfig:
+    def with_value[T](self, spec: ConfigSpec[T], value: T) -> AuroraConfig:
         values = dict(self._values)
-        stored_key = cast("ConfigKey[object]", key)
-        if stored_key not in values:
-            raise KeyError(f"不能替换尚未注册的配置：{key.name}")
-        values[stored_key] = value
+        stored_spec = cast("ConfigSpec[object]", spec)
+        if stored_spec not in values:
+            raise KeyError(f"不能替换尚未注册的配置：{spec.name}")
+        values[stored_spec] = value
         return AuroraConfig(values, self._sources, self._project_root)
 
     @property
     def names(self) -> tuple[str, ...]:
-        return tuple(key.name for key in self._values)
+        return tuple(spec.name for spec in self._values)
 
     @property
     def sources(self) -> tuple[ConfigSource, ...]:
@@ -89,36 +235,20 @@ class AuroraConfig:
         raise KeyError(f"配置尚未注册：{name}")
 
 
-class ConfigCollector:
-    """接收配置模块注册，并在注册时读取对应 TOML。"""
-
-    def __init__(self, project_root: Path) -> None:
-        self._project_root = project_root
-        self._values: dict[ConfigKey[object], object] = {}
-        self._names: set[str] = set()
-        self._paths: set[str] = set()
-        self._sources: list[ConfigSource] = []
-
-    def register[T](self, key: ConfigKey[T], relative_path: str, parser: Callable[[Path], T]) -> None:
-        if key.name in self._names:
-            raise ValueError(f"配置重复注册：{key.name}")
-        if relative_path in self._paths:
-            raise ValueError(f"配置文件重复注册：{relative_path}")
-        self._names.add(key.name)
-        self._paths.add(relative_path)
-        self._sources.append(ConfigSource(key.name, relative_path))
-        self._values[cast("ConfigKey[object]", key)] = parser(self._project_root / relative_path)
-
-    def build(self) -> AuroraConfig:
-        return AuroraConfig(self._values, tuple(self._sources), self._project_root)
-
-
-type ConfigRegistrar = Callable[[ConfigCollector], None]
-
-
-def collect_config(project_root: Path, registrars: Iterable[ConfigRegistrar]) -> AuroraConfig:
-    """按显式注册顺序读取配置并生成统一配置对象。"""
-    collector = ConfigCollector(project_root)
-    for register in registrars:
-        register(collector)
-    return collector.build()
+def assemble_config(project_root: Path, specs: Iterable[ConfigSpec[Any]]) -> AuroraConfig:
+    """按声明式规格读取全部 TOML 并生成只读配置对象。"""
+    values: dict[ConfigSpec[object], object] = {}
+    sources: list[ConfigSource] = []
+    names: set[str] = set()
+    paths: set[str] = set()
+    for spec in specs:
+        if spec.name in names:
+            raise ValueError(f"配置重复注册：{spec.name}")
+        if spec.path in paths:
+            raise ValueError(f"配置文件重复注册：{spec.path}")
+        names.add(spec.name)
+        paths.add(spec.path)
+        sources.append(ConfigSource(spec.name, spec.path))
+        stored = cast("ConfigSpec[object]", spec)
+        values[stored] = spec.load(project_root)
+    return AuroraConfig(values, tuple(sources), project_root)

@@ -155,6 +155,13 @@ def utils_status() -> dict[str, Any]:
     }
 
 
+class UtilsOps:
+    """共享工具能力的无状态窄 ops 端口适配器。"""
+
+    def utils_status(self) -> dict[str, Any]:
+        return utils_status()
+
+
 def contracts_status() -> dict[str, Any]:
     """返回公共契约的稳定能力目录。"""
     return {
@@ -175,3 +182,10 @@ def contracts_status() -> dict[str, Any]:
         ],
         "ports": ["Model", "Tool", "ScopedTool", "WorldReader", "WorldWriter", "WorldJournal"],
     }
+
+
+class ContractsOps:
+    """公共契约的无状态窄 ops 端口适配器。"""
+
+    def contracts_status(self) -> dict[str, Any]:
+        return contracts_status()

@@ -5,10 +5,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora import load_config
-from aurora.config import collect_config
-from aurora.configuration import apps, platforms
-from aurora.configuration.apps import APPS_CONFIG, AppConfig, AppsConfig
-from aurora.configuration.platforms import PLATFORMS_CONFIG, McpPlatformConfig, PlatformsConfig
+from aurora.config import assemble_config
+from aurora.configuration.apps import APPS_CONFIG, AppConfig
+from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from src.mcp import McpAppSpec, McpEventMode, McpTransport
 
 if TYPE_CHECKING:
@@ -39,20 +38,21 @@ event_mode = "disabled"
 
 _EXPECTED_TEMPLATE_APPS = 3
 _EXPECTED_TIMEOUT_SECONDS = 30.0
+_TEMPLATE_PANEL_PORT = 8765
 
 
-def _load_apps(tmp_path: Path, content: str) -> AppsConfig:
+def _load_apps(tmp_path: Path, content: str) -> tuple[AppConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "apps.toml").write_text(content, encoding="utf-8")
-    return collect_config(tmp_path, (apps.register,)).get(APPS_CONFIG)
+    return assemble_config(tmp_path, (APPS_CONFIG,)).get(APPS_CONFIG)
 
 
-def _load_platforms(tmp_path: Path, content: str) -> PlatformsConfig:
+def _load_platforms(tmp_path: Path, content: str) -> tuple[PlatformConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "platforms.toml").write_text(content, encoding="utf-8")
-    return collect_config(tmp_path, (platforms.register,)).get(PLATFORMS_CONFIG)
+    return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
 
 
 def test_template_exports_typed_frozen_mcp_configuration(configured_project: Path) -> None:
@@ -60,21 +60,26 @@ def test_template_exports_typed_frozen_mcp_configuration(configured_project: Pat
     app_configuration = configuration.get(APPS_CONFIG)
     platform_configuration = configuration.get(PLATFORMS_CONFIG)
 
-    assert isinstance(app_configuration, AppsConfig)
-    assert len(app_configuration.apps) == _EXPECTED_TEMPLATE_APPS
-    assert all(isinstance(app, AppConfig) for app in app_configuration.apps)
-    assert all(app.enabled is False for app in app_configuration.apps)
-    assert app_configuration.apps[0].event_mode == "disabled"
-    assert app_configuration.apps[1].event_mode == "disabled"
-    assert app_configuration.apps[2].event_mode == "world_events"
-    assert app_configuration.apps[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
-    assert platform_configuration == PlatformsConfig(McpPlatformConfig(enabled=True, terminal_logs=True))
+    assert len(app_configuration) == _EXPECTED_TEMPLATE_APPS
+    assert all(isinstance(app, AppConfig) for app in app_configuration)
+    assert all(app.enabled is False for app in app_configuration)
+    assert app_configuration[0].event_mode == "disabled"
+    assert app_configuration[1].event_mode == "disabled"
+    assert app_configuration[2].event_mode == "world_events"
+    assert app_configuration[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
+    assert [item.id for item in platform_configuration] == ["builtin.console", "builtin.panel", "builtin.mcp"]
+    assert all(item.enabled for item in platform_configuration if item.id != "builtin.panel")
+    assert all(item.logging == "INFO" for item in platform_configuration)
+    panel = next(item for item in platform_configuration if item.id == "builtin.panel")
+    assert panel.settings("port") == _TEMPLATE_PANEL_PORT
+    assert (panel.config or {}).get("host") == "127.0.0.1"
+    assert next(item for item in platform_configuration if item.id == "builtin.console").config == {}
 
 
 @pytest.mark.parametrize("event_mode", ("disabled", "world_events", "legacy_aurora_event"))
 def test_stdio_accepts_each_event_mode_and_project_relative_directory(tmp_path: Path, event_mode: str) -> None:
     configuration = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"', f'event_mode = "{event_mode}"'))
-    app = configuration.apps[0]
+    app = configuration[0]
 
     assert app.package == "org.example.clock"
     assert app.working_dir == "extensions/clock"
@@ -84,8 +89,8 @@ def test_stdio_accepts_each_event_mode_and_project_relative_directory(tmp_path: 
 
 
 def test_streamable_http_uses_https_and_optional_auth_environment(tmp_path: Path) -> None:
-    with_auth = _load_apps(tmp_path, _HTTP).apps[0]
-    without_auth = _load_apps(tmp_path, _HTTP.replace('auth_env = "MCP_BEARER_TOKEN"\n', "")).apps[0]
+    with_auth = _load_apps(tmp_path, _HTTP)[0]
+    without_auth = _load_apps(tmp_path, _HTTP.replace('auth_env = "MCP_BEARER_TOKEN"\n', ""))[0]
 
     assert with_auth.url == "https://mcp.example.org/rpc"
     assert with_auth.auth_env == "MCP_BEARER_TOKEN"
@@ -110,7 +115,7 @@ def test_streamable_http_rejects_world_events_in_config_dto_and_runtime_spec(tmp
 
 
 def test_empty_app_directory_is_valid(tmp_path: Path) -> None:
-    assert _load_apps(tmp_path, "app = []\n") == AppsConfig(())
+    assert _load_apps(tmp_path, "app = []\n") == ()
 
 
 @pytest.mark.parametrize(
@@ -128,7 +133,7 @@ def test_apps_rejects_unknown_missing_and_invalid_topology(tmp_path: Path, conte
 
 
 def test_missing_event_mode_defaults_to_disabled_for_existing_personal_config(tmp_path: Path) -> None:
-    app = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"\n', "")).apps[0]
+    app = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"\n', ""))[0]
 
     assert app.event_mode == "disabled"
 
@@ -160,7 +165,7 @@ def test_stdio_working_directory_must_stay_relative_to_project(tmp_path: Path, w
 
 @pytest.mark.parametrize("env", ('["BAD-NAME"]', '["TOKEN", "TOKEN"]', '["变量"]', "[1]"))
 def test_stdio_environment_is_an_ascii_unique_name_allowlist(tmp_path: Path, env: str) -> None:
-    with pytest.raises(ValueError, match=r"环境变量名|文本数组"):
+    with pytest.raises(ValueError, match=r"环境变量名|文本数组|不得重复"):
         _load_apps(tmp_path, _STDIO.replace('["CLOCK_TOKEN"]', env))
 
 
@@ -212,26 +217,43 @@ def test_platforms_parses_exact_mcp_preference(tmp_path: Path) -> None:
     configuration = _load_platforms(
         tmp_path,
         """\
-[platform.mcp]
+[[platform]]
+id = "builtin.mcp"
 enabled = false
-terminal_logs = true
+logging = "NONE"
 """,
     )
 
-    assert configuration == PlatformsConfig(McpPlatformConfig(enabled=False, terminal_logs=True))
+    assert configuration == (PlatformConfig("builtin.mcp", enabled=False, logging="NONE"),)
+
+
+def test_platforms_accepts_empty_and_duplicate_ids_trusting_project(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    root = tmp_path_factory.mktemp("empty")
+    config_directory = root / "config"
+    config_directory.mkdir()
+    (config_directory / "platforms.toml").write_text("platform = []\n", encoding="utf-8")
+    empty = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
+    assert empty == ()
+
+    (config_directory / "platforms.toml").write_text(
+        '[[platform]]\nid = "builtin.mcp"\nenabled = true\n\n[[platform]]\nid = "builtin.mcp"\nenabled = true\n',
+        encoding="utf-8",
+    )
+    duplicated = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
+    assert [item.id for item in duplicated] == ["builtin.mcp", "builtin.mcp"]
 
 
 @pytest.mark.parametrize(
     "content",
     (
         "",
-        "[other]\nenabled = true\n",
-        "[platform.other]\nenabled = true\n",
-        "[platform.mcp]\nenabled = true\n",
-        "[platform.mcp]\nenabled = true\nterminal_logs = false\nunknown = true\n",
-        '[platform.mcp]\nenabled = "true"\nterminal_logs = false\n',
+        '[[platform]]\nid = "builtin.mcp"\nenabled = "true"\n',
+        '[[platform]]\nid = "builtin.ghost"\nenabled = true\n',
+        '[[platform]]\nid = "builtin.mcp"\nenabled = true\nlogging = "TRACE"\n',
     ),
 )
 def test_platforms_rejects_unknown_missing_and_non_boolean_fields(tmp_path: Path, content: str) -> None:
-    with pytest.raises(ValueError, match=r"字段不匹配|布尔值"):
+    with pytest.raises(ValueError, match=r"未知平台 id|日志级别|布尔值|表数组"):
         _load_platforms(tmp_path, content)

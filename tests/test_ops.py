@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from aurora import AuroraRuntime, assemble_runtime, load_config
-from aurora.configuration.models import MODELS_CONFIG
+from aurora.configuration.runtime import RUNTIME_CONFIG
 from ops import ConfigAccess, ConfigSourceRef
 from ops.contracts import OperationControl, OperationResult, OpsPorts
 from ops.parser import CommandParseError, coerce_value, split_text
@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
 _MIN_OPERATION_COUNT = 9
 _CADENCE_EVOKE_EVERY = 1
-_MODEL_OUTPUT_BUDGET_BEFORE = 51200
-_MODEL_OUTPUT_BUDGET_AFTER = 12345
+_LOG_LEVEL_BEFORE = "INFO"
+_LOG_LEVEL_AFTER = "DEBUG"
 
 
 def _close_runtime(runtime: AuroraRuntime) -> None:
@@ -96,11 +96,6 @@ class FakeConfig:
         if package == "missing":
             raise KeyError(package)
         return {"package": package, "enabled": enabled}
-
-    def set_extension_enabled(self, extension_id: str, *, enabled: bool) -> dict[str, Any]:
-        if extension_id == "missing":
-            raise ValueError(extension_id)
-        return {"id": extension_id, "enabled": enabled}
 
 
 class FakeWorldOps:
@@ -234,14 +229,13 @@ def test_router_returns_parse_and_operation_errors_in_chinese() -> None:
     absent_node = asyncio.run(router.execute_path("GET", "/trees/tree/nodes/absent"))
     absent_config = asyncio.run(router.route_text("/config-show absent"))
     absent_app = asyncio.run(router.route_text("/app-enable missing true"))
-    absent_extension = asyncio.run(router.route_text("/extension-enable missing true"))
 
     assert missing_message.code == "PARSE_ERROR"
     assert missing_message.message is not None
     assert "缺少必填参数" in missing_message.message
     assert bad_limit.code == "INVALID_LIMIT"
     assert absent_tree.code == absent_node.code == absent_config.code == "NOT_FOUND"
-    assert absent_app.code == absent_extension.code == "CONFIG_ERROR"
+    assert absent_app.code == "CONFIG_ERROR"
 
 
 def test_world_index_is_resumable_and_forest_merges_runtime_and_journal() -> None:
@@ -282,23 +276,17 @@ def test_config_access_reads_registered_personal_files_and_preserves_comments(co
     sources = tuple(ConfigSourceRef(source.name, source.relative_path) for source in configuration.sources)
     access = ConfigAccess(configured_project, sources)
     app_path = configured_project / "config" / "apps.toml"
-    extension_path = configured_project / "config" / "extensions.toml"
 
     app_result = access.set_app_enabled("org.aurora.clock", enabled=True)
     unchanged = access.set_app_enabled("org.aurora.clock", enabled=True)
-    extension_result = access.set_extension_enabled("aurora.builtin.control", enabled=False)
 
     assert access.read("apps")["name"] == "apps"  # type: ignore[index]
     assert access.read("absent") is None
     assert app_result["changed"] is True and app_result["restart_required"] is True
     assert unchanged["changed"] is False and unchanged["restart_required"] is False
-    assert extension_result["changed"] is True
     assert "# 内建 Clock 应用" in app_path.read_text(encoding="utf-8")
-    assert "# 认知控制" in extension_path.read_text(encoding="utf-8")
     with app_path.open("rb") as stream:
         assert tomllib.load(stream)["app"][0]["enabled"] is True
-    with extension_path.open("rb") as stream:
-        assert tomllib.load(stream)["extension"][0]["enabled"] is False
 
 
 def test_config_access_rejects_templates_and_unknown_entries(configured_project: Path) -> None:
@@ -306,8 +294,6 @@ def test_config_access_rejects_templates_and_unknown_entries(configured_project:
         ConfigAccess(configured_project, (ConfigSourceRef("template", "config.example/apps.toml"),))
 
     access = ConfigAccess(configured_project, (ConfigSourceRef("apps", "config/apps.toml"),))
-    with pytest.raises(KeyError, match="配置尚未注册"):
-        access.set_extension_enabled("anything", enabled=True)
     with pytest.raises(KeyError, match="不存在"):
         access.set_app_enabled("missing", enabled=True)
 
@@ -393,19 +379,19 @@ def test_config_mutation_ops_record_world_events(configured_project: Path) -> No
 def test_config_reload_reparses_toml_and_swaps_runtime_config(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
     try:
-        models_path = configured_project / "config" / "models.toml"
-        updated = models_path.read_text(encoding="utf-8").replace(
-            f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_BEFORE}",
-            f"max_output_tokens = {_MODEL_OUTPUT_BUDGET_AFTER}",
+        runtime_path = configured_project / "config" / "runtime.toml"
+        updated = runtime_path.read_text(encoding="utf-8").replace(
+            f'log_level = "{_LOG_LEVEL_BEFORE}"',
+            f'log_level = "{_LOG_LEVEL_AFTER}"',
         )
-        models_path.write_text(updated, encoding="utf-8")
+        runtime_path.write_text(updated, encoding="utf-8")
 
-        assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_BEFORE
+        assert runtime.config.get(RUNTIME_CONFIG).log_level == _LOG_LEVEL_BEFORE
 
         result = asyncio.run(runtime.ops.execute("POST", "/config/reload"))
 
         assert result.ok is True
-        assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == _MODEL_OUTPUT_BUDGET_AFTER
+        assert runtime.config.get(RUNTIME_CONFIG).log_level == _LOG_LEVEL_AFTER
         assert result.data is not None and "names" in result.data
         commits = asyncio.run(runtime.world.commits("aurora:config", 0, 10))
         assert [commit.kind for commit in commits] == ["ops.config.reloaded"]
@@ -416,15 +402,15 @@ def test_config_reload_reparses_toml_and_swaps_runtime_config(configured_project
 def test_config_reload_failure_keeps_previous_config(configured_project: Path) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
     try:
-        before = runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens
-        models_path = configured_project / "config" / "models.toml"
-        models_path.write_text("max_output_tokens = 非法\n[models", encoding="utf-8")
+        before = runtime.config.get(RUNTIME_CONFIG).log_level
+        runtime_path = configured_project / "config" / "runtime.toml"
+        runtime_path.write_text("log_level = 非法\n[runtime", encoding="utf-8")
 
         result = asyncio.run(runtime.ops.route_text("/reload"))
 
         assert result.ok is False
         assert result.code == "CONFIG_ERROR"
-        assert runtime.config.get(MODELS_CONFIG).runtime.max_output_tokens == before
+        assert runtime.config.get(RUNTIME_CONFIG).log_level == before
     finally:
         _close_runtime(runtime)
 

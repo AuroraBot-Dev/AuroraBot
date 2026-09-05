@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from io import StringIO
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from rich.console import Console
 
@@ -10,8 +11,6 @@ from ops.panel import PanelSettings, PanelStore, print_panel_notice
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def test_panel_notice_prints_full_token_only_when_created(tmp_path: Path) -> None:
@@ -46,10 +45,7 @@ def test_panel_notice_prints_full_token_only_when_created(tmp_path: Path) -> Non
     assert f"登录 Token 请查看：{second.token_path}" in second_output.getvalue()
 
 
-def test_panel_notice_constructs_a_console_instance_with_highlighting_disabled(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_panel_notice_defaults_to_a_console_with_highlighting_disabled(tmp_path: Path) -> None:
     async def initialize(store: PanelStore) -> None:
         await store.initialize()
 
@@ -64,8 +60,8 @@ def test_panel_notice_constructs_a_console_instance_with_highlighting_disabled(
         def print(self, value: object) -> None:
             calls.append(("print", value))
 
-    monkeypatch.setattr("ops.panel.notice.Console", FakeConsole)
-    print_panel_notice(PanelSettings(), store)
+    with patch("ops.panel.notice._default_console", return_value=FakeConsole(highlight=False)):
+        print_panel_notice(PanelSettings(), store)
     asyncio.run(store.close())
 
     assert calls[0] == ("highlight", False)

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from aurora.composition.mcp import build_mcp_specs
 from aurora.composition.world import build_world
-from aurora.configuration.platforms import PLATFORMS_CONFIG
+from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.configuration.storage import STORAGE_CONFIG
 from aurora.runtime.assembly import assemble_runtime
 from aurora.runtime.panel import PanelRuntime, close_panel, run_panel
@@ -31,6 +31,10 @@ if TYPE_CHECKING:
 
 _logger = get_logger(__name__)
 
+_MCP_PLATFORM_ID = "builtin.mcp"
+_PANEL_PLATFORM_ID = "builtin.panel"
+_CONSOLE_PLATFORM_ID = "builtin.console"
+
 
 async def run_project(
     config: AuroraConfig,
@@ -50,10 +54,10 @@ async def run_project(
     mcp: McpRuntime | None = None
     try:
         await world.initialize()
-        platform = config.get(PLATFORMS_CONFIG).mcp
+        mcp_platform = _platform(config, _MCP_PLATFORM_ID)
         mcp = await prepare_mcp(
             build_mcp_specs(config),
-            platform_enabled=platform.enabled,
+            platform_enabled=mcp_platform.enabled,
             world=world,
             factory=mcp_factory,
         )
@@ -72,8 +76,10 @@ async def run_project(
     installed = ()
     try:
         runtime.bind_stop_requester(stop.set)
+        panel_platform = _platform(config, _PANEL_PLATFORM_ID)
+        console_platform = _platform(config, _CONSOLE_PLATFORM_ID)
         panel = await run_panel(
-            runtime.root.panel,
+            panel_platform,
             runtime.ops,
             storage=config.get(STORAGE_CONFIG),
             project_root=config.project_root,
@@ -82,7 +88,7 @@ async def run_project(
         if runtime.cadence.enabled:
             cadence_task = asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
         installed = install_stop_handlers(stop) if stop_event is None else ()
-        if not headless and runtime.root.console_enabled:
+        if not headless and console_platform.enabled:
             await runtime.console.run(runtime, stop_event=stop, readline=readline, output=output)
         else:
             await stop.wait()
@@ -128,3 +134,10 @@ async def _activate_runtime(runtime: AuroraRuntime, mcp: McpRuntime) -> None:
     if runtime.cadence.enabled:
         await runtime.cadence.initialize()
     await mcp.activate()
+
+
+def _platform(config: AuroraConfig, platform_id: str) -> PlatformConfig:
+    for item in config.get(PLATFORMS_CONFIG):
+        if item.id == platform_id:
+            return item
+    raise ValueError(f"平台尚未声明：{platform_id}")

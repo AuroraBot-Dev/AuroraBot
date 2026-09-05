@@ -22,6 +22,11 @@ class PromptAssembler:
         self._catalog = catalog
         self._max_characters = max_characters
 
+    @property
+    def catalog(self) -> PromptCatalog:
+        """暴露当前提示词目录给组合与监测；组装逻辑不依赖此属性。"""
+        return self._catalog
+
     def assemble(
         self,
         tree: AgentTree,

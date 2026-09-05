@@ -13,7 +13,6 @@ _EXPECTED_HTTP = frozenset(
         "GET /config/{name}",
         "POST /config/reload",
         "POST /apps/{package}/enabled",
-        "POST /extensions/{extension_id}/enabled",
         "GET /engine/status",
         "GET /trees",
         "GET /trees/{tree_id}",
@@ -48,7 +47,7 @@ _TEXT_ONLY = frozenset({"POST /console/clear"})
 _EXPECTED_TOTAL = len(_EXPECTED_HTTP) + len(_TEXT_ONLY)
 
 
-def test_panel_catalog_is_exactly_34_http_plus_1_text_only() -> None:
+def test_panel_catalog_is_exactly_33_http_plus_1_text_only() -> None:
     entries = {f"{spec.method} {spec.path}" for spec in iter_operations()}
     text_only = {f"{spec.method} {spec.path}" for spec in iter_operations() if spec.scope is OperationScope.TEXT_ONLY}
 
