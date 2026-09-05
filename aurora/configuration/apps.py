@@ -133,3 +133,5 @@ APPS_CONFIG = ConfigSpec[tuple[AppConfig, ...]](
     path="config/apps.toml",
     parse=_parse,
 )
+
+CONFIG_SPEC = APPS_CONFIG

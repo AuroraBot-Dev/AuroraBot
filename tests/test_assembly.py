@@ -11,7 +11,7 @@ import pytest
 from aurora import AuroraConfig, assemble_runtime, load_config
 from aurora.composer import CompositionContext, InstanceKey, ModuleSpec, PackageSpec, build_module_specs, compose
 from aurora.composition import compose_project
-from aurora.composition.agents import AGENTS, EXTERNAL_TOOLS
+from aurora.composition.agents import AGENTS
 from aurora.composition.ai import MODEL
 from aurora.composition.cadence import CADENCE
 from aurora.composition.engine import ENGINE_RUNNER
@@ -23,6 +23,7 @@ from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.memory import MEMORY_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.contributions import TOOL_CONTRIBUTIONS
 from aurora.utils.toml import load_toml, text
 from src.ai import LiteLLMModelGateway
 from src.contracts import (
@@ -211,7 +212,8 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
     )
     assembly = compose_project(
         with_wildcard,
-        ((MODEL, FakeModel()), (EXTERNAL_TOOLS, qq_tools)),
+        ((MODEL, FakeModel()),),
+        tuple((TOOL_CONTRIBUTIONS, tool) for tool in qq_tools),
     )
     root_definition = assembly.get(AGENTS).get("builtin.root")
 
@@ -287,9 +289,11 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
         FakeTool("aur.mcp.org.aurora.qq.qq_mark_chat_read"),
         FakeTool("aur.mcp.org.aurora.qq.qq_delete_friend"),
     )
-    agents = compose_project(load_config(configured_project), ((MODEL, FakeModel()), (EXTERNAL_TOOLS, qq_tools))).get(
-        AGENTS
-    )
+    agents = compose_project(
+        load_config(configured_project),
+        ((MODEL, FakeModel()),),
+        tuple((TOOL_CONTRIBUTIONS, tool) for tool in qq_tools),
+    ).get(AGENTS)
     triage = agents.get("builtin.triage")
     root = agents.get("builtin.root")
     worker = agents.get("builtin.worker")
@@ -328,7 +332,7 @@ def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
     project_root = Path(__file__).parents[1]
     shutil.copytree(project_root / "config.example", tmp_path / "config.example")
 
-    with pytest.raises(FileNotFoundError, match=r"config[\\/]+runtime\.toml"):
+    with pytest.raises(FileNotFoundError, match=r"config[\\/]+[a-z]+\.toml"):
         load_config(tmp_path)
 
 

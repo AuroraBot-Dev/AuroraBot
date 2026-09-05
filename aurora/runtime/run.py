@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from aurora.composition.mcp import build_mcp_specs
-from aurora.composition.world import build_world
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.configuration.storage import STORAGE_CONFIG
-from aurora.runtime.assembly import assemble_runtime
+from aurora.runtime.assembly import assemble_runtime_managed
 from aurora.runtime.panel import PanelRuntime, close_panel, run_panel
 from aurora.runtime.support import (
     InstalledSignal,
@@ -19,20 +16,19 @@ from aurora.runtime.support import (
     restore_stop_handlers,
 )
 from ops.runtime import OpsRuntime
-from src.mcp import McpRuntime, prepare_mcp
 from src.utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
+    from aurora.composer import ContributionBinding, InstanceBinding, ManagedAssembly
     from aurora.config import AuroraConfig
     from aurora.runtime.core import AuroraRuntime
-    from src.contracts import Model, Tool, WorldJournal
+    from src.contracts import Model, Tool
     from src.mcp import McpClientFactory
 
 _logger = get_logger(__name__)
 
-_MCP_PLATFORM_ID = "builtin.mcp"
 _PANEL_PLATFORM_ID = "builtin.panel"
 _CONSOLE_PLATFORM_ID = "builtin.console"
 
@@ -47,32 +43,29 @@ async def run_project(
     readline: Callable[[str], str] | None = None,
     output: Callable[[str], None] = print,
     mcp_factory: McpClientFactory | None = None,
+    instances: Iterable[InstanceBinding] = (),
+    contributions: Iterable[ContributionBinding] = (),
 ) -> AuroraRuntime:
-    """先冻结 MCP 工具目录，再组合运行时并让 Console 或停止事件拥有进程前台。"""
+    """通过统一模块生命周期组合运行时，并让 Console 或停止事件拥有进程前台。"""
     configure_project_logging(config)
     _logger.info("Aurora runtime 启动 headless={}", headless)
-    world = build_world(config)
-    mcp: McpRuntime | None = None
+    stop = stop_event or asyncio.Event()
     try:
-        await world.initialize()
-        mcp_platform = _platform(config, _MCP_PLATFORM_ID)
-        mcp = await prepare_mcp(
-            build_mcp_specs(config),
-            platform_enabled=mcp_platform.enabled,
-            world=world,
-            factory=mcp_factory,
+        runtime, lifecycle = await assemble_runtime_managed(
+            config,
+            model,
+            tools,
+            output=output,
+            mcp_factory=mcp_factory,
+            instances=instances,
+            contributions=contributions,
         )
-        _logger.info("MCP 工具目录已冻结 app_count={} tool_count={}", len(mcp.snapshot().apps), len(mcp.tools))
-        runtime = assemble_runtime(config, model, tools, world=world, mcp=mcp, output=output)
-        await _activate_runtime(runtime, mcp)
+        await lifecycle.activate(stop)
         _logger.info("Aurora runtime 装配完成")
     except BaseException as error:
         _logger.error("Aurora runtime 启动失败 error_type={}", type(error).__name__)
-        await _close_failed_startup(mcp, world)
         raise
 
-    stop = stop_event or asyncio.Event()
-    cadence_task: asyncio.Task[None] | None = None
     panel: PanelRuntime | None = None
     panel_lock = asyncio.Lock()
     installed = ()
@@ -98,8 +91,6 @@ async def run_project(
     try:
         runtime.bind_serve_requester(serve_panel)
         console_platform = _platform(config, _CONSOLE_PLATFORM_ID)
-        if runtime.cadence.enabled:
-            cadence_task = asyncio.create_task(runtime.cadence.run(stop), name="aurora-cadence")
         installed = install_stop_handlers(stop) if stop_event is None else ()
         if not headless and console_platform.enabled:
             await runtime.console.run(runtime, stop_event=stop, readline=readline, output=output)
@@ -107,46 +98,22 @@ async def run_project(
             await stop.wait()
     finally:
         runtime.bind_serve_requester(None)
-        await _shutdown_project(runtime, panel, cadence_task, installed, mcp, world)
+        await _shutdown_project(panel, installed, lifecycle)
     return runtime
 
 
-async def _close_failed_startup(mcp: McpRuntime | None, world: WorldJournal) -> None:
-    if mcp is not None:
-        with suppress(Exception):
-            await mcp.close()
-    with suppress(Exception):
-        await world.close()
-
-
 async def _shutdown_project(
-    runtime: AuroraRuntime,
     panel: PanelRuntime | None,
-    cadence_task: asyncio.Task[None] | None,
     installed: tuple[InstalledSignal, ...],
-    mcp: McpRuntime,
-    world: WorldJournal,
+    lifecycle: ManagedAssembly,
 ) -> None:
     _logger.info("Aurora runtime 开始关闭")
     try:
         restore_stop_handlers(installed)
     finally:
         await close_panel(panel)
-        if cadence_task is not None:
-            cadence_task.cancel()
-            await asyncio.gather(cadence_task, return_exceptions=True)
-        try:
-            await mcp.close()
-        finally:
-            await world.close()
+        await lifecycle.close()
     _logger.info("Aurora runtime 已关闭")
-
-
-async def _activate_runtime(runtime: AuroraRuntime, mcp: McpRuntime) -> None:
-    """先固定 Cadence cursor，再放行 MCP 业务事件。"""
-    if runtime.cadence.enabled:
-        await runtime.cadence.initialize()
-    await mcp.activate()
 
 
 def _platform(config: AuroraConfig, platform_id: str) -> PlatformConfig:

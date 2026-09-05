@@ -32,3 +32,5 @@ PROMPTS_CONFIG = ConfigSpec[tuple[PromptConfig, ...]](
         model=PromptConfig,
     ),
 )
+
+CONFIG_SPEC = PROMPTS_CONFIG

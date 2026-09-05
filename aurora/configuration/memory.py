@@ -29,3 +29,5 @@ MEMORY_CONFIG = ConfigSpec[MemoryConfig](
         model=MemoryConfig,
     ),
 )
+
+CONFIG_SPEC = MEMORY_CONFIG

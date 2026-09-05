@@ -45,3 +45,5 @@ RUNTIME_CONFIG = ConfigSpec[RuntimeConfig](
         model=RuntimeConfig,
     ),
 )
+
+CONFIG_SPEC = RUNTIME_CONFIG

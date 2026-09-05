@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
+from importlib import import_module
+from pathlib import Path
+from pkgutil import iter_modules
 from typing import TYPE_CHECKING, Any
 
 from ops.contracts import OperationResult, OperationScope, OperationSpec, ParameterSpec
@@ -95,20 +97,7 @@ def _load_all() -> None:
     if _STATE.loaded:
         return
     _STATE.loaded = True
-    for module in (
-        "ops.operations.config",
-        "ops.operations.engine",
-        "ops.operations.system",
-        "ops.operations.agents",
-        "ops.operations.tools",
-        "ops.operations.prompt",
-        "ops.operations.ai",
-        "ops.operations.world",
-        "ops.operations.console",
-        "ops.operations.utils",
-        "ops.operations.contracts",
-        "ops.operations.cadence",
-        "ops.operations.memory",
-        "ops.operations.mcp",
-    ):
-        importlib.import_module(module)
+    operations_directory = Path(__file__).resolve().parent / "operations"
+    for item in sorted(iter_modules([str(operations_directory)])):
+        if not item.name.startswith("_"):
+            import_module(f"ops.operations.{item.name}")

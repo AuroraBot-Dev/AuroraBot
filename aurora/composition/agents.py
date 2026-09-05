@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 
 from aurora.composer import InstanceKey, PackageSpec
 from aurora.configuration.agents import AGENTS_CONFIG
+from aurora.contributions import TOOL_CONTRIBUTIONS
 from src.agents import AgentCatalog
-from src.contracts import AgentDefinition, Tool
+from src.contracts import AgentDefinition
 from src.tools.builtin import DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL
 from src.utils import resolve_names
 
@@ -17,12 +18,11 @@ if TYPE_CHECKING:
 _BUILTIN_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL})
 
 AGENTS = InstanceKey[AgentCatalog]("agents.catalog")
-EXTERNAL_TOOLS = InstanceKey[tuple[Tool, ...]]("tools.external")
 
 
 def construct(context: CompositionContext) -> None:
     """构造并注册 ``src.agents`` 的项目实例。"""
-    external: tuple[Tool, ...] = context.require(EXTERNAL_TOOLS) if context.contains(EXTERNAL_TOOLS) else ()
+    external = context.contributions(TOOL_CONTRIBUTIONS)
     available = _BUILTIN_NAMES | frozenset(tool.definition.name for tool in external)
     agents = AgentCatalog(
         AgentDefinition(
@@ -43,4 +43,5 @@ PACKAGE_SPEC = PackageSpec(
     provides=(AGENTS,),
     requires=(),
     register=construct,
+    consumes=(TOOL_CONTRIBUTIONS,),
 )

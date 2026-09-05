@@ -34,3 +34,5 @@ PROVIDERS_CONFIG = ConfigSpec[tuple[ProviderConfig, ...]](
         model=ProviderConfig,
     ),
 )
+
+CONFIG_SPEC = PROVIDERS_CONFIG

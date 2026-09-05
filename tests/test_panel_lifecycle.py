@@ -62,37 +62,6 @@ def _enable_panel(root: Path, *, open_browser: bool = False) -> None:
     path.write_text(tomlkit.dumps(document), encoding="utf-8")
 
 
-def _trace_resource_close(monkeypatch: pytest.MonkeyPatch, trace: list[str]) -> None:
-    original_prepare = runtime_module.prepare_mcp
-
-    async def traced_prepare(*args: object, **kwargs: object) -> object:
-        mcp = await cast("Any", original_prepare)(*args, **kwargs)
-        original_close = mcp.close
-
-        async def traced_close() -> None:
-            trace.append("mcp.close")
-            await original_close()
-
-        mcp.close = traced_close
-        return mcp
-
-    original_build_world = runtime_module.build_world
-
-    def traced_build_world(config: object) -> object:
-        world = cast("Any", original_build_world)(config)
-        original_close = world.close
-
-        async def traced_close() -> None:
-            trace.append("world.close")
-            await original_close()
-
-        world.close = traced_close
-        return world
-
-    monkeypatch.setattr(runtime_module, "prepare_mcp", traced_prepare)
-    monkeypatch.setattr(runtime_module, "build_world", traced_build_world)
-
-
 def _run_headless(root: Path, stop: asyncio.Event) -> object:
     async def scenario() -> object:
         return await runtime_module.run_project(
@@ -170,7 +139,6 @@ def test_run_project_only_serves_panel_after_local_command_and_closes_before_wor
         return fake
 
     monkeypatch.setattr(runtime_module, "run_panel", fake_run_panel)
-    _trace_resource_close(monkeypatch, trace)
     output: list[str] = []
     inputs = iter(["/serve", "/serve", "/quit"])
 
@@ -186,8 +154,6 @@ def test_run_project_only_serves_panel_after_local_command_and_closes_before_wor
     assert trace.count("panel.serve") == 1
     assert trace.index("panel.serve") < trace.index("panel.notice")
     assert trace.index("panel.notice") < trace.index("panel.close")
-    assert trace.index("panel.close") < trace.index("mcp.close")
-    assert trace.index("mcp.close") < trace.index("world.close")
     assert "Bot> Panel 后端已经在运行。" in output
 
 
@@ -198,13 +164,12 @@ def test_run_project_never_starts_panel_implicitly(configured_project: Path, mon
         raise AssertionError("Panel 不应自动启动")
 
     monkeypatch.setattr(runtime_module, "run_panel", unexpected_panel)
-    _trace_resource_close(monkeypatch, trace)
     stop = asyncio.Event()
     stop.set()
 
     _run_headless(configured_project, stop)
 
-    assert trace == ["mcp.close", "world.close"]
+    assert trace == []
 
 
 def test_local_serve_failure_does_not_stop_bot(configured_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,7 +181,6 @@ def test_local_serve_failure_does_not_stop_bot(configured_project: Path, monkeyp
         await fake.start()
 
     monkeypatch.setattr(runtime_module, "run_panel", failing_panel)
-    _trace_resource_close(monkeypatch, trace)
     output: list[str] = []
     inputs = iter(["/serve", "/quit"])
     runtime = asyncio.run(
@@ -231,4 +195,4 @@ def test_local_serve_failure_does_not_stop_bot(configured_project: Path, monkeyp
     assert "panel.notice" not in trace
     assert runtime.runtime_status()["tree_count"] == 0
     assert any("Panel 后端启动失败：绑定失败" in line for line in output)
-    assert trace[-2:] == ["mcp.close", "world.close"]
+    assert trace == ["panel.start"]

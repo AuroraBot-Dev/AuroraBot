@@ -10,6 +10,8 @@ from aurora.configuration.cadence import CADENCE_CONFIG
 from src.cadence import DEFAULT_REACTIVE_RULES, Cadence
 
 if TYPE_CHECKING:
+    import asyncio
+
     from aurora.composer import CompositionContext
     from src.contracts import WorldJournal
 
@@ -35,9 +37,25 @@ def construct(context: CompositionContext) -> None:
     context.provide(CADENCE, cadence)
 
 
+async def activate(context: CompositionContext) -> None:
+    """在外部业务事件入口放行前固定世界游标。"""
+    cadence = context.require(CADENCE)
+    if cadence.enabled:
+        await cadence.initialize()
+
+
+async def run(context: CompositionContext, stop: asyncio.Event) -> None:
+    """按统一生命周期运行启用的节律后台循环。"""
+    cadence = context.require(CADENCE)
+    if cadence.enabled:
+        await cadence.run(stop)
+
+
 PACKAGE_SPEC = PackageSpec(
     key=CADENCE,
     provides=(CADENCE,),
     requires=(WORLD_JOURNAL_NAME,),
     register=construct,
+    activate=activate,
+    run=run,
 )

@@ -89,3 +89,5 @@ STORAGE_CONFIG = ConfigSpec[tuple[StorageEntry, ...]](
     path="config/storage.toml",
     parse=_parse,
 )
+
+CONFIG_SPEC = STORAGE_CONFIG

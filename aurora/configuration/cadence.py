@@ -38,3 +38,5 @@ CADENCE_CONFIG = ConfigSpec[CadenceConfig](
         model=CadenceConfig,
     ),
 )
+
+CONFIG_SPEC = CADENCE_CONFIG

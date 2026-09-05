@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -10,11 +10,12 @@ import pytest
 from aurora.composition import compose_project
 from aurora.composition.ai import MODEL
 from aurora.composition.mcp import build_mcp_specs
+from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration import load_config
 from aurora.configuration.apps import APPS_CONFIG, AppConfig
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
-from aurora.runtime import AuroraRuntime, assemble_runtime, run_project
-from aurora.runtime import run as runtime_module
+from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.runtime import assemble_runtime, run_project
 from ops.runtime import OpsRuntime
 from src.contracts import (
     ChatMessage,
@@ -26,14 +27,14 @@ from src.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from src.mcp import McpAppSpec, McpCallResult, McpRemoteTool, McpRuntime, McpToolsPage, prepare_mcp
+from src.mcp import McpAppSpec, McpCallResult, McpRemoteTool, McpToolsPage, prepare_mcp
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterable, Mapping
+    from collections.abc import Awaitable, Callable, Mapping
     from pathlib import Path
 
     from aurora.config import AuroraConfig
-    from src.contracts import Model, Tool, TreeActivity, WorldJournal
+    from src.contracts import TreeActivity
     from src.mcp.client import InboundEventHandler
 
 _PACKAGE = "org.example.lifecycle"
@@ -340,7 +341,7 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
     asyncio.run(scenario())
 
 
-def test_run_project_orders_world_discovery_assembly_and_reverse_shutdown(
+def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
     configured_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -349,22 +350,6 @@ def test_run_project_orders_world_discovery_assembly_and_reverse_shutdown(
         config = _active_config(configured_project)
         world = FakeWorldJournal(trace)
         factory = FakeMcpFactory(trace)
-        original_assemble = runtime_module.assemble_runtime
-
-        def traced_assemble(
-            configuration: AuroraConfig,
-            model: Model | None = None,
-            tools: Iterable[Tool] = (),
-            *,
-            world: WorldJournal | None = None,
-            mcp: McpRuntime | None = None,
-            output: Callable[[str], None] = print,
-        ) -> AuroraRuntime:
-            trace.append("assembly")
-            return original_assemble(configuration, model, tools, world=world, mcp=mcp, output=output)
-
-        monkeypatch.setattr(runtime_module, "build_world", lambda _config: world)
-        monkeypatch.setattr(runtime_module, "assemble_runtime", traced_assemble)
         stop = asyncio.Event()
         stop.set()
 
@@ -375,21 +360,21 @@ def test_run_project_orders_world_discovery_assembly_and_reverse_shutdown(
             stop_event=stop,
             output=lambda _message: None,
             mcp_factory=factory,
+            instances=((WORLD_JOURNAL, world),),
         )
 
         assert runtime.world is world
         assert factory.opened_specs[0].package == _PACKAGE
         assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
         assert trace.index("world.initialize") < trace.index("mcp.open")
-        assert trace.index("mcp.discover") < trace.index("assembly")
-        assert trace.index("assembly") < trace.index("mcp.activate")
+        assert trace.index("mcp.discover") < trace.index("mcp.activate")
         assert trace[-2:] == ["mcp.close", "world.close"]
         assert world.closed is True
 
     asyncio.run(scenario())
 
 
-def test_run_project_closes_mcp_then_world_when_assembly_fails(
+def test_run_project_closes_mcp_then_world_when_composition_fails(
     configured_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -398,28 +383,20 @@ def test_run_project_closes_mcp_then_world_when_assembly_fails(
         config = _active_config(configured_project)
         world = FakeWorldJournal(trace)
         factory = FakeMcpFactory(trace)
+        runtime_config = config.get(RUNTIME_CONFIG)
+        broken = config.with_value(RUNTIME_CONFIG, replace(runtime_config, agent="missing"))
 
-        def fail_assembly(
-            configuration: AuroraConfig,
-            model: Model | None = None,
-            tools: Iterable[Tool] = (),
-            *,
-            world: WorldJournal | None = None,
-            mcp: McpRuntime | None = None,
-            output: Callable[[str], None] = print,
-        ) -> AuroraRuntime:
-            _ = configuration, model, tools, world, mcp, output
-            trace.append("assembly")
-            raise RuntimeError("组合失败")
-
-        monkeypatch.setattr(runtime_module, "build_world", lambda _config: world)
-        monkeypatch.setattr(runtime_module, "assemble_runtime", fail_assembly)
-
-        with pytest.raises(RuntimeError, match="组合失败"):
-            await run_project(config, FakeModel(), headless=True, mcp_factory=factory)
+        with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
+            await run_project(
+                broken,
+                FakeModel(),
+                headless=True,
+                mcp_factory=factory,
+                instances=((WORLD_JOURNAL, world),),
+            )
 
         assert trace.index("world.initialize") < trace.index("mcp.open")
-        assert trace.index("mcp.discover") < trace.index("assembly")
+        assert trace.index("mcp.discover") < trace.index("mcp.close")
         assert trace[-2:] == ["mcp.close", "world.close"]
         assert factory.client.connected is False
         assert world.closed is True

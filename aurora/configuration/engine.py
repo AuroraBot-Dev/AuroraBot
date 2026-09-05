@@ -27,3 +27,5 @@ ENGINE_CONFIG = ConfigSpec[EngineConfig](
         model=EngineConfig,
     ),
 )
+
+CONFIG_SPEC = ENGINE_CONFIG

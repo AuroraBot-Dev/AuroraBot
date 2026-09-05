@@ -5,17 +5,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from aurora.composer import InstanceKey, PackageSpec
+from aurora.contributions import TOOL_CONTRIBUTIONS
 from src.tools import ToolRegistry
 from src.tools.builtin import builtin_tools
 
 if TYPE_CHECKING:
     from aurora.composer import CompositionContext
     from src.agents import AgentCatalog
-    from src.contracts import Tool, WorldJournal
+    from src.contracts import WorldJournal
 
 AGENTS_NAME = "agents.catalog"
 WORLD_JOURNAL_NAME = "world.journal"
-EXTERNAL_TOOLS_NAME = "tools.external"
 
 TOOLS = InstanceKey[ToolRegistry]("tools.registry")
 
@@ -24,8 +24,8 @@ def construct(context: CompositionContext) -> None:
     """构造并注册 ``src.tools`` 的项目实例。"""
     journal = cast("WorldJournal", context.require_name(WORLD_JOURNAL_NAME))
     agents = cast("AgentCatalog", context.require_name(AGENTS_NAME))
-    external = context.require_name(EXTERNAL_TOOLS_NAME) if context.contains_name(EXTERNAL_TOOLS_NAME) else ()
-    tools = ToolRegistry((*builtin_tools(agents=agents, journal=journal), *cast("tuple[Tool, ...]", external)))
+    external = context.contributions(TOOL_CONTRIBUTIONS)
+    tools = ToolRegistry((*builtin_tools(agents=agents, journal=journal), *external))
     context.provide(TOOLS, tools)
 
 
@@ -34,4 +34,5 @@ PACKAGE_SPEC = PackageSpec(
     provides=(TOOLS,),
     requires=(WORLD_JOURNAL_NAME, AGENTS_NAME),
     register=construct,
+    consumes=(TOOL_CONTRIBUTIONS,),
 )

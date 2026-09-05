@@ -38,3 +38,5 @@ AGENTS_CONFIG = ConfigSpec[tuple[AgentConfig, ...]](
         model=AgentConfig,
     ),
 )
+
+CONFIG_SPEC = AGENTS_CONFIG

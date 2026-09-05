@@ -27,3 +27,5 @@ ENDPOINTS_CONFIG = ConfigSpec[tuple[EndpointConfig, ...]](
         model=EndpointConfig,
     ),
 )
+
+CONFIG_SPEC = ENDPOINTS_CONFIG

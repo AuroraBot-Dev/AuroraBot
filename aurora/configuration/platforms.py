@@ -52,3 +52,5 @@ PLATFORMS_CONFIG = ConfigSpec[tuple[PlatformConfig, ...]](
         model=PlatformConfig,
     ),
 )
+
+CONFIG_SPEC = PLATFORMS_CONFIG

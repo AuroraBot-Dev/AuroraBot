@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from aurora.composer import InstanceKey, PackageSpec
 from aurora.configuration.apps import APPS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
-from src.mcp import McpAppSpec, McpEventMode, McpRuntime, McpTransport
+from aurora.contributions import TOOL_CONTRIBUTIONS
+from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
 
 if TYPE_CHECKING:
-    from aurora.composer import CompositionContext
+    from aurora.composer import AsyncCleanup, CompositionContext
     from aurora.config import AuroraConfig
+    from src.contracts import WorldJournal
 
 _MCP_PLATFORM_ID = "builtin.mcp"
 
+WORLD_JOURNAL_NAME = "world.journal"
+CADENCE_NAME = "cadence.runtime"
+
 MCP_RUNTIME = InstanceKey[McpRuntime]("mcp.runtime")
+MCP_CLIENT_FACTORY = InstanceKey[McpClientFactory]("mcp.client_factory")
 
 
 def _mcp_platform(config: AuroraConfig) -> PlatformConfig:
@@ -75,17 +81,48 @@ def build_mcp_specs(config: AuroraConfig) -> tuple[McpAppSpec, ...]:
     return tuple(specs)
 
 
+async def prepare(context: CompositionContext) -> AsyncCleanup | None:
+    """连接并冻结 MCP 目录，把关闭函数交给统一生命周期。"""
+    if context.contains(MCP_RUNTIME):
+        return None
+    platform = _mcp_platform(context.config)
+    world = cast("WorldJournal", context.require_name(WORLD_JOURNAL_NAME))
+    factory = context.require(MCP_CLIENT_FACTORY) if context.contains(MCP_CLIENT_FACTORY) else None
+    runtime = await prepare_mcp(
+        build_mcp_specs(context.config),
+        platform_enabled=platform.enabled,
+        world=world,
+        factory=factory,
+    )
+    context.provide(MCP_RUNTIME, runtime)
+    return runtime.close
+
+
 def construct(context: CompositionContext) -> None:
     """构造并注册 ``src.mcp`` 的项目实例。"""
     if not context.contains(MCP_RUNTIME):
         platform = _mcp_platform(context.config)
-        runtime = McpRuntime.disabled(build_mcp_specs(context.config), platform_enabled=platform.enabled)
+        specs = build_mcp_specs(context.config)
+        if platform.enabled and any(spec.enabled for spec in specs):
+            raise ValueError("启用 MCP App 必须先经过异步连接与完整工具发现")
+        runtime = McpRuntime.disabled(specs, platform_enabled=platform.enabled)
         context.provide(MCP_RUNTIME, runtime)
+    for tool in context.require(MCP_RUNTIME).tools:
+        context.contribute(TOOL_CONTRIBUTIONS, tool)
+
+
+async def activate(context: CompositionContext) -> None:
+    """在 cadence 固定游标后放行 MCP 业务事件。"""
+    await context.require(MCP_RUNTIME).activate()
 
 
 PACKAGE_SPEC = PackageSpec(
     key=MCP_RUNTIME,
     provides=(MCP_RUNTIME,),
-    requires=(),
+    requires=(WORLD_JOURNAL_NAME,),
     register=construct,
+    contributes=(TOOL_CONTRIBUTIONS,),
+    activation_after=(CADENCE_NAME,),
+    prepare=prepare,
+    activate=activate,
 )
