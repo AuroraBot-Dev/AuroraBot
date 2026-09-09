@@ -7,8 +7,8 @@ import tomllib
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
-from aurora.apps.models import AppManagerError, AppManifest
-from aurora.configuration.apps import AppConfig, McpEventMode
+from aurora.commands.app.models import AppManagerError, AppManifest
+from aurora.configuration.apps import AppConfig
 
 _ROOT_FIELDS = frozenset({"manifest_version", "package", "app"})
 _PACKAGE_FIELDS = frozenset({"id", "name", "version", "description"})
@@ -17,6 +17,8 @@ _CONTROL_CODE_BOUNDARY = 32
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from aurora.configuration.apps import McpEventMode
 
 
 def load_manifest(path: Path, *, working_dir: str, enabled: bool) -> AppManifest:
@@ -33,7 +35,11 @@ def load_manifest(path: Path, *, working_dir: str, enabled: bool) -> AppManifest
     except AppManagerError:
         raise
     except FileNotFoundError as error:
-        raise AppManagerError("仓库根目录缺少 aurora-app.toml") from error
+        raise AppManagerError(
+            "仓库所选版本的根目录缺少 aurora-app.toml，无法自动安装。"
+            "请由应用作者补充安装清单；若其他分支或标签已包含清单，可使用 --ref 指定，"
+            "否则请按应用说明手动接入 config/apps.toml。"
+        ) from error
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise AppManagerError(f"无法读取 aurora-app.toml：{error}") from error
     _exact_fields(document, _ROOT_FIELDS, "aurora-app.toml")

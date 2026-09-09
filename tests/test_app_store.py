@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
+import sys
 import tomllib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.apps.github import GitHubClient, JsonResponse
-from aurora.apps.models import AppManagerConfigError, AppManagerError
-from aurora.apps.service import AppManager
-from aurora.apps.store import LOCK_NAME, MARKER_NAME, AppStore
+from aurora.commander import run
+from aurora.commands import DEFAULT_REGISTRY
+from aurora.commands import app as app_command
+from aurora.commands.app.github import GitHubClient, JsonResponse
+from aurora.commands.app.models import AppManagerConfigError, AppManagerError, AppManifest, Repository
+from aurora.commands.app.service import AppManager
+from aurora.commands.app.store import LOCK_NAME, MARKER_NAME, AppStore
+from aurora.configuration.apps import AppConfig
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -207,7 +213,6 @@ def test_list_ignores_manual_directory_and_reports_lock(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("options", "message"),
     (
-        ({"topic": False}, "没有 aurorabot-app topic"),
         ({"archived": True}, "已归档"),
         ({"disabled": True}, "已被 GitHub 禁用"),
     ),
@@ -246,6 +251,224 @@ def test_duplicate_install_is_rejected_before_second_clone(tmp_path: Path) -> No
     with pytest.raises(AppManagerError, match="安装目录已存在"):
         manager.install("example/weather-mcp")
     assert calls == 1
+
+
+def test_install_without_manifest_keeps_config_and_cleans_staging(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    config_path = root / "config" / "apps.toml"
+    original = config_path.read_bytes()
+
+    def clone(_url: str, destination: Path, _ref: str | None) -> str:
+        destination.mkdir(parents=True)
+        (destination / "pyproject.toml").write_text('[project]\nname = "weather"\n', encoding="utf-8")
+        return _COMMIT
+
+    manager = AppManager(root, github=_github(), clone=clone, clock=lambda: _NOW)
+    with pytest.raises(AppManagerError, match=r"缺少 aurora-app\.toml.*应用作者.*--ref.*手动接入"):
+        manager.install("example/weather-mcp")
+
+    assert config_path.read_bytes() == original
+    assert tuple(manager.store.install_root.iterdir()) == ()
+
+
+def _clone_without_manifest(url: str, destination: Path, ref: str | None) -> str:
+    commit = _clone(url, destination, ref)
+    (destination / "aurora-app.toml").unlink()
+    return commit
+
+
+def _clone_with_project(url: str, destination: Path, ref: str | None) -> str:
+    commit = _clone_without_manifest(url, destination, ref)
+    (destination / "pyproject.toml").write_text(
+        '[project]\nname = "Weather"\nversion = "1.0"\n[project.scripts]\nweather = "weather:main"\n',
+        encoding="utf-8",
+    )
+    return commit
+
+
+def _preset(root: Path, package: str = "org.example.weather") -> AppConfig:
+    app = AppConfig(
+        package,
+        False,
+        "stdio",
+        "world_events",
+        90,
+        working_dir="extensions/apps/Weather",
+        command=("uv", "run", "weather"),
+        env=("TOKEN",),
+    )
+    AppStore(root).add_app(app)
+    return app
+
+
+def test_reuse_config_preserves_parameters_and_comments_without_prompt(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    previous = _preset(root)
+    manager = AppManager(root, github=_github(), clone=_clone_with_project, clock=lambda: _NOW)
+
+    installed = manager.install("example/weather-mcp", reuse_config=True)
+
+    current = manager.store.apps_config()[-1]
+    assert current.package == previous.package
+    assert (current.env, current.command, current.timeout_seconds, current.event_mode, current.enabled) == (
+        previous.env,
+        previous.command,
+        previous.timeout_seconds,
+        previous.event_mode,
+        previous.enabled,
+    )
+    assert current.working_dir == "extensions/apps/example/weather-mcp"
+    assert installed.enabled is False
+    assert manager.list().apps[0].state == "ready"
+    assert "# 保留这条注释" in (root / "config/apps.toml").read_text(encoding="utf-8")
+
+
+def test_reuse_config_refuses_existing_directory(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    previous = _preset(root)
+    assert previous.working_dir is not None
+    directory = root / previous.working_dir
+    directory.mkdir(parents=True)
+    (directory / "keep.txt").write_text("keep")
+    original = (root / "config/apps.toml").read_bytes()
+    manager = AppManager(root, github=_github(), clone=_clone_with_project)
+    with pytest.raises(AppManagerError, match="拒绝覆盖"):
+        manager.install("example/weather-mcp", reuse_config=True)
+    assert (directory / "keep.txt").read_text() == "keep"
+    assert (root / "config/apps.toml").read_bytes() == original
+    assert not (manager.store.install_root / "example/weather-mcp").exists()
+
+
+@pytest.mark.parametrize("presets", (0, 2))
+def test_reuse_config_requires_unique_metadata_match(tmp_path: Path, presets: int) -> None:
+    root = _project(tmp_path)
+    for index in range(presets):
+        _preset(root, f"org.example.weather{index}")
+    manager = AppManager(root, github=_github(), clone=_clone_with_project)
+    with pytest.raises(AppManagerError, match="无法唯一匹配"):
+        manager.install("example/weather-mcp", reuse_config=True)
+
+
+def test_reuse_config_write_failure_rolls_back_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _project(tmp_path)
+    _preset(root)
+    original = (root / "config/apps.toml").read_bytes()
+    manager = AppManager(root, github=_github(), clone=_clone_with_project)
+
+    def fail(_previous: AppConfig, _replacement: AppConfig) -> None:
+        raise OSError("write failed")
+
+    monkeypatch.setattr(manager.store, "reuse_app", fail)
+    with pytest.raises(AppManagerError, match="write failed"):
+        manager.install("example/weather-mcp", reuse_config=True)
+    assert (root / "config/apps.toml").read_bytes() == original
+    assert tuple(manager.store.install_root.iterdir()) == ()
+
+
+def _configure_install(_checkout: Path, _repository: Repository) -> AppManifest:
+    return AppManifest(
+        "org.example.weather", "天气", "1.0", "天气服务", ("uv", "run", "weather"), ("TOKEN",), 60, "world_events"
+    )
+
+
+def test_guided_install_without_topic_persists_config_and_can_be_removed(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    manager = AppManager(
+        root,
+        github=_github(topic=False),
+        clone=_clone_without_manifest,
+        configure=_configure_install,
+        clock=lambda: _NOW,
+    )
+
+    installed = manager.install("example/weather-mcp", enabled=False)
+
+    assert installed.state == "ready"
+    assert not (installed.path / "aurora-app.toml").exists()
+    app = next(item for item in manager.store.apps_config() if item.package == installed.package)
+    assert app.command == ("uv", "run", "weather")
+    assert app.env == ("TOKEN",)
+    assert app.event_mode == "world_events"
+    assert app.enabled is False
+    assert manager.list().apps[0].state == "ready"
+    manager.remove(installed.package)
+    assert manager.list().apps == ()
+
+
+def test_cli_guided_install_uses_discovered_entry_and_saves_confirmed_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _project(tmp_path)
+
+    def clone(url: str, destination: Path, ref: str | None) -> str:
+        commit = _clone_without_manifest(url, destination, ref)
+        (destination / "pyproject.toml").write_text(
+            '[project]\nname = "weather-mcp"\nversion = "1.0"\n[project.scripts]\nweather = "weather:main"\n',
+            encoding="utf-8",
+        )
+        return commit
+
+    def manager(project_root: Path, **options: object) -> AppManager:
+        return AppManager(
+            project_root,
+            github=_github(topic=False),
+            clone=clone,
+            configure=app_command.guide_install,
+            clock=lambda: _NOW,
+        )
+
+    answers = iter(["org.example.weather", "", "", "1", "TOKEN", "", "world_events", "y"])
+    monkeypatch.setattr(app_command, "AppManager", manager)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    code = run(["--root", str(root), "app", "install", "example/weather-mcp", "--disabled"], registry=DEFAULT_REGISTRY)
+
+    assert code == 0
+    assert "已安装 weather-mcp 1.0" in capsys.readouterr().out
+    config = AppStore(root).apps_config()[-1]
+    assert (config.package, config.command, config.event_mode) == (
+        "org.example.weather",
+        ("uv", "run", "weather"),
+        "world_events",
+    )
+    assert config.enabled is False
+
+
+@pytest.mark.parametrize("error", (AppManagerError("已取消安装"), KeyboardInterrupt()))
+def test_guided_install_cancellation_rolls_back(tmp_path: Path, error: BaseException) -> None:
+    root = _project(tmp_path)
+    original = (root / "config/apps.toml").read_bytes()
+
+    def configure(_checkout: Path, _repository: Repository) -> AppManifest:
+        raise error
+
+    manager = AppManager(root, github=_github(), clone=_clone_without_manifest, configure=configure)
+    with pytest.raises(type(error)):
+        manager.install("example/weather-mcp")
+    assert (root / "config/apps.toml").read_bytes() == original
+    assert tuple(manager.store.install_root.iterdir()) == ()
+
+
+@pytest.mark.parametrize("broken", (False, True))
+def test_existing_manifest_never_calls_interactive_fallback(tmp_path: Path, broken: bool) -> None:
+    root = _project(tmp_path)
+
+    def configure(_checkout: Path, _repository: Repository) -> AppManifest:
+        pytest.fail("已有清单不得调用交互兜底")
+
+    def clone(url: str, destination: Path, ref: str | None) -> str:
+        commit = _clone(url, destination, ref)
+        if broken:
+            (destination / "aurora-app.toml").write_text("not = [valid")
+        return commit
+
+    manager = AppManager(root, github=_github(), clone=clone, configure=configure, clock=lambda: _NOW)
+    if broken:
+        with pytest.raises(AppManagerError, match="无法读取"):
+            manager.install("example/weather-mcp")
+    else:
+        assert manager.install("example/weather-mcp").state == "ready"
 
 
 def test_install_rejects_package_owned_by_different_managed_repository(tmp_path: Path) -> None:
@@ -322,6 +545,47 @@ def test_remove_deletes_only_managed_directory_and_config(tmp_path: Path) -> Non
     with (root / "config" / "apps.toml").open("rb") as stream:
         apps = tomllib.load(stream)["app"]
     assert [item["package"] for item in apps] == ["org.example.existing"]
+
+
+def test_remove_last_app_with_readonly_git_pack_keeps_valid_empty_config(tmp_path: Path) -> None:
+    config = tmp_path / "config/apps.toml"
+    config.parent.mkdir()
+    config.write_text("# 空配置\napp = []\n", encoding="utf-8")
+    manager = _manager(tmp_path)
+    installed = manager.install("example/weather-mcp")
+    pack = installed.path / ".git/objects/pack/pack-test.idx"
+    pack.parent.mkdir(parents=True)
+    pack.write_bytes(b"pack")
+    pack.chmod(stat.S_IREAD)
+
+    manager.remove(installed.package)
+
+    assert tomllib.loads(config.read_text(encoding="utf-8")) == {"app": []}
+    assert manager.list().apps == ()
+    assert tuple(manager.store.install_root.iterdir()) == ()
+    with pytest.raises(AppManagerError, match="未找到受管安装"):
+        manager.remove(installed.package)
+    assert manager.install("example/weather-mcp").state == "ready"
+
+
+def test_cancelled_install_cleans_readonly_git_pack(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+
+    def clone(url: str, destination: Path, ref: str | None) -> str:
+        commit = _clone_without_manifest(url, destination, ref)
+        pack = destination / ".git/objects/pack/pack-test.idx"
+        pack.parent.mkdir(parents=True)
+        pack.write_bytes(b"pack")
+        pack.chmod(stat.S_IREAD)
+        return commit
+
+    def cancel(_checkout: Path, _repository: Repository) -> AppManifest:
+        raise AppManagerError("已取消")
+
+    manager = AppManager(root, github=_github(), clone=clone, configure=cancel)
+    with pytest.raises(AppManagerError, match="已取消"):
+        manager.install("example/weather-mcp")
+    assert tuple(manager.store.install_root.iterdir()) == ()
 
 
 def test_remove_restores_directory_when_config_write_fails(

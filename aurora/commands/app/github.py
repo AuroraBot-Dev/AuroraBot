@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from aurora.apps.models import AppManagerError, Repository, RepositoryPage, normalize_repository
+from aurora.commands.app.models import AppManagerError, Repository, RepositoryPage, normalize_repository
 
 if TYPE_CHECKING:
     from http.client import HTTPMessage
@@ -205,4 +205,4 @@ def _boolean(value: Mapping[str, object], key: str) -> bool:
     return item
 
 
-__all__ = ["GitHubClient", "JsonResponse", "JsonTransport"]
+__all__ = ["GitHubClient", "JsonResponse"]

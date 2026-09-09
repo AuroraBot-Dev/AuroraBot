@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.apps.models import (
+from aurora.commander import run
+from aurora.commands import DEFAULT_REGISTRY, app
+from aurora.commands.app.models import (
     AppManagerConfigError,
     AppManagerError,
     InstalledApp,
@@ -17,8 +19,6 @@ from aurora.apps.models import (
     Repository,
     RepositoryPage,
 )
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY, app
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class FakeStore:
 class FakeManager:
     error: Exception | None = None
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, **_options: object) -> None:
         self.store = FakeStore(root.resolve())
 
     def search(self, **arguments: object) -> RepositoryPage:
@@ -132,6 +132,9 @@ def test_app_command_is_registered_and_prints_search(
     assert "example/weather-mcp" in output
     assert "结果可能不完整" in output
     assert "aurora app install" in output
+    assert "尚未校验安装清单" in output
+    assert "aurora-app.toml" in output
+    assert "使用 aurora app install example/weather-mcp 安装" not in output
 
 
 def test_install_list_and_remove_outputs(
@@ -179,7 +182,7 @@ def test_app_command_maps_errors(
     message: str,
 ) -> None:
     class FailingManager(FakeManager):
-        def __init__(self, root: Path) -> None:
+        def __init__(self, root: Path, **_options: object) -> None:
             super().__init__(root)
             self.error = error
 

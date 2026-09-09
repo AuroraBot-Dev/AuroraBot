@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.apps.manifest import load_manifest, manifest_app_config
-from aurora.apps.models import AppManagerError
+from aurora.commands.app.manifest import load_manifest, manifest_app_config
+from aurora.commands.app.models import AppManagerError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -107,7 +107,7 @@ def test_load_manifest_requires_integer_manifest_version(tmp_path: Path, version
         ('version = "1.2.0"', 'version = ""', "version"),
         ("timeout_seconds = 30", "timeout_seconds = 0", "有限正数"),
         ('event_mode = "disabled"', 'event_mode = "magic"', "event_mode"),
-        ('env = ["WEATHER_API_KEY"]', 'env = ["TOKEN", "TOKEN"]', "不重复"),
+        ('env = ["WEATHER_API_KEY"]', 'env = ["TOKEN", "TOKEN"]', "不得重复"),
         (
             'command = ["uv", "run", "--frozen", "weather-mcp"]',
             "command = []",

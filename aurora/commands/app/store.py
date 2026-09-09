@@ -15,7 +15,7 @@ import tomlkit
 from tomlkit.exceptions import ParseError
 from tomlkit.items import AoT, Array
 
-from aurora.apps.models import (
+from aurora.commands.app.models import (
     AppManagerConfigError,
     AppManagerError,
     InstalledApp,
@@ -23,7 +23,7 @@ from aurora.apps.models import (
     InstallMarker,
     normalize_repository,
 )
-from aurora.configuration.apps import AppConfig, AppsConfig, load_apps_config
+from aurora.configuration.apps import APPS_CONFIG, AppConfig
 
 MANIFEST_NAME = "aurora-app.toml"
 MARKER_NAME = ".aurora-installed.toml"
@@ -109,17 +109,17 @@ class AppStore:
         self.ensure_managed_path(destination.resolve())
         return destination.resolve().relative_to(self.project_root).as_posix()
 
-    def apps_config(self) -> AppsConfig:
+    def apps_config(self) -> tuple[AppConfig, ...]:
         if not self.apps_path.is_file():
             raise AppManagerConfigError("未找到 config/apps.toml，请先运行 aurora setup")
         try:
-            return load_apps_config(self.apps_path)
+            return APPS_CONFIG.load(self.project_root)
         except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
             raise AppManagerConfigError(f"apps.toml 无效：{error}") from error
 
     def add_app(self, app: AppConfig) -> None:
         config = self.apps_config()
-        if any(current.package == app.package for current in config.apps):
+        if any(current.package == app.package for current in config):
             raise AppManagerError(f"apps.toml 已存在 package：{app.package}")
         document, entries, empty_array_comment = self._document()
         table = tomlkit.table()
@@ -139,7 +139,7 @@ class AppStore:
 
     def remove_app(self, package: str, expected_directory: Path) -> None:
         config = self.apps_config()
-        matching = [app for app in config.apps if app.package == package]
+        matching = [app for app in config if app.package == package]
         if len(matching) != 1:
             raise AppManagerError(f"apps.toml 中 package 数量异常：{package}")
         app = matching[0]
@@ -150,11 +150,24 @@ class AppStore:
         if len(indexes) != 1:
             raise AppManagerError(f"apps.toml 中 package 数量异常：{package}")
         del entries[indexes[0]]
+        if not entries:
+            document["app"] = tomlkit.array()
+        _atomic_write(self.apps_path, tomlkit.dumps(document))
+
+    def reuse_app(self, previous: AppConfig, replacement: AppConfig) -> None:
+        """复用已确认的条目，只更新工作目录和启用状态，保留注释与其他字段。"""
+        current = next((app for app in self.apps_config() if app.package == previous.package), None)
+        if current != previous or replacement.package != previous.package:
+            raise AppManagerError("已有 App 配置发生变化，请重新安装")
+        document, entries, _comment = self._document()
+        table = next(item for item in entries if item.get("package") == previous.package)
+        table["working_dir"] = replacement.working_dir
+        table["enabled"] = replacement.enabled
         _atomic_write(self.apps_path, tomlkit.dumps(document))
 
     def list_installed(self) -> InstalledAppList:
         self.ensure_install_root_safe()
-        configured = {app.package: app for app in self.apps_config().apps}
+        configured = {app.package: app for app in self.apps_config()}
         apps: list[InstalledApp] = []
         for directory in self._candidate_directories():
             marker_path = directory / MARKER_NAME

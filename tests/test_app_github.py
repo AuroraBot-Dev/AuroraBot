@@ -10,9 +10,9 @@ from urllib.request import Request
 
 import pytest
 
-from aurora.apps import github as github_module
-from aurora.apps.github import GitHubClient, JsonResponse
-from aurora.apps.models import AppManagerError, normalize_repository
+from aurora.commands.app import github as github_module
+from aurora.commands.app.github import GitHubClient, JsonResponse
+from aurora.commands.app.models import AppManagerError, normalize_repository
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

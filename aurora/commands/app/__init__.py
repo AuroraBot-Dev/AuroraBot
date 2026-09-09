@@ -5,7 +5,20 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.apps import AppManager, AppManagerConfigError, AppManagerError, RepositoryPage
+from aurora.commands.app.github import GitHubClient, JsonResponse
+from aurora.commands.app.interactive import guide_install
+from aurora.commands.app.models import (
+    AppManagerConfigError,
+    AppManagerError,
+    AppManifest,
+    InstalledApp,
+    InstalledAppList,
+    InstallMarker,
+    Repository,
+    RepositoryPage,
+    normalize_repository,
+)
+from aurora.commands.app.service import AppManager
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 
 if TYPE_CHECKING:
@@ -33,6 +46,7 @@ COMMAND: CommandSpec = {
             "options": {
                 "--ref": {"default": None, "help": "要安装的 Git branch 或 tag"},
                 "--disabled": "安装后保持禁用",
+                "--reuse-config": "复用已有配置，保留参数和启用状态；已有工作目录存在时拒绝覆盖",
             },
         },
         "list": {"help": "列出受管 MCP App 安装"},
@@ -45,7 +59,7 @@ COMMAND: CommandSpec = {
 
 
 def execute(arguments: argparse.Namespace) -> int:
-    manager = AppManager(arguments.root)
+    manager = AppManager(arguments.root, configure=guide_install)
     try:
         match arguments.subcommand:
             case "search":
@@ -58,14 +72,16 @@ def execute(arguments: argparse.Namespace) -> int:
                 )
                 _print_search(result)
             case "install":
-                installed = manager.install(arguments.source, ref=arguments.ref, enabled=not arguments.disabled)
+                options = {"reuse_config": True} if arguments.reuse_config else {}
+                installed = manager.install(
+                    arguments.source, ref=arguments.ref, enabled=not arguments.disabled, **options
+                )
                 marker = installed.marker
                 assert marker is not None
                 state = "已启用" if installed.enabled else "已安装但禁用"
                 sys.stdout.write(f"已安装 {marker.name} {marker.version}（{marker.package}，{state}）\n")
                 sys.stdout.write(f"来源：{marker.repository}@{marker.requested_ref}（{marker.resolved_commit[:12]}）\n")
                 sys.stdout.write(f"目录：{installed.path.relative_to(manager.store.project_root)}\n")
-                sys.stdout.write("请确认仓库来源及 aurora-app.toml 中的 command。\n")
                 sys.stdout.write("配置将在下次 aurora start 时生效。\n")
             case "list":
                 return _print_installed(manager)
@@ -97,7 +113,8 @@ def _print_search(result: RepositoryPage) -> None:
     suffix = "，结果可能不完整" if result.incomplete else ""
     sys.stdout.write(f"共 {result.total} 个仓库；第 {result.page} 页，每页 {result.page_size} 条{suffix}。\n")
     if result.repositories:
-        sys.stdout.write(f"使用 aurora app install {result.repositories[0].full_name} 安装。\n")
+        sys.stdout.write("搜索结果仅按 aurorabot-app topic 匹配，尚未校验安装清单。\n")
+        sys.stdout.write("使用 aurora app install <owner/repo> 安装；没有 aurora-app.toml 时将引导填写配置。\n")
 
 
 def _print_installed(manager: AppManager) -> int:
@@ -122,4 +139,19 @@ def _print_installed(manager: AppManager) -> int:
     return EXIT_FAILURE if failed else 0
 
 
-__all__ = ["COMMAND", "execute"]
+__all__ = [
+    "COMMAND",
+    "AppManager",
+    "AppManagerConfigError",
+    "AppManagerError",
+    "AppManifest",
+    "GitHubClient",
+    "InstallMarker",
+    "InstalledApp",
+    "InstalledAppList",
+    "JsonResponse",
+    "Repository",
+    "RepositoryPage",
+    "execute",
+    "normalize_repository",
+]
