@@ -7,20 +7,26 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurora.composition import compose_project
+from aurora.composer import CompositionContext, InstanceKey, PackageSpec, build_module_specs, compose
+from aurora.composition import PACKAGE_SPECS, compose_project
 from aurora.composition.ai import MODEL
-from aurora.composition.mcp import build_mcp_specs
+from aurora.composition.mcp import MCP_RUNTIME, build_mcp_specs
 from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration import load_config
 from aurora.configuration.apps import APPS_CONFIG, AppConfig
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.contributions import TREE_LAUNCHER_BINDINGS
 from aurora.runtime import assemble_runtime, run_project
+from aurora.runtime.assembly import runtime_from_assembly
 from ops.runtime import OpsRuntime
 from src.contracts import (
     ChatMessage,
     EnvironmentEvent,
     ModelRequest,
+    TreeLauncher,
+    TreeLaunchRequest,
+    TreeStatus,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -325,7 +331,7 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
             runtime = assemble_runtime(config, FakeModel(), world=world, mcp=mcp)
 
             assert runtime.world is world
-            assert runtime.mcp is mcp
+            assert runtime.assembly.get(MCP_RUNTIME) is mcp
             assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
             tools_port = OpsRuntime(runtime.assembly).ports.tools
             assert tools_port is not None
@@ -353,6 +359,10 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
         stop = asyncio.Event()
         stop.set()
 
+        def bind(launcher: TreeLauncher) -> None:
+            assert launcher is not None
+            trace.append("launcher.bind")
+
         runtime = await run_project(
             config,
             FakeModel(),
@@ -361,6 +371,7 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
             output=lambda _message: None,
             mcp_factory=factory,
             instances=((WORLD_JOURNAL, world),),
+            contributions=((TREE_LAUNCHER_BINDINGS, bind),),
         )
 
         assert runtime.world is world
@@ -368,6 +379,74 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
         assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
         assert trace.index("world.initialize") < trace.index("mcp.open")
         assert trace.index("mcp.discover") < trace.index("mcp.activate")
+        assert trace.index("mcp.discover") < trace.index("launcher.bind") < trace.index("mcp.activate")
+        assert trace[-2:] == ["mcp.close", "world.close"]
+        assert world.closed is True
+
+    asyncio.run(scenario())
+
+
+def test_new_launcher_consumer_only_needs_its_own_package_spec(configured_project: Path) -> None:
+    """新能力自行贡献窄端口绑定，无须扩展门面的构造参数或装配入口。"""
+    launchers: list[TreeLauncher] = []
+    extra = InstanceKey[list[TreeLauncher]]("extra.launchers")
+
+    def construct(context: CompositionContext) -> None:
+        context.provide(extra, launchers)
+        context.contribute(TREE_LAUNCHER_BINDINGS, launchers.append)
+
+    package = PackageSpec(
+        key=extra,
+        provides=(extra,),
+        requires=(),
+        register=construct,
+        contributes=(TREE_LAUNCHER_BINDINGS,),
+    )
+    config = load_config(configured_project)
+    model = FakeModel()
+    world = FakeWorldJournal([])
+    assembly = compose(
+        config,
+        build_module_specs((*PACKAGE_SPECS, package)),
+        ((MODEL, model), (WORLD_JOURNAL, world)),
+    )
+    assert launchers == []
+    echoed: list[str] = []
+
+    runtime = runtime_from_assembly(assembly, output=echoed.append)
+    tree = asyncio.run(launchers[0].launch_tree(TreeLaunchRequest("开始认知")))
+
+    assert assembly.get(extra) == [runtime]
+    assert runtime.assembly is assembly
+    assert runtime.config is config
+    assert runtime.world is world
+    assert tree.status is TreeStatus.COMPLETED
+    assert runtime.runtime_status()["trees"]["completed"] == 1
+    assert echoed == ["Cadence> [builtin.root] 完成"]
+
+
+def test_launcher_binding_failure_closes_prepared_resources_before_activation(configured_project: Path) -> None:
+    async def scenario() -> None:
+        trace: list[str] = []
+        world = FakeWorldJournal(trace)
+        factory = FakeMcpFactory(trace)
+
+        def fail_binding(launcher: TreeLauncher) -> None:
+            del launcher
+            raise ValueError("唤起端口绑定失败")
+
+        with pytest.raises(ValueError, match="唤起端口绑定失败"):
+            await run_project(
+                _active_config(configured_project),
+                FakeModel(),
+                headless=True,
+                mcp_factory=factory,
+                instances=((WORLD_JOURNAL, world),),
+                contributions=((TREE_LAUNCHER_BINDINGS, fail_binding),),
+            )
+
+        assert "mcp.discover" in trace
+        assert "mcp.activate" not in trace
         assert trace[-2:] == ["mcp.close", "world.close"]
         assert world.closed is True
 

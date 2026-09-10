@@ -1,7 +1,7 @@
 """项目级进程门面：持有已装配实例并运行 AgentTree。
 
 本模块不读取任何 ``aurora.composition`` 键或 ``aurora.configuration`` 规格；
-协作者由 ``aurora.runtime.assembly`` 从单一 ``AuroraAssembly`` 解析后注入。
+协作者由 runtime 组合代表模块捕获，在 Assembly 冻结后由工厂注入。
 """
 
 from __future__ import annotations
@@ -22,12 +22,9 @@ if TYPE_CHECKING:
     from aurora.composer import AuroraAssembly
     from aurora.configuration.runtime import RuntimeConfig
     from src.agents import AgentCatalog
-    from src.cadence import Cadence
     from src.console import TerminalConsole
     from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest, WorldJournal
     from src.engine import AgentTreeRunner
-    from src.mcp import McpRuntime
-    from src.memory import Memory
 
 _logger = get_logger(__name__)
 
@@ -44,9 +41,6 @@ class AuroraRuntime:
         root: RuntimeConfig,
         console: TerminalConsole,
         world: WorldJournal,
-        cadence: Cadence,
-        memory: Memory,
-        mcp: McpRuntime,
         output: Callable[[str], None] = print,
     ) -> None:
         self.assembly = assembly
@@ -56,9 +50,6 @@ class AuroraRuntime:
         self.root = root
         self.console = console
         self.world = world
-        self.cadence = cadence
-        self.memory = memory
-        self.mcp = mcp
         self.output = output
         self._trees: dict[str, AgentTree] = {}
         self._serve_requester: Callable[[], Awaitable[str]] | None = None

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 from aurora.composer import InstanceKey, PackageSpec
 from aurora.configuration.cadence import CADENCE_CONFIG
+from aurora.contributions import TREE_LAUNCHER_BINDINGS
 from src.cadence import DEFAULT_REACTIVE_RULES, Cadence
 
 if TYPE_CHECKING:
@@ -35,6 +36,7 @@ def construct(context: CompositionContext) -> None:
         reactive_rules=DEFAULT_REACTIVE_RULES,
     )
     context.provide(CADENCE, cadence)
+    context.contribute(TREE_LAUNCHER_BINDINGS, cadence.bind_launcher)
 
 
 async def activate(context: CompositionContext) -> None:
@@ -56,6 +58,7 @@ PACKAGE_SPEC = PackageSpec(
     provides=(CADENCE,),
     requires=(WORLD_JOURNAL_NAME,),
     register=construct,
+    contributes=(TREE_LAUNCHER_BINDINGS,),
     activate=activate,
     run=run,
 )

@@ -44,8 +44,8 @@ class ContributionKey[T]:
 class AuroraAssembly:
     """组合完成后的只读产物：``AuroraConfig`` 与全部已构造实例。
 
-    config 在构造阶段即被各代表模块的 construct 读取；装入 assembly 是为了让 runtime
-    拿到单一对象后自行按键拆取所需实例与配置。
+    config 在构造阶段由各代表模块读取；最终 assembly 同时向进程门面与只读观察端
+    提供同一份配置和实例目录。
     """
 
     config: AuroraConfig
@@ -136,7 +136,7 @@ class ModuleSpec:
 
 @dataclass(frozen=True, slots=True)
 class PackageSpec:
-    """一个 src 包的组合代表：自持键、依赖、贡献与生命周期。
+    """一个功能包或项目进程门面的组合代表：自持键、依赖、贡献与生命周期。
 
     代表模块只导出自身包的键；兄弟包的实例一律按键名声明并到构造期由
     CompositionContext 提供，因此各代表模块之间不需要运行时相互 import。

@@ -78,6 +78,7 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
     model = FakeModel()
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
+    cadence = runtime.assembly.get(CADENCE)
 
     async def scenario() -> None:
         await runtime.world.initialize()
@@ -92,9 +93,9 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
                 data={"event_kind": "qq.notice.background"},
                 occurred_at=datetime.now(UTC),
             )
-        before = runtime.cadence.status()
-        await runtime.cadence.evaluate_once()
-        after = runtime.cadence.status()
+        before = cadence.status()
+        await cadence.evaluate_once()
+        after = cadence.status()
 
         assert runtime.runtime_status()["trees"]["completed"] == 1
         assert before["pending"] == 0 and after["pending"] == 0

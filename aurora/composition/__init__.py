@@ -1,4 +1,4 @@
-"""项目组件目录；按文件名自动发现各 ``src`` 包的唯一 ``PACKAGE_SPEC``。"""
+"""项目组件目录；自动发现功能包与进程门面的唯一 ``PACKAGE_SPEC``。"""
 
 from __future__ import annotations
 

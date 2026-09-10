@@ -104,13 +104,13 @@ def test_each_project_toml_has_one_registered_configuration_module() -> None:
     assert len(CONFIG_SPECS) == len(registered_names)
 
 
-def test_each_composition_module_targets_a_src_package_and_is_registered() -> None:
+def test_each_composition_module_represents_a_functional_package_or_project_runtime() -> None:
     module_names = {path.stem for path in (_ROOT / "aurora" / "composition").glob("*.py") if path.stem != "__init__"}
     src_names = {path.name for path in (_ROOT / "src").iterdir() if path.is_dir() and not path.name.startswith("__")}
     registered_names = {spec.register.__module__.rsplit(".", maxsplit=1)[-1] for spec in COMPOSITION_SPECS}
 
     assert module_names == registered_names
-    assert module_names <= src_names
+    assert module_names <= src_names | {"runtime"}
 
 
 def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
@@ -123,7 +123,7 @@ def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
 
 
 def test_runtime_core_only_accepts_collaborators_injected_from_assembly() -> None:
-    """进程门面 core.py 不得运行时 import composition 键或 configuration 规格；装配只在 assembly.py。"""
+    """门面不读取组合键或配置规格；入口只调用工厂，协作者接线由代表模块声明。"""
     violations: list[str] = []
     runtime_directory = _ROOT / "aurora" / "runtime"
     for path in runtime_directory.glob("*.py"):
@@ -137,6 +137,14 @@ def test_runtime_core_only_accepts_collaborators_injected_from_assembly() -> Non
             if module.startswith("aurora.configuration.") and path.stem not in {"support", "run", "panel"}:
                 violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
     assert violations == []
+
+
+def test_runtime_core_does_not_store_unrelated_capabilities() -> None:
+    """门面只依赖实际调用的能力，避免为接线或观察转存其他模块。"""
+    path = _ROOT / "aurora" / "runtime" / "core.py"
+    unrelated = {"src.cadence", "src.memory", "src.mcp"}
+
+    assert not {_src_package(module) for module, _ in _imports_of(path)} & unrelated
 
 
 def test_cli_main_only_dispatches_through_command_layer() -> None:

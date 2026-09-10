@@ -31,8 +31,8 @@ aurora/commands/       每个 CLI 命令一个自动发现模块
 aurora/configuration/  每个 TOML 一个解析模块，导出唯一 CONFIG_SPEC 后自动发现
 aurora/composer.py        组合根实现：类型化 InstanceKey/ContributionKey、CompositionContext、PackageSpec/ModuleSpec、
                           ManagedAssembly 统一生命周期、AuroraAssembly
-aurora/contributions.py   项目级稳定多值贡献键（首个为 Tool 目录）
-aurora/composition/        每个 src 功能包一个同名代表模块（PACKAGE_SPEC：provides/requires/contributes/consumes/hooks），按文件名自动发现
+aurora/contributions.py   项目级稳定多值贡献键（Tool 目录、TreeLauncher 绑定）
+aurora/composition/        每个 src 功能包一个同名代表模块，runtime 模块代表项目进程门面；PACKAGE_SPEC 按文件名自动发现
 aurora/runtime/        AuroraRuntime 进程门面：AgentTree 运行、Console 本地分派与进程生命周期
 aurora/utils/          项目级进程、环境、平台、TOML 与包发现工具
 ops/            只读 OperationSpec 观察目录与本地 Panel HTTP
@@ -85,9 +85,10 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
   `commands` 按模块注册 CLI，`main.py` 只分派。
-- `aurora.runtime` 是唯一进程边界：`assembly.py` 是唯一从 `AuroraAssembly` 拆取实例键与配置规格的装配适配点；运行门面
-  `core.py` 只持有被注入的协作者（runner/agents/root/console/world/cadence/memory/mcp）与通用 `assembly`/`config`，不 import
-  组合键或配置规格，也不随新增组合模块增长。
+- `aurora.runtime` 是唯一进程边界：`assembly.py` 只适配调用者注入参数，并从 `AuroraAssembly` 取得 runtime 工厂创建门面，
+  不维护协作者清单或替具体模块绑定端口；`composition/runtime.py` 声明门面实际依赖并捕获已构造实例，不保留可写组合上下文。
+  `core.py` 只持有实际使用的注入协作者（runner/agents/root/console/world）与通用 `assembly`/`config`，不 import 组合键或配置规格。
+  Cadence 在自身代表模块贡献 `TreeLauncher` 绑定函数；runtime 工厂消费绑定集合，创建门面后、生命周期激活前统一接线。
 - 命令、配置、组合与 ops 操作模块都按包目录自动发现：新增并列项只增加该能力自己的一个模块与配套 TOML/测试，不再修改目录入口、
   Tool 聚合方或 runtime 分支；发现范围只含随 AuroraBot 安装的内部包，不做第三方 entry point 或 manifest。
 - 组合模块是 src 功能包的唯一代表：每个 `aurora/composition/<pkg>.py` 导出唯一 `PACKAGE_SPEC`，声明自身键、`provides`、
@@ -96,7 +97,7 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
   （类型检查可 TYPE_CHECKING）。唯一实例键只有一个提供者；`aurora/contributions.py` 定义稳定的多值贡献键（首个为
   Tool 目录），任意模块可追加同类型值，消费方自动依赖全部贡献者，零贡献合法。通用组合器校验键名、依赖与贡献并拓扑装配；
   生命周期在 Assembly 冻结后按 `activation_after` 激活并启动后台 `run`，关闭时先取消任务再逆序执行 `close` 与 prepare
-  cleanup。合成产物 `AuroraAssembly` 同时冻结 `AuroraConfig` 与全部实例，供 runtime 拆取；需要连接、后台循环或关闭的
+  cleanup。合成产物 `AuroraAssembly` 同时冻结 `AuroraConfig` 与全部实例（含 runtime 工厂）；需要连接、后台循环或关闭的
   能力只修改自己的代表模块。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
 - 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`agents/prompt/ai/console/cadence/memory/

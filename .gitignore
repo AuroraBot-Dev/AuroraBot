@@ -36,6 +36,7 @@ htmlcov/
 .coverage.*
 coverage.xml
 .pytest_cache/
+tests/.tmp/
 
 # OS
 .DS_store
