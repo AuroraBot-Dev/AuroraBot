@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import sys
+import time
 import tomllib
 from typing import TYPE_CHECKING
 
 from aurora.configuration import load_config
 from aurora.utils.process import EXIT_CONFIG_ERROR
+from aurora.utils.table import render_table
 
 if TYPE_CHECKING:
     import argparse
@@ -30,9 +32,13 @@ COMMAND: CommandSpec = {
 
 
 def _list_sources(configuration: AuroraConfig) -> int:
-    width = max(len(source.name) for source in configuration.sources)
-    for source in configuration.sources:
-        sys.stdout.write(f"{source.name.ljust(width)}  |  {source.relative_path}\n")
+    rows = [(source.name, source.relative_path) for source in configuration.sources]
+    table = render_table(
+        ("Name", "Path"),
+        rows,
+        banner=("AuroraBot Config", f"Config Sources: {len(rows)}"),
+    )
+    sys.stdout.write(f"{time.ctime()}\n{table}\n")
     return 0
 
 

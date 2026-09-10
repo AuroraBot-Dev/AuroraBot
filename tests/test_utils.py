@@ -10,6 +10,7 @@ from loguru import logger as _loguru_logger
 
 from aurora.utils.platform import detect_os, is_linux, is_macos, is_windows
 from aurora.utils.project import get_git_revision
+from aurora.utils.table import render_table
 from src.utils import (
     NamePatternError,
     UnsupportedLoggingLevelError,
@@ -178,6 +179,24 @@ def test_platform_detection_maps_known_and_unknown_systems(monkeypatch: pytest.M
 
     monkeypatch.setattr("sys.platform", "freebsd")
     assert detect_os() == "freebsd"
+
+
+def test_render_table_builds_bordered_columns_and_validates_shape() -> None:
+    assert render_table(("Name", "Path"), [("runtime", "config/runtime.toml")]) == (
+        "+---------+---------------------+\n"
+        "| Name    | Path                |\n"
+        "|=========+=====================|\n"
+        "| runtime | config/runtime.toml |\n"
+        "+---------+---------------------+"
+    )
+    assert render_table(("A",), [("1",)], banner=("Title",)) == (
+        "+-------+\n| Title |\n+-------+\n| A     |\n|=======|\n| 1     |\n+-------+"
+    )
+
+    with pytest.raises(ValueError, match="列数"):
+        render_table(("A", "B"), [("1",)])
+    with pytest.raises(ValueError, match="列数"):
+        render_table(("A",), [], banner=("x", "y"))
 
 
 def test_get_git_revision_returns_short_hash_or_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

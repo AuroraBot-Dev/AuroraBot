@@ -189,9 +189,9 @@ def test_config_command_lists_and_shows_registered_sources(
 ) -> None:
     assert run(["--root", str(configured_project), config.COMMAND["name"], "list"]) == 0
     listing = capsys.readouterr().out
-    assert re.search(r"^runtime\s+\|\s+config/runtime\.toml$", listing, re.MULTILINE)
-    assert re.search(r"^providers\s+\|\s+config/providers\.toml$", listing, re.MULTILINE)
-    assert re.search(r"^endpoints\s+\|\s+config/endpoints\.toml$", listing, re.MULTILINE)
+    assert re.search(r"^\| runtime\s+\| config/runtime\.toml\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| providers\s+\| config/providers\.toml\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| endpoints\s+\| config/endpoints\.toml\s+\|$", listing, re.MULTILINE)
 
     assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == 0
     shown = capsys.readouterr().out
