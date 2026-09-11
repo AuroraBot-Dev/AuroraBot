@@ -158,10 +158,10 @@ def test_runtime_serve_command_uses_injected_local_callback(configured_project: 
         calls += 1
         return "Panel 后端已启动。"
 
-    runtime.bind_serve_requester(serve)
+    runtime.terminal.bind_serve_panel(serve)
     try:
-        response = asyncio.run(runtime.dispatch_terminal("/serve"))
-        unknown = asyncio.run(runtime.dispatch_terminal("/status"))
+        response = asyncio.run(runtime.terminal.dispatch_terminal("/serve"))
+        unknown = asyncio.run(runtime.terminal.dispatch_terminal("/status"))
 
         assert response.text == "Panel 后端已启动。"
         assert response.is_error is False

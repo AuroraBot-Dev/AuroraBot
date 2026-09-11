@@ -12,7 +12,6 @@ from src.kernel import (
     compose,
     compose_managed,
 )
-from src.mcp import McpClientFactory
 from src.runtime import AuroraRuntime, create_runtime
 
 if TYPE_CHECKING:
@@ -61,7 +60,6 @@ async def assemble_runtime_managed(
     tools: Iterable[Tool] = (),
     *,
     output: Callable[[str], None] = print,
-    mcp_factory: McpClientFactory | None = None,
     instances: Iterable[InstanceBinding] = (),
     contributions: Iterable[ContributionBinding] = (),
 ) -> tuple[AuroraRuntime, ManagedAssembly]:
@@ -69,8 +67,6 @@ async def assemble_runtime_managed(
     bindings = list(instances)
     if model is not None:
         bindings.append((Model, model))
-    if mcp_factory is not None:
-        bindings.append((McpClientFactory, mcp_factory))
     contributed = [*contributions, *((TOOL_CONTRIBUTIONS, tool) for tool in tools)]
     lifecycle = await compose_managed(config, _discover_specs(config), bindings, contributed)
     try:

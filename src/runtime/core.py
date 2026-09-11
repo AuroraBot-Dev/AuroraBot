@@ -1,7 +1,7 @@
 """项目级进程门面：持有已装配能力并运行 AgentTree。
 
-本模块只依赖公共契约与组合内核，不读取任何项目配置规格；协作者在 Assembly
-冻结后由工厂注入。
+门面只负责认知运行与事实提交；终端文本渲染与本地命令分派分别由
+``TreeTextPresenter`` 与 ``TerminalCommandDispatcher`` 承担。
 """
 
 from __future__ import annotations
@@ -9,27 +9,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from rich.console import Console
-from rich.markup import escape as markup_escape
-
-from src.contracts import (
-    AgentTree,
-    EnvironmentEvent,
-    TerminalControl,
-    TerminalResponse,
-    WorldCommit,
-    WorldFrontier,
-)
-from src.utils import bounded_summary, get_logger
+from src.contracts import AgentTree, EnvironmentEvent, WorldCommit, WorldFrontier
+from src.runtime.presenter import TreeTextPresenter
+from src.runtime.terminal import TerminalCommandDispatcher
+from src.utils import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Callable
 
     from src.contracts import (
         AgentCatalog,
-        AgentNode,
         AgentTreeRunner,
-        ChatMessage,
         RuntimeConfig,
         TerminalConsole,
         TreeLaunchRequest,
@@ -62,8 +52,9 @@ class AuroraRuntime:
         self.console = console
         self.world = world
         self.output = output
+        self.presenter = TreeTextPresenter(output)
+        self.terminal = TerminalCommandDispatcher(self.run)
         self._trees: dict[str, AgentTree] = {}
-        self._serve_requester: Callable[[], Awaitable[str]] | None = None
 
     def create_tree(
         self,
@@ -99,51 +90,12 @@ class AuroraRuntime:
         )
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        printed: dict[str, int] = {}
 
         def observer(current: AgentTree) -> None:
             self._record_tree(current)
-            self._echo_node_texts(current, printed)
+            self.presenter.echo(current)
 
         return await self.runner.run(tree, observer=observer)
-
-    def _echo_node_texts(self, tree: AgentTree, printed: dict[str, int]) -> None:
-        console = Console(highlight=False) if self.output is print else None
-        for node in tree.nodes:
-            seen = printed.get(node.node_id, 0)
-            for message in node.messages[seen:]:
-                self._echo_message(node, message, console)
-            printed[node.node_id] = len(node.messages)
-
-    def _echo_message(self, node: AgentNode, message: ChatMessage, console: Console | None) -> None:
-        tag = node.definition_id
-        if message.role == "assistant":
-            if message.content.strip():
-                self._echo_line("Cadence>", tag, message.content, console)
-            for call in message.tool_calls:
-                self._echo_line("→", tag, call.name, console, indent=True)
-        elif message.role == "tool":
-            summary = bounded_summary((message.content,))
-            label = "失败" if message.is_error else "←"
-            self._echo_line(label, tag, summary, console, indent=True)
-
-    def _echo_line(
-        self,
-        prefix: str,
-        tag: str,
-        content: str,
-        console: Console | None,
-        *,
-        indent: bool = False,
-    ) -> None:
-        marker = f"{'  ' if indent else ''}{prefix}"
-        if console is None:
-            self.output(f"{marker} [{tag}] {content}")
-            return
-        console.print(
-            f"[bold]{marker}[/bold] [cyan]\\[{markup_escape(tag)}][/cyan] {markup_escape(content)}",
-            highlight=False,
-        )
 
     async def submit_event(self, event: EnvironmentEvent) -> WorldCommit:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
@@ -160,39 +112,6 @@ class AuroraRuntime:
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
         return await self.runner.run(tree, observer=self._record_tree)
-
-    def bind_serve_requester(self, requester: Callable[[], Awaitable[str]] | None) -> None:
-        self._serve_requester = requester
-
-    async def dispatch_terminal(self, text: str) -> TerminalResponse:
-        input_type = "command" if text.startswith("/") else "message"
-        _logger.debug("终端输入开始 input_type={}", input_type)
-        if text in {"/help", "/h"}:
-            return TerminalResponse("本地命令：/help /clear /quit /serve")
-        if text in {"/clear", "/cls"}:
-            return TerminalResponse(control=TerminalControl.CLEAR)
-        if text in {"/quit", "/exit", "/q"}:
-            return TerminalResponse("正在停止。", TerminalControl.SHUTDOWN)
-        if text == "/serve":
-            return await self._serve_panel()
-        if text.startswith("/"):
-            return TerminalResponse("未知本地命令；输入 /help 查看命令。", is_error=True)
-
-        tree = await self.run(text)
-        root = tree.node(tree.root_id)
-        failed = root.status.value == "failed"
-        rendered = root.error if failed else root.result
-        _logger.debug("终端输入完成 input_type={} tree_status={}", input_type, tree.status.value)
-        return TerminalResponse(rendered, is_error=failed)
-
-    async def _serve_panel(self) -> TerminalResponse:
-        if self._serve_requester is None:
-            return TerminalResponse("Panel 后端当前不可启动。", is_error=True)
-        try:
-            return TerminalResponse(await self._serve_requester())
-        except (OSError, RuntimeError, ValueError) as error:
-            _logger.error("Panel 后端启动失败 error_type={}", type(error).__name__)
-            return TerminalResponse(f"Panel 后端启动失败：{error}", is_error=True)
 
     def runtime_status(self) -> dict[str, Any]:
         statuses = {"running": 0, "completed": 0, "failed": 0}

@@ -31,7 +31,7 @@ from src.contracts import (
     WorldStreamPage,
 )
 from src.kernel import BuiltinSource, compose, module
-from src.mcp import McpAppSpec, McpCallResult, McpRemoteTool, McpToolsPage, prepare_mcp
+from src.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemoteTool, McpToolsPage, prepare_mcp
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from src.mcp.module import build_mcp_specs
 from src.runtime import create_runtime
@@ -377,8 +377,7 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
             headless=True,
             stop_event=stop,
             output=lambda _message: None,
-            mcp_factory=factory,
-            instances=((WorldJournal, world),),
+            instances=((WorldJournal, world), (McpClientFactory, factory)),
             contributions=((TREE_LAUNCHER_BINDINGS, bind),),
         )
 
@@ -439,8 +438,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
                 _active_config(configured_project),
                 FakeModel(),
                 headless=True,
-                mcp_factory=factory,
-                instances=((WorldJournal, world),),
+                instances=((WorldJournal, world), (McpClientFactory, factory)),
                 contributions=((TREE_LAUNCHER_BINDINGS, fail_binding),),
             )
 
@@ -469,8 +467,7 @@ def test_run_project_closes_mcp_then_world_when_composition_fails(
                 broken,
                 FakeModel(),
                 headless=True,
-                mcp_factory=factory,
-                instances=((WorldJournal, world),),
+                instances=((WorldJournal, world), (McpClientFactory, factory)),
             )
 
         assert trace.index("world.initialize") < trace.index("mcp.open")

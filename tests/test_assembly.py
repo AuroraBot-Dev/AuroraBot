@@ -131,7 +131,7 @@ def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path
     assert "最近时间窗口内的世界活动" in model.requests[0].messages[0].content
 
 
-def test_echo_node_texts_traces_tool_calls(configured_project: Path) -> None:
+def test_presenter_traces_tool_calls(configured_project: Path) -> None:
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=echoed.append)
     tree = runtime.create_tree("开始")
@@ -139,7 +139,7 @@ def test_echo_node_texts_traces_tool_calls(configured_project: Path) -> None:
     tree = tree.append("root", ChatMessage.tool("c1", "hi"))
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
-    runtime._echo_node_texts(tree, {})
+    runtime.presenter.echo(tree)
 
     assert echoed == [
         "  → [builtin.root] aur.test.echo",
@@ -148,7 +148,7 @@ def test_echo_node_texts_traces_tool_calls(configured_project: Path) -> None:
     ]
 
 
-def test_echo_node_texts_renders_rich_for_terminal_sink(
+def test_presenter_renders_rich_for_terminal_sink(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -156,7 +156,7 @@ def test_echo_node_texts_renders_rich_for_terminal_sink(
     tree = runtime.create_tree("开始")
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
-    runtime._echo_node_texts(tree, {})
+    runtime.presenter.echo(tree)
 
     assert "Cadence> [builtin.root] 完成" in capsys.readouterr().out
 

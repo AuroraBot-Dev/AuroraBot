@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from aurora.configuration.platforms import PLATFORMS_CONFIG
+from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.configuration.storage import STORAGE_CONFIG
 from aurora.runtime.assembly import assemble_runtime_managed
 from aurora.runtime.panel import PanelRuntime, close_panel, run_panel
@@ -24,8 +24,6 @@ if TYPE_CHECKING:
     from aurora.config import AuroraConfig
     from src.contracts import Model, Tool
     from src.kernel import ContributionBinding, InstanceBinding, ManagedAssembly
-    from src.mcp import McpClientFactory
-    from src.mcp.config import PlatformConfig
     from src.runtime import AuroraRuntime
 
 _logger = get_logger(__name__)
@@ -43,7 +41,6 @@ async def run_project(
     stop_event: asyncio.Event | None = None,
     readline: Callable[[str], str] | None = None,
     output: Callable[[str], None] = print,
-    mcp_factory: McpClientFactory | None = None,
     instances: Iterable[InstanceBinding] = (),
     contributions: Iterable[ContributionBinding] = (),
 ) -> AuroraRuntime:
@@ -57,7 +54,6 @@ async def run_project(
             model,
             tools,
             output=output,
-            mcp_factory=mcp_factory,
             instances=instances,
             contributions=contributions,
         )
@@ -90,15 +86,15 @@ async def run_project(
             return "Panel 后端已启动。"
 
     try:
-        runtime.bind_serve_requester(serve_panel)
+        runtime.terminal.bind_serve_panel(serve_panel)
         console_platform = _platform(config, _CONSOLE_PLATFORM_ID)
         installed = install_stop_handlers(stop) if stop_event is None else ()
         if not headless and console_platform.enabled:
-            await runtime.console.run(runtime, stop_event=stop, readline=readline, output=output)
+            await runtime.console.run(runtime.terminal, stop_event=stop, readline=readline, output=output)
         else:
             await stop.wait()
     finally:
-        runtime.bind_serve_requester(None)
+        runtime.terminal.bind_serve_panel(None)
         await _shutdown_project(panel, installed, lifecycle)
     return runtime
 
