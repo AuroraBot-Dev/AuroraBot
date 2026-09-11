@@ -9,6 +9,12 @@ from src.contracts.agent import (
     TreeLaunchRequest,
     TreeStatus,
 )
+from src.contracts.contributions import (
+    TOOL_CONTRIBUTIONS,
+    TREE_LAUNCHER_BINDINGS,
+    TreeLauncherBinding,
+)
+from src.contracts.kernel import ContributionKey, Settings
 from src.contracts.model import (
     ChatMessage,
     ChatRole,
@@ -85,12 +91,14 @@ __all__ = [
     "OUTPUT_COMMITTED",
     "OUTPUT_REQUESTED",
     "SYSTEM_SCOPE",
+    "TOOL_CONTRIBUTIONS",
     "TOOL_FAILED",
     "TOOL_REQUESTED",
     "TOOL_SUCCEEDED",
     "TOOL_UNKNOWN",
     "TREE_COMPLETED",
     "TREE_FAILED",
+    "TREE_LAUNCHER_BINDINGS",
     "TREE_STARTED",
     "WORLD_DELTA_DELIVERED",
     "AgentDefinition",
@@ -99,6 +107,7 @@ __all__ = [
     "AgentTree",
     "ChatMessage",
     "ChatRole",
+    "ContributionKey",
     "DelegationRequest",
     "EnvironmentEvent",
     "MemoryReader",
@@ -107,6 +116,7 @@ __all__ = [
     "Model",
     "ModelRequest",
     "ScopedTool",
+    "Settings",
     "Tool",
     "ToolCall",
     "ToolDefinition",
@@ -117,6 +127,7 @@ __all__ = [
     "TreeActivity",
     "TreeLaunchRequest",
     "TreeLauncher",
+    "TreeLauncherBinding",
     "TreeStatus",
     "WorldCommit",
     "WorldCommitInput",

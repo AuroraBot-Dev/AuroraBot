@@ -10,7 +10,19 @@ from ops.registry import iter_operations
 _ROOT = Path(__file__).parents[1]
 _SRC_BASE_ALLOWED = {
     package: {f"src.{package}", "src.contracts", "src.utils"}
-    for package in ("agents", "prompt", "tools", "ai", "console", "cadence", "engine", "memory", "mcp", "world")
+    for package in (
+        "agents",
+        "prompt",
+        "tools",
+        "ai",
+        "console",
+        "cadence",
+        "engine",
+        "kernel",
+        "memory",
+        "mcp",
+        "world",
+    )
 }
 _SRC_BASE_ALLOWED.update({"contracts": {"src.contracts"}, "utils": {"src.utils"}})
 _TYPE_ONLY_SRC = {
