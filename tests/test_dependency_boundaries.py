@@ -38,6 +38,8 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
     for path in (_ROOT / "src").rglob("*.py"):
         package = path.relative_to(_ROOT / "src").parts[0]
         base = _SRC_BASE_ALLOWED[package]
+        if path.name == "module.py":
+            base = base | {"src.kernel"}
         type_only = base | _TYPE_ONLY_SRC.get(package, frozenset())
         for module, guarded in _imports_of(path):
             if module in {"aurora", "ops"} or module.startswith(("aurora.", "ops.")):

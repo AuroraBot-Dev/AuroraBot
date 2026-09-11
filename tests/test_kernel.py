@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -21,7 +22,6 @@ from src.kernel import (
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-    from pathlib import Path
 
     from src.kernel.context import ModuleContext
 
@@ -41,6 +41,10 @@ class Gamma:
 class _Settings:
     def __init__(self, values: dict[type, object] | None = None) -> None:
         self._values = values or {}
+
+    @property
+    def project_root(self) -> Path:
+        return Path()
 
     def get[T](self, config_type: type[T]) -> T:
         return cast("T", self._values[config_type])

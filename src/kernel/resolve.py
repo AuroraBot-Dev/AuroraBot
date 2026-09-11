@@ -94,10 +94,11 @@ def _dependencies(
     include_activation: bool,
 ) -> set[str]:
     dependencies: set[str] = set()
-    requirements = list(spec.requires)
     if include_activation:
-        requirements.extend(spec.activation_after)
-    for requirement in requirements:
+        for capability in spec.activation_after:
+            _add(dependencies, providers.get(capability), spec)
+        return dependencies
+    for requirement in spec.requires:
         _add(dependencies, providers.get(requirement), spec)
     for key in spec.consumes:
         for contributor in contributors.get(key.name, ()):

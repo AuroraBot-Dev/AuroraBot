@@ -13,11 +13,13 @@ from src.contracts.capabilities import (
     AgentCatalog,
     AgentTreeRunner,
     Cadence,
+    McpRuntime,
     PromptAssembler,
     PromptCatalog,
     TerminalConsole,
     ToolRegistry,
 )
+from src.contracts.config import EndpointConfig, EndpointsConfig, RuntimeConfig
 from src.contracts.console import TerminalControl, TerminalDispatcher, TerminalResponse
 from src.contracts.contributions import (
     TOOL_CONTRIBUTIONS,
@@ -132,7 +134,10 @@ __all__ = [
     "ChatRole",
     "ContributionKey",
     "DelegationRequest",
+    "EndpointConfig",
+    "EndpointsConfig",
     "EnvironmentEvent",
+    "McpRuntime",
     "MemoryReader",
     "MemoryScopeSnapshot",
     "MemorySnapshot",
@@ -140,6 +145,7 @@ __all__ = [
     "ModelRequest",
     "PromptAssembler",
     "PromptCatalog",
+    "RuntimeConfig",
     "ScopedTool",
     "Settings",
     "TerminalConsole",

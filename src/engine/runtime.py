@@ -34,10 +34,7 @@ _logger = get_logger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.agents import AgentCatalog
-    from src.contracts import ToolDefinition
-    from src.prompt import PromptAssembler
-    from src.tools import ToolRegistry
+    from src.contracts import AgentCatalog, PromptAssembler, ToolDefinition, ToolRegistry
 
 
 class AgentTreeRunner:

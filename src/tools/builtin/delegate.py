@@ -16,7 +16,7 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    from src.agents import AgentCatalog
+    from src.contracts import AgentCatalog
 
 
 class DelegateTool:

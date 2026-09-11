@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from src.contracts.agent import AgentDefinition, AgentTree, TreeLauncher
     from src.contracts.console import TerminalDispatcher
     from src.contracts.model import ChatMessage
-    from src.contracts.tool import ToolCall, ToolDefinition, ToolResult, ToolScopes
+    from src.contracts.tool import Tool, ToolCall, ToolDefinition, ToolResult, ToolScopes
     from src.contracts.world import MemorySnapshot
 
 
@@ -99,9 +99,11 @@ class Cadence(Protocol):
     @property
     def enabled(self) -> bool: ...
 
+    def status(self) -> dict[str, object]: ...
+
     async def initialize(self) -> None: ...
 
-    async def run(self, stop: asyncio.Event) -> None: ...
+    async def run(self, stop_event: asyncio.Event) -> None: ...
 
     def bind_launcher(self, launcher: TreeLauncher) -> None: ...
 
@@ -110,7 +112,7 @@ class McpRuntime(Protocol):
     """MCP 客户端运行期目录与生命周期。"""
 
     @property
-    def tools(self) -> tuple[object, ...]: ...
+    def tools(self) -> tuple[Tool, ...]: ...
 
     async def activate(self) -> None: ...
 

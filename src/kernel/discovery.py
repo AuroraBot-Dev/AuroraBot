@@ -42,15 +42,17 @@ class BuiltinSource:
 
     def discover(self) -> Iterable[ModuleSpec]:
         package = import_module(self._package)
-        root = Path(package.__file__ or "").parent
         specs: list[ModuleSpec] = []
-        for directory in sorted(root.iterdir()):
-            if not directory.is_dir() or directory.name.startswith(("_", ".")):
+        for root in sorted({Path(path).resolve() for path in package.__path__}):
+            if not root.is_dir():
                 continue
-            if not (directory / _MODULE_FILE).is_file():
-                continue
-            module = import_module(f"{self._package}.{directory.name}.module")
-            specs.append(_module_spec(module, f"{self._package}.{directory.name}.module"))
+            for directory in sorted(root.iterdir()):
+                if not directory.is_dir() or directory.name.startswith(("_", ".")):
+                    continue
+                if not (directory / _MODULE_FILE).is_file():
+                    continue
+                module = import_module(f"{self._package}.{directory.name}.module")
+                specs.append(_module_spec(module, f"{self._package}.{directory.name}.module"))
         return specs
 
 
