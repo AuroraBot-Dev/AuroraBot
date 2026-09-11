@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def _database_path(context: ModuleContext) -> Path:
-    storage = context.settings.get(StorageConfig)
+    storage = context.settings.resolve(StorageConfig)
     directory = resolve_storage_directory(storage.entries, "world")
     return context.settings.project_root / directory / "world.sqlite3"
 

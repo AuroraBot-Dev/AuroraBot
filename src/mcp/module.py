@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from src.contracts import TOOL_CONTRIBUTIONS, Cadence, WorldJournal
+from src.contracts import TOOL_CONTRIBUTIONS, Cadence, Settings, WorldJournal
 from src.contracts import McpRuntime as McpRuntimePort
 from src.kernel import ModuleContext, module
 from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
@@ -17,15 +17,16 @@ if TYPE_CHECKING:
 _MCP_PLATFORM_ID = "builtin.mcp"
 
 
-def _mcp_platform(context: ModuleContext) -> PlatformConfig:
-    platforms = context.settings.get(PlatformsConfig).platforms
+def _mcp_platform(settings: Settings) -> PlatformConfig:
+    platforms = settings.resolve(PlatformsConfig).platforms
     return next(item for item in platforms if item.id == _MCP_PLATFORM_ID)
 
 
-def _build_specs(context: ModuleContext) -> tuple[McpAppSpec, ...]:
-    apps = context.settings.get(AppsConfig).apps
-    platform = _mcp_platform(context)
-    project_root = context.settings.project_root.resolve()
+def build_mcp_specs(settings: Settings) -> tuple[McpAppSpec, ...]:
+    """把纯 DTO 与当前进程的显式凭据映射为协议适配说明。"""
+    apps = settings.resolve(AppsConfig).apps
+    platform = _mcp_platform(settings)
+    project_root = settings.project_root.resolve()
     terminal_logs = platform.logging != "NONE"
     specs: list[McpAppSpec] = []
     for app in apps:
@@ -76,10 +77,10 @@ def _build_specs(context: ModuleContext) -> tuple[McpAppSpec, ...]:
 async def prepare(context: ModuleContext) -> AsyncCleanup | None:
     if context.get_optional(McpRuntimePort) is not None:
         return None
-    platform = _mcp_platform(context)
+    platform = _mcp_platform(context.settings)
     factory = context.get_optional(McpClientFactory)
     runtime = await prepare_mcp(
-        _build_specs(context),
+        build_mcp_specs(context.settings),
         platform_enabled=platform.enabled,
         world=context.get(WorldJournal),
         factory=factory,
@@ -104,8 +105,8 @@ async def activate(context: ModuleContext) -> None:
 def build(context: ModuleContext) -> McpRuntimePort:
     runtime = context.get_optional(McpRuntimePort)
     if runtime is None:
-        platform = _mcp_platform(context)
-        specs = _build_specs(context)
+        platform = _mcp_platform(context.settings)
+        specs = build_mcp_specs(context.settings)
         if platform.enabled and any(spec.enabled for spec in specs):
             raise ValueError("启用 MCP App 必须先经过异步连接与完整工具发现")
         runtime = McpRuntime.disabled(specs, platform_enabled=platform.enabled)

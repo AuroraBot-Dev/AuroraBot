@@ -45,20 +45,20 @@ def _load_apps(tmp_path: Path, content: str) -> tuple[AppConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "apps.toml").write_text(content, encoding="utf-8")
-    return assemble_config(tmp_path, (APPS_CONFIG,)).get(APPS_CONFIG)
+    return assemble_config(tmp_path, (APPS_CONFIG,)).get(APPS_CONFIG).apps
 
 
 def _load_platforms(tmp_path: Path, content: str) -> tuple[PlatformConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "platforms.toml").write_text(content, encoding="utf-8")
-    return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
+    return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
 
 
 def test_template_exports_typed_frozen_mcp_configuration(configured_project: Path) -> None:
     configuration = load_config(configured_project)
-    app_configuration = configuration.get(APPS_CONFIG)
-    platform_configuration = configuration.get(PLATFORMS_CONFIG)
+    app_configuration = configuration.get(APPS_CONFIG).apps
+    platform_configuration = configuration.get(PLATFORMS_CONFIG).platforms
 
     assert len(app_configuration) == _EXPECTED_TEMPLATE_APPS
     assert all(isinstance(app, AppConfig) for app in app_configuration)
@@ -234,14 +234,14 @@ def test_platforms_accepts_empty_and_duplicate_ids_trusting_project(
     config_directory = root / "config"
     config_directory.mkdir()
     (config_directory / "platforms.toml").write_text("platform = []\n", encoding="utf-8")
-    empty = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
+    empty = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
     assert empty == ()
 
     (config_directory / "platforms.toml").write_text(
         '[[platform]]\nid = "builtin.mcp"\nenabled = true\n\n[[platform]]\nid = "builtin.mcp"\nenabled = true\n',
         encoding="utf-8",
     )
-    duplicated = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
+    duplicated = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
     assert [item.id for item in duplicated] == ["builtin.mcp", "builtin.mcp"]
 
 

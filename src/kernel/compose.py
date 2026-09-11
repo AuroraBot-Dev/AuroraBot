@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.kernel.context import _MutableContext
 from src.kernel.lifecycle import ManagedAssembly
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 _logger = get_logger(__name__)
 
 type InstanceBinding = tuple[type, object]
-type ContributionBinding = tuple[ContributionKey[object], object]
+type ContributionBinding = tuple[ContributionKey[Any], object]
 
 
 def _validate_provides(spec: ModuleSpec, context: _MutableContext) -> None:

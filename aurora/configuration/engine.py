@@ -2,17 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from aurora.config import ConfigSpec, TableShape, positive_integer_field
-
-
-@dataclass(frozen=True, slots=True)
-class EngineConfig:
-    max_depth: int
-    max_nodes: int
-    max_steps: int
-
+from src.engine.config import EngineConfig
 
 ENGINE_CONFIG = ConfigSpec[EngineConfig](
     name="engine",

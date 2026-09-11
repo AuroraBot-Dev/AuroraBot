@@ -1,7 +1,7 @@
-"""项目级进程门面：持有已装配实例并运行 AgentTree。
+"""项目级进程门面：持有已装配能力并运行 AgentTree。
 
-本模块不读取任何 ``aurora.composition`` 键或 ``aurora.configuration`` 规格；
-协作者由 runtime 组合代表模块捕获，在 Assembly 冻结后由工厂注入。
+本模块只依赖公共契约与组合内核，不读取任何项目配置规格；协作者在 Assembly
+冻结后由工厂注入。
 """
 
 from __future__ import annotations
@@ -12,19 +12,30 @@ from uuid import uuid4
 from rich.console import Console
 from rich.markup import escape as markup_escape
 
-from src.console import TerminalControl, TerminalResponse
-from src.contracts import AgentTree, EnvironmentEvent, WorldCommit, WorldFrontier
+from src.contracts import (
+    AgentTree,
+    EnvironmentEvent,
+    TerminalControl,
+    TerminalResponse,
+    WorldCommit,
+    WorldFrontier,
+)
 from src.utils import bounded_summary, get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from aurora.composer import AuroraAssembly
-    from aurora.configuration.runtime import RuntimeConfig
-    from src.agents import AgentCatalog
-    from src.console import TerminalConsole
-    from src.contracts import AgentNode, ChatMessage, TreeLaunchRequest, WorldJournal
-    from src.engine import AgentTreeRunner
+    from src.contracts import (
+        AgentCatalog,
+        AgentNode,
+        AgentTreeRunner,
+        ChatMessage,
+        RuntimeConfig,
+        TerminalConsole,
+        TreeLaunchRequest,
+        WorldJournal,
+    )
+    from src.kernel import Assembly
 
 _logger = get_logger(__name__)
 
@@ -34,7 +45,7 @@ class AuroraRuntime:
 
     def __init__(
         self,
-        assembly: AuroraAssembly,
+        assembly: Assembly,
         *,
         runner: AgentTreeRunner,
         agents: AgentCatalog,
@@ -44,7 +55,7 @@ class AuroraRuntime:
         output: Callable[[str], None] = print,
     ) -> None:
         self.assembly = assembly
-        self.config = assembly.config
+        self.settings = assembly.settings
         self.runner = runner
         self.agents = agents
         self.root = root

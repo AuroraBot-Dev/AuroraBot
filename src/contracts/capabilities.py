@@ -96,6 +96,8 @@ class TerminalConsole(Protocol):
 class Cadence(Protocol):
     """世界提交驱动的主动节律。"""
 
+    agent: str | None
+
     @property
     def enabled(self) -> bool: ...
 
@@ -103,9 +105,63 @@ class Cadence(Protocol):
 
     async def initialize(self) -> None: ...
 
+    async def evaluate_once(self) -> None: ...
+
     async def run(self, stop_event: asyncio.Event) -> None: ...
 
     def bind_launcher(self, launcher: TreeLauncher) -> None: ...
+
+
+class _Valued(Protocol):
+    @property
+    def value(self) -> str: ...
+
+
+class McpAppSnapshot(Protocol):
+    """ops 可安全公开的单个 MCP App 状态。"""
+
+    @property
+    def package(self) -> str: ...
+
+    @property
+    def configured_enabled(self) -> bool: ...
+
+    @property
+    def active(self) -> bool: ...
+
+    @property
+    def transport(self) -> _Valued: ...
+
+    @property
+    def state(self) -> _Valued: ...
+
+    @property
+    def negotiated_version(self) -> str | None: ...
+
+    @property
+    def tool_ids(self) -> tuple[str, ...]: ...
+
+    @property
+    def last_error(self) -> str | None: ...
+
+    @property
+    def restart_required(self) -> bool: ...
+
+
+class McpRuntimeSnapshot(Protocol):
+    """一次冻结目录对应的 MCP 运行状态。"""
+
+    @property
+    def platform_enabled(self) -> bool: ...
+
+    @property
+    def tool_ids(self) -> tuple[str, ...]: ...
+
+    @property
+    def apps(self) -> tuple[McpAppSnapshot, ...]: ...
+
+    @property
+    def restart_required(self) -> bool: ...
 
 
 class McpRuntime(Protocol):
@@ -113,6 +169,10 @@ class McpRuntime(Protocol):
 
     @property
     def tools(self) -> tuple[Tool, ...]: ...
+
+    def snapshot(self) -> McpRuntimeSnapshot: ...
+
+    def app(self, package: str) -> McpAppSnapshot | None: ...
 
     async def activate(self) -> None: ...
 

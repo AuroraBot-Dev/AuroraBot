@@ -35,20 +35,20 @@ def _load_providers(tmp_path: Path, content: str) -> tuple[ProviderConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "providers.toml").write_text(content, encoding="utf-8")
-    return assemble_config(tmp_path, (PROVIDERS_CONFIG,)).get(PROVIDERS_CONFIG)
+    return assemble_config(tmp_path, (PROVIDERS_CONFIG,)).get(PROVIDERS_CONFIG).providers
 
 
 def _load_endpoints(tmp_path: Path, content: str) -> tuple[EndpointConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "endpoints.toml").write_text(content, encoding="utf-8")
-    return assemble_config(tmp_path, (ENDPOINTS_CONFIG,)).get(ENDPOINTS_CONFIG)
+    return assemble_config(tmp_path, (ENDPOINTS_CONFIG,)).get(ENDPOINTS_CONFIG).endpoints
 
 
 def test_template_exports_typed_provider_and_endpoint_configuration(configured_project: Path) -> None:
     configuration = load_config(configured_project)
-    providers = configuration.get(PROVIDERS_CONFIG)
-    endpoints = configuration.get(ENDPOINTS_CONFIG)
+    providers = configuration.get(PROVIDERS_CONFIG).providers
+    endpoints = configuration.get(ENDPOINTS_CONFIG).endpoints
 
     assert providers[0] == ProviderConfig("deepseek", "litellm", "DEEPSEEK_API_KEY")
     assert providers[3] == ProviderConfig(

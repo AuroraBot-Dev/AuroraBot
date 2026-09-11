@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from aurora.composition import COMPOSITION_SPECS
 from aurora.configuration import CONFIG_SPECS
 from ops.registry import iter_operations
 
@@ -21,19 +20,22 @@ _SRC_BASE_ALLOWED = {
         "kernel",
         "memory",
         "mcp",
+        "runtime",
         "world",
     )
 }
 _SRC_BASE_ALLOWED.update({"contracts": {"src.contracts"}, "utils": {"src.utils"}})
 _TYPE_ONLY_SRC = {
-    "engine": {"src.agents", "src.prompt", "src.tools"},
-    "tools": {"src.agents"},
+    "runtime": {"src.kernel"},
 }
 _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 
 
 def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
-    """功能 src 包运行时只能依赖 contracts/utils/自身；跨包能力只允许 TYPE_CHECKING。"""
+    """功能 src 包运行时只能依赖 contracts/utils/自身；跨包能力只允许 TYPE_CHECKING。
+
+    每个包的 ``module.py`` 是组合元数据，额外允许引用 ``src.kernel`` 声明自身。
+    """
     violations: list[str] = []
     for path in (_ROOT / "src").rglob("*.py"):
         package = path.relative_to(_ROOT / "src").parts[0]
@@ -54,16 +56,25 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
 
 
 def test_ops_only_touches_leaf_infrastructure_and_assembly_types() -> None:
-    """ops 作为 backend：运行时只许 import 组合/配置叶子与 contracts/utils；src 功能包仅 TYPE_CHECKING。
+    """ops 作为 backend：运行时只许 import 组合内核、配置叶子与 contracts/utils。
 
-    允许集固定为 aurora.composer/config/configuration 与 src.contracts/src.utils；aurora.runtime、
-    aurora.composition、aurora.views 以及 src 功能包不得进入 ops 的运行时导入。
+    aurora.config/configuration 与 src.kernel/src.contracts/src.utils 是允许集；src 功能包
+    不得进入 ops 的运行时导入。
     """
-    aurora_runtime_allowed = ("aurora.composer", "aurora.config", "aurora.configuration")
+    aurora_runtime_allowed = ("aurora.config", "aurora.configuration")
     violations: list[str] = []
     for path in (_ROOT / "ops").rglob("*.py"):
         for module, guarded in _imports_of(path):
-            if module.startswith("src.") and not guarded and _src_package(module) not in {"src.contracts", "src.utils"}:
+            if (
+                module.startswith("src.")
+                and not guarded
+                and _src_package(module)
+                not in {
+                    "src.contracts",
+                    "src.kernel",
+                    "src.utils",
+                }
+            ):
                 violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
             if module in {"aurora", "src"} or module.startswith(("aurora.", "ops.operations.aurora")):
                 if guarded:
@@ -74,32 +85,9 @@ def test_ops_only_touches_leaf_infrastructure_and_assembly_types() -> None:
     assert violations == []
 
 
-def test_composition_representatives_do_not_import_sibling_representatives_at_runtime() -> None:
-    """组合代表模块之间只经注册表/实例互联；兄弟模块只允许 TYPE_CHECKING。"""
-    violations: list[str] = []
-    composition_directory = _ROOT / "aurora" / "composition"
-    for path in composition_directory.glob("*.py"):
-        if path.stem == "__init__":
-            continue
-        for module, guarded in _imports_of(path):
-            if module.startswith("aurora.composition.") and not guarded:
-                violations.append(f"{path.relative_to(_ROOT)} runtime imports 兄弟代表模块 {module}")
-    assert violations == []
-
-
 def test_removed_src_subpackages_do_not_return_as_empty_scaffolding() -> None:
     existing = [name for name in _REMOVED_PACKAGES if (_ROOT / "src" / name).exists()]
     assert existing == []
-
-
-def test_project_configuration_does_not_construct_src_objects() -> None:
-    violations: list[str] = []
-    for path in (_ROOT / "aurora" / "configuration").rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            module = _imported_module(node)
-            if module == "src" or module.startswith("src."):
-                violations.append(f"{path.relative_to(_ROOT)} imports {module}")
-    assert violations == []
 
 
 def test_each_project_toml_has_one_registered_configuration_module() -> None:
@@ -118,15 +106,6 @@ def test_each_project_toml_has_one_registered_configuration_module() -> None:
     assert len(CONFIG_SPECS) == len(registered_names)
 
 
-def test_each_composition_module_represents_a_functional_package_or_project_runtime() -> None:
-    module_names = {path.stem for path in (_ROOT / "aurora" / "composition").glob("*.py") if path.stem != "__init__"}
-    src_names = {path.name for path in (_ROOT / "src").iterdir() if path.is_dir() and not path.name.startswith("__")}
-    registered_names = {spec.register.__module__.rsplit(".", maxsplit=1)[-1] for spec in COMPOSITION_SPECS}
-
-    assert module_names == registered_names
-    assert module_names <= src_names | {"runtime"}
-
-
 def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
     module_names = {path.stem for path in (_ROOT / "ops" / "operations").glob("*.py") if path.stem != "__init__"}
     registered_names = {
@@ -136,26 +115,9 @@ def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
     assert module_names == registered_names
 
 
-def test_runtime_core_only_accepts_collaborators_injected_from_assembly() -> None:
-    """门面不读取组合键或配置规格；入口只调用工厂，协作者接线由代表模块声明。"""
-    violations: list[str] = []
-    runtime_directory = _ROOT / "aurora" / "runtime"
-    for path in runtime_directory.glob("*.py"):
-        if path.stem == "assembly":
-            continue
-        for module, guarded in _imports_of(path):
-            if guarded:
-                continue
-            if module == "aurora.composition" or module.startswith("aurora.composition."):
-                violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
-            if module.startswith("aurora.configuration.") and path.stem not in {"support", "run", "panel"}:
-                violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
-    assert violations == []
-
-
 def test_runtime_core_does_not_store_unrelated_capabilities() -> None:
     """门面只依赖实际调用的能力，避免为接线或观察转存其他模块。"""
-    path = _ROOT / "aurora" / "runtime" / "core.py"
+    path = _ROOT / "src" / "runtime" / "core.py"
     unrelated = {"src.cadence", "src.memory", "src.mcp"}
 
     assert not {_src_package(module) for module, _ in _imports_of(path)} & unrelated

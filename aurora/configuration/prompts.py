@@ -2,24 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from aurora.config import ConfigSpec, TableArrayShape, boolean_field, text_field
+from src.prompt.config import PromptConfig, PromptsConfig
 
-from aurora.config import (
-    ConfigSpec,
-    TableArrayShape,
-    boolean_field,
-    text_field,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class PromptConfig:
-    id: str
-    source: str
-    enabled: bool = True
-
-
-PROMPTS_CONFIG = ConfigSpec[tuple[PromptConfig, ...]](
+PROMPTS_CONFIG = ConfigSpec[PromptsConfig](
     name="prompts",
     path="config/prompts.toml",
     shape=TableArrayShape(
@@ -30,6 +16,7 @@ PROMPTS_CONFIG = ConfigSpec[tuple[PromptConfig, ...]](
             boolean_field("enabled"),
         ),
         model=PromptConfig,
+        container=PromptsConfig,
     ),
 )
 

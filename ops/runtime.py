@@ -13,20 +13,20 @@ from ops.registry import catalog_entries
 from ops.router import OperationRouter
 
 if TYPE_CHECKING:
-    from aurora.composer import AuroraAssembly
     from ops.contracts import OperationResult, OperationSpec, OpsPorts
+    from src.kernel import Assembly
 
 
 class OpsRuntime:
     """热路径外的统一操作运行时。"""
 
-    def __init__(self, assembly: AuroraAssembly) -> None:
+    def __init__(self, assembly: Assembly) -> None:
         self._assembly = assembly
         self._ports = build_ops_ports(assembly)
         self._router = OperationRouter(self._ports)
 
     @property
-    def assembly(self) -> AuroraAssembly:
+    def assembly(self) -> Assembly:
         return self._assembly
 
     @property

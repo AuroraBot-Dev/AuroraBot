@@ -2,25 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from aurora.config import ConfigSpec, TableArrayShape, optional_text_field, text_field
+from src.ai.config import ProviderConfig, ProvidersConfig
 
-from aurora.config import (
-    ConfigSpec,
-    TableArrayShape,
-    optional_text_field,
-    text_field,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderConfig:
-    name: str
-    adapter: str
-    secret_env: str
-    base_url: str | None = None
-
-
-PROVIDERS_CONFIG = ConfigSpec[tuple[ProviderConfig, ...]](
+PROVIDERS_CONFIG = ConfigSpec[ProvidersConfig](
     name="providers",
     path="config/providers.toml",
     shape=TableArrayShape(
@@ -32,6 +17,7 @@ PROVIDERS_CONFIG = ConfigSpec[tuple[ProviderConfig, ...]](
             optional_text_field("base_url"),
         ),
         model=ProviderConfig,
+        container=ProvidersConfig,
     ),
 )
 

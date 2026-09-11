@@ -10,8 +10,8 @@ from src.kernel import ModuleContext, module
 
 @module(name="ai", provides=Model)
 def build(context: ModuleContext) -> Model:
-    providers = context.settings.get(ProvidersConfig)
-    endpoints = context.settings.get(EndpointsConfig)
+    providers = context.settings.resolve(ProvidersConfig)
+    endpoints = context.settings.resolve(EndpointsConfig)
     return LiteLLMModelGateway(
         {item.name: ProviderEndpoint(item.adapter, item.base_url, item.secret_env) for item in providers.providers},
         {item.name: ModelEndpoint(item.provider, item.model) for item in endpoints.endpoints},

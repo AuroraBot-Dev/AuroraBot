@@ -42,19 +42,19 @@ def _load_platforms(tmp_path: Path, content: str) -> tuple[PlatformConfig, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "platforms.toml").write_text(content, encoding="utf-8")
-    return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG)
+    return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
 
 
 def _load_storage(tmp_path: Path, content: str) -> tuple[StorageEntry, ...]:
     config_directory = tmp_path / "config"
     config_directory.mkdir(exist_ok=True)
     (config_directory / "storage.toml").write_text(content, encoding="utf-8")
-    return assemble_config(tmp_path, (STORAGE_CONFIG,)).get(STORAGE_CONFIG)
+    return assemble_config(tmp_path, (STORAGE_CONFIG,)).get(STORAGE_CONFIG).entries
 
 
 def test_template_exports_typed_panel_platform_configuration(configured_project: Path) -> None:
     configuration = load_config(configured_project)
-    platforms = configuration.get(PLATFORMS_CONFIG)
+    platforms = configuration.get(PLATFORMS_CONFIG).platforms
     panel = next(item for item in platforms if item.id == "builtin.panel")
 
     assert panel.enabled is False
@@ -67,7 +67,7 @@ def test_template_exports_typed_panel_platform_configuration(configured_project:
 
 
 def test_template_exports_typed_storage_paths(configured_project: Path) -> None:
-    storage = load_config(configured_project).get(STORAGE_CONFIG)
+    storage = load_config(configured_project).get(STORAGE_CONFIG).entries
 
     assert resolve_directory(storage, "DATA_ROOT") == "data"
     assert resolve_directory(storage, "world") == "data/world"

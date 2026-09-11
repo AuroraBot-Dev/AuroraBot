@@ -2,19 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from aurora.config import ConfigSpec, TableArrayShape, text_field
+from src.contracts.config import EndpointConfig, EndpointsConfig
 
-
-@dataclass(frozen=True, slots=True)
-class EndpointConfig:
-    name: str
-    provider: str
-    model: str
-
-
-ENDPOINTS_CONFIG = ConfigSpec[tuple[EndpointConfig, ...]](
+ENDPOINTS_CONFIG = ConfigSpec[EndpointsConfig](
     name="endpoints",
     path="config/endpoints.toml",
     shape=TableArrayShape(
@@ -25,6 +16,7 @@ ENDPOINTS_CONFIG = ConfigSpec[tuple[EndpointConfig, ...]](
             text_field("model"),
         ),
         model=EndpointConfig,
+        container=EndpointsConfig,
     ),
 )
 

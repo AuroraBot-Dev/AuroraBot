@@ -46,7 +46,7 @@ class _Settings:
     def project_root(self) -> Path:
         return Path()
 
-    def get[T](self, config_type: type[T]) -> T:
+    def resolve[T](self, config_type: type[T]) -> T:
         return cast("T", self._values[config_type])
 
 

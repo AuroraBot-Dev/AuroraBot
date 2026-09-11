@@ -2,27 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from aurora.config import ConfigSpec, TableArrayShape, strings_field, text_field
+from src.agents.config import AgentConfig, AgentsConfig
 
-from aurora.config import (
-    ConfigSpec,
-    TableArrayShape,
-    strings_field,
-    text_field,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class AgentConfig:
-    id: str
-    description: str
-    prompt: str
-    model: str
-    tools: tuple[str, ...]
-    children: frozenset[str]
-
-
-AGENTS_CONFIG = ConfigSpec[tuple[AgentConfig, ...]](
+AGENTS_CONFIG = ConfigSpec[AgentsConfig](
     name="agents",
     path="config/agents.toml",
     shape=TableArrayShape(
@@ -36,6 +19,7 @@ AGENTS_CONFIG = ConfigSpec[tuple[AgentConfig, ...]](
             strings_field("children", transform=frozenset),
         ),
         model=AgentConfig,
+        container=AgentsConfig,
     ),
 )
 

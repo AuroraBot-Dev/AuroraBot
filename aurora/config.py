@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
@@ -193,9 +193,14 @@ class AuroraConfig:
     _values: Mapping[ConfigSpec[object], object]
     _sources: tuple[ConfigSource, ...] = ()
     _project_root: Path | None = None
+    _by_type: Mapping[type, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_values", MappingProxyType(dict(self._values)))
+        by_type: dict[type, object] = {}
+        for value in self._values.values():
+            by_type.setdefault(type(value), value)
+        object.__setattr__(self, "_by_type", MappingProxyType(by_type))
         if self._project_root is not None:
             object.__setattr__(self, "_project_root", self._project_root.resolve())
 
@@ -205,6 +210,13 @@ class AuroraConfig:
         except KeyError as error:
             raise KeyError(f"配置尚未注册：{spec.name}") from error
         return cast("T", value)
+
+    def resolve[T](self, config_type: type[T]) -> T:
+        """按配置 DTO 类型读取值；供自描述模块经 ``Settings`` 契约访问。"""
+        try:
+            return cast("T", self._by_type[config_type])
+        except KeyError as error:
+            raise KeyError(f"配置类型尚未注册：{config_type.__name__}") from error
 
     def with_value[T](self, spec: ConfigSpec[T], value: T) -> AuroraConfig:
         values = dict(self._values)

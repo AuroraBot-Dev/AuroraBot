@@ -29,7 +29,7 @@ def build(context: ModuleContext) -> AgentCatalogPort:
             resolve_names(available, item.tools, label=item.id),
             item.children,
         )
-        for item in context.settings.get(AgentsConfig).agents
+        for item in context.settings.resolve(AgentsConfig).agents
     )
 
 

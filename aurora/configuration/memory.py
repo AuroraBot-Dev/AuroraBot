@@ -2,18 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from aurora.config import ConfigSpec, TableShape, positive_integer_field, strings_field
-
-
-@dataclass(frozen=True, slots=True)
-class MemoryConfig:
-    window_minutes: int
-    commits_per_scope: int
-    scope_include: tuple[str, ...]
-    scope_exclude: tuple[str, ...]
-
+from src.memory.config import MemoryConfig
 
 MEMORY_CONFIG = ConfigSpec[MemoryConfig](
     name="memory",

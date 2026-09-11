@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
 _ROOT = Path(__file__).parents[1]
 _LOGGED_RUNTIME_MODULES = (
-    "aurora/composer.py",
-    "aurora/runtime/core.py",
+    "src/kernel/compose.py",
+    "src/runtime/core.py",
     "aurora/runtime/run.py",
     "src/agents/catalog.py",
     "src/ai/gateway.py",
@@ -63,7 +63,7 @@ def test_logging_configuration_is_typed_and_project_relative(configured_project:
     runtime = load_config(configured_project).get(RUNTIME_CONFIG)
 
     assert runtime.log_level == "INFO"
-    storage = load_config(configured_project).get(STORAGE_CONFIG)
+    storage = load_config(configured_project).get(STORAGE_CONFIG).entries
     assert resolve_directory(storage, "logs") == "data/logs"
 
 
@@ -101,7 +101,7 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     asyncio.run(scenario())
     logfile = (
         configured_project
-        / resolve_directory(load_config(configured_project).get(STORAGE_CONFIG), "logs")
+        / resolve_directory(load_config(configured_project).get(STORAGE_CONFIG).entries, "logs")
         / "aurora.log"
     )
     content = logfile.read_text(encoding="utf-8")

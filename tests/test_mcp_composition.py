@@ -7,22 +7,18 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurora.composer import CompositionContext, InstanceKey, PackageSpec, build_module_specs, compose
-from aurora.composition import PACKAGE_SPECS, compose_project
-from aurora.composition.ai import MODEL
-from aurora.composition.mcp import MCP_RUNTIME, build_mcp_specs
-from aurora.composition.world import WORLD_JOURNAL
 from aurora.configuration import load_config
-from aurora.configuration.apps import APPS_CONFIG, AppConfig
-from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configuration.apps import APPS_CONFIG
+from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.contributions import TREE_LAUNCHER_BINDINGS
 from aurora.runtime import assemble_runtime, run_project
-from aurora.runtime.assembly import runtime_from_assembly
 from ops.runtime import OpsRuntime
 from src.contracts import (
+    TREE_LAUNCHER_BINDINGS,
     ChatMessage,
     EnvironmentEvent,
+    McpRuntime,
+    Model,
     ModelRequest,
     TreeLauncher,
     TreeLaunchRequest,
@@ -31,9 +27,14 @@ from src.contracts import (
     WorldCommitInput,
     WorldDeltaPage,
     WorldFrontier,
+    WorldJournal,
     WorldStreamPage,
 )
+from src.kernel import BuiltinSource, compose, module
 from src.mcp import McpAppSpec, McpCallResult, McpRemoteTool, McpToolsPage, prepare_mcp
+from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
+from src.mcp.module import build_mcp_specs
+from src.runtime import create_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 
     from aurora.config import AuroraConfig
     from src.contracts import TreeActivity
+    from src.kernel import ModuleContext
     from src.mcp.client import InboundEventHandler
 
 _PACKAGE = "org.example.lifecycle"
@@ -233,25 +235,29 @@ def _active_config(project_root: Path) -> AuroraConfig:
     config = load_config(project_root)
     return config.with_value(
         APPS_CONFIG,
-        (
-            AppConfig(
-                package=_PACKAGE,
-                enabled=True,
-                transport="stdio",
-                event_mode="disabled",
-                timeout_seconds=5,
-                working_dir="mcp-server",
-                command=("fake-mcp",),
-            ),
+        AppsConfig(
+            (
+                AppConfig(
+                    package=_PACKAGE,
+                    enabled=True,
+                    transport="stdio",
+                    event_mode="disabled",
+                    timeout_seconds=5,
+                    working_dir="mcp-server",
+                    command=("fake-mcp",),
+                ),
+            )
         ),
     ).with_value(PLATFORMS_CONFIG, _active_platforms())
 
 
-def _active_platforms() -> tuple[PlatformConfig, ...]:
-    return (
-        PlatformConfig("builtin.console", True, "INFO"),
-        PlatformConfig("builtin.panel", True, "INFO"),
-        PlatformConfig("builtin.mcp", True, "INFO"),
+def _active_platforms() -> PlatformsConfig:
+    return PlatformsConfig(
+        (
+            PlatformConfig("builtin.console", True, "INFO"),
+            PlatformConfig("builtin.panel", True, "INFO"),
+            PlatformConfig("builtin.mcp", True, "INFO"),
+        )
     )
 
 
@@ -267,26 +273,28 @@ def test_build_mcp_specs_only_forwards_whitelisted_environment_and_hides_credent
         load_config(configured_project)
         .with_value(
             APPS_CONFIG,
-            (
-                AppConfig(
-                    package="org.example.local",
-                    enabled=True,
-                    transport="stdio",
-                    event_mode="disabled",
-                    timeout_seconds=5,
-                    working_dir="mcp-server",
-                    command=("fake-mcp",),
-                    env=("AURORA_MCP_ALLOWED",),
-                ),
-                AppConfig(
-                    package="org.example.remote",
-                    enabled=True,
-                    transport="streamable_http",
-                    event_mode="disabled",
-                    timeout_seconds=5,
-                    url="https://mcp.example.test/rpc",
-                    auth_env="AURORA_MCP_HTTP_TOKEN",
-                ),
+            AppsConfig(
+                (
+                    AppConfig(
+                        package="org.example.local",
+                        enabled=True,
+                        transport="stdio",
+                        event_mode="disabled",
+                        timeout_seconds=5,
+                        working_dir="mcp-server",
+                        command=("fake-mcp",),
+                        env=("AURORA_MCP_ALLOWED",),
+                    ),
+                    AppConfig(
+                        package="org.example.remote",
+                        enabled=True,
+                        transport="streamable_http",
+                        event_mode="disabled",
+                        timeout_seconds=5,
+                        url="https://mcp.example.test/rpc",
+                        auth_env="AURORA_MCP_HTTP_TOKEN",
+                    ),
+                )
             ),
         )
         .with_value(PLATFORMS_CONFIG, _active_platforms())
@@ -309,7 +317,7 @@ def test_sync_compose_rejects_active_mcp_app_without_async_discovery(configured_
     config = _active_config(configured_project)
 
     with pytest.raises(ValueError, match="必须先经过异步连接与完整工具发现"):
-        compose_project(config, ((MODEL, FakeModel()),))
+        assemble_runtime(config, FakeModel())
 
 
 def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_registry(
@@ -331,7 +339,7 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
             runtime = assemble_runtime(config, FakeModel(), world=world, mcp=mcp)
 
             assert runtime.world is world
-            assert runtime.assembly.get(MCP_RUNTIME) is mcp
+            assert runtime.assembly.get(McpRuntime) is mcp
             assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
             tools_port = OpsRuntime(runtime.assembly).ports.tools
             assert tools_port is not None
@@ -370,7 +378,7 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
             stop_event=stop,
             output=lambda _message: None,
             mcp_factory=factory,
-            instances=((WORLD_JOURNAL, world),),
+            instances=((WorldJournal, world),),
             contributions=((TREE_LAUNCHER_BINDINGS, bind),),
         )
 
@@ -386,39 +394,30 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
     asyncio.run(scenario())
 
 
-def test_new_launcher_consumer_only_needs_its_own_package_spec(configured_project: Path) -> None:
+def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Path) -> None:
     """新能力自行贡献窄端口绑定，无须扩展门面的构造参数或装配入口。"""
     launchers: list[TreeLauncher] = []
-    extra = InstanceKey[list[TreeLauncher]]("extra.launchers")
 
-    def construct(context: CompositionContext) -> None:
-        context.provide(extra, launchers)
+    @module(name="extra.launchers", contributes=(TREE_LAUNCHER_BINDINGS,))
+    def build_extra(context: ModuleContext) -> None:
         context.contribute(TREE_LAUNCHER_BINDINGS, launchers.append)
 
-    package = PackageSpec(
-        key=extra,
-        provides=(extra,),
-        requires=(),
-        register=construct,
-        contributes=(TREE_LAUNCHER_BINDINGS,),
-    )
     config = load_config(configured_project)
     model = FakeModel()
     world = FakeWorldJournal([])
     assembly = compose(
         config,
-        build_module_specs((*PACKAGE_SPECS, package)),
-        ((MODEL, model), (WORLD_JOURNAL, world)),
+        (*BuiltinSource().discover(), build_extra),
+        ((Model, model), (WorldJournal, world)),
     )
     assert launchers == []
     echoed: list[str] = []
 
-    runtime = runtime_from_assembly(assembly, output=echoed.append)
+    runtime = create_runtime(assembly, output=echoed.append)
     tree = asyncio.run(launchers[0].launch_tree(TreeLaunchRequest("开始认知")))
 
-    assert assembly.get(extra) == [runtime]
     assert runtime.assembly is assembly
-    assert runtime.config is config
+    assert runtime.settings is config
     assert runtime.world is world
     assert tree.status is TreeStatus.COMPLETED
     assert runtime.runtime_status()["trees"]["completed"] == 1
@@ -441,7 +440,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
                 FakeModel(),
                 headless=True,
                 mcp_factory=factory,
-                instances=((WORLD_JOURNAL, world),),
+                instances=((WorldJournal, world),),
                 contributions=((TREE_LAUNCHER_BINDINGS, fail_binding),),
             )
 
@@ -471,7 +470,7 @@ def test_run_project_closes_mcp_then_world_when_composition_fails(
                 FakeModel(),
                 headless=True,
                 mcp_factory=factory,
-                instances=((WORLD_JOURNAL, world),),
+                instances=((WorldJournal, world),),
             )
 
         assert trace.index("world.initialize") < trace.index("mcp.open")

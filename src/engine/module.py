@@ -53,12 +53,12 @@ def _validate_cross_references(
     requires=(PromptAssembler, Model, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader),
 )
 def build(context: ModuleContext) -> AgentTreeRunnerPort:
-    config = context.settings.get(EngineConfig)
-    runtime = context.settings.get(RuntimeConfig)
+    config = context.settings.resolve(EngineConfig)
+    runtime = context.settings.resolve(RuntimeConfig)
     assembler = context.get(PromptAssembler)
     agents = context.get(AgentCatalog)
     tools = context.get(ToolRegistry)
-    endpoint_ids = frozenset(item.name for item in context.settings.get(EndpointsConfig).endpoints)
+    endpoint_ids = frozenset(item.name for item in context.settings.resolve(EndpointsConfig).endpoints)
     _validate_cross_references(agents, assembler.catalog.agent_prompts, endpoint_ids, tools.names, runtime.agent)
     return AgentTreeRunner(
         context.get(Model),

@@ -49,7 +49,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     run=run,
 )
 def build(context: ModuleContext) -> CadencePort:
-    config = context.settings.get(CadenceConfig)
+    config = context.settings.resolve(CadenceConfig)
     agents = context.get(AgentCatalog)
     _validate_agents(config.agent, agents)
     journal = context.get(WorldJournal)

@@ -1,4 +1,4 @@
-"""从唯一 AuroraAssembly 构造 ops 所需的实例化窄端口。
+"""从唯一 Assembly 构造 ops 所需的实例化窄端口。
 
 ops 作为 backend 自持全部监测业务：世界、目录、节律与平台事实都从 assembly 的实例或
 配置直接派生；aurora 不再装配这些端口。
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from aurora.composer import InstanceKey
 from aurora.configuration.endpoints import ENDPOINTS_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
@@ -16,32 +15,27 @@ from aurora.configuration.providers import PROVIDERS_CONFIG
 from ops.config import ConfigAccess, ConfigSourceRef
 from ops.contracts import OpsPorts
 from ops.views import agent_dict, commit_dict, contracts_status, mcp_app_dict, tool_dict, utils_status
+from src.contracts import (
+    AgentCatalog,
+    AgentTreeRunner,
+    Cadence,
+    McpRuntime,
+    MemoryReader,
+    PromptAssembler,
+    ToolRegistry,
+    WorldJournal,
+)
 
 if TYPE_CHECKING:
     from typing import Protocol
 
-    from aurora.composer import AuroraAssembly
-    from src.agents import AgentCatalog
-    from src.cadence import Cadence
-    from src.contracts import WorldJournal
-    from src.mcp import McpRuntime
-    from src.memory import Memory
-    from src.prompt import PromptAssembler
-    from src.tools import ToolRegistry
+    from aurora.config import AuroraConfig
+    from src.kernel import Assembly
 
     class _ConsolePlatform(Protocol):
         id: str
         enabled: bool
 
-
-WORLD_KEY: InstanceKey[WorldJournal] = InstanceKey("world.journal")
-AGENTS_KEY: InstanceKey[AgentCatalog] = InstanceKey("agents.catalog")
-TOOLS_KEY: InstanceKey[ToolRegistry] = InstanceKey("tools.registry")
-PROMPT_KEY: InstanceKey[PromptAssembler] = InstanceKey("prompt.assembler")
-MEMORY_KEY: InstanceKey[Memory] = InstanceKey("memory.reader")
-CADENCE_KEY: InstanceKey[Cadence] = InstanceKey("cadence.runtime")
-MCP_KEY: InstanceKey[McpRuntime] = InstanceKey("mcp.runtime")
-ENGINE_KEY: InstanceKey[object] = InstanceKey("engine.runner")
 
 _CONSOLE_PLATFORM_ID = "builtin.console"
 
@@ -203,7 +197,7 @@ class CadencePort:
 class MemoryPort:
     """Memory 实例的窄监测端口。"""
 
-    def __init__(self, memory: Memory, world: WorldJournal) -> None:
+    def __init__(self, memory: MemoryReader, world: WorldJournal) -> None:
         self._memory = memory
         self._world = world
 
@@ -257,25 +251,23 @@ class ContractsPort:
         return contracts_status()
 
 
-def build_ops_ports(
-    assembly: AuroraAssembly,
-) -> OpsPorts:
-    """把 assembly 的实例与配置组装成 handlers 可见的只读 OpsPorts。"""
-    config = assembly.config
+def build_ops_ports(assembly: Assembly) -> OpsPorts:
+    """把 assembly 的能力与配置组装成 handlers 可见的只读 OpsPorts。"""
+    config = cast("AuroraConfig", assembly.settings)
     config_access = ConfigAccess(
         config.project_root,
         tuple(ConfigSourceRef(source.name, source.relative_path) for source in config.sources),
     )
-    world = _get(assembly, WORLD_KEY)
-    agents = _get(assembly, AGENTS_KEY)
-    tools = _get(assembly, TOOLS_KEY)
-    assembler = _get(assembly, PROMPT_KEY)
-    memory = _get(assembly, MEMORY_KEY)
-    cadence = _get(assembly, CADENCE_KEY)
-    mcp = _get(assembly, MCP_KEY)
-    engine = _get(assembly, ENGINE_KEY)
+    world = assembly.get_optional(WorldJournal)
+    agents = assembly.get_optional(AgentCatalog)
+    tools = assembly.get_optional(ToolRegistry)
+    assembler = assembly.get_optional(PromptAssembler)
+    memory = assembly.get_optional(MemoryReader)
+    cadence = assembly.get_optional(Cadence)
+    mcp = assembly.get_optional(McpRuntime)
+    engine = assembly.get_optional(AgentTreeRunner)
     platform_console = next(
-        (item for item in config.get(PLATFORMS_CONFIG) if item.id == _CONSOLE_PLATFORM_ID),
+        (item for item in config.get(PLATFORMS_CONFIG).platforms if item.id == _CONSOLE_PLATFORM_ID),
         None,
     )
     return OpsPorts(
@@ -284,7 +276,7 @@ def build_ops_ports(
         agents=AgentsPort(agents) if agents is not None else None,
         tools=ToolsPort(tools) if tools is not None else None,
         prompt=PromptPort(assembler) if assembler is not None else None,
-        ai=AiPort(config.get(PROVIDERS_CONFIG), config.get(ENDPOINTS_CONFIG)),
+        ai=AiPort(config.get(PROVIDERS_CONFIG).providers, config.get(ENDPOINTS_CONFIG).endpoints),
         world=WorldPort(world) if world is not None else None,
         console=ConsolePort(platform_console) if platform_console is not None else None,
         utils=UtilsPort(),
@@ -293,10 +285,3 @@ def build_ops_ports(
         memory=MemoryPort(memory, world) if memory is not None and world is not None else None,
         mcp=McpPort(mcp) if mcp is not None else None,
     )
-
-
-def _get[T](assembly: AuroraAssembly, key: InstanceKey[T]) -> T | None:
-    try:
-        return assembly.get(key)
-    except KeyError:
-        return None

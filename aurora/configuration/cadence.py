@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from aurora.config import (
     ConfigSpec,
     TableShape,
@@ -12,16 +10,7 @@ from aurora.config import (
     positive_number_field,
     text_field,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class CadenceConfig:
-    enabled: bool
-    agent: str
-    evoke_every: int
-    tick_seconds: int
-    poll_seconds: float
-
+from src.cadence.config import CadenceConfig
 
 CADENCE_CONFIG = ConfigSpec[CadenceConfig](
     name="cadence",

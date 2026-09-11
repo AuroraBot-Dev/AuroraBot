@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.storage import STORAGE_CONFIG
 from aurora.runtime.assembly import assemble_runtime_managed
 from aurora.runtime.panel import PanelRuntime, close_panel, run_panel
@@ -21,11 +21,12 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from aurora.composer import ContributionBinding, InstanceBinding, ManagedAssembly
     from aurora.config import AuroraConfig
-    from aurora.runtime.core import AuroraRuntime
     from src.contracts import Model, Tool
+    from src.kernel import ContributionBinding, InstanceBinding, ManagedAssembly
     from src.mcp import McpClientFactory
+    from src.mcp.config import PlatformConfig
+    from src.runtime import AuroraRuntime
 
 _logger = get_logger(__name__)
 
@@ -79,7 +80,7 @@ async def run_project(
             started = await run_panel(
                 panel_platform,
                 OpsRuntime(runtime.assembly),
-                storage=config.get(STORAGE_CONFIG),
+                storage=config.get(STORAGE_CONFIG).entries,
                 project_root=config.project_root,
                 profile=runtime.root.profile,
             )
@@ -117,7 +118,7 @@ async def _shutdown_project(
 
 
 def _platform(config: AuroraConfig, platform_id: str) -> PlatformConfig:
-    for item in config.get(PLATFORMS_CONFIG):
+    for item in config.get(PLATFORMS_CONFIG).platforms:
         if item.id == platform_id:
             return item
     raise ValueError(f"平台尚未声明：{platform_id}")

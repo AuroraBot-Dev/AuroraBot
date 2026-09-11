@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -99,7 +99,7 @@ class _MutableContext:
         for capability, instance in instances:
             self.provide(capability, instance)
 
-    def seed_contributions(self, values: Iterable[tuple[ContributionKey[object], object]]) -> None:
+    def seed_contributions(self, values: Iterable[tuple[ContributionKey[Any], object]]) -> None:
         for key, value in values:
             self.contribute(key, value)
 

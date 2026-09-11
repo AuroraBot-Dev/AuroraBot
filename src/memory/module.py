@@ -12,7 +12,7 @@ from src.memory.config import MemoryConfig
 
 @module(name="memory", provides=MemoryReader, requires=(WorldJournal,))
 def build(context: ModuleContext) -> MemoryReader:
-    config = context.settings.get(MemoryConfig)
+    config = context.settings.resolve(MemoryConfig)
     return Memory(
         context.get(WorldJournal),
         window=timedelta(minutes=config.window_minutes),

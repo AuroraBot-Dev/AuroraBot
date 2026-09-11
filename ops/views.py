@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Any
 from src.utils import thaw_json
 
 if TYPE_CHECKING:
-    from src.contracts import AgentDefinition, ToolDefinition, WorldCommit
-    from src.mcp import McpAppSnapshot
+    from src.contracts import AgentDefinition, McpAppSnapshot, ToolDefinition, WorldCommit
 
 
 def utils_status() -> dict[str, Any]:

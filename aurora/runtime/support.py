@@ -27,7 +27,7 @@ class InstalledSignal:
 def configure_project_logging(config: AuroraConfig) -> None:
     """在其他运行时效果前应用项目日志配置。"""
     runtime = config.get(RUNTIME_CONFIG)
-    logfile = config.project_root / resolve_directory(config.get(STORAGE_CONFIG), "logs") / "aurora.log"
+    logfile = config.project_root / resolve_directory(config.get(STORAGE_CONFIG).entries, "logs") / "aurora.log"
     configure_console_logging(enabled=True, level=runtime.log_level)
     configure_logging(runtime.log_level, logfile)
 

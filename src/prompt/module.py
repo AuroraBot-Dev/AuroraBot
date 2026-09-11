@@ -17,7 +17,7 @@ _SYSTEM_PREFIX = "system."
 
 @module(name="prompt", provides=PromptAssemblerPort)
 def build(context: ModuleContext) -> PromptAssemblerPort:
-    config = context.settings.get(PromptsConfig)
+    config = context.settings.resolve(PromptsConfig)
     directory = context.settings.project_root / "config" / "prompts"
     system, agent_prompts = _read_prompts(directory, config.prompts)
     return PromptAssembler(PromptCatalog(system, agent_prompts))
