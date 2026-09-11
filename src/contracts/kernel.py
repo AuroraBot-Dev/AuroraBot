@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +25,9 @@ class ContributionKey[T]:
 
 
 class Settings(Protocol):
-    """按配置 DTO 类型读取只读配置值。"""
+    """按配置 DTO 类型读取只读配置值，并暴露项目根目录。"""
+
+    @property
+    def project_root(self) -> Path: ...
 
     def get[T](self, config_type: type[T]) -> T: ...

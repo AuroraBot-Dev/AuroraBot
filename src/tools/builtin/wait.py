@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from src.contracts import (
+    WAIT_TOOL,
     ToolCall,
     ToolDefinition,
     ToolOutput,
@@ -13,7 +14,6 @@ from src.contracts import (
     ToolStatus,
 )
 
-WAIT_TOOL = "aur.builtin.wait"
 _MAX_WAIT_SECONDS = 60.0
 
 

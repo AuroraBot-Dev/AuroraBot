@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 from src.contracts import (
+    WORLD_READ_TOOL,
+    WORLD_TREES_TOOL,
     ToolCall,
     ToolDefinition,
     ToolOutput,
@@ -14,9 +16,6 @@ from src.contracts import (
     WorldCommit,
     WorldJournal,
 )
-
-WORLD_READ_TOOL = "aur.serv.world.read"
-WORLD_TREES_TOOL = "aur.serv.world.trees"
 
 _MAX_READ_LIMIT = 100
 _MAX_TREES_LIMIT = 256

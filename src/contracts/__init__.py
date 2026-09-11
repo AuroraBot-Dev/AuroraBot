@@ -9,6 +9,16 @@ from src.contracts.agent import (
     TreeLaunchRequest,
     TreeStatus,
 )
+from src.contracts.capabilities import (
+    AgentCatalog,
+    AgentTreeRunner,
+    Cadence,
+    PromptAssembler,
+    PromptCatalog,
+    TerminalConsole,
+    ToolRegistry,
+)
+from src.contracts.console import TerminalControl, TerminalDispatcher, TerminalResponse
 from src.contracts.contributions import (
     TOOL_CONTRIBUTIONS,
     TREE_LAUNCHER_BINDINGS,
@@ -23,6 +33,11 @@ from src.contracts.model import (
     ToolCall,
 )
 from src.contracts.tool import (
+    BUILTIN_TOOL_NAMES,
+    DELEGATE_TOOL,
+    WAIT_TOOL,
+    WORLD_READ_TOOL,
+    WORLD_TREES_TOOL,
     DelegationRequest,
     ScopedTool,
     Tool,
@@ -76,9 +91,11 @@ from src.contracts.world import (
 )
 
 __all__ = [
+    "BUILTIN_TOOL_NAMES",
     "CONFIG_SCOPE",
     "CONSOLE_INPUT",
     "CONSOLE_SCOPE",
+    "DELEGATE_TOOL",
     "MCP_APP_DISCONNECTED",
     "MCP_CATALOG_CHANGED",
     "MCP_EVENT_RECEIVED",
@@ -100,11 +117,17 @@ __all__ = [
     "TREE_FAILED",
     "TREE_LAUNCHER_BINDINGS",
     "TREE_STARTED",
+    "WAIT_TOOL",
     "WORLD_DELTA_DELIVERED",
+    "WORLD_READ_TOOL",
+    "WORLD_TREES_TOOL",
+    "AgentCatalog",
     "AgentDefinition",
     "AgentNode",
     "AgentStatus",
     "AgentTree",
+    "AgentTreeRunner",
+    "Cadence",
     "ChatMessage",
     "ChatRole",
     "ContributionKey",
@@ -115,12 +138,19 @@ __all__ = [
     "MemorySnapshot",
     "Model",
     "ModelRequest",
+    "PromptAssembler",
+    "PromptCatalog",
     "ScopedTool",
     "Settings",
+    "TerminalConsole",
+    "TerminalControl",
+    "TerminalDispatcher",
+    "TerminalResponse",
     "Tool",
     "ToolCall",
     "ToolDefinition",
     "ToolOutput",
+    "ToolRegistry",
     "ToolResult",
     "ToolScopes",
     "ToolStatus",
