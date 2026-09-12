@@ -32,7 +32,6 @@ aurora/configuration/  每个 TOML 一个解析模块，引用 src/<pkg> 的配�
 aurora/config.py       按注册顺序合并 TOML 为只读 AuroraConfig；同时实现 src.contracts.Settings
 aurora/runtime/        进程编排：内核装配入口、进程生命周期、日志与信号
 aurora/utils/          项目级进程、环境、平台、TOML 与包发现工具
-auth/           独立 Token 认证：生成、恒定时间校验与安全持久化，不依赖 aurora/ops/src
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  AgentTree、ChatMessage、Model、Tool、能力协议与组合内核公共值对象
 src/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
@@ -82,7 +81,6 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 - `aurora` 只负责 CLI 命令分发与配置解析：`configuration` 引用 `src/<pkg>` 的配置 DTO，`config` 合并为只读 `AuroraConfig`
   并实现 `src.contracts.Settings`；`aurora.runtime` 是进程编排（装配入口、生命周期、日志与信号），不含组合逻辑。
 - `src/runtime` 是 Bot 进程门面：从冻结 `Assembly` 创建门面并接线 `TreeLauncher` 绑定；终端命令分派与文本呈现各自独立。
-- `auth` 是独立 Token 认证：生成、恒定时间校验与安全持久化，不依赖 aurora/ops/src。
 - 命令与配置模块按目录自动发现：新增并列项只增加该能力自己的配置模板、`configuration`/`src/<pkg>/module.py`/测试。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
 - 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/kernel ← src/runtime`；功能 src 包
@@ -92,7 +90,7 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 ## Current scope
 
 当前实现 `src/kernel` 组合微内核、自描述 `src` 模块、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start
-生命周期，以及 WorldJournal 持久化与 migration；`auth` 提供独立 Token 认证；`panel/` 子模块仅保留前端，后端链路已移除。
+生命周期，以及 WorldJournal 持久化与 migration；`panel/` 子模块仅保留前端，后端链路已移除。
 不实现自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
 引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 

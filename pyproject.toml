@@ -25,7 +25,7 @@ aurora = "aurora.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["aurora", "aurora.*", "auth", "auth.*", "src", "src.*"]
+include = ["aurora", "aurora.*", "src", "src.*"]
 
 [dependency-groups]
 dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
@@ -89,7 +89,7 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "auth", "src", "tests"]
+include = ["aurora", "src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"
