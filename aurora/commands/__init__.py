@@ -15,8 +15,17 @@ if TYPE_CHECKING:
     from aurora.commander import CommandBinding
 
 COMMAND_SPECS = tuple(
-    cast("CommandBinding", (getattr(module, "COMMAND", None), getattr(module, "execute", None)))
-    for module in discover_modules(__name__, tuple(str(path) for path in __path__))
+    cast(
+        "CommandBinding",
+        (
+            getattr(module, "COMMAND", None),
+            getattr(module, "execute", None),
+        ),
+    )
+    for module in discover_modules(
+        __name__,
+        tuple(str(path) for path in __path__),
+    )
 )
 
 DEFAULT_REGISTRY = build_registry(COMMAND_SPECS)

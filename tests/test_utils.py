@@ -193,6 +193,10 @@ def test_render_table_builds_bordered_columns_and_validates_shape() -> None:
         "+-------+\n| Title |\n+-------+\n| A     |\n|=======|\n| 1     |\n+-------+"
     )
 
+    assert render_table(("项目", "内容"), [("系统", "windows")]) == (
+        "+------+---------+\n| 项目 | 内容    |\n|======+=========|\n| 系统 | windows |\n+------+---------+"
+    )
+
     with pytest.raises(ValueError, match="列数"):
         render_table(("A", "B"), [("1",)])
     with pytest.raises(ValueError, match="列数"):

@@ -22,4 +22,9 @@ COMMAND: CommandSpec = {
 
 
 def execute(arguments: argparse.Namespace) -> int:
-    return run_pnpm(str(arguments.script), arguments.passthrough, arguments.root / "panel", "panel")
+    return run_pnpm(
+        str(arguments.script),
+        arguments.passthrough,
+        arguments.root / "panel",
+        "panel",
+    )

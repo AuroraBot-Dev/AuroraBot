@@ -22,7 +22,11 @@ def _config_spec(module: ModuleType) -> ConfigSpec[Any]:
 
 
 CONFIG_SPECS = tuple(
-    _config_spec(module) for module in discover_modules(__name__, tuple(str(path) for path in __path__))
+    _config_spec(module)
+    for module in discover_modules(
+        __name__,
+        tuple(str(path) for path in __path__),
+    )
 )
 
 

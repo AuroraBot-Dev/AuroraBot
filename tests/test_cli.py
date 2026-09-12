@@ -54,10 +54,14 @@ def test_about_reports_os_version_and_revision(
 
     assert run(["--root", str(tmp_path), about.COMMAND["name"]]) == 0
     output = capsys.readouterr().out
-    assert "系统：测试系统" in output
-    assert "版本：1.2.3" in output
-    assert "提交：abc1234" in output
+    assert "| 系统" in output
+    assert "测试系统" in output
+    assert "| 版本" in output
+    assert "1.2.3" in output
+    assert "| 提交" in output
+    assert "abc1234" in output
     assert "AuroraBot" in output
+    assert "https://www.aurorabot.org/" in output
 
 
 def test_missing_subcommand_prints_command_help(capsys: pytest.CaptureFixture[str]) -> None:
