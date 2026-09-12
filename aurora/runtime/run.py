@@ -6,16 +6,13 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
-from aurora.configuration.storage import STORAGE_CONFIG
 from aurora.runtime.assembly import assemble_runtime_managed
-from aurora.runtime.panel import PanelRuntime, close_panel, run_panel
 from aurora.runtime.support import (
     InstalledSignal,
     configure_project_logging,
     install_stop_handlers,
     restore_stop_handlers,
 )
-from ops.runtime import OpsRuntime
 from src.utils import get_logger
 
 if TYPE_CHECKING:
@@ -28,7 +25,6 @@ if TYPE_CHECKING:
 
 _logger = get_logger(__name__)
 
-_PANEL_PLATFORM_ID = "builtin.panel"
 _CONSOLE_PLATFORM_ID = "builtin.console"
 
 
@@ -63,30 +59,8 @@ async def run_project(
         _logger.error("Aurora runtime 启动失败 error_type={}", type(error).__name__)
         raise
 
-    panel: PanelRuntime | None = None
-    panel_lock = asyncio.Lock()
     installed = ()
-
-    async def serve_panel() -> str:
-        nonlocal panel
-        async with panel_lock:
-            if panel is not None:
-                return "Panel 后端已经在运行。"
-            panel_platform = _platform(config, _PANEL_PLATFORM_ID)
-            started = await run_panel(
-                panel_platform,
-                OpsRuntime(runtime.assembly),
-                storage=config.get(STORAGE_CONFIG).entries,
-                project_root=config.project_root,
-                profile=runtime.root.profile,
-            )
-            if started is None:
-                raise RuntimeError("Panel 后端已在配置中禁用")
-            panel = started
-            return "Panel 后端已启动。"
-
     try:
-        runtime.terminal.bind_serve_panel(serve_panel)
         console_platform = _platform(config, _CONSOLE_PLATFORM_ID)
         installed = install_stop_handlers(stop) if stop_event is None else ()
         if not headless and console_platform.enabled:
@@ -94,13 +68,11 @@ async def run_project(
         else:
             await stop.wait()
     finally:
-        runtime.terminal.bind_serve_panel(None)
-        await _shutdown_project(panel, installed, lifecycle)
+        await _shutdown_project(installed, lifecycle)
     return runtime
 
 
 async def _shutdown_project(
-    panel: PanelRuntime | None,
     installed: tuple[InstalledSignal, ...],
     lifecycle: ManagedAssembly,
 ) -> None:
@@ -108,7 +80,6 @@ async def _shutdown_project(
     try:
         restore_stop_handlers(installed)
     finally:
-        await close_panel(panel)
         await lifecycle.close()
     _logger.info("Aurora runtime 已关闭")
 

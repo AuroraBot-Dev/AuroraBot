@@ -80,7 +80,6 @@ AuroraBot 的诞生离不开许多优秀的开源项目：
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | 模型 Provider 接入与调用基础设施 |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP 客户端与工具协议             |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Panel 本地后端                   |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console 与终端体验               |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal 持久化              |
 

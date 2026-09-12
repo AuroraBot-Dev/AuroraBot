@@ -38,7 +38,6 @@ event_mode = "disabled"
 
 _EXPECTED_TEMPLATE_APPS = 3
 _EXPECTED_TIMEOUT_SECONDS = 30.0
-_TEMPLATE_PANEL_PORT = 8765
 
 
 def _load_apps(tmp_path: Path, content: str) -> tuple[AppConfig, ...]:
@@ -67,12 +66,9 @@ def test_template_exports_typed_frozen_mcp_configuration(configured_project: Pat
     assert app_configuration[1].event_mode == "disabled"
     assert app_configuration[2].event_mode == "world_events"
     assert app_configuration[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
-    assert [item.id for item in platform_configuration] == ["builtin.console", "builtin.panel", "builtin.mcp"]
-    assert all(item.enabled for item in platform_configuration if item.id != "builtin.panel")
+    assert [item.id for item in platform_configuration] == ["builtin.console", "builtin.mcp"]
+    assert all(item.enabled for item in platform_configuration)
     assert all(item.logging == "INFO" for item in platform_configuration)
-    panel = next(item for item in platform_configuration if item.id == "builtin.panel")
-    assert panel.settings("port") == _TEMPLATE_PANEL_PORT
-    assert (panel.config or {}).get("host") == "127.0.0.1"
     assert next(item for item in platform_configuration if item.id == "builtin.console").config == {}
 
 

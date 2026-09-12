@@ -12,7 +12,6 @@ from aurora.configuration.apps import APPS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.runtime import assemble_runtime, run_project
-from ops.runtime import OpsRuntime
 from src.contracts import (
     TREE_LAUNCHER_BINDINGS,
     ChatMessage,
@@ -255,7 +254,6 @@ def _active_platforms() -> PlatformsConfig:
     return PlatformsConfig(
         (
             PlatformConfig("builtin.console", True, "INFO"),
-            PlatformConfig("builtin.panel", True, "INFO"),
             PlatformConfig("builtin.mcp", True, "INFO"),
         )
     )
@@ -340,14 +338,8 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
 
             assert runtime.world is world
             assert runtime.assembly.get(McpRuntime) is mcp
-            assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
-            tools_port = OpsRuntime(runtime.assembly).ports.tools
-            assert tools_port is not None
-            assert tools_port.tool_detail(_TOOL_ID) == {
-                "name": _TOOL_ID,
-                "description": "连通性检查",
-                "parameters": {"type": "object", "properties": {}},
-            }
+            definitions = {definition.name: definition for definition in runtime.runner.tool_definitions}
+            assert definitions[_TOOL_ID].description == "连通性检查"
         finally:
             await mcp.close()
             await world.close()

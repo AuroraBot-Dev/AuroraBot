@@ -80,7 +80,6 @@ AuroraBot は、多くの優れたオープンソース・プロジェクトな�
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider 接続と call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP client と tool protocol               |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | ローカル Panel backend                    |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console と terminal experience            |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal 永続化                       |
 

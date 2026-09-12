@@ -10,7 +10,11 @@ if TYPE_CHECKING:
     from aurora.runtime.run import run_project
     from src.runtime import AuroraRuntime
 
-__all__ = ["AuroraRuntime", "assemble_runtime", "run_project"]
+__all__ = [
+    "AuroraRuntime",
+    "assemble_runtime",
+    "run_project",
+]
 
 _ENTRY_MODULES = {
     "AuroraRuntime": "src.runtime",
@@ -20,7 +24,7 @@ _ENTRY_MODULES = {
 
 
 def __getattr__(name: str) -> object:
-    """按需解析公共入口，避免运行入口在导入期加载 ops 与 panel。"""
+    """按需解析公共入口，避免运行入口在导入期加载重型依赖。"""
     module = _ENTRY_MODULES.get(name)
     if module is None:
         raise AttributeError(f"模块 {__name__!r} 没有属性 {name!r}")

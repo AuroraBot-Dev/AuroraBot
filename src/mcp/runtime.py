@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from src.mcp.tool import McpToolBinding
 
 _EVENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,159}")
-_RESERVED_EVENT_PREFIXES = ("engine.", "tool.", "output.", "cadence.", "ops.", "mcp.")
+_RESERVED_EVENT_PREFIXES = ("engine.", "tool.", "output.", "cadence.", "mcp.")
 _CONTROL_CHARACTER_LIMIT = 32
 _MAX_TOOL_PAGES = 1024
 _MAX_TOOLS = 10_000

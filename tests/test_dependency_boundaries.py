@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 
 from aurora.configuration import CONFIG_SPECS
-from ops.registry import iter_operations
 
 _ROOT = Path(__file__).parents[1]
 _SRC_BASE_ALLOWED = {
@@ -55,36 +54,6 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
     assert violations == []
 
 
-def test_ops_only_touches_leaf_infrastructure_and_assembly_types() -> None:
-    """ops 作为 backend：运行时只许 import 组合内核、配置叶子与 contracts/utils。
-
-    aurora.config/configuration 与 src.kernel/src.contracts/src.utils 是允许集；src 功能包
-    不得进入 ops 的运行时导入。
-    """
-    aurora_runtime_allowed = ("aurora.config", "aurora.configuration")
-    violations: list[str] = []
-    for path in (_ROOT / "ops").rglob("*.py"):
-        for module, guarded in _imports_of(path):
-            if (
-                module.startswith("src.")
-                and not guarded
-                and _src_package(module)
-                not in {
-                    "src.contracts",
-                    "src.kernel",
-                    "src.utils",
-                }
-            ):
-                violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
-            if module in {"aurora", "src"} or module.startswith(("aurora.", "ops.operations.aurora")):
-                if guarded:
-                    continue
-                allowed = any(module == prefix or module.startswith(f"{prefix}.") for prefix in aurora_runtime_allowed)
-                if module == "aurora" or not allowed:
-                    violations.append(f"{path.relative_to(_ROOT)} runtime imports {module}")
-    assert violations == []
-
-
 def test_removed_src_subpackages_do_not_return_as_empty_scaffolding() -> None:
     existing = [name for name in _REMOVED_PACKAGES if (_ROOT / "src" / name).exists()]
     assert existing == []
@@ -104,15 +73,6 @@ def test_each_project_toml_has_one_registered_configuration_module() -> None:
 
     assert toml_names == module_names == registered_names
     assert len(CONFIG_SPECS) == len(registered_names)
-
-
-def test_each_ops_operation_module_contributes_to_registered_catalog() -> None:
-    module_names = {path.stem for path in (_ROOT / "ops" / "operations").glob("*.py") if path.stem != "__init__"}
-    registered_names = {
-        spec.handler.__module__.rsplit(".", maxsplit=1)[-1] for spec in iter_operations() if spec.handler is not None
-    }
-
-    assert module_names == registered_names
 
 
 def test_runtime_core_does_not_store_unrelated_capabilities() -> None:

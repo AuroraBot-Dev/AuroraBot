@@ -68,7 +68,7 @@ class AgentTreeRunner:
 
     @property
     def tool_definitions(self) -> tuple[ToolDefinition, ...]:
-        """暴露当前不可变工具目录给 ops 监测；核心循环不依赖此属性。"""
+        """暴露当前不可变工具目录供只读观察；核心循环不依赖此属性。"""
         return self._tools.definitions
 
     async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:

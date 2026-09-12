@@ -24,7 +24,7 @@ COMMAND: CommandSpec = {
     },
 }
 _RUN = ("uv", "run", "--no-sync")
-_PATHS = ("aurora", "ops", "src", "tests")
+_PATHS = ("aurora", "auth", "src", "tests")
 _TEST_COMMAND = (*_RUN, "pytest", "-q", *(f"--cov={path}" for path in _PATHS if path != "tests"))
 
 

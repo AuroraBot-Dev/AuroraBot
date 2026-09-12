@@ -20,7 +20,7 @@ type McpEventMode = Literal["disabled", "world_events", "legacy_aurora_event"]
 
 _TRANSPORTS = frozenset({"stdio", "streamable_http"})
 _EVENT_MODES = frozenset({"disabled", "world_events", "legacy_aurora_event"})
-_PLATFORM_IDS = frozenset({"builtin.console", "builtin.panel", "builtin.mcp"})
+_PLATFORM_IDS = frozenset({"builtin.console", "builtin.mcp"})
 
 
 @dataclass(frozen=True, slots=True)

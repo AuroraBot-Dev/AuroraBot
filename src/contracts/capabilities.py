@@ -118,7 +118,7 @@ class _Valued(Protocol):
 
 
 class McpAppSnapshot(Protocol):
-    """ops 可安全公开的单个 MCP App 状态。"""
+    """可安全公开的单个 MCP App 状态。"""
 
     @property
     def package(self) -> str: ...

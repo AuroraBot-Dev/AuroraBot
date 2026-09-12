@@ -80,7 +80,6 @@ AuroraBot would not exist without many excellent open-source projects:
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider integration and call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP client and tool protocol                       |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Local Panel backend                                |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console and terminal experience                    |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal persistence                           |
 

@@ -173,7 +173,7 @@ class McpInboundEvent:
 
 @dataclass(frozen=True, slots=True)
 class McpAppSnapshot:
-    """ops 可安全公开的单个 App 状态，不含凭据。"""
+    """可安全公开的单个 App 状态，不含凭据。"""
 
     package: str
     configured_enabled: bool
