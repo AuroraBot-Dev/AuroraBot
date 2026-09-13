@@ -12,16 +12,23 @@ from aurora.commander import CommandSpec, SubcommandSpec, build_registry
 from aurora.utils.modules import discover_modules
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
     from aurora.commander import CommandBinding
 
+
+def _command_binding(module: ModuleType) -> CommandBinding:
+    spec = getattr(module, "COMMAND", None)
+    executor = getattr(module, "execute", None)
+    if not isinstance(spec, dict):
+        raise TypeError(f"命令模块必须导出 COMMAND：{module.__name__}")
+    if not callable(executor):
+        raise TypeError(f"命令模块必须导出可调用 execute：{module.__name__}")
+    return cast("CommandBinding", (spec, executor))
+
+
 COMMAND_SPECS = tuple(
-    cast(
-        "CommandBinding",
-        (
-            getattr(module, "COMMAND", None),
-            getattr(module, "execute", None),
-        ),
-    )
+    _command_binding(module)
     for module in discover_modules(
         __name__,
         tuple(str(path) for path in __path__),
