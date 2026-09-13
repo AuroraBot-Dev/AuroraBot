@@ -21,8 +21,8 @@ from src.contracts import (
     TreeStatus,
     WorldCommit,
     WorldFrontier,
-    tree_scope,
 )
+from src.engine.scopes import tree_scope
 from src.engine.world_effects import EngineWorldEffects, render_delta
 from src.utils import get_logger
 

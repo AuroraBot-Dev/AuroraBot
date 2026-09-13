@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from src.contracts import FRONT_BINDINGS, TREE_LAUNCHER_BINDINGS, RuntimeConfig
+from src.contracts import FRONT_BINDINGS, TREE_LAUNCHER_BINDINGS
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.console import TerminalConsole
 from src.contracts.pkgs.engine import AgentTreeRunner
 from src.contracts.pkgs.world import WorldJournal
+from src.runtime.config import RuntimeConfig
 from src.runtime.core import AuroraRuntime
 
 if TYPE_CHECKING:
@@ -25,11 +26,15 @@ class RuntimeFactory(Protocol):
 
 def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print) -> AuroraRuntime:
     """从 Assembly 取出实际协作者创建门面，再绑定全部 TreeLauncher 贡献。"""
+    agents = assembly.get(AgentCatalog)
+    root = assembly.settings.resolve(RuntimeConfig)
+    if root.agent not in agents.ids:
+        raise ValueError(f"root 引用了未知 Agent definition：{root.agent}")
     runtime = AuroraRuntime(
         assembly,
         runner=assembly.get(AgentTreeRunner),
-        agents=assembly.get(AgentCatalog),
-        root=assembly.settings.resolve(RuntimeConfig),
+        agents=agents,
+        root=root,
         console=assembly.get(TerminalConsole),
         world=assembly.get(WorldJournal),
         output=output,

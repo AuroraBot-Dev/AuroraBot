@@ -13,9 +13,11 @@ from aurora.configuration.agents import AGENTS_CONFIG
 from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
 from aurora.configuration.memory import MEMORY_CONFIG
+from aurora.configuration.providers import PROVIDERS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from src.agents.config import AgentsConfig
 from src.ai import LiteLLMModelGateway
+from src.ai.config import ProvidersConfig
 from src.contracts import (
     MCP_EVENT_RECEIVED,
     ChatMessage,
@@ -41,9 +43,16 @@ EXPECTED_WINDOW_MINUTES = 60
 EXPECTED_COMMITS_PER_SCOPE = 50
 
 
+_TEMPLATE_ENDPOINTS = frozenset({"default", "fast", "quality", "multimodal", "embedding"})
+
+
 @dataclass(slots=True)
 class FakeModel:
     requests: list[ModelRequest] = field(default_factory=list)
+
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        if endpoint_id not in _TEMPLATE_ENDPOINTS:
+            raise ValueError(f"未知 model endpoint：{endpoint_id}")
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
@@ -312,6 +321,17 @@ def test_composition_builds_configured_model_when_caller_does_not_inject_one(con
     assembly = assemble_runtime(load_config(configured_project)).assembly
 
     assert isinstance(assembly.get(Model), LiteLLMModelGateway)
+
+
+def test_assembly_rejects_agent_model_whose_provider_is_unusable(configured_project: Path) -> None:
+    configuration = load_config(configured_project)
+    providers = configuration.get(PROVIDERS_CONFIG).providers
+    broken = ProvidersConfig(
+        tuple(replace(item, adapter="unknown") if item.name == "deepseek" else item for item in providers)
+    )
+
+    with pytest.raises(ValueError, match="尚未实现的 adapter"):
+        assemble_runtime(configuration.with_value(PROVIDERS_CONFIG, broken))
 
 
 def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:

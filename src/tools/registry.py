@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from src.contracts import (
-    DelegationRequest,
-    ToolOutput,
-    ToolScopes,
-    ToolStatus,
-    is_valid_tool_id,
-)
+from src.contracts import DelegationRequest, ToolOutput, ToolScopes, ToolStatus
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
+
+_AUR_TOOL_ID = re.compile(r"aur(?:\.[a-z][a-z0-9_-]*){2,}")
+_MCP_TOOL_ID = re.compile(r"aur\.mcp\.[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\.[A-Za-z][A-Za-z0-9_-]*")
+
+
+def _is_valid_tool_id(name: str) -> bool:
+    """框架命名保持小写；MCP raw name 段属于第三方外部事实，允许大写风格。"""
+    return _AUR_TOOL_ID.fullmatch(name) is not None or _MCP_TOOL_ID.fullmatch(name) is not None
+
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -34,7 +38,7 @@ class ToolRegistry:
         definitions: dict[str, ToolDefinition] = {}
         for tool in tools:
             definition = tool.definition
-            if not is_valid_tool_id(definition.name):
+            if not _is_valid_tool_id(definition.name):
                 raise ToolRegistrationError(f"工具 ID 不符合 aur.* 域规范：{definition.name}")
             if definition.name in bindings:
                 raise ToolRegistrationError(f"工具重复注册：{definition.name}")

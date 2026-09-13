@@ -43,6 +43,9 @@ _LOGGED_RUNTIME_MODULES = (
 class _Model:
     result: str
 
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
+
     async def complete(self, request: ModelRequest) -> ChatMessage:
         del request
         return ChatMessage.assistant(self.result)

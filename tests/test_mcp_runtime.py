@@ -19,7 +19,6 @@ from src.contracts import (
     WorldCommit,
     WorldCommitInput,
     WorldFrontier,
-    mcp_scope,
 )
 from src.mcp import (
     McpAppSpec,
@@ -32,6 +31,7 @@ from src.mcp import (
     McpTransport,
     prepare_mcp,
 )
+from src.mcp.scopes import mcp_scope
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping

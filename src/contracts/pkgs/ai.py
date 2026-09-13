@@ -11,4 +11,6 @@ if TYPE_CHECKING:
 class Model(Protocol):
     """AgentTree 循环使用的唯一模型端口。"""
 
+    def validate_endpoint(self, endpoint_id: str) -> None: ...
+
     async def complete(self, request: ModelRequest) -> ChatMessage: ...

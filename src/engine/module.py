@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import DELEGATE_TOOL, EndpointsConfig, RuntimeConfig
+from src.contracts import DELEGATE_TOOL
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.ai import Model
 from src.contracts.pkgs.engine import AgentTreeRunner as AgentTreeRunnerPort
@@ -23,17 +23,13 @@ if TYPE_CHECKING:
 def _validate_cross_references(
     agents: AgentCatalog,
     prompts: Mapping[str, str],
-    endpoint_ids: frozenset[str],
+    model: Model,
     tool_names: frozenset[str],
-    runtime_agent: str,
 ) -> None:
-    if runtime_agent not in agents.ids:
-        raise ValueError(f"root 引用了未知 Agent definition：{runtime_agent}")
     for definition in agents.definitions:
         if definition.prompt_id not in prompts:
             raise ValueError(f"{definition.definition_id} 引用了未知 Agent prompt：{definition.prompt_id}")
-        if definition.model not in endpoint_ids:
-            raise ValueError(f"{definition.definition_id} 引用了未知 model endpoint：{definition.model}")
+        model.validate_endpoint(definition.model)
         missing = definition.tools - tool_names
         if missing:
             raise ValueError(f"{definition.definition_id} 引用了不可用工具：{', '.join(sorted(missing))}")
@@ -48,14 +44,13 @@ def _validate_cross_references(
 )
 def build(context: ModuleContext) -> AgentTreeRunnerPort:
     config = context.settings.resolve(EngineConfig)
-    runtime = context.settings.resolve(RuntimeConfig)
     assembler = context.get(PromptAssembler)
     agents = context.get(AgentCatalog)
     tools = context.get(ToolRegistry)
-    endpoint_ids = frozenset(item.name for item in context.settings.resolve(EndpointsConfig).endpoints)
-    _validate_cross_references(agents, assembler.catalog.agent_prompts, endpoint_ids, tools.names, runtime.agent)
+    model = context.get(Model)
+    _validate_cross_references(agents, assembler.catalog.agent_prompts, model, tools.names)
     return AgentTreeRunner(
-        context.get(Model),
+        model,
         assembler,
         agents,
         tools,

@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from src.contracts.tool import ToolCall, ToolDefinition, ToolResult, ToolScopes
+    from src.contracts.tool import ToolCall, ToolDefinition, ToolResult
+    from src.contracts.world import ToolScopes
 
 
 class ToolRegistry(Protocol):

@@ -12,8 +12,6 @@ if TYPE_CHECKING:
 
 # 稳定的世界 scope 与事件 kind 常量；scope 的实际归属由提交方决定，
 # world 只负责校验、编号与追加。
-SYSTEM_SCOPE = "aurora:system"
-CONFIG_SCOPE = "aurora:config"
 CONSOLE_SCOPE = "aurora:console"
 
 TREE_STARTED = "engine.tree.started"
@@ -36,20 +34,6 @@ CONSOLE_INPUT = "console.input"
 MCP_APP_DISCONNECTED = "mcp.app.disconnected"
 MCP_CATALOG_CHANGED = "mcp.catalog.changed"
 MCP_EVENT_RECEIVED = "mcp.event.received"
-
-
-def tree_scope(tree_id: str) -> str:
-    """返回一次 AgentTree 运行的标准世界 scope。"""
-    if not tree_id.strip():
-        raise ValueError("tree_id must not be empty")
-    return f"aurora:tree:{tree_id}"
-
-
-def mcp_scope(package: str) -> str:
-    """返回一个 MCP App 的标准世界 scope。"""
-    if not package.strip():
-        raise ValueError("package must not be empty")
-    return f"aurora:mcp:{package}"
 
 
 @dataclass(frozen=True, slots=True)

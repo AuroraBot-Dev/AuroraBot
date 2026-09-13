@@ -5,9 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from src.agents.config import AgentConfig, AgentsConfig
-from src.ai.config import ProviderConfig, ProvidersConfig
+from src.ai.config import EndpointConfig, EndpointsConfig, ProviderConfig, ProvidersConfig
 from src.cadence.config import CadenceConfig
-from src.contracts import EndpointConfig, EndpointsConfig, RuntimeConfig
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.ai import Model
 from src.contracts.pkgs.console import TerminalConsole
@@ -22,6 +21,7 @@ from src.kernel import BuiltinSource, compose, resolve
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from src.memory.config import MemoryConfig
 from src.prompt.config import PromptConfig, PromptsConfig
+from src.runtime.config import RuntimeConfig
 from src.world.config import StorageConfig, StorageEntry
 
 if TYPE_CHECKING:

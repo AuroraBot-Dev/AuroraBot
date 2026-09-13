@@ -23,8 +23,8 @@ from src.contracts import (
     ToolStatus,
     WorldCommitInput,
     WorldFrontier,
-    tree_scope,
 )
+from src.engine.scopes import tree_scope
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

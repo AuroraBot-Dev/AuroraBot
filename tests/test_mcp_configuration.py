@@ -36,7 +36,7 @@ timeout_seconds = 15.5
 event_mode = "disabled"
 """
 
-_EXPECTED_TEMPLATE_APPS = 3
+_EXPECTED_TEMPLATE_APPS = 2
 _EXPECTED_TIMEOUT_SECONDS = 30.0
 
 
@@ -63,13 +63,20 @@ def test_template_exports_typed_frozen_mcp_configuration(configured_project: Pat
     assert all(isinstance(app, AppConfig) for app in app_configuration)
     assert all(app.enabled is False for app in app_configuration)
     assert app_configuration[0].event_mode == "disabled"
-    assert app_configuration[1].event_mode == "disabled"
-    assert app_configuration[2].event_mode == "world_events"
-    assert app_configuration[2].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
+    assert app_configuration[1].event_mode == "world_events"
+    assert app_configuration[1].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
     assert [item.id for item in platform_configuration] == ["builtin.console", "builtin.mcp"]
     assert all(item.enabled for item in platform_configuration)
     assert all(item.logging == "INFO" for item in platform_configuration)
     assert next(item for item in platform_configuration if item.id == "builtin.console").config == {}
+
+
+def test_template_apps_stay_outside_the_installed_src_tree(configured_project: Path) -> None:
+    """MCP 应用是外部进程，发布模板不得把 working_dir 指向随包发布的 ``src/``。"""
+    apps = load_config(configured_project).get(APPS_CONFIG).apps
+
+    assert apps
+    assert all(app.working_dir is not None and not app.working_dir.startswith("src/") for app in apps)
 
 
 @pytest.mark.parametrize("event_mode", ("disabled", "world_events", "legacy_aurora_event"))

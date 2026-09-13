@@ -1,14 +1,3 @@
-# 内建 Clock 应用
-[[app]]
-package = "org.aurora.clock"
-enabled = false
-transport = "stdio"
-working_dir = "src/apps/aurora-app-clock"
-command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
-env = []
-timeout_seconds = 30
-event_mode = "disabled"
-
 [[app]]
 package = "com.github.windows_mcp"
 enabled = false

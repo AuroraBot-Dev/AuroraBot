@@ -13,6 +13,13 @@ _MAX_SCOPE_LENGTH = 256
 _CONTROL_CHARACTER_LIMIT = 32
 
 
+def mcp_scope(package: str) -> str:
+    """返回一个 MCP App 的标准世界 scope。"""
+    if not package.strip():
+        raise ValueError("package must not be empty")
+    return f"aurora:mcp:{package}"
+
+
 def validate_mcp_scope(scope: str) -> str:
     """校验并原样返回可进入 World frontier 的 MCP scope。"""
     if (
@@ -67,4 +74,4 @@ def render_scope_template(template: str, arguments: Mapping[str, Any]) -> str:
     return validate_mcp_scope("".join(pieces))
 
 
-__all__ = ["render_scope_template", "validate_mcp_scope", "validate_scope_template"]
+__all__ = ["mcp_scope", "render_scope_template", "validate_mcp_scope", "validate_scope_template"]

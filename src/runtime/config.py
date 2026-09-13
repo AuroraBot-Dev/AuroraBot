@@ -1,4 +1,4 @@
-"""跨包共享的配置形状。"""
+"""``src.runtime`` 的进程级配置形状。"""
 
 from __future__ import annotations
 
@@ -23,19 +23,3 @@ class RuntimeConfig:
             raise ValueError("agent 不能为空")
         if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NONE"}:
             raise ValueError("log_level 必须是日志级别或 NONE")
-
-
-@dataclass(frozen=True, slots=True)
-class EndpointConfig:
-    """一个显式模型端点。"""
-
-    name: str
-    provider: str
-    model: str
-
-
-@dataclass(frozen=True, slots=True)
-class EndpointsConfig:
-    """全部模型端点。"""
-
-    endpoints: tuple[EndpointConfig, ...]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from aurora.config import ConfigSpec, TableShape, text_field
-from src.contracts.config import RuntimeConfig
+from src.runtime.config import RuntimeConfig
 
 RUNTIME_CONFIG = ConfigSpec[RuntimeConfig](
     name="runtime",

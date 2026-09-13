@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from aurora.config import ConfigSpec, TableArrayShape, text_field
-from src.contracts.config import EndpointConfig, EndpointsConfig
+from src.ai.config import EndpointConfig, EndpointsConfig
 
 ENDPOINTS_CONFIG = ConfigSpec[EndpointsConfig](
     name="endpoints",

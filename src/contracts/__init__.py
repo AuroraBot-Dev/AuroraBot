@@ -13,7 +13,6 @@ from src.contracts.agent import (
     TreeLaunchRequest,
     TreeStatus,
 )
-from src.contracts.config import EndpointConfig, EndpointsConfig, RuntimeConfig
 from src.contracts.console import TerminalControl, TerminalResponse
 from src.contracts.contributions import (
     FRONT_BINDINGS,
@@ -34,17 +33,13 @@ from src.contracts.tool import (
     WORLD_READ_TOOL,
     WORLD_TREES_TOOL,
     DelegationRequest,
-    ScopedTool,
     Tool,
     ToolDefinition,
     ToolOutput,
     ToolResult,
     ToolStatus,
-    is_valid_mcp_tool_id,
-    is_valid_tool_id,
 )
 from src.contracts.world import (
-    CONFIG_SCOPE,
     CONSOLE_INPUT,
     CONSOLE_SCOPE,
     MCP_APP_DISCONNECTED,
@@ -58,7 +53,6 @@ from src.contracts.world import (
     NODE_SPAWNED,
     OUTPUT_COMMITTED,
     OUTPUT_REQUESTED,
-    SYSTEM_SCOPE,
     TOOL_FAILED,
     TOOL_REQUESTED,
     TOOL_SUCCEEDED,
@@ -77,13 +71,10 @@ from src.contracts.world import (
     WorldDeltaPage,
     WorldFrontier,
     WorldStreamPage,
-    mcp_scope,
-    tree_scope,
 )
 
 __all__ = [
     "BUILTIN_TOOL_NAMES",
-    "CONFIG_SCOPE",
     "CONSOLE_INPUT",
     "CONSOLE_SCOPE",
     "DELEGATE_TOOL",
@@ -99,7 +90,6 @@ __all__ = [
     "NODE_SPAWNED",
     "OUTPUT_COMMITTED",
     "OUTPUT_REQUESTED",
-    "SYSTEM_SCOPE",
     "TOOL_CONTRIBUTIONS",
     "TOOL_FAILED",
     "TOOL_REQUESTED",
@@ -121,8 +111,6 @@ __all__ = [
     "ChatRole",
     "ContributionKey",
     "DelegationRequest",
-    "EndpointConfig",
-    "EndpointsConfig",
     "EnvironmentEvent",
     "Front",
     "FrontBinding",
@@ -131,8 +119,6 @@ __all__ = [
     "MemoryScopeSnapshot",
     "MemorySnapshot",
     "ModelRequest",
-    "RuntimeConfig",
-    "ScopedTool",
     "Settings",
     "TerminalControl",
     "TerminalResponse",
@@ -152,8 +138,4 @@ __all__ = [
     "WorldDeltaPage",
     "WorldFrontier",
     "WorldStreamPage",
-    "is_valid_mcp_tool_id",
-    "is_valid_tool_id",
-    "mcp_scope",
-    "tree_scope",
 ]

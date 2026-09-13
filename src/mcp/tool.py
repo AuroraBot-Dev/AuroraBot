@@ -4,24 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.contracts import (
-    ToolCall,
-    ToolDefinition,
-    ToolOutput,
-    ToolScopes,
-    ToolStatus,
-    is_valid_mcp_tool_id,
-    mcp_scope,
-)
+from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolScopes, ToolStatus
 from src.mcp.models import McpCallRejectedError, McpCallResult, McpCallUnknownError, McpRemoteTool
-from src.mcp.scopes import render_scope_template, validate_scope_template
+from src.mcp.scopes import mcp_scope, render_scope_template, validate_scope_template
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
+
+_MCP_TOOL_ID = re.compile(r"aur\.mcp\.[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\.[A-Za-z][A-Za-z0-9_-]*")
+
+
+def _is_valid_mcp_tool_id(name: str) -> bool:
+    """校验 ``aur.mcp.<package>.<raw_name>``：package 段小写，raw name 段允许大写。"""
+    return _MCP_TOOL_ID.fullmatch(name) is not None
+
 
 if TYPE_CHECKING:
     from src.mcp.client import McpClientPort
@@ -42,7 +43,7 @@ def bind_mcp_tool(package: str, remote: McpRemoteTool) -> McpToolBinding:
     """校验一次发现项并形成稳定、不静默改名的领域定义。"""
     raw_name = remote.name
     tool_id = f"aur.mcp.{package}.{raw_name}"
-    if not raw_name or raw_name != raw_name.strip() or not is_valid_mcp_tool_id(tool_id):
+    if not raw_name or raw_name != raw_name.strip() or not _is_valid_mcp_tool_id(tool_id):
         raise ValueError(f"MCP Tool 名称不能组成合法 Aurora 工具 ID：{package}/{remote.name}")
     if remote.input_schema.get("type") != "object":
         raise ValueError(f"MCP Tool input schema 必须是 object：{tool_id}")

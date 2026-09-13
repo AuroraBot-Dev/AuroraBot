@@ -16,7 +16,6 @@ from src.contracts import (
     MCP_CATALOG_CHANGED,
     MCP_EVENT_RECEIVED,
     WorldFrontier,
-    mcp_scope,
 )
 from src.mcp.client import McpClientFactory, McpClientPort, SdkMcpClientFactory
 from src.mcp.models import (
@@ -27,7 +26,7 @@ from src.mcp.models import (
     McpRuntimeSnapshot,
     McpStartupError,
 )
-from src.mcp.scopes import validate_mcp_scope
+from src.mcp.scopes import mcp_scope, validate_mcp_scope
 from src.mcp.tool import McpTool, bind_mcp_tool
 from src.utils import get_logger
 

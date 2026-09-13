@@ -48,6 +48,9 @@ class FakeModel:
     responses: list[ChatMessage]
     requests: list[ModelRequest] = field(default_factory=list)
 
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
+
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
         return self.responses.pop(0)
@@ -101,6 +104,9 @@ class EventInjectingModel:
     journal: SqlAlchemyWorldJournal
     event: EnvironmentEvent
     requests: list[ModelRequest] = field(default_factory=list)
+
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
@@ -280,6 +286,9 @@ def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp
 
 def test_model_failure_becomes_tree_failure() -> None:
     class FailingModel:
+        def validate_endpoint(self, endpoint_id: str) -> None:
+            del endpoint_id
+
         async def complete(self, request: ModelRequest) -> ChatMessage:
             raise RuntimeError(request.model)
 
