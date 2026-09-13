@@ -56,7 +56,7 @@ AuroraBot records design decisions with long-term impact in RFCs. Update or add 
 
 Small bug fixes, test additions, copy improvements, and refactors that do not change public semantics can be submitted directly. When public documentation changes, update the Chinese, English, and Japanese entry points together.
 
-The current runtime, package boundaries, and process composition follow the single design baseline [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md).
+The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](docs/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](docs/architecture/).
 
 ## Keep the loop closed
 

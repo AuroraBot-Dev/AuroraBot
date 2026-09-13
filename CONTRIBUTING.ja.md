@@ -56,7 +56,7 @@ AuroraBot は、長期的に影響を与える設計上の決定を RFC に記�
 
 小さなバグ修正、テストの追加、文言の改善、公共の意味を変えない refactor は直接提出できます。公開ドキュメントを変更した場合は、中国語・英語・日本語の入口をまとめて更新してください。
 
-現在の runtime、パッケージ境界、プロセス構成は、唯一の設計基準 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) に従います。
+現在の runtime、パッケージ境界、プロセス構成は、設計思想 [RFC 0300](docs/rfc/0300-design-philosophy.md) を最上位の制約とし、現行の実装構造は [アーキテクチャ説明](docs/architecture/) にあります。
 
 ## 閉じたループを保つ
 

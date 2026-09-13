@@ -57,7 +57,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 
 小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、英文和日文入口。
 
-当前运行时、包边界和进程组合以唯一设计基准 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) 为准。
+当前运行时、包边界和进程组合以设计思想 [RFC 0300](docs/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](docs/architecture/)。
 
 ## 保持闭环完整
 

@@ -15,10 +15,12 @@ AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一�
 
 ## Architecture authority
 
-- `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准。
-- `docs/architecture/` 是按包拆分的实施架构说明；`docs/architecture/packages/package-baseline.md` 是新增模块/包的最低扩展成本基线。
+文档按效力分层：
+
+- `docs/rfc/0300-design-philosophy.md` 是设计思想：只陈述不变量与判断准则，不含实现坐标（包名、文件名、字段名、类名、协议修订号、事件名等）；仅当设计思想、语义不变量或边界本身改变时才修订。
+- 其他 `docs/rfc/` 记录稳定的机制决策；`docs/architecture/` 记录现行实现结构，可随实现自由更新；`docs/reference/` 记录精确词汇与协议。
 - `docs/` 是独立文档仓库的子模块；RFC 先在 docs 仓库提交，再由主仓库更新子模块指针。
-- 影响 AgentTree、四角色消息、模型/工具端口、配置或组合根的改动，必须先更新 RFC。
+- 仅当设计思想、语义不变量或边界改变时才更新 RFC；实现结构、配置字段、事件名等改动只更新 architecture/reference 与测试，不动 RFC。
 - Python 源码和测试的注释与 docstring 不提具体 RFC 编号，直接说明局部不变量。
 
 ## Project layout

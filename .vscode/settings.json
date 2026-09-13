@@ -6,7 +6,7 @@
   "explorer.fileNesting.patterns": {
     "*.py": "${capture}.pyi, ${capture}_test.py, test_${capture}.py",
     "module.py": "config.py, runtime.py, __init__.py",
-    "README.md": "README.en.md, README.ja.md, LICENSE, CODE_OF_CONDUCT.md, CONTRIBUTING.md, CONTRIBUTING.en.md, CONTRIBUTING.ja.md",
+    "README.md": "README.*.md, LICENSE, CODE_OF_CONDUCT.md, CONTRIBUTING.md, CONTRIBUTING.*.md, AGENTS.md",
     "pyproject.toml": "uv.lock, .python-version, ruff.toml, .ruff.toml, pytest.ini, tox.ini, .pre-commit-config.yaml, .coverage",
     ".env": ".env.example, .env.*",
     ".gitignore": ".gitattributes, .gitmodules",
