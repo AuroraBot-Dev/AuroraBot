@@ -5,6 +5,7 @@
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {
     "*.py": "${capture}.pyi, ${capture}_test.py, test_${capture}.py",
+    "main.py": "main_*.py, main.*.py, __main__.py",
     "module.py": "config.py, runtime.py, __init__.py",
     "README.md": "README.*.md, LICENSE, CODE_OF_CONDUCT.md, CONTRIBUTING.md, CONTRIBUTING.*.md, AGENTS.md",
     "pyproject.toml": "uv.lock, .python-version, ruff.toml, .ruff.toml, pytest.ini, tox.ini, .pre-commit-config.yaml, .coverage",
