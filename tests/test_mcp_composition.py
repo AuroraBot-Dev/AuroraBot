@@ -11,7 +11,6 @@ from aurora.configuration import load_config
 from aurora.configuration.apps import APPS_CONFIG
 from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.runtime import assemble_runtime, run_project
 from src.contracts import (
     TREE_LAUNCHER_BINDINGS,
     ChatMessage,
@@ -33,7 +32,7 @@ from src.kernel import BuiltinSource, compose, module
 from src.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemoteTool, McpToolsPage, prepare_mcp
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from src.mcp.module import build_mcp_specs
-from src.runtime import create_runtime
+from src.runtime import assemble_runtime, create_runtime, run_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -347,7 +346,7 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
     asyncio.run(scenario())
 
 
-def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
+def test_run_runtime_orders_world_discovery_activation_and_reverse_shutdown(
     configured_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -363,7 +362,7 @@ def test_run_project_orders_world_discovery_activation_and_reverse_shutdown(
             assert launcher is not None
             trace.append("launcher.bind")
 
-        runtime = await run_project(
+        runtime = await run_runtime(
             config,
             FakeModel(),
             headless=True,
@@ -426,7 +425,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
             raise ValueError("唤起端口绑定失败")
 
         with pytest.raises(ValueError, match="唤起端口绑定失败"):
-            await run_project(
+            await run_runtime(
                 _active_config(configured_project),
                 FakeModel(),
                 headless=True,
@@ -442,7 +441,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
     asyncio.run(scenario())
 
 
-def test_run_project_closes_mcp_then_world_when_composition_fails(
+def test_run_runtime_closes_mcp_then_world_when_composition_fails(
     configured_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -455,7 +454,7 @@ def test_run_project_closes_mcp_then_world_when_composition_fails(
         broken = config.with_value(RUNTIME_CONFIG, replace(runtime_config, agent="missing"))
 
         with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
-            await run_project(
+            await run_runtime(
                 broken,
                 FakeModel(),
                 headless=True,

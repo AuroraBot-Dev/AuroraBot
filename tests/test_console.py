@@ -6,9 +6,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora import load_config, run_project
+from aurora import load_config
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
 from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, WorldCommit, WorldCommitInput, WorldFrontier
+from src.runtime import run_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -132,7 +133,7 @@ def test_project_console_runs_message_tree_and_local_commands(configured_project
     stop = asyncio.Event()
 
     runtime = asyncio.run(
-        run_project(
+        run_runtime(
             load_config(configured_project),
             model,
             stop_event=stop,
@@ -155,7 +156,7 @@ def test_project_headless_waits_only_for_shared_stop_event(configured_project: P
     output: list[str] = []
 
     runtime = asyncio.run(
-        run_project(load_config(configured_project), FakeModel(), headless=True, stop_event=stop, output=output.append)
+        run_runtime(load_config(configured_project), FakeModel(), headless=True, stop_event=stop, output=output.append)
     )
 
     assert runtime.runtime_status()["tree_count"] == 0

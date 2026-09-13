@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from src.contracts import (
     TREE_LAUNCHER_BINDINGS,
@@ -18,6 +18,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from src.kernel import Assembly
+
+
+class RuntimeFactory(Protocol):
+    """从冻结 ``Assembly`` 创建进程门面的可调用契约。"""
+
+    def __call__(self, assembly: Assembly, *, output: Callable[[str], None] = ...) -> AuroraRuntime: ...
 
 
 def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print) -> AuroraRuntime:

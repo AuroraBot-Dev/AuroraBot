@@ -49,7 +49,9 @@ temp/
 extensions/
 
 # IDE / Editor
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .editor/
 .cursor/
 .idea/

@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import assemble_runtime, load_config
+from aurora import load_config
 from aurora.configuration.runtime import RUNTIME_CONFIG
 from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
-from aurora.runtime.support import configure_project_logging
+from aurora.utils.logging import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
+from src.runtime import assemble_runtime
 from src.tools import ToolRegistry
 from src.utils import configure_console_logging
 
@@ -23,7 +24,7 @@ _ROOT = Path(__file__).parents[1]
 _LOGGED_RUNTIME_MODULES = (
     "src/kernel/compose.py",
     "src/runtime/core.py",
-    "aurora/runtime/run.py",
+    "src/runtime/run.py",
     "src/agents/catalog.py",
     "src/ai/gateway.py",
     "src/cadence/cadence.py",

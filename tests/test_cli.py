@@ -123,7 +123,7 @@ def test_start_loads_configuration_and_runs_shared_lifecycle(
 
     monkeypatch.setattr(start, "load_project_env", fake_load_env)
     monkeypatch.setattr(start, "_load_configuration", tracked_load_config)
-    monkeypatch.setattr(start, "_run_project", fake_run)
+    monkeypatch.setattr(start, "_run_runtime", fake_run)
 
     assert run(["--root", str(configured_project), start.COMMAND["name"], "--headless"]) == 0
     assert order == ["env", "config", "runtime"]
@@ -167,10 +167,10 @@ def test_start_runs_real_shared_lifecycle(
 ) -> None:
     calls: list[tuple[object, bool]] = []
 
-    async def fake_run_project(configuration: object, *, headless: bool) -> None:
+    async def fake_run_project(configuration: object, *, headless: bool, stop_event: object) -> None:
         calls.append((configuration, headless))
 
-    monkeypatch.setattr("aurora.runtime.run_project", fake_run_project)
+    monkeypatch.setattr("src.runtime.run_runtime", fake_run_project)
 
     assert run(["--root", str(configured_project), start.COMMAND["name"], "--headless"]) == 0
     assert len(calls) == 1
@@ -182,7 +182,8 @@ def test_start_maps_keyboard_interrupt_to_exit_code(monkeypatch: pytest.MonkeyPa
         raise KeyboardInterrupt
 
     monkeypatch.setattr(start, "_load_configuration", lambda _root: object())
-    monkeypatch.setattr(start, "_run_project", interrupted)
+    monkeypatch.setattr(start, "configure_project_logging", lambda _config: None)
+    monkeypatch.setattr(start, "_run_runtime", interrupted)
 
     assert run([start.COMMAND["name"], "--headless"]) == EXIT_INTERRUPTED
 

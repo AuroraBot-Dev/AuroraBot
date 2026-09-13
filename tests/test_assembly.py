@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from aurora import AuroraConfig, assemble_runtime, load_config
+from aurora import AuroraConfig, load_config
 from aurora.configuration.agents import AGENTS_CONFIG
 from aurora.configuration.cadence import CADENCE_CONFIG
 from aurora.configuration.engine import ENGINE_CONFIG
@@ -34,6 +34,7 @@ from src.contracts import (
     TreeStatus,
     WorldFrontier,
 )
+from src.runtime import assemble_runtime
 
 EXPECTED_MAX_DEPTH = 4
 EXPECTED_WINDOW_MINUTES = 60

@@ -95,11 +95,12 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
         "mcp",
         "memory",
         "prompt",
+        "runtime",
         "tools",
         "world",
     }
     resolution = resolve(specs)
-    assert resolution.construction[-1].name == "engine"
+    assert resolution.construction[-1].name == "runtime"
 
 
 def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:

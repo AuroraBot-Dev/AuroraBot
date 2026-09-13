@@ -23,10 +23,14 @@ _SRC_BASE_ALLOWED = {
         "world",
     )
 }
-_SRC_BASE_ALLOWED.update({"contracts": {"src.contracts"}, "utils": {"src.utils"}})
-_TYPE_ONLY_SRC = {
-    "runtime": {"src.kernel"},
-}
+_SRC_BASE_ALLOWED.update(
+    {
+        "contracts": {"src.contracts"},
+        "utils": {"src.utils"},
+        "runtime": {"src.runtime", "src.contracts", "src.utils", "src.kernel"},
+    }
+)
+_TYPE_ONLY_SRC: dict[str, set[str]] = {}
 _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 
 

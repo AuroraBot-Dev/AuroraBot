@@ -26,16 +26,15 @@ AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一�
 ```text
 config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configuration 模块
 config/         从模板复制的个人生效配置，始终由 Git 忽略
-aurora/         项目级入口、配置解析与进程编排
+aurora/         项目级入口与配置解析
 aurora/commands/       每个 CLI 命令一个自动发现模块
 aurora/configuration/  每个 TOML 一个解析模块，引用 src/<pkg> 的配置 DTO 并导出唯一 CONFIG_SPEC
 aurora/config.py       按注册顺序合并 TOML 为只读 AuroraConfig；同时实现 src.contracts.Settings
-aurora/runtime/        进程编排：内核装配入口、进程生命周期、日志与信号
-aurora/utils/          项目级进程、环境、平台、TOML 与包发现工具
+aurora/utils/          项目级进程、环境、日志、信号、平台、TOML 与包发现工具
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  AgentTree、ChatMessage、Model、Tool、能力协议与组合内核公共值对象
 src/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
-src/runtime/    Bot 进程门面、终端命令分派与文本呈现
+src/runtime/    Bot 进程门面与装配入口：发现源、门面工厂、终端命令分派与文本呈现
 src/agents/     不可变 AgentDefinition 目录与唯一解析
 src/tools/      工具注册表与框架内建工具
 src/prompt/     四角色 PromptAssembler
@@ -79,8 +78,10 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 - 发现源：随安装发布的 `src` 包、项目内被 Git 忽略的 `extensions/plugins/` 与 `aurorabot_plugin` entry point；同优先级冲突、
   缺失依赖与依赖环都在启动前失败。
 - `aurora` 只负责 CLI 命令分发与配置解析：`configuration` 引用 `src/<pkg>` 的配置 DTO，`config` 合并为只读 `AuroraConfig`
-  并实现 `src.contracts.Settings`；`aurora.runtime` 是进程编排（装配入口、生命周期、日志与信号），不含组合逻辑。
-- `src/runtime` 是 Bot 进程门面：从冻结 `Assembly` 创建门面并接线 `TreeLauncher` 绑定；终端命令分派与文本呈现各自独立。
+  并实现 `src.contracts.Settings`；`aurora start` 只负责 `.env`、配置加载、进程日志与 SIGINT/SIGTERM，然后调用 `src.runtime`
+  的装配入口，不含组合逻辑。
+- `src/runtime` 是 Bot 进程门面与装配入口：发现模块声明、从冻结 `Assembly` 创建门面并接线 `TreeLauncher` 绑定；
+  终端命令分派与文本呈现各自独立。
 - 命令与配置模块按目录自动发现：新增并列项只增加该能力自己的配置模板、`configuration`/`src/<pkg>/module.py`/测试。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
 - 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/kernel ← src/runtime`；功能 src 包

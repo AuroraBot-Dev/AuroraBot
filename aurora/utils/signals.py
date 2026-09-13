@@ -1,4 +1,4 @@
-"""提供运行时入口使用的进程级辅助函数。"""
+"""把进程终止信号转为异步停止事件，并可恢复原处理器。"""
 
 from __future__ import annotations
 
@@ -6,14 +6,8 @@ import signal
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
-from src.utils import configure_console_logging, configure_logging
-
 if TYPE_CHECKING:
     import asyncio
-
-    from aurora.config import AuroraConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,14 +16,6 @@ class InstalledSignal:
 
     candidate: signal.Signals
     previous: object
-
-
-def configure_project_logging(config: AuroraConfig) -> None:
-    """在其他运行时效果前应用项目日志配置。"""
-    runtime = config.get(RUNTIME_CONFIG)
-    logfile = config.project_root / resolve_directory(config.get(STORAGE_CONFIG).entries, "logs") / "aurora.log"
-    configure_console_logging(enabled=True, level=runtime.log_level)
-    configure_logging(runtime.log_level, logfile)
 
 
 def install_stop_handlers(stop: asyncio.Event) -> tuple[InstalledSignal, ...]:
