@@ -14,6 +14,7 @@ from src.tools.builtin import builtin_tools
     provides=ToolRegistryPort,
     requires=(WorldJournal, AgentCatalog),
     consumes=(TOOL_CONTRIBUTIONS,),
+    declares=(TOOL_CONTRIBUTIONS,),
 )
 def build(context: ModuleContext) -> ToolRegistryPort:
     journal = context.get(WorldJournal)

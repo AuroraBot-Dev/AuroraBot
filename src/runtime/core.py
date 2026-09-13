@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from src.contracts import (
         AgentCatalog,
         AgentTreeRunner,
+        FrontBinding,
         RuntimeConfig,
         TerminalConsole,
         TreeLaunchRequest,
@@ -43,6 +44,7 @@ class AuroraRuntime:
         console: TerminalConsole,
         world: WorldJournal,
         output: Callable[[str], None] = print,
+        front_bindings: tuple[FrontBinding, ...] = (),
     ) -> None:
         self.assembly = assembly
         self.settings = assembly.settings
@@ -52,6 +54,7 @@ class AuroraRuntime:
         self.console = console
         self.world = world
         self.output = output
+        self.front_bindings = front_bindings
         self.presenter = TreeTextPresenter(output)
         self.terminal = TerminalCommandDispatcher(self.run)
         self._trees: dict[str, AgentTree] = {}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 from src.contracts import (
+    FRONT_BINDINGS,
     TREE_LAUNCHER_BINDINGS,
     AgentCatalog,
     AgentTreeRunner,
@@ -36,6 +37,7 @@ def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print)
         console=assembly.get(TerminalConsole),
         world=assembly.get(WorldJournal),
         output=output,
+        front_bindings=assembly.contributions(FRONT_BINDINGS),
     )
     for bind in assembly.contributions(TREE_LAUNCHER_BINDINGS):
         bind(runtime)

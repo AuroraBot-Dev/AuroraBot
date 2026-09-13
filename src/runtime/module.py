@@ -12,6 +12,7 @@ from src.runtime.factory import RuntimeFactory, create_runtime
     provides=RuntimeFactory,
     requires=(AgentTreeRunner, AgentCatalog, TerminalConsole, WorldJournal),
     consumes=(TREE_LAUNCHER_BINDINGS,),
+    declares=(TREE_LAUNCHER_BINDINGS,),
 )
 def build(_context: ModuleContext) -> RuntimeFactory:
     return create_runtime

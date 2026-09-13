@@ -16,9 +16,30 @@ from src.kernel.discovery import (
     StaticSource,
 )
 from src.kernel.lifecycle import ManagedAssembly
-from src.kernel.resolve import Resolution, resolve
+from src.kernel.phase import (
+    ACTIVATE,
+    BUILTIN_PHASES,
+    CLOSE,
+    CONSTRUCT,
+    DRAIN,
+    PREPARE,
+    READY,
+    RUN,
+    Ordering,
+    Phase,
+    PhaseKind,
+)
+from src.kernel.resolve import PhaseStep, Resolution, resolve
 
 __all__ = [
+    "ACTIVATE",
+    "BUILTIN_PHASES",
+    "CLOSE",
+    "CONSTRUCT",
+    "DRAIN",
+    "PREPARE",
+    "READY",
+    "RUN",
     "Assembly",
     "AsyncCleanup",
     "BuiltinSource",
@@ -31,6 +52,10 @@ __all__ = [
     "ManagedAssembly",
     "ModuleContext",
     "ModuleSpec",
+    "Ordering",
+    "Phase",
+    "PhaseKind",
+    "PhaseStep",
     "Resolution",
     "StaticSource",
     "compose",

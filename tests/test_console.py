@@ -8,7 +8,18 @@ from typing import TYPE_CHECKING
 
 from aurora import load_config
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
-from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, WorldCommit, WorldCommitInput, WorldFrontier
+from src.contracts import (
+    FRONT_BINDINGS,
+    ChatMessage,
+    EnvironmentEvent,
+    Front,
+    FrontContext,
+    ModelRequest,
+    WorldCommit,
+    WorldCommitInput,
+    WorldFrontier,
+    WorldJournal,
+)
 from src.runtime import run_runtime
 
 if TYPE_CHECKING:
@@ -161,3 +172,79 @@ def test_project_headless_waits_only_for_shared_stop_event(configured_project: P
 
     assert runtime.runtime_status()["tree_count"] == 0
     assert output == []
+
+
+def test_headless_runs_contributed_non_interactive_front(configured_project: Path) -> None:
+    ran: list[str] = []
+
+    async def front(stop: asyncio.Event) -> None:
+        ran.append("front")
+        stop.set()
+
+    def bind(_context: object) -> Front:
+        return Front(front, interactive=False)
+
+    stop = asyncio.Event()
+    asyncio.run(
+        run_runtime(
+            load_config(configured_project),
+            FakeModel(),
+            headless=True,
+            stop_event=stop,
+            output=lambda _message: None,
+            contributions=((FRONT_BINDINGS, bind),),
+        )
+    )
+
+    assert ran == ["front"]
+
+
+def test_headless_skips_interactive_front(configured_project: Path) -> None:
+    ran: list[str] = []
+
+    async def front(stop: asyncio.Event) -> None:
+        ran.append("front")
+
+    def bind(_context: object) -> Front:
+        return Front(front, interactive=True)
+
+    stop = asyncio.Event()
+    stop.set()
+    asyncio.run(
+        run_runtime(
+            load_config(configured_project),
+            FakeModel(),
+            headless=True,
+            stop_event=stop,
+            output=lambda _message: None,
+            contributions=((FRONT_BINDINGS, bind),),
+        )
+    )
+
+    assert ran == []
+
+
+def test_contributed_front_reads_capabilities_by_declaration(configured_project: Path) -> None:
+    resolved: list[object] = []
+
+    def bind(context: FrontContext) -> Front:
+        resolved.append(context.get(WorldJournal))
+
+        async def front(stop: asyncio.Event) -> None:
+            stop.set()
+
+        return Front(front, interactive=False)
+
+    stop = asyncio.Event()
+    asyncio.run(
+        run_runtime(
+            load_config(configured_project),
+            FakeModel(),
+            headless=True,
+            stop_event=stop,
+            output=lambda _message: None,
+            contributions=((FRONT_BINDINGS, bind),),
+        )
+    )
+
+    assert len(resolved) == 1

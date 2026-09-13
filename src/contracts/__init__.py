@@ -24,8 +24,13 @@ from src.contracts.capabilities import (
 from src.contracts.config import EndpointConfig, EndpointsConfig, RuntimeConfig
 from src.contracts.console import TerminalControl, TerminalDispatcher, TerminalResponse
 from src.contracts.contributions import (
+    FRONT_BINDINGS,
     TOOL_CONTRIBUTIONS,
     TREE_LAUNCHER_BINDINGS,
+    Front,
+    FrontBinding,
+    FrontContext,
+    FrontIO,
     TreeLauncherBinding,
 )
 from src.contracts.kernel import ContributionKey, Settings
@@ -100,6 +105,7 @@ __all__ = [
     "CONSOLE_INPUT",
     "CONSOLE_SCOPE",
     "DELEGATE_TOOL",
+    "FRONT_BINDINGS",
     "MCP_APP_DISCONNECTED",
     "MCP_CATALOG_CHANGED",
     "MCP_EVENT_RECEIVED",
@@ -139,6 +145,10 @@ __all__ = [
     "EndpointConfig",
     "EndpointsConfig",
     "EnvironmentEvent",
+    "Front",
+    "FrontBinding",
+    "FrontContext",
+    "FrontIO",
     "McpAppSnapshot",
     "McpRuntime",
     "McpRuntimeSnapshot",
