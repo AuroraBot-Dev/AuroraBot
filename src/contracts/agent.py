@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from src.contracts.model import ChatMessage, ToolCall
 from src.contracts.world import ToolScopes, WorldFrontier
@@ -42,12 +42,6 @@ class TreeLaunchRequest:
             raise ValueError("TreeLaunchRequest requires a non-empty message")
         if self.caused_by is not None and not self.caused_by.strip():
             raise ValueError("TreeLaunchRequest caused_by must not be empty")
-
-
-class TreeLauncher(Protocol):
-    """接受一次 AgentTree 唤起请求的运行时端口。"""
-
-    async def launch_tree(self, request: TreeLaunchRequest) -> AgentTree: ...
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
-from src.contracts.console import TerminalControl, TerminalDispatcher, TerminalResponse
+from src.contracts.console import TerminalControl, TerminalResponse
+from src.contracts.pkgs.runtime import TerminalDispatcher
 
 __all__ = ["TerminalControl", "TerminalDispatcher", "TerminalResponse"]

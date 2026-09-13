@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from src.contracts import (
-    FRONT_BINDINGS,
-    TREE_LAUNCHER_BINDINGS,
-    AgentCatalog,
-    AgentTreeRunner,
-    RuntimeConfig,
-    TerminalConsole,
-    WorldJournal,
-)
+from src.contracts import FRONT_BINDINGS, TREE_LAUNCHER_BINDINGS, RuntimeConfig
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.console import TerminalConsole
+from src.contracts.pkgs.engine import AgentTreeRunner
+from src.contracts.pkgs.world import WorldJournal
 from src.runtime.core import AuroraRuntime
 
 if TYPE_CHECKING:

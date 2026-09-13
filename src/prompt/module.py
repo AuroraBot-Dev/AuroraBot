@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import PromptAssembler as PromptAssemblerPort
+from src.contracts.pkgs.prompt import PromptAssembler as PromptAssemblerPort
 from src.kernel import ModuleContext, module
 from src.prompt import PromptAssembler, PromptCatalog
 from src.prompt.config import PromptConfig, PromptsConfig

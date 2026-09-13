@@ -13,8 +13,6 @@ from src.contracts import (
     AgentTree,
     ChatMessage,
     DelegationRequest,
-    MemoryReader,
-    Model,
     ModelRequest,
     ToolCall,
     ToolOutput,
@@ -23,7 +21,6 @@ from src.contracts import (
     TreeStatus,
     WorldCommit,
     WorldFrontier,
-    WorldJournal,
     tree_scope,
 )
 from src.engine.world_effects import EngineWorldEffects, render_delta
@@ -34,7 +31,13 @@ _logger = get_logger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.contracts import AgentCatalog, PromptAssembler, ToolDefinition, ToolRegistry
+    from src.contracts import ToolDefinition
+    from src.contracts.pkgs.agents import AgentCatalog
+    from src.contracts.pkgs.ai import Model
+    from src.contracts.pkgs.memory import MemoryReader
+    from src.contracts.pkgs.prompt import PromptAssembler
+    from src.contracts.pkgs.tools import ToolRegistry
+    from src.contracts.pkgs.world import WorldJournal
 
 
 class AgentTreeRunner:

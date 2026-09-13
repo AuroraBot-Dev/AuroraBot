@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import WorldJournal, WorldReader, WorldWriter
+from src.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
 from src.kernel import ModuleContext, module
 from src.world import SqlAlchemyWorldJournal
 from src.world.config import StorageConfig, resolve_storage_directory

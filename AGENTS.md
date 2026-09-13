@@ -34,7 +34,7 @@ aurora/configuration/  每个 TOML 一个解析模块，引用 src/<pkg> 的配�
 aurora/config.py       按注册顺序合并 TOML 为只读 AuroraConfig；同时实现 src.contracts.Settings
 aurora/utils/          项目级进程、环境、日志、信号、平台、TOML 与包发现工具
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
-src/contracts/  AgentTree、ChatMessage、Model、Tool、能力协议与组合内核公共值对象
+src/contracts/  公共值对象、常量与贡献契约；跨包能力端口按提供方放在 src/contracts/pkgs/<pkg>.py
 src/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
 src/runtime/    Bot 进程门面与装配入口：发现源、门面工厂、终端命令分派与文本呈现
 src/agents/     不可变 AgentDefinition 目录与唯一解析
@@ -88,7 +88,8 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
 - 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/kernel ← src/runtime`；功能 src 包
   运行时只依赖 contracts、utils 与自身，跨包能力只允许类型检查期（TYPE_CHECKING）引用，真正的能力调用靠内核注入的契约实例
-  完成；`src ← aurora`；`src` 不导入 `aurora`。具体允许集由 `tests/test_dependency_boundaries.py` 固化。
+  完成；`src ← aurora`；`src` 不导入 `aurora`。依赖边界由 `tests/test_dependency_boundaries.py` 按约定校验：叶子包只依赖自身，
+  其他包可依赖 contracts 与 utils，机制包额外可依赖 kernel；新增能力包无需修改该测试。
 
 ## Current scope
 

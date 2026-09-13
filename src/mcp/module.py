@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from src.contracts import TOOL_CONTRIBUTIONS, Cadence, Settings, WorldJournal
-from src.contracts import McpRuntime as McpRuntimePort
+from src.contracts import TOOL_CONTRIBUTIONS, Settings
+from src.contracts.pkgs.cadence import Cadence
+from src.contracts.pkgs.mcp import McpRuntime as McpRuntimePort
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
 from src.mcp.config import AppsConfig, PlatformConfig, PlatformsConfig

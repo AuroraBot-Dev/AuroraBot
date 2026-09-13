@@ -7,20 +7,16 @@ from typing import TYPE_CHECKING, cast
 from src.agents.config import AgentConfig, AgentsConfig
 from src.ai.config import ProviderConfig, ProvidersConfig
 from src.cadence.config import CadenceConfig
-from src.contracts import (
-    AgentCatalog,
-    AgentTreeRunner,
-    EndpointConfig,
-    EndpointsConfig,
-    McpRuntime,
-    MemoryReader,
-    Model,
-    PromptAssembler,
-    RuntimeConfig,
-    TerminalConsole,
-    ToolRegistry,
-    WorldJournal,
-)
+from src.contracts import EndpointConfig, EndpointsConfig, RuntimeConfig
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.console import TerminalConsole
+from src.contracts.pkgs.engine import AgentTreeRunner
+from src.contracts.pkgs.mcp import McpRuntime
+from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.prompt import PromptAssembler
+from src.contracts.pkgs.tools import ToolRegistry
+from src.contracts.pkgs.world import WorldJournal
 from src.engine.config import EngineConfig
 from src.kernel import BuiltinSource, compose, resolve
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig

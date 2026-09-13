@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
 
 
 class TerminalControl(StrEnum):
@@ -18,7 +17,3 @@ class TerminalResponse:
     text: str | None = None
     control: TerminalControl = TerminalControl.NONE
     is_error: bool = False
-
-
-class TerminalDispatcher(Protocol):
-    async def dispatch_terminal(self, text: str) -> TerminalResponse: ...

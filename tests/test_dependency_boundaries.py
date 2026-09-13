@@ -6,32 +6,24 @@ from pathlib import Path
 from aurora.configuration import CONFIG_SPECS
 
 _ROOT = Path(__file__).parents[1]
-_SRC_BASE_ALLOWED = {
-    package: {f"src.{package}", "src.contracts", "src.utils"}
-    for package in (
-        "agents",
-        "prompt",
-        "tools",
-        "ai",
-        "console",
-        "cadence",
-        "engine",
-        "kernel",
-        "memory",
-        "mcp",
-        "runtime",
-        "world",
-    )
-}
-_SRC_BASE_ALLOWED.update(
-    {
-        "contracts": {"src.contracts"},
-        "utils": {"src.utils"},
-        "runtime": {"src.runtime", "src.contracts", "src.utils", "src.kernel"},
-    }
-)
+_LEAF_PACKAGES = frozenset({"contracts", "utils"})
+_MECHANISM_PACKAGES = frozenset({"kernel", "runtime"})
 _TYPE_ONLY_SRC: dict[str, set[str]] = {}
 _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
+
+
+def _base_allowed(package: str) -> set[str]:
+    """按约定推导一个 src 包运行时可依赖的 src 包集合。
+
+    叶子包只依赖自身；其他包可依赖 contracts 与 utils；机制包额外可依赖 kernel。
+    新增能力包无需修改本文件。
+    """
+    if package in _LEAF_PACKAGES:
+        return {f"src.{package}"}
+    allowed = {f"src.{package}", "src.contracts", "src.utils"}
+    if package in _MECHANISM_PACKAGES:
+        allowed.add("src.kernel")
+    return allowed
 
 
 def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
@@ -42,7 +34,7 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
     violations: list[str] = []
     for path in (_ROOT / "src").rglob("*.py"):
         package = path.relative_to(_ROOT / "src").parts[0]
-        base = _SRC_BASE_ALLOWED[package]
+        base = _base_allowed(package)
         if path.name == "module.py":
             base = base | {"src.kernel"}
         type_only = base | _TYPE_ONLY_SRC.get(package, frozenset())
@@ -56,6 +48,13 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
                 tag = "typecheck" if guarded else "runtime"
                 violations.append(f"{path.relative_to(_ROOT)} {tag} imports {module}")
     assert violations == []
+
+
+def test_dependency_convention_admits_new_capability_packages() -> None:
+    assert _base_allowed("tts") == {"src.tts", "src.contracts", "src.utils"}
+    assert _base_allowed("contracts") == {"src.contracts"}
+    assert _base_allowed("utils") == {"src.utils"}
+    assert _base_allowed("runtime") == {"src.runtime", "src.contracts", "src.utils", "src.kernel"}
 
 
 def test_removed_src_subpackages_do_not_return_as_empty_scaffolding() -> None:

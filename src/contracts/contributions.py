@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     import asyncio
     from collections.abc import Awaitable, Callable
 
-    from src.contracts.agent import TreeLauncher
     from src.contracts.kernel import Settings
+    from src.contracts.pkgs.runtime import TreeLauncher
 
 
 class TreeLauncherBinding(Protocol):

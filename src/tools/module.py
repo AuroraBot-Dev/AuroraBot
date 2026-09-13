@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from src.contracts import TOOL_CONTRIBUTIONS, AgentCatalog, WorldJournal
-from src.contracts import ToolRegistry as ToolRegistryPort
+from src.contracts import TOOL_CONTRIBUTIONS
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.tools import ToolRegistry as ToolRegistryPort
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 from src.tools import ToolRegistry
 from src.tools.builtin import builtin_tools

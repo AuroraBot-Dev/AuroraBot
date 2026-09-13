@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
-from src.contracts import MemoryScopeSnapshot, MemorySnapshot, WorldReader
+from src.contracts import MemoryScopeSnapshot, MemorySnapshot
 from src.utils import get_logger
 from src.utils.patterns import pattern_matches
+
+if TYPE_CHECKING:
+    from src.contracts.pkgs.world import WorldReader
 
 _logger = get_logger(__name__)
 

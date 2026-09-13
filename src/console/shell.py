@@ -15,7 +15,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
 from src.console.models import TerminalControl
-from src.contracts import CONSOLE_INPUT, CONSOLE_SCOPE, WorldFrontier, WorldWriter
+from src.contracts import CONSOLE_INPUT, CONSOLE_SCOPE, WorldFrontier
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from prompt_toolkit.output import Output
 
     from src.console.models import TerminalDispatcher
+    from src.contracts.pkgs.world import WorldWriter
 
 
 @dataclass(frozen=True, slots=True)

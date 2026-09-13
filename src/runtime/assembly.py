@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import TOOL_CONTRIBUTIONS, McpRuntime, Model, Tool, WorldJournal
+from src.contracts import TOOL_CONTRIBUTIONS, Tool
+from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.mcp import McpRuntime
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import (
     BuiltinSource,
     DirectorySource,

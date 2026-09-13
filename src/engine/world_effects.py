@@ -29,7 +29,8 @@ from src.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from src.contracts import AgentNode, AgentTree, ToolCall, ToolOutput, WorldCommit, WorldDeltaPage, WorldJournal
+    from src.contracts import AgentNode, AgentTree, ToolCall, ToolOutput, WorldCommit, WorldDeltaPage
+    from src.contracts.pkgs.world import WorldJournal
 
 _TOOL_EVENT_KINDS = {
     ToolStatus.SUCCEEDED: TOOL_SUCCEEDED,

@@ -1,28 +1,20 @@
-"""AuroraBot 最小核心的公共值对象与端口。"""
+"""AuroraBot 最小核心的公共值对象、常量与贡献契约。
+
+跨包能力端口按提供方放在 ``src.contracts.pkgs.<pkg>``，消费方直接从那里导入。
+"""
+
+from __future__ import annotations
 
 from src.contracts.agent import (
     AgentDefinition,
     AgentNode,
     AgentStatus,
     AgentTree,
-    TreeLauncher,
     TreeLaunchRequest,
     TreeStatus,
 )
-from src.contracts.capabilities import (
-    AgentCatalog,
-    AgentTreeRunner,
-    Cadence,
-    McpAppSnapshot,
-    McpRuntime,
-    McpRuntimeSnapshot,
-    PromptAssembler,
-    PromptCatalog,
-    TerminalConsole,
-    ToolRegistry,
-)
 from src.contracts.config import EndpointConfig, EndpointsConfig, RuntimeConfig
-from src.contracts.console import TerminalControl, TerminalDispatcher, TerminalResponse
+from src.contracts.console import TerminalControl, TerminalResponse
 from src.contracts.contributions import (
     FRONT_BINDINGS,
     TOOL_CONTRIBUTIONS,
@@ -34,13 +26,7 @@ from src.contracts.contributions import (
     TreeLauncherBinding,
 )
 from src.contracts.kernel import ContributionKey, Settings
-from src.contracts.model import (
-    ChatMessage,
-    ChatRole,
-    Model,
-    ModelRequest,
-    ToolCall,
-)
+from src.contracts.model import ChatMessage, ChatRole, ModelRequest, ToolCall
 from src.contracts.tool import (
     BUILTIN_TOOL_NAMES,
     DELEGATE_TOOL,
@@ -82,7 +68,6 @@ from src.contracts.world import (
     TREE_STARTED,
     WORLD_DELTA_DELIVERED,
     EnvironmentEvent,
-    MemoryReader,
     MemoryScopeSnapshot,
     MemorySnapshot,
     ToolScopes,
@@ -91,10 +76,7 @@ from src.contracts.world import (
     WorldCommitInput,
     WorldDeltaPage,
     WorldFrontier,
-    WorldJournal,
-    WorldReader,
     WorldStreamPage,
-    WorldWriter,
     mcp_scope,
     tree_scope,
 )
@@ -131,13 +113,10 @@ __all__ = [
     "WORLD_DELTA_DELIVERED",
     "WORLD_READ_TOOL",
     "WORLD_TREES_TOOL",
-    "AgentCatalog",
     "AgentDefinition",
     "AgentNode",
     "AgentStatus",
     "AgentTree",
-    "AgentTreeRunner",
-    "Cadence",
     "ChatMessage",
     "ChatRole",
     "ContributionKey",
@@ -149,44 +128,30 @@ __all__ = [
     "FrontBinding",
     "FrontContext",
     "FrontIO",
-    "McpAppSnapshot",
-    "McpRuntime",
-    "McpRuntimeSnapshot",
-    "MemoryReader",
     "MemoryScopeSnapshot",
     "MemorySnapshot",
-    "Model",
     "ModelRequest",
-    "PromptAssembler",
-    "PromptCatalog",
     "RuntimeConfig",
     "ScopedTool",
     "Settings",
-    "TerminalConsole",
     "TerminalControl",
-    "TerminalDispatcher",
     "TerminalResponse",
     "Tool",
     "ToolCall",
     "ToolDefinition",
     "ToolOutput",
-    "ToolRegistry",
     "ToolResult",
     "ToolScopes",
     "ToolStatus",
     "TreeActivity",
     "TreeLaunchRequest",
-    "TreeLauncher",
     "TreeLauncherBinding",
     "TreeStatus",
     "WorldCommit",
     "WorldCommitInput",
     "WorldDeltaPage",
     "WorldFrontier",
-    "WorldJournal",
-    "WorldReader",
     "WorldStreamPage",
-    "WorldWriter",
     "is_valid_mcp_tool_id",
     "is_valid_tool_id",
     "mcp_scope",

@@ -7,14 +7,10 @@ from typing import TYPE_CHECKING
 
 from src.cadence import DEFAULT_REACTIVE_RULES, Cadence
 from src.cadence.config import CadenceConfig
-from src.contracts import (
-    TREE_LAUNCHER_BINDINGS,
-    AgentCatalog,
-    WorldJournal,
-)
-from src.contracts import (
-    Cadence as CadencePort,
-)
+from src.contracts import TREE_LAUNCHER_BINDINGS
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.cadence import Cadence as CadencePort
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:

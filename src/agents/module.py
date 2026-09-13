@@ -9,9 +9,7 @@ from src.contracts import (
     TOOL_CONTRIBUTIONS,
     AgentDefinition,
 )
-from src.contracts import (
-    AgentCatalog as AgentCatalogPort,
-)
+from src.contracts.pkgs.agents import AgentCatalog as AgentCatalogPort
 from src.kernel import ModuleContext, module
 from src.utils import resolve_names
 

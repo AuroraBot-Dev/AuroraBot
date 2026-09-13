@@ -36,7 +36,8 @@ _logger = get_logger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from src.contracts import Tool, WorldWriter
+    from src.contracts import Tool
+    from src.contracts.pkgs.world import WorldWriter
     from src.mcp.tool import McpToolBinding
 
 _EVENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,159}")

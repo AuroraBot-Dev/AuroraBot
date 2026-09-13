@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from src.contracts import MemoryReader, WorldJournal
+from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 from src.memory import Memory
 from src.memory.config import MemoryConfig

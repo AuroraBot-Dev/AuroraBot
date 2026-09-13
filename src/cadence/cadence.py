@@ -7,18 +7,15 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from src.contracts import (
-    MCP_EVENT_RECEIVED,
-    TreeLauncher,
-    TreeLaunchRequest,
-    WorldCommit,
-    WorldFrontier,
-    WorldReader,
-    WorldWriter,
-)
+from src.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldCommit, WorldFrontier
 from src.utils import get_logger
+
+if TYPE_CHECKING:
+    from src.contracts.pkgs.runtime import TreeLauncher
+    from src.contracts.pkgs.world import WorldReader, WorldWriter
 
 _logger = get_logger(__name__)
 

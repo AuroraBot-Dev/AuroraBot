@@ -4,20 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts import (
-    DELEGATE_TOOL,
-    AgentCatalog,
-    EndpointsConfig,
-    MemoryReader,
-    Model,
-    PromptAssembler,
-    RuntimeConfig,
-    ToolRegistry,
-    WorldJournal,
-)
-from src.contracts import (
-    AgentTreeRunner as AgentTreeRunnerPort,
-)
+from src.contracts import DELEGATE_TOOL, EndpointsConfig, RuntimeConfig
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.engine import AgentTreeRunner as AgentTreeRunnerPort
+from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.prompt import PromptAssembler
+from src.contracts.pkgs.tools import ToolRegistry
+from src.contracts.pkgs.world import WorldJournal
 from src.engine import AgentTreeRunner
 from src.engine.config import EngineConfig
 from src.kernel import ModuleContext, module

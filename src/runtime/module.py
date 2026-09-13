@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from src.contracts import TREE_LAUNCHER_BINDINGS, AgentCatalog, AgentTreeRunner, TerminalConsole, WorldJournal
+from src.contracts import TREE_LAUNCHER_BINDINGS
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.console import TerminalConsole
+from src.contracts.pkgs.engine import AgentTreeRunner
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 from src.runtime.factory import RuntimeFactory, create_runtime
 

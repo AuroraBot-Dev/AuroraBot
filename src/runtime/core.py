@@ -17,15 +17,11 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.contracts import (
-        AgentCatalog,
-        AgentTreeRunner,
-        FrontBinding,
-        RuntimeConfig,
-        TerminalConsole,
-        TreeLaunchRequest,
-        WorldJournal,
-    )
+    from src.contracts import FrontBinding, RuntimeConfig, TreeLaunchRequest
+    from src.contracts.pkgs.agents import AgentCatalog
+    from src.contracts.pkgs.console import TerminalConsole
+    from src.contracts.pkgs.engine import AgentTreeRunner
+    from src.contracts.pkgs.world import WorldJournal
     from src.kernel import Assembly
 
 _logger = get_logger(__name__)

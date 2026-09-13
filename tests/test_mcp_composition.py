@@ -15,19 +15,18 @@ from src.contracts import (
     TREE_LAUNCHER_BINDINGS,
     ChatMessage,
     EnvironmentEvent,
-    McpRuntime,
-    Model,
     ModelRequest,
-    TreeLauncher,
     TreeLaunchRequest,
     TreeStatus,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
     WorldFrontier,
-    WorldJournal,
     WorldStreamPage,
 )
+from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.mcp import McpRuntime
+from src.contracts.pkgs.world import WorldJournal
 from src.kernel import BuiltinSource, compose, module
 from src.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemoteTool, McpToolsPage, prepare_mcp
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
@@ -40,6 +39,7 @@ if TYPE_CHECKING:
 
     from aurora.config import AuroraConfig
     from src.contracts import TreeActivity
+    from src.contracts.pkgs.runtime import TreeLauncher
     from src.kernel import ModuleContext
     from src.mcp.client import InboundEventHandler
 

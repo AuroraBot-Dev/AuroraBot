@@ -18,8 +18,8 @@ from src.contracts import (
     WorldCommit,
     WorldCommitInput,
     WorldFrontier,
-    WorldJournal,
 )
+from src.contracts.pkgs.world import WorldJournal
 from src.runtime import run_runtime
 
 if TYPE_CHECKING:

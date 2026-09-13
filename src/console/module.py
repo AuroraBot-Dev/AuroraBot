@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.console import TerminalConsole
-from src.contracts import FRONT_BINDINGS, Front, FrontContext, FrontIO, TerminalDispatcher, WorldWriter
-from src.contracts import TerminalConsole as TerminalConsolePort
+from src.contracts import FRONT_BINDINGS, Front, FrontContext, FrontIO
+from src.contracts.pkgs.console import TerminalConsole as TerminalConsolePort
+from src.contracts.pkgs.runtime import TerminalDispatcher
+from src.contracts.pkgs.world import WorldWriter
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:

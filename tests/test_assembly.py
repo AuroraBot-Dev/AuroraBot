@@ -18,14 +18,8 @@ from src.agents.config import AgentsConfig
 from src.ai import LiteLLMModelGateway
 from src.contracts import (
     MCP_EVENT_RECEIVED,
-    AgentCatalog,
-    AgentTreeRunner,
-    Cadence,
     ChatMessage,
-    MemoryReader,
-    Model,
     ModelRequest,
-    PromptAssembler,
     Tool,
     ToolCall,
     ToolDefinition,
@@ -34,6 +28,12 @@ from src.contracts import (
     TreeStatus,
     WorldFrontier,
 )
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.cadence import Cadence
+from src.contracts.pkgs.engine import AgentTreeRunner
+from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.prompt import PromptAssembler
 from src.runtime import assemble_runtime
 
 EXPECTED_MAX_DEPTH = 4

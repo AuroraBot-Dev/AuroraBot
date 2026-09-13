@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from src.contracts import (
     WORLD_READ_TOOL,
@@ -14,8 +15,10 @@ from src.contracts import (
     ToolScopes,
     ToolStatus,
     WorldCommit,
-    WorldJournal,
 )
+
+if TYPE_CHECKING:
+    from src.contracts.pkgs.world import WorldJournal
 
 _MAX_READ_LIMIT = 100
 _MAX_TREES_LIMIT = 256

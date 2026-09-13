@@ -1,10 +1,10 @@
-"""Bot 世界提交、观察前沿与存储端口。"""
+"""Bot 世界提交与观察前沿的值对象与常量。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -218,63 +218,3 @@ class ToolScopes:
         object.__setattr__(self, "publish", frozenset(self.publish))
         if any(not scope.strip() for scope in (*self.observe, *self.publish)):
             raise ValueError("ToolScopes must not contain empty scopes")
-
-
-class WorldReader(Protocol):
-    """世界线的只读端口；供 prompt、memory、cadence 等消费者使用。"""
-
-    async def cursor(self) -> int: ...
-
-    async def head(self, scopes: frozenset[str]) -> WorldFrontier: ...
-
-    async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage: ...
-
-    async def active_scopes(self, since: datetime) -> tuple[str, ...]: ...
-
-    async def commit(self, commit_id: str) -> WorldCommit | None: ...
-
-    async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]: ...
-
-    async def stream(self, after: int, limit: int) -> WorldStreamPage: ...
-
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]: ...
-
-
-class MemoryReader(Protocol):
-    """按活跃 scope 提供世界记忆快照的只读端口。"""
-
-    async def recall(
-        self,
-        *,
-        now: datetime | None = None,
-        scopes: frozenset[str] | None = None,
-    ) -> MemorySnapshot: ...
-
-
-class WorldWriter(Protocol):
-    """世界线的只写端口；供 console、mcp、cadence 等生产者使用。"""
-
-    async def append_event(self, event: EnvironmentEvent) -> WorldCommit: ...
-
-    async def append_commit(
-        self,
-        *,
-        commit_id: str,
-        kind: str,
-        source: str,
-        summary: str,
-        scopes: frozenset[str],
-        based_on: WorldFrontier,
-        data: Mapping[str, Any],
-        occurred_at: datetime | None = None,
-    ) -> WorldCommit: ...
-
-    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]: ...
-
-
-class WorldJournal(WorldReader, WorldWriter, Protocol):
-    """世界事实与效果因果的唯一持久化端口。"""
-
-    async def initialize(self) -> None: ...
-
-    async def close(self) -> None: ...

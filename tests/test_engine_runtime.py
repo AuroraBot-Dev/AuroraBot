@@ -15,7 +15,6 @@ from src.contracts import (
     AgentTree,
     ChatMessage,
     EnvironmentEvent,
-    Model,
     ModelRequest,
     Tool,
     ToolCall,
@@ -27,7 +26,6 @@ from src.contracts import (
     TreeStatus,
     WorldCommit,
     WorldFrontier,
-    WorldJournal,
 )
 from src.engine import AgentTreeRunner
 from src.prompt import PromptAssembler, PromptCatalog
@@ -36,6 +34,9 @@ from src.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from src.contracts.pkgs.ai import Model
+    from src.contracts.pkgs.world import WorldJournal
 
 EXPECTED_DELEGATION_NODES = 2
 _SECOND_REQUEST = 2

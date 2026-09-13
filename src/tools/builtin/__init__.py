@@ -9,7 +9,9 @@ from src.tools.builtin.wait import WAIT_TOOL, WaitTool
 from src.tools.builtin.world import WORLD_READ_TOOL, WORLD_TREES_TOOL, WorldReadTool, WorldTreesTool
 
 if TYPE_CHECKING:
-    from src.contracts import AgentCatalog, Tool, WorldJournal
+    from src.contracts import Tool
+    from src.contracts.pkgs.agents import AgentCatalog
+    from src.contracts.pkgs.world import WorldJournal
 
 __all__ = [
     "DELEGATE_TOOL",

@@ -5,14 +5,16 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
-from src.contracts import FrontIO, TerminalDispatcher
+from src.contracts import FrontIO
+from src.contracts.pkgs.runtime import TerminalDispatcher
 from src.runtime.assembly import compose_runtime
 from src.utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from src.contracts import Model, Settings, Tool
+    from src.contracts import Settings, Tool
+    from src.contracts.pkgs.ai import Model
     from src.kernel import ContributionBinding, InstanceBinding
     from src.runtime.core import AuroraRuntime
 

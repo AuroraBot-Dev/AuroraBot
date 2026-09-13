@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
 from src.ai.config import ProvidersConfig
-from src.contracts import EndpointsConfig, Model
+from src.contracts import EndpointsConfig
+from src.contracts.pkgs.ai import Model
 from src.kernel import ModuleContext, module
 
 
