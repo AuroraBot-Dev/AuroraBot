@@ -83,6 +83,7 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 [tool.ruff.lint.per-file-ignores]
 "aurora/__init__.py" = ["PLC0415"]
 "aurora/commands/start.py" = ["PLC0415"]
+"aurora/utils/logging.py" = ["PLC0415"]
 "src/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]

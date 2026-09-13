@@ -450,6 +450,94 @@ def test_setup_skips_node_dependencies_without_process(
     assert "未找到 pnpm" in capsys.readouterr().err
 
 
+def test_setup_config_flag_only_copies_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / "config.example" / "runtime.toml").write_text("x = 1\n", encoding="utf-8")
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(setup, "run_process", fake_run)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.COMMAND["name"], "--config"])
+
+    assert setup.execute(arguments) == 0
+    assert (tmp_path / "config" / "runtime.toml").read_text(encoding="utf-8") == "x = 1\n"
+    assert not (tmp_path / ".env").exists()
+    assert calls == []
+
+
+def test_setup_python_flag_only_syncs_dependencies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(setup, "run_process", fake_run)
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.COMMAND["name"], "--python"])
+
+    assert setup.execute(arguments) == 0
+    assert calls == [(("uv", "sync"), tmp_path)]
+
+
+def test_setup_docs_flag_initializes_only_docs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(setup, "run_process", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    arguments = build_parser().parse_args(["--root", str(tmp_path), setup.COMMAND["name"], "--docs"])
+
+    assert setup.execute(arguments) == 0
+    assert calls == [
+        (("git", "submodule", "update", "--init", "docs"), tmp_path),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "docs"),
+    ]
+
+
+def test_setup_combines_selected_flags_in_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "config.example").mkdir()
+    (tmp_path / "config.example" / "runtime.toml").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".env.example").write_text("DEEPSEEK_API_KEY=\n", encoding="utf-8")
+    calls: list[tuple[tuple[str, ...], Path]] = []
+
+    def fake_run(command: tuple[str, ...], root: Path) -> int:
+        calls.append((command, root))
+        return 0
+
+    monkeypatch.setattr(setup, "run_process", fake_run)
+    monkeypatch.setattr(setup.shutil, "which", lambda _name: "/usr/bin/pnpm")
+    arguments = build_parser().parse_args(
+        ["--root", str(tmp_path), setup.COMMAND["name"], "--python", "--env", "--panel"]
+    )
+
+    assert setup.execute(arguments) == 0
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "DEEPSEEK_API_KEY=\n"
+    assert not (tmp_path / "config").exists()
+    assert calls == [
+        (("uv", "sync"), tmp_path),
+        (("git", "submodule", "update", "--init", "panel"), tmp_path),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "panel"),
+    ]
+
+
 def test_process_boundary_reports_failure_and_interrupt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

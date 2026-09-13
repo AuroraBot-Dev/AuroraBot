@@ -6,7 +6,6 @@ import asyncio
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.configuration.platforms import PLATFORMS_CONFIG
 from aurora.utils.environment import load_project_env
 from aurora.utils.logging import configure_project_logging
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_INTERRUPTED
@@ -37,6 +36,8 @@ def _load_configuration(project_root: Path) -> AuroraConfig:
 
 
 def _console_enabled(configuration: AuroraConfig) -> bool:
+    from aurora.configuration.platforms import PLATFORMS_CONFIG
+
     for platform in configuration.get(PLATFORMS_CONFIG).platforms:
         if platform.id == _CONSOLE_PLATFORM_ID:
             return platform.enabled
