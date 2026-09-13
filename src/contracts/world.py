@@ -10,29 +10,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
-# 稳定的世界 scope 与事件 kind 常量；scope 的实际归属由提交方决定，
-# world 只负责校验、编号与追加。
-CONSOLE_SCOPE = "aurora:console"
-
-TREE_STARTED = "engine.tree.started"
-TREE_COMPLETED = "engine.tree.completed"
-TREE_FAILED = "engine.tree.failed"
-NODE_SPAWNED = "engine.node.spawned"
-NODE_COMPLETED = "engine.node.completed"
-NODE_FAILED = "engine.node.failed"
-MODEL_REQUESTED = "engine.model.requested"
-MODEL_COMPLETED = "engine.model.completed"
-MODEL_FAILED = "engine.model.failed"
-TOOL_REQUESTED = "tool.requested"
-TOOL_SUCCEEDED = "tool.succeeded"
-TOOL_FAILED = "tool.failed"
-TOOL_UNKNOWN = "tool.unknown"
-OUTPUT_REQUESTED = "output.requested"
-OUTPUT_COMMITTED = "output.committed"
-WORLD_DELTA_DELIVERED = "engine.world.delta_delivered"
-CONSOLE_INPUT = "console.input"
-MCP_APP_DISCONNECTED = "mcp.app.disconnected"
-MCP_CATALOG_CHANGED = "mcp.catalog.changed"
+# 跨包观察的业务事件 kind；各包自己的事件 kind 定义在各自包内，
+# scope 的实际归属由提交方决定，world 只负责校验、编号与追加。
 MCP_EVENT_RECEIVED = "mcp.event.received"
 
 

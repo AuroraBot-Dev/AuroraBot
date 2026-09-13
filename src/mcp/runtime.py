@@ -11,13 +11,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from src.contracts import (
-    MCP_APP_DISCONNECTED,
-    MCP_CATALOG_CHANGED,
-    MCP_EVENT_RECEIVED,
-    WorldFrontier,
-)
+from src.contracts import MCP_EVENT_RECEIVED, WorldFrontier
 from src.mcp.client import McpClientFactory, McpClientPort, SdkMcpClientFactory
+from src.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
 from src.mcp.models import (
     McpAppSnapshot,
     McpAppSpec,

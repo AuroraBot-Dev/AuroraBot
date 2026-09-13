@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.contracts import (
+from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontier
+from src.engine.events import (
     NODE_COMPLETED,
     NODE_FAILED,
     NODE_SPAWNED,
@@ -19,10 +20,6 @@ from src.contracts import (
     TREE_FAILED,
     TREE_STARTED,
     WORLD_DELTA_DELIVERED,
-    ToolScopes,
-    ToolStatus,
-    WorldCommitInput,
-    WorldFrontier,
 )
 from src.engine.scopes import tree_scope
 

@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from src.contracts import (
-    MCP_APP_DISCONNECTED,
-    MCP_CATALOG_CHANGED,
     MCP_EVENT_RECEIVED,
     EnvironmentEvent,
     ToolCall,
@@ -31,6 +29,7 @@ from src.mcp import (
     McpTransport,
     prepare_mcp,
 )
+from src.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
 from src.mcp.scopes import mcp_scope
 
 if TYPE_CHECKING:

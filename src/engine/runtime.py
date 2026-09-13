@@ -5,10 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.contracts import (
-    MODEL_COMPLETED,
-    MODEL_FAILED,
-    MODEL_REQUESTED,
-    TOOL_FAILED,
     AgentNode,
     AgentTree,
     ChatMessage,
@@ -22,6 +18,7 @@ from src.contracts import (
     WorldCommit,
     WorldFrontier,
 )
+from src.engine.events import MODEL_COMPLETED, MODEL_FAILED, MODEL_REQUESTED, TOOL_FAILED
 from src.engine.scopes import tree_scope
 from src.engine.world_effects import EngineWorldEffects, render_delta
 from src.utils import get_logger

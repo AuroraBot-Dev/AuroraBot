@@ -1,4 +1,4 @@
-"""MCP 业务事件扩展与启动门闩。"""
+"""MCP 业务事件扩展、进程运行期事件 kind 与启动门闩。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 
 WORLD_EVENTS_EXTENSION = "org.aurorabot/world-events"
 WORLD_EVENT_NOTIFICATION = "notifications/org.aurorabot/world-events/event"
+
+# 进程运行期提交的生命周期事件 kind；mcp.event.received 是跨包业务事件，定义在 src.contracts。
+MCP_APP_DISCONNECTED = "mcp.app.disconnected"
+MCP_CATALOG_CHANGED = "mcp.catalog.changed"
 
 type InboundEventHandler = Callable[[McpInboundEvent], Awaitable[None]]
 
@@ -108,6 +112,8 @@ def inbound_event(params: WorldEventParams) -> McpInboundEvent:
 
 
 __all__ = [
+    "MCP_APP_DISCONNECTED",
+    "MCP_CATALOG_CHANGED",
     "WORLD_EVENTS_EXTENSION",
     "WORLD_EVENT_NOTIFICATION",
     "InboundEventGate",

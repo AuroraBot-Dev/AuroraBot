@@ -14,8 +14,9 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear as clear_terminal
 
+from src.console.events import CONSOLE_INPUT, CONSOLE_SCOPE
 from src.console.models import TerminalControl
-from src.contracts import CONSOLE_INPUT, CONSOLE_SCOPE, WorldFrontier
+from src.contracts import WorldFrontier
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
