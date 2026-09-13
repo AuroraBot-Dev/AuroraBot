@@ -183,24 +183,34 @@ def test_start_maps_keyboard_interrupt_to_exit_code(monkeypatch: pytest.MonkeyPa
     assert run([start.COMMAND["name"], "--headless"]) == EXIT_INTERRUPTED
 
 
-def test_config_overview_lists_registered_sources_with_status(
+def test_config_overview_lists_registered_sources_without_loading(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert run(["--root", str(configured_project), config.COMMAND["name"]]) == 0
     listing = capsys.readouterr().out
+    assert re.search(r"^\| runtime\s+\| config/runtime\.toml\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| providers\s+\| config/providers\.toml\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| endpoints\s+\| config/endpoints\.toml\s+\|$", listing, re.MULTILINE)
+    assert "状态" not in listing
+
+
+def test_config_overview_check_reports_status(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "--check"]) == 0
+    listing = capsys.readouterr().out
     assert re.search(r"^\| runtime\s+\| config/runtime\.toml\s+\| 正常\s+\|$", listing, re.MULTILINE)
-    assert re.search(r"^\| providers\s+\| config/providers\.toml\s+\| 正常\s+\|$", listing, re.MULTILINE)
-    assert re.search(r"^\| endpoints\s+\| config/endpoints\.toml\s+\| 正常\s+\|$", listing, re.MULTILINE)
 
 
-def test_config_overview_reports_broken_source(
+def test_config_overview_check_reports_broken_source(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     (configured_project / "config" / "runtime.toml").write_text('[runtime]\nprofile = "prod"\n', encoding="utf-8")
 
-    assert run(["--root", str(configured_project), config.COMMAND["name"]]) == EXIT_CONFIG_ERROR
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "--check"]) == EXIT_CONFIG_ERROR
     assert "错误：" in capsys.readouterr().out
 
 
@@ -234,17 +244,14 @@ def test_config_command_rejects_unknown_name(
     assert "未知配置：unknown" in capsys.readouterr().err
 
 
-def test_config_command_reports_load_error(
-    monkeypatch: pytest.MonkeyPatch,
+def test_config_detail_reports_invalid_source(
+    configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fail_load(_root: Path) -> None:
-        raise ValueError("字段无效")
+    (configured_project / "config" / "runtime.toml").write_text('[runtime]\nprofile = "prod"\n', encoding="utf-8")
 
-    monkeypatch.setattr(config, "load_config", fail_load)
-
-    assert run([config.COMMAND["name"], "runtime"]) == EXIT_CONFIG_ERROR
-    assert "配置加载失败：字段无效" in capsys.readouterr().err
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime"]) == EXIT_CONFIG_ERROR
+    assert "配置加载失败" in capsys.readouterr().err
 
 
 def test_config_raw_reports_unreadable_source_file(

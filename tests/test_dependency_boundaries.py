@@ -77,6 +77,7 @@ def test_each_project_toml_has_one_registered_configuration_module() -> None:
 
     assert toml_names == module_names == registered_names
     assert len(CONFIG_SPECS) == len(registered_names)
+    assert {spec.path for spec in CONFIG_SPECS} == {f"config/{name}.toml" for name in registered_names}
 
 
 def test_runtime_core_does_not_store_unrelated_capabilities() -> None:
