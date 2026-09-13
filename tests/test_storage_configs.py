@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora import load_config
-from aurora.config import assemble_config
-from aurora.configuration.storage import STORAGE_CONFIG, StorageEntry, resolve_directory
+from aurora.configs.storage import STORAGE_CONFIG, StorageEntry, resolve_directory
+from aurora.configurator import assemble_config
 
 if TYPE_CHECKING:
     from pathlib import Path

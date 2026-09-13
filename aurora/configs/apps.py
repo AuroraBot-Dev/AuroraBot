@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from aurora.config import ConfigSpec
+from aurora.contracts.config import ConfigSpec
 from aurora.utils.toml import (
     boolean,
     check_unique_items,

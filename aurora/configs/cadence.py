@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurora.config import (
+from aurora.contracts.config import (
     ConfigSpec,
     TableShape,
     boolean_field,

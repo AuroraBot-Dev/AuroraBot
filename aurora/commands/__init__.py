@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from aurora.commander import CommandSpec, SubcommandSpec, build_registry
+from aurora.commander import build_registry
+from aurora.contracts.command import CommandSpec, SubcommandSpec
 from aurora.utils.modules import discover_modules
 
 if TYPE_CHECKING:
     from types import ModuleType
 
-    from aurora.commander import CommandBinding
+    from aurora.contracts.command import CommandBinding
 
 
 def _command_binding(module: ModuleType) -> CommandBinding:

@@ -1,4 +1,8 @@
-"""配置组合根：按声明式规格合并项目配置成一个只读配置对象。"""
+"""配置契约：声明式字段、形状、规格与合并后的只读配置值对象。
+
+供 ``aurora.configs`` 各解析模块与 ``aurora.configurator`` 装配逻辑共享；
+TOML 字段读取与 ``ConfigSpec.load`` 只依赖 ``aurora.utils.toml``，不含配置发现与合并顺序。
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ from aurora.utils.toml import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
     from pathlib import Path
 
     from aurora.utils.toml import TomlTable
@@ -245,22 +249,3 @@ class AuroraConfig:
             if source.name == name:
                 return source
         raise KeyError(f"配置尚未注册：{name}")
-
-
-def assemble_config(project_root: Path, specs: Iterable[ConfigSpec[Any]]) -> AuroraConfig:
-    """按声明式规格读取全部 TOML 并生成只读配置对象。"""
-    values: dict[ConfigSpec[object], object] = {}
-    sources: list[ConfigSource] = []
-    names: set[str] = set()
-    paths: set[str] = set()
-    for spec in specs:
-        if spec.name in names:
-            raise ValueError(f"配置重复注册：{spec.name}")
-        if spec.path in paths:
-            raise ValueError(f"配置文件重复注册：{spec.path}")
-        names.add(spec.name)
-        paths.add(spec.path)
-        sources.append(ConfigSource(spec.name, spec.path))
-        stored = cast("ConfigSpec[object]", spec)
-        values[stored] = spec.load(project_root)
-    return AuroraConfig(values, tuple(sources), project_root)

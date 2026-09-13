@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 
 from aurora import AuroraConfig, load_config
-from aurora.configuration.agents import AGENTS_CONFIG
-from aurora.configuration.cadence import CADENCE_CONFIG
-from aurora.configuration.engine import ENGINE_CONFIG
-from aurora.configuration.memory import MEMORY_CONFIG
-from aurora.configuration.providers import PROVIDERS_CONFIG
-from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.configs.agents import AGENTS_CONFIG
+from aurora.configs.cadence import CADENCE_CONFIG
+from aurora.configs.engine import ENGINE_CONFIG
+from aurora.configs.memory import MEMORY_CONFIG
+from aurora.configs.providers import PROVIDERS_CONFIG
+from aurora.configs.runtime import RUNTIME_CONFIG
 from src.agents.config import AgentsConfig
 from src.ai import LiteLLMModelGateway
 from src.ai.config import ProvidersConfig
@@ -59,20 +59,20 @@ class FakeModel:
         return ChatMessage.assistant("done")
 
 
-def test_project_configuration_builds_complete_runtime(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    runtime_configuration = configuration.get(RUNTIME_CONFIG)
-    definitions = configuration.get(AGENTS_CONFIG).agents
-    root_definition = next(item for item in definitions if item.id == runtime_configuration.agent)
+def test_project_config_builds_complete_runtime(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    runtime_config = config.get(RUNTIME_CONFIG)
+    definitions = config.get(AGENTS_CONFIG).agents
+    root_definition = next(item for item in definitions if item.id == runtime_config.agent)
     model = FakeModel()
-    runtime = assemble_runtime(configuration, model)
+    runtime = assemble_runtime(config, model)
 
     result = asyncio.run(runtime.run("hello", tree_id="tree"))
 
     assert result.status == TreeStatus.COMPLETED
     assert result.tree_id == "tree"
-    assert result.node(runtime_configuration.node_id).definition_id == runtime_configuration.agent
-    assert result.node(runtime_configuration.node_id).model == root_definition.model
+    assert result.node(runtime_config.node_id).definition_id == runtime_config.agent
+    assert result.node(runtime_config.node_id).model == root_definition.model
     assert model.requests[0].model == root_definition.model
     assert [tool.name for tool in model.requests[0].tools] == [
         "aur.agent.delegate",
@@ -132,9 +132,9 @@ def test_launch_tree_echoes_root_text_without_external_delivery(configured_proje
 
 
 def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
+    config = load_config(configured_project)
     model = FakeModel()
-    runtime = assemble_runtime(configuration, model)
+    runtime = assemble_runtime(config, model)
 
     asyncio.run(runtime.run("hello", tree_id="tree-memory"))
 
@@ -172,13 +172,13 @@ def test_presenter_renders_rich_for_terminal_sink(
 
 
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    assembly = assemble_runtime(configuration, FakeModel()).assembly
+    config = load_config(configured_project)
+    assembly = assemble_runtime(config, FakeModel()).assembly
     cadence = assembly.get(Cadence)
     memory = assembly.get(MemoryReader)
-    memory_config = configuration.get(MEMORY_CONFIG)
+    memory_config = config.get(MEMORY_CONFIG)
 
-    assert cadence.enabled is configuration.get(CADENCE_CONFIG).enabled is True
+    assert cadence.enabled is config.get(CADENCE_CONFIG).enabled is True
     assert cadence.agent == "builtin.triage"
     assert memory is assembly.get(MemoryReader)
     assert memory_config.window_minutes == EXPECTED_WINDOW_MINUTES
@@ -200,9 +200,9 @@ class FakeTool:
 
 
 def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    agents = configuration.get(AGENTS_CONFIG).agents
-    with_wildcard = configuration.with_value(
+    config = load_config(configured_project)
+    agents = config.get(AGENTS_CONFIG).agents
+    with_wildcard = config.with_value(
         AGENTS_CONFIG,
         AgentsConfig(
             tuple(
@@ -230,10 +230,10 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
 
 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    agents = configuration.get(AGENTS_CONFIG).agents
+    config = load_config(configured_project)
+    agents = config.get(AGENTS_CONFIG).agents
     root = agents[0]
-    invalid = configuration.with_value(
+    invalid = config.with_value(
         AGENTS_CONFIG,
         AgentsConfig(tuple((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents[1:]))),
     )
@@ -243,36 +243,36 @@ def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> Non
 
 
 def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    runtime = configuration.get(RUNTIME_CONFIG)
-    agents = configuration.get(AGENTS_CONFIG).agents
+    config = load_config(configured_project)
+    runtime = config.get(RUNTIME_CONFIG)
+    agents = config.get(AGENTS_CONFIG).agents
     root = agents[0]
 
     with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
-        assemble_runtime(configuration.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
+        assemble_runtime(config.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
     with pytest.raises(ValueError, match="未知 Agent prompt"):
         assemble_runtime(
-            configuration.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, prompt="missing"), *agents[1:]))),
+            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, prompt="missing"), *agents[1:]))),
             FakeModel(),
         )
     with pytest.raises(ValueError, match="未知 model endpoint"):
         assemble_runtime(
-            configuration.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, model="missing"), *agents[1:]))),
+            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, model="missing"), *agents[1:]))),
             FakeModel(),
         )
     with pytest.raises(ValueError, match=r"children.*可见性不一致"):
         assemble_runtime(
-            configuration.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, tools=()), *agents[1:]))),
+            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, tools=()), *agents[1:]))),
             FakeModel(),
         )
 
 
-def test_configuration_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    engine = configuration.get(ENGINE_CONFIG)
-    assembly = assemble_runtime(configuration, FakeModel()).assembly
+def test_config_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    engine = config.get(ENGINE_CONFIG)
+    assembly = assemble_runtime(config, FakeModel()).assembly
 
-    assert isinstance(configuration, AuroraConfig)
+    assert isinstance(config, AuroraConfig)
     assert engine.max_depth == EXPECTED_MAX_DEPTH
     assert assembly.get(PromptAssembler) is not None
     assert assembly.get(AgentCatalog) is not None
@@ -324,14 +324,14 @@ def test_composition_builds_configured_model_when_caller_does_not_inject_one(con
 
 
 def test_assembly_rejects_agent_model_whose_provider_is_unusable(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    providers = configuration.get(PROVIDERS_CONFIG).providers
+    config = load_config(configured_project)
+    providers = config.get(PROVIDERS_CONFIG).providers
     broken = ProvidersConfig(
         tuple(replace(item, adapter="unknown") if item.name == "deepseek" else item for item in providers)
     )
 
     with pytest.raises(ValueError, match="尚未实现的 adapter"):
-        assemble_runtime(configuration.with_value(PROVIDERS_CONFIG, broken))
+        assemble_runtime(config.with_value(PROVIDERS_CONFIG, broken))
 
 
 def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
@@ -342,8 +342,8 @@ def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
         load_config(tmp_path)
 
 
-def test_assembly_bundles_the_project_configuration(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    assembly = assemble_runtime(configuration, FakeModel()).assembly
+def test_assembly_bundles_the_project_config(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    assembly = assemble_runtime(config, FakeModel()).assembly
 
-    assert assembly.settings is configuration
+    assert assembly.settings is config

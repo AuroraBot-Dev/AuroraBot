@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora import load_config
-from aurora.config import assemble_config
-from aurora.configuration.apps import APPS_CONFIG, AppConfig
-from aurora.configuration.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configs.apps import APPS_CONFIG, AppConfig
+from aurora.configs.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configurator import assemble_config
 from src.mcp import McpAppSpec, McpEventMode, McpTransport
 
 if TYPE_CHECKING:
@@ -54,21 +54,21 @@ def _load_platforms(tmp_path: Path, content: str) -> tuple[PlatformConfig, ...]:
     return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
 
 
-def test_template_exports_typed_frozen_mcp_configuration(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    app_configuration = configuration.get(APPS_CONFIG).apps
-    platform_configuration = configuration.get(PLATFORMS_CONFIG).platforms
+def test_template_exports_typed_frozen_mcp_config(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    app_config = config.get(APPS_CONFIG).apps
+    platform_config = config.get(PLATFORMS_CONFIG).platforms
 
-    assert len(app_configuration) == _EXPECTED_TEMPLATE_APPS
-    assert all(isinstance(app, AppConfig) for app in app_configuration)
-    assert all(app.enabled is False for app in app_configuration)
-    assert app_configuration[0].event_mode == "disabled"
-    assert app_configuration[1].event_mode == "world_events"
-    assert app_configuration[1].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
-    assert [item.id for item in platform_configuration] == ["builtin.console", "builtin.mcp"]
-    assert all(item.enabled for item in platform_configuration)
-    assert all(item.logging == "INFO" for item in platform_configuration)
-    assert next(item for item in platform_configuration if item.id == "builtin.console").config == {}
+    assert len(app_config) == _EXPECTED_TEMPLATE_APPS
+    assert all(isinstance(app, AppConfig) for app in app_config)
+    assert all(app.enabled is False for app in app_config)
+    assert app_config[0].event_mode == "disabled"
+    assert app_config[1].event_mode == "world_events"
+    assert app_config[1].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
+    assert [item.id for item in platform_config] == ["builtin.console", "builtin.mcp"]
+    assert all(item.enabled for item in platform_config)
+    assert all(item.logging == "INFO" for item in platform_config)
+    assert next(item for item in platform_config if item.id == "builtin.console").config == {}
 
 
 def test_template_apps_stay_outside_the_installed_src_tree(configured_project: Path) -> None:
@@ -81,8 +81,8 @@ def test_template_apps_stay_outside_the_installed_src_tree(configured_project: P
 
 @pytest.mark.parametrize("event_mode", ("disabled", "world_events", "legacy_aurora_event"))
 def test_stdio_accepts_each_event_mode_and_project_relative_directory(tmp_path: Path, event_mode: str) -> None:
-    configuration = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"', f'event_mode = "{event_mode}"'))
-    app = configuration[0]
+    config = _load_apps(tmp_path, _STDIO.replace('event_mode = "disabled"', f'event_mode = "{event_mode}"'))
+    app = config[0]
 
     assert app.package == "org.example.clock"
     assert app.working_dir == "extensions/clock"
@@ -217,7 +217,7 @@ def test_apps_rejects_invalid_event_mode_enabled_type_and_auth_environment(tmp_p
 
 
 def test_platforms_parses_exact_mcp_preference(tmp_path: Path) -> None:
-    configuration = _load_platforms(
+    config = _load_platforms(
         tmp_path,
         """\
 [[platform]]
@@ -227,7 +227,7 @@ logging = "NONE"
 """,
     )
 
-    assert configuration == (PlatformConfig("builtin.mcp", enabled=False, logging="NONE"),)
+    assert config == (PlatformConfig("builtin.mcp", enabled=False, logging="NONE"),)
 
 
 def test_platforms_accepts_empty_and_duplicate_ids_trusting_project(

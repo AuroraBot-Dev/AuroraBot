@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora import load_config
-from aurora.config import assemble_config
-from aurora.configuration.endpoints import ENDPOINTS_CONFIG, EndpointConfig
-from aurora.configuration.providers import PROVIDERS_CONFIG, ProviderConfig
+from aurora.configs.endpoints import ENDPOINTS_CONFIG, EndpointConfig
+from aurora.configs.providers import PROVIDERS_CONFIG, ProviderConfig
+from aurora.configurator import assemble_config
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,10 +45,10 @@ def _load_endpoints(tmp_path: Path, content: str) -> tuple[EndpointConfig, ...]:
     return assemble_config(tmp_path, (ENDPOINTS_CONFIG,)).get(ENDPOINTS_CONFIG).endpoints
 
 
-def test_template_exports_typed_provider_and_endpoint_configuration(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    providers = configuration.get(PROVIDERS_CONFIG).providers
-    endpoints = configuration.get(ENDPOINTS_CONFIG).endpoints
+def test_template_exports_typed_provider_and_endpoint_config(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    providers = config.get(PROVIDERS_CONFIG).providers
+    endpoints = config.get(ENDPOINTS_CONFIG).endpoints
 
     assert providers[0] == ProviderConfig("deepseek", "litellm", "DEEPSEEK_API_KEY")
     assert providers[3] == ProviderConfig(

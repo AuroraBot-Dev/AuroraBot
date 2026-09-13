@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from aurora.commands.config.detail import read_source, render_effective
 from aurora.commands.config.editing import apply_sets, open_in_editor
 from aurora.commands.config.overview import render_overview
-from aurora.configuration import config_names, config_spec
+from aurora.configs import config_names, config_spec
 from aurora.utils.process import EXIT_CONFIG_ERROR
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora.commander import CommandSpec
-    from aurora.config import ConfigSpec
+    from aurora.contracts.config import ConfigSpec
 
 COMMAND: CommandSpec = {
     "name": "config",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.configuration import config_relative_path, config_spec
+from aurora.configs import config_relative_path, config_spec
 from aurora.utils.table import render_table
 
 if TYPE_CHECKING:

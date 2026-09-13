@@ -10,7 +10,7 @@ from aurora.utils.process import EXIT_FAILURE, run_process
 if TYPE_CHECKING:
     import argparse
 
-    from aurora.commander import CommandSpec
+    from aurora.contracts.command import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "check",

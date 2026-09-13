@@ -107,7 +107,7 @@ def test_each_command_registers_its_own_executor() -> None:
     assert "显示帮助并退出" in parser.format_help()
 
 
-def test_start_loads_configuration_and_runs_shared_lifecycle(
+def test_start_loads_config_and_runs_shared_lifecycle(
     configured_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -119,18 +119,18 @@ def test_start_loads_configuration_and_runs_shared_lifecycle(
         order.append("env")
         return True
 
-    original_load_config = start._load_configuration
+    original_load_config = start._load_config
 
     def tracked_load_config(root: Path) -> object:
         order.append("config")
         return original_load_config(root)
 
-    async def fake_run(configuration: object, *, headless: bool) -> None:
+    async def fake_run(config: object, *, headless: bool) -> None:
         order.append("runtime")
-        calls.append((configuration, headless))
+        calls.append((config, headless))
 
     monkeypatch.setattr(start, "load_project_env", fake_load_env)
-    monkeypatch.setattr(start, "_load_configuration", tracked_load_config)
+    monkeypatch.setattr(start, "_load_config", tracked_load_config)
     monkeypatch.setattr(start, "_run_runtime", fake_run)
 
     assert run(["--root", str(configured_project), start.COMMAND["name"], "--headless"]) == 0
@@ -156,14 +156,14 @@ def test_missing_project_env_is_empty_input(tmp_path: Path) -> None:
     assert load_project_env(tmp_path) is False
 
 
-def test_start_reports_configuration_failure(
+def test_start_reports_config_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def fail_load(_root: Path) -> None:
         raise ValueError("模型配置错误")
 
-    monkeypatch.setattr(start, "_load_configuration", fail_load)
+    monkeypatch.setattr(start, "_load_config", fail_load)
 
     assert run([start.COMMAND["name"], "--headless"]) == EXIT_CONFIG_ERROR
     assert "启动失败：模型配置错误" in capsys.readouterr().err
@@ -175,8 +175,8 @@ def test_start_runs_real_shared_lifecycle(
 ) -> None:
     calls: list[tuple[object, bool]] = []
 
-    async def fake_run_project(configuration: object, *, headless: bool, stop_event: object) -> None:
-        calls.append((configuration, headless))
+    async def fake_run_project(config: object, *, headless: bool, stop_event: object) -> None:
+        calls.append((config, headless))
 
     monkeypatch.setattr("src.runtime.run_runtime", fake_run_project)
 
@@ -186,10 +186,10 @@ def test_start_runs_real_shared_lifecycle(
 
 
 def test_start_maps_keyboard_interrupt_to_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def interrupted(configuration: object, *, headless: bool) -> None:
+    async def interrupted(config: object, *, headless: bool) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(start, "_load_configuration", lambda _root: object())
+    monkeypatch.setattr(start, "_load_config", lambda _root: object())
     monkeypatch.setattr(start, "configure_project_logging", lambda _config: None)
     monkeypatch.setattr(start, "_run_runtime", interrupted)
 

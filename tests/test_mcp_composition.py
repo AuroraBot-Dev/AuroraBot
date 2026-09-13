@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurora.configuration import load_config
-from aurora.configuration.apps import APPS_CONFIG
-from aurora.configuration.platforms import PLATFORMS_CONFIG
-from aurora.configuration.runtime import RUNTIME_CONFIG
+from aurora.configs import load_config
+from aurora.configs.apps import APPS_CONFIG
+from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.runtime import RUNTIME_CONFIG
 from src.contracts import (
     TREE_LAUNCHER_BINDINGS,
     ChatMessage,
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
     from pathlib import Path
 
-    from aurora.config import AuroraConfig
+    from aurora.contracts.config import AuroraConfig
     from src.contracts import TreeActivity
     from src.contracts.pkgs.runtime import TreeLauncher
     from src.kernel import ModuleContext

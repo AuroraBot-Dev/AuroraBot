@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora import load_config
-from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
+from aurora.configs.runtime import RUNTIME_CONFIG
+from aurora.configs.storage import STORAGE_CONFIG, resolve_directory
 from aurora.utils.logging import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
 from src.runtime import assemble_runtime
@@ -63,7 +63,7 @@ class _FailingTool:
         raise RuntimeError("secret-in-exception")
 
 
-def test_logging_configuration_is_typed_and_project_relative(configured_project: Path) -> None:
+def test_logging_config_is_typed_and_project_relative(configured_project: Path) -> None:
     runtime = load_config(configured_project).get(RUNTIME_CONFIG)
 
     assert runtime.log_level == "INFO"
@@ -72,7 +72,7 @@ def test_logging_configuration_is_typed_and_project_relative(configured_project:
 
 
 @pytest.mark.parametrize("level", ("TRACE", "warn", "WARN", ""))
-def test_logging_configuration_rejects_invalid_levels(
+def test_logging_config_rejects_invalid_levels(
     configured_project: Path,
     level: str,
 ) -> None:
@@ -88,10 +88,10 @@ def test_logging_configuration_rejects_invalid_levels(
 def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_details(
     configured_project: Path,
 ) -> None:
-    configuration = load_config(configured_project)
-    configure_project_logging(configuration)
+    config = load_config(configured_project)
+    configure_project_logging(config)
     configure_console_logging(enabled=False)
-    runtime = assemble_runtime(configuration, _Model("secret-in-model-result"))
+    runtime = assemble_runtime(config, _Model("secret-in-model-result"))
 
     async def scenario() -> None:
         await asyncio.wait_for(runtime.run("secret-in-message", tree_id="logging-tree"), timeout=5)

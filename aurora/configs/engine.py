@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurora.config import ConfigSpec, TableShape, positive_integer_field
+from aurora.contracts.config import ConfigSpec, TableShape, positive_integer_field
 from src.engine.config import EngineConfig
 
 ENGINE_CONFIG = ConfigSpec[EngineConfig](

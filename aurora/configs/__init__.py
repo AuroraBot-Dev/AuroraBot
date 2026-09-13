@@ -6,14 +6,15 @@ from functools import cache
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
-from aurora.config import ConfigSpec, assemble_config
+from aurora.configurator import assemble_config
+from aurora.contracts.config import ConfigSpec
 from aurora.utils.modules import discover_module_names
 
 if TYPE_CHECKING:
     from pathlib import Path
     from types import ModuleType
 
-    from aurora.config import AuroraConfig
+    from aurora.contracts.config import AuroraConfig
 
     CONFIG_SPECS: tuple[ConfigSpec[Any], ...]
 

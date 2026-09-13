@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurora.config import ConfigSpec, TableShape, positive_integer_field, strings_field
+from aurora.contracts.config import ConfigSpec, TableShape, positive_integer_field, strings_field
 from src.memory.config import MemoryConfig
 
 MEMORY_CONFIG = ConfigSpec[MemoryConfig](

@@ -11,7 +11,7 @@ from aurora.utils.project import get_project_version
 if TYPE_CHECKING:
     import argparse
 
-    from aurora.commander import CommandSpec
+    from aurora.contracts.command import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "donk",

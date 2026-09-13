@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurora.config import ConfigSpec, TableArrayShape, boolean_field, text_field
+from aurora.contracts.config import ConfigSpec, TableArrayShape, boolean_field, text_field
 from src.prompt.config import PromptConfig, PromptsConfig
 
 PROMPTS_CONFIG = ConfigSpec[PromptsConfig](

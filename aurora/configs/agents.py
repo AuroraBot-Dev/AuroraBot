@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurora.config import ConfigSpec, TableArrayShape, strings_field, text_field
+from aurora.contracts.config import ConfigSpec, TableArrayShape, strings_field, text_field
 from src.agents.config import AgentConfig, AgentsConfig
 
 AGENTS_CONFIG = ConfigSpec[AgentsConfig](

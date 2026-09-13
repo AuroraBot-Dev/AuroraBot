@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     import argparse
     from pathlib import Path
 
-    from aurora.commander import CommandSpec
-    from aurora.config import AuroraConfig
+    from aurora.contracts.command import CommandSpec
+    from aurora.contracts.config import AuroraConfig
 
 _CONSOLE_PLATFORM_ID = "builtin.console"
 
@@ -29,28 +29,28 @@ COMMAND: CommandSpec = {
 }
 
 
-def _load_configuration(project_root: Path) -> AuroraConfig:
-    from aurora.configuration import load_config
+def _load_config(project_root: Path) -> AuroraConfig:
+    from aurora.configs import load_config
 
     return load_config(project_root)
 
 
-def _console_enabled(configuration: AuroraConfig) -> bool:
-    from aurora.configuration.platforms import PLATFORMS_CONFIG
+def _console_enabled(config: AuroraConfig) -> bool:
+    from aurora.configs.platforms import PLATFORMS_CONFIG
 
-    for platform in configuration.get(PLATFORMS_CONFIG).platforms:
+    for platform in config.get(PLATFORMS_CONFIG).platforms:
         if platform.id == _CONSOLE_PLATFORM_ID:
             return platform.enabled
     return False
 
 
-async def _run_runtime(configuration: AuroraConfig, *, headless: bool) -> None:
+async def _run_runtime(config: AuroraConfig, *, headless: bool) -> None:
     from src.runtime import run_runtime
 
     stop = asyncio.Event()
     installed = install_stop_handlers(stop)
     try:
-        await run_runtime(configuration, headless=headless, stop_event=stop)
+        await run_runtime(config, headless=headless, stop_event=stop)
     finally:
         restore_stop_handlers(installed)
 
@@ -58,10 +58,10 @@ async def _run_runtime(configuration: AuroraConfig, *, headless: bool) -> None:
 def execute(arguments: argparse.Namespace) -> int:
     try:
         load_project_env(arguments.root)
-        configuration = _load_configuration(arguments.root)
-        configure_project_logging(configuration)
-        headless = arguments.headless or not _console_enabled(configuration)
-        asyncio.run(_run_runtime(configuration, headless=headless))
+        config = _load_config(arguments.root)
+        configure_project_logging(config)
+        headless = arguments.headless or not _console_enabled(config)
+        asyncio.run(_run_runtime(config, headless=headless))
     except KeyboardInterrupt:
         return EXIT_INTERRUPTED
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:

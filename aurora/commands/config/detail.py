@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from aurora.commands.config.render import render_value
-from aurora.configuration import config_relative_path
+from aurora.configs import config_relative_path
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora.config import ConfigSpec
+    from aurora.contracts.config import ConfigSpec
 
 
 def render_effective(root: Path, spec: ConfigSpec[Any]) -> str:

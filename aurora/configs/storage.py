@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.config import ConfigSpec
+from aurora.contracts.config import ConfigSpec
 from aurora.utils.toml import load_toml, optional_text, table_array, text
 from src.world.config import StorageConfig, StorageEntry, resolve_storage_directory
 
