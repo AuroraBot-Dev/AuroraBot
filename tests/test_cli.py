@@ -65,11 +65,6 @@ def test_about_reports_os_version_and_revision(
 
 
 def test_missing_subcommand_prints_command_help(capsys: pytest.CaptureFixture[str]) -> None:
-    assert run([config.COMMAND["name"]]) == 0
-    output = capsys.readouterr().out
-    assert "列出全部已注册配置" in output
-    assert "显示一份配置的原始 TOML" in output
-
     assert run([donk.COMMAND["name"]]) == 0
     output = capsys.readouterr().out
     assert "升级主版本号" in output
@@ -81,7 +76,7 @@ def test_each_command_registers_its_own_executor() -> None:
 
     about_arguments = parser.parse_args([about.COMMAND["name"]])
     check_arguments = parser.parse_args([check.COMMAND["name"]])
-    config_arguments = parser.parse_args([config.COMMAND["name"], "list"])
+    config_arguments = parser.parse_args([config.COMMAND["name"], "runtime"])
     donk_arguments = parser.parse_args([donk.COMMAND["name"], "show"])
     setup_arguments = parser.parse_args([setup.COMMAND["name"]])
     start_arguments = parser.parse_args([start.COMMAND["name"], "--headless"])
@@ -188,28 +183,54 @@ def test_start_maps_keyboard_interrupt_to_exit_code(monkeypatch: pytest.MonkeyPa
     assert run([start.COMMAND["name"], "--headless"]) == EXIT_INTERRUPTED
 
 
-def test_config_command_lists_and_shows_registered_sources(
+def test_config_overview_lists_registered_sources_with_status(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert run(["--root", str(configured_project), config.COMMAND["name"], "list"]) == 0
+    assert run(["--root", str(configured_project), config.COMMAND["name"]]) == 0
     listing = capsys.readouterr().out
-    assert re.search(r"^\| runtime\s+\| config/runtime\.toml\s+\|$", listing, re.MULTILINE)
-    assert re.search(r"^\| providers\s+\| config/providers\.toml\s+\|$", listing, re.MULTILINE)
-    assert re.search(r"^\| endpoints\s+\| config/endpoints\.toml\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| runtime\s+\| config/runtime\.toml\s+\| 正常\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| providers\s+\| config/providers\.toml\s+\| 正常\s+\|$", listing, re.MULTILINE)
+    assert re.search(r"^\| endpoints\s+\| config/endpoints\.toml\s+\| 正常\s+\|$", listing, re.MULTILINE)
 
-    assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == 0
-    shown = capsys.readouterr().out
-    assert "[runtime]" in shown
-    assert 'node_id = "root"' in shown
-    assert 'log_level = "INFO"' in shown
+
+def test_config_overview_reports_broken_source(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (configured_project / "config" / "runtime.toml").write_text('[runtime]\nprofile = "prod"\n', encoding="utf-8")
+
+    assert run(["--root", str(configured_project), config.COMMAND["name"]]) == EXIT_CONFIG_ERROR
+    assert "错误：" in capsys.readouterr().out
+
+
+def test_config_detail_renders_instantiated_value(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime"]) == 0
+    output = capsys.readouterr().out
+    assert "源文件：config/runtime.toml" in output
+    assert "RuntimeConfig(" in output
+    assert "node_id='root'" in output
+    assert "log_level='INFO'" in output
+
+
+def test_config_raw_prints_source_toml(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime", "--raw"]) == 0
+    output = capsys.readouterr().out
+    assert "[runtime]" in output
+    assert 'node_id = "root"' in output
 
 
 def test_config_command_rejects_unknown_name(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "unknown"]) == EXIT_CONFIG_ERROR
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "unknown"]) == EXIT_CONFIG_ERROR
     assert "未知配置：unknown" in capsys.readouterr().err
 
 
@@ -222,38 +243,164 @@ def test_config_command_reports_load_error(
 
     monkeypatch.setattr(config, "load_config", fail_load)
 
-    assert run([config.COMMAND["name"], "list"]) == EXIT_CONFIG_ERROR
+    assert run([config.COMMAND["name"], "runtime"]) == EXIT_CONFIG_ERROR
     assert "配置加载失败：字段无效" in capsys.readouterr().err
 
 
-def test_config_show_reports_unreadable_source_file(
+def test_config_raw_reports_unreadable_source_file(
     configured_project: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    configuration = config.load_config(configured_project)
-    monkeypatch.setattr(config, "load_config", lambda _root: configuration)
     (configured_project / "config" / "runtime.toml").unlink()
 
-    assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == EXIT_CONFIG_ERROR
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime", "--raw"]) == EXIT_CONFIG_ERROR
     assert "无法读取配置 runtime" in capsys.readouterr().err
 
 
-def test_config_show_ends_output_with_newline_for_unterminated_source(
+def test_config_raw_ends_output_with_newline_for_unterminated_source(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     path = configured_project / "config" / "runtime.toml"
     path.write_text(path.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8")
 
-    assert run(["--root", str(configured_project), config.COMMAND["name"], "show", "runtime"]) == 0
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime", "--raw"]) == 0
     assert capsys.readouterr().out.endswith("\n")
 
 
-def test_config_execute_rejects_unknown_subcommand(configured_project: Path) -> None:
-    arguments = argparse.Namespace(root=configured_project, subcommand="bogus", name=None)
+def test_config_set_rewrites_source_and_validates(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = [
+        "--root",
+        str(configured_project),
+        config.COMMAND["name"],
+        "runtime",
+        "--set",
+        "runtime.log_level=DEBUG",
+    ]
 
-    assert config.execute(arguments) == EXIT_CONFIG_ERROR
+    assert run(arguments) == 0
+    assert "配置校验通过" in capsys.readouterr().out
+    assert 'log_level = "DEBUG"' in (configured_project / "config" / "runtime.toml").read_text(encoding="utf-8")
+
+
+def test_config_set_parses_typed_values(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = [
+        "--root",
+        str(configured_project),
+        config.COMMAND["name"],
+        "engine",
+        "--set",
+        "engine.tree.max_depth=8",
+    ]
+
+    assert run(arguments) == 0
+    assert "max_depth = 8" in (configured_project / "config" / "engine.toml").read_text(encoding="utf-8")
+
+
+def test_config_set_updates_array_element(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = [
+        "--root",
+        str(configured_project),
+        config.COMMAND["name"],
+        "endpoints",
+        "--set",
+        "endpoint.0.model=deepseek-reasoner",
+    ]
+
+    assert run(arguments) == 0
+    content = (configured_project / "config" / "endpoints.toml").read_text(encoding="utf-8")
+    assert 'model = "deepseek-reasoner"' in content
+
+
+def test_config_set_reports_validation_failure(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = [
+        "--root",
+        str(configured_project),
+        config.COMMAND["name"],
+        "runtime",
+        "--set",
+        "runtime.log_level=LOUD",
+    ]
+
+    assert run(arguments) == EXIT_CONFIG_ERROR
+    assert "配置校验失败" in capsys.readouterr().err
+
+
+def test_config_set_requires_key_value_format(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = [
+        "--root",
+        str(configured_project),
+        config.COMMAND["name"],
+        "runtime",
+        "--set",
+        "runtime.log_level",
+    ]
+
+    assert run(arguments) == EXIT_CONFIG_ERROR
+    assert "--set 需要 KEY=VALUE 格式" in capsys.readouterr().err
+
+
+def test_config_rejects_set_with_edit(
+    configured_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    arguments = [
+        "--root",
+        str(configured_project),
+        config.COMMAND["name"],
+        "runtime",
+        "--set",
+        "runtime.log_level=DEBUG",
+        "--edit",
+    ]
+
+    assert run(arguments) == EXIT_CONFIG_ERROR
+    assert "不能同时使用" in capsys.readouterr().err
+
+
+def test_config_edit_opens_source_in_editor(
+    configured_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[tuple[Path, Path]] = []
+
+    def fake_edit(root: Path, path: Path) -> int:
+        calls.append((root, path))
+        return 0
+
+    monkeypatch.setattr(config, "open_in_editor", fake_edit)
+
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime", "--edit"]) == 0
+    assert calls == [(configured_project, configured_project / "config" / "runtime.toml")]
+    assert "配置校验通过" in capsys.readouterr().out
+
+
+def test_config_edit_requires_editor_environment(
+    configured_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("EDITOR", raising=False)
+    monkeypatch.delenv("VISUAL", raising=False)
+
+    assert run(["--root", str(configured_project), config.COMMAND["name"], "runtime", "--edit"]) == EXIT_CONFIG_ERROR
+    assert "未设置 EDITOR" in capsys.readouterr().err
 
 
 def test_check_command_runs_all_selected_stages_and_summarizes_failures(
@@ -579,6 +726,13 @@ def test_commander_rejects_unknown_spec_fields_and_empty_names() -> None:
 def test_commander_rejects_non_callable_executor() -> None:
     with pytest.raises(ValueError, match="必须绑定可调用执行器"):
         build_registry(((about.COMMAND, cast("Any", "not-callable")),))
+
+
+def test_commander_validates_positional_arg_specs() -> None:
+    with pytest.raises(ValueError, match="位置参数必须是帮助文本或 add_argument 字典"):
+        build_registry(((cast("CommandSpec", {**about.COMMAND, "args": {"target": 1}}), about.execute),))
+    with pytest.raises(ValueError, match="位置参数帮助文本不能为空"):
+        build_registry(((cast("CommandSpec", {**about.COMMAND, "args": {"target": "  "}}), about.execute),))
 
 
 def test_docs_command_passes_script_and_passthrough_to_process(

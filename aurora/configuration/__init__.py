@@ -40,10 +40,15 @@ def load_config(project_root: Path) -> AuroraConfig:
     return assemble_config(project_root, _config_specs())
 
 
+def config_specs() -> tuple[ConfigSpec[Any], ...]:
+    """返回全部已注册配置规格；首次调用时发现并缓存。"""
+    return _config_specs()
+
+
 def __getattr__(name: str) -> object:
     if name == "CONFIG_SPECS":
         return _config_specs()
     raise AttributeError(f"模块 {__name__!r} 没有属性 {name!r}")
 
 
-__all__ = ["CONFIG_SPECS", "load_config"]
+__all__ = ["CONFIG_SPECS", "config_specs", "load_config"]

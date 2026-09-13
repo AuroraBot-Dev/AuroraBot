@@ -22,7 +22,7 @@ _SPEC_FIELDS = frozenset({"name", "help", "options", "args", "subcommands", "pas
 class SubcommandSpec(TypedDict, total=False):
     help: str
     options: dict[str, str | dict[str, Any]]
-    args: dict[str, str]
+    args: dict[str, str | dict[str, Any]]
     passthrough: str
     subcommands: dict[str, SubcommandSpec]
 
@@ -54,9 +54,7 @@ def _validate_spec(spec: SubcommandSpec, label: str) -> None:
     if unexpected:
         raise ValueError(f"{label} 包含未知字段：{', '.join(sorted(unexpected))}")
     _validate_options(spec.get("options"), label)
-    for arg in spec.get("args", {}):
-        if not arg.strip():
-            raise ValueError(f"{label} 包含空位置参数名")
+    _validate_args(spec.get("args"), label)
     passthrough = spec.get("passthrough")
     if passthrough is not None and not passthrough.strip():
         raise ValueError(f"{label} 的透传参数帮助文本不能为空")
@@ -77,6 +75,19 @@ def _validate_options(options: dict[str, str | dict[str, Any]] | None, label: st
                 raise ValueError(f"{label} 的选项帮助文本不能为空：{flag}")
         elif not isinstance(option, dict):
             raise ValueError(f"{label} 的选项必须是帮助文本或 add_argument 字典：{flag}")
+
+
+def _validate_args(args: dict[str, str | dict[str, Any]] | None, label: str) -> None:
+    if args is None:
+        return
+    for name, arg in args.items():
+        if not name.strip():
+            raise ValueError(f"{label} 包含空位置参数名")
+        if isinstance(arg, str):
+            if not arg.strip():
+                raise ValueError(f"{label} 的位置参数帮助文本不能为空：{name}")
+        elif not isinstance(arg, dict):
+            raise ValueError(f"{label} 的位置参数必须是帮助文本或 add_argument 字典：{name}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +152,10 @@ def _apply_spec(
         else:
             parser.add_argument(flag, action="store_true", help=str(option))
     for name, help_text in spec.get("args", {}).items():
-        parser.add_argument(name, help=str(help_text))
+        if isinstance(help_text, dict):
+            parser.add_argument(name, **cast("dict[str, Any]", help_text))
+        else:
+            parser.add_argument(name, help=str(help_text))
     subcommands = spec.get("subcommands", {})
     if subcommands:
         actions = parser.add_subparsers(dest="subcommand")
