@@ -42,6 +42,19 @@ def test_bare_cli_and_about_show_ascii_art_without_effects(capsys: pytest.Captur
     assert "▀▀▀▀ ▀▀▀▀ ▀    ▀▀▀▀ ▀    ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ▀▀▀" in output
 
 
+def test_cli_version_flag_prints_running_version(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("aurora.commander.get_running_version", lambda: "9.9.9")
+
+    assert run(["--version"]) == 0
+    assert capsys.readouterr().out == "AuroraBot 9.9.9\n"
+
+    assert run(["-v"]) == 0
+    assert capsys.readouterr().out == "AuroraBot 9.9.9\n"
+
+
 def test_about_reports_os_version_and_revision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

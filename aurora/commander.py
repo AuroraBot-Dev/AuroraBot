@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Required, TypedDict, cast
+
+from aurora.utils.project import get_running_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -119,7 +122,8 @@ def build_registry(bindings: Iterable[CommandBinding]) -> CommandRegistry:
 def build_parser(registry: CommandRegistry) -> argparse.ArgumentParser:
     """构建顶层解析器，并注册目录中的全部命令与子命令。"""
     parser: argparse.ArgumentParser = _ChineseArgumentParser(prog="aurora", description="AuroraBot 运行时")
-    parser.add_argument("--root", type=Path, default=Path.cwd(), help="项目根目录")
+    parser.add_argument("-v", "--version", action="store_true", help="显示版本并退出")
+    parser.add_argument("-r", "--root", type=Path, default=Path.cwd(), help="项目根目录")
     subparsers = cast(
         "argparse._SubParsersAction[argparse.ArgumentParser]",
         parser.add_subparsers(dest="command"),
@@ -172,6 +176,9 @@ def run(argv: Sequence[str] | None = None, *, registry: CommandRegistry) -> int:
     """按目录构建解析器，解析输入并分派到命令执行器。"""
     parser = build_parser(registry)
     arguments = parser.parse_args(argv)
+    if getattr(arguments, "version", False):
+        sys.stdout.write(f"AuroraBot {get_running_version()}\n")
+        return 0
     executor = getattr(arguments, "executor", None)
     if executor is None:
         getattr(arguments, "help_parser", parser).print_help()
