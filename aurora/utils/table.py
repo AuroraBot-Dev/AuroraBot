@@ -11,13 +11,17 @@ if TYPE_CHECKING:
 _FULLWIDTH = frozenset(("F", "W"))
 
 
-def _display_width(text: str) -> int:
-    """按终端显示宽度计算文本长度，全角字符占两列。"""
+def display_width(text: str) -> int:
+    """按终端显示宽度计算文本长度，全角字符占两列。
+
+    渲染表格要用它，任何需要「按列对齐 / 按列截断」的调用方也应复用它：
+    宽度算错的表现是框线断开，而不只是略微不齐。
+    """
     return sum(2 if unicodedata.east_asian_width(char) in _FULLWIDTH else 1 for char in text)
 
 
 def _pad(text: str, width: int) -> str:
-    return text + " " * (width - _display_width(text))
+    return text + " " * (width - display_width(text))
 
 
 def render_table(
@@ -30,13 +34,13 @@ def render_table(
     if banner is not None and len(banner) != len(headers):
         raise ValueError("banner 与 headers 的列数必须一致")
 
-    widths = [_display_width(header) for header in headers]
+    widths = [display_width(header) for header in headers]
     if banner is not None:
-        widths = [max(width, _display_width(cell)) for width, cell in zip(widths, banner, strict=True)]
+        widths = [max(width, display_width(cell)) for width, cell in zip(widths, banner, strict=True)]
     for row in rows:
         if len(row) != len(headers):
             raise ValueError("每行的列数必须与 headers 一致")
-        widths = [max(width, _display_width(cell)) for width, cell in zip(widths, row, strict=True)]
+        widths = [max(width, display_width(cell)) for width, cell in zip(widths, row, strict=True)]
 
     def border(segment: str) -> str:
         return "+" + "+".join(segment * (width + 2) for width in widths) + "+"
