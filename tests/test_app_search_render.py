@@ -1,4 +1,4 @@
-"""``aurora app search`` 的结果呈现测试：表格、JSON 与两者的同源性。
+"""``aurora app search`` 的结果呈现测试：表格与 stderr 警告行。
 
 这里只管 stdout 长什么样；命令怎么装配、参数怎么转发、退出码怎么定，归
 ``test_app_search_cli.py``。全部离线：``_github_source`` 被换成预置 source。
@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import json
 import unicodedata
 from typing import TYPE_CHECKING
 
@@ -180,71 +179,7 @@ def test_an_empty_result_is_not_an_error(
     assert error == ""
 
 
-# --- JSON 输出 -----------------------------------------------------------------
-
-
-def test_json_is_the_only_thing_on_stdout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    stub(monkeypatch, page((repository(),)))
-
-    code, output, _ = captured(capsys, tmp_path, "search", "--json")
-
-    assert code == 0
-    assert json.loads(output) == {
-        "total_count": 1,
-        "page": 1,
-        "page_size": 20,
-        "incomplete_results": False,
-        "items": [
-            {
-                "full_name": "Churk-Ben/Aurora-QQ",
-                "owner": "Churk-Ben",
-                "name": "Aurora-QQ",
-                "description": "QQ 通知 App",
-                "stars": 12,
-                "topics": ["aurorabot-app"],
-                "updated_at": "2026-09-01T12:00:00Z",
-                "default_branch": "main",
-                "html_url": "https://github.com/Churk-Ben/Aurora-QQ",
-                "clone_url": "https://github.com/Churk-Ben/Aurora-QQ.git",
-                "archived": False,
-                "disabled": False,
-                "status": "active",
-            }
-        ],
-    }
-
-
-def test_json_carries_the_pagination_it_was_asked_for(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """分页信息是「这一页」的属性；脚本据此才知道还有没有下一页。"""
-    stub(monkeypatch, page((repository(),), page=3, page_size=5, total_count=1500))
-
-    _, output, _ = captured(capsys, tmp_path, "search", "--json")
-
-    payload = json.loads(output)
-    assert (payload["page"], payload["page_size"], payload["total_count"]) == (3, 5, 1500)
-
-
-def test_json_and_table_render_the_same_repositories(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    result = page((repository(), repository(full_name="aurora/clock", archived=True)))
-    stub(monkeypatch, result)
-    _, table_output, _ = captured(capsys, tmp_path, "search")
-    stub(monkeypatch, result)
-    _, json_output, _ = captured(capsys, tmp_path, "search", "--json")
-
-    items = json.loads(json_output)["items"]
-
-    assert [[item["full_name"], item["status"]] for item in items] == [
-        [row[0], row[2]] for row in _data_rows(table_output)
-    ]
-
-
-def test_incomplete_results_warn_on_stderr_in_table_mode(
+def test_incomplete_results_warn_on_stderr(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """结果不完整仍然可用，所以不动退出码，但要说清可能还有仓库。"""
@@ -254,18 +189,6 @@ def test_incomplete_results_warn_on_stderr_in_table_mode(
 
     assert code == 0
     assert "搜索结果不完整" in error
-
-
-def test_incomplete_results_are_visible_to_scripts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """stderr 不是给机器的接口：这个信号必须在 JSON 里，否则脚本永远读不到。"""
-    stub(monkeypatch, page((repository(),), incomplete_results=True))
-
-    _, output, error = captured(capsys, tmp_path, "search", "--json")
-
-    assert json.loads(output)["incomplete_results"] is True
-    assert error == ""
 
 
 def test_a_complete_result_is_silent_on_stderr(

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 from typing import TYPE_CHECKING, Any
 
 import httpx2
@@ -17,7 +18,14 @@ from aurora.commands.app.github import (
     GitHubSource,
     HttpxTransport,
 )
-from aurora.commands.app.models import ConfigError, DiscoveryError, GitHubRateLimitError, Repository
+from aurora.commands.app.manifest import MANIFEST_NAME, MAX_MANIFEST_BYTES
+from aurora.commands.app.models import (
+    ConfigError,
+    DiscoveryError,
+    GitHubRateLimitError,
+    ManifestError,
+    Repository,
+)
 from aurora.utils.project import get_running_version
 
 if TYPE_CHECKING:
@@ -583,3 +591,145 @@ def test_the_default_transport_closes_its_client(fake_client: list[_FakeClient])
     source.search()
 
     assert fake_client[0].closed is True
+
+
+# --- 清单（Contents API） ------------------------------------------------------
+
+
+def _contents(content: str, **overrides: object) -> httpx2.Response:
+    """一份 Contents API 的文件响应体。"""
+    body: dict[str, object] = {
+        "type": "file",
+        "encoding": "base64",
+        "content": base64.b64encode(content.encode("utf-8")).decode(),
+    }
+    body.update(overrides)
+    return httpx2.Response(200, json=body)
+
+
+def _raw_contents(payload: bytes, **overrides: object) -> httpx2.Response:
+    """直接给一份字节，用来测编码与体积：它们都是解码之后才看得见的。"""
+    body: dict[str, object] = {"type": "file", "encoding": "base64", "content": base64.b64encode(payload).decode()}
+    body.update(overrides)
+    return httpx2.Response(200, json=body)
+
+
+def test_the_manifest_is_read_from_the_repository_root() -> None:
+    source, transport = _source(_contents('manifest_version = 1\n[server]\ncommand = ["uv"]\n'))
+
+    content = source.manifest("Churk-Ben/Aurora-QQ")
+
+    assert content == 'manifest_version = 1\n[server]\ncommand = ["uv"]\n'
+    assert transport.calls[0]["url"] == f"https://api.github.com/repos/Churk-Ben/Aurora-QQ/contents/{MANIFEST_NAME}"
+
+
+def test_no_ref_means_the_default_branch() -> None:
+    source, transport = _source(_contents("manifest_version = 1\n"))
+
+    source.manifest("Churk-Ben/Aurora-QQ")
+
+    assert transport.calls[0]["params"] == {}
+
+
+def test_a_ref_is_read_from_that_ref() -> None:
+    """从 main 读到清单却去装一个 tag，等于按另一个版本的声明安装。"""
+    source, transport = _source(_contents("manifest_version = 1\n"))
+
+    source.manifest("Churk-Ben/Aurora-QQ", ref="v1.2.0")
+
+    assert transport.calls[0]["params"] == {"ref": "v1.2.0"}
+
+
+def test_a_missing_manifest_is_not_an_error() -> None:
+    """仓库元数据刚刚取到了，所以这里的 404 只能是「没有这个文件」。"""
+    source, _ = _source(_failed(404))
+
+    assert source.manifest("Churk-Ben/Aurora-QQ") is None
+
+
+def test_a_directory_instead_of_a_file_is_unusable() -> None:
+    source, _ = _source(_contents("", type="dir"))
+
+    with pytest.raises(ManifestError, match="不是仓库根目录下的一个文件"):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "file", "encoding": "none", "content": ""},
+        {"type": "file", "encoding": "base64"},
+        {"type": "file", "encoding": "base64", "content": ""},
+    ],
+)
+def test_an_unavailable_content_field_is_unusable(payload: dict[str, object]) -> None:
+    """超过 1 MB 的文件 GitHub 会返回空 content 与 ``encoding: none``。"""
+    source, _ = _source(httpx2.Response(200, json=payload))
+
+    with pytest.raises(ManifestError, match="解码"):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+def test_undecodable_base64_is_unusable() -> None:
+    """GitHub 说是 base64 但内容解不开：宁可报不可用，也不拿半份字节去解析 TOML。"""
+    body = {"type": "file", "encoding": "base64", "content": "a"}
+    source, _ = _source(httpx2.Response(200, json=body))
+
+    with pytest.raises(ManifestError, match="base64"):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+def test_an_oversized_manifest_is_unusable() -> None:
+    source, _ = _source(_raw_contents(b"x" * (MAX_MANIFEST_BYTES + 1)))
+
+    with pytest.raises(ManifestError, match="字节"):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+def test_a_manifest_with_a_size_boundary_is_accepted() -> None:
+    """边界值属于可用范围：正好等于上限的一份仍然要能读出来。"""
+    source, _ = _source(_raw_contents(b"x" * MAX_MANIFEST_BYTES))
+
+    assert len(source.manifest("Churk-Ben/Aurora-QQ") or "") == MAX_MANIFEST_BYTES
+
+
+def test_a_non_utf8_manifest_is_unusable() -> None:
+    source, _ = _source(_raw_contents(b"\xff\xfe\x00"))
+
+    with pytest.raises(ManifestError, match="UTF-8"):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+def test_the_error_names_the_source_it_read_from() -> None:
+    """同一个仓库的两个 ref 各有各的清单，出错时必须说清是哪一份。"""
+    source, _ = _source(_contents("", type="symlink"))
+
+    with pytest.raises(ManifestError) as error_info:
+        source.manifest("Churk-Ben/Aurora-QQ", ref="v2")
+
+    assert "Churk-Ben/Aurora-QQ@v2" in str(error_info.value)
+
+
+def test_a_rate_limited_manifest_read_says_so() -> None:
+    source, _ = _source(_failed(403, {"X-RateLimit-Remaining": "0"}))
+
+    with pytest.raises(GitHubRateLimitError):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+def test_a_401_on_the_manifest_read_points_at_the_token() -> None:
+    source, _ = _source(_failed(401))
+
+    with pytest.raises(DiscoveryError, match="GITHUB_TOKEN"):
+        source.manifest("Churk-Ben/Aurora-QQ")
+
+
+def test_the_manifest_token_only_travels_in_the_authorization_header() -> None:
+    source, transport = _source(_contents("manifest_version = 1\n"), token=_TOKEN)
+
+    source.manifest("Churk-Ben/Aurora-QQ", ref="main")
+
+    call = transport.calls[0]
+    assert _TOKEN not in call["url"]
+    assert _TOKEN not in str(call["params"])
+    assert call["headers"]["Authorization"] == f"Bearer {_TOKEN}"

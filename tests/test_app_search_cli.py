@@ -43,7 +43,7 @@ def test_search_help_lists_its_options(capsys: pytest.CaptureFixture[str]) -> No
 
     assert exit_info.value.code == 0
     usage = " ".join(capsys.readouterr().out.split())
-    for option in ("--page", "--page-size", "--sort", "--order", "--json"):
+    for option in ("--page", "--page-size", "--sort", "--order"):
         assert option in usage
 
 

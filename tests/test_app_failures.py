@@ -77,7 +77,11 @@ def test_registry_package_reports_structure_errors_as_registry_errors() -> None:
 
 @pytest.mark.parametrize(
     "arguments",
-    [("list",), ("list", "--json"), ("enable", "com.example.weather"), ("disable", "com.example.weather")],
+    [
+        ("list",),
+        ("enable", "com.example.weather"),
+        ("disable", "com.example.weather"),
+    ],
 )
 def test_missing_registry_is_a_configuration_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], arguments: tuple[str, ...]

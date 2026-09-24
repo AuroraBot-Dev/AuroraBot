@@ -1,39 +1,50 @@
-"""实现 ``aurora app``：查看并调整 ``config/apps.toml`` 中的 MCP App 注册表。"""
+"""解析并执行 ``aurora app`` 子命令。"""
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from typing import TYPE_CHECKING
 
+from aurora.commands.app.clone import github_https_path
 from aurora.commands.app.github import (
     DEFAULT_PAGE,
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
-    MAX_RESULTS,
     ORDER_FIELDS,
     SORT_FIELDS,
-    TOPIC,
     TOPIC_CLAUSE,
     GitHubSource,
     HttpxTransport,
 )
+from aurora.commands.app.install import check_connect_url, remote_package
 from aurora.commands.app.models import (
     AppError,
-    AppList,
-    AppListItem,
+    CloneError,
     ConfigError,
+    ConnectPlan,
     DiscoveryError,
+    InstallError,
+    InstallPlan,
     RegistryWriteError,
-    Repository,
-    RepositoryPage,
+    RemoveError,
+    RunnerPlan,
+    VerifyError,
+)
+from aurora.commands.app.render import (
+    healthy,
+    render_cancelled,
+    render_list,
+    render_outcome,
+    render_plan,
+    render_removal,
+    render_search,
+    render_toggle,
 )
 from aurora.commands.app.service import AppManager
-from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
+from aurora.commands.app.store import AppStore
 from aurora.utils.environment import load_project_env
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
-from aurora.utils.table import display_width, render_table
 
 if TYPE_CHECKING:
     import argparse
@@ -41,24 +52,16 @@ if TYPE_CHECKING:
 
     from aurora.contracts.command import CommandSpec
 
-_COLUMNS = ("PACKAGE ID", "ENABLED", "TRANSPORT", "STATE", "PATH")
-_TITLE = "Aurora App 注册表"
-_SEARCH_COLUMNS = ("REPOSITORY", "STARS", "STATUS", "UPDATED", "DESCRIPTION")
-_SEARCH_TITLE = "Aurora App Search"
 _TOKEN_VARIABLE = "GITHUB_TOKEN"
-# 描述列按显示宽度截断：全角字符占两列，不截断会让中文描述把表格撑到几百列。
-_DESCRIPTION_WIDTH = 50
-_UPDATED_LENGTH = 10
-_ELLIPSIS = "…"
+_CONTINUE_PROMPT = "Continue? [Y/n] "
+# 空回车即同意，与提示符里的大写 Y 一致；其余一律按拒绝处理。
+_AFFIRMATIVE = frozenset({"", "y", "yes"})
 
 COMMAND: CommandSpec = {
     "name": "app",
     "help": "查看并调整 MCP App 注册表",
     "subcommands": {
-        "list": {
-            "help": "列出 config/apps.toml 中的 App 及其就绪状态",
-            "options": {"--json": "以 JSON 输出，便于脚本消费"},
-        },
+        "list": {"help": "列出 config/apps.toml 中的 App 及其就绪状态"},
         "search": {
             "help": "按 topic 搜索可安装的 App 仓库",
             "args": {
@@ -79,8 +82,44 @@ COMMAND: CommandSpec = {
                 },
                 "--sort": {"metavar": "FIELD", "help": f"排序字段，可选 {'、'.join(SORT_FIELDS)}"},
                 "--order": {"metavar": "ORDER", "help": f"排序方向，可选 {'、'.join(ORDER_FIELDS)}，需与 --sort 同用"},
-                "--json": "以 JSON 输出，便于脚本消费",
             },
+        },
+        "install": {
+            "help": "安装本地 MCP 包、登记已在运行的远程 MCP 端点，或安装声明了启动方式的源码仓库",
+            "args": {
+                "repository": {
+                    "nargs": "?",
+                    "default": None,
+                    "metavar": "SOURCE",
+                    "help": "远程 MCP 的 HTTPS URL，或源码仓库（owner/repo、GitHub HTTPS/SSH URL）",
+                },
+            },
+            "options": {
+                "--ref": {"metavar": "REF", "help": "分支或标签，交给 Git 解析，不预判形状"},
+                "--package": {"metavar": "ID", "help": "显式 package ID，默认由来源推导"},
+                "--auth-env": {
+                    "metavar": "ENV_NAME",
+                    "help": "远程 MCP 的 Bearer token 环境变量名；仅适用于 HTTPS URL",
+                },
+                "--command": {
+                    "metavar": "JSON",
+                    "help": "显式启动命令，JSON 字符串数组；给出后不再要求 aurora-app.toml",
+                },
+                "--npx": {"metavar": "PACKAGE", "help": "交给 npx 运行的包，不克隆任何仓库"},
+                "--uvx": {"metavar": "PACKAGE", "help": "交给 uvx 运行的包，不克隆任何仓库"},
+                "--arg": {
+                    "action": "append",
+                    "metavar": "VALUE",
+                    "help": "传给 Server 的参数，可重复；排在包名之后（如允许访问的目录）",
+                },
+                "--disabled": {"action": "store_true", "help": "登记为禁用；默认启用"},
+                "--yes": {"action": "store_true", "help": "跳过最终确认，不跳过任何检查"},
+            },
+        },
+        "remove": {
+            "help": "从注册表移除一个 App，受管安装目录一并删除",
+            "args": {"package": "注册表中的小写点分 package ID"},
+            "options": {"--force": {"action": "store_true", "help": "只跳过 origin 归属校验，不放宽路径边界"}},
         },
         "enable": {
             "help": "允许 App 在下次 aurora start 时启动",
@@ -98,23 +137,32 @@ def execute(arguments: argparse.Namespace) -> int:
     """按子命令读取或调整注册表；错误转换为中文提示与项目退出码。"""
     try:
         _load_environment(arguments.root)
-        manager = AppManager(AppStore(arguments.root), _github_source())
-        match arguments.subcommand:
-            case "list":
-                return _list_apps(manager, as_json=bool(arguments.json))
-            case "search":
-                return _search_apps(manager, arguments)
-            case "enable":
-                return _toggle(manager, str(arguments.package), enabled=True)
-            case "disable":
-                return _toggle(manager, str(arguments.package), enabled=False)
-            case _:
-                raise ConfigError(f"未知子命令：{arguments.subcommand}")
+        return _dispatch(arguments)
     except AppError as error:
         sys.stderr.write(f"{_label(error)}：{error}\n")
         return _exit_code(error)
     except KeyboardInterrupt:
         return EXIT_INTERRUPTED
+
+
+def _dispatch(arguments: argparse.Namespace) -> int:
+    """子命令分发；与 execute 分开是为了让错误通道只有一处、只有两条出口。"""
+    manager = AppManager(AppStore(arguments.root), _github_source())
+    match arguments.subcommand:
+        case "list":
+            return _list_apps(manager)
+        case "search":
+            return _search_apps(manager, arguments)
+        case "install":
+            return _install_app(manager, arguments)
+        case "remove":
+            return _remove_app(manager, arguments)
+        case "enable":
+            return _toggle(manager, str(arguments.package), enabled=True)
+        case "disable":
+            return _toggle(manager, str(arguments.package), enabled=False)
+        case _:
+            raise ConfigError(f"未知子命令：{arguments.subcommand}")
 
 
 def _load_environment(root: Path) -> None:
@@ -139,163 +187,248 @@ def _github_source() -> GitHubSource:
     return GitHubSource(HttpxTransport(), token=os.environ.get(_TOKEN_VARIABLE))
 
 
-def _list_apps(manager: AppManager, *, as_json: bool) -> int:
+_FAILURE_ERRORS = (
+    RegistryWriteError,
+    DiscoveryError,
+    CloneError,
+    InstallError,
+    RemoveError,
+    VerifyError,
+)
+
+
+def _list_apps(manager: AppManager) -> int:
+    """列出注册表；条目自身不可用时退出码非零，好让脚本能直接判。"""
     result = manager.list_apps()
-    if as_json:
-        sys.stdout.write(json.dumps([_as_dict(item) for item in result.apps], ensure_ascii=False, indent=2) + "\n")
-    else:
-        _print_table(result)
-    return EXIT_FAILURE if any(item.state != "ready" for item in result.apps) else 0
+    render_list(result)
+    return 0 if healthy(result) else EXIT_FAILURE
 
 
 def _search_apps(manager: AppManager, arguments: argparse.Namespace) -> int:
     """搜索候选仓库并渲染；空结果不是错误，退出码仍是 0。"""
-    result = manager.search_apps(
-        arguments.query,
-        page=arguments.page,
-        page_size=arguments.page_size,
-        sort=arguments.sort,
-        order=arguments.order,
+    render_search(
+        manager.search_apps(
+            arguments.query,
+            page=arguments.page,
+            page_size=arguments.page_size,
+            sort=arguments.sort,
+            order=arguments.order,
+        )
     )
-    if arguments.json:
-        _print_search_json(result)
-    else:
-        _print_search(result)
-        if result.incomplete_results:
-            # 表格模式没有机器可读的出口，只能在人看的这一侧补一句。
-            sys.stderr.write("警告：GitHub 报告本次搜索结果不完整，可能仍有未返回的仓库。\n")
+    return 0
+
+
+def _install_app(manager: AppManager, arguments: argparse.Namespace) -> int:
+    """按输入来源选择包管理器、远程端点或源码仓库。
+
+    三条路径各有自己的准入规则；HTTPS 的 GitHub 仓库 URL 仍由源码路径处理，
+    不能作为 MCP 端点连接。
+    """
+    chosen = [(name, specifier) for name, specifier in (("npx", arguments.npx), ("uvx", arguments.uvx)) if specifier]
+    if len(chosen) > 1:
+        raise ConfigError("--npx 与 --uvx 只能用一个")
+    if chosen:
+        executable, specifier = chosen[0]
+        return _install_package_source(manager, arguments, executable=executable, specifier=str(specifier))
+    source = arguments.repository
+    if source is not None and _is_remote_url(source):
+        return _install_remote_source(manager, arguments, url=source)
+    if source is not None and "/" not in source and ":" not in source:
+        raise ConfigError(
+            f"当前不支持按名称查找 MCP Server：{source}；请提供真实 npm 包（--npx）、MCP HTTPS URL 或 owner/repo"
+        )
+    return _install_repository_source(manager, arguments)
+
+
+def _is_remote_url(source: str) -> bool:
+    """URL 走远程路径；GitHub 仓库 URL 保留源码语义。"""
+    try:
+        repository_url = github_https_path(source) is not None
+    except ValueError as error:
+        raise ConfigError(f"URL 格式无效：{source}") from error
+    return source.lower().startswith(("https://", "http://")) and not repository_url
+
+
+def _install_package_source(
+    manager: AppManager, arguments: argparse.Namespace, *, executable: str, specifier: str
+) -> int:
+    if arguments.repository is not None:
+        raise ConfigError(f"--{executable} 不接受仓库参数：{arguments.repository}")
+    if arguments.ref is not None:
+        raise ConfigError(f"--{executable} 不克隆任何仓库，不能与 --ref 同用")
+    if arguments.command is not None:
+        raise ConfigError(f"--{executable} 已经决定了启动命令，不能与 --command 同用")
+    if arguments.auth_env is not None:
+        raise ConfigError(f"--auth-env 只适用于远程 MCP URL，不能与 --{executable} 同用")
+    return _install_runner(manager, arguments, executable=executable, specifier=specifier)
+
+
+def _install_remote_source(manager: AppManager, arguments: argparse.Namespace, *, url: str) -> int:
+    if arguments.ref is not None or arguments.command is not None or arguments.arg:
+        raise ConfigError("远程 MCP URL 不接受 --ref、--command 或 --arg")
+    checked = check_connect_url(url)
+    return _register_remote(
+        manager,
+        url=checked,
+        package=arguments.package or remote_package(checked),
+        auth_env=arguments.auth_env,
+        enabled=not arguments.disabled,
+        assume_yes=bool(arguments.yes),
+    )
+
+
+def _install_repository_source(manager: AppManager, arguments: argparse.Namespace) -> int:
+    if arguments.auth_env is not None:
+        raise ConfigError("--auth-env 只适用于远程 MCP URL")
+    if arguments.arg:
+        # 仓库型安装的启动命令来自 aurora-app.toml 或 --command，Aurora 不往里塞
+        # 参数：那会把「仓库声明的入口」改成一个用户拼出来的入口。
+        raise ConfigError("--arg 只适用于 --npx / --uvx；源码安装的参数由仓库清单或 --command 决定")
+    if arguments.repository is None:
+        raise ConfigError("请给出 MCP HTTPS URL 或源码仓库，或用 --npx / --uvx 指定本地包")
+    return _install_repository(manager, arguments)
+
+
+def _install_repository(manager: AppManager, arguments: argparse.Namespace) -> int:
+    """安装一个源码仓库；用户放弃时返回 EXIT_INTERRUPTED，不当成失败。
+
+    ``--yes`` 在这里实现，而不是传 ``AppManager.install(yes=...)``：计划必须
+    无条件展示，而 ``--yes`` 只该跳过最后那一次提问。把 assume_yes 关进闭包，
+    两条规则各管各的，``service.install`` 的 ``yes`` 仍然留给编程调用方。
+    """
+    assume_yes = bool(arguments.yes)
+
+    def confirm(plan: InstallPlan) -> bool:
+        render_plan(plan)
+        return _confirmed(assume_yes)
+
+    plan = manager.install(
+        str(arguments.repository),
+        ref=arguments.ref,
+        command=arguments.command,
+        package=arguments.package,
+        enable=not arguments.disabled,
+        confirm=confirm,
+    )
+    if plan is None:
+        return _cancelled()
+    render_outcome(plan)
+    return 0
+
+
+def _install_runner(manager: AppManager, arguments: argparse.Namespace, *, executable: str, specifier: str) -> int:
+    """登记一个由包管理器取包的本地 MCP；与源码安装共用确认与 --yes 的规则。"""
+    assume_yes = bool(arguments.yes)
+
+    def confirm(plan: RunnerPlan) -> bool:
+        render_plan(plan)
+        return _confirmed(assume_yes)
+
+    plan = manager.install_runner(
+        executable=executable,
+        specifier=specifier,
+        package=arguments.package,
+        arguments=tuple(arguments.arg or ()),
+        enable=not arguments.disabled,
+        confirm=confirm,
+    )
+    if plan is None:
+        return _cancelled()
+    render_outcome(plan)
+    return 0
+
+
+def _register_remote(
+    manager: AppManager,
+    *,
+    url: str,
+    package: str,
+    auth_env: str | None,
+    enabled: bool,
+    assume_yes: bool,
+) -> int:
+    """远程端点的唯一 CLI 流程：展示、确认、连接发现、登记。
+
+    ``--yes`` 在这里跳过的是提问，不是握手：握手是这条路径唯一的准入门槛，而
+    它不改变任何状态，让用户看一遍计划再连只是把同一件事推迟一次回车。
+
+    """
+
+    def confirm(plan: ConnectPlan) -> bool:
+        render_plan(plan)
+        return _confirmed(assume_yes)
+
+    plan = manager.connect(
+        url,
+        package=package,
+        auth_env=auth_env,
+        enable=enabled,
+        confirm=confirm,
+    )
+    if plan is None:
+        return _cancelled()
+    render_outcome(plan)
+    return 0
+
+
+def _remove_app(manager: AppManager, arguments: argparse.Namespace) -> int:
+    """移除一个 App；非受管条目只解除注册，必须说清没删文件。"""
+    render_removal(manager.remove(str(arguments.package), force=bool(arguments.force)), manager.store.project_root)
     return 0
 
 
 def _toggle(manager: AppManager, package: str, *, enabled: bool) -> int:
-    changed = manager.enable(package) if enabled else manager.disable(package)
-    if not changed:
-        sys.stdout.write(f"{package} 已经是{'启用' if enabled else '禁用'}状态，未修改配置。\n")
-        return 0
-    sys.stdout.write(f"已{'启用' if enabled else '禁用'} {package}。配置将在下次 aurora start 时生效。\n")
+    render_toggle(package, enabled=enabled, changed=manager.enable(package) if enabled else manager.disable(package))
     return 0
 
 
-def _as_dict(item: AppListItem) -> dict[str, str | bool | None]:
-    """把列表项投影成 JSON 对象；键顺序与表格列一致。"""
-    return {
-        "package": item.package,
-        "enabled": item.enabled,
-        "transport": item.transport,
-        "state": item.state,
-        "path": item.path,
-    }
+def _confirmed(assume_yes: bool) -> bool:
+    """一次确认；``--yes`` 跳过提问，但不跳过已经跑完的任何检查。
 
-
-def _search_dict(repository: Repository) -> dict[str, object]:
-    """把候选仓库投影成 JSON 对象；字段与 Repository 一一对应，外加展示用 status。"""
-    return {
-        "full_name": repository.full_name,
-        "owner": repository.owner,
-        "name": repository.name,
-        "description": repository.description,
-        "stars": repository.stars,
-        "topics": list(repository.topics),
-        "updated_at": repository.updated_at,
-        "default_branch": repository.default_branch,
-        "html_url": repository.html_url,
-        "clone_url": repository.clone_url,
-        "archived": repository.archived,
-        "disabled": repository.disabled,
-        "status": repository.status,
-    }
-
-
-def _print_table(result: AppList) -> None:
-    """按列渲染注册表；路径与 package 不截断，避免隐藏诊断信息。"""
-    if not result.apps:
-        sys.stdout.write(f"{APPS_RELATIVE_PATH} 中没有注册任何 App。\n")
-        return
-    rows = [
-        (item.package, "yes" if item.enabled else "no", item.transport, item.state, item.path or "-")
-        for item in result.apps
-    ]
-    banner = (_TITLE, "", "", "", APPS_RELATIVE_PATH)
-    sys.stdout.write(render_table(_COLUMNS, rows, banner=banner) + "\n")
-
-
-def _print_search_json(result: RepositoryPage) -> None:
-    """把一页搜索结果投影成 JSON 对象。
-
-    输出的是对象而不是裸数组：分页与完整性是「这一页」的属性，只放在 stderr
-    上等于对脚本不可见。``incomplete_results`` 尤其重要 —— 它意味着「你以为
-    翻完了，其实没有」。list --json 仍是裸数组：它输出的是完整列表，没有分页
-    和完整性这两个概念。
+    这里不是交互终端时直接拒绝，而不是等着读：管道或 CI 里等一个永远不会来的
+    回车看着像挂死，实际是 EOF 被 ``input()`` 当成空串。
     """
-    payload = {
-        "total_count": result.total_count,
-        "page": result.page,
-        "page_size": result.page_size,
-        "incomplete_results": result.incomplete_results,
-        "items": [_search_dict(item) for item in result.items],
-    }
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        raise ConfigError("当前不是交互终端，请加 --yes 确认")
+    try:
+        answer = input(_CONTINUE_PROMPT)
+    except EOFError:
+        return False
+    return answer.strip().lower() in _AFFIRMATIVE
 
 
-def _print_search(result: RepositoryPage) -> None:
-    """按列渲染搜索结果；描述截断，其余列保持原样。"""
-    if not result.items:
-        sys.stdout.write(f"没有找到带 {TOPIC} topic 的仓库。\n")
-        return
-    rows = [_search_row(item) for item in result.items]
-    banner = (_SEARCH_TITLE, "", "", "", TOPIC_CLAUSE)
-    sys.stdout.write(render_table(_SEARCH_COLUMNS, rows, banner=banner) + "\n")
-    sys.stdout.write(_search_footer(result) + "\n")
-
-
-def _search_row(repository: Repository) -> tuple[str, ...]:
-    return (
-        repository.full_name,
-        str(repository.stars),
-        repository.status,
-        repository.updated_at[:_UPDATED_LENGTH] or "-",
-        _truncate(repository.description or "-", _DESCRIPTION_WIDTH),
-    )
-
-
-def _search_footer(result: RepositoryPage) -> str:
-    first = (result.page - 1) * result.page_size + 1
-    footer = f"显示第 {first}-{first + len(result.items) - 1} 条，共 {result.total_count} 条。"
-    if result.total_count > MAX_RESULTS:
-        footer += f"GitHub 只暴露前 {MAX_RESULTS} 条结果，请用 QUERY 关键词缩小范围。"
-    return footer
-
-
-def _truncate(text: str, width: int) -> str:
-    """按显示宽度截断；全角算两列，超长以省略号收尾。
-
-    复用 ``aurora.utils.table.display_width``：截断宽度与渲染宽度必须是同一套
-    算法，否则列宽会与框线算出的宽度对不上。
-    """
-    if display_width(text) <= width:
-        return text
-    kept: list[str] = []
-    used = 0
-    for character in text:
-        size = display_width(character)
-        if used + size > width - 1:
-            break
-        kept.append(character)
-        used += size
-    return "".join(kept) + _ELLIPSIS
+def _cancelled() -> int:
+    render_cancelled()
+    return EXIT_INTERRUPTED
 
 
 def _exit_code(error: AppError) -> int:
-    """把领域错误映射到项目既有退出码；写入与网络失败属于一般失败。"""
-    if isinstance(error, (RegistryWriteError, DiscoveryError)):
-        return EXIT_FAILURE
-    return EXIT_CONFIG_ERROR
+    """把领域错误映射到项目既有退出码。
+
+    分界是「输入对不对」而不是「哪一类操作失败」：不可用的仓库、不合规的 package
+    与路径冲突重试也不会变，属于配置错误；写盘、网络、git 与握手的失败则可能只是
+    这一次没成，属于一般失败。新增 AppError 子类时要在这里表态，否则会掉进默认
+    分支 —— 例如 CloneError 不显式列出，git 超时就会说成「App 配置错误」。
+    """
+    return EXIT_FAILURE if isinstance(error, _FAILURE_ERRORS) else EXIT_CONFIG_ERROR
 
 
 def _label(error: AppError) -> str:
+    """一句话标签，走 ``error``：`` 的格式。
+
+    InstallError 与 RemoveError 各自给一句：两者的恢复建议不同（安装失败要指出
+    残留的正式目录，删除失败要指出残留的回收目录），笼统的「操作失败」恰好丢掉
+    用户最需要知道的那一件事。
+    """
     if isinstance(error, DiscoveryError):
         return "App 搜索失败"
+    if isinstance(error, InstallError):
+        return "App 安装失败"
+    if isinstance(error, RemoveError):
+        return "App 移除失败"
     return "App 操作失败" if _exit_code(error) == EXIT_FAILURE else "App 配置错误"
 
 
-__all__ = ["COMMAND", "AppManager", "AppStore", "execute"]
+__all__ = ["COMMAND", "execute"]

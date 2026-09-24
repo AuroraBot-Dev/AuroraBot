@@ -1,17 +1,17 @@
-"""GitHub 仓库发现：Search Query 构造、HTTP 请求、JSON 解析与错误映射。
-
-本模块只回答「GitHub 上有哪些候选 Repository」。它不 clone、不检查仓库内容、
-不判断是不是 MCP Server，也不生成 package ID —— 那些属于后续阶段。
-"""
+"""通过 GitHub API 搜索仓库并读取元数据与安装清单。"""
 
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Protocol
+from urllib.parse import quote
 
 import httpx2
 
+from aurora.commands.app.manifest import MANIFEST_NAME, MAX_MANIFEST_BYTES, manifest_source, unusable_manifest
 from aurora.commands.app.models import (
     ConfigError,
     DiscoveryError,
@@ -33,6 +33,7 @@ MAX_PAGE_SIZE = 100
 MAX_RESULTS = 1000
 
 _SEARCH_ENDPOINT = "https://api.github.com/search/repositories"
+_REPOSITORIES_ENDPOINT = "https://api.github.com/repos"
 _API_VERSION = "2022-11-28"
 _ACCEPT = "application/vnd.github+json"
 _TIMEOUT_SECONDS = 30.0
@@ -92,7 +93,7 @@ class GitHubSource:
     ) -> RepositoryPage:
         """搜索带 ``aurorabot-app`` topic 的仓库；参数越界在发请求前就拒绝。"""
         check_search_arguments(page=page, page_size=page_size, sort=sort, order=order)
-        response = self._get(_search_parameters(query, page, page_size, sort, order))
+        response = self._get(_SEARCH_ENDPOINT, _search_parameters(query, page, page_size, sort, order))
         _raise_for_status(response)
         payload = _payload(response)
         return RepositoryPage(
@@ -103,10 +104,24 @@ class GitHubSource:
             incomplete_results=_flag(payload, "incomplete_results"),
         )
 
-    def _get(self, parameters: Mapping[str, str | int]) -> httpx2.Response:
+    def repository(self, full_name: str) -> Repository:
+        """从 GitHub API 读取仓库名称、默认分支与克隆地址。"""
+        response = self._get(_repository_endpoint(full_name), {})
+        _raise_for_status(response, resource="仓库")
+        return _repository(_payload(response))
+
+    def manifest(self, full_name: str, *, ref: str | None = None) -> str | None:
+        """克隆前读取仓库根目录的安装清单；Contents API 返回 404 时返回 None。"""
+        response = self._get(_contents_endpoint(full_name, MANIFEST_NAME), _ref_parameters(ref))
+        if response.status_code == httpx2.codes.NOT_FOUND:
+            return None
+        _raise_for_status(response, resource="清单")
+        return _manifest_content(_payload(response), manifest_source(full_name, ref))
+
+    def _get(self, url: str, parameters: Mapping[str, str | int]) -> httpx2.Response:
         try:
             return self._transport.get(
-                _SEARCH_ENDPOINT,
+                url,
                 headers=_headers(self._token),
                 params=parameters,
                 timeout=_TIMEOUT_SECONDS,
@@ -164,6 +179,60 @@ def _search_parameters(
     return parameters
 
 
+def _repository_base(full_name: str) -> str:
+    """``/repos/{owner}/{repo}``；两段各自 percent-encoding，不手工拼裸路径。
+
+    这里只保证 URL 拼得出来。仓库名的完整规则在 ``install.check_requested_name``，
+    调用方已经先过了一遍；这一条是兜底，免得调用方漏掉时拼出一个指向别处的 URL。
+    """
+    owner, separator, name = full_name.partition("/")
+    if not separator or not owner or not name:
+        raise DiscoveryError(f"仓库全名必须是 owner/repo 两段：{full_name}")
+    encoded = "/".join(quote(part, safe="") for part in (owner, name))
+    return f"{_REPOSITORIES_ENDPOINT}/{encoded}"
+
+
+def _repository_endpoint(full_name: str) -> str:
+    return _repository_base(full_name)
+
+
+def _contents_endpoint(full_name: str, path: str) -> str:
+    """``/repos/{owner}/{repo}/contents/{path}``；文件名同样要转义。"""
+    return f"{_repository_base(full_name)}/contents/{quote(path, safe='')}"
+
+
+def _ref_parameters(ref: str | None) -> dict[str, str]:
+    """指定 --ref 时从那个 ref 读清单；不指定就由 GitHub 用默认分支。
+
+    清单必须与将要克隆的 ref 一致：从 main 读到清单、却去装一个 tag，等于按另一
+    个版本的声明安装。
+    """
+    return {} if ref is None else {"ref": ref}
+
+
+def _manifest_content(payload: Mapping[str, object], source: str) -> str:
+    """把 Contents API 的文件响应解成文本。
+
+    ``content`` 是 base64（Contents API 对 1 MB 以上的文件会返回空 content 与
+    ``encoding: none``），所以「拿不到内容」是必须处理的正常分支，不是异常。
+    """
+    if payload.get("type") != "file":
+        raise unusable_manifest(source, "它不是仓库根目录下的一个文件")
+    content = payload.get("content")
+    if payload.get("encoding") != "base64" or not isinstance(content, str) or not content:
+        raise unusable_manifest(source, "GitHub 没有返回可解码的内容，文件可能超过 1 MB")
+    try:
+        raw = base64.b64decode(content, validate=False)
+    except (binascii.Error, ValueError) as error:
+        raise unusable_manifest(source, f"内容不是合法 base64（{type(error).__name__}）") from error
+    if len(raw) > MAX_MANIFEST_BYTES:
+        raise unusable_manifest(source, f"超过 {MAX_MANIFEST_BYTES} 字节，不像一份声明文件")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise unusable_manifest(source, "内容不是 UTF-8 文本") from error
+
+
 def _headers(token: str | None) -> dict[str, str]:
     """GitHub 请求头；token 只在这里出现，绝不进入错误信息或日志。"""
     headers = {
@@ -176,8 +245,8 @@ def _headers(token: str | None) -> dict[str, str]:
     return headers
 
 
-def _raise_for_status(response: httpx2.Response) -> None:
-    """把 GitHub 的 HTTP 状态折叠成两类错误；消息里不出现任何请求头。"""
+def _raise_for_status(response: httpx2.Response, *, resource: str = "搜索") -> None:
+    """将 GitHub HTTP 状态转换为搜索、认证或配额错误。"""
     status = response.status_code
     if status == httpx2.codes.OK:
         return
@@ -188,7 +257,7 @@ def _raise_for_status(response: httpx2.Response) -> None:
             raise GitHubRateLimitError(_rate_limit_message(response))
         raise DiscoveryError(f"GitHub 拒绝了这次请求（HTTP {status}）")
     if status == httpx2.codes.NOT_FOUND:
-        raise DiscoveryError("GitHub 搜索接口返回 HTTP 404")
+        raise DiscoveryError(f"GitHub {resource}接口返回 HTTP 404")
     if status >= httpx2.codes.INTERNAL_SERVER_ERROR:
         raise DiscoveryError("GitHub 服务暂时不可用")
     raise DiscoveryError(f"GitHub 请求失败（HTTP {status}）")

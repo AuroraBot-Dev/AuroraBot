@@ -21,6 +21,7 @@ from aurora.commands.app.models import (
     AppState,
     ConfigError,
     PathError,
+    RawApp,
     RegistryError,
     RegistryWriteError,
     registry_package,
@@ -59,59 +60,21 @@ class AppStore:
         items = tuple(self._item(package, raw) for package, raw in zip(packages, raw_apps, strict=True))
         return AppList(items)
 
-    def set_enabled(self, package: str, enabled: bool) -> bool:
-        """修改一个已有条目的 enabled；返回是否实际改动了文件。"""
-        if not self.apps_path.is_file():
-            raise _missing_registry(self.apps_path)
-        return self._set_enabled(package, enabled)
+    def require_registry(self) -> None:
+        """注册表不存在即 ConfigError；要写它的用例在动手之前先调这一条。
 
-    def validate_registered_working_dir(self, working_dir: str) -> Path:
-        """校验已注册 App 的 working_dir，返回项目内的绝对路径。
-
-        事务目录（暂存、回收）不适用这条规则，它们会有各自的校验入口。
+        读取入口（``_read_document`` / ``_editable_document``）也各自调它一次，
+        所以「文件不存在」在任何路径上都是同一句话。这里公开出来只是为了让
+        install 能在 clone 之前就问 —— 否则用户会先等完一整次 clone 才被告知
+        「先去 aurora setup」，而这句话在动手之前就能说。
         """
-        try:
-            check_relative_directory(working_dir, "app.working_dir")
-        except ValueError as error:
-            raise PathError(f"working_dir 必须是项目内相对目录：{working_dir}") from error
-        normalized = PurePosixPath(working_dir.replace("\\", "/"))
-        directory = self.project_root.joinpath(*normalized.parts)
-        for component in _components(self.project_root, directory):
-            if os.path.lexists(component) and (component.is_symlink() or component.is_junction()):
-                raise PathError(f"working_dir 不得经过符号链接或联接：{component}")
-        if not directory.resolve().is_relative_to(self.project_root):
-            raise PathError(f"working_dir 越出项目根目录：{working_dir}")
-        return directory
-
-    def _read_document(self) -> TomlTable:
         if not self.apps_path.is_file():
             raise _missing_registry(self.apps_path)
-        try:
-            return load_toml(self.apps_path)
-        except (OSError, tomllib.TOMLDecodeError) as error:
-            raise ConfigError(f"{APPS_RELATIVE_PATH} 无法解析：{error}") from error
 
-    def _item(self, package: str, raw: TomlTable) -> AppListItem:
-        """把一个条目投影成列表项；条目字段问题只影响它自己，不影响整次读取。"""
-        transport = _declared_text(raw, "transport")
-        config = _app_config(package, raw)
-        if config is None:
-            return AppListItem(package, False, transport, "invalid", _declared_text(raw, "working_dir"))
-        if config.transport == "stdio" and config.working_dir is not None:
-            state = self._stdio_state(config.working_dir)
-            return AppListItem(package, config.enabled, "stdio", state, config.working_dir)
-        return AppListItem(package, config.enabled, config.transport, "ready", None)
-
-    def _stdio_state(self, working_dir: str) -> AppState:
-        try:
-            directory = self.validate_registered_working_dir(working_dir)
-        except PathError:
-            return "invalid"
-        return "ready" if directory.is_dir() else "missing"
-
-    def _set_enabled(self, package: str, enabled: bool) -> bool:
+    def set_enabled(self, package: str, enabled: bool) -> bool:
+        """原子修改一个已有条目的 enabled；返回是否实际改动了文件。"""
         document = self._editable_document()
-        matches = [entry for entry in _editable_apps(document) if entry.get("package") == package]
+        matches = [entry for entry in _apps_array(document) if entry.get("package") == package]
         if not matches:
             raise AppNotFoundError(f"注册表中不存在 package：{package}")
         if len(matches) > 1:
@@ -124,7 +87,91 @@ class AppStore:
         _atomic_write(self.apps_path, tomlkit.dumps(document))
         return True
 
+    def raw_app(self, package: str) -> RawApp | None:
+        """按 package 取一条注册表条目的原始声明；不存在时返回 None。
+
+        列表投影不能当这个用途：无效条目的 working_dir 会被压成展示占位符
+        ``"-"``，remove 需要区分「用户写的字符串」与「那个占位符」。
+        """
+        raw_apps = _raw_apps(self._read_document())
+        packages = _packages(raw_apps)
+        for name, raw in zip(packages, raw_apps, strict=True):
+            if name == package:
+                return RawApp(name, _declared_optional(raw, "working_dir"), _app_config(name, raw))
+        return None
+
+    def add_app(self, entry: AppConfig) -> None:
+        """追加一条条目并原子写注册表。
+
+        接收 ``AppConfig`` 而不是计划：store 只认识注册表条目的形状，不知道
+        GitHub、包管理器与远程端点。写出的字段恰好是 runtime 解析器为该传输开的
+        那一份白名单键（见 ``app_table``）—— 多一个 key 会让 ``aurora start``
+        拒绝整个文件。
+        """
+        document = self._editable_document()
+        _apps_array(document).append(app_table(entry))
+        _atomic_write(self.apps_path, tomlkit.dumps(document))
+
+    def remove_app(self, package: str) -> None:
+        """删除一条条目并原子写注册表；package 不存在即 AppNotFoundError。"""
+        document = self._editable_document()
+        apps = _apps_array(document)
+        matches = [index for index, entry in enumerate(apps) if entry.get("package") == package]
+        if not matches:
+            raise AppNotFoundError(f"注册表中不存在 package：{package}")
+        if len(matches) > 1:
+            raise RegistryError(f"{APPS_RELATIVE_PATH} 中 package 重复：{package}")
+        del apps[matches[0]]
+        if len(apps) == 0:
+            _keep_empty_apps_array(document)
+        _atomic_write(self.apps_path, tomlkit.dumps(document))
+
+    def validate_registered_working_dir(self, working_dir: str) -> Path:
+        """校验已注册 App 的 working_dir，返回项目内的绝对路径。
+
+        事务目录（暂存、回收）不适用这条规则，它们走 ``check_project_directory``
+        加自己的形状判断。
+        """
+        try:
+            check_relative_directory(working_dir, "app.working_dir")
+        except ValueError as error:
+            raise PathError(f"working_dir 必须是项目内相对目录：{working_dir}") from error
+        normalized = PurePosixPath(working_dir.replace("\\", "/"))
+        return check_project_directory(self.project_root, self.project_root.joinpath(*normalized.parts), "working_dir")
+
+    def _read_document(self) -> TomlTable:
+        self.require_registry()
+        try:
+            return load_toml(self.apps_path)
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            raise ConfigError(f"{APPS_RELATIVE_PATH} 无法解析：{error}") from error
+
+    def _item(self, package: str, raw: TomlTable) -> AppListItem:
+        """把一个条目投影成列表项；条目字段问题只影响它自己，不影响整次读取。
+
+        两种传输的「自身可用」不是同一件事：本地条目要核对磁盘上的 working_dir，
+        远程条目没有本地文件可查。远程因此是 ``configured`` 而不是 ``ready`` ——
+        它说的是「这一条读得通、可以交给 aurora start」，端点是否在线由
+        运行期会重新连接；列表不探测端点状态。
+        """
+        transport = _declared_text(raw, "transport")
+        config = _app_config(package, raw)
+        if config is None:
+            return AppListItem(package, False, transport, "invalid", _declared_text(raw, "working_dir"))
+        if config.transport == "stdio":
+            state = self._stdio_state(config.working_dir or "")
+            return AppListItem(package, config.enabled, "stdio", state, config.working_dir)
+        return AppListItem(package, config.enabled, config.transport, "configured", None)
+
+    def _stdio_state(self, working_dir: str) -> AppState:
+        try:
+            directory = self.validate_registered_working_dir(working_dir)
+        except PathError:
+            return "invalid"
+        return "ready" if directory.is_dir() else "missing"
+
     def _editable_document(self) -> TOMLDocument:
+        self.require_registry()
         try:
             return tomlkit.parse(self.apps_path.read_text(encoding="utf-8"))
         except (OSError, ParseError) as error:
@@ -156,14 +203,71 @@ def _packages(raw_apps: tuple[TomlTable, ...]) -> tuple[str, ...]:
     return packages
 
 
-def _editable_apps(document: TOMLDocument) -> tuple[Table, ...]:
-    """取出可编辑的 ``[[app]]`` 条目；空数组视为没有任何条目。"""
+def _apps_array(document: TOMLDocument) -> AoT:
+    """取出可编辑的 ``[[app]]`` 表数组；缺失或 ``app = []`` 都补一个空的。
+
+    空数组没有 append，而删除条目与新增条目必须拿到同一个容器，所以这里就地
+    把它换成表数组。只有真正要改文件的入口会调用它。
+    """
     entries = document.get("app")
     if isinstance(entries, AoT):
-        return tuple(entries)
-    if isinstance(entries, Array) and len(entries) == 0:
-        return ()
+        return entries
+    if entries is None or (isinstance(entries, Array) and len(entries) == 0):
+        if entries is not None:
+            del document["app"]
+        empty = tomlkit.aot()
+        document["app"] = empty
+        return empty
     raise RegistryError(f"{APPS_RELATIVE_PATH} 的 app 必须是表数组")
+
+
+def _keep_empty_apps_array(document: TOMLDocument) -> None:
+    """把空掉的表数组换成 ``app = []``。
+
+    删掉最后一条之后 tomlkit 会把整个键渲染掉，文件里就只剩一个空文档 ——
+    而读取端要求 ``app`` 存在且是表数组，于是「移除最后一个 App」会把注册表
+    变成一份读不了的文件。空注册表的写法就是 ``app = []``，这里沿用同一种表示，
+    不把空数组留成一个缺失的键。
+    """
+    del document["app"]
+    document["app"] = tomlkit.array()
+
+
+def render_entry(entry: AppConfig) -> str:
+    """把一条条目渲染成 ``[[app]]`` 文本块，用于安装确认时展示。
+
+    展示给用户的这段文本与最终写进文件的那一段出自同一个 ``app_table``：计划里
+    写 enabled = true，注册表就是 true，不存在两处各自渲染、各自漂移的可能。
+    """
+    document = tomlkit.document()
+    _apps_array(document).append(app_table(entry))
+    return tomlkit.dumps(document).strip()
+
+
+def app_table(entry: AppConfig) -> Table:
+    """把一条配置写成 TOML 表；字段与顺序对齐 config.example/apps.toml。
+
+    两种传输的键集不同，因为运行时解析器对它们各开了一份封闭白名单：stdio 条目
+    多一个键就会被 ``aurora start`` 拒绝整个文件，streamable_http 条目多一个
+    ``working_dir`` 同样如此。所以这里按 transport 分支，而不是写一份合并的。
+    """
+    rendered = tomlkit.table()
+    rendered["package"] = entry.package
+    rendered["enabled"] = entry.enabled
+    rendered["transport"] = entry.transport
+    if entry.transport == "stdio":
+        rendered["working_dir"] = entry.working_dir
+        rendered["command"] = list(entry.command)
+        rendered["env"] = list(entry.env)
+    else:
+        rendered["url"] = entry.url
+        # auth_env 是可选的：没有它就是「这个端点不需要凭据」，而 TOML 里没有
+        # 这个键与它的值是 none 是同一件事。写一个空值反而会被解析器判为非法。
+        if entry.auth_env is not None:
+            rendered["auth_env"] = entry.auth_env
+    rendered["timeout_seconds"] = entry.timeout_seconds
+    rendered["event_mode"] = entry.event_mode
+    return rendered
 
 
 def _declared_text(raw: TomlTable, key: str) -> str:
@@ -172,12 +276,37 @@ def _declared_text(raw: TomlTable, key: str) -> str:
     return value.strip() if isinstance(value, str) and value.strip() else "-"
 
 
+def _declared_optional(raw: TomlTable, key: str) -> str | None:
+    """注册表里的原始文本；缺失、空白或类型不对时返回 None。
+
+    与 ``_declared_text`` 只差兜底值：那个是给表格看的 ``"-"``，这个是给判断
+    看的「没有」。占位符必须能被识别出来，否则 remove 会把 ``"-"`` 当路径。
+    """
+    value = raw.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def check_project_directory(project_root: Path, directory: Path, label: str) -> Path:
+    """确认一个项目内目录不经链接、不越界，返回它。
+
+    ``label`` 只进错误信息：调用方说得出自己在处理什么（working_dir、受管安装
+    根），用户才知道该去改哪一行配置。路径安全是绝对的，不由任何参数开启 ——
+    install 与 remove 走的是同一条规则。
+    """
+    for component in _components(project_root, directory):
+        if os.path.lexists(component) and (component.is_symlink() or component.is_junction()):
+            raise PathError(f"{label} 不得经过符号链接或联接：{component}")
+    if not directory.resolve().is_relative_to(project_root):
+        raise PathError(f"{label} 越出项目根目录：{directory}")
+    return directory
+
+
 def _components(root: Path, path: Path) -> tuple[Path, ...]:
     """从项目根开始逐层枚举路径的每一级，用于检查链接与联接。"""
     try:
         relative = path.relative_to(root)
     except ValueError as error:
-        raise PathError(f"working_dir 越出项目根目录：{path}") from error
+        raise PathError(f"路径不在项目根目录内：{path}") from error
     current = root
     components: list[Path] = []
     for part in relative.parts:
@@ -265,4 +394,7 @@ def _discard(path: Path) -> str:
 __all__ = [
     "APPS_RELATIVE_PATH",
     "AppStore",
+    "app_table",
+    "check_project_directory",
+    "render_entry",
 ]
