@@ -10,7 +10,8 @@
     "README.md": "README.*.md, LICENSE, CODE_OF_CONDUCT.md, CONTRIBUTING.md, CONTRIBUTING.*.md, AGENTS.md",
     "pyproject.toml": "uv.lock, .python-version, ruff.toml, .ruff.toml, pytest.ini, tox.ini, .pre-commit-config.yaml, .coverage",
     ".env": ".env.example, .env.*",
-    ".gitignore": ".gitattributes, .gitmodules",
+    ".gitignore": ".gitattributes, .gitmodules, .prettierrc.json",
     "package.json": "pnpm-lock.yaml, package-lock.json, yarn.lock, .npmrc, tsconfig*.json, vite.config.*, eslint.config.*, .prettierrc*, .stylelintrc*, uno.config.*, turbo.json"
-  }
+  },
+  "basedpyright.analysis.inlayHints.variableTypes": false
 }

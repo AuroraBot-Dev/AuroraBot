@@ -8,11 +8,11 @@
 
 ## 三种登记来源
 
-| 来源 | 命令写法 | Aurora 做了什么 | 需要什么 |
-| --- | --- | --- | --- |
-| 源码仓库 | `install owner/repo` | clone 仓库到 `extensions/apps/<owner>/<repo>/`，注册启动命令 | 仓库根目录有 `aurora-app.toml`，或用 `--command` 显式给出启动命令 |
-| 包管理器 | `install --npx <pkg>` / `install --uvx <pkg>` | 启动包完成 MCP 检查，并登记启动命令；包管理器可能下载到自己的缓存 | 本机装了 npx 或 uvx |
-| 远程端点 | `install https://mcp.example.com/rpc` | 检查端点并在 `apps.toml` 登记地址与认证变量名；不下载 Server 文件 | 端点能完成 MCP 握手并提供 Tool |
+| 来源     | 命令写法                                      | Aurora 做了什么                                                   | 需要什么                                                          |
+| -------- | --------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 源码仓库 | `install owner/repo`                          | clone 仓库到 `extensions/apps/<owner>/<repo>/`，注册启动命令      | 仓库根目录有 `aurora-app.toml`，或用 `--command` 显式给出启动命令 |
+| 包管理器 | `install --npx <pkg>` / `install --uvx <pkg>` | 启动包完成 MCP 检查，并登记启动命令；包管理器可能下载到自己的缓存 | 本机装了 npx 或 uvx                                               |
+| 远程端点 | `install https://mcp.example.com/rpc`         | 检查端点并在 `apps.toml` 登记地址与认证变量名；不下载 Server 文件 | 端点能完成 MCP 握手并提供 Tool                                    |
 
 三者的共同点：登记前都要通过一次 MCP 握手，确认它连得上、至少能提供一个 Tool。装完的 App
 是「已经登记」，不保证 Bot 已能调用 —— 那还取决于当前 Agent 的工具可见配置。
@@ -72,16 +72,16 @@ aurora app install https://mcp.example.com/rpc --auth-env MCP_TOKEN
 
 选项：
 
-| 选项 | 作用 |
-| --- | --- |
-| `--ref REF` | 分支或标签，交给 Git 解析；只用于源码安装 |
-| `--package ID` | 显式指定 package ID，默认由来源推导 |
-| `--command JSON` | 显式启动命令，JSON 字符串数组；给出后不再要求 `aurora-app.toml` |
-| `--npx` / `--uvx PACKAGE` | 交给对应包管理器运行，两者只能用一个 |
-| `--arg VALUE` | 传给 Server 的参数，可重复，排在包名之后；只用于 `--npx` / `--uvx` |
-| `--auth-env ENV_NAME` | Bearer token 所在的环境变量名；只用于远程 URL |
-| `--disabled` | 登记为禁用（默认启用） |
-| `--yes` | 跳过最后那次确认，不跳过任何检查 |
+| 选项                      | 作用                                                               |
+| ------------------------- | ------------------------------------------------------------------ |
+| `--ref REF`               | 分支或标签，交给 Git 解析；只用于源码安装                          |
+| `--package ID`            | 显式指定 package ID，默认由来源推导                                |
+| `--command JSON`          | 显式启动命令，JSON 字符串数组；给出后不再要求 `aurora-app.toml`    |
+| `--npx` / `--uvx PACKAGE` | 交给对应包管理器运行，两者只能用一个                               |
+| `--arg VALUE`             | 传给 Server 的参数，可重复，排在包名之后；只用于 `--npx` / `--uvx` |
+| `--auth-env ENV_NAME`     | Bearer token 所在的环境变量名；只用于远程 URL                      |
+| `--disabled`              | 登记为禁用（默认启用）                                             |
+| `--yes`                   | 跳过最后那次确认，不跳过任何检查                                   |
 
 源码安装的顺序是有意的：准入、package 查重、目标路径冲突、读清单都在 clone 之前完成 ——
 这几种情形在下载整库之前就能给出答案。clone、检测、展示、确认与握手完成后，
@@ -148,18 +148,18 @@ timeout_seconds = 60
 event_mode = "world_events"
 ```
 
-| 字段 | 说明 |
-| --- | --- |
-| `package` | 小写点分 ID，Aurora 内部的唯一身份；也是 Bot 看到的工具名前缀 |
-| `enabled` | 是否在 `aurora start` 时启动 |
-| `transport` | `stdio`（本地进程）或 `streamable_http`（远程端点） |
-| `working_dir` | 仅 stdio：项目内相对目录，不得越出项目根或经过符号链接；`remove` 只把 `extensions/apps/<owner>/<repo>` 这一种形状当受管目录 |
-| `command` | 仅 stdio：启动命令的 argv |
-| `env` | 仅 stdio：要额外传给 Server 的环境变量**名**，值取自 Aurora 进程的环境；`aurora app` 写出的条目恒为 `[]` |
-| `url` | 仅 streamable_http：端点的 HTTPS 地址 |
-| `auth_env` | 仅 streamable_http：Bearer token 所在的环境变量名，可选 |
-| `timeout_seconds` | MCP 连接和协议读取的超时时间 |
-| `event_mode` | 是否把 Server 上报的事件送进 Bot 的世界线 |
+| 字段              | 说明                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `package`         | 小写点分 ID，Aurora 内部的唯一身份；也是 Bot 看到的工具名前缀                                                               |
+| `enabled`         | 是否在 `aurora start` 时启动                                                                                                |
+| `transport`       | `stdio`（本地进程）或 `streamable_http`（远程端点）                                                                         |
+| `working_dir`     | 仅 stdio：项目内相对目录，不得越出项目根或经过符号链接；`remove` 只把 `extensions/apps/<owner>/<repo>` 这一种形状当受管目录 |
+| `command`         | 仅 stdio：启动命令的 argv                                                                                                   |
+| `env`             | 仅 stdio：要额外传给 Server 的环境变量**名**，值取自 Aurora 进程的环境；`aurora app` 写出的条目恒为 `[]`                    |
+| `url`             | 仅 streamable_http：端点的 HTTPS 地址                                                                                       |
+| `auth_env`        | 仅 streamable_http：Bearer token 所在的环境变量名，可选                                                                     |
+| `timeout_seconds` | MCP 连接和协议读取的超时时间                                                                                                |
+| `event_mode`      | 是否把 Server 上报的事件送进 Bot 的世界线                                                                                   |
 
 两种 transport 的键集是各自封闭的白名单：多写一个键（例如给远程条目加 `working_dir`）会让
 `aurora start` 拒绝整个文件。手工编辑时请照抄 `config.example/apps.toml` 的形状。
@@ -177,12 +177,12 @@ event_mode = "world_events"
 
 ## 退出码
 
-| 码 | 含义 |
-| --- | --- |
-| 0 | 成功（`search` 没有结果也是 0） |
-| 1 | 一般失败：写盘、网络、git、握手、`list` 里有条目自身不可用 |
-| 2 | 配置或输入错误：注册表缺失/无法解析、package 不合规、路径冲突、参数用错 |
-| 130 | 被用户取消（对确认回答 n，或 Ctrl-C） |
+| 码  | 含义                                                                    |
+| --- | ----------------------------------------------------------------------- |
+| 0   | 成功（`search` 没有结果也是 0）                                         |
+| 1   | 一般失败：写盘、网络、git、握手、`list` 里有条目自身不可用              |
+| 2   | 配置或输入错误：注册表缺失/无法解析、package 不合规、路径冲突、参数用错 |
+| 130 | 被用户取消（对确认回答 n，或 Ctrl-C）                                   |
 
 ## 排错
 
