@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -9,9 +10,9 @@ from aurora.configs.apps import APPS_CONFIG, AppConfig
 from aurora.configs.platforms import PLATFORMS_CONFIG, PlatformConfig
 from aurora.configurator import assemble_config
 from src.mcp import McpAppSpec, McpEventMode, McpTransport
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from src.mcp.module import build_mcp_specs
+from src.mcp.runtime import app_owned_scopes
+from src.mcp.scopes import owns_scope
 
 _STDIO = """\
 [[app]]
@@ -38,6 +39,8 @@ event_mode = "disabled"
 
 _EXPECTED_TEMPLATE_APPS = 2
 _EXPECTED_TIMEOUT_SECONDS = 30.0
+_QQ_PACKAGE = "org.aurora.qq"
+_QQ_SCOPES = ("aurora:mcp:org.aurora.qq",)
 
 
 def _load_apps(tmp_path: Path, content: str) -> tuple[AppConfig, ...]:
@@ -52,6 +55,100 @@ def _load_platforms(tmp_path: Path, content: str) -> tuple[PlatformConfig, ...]:
     config_directory.mkdir(exist_ok=True)
     (config_directory / "platforms.toml").write_text(content, encoding="utf-8")
     return assemble_config(tmp_path, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
+
+
+def test_template_declares_the_domains_each_app_owns(configured_project: Path) -> None:
+    apps = load_config(configured_project).get(APPS_CONFIG).apps
+
+    qq = next(app for app in apps if app.package == _QQ_PACKAGE)
+    windows = next(app for app in apps if app.package != _QQ_PACKAGE)
+
+    assert qq.scopes == _QQ_SCOPES
+    assert windows.scopes == ()
+
+
+def test_app_scopes_must_stay_inside_the_app_own_namespace(tmp_path: Path) -> None:
+    """命名空间即所有权：扩展不能声明别人的域。"""
+    foreign = _STDIO.replace('event_mode = "disabled"', f'event_mode = "disabled"\nscopes = ["{_QQ_SCOPES[0]}"]')
+
+    with pytest.raises(ValueError, match="只能声明自己命名空间下的域"):
+        _load_apps(tmp_path, foreign)
+
+
+def test_app_scopes_accept_the_own_domain_and_its_sub_domains(tmp_path: Path) -> None:
+    own = _STDIO.replace(
+        'event_mode = "disabled"',
+        'event_mode = "disabled"\nscopes = ["aurora:mcp:org.example.clock", "aurora:mcp:org.example.clock:room:1"]',
+    )
+
+    app = _load_apps(tmp_path, own)[0]
+
+    assert app.scopes == ("aurora:mcp:org.example.clock", "aurora:mcp:org.example.clock:room:1")
+
+
+def test_app_scopes_reject_duplicates(tmp_path: Path) -> None:
+    duplicated = _STDIO.replace(
+        'event_mode = "disabled"',
+        'event_mode = "disabled"\nscopes = ["aurora:mcp:org.example.clock", "aurora:mcp:org.example.clock"]',
+    )
+
+    with pytest.raises(ValueError, match="不得重复"):
+        _load_apps(tmp_path, duplicated)
+
+
+def test_app_scopes_reject_values_outside_the_scope_grammar() -> None:
+    """TOML 层会 strip，所以带空白的域只能从 DTO 构造这一侧验证。"""
+    with pytest.raises(ValueError, match="MCP scope 非法"):
+        AppConfig(
+            "org.example.clock",
+            False,
+            "stdio",
+            "disabled",
+            30.0,
+            working_dir="extensions/clock",
+            command=("uv", "run", "clock"),
+            scopes=("aurora:mcp:org.example.clock ",),
+        )
+
+
+def test_owning_a_lookalike_package_is_not_owning_this_one() -> None:
+    assert owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qq")
+    assert owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qq:room:7")
+    assert not owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qqq")
+    assert not owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qqq:room:7")
+    assert not owns_scope(_QQ_PACKAGE, "aurora:cadence")
+
+
+def test_app_owned_scopes_fall_back_to_the_package_domain() -> None:
+    spec = McpAppSpec(
+        _QQ_PACKAGE,
+        False,
+        McpTransport.STDIO,
+        30.0,
+        False,
+        McpEventMode.DISABLED,
+        command=("uv", "run", "aurora-qq-mcp"),
+        working_dir=Path("extensions/apps/Aurora-QQ"),
+    )
+
+    assert spec.scopes == ()
+    assert app_owned_scopes(spec) == _QQ_SCOPES
+    assert app_owned_scopes(replace(spec, scopes=("aurora:mcp:org.aurora.qq:room:1",))) == (
+        "aurora:mcp:org.aurora.qq:room:1",
+    )
+
+
+def test_app_declaring_an_unregistered_domain_fails_before_startup(configured_project: Path) -> None:
+    """域注册表没有覆盖的 App 域必须在启动前失败。"""
+    scopes_toml = configured_project / "config" / "scopes.toml"
+    text = scopes_toml.read_text(encoding="utf-8")
+    scopes_toml.write_text(
+        text.replace('pattern = "aurora:mcp:*"', 'pattern = "aurora:mcp-other:*"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="MCP App 声明了未注册的域"):
+        build_mcp_specs(load_config(configured_project))
 
 
 def test_template_exports_typed_frozen_mcp_config(configured_project: Path) -> None:
