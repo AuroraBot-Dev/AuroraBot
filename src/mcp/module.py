@@ -5,13 +5,13 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from src.contracts import TOOL_CONTRIBUTIONS, Settings
+from src.contracts import TOOL_CONTRIBUTIONS, ScopeCatalog, Settings
 from src.contracts.pkgs.cadence import Cadence
 from src.contracts.pkgs.mcp import McpRuntime as McpRuntimePort
 from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
-from src.mcp.config import AppsConfig, PlatformConfig, PlatformsConfig
+from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from src.mcp.scopes import SCOPE_PATTERN as MCP_SCOPE_PATTERN
 
 if TYPE_CHECKING:
@@ -25,9 +25,18 @@ def _mcp_platform(settings: Settings) -> PlatformConfig:
     return next(item for item in platforms if item.id == _MCP_PLATFORM_ID)
 
 
+def _validate_declared_app_scopes(settings: Settings, apps: tuple[AppConfig, ...]) -> None:
+    """App 声明的域必须被域注册表覆盖；未注册即启动前失败。"""
+    declared = tuple(scope for app in apps for scope in app.scopes)
+    undeclared = settings.resolve(ScopeCatalog).undeclared(declared)
+    if undeclared:
+        raise ValueError(f"MCP App 声明了未注册的域：{', '.join(undeclared)}")
+
+
 def build_mcp_specs(settings: Settings) -> tuple[McpAppSpec, ...]:
     """把纯 DTO 与当前进程的显式凭据映射为协议适配说明。"""
     apps = settings.resolve(AppsConfig).apps
+    _validate_declared_app_scopes(settings, apps)
     platform = _mcp_platform(settings)
     project_root = settings.project_root.resolve()
     terminal_logs = platform.logging != "NONE"
@@ -54,6 +63,7 @@ def build_mcp_specs(settings: Settings) -> tuple[McpAppSpec, ...]:
                     command=app.command,
                     working_dir=working_dir,
                     environment=environment,
+                    scopes=app.scopes,
                 )
             )
             continue
@@ -72,6 +82,7 @@ def build_mcp_specs(settings: Settings) -> tuple[McpAppSpec, ...]:
                 event_mode,
                 url=app.url,
                 auth_token=auth_token,
+                scopes=app.scopes,
             )
         )
     return tuple(specs)

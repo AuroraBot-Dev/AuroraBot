@@ -313,7 +313,7 @@ async def _prepare_app(
         async with asyncio.timeout(record.spec.timeout_seconds):
             client = await factory.open(
                 record.spec,
-                lambda event: _append_inbound_event(world, package, event),
+                lambda event: _append_inbound_event(world, record.spec, event),
             )
             record.client = client
             record.negotiated_version = client.protocol_version
@@ -379,7 +379,8 @@ async def _discover_bindings(record: _AppRecord) -> tuple[McpToolBinding, ...]:
     return tuple(bindings)
 
 
-async def _append_inbound_event(world: WorldWriter, package: str, event: McpInboundEvent) -> None:
+async def _append_inbound_event(world: WorldWriter, spec: McpAppSpec, event: McpInboundEvent) -> None:
+    package = spec.package
     if _EVENT_ID.fullmatch(event.event_id) is None:
         raise ValueError("MCP 业务事件 event_id 非法")
     try:
@@ -400,12 +401,17 @@ async def _append_inbound_event(world: WorldWriter, package: str, event: McpInbo
         kind=MCP_EVENT_RECEIVED,
         source=f"mcp:{package}",
         summary=event.summary,
-        scopes=frozenset({event.scope, mcp_scope(package)}),
+        scopes=frozenset({event.scope, *app_owned_scopes(spec)}),
         based_on=WorldFrontier(),
         data={"event_id": event.event_id, "event_kind": event.kind, "data": dict(event.data)},
         occurred_at=event.occurred_at.astimezone(UTC),
     )
     _logger.debug("MCP 业务事件已接收 package={} event_id={} kind={}", package, event.event_id, event.kind)
+
+
+def app_owned_scopes(spec: McpAppSpec) -> tuple[str, ...]:
+    """返回该 App 向世界发布事实时归属的域；未声明时退回它自己命名空间下的标准域。"""
+    return spec.scopes or (mcp_scope(spec.package),)
 
 
 def _reject_duplicate_packages(records: tuple[_AppRecord, ...]) -> None:
@@ -414,4 +420,4 @@ def _reject_duplicate_packages(records: tuple[_AppRecord, ...]) -> None:
         raise ValueError("MCP App package 不能重复")
 
 
-__all__ = ["McpRuntime", "prepare_mcp"]
+__all__ = ["McpRuntime", "app_owned_scopes", "prepare_mcp"]
