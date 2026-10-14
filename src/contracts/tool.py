@@ -71,9 +71,10 @@ type ToolResult = ToolOutput | DelegationRequest
 DELEGATE_TOOL = "aur.agent.delegate"
 WAIT_TOOL = "aur.builtin.wait"
 WORLD_READ_TOOL = "aur.serv.world.read"
+WORLD_SCOPES_TOOL = "aur.serv.world.scopes"
 WORLD_TREES_TOOL = "aur.serv.world.trees"
 
-BUILTIN_TOOL_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL})
+BUILTIN_TOOL_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL})
 
 
 class Tool(Protocol):
