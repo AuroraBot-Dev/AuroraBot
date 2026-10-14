@@ -11,12 +11,7 @@ id = "builtin.fast-worker"
 description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
 prompt = "builtin.fast"
 model = "fast"
-tools = [
-    "aur.mcp.org.aurora.qq.qq_send_*message",
-    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
-    "aur.mcp.org.aurora.qq.qq_get_*",
-    "aur.mcp.org.aurora.qq.qq_mark_*",
-]
+tools = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]
 children = []
 
 [[agent]]
@@ -24,7 +19,7 @@ id = "builtin.root"
 description = "总代理：理解完整任务、整合结果。"
 prompt = "builtin.root"
 model = "quality"
-tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"]
+tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.scopes", "aur.serv.world.trees"]
 children = [
     "builtin.fast-worker",
     "builtin.chat",
@@ -37,10 +32,7 @@ id = "builtin.chat"
 description = "即时会话回复：生成回复正文，或用发送工具像人类一样分多条投递回原会话。"
 prompt = "builtin.chat"
 model = "fast"
-tools = [
-    "aur.mcp.org.aurora.qq.qq_send_*message",
-    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
-]
+tools = ["#aurora:tool/qq-send"]
 children = []
 
 [[agent]]
@@ -51,6 +43,7 @@ model = "quality"
 tools = [
     "aur.agent.delegate",
     "aur.serv.world.read",
+    "aur.serv.world.scopes",
     "aur.serv.world.trees",
     "aur.mcp.org.aurora.qq.*",
     "aur.mcp.com.github.windows_mcp.*",

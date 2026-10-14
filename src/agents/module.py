@@ -8,6 +8,7 @@ from src.contracts import (
     BUILTIN_TOOL_NAMES,
     TOOL_CONTRIBUTIONS,
     AgentDefinition,
+    TagsConfig,
 )
 from src.contracts.pkgs.agents import AgentCatalog as AgentCatalogPort
 from src.kernel import ModuleContext, module
@@ -18,13 +19,14 @@ from src.utils import resolve_names
 def build(context: ModuleContext) -> AgentCatalogPort:
     external = context.contributions(TOOL_CONTRIBUTIONS)
     available = BUILTIN_TOOL_NAMES | frozenset(tool.definition.name for tool in external)
+    tags = context.settings.resolve(TagsConfig).table
     return AgentCatalog(
         AgentDefinition(
             item.id,
             item.description,
             item.prompt,
             item.model,
-            resolve_names(available, item.tools, label=item.id),
+            resolve_names(available, tags.expand(item.tools, label=item.id), label=item.id),
             item.children,
         )
         for item in context.settings.resolve(AgentsConfig).agents
