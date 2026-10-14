@@ -1,0 +1,19 @@
+# 即时路由策略：把一类已提交的外部事件路由到一个即时会话 Agent。
+#
+# 这些规则原本硬编码在 Python 里；现在是数据，可以按需增删而不改代码。
+# 判定顺序自上而下，第一条命中的规则胜出。
+#   source      提交的 source 字段，须精确匹配（MCP App 形如 mcp:<package>）
+#   event_kind  提交 data 里的 event_kind
+#   agent       命中的事件委派给哪个预定义 Agent
+#   contains_any 非空时，还要求提交 summary 含有其中任意一个词
+[[reaction]]
+source = "mcp:org.aurora.qq"
+event_kind = "qq.message.private"
+agent = "builtin.chat"
+contains_any = []
+
+[[reaction]]
+source = "mcp:org.aurora.qq"
+event_kind = "qq.message.group"
+agent = "builtin.chat"
+contains_any = ["小光", "夜曦光"]

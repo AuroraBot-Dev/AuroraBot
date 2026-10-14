@@ -1,0 +1,29 @@
+# 域注册表：世界的分区及其所有者、种类与语义。
+#
+# 域是世界的分区键。这份声明回答三个问题：谁拥有这个域、它属于哪一类、它是什么。
+# 判定按声明顺序，**第一条命中者胜出**，所以具体声明写在前、通配声明写在后。
+#
+#   kind = "resource"  长期存在、构成 Bot 可观察的世界资源
+#   kind = "run"       与一次认知运行同寿，只是引擎的运转台账，默认不作为世界资源观察
+#
+# 模式支持精确名与尾部单层通配（<前缀>:*）；域的实际命名目前仍是 aurora:<path> 形式，
+# 命名空间化（<namespace>:<path>）在后续阶段统一切换。
+[[scope]]
+pattern = "aurora:console"
+kind = "resource"
+description = "本地终端输入先进入的世界线；渲染输出不进入世界线。"
+
+[[scope]]
+pattern = "aurora:cadence"
+kind = "resource"
+description = "节律 tick 与唤起决策的提交，记录 Bot 主动发起认知的理由。"
+
+[[scope]]
+pattern = "aurora:mcp:*"
+kind = "resource"
+description = "一个 MCP App 上报的外部世界事实；* 处为该 App 的 package id。"
+
+[[scope]]
+pattern = "aurora:tree:*"
+kind = "run"
+description = "一次 AgentTree 运行的因果台账；它记录引擎做了什么，不是 Bot 经历的世界。"

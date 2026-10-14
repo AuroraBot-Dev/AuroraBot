@@ -53,8 +53,13 @@ class Field:
     transform: Callable[..., object] | None = None
 
 
-def text_field(name: str, *, target: str | None = None) -> Field:
-    return Field(name, FieldKind.TEXT, target=target)
+def text_field(
+    name: str,
+    *,
+    target: str | None = None,
+    transform: Callable[..., object] | None = None,
+) -> Field:
+    return Field(name, FieldKind.TEXT, target=target, transform=transform)
 
 
 def optional_text_field(name: str, *, target: str | None = None) -> Field:

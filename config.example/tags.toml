@@ -1,0 +1,25 @@
+# 标签集合：把一组 ID 或模式命名化，供其它配置引用。
+#
+# 引用写法为 #<namespace>:<path>，与 ID 语法一致；标签可以引用其它标签。
+# 展开时保留书写顺序，因此「最后匹配者胜」的语义与直接写模式完全相同：
+#   values = ["aur.x.*", "!aur.x.skip"]  等价于在引用处按顺序写这两条。
+[[tag]]
+name = "aurora:tool/qq-send"
+values = [
+    "aur.mcp.org.aurora.qq.qq_send_*message",
+    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
+]
+
+[[tag]]
+name = "aurora:tool/qq-read"
+values = [
+    "aur.mcp.org.aurora.qq.qq_get_*",
+    "aur.mcp.org.aurora.qq.qq_mark_*",
+]
+
+[[tag]]
+name = "aurora:tool/qq"
+values = [
+    "#aurora:tool/qq-send",
+    "#aurora:tool/qq-read",
+]
