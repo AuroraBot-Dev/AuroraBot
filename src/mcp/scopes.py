@@ -24,6 +24,20 @@ def mcp_scope(package: str) -> str:
     return f"{_PREFIX}{package}"
 
 
+def owned_scope_prefix(package: str) -> str:
+    """返回一个 MCP App 拥有的域前缀；扩展只能在自己名下声明域。"""
+    return mcp_scope(package)
+
+
+def owns_scope(package: str, scope: str) -> bool:
+    """判断一个域是否落在该 App 自己的命名空间下。
+
+    前缀必须整体成段匹配，避免 ``org.aurora.qq`` 误认领 ``org.aurora.qqq``。
+    """
+    prefix = owned_scope_prefix(package)
+    return scope == prefix or scope.startswith(f"{prefix}:")
+
+
 def validate_mcp_scope(scope: str) -> str:
     """校验并原样返回可进入 World frontier 的 MCP scope。"""
     if (
@@ -78,4 +92,11 @@ def render_scope_template(template: str, arguments: Mapping[str, Any]) -> str:
     return validate_mcp_scope("".join(pieces))
 
 
-__all__ = ["mcp_scope", "render_scope_template", "validate_mcp_scope", "validate_scope_template"]
+__all__ = [
+    "mcp_scope",
+    "owned_scope_prefix",
+    "owns_scope",
+    "render_scope_template",
+    "validate_mcp_scope",
+    "validate_scope_template",
+]

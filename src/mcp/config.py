@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from src.mcp.scopes import owns_scope, validate_mcp_scope
 from src.utils.validation import (
     check_environment_name,
     check_https_url,
@@ -37,6 +38,7 @@ class AppConfig:
     env: tuple[str, ...] = ()
     url: str | None = None
     auth_env: str | None = None
+    scopes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         check_package_name(self.package, "app.package")
@@ -45,10 +47,20 @@ class AppConfig:
         if self.event_mode not in _EVENT_MODES:
             raise ValueError("app.event_mode 不受支持")
         check_positive_number(self.timeout_seconds, "timeout_seconds")
+        self._validate_owned_scopes()
         if self.transport == "stdio":
             self._validate_stdio()
         else:
             self._validate_http()
+
+    def _validate_owned_scopes(self) -> None:
+        """扩展只能声明自己命名空间下的域：命名空间即所有权。"""
+        object.__setattr__(self, "scopes", tuple(self.scopes))
+        check_unique_items(self.scopes, "app.scopes")
+        for scope in self.scopes:
+            validate_mcp_scope(scope)
+            if not owns_scope(self.package, scope):
+                raise ValueError(f"app.scopes 只能声明自己命名空间下的域：{scope} 不属于 {self.package}")
 
     def _validate_stdio(self) -> None:
         if self.working_dir is None:

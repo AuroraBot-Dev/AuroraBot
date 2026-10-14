@@ -24,8 +24,11 @@ if TYPE_CHECKING:
     from aurora.utils.toml import TomlTable
 
 _COMMON_FIELDS = frozenset({"package", "enabled", "transport", "timeout_seconds", "event_mode"})
-_STDIO_FIELDS = _COMMON_FIELDS | {"working_dir", "command", "env"}
-_HTTP_FIELDS = _COMMON_FIELDS | {"url", "auth_env"}
+_STDIO_FIELDS = _COMMON_FIELDS | {"working_dir", "command", "env", "scopes"}
+_HTTP_FIELDS = _COMMON_FIELDS | {"url", "auth_env", "scopes"}
+_OPTIONAL_FIELDS = frozenset({"event_mode", "scopes"})
+_STDIO_REQUIRED = _STDIO_FIELDS - _OPTIONAL_FIELDS
+_HTTP_REQUIRED = (_COMMON_FIELDS - _OPTIONAL_FIELDS) | {"url"}
 
 
 def _parse(path: Path) -> AppsConfig:
@@ -39,8 +42,9 @@ def _parse(path: Path) -> AppsConfig:
 
 def _parse_app(raw: TomlTable) -> AppConfig:
     transport = cast("McpTransport", text(raw, "transport"))
-    allowed = _STDIO_FIELDS if transport == "stdio" else _HTTP_FIELDS
-    required = (_STDIO_FIELDS - {"event_mode"}) if transport == "stdio" else (_COMMON_FIELDS - {"event_mode"}) | {"url"}
+    stdio = transport == "stdio"
+    allowed = _STDIO_FIELDS if stdio else _HTTP_FIELDS
+    required = _STDIO_REQUIRED if stdio else _HTTP_REQUIRED
     require_fields(raw, allowed, required, f"{transport} app")
     event_mode_value = optional_text(raw, "event_mode") or "disabled"
     common = {
@@ -49,6 +53,7 @@ def _parse_app(raw: TomlTable) -> AppConfig:
         "transport": transport,
         "event_mode": cast("McpEventMode", event_mode_value),
         "timeout_seconds": positive_number(raw, "timeout_seconds"),
+        "scopes": strings(raw, "scopes") if "scopes" in raw else (),
     }
     if transport == "stdio":
         return AppConfig(

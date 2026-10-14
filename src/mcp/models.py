@@ -60,6 +60,7 @@ class McpAppSpec:
     url: str | None = None
     environment: Mapping[str, str] = field(default_factory=dict, repr=False)
     auth_token: str | None = field(default=None, repr=False)
+    scopes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         self._validate_common()
