@@ -12,6 +12,9 @@ from src.contracts import (
     AgentDefinition,
     DelegationRequest,
     EnvironmentEvent,
+    ScopeCatalog,
+    ScopeDeclaration,
+    ScopeKind,
     ToolCall,
     ToolDefinition,
     ToolOutput,
@@ -27,6 +30,7 @@ from src.tools import (
     DELEGATE_TOOL,
     WAIT_TOOL,
     WORLD_READ_TOOL,
+    WORLD_SCOPES_TOOL,
     WORLD_TREES_TOOL,
     DelegateTool,
     ToolRegistrationError,
@@ -39,6 +43,15 @@ from src.tools.builtin import builtin_tools
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+
+def _scope_catalog() -> ScopeCatalog:
+    return ScopeCatalog(
+        (
+            ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "终端输入先进入的世界线"),
+            ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "一次运行的因果台账"),
+        )
+    )
 
 
 class EchoTool:
@@ -333,10 +346,12 @@ def test_wait_tool_sleeps_within_bounds_and_rejects_invalid_values() -> None:
 
 def test_builtin_tools_form_the_default_catalog_before_external_tools() -> None:
     journal = FakeJournal()
-    builtins = builtin_tools(agents=_agents(), journal=journal)
+    builtins = builtin_tools(agents=_agents(), journal=journal, scopes=_scope_catalog())
     registry = ToolRegistry((*builtins, EchoTool()))
 
-    assert registry.names == frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_TREES_TOOL, "aur.test.echo"})
+    assert registry.names == frozenset(
+        {DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL, "aur.test.echo"}
+    )
 
 
 def test_world_tools_are_registered_under_service_domain_ids() -> None:

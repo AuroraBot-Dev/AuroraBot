@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.contracts import WorldCommitInput, WorldFrontier
+from src.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, WorldCommitInput, WorldFrontier
 from src.memory import Memory
 from src.utils.patterns import NamePatternError
 from src.world import SqlAlchemyWorldJournal
@@ -170,3 +170,94 @@ def test_memory_rejects_invalid_scope_patterns() -> None:
 
     with pytest.raises(NamePatternError):
         Memory(FakeReader(), scope_include=("qq:[",))  # type: ignore[arg-type]
+
+
+_CATALOG = ScopeCatalog(
+    (
+        ScopeDeclaration("aurora:cadence", ScopeKind.RESOURCE, "节律决策"),
+        ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "一次运行的因果台账"),
+    )
+)
+
+
+async def _two_scope_journal(tmp_path: Path, now: datetime) -> SqlAlchemyWorldJournal:
+    journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+    await journal.initialize()
+    await journal.append_commits(
+        (
+            WorldCommitInput(
+                "cadence-1",
+                "cadence.tree_planned",
+                "cadence",
+                "节律决策",
+                frozenset({"aurora:cadence"}),
+                WorldFrontier(),
+                {},
+                now - timedelta(minutes=5),
+            ),
+            WorldCommitInput(
+                "run-1",
+                "tool.succeeded",
+                "engine",
+                "运行因果",
+                frozenset({"aurora:tree:tree"}),
+                WorldFrontier(),
+                {},
+                now - timedelta(minutes=3),
+            ),
+            WorldCommitInput(
+                "other-1",
+                "environment.message",
+                "qq",
+                "群消息",
+                frozenset({"qq:group"}),
+                WorldFrontier(),
+                {},
+                now - timedelta(minutes=2),
+            ),
+        )
+    )
+    return journal
+
+
+def test_memory_excludes_run_domains_declared_by_the_registry(tmp_path: Path) -> None:
+    """运行台账域默认不进入记忆，不必再靠手写排除模式。"""
+
+    async def scenario() -> None:
+        now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        journal = await _two_scope_journal(tmp_path, now)
+        memory = Memory(journal, commits_per_scope=1, catalog=_CATALOG)
+        snapshot = await memory.recall(now=now)
+        await journal.close()
+
+        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:cadence"]
+
+    asyncio.run(scenario())
+
+
+def test_memory_keeps_undeclared_scopes(tmp_path: Path) -> None:
+    """缺一条声明不该丢掉真实世界内容：未声明的域一律保留。"""
+
+    async def scenario() -> None:
+        now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        journal = await _two_scope_journal(tmp_path, now)
+        memory = Memory(journal, commits_per_scope=1, catalog=ScopeCatalog(()))
+        snapshot = await memory.recall(now=now)
+        await journal.close()
+
+        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:tree:tree", "aurora:cadence"]
+
+    asyncio.run(scenario())
+
+
+def test_memory_can_opt_into_run_domains(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        journal = await _two_scope_journal(tmp_path, now)
+        memory = Memory(journal, commits_per_scope=1, catalog=_CATALOG, include_run_scopes=True)
+        snapshot = await memory.recall(now=now)
+        await journal.close()
+
+        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:tree:tree", "aurora:cadence"]
+
+    asyncio.run(scenario())

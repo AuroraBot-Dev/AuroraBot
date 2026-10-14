@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, cast
 
 from src.agents.config import AgentConfig, AgentsConfig
 from src.ai.config import EndpointConfig, EndpointsConfig, ProviderConfig, ProvidersConfig
-from src.cadence.config import CadenceConfig
+from src.cadence.config import CadenceConfig, ReactionsConfig
+from src.contracts.identity import TagsConfig
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.ai import Model
 from src.contracts.pkgs.console import TerminalConsole
@@ -16,6 +17,7 @@ from src.contracts.pkgs.memory import MemoryReader
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
 from src.engine.config import EngineConfig
 from src.kernel import BuiltinSource, compose, resolve
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
@@ -59,6 +61,7 @@ def _settings(tmp_path: Path) -> _Settings:
             RuntimeConfig: RuntimeConfig("default", "root", "builtin.chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
             CadenceConfig: CadenceConfig(False, "builtin.chat", 5, 3600, 0.25),
+            ReactionsConfig: ReactionsConfig(()),
             AppsConfig: AppsConfig(
                 (
                     AppConfig(
@@ -74,6 +77,13 @@ def _settings(tmp_path: Path) -> _Settings:
             ),
             PlatformsConfig: PlatformsConfig((PlatformConfig("builtin.mcp", False),)),
             StorageConfig: StorageConfig((StorageEntry("world", "data"),)),
+            TagsConfig: TagsConfig(()),
+            ScopeCatalog: ScopeCatalog(
+                (
+                    ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "终端输入先进入的世界线"),
+                    ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "一次运行的因果台账"),
+                )
+            ),
         },
     )
 
@@ -102,12 +112,17 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
 def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
     assembly = compose(_settings(tmp_path), BuiltinSource().discover())
 
-    assert isinstance(assembly.get(Model), object)
-    assert isinstance(assembly.get(PromptAssembler), object)
-    assert isinstance(assembly.get(AgentCatalog), object)
-    assert isinstance(assembly.get(ToolRegistry), object)
-    assert isinstance(assembly.get(WorldJournal), object)
-    assert isinstance(assembly.get(MemoryReader), object)
-    assert isinstance(assembly.get(TerminalConsole), object)
-    assert isinstance(assembly.get(McpRuntime), object)
-    assert isinstance(assembly.get(AgentTreeRunner), object)
+    capabilities = (
+        assembly.get(Model),
+        assembly.get(PromptAssembler),
+        assembly.get(AgentCatalog),
+        assembly.get(ToolRegistry),
+        assembly.get(WorldJournal),
+        assembly.get(MemoryReader),
+        assembly.get(TerminalConsole),
+        assembly.get(McpRuntime),
+        assembly.get(AgentTreeRunner),
+    )
+
+    assert all(capability is not None for capability in capabilities)
+    assert len({id(capability) for capability in capabilities}) == len(capabilities)

@@ -77,6 +77,7 @@ def test_project_config_builds_complete_runtime(configured_project: Path) -> Non
     assert [tool.name for tool in model.requests[0].tools] == [
         "aur.agent.delegate",
         "aur.serv.world.read",
+        "aur.serv.world.scopes",
         "aur.serv.world.trees",
     ]
 
@@ -297,7 +298,14 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
 
     assert triage.tools == frozenset({"aur.agent.delegate"})
     assert triage.children == frozenset({"builtin.root", "builtin.fast-worker"})
-    assert root.tools == frozenset({"aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"})
+    assert root.tools == frozenset(
+        {
+            "aur.agent.delegate",
+            "aur.serv.world.read",
+            "aur.serv.world.scopes",
+            "aur.serv.world.trees",
+        }
+    )
     assert root.children == frozenset({"builtin.worker", "builtin.fast-worker", "builtin.reviewer", "builtin.chat"})
     assert worker.model == "quality"
     assert worker.children == frozenset({"builtin.reviewer", "builtin.fast-worker"})
