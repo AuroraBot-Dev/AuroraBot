@@ -33,6 +33,8 @@ class ModuleSpec:
     contributes: tuple[ContributionKey[Any], ...] = ()
     consumes: tuple[ContributionKey[Any], ...] = ()
     declares: tuple[ContributionKey[Any], ...] = ()
+    owns_scopes: tuple[str, ...] = ()
+    observes_scopes: tuple[str, ...] = ()
     priority: int = 0
     optional: bool = False
     order: tuple[Ordering, ...] = ()
@@ -46,6 +48,11 @@ class ModuleSpec:
         contribution_names = [key.name for key in (*self.contributes, *self.consumes)]
         if len(contribution_names) != len(set(contribution_names)):
             raise ValueError(f"模块重复声明贡献点：{self.name}")
+        scopes = (*self.owns_scopes, *self.observes_scopes)
+        if any(not scope.strip() or scope != scope.strip() for scope in scopes):
+            raise ValueError(f"模块声明的域必须是非空且无首尾空白的文本：{self.name}")
+        if len(scopes) != len(set(scopes)):
+            raise ValueError(f"模块重复声明域：{self.name}")
 
     def hook(self, phase: Phase) -> PhaseHook | None:
         """返回本模块在该阶段注册的钩子；未参与返回 ``None``。"""
@@ -71,6 +78,8 @@ def module(
     contributes: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
     consumes: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
     declares: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
+    owns_scopes: str | tuple[str, ...] = (),
+    observes_scopes: str | tuple[str, ...] = (),
     priority: int = 0,
     optional: bool = False,
     activation_after: type | tuple[type, ...] = (),
@@ -117,6 +126,8 @@ def module(
             contributes=_as_tuple(contributes),
             consumes=_as_tuple(consumes),
             declares=_as_tuple(declares),
+            owns_scopes=_as_tuple(owns_scopes),
+            observes_scopes=_as_tuple(observes_scopes),
             priority=priority,
             optional=optional,
             order=extra_order,
