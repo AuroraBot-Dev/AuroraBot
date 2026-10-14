@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.console import TerminalConsole
+from src.console.events import CONSOLE_SCOPE
 from src.contracts import FRONT_BINDINGS, Front, FrontContext, FrontIO
 from src.contracts.pkgs.console import TerminalConsole as TerminalConsolePort
 from src.contracts.pkgs.runtime import TerminalDispatcher
@@ -38,6 +39,7 @@ def _bind_console(console: TerminalConsolePort) -> FrontBinding:
     requires=(WorldWriter,),
     contributes=(FRONT_BINDINGS,),
     declares=(FRONT_BINDINGS,),
+    owns_scopes=CONSOLE_SCOPE,
 )
 def build(context: ModuleContext) -> TerminalConsolePort:
     console = TerminalConsole(context.get(WorldWriter))

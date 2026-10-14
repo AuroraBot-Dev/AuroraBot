@@ -14,6 +14,7 @@ from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.pkgs.world import WorldJournal
 from src.engine import AgentTreeRunner
 from src.engine.config import EngineConfig
+from src.engine.scopes import SCOPE_PATTERN as TREE_SCOPE_PATTERN
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ def _validate_cross_references(
     name="engine",
     provides=AgentTreeRunnerPort,
     requires=(PromptAssembler, Model, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader),
+    owns_scopes=TREE_SCOPE_PATTERN,
 )
 def build(context: ModuleContext) -> AgentTreeRunnerPort:
     config = context.settings.resolve(EngineConfig)

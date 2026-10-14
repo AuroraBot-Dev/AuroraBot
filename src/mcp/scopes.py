@@ -11,13 +11,17 @@ if TYPE_CHECKING:
 _PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _MAX_SCOPE_LENGTH = 256
 _CONTROL_CHARACTER_LIMIT = 32
+_PREFIX = "aurora:mcp:"
+
+#: 扩展域在域注册表里的声明形状；MCP 运行时拥有这一族域。
+SCOPE_PATTERN = f"{_PREFIX}*"
 
 
 def mcp_scope(package: str) -> str:
     """返回一个 MCP App 的标准世界 scope。"""
     if not package.strip():
         raise ValueError("package must not be empty")
-    return f"aurora:mcp:{package}"
+    return f"{_PREFIX}{package}"
 
 
 def validate_mcp_scope(scope: str) -> str:

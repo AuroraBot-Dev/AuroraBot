@@ -12,6 +12,7 @@ from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
 from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
 from src.mcp.config import AppsConfig, PlatformConfig, PlatformsConfig
+from src.mcp.scopes import SCOPE_PATTERN as MCP_SCOPE_PATTERN
 
 if TYPE_CHECKING:
     from src.kernel import AsyncCleanup
@@ -100,6 +101,7 @@ async def activate(context: ModuleContext) -> None:
     provides=McpRuntimePort,
     requires=(WorldJournal,),
     contributes=(TOOL_CONTRIBUTIONS,),
+    owns_scopes=MCP_SCOPE_PATTERN,
     activation_after=(Cadence,),
     prepare=prepare,
     activate=activate,

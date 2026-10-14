@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.contracts import TOOL_CONTRIBUTIONS
+from src.contracts import TOOL_CONTRIBUTIONS, ScopeCatalog
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.tools import ToolRegistry as ToolRegistryPort
 from src.contracts.pkgs.world import WorldJournal
@@ -22,7 +22,8 @@ def build(context: ModuleContext) -> ToolRegistryPort:
     journal = context.get(WorldJournal)
     agents = context.get(AgentCatalog)
     external = context.contributions(TOOL_CONTRIBUTIONS)
-    return ToolRegistry((*builtin_tools(agents=agents, journal=journal), *external))
+    scopes = context.settings.resolve(ScopeCatalog)
+    return ToolRegistry((*builtin_tools(agents=agents, journal=journal, scopes=scopes), *external))
 
 
 MODULE = build

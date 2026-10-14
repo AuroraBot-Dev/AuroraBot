@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+_PREFIX = "aurora:tree:"
+
+#: 运行域在域注册表里的声明形状；引擎拥有这一族域。
+SCOPE_PATTERN = f"{_PREFIX}*"
+
 
 def tree_scope(tree_id: str) -> str:
     """返回一次 AgentTree 运行的标准世界 scope。"""
     if not tree_id.strip():
         raise ValueError("tree_id must not be empty")
-    return f"aurora:tree:{tree_id}"
+    return f"{_PREFIX}{tree_id}"
