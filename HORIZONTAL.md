@@ -199,14 +199,15 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 
 一个扩展要能说三句话。两条入口的进度不同：
 
-| 扩展想说 | 组合期（`ModuleSpec`） | 运行期（`aurora app`） |
+| 扩展想说 | 组合期（`ModuleSpec`） | 运行期（`aurora app` / `apps.toml`） |
 |---|---|---|
 | 我提供哪些 **Act** | ✅ `provides` + `TOOL_CONTRIBUTIONS` | ✅ 冻结工具目录 |
-| 我拥有哪些**域** | ✅ **P3a 已落地**：`owns_scopes` | ❌ **无处声明** |
-| 我需要观察哪些**域** | ✅ **P3a 已落地**：`observes_scopes` | ⚠️ 仅 MCP tool contract，声明权在远端 |
+| 我拥有哪些**域** | ✅ **P3a**：`owns_scopes` | ✅ **P3b**：`scopes` |
+| 我需要观察哪些**域** | ✅ **P3a**：`observes_scopes` | ⚠️ 仅 MCP tool contract，声明权在远端 |
 
-**组合期那条（P3a）已经闭环**：模块在 `@module(...)` 里声明 `owns_scopes` / `observes_scopes`，
-项目装配入口在**启动前**校验每个声明都被域注册表覆盖：
+**两条入口都能说「我拥有哪些域」了，而且都由启动前校验把关。**
+
+组合期（P3a）——模块在 `@module(...)` 声明，项目装配入口校验覆盖：
 
 ```python
 # src/runtime/assembly.py
@@ -217,16 +218,33 @@ def validate_declared_scopes(settings, specs) -> None:
         raise ValueError(f"模块声明了未注册的域：{', '.join(undeclared)}")
 ```
 
-于是「谁拥有这个域」有了唯一答案：`aurora:console` → `console` 模块，`aurora:tree:*` → `engine`，
-`aurora:mcp:*` → `mcp`，`aurora:cadence` → `cadence`。而写错一个域名字会在**启动前**失败，
-不是运行到一半才发现。
+运行期（P3b）——App 在 `apps.toml` 声明，两道关：
 
-运行期那条的硬证据（`aurora/commands/app/verify.py:82`）：
+```toml
+[[app]]
+package = "org.aurora.qq"
+scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的域
+```
+
+| 关 | 规则 | 在哪 |
+|---|---|---|
+| **归属**（H3） | 域必须落在该 App 自己的命名空间下，且前缀按**整段**匹配（`org.aurora.qq` 认领不了 `org.aurora.qqq`） | `AppConfig.__post_init__` |
+| **覆盖**（H4） | 域必须被域注册表覆盖 | `build_mcp_specs`（连接前） |
+
+于是「谁拥有这个域」有了唯一答案：`aurora:console` → `console` 模块，`aurora:tree:*` → `engine`，
+`aurora:mcp:*` → `mcp`，`aurora:cadence` → `cadence`，`aurora:mcp:org.aurora.qq` → 那个 App。
+写错一个域名会在**启动前**失败，不是运行到一半才发现。
+
+声明不是装饰：App 向世界发布事实时，`app_owned_scopes(spec)` 用声明值，未声明才退回
+`aurora:mcp:<package>`（`src/mcp/runtime.py`）。所以「我的世界有哪些域」由扩展自己说，
+而不是由框架替它猜。
+
+仍然缺的（`aurora/commands/app/verify.py:82`）：
 
 > Aurora 当前只把 MCP 的 Tools 暴露给 Bot：只有 Resources 或 Prompts 的 Server 无法作为工具 App 登记。
 
-**「资源」在 MCP 这条路上仍然没有落脚点。** 引入域注册表后，第三句写成
-「我拥有 `<my-namespace>:world`」——不必照抄 MCP 的 resources/URI 方案，**域本身就是 URI**。
+**「资源」在 MCP 这条路上仍无落脚点**：App 现在能*声明*自己的域，但 `aurora app` 的准入
+仍要求 Server 至少提供一个 Tool。要让它成为「世界生产者」，还差准入规则那一步。
 
 ---
 
@@ -266,7 +284,7 @@ def validate_declared_scopes(settings, specs) -> None:
 | 1 | 两套身份机制，字符串侧无唯一权威 → **8 套校验器** | `_validate_cross_references`、`_validate_agents`、`resolve_names`、`_reject_unknown`、`require_fields`、`AgentCatalog`、内核 `_validate_names`、`app` 的 24 个 `check_*` | H1+H3 |
 | 2 | **三套因果表示**：全局 `insertion_sequence`、每域 `sequence`、`based_on` 快照 | `based_on` 实测 **93.2% 重复**，生产代码只读一处 | 域模型 + 存储重设 |
 | 3 | 引擎台账与世界资源同居一条线 | 94 提交里 ~92 条是台账 | ✅ 读侧已分离（P1：记忆按 `kind` 排除运行域）；写侧仍同居一条线（P5） |
-| 4 | 两套扩展入口、两个生命周期、无共同语言 | `ModuleSpec`（11 个 `module.py`）vs `aurora app`（12 文件 / ~4150 行） | ⚠️ 组合期已能声明域（P3a）；运行期仍缺（P3b） |
+| 4 | 两套扩展入口、两个生命周期、无共同语言 | `ModuleSpec`（11 个 `module.py`）vs `aurora app`（12 文件 / ~4150 行） | ✅ 两条入口都能声明「我拥有哪些域」（P3a / P3b） |
 | 5 | 域命名空间混了资源域与运行域 | 无区分标记 | ✅ **P1 已解决**：`kind` 字段 + 注册表 |
 | 6 | 正则 / 校验器跨包复制 | `_MCP_TOOL_ID` ×2；`toml.py:91-144` 与 `src/utils/validation.py:13-59` 六函数逐字相同 | H1 |
 | 7 | 另外三个操作可替换但**未声明、未校验** | 内核 `priority` 裁决已支持，`WorldReader`/`MemoryReader`/`WorldWriter` 都是 `provides=` 契约 | §7：声明扩展点 + 语义一致性校验 |
@@ -284,7 +302,8 @@ def validate_declared_scopes(settings, specs) -> None:
 | **P1** | 域注册表 + `kind`（资源 / 运行）+ 给域一句 description | `src/contracts/scope.py`、新配置、`WorldScopesTool`、记忆可见性 | ✅ **已落地** |
 | **P2** | ID 语法切到 `namespace:path`（接受一次数据断层） | 全仓 ID 字面量 + `config.example` + 测试 | ⬜ |
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
-| **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 | `apps.toml` / `AppConfig` / `aurora app` 校验 | ⬜ |
+| **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
+| **P3c** | 让只有 Resources 的 Server 也能作为世界生产者登记 | `aurora app` 准入规则 | ⬜ |
 | **P4** | 声明四操作为扩展点，并为替换实现加语义一致性校验 | contracts 契约文档 + 内核或模块层校验 | ⬜ |
 | **P5** | 域作为物理分区键 + `delta()` 下推 + 因果表示收敛 | `src/world` + migration | ⬜ |
 
@@ -325,6 +344,17 @@ P5 是唯一需要 schema migration 的阶段。
 | `src/engine/scopes.py` / `src/mcp/scopes.py` | 域模式常量 `SCOPE_PATTERN`，命名只在一处 |
 | `console` / `cadence` / `engine` / `mcp` 的 `module.py` | 各自声明它拥有的域 |
 
+### P3b：运行期扩展声明域
+
+| 文件 | 内容 |
+|---|---|
+| `src/mcp/scopes.py` | `owned_scope_prefix()` / `owns_scope()`：前缀按整段匹配，防 `org.aurora.qq` 误认领 `org.aurora.qqq` |
+| `src/mcp/config.py` | `AppConfig.scopes` + 归属校验（H3，命名空间即所有权） |
+| `src/mcp/models.py` | `McpAppSpec.scopes` 携带声明 |
+| `src/mcp/module.py` | `build_mcp_specs` 校验注册表覆盖（H4，连接前失败） |
+| `src/mcp/runtime.py` | `app_owned_scopes()`：发布事实时用声明值，未声明才退回标准域 |
+| `aurora/configs/apps.py` | `scopes` 加入白名单并保持可选（与 `event_mode` 同级） |
+
 ### 测试
 
 | 文件 | 覆盖 |
@@ -332,10 +362,11 @@ P5 是唯一需要 schema migration 的阶段。
 | `tests/test_identity.py` | 22 项：ID 解析、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返 |
 | `tests/test_scopes.py` | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
 | `tests/test_reactions_configs.py` | 9 项：模板往返、路由命中、字段缺失与未知字段 |
+| `tests/test_mcp_configs.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
 | `tests/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
 | `tests/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
 
-验证：**1124 passed / 1 skipped**，`ruff` 与 `pyright` 均 0 error，配置 14 个 TOML ↔ 14 个 configs 模块（原 11 个 + `reactions` / `scopes` / `tags`）。
+验证：**1132 passed / 1 skipped**，`ruff` 与 `pyright` 均 0 error，配置 14 个 TOML ↔ 14 个 configs 模块（原 11 个 + `reactions` / `scopes` / `tags`）。
 
 ---
 
