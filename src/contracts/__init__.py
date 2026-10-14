@@ -30,8 +30,9 @@ from src.contracts.identity import (
     Identifier,
     IdentityError,
     TagDefinition,
-    TagsConfig,
     TagTable,
+    TagsConfig,
+    alias_path,
     is_namespace,
     is_path,
 )
@@ -122,6 +123,7 @@ __all__ = [
     "WorldDeltaPage",
     "WorldFrontier",
     "WorldStreamPage",
+    "alias_path",
     "is_namespace",
     "is_path",
 ]

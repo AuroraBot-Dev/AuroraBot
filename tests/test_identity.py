@@ -14,12 +14,32 @@ from src.contracts.identity import (
     Identifier,
     IdentityError,
     TagDefinition,
-    TagsConfig,
     TagTable,
+    TagsConfig,
+    alias_path,
     is_namespace,
     is_path,
 )
 from src.utils import resolve_names
+
+# 第三方 MCP Server 真的会给出这些名字；MCP SDK 对 Tool.name 不做任何格式约束。
+_FOREIGN_NAMES = (
+    "send_message",
+    "read-file",
+    "SendMessage",
+    "send.message",
+    "tool/read",
+    "2fa_verify",
+    "_private",
+    "send:message",
+    "send message",
+    "消息发送",
+    "-leading-dash",
+    ".leading-dot",
+    "",
+    "   ",
+    "a" * 200,
+)
 
 
 def _table(*tags: TagDefinition) -> TagTable:
@@ -62,6 +82,44 @@ def test_namespace_and_path_predicates() -> None:
     assert not is_namespace("Aurora")
     assert is_path("tool/qq_send_message")
     assert not is_path("/tool")
+
+
+@pytest.mark.parametrize("raw", _FOREIGN_NAMES)
+def test_alias_path_is_total_over_foreign_names(raw: str) -> None:
+    """任何第三方名字都必须能落进命名空间，否则一个古怪名字会让进程起不来。"""
+    aliased = alias_path(raw)
+
+    assert is_path(aliased)
+    assert aliased == alias_path(raw)
+
+
+def test_alias_path_keeps_legal_names_verbatim() -> None:
+    """合法即零映射：模型看到的就是服务器给的名字。"""
+    for raw in ("send_message", "read-file", "SendMessage", "send.message", "tool/read", "2fa_verify", "_private"):
+        assert alias_path(raw) == raw
+
+
+def test_alias_path_is_a_pure_function_of_the_raw_name() -> None:
+    """别名不能依赖服务器的工具集合，否则增删工具会让已有工具的 ID 漂移。"""
+    assert alias_path("send:message") == alias_path("send:message")
+    assert alias_path("send:message") != alias_path("send/ message")
+    assert alias_path("消息发送") == alias_path("消息发送")
+
+
+@pytest.mark.parametrize("raw", ["send:message", "send message", "消息发送", "-leading-dash", ""])
+def test_alias_path_output_is_readable_and_marked(raw: str) -> None:
+    aliased = alias_path(raw)
+
+    assert len(aliased) <= 64
+    assert aliased.isascii()
+    assert aliased[-9] == "-"
+    assert all(char.isalnum() or char == "-" for char in aliased)
+
+
+def test_alias_path_separates_names_that_would_otherwise_merge() -> None:
+    """净化会把不同名字压成同一个 slug，哈希必须把它们分开。"""
+    assert alias_path("send:message") != alias_path("send.message-x")
+    assert alias_path("a b") != alias_path("a-b")
 
 
 def test_tags_pass_through_entries_that_are_not_references() -> None:

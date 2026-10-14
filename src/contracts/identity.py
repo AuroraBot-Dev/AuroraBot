@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -23,6 +24,9 @@ DEFAULT_NAMESPACE = "aurora"
 _NAMESPACE = re.compile(r"[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*")
 _PATH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_][A-Za-z0-9_.-]*)*")
 _MAX_TAG_DEPTH = 16
+_UNSAFE_RUN = re.compile(r"[^A-Za-z0-9]+")
+_ALIAS_DIGEST_BYTES = 4
+_ALIAS_SLUG_LIMIT = 48
 
 
 class IdentityError(ValueError):
@@ -37,6 +41,24 @@ def is_namespace(value: str) -> bool:
 def is_path(value: str) -> bool:
     """判断文本是否为合法 path（条目本地名，允许第三方 raw name 的大小写）。"""
     return _PATH.fullmatch(value) is not None
+
+
+def alias_path(raw: str) -> str:
+    """把一个外来名字收进 path 语法；合法则原样返回。
+
+    第三方 MCP Server 的工具名不受任何协议约束，所以这一层必须是**全函数**：
+    任何字符串都要能落进命名空间，否则一个古怪的工具名会让整个进程起不来。
+
+    - 合法即零映射：模型看到的就是服务器给的名字。
+    - 否则生成只依赖 ``raw`` 的确定性别名 ``<slug>-<8位哈希>``。只依赖 raw 意味着
+      服务器增删工具**不会**让已有工具的 ID 漂移——ID 稳定性就是世界线与配置的稳定性。
+    - 别名之间、别名与原样名之间仍可能相撞，由注册处在同一命名空间内检出并报错。
+    """
+    if is_path(raw):
+        return raw
+    slug = _UNSAFE_RUN.sub("-", raw).strip("-").lower()[:_ALIAS_SLUG_LIMIT].strip("-")
+    digest = hashlib.blake2b(raw.encode("utf-8"), digest_size=_ALIAS_DIGEST_BYTES).hexdigest()
+    return f"{slug or 'unnamed'}-{digest}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +184,7 @@ __all__ = [
     "TagDefinition",
     "TagTable",
     "TagsConfig",
+    "alias_path",
     "is_namespace",
     "is_path",
 ]
