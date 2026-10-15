@@ -283,7 +283,7 @@ def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp
         result = await _runner(model, (root,), tool, world=journal).run(
             AgentTree.create("tree", "root", root, "执行一次")
         )
-        commits = await journal.commits("aurora:tree:tree", 0, 100)
+        commits = await journal.commits("aurora:run/tree", 0, 100)
         await journal.close()
         return result, tool, commits
 
@@ -490,7 +490,7 @@ def test_world_read_tool_returns_bodies_and_forest_indexes_the_tree(tmp_path: Pa
         tree = AgentTree.create("tree", "root", root, "看看世界", frontier)
         result = await _runner(model, (root,), read_tool, world=journal).run(tree)
         environment = await journal.delta(WorldFrontier(), frozenset({scope}))
-        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:tree:tree"}))
+        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:run/tree"}))
         forest = await journal.tree_index(10)
         await journal.close()
         return (
@@ -544,7 +544,7 @@ def test_world_read_tool_first_batch_defers_until_delta_is_disclosed(tmp_path: P
         tree = AgentTree.create("tree", "root", root, "看看世界", frontier)
         result = await _runner(model, (root,), read_tool, world=journal).run(tree)
         environment = await journal.delta(WorldFrontier(), frozenset({scope}))
-        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:tree:tree"}))
+        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:run/tree"}))
         await journal.close()
         return (
             result,

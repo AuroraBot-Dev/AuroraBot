@@ -101,7 +101,7 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
                     "tool.requested",
                     "engine",
                     "请求",
-                    frozenset({"aurora:tree:a"}),
+                    frozenset({"aurora:run/a"}),
                     WorldFrontier(),
                     {"tree_id": "a", "tool": "x"},
                     later,
@@ -111,7 +111,7 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
                     "tool.succeeded",
                     "engine",
                     "完成",
-                    frozenset({"aurora:tree:a"}),
+                    frozenset({"aurora:run/a"}),
                     WorldFrontier(),
                     {"tree_id": "a", "tool": "x"},
                     later,
@@ -121,7 +121,7 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
                     "tool.requested",
                     "engine",
                     "请求",
-                    frozenset({"aurora:tree:b"}),
+                    frozenset({"aurora:run/b"}),
                     WorldFrontier(),
                     {"tree_id": "b", "tool": "y"},
                     earlier,
@@ -184,10 +184,10 @@ def test_sqlalchemy_journal_streams_continuous_events_by_global_cursor(tmp_path:
         await journal.append_commits(
             (
                 WorldCommitInput(
-                    "c-1", "engine.tree.started", "engine", "第一项", frozenset({"aurora:tree:a"}), WorldFrontier()
+                    "c-1", "engine.tree.started", "engine", "第一项", frozenset({"aurora:run/a"}), WorldFrontier()
                 ),
                 WorldCommitInput(
-                    "c-2", "tool.requested", "engine", "第二项", frozenset({"aurora:tree:a"}), WorldFrontier()
+                    "c-2", "tool.requested", "engine", "第二项", frozenset({"aurora:run/a"}), WorldFrontier()
                 ),
                 WorldCommitInput(
                     "c-3", "environment.message", "qq", "第三项", frozenset({"qq:group"}), WorldFrontier()

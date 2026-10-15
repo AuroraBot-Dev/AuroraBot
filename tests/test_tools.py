@@ -48,8 +48,8 @@ if TYPE_CHECKING:
 def _scope_catalog() -> ScopeCatalog:
     return ScopeCatalog(
         (
-            ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "终端输入先进入的世界线"),
-            ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "一次运行的因果台账"),
+            ScopeDeclaration("aurora:world/console", ScopeKind.RESOURCE, "终端输入先进入的世界线"),
+            ScopeDeclaration("aurora:run/*", ScopeKind.RUN, "一次运行的因果台账"),
         )
     )
 

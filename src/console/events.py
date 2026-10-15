@@ -2,5 +2,7 @@
 
 from __future__ import annotations
 
-CONSOLE_SCOPE = "aurora:console"
+from src.contracts.identity import world_scope
+
+CONSOLE_SCOPE = f"{world_scope('aurora')}/console"
 CONSOLE_INPUT = "console.input"

@@ -5,23 +5,23 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.identity import WORLD_SCOPE_PATTERN, WORLD_SUB_SCOPE_PATTERN, world_scope
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 _PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _MAX_SCOPE_LENGTH = 256
 _CONTROL_CHARACTER_LIMIT = 32
-_PREFIX = "aurora:mcp:"
 
-#: 扩展域在域注册表里的声明形状；MCP 运行时拥有这一族域。
-SCOPE_PATTERN = f"{_PREFIX}*"
+#: 扩展域在域注册表里的声明形状：命名空间即所有者，package 在发现前不可知。
+SCOPE_PATTERN = WORLD_SCOPE_PATTERN
+SUB_SCOPE_PATTERN = WORLD_SUB_SCOPE_PATTERN
 
 
 def mcp_scope(package: str) -> str:
-    """返回一个 MCP App 的标准世界 scope。"""
-    if not package.strip():
-        raise ValueError("package must not be empty")
-    return f"{_PREFIX}{package}"
+    """返回一个 MCP App 拥有的世界域：``<package>:world``。"""
+    return world_scope(package)
 
 
 def owned_scope_prefix(package: str) -> str:
@@ -32,10 +32,11 @@ def owned_scope_prefix(package: str) -> str:
 def owns_scope(package: str, scope: str) -> bool:
     """判断一个域是否落在该 App 自己的命名空间下。
 
-    前缀必须整体成段匹配，避免 ``org.aurora.qq`` 误认领 ``org.aurora.qqq``。
+    前缀必须整体成段匹配，避免 ``org.aurora.qq`` 误认领 ``org.aurora.qqq``；
+    子域用 ``/`` 继续细分（``<package>:world/room/1``）。
     """
     prefix = owned_scope_prefix(package)
-    return scope == prefix or scope.startswith(f"{prefix}:")
+    return scope == prefix or scope.startswith(f"{prefix}/")
 
 
 def validate_mcp_scope(scope: str) -> str:

@@ -211,7 +211,7 @@ def test_reactive_rule_launches_immediately_with_business_frontier_and_exact_cur
         "mcp:org.aurora.qq",
         "QQ 私聊收到 Aurore 的消息: 在吗",
         datetime.now(UTC),
-        {"qq:private:42": 7, "aurora:mcp:org.aurora.qq": 11},
+        {"qq:private:42": 7, "org.aurora.qq:world": 11},
         WorldFrontier(),
         {"event_kind": "qq.message.private", "data": {"user_id": "42"}},
     )

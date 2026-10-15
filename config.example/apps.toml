@@ -18,5 +18,5 @@ env = ["AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG"]
 timeout_seconds = 60
 event_mode = "world_events"
 # 这个 App 拥有的世界域；只能声明自己命名空间下的域。
-# 不声明时退回 aurora:mcp:org.aurora.qq。
-scopes = ["aurora:mcp:org.aurora.qq"]
+# 不声明时退回 org.aurora.qq:world。
+scopes = ["org.aurora.qq:world"]

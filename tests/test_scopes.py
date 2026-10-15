@@ -21,13 +21,20 @@ from src.mcp.scopes import mcp_scope
 from src.runtime.assembly import declared_scopes, validate_declared_scopes
 from src.tools import WORLD_SCOPES_TOOL, WorldScopesTool
 
-_EXPECTED_OWNED_SCOPES = ("aurora:cadence", "aurora:console", "aurora:mcp:*", "aurora:tree:*")
+_EXPECTED_OWNED_SCOPES = (
+    "*:world",
+    "*:world/*",
+    "aurora:run/*",
+    "aurora:world/cadence",
+    "aurora:world/console",
+)
 
 _TEMPLATE = (
-    ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "终端输入先进入的世界线"),
-    ScopeDeclaration("aurora:cadence", ScopeKind.RESOURCE, "节律决策"),
-    ScopeDeclaration("aurora:mcp:*", ScopeKind.RESOURCE, "MCP App 上报的外部事实"),
-    ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "一次运行的因果台账"),
+    ScopeDeclaration("aurora:world/console", ScopeKind.RESOURCE, "终端输入先进入的世界线"),
+    ScopeDeclaration("aurora:world/cadence", ScopeKind.RESOURCE, "节律决策"),
+    ScopeDeclaration("*:world", ScopeKind.RESOURCE, "扩展拥有的世界域"),
+    ScopeDeclaration("*:world/*", ScopeKind.RESOURCE, "扩展世界域的子域"),
+    ScopeDeclaration("aurora:run/*", ScopeKind.RUN, "一次运行的因果台账"),
 )
 _TEMPLATE_COUNT = len(_TEMPLATE)
 _TEMPLATE_RESOURCE_COUNT = sum(1 for item in _TEMPLATE if item.kind is ScopeKind.RESOURCE)
@@ -38,30 +45,30 @@ def _catalog(*declarations: ScopeDeclaration) -> ScopeCatalog:
 
 
 def test_owner_is_derived_from_the_pattern_namespace() -> None:
-    assert ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "说明").owner == "aurora"
+    assert ScopeDeclaration("aurora:world/console", ScopeKind.RESOURCE, "说明").owner == "aurora"
     assert ScopeDeclaration("org.aurora.qq:world", ScopeKind.RESOURCE, "说明").owner == "org.aurora.qq"
 
 
 def test_declaration_matches_exact_names_and_one_wildcard_family() -> None:
-    tree = ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "台账")
+    tree = ScopeDeclaration("aurora:run/*", ScopeKind.RUN, "台账")
 
-    assert tree.matches("aurora:tree:abc")
-    assert not tree.matches("aurora:tree:")
-    assert not tree.matches("aurora:tree")
-    assert not tree.matches("aurora:trees:abc")
+    assert tree.matches("aurora:run/abc")
+    assert not tree.matches("aurora:run/")
+    assert not tree.matches("aurora:run")
+    assert not tree.matches("aurora:runs/abc")
 
-    exact = ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "说明")
-    assert exact.matches("aurora:console")
-    assert not exact.matches("aurora:console:extra")
+    exact = ScopeDeclaration("aurora:world/console", ScopeKind.RESOURCE, "说明")
+    assert exact.matches("aurora:world/console")
+    assert not exact.matches("aurora:world/console:extra")
 
 
 @pytest.mark.parametrize(
     "declaration",
     [
         ("console", ScopeKind.RESOURCE, "说明"),
-        ("aurora:console ", ScopeKind.RESOURCE, "说明"),
-        ("aurora:console", "resource", "说明"),
-        ("aurora:console", ScopeKind.RESOURCE, "   "),
+        ("aurora:world/console ", ScopeKind.RESOURCE, "说明"),
+        ("aurora:world/console", "resource", "说明"),
+        ("aurora:world/console", ScopeKind.RESOURCE, "   "),
     ],
 )
 def test_declaration_rejects_malformed_input(declaration: tuple[str, object, str]) -> None:
@@ -72,13 +79,13 @@ def test_declaration_rejects_malformed_input(declaration: tuple[str, object, str
 
 def test_catalog_first_matching_declaration_wins() -> None:
     catalog = _catalog(
-        ScopeDeclaration("aurora:tree:special", ScopeKind.RESOURCE, "特例"),
-        ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "台账"),
+        ScopeDeclaration("aurora:run/special", ScopeKind.RESOURCE, "特例"),
+        ScopeDeclaration("aurora:run/*", ScopeKind.RUN, "台账"),
     )
 
-    assert catalog.classify("aurora:tree:special") is ScopeKind.RESOURCE
-    assert catalog.classify("aurora:tree:other") is ScopeKind.RUN
-    assert catalog.describe("aurora:tree:special") == "特例"
+    assert catalog.classify("aurora:run/special") is ScopeKind.RESOURCE
+    assert catalog.classify("aurora:run/other") is ScopeKind.RUN
+    assert catalog.describe("aurora:run/special") == "特例"
 
 
 def test_catalog_reports_undeclared_and_unknown_scopes() -> None:
@@ -86,7 +93,7 @@ def test_catalog_reports_undeclared_and_unknown_scopes() -> None:
 
     assert catalog.classify("aurora:nowhere") is None
     assert catalog.describe("aurora:nowhere") is None
-    assert catalog.undeclared(("aurora:console", "aurora:nowhere", "aurora:other")) == (
+    assert catalog.undeclared(("aurora:world/console", "aurora:nowhere", "aurora:other")) == (
         "aurora:nowhere",
         "aurora:other",
     )
@@ -96,15 +103,15 @@ def test_catalog_groups_declarations_by_kind_and_owner() -> None:
     catalog = _catalog()
 
     assert catalog.owners == {"aurora"}
-    assert [item.pattern for item in catalog.of_kind(ScopeKind.RUN)] == ["aurora:tree:*"]
+    assert [item.pattern for item in catalog.of_kind(ScopeKind.RUN)] == ["aurora:run/*"]
     assert len(catalog.of_kind(ScopeKind.RESOURCE)) == _TEMPLATE_RESOURCE_COUNT
 
 
 def test_duplicate_patterns_are_rejected() -> None:
     with pytest.raises(ValueError, match="域模式重复声明"):
         _catalog(
-            ScopeDeclaration("aurora:console", ScopeKind.RESOURCE, "一"),
-            ScopeDeclaration("aurora:console", ScopeKind.RUN, "二"),
+            ScopeDeclaration("aurora:world/console", ScopeKind.RESOURCE, "一"),
+            ScopeDeclaration("aurora:world/console", ScopeKind.RUN, "二"),
         )
 
 
@@ -154,6 +161,7 @@ def test_scopes_tool_returns_owners_kinds_and_descriptions() -> None:
         "resource",
         "resource",
         "resource",
+        "resource",
         "run",
     ]
     assert all(item["description"] for item in payload["scopes"])
@@ -164,7 +172,7 @@ def test_scopes_tool_filters_by_kind_and_rejects_unknown_kinds() -> None:
 
     filtered = asyncio.run(tool.execute(ToolCall("c1", WORLD_SCOPES_TOOL, {"kind": "run"})))
     assert isinstance(filtered, ToolOutput)
-    assert [item["pattern"] for item in json.loads(filtered.content)["scopes"]] == ["aurora:tree:*"]
+    assert [item["pattern"] for item in json.loads(filtered.content)["scopes"]] == ["aurora:run/*"]
 
     rejected = asyncio.run(tool.execute(ToolCall("c2", WORLD_SCOPES_TOOL, {"kind": "vendor"})))
     assert isinstance(rejected, ToolOutput)
@@ -207,10 +215,10 @@ def test_module_declaring_an_unregistered_domain_fails_before_startup() -> None:
 
 
 def test_module_can_declare_the_domains_it_observes() -> None:
-    spec = ModuleSpec(name="watcher", provides=(object,), observes_scopes=("aurora:mcp:*",))
+    spec = ModuleSpec(name="watcher", provides=(object,), observes_scopes=("*:world",))
 
     validate_declared_scopes(_Settings(_catalog()), (spec,))
-    assert declared_scopes((spec,)) == ((), ("aurora:mcp:*",))
+    assert declared_scopes((spec,)) == ((), ("*:world",))
 
 
 def test_module_spec_rejects_blank_and_duplicated_domain_declarations() -> None:
@@ -218,5 +226,8 @@ def test_module_spec_rejects_blank_and_duplicated_domain_declarations() -> None:
         ModuleSpec(name="blank", provides=(object,), owns_scopes=(" ",))
     with pytest.raises(ValueError, match="重复声明域"):
         ModuleSpec(
-            name="twice", provides=(object,), owns_scopes=("aurora:console",), observes_scopes=("aurora:console",)
+            name="twice",
+            provides=(object,),
+            owns_scopes=("aurora:world/console",),
+            observes_scopes=("aurora:world/console",),
         )

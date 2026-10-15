@@ -41,7 +41,7 @@ class WorldReadTool:
                 "properties": {
                     "scope": {
                         "type": "string",
-                        "description": "要读取的世界 scope，例如 aurora:tree:<tree_id> 或环境 scope。",
+                        "description": "要读取的世界 scope，例如 aurora:run/<tree_id> 或环境 scope。",
                     },
                     "after": {
                         "type": "integer",
@@ -197,17 +197,18 @@ class WorldScopesTool:
     async def execute(self, call: ToolCall) -> ToolResult:
         raw = call.arguments.get("kind")
         if raw is None:
-            declarations = self._catalog.declarations
+            catalog = self._catalog
         elif isinstance(raw, str) and raw in {kind.value for kind in ScopeKind}:
-            declarations = self._catalog.of_kind(ScopeKind(raw))
+            catalog = ScopeCatalog(self._catalog.of_kind(ScopeKind(raw)))
         else:
             kinds = "、".join(kind.value for kind in ScopeKind)
             return ToolOutput(f"域种类无效：kind 必须是 {kinds} 之一", status=ToolStatus.FAILED)
+        declarations = catalog.declarations
         return ToolOutput(
             json.dumps(
                 {
                     "count": len(declarations),
-                    "owners": sorted({item.owner for item in declarations}),
+                    "owners": sorted(catalog.owners),
                     "scopes": [
                         {
                             "pattern": item.pattern,

@@ -27,7 +27,7 @@ def _commit(source: str, event_kind: str, summary: str) -> WorldCommit:
         source,
         summary,
         datetime(2026, 1, 1, tzinfo=UTC),
-        {"aurora:mcp:org.aurora.qq": 1},
+        {"org.aurora.qq:world": 1},
         WorldFrontier(),
         {"event_kind": event_kind},
     )

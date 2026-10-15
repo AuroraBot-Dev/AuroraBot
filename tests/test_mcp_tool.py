@@ -247,8 +247,8 @@ def test_scope_contract_defaults_to_app_scope_and_resolves_negotiated_templates(
     )
     default_tool = McpTool(default_binding, FakeCallClient(McpCallResult(False, None, ())), _TIMEOUT_SECONDS)
     default_scopes = default_tool.resolve_scopes(ToolCall("default", default_tool.definition.name, {}))
-    assert default_scopes.observe == frozenset({"aurora:mcp:org.example.tools"})
-    assert default_scopes.publish == frozenset({"aurora:mcp:org.example.tools"})
+    assert default_scopes.observe == frozenset({"org.example.tools:world"})
+    assert default_scopes.publish == frozenset({"org.example.tools:world"})
 
     binding = bind_mcp_tool(
         "org.example.tools",

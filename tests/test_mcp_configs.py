@@ -40,7 +40,7 @@ event_mode = "disabled"
 _EXPECTED_TEMPLATE_APPS = 2
 _EXPECTED_TIMEOUT_SECONDS = 30.0
 _QQ_PACKAGE = "org.aurora.qq"
-_QQ_SCOPES = ("aurora:mcp:org.aurora.qq",)
+_QQ_SCOPES = ("org.aurora.qq:world",)
 
 
 def _load_apps(tmp_path: Path, content: str) -> tuple[AppConfig, ...]:
@@ -78,18 +78,18 @@ def test_app_scopes_must_stay_inside_the_app_own_namespace(tmp_path: Path) -> No
 def test_app_scopes_accept_the_own_domain_and_its_sub_domains(tmp_path: Path) -> None:
     own = _STDIO.replace(
         'event_mode = "disabled"',
-        'event_mode = "disabled"\nscopes = ["aurora:mcp:org.example.clock", "aurora:mcp:org.example.clock:room:1"]',
+        'event_mode = "disabled"\nscopes = ["org.example.clock:world", "org.example.clock:world/room/1"]',
     )
 
     app = _load_apps(tmp_path, own)[0]
 
-    assert app.scopes == ("aurora:mcp:org.example.clock", "aurora:mcp:org.example.clock:room:1")
+    assert app.scopes == ("org.example.clock:world", "org.example.clock:world/room/1")
 
 
 def test_app_scopes_reject_duplicates(tmp_path: Path) -> None:
     duplicated = _STDIO.replace(
         'event_mode = "disabled"',
-        'event_mode = "disabled"\nscopes = ["aurora:mcp:org.example.clock", "aurora:mcp:org.example.clock"]',
+        'event_mode = "disabled"\nscopes = ["org.example.clock:world", "org.example.clock:world"]',
     )
 
     with pytest.raises(ValueError, match="不得重复"):
@@ -107,16 +107,16 @@ def test_app_scopes_reject_values_outside_the_scope_grammar() -> None:
             30.0,
             working_dir="extensions/clock",
             command=("uv", "run", "clock"),
-            scopes=("aurora:mcp:org.example.clock ",),
+            scopes=("org.example.clock:world ",),
         )
 
 
 def test_owning_a_lookalike_package_is_not_owning_this_one() -> None:
-    assert owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qq")
-    assert owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qq:room:7")
-    assert not owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qqq")
-    assert not owns_scope(_QQ_PACKAGE, "aurora:mcp:org.aurora.qqq:room:7")
-    assert not owns_scope(_QQ_PACKAGE, "aurora:cadence")
+    assert owns_scope(_QQ_PACKAGE, "org.aurora.qq:world")
+    assert owns_scope(_QQ_PACKAGE, "org.aurora.qq:world/room/7")
+    assert not owns_scope(_QQ_PACKAGE, "org.aurora.qq:worldq")
+    assert not owns_scope(_QQ_PACKAGE, "org.aurora.qqq:world/room/7")
+    assert not owns_scope(_QQ_PACKAGE, "aurora:world/cadence")
 
 
 def test_app_owned_scopes_fall_back_to_the_package_domain() -> None:
@@ -133,19 +133,17 @@ def test_app_owned_scopes_fall_back_to_the_package_domain() -> None:
 
     assert spec.scopes == ()
     assert app_owned_scopes(spec) == _QQ_SCOPES
-    assert app_owned_scopes(replace(spec, scopes=("aurora:mcp:org.aurora.qq:room:1",))) == (
-        "aurora:mcp:org.aurora.qq:room:1",
-    )
+    assert app_owned_scopes(replace(spec, scopes=("org.aurora.qq:world/room/1",))) == ("org.aurora.qq:world/room/1",)
 
 
 def test_app_declaring_an_unregistered_domain_fails_before_startup(configured_project: Path) -> None:
     """域注册表没有覆盖的 App 域必须在启动前失败。"""
     scopes_toml = configured_project / "config" / "scopes.toml"
     text = scopes_toml.read_text(encoding="utf-8")
-    scopes_toml.write_text(
-        text.replace('pattern = "aurora:mcp:*"', 'pattern = "aurora:mcp-other:*"'),
-        encoding="utf-8",
+    without_extensions = text.replace('pattern = "*:world/*"', 'pattern = "aurora:no-such-world/*"').replace(
+        'pattern = "*:world"', 'pattern = "aurora:no-such-world"'
     )
+    scopes_toml.write_text(without_extensions, encoding="utf-8")
 
     with pytest.raises(ValueError, match="MCP App 声明了未注册的域"):
         build_mcp_specs(load_config(configured_project))

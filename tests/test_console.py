@@ -136,7 +136,7 @@ def test_terminal_console_records_every_non_empty_input_to_worldline() -> None:
     )
 
     assert [commit.summary for commit in world.commits] == ["请处理", "/status", "/exit"]
-    assert {scope for commit in world.commits for scope in commit.scopes} == {"aurora:console"}
+    assert {scope for commit in world.commits for scope in commit.scopes} == {"aurora:world/console"}
     assert {commit.kind for commit in world.commits} == {"console.input"}
     assert dispatcher.inputs == ["请处理", "/status", "/exit"]
 

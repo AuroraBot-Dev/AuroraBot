@@ -13,6 +13,7 @@ from src.kernel import ModuleContext, module
 from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from src.mcp.scopes import SCOPE_PATTERN as MCP_SCOPE_PATTERN
+from src.mcp.scopes import SUB_SCOPE_PATTERN as MCP_SUB_SCOPE_PATTERN
 
 if TYPE_CHECKING:
     from src.kernel import AsyncCleanup
@@ -112,7 +113,7 @@ async def activate(context: ModuleContext) -> None:
     provides=McpRuntimePort,
     requires=(WorldJournal,),
     contributes=(TOOL_CONTRIBUTIONS,),
-    owns_scopes=MCP_SCOPE_PATTERN,
+    owns_scopes=(MCP_SCOPE_PATTERN, MCP_SUB_SCOPE_PATTERN),
     activation_after=(Cadence,),
     prepare=prepare,
     activate=activate,

@@ -37,7 +37,7 @@ def test_memory_returns_recent_active_scopes_with_latest_details(tmp_path: Path)
                     "tool.succeeded",
                     "engine",
                     "最近完成",
-                    frozenset({"aurora:tree:tree"}),
+                    frozenset({"aurora:run/tree"}),
                     WorldFrontier(),
                     {"detail": "ok"},
                     now - timedelta(minutes=2),
@@ -58,7 +58,7 @@ def test_memory_returns_recent_active_scopes_with_latest_details(tmp_path: Path)
         rendered = Memory.render(snapshot)
         await journal.close()
 
-        assert [scope.scope for scope in snapshot.scopes] == ["aurora:tree:tree", "qq:group"]
+        assert [scope.scope for scope in snapshot.scopes] == ["aurora:run/tree", "qq:group"]
         assert [scope.commits[0].commit_id for scope in snapshot.scopes] == ["recent-2", "recent-1"]
         assert "最近完成" in rendered
         assert '"detail":"ok"' in rendered
@@ -109,7 +109,7 @@ def test_memory_filters_scopes_with_include_and_exclude_patterns(tmp_path: Path)
                     "tool.succeeded",
                     "engine",
                     "运行因果",
-                    frozenset({"aurora:tree:tree"}),
+                    frozenset({"aurora:run/tree"}),
                     WorldFrontier(),
                     {},
                     now - timedelta(minutes=3),
@@ -147,14 +147,14 @@ def test_memory_include_negation_reinjects_an_excluded_scope(tmp_path: Path) -> 
                     "tool.succeeded",
                     "engine",
                     "运行因果",
-                    frozenset({"aurora:tree:tree"}),
+                    frozenset({"aurora:run/tree"}),
                     WorldFrontier(),
                     {},
                     now - timedelta(minutes=3),
                 ),
             )
         )
-        memory = Memory(journal, commits_per_scope=1, scope_include=("**", "!aurora:tree:**"))
+        memory = Memory(journal, commits_per_scope=1, scope_include=("**", "!aurora:run/**"))
         snapshot = await memory.recall(now=now)
         await journal.close()
 
@@ -174,8 +174,8 @@ def test_memory_rejects_invalid_scope_patterns() -> None:
 
 _CATALOG = ScopeCatalog(
     (
-        ScopeDeclaration("aurora:cadence", ScopeKind.RESOURCE, "节律决策"),
-        ScopeDeclaration("aurora:tree:*", ScopeKind.RUN, "一次运行的因果台账"),
+        ScopeDeclaration("aurora:world/cadence", ScopeKind.RESOURCE, "节律决策"),
+        ScopeDeclaration("aurora:run/*", ScopeKind.RUN, "一次运行的因果台账"),
     )
 )
 
@@ -190,7 +190,7 @@ async def _two_scope_journal(tmp_path: Path, now: datetime) -> SqlAlchemyWorldJo
                 "cadence.tree_planned",
                 "cadence",
                 "节律决策",
-                frozenset({"aurora:cadence"}),
+                frozenset({"aurora:world/cadence"}),
                 WorldFrontier(),
                 {},
                 now - timedelta(minutes=5),
@@ -200,7 +200,7 @@ async def _two_scope_journal(tmp_path: Path, now: datetime) -> SqlAlchemyWorldJo
                 "tool.succeeded",
                 "engine",
                 "运行因果",
-                frozenset({"aurora:tree:tree"}),
+                frozenset({"aurora:run/tree"}),
                 WorldFrontier(),
                 {},
                 now - timedelta(minutes=3),
@@ -230,7 +230,7 @@ def test_memory_excludes_run_domains_declared_by_the_registry(tmp_path: Path) ->
         snapshot = await memory.recall(now=now)
         await journal.close()
 
-        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:cadence"]
+        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:world/cadence"]
 
     asyncio.run(scenario())
 
@@ -245,7 +245,7 @@ def test_memory_keeps_undeclared_scopes(tmp_path: Path) -> None:
         snapshot = await memory.recall(now=now)
         await journal.close()
 
-        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:tree:tree", "aurora:cadence"]
+        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:run/tree", "aurora:world/cadence"]
 
     asyncio.run(scenario())
 
@@ -258,6 +258,6 @@ def test_memory_can_opt_into_run_domains(tmp_path: Path) -> None:
         snapshot = await memory.recall(now=now)
         await journal.close()
 
-        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:tree:tree", "aurora:cadence"]
+        assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:run/tree", "aurora:world/cadence"]
 
     asyncio.run(scenario())
