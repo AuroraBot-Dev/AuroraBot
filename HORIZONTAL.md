@@ -70,10 +70,10 @@ path       [A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*
 | `builtin.console`（platform） | `aurora:platform/console` | 内置 | ✅ 已落地 |
 | `world` / `mcp` / `engine`（module） | 保持原样 | 内部诊断名 | **不改** |
 | `tools.catalog`（贡献键） | 保持原样 | 内部贡献键 | **不改** |
-| `aurora:console`（域） | `aurora:world/console` | 资源域 | ⬜ P2-2 |
-| `aurora:cadence`（域） | `aurora:world/cadence` | 资源域 | ⬜ P2-2 |
-| `aurora:mcp:<package>`（域） | `<package>:world` | 资源域 | ⬜ P2-2 |
-| `aurora:tree:<id>`（域） | `aurora:run/<id>` | **运行域** | ⬜ P2-2 |
+| `aurora:world/console` | `aurora:world/console` | 资源域 | ✅ 已落地 |
+| `aurora:world/cadence` | `aurora:world/cadence` | 资源域 | ✅ 已落地 |
+| `aurora:mcp:<package>` | `<package>:world` | 资源域 | ✅ 已落地 |
+| `aurora:tree:<id>` | `aurora:run/<id>` | **运行域** | ✅ 已落地 |
 | `AuroraConfig` 等能力类型 | 保留 Python 类型（value 侧） | — | 不需要 ID |
 
 **只改「可被配置或模型寻址」的东西。** module 名与贡献键是内部诊断与接线标识，
@@ -111,9 +111,10 @@ MCP SDK 对 `Tool.name` **不做任何格式约束**（`annotation=str`），所
 
 ### 已知接缝
 
-标签模式仍以 `.` 为段分隔符，而工具 path 里允许出现 `.`，所以单星 `*` 不跨点
+标签模式仍以 `.` 为段分隔符，而 ID 的 path 里允许出现 `.` 与 `/`，所以单星 `*` 不跨点
 （`org.aurora.qq:tool/*` 不会匹配 `org.aurora.qq:tool/send.message`）。
-模式分隔符应当跟随 ID 语法，留待 P2-2 一并对齐。
+模式分隔符应当跟随 ID 语法，单独列为 **P2-3**：它同时影响 agent 的工具可见性，
+与本轮的域换根不是一个改动，混在一起会让两者都难验证。
 
 ### 修复的缺陷
 
@@ -209,16 +210,31 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 > 域 = 一个按域分区的世界事实流 + **单调序号** + **观察前沿**。
 
 所以：**tag 用来表达「哪些域」，域本身仍是带序号的流。**
-`#aurora:world/extensions` 展开成一组域，每个域各自有独立的序号与前沿。
+`#aurora:world/*` 展开成一组域，每个域各自有独立的序号与前沿。
 
 ### 域注册表要存的字段
 
 | 字段 | 用途 |
 |---|---|
-| `pattern` | 精确域或 `<前缀>:*` 覆盖一族域 |
-| `owner` | 由 pattern 的命名空间推出；即声明权威 |
+| `pattern` | 精确域、`<前缀>:*` 一族域，或 `*:<path>` 任意命名空间 |
+| `owner` | 由 pattern 的命名空间推出；即声明权威（`*` 不算所有者） |
 | `kind` | `resource` / `run` |
 | `description` | **给模型读的一句话** |
+
+命名空间通配是扩展域逼出来的：`<package>:world` 里的 package 在发现之前不可知，
+注册表无法逐个列举。所以扩展域写成**两条**声明而不是含糊的 `*:world*`：
+
+```toml
+[[scope]]
+pattern = "*:world"      # 扩展拥有的世界域本身
+kind = "resource"
+
+[[scope]]
+pattern = "*:world/*"    # 及其子域，例如 <package>:world/room/1
+kind = "resource"
+```
+
+具体声明必须排在前——`*:world` 也会匹配 `aurora:world/console`，靠首条命中把它让给内置声明。
 
 ### 已经吃上力的地方
 
@@ -340,7 +356,8 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | **P1** | 域注册表 + `kind`（资源 / 运行）+ 给域一句 description | `src/contracts/scope.py`、新配置、`WorldScopesTool`、记忆可见性 | ✅ **已落地** |
 | **P2-1a** | 工具 ID 换根 + 第三方名字接纳（含修掉「古怪工具名让进程起不来」） | `registry` / `mcp.tool` / `config.example` / 测试 | ✅ **已落地** |
 | **P2-1b** | agent / prompt / platform ID 换根 + 三物种应用同一套规则 | `config.example` + 三处 DTO + 测试 | ✅ **已落地** |
-| **P2-2** | 域换根到 `<owner>:world`（接受一次数据断层）+ 模式分隔符跟随 ID 语法 | 全仓域字面量 + `scopes.toml` + 模式引擎 | ⬜ |
+| **P2-2** | 域换根到命名空间语法（接受一次数据断层） | 四处域命名 + `scopes.toml` + 域模式 | ✅ **已落地** |
+| **P2-3** | 标签/可见性模式的分隔符跟随 ID 语法 | `src/utils/patterns.py` + 两处消费者 | ⬜ |
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
 | **P3c** | 让只有 Resources 的 Server 也能作为世界生产者登记 | `aurora app` 准入规则 | ⬜ |
@@ -413,6 +430,18 @@ P5 是唯一需要 schema migration 的阶段。
 | `src/prompt/models.py` | `PromptCatalog` 校验 Agent prompt ID |
 | `src/prompt/module.py` | 按 ID 的 kind 段切分 system / agent，未知 kind 直接报错（取代 `_SYSTEM_PREFIX`） |
 | `src/mcp/config.py` | `PlatformConfig` 校验平台物种前缀 |
+
+### P2-2：域换根
+
+| 文件 | 内容 |
+|---|---|
+| `src/contracts/identity.py` | `world_scope(owner)` / `WORLD_SCOPE_PATTERN` / `WORLD_SUB_SCOPE_PATTERN` |
+| `src/contracts/scope.py` | `*:<path>` 命名空间通配；尾部通配统一要求至少一段；`owners` 排除 `*` |
+| `src/console/events.py` / `src/cadence/cadence.py` | `aurora:world/console` / `aurora:world/cadence` |
+| `src/engine/scopes.py` | 运行域 `aurora:run/<tree_id>`，与其他物种共用同一套语法 |
+| `src/mcp/scopes.py` | `mcp_scope(package)` = `world_scope(package)`；子域用 `/` |
+| `src/cadence/cadence.py` | **删除**硬编码的 `_MCP_SCOPE_PREFIX`：改由 `source` 按域命名规则现算 |
+| `src/tools/builtin/world.py` | 域目录工具的 `owners` 改走 `ScopeCatalog.owners`，通配不算所有者 |
 
 ### 测试
 
