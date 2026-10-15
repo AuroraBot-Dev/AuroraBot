@@ -1,4 +1,9 @@
-"""按顺序应用 gitignore 风格模式，产出最终的原子名称集合。"""
+"""按顺序应用模式，产出最终的原子名称集合。
+
+模式的语言跟随 ID 的命名空间语法：``<namespace>:<path>``。
+命名空间用 ``.`` 分层，path 用 ``/`` 分层，``:`` 连接两者；
+``*`` 与 ``?`` 只在本层内匹配，``**`` 跨全部层级。
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,16 @@ if TYPE_CHECKING:
 
 _logger = get_logger(__name__)
 
-_SEPARATOR = "."
+_ID_SEPARATOR = ":"
+_NAMESPACE_LEVEL = "."
+_PATH_LEVEL = "/"
+
+# `*` / `?` 不跨的字符取决于它落在哪一段。ID 的层级语法是三段式的：
+# 命名空间用 `.` 分层，`:` 分隔命名空间与 path，path 用 `/` 分层。
+_NAMESPACE_BLOCKED = f"{_NAMESPACE_LEVEL}{_ID_SEPARATOR}"
+_PATH_BLOCKED = _PATH_LEVEL
+# 没有 `:` 的模式按命名空间前缀理解，保持 `.` 分层的老语义。
+_UNSCOPED_BLOCKED = _NAMESPACE_LEVEL
 
 
 class NamePatternError(ValueError):
@@ -84,29 +98,43 @@ def _compile(entry: str) -> _Rule:
 
 
 def _translate(pattern: str) -> str:
-    segments = pattern.split(_SEPARATOR)
-    parts: list[str] = []
-    for index, segment in enumerate(segments):
-        if index:
-            parts.append(re.escape(_SEPARATOR))
-        parts.append(_translate_segment(segment))
-    return f"^{''.join(parts)}$"
+    """把模式翻成锚定正则，**按位置**决定 ``*`` / ``?`` 不跨哪些字符。
+
+    - ``命名空间`` 段（``:`` 之前）用 ``.`` 分层，所以那里的 ``*`` 不跨 ``.``；
+    - ``path`` 段（``:`` 之后）只以 ``/`` 分层，``.`` 是普通字符，
+      所以 ``org.aurora.qq:tool/*`` 匹配得到 ``org.aurora.qq:tool/send.message``；
+    - 没有 ``:`` 的模式按命名空间前缀理解（``org.aurora.**``）。
+
+    ``**`` 在任意位置都跨全部层级。第三方 MCP 的业务 scope 是自由文本，
+    里面的 ``:`` 落在 path 段，因此 ``qq:*`` 仍能匹配 ``qq:group:123``。
+    """
+    namespace, separator, path = pattern.partition(_ID_SEPARATOR)
+    if not separator:
+        return f"^{_translate_region(namespace, _UNSCOPED_BLOCKED)}$"
+    return (
+        f"^{_translate_region(namespace, _NAMESPACE_BLOCKED)}"
+        f"{re.escape(_ID_SEPARATOR)}"
+        f"{_translate_region(path, _PATH_BLOCKED)}$"
+    )
 
 
-def _translate_segment(segment: str) -> str:
-    """``**`` 单独成段匹配任意深度；段内 ``*`` 不跨分隔符。"""
-    if segment == "**":
-        return r".*"
+def _translate_region(region: str, blocked: str) -> str:
+    """翻译一段模式；``**`` 跨全部层级，单星与 ``?`` 不跨 ``blocked``。"""
+    single = f"[^{re.escape(blocked)}]"
     output: list[str] = []
     index = 0
-    while index < len(segment):
-        char = segment[index]
+    while index < len(region):
+        char = region[index]
         if char == "*":
-            output.append(r"[^.]*")
+            if region.startswith("**", index):
+                output.append(".*")
+                index += 2
+                continue
+            output.append(f"{single}*")
         elif char == "?":
-            output.append(r"[^.]")
+            output.append(single)
         elif char == "[":
-            end, translated = _translate_class(segment, index)
+            end, translated = _translate_class(region, index)
             output.append(translated)
             index = end + 1
             continue

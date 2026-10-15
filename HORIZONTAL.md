@@ -109,12 +109,21 @@ MCP SDK 对 `Tool.name` **不做任何格式约束**（`annotation=str`），所
 而 discovery 失败会升级成 `McpStartupError` —— **一个古怪工具名就能让整个 AuroraBot 起不来**。
 这条现在关闭：任何第三方名字都能接入。
 
-### 已知接缝
+### 模式语言跟随 ID 语法（P2-3 已落地）
 
-标签模式仍以 `.` 为段分隔符，而 ID 的 path 里允许出现 `.` 与 `/`，所以单星 `*` 不跨点
-（`org.aurora.qq:tool/*` 不会匹配 `org.aurora.qq:tool/send.message`）。
-模式分隔符应当跟随 ID 语法，单独列为 **P2-3**：它同时影响 agent 的工具可见性，
-与本轮的域换根不是一个改动，混在一起会让两者都难验证。
+模式曾经以 `.` 为唯一段分隔符，于是 `org.aurora.qq:tool/*` 匹配不到
+`org.aurora.qq:tool/send.message`——path 里的点被当成了层级。
+
+现在 `*` 不跨哪些字符是**按位置**决定的，因为 ID 的层级语法本来就是三段式的：
+
+| 位置 | 分层字符 | 单星 `*` 不跨 | 例子 |
+|---|---|---|---|
+| 命名空间段（`:` 之前） | `.` | `.` `:` | `*:tool/*` 只够到一层命名空间 |
+| path 段（`:` 之后） | `/` | `/` | `org.aurora.qq:tool/*` 够得到 `send.message` |
+| 无 `:` 的模式 | `.` | `.` | `org.aurora.**` 仍是命名空间前缀模式 |
+
+`**` 在任意位置都跨全部层级。第三方 MCP 的业务 scope 是自由文本，
+其中的 `:` 落在 path 段，所以 `qq:*` 仍能匹配 `qq:group:123`。
 
 ### 修复的缺陷
 
@@ -353,7 +362,7 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | **P2-1a** | 工具 ID 换根 + 第三方名字接纳（含修掉「古怪工具名让进程起不来」） | `registry` / `mcp.tool` / `config.example` / 测试 | ✅ **已落地** |
 | **P2-1b** | agent / prompt / platform ID 换根 + 三物种应用同一套规则 | `config.example` + 三处 DTO + 测试 | ✅ **已落地** |
 | **P2-2** | 域换根到命名空间语法（接受一次数据断层） | 四处域命名 + `scopes.toml` + 域模式 | ✅ **已落地** |
-| **P2-3** | 标签/可见性模式的分隔符跟随 ID 语法 | `src/utils/patterns.py` + 两处消费者 | ⬜ |
+| **P2-3** | 标签/可见性模式的语言跟随 ID 语法（按位置决定 `*` 的边界） | `src/utils/patterns.py` + 两处消费者 | ✅ **已落地** |
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
 | **P3c** | 零工具的 Server 也能作为世界生产者登记（准入 = 至少一种贡献） | `aurora app` 准入规则 + `--events` | ✅ **已落地** |
@@ -483,6 +492,20 @@ P5 是唯一需要 schema migration 的阶段。
 **顺带记下一处既存类型缺口**：`src.kernel.Capabilities` 把 `settings` 声明为可写属性，
 而 `Assembly` 是 frozen 的，两者在类型上并不相容。校验因此只声明自己需要的窄协议
 （`get` / `get_optional`），不去改动内核——那是个独立的、影响面更大的问题。
+
+### P2-3：模式语言跟随 ID 语法
+
+| 文件 | 内容 |
+|---|---|
+| `src/utils/patterns.py` | 按第一个 `:` 切成命名空间段与 path 段，两段各自决定 `*` / `?` 不跨什么；`**` 任意位置跨全部 |
+
+翻译从「按 `.` 切段」改成「逐字符走、按位置取屏蔽集」，因此不需要知道模式里
+哪个点属于命名空间、哪个属于名字——**位置本身就说明了这件事**。
+
+**只改了一处断言的语义**：`tests/test_utils.py` 里原本写着
+`not pattern_matches("aurora:tool/*", "aurora:tool/world_read.deep")`，
+把旧接缝钉成了期望行为。它现在断言相反的事实，并另加一条 `/` 仍分层、
+`*:tool/*` 只够一层命名空间、`qq:*` 仍匹配 `qq:group:123` 的测试。
 
 ### 测试
 

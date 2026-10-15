@@ -121,7 +121,7 @@ def test_resolve_names_applies_ordered_patterns_with_last_match_wins() -> None:
         frozenset({"org.aurora.qq:tool/qq_send_private_message"})
     )
     assert resolve_names(_TOOLS, ("!org.aurora.qq:tool/*",)) == frozenset()
-    # ** 单独成段跨分隔符深度；* 段内不跨 .，所以单星只够到不含点的命名空间
+    # 没有 `:` 的模式按命名空间前缀理解，`**` 跨全部层级
     assert resolve_names(_TOOLS, ("org.aurora.**",)) == frozenset(
         {
             "org.aurora.qq:tool/qq_send_private_message",
@@ -161,7 +161,7 @@ def test_resolve_names_rejects_unmatched_exact_and_warns_unmatched_wildcards() -
 
 def test_pattern_matches_and_rejects_invalid_patterns() -> None:
     assert pattern_matches("org.aurora.**", "org.aurora.qq:tool/qq_send_private_message")
-    assert not pattern_matches("aurora:tool/*", "aurora:tool/world_read.deep")
+    assert not pattern_matches("aurora:tool/*", "aurora:tool/room/read")
 
     with pytest.raises(NamePatternError, match="不能为空"):
         resolve_names(_TOOLS, ("",))
@@ -173,6 +173,21 @@ def test_pattern_matches_and_rejects_invalid_patterns() -> None:
         resolve_names(_TOOLS, ("aur.[z-a].*",))
     with pytest.raises(NamePatternError, match="嵌套"):
         resolve_names(_TOOLS, ("aur.[[a].*",))
+
+
+def test_wildcard_reach_follows_the_id_level_syntax() -> None:
+    """`*` 不跨哪一层，取决于它落在哪一段——这正是 ID 的三段式语法。"""
+    # path 段只以 `/` 分层，`.` 是普通字符：单星够得到带点的工具名
+    assert pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/send.message")
+    assert pattern_matches("aurora:tool/world_*", "aurora:tool/world_read.deep")
+    # 但 `/` 仍是层级：单星只走一层，双星才跨
+    assert not pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/room/send")
+    assert pattern_matches("org.aurora.qq:tool/**", "org.aurora.qq:tool/room/send")
+    # 命名空间段仍以 `.` 分层：单星只够到一层命名空间
+    assert not pattern_matches("*:tool/*", "org.aurora.qq:tool/send")
+    assert pattern_matches("**:tool/*", "org.aurora.qq:tool/send")
+    # 第三方业务 scope 是自由文本，其中的 `:` 落在 path 段而不是层级
+    assert pattern_matches("qq:*", "qq:group:123")
 
 
 def test_platform_detection_maps_known_and_unknown_systems(monkeypatch: pytest.MonkeyPatch) -> None:
