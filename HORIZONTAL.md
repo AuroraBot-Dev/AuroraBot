@@ -360,7 +360,7 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | **P2-3** | 标签/可见性模式的分隔符跟随 ID 语法 | `src/utils/patterns.py` + 两处消费者 | ⬜ |
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
-| **P3c** | 让只有 Resources 的 Server 也能作为世界生产者登记 | `aurora app` 准入规则 | ⬜ |
+| **P3c** | 零工具的 Server 也能作为世界生产者登记（准入 = 至少一种贡献） | `aurora app` 准入规则 + `--events` | ✅ **已落地** |
 | **P4** | 声明四操作为扩展点，并为替换实现加语义一致性校验 | contracts 契约文档 + 内核或模块层校验 | ⬜ |
 | **P5** | 域作为物理分区键 + `delta()` 下推 + 因果表示收敛 | `src/world` + migration | ⬜ |
 
@@ -443,6 +443,30 @@ P5 是唯一需要 schema migration 的阶段。
 | `src/cadence/cadence.py` | **删除**硬编码的 `_MCP_SCOPE_PREFIX`：改由 `source` 按域命名规则现算 |
 | `src/tools/builtin/world.py` | 域目录工具的 `owners` 改走 `ScopeCatalog.owners`，通配不算所有者 |
 
+### P3c：零工具的世界生产者
+
+原先的准入是「至少一个 Tool」。这条规则把**贡献**和**工具**当成了同一件事，
+于是三类 Server 被挡在门外：只有 Resources 的、只有 Prompts 的，以及最要紧的
+——**只推事件、不需要任何可调用工具的外部世界桥**。
+
+现在准入问的是「至少能贡献一种东西」：
+
+| 贡献 | 判据 | 模型能做什么 |
+|---|---|---|
+| Act | 发现到至少一个 Tool | 调用它 |
+| 世界生产者 | `event_mode = world_events` | 等它的世界事件，然后 `world_read` |
+
+两者都做不到的条目纯粹是死配置——既调不动，也等不到它——仍然拒绝，
+但拒绝信息会指出 `--events` 这条路。
+
+`event_mode` 之前是安装期写死的 `DEFAULT_EVENT_MODE`，CLI 无法声明，
+所以「世界生产者」这条路**根本走不到**。它现在进了三个计划 DTO，
+并经由 `registry_entry`（计划 → 配置的唯一翻译点）落进注册表；
+远程端点由 `check_remote_config` 在连接之前就拒绝（`streamable_http` 暂不支持事件）。
+
+`verify.require_tools` 改名 `require_contribution`：名字该说清它在判什么，
+而不是暗示 Tool 是唯一贡献。
+
 ### 测试
 
 | 文件 | 覆盖 |
@@ -451,6 +475,8 @@ P5 是唯一需要 schema migration 的阶段。
 | `tests/test_scopes.py` | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
 | `tests/test_reactions_configs.py` | 9 项：模板往返、路由命中、字段缺失与未知字段 |
 | `tests/test_mcp_configs.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
+| `tests/test_app_verify.py` | +2 项：零工具 + `world_events` 作为世界生产者登记且声明落进注册表；远程端点拒绝 `--events` |
+| `tests/test_app_install_cli.py` | +2 项：`--events` 的 CLI 通路（零工具也登记）与「不加 `--events` 仍拒绝」 |
 | `tests/test_mcp_tool.py` | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字 |
 | `tests/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
 | `tests/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
