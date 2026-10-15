@@ -39,6 +39,7 @@ from src.contracts.identity import (
     world_scope,
 )
 from src.contracts.kernel import ContributionKey, Settings
+from src.contracts.loop import LOOP_OPERATIONS, WORLD_PORTS, LoopOperation
 from src.contracts.model import ChatMessage, ChatRole, ModelRequest, ToolCall
 from src.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
 from src.contracts.tool import (
@@ -74,11 +75,13 @@ __all__ = [
     "DEFAULT_NAMESPACE",
     "DELEGATE_TOOL",
     "FRONT_BINDINGS",
+    "LOOP_OPERATIONS",
     "MCP_EVENT_RECEIVED",
     "TAG_PREFIX",
     "TOOL_CONTRIBUTIONS",
     "TREE_LAUNCHER_BINDINGS",
     "WAIT_TOOL",
+    "WORLD_PORTS",
     "WORLD_READ_TOOL",
     "WORLD_SCOPES_TOOL",
     "WORLD_TREES_TOOL",
@@ -97,6 +100,7 @@ __all__ = [
     "FrontIO",
     "Identifier",
     "IdentityError",
+    "LoopOperation",
     "MemoryScopeSnapshot",
     "MemorySnapshot",
     "ModelRequest",

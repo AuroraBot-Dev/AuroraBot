@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
-from src.contracts import TOOL_CONTRIBUTIONS, ScopeCatalog, Tool
+from src.contracts import LOOP_OPERATIONS, TOOL_CONTRIBUTIONS, WORLD_PORTS, ScopeCatalog, Tool
 from src.contracts.pkgs.ai import Model
 from src.contracts.pkgs.mcp import McpRuntime
 from src.contracts.pkgs.world import WorldJournal
@@ -49,6 +49,37 @@ def validate_declared_scopes(settings: Settings, specs: Iterable[ModuleSpec]) ->
         raise ValueError(f"模块声明了未注册的域：{', '.join(undeclared)}")
 
 
+class LoopCapabilities(Protocol):
+    """校验四操作所需的最小能力视图：按契约类型读取实例。
+
+    不复用 ``src.kernel.Capabilities``：那个协议把 ``settings`` 声明为可写属性，
+    而 ``Assembly`` 是 frozen 的，两者在类型上并不相容（既存缺口，与本校验无关）。
+    这里只要「读得到能力」，就只声明这一件事。
+    """
+
+    def get[T](self, capability: type[T]) -> T: ...
+
+    def get_optional[T](self, capability: type[T]) -> T | None: ...
+
+
+def validate_loop_operations(capabilities: LoopCapabilities) -> None:
+    """ReAct 四操作必须齐备，并且 Observe 与 Effect 必须落在同一个世界上。
+
+    四操作由 ``provides`` 契约表达，所以内核本来就能替换它们；这里补的是
+    **替换之后仍然是一个完整循环**：缺一个操作就不是循环，而观察与效果落在
+    两个世界上时，Bot 会经历一个自己写不进去的世界。
+    """
+    missing = [
+        operation.name for operation in LOOP_OPERATIONS if capabilities.get_optional(operation.capability) is None
+    ]
+    if missing:
+        raise ValueError(f"ReAct 循环缺少操作实现：{', '.join(missing)}")
+    worlds = [capabilities.get(port) for port in WORLD_PORTS]
+    if any(world is not worlds[0] for world in worlds[1:]):
+        names = "、".join(port.__name__ for port in WORLD_PORTS)
+        raise ValueError(f"Observe 与 Effect 必须是同一个世界：{names} 必须由同一个对象提供")
+
+
 def _sources(settings: Settings) -> tuple[DiscoverySource, ...]:
     plugin_directory = settings.project_root.joinpath(*_PLUGIN_DIRECTORY)
     return (BuiltinSource(), DirectorySource(plugin_directory), EntryPointSource())
@@ -74,6 +105,7 @@ def _seed(
 
 
 def _create(assembly: Assembly, output: Callable[[str], None]) -> AuroraRuntime:
+    validate_loop_operations(assembly)
     factory = assembly.get(RuntimeFactory)
     return factory(assembly, output=output)
 
