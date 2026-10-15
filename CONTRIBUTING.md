@@ -64,7 +64,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 贡献代码时，请守住几条能让 AuroraBot 可靠工作的边界：
 
 - 模型决定、运行时执行：assistant 只能回复或请求工具，真实外部效果只由 Tool 契约执行，普通模型文本不是效果；
-- 委派就是树操作：`aur.agent.delegate` 是普通可见 Tool，由 engine 解释并创建 child，child 完成后以 tool
+- 委派就是树操作：`aurora:tool/delegate` 是普通可见 Tool，由 engine 解释并创建 child，child 完成后以 tool
   结果恢复 parent；
 - engine 管理完整热路径，具体模型、工具与记忆实现通过 contracts Port 注入，节点不直接调用模型网关或平台客户端；
 - 结构配置继续使用 TOML，密钥继续只来自环境变量；

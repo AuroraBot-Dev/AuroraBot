@@ -225,7 +225,7 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 | 用途 | 之前 | 现在 |
 |---|---|---|
 | 记忆可见性 | 用户得手写 `scope_include = ["**", "!aurora:tree:**"]` 才能挡住引擎台账 | 注册表声明 `kind=run`，默认不进记忆；未声明的域一律保留 |
-| 模型可读 | 域对模型完全不可见 | `aur.serv.world.scopes` 列出所有者、种类与说明 |
+| 模型可读 | 域对模型完全不可见 | `aurora:tool/world_scopes` 列出所有者、种类与说明 |
 | 声明封闭性 | 无处校验 | 测试断言**代码产生的每个域都被模板覆盖**（`ScopeCatalog.undeclared(...) == ()`） |
 
 `ScopeCatalog.classify` 对未声明的域返回 `None`（宽松），只有**明确声明为 `run`** 的域才被排除——
@@ -371,7 +371,7 @@ P5 是唯一需要 schema migration 的阶段。
 |---|---|
 | `src/contracts/scope.py` | `ScopeKind` / `ScopeDeclaration` / `ScopeCatalog`（自带最小模式匹配，契约层不依赖 `src.utils`） |
 | `aurora/configs/scopes.py` + `config.example/scopes.toml` | 域注册表的声明与解析 |
-| `src/tools/builtin/world.py` | `aur.serv.world.scopes`：把域注册表交给模型读 |
+| `src/tools/builtin/world.py` | `aurora:tool/world_scopes`：把域注册表交给模型读 |
 | `src/memory/memory.py` + `module.py` | `kind=run` 的域默认不进记忆；未声明的域保留 |
 | `aurora/contracts/config.py` | `text_field` 支持 `transform`（与 `strings_field` 对称，供枚举字段使用） |
 

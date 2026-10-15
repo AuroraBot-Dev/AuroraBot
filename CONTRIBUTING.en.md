@@ -63,7 +63,7 @@ The current runtime, package boundaries, and process composition are governed by
 While contributing code, hold the boundaries that keep AuroraBot reliable:
 
 - The model decides, the runtime executes: assistant may only reply or request tools; real external effects run only through the Tool contract, and plain model text is not an effect.
-- Delegation is a tree operation: `aur.agent.delegate` is an ordinary visible Tool that the engine interprets to spawn a child; when the child finishes, the parent resumes with the tool result.
+- Delegation is a tree operation: `aurora:tool/delegate` is an ordinary visible Tool that the engine interprets to spawn a child; when the child finishes, the parent resumes with the tool result.
 - The engine owns the full hot path; concrete model, tool, and memory implementations are injected through contracts Ports, and nodes never call the model gateway or platform clients directly.
 - Structural configuration stays in TOML; keys keep coming only from environment variables.
 - Shared logging goes through `src.utils.logging.get_logger()` and never records full prompts, model replies, or sensitive payloads.
