@@ -58,16 +58,16 @@ path       [A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*
 
 ### 现状 → 目标映射
 
-| 现状 | 目标 | 归属 |
 | 现在 | 目标 | 归属 | 状态 |
 |---|---|---|---|
 | `aur.agent.delegate` | `aurora:tool/delegate` | 内置 | ✅ 已落地 |
 | `aur.serv.world.read` | `aurora:tool/world_read` | 内置 | ✅ 已落地 |
 | `aur.builtin.wait` | `aurora:tool/wait` | 内置 | ✅ 已落地 |
 | `aur.mcp.<package>.<raw_name>` | `<package>:tool/<raw_name 或别名>` | 扩展 | ✅ 已落地 |
-| `builtin.root`（agent） | `aurora:agent/root` | 内置 | ⬜ |
-| `system.soul`（prompt） | `aurora:prompt/soul` | 内置 | ⬜ |
-| `builtin.console`（platform） | `aurora:platform/console` | 内置 | ⬜ |
+| `builtin.root`（agent） | `aurora:agent/root` | 内置 | ✅ 已落地 |
+| `system.soul`（prompt） | `aurora:prompt/system/soul` | 内置 | ✅ 已落地 |
+| `builtin.triage`（prompt） | `aurora:prompt/agent/triage` | 内置 | ✅ 已落地 |
+| `builtin.console`（platform） | `aurora:platform/console` | 内置 | ✅ 已落地 |
 | `world` / `mcp` / `engine`（module） | 保持原样 | 内部诊断名 | **不改** |
 | `tools.catalog`（贡献键） | 保持原样 | 内部贡献键 | **不改** |
 | `aurora:console`（域） | `aurora:world/console` | 资源域 | ⬜ P2-2 |
@@ -78,6 +78,21 @@ path       [A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*
 
 **只改「可被配置或模型寻址」的东西。** module 名与贡献键是内部诊断与接线标识，
 既不被配置引用也不被模型看见，改成命名空间化只是噪声——横向体系管的是**可寻址面**，不是所有字符串。
+
+### 换根顺手消掉的一处歧义
+
+`builtin.chat` 在旧方案里**同时是 agent id 和 prompt id**（前者在 `agents.toml`，后者在 `prompts.toml`），
+而提示词的「全局 system 片段 vs Agent 局部提示词」只靠 Python 里一个 `_SYSTEM_PREFIX = "system."` 判别。
+换根后两者都由 path 段显式表达：
+
+```
+aurora:agent/chat                   Agent 原型
+aurora:prompt/agent/chat            它的提示词
+aurora:prompt/system/soul           全局 system 片段
+```
+
+`prompt/<kind>/<name>` 的 kind 段取代了那个隐藏前缀；未知 kind 在读取时直接报错，
+而不是悄悄落进 Agent 提示词里。
 
 ### 外来名字的接纳规则（第三方 MCP 的接入面）
 
@@ -324,7 +339,7 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | **P0** | 身份层（`Identifier`）+ 标签集合 + 把策略搬出代码 | `src/contracts/identity.py`、新配置 | ✅ **已落地** |
 | **P1** | 域注册表 + `kind`（资源 / 运行）+ 给域一句 description | `src/contracts/scope.py`、新配置、`WorldScopesTool`、记忆可见性 | ✅ **已落地** |
 | **P2-1a** | 工具 ID 换根 + 第三方名字接纳（含修掉「古怪工具名让进程起不来」） | `registry` / `mcp.tool` / `config.example` / 测试 | ✅ **已落地** |
-| **P2-1b** | agent / prompt / platform ID 换根 | `config.example` + 测试 | ⬜ |
+| **P2-1b** | agent / prompt / platform ID 换根 + 三物种应用同一套规则 | `config.example` + 三处 DTO + 测试 | ✅ **已落地** |
 | **P2-2** | 域换根到 `<owner>:world`（接受一次数据断层）+ 模式分隔符跟随 ID 语法 | 全仓域字面量 + `scopes.toml` + 模式引擎 | ⬜ |
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
@@ -388,6 +403,16 @@ P5 是唯一需要 schema migration 的阶段。
 | `src/tools/registry.py` | `is_tool_id()` 成为**唯一**工具 ID 校验器（旧的两份 `_MCP_TOOL_ID` 消失） |
 | `src/mcp/tool.py` | `mcp_tool_id()`：package 段我们必须合法，raw_name 段原样接纳或别名 |
 | `src/mcp/runtime.py` | 同一命名空间内两个远端名收敛到同一 ID 时，同时报出两个名字 |
+
+### P2-1b：三个物种换根并应用同一套规则
+
+| 文件 | 内容 |
+|---|---|
+| `src/contracts/identity.py` | 物种前缀常量（`TOOL_` / `AGENT_` / `PROMPT_` / `PLATFORM_PATH_PREFIX`）与 `SYSTEM_` / `AGENT_PROMPT_PATH_PREFIX` |
+| `src/contracts/agent.py` | `AgentDefinition` 校验自身 ID、prompt ID、工具与 children 的物种 |
+| `src/prompt/models.py` | `PromptCatalog` 校验 Agent prompt ID |
+| `src/prompt/module.py` | 按 ID 的 kind 段切分 system / agent，未知 kind 直接报错（取代 `_SYSTEM_PREFIX`） |
+| `src/mcp/config.py` | `PlatformConfig` 校验平台物种前缀 |
 
 ### 测试
 
