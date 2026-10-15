@@ -58,6 +58,11 @@ def _verifier() -> MCPVerifier:
     return MCPVerifier(FakeMcpClientFactory(protocol_version=DEFAULT_PROTOCOL))  # type: ignore[arg-type]
 
 
+def _zero_tool_verifier() -> MCPVerifier:
+    """一个合法但零工具的 Server：只有 Resources / Prompts，或只推事件。"""
+    return MCPVerifier(FakeMcpClientFactory(protocol_version=DEFAULT_PROTOCOL, tools=()))  # type: ignore[arg-type]
+
+
 class _Terminal(io.StringIO):
     """一个自称是终端的 stdin，里面放着用户将要敲的那一行。
 
@@ -116,6 +121,7 @@ def test_install_help_lists_its_options(capsys: pytest.CaptureFixture[str]) -> N
         "--uvx",
         "--arg",
         "--auth-env",
+        "--events",
         "--disabled",
         "--yes",
     ):
@@ -384,6 +390,35 @@ def test_a_checked_install_reports_the_tools_it_found(
     assert "发现的工具：   1 个" in out
     assert f"{_PACKAGE}:tool/weather_now" in out
     assert "未经过连接检查" not in out
+
+
+def test_events_registers_a_server_that_exposes_no_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """世界生产者不必暴露 Tool：零工具 + --events 也要能登记，且声明要落进注册表。"""
+    stub_cli(monkeypatch, verifier=_zero_tool_verifier())
+    root = _project(tmp_path)
+
+    code, out, _ = _capture(capsys, root, "install", _REQUESTED, "--events", "--yes")
+
+    assert code == 0
+    assert "发现的工具：   0 个" in out
+    entry = (root / _CONFIG).read_text(encoding="utf-8")
+    assert 'event_mode = "world_events"' in entry, "只写进计划而不写进注册表，启动时就白声明了"
+
+
+def test_without_events_a_zero_tool_server_is_still_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """不加 --events 时零工具仍然是死配置：既调不动，也等不到它。"""
+    stub_cli(monkeypatch, verifier=_zero_tool_verifier())
+    root = _project(tmp_path)
+
+    code, _, err = _capture(capsys, root, "install", _REQUESTED, "--yes")
+
+    assert code == EXIT_FAILURE
+    assert "--events" in err, "拒绝时要指出另一条登记路径"
+    assert (root / _CONFIG).read_text(encoding="utf-8") == _EMPTY_REGISTRY
 
 
 def test_install_explains_that_bot_visibility_depends_on_project_policy(

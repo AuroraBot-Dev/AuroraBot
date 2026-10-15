@@ -10,7 +10,7 @@ from aurora.utils.toml import check_package_name
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.mcp.config import AppConfig
+    from src.mcp.config import AppConfig, McpEventMode
 
 type AppState = Literal["ready", "missing", "invalid", "configured"]
 type AppKind = Literal["local", "remote"]
@@ -219,6 +219,7 @@ class RunnerPlan:
     working_dir: str
     enabled: bool = False
     tools: tuple[str, ...] = ()
+    event_mode: McpEventMode = "disabled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +231,7 @@ class ConnectPlan:
     auth_env: str | None = None
     enabled: bool = False
     tools: tuple[str, ...] = ()
+    event_mode: McpEventMode = "disabled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +251,7 @@ class InstallPlan:
     evidence: str
     enabled: bool = False
     tools: tuple[str, ...] = ()
+    event_mode: McpEventMode = "disabled"
 
 
 # 三种来源的计划分别保存源码仓库、包管理器命令或远程 URL，共用登记状态与工具目录。

@@ -17,7 +17,7 @@ from aurora.commands.app.github import (
     GitHubSource,
     HttpxTransport,
 )
-from aurora.commands.app.install import check_connect_url, remote_package
+from aurora.commands.app.install import DEFAULT_EVENT_MODE, check_connect_url, remote_package
 from aurora.commands.app.models import (
     AppError,
     CloneError,
@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora.contracts.command import CommandSpec
+    from src.mcp.config import McpEventMode
 
 _TOKEN_VARIABLE = "GITHUB_TOKEN"
 _CONTINUE_PROMPT = "Continue? [Y/n] "
@@ -111,6 +112,10 @@ COMMAND: CommandSpec = {
                     "action": "append",
                     "metavar": "VALUE",
                     "help": "传给 Server 的参数，可重复；排在包名之后（如允许访问的目录）",
+                },
+                "--events": {
+                    "action": "store_true",
+                    "help": "登记为世界生产者：只把 Server 上报的外部事实推进世界线，不要求它暴露 Tool",
                 },
                 "--disabled": {"action": "store_true", "help": "登记为禁用；默认启用"},
                 "--yes": {"action": "store_true", "help": "跳过最终确认，不跳过任何检查"},
@@ -249,6 +254,11 @@ def _is_remote_url(source: str) -> bool:
     return source.lower().startswith(("https://", "http://")) and not repository_url
 
 
+def _event_mode(arguments: argparse.Namespace) -> McpEventMode:
+    """``--events`` 把条目登记为世界生产者：只推进外部事实，不要求暴露 Tool。"""
+    return "world_events" if getattr(arguments, "events", False) else DEFAULT_EVENT_MODE
+
+
 def _install_package_source(
     manager: AppManager, arguments: argparse.Namespace, *, executable: str, specifier: str
 ) -> int:
@@ -273,6 +283,7 @@ def _install_remote_source(manager: AppManager, arguments: argparse.Namespace, *
         package=arguments.package or remote_package(checked),
         auth_env=arguments.auth_env,
         enabled=not arguments.disabled,
+        event_mode=_event_mode(arguments),
         assume_yes=bool(arguments.yes),
     )
 
@@ -308,6 +319,7 @@ def _install_repository(manager: AppManager, arguments: argparse.Namespace) -> i
         command=arguments.command,
         package=arguments.package,
         enable=not arguments.disabled,
+        event_mode=_event_mode(arguments),
         confirm=confirm,
     )
     if plan is None:
@@ -330,6 +342,7 @@ def _install_runner(manager: AppManager, arguments: argparse.Namespace, *, execu
         package=arguments.package,
         arguments=tuple(arguments.arg or ()),
         enable=not arguments.disabled,
+        event_mode=_event_mode(arguments),
         confirm=confirm,
     )
     if plan is None:
@@ -345,6 +358,7 @@ def _register_remote(
     package: str,
     auth_env: str | None,
     enabled: bool,
+    event_mode: McpEventMode,
     assume_yes: bool,
 ) -> int:
     """远程端点的唯一 CLI 流程：展示、确认、连接发现、登记。
@@ -363,6 +377,7 @@ def _register_remote(
         package=package,
         auth_env=auth_env,
         enable=enabled,
+        event_mode=event_mode,
         confirm=confirm,
     )
     if plan is None:

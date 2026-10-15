@@ -23,7 +23,8 @@ from app_install_support import (
     tools_page,
 )
 
-from aurora.commands.app.models import ConfigError, VerifyError
+from aurora.commands.app.install import check_remote_config
+from aurora.commands.app.models import ConfigError, PlanError, VerifyError
 from aurora.commands.app.service import AppManager
 from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
 from aurora.commands.app.verify import (
@@ -495,8 +496,29 @@ def test_a_server_without_tools_is_not_installed(tmp_path: Path) -> None:
     message = str(error_info.value)
     assert "连接成功" in message, "不要把「没有工具」说成连接失败"
     assert "可注册的 Tool" in message
+    assert "--events" in message, "拒绝时必须指出另一条登记路径"
     assert (root / APPS_RELATIVE_PATH).read_text(encoding="utf-8") == _EMPTY_REGISTRY
     assert not (root / APP_PATH).exists(), "拒绝时磁盘上不留任何东西"
+
+
+def test_a_server_without_tools_registers_as_a_world_producer(tmp_path: Path) -> None:
+    """零工具 + world_events 是**世界生产者**：它把外部事实推进世界线，不需要暴露 Tool。"""
+    root = project(tmp_path, _EMPTY_REGISTRY)
+    manager = _manager(root, FakeMcpClientFactory(tools=()))
+
+    result = manager.install(_REQUESTED_NAME, command=_COMMAND_JSON, yes=True, event_mode="world_events")
+
+    assert result is not None
+    assert result.tools == ()
+    assert result.event_mode == "world_events"
+    entry = (root / APPS_RELATIVE_PATH).read_text(encoding="utf-8")
+    assert 'event_mode = "world_events"' in entry, "声明必须落进注册表，否则启动时又变回 disabled"
+
+
+def test_world_producer_flag_is_rejected_by_remote_endpoints(tmp_path: Path) -> None:
+    """streamable_http 暂不支持 world_events：静态校验要在连接之前就拒绝。"""
+    with pytest.raises(PlanError, match="暂不支持 world_events"):
+        check_remote_config("org.example.remote", "https://mcp.example.org/rpc", None, event_mode="world_events")
 
 
 def test_install_does_not_write_per_app_agent_grants(tmp_path: Path) -> None:

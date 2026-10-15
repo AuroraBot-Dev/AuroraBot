@@ -201,7 +201,7 @@ def _print(plan: AppPlan, lines: list[str]) -> None:
 
 
 def _print_tools(tools: tuple[str, ...]) -> None:
-    # 零工具在这里走不到：require_tools 会先拒绝，不会返回计划。
+    # 零工具可以走到这里：世界生产者（--events）本来就不暴露工具。
     sys.stdout.write(f"发现的工具：   {len(tools)} 个\n")
     for tool in tools:
         sys.stdout.write(f"  {tool}\n")

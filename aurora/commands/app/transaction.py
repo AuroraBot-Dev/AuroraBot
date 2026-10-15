@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from aurora.commands.app.clone import github_https_path, remove_tree
 from aurora.commands.app.install import (
     APPS_DIRECTORY,
-    DEFAULT_EVENT_MODE,
     DEFAULT_TIMEOUT_SECONDS,
     DEFAULT_TRANSPORT,
     check_final_path,
@@ -230,7 +229,7 @@ def registry_entry(plan: AppPlan) -> AppConfig:
             package=plan.package,
             enabled=plan.enabled,
             transport="streamable_http",
-            event_mode=DEFAULT_EVENT_MODE,
+            event_mode=plan.event_mode,
             timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
             url=plan.url,
             auth_env=plan.auth_env,
@@ -242,7 +241,7 @@ def registry_entry(plan: AppPlan) -> AppConfig:
         package=plan.package,
         enabled=plan.enabled,
         transport=DEFAULT_TRANSPORT,
-        event_mode=DEFAULT_EVENT_MODE,
+        event_mode=plan.event_mode,
         timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
         working_dir=plan.working_dir,
         command=plan.command,

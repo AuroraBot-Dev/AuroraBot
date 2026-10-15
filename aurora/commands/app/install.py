@@ -211,19 +211,21 @@ def runner_plan(
     package: str,
     arguments: Sequence[str] = (),
     enabled: bool = False,
+    event_mode: McpEventMode = DEFAULT_EVENT_MODE,
 ) -> RunnerPlan:
     """包管理器型安装的注册计划；不做任何检测、clone 或注册表访问。
 
     与源码安装计划一样，它要么直接可用，要么在这一步就失败。
     """
     command = runner_command(executable, specifier, arguments)
-    check_app_config(package, PACKAGE_RUNNER_WORKING_DIR, command)
+    check_app_config(package, PACKAGE_RUNNER_WORKING_DIR, command, event_mode=event_mode)
     return RunnerPlan(
         package=package,
         command=command,
         runtime=runtime_of(command),
         working_dir=PACKAGE_RUNNER_WORKING_DIR,
         enabled=enabled,
+        event_mode=event_mode,
     )
 
 
@@ -352,10 +354,11 @@ def build_install_plan(
     package: str,
     path: str,
     enabled: bool = False,
+    event_mode: McpEventMode = DEFAULT_EVENT_MODE,
 ) -> InstallPlan:
     """组装并静态校验源码安装计划。"""
     working_dir = derive_working_dir(path, candidate.repository_subdir)
-    check_app_config(package, working_dir, candidate.command)
+    check_app_config(package, working_dir, candidate.command, event_mode=event_mode)
     return InstallPlan(
         repository=repository,
         ref=ref,
@@ -369,6 +372,7 @@ def build_install_plan(
         runtime=candidate.runtime,
         evidence=candidate.evidence,
         enabled=enabled,
+        event_mode=event_mode,
     )
 
 
@@ -401,7 +405,13 @@ def _credential_name(name: str) -> bool:
     return is_secret_name(name) or name.lower() in _URL_CREDENTIAL_NAMES
 
 
-def check_app_config(package: str, working_dir: str, command: tuple[str, ...]) -> None:
+def check_app_config(
+    package: str,
+    working_dir: str,
+    command: tuple[str, ...],
+    *,
+    event_mode: McpEventMode = DEFAULT_EVENT_MODE,
+) -> None:
     """用运行时 AppConfig 逐字段构造一遍，纯静态校验。
 
     不启动 Server、不连接 MCP、不做握手。AppConfig 的 ``__post_init__`` 已经包含
@@ -414,7 +424,7 @@ def check_app_config(package: str, working_dir: str, command: tuple[str, ...]) -
             package=package,
             enabled=False,
             transport=DEFAULT_TRANSPORT,
-            event_mode=DEFAULT_EVENT_MODE,
+            event_mode=event_mode,
             timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
             working_dir=working_dir,
             command=command,
@@ -424,7 +434,13 @@ def check_app_config(package: str, working_dir: str, command: tuple[str, ...]) -
         raise PlanError(f"生成的安装配置不合法：{error}") from error
 
 
-def check_remote_config(package: str, url: str, auth_env: str | None) -> None:
+def check_remote_config(
+    package: str,
+    url: str,
+    auth_env: str | None,
+    *,
+    event_mode: McpEventMode = DEFAULT_EVENT_MODE,
+) -> None:
     """远程条目的静态校验；与 ``check_app_config`` 对称，同样复用 AppConfig。
 
     streamable_http 的字段白名单与 stdio 不同（``url`` / ``auth_env`` 取代
@@ -436,7 +452,7 @@ def check_remote_config(package: str, url: str, auth_env: str | None) -> None:
             package=package,
             enabled=False,
             transport="streamable_http",
-            event_mode=DEFAULT_EVENT_MODE,
+            event_mode=event_mode,
             timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
             url=url,
             auth_env=auth_env,

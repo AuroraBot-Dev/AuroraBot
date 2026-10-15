@@ -60,8 +60,8 @@ class Handshake:
 class Inspection:
     """一次 MCP 连接检查的结论：协商版本 + 完整发现的工具目录。
 
-    ``tools`` 为空是合法结论，不是失败：一个只提供 Resources 或 Prompts 的
-    Server 仍然是合法 MCP Server。安装要求「至少一个可注册工具」。
+    ``tools`` 为空是合法结论，不是失败：一个只推送世界事件、不对外暴露工具的
+    Server 仍然是合法 MCP Server —— 它是**世界生产者**而不是工具提供者。
     """
 
     protocol_version: str
@@ -73,14 +73,25 @@ class Inspection:
         return tuple(binding.definition.name for binding in self.tools)
 
 
-def require_tools(inspection: Inspection, handshake: Handshake) -> Inspection:
-    """只登记至少提供一个 Tool 的 Server；握手成功但零工具时明确拒绝。"""
-    if inspection.tools:
+def require_contribution(inspection: Inspection, handshake: Handshake, *, produces_events: bool) -> Inspection:
+    """只登记**至少能贡献一种东西**的 Server。
+
+    两种贡献：向 Bot 暴露 Tool（Act），或把外部事实推进世界线（世界生产者，
+    ``event_mode = world_events``）。两者都做不到时，登记它没有任何意义 ——
+    Bot 既调不动它，也等不到它。
+
+    这里必须显式要求 ``produces_events``，而不是假定「零工具也无妨」：
+    一个既没有 Tool、event_mode 又是 disabled 的条目纯粹是死配置。
+    """
+    if inspection.tools or produces_events:
         return inspection
     raise VerifyError(
         f"{handshake.label}（{handshake.subject}）连接成功，但没有发现任何可注册的 Tool。\n"
-        f"Aurora 当前只把 MCP 的 Tools 暴露给 Bot：只有 Resources 或 Prompts 的 Server 无法作为工具 App 登记。\n"
-        "可尝试：确认该地址确实是 MCP Server，或检查 Server 是否需要启动参数来开放工具（例如允许访问的目录）"
+        "Aurora 只把 MCP 的 Tools 暴露给 Bot，所以这样的 Server 只有两种登记方式：\n"
+        "  - 让它开放至少一个 Tool；\n"
+        "  - 用 --events 声明它是世界生产者（只把外部事实推进 Bot 的世界线，不提供可调用的工具）。\n"
+        "可尝试：确认该地址确实是 MCP Server，或检查 Server 是否需要启动参数来开放工具"
+        "（例如允许访问的目录）"
     )
 
 
@@ -283,6 +294,7 @@ __all__ = [
     "endpoint_target",
     "install_hints",
     "process_target",
+    "require_contribution",
     "scrub_secrets",
     "verify_environment",
 ]

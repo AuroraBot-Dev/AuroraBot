@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from aurora.commands.app.clone import CapturedProcessRunner, Cloner, GitRepositoryCloner, staging_directory
 from aurora.commands.app.github import DEFAULT_PAGE, DEFAULT_PAGE_SIZE
 from aurora.commands.app.install import (
+    DEFAULT_EVENT_MODE,
     PreparedInstall,
     build_install_plan,
     check_admission,
@@ -52,7 +53,7 @@ from aurora.commands.app.verify import (
     endpoint_target,
     install_hints,
     process_target,
-    require_tools,
+    require_contribution,
 )
 
 if TYPE_CHECKING:
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
     from aurora.commands.app.github import GitHubSource
     from aurora.commands.app.models import AppList, LaunchCandidate, RepositoryPage
     from aurora.commands.app.store import AppStore
+    from src.mcp.config import McpEventMode
 
 type Confirm[T] = Callable[[T], bool]
 
@@ -118,6 +120,7 @@ class AppManager:
         command: str | None = None,
         package: str | None = None,
         enabled: bool = False,
+        event_mode: McpEventMode = DEFAULT_EVENT_MODE,
     ) -> Iterator[PreparedInstall]:
         """生成源码安装计划并暂存 clone；退出上下文时清理 staging。
 
@@ -148,6 +151,7 @@ class AppManager:
                 package=resolved,
                 path=path,
                 enabled=enabled,
+                event_mode=event_mode,
             )
             yield PreparedInstall(plan=plan, staging=staging)
 
@@ -166,9 +170,12 @@ class AppManager:
         ref: str | None = None,
         command: str | None = None,
         package: str | None = None,
+        event_mode: McpEventMode = DEFAULT_EVENT_MODE,
     ) -> InstallPlan:
         """生成供展示的源码安装计划；退出上下文时清理暂存克隆。"""
-        with self.prepare_install(repository, ref=ref, command=command, package=package) as prepared:
+        with self.prepare_install(
+            repository, ref=ref, command=command, package=package, event_mode=event_mode
+        ) as prepared:
             return prepared.plan
 
     def install(
@@ -180,6 +187,7 @@ class AppManager:
         package: str | None = None,
         enable: bool = True,
         yes: bool = False,
+        event_mode: McpEventMode = DEFAULT_EVENT_MODE,
         confirm: Confirm[InstallPlan] | None = None,
     ) -> InstallPlan | None:
         """安装一个源码仓库并把条目写进注册表；返回 None 表示用户放弃。
@@ -194,7 +202,14 @@ class AppManager:
         # 注册表是 aurora setup 生成的个人配置，install 不凭空造一个。这一句必须
         # 在 clone 之前：等到提交时才发现，用户就白等了一整次 clone。
         self.store.require_registry()
-        with self.prepare_install(repository, ref=ref, command=command, package=package, enabled=enable) as prepared:
+        with self.prepare_install(
+            repository,
+            ref=ref,
+            command=command,
+            package=package,
+            enabled=enable,
+            event_mode=event_mode,
+        ) as prepared:
             plan = prepared.plan
             if not yes and not (confirm or _default_confirm)(plan):
                 return None
@@ -203,7 +218,9 @@ class AppManager:
             handshake = process_target(
                 plan.package, plan.command, working_dir=staged, hints=install_hints(plan.command)
             )
-            inspection = require_tools(self.verifier.inspect(handshake), handshake)
+            inspection = require_contribution(
+                self.verifier.inspect(handshake), handshake, produces_events=plan.event_mode == "world_events"
+            )
             # 工具目录只留在本次结果里；运行期会重新发现。
             plan = replace(plan, tools=inspection.tool_ids)
             install_transaction(self.store, PreparedInstall(plan=plan, staging=prepared.staging))
@@ -218,6 +235,7 @@ class AppManager:
         arguments: Sequence[str] = (),
         enable: bool = True,
         yes: bool = False,
+        event_mode: McpEventMode = DEFAULT_EVENT_MODE,
         confirm: Confirm[RunnerPlan] | None = None,
     ) -> RunnerPlan | None:
         """检查包管理器启动的 MCP Server，并登记从项目根目录运行的命令。"""
@@ -232,6 +250,7 @@ class AppManager:
             package=resolved,
             arguments=extra,
             enabled=enable,
+            event_mode=event_mode,
         )
         if not yes and not (confirm or _default_confirm)(plan):
             return None
@@ -241,7 +260,9 @@ class AppManager:
             working_dir=self.store.project_root,
             hints=install_hints(plan.command),
         )
-        inspection = require_tools(self.verifier.inspect(handshake), handshake)
+        inspection = require_contribution(
+            self.verifier.inspect(handshake), handshake, produces_events=plan.event_mode == "world_events"
+        )
         plan = replace(plan, tools=inspection.tool_ids)
         register_transaction(self.store, plan)
         return plan
@@ -254,6 +275,7 @@ class AppManager:
         auth_env: str | None = None,
         enable: bool = True,
         yes: bool = False,
+        event_mode: McpEventMode = DEFAULT_EVENT_MODE,
         confirm: Confirm[ConnectPlan] | None = None,
     ) -> ConnectPlan | None:
         """检查远程 MCP 端点并登记 URL 与认证变量名；返回 None 表示取消。"""
@@ -263,8 +285,9 @@ class AppManager:
             url=check_connect_url(url),
             auth_env=auth_env,
             enabled=enable,
+            event_mode=event_mode,
         )
-        check_remote_config(plan.package, plan.url, plan.auth_env)
+        check_remote_config(plan.package, plan.url, plan.auth_env, event_mode=event_mode)
         check_package_collision(self.store, plan.package)
         if not yes and not (confirm or _default_confirm)(plan):
             return None
@@ -274,7 +297,9 @@ class AppManager:
             hints=endpoint_hints(plan.url, plan.auth_env),
             auth_env=plan.auth_env,
         )
-        inspection = require_tools(self.verifier.inspect(handshake), handshake)
+        inspection = require_contribution(
+            self.verifier.inspect(handshake), handshake, produces_events=plan.event_mode == "world_events"
+        )
         plan = replace(plan, tools=inspection.tool_ids)
         register_transaction(self.store, plan)
         return plan
