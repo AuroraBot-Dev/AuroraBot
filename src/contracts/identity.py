@@ -21,6 +21,16 @@ if TYPE_CHECKING:
 TAG_PREFIX = "#"
 DEFAULT_NAMESPACE = "aurora"
 
+#: 物种前缀：path 的第一段。统一的是语法与所有者，不是注册表。
+TOOL_PATH_PREFIX = "tool/"
+AGENT_PATH_PREFIX = "agent/"
+PROMPT_PATH_PREFIX = "prompt/"
+PLATFORM_PATH_PREFIX = "platform/"
+
+#: 提示词的两种 kind：全局 system 片段与 Agent 局部提示词。
+SYSTEM_PROMPT_PATH_PREFIX = f"{PROMPT_PATH_PREFIX}system/"
+AGENT_PROMPT_PATH_PREFIX = f"{PROMPT_PATH_PREFIX}agent/"
+
 _NAMESPACE = re.compile(r"[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*")
 _PATH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_][A-Za-z0-9_.-]*)*")
 _MAX_TAG_DEPTH = 16
@@ -96,6 +106,17 @@ class Identifier:
 
     def __str__(self) -> str:
         return f"{self.namespace}:{self.path}"
+
+
+def matches_species(value: str, path_prefix: str) -> bool:
+    """判断一个 ID 是否合法，且其 path 落在某个物种前缀下。
+
+    物种由 path 的第一段表达：``aurora:tool/delegate``、``org.aurora.qq:tool/send``、
+    ``aurora:agent/root``、``aurora:prompt/system/soul``、``aurora:platform/mcp``。
+    统一的是语法与所有者，不是注册表——每个物种仍各自持有自己的目录。
+    """
+    identifier = Identifier.optional(value)
+    return identifier is not None and identifier.path.startswith(path_prefix)
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,8 +198,14 @@ class TagsConfig:
 
 
 __all__ = [
+    "AGENT_PATH_PREFIX",
+    "AGENT_PROMPT_PATH_PREFIX",
     "DEFAULT_NAMESPACE",
+    "PLATFORM_PATH_PREFIX",
+    "PROMPT_PATH_PREFIX",
+    "SYSTEM_PROMPT_PATH_PREFIX",
     "TAG_PREFIX",
+    "TOOL_PATH_PREFIX",
     "Identifier",
     "IdentityError",
     "TagDefinition",
@@ -187,4 +214,5 @@ __all__ = [
     "alias_path",
     "is_namespace",
     "is_path",
+    "matches_species",
 ]

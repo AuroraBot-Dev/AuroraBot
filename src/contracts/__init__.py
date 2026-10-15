@@ -35,6 +35,7 @@ from src.contracts.identity import (
     alias_path,
     is_namespace,
     is_path,
+    matches_species,
 )
 from src.contracts.kernel import ContributionKey, Settings
 from src.contracts.model import ChatMessage, ChatRole, ModelRequest, ToolCall
@@ -126,4 +127,5 @@ __all__ = [
     "alias_path",
     "is_namespace",
     "is_path",
+    "matches_species",
 ]

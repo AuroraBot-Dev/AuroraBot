@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.contracts import DelegationRequest, ToolOutput, ToolScopes, ToolStatus
-from src.contracts.identity import Identifier
+from src.contracts.identity import matches_species
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
@@ -20,8 +20,7 @@ def is_tool_id(name: str) -> bool:
     第三方 MCP 工具名不受协议约束，所以外来名字先经 ``alias_path`` 收进 path 语法，
     再到这里做**唯一一次**校验；框架内建工具直接写合法 ID。
     """
-    identifier = Identifier.optional(name)
-    return identifier is not None and identifier.path.startswith(_TOOL_PATH_PREFIX)
+    return matches_species(name, _TOOL_PATH_PREFIX)
 
 
 if TYPE_CHECKING:
