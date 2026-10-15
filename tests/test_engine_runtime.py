@@ -60,7 +60,7 @@ class EchoTool:
     @property
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
-            "aur.test.echo",
+            "test:tool/echo",
             "Echo one value.",
             {"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
         )
@@ -179,11 +179,11 @@ def test_runner_publishes_each_immutable_tree_transition() -> None:
 def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
     model = FakeModel(
         [
-            ChatMessage.assistant(tool_calls=(ToolCall("echo-1", "aur.test.echo", {"value": "hello"}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("echo-1", "test:tool/echo", {"value": "hello"}),)),
             ChatMessage.assistant("finished"),
         ]
     )
-    root = _agent(model="tool-model", tools=frozenset({"aur.test.echo"}))
+    root = _agent(model="tool-model", tools=frozenset({"test:tool/echo"}))
     tree = AgentTree.create("tree", "root", root, "echo")
 
     result = asyncio.run(_runner(model, (root,), EchoTool()).run(tree))
@@ -196,7 +196,7 @@ def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
         "assistant",
     ]
     assert result.node("root").messages[2].content == "hello"
-    assert [tool.name for tool in model.requests[0].tools] == ["aur.test.echo"]
+    assert [tool.name for tool in model.requests[0].tools] == ["test:tool/echo"]
 
 
 def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
@@ -238,11 +238,11 @@ def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
 def test_tool_failure_is_a_tool_message_not_a_tree_failure() -> None:
     model = FakeModel(
         [
-            ChatMessage.assistant(tool_calls=(ToolCall("missing-1", "aur.test.missing", {}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("missing-1", "test:tool/missing", {}),)),
             ChatMessage.assistant("recovered"),
         ]
     )
-    root = _agent(tools=frozenset({"aur.test.missing"}))
+    root = _agent(tools=frozenset({"test:tool/missing"}))
     tree = AgentTree.create("tree", "root", root, "try")
 
     result = asyncio.run(_runner(model, (root,)).run(tree))
@@ -251,7 +251,7 @@ def test_tool_failure_is_a_tool_message_not_a_tree_failure() -> None:
     tool_message = result.node("root").messages[2]
     assert tool_message.role == "tool"
     assert tool_message.is_error is True
-    assert tool_message.content == "未知工具：aur.test.missing"
+    assert tool_message.content == "未知工具：test:tool/missing"
 
 
 def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp_path: Path) -> None:
@@ -260,11 +260,11 @@ def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp
         tool = UnknownTool()
         model = FakeModel(
             [
-                ChatMessage.assistant(tool_calls=(ToolCall("unknown-1", "aur.test.echo", {"value": "效果无法确认"}),)),
+                ChatMessage.assistant(tool_calls=(ToolCall("unknown-1", "test:tool/echo", {"value": "效果无法确认"}),)),
                 ChatMessage.assistant("已知悉不确定结果"),
             ]
         )
-        root = _agent(tools=frozenset({"aur.test.echo"}))
+        root = _agent(tools=frozenset({"test:tool/echo"}))
         result = await _runner(model, (root,), tool, world=journal).run(
             AgentTree.create("tree", "root", root, "执行一次")
         )
@@ -303,19 +303,19 @@ def test_model_failure_becomes_tree_failure() -> None:
 def test_tool_exception_and_hidden_tool_are_returned_to_model() -> None:
     model = FakeModel(
         [
-            ChatMessage.assistant(tool_calls=(ToolCall("fail", "aur.test.echo", {"error": "broken"}),)),
-            ChatMessage.assistant(tool_calls=(ToolCall("hidden", "aur.test.missing", {}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("fail", "test:tool/echo", {"error": "broken"}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("hidden", "test:tool/missing", {}),)),
             ChatMessage.assistant("recovered"),
         ]
     )
-    root = _agent(tools=frozenset({"aur.test.echo"}))
+    root = _agent(tools=frozenset({"test:tool/echo"}))
     tree = AgentTree.create("tree", "root", root, "hello")
 
     result = asyncio.run(_runner(model, (root,), FailingTool()).run(tree))
 
     tools = [message for message in result.node("root").messages if message.role == "tool"]
     assert tools[0].content == "工具执行失败：broken"
-    assert tools[1].content == "当前 Agent 不可见此工具：aur.test.missing"
+    assert tools[1].content == "当前 Agent 不可见此工具：test:tool/missing"
 
 
 def test_runner_rejects_invalid_limits() -> None:
@@ -391,17 +391,17 @@ def test_world_delta_defers_a_tool_batch_then_the_next_batch_seals_its_frontier(
             [
                 ChatMessage.assistant(
                     tool_calls=(
-                        ToolCall("first-a", "aur.test.echo", {"value": "first-a"}),
-                        ToolCall("first-b", "aur.test.echo", {"value": "first-b"}),
+                        ToolCall("first-a", "test:tool/echo", {"value": "first-a"}),
+                        ToolCall("first-b", "test:tool/echo", {"value": "first-b"}),
                     )
                 ),
-                ChatMessage.assistant(tool_calls=(ToolCall("second", "aur.test.echo", {"value": "second"}),)),
+                ChatMessage.assistant(tool_calls=(ToolCall("second", "test:tool/echo", {"value": "second"}),)),
                 ChatMessage.assistant("完成"),
             ],
             journal,
             EnvironmentEvent("event-3", "qq", scope, "message", datetime.now(UTC), "第三条消息"),
         )
-        root = _agent(tools=frozenset({"aur.test.echo"}))
+        root = _agent(tools=frozenset({"test:tool/echo"}))
         tree = AgentTree.create("tree", "root", root, "开始", frontier)
         runner = _runner(model, (root,), tool, world=journal)
         result = await runner.run(tree)

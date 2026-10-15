@@ -4,24 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolScopes, ToolStatus
+from src.contracts import Identifier, ToolCall, ToolDefinition, ToolOutput, ToolScopes, ToolStatus
+from src.contracts.identity import alias_path
 from src.mcp.models import McpCallRejectedError, McpCallResult, McpCallUnknownError, McpRemoteTool
 from src.mcp.scopes import mcp_scope, render_scope_template, validate_scope_template
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
 
-_MCP_TOOL_ID = re.compile(r"aur\.mcp\.[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\.[A-Za-z][A-Za-z0-9_-]*")
 
+def mcp_tool_id(package: str, raw_name: str) -> str:
+    """把一个远端工具名收进本地命名空间：``<package>:tool/<别名>``。
 
-def _is_valid_mcp_tool_id(name: str) -> bool:
-    """校验 ``aur.mcp.<package>.<raw_name>``：package 段小写，raw name 段允许大写。"""
-    return _MCP_TOOL_ID.fullmatch(name) is not None
+    package 段是我们自己的命名空间，必须合法；raw_name 段来自第三方，经 ``alias_path``
+    原样接纳或确定性别名——第三方 Server 不需要为接入做任何改名。
+    """
+    return str(Identifier(package, f"tool/{alias_path(raw_name)}"))
 
 
 if TYPE_CHECKING:
@@ -42,9 +44,9 @@ class McpToolBinding:
 def bind_mcp_tool(package: str, remote: McpRemoteTool) -> McpToolBinding:
     """校验一次发现项并形成稳定、不静默改名的领域定义。"""
     raw_name = remote.name
-    tool_id = f"aur.mcp.{package}.{raw_name}"
-    if not raw_name or raw_name != raw_name.strip() or not _is_valid_mcp_tool_id(tool_id):
-        raise ValueError(f"MCP Tool 名称不能组成合法 Aurora 工具 ID：{package}/{remote.name}")
+    if not raw_name or raw_name != raw_name.strip():
+        raise ValueError(f"MCP Tool 名称必须是非空且无首尾空白的文本：{package}/{remote.name!r}")
+    tool_id = mcp_tool_id(package, raw_name)
     if remote.input_schema.get("type") != "object":
         raise ValueError(f"MCP Tool input schema 必须是 object：{tool_id}")
     observe, publish = _scope_templates(package, remote)

@@ -14,8 +14,8 @@ from src.contracts.identity import (
     Identifier,
     IdentityError,
     TagDefinition,
-    TagTable,
     TagsConfig,
+    TagTable,
     alias_path,
     is_namespace,
     is_path,
@@ -106,13 +106,17 @@ def test_alias_path_is_a_pure_function_of_the_raw_name() -> None:
     assert alias_path("消息发送") == alias_path("消息发送")
 
 
+_ALIAS_LENGTH_LIMIT = 64
+_ALIAS_DIGEST_TAIL = 9
+
+
 @pytest.mark.parametrize("raw", ["send:message", "send message", "消息发送", "-leading-dash", ""])
 def test_alias_path_output_is_readable_and_marked(raw: str) -> None:
     aliased = alias_path(raw)
 
-    assert len(aliased) <= 64
+    assert len(aliased) <= _ALIAS_LENGTH_LIMIT
     assert aliased.isascii()
-    assert aliased[-9] == "-"
+    assert aliased[-_ALIAS_DIGEST_TAIL] == "-"
     assert all(char.isalnum() or char == "-" for char in aliased)
 
 
@@ -123,54 +127,54 @@ def test_alias_path_separates_names_that_would_otherwise_merge() -> None:
 
 
 def test_tags_pass_through_entries_that_are_not_references() -> None:
-    table = _table(TagDefinition("aurora:tool/qq", ("aur.mcp.org.aurora.qq.*",)))
+    table = _table(TagDefinition("aurora:tool/qq", ("org.aurora.qq:tool/*",)))
 
-    assert table.expand(("aur.agent.delegate", "#aurora:tool/qq")) == (
-        "aur.agent.delegate",
-        "aur.mcp.org.aurora.qq.*",
+    assert table.expand(("aurora:tool/delegate", "#aurora:tool/qq")) == (
+        "aurora:tool/delegate",
+        "org.aurora.qq:tool/*",
     )
 
 
 def test_tags_expand_nested_definitions_in_writing_order() -> None:
     table = _table(
-        TagDefinition("aurora:tool/send", ("aur.mcp.org.aurora.qq.qq_send_*message", "!aur.mcp.org.aurora.qq.skip")),
-        TagDefinition("aurora:tool/qq", ("#aurora:tool/send", "aur.mcp.org.aurora.qq.qq_get_*")),
+        TagDefinition("aurora:tool/send", ("org.aurora.qq:tool/qq_send_*message", "!org.aurora.qq:tool/skip")),
+        TagDefinition("aurora:tool/qq", ("#aurora:tool/send", "org.aurora.qq:tool/qq_get_*")),
     )
 
     assert table.expand(("#aurora:tool/qq",)) == (
-        "aur.mcp.org.aurora.qq.qq_send_*message",
-        "!aur.mcp.org.aurora.qq.skip",
-        "aur.mcp.org.aurora.qq.qq_get_*",
+        "org.aurora.qq:tool/qq_send_*message",
+        "!org.aurora.qq:tool/skip",
+        "org.aurora.qq:tool/qq_get_*",
     )
 
 
 def test_tag_expansion_keeps_last_match_wins_semantics() -> None:
-    available = frozenset({"aur.mcp.org.aurora.qq.qq_send_message", "aur.mcp.org.aurora.qq.qq_send_forward_message"})
+    available = frozenset({"org.aurora.qq:tool/qq_send_message", "org.aurora.qq:tool/qq_send_forward_message"})
     table = _table(
         TagDefinition(
             "aurora:tool/qq-send",
-            ("aur.mcp.org.aurora.qq.qq_send_*message", "!aur.mcp.org.aurora.qq.qq_send_forward_message"),
+            ("org.aurora.qq:tool/qq_send_*message", "!org.aurora.qq:tool/qq_send_forward_message"),
         )
     )
 
     resolved = resolve_names(available, table.expand(("#aurora:tool/qq-send",), label="builtin.chat"))
 
-    assert resolved == frozenset({"aur.mcp.org.aurora.qq.qq_send_message"})
+    assert resolved == frozenset({"org.aurora.qq:tool/qq_send_message"})
 
 
 def test_tag_expansion_equals_writing_the_patterns_inline() -> None:
     patterns = (
-        "aur.mcp.org.aurora.qq.qq_send_*message",
-        "!aur.mcp.org.aurora.qq.qq_send_forward_message",
-        "aur.mcp.org.aurora.qq.qq_get_*",
+        "org.aurora.qq:tool/qq_send_*message",
+        "!org.aurora.qq:tool/qq_send_forward_message",
+        "org.aurora.qq:tool/qq_get_*",
     )
     table = _table(TagDefinition("aurora:tool/qq-send", patterns))
     available = frozenset(
         {
-            "aur.mcp.org.aurora.qq.qq_send_message",
-            "aur.mcp.org.aurora.qq.qq_send_forward_message",
-            "aur.mcp.org.aurora.qq.qq_get_profile",
-            "aur.mcp.com.github.windows_mcp.click",
+            "org.aurora.qq:tool/qq_send_message",
+            "org.aurora.qq:tool/qq_send_forward_message",
+            "org.aurora.qq:tool/qq_get_profile",
+            "com.github.windows_mcp:tool/click",
         }
     )
 
@@ -178,7 +182,7 @@ def test_tag_expansion_equals_writing_the_patterns_inline() -> None:
 
 
 def test_undeclared_tag_is_rejected() -> None:
-    table = _table(TagDefinition("aurora:tool/qq", ("aur.mcp.org.aurora.qq.*",)))
+    table = _table(TagDefinition("aurora:tool/qq", ("org.aurora.qq:tool/*",)))
 
     with pytest.raises(IdentityError, match="未声明的标签"):
         table.expand(("#aurora:tool/missing",), label="builtin.chat")
@@ -228,8 +232,8 @@ def test_template_declares_a_nested_tag_collection(tmp_path: Path) -> None:
 
     assert table.names == {"aurora:tool/qq-send", "aurora:tool/qq-read", "aurora:tool/qq"}
     assert table.expand(("#aurora:tool/qq",)) == (
-        "aur.mcp.org.aurora.qq.qq_send_*message",
-        "!aur.mcp.org.aurora.qq.qq_send_forward_message",
-        "aur.mcp.org.aurora.qq.qq_get_*",
-        "aur.mcp.org.aurora.qq.qq_mark_*",
+        "org.aurora.qq:tool/qq_send_*message",
+        "!org.aurora.qq:tool/qq_send_forward_message",
+        "org.aurora.qq:tool/qq_get_*",
+        "org.aurora.qq:tool/qq_mark_*",
     )

@@ -357,6 +357,7 @@ async def _discover_bindings(record: _AppRecord) -> tuple[McpToolBinding, ...]:
     visited: set[str] = set()
     bindings: list[McpToolBinding] = []
     raw_names: set[str] = set()
+    by_tool_id: dict[str, str] = {}
     page_count = 0
     while True:
         page_count += 1
@@ -367,7 +368,16 @@ async def _discover_bindings(record: _AppRecord) -> tuple[McpToolBinding, ...]:
             if remote.name in raw_names:
                 raise ValueError(f"MCP App 工具名称重复：{record.spec.package}/{remote.name}")
             raw_names.add(remote.name)
-            bindings.append(bind_mcp_tool(record.spec.package, remote))
+            binding = bind_mcp_tool(record.spec.package, remote)
+            tool_id = binding.definition.name
+            owner = by_tool_id.get(tool_id)
+            if owner is not None and owner != remote.name:
+                raise ValueError(
+                    f"MCP App 两个工具名收敛到同一个本地 ID：{record.spec.package}/{owner} 与 "
+                    f"{record.spec.package}/{remote.name} -> {tool_id}"
+                )
+            by_tool_id[tool_id] = remote.name
+            bindings.append(binding)
             if len(bindings) > _MAX_TOOLS:
                 raise ValueError(f"MCP App 工具数量过多：{record.spec.package}")
         cursor = page.next_cursor

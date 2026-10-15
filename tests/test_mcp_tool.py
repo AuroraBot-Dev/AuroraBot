@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from src.contracts import ToolCall, ToolStatus
+from src.contracts.identity import is_path
 from src.mcp import (
     McpCallRejectedError,
     McpCallResult,
@@ -17,6 +18,7 @@ from src.mcp import (
     McpToolsPage,
     bind_mcp_tool,
 )
+from src.tools import is_tool_id
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -153,7 +155,7 @@ def test_mcp_tool_rejects_wrong_route_and_disconnected_client_without_sending() 
     )
     tool = McpTool(binding, client, _TIMEOUT_SECONDS)
 
-    wrong_route = asyncio.run(tool.execute(ToolCall("wrong", "aur.mcp.org.example.tools.other", {})))
+    wrong_route = asyncio.run(tool.execute(ToolCall("wrong", "org.example.tools:tool/other", {})))
     client._connected = False
     disconnected = asyncio.run(tool.execute(ToolCall("offline", tool.definition.name, {})))
 
@@ -162,20 +164,40 @@ def test_mcp_tool_rejects_wrong_route_and_disconnected_client_without_sending() 
     assert client.calls == []
 
 
-def test_bind_mcp_tool_rejects_invalid_name_and_non_object_schema_without_rewriting() -> None:
-    with pytest.raises(ValueError, match="合法 Aurora 工具 ID"):
+def test_bind_mcp_tool_rejects_whitespace_frame_and_invalid_package_without_rewriting() -> None:
+    with pytest.raises(ValueError, match="无首尾空白的文本"):
         bind_mcp_tool("org.example.tools", McpRemoteTool(" valid_name", None, {"type": "object"}))
-    with pytest.raises(ValueError, match="合法 Aurora 工具 ID"):
+    with pytest.raises(ValueError, match="无首尾空白的文本"):
         bind_mcp_tool("org.example.tools", McpRemoteTool("valid_name ", None, {"type": "object"}))
-    with pytest.raises(ValueError, match="合法 Aurora 工具 ID"):
+    with pytest.raises(ValueError, match="namespace 不符合命名空间约定"):
         bind_mcp_tool("Org.example.tools", McpRemoteTool("valid_name", None, {"type": "object"}))
     with pytest.raises(ValueError, match="input schema 必须是 object"):
         bind_mcp_tool("org.example.tools", McpRemoteTool("valid", None, {"type": "array"}))
 
     binding = bind_mcp_tool("org.example.tools", McpRemoteTool("valid_name", None, {"type": "object"}))
     assert binding.raw_name == "valid_name"
-    assert binding.definition.name == "aur.mcp.org.example.tools.valid_name"
+    assert binding.definition.name == "org.example.tools:tool/valid_name"
     assert binding.definition.description == "MCP 工具：valid_name"
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["read", "tool/read", "2fa_verify", "_private", "send.message", "SendMessage", "send:message", "消息发送"],
+)
+def test_bind_mcp_tool_accepts_any_third_party_name(raw_name: str) -> None:
+    """第三方 Server 不必为自己的工具名做任何改名就能接入。
+
+    合法名零映射（模型看到的就是服务器给的名字），其余收进确定性别名。
+    """
+    binding = bind_mcp_tool("org.example.tools", McpRemoteTool(raw_name, None, {"type": "object"}))
+
+    assert binding.raw_name == raw_name
+    assert is_tool_id(binding.definition.name)
+    expected = raw_name if is_path(raw_name) else None
+    if expected is not None:
+        assert binding.definition.name == f"org.example.tools:tool/{expected}"
+    else:
+        assert binding.definition.name != f"org.example.tools:tool/{raw_name}"
 
 
 def test_bind_mcp_tool_keeps_third_party_camelcase_raw_name_without_rewriting() -> None:
@@ -185,12 +207,12 @@ def test_bind_mcp_tool_keeps_third_party_camelcase_raw_name_without_rewriting() 
     )
 
     assert binding.raw_name == "Screenshot"
-    assert binding.definition.name == "aur.mcp.com.github.windows_mcp.Screenshot"
+    assert binding.definition.name == "com.github.windows_mcp:tool/Screenshot"
     assert binding.definition.description == "截取屏幕"
 
     mixed = bind_mcp_tool("com.github.windows_mcp", McpRemoteTool("WaitFor", None, {"type": "object"}))
     assert mixed.raw_name == "WaitFor"
-    assert mixed.definition.name == "aur.mcp.com.github.windows_mcp.WaitFor"
+    assert mixed.definition.name == "com.github.windows_mcp:tool/WaitFor"
 
 
 def test_mcp_remote_tool_and_definition_deep_freeze_nested_json() -> None:

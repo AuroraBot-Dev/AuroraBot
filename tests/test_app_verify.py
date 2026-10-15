@@ -215,8 +215,8 @@ def test_a_successful_inspection_reports_the_discovered_tools(tmp_path: Path) ->
     inspection = _verifier(factory).inspect(_process(tmp_path))
 
     assert inspection.tool_ids == (
-        f"aur.mcp.{WEATHER_PACKAGE}.read_text_file",
-        f"aur.mcp.{WEATHER_PACKAGE}.list_allowed_directories",
+        f"{WEATHER_PACKAGE}:tool/read_text_file",
+        f"{WEATHER_PACKAGE}:tool/list_allowed_directories",
     )
 
 

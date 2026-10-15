@@ -3,7 +3,7 @@ id = "builtin.triage"
 description = "注意力初筛：判断眼前世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
 prompt = "builtin.triage"
 model = "fast"
-tools = ["aur.agent.delegate"]
+tools = ["aurora:tool/delegate"]
 children = ["builtin.root", "builtin.fast-worker"]
 
 [[agent]]
@@ -19,7 +19,7 @@ id = "builtin.root"
 description = "总代理：理解完整任务、整合结果。"
 prompt = "builtin.root"
 model = "quality"
-tools = ["aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.scopes", "aur.serv.world.trees"]
+tools = ["aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_scopes", "aurora:tool/world_trees"]
 children = [
     "builtin.fast-worker",
     "builtin.chat",
@@ -41,12 +41,12 @@ description = "通用执行者：掌握全部 QQ、Windows 桌面自动化工具
 prompt = "builtin.worker"
 model = "quality"
 tools = [
-    "aur.agent.delegate",
-    "aur.serv.world.read",
-    "aur.serv.world.scopes",
-    "aur.serv.world.trees",
-    "aur.mcp.org.aurora.qq.*",
-    "aur.mcp.com.github.windows_mcp.*",
+    "aurora:tool/delegate",
+    "aurora:tool/world_read",
+    "aurora:tool/world_scopes",
+    "aurora:tool/world_trees",
+    "org.aurora.qq:tool/*",
+    "com.github.windows_mcp:tool/*",
 ]
 children = ["builtin.reviewer", "builtin.fast-worker"]
 

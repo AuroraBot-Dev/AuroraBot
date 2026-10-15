@@ -52,8 +52,6 @@ ENDPOINT_PACKAGE = "com.example.remote"
 DEFAULT_TOOL_NAMES = ("weather_now",)
 # 授权测试默认引用的 Agent：``config.example/agents.toml`` 里真实存在的一个 ID。
 DEFAULT_AGENT_ID = "builtin.worker"
-# 一个可注册工具的领域 ID 前缀由发现规则决定：``aur.mcp.<package>.<raw_name>``。
-DEFAULT_TOOL_PREFIX = "aur.mcp."
 
 
 def tools_page(names: Sequence[str] = DEFAULT_TOOL_NAMES, *, next_cursor: str | None = None) -> McpToolsPage:
@@ -385,7 +383,6 @@ __all__ = [
     "DEFAULT_COMMIT",
     "DEFAULT_PROTOCOL",
     "DEFAULT_TOOL_NAMES",
-    "DEFAULT_TOOL_PREFIX",
     "ENDPOINT",
     "ENDPOINT_PACKAGE",
     "MANIFEST",

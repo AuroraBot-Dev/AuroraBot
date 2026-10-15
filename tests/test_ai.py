@@ -63,7 +63,7 @@ def test_openai_tool_adapter_preserves_native_schema() -> None:
 
 
 def test_openai_adapter_maps_domain_tool_id_to_provider_safe_name() -> None:
-    domain_name = "aur.agent.delegate"
+    domain_name = "aurora:tool/delegate"
     aliases = openai_tool_name_map((domain_name,))
     alias = aliases[domain_name]
 
@@ -80,7 +80,7 @@ def test_openai_adapter_maps_domain_tool_id_to_provider_safe_name() -> None:
 def test_litellm_gateway_round_trips_domain_tool_names_in_definitions_history_and_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    domain_name = "aur.agent.delegate"
+    domain_name = "aurora:tool/delegate"
     captured: list[dict[str, Any]] = []
 
     async def call(parameters: dict[str, Any]) -> dict[str, Any]:

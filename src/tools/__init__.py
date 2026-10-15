@@ -12,7 +12,7 @@ from src.tools.builtin import (
     WorldScopesTool,
     WorldTreesTool,
 )
-from src.tools.registry import ToolRegistrationError, ToolRegistry
+from src.tools.registry import ToolRegistrationError, ToolRegistry, is_tool_id
 
 __all__ = [
     "DELEGATE_TOOL",
@@ -27,4 +27,5 @@ __all__ = [
     "WorldReadTool",
     "WorldScopesTool",
     "WorldTreesTool",
+    "is_tool_id",
 ]

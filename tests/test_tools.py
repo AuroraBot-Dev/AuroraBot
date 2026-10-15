@@ -57,7 +57,7 @@ def _scope_catalog() -> ScopeCatalog:
 class EchoTool:
     @property
     def definition(self) -> ToolDefinition:
-        return ToolDefinition("aur.test.echo", "回显一个值。", {"type": "object"})
+        return ToolDefinition("test:tool/echo", "回显一个值。", {"type": "object"})
 
     async def execute(self, call: ToolCall) -> ToolOutput:
         return ToolOutput(str(call.arguments["value"]))
@@ -92,10 +92,10 @@ def _agents() -> AgentCatalog:
 def test_registry_forms_sorted_immutable_catalog_and_filters_visibility() -> None:
     registry = ToolRegistry((EchoTool(), DelegateTool(_agents())))
 
-    assert registry.names == frozenset({DELEGATE_TOOL, "aur.test.echo"})
-    assert [definition.name for definition in registry.definitions] == [DELEGATE_TOOL, "aur.test.echo"]
-    assert [definition.name for definition in registry.definitions_for(frozenset({"aur.test.echo"}))] == [
-        "aur.test.echo"
+    assert registry.names == frozenset({DELEGATE_TOOL, "test:tool/echo"})
+    assert [definition.name for definition in registry.definitions] == [DELEGATE_TOOL, "test:tool/echo"]
+    assert [definition.name for definition in registry.definitions_for(frozenset({"test:tool/echo"}))] == [
+        "test:tool/echo"
     ]
 
 
@@ -105,7 +105,7 @@ def test_registry_rejects_non_domain_and_duplicate_tool_ids() -> None:
         def definition(self) -> ToolDefinition:
             return ToolDefinition("echo", "无效名称。", {})
 
-    with pytest.raises(ToolRegistrationError, match=r"aur\.\*"):
+    with pytest.raises(ToolRegistrationError, match="不符合命名空间约定"):
         ToolRegistry((InvalidTool(),))
     with pytest.raises(ToolRegistrationError, match="重复注册"):
         ToolRegistry((EchoTool(), EchoTool()))
@@ -115,35 +115,35 @@ def test_registry_accepts_uppercase_mcp_raw_name_but_keeps_framework_ids_lowerca
     class McpCamelTool(EchoTool):
         @property
         def definition(self) -> ToolDefinition:
-            return ToolDefinition("aur.mcp.com.github.windows_mcp.Screenshot", "第三方大写工具名。", {})
+            return ToolDefinition("com.github.windows_mcp:tool/Screenshot", "第三方大写工具名。", {})
 
-    class UpperBuiltinTool(EchoTool):
+    class WrongSpeciesTool(EchoTool):
         @property
         def definition(self) -> ToolDefinition:
-            return ToolDefinition("aur.agent.Foo", "框架工具名必须保持小写。", {})
+            return ToolDefinition("aurora:agent/delegate", "路径不在 tool/ 下的 ID 不是工具。", {})
 
     registry = ToolRegistry((McpCamelTool(),))
-    assert "aur.mcp.com.github.windows_mcp.Screenshot" in registry.names
-    assert "aur.mcp.com.github.windows_mcp.Screenshot" in [d.name for d in registry.definitions]
-    with pytest.raises(ToolRegistrationError, match=r"aur\.\*"):
-        ToolRegistry((UpperBuiltinTool(),))
+    assert "com.github.windows_mcp:tool/Screenshot" in registry.names
+    assert "com.github.windows_mcp:tool/Screenshot" in [d.name for d in registry.definitions]
+    with pytest.raises(ToolRegistrationError, match="不符合命名空间约定"):
+        ToolRegistry((WrongSpeciesTool(),))
 
 
 def test_registry_routes_calls_and_normalizes_boundary_failures() -> None:
     with pytest.raises(ToolRegistrationError, match="重复注册"):
         ToolRegistry((EchoTool(), FailingTool()))
 
-    echo = asyncio.run(ToolRegistry((EchoTool(),)).execute(ToolCall("echo", "aur.test.echo", {"value": "ok"})))
-    missing = asyncio.run(ToolRegistry().execute(ToolCall("missing", "aur.test.missing", {})))
+    echo = asyncio.run(ToolRegistry((EchoTool(),)).execute(ToolCall("echo", "test:tool/echo", {"value": "ok"})))
+    missing = asyncio.run(ToolRegistry().execute(ToolCall("missing", "test:tool/missing", {})))
     failed = asyncio.run(
-        ToolRegistry((FailingTool(),)).execute(ToolCall("failed", "aur.test.echo", {"error": "broken"}))
+        ToolRegistry((FailingTool(),)).execute(ToolCall("failed", "test:tool/echo", {"error": "broken"}))
     )
     unknown = asyncio.run(
-        ToolRegistry((UnknownTool(),)).execute(ToolCall("unknown", "aur.test.echo", {"value": "uncertain"}))
+        ToolRegistry((UnknownTool(),)).execute(ToolCall("unknown", "test:tool/echo", {"value": "uncertain"}))
     )
 
     assert echo == ToolOutput("ok")
-    assert missing == ToolOutput("未知工具：aur.test.missing", status=ToolStatus.FAILED)
+    assert missing == ToolOutput("未知工具：test:tool/missing", status=ToolStatus.FAILED)
     assert failed == ToolOutput("工具执行失败：broken", status=ToolStatus.FAILED)
     assert unknown == ToolOutput("uncertain", status=ToolStatus.UNKNOWN)
 
@@ -350,7 +350,7 @@ def test_builtin_tools_form_the_default_catalog_before_external_tools() -> None:
     registry = ToolRegistry((*builtins, EchoTool()))
 
     assert registry.names == frozenset(
-        {DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL, "aur.test.echo"}
+        {DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL, "test:tool/echo"}
     )
 
 

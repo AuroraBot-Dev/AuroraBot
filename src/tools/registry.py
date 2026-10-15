@@ -2,22 +2,26 @@
 
 from __future__ import annotations
 
-import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.contracts import DelegationRequest, ToolOutput, ToolScopes, ToolStatus
+from src.contracts.identity import Identifier
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
 
-_AUR_TOOL_ID = re.compile(r"aur(?:\.[a-z][a-z0-9_-]*){2,}")
-_MCP_TOOL_ID = re.compile(r"aur\.mcp\.[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\.[A-Za-z][A-Za-z0-9_-]*")
+_TOOL_PATH_PREFIX = "tool/"
 
 
-def _is_valid_tool_id(name: str) -> bool:
-    """框架命名保持小写；MCP raw name 段属于第三方外部事实，允许大写风格。"""
-    return _AUR_TOOL_ID.fullmatch(name) is not None or _MCP_TOOL_ID.fullmatch(name) is not None
+def is_tool_id(name: str) -> bool:
+    """工具 ID 必须是一个 path 落在 ``tool/`` 下的命名空间化 ID。
+
+    第三方 MCP 工具名不受协议约束，所以外来名字先经 ``alias_path`` 收进 path 语法，
+    再到这里做**唯一一次**校验；框架内建工具直接写合法 ID。
+    """
+    identifier = Identifier.optional(name)
+    return identifier is not None and identifier.path.startswith(_TOOL_PATH_PREFIX)
 
 
 if TYPE_CHECKING:
@@ -38,8 +42,8 @@ class ToolRegistry:
         definitions: dict[str, ToolDefinition] = {}
         for tool in tools:
             definition = tool.definition
-            if not _is_valid_tool_id(definition.name):
-                raise ToolRegistrationError(f"工具 ID 不符合 aur.* 域规范：{definition.name}")
+            if not is_tool_id(definition.name):
+                raise ToolRegistrationError(f"工具 ID 不符合命名空间约定：{definition.name}")
             if definition.name in bindings:
                 raise ToolRegistrationError(f"工具重复注册：{definition.name}")
             bindings[definition.name] = tool

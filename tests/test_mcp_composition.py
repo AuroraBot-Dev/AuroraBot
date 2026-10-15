@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from src.mcp.client import InboundEventHandler
 
 _PACKAGE = "org.example.lifecycle"
-_TOOL_ID = f"aur.mcp.{_PACKAGE}.ping"
+_TOOL_ID = f"{_PACKAGE}:tool/ping"
 
 
 @dataclass(slots=True)

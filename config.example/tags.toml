@@ -6,15 +6,15 @@
 [[tag]]
 name = "aurora:tool/qq-send"
 values = [
-    "aur.mcp.org.aurora.qq.qq_send_*message",
-    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
+    "org.aurora.qq:tool/qq_send_*message",
+    "!org.aurora.qq:tool/qq_send_forward_message",
 ]
 
 [[tag]]
 name = "aurora:tool/qq-read"
 values = [
-    "aur.mcp.org.aurora.qq.qq_get_*",
-    "aur.mcp.org.aurora.qq.qq_mark_*",
+    "org.aurora.qq:tool/qq_get_*",
+    "org.aurora.qq:tool/qq_mark_*",
 ]
 
 [[tag]]

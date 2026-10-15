@@ -68,11 +68,11 @@ class DelegationRequest:
 
 type ToolResult = ToolOutput | DelegationRequest
 
-DELEGATE_TOOL = "aur.agent.delegate"
-WAIT_TOOL = "aur.builtin.wait"
-WORLD_READ_TOOL = "aur.serv.world.read"
-WORLD_SCOPES_TOOL = "aur.serv.world.scopes"
-WORLD_TREES_TOOL = "aur.serv.world.trees"
+DELEGATE_TOOL = "aurora:tool/delegate"
+WAIT_TOOL = "aurora:tool/wait"
+WORLD_READ_TOOL = "aurora:tool/world_read"
+WORLD_SCOPES_TOOL = "aurora:tool/world_scopes"
+WORLD_TREES_TOOL = "aurora:tool/world_trees"
 
 BUILTIN_TOOL_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL})
 
