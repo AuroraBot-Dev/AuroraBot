@@ -17,7 +17,7 @@ from src.mcp.scopes import SCOPE_PATTERN as MCP_SCOPE_PATTERN
 if TYPE_CHECKING:
     from src.kernel import AsyncCleanup
 
-_MCP_PLATFORM_ID = "builtin.mcp"
+_MCP_PLATFORM_ID = "aurora:platform/mcp"
 
 
 def _mcp_platform(settings: Settings) -> PlatformConfig:

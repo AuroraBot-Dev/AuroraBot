@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from aurora.contracts.command import CommandSpec
     from aurora.contracts.config import AuroraConfig
 
-_CONSOLE_PLATFORM_ID = "builtin.console"
+_CONSOLE_PLATFORM_ID = "aurora:platform/console"
 
 COMMAND: CommandSpec = {
     "name": "start",

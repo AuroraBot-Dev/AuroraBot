@@ -9,11 +9,11 @@
 [[reaction]]
 source = "mcp:org.aurora.qq"
 event_kind = "qq.message.private"
-agent = "builtin.chat"
+agent = "aurora:agent/chat"
 contains_any = []
 
 [[reaction]]
 source = "mcp:org.aurora.qq"
 event_kind = "qq.message.group"
-agent = "builtin.chat"
+agent = "aurora:agent/chat"
 contains_any = ["小光", "夜曦光"]

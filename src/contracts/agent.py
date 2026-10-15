@@ -7,6 +7,12 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from src.contracts.identity import (
+    AGENT_PATH_PREFIX,
+    PROMPT_PATH_PREFIX,
+    TOOL_PATH_PREFIX,
+    matches_species,
+)
 from src.contracts.model import ChatMessage, ToolCall
 from src.contracts.world import ToolScopes, WorldFrontier
 
@@ -60,8 +66,16 @@ class AgentDefinition:
         object.__setattr__(self, "children", frozenset(self.children))
         if not all((self.definition_id.strip(), self.description.strip(), self.prompt_id.strip(), self.model.strip())):
             raise ValueError("AgentDefinition requires definition_id, description, prompt_id and model")
+        if not matches_species(self.definition_id, AGENT_PATH_PREFIX):
+            raise ValueError(f"Agent definition ID 必须形如 <namespace>:agent/<name>：{self.definition_id}")
+        if not matches_species(self.prompt_id, PROMPT_PATH_PREFIX):
+            raise ValueError(f"Agent prompt ID 必须形如 <namespace>:prompt/<kind>/<name>：{self.prompt_id}")
         if any(not name for name in (*self.tools, *self.children)):
             raise ValueError("AgentDefinition Tool and child IDs must not be empty")
+        if any(not matches_species(name, TOOL_PATH_PREFIX) for name in self.tools):
+            raise ValueError(f"AgentDefinition 引用了非工具 ID：{self.definition_id}")
+        if any(not matches_species(name, AGENT_PATH_PREFIX) for name in self.children):
+            raise ValueError(f"AgentDefinition 引用了非 Agent ID 的 child：{self.definition_id}")
 
 
 @dataclass(frozen=True, slots=True)

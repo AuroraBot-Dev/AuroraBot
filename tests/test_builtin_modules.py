@@ -54,13 +54,18 @@ def _settings(tmp_path: Path) -> _Settings:
             ProvidersConfig: ProvidersConfig((ProviderConfig("provider", "litellm", "API_KEY"),)),
             EndpointsConfig: EndpointsConfig((EndpointConfig("chat", "provider", "gpt"),)),
             PromptsConfig: PromptsConfig(
-                (PromptConfig("system.core", "system.txt"), PromptConfig("builtin.chat", "chat.txt"))
+                (
+                    PromptConfig("aurora:prompt/system/core", "system.txt"),
+                    PromptConfig("aurora:prompt/agent/chat", "chat.txt"),
+                )
             ),
-            AgentsConfig: AgentsConfig((AgentConfig("builtin.chat", "会话", "builtin.chat", "chat", (), frozenset()),)),
+            AgentsConfig: AgentsConfig(
+                (AgentConfig("aurora:agent/chat", "会话", "aurora:prompt/agent/chat", "chat", (), frozenset()),)
+            ),
             EngineConfig: EngineConfig(2, 8, 16),
-            RuntimeConfig: RuntimeConfig("default", "root", "builtin.chat", "NONE"),
+            RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
-            CadenceConfig: CadenceConfig(False, "builtin.chat", 5, 3600, 0.25),
+            CadenceConfig: CadenceConfig(False, "aurora:agent/chat", 5, 3600, 0.25),
             ReactionsConfig: ReactionsConfig(()),
             AppsConfig: AppsConfig(
                 (
@@ -75,7 +80,7 @@ def _settings(tmp_path: Path) -> _Settings:
                     ),
                 )
             ),
-            PlatformsConfig: PlatformsConfig((PlatformConfig("builtin.mcp", False),)),
+            PlatformsConfig: PlatformsConfig((PlatformConfig("aurora:platform/mcp", False),)),
             StorageConfig: StorageConfig((StorageEntry("world", "data"),)),
             TagsConfig: TagsConfig(()),
             ScopeCatalog: ScopeCatalog(

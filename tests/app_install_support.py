@@ -51,7 +51,7 @@ ENDPOINT_PACKAGE = "com.example.remote"
 # 必须有内容，否则每个用例都得先声明自己要装的东西有工具。
 DEFAULT_TOOL_NAMES = ("weather_now",)
 # 授权测试默认引用的 Agent：``config.example/agents.toml`` 里真实存在的一个 ID。
-DEFAULT_AGENT_ID = "builtin.worker"
+DEFAULT_AGENT_ID = "aurora:agent/worker"
 
 
 def tools_page(names: Sequence[str] = DEFAULT_TOOL_NAMES, *, next_cursor: str | None = None) -> McpToolsPage:

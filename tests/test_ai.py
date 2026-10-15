@@ -97,7 +97,7 @@ def test_litellm_gateway_round_trips_domain_tool_names_in_definitions_history_an
                             {
                                 "id": "call-next",
                                 "type": "function",
-                                "function": {"name": alias, "arguments": '{"agent":"builtin.worker"}'},
+                                "function": {"name": alias, "arguments": '{"agent":"aurora:agent/worker"}'},
                             }
                         ],
                     }

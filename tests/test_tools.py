@@ -77,14 +77,21 @@ def _agents() -> AgentCatalog:
     return AgentCatalog(
         (
             AgentDefinition(
-                "root",
+                "aurora:agent/root",
                 "总代理。",
-                "root",
+                "aurora:prompt/agent/root",
                 "quality",
                 frozenset({DELEGATE_TOOL}),
-                frozenset({"worker"}),
+                frozenset({"aurora:agent/worker"}),
             ),
-            AgentDefinition("worker", "通用执行者。", "worker", "fast", frozenset(), frozenset()),
+            AgentDefinition(
+                "aurora:agent/worker",
+                "通用执行者。",
+                "aurora:prompt/agent/worker",
+                "fast",
+                frozenset(),
+                frozenset(),
+            ),
         )
     )
 
@@ -156,19 +163,19 @@ def test_delegate_is_a_registered_tool_that_produces_a_tree_operation_request() 
                 "delegate",
                 DELEGATE_TOOL,
                 {
-                    "agent": "worker",
+                    "agent": "aurora:agent/worker",
                     "instruction": "检查一个边界",
                 },
             )
         )
     )
 
-    assert result == DelegationRequest("worker", "检查一个边界")
+    assert result == DelegationRequest("aurora:agent/worker", "检查一个边界")
     assert registry.definitions[0].name == DELEGATE_TOOL
     choices = registry.definitions[0].parameters["properties"]["agent"]["oneOf"]  # type: ignore[index]
     assert choices == (
-        {"const": "root", "description": "总代理。"},
-        {"const": "worker", "description": "通用执行者。"},
+        {"const": "aurora:agent/root", "description": "总代理。"},
+        {"const": "aurora:agent/worker", "description": "通用执行者。"},
     )
 
 

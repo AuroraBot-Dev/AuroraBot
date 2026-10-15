@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.contracts.identity import AGENT_PROMPT_PATH_PREFIX, SYSTEM_PROMPT_PATH_PREFIX, matches_species
 from src.contracts.pkgs.prompt import PromptAssembler as PromptAssemblerPort
 from src.kernel import ModuleContext, module
 from src.prompt import PromptAssembler, PromptCatalog
@@ -11,8 +12,6 @@ from src.prompt.config import PromptConfig, PromptsConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-_SYSTEM_PREFIX = "system."
 
 
 @module(name="prompt", provides=PromptAssemblerPort)
@@ -27,14 +26,17 @@ def _read_prompts(
     directory: Path,
     prompts: tuple[PromptConfig, ...],
 ) -> tuple[tuple[str, ...], dict[str, str]]:
+    """按 ID 的 kind 段切分提示词：``prompt/system/*`` 是全局片段，``prompt/agent/*`` 是 Agent 局部。"""
     system_fragments: list[str] = []
     agent_prompts: dict[str, str] = {}
     for item in prompts:
         content = _read_fragment(directory, item.source)
-        if item.id.startswith(_SYSTEM_PREFIX):
+        if matches_species(item.id, SYSTEM_PROMPT_PATH_PREFIX):
             system_fragments.append(content)
-        else:
+        elif matches_species(item.id, AGENT_PROMPT_PATH_PREFIX):
             agent_prompts[item.id] = content
+        else:
+            raise ValueError(f"提示词 ID 的 kind 必须是 system 或 agent：{item.id}")
     if not system_fragments:
         raise ValueError("提示词配置至少需要一个 system 片段")
     if not agent_prompts:

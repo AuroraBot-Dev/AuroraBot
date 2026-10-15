@@ -255,8 +255,8 @@ def _active_config(project_root: Path) -> AuroraConfig:
 def _active_platforms() -> PlatformsConfig:
     return PlatformsConfig(
         (
-            PlatformConfig("builtin.console", True, "INFO"),
-            PlatformConfig("builtin.mcp", True, "INFO"),
+            PlatformConfig("aurora:platform/console", True, "INFO"),
+            PlatformConfig("aurora:platform/mcp", True, "INFO"),
         )
     )
 
@@ -414,7 +414,7 @@ def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Pat
     assert runtime.world is world
     assert tree.status is TreeStatus.COMPLETED
     assert runtime.runtime_status()["trees"]["completed"] == 1
-    assert echoed == ["Cadence> [builtin.root] 完成"]
+    assert echoed == ["Cadence> [aurora:agent/root] 完成"]
 
 
 def test_launcher_binding_failure_closes_prepared_resources_before_activation(configured_project: Path) -> None:

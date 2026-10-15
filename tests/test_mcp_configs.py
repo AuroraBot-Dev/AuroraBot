@@ -162,10 +162,10 @@ def test_template_exports_typed_frozen_mcp_config(configured_project: Path) -> N
     assert app_config[0].event_mode == "disabled"
     assert app_config[1].event_mode == "world_events"
     assert app_config[1].env == ("AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG")
-    assert [item.id for item in platform_config] == ["builtin.console", "builtin.mcp"]
+    assert [item.id for item in platform_config] == ["aurora:platform/console", "aurora:platform/mcp"]
     assert all(item.enabled for item in platform_config)
     assert all(item.logging == "INFO" for item in platform_config)
-    assert next(item for item in platform_config if item.id == "builtin.console").config == {}
+    assert next(item for item in platform_config if item.id == "aurora:platform/console").config == {}
 
 
 def test_template_apps_stay_outside_the_installed_src_tree(configured_project: Path) -> None:
@@ -318,13 +318,13 @@ def test_platforms_parses_exact_mcp_preference(tmp_path: Path) -> None:
         tmp_path,
         """\
 [[platform]]
-id = "builtin.mcp"
+id = "aurora:platform/mcp"
 enabled = false
 logging = "NONE"
 """,
     )
 
-    assert config == (PlatformConfig("builtin.mcp", enabled=False, logging="NONE"),)
+    assert config == (PlatformConfig("aurora:platform/mcp", enabled=False, logging="NONE"),)
 
 
 def test_platforms_accepts_empty_and_duplicate_ids_trusting_project(
@@ -337,21 +337,19 @@ def test_platforms_accepts_empty_and_duplicate_ids_trusting_project(
     empty = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
     assert empty == ()
 
-    (config_directory / "platforms.toml").write_text(
-        '[[platform]]\nid = "builtin.mcp"\nenabled = true\n\n[[platform]]\nid = "builtin.mcp"\nenabled = true\n',
-        encoding="utf-8",
-    )
+    duplicated_entry = '[[platform]]\nid = "aurora:platform/mcp"\nenabled = true\n'
+    (config_directory / "platforms.toml").write_text(duplicated_entry * 2, encoding="utf-8")
     duplicated = assemble_config(root, (PLATFORMS_CONFIG,)).get(PLATFORMS_CONFIG).platforms
-    assert [item.id for item in duplicated] == ["builtin.mcp", "builtin.mcp"]
+    assert [item.id for item in duplicated] == ["aurora:platform/mcp", "aurora:platform/mcp"]
 
 
 @pytest.mark.parametrize(
     "content",
     (
         "",
-        '[[platform]]\nid = "builtin.mcp"\nenabled = "true"\n',
-        '[[platform]]\nid = "builtin.ghost"\nenabled = true\n',
-        '[[platform]]\nid = "builtin.mcp"\nenabled = true\nlogging = "TRACE"\n',
+        '[[platform]]\nid = "aurora:platform/mcp"\nenabled = "true"\n',
+        '[[platform]]\nid = "aurora:platform/ghost"\nenabled = true\n',
+        '[[platform]]\nid = "aurora:platform/mcp"\nenabled = true\nlogging = "TRACE"\n',
     ),
 )
 def test_platforms_rejects_unknown_missing_and_non_boolean_fields(tmp_path: Path, content: str) -> None:

@@ -1,9 +1,9 @@
 [[platform]]
-id = "builtin.console"
+id = "aurora:platform/console"
 enabled = true
 logging = "INFO"
 
 [[platform]]
-id = "builtin.mcp"
+id = "aurora:platform/mcp"
 enabled = true
 logging = "INFO"

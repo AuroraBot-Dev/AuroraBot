@@ -115,11 +115,19 @@ class EventInjectingModel:
         return self.responses.pop(0)
 
 
+def _prompt_id(name: str) -> str:
+    return f"aurora:prompt/agent/{name}"
+
+
+def _agent_id(name: str) -> str:
+    return f"aurora:agent/{name}"
+
+
 def _assembler() -> PromptAssembler:
     return PromptAssembler(
         PromptCatalog(
             ("You are Aurora.",),
-            {"root": "Solve the whole task.", "worker": "Solve only the assigned part."},
+            {_prompt_id("root"): "Solve the whole task.", _prompt_id("worker"): "Solve only the assigned part."},
         )
     )
 
@@ -131,7 +139,14 @@ def _agent(
     tools: frozenset[str] = frozenset(),
     children: frozenset[str] = frozenset(),
 ) -> AgentDefinition:
-    return AgentDefinition(definition_id, f"{definition_id} Agent.", prompt, model, tools, children)
+    return AgentDefinition(
+        _agent_id(definition_id),
+        f"{definition_id} Agent.",
+        _prompt_id(prompt),
+        model,
+        tools,
+        frozenset(_agent_id(child) for child in children),
+    )
 
 
 def _runner(
@@ -203,7 +218,7 @@ def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
     delegate = ToolCall(
         "delegate-1",
         DELEGATE_TOOL,
-        {"agent": "worker", "instruction": "inspect this"},
+        {"agent": _agent_id("worker"), "instruction": "inspect this"},
     )
     model = FakeModel(
         [
@@ -226,7 +241,7 @@ def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
     assert len(result.nodes) == EXPECTED_DELEGATION_NODES
     child = result.nodes[1]
     assert child.parent_id == "root"
-    assert child.definition_id == "worker"
+    assert child.definition_id == _agent_id("worker")
     assert child.model == "small-model"
     assert child.status == AgentStatus.COMPLETED
     assert [request.model for request in model.requests] == ["large-model", "small-model", "large-model"]
@@ -357,7 +372,7 @@ def test_delegate_rejects_registered_agent_outside_parent_allowlist() -> None:
     model = FakeModel(
         [
             ChatMessage.assistant(
-                tool_calls=(ToolCall("delegate", DELEGATE_TOOL, {"agent": "worker", "instruction": "work"}),)
+                tool_calls=(ToolCall("delegate", DELEGATE_TOOL, {"agent": _agent_id("worker"), "instruction": "work"}),)
             ),
             ChatMessage.assistant("recovered"),
         ]
@@ -372,7 +387,7 @@ def test_delegate_rejects_registered_agent_outside_parent_allowlist() -> None:
     assert len(result.nodes) == 1
     assert result.node("root").messages[2] == ChatMessage.tool(
         "delegate",
-        "当前 Agent 不允许委派给：worker",
+        f"当前 Agent 不允许委派给：{_agent_id('worker')}",
         is_error=True,
     )
 

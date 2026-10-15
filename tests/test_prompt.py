@@ -19,13 +19,16 @@ from src.prompt import PromptAssembler, PromptCatalog
 
 def _assembler(*, limit: int = 1_000) -> PromptAssembler:
     return PromptAssembler(
-        PromptCatalog(("You are Aurora.", "The world continues between messages."), {"root": "Act as the root."}),
+        PromptCatalog(
+            ("You are Aurora.", "The world continues between messages."),
+            {"aurora:prompt/agent/root": "Act as the root."},
+        ),
         max_characters=limit,
     )
 
 
-def _agent(prompt: str = "root") -> AgentDefinition:
-    return AgentDefinition("agent", "Test Agent.", prompt, "quality-model", frozenset(), frozenset())
+def _agent(prompt: str = "aurora:prompt/agent/root") -> AgentDefinition:
+    return AgentDefinition("aurora:agent/test", "Test Agent.", prompt, "quality-model", frozenset(), frozenset())
 
 
 def test_assembler_emits_one_system_then_node_transcript() -> None:
@@ -88,7 +91,7 @@ def test_assembler_truncation_never_leaves_orphan_tool_message() -> None:
 
 
 def test_assembler_rejects_missing_agent_prompt() -> None:
-    tree = AgentTree.create("tree", "root", _agent("missing"), "hello")
+    tree = AgentTree.create("tree", "root", _agent("aurora:prompt/agent/missing"), "hello")
 
     with pytest.raises(ValueError, match="missing Agent prompt"):
         _assembler().assemble(tree, "root")
@@ -118,8 +121,8 @@ def test_assembler_injects_memory_snapshot_into_system() -> None:
 
 def test_prompt_catalog_and_assembler_require_non_empty_bounds() -> None:
     with pytest.raises(ValueError, match="system fragment"):
-        PromptCatalog((), {"root": "prompt"})
+        PromptCatalog((), {"aurora:prompt/agent/root": "prompt"})
     with pytest.raises(ValueError, match="Agent prompt"):
         PromptCatalog(("system",), {})
     with pytest.raises(ValueError, match="must be positive"):
-        PromptAssembler(PromptCatalog(("system",), {"root": "prompt"}), max_characters=0)
+        PromptAssembler(PromptCatalog(("system",), {"aurora:prompt/agent/root": "prompt"}), max_characters=0)

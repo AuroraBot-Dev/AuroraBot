@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from src.contracts.identity import PLATFORM_PATH_PREFIX, matches_species
 from src.mcp.scopes import owns_scope, validate_mcp_scope
 from src.utils.validation import (
     check_environment_name,
@@ -21,7 +22,7 @@ type McpEventMode = Literal["disabled", "world_events", "legacy_aurora_event"]
 
 _TRANSPORTS = frozenset({"stdio", "streamable_http"})
 _EVENT_MODES = frozenset({"disabled", "world_events", "legacy_aurora_event"})
-_PLATFORM_IDS = frozenset({"builtin.console", "builtin.mcp"})
+_PLATFORM_IDS = frozenset({"aurora:platform/console", "aurora:platform/mcp"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +101,8 @@ class PlatformConfig:
     config: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not matches_species(self.id, PLATFORM_PATH_PREFIX):
+            raise ValueError(f"platform.id 必须是平台命名空间下的 ID：{self.id}")
         if self.id not in _PLATFORM_IDS:
             raise ValueError(f"未知平台 id：{self.id}")
         normalized = self.logging or "INFO"

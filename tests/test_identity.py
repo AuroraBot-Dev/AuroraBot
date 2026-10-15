@@ -157,7 +157,7 @@ def test_tag_expansion_keeps_last_match_wins_semantics() -> None:
         )
     )
 
-    resolved = resolve_names(available, table.expand(("#aurora:tool/qq-send",), label="builtin.chat"))
+    resolved = resolve_names(available, table.expand(("#aurora:tool/qq-send",), label="aurora:agent/chat"))
 
     assert resolved == frozenset({"org.aurora.qq:tool/qq_send_message"})
 
@@ -185,7 +185,7 @@ def test_undeclared_tag_is_rejected() -> None:
     table = _table(TagDefinition("aurora:tool/qq", ("org.aurora.qq:tool/*",)))
 
     with pytest.raises(IdentityError, match="未声明的标签"):
-        table.expand(("#aurora:tool/missing",), label="builtin.chat")
+        table.expand(("#aurora:tool/missing",), label="aurora:agent/chat")
 
 
 def test_tag_cycles_are_rejected() -> None:

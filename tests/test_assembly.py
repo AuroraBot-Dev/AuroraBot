@@ -113,8 +113,8 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
         assert after_cursor > before_cursor
         assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
         tree = next(iter(runtime._trees.values()))
-        assert tree.node(tree.root_id).definition_id == "builtin.triage"
-        assert echoed == ["Cadence> [builtin.triage] done"]
+        assert tree.node(tree.root_id).definition_id == "aurora:agent/triage"
+        assert echoed == ["Cadence> [aurora:agent/triage] done"]
 
     asyncio.run(scenario())
 
@@ -125,9 +125,9 @@ def test_launch_tree_echoes_root_text_without_external_delivery(configured_proje
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
-        result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="builtin.triage"))
+        result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="aurora:agent/triage"))
         assert result.status is TreeStatus.COMPLETED
-        assert echoed == ["Cadence> [builtin.triage] done"]
+        assert echoed == ["Cadence> [aurora:agent/triage] done"]
 
     asyncio.run(scenario())
 
@@ -153,9 +153,9 @@ def test_presenter_traces_tool_calls(configured_project: Path) -> None:
     runtime.presenter.echo(tree)
 
     assert echoed == [
-        "  → [builtin.root] test:tool/echo",
-        "  ← [builtin.root] hi",
-        "Cadence> [builtin.root] 完成",
+        "  → [aurora:agent/root] test:tool/echo",
+        "  ← [aurora:agent/root] hi",
+        "Cadence> [aurora:agent/root] 完成",
     ]
 
 
@@ -169,7 +169,7 @@ def test_presenter_renders_rich_for_terminal_sink(
 
     runtime.presenter.echo(tree)
 
-    assert "Cadence> [builtin.root] 完成" in capsys.readouterr().out
+    assert "Cadence> [aurora:agent/root] 完成" in capsys.readouterr().out
 
 
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
@@ -180,7 +180,7 @@ def test_cadence_and_memory_instances_are_composed_and_configured(configured_pro
     memory_config = config.get(MEMORY_CONFIG)
 
     assert cadence.enabled is config.get(CADENCE_CONFIG).enabled is True
-    assert cadence.agent == "builtin.triage"
+    assert cadence.agent == "aurora:agent/triage"
     assert memory is assembly.get(MemoryReader)
     assert memory_config.window_minutes == EXPECTED_WINDOW_MINUTES
     assert memory_config.commits_per_scope == EXPECTED_COMMITS_PER_SCOPE
@@ -211,7 +211,7 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
                     item,
                     tools=tuple((*item.tools, "org.aurora.qq:tool/*", "!org.aurora.qq:tool/qq_send_group_message")),
                 )
-                if item.id == "builtin.root"
+                if item.id == "aurora:agent/root"
                 else item
                 for item in agents
             )
@@ -222,7 +222,7 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
         FakeTool("org.aurora.qq:tool/qq_send_group_message"),
     )
     assembly = assemble_runtime(with_wildcard, FakeModel(), tools=qq_tools).assembly
-    root_definition = assembly.get(AgentCatalog).get("builtin.root")
+    root_definition = assembly.get(AgentCatalog).get("aurora:agent/root")
 
     assert "org.aurora.qq:tool/qq_send_private_message" in root_definition.tools
     assert "org.aurora.qq:tool/qq_send_group_message" not in root_definition.tools
@@ -251,7 +251,10 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         assemble_runtime(config.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
     with pytest.raises(ValueError, match="未知 Agent prompt"):
         assemble_runtime(
-            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, prompt="missing"), *agents[1:]))),
+            config.with_value(
+                AGENTS_CONFIG,
+                AgentsConfig((replace(root, prompt="aurora:prompt/agent/missing"), *agents[1:])),
+            ),
             FakeModel(),
         )
     with pytest.raises(ValueError, match="未知 model endpoint"):
@@ -288,14 +291,14 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
         FakeTool("org.aurora.qq:tool/qq_delete_friend"),
     )
     agents = assemble_runtime(load_config(configured_project), FakeModel(), tools=qq_tools).assembly.get(AgentCatalog)
-    triage = agents.get("builtin.triage")
-    root = agents.get("builtin.root")
-    worker = agents.get("builtin.worker")
-    fast_worker = agents.get("builtin.fast-worker")
-    reviewer = agents.get("builtin.reviewer")
+    triage = agents.get("aurora:agent/triage")
+    root = agents.get("aurora:agent/root")
+    worker = agents.get("aurora:agent/worker")
+    fast_worker = agents.get("aurora:agent/fast-worker")
+    reviewer = agents.get("aurora:agent/reviewer")
 
     assert triage.tools == frozenset({"aurora:tool/delegate"})
-    assert triage.children == frozenset({"builtin.root", "builtin.fast-worker"})
+    assert triage.children == frozenset({"aurora:agent/root", "aurora:agent/fast-worker"})
     assert root.tools == frozenset(
         {
             "aurora:tool/delegate",
@@ -304,13 +307,15 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
             "aurora:tool/world_trees",
         }
     )
-    assert root.children == frozenset({"builtin.worker", "builtin.fast-worker", "builtin.reviewer", "builtin.chat"})
+    assert root.children == frozenset(
+        {"aurora:agent/worker", "aurora:agent/fast-worker", "aurora:agent/reviewer", "aurora:agent/chat"}
+    )
     assert worker.model == "quality"
-    assert worker.children == frozenset({"builtin.reviewer", "builtin.fast-worker"})
+    assert worker.children == frozenset({"aurora:agent/reviewer", "aurora:agent/fast-worker"})
     assert "org.aurora.qq:tool/qq_send_private_message" in worker.tools
     assert "org.aurora.qq:tool/qq_delete_friend" in worker.tools
     assert fast_worker.model == "fast"
-    assert fast_worker.prompt_id == "builtin.fast"
+    assert fast_worker.prompt_id == "aurora:prompt/agent/fast"
     assert fast_worker.children == frozenset()
     assert fast_worker.tools == frozenset(
         {

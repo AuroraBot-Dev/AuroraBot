@@ -1,44 +1,44 @@
 [[agent]]
-id = "builtin.triage"
+id = "aurora:agent/triage"
 description = "注意力初筛：判断眼前世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
-prompt = "builtin.triage"
+prompt = "aurora:prompt/agent/triage"
 model = "fast"
 tools = ["aurora:tool/delegate"]
-children = ["builtin.root", "builtin.fast-worker"]
+children = ["aurora:agent/root", "aurora:agent/fast-worker"]
 
 [[agent]]
-id = "builtin.fast-worker"
+id = "aurora:agent/fast-worker"
 description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
-prompt = "builtin.fast"
+prompt = "aurora:prompt/agent/fast"
 model = "fast"
 tools = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]
 children = []
 
 [[agent]]
-id = "builtin.root"
+id = "aurora:agent/root"
 description = "总代理：理解完整任务、整合结果。"
-prompt = "builtin.root"
+prompt = "aurora:prompt/agent/root"
 model = "quality"
 tools = ["aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_scopes", "aurora:tool/world_trees"]
 children = [
-    "builtin.fast-worker",
-    "builtin.chat",
-    "builtin.worker",
-    "builtin.reviewer",
+    "aurora:agent/fast-worker",
+    "aurora:agent/chat",
+    "aurora:agent/worker",
+    "aurora:agent/reviewer",
 ]
 
 [[agent]]
-id = "builtin.chat"
+id = "aurora:agent/chat"
 description = "即时会话回复：生成回复正文，或用发送工具像人类一样分多条投递回原会话。"
-prompt = "builtin.chat"
+prompt = "aurora:prompt/agent/chat"
 model = "fast"
 tools = ["#aurora:tool/qq-send"]
 children = []
 
 [[agent]]
-id = "builtin.worker"
+id = "aurora:agent/worker"
 description = "通用执行者：掌握全部 QQ、Windows 桌面自动化工具与世界读取，深入完成边界明确的独立工作，可继续委派轻量任务或审阅。"
-prompt = "builtin.worker"
+prompt = "aurora:prompt/agent/worker"
 model = "quality"
 tools = [
     "aurora:tool/delegate",
@@ -48,20 +48,20 @@ tools = [
     "org.aurora.qq:tool/*",
     "com.github.windows_mcp:tool/*",
 ]
-children = ["builtin.reviewer", "builtin.fast-worker"]
+children = ["aurora:agent/reviewer", "aurora:agent/fast-worker"]
 
 [[agent]]
-id = "builtin.reviewer"
+id = "aurora:agent/reviewer"
 description = "独立审阅者：检查给定结果的事实、遗漏和边界，返回简洁可执行的结论。"
-prompt = "builtin.reviewer"
+prompt = "aurora:prompt/agent/reviewer"
 model = "quality"
 tools = []
 children = []
 
 [[agent]]
-id = "builtin.memory"
+id = "aurora:agent/memory"
 description = "记忆专员：忠实整理长期记忆内容；当前未接入持久化端口，暂不参与派发。"
-prompt = "builtin.memory"
+prompt = "aurora:prompt/agent/memory"
 model = "quality"
 tools = []
 children = []
