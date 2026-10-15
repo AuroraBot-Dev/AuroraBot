@@ -297,37 +297,33 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 
 > Aurora 当前只把 MCP 的 Tools 暴露给 Bot：只有 Resources 或 Prompts 的 Server 无法作为工具 App 登记。
 
-**「资源」在 MCP 这条路上仍无落脚点**：App 现在能*声明*自己的域，但 `aurora app` 的准入
-仍要求 Server 至少提供一个 Tool。要让它成为「世界生产者」，还差准入规则那一步。
+**「资源」在 MCP 这条路上已有落脚点**：App 能声明自己的域，也能以 `--events` 作为世界生产者
+登记而不必暴露任何 Tool。见 §9 的 P3c。
 
 ---
 
 ## 7. ReAct 四操作
 
-循环今天**已经由域驱动**，只是没被命名：
+循环**由域驱动**，四个操作现在各有名字、职责与不变量：
 
-| 操作 | 契约 | 域参数 | 扩展状态 |
+| 操作 | 契约 | 域参数 | 状态 |
 |---|---|---|---|
-| **Observe** | `WorldReader.delta(start, scopes)` | ✅ 就是域 | ⚠️ 内核可替换，未声明、未校验 |
-| **Recall** | `MemoryReader.recall(scopes=...)` | ✅ 就是域 | ⚠️ 内核可替换，未声明、未校验 |
-| **Effect** | `WorldWriter.append_commit(scopes=...)` | ✅ 就是域 | ⚠️ 内核可替换，未声明、未校验 |
-| **Act** | `ToolRegistry.execute(call)` | ⚠️ 靠 `ToolScopes` 携带，地址是工具名 | ✅ **唯一被声明为扩展点的** |
+| **Observe** | `WorldReader.delta(start, scopes)` | ✅ 就是域 | ✅ 已声明（P4） |
+| **Recall** | `MemoryReader.recall(scopes=...)` | ✅ 就是域 | ✅ 已声明（P4） |
+| **Effect** | `WorldWriter.append_commit(scopes=...)` | ✅ 就是域 | ✅ 已声明（P4） |
+| **Act** | `ToolRegistry.execute(call)` | ⚠️ 靠 `ToolScopes` 携带，地址是工具名 | ✅ 已声明 |
 
-两个结论：
+三个结论：
 
 1. 域已经驱动了三阶段——`Observe/Recall/Effect` 的参数本来就是域。
-2. **另外三个操作在内核层面已经可替换，但没有任何地方声明这是受支持的扩展点。**
-   内核按 `priority` 裁决同契约的多个 provider（`src/kernel/resolve.py:134`，
-   有测试 `tests/test_kernel.py:101`），而 `WorldReader` / `MemoryReader` / `WorldWriter`
-   都是 `provides=` 的契约类型——所以扩展**技术上今天就能**提供一份自己的实现并胜出。
-   缺的不是机制，而是两件事：
-   - **声明**：没有任何地方说「这三个是扩展点」；
-   - **校验**：替换实现可以违反前沿单调性、序号连续性与提交幂等，而无人阻止。
-
-   所以「用不同网络驱动不同阶段」的缺口是**契约与校验**，不是端口化。
+2. **另外三个操作在内核层面一直可替换，缺的从来不是可替换性，而是「谁知道这件事」。**
+   内核按 `priority` 裁决同契约的多个 provider（`src/kernel/resolve.py`，
+   测试 `tests/test_kernel.py`），而三个操作都是 `provides=` 的契约类型。
+   所以这里做的不是端口化，是**声明 + 校验**（见 §9 的 P4）。
+3. 校验只补内核问不了的那件事：**替换之后是否仍是一个完整循环。**
 
 模型可以主动申请一个域：`WorldReadTool.resolve_scopes` 返回 `ToolScopes(observe={scope})`
-（`src/tools/builtin/world.py:71`）。这条是「注意力是一等操作」的种子。
+（`src/tools/builtin/world.py`）。这条是「注意力是一等操作」的种子。
 
 ---
 
@@ -361,7 +357,7 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
 | **P3c** | 零工具的 Server 也能作为世界生产者登记（准入 = 至少一种贡献） | `aurora app` 准入规则 + `--events` | ✅ **已落地** |
-| **P4** | 声明四操作为扩展点，并为替换实现加语义一致性校验 | contracts 契约文档 + 内核或模块层校验 | ⬜ |
+| **P4** | 声明四操作为扩展点 + 装配期校验（齐备性、世界单源） | `src/contracts/loop.py` + `src/runtime/assembly.py` | ✅ **已落地** |
 | **P5** | 域作为物理分区键 + `delta()` 下推 + 因果表示收敛 | `src/world` + migration | ⬜ |
 
 P2 建议在 P1 之后（域注册表要先有地方挂 owner——现已具备）。
@@ -467,6 +463,27 @@ P5 是唯一需要 schema migration 的阶段。
 `verify.require_tools` 改名 `require_contribution`：名字该说清它在判什么，
 而不是暗示 Tool 是唯一贡献。
 
+### P4：四操作显式化
+
+| 文件 | 内容 |
+|---|---|
+| `src/contracts/loop.py` | `LoopOperation`（名字 / 契约 / 职责 / 不变量）与 `LOOP_OPERATIONS`、`WORLD_PORTS` |
+| `src/runtime/assembly.py` | `validate_loop_operations`：四操作齐备 + 三个世界端口同源；在 `_create` 里对装配结果执行 |
+
+**校验只补内核问不了的那件事。** 内核已经保证：同契约同优先级冲突会失败、
+缺依赖会失败。它保证不了的是「替换之后仍是一个完整循环」：
+
+- 缺任一操作 → 那不是一个循环，启动前失败；
+- 三个世界端口由不同对象提供 → Bot 会经历一个自己写不进去的世界。
+
+第二条在今天的实现里**恰好成立**，而且是有意为之：`src/world/module.py` 的 `prepare`
+会复用外部预先提供的 `WorldJournal`（测试注入预构世界就走这条路），`build` 再把它
+登记到全部三个端口下。所以三个端口本来就是同一个对象，校验只是把这件事固定下来。
+
+**顺带记下一处既存类型缺口**：`src.kernel.Capabilities` 把 `settings` 声明为可写属性，
+而 `Assembly` 是 frozen 的，两者在类型上并不相容。校验因此只声明自己需要的窄协议
+（`get` / `get_optional`），不去改动内核——那是个独立的、影响面更大的问题。
+
 ### 测试
 
 | 文件 | 覆盖 |
@@ -477,6 +494,7 @@ P5 是唯一需要 schema migration 的阶段。
 | `tests/test_mcp_configs.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
 | `tests/test_app_verify.py` | +2 项：零工具 + `world_events` 作为世界生产者登记且声明落进注册表；远程端点拒绝 `--events` |
 | `tests/test_app_install_cli.py` | +2 项：`--events` 的 CLI 通路（零工具也登记）与「不加 `--events` 仍拒绝」 |
+| `tests/test_loop.py` | 6 项：四操作的名字与契约互不相同、职责与不变量非空、三个世界端口同源声明、齐备时通过、缺操作报出名字、两个世界被拒、**内建组合恰好满足全部四条不变量** |
 | `tests/test_mcp_tool.py` | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字 |
 | `tests/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
 | `tests/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
