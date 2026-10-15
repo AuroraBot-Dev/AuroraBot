@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003 - SQLAlchemy resolves this annotation during model declaration
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -37,12 +37,13 @@ class WorldCommitRow(Base):
 
 
 class WorldCommitScopeRow(Base):
-    """提交在每个 scope 中的独立序号。"""
+    """提交在每个 scope 中的独立序号；`(scope, sequence)` 是域分区键。"""
 
     __tablename__ = "world_commit_scopes"
     __table_args__ = (
         UniqueConstraint("scope", "sequence", name="world_commit_scope_sequence_unique"),
         UniqueConstraint("commit_id", "scope", name="world_commit_scope_membership_unique"),
+        Index("world_commit_scope_partition", "scope", "sequence", "commit_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

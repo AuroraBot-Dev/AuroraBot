@@ -6,9 +6,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora import assemble_runtime, load_config, run_project
+from aurora import load_config
 from src.console import TerminalConsole, TerminalControl, TerminalResponse
-from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, WorldCommit, WorldCommitInput, WorldFrontier
+from src.contracts import (
+    FRONT_BINDINGS,
+    ChatMessage,
+    EnvironmentEvent,
+    Front,
+    FrontContext,
+    ModelRequest,
+    WorldCommit,
+    WorldCommitInput,
+    WorldFrontier,
+)
+from src.contracts.pkgs.world import WorldJournal
+from src.runtime import run_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -68,6 +80,9 @@ class FakeDispatcher:
 class FakeModel:
     requests: list[ModelRequest] = field(default_factory=list)
 
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
+
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
         return ChatMessage.assistant("全链路完成")
@@ -121,7 +136,7 @@ def test_terminal_console_records_every_non_empty_input_to_worldline() -> None:
     )
 
     assert [commit.summary for commit in world.commits] == ["请处理", "/status", "/exit"]
-    assert {scope for commit in world.commits for scope in commit.scopes} == {"aurora:console"}
+    assert {scope for commit in world.commits for scope in commit.scopes} == {"aurora:world/console"}
     assert {commit.kind for commit in world.commits} == {"console.input"}
     assert dispatcher.inputs == ["请处理", "/status", "/exit"]
 
@@ -132,7 +147,7 @@ def test_project_console_runs_message_tree_and_local_commands(configured_project
     stop = asyncio.Event()
 
     runtime = asyncio.run(
-        run_project(
+        run_runtime(
             load_config(configured_project),
             model,
             stop_event=stop,
@@ -145,31 +160,8 @@ def test_project_console_runs_message_tree_and_local_commands(configured_project
     assert model.requests[0].messages[1].content == "请处理"
     assert runtime.runtime_status()["trees"]["completed"] == 1
     assert "Bot> 全链路完成" in output
-    assert "Bot> 本地命令：/help /clear /quit /serve" in output
+    assert "Bot> 本地命令：/help /clear /quit" in output
     assert stop.is_set()
-
-
-def test_runtime_serve_command_uses_injected_local_callback(configured_project: Path) -> None:
-    runtime = assemble_runtime(load_config(configured_project), FakeModel())
-    calls = 0
-
-    async def serve() -> str:
-        nonlocal calls
-        calls += 1
-        return "Panel 后端已启动。"
-
-    runtime.bind_serve_requester(serve)
-    try:
-        response = asyncio.run(runtime.dispatch_terminal("/serve"))
-        unknown = asyncio.run(runtime.dispatch_terminal("/status"))
-
-        assert response.text == "Panel 后端已启动。"
-        assert response.is_error is False
-        assert calls == 1
-        assert unknown.is_error is True
-        assert runtime.runtime_status()["tree_count"] == 0
-    finally:
-        asyncio.run(runtime.world.close())
 
 
 def test_project_headless_waits_only_for_shared_stop_event(configured_project: Path) -> None:
@@ -178,8 +170,84 @@ def test_project_headless_waits_only_for_shared_stop_event(configured_project: P
     output: list[str] = []
 
     runtime = asyncio.run(
-        run_project(load_config(configured_project), FakeModel(), headless=True, stop_event=stop, output=output.append)
+        run_runtime(load_config(configured_project), FakeModel(), headless=True, stop_event=stop, output=output.append)
     )
 
     assert runtime.runtime_status()["tree_count"] == 0
     assert output == []
+
+
+def test_headless_runs_contributed_non_interactive_front(configured_project: Path) -> None:
+    ran: list[str] = []
+
+    async def front(stop: asyncio.Event) -> None:
+        ran.append("front")
+        stop.set()
+
+    def bind(_context: object) -> Front:
+        return Front(front, interactive=False)
+
+    stop = asyncio.Event()
+    asyncio.run(
+        run_runtime(
+            load_config(configured_project),
+            FakeModel(),
+            headless=True,
+            stop_event=stop,
+            output=lambda _message: None,
+            contributions=((FRONT_BINDINGS, bind),),
+        )
+    )
+
+    assert ran == ["front"]
+
+
+def test_headless_skips_interactive_front(configured_project: Path) -> None:
+    ran: list[str] = []
+
+    async def front(stop: asyncio.Event) -> None:
+        ran.append("front")
+
+    def bind(_context: object) -> Front:
+        return Front(front, interactive=True)
+
+    stop = asyncio.Event()
+    stop.set()
+    asyncio.run(
+        run_runtime(
+            load_config(configured_project),
+            FakeModel(),
+            headless=True,
+            stop_event=stop,
+            output=lambda _message: None,
+            contributions=((FRONT_BINDINGS, bind),),
+        )
+    )
+
+    assert ran == []
+
+
+def test_contributed_front_reads_capabilities_by_declaration(configured_project: Path) -> None:
+    resolved: list[object] = []
+
+    def bind(context: FrontContext) -> Front:
+        resolved.append(context.get(WorldJournal))
+
+        async def front(stop: asyncio.Event) -> None:
+            stop.set()
+
+        return Front(front, interactive=False)
+
+    stop = asyncio.Event()
+    asyncio.run(
+        run_runtime(
+            load_config(configured_project),
+            FakeModel(),
+            headless=True,
+            stop_event=stop,
+            output=lambda _message: None,
+            contributions=((FRONT_BINDINGS, bind),),
+        )
+    )
+
+    assert len(resolved) == 1

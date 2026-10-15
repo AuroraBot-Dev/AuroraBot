@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from src.contracts import (
-    MCP_APP_DISCONNECTED,
-    MCP_CATALOG_CHANGED,
     MCP_EVENT_RECEIVED,
     EnvironmentEvent,
     ToolCall,
@@ -19,7 +17,6 @@ from src.contracts import (
     WorldCommit,
     WorldCommitInput,
     WorldFrontier,
-    mcp_scope,
 )
 from src.mcp import (
     McpAppSpec,
@@ -32,6 +29,8 @@ from src.mcp import (
     McpTransport,
     prepare_mcp,
 )
+from src.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
+from src.mcp.scopes import mcp_scope
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -242,8 +241,8 @@ def test_prepare_mcp_reads_every_page_then_publishes_one_frozen_catalog() -> Non
             assert client.lifecycle[:3] == ["bind", "list:None", "list:page-2"]
             assert client.events_active is False
             assert tuple(tool.definition.name for tool in runtime.tools) == (
-                "aur.mcp.org.example.clock.alpha",
-                "aur.mcp.org.example.clock.zeta",
+                "org.example.clock:tool/alpha",
+                "org.example.clock:tool/zeta",
             )
             snapshot = runtime.snapshot()
             assert snapshot.tool_ids == tuple(tool.definition.name for tool in runtime.tools)
@@ -251,8 +250,8 @@ def test_prepare_mcp_reads_every_page_then_publishes_one_frozen_catalog() -> Non
             assert snapshot.apps[0].state is McpAppState.READY
             assert snapshot.apps[0].negotiated_version == "2026-07-28"
             assert snapshot.apps[0].tool_ids == (
-                "aur.mcp.org.example.clock.zeta",
-                "aur.mcp.org.example.clock.alpha",
+                "org.example.clock:tool/zeta",
+                "org.example.clock:tool/alpha",
             )
             assert world.commits == []
             assert client.catalog_changed is not None and client.disconnected is not None
@@ -473,7 +472,7 @@ def test_catalog_change_only_marks_restart_and_keeps_the_frozen_tools() -> None:
 
             snapshot = runtime.snapshot()
             assert runtime.tools is frozen_tools
-            assert snapshot.tool_ids == ("aur.mcp.org.example.catalog.before",)
+            assert snapshot.tool_ids == ("org.example.catalog:tool/before",)
             assert snapshot.apps[0].state is McpAppState.READY
             assert snapshot.apps[0].restart_required is True
             assert snapshot.restart_required is True
@@ -482,7 +481,7 @@ def test_catalog_change_only_marks_restart_and_keeps_the_frozen_tools() -> None:
             assert len(changed) == 1
             assert changed[0].data == {
                 "restart_required": True,
-                "frozen_tool_ids": ["aur.mcp.org.example.catalog.before"],
+                "frozen_tool_ids": ["org.example.catalog:tool/before"],
             }
         finally:
             await runtime.close()
@@ -507,7 +506,7 @@ def test_disconnect_marks_app_unavailable_and_prevents_later_tool_calls() -> Non
             await runtime.activate()
             await client.emit_disconnected("transport lost")
             result = await runtime.tools[0].execute(
-                ToolCall("call-after-disconnect", "aur.mcp.org.example.offline.ping", {})
+                ToolCall("call-after-disconnect", "org.example.offline:tool/ping", {})
             )
 
             app = runtime.app(package)

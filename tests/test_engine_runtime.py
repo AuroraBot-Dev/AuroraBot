@@ -15,7 +15,6 @@ from src.contracts import (
     AgentTree,
     ChatMessage,
     EnvironmentEvent,
-    Model,
     ModelRequest,
     Tool,
     ToolCall,
@@ -27,7 +26,6 @@ from src.contracts import (
     TreeStatus,
     WorldCommit,
     WorldFrontier,
-    WorldJournal,
 )
 from src.engine import AgentTreeRunner
 from src.prompt import PromptAssembler, PromptCatalog
@@ -36,6 +34,9 @@ from src.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from src.contracts.pkgs.ai import Model
+    from src.contracts.pkgs.world import WorldJournal
 
 EXPECTED_DELEGATION_NODES = 2
 _SECOND_REQUEST = 2
@@ -47,6 +48,9 @@ class FakeModel:
     responses: list[ChatMessage]
     requests: list[ModelRequest] = field(default_factory=list)
 
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
+
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
         return self.responses.pop(0)
@@ -56,7 +60,7 @@ class EchoTool:
     @property
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
-            "aur.test.echo",
+            "test:tool/echo",
             "Echo one value.",
             {"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
         )
@@ -101,6 +105,9 @@ class EventInjectingModel:
     event: EnvironmentEvent
     requests: list[ModelRequest] = field(default_factory=list)
 
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
+
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
         if len(self.requests) == _SECOND_REQUEST:
@@ -108,11 +115,19 @@ class EventInjectingModel:
         return self.responses.pop(0)
 
 
+def _prompt_id(name: str) -> str:
+    return f"aurora:prompt/agent/{name}"
+
+
+def _agent_id(name: str) -> str:
+    return f"aurora:agent/{name}"
+
+
 def _assembler() -> PromptAssembler:
     return PromptAssembler(
         PromptCatalog(
             ("You are Aurora.",),
-            {"root": "Solve the whole task.", "worker": "Solve only the assigned part."},
+            {_prompt_id("root"): "Solve the whole task.", _prompt_id("worker"): "Solve only the assigned part."},
         )
     )
 
@@ -124,7 +139,14 @@ def _agent(
     tools: frozenset[str] = frozenset(),
     children: frozenset[str] = frozenset(),
 ) -> AgentDefinition:
-    return AgentDefinition(definition_id, f"{definition_id} Agent.", prompt, model, tools, children)
+    return AgentDefinition(
+        _agent_id(definition_id),
+        f"{definition_id} Agent.",
+        _prompt_id(prompt),
+        model,
+        tools,
+        frozenset(_agent_id(child) for child in children),
+    )
 
 
 def _runner(
@@ -172,11 +194,11 @@ def test_runner_publishes_each_immutable_tree_transition() -> None:
 def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
     model = FakeModel(
         [
-            ChatMessage.assistant(tool_calls=(ToolCall("echo-1", "aur.test.echo", {"value": "hello"}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("echo-1", "test:tool/echo", {"value": "hello"}),)),
             ChatMessage.assistant("finished"),
         ]
     )
-    root = _agent(model="tool-model", tools=frozenset({"aur.test.echo"}))
+    root = _agent(model="tool-model", tools=frozenset({"test:tool/echo"}))
     tree = AgentTree.create("tree", "root", root, "echo")
 
     result = asyncio.run(_runner(model, (root,), EchoTool()).run(tree))
@@ -189,14 +211,14 @@ def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
         "assistant",
     ]
     assert result.node("root").messages[2].content == "hello"
-    assert [tool.name for tool in model.requests[0].tools] == ["aur.test.echo"]
+    assert [tool.name for tool in model.requests[0].tools] == ["test:tool/echo"]
 
 
 def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
     delegate = ToolCall(
         "delegate-1",
         DELEGATE_TOOL,
-        {"agent": "worker", "instruction": "inspect this"},
+        {"agent": _agent_id("worker"), "instruction": "inspect this"},
     )
     model = FakeModel(
         [
@@ -219,7 +241,7 @@ def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
     assert len(result.nodes) == EXPECTED_DELEGATION_NODES
     child = result.nodes[1]
     assert child.parent_id == "root"
-    assert child.definition_id == "worker"
+    assert child.definition_id == _agent_id("worker")
     assert child.model == "small-model"
     assert child.status == AgentStatus.COMPLETED
     assert [request.model for request in model.requests] == ["large-model", "small-model", "large-model"]
@@ -231,11 +253,11 @@ def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
 def test_tool_failure_is_a_tool_message_not_a_tree_failure() -> None:
     model = FakeModel(
         [
-            ChatMessage.assistant(tool_calls=(ToolCall("missing-1", "aur.test.missing", {}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("missing-1", "test:tool/missing", {}),)),
             ChatMessage.assistant("recovered"),
         ]
     )
-    root = _agent(tools=frozenset({"aur.test.missing"}))
+    root = _agent(tools=frozenset({"test:tool/missing"}))
     tree = AgentTree.create("tree", "root", root, "try")
 
     result = asyncio.run(_runner(model, (root,)).run(tree))
@@ -244,7 +266,7 @@ def test_tool_failure_is_a_tool_message_not_a_tree_failure() -> None:
     tool_message = result.node("root").messages[2]
     assert tool_message.role == "tool"
     assert tool_message.is_error is True
-    assert tool_message.content == "未知工具：aur.test.missing"
+    assert tool_message.content == "未知工具：test:tool/missing"
 
 
 def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp_path: Path) -> None:
@@ -253,15 +275,15 @@ def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp
         tool = UnknownTool()
         model = FakeModel(
             [
-                ChatMessage.assistant(tool_calls=(ToolCall("unknown-1", "aur.test.echo", {"value": "效果无法确认"}),)),
+                ChatMessage.assistant(tool_calls=(ToolCall("unknown-1", "test:tool/echo", {"value": "效果无法确认"}),)),
                 ChatMessage.assistant("已知悉不确定结果"),
             ]
         )
-        root = _agent(tools=frozenset({"aur.test.echo"}))
+        root = _agent(tools=frozenset({"test:tool/echo"}))
         result = await _runner(model, (root,), tool, world=journal).run(
             AgentTree.create("tree", "root", root, "执行一次")
         )
-        commits = await journal.commits("aurora:tree:tree", 0, 100)
+        commits = await journal.commits("aurora:run/tree", 0, 100)
         await journal.close()
         return result, tool, commits
 
@@ -279,6 +301,9 @@ def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp
 
 def test_model_failure_becomes_tree_failure() -> None:
     class FailingModel:
+        def validate_endpoint(self, endpoint_id: str) -> None:
+            del endpoint_id
+
         async def complete(self, request: ModelRequest) -> ChatMessage:
             raise RuntimeError(request.model)
 
@@ -293,19 +318,19 @@ def test_model_failure_becomes_tree_failure() -> None:
 def test_tool_exception_and_hidden_tool_are_returned_to_model() -> None:
     model = FakeModel(
         [
-            ChatMessage.assistant(tool_calls=(ToolCall("fail", "aur.test.echo", {"error": "broken"}),)),
-            ChatMessage.assistant(tool_calls=(ToolCall("hidden", "aur.test.missing", {}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("fail", "test:tool/echo", {"error": "broken"}),)),
+            ChatMessage.assistant(tool_calls=(ToolCall("hidden", "test:tool/missing", {}),)),
             ChatMessage.assistant("recovered"),
         ]
     )
-    root = _agent(tools=frozenset({"aur.test.echo"}))
+    root = _agent(tools=frozenset({"test:tool/echo"}))
     tree = AgentTree.create("tree", "root", root, "hello")
 
     result = asyncio.run(_runner(model, (root,), FailingTool()).run(tree))
 
     tools = [message for message in result.node("root").messages if message.role == "tool"]
     assert tools[0].content == "工具执行失败：broken"
-    assert tools[1].content == "当前 Agent 不可见此工具：aur.test.missing"
+    assert tools[1].content == "当前 Agent 不可见此工具：test:tool/missing"
 
 
 def test_runner_rejects_invalid_limits() -> None:
@@ -347,7 +372,7 @@ def test_delegate_rejects_registered_agent_outside_parent_allowlist() -> None:
     model = FakeModel(
         [
             ChatMessage.assistant(
-                tool_calls=(ToolCall("delegate", DELEGATE_TOOL, {"agent": "worker", "instruction": "work"}),)
+                tool_calls=(ToolCall("delegate", DELEGATE_TOOL, {"agent": _agent_id("worker"), "instruction": "work"}),)
             ),
             ChatMessage.assistant("recovered"),
         ]
@@ -362,7 +387,7 @@ def test_delegate_rejects_registered_agent_outside_parent_allowlist() -> None:
     assert len(result.nodes) == 1
     assert result.node("root").messages[2] == ChatMessage.tool(
         "delegate",
-        "当前 Agent 不允许委派给：worker",
+        f"当前 Agent 不允许委派给：{_agent_id('worker')}",
         is_error=True,
     )
 
@@ -381,17 +406,17 @@ def test_world_delta_defers_a_tool_batch_then_the_next_batch_seals_its_frontier(
             [
                 ChatMessage.assistant(
                     tool_calls=(
-                        ToolCall("first-a", "aur.test.echo", {"value": "first-a"}),
-                        ToolCall("first-b", "aur.test.echo", {"value": "first-b"}),
+                        ToolCall("first-a", "test:tool/echo", {"value": "first-a"}),
+                        ToolCall("first-b", "test:tool/echo", {"value": "first-b"}),
                     )
                 ),
-                ChatMessage.assistant(tool_calls=(ToolCall("second", "aur.test.echo", {"value": "second"}),)),
+                ChatMessage.assistant(tool_calls=(ToolCall("second", "test:tool/echo", {"value": "second"}),)),
                 ChatMessage.assistant("完成"),
             ],
             journal,
             EnvironmentEvent("event-3", "qq", scope, "message", datetime.now(UTC), "第三条消息"),
         )
-        root = _agent(tools=frozenset({"aur.test.echo"}))
+        root = _agent(tools=frozenset({"test:tool/echo"}))
         tree = AgentTree.create("tree", "root", root, "开始", frontier)
         runner = _runner(model, (root,), tool, world=journal)
         result = await runner.run(tree)
@@ -465,7 +490,7 @@ def test_world_read_tool_returns_bodies_and_forest_indexes_the_tree(tmp_path: Pa
         tree = AgentTree.create("tree", "root", root, "看看世界", frontier)
         result = await _runner(model, (root,), read_tool, world=journal).run(tree)
         environment = await journal.delta(WorldFrontier(), frozenset({scope}))
-        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:tree:tree"}))
+        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:run/tree"}))
         forest = await journal.tree_index(10)
         await journal.close()
         return (
@@ -519,7 +544,7 @@ def test_world_read_tool_first_batch_defers_until_delta_is_disclosed(tmp_path: P
         tree = AgentTree.create("tree", "root", root, "看看世界", frontier)
         result = await _runner(model, (root,), read_tool, world=journal).run(tree)
         environment = await journal.delta(WorldFrontier(), frozenset({scope}))
-        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:tree:tree"}))
+        tree_scope = await journal.delta(WorldFrontier(), frozenset({"aurora:run/tree"}))
         await journal.close()
         return (
             result,

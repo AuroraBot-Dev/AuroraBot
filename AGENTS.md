@@ -15,34 +15,29 @@ AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一�
 
 ## Architecture authority
 
-- `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准。
-- `docs/architecture/` 是按包拆分的实施架构说明；`docs/architecture/packages/package-baseline.md` 是新增模块/包的最低扩展成本基线。
+文档按效力分层：
+
+- `docs/rfc/0300-design-philosophy.md` 是设计思想：只陈述不变量与判断准则，不含实现坐标（包名、文件名、字段名、类名、协议修订号、事件名等）；仅当设计思想、语义不变量或边界本身改变时才修订。
+- 其他 `docs/rfc/` 记录稳定的机制决策；`docs/architecture/` 记录现行实现结构，可随实现自由更新；`docs/reference/` 记录精确词汇与协议。
 - `docs/` 是独立文档仓库的子模块；RFC 先在 docs 仓库提交，再由主仓库更新子模块指针。
-- 影响 AgentTree、四角色消息、模型/工具端口、配置或组合根的改动，必须先更新 RFC。
+- 仅当设计思想、语义不变量或边界改变时才更新 RFC；实现结构、配置字段、事件名等改动只更新 architecture/reference 与测试，不动 RFC。
 - Python 源码和测试的注释与 docstring 不提具体 RFC 编号，直接说明局部不变量。
 
 ## Project layout
 
 ```text
-config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configuration 模块
+config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configs 模块
 config/         从模板复制的个人生效配置，始终由 Git 忽略
-aurora/         项目级入口、统一 Config/Composer、runtime 门面与项目工具
+aurora/         项目级入口与配置解析
 aurora/commands/       每个 CLI 命令一个自动发现模块
-aurora/configuration/  每个 TOML 一个解析模块，导出唯一 CONFIG_SPEC 后自动发现
-aurora/composer.py        组合根实现：类型化 InstanceKey/ContributionKey、CompositionContext、PackageSpec/ModuleSpec、
-                          ManagedAssembly 统一生命周期、AuroraAssembly
-aurora/contributions.py   项目级稳定多值贡献键（Tool 目录、TreeLauncher 绑定）
-aurora/composition/        每个 src 功能包一个同名代表模块，runtime 模块代表项目进程门面；PACKAGE_SPEC 按文件名自动发现
-aurora/runtime/        AuroraRuntime 进程门面：AgentTree 运行、Console 本地分派与进程生命周期
-aurora/utils/          项目级进程、环境、平台、TOML 与包发现工具
-ops/            只读 OperationSpec 观察目录与本地 Panel HTTP
-ops/ports.py    从 AuroraAssembly 派生实例化窄端口的 ops backend 端口层
-ops/views.py    ops 侧领域→JSON 投影（commit/tool/agent 等）
-ops/operations/       每个运行时包一个 JSON 化操作注册模块
-ops/panel/      Panel 会话、Token 与本地 HTTP 后端
-ops/parser.py   GET 操作参数校验与类型转换
+aurora/configs/        每个 TOML 一个解析模块，引用 src/<pkg> 的配置 DTO 并导出唯一 CONFIG_SPEC
+aurora/contracts/      配置与命令的公共值对象契约；并列模块只从这里导入声明类型
+aurora/configurator.py 按注册顺序合并 TOML 为只读 AuroraConfig；同时实现 src.contracts.Settings
+aurora/utils/          项目级进程、环境、日志、信号、平台、TOML 与包发现工具
 src/utils/      无上层依赖的日志、时间、文本与序列化工具
-src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
+src/contracts/  公共值对象、常量与贡献契约；跨包能力端口按提供方放在 src/contracts/pkgs/<pkg>.py
+src/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
+src/runtime/    Bot 进程门面与装配入口：发现源、门面工厂、终端命令分派与文本呈现
 src/agents/     不可变 AgentDefinition 目录与唯一解析
 src/tools/      工具注册表与框架内建工具
 src/prompt/     四角色 PromptAssembler
@@ -55,10 +50,10 @@ src/memory/     只读近期世界记忆快照
 src/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
 docs/           文档站点与唯一 RFC 子模块
-panel/          消费同一 ops 目录的独立前端子模块
+panel/          独立前端子模块（后端已移除，仅保留前端与工具链）
 scripts/        三平台安装脚本（linux/macos/windows）
 assets/         多语言文案（zh-CN/ja-JP/en-US）
-extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
+extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 忽略
 ```
 
 ## Core boundaries
@@ -76,42 +71,33 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
 - 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
 - `src/cadence` 只按世界提交请求唤起一棵 AgentTree；`src/memory` 只消费 `WorldReader` 生成 PromptAssembler 的显式输入；
   二者不得保存或解释另一套认知运行状态。
-- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线；`/help`、`/clear`、`/quit`、`/serve`
-  是不经过 ops 的本地命令。
-- 每个已开放观察域在 ops 中拥有窄 RuntimePort 和 GET method/path，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
-- ops 是持有 `AuroraAssembly` 的 backend：路由、监测端口与 JSON 投影全在 ops 侧（`ops/views.py`、`ops/ports.py`），
-  `OpsRuntime(assembly)` 从 assembly 派生只读实例化窄端口；不开放 Tree、世界写入、配置修改、Cadence 触发或进程控制。
-  Panel 后端只在 Console 显式执行 `/serve` 后于同一事件循环启动。aurora 不书写 ops 适配器或领域→JSON 投影。
+- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线；`/help`、`/clear`、`/quit`
+  是本地命令，不进入组合内核。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
-- `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
-  `commands` 按模块注册 CLI，`main.py` 只分派。
-- `aurora.runtime` 是唯一进程边界：`assembly.py` 只适配调用者注入参数，并从 `AuroraAssembly` 取得 runtime 工厂创建门面，
-  不维护协作者清单或替具体模块绑定端口；`composition/runtime.py` 声明门面实际依赖并捕获已构造实例，不保留可写组合上下文。
-  `core.py` 只持有实际使用的注入协作者（runner/agents/root/console/world）与通用 `assembly`/`config`，不 import 组合键或配置规格。
-  Cadence 在自身代表模块贡献 `TreeLauncher` 绑定函数；runtime 工厂消费绑定集合，创建门面后、生命周期激活前统一接线。
-- 命令、配置、组合与 ops 操作模块都按包目录自动发现：新增并列项只增加该能力自己的一个模块与配套 TOML/测试，不再修改目录入口、
-  Tool 聚合方或 runtime 分支；发现范围只含随 AuroraBot 安装的内部包，不做第三方 entry point 或 manifest。
-- 组合模块是 src 功能包的唯一代表：每个 `aurora/composition/<pkg>.py` 导出唯一 `PACKAGE_SPEC`，声明自身键、`provides`、
-  按键名的 `requires`、稳定贡献点 `contributes/consumes`、可选 `activation_after` 与异步 `prepare/activate/run/close` hook。
-  兄弟实例一律在构造期经 `CompositionContext.require_name` 取已构造实例，代表模块之间不允许运行时相互 import
-  （类型检查可 TYPE_CHECKING）。唯一实例键只有一个提供者；`aurora/contributions.py` 定义稳定的多值贡献键（首个为
-  Tool 目录），任意模块可追加同类型值，消费方自动依赖全部贡献者，零贡献合法。通用组合器校验键名、依赖与贡献并拓扑装配；
-  生命周期在 Assembly 冻结后按 `activation_after` 激活并启动后台 `run`，关闭时先取消任务再逆序执行 `close` 与 prepare
-  cleanup。合成产物 `AuroraAssembly` 同时冻结 `AuroraConfig` 与全部实例（含 runtime 工厂）；需要连接、后台循环或关闭的
-  能力只修改自己的代表模块。
+- `src/kernel` 是唯一组合机制：以契约类型为能力身份，`@module`/`ModuleSpec` 声明 `provides/requires/contributes/consumes`
+  与可选 `prepare/activate/run/close`；依赖解析、冲突裁决、可选跳过、环检测与拓扑装配都在内核，内核不认识具体 `src` 子包。
+- 每个 `src/<pkg>` 在 `module.py` 自描述唯一 `MODULE`；兄弟能力只经 `src.contracts` 的契约类型注入，模块之间不运行时相互
+  import（类型位置允许 TYPE_CHECKING）。
+- 发现源：随安装发布的 `src` 包、项目内被 Git 忽略的 `extensions/plugins/` 与 `aurorabot_plugin` entry point；同优先级冲突、
+  缺失依赖与依赖环都在启动前失败。
+- `aurora` 只负责 CLI 命令分发与配置解析：`configs` 引用 `src/<pkg>` 的配置 DTO，`configurator` 合并为只读 `AuroraConfig`
+  并实现 `src.contracts.Settings`；配置与命令的公共值对象放在 `aurora.contracts`，并列模块只从这里导入声明类型；
+  `aurora start` 只负责 `.env`、配置加载、进程日志与 SIGINT/SIGTERM，然后调用 `src.runtime`
+  的装配入口，不含组合逻辑。
+- `src/runtime` 是 Bot 进程门面与装配入口：发现模块声明、从冻结 `Assembly` 创建门面并接线 `TreeLauncher` 绑定；
+  终端命令分派与文本呈现各自独立。
+- 命令与配置模块按目录自动发现：新增并列项只增加该能力自己的配置模板、`configs`/`src/<pkg>/module.py`/测试。
 - 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
-- 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`agents/prompt/ai/console/cadence/memory/
-  mcp/world/engine/tools` 功能包运行时只依赖 contracts、utils 与自身，跨包能力只允许类型检查期（TYPE_CHECKING）引用，真正的能力
-  调用靠组合层注入的实例完成；`tools ← engine ← aurora`，`console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`。
-  ops 是持有 `AuroraAssembly` 的 backend：运行时只许 import `aurora.composer`/`aurora.config`/`aurora.configuration` 与
-  `src.contracts`/`src.utils`，src 功能包与 aurora.runtime/composition/views 不得进入 ops 运行时导入（类型位置允许
-  TYPE_CHECKING）。具体允许集由 `tests/test_dependency_boundaries.py` 固化。
+- 依赖方向：`src.utils` 与 `src.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/kernel ← src/runtime`；功能 src 包
+  运行时只依赖 contracts、utils 与自身，跨包能力只允许类型检查期（TYPE_CHECKING）引用，真正的能力调用靠内核注入的契约实例
+  完成；`src ← aurora`；`src` 不导入 `aurora`。依赖边界由 `tests/test_dependency_boundaries.py` 按约定校验：叶子包只依赖自身，
+  其他包可依赖 contracts 与 utils，机制包额外可依赖 kernel；新增能力包无需修改该测试。
 
 ## Current scope
 
-当前实现 ops（含本地 Panel HTTP 后端与 Token 登录）、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start 生命周期，
-以及 WorldJournal 持久化与 migration；panel 子模块是消费同一 ops 目录的 Vue 前端；
-不实现 Panel 附件与 WebSocket、自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
+当前实现 `src/kernel` 组合微内核、自描述 `src` 模块、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start
+生命周期，以及 WorldJournal 持久化与 migration；`panel/` 子模块仅保留前端，后端链路已移除。
+不实现自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
 引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 
 ## Language and text
@@ -127,5 +113,5 @@ extensions/     本机 MCP 应用运行时目录，始终由 Git 忽略
 - Ruff 行宽 120，LF，双引号；公开 API 有类型注解；值对象优先 frozen + slots dataclass。
 - 单个源码文件不超过 600 行, 数据模型定义（ORM/DataClass）如 SQLAlchemy 或 Pydantic 模型，如果只是字段声明（无逻辑），允许 1000+ 行，因为它们是声明式配置。
 - 不以 lint ignore 掩盖核心复杂度。
-- 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 与 Panel 会话的临时 SQLite 集成测试外不使用数据库。
+- 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 的临时 SQLite 集成测试外不使用数据库。
 - 提交前运行 `uv run aurora check --fix`。

@@ -16,6 +16,13 @@ EXIT_CONFIG_ERROR = 2
 EXIT_INTERRUPTED = 130
 
 
+def _resolve_command(command: Sequence[str]) -> list[str]:
+    executable = shutil.which(command[0])
+    if executable is None:
+        return list(command)
+    return [executable, *command[1:]]
+
+
 def run_process(command: Sequence[str], root: Path) -> int:
     sys.stdout.write(f"\n>>> {' '.join(command)}\n")
     sys.stdout.flush()
@@ -29,13 +36,6 @@ def run_process(command: Sequence[str], root: Path) -> int:
     if result.returncode != 0:
         sys.stderr.write(f"命令失败，退出码 {result.returncode}。\n")
     return result.returncode
-
-
-def _resolve_command(command: Sequence[str]) -> list[str]:
-    executable = shutil.which(command[0])
-    if executable is None:
-        return list(command)
-    return [executable, *command[1:]]
 
 
 def run_pnpm(script: str, passthrough: Sequence[str], directory: Path, label: str) -> int:

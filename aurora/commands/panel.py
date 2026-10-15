@@ -9,7 +9,7 @@ from aurora.utils.process import run_pnpm
 if TYPE_CHECKING:
     import argparse
 
-    from aurora.commander import CommandSpec
+    from aurora.contracts.command import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "panel",
@@ -22,4 +22,9 @@ COMMAND: CommandSpec = {
 
 
 def execute(arguments: argparse.Namespace) -> int:
-    return run_pnpm(str(arguments.script), arguments.passthrough, arguments.root / "panel", "panel")
+    return run_pnpm(
+        str(arguments.script),
+        arguments.passthrough,
+        arguments.root / "panel",
+        "panel",
+    )

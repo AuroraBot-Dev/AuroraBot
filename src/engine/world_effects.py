@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.contracts import (
+from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontier
+from src.engine.events import (
+    MODEL_COMPLETED,
+    MODEL_FAILED,
+    MODEL_REQUESTED,
     NODE_COMPLETED,
     NODE_FAILED,
     NODE_SPAWNED,
@@ -19,17 +23,23 @@ from src.contracts import (
     TREE_FAILED,
     TREE_STARTED,
     WORLD_DELTA_DELIVERED,
-    ToolScopes,
-    ToolStatus,
-    WorldCommitInput,
-    WorldFrontier,
-    tree_scope,
 )
+from src.engine.scopes import tree_scope
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from src.contracts import AgentNode, AgentTree, ToolCall, ToolOutput, WorldCommit, WorldDeltaPage, WorldJournal
+    from src.contracts import (
+        AgentNode,
+        AgentTree,
+        ChatMessage,
+        ModelRequest,
+        ToolCall,
+        ToolOutput,
+        WorldCommit,
+        WorldDeltaPage,
+    )
+    from src.contracts.pkgs.world import WorldJournal
 
 _TOOL_EVENT_KINDS = {
     ToolStatus.SUCCEEDED: TOOL_SUCCEEDED,
@@ -49,7 +59,7 @@ class EngineWorldEffects:
     def __init__(self, world: WorldJournal) -> None:
         self._world = world
 
-    async def append_commit(
+    async def _append(
         self,
         *,
         commit_id: str,
@@ -69,9 +79,9 @@ class EngineWorldEffects:
             data=data,
         )
 
-    async def record_tree_started(self, tree: AgentTree) -> None:
+    async def tree_started(self, tree: AgentTree) -> None:
         root = tree.node(tree.root_id)
-        await self.append_commit(
+        await self._append(
             commit_id=f"{tree.tree_id}:tree:started",
             kind=TREE_STARTED,
             summary="AgentTree 已启动",
@@ -85,8 +95,8 @@ class EngineWorldEffects:
             },
         )
 
-    async def record_tree_failed(self, tree: AgentTree, error: str, data: Mapping[str, object]) -> None:
-        await self.append_commit(
+    async def tree_failed(self, tree: AgentTree, error: str, data: Mapping[str, object]) -> None:
+        await self._append(
             commit_id=f"{tree.tree_id}:tree:failed",
             kind=TREE_FAILED,
             summary=f"AgentTree 失败：{error}",
@@ -95,7 +105,96 @@ class EngineWorldEffects:
             data={"tree_id": tree.tree_id, "error": error, **data},
         )
 
-    async def record_delta_delivered(
+    async def model_requested(self, tree: AgentTree, node: AgentNode, request: ModelRequest) -> None:
+        await self._append(
+            commit_id=f"{_model_prefix(tree, node)}:requested",
+            kind=MODEL_REQUESTED,
+            summary=f"请求模型：{node.model}",
+            scopes=frozenset({tree_scope(tree.tree_id)}),
+            based_on=node.observed_frontier,
+            data={
+                "tree_id": tree.tree_id,
+                "node_id": node.node_id,
+                "model": node.model,
+                "message_count": len(request.messages),
+                "tool_count": len(request.tools),
+            },
+        )
+
+    async def model_failed(self, tree: AgentTree, node: AgentNode, error: str) -> None:
+        await self._append(
+            commit_id=f"{_model_prefix(tree, node)}:failed",
+            kind=MODEL_FAILED,
+            summary=f"模型失败：{error}",
+            scopes=frozenset({tree_scope(tree.tree_id)}),
+            based_on=node.observed_frontier,
+            data={
+                "tree_id": tree.tree_id,
+                "node_id": node.node_id,
+                "model": node.model,
+                "error": error,
+            },
+        )
+
+    async def model_role_invalid(self, tree: AgentTree, node: AgentNode, role: str) -> None:
+        reason = "model must return an assistant message"
+        await self._append(
+            commit_id=f"{_model_prefix(tree, node)}:failed",
+            kind=MODEL_FAILED,
+            summary=f"模型失败：{reason}",
+            scopes=frozenset({tree_scope(tree.tree_id)}),
+            based_on=node.observed_frontier,
+            data={
+                "tree_id": tree.tree_id,
+                "node_id": node.node_id,
+                "model": node.model,
+                "role": role,
+            },
+        )
+
+    async def model_completed(self, tree: AgentTree, node: AgentNode, response: ChatMessage) -> WorldFrontier:
+        commit = await self._append(
+            commit_id=f"{_model_prefix(tree, node)}:completed",
+            kind=MODEL_COMPLETED,
+            summary=f"模型完成：{node.model}",
+            scopes=frozenset({tree_scope(tree.tree_id)}),
+            based_on=node.observed_frontier,
+            data={
+                "tree_id": tree.tree_id,
+                "node_id": node.node_id,
+                "model": node.model,
+                "content_length": len(response.content),
+                "tool_call_count": len(response.tool_calls),
+            },
+        )
+        return WorldFrontier(commit.scopes)
+
+    async def scope_rejected(
+        self,
+        tree: AgentTree,
+        node_id: str,
+        calls: tuple[ToolCall, ...],
+        error: Exception,
+    ) -> None:
+        based_on = tree.node(node_id).observed_frontier
+        for call in calls:
+            await self._append(
+                commit_id=f"{tree.tree_id}:{node_id}:{call.call_id}:scope-error",
+                kind=TOOL_FAILED,
+                summary=f"工具 scope 解析失败：{call.name}",
+                scopes=frozenset({tree_scope(tree.tree_id)}),
+                based_on=based_on,
+                data={
+                    "tree_id": tree.tree_id,
+                    "node_id": node_id,
+                    "tool_call_id": call.call_id,
+                    "tool": call.name,
+                    "error": str(error),
+                    "status": ToolStatus.FAILED.value,
+                },
+            )
+
+    async def delta_delivered(
         self,
         tree: AgentTree,
         node_id: str,
@@ -104,7 +203,7 @@ class EngineWorldEffects:
         commit_id: str,
         call_ids: tuple[str, ...] = (),
     ) -> None:
-        await self.append_commit(
+        await self._append(
             commit_id=commit_id,
             kind=WORLD_DELTA_DELIVERED,
             summary="世界更新已披露给 Agent",
@@ -119,8 +218,8 @@ class EngineWorldEffects:
             },
         )
 
-    async def record_node_spawned(self, tree: AgentTree, child: AgentNode) -> None:
-        await self.append_commit(
+    async def node_spawned(self, tree: AgentTree, child: AgentNode) -> None:
+        await self._append(
             commit_id=f"{tree.tree_id}:{child.node_id}:spawned",
             kind=NODE_SPAWNED,
             summary=f"委派创建节点：{child.definition_id}",
@@ -135,7 +234,7 @@ class EngineWorldEffects:
             },
         )
 
-    async def record_tool_output(
+    async def tool_output(
         self,
         tree: AgentTree,
         node_id: str,
@@ -143,7 +242,7 @@ class EngineWorldEffects:
         output: ToolOutput,
         scopes: ToolScopes,
     ) -> WorldFrontier:
-        commit = await self.append_commit(
+        commit = await self._append(
             commit_id=f"{tree.tree_id}:{node_id}:{call.call_id}:result",
             kind=_TOOL_EVENT_KINDS[output.status],
             summary=f"工具{_TOOL_SUMMARY_ACTIONS[output.status]}：{call.name}",
@@ -161,7 +260,7 @@ class EngineWorldEffects:
         )
         return WorldFrontier(commit.scopes)
 
-    async def record_tool_requests(
+    async def tool_requests(
         self,
         tree: AgentTree,
         node_id: str,
@@ -191,7 +290,7 @@ class EngineWorldEffects:
         )
         return frontier_for(commits)
 
-    async def record_root_completion(self, tree: AgentTree, node_id: str, result: str) -> WorldFrontier:
+    async def root_completion(self, tree: AgentTree, node_id: str, result: str) -> WorldFrontier:
         node = tree.node(node_id)
         scopes = publish_scopes(tree, ToolScopes())
         data = {"tree_id": tree.tree_id, "node_id": node_id, "content": result}
@@ -228,7 +327,7 @@ class EngineWorldEffects:
         )
         return frontier_for(commits)
 
-    async def record_delegation_completion(
+    async def delegation_completion(
         self,
         tree: AgentTree,
         child: AgentNode,
@@ -274,6 +373,11 @@ class EngineWorldEffects:
             )
         )
         return frontier_for(commits)
+
+
+def _model_prefix(tree: AgentTree, node: AgentNode) -> str:
+    step_index = sum(message.role == "assistant" for message in node.messages)
+    return f"{tree.tree_id}:{node.node_id}:model:{step_index}"
 
 
 def frontier_for(commits: tuple[WorldCommit, ...]) -> WorldFrontier:

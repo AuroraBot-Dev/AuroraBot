@@ -6,7 +6,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, insert, inspect, select, update
+from sqlalchemy import and_, func, insert, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from src.contracts import (
@@ -25,9 +25,10 @@ from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommi
 _logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from sqlalchemy import ColumnElement
     from sqlalchemy.engine import Connection, Row
 
 _MAX_BODY_PAGE = 256
@@ -135,7 +136,7 @@ class SqlAlchemyWorldJournal:
                 statement = select(WorldCommitRow).where(WorldCommitRow.commit_id == item.commit_id)
                 existing = await session.scalar(statement)
                 if existing is not None:
-                    commit = await self._commit(session, existing)
+                    (commit,) = await self._load_commits(session, (existing,))
                     if not _matches_input(commit, item):
                         raise ValueError(f"WorldCommit ID 已被不同内容使用：{item.commit_id}")
                     appended.append(commit)
@@ -233,7 +234,9 @@ class SqlAlchemyWorldJournal:
             raise ValueError("commit_id must not be empty")
         async with self._sessions() as session:
             row = await session.scalar(select(WorldCommitRow).where(WorldCommitRow.commit_id == commit_id))
-            return await self._commit(session, row) if row is not None else None
+            if row is None:
+                return None
+            return (await self._load_commits(session, (row,)))[0]
 
     async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]:
         """有界读取一个 scope 中序号大于 after 的提交正文，按写入顺序返回。"""
@@ -252,10 +255,7 @@ class SqlAlchemyWorldJournal:
                 .limit(limit)
             )
             rows = await session.scalars(statement)
-            result: list[WorldCommit] = []
-            for row in rows:
-                result.append(await self._commit(session, row))
-            return tuple(result)
+            return await self._load_commits(session, list(rows))
 
     async def stream(self, after: int, limit: int) -> WorldStreamPage:
         """按全局 insertion cursor 读取连续事件流。"""
@@ -273,9 +273,7 @@ class SqlAlchemyWorldJournal:
             rows = list(await session.scalars(statement))
             has_more = len(rows) > limit
             page_rows = rows[:limit]
-            commits: tuple[WorldCommit, ...] = ()
-            for row in page_rows:
-                commits = (*commits, await self._commit(session, row))
+            commits = await self._load_commits(session, page_rows)
             end = max((row.insertion_sequence for row in page_rows), default=after)
             return WorldStreamPage(after, end, commits, has_more)
 
@@ -300,51 +298,76 @@ class SqlAlchemyWorldJournal:
         return tuple(_tree_activity(row) for row in rows)
 
     async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage:
+        """按域分区读取前沿之后的一页提交；域过滤与排序全部由 SQLite 的索引完成。"""
         if not scopes:
             return WorldDeltaPage(start, start, (), False)
+        ordered = sorted(scopes)
         async with self._sessions() as session:
-            rows = await session.scalars(select(WorldCommitRow).order_by(WorldCommitRow.insertion_sequence))
-            commits: list[WorldCommit] = []
-            for row in rows:
-                commit = await self._commit(session, row)
-                if any(commit.scopes.get(scope, 0) > start.sequence(scope) for scope in scopes):
-                    commits.append(commit)
-                if len(commits) == self._page_size:
-                    break
-            end_positions = {
-                scope: max((*(item.scopes.get(scope, 0) for item in commits), start.sequence(scope)))
-                for scope in scopes
-            }
-            end = start.advance(end_positions)
-            more = False
-            if len(commits) == self._page_size:
-                for row in await session.scalars(select(WorldCommitRow).order_by(WorldCommitRow.insertion_sequence)):
-                    commit = await self._commit(session, row)
-                    if any(commit.scopes.get(scope, 0) > end.sequence(scope) for scope in scopes):
-                        more = True
-                        break
-            return WorldDeltaPage(start, end, tuple(commits), more)
+            statement = (
+                select(WorldCommitRow)
+                .join(WorldCommitScopeRow, WorldCommitScopeRow.commit_id == WorldCommitRow.commit_id)
+                .where(or_(*(_advances(scope, start.sequence(scope)) for scope in ordered)))
+                .order_by(WorldCommitRow.insertion_sequence)
+                .limit(self._page_size)
+                .distinct()
+            )
+            commits = await self._load_commits(session, list(await session.scalars(statement)))
+            end = start.advance(
+                {
+                    scope: max([*(commit.scopes.get(scope, 0) for commit in commits), start.sequence(scope)])
+                    for scope in scopes
+                }
+            )
+            more = len(commits) == self._page_size and await self._has_more(session, end, ordered)
+            return WorldDeltaPage(start, end, commits, more)
 
-    async def _commit(self, session: AsyncSession, row: WorldCommitRow) -> WorldCommit:
+    @staticmethod
+    async def _has_more(session: AsyncSession, end: WorldFrontier, scopes: Sequence[str]) -> bool:
+        """域分区上是否还有越过 end 的提交；只查分区索引，不载入正文。"""
+        statement = (
+            select(WorldCommitScopeRow.id)
+            .where(or_(*(_advances(scope, end.sequence(scope)) for scope in scopes)))
+            .limit(1)
+        )
+        return await session.scalar(statement) is not None
+
+    async def _load_commits(self, session: AsyncSession, rows: Sequence[WorldCommitRow]) -> tuple[WorldCommit, ...]:
+        """按页批量载入提交正文：分区序号与观察前沿各一次查询。"""
+        if not rows:
+            return ()
+        identifiers = [row.commit_id for row in rows]
+        scopes: dict[str, dict[str, int]] = {}
+        based_on: dict[str, dict[str, int]] = {}
         scope_rows = await session.scalars(
-            select(WorldCommitScopeRow).where(WorldCommitScopeRow.commit_id == row.commit_id)
+            select(WorldCommitScopeRow).where(WorldCommitScopeRow.commit_id.in_(identifiers))
         )
+        for item in scope_rows:
+            scopes.setdefault(item.commit_id, {})[item.scope] = item.sequence
         base_rows = await session.scalars(
-            select(WorldCommitBaseRow).where(WorldCommitBaseRow.commit_id == row.commit_id)
+            select(WorldCommitBaseRow).where(WorldCommitBaseRow.commit_id.in_(identifiers))
         )
-        scopes = {item.scope: item.sequence for item in scope_rows}
-        based_on = WorldFrontier({item.scope: item.sequence for item in base_rows})
-        occurred_at = row.occurred_at.replace(tzinfo=UTC) if row.occurred_at.tzinfo is None else row.occurred_at
-        return WorldCommit(
-            row.commit_id,
-            row.kind,
-            row.source,
-            row.summary,
-            occurred_at,
-            scopes,
-            based_on,
-            row.payload,
-        )
+        for item in base_rows:
+            based_on.setdefault(item.commit_id, {})[item.scope] = item.sequence
+        return tuple(_as_commit(row, scopes.get(row.commit_id, {}), based_on.get(row.commit_id, {})) for row in rows)
+
+
+def _advances(scope: str, sequence: int) -> ColumnElement[bool]:
+    """域分区中一条越过给定序号的提交；由 `(scope, sequence)` 索引直接回答。"""
+    return and_(WorldCommitScopeRow.scope == scope, WorldCommitScopeRow.sequence > sequence)
+
+
+def _as_commit(row: WorldCommitRow, scopes: dict[str, int], based_on: dict[str, int]) -> WorldCommit:
+    occurred_at = row.occurred_at.replace(tzinfo=UTC) if row.occurred_at.tzinfo is None else row.occurred_at
+    return WorldCommit(
+        row.commit_id,
+        row.kind,
+        row.source,
+        row.summary,
+        occurred_at,
+        scopes,
+        WorldFrontier(based_on),
+        row.payload,
+    )
 
 
 def _matches_input(commit: WorldCommit, item: WorldCommitInput) -> bool:

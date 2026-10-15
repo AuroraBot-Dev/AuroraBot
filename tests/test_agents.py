@@ -7,7 +7,14 @@ from src.contracts import AgentDefinition
 
 
 def _agent(definition_id: str, *, children: frozenset[str] = frozenset()) -> AgentDefinition:
-    return AgentDefinition(definition_id, f"{definition_id} Agent.", "shared", "model", frozenset(), children)
+    return AgentDefinition(
+        f"aurora:agent/{definition_id}",
+        f"{definition_id} Agent.",
+        "aurora:prompt/agent/shared",
+        "model",
+        frozenset(),
+        frozenset(f"aurora:agent/{child}" for child in children),
+    )
 
 
 def test_catalog_is_sorted_unique_and_resolves_definitions() -> None:
@@ -15,9 +22,12 @@ def test_catalog_is_sorted_unique_and_resolves_definitions() -> None:
     root = _agent("root", children=frozenset({"worker"}))
     catalog = AgentCatalog((worker, root))
 
-    assert [definition.definition_id for definition in catalog.definitions] == ["root", "worker"]
-    assert catalog.ids == frozenset({"root", "worker"})
-    assert catalog.get("worker") is worker
+    assert [definition.definition_id for definition in catalog.definitions] == [
+        "aurora:agent/root",
+        "aurora:agent/worker",
+    ]
+    assert catalog.ids == frozenset({"aurora:agent/root", "aurora:agent/worker"})
+    assert catalog.get("aurora:agent/worker") is worker
 
 
 def test_catalog_rejects_empty_duplicate_unknown_and_missing_child_definitions() -> None:
@@ -28,11 +38,13 @@ def test_catalog_rejects_empty_duplicate_unknown_and_missing_child_definitions()
     with pytest.raises(AgentDefinitionError, match="未知 child"):
         AgentCatalog((_agent("root", children=frozenset({"missing"})),))
     with pytest.raises(AgentDefinitionError, match="未知 Agent definition"):
-        AgentCatalog((_agent("root"),)).get("missing")
+        AgentCatalog((_agent("root"),)).get("aurora:agent/missing")
 
 
 def test_agent_definition_requires_complete_identity_and_non_empty_references() -> None:
     with pytest.raises(ValueError, match="requires definition_id"):
-        AgentDefinition("", "Agent.", "profile", "model", frozenset(), frozenset())
+        AgentDefinition("", "Agent.", "aurora:prompt/agent/profile", "model", frozenset(), frozenset())
     with pytest.raises(ValueError, match="must not be empty"):
-        AgentDefinition("root", "Agent.", "profile", "model", frozenset({""}), frozenset())
+        AgentDefinition(
+            "aurora:agent/root", "Agent.", "aurora:prompt/agent/profile", "model", frozenset({""}), frozenset()
+        )

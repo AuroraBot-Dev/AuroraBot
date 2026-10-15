@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.contracts import (
+    DELEGATE_TOOL,
     DelegationRequest,
     ToolCall,
     ToolDefinition,
@@ -15,9 +16,7 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    from src.agents import AgentCatalog
-
-DELEGATE_TOOL = "aur.agent.delegate"
+    from src.contracts.pkgs.agents import AgentCatalog
 
 
 class DelegateTool:

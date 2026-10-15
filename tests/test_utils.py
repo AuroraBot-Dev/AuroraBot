@@ -103,46 +103,55 @@ def test_logging_rejects_unknown_level() -> None:
 
 _TOOLS = frozenset(
     {
-        "aur.agent.delegate",
-        "aur.mcp.org.aurora.qq.qq_send_private_message",
-        "aur.mcp.org.aurora.qq.qq_send_group_message",
-        "aur.mcp.org.aurora.clock.get_current_time",
-        "aur.serv.world.read",
-        "aur.serv.world.trees",
+        "aurora:tool/delegate",
+        "org.aurora.qq:tool/qq_send_private_message",
+        "org.aurora.qq:tool/qq_send_group_message",
+        "org.aurora.clock:tool/get_current_time",
+        "aurora:tool/world_read",
+        "aurora:tool/world_trees",
     }
 )
 
 
 def test_resolve_names_applies_ordered_patterns_with_last_match_wins() -> None:
-    assert resolve_names(_TOOLS, ("aur.agent.delegate", "aur.serv.world.*")) == frozenset(
-        {"aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"}
+    assert resolve_names(_TOOLS, ("aurora:tool/delegate", "aurora:tool/world_*")) == frozenset(
+        {"aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_trees"}
     )
-    assert resolve_names(_TOOLS, ("aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")) == (
-        frozenset({"aur.mcp.org.aurora.qq.qq_send_private_message"})
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/*", "!org.aurora.qq:tool/qq_send_group_message")) == (
+        frozenset({"org.aurora.qq:tool/qq_send_private_message"})
     )
-    assert resolve_names(_TOOLS, ("!aur.mcp.org.aurora.qq.*",)) == frozenset()
-    assert resolve_names(_TOOLS, ("aur.**",)) == _TOOLS
-    assert resolve_names(_TOOLS, ("aur.mcp.org.aurora.qq.qq_send_*_message",)) == frozenset(
-        {"aur.mcp.org.aurora.qq.qq_send_private_message", "aur.mcp.org.aurora.qq.qq_send_group_message"}
+    assert resolve_names(_TOOLS, ("!org.aurora.qq:tool/*",)) == frozenset()
+    # 没有 `:` 的模式按命名空间前缀理解，`**` 跨全部层级
+    assert resolve_names(_TOOLS, ("org.aurora.**",)) == frozenset(
+        {
+            "org.aurora.qq:tool/qq_send_private_message",
+            "org.aurora.qq:tool/qq_send_group_message",
+            "org.aurora.clock:tool/get_current_time",
+        }
     )
-    assert resolve_names(_TOOLS, ("aur.mcp.org.aurora.qq.qq_send_?rivate_message",)) == frozenset(
-        {"aur.mcp.org.aurora.qq.qq_send_private_message"}
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/qq_send_*_message",)) == frozenset(
+        {"org.aurora.qq:tool/qq_send_private_message", "org.aurora.qq:tool/qq_send_group_message"}
     )
-    assert resolve_names(_TOOLS, ("aur.mcp.org.aurora.qq.qq_send_[gp]rivate_message",)) == frozenset(
-        {"aur.mcp.org.aurora.qq.qq_send_private_message"}
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/qq_send_?rivate_message",)) == frozenset(
+        {"org.aurora.qq:tool/qq_send_private_message"}
     )
-    assert resolve_names(_TOOLS, ("aur.mcp.**.read",)) == frozenset()
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/qq_send_[gp]rivate_message",)) == frozenset(
+        {"org.aurora.qq:tool/qq_send_private_message"}
+    )
+    assert resolve_names(_TOOLS, ("*:tool/*",)) == frozenset(
+        {"aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_trees"}
+    )
     assert resolve_names(_TOOLS, ()) == frozenset()
 
 
 def test_resolve_names_rejects_unmatched_exact_and_warns_unmatched_wildcards() -> None:
     with pytest.raises(NamePatternError, match="引用了未注册名称"):
-        resolve_names(_TOOLS, ("aur.test.missing",), label="agent-x")
+        resolve_names(_TOOLS, ("test:tool/missing",), label="agent-x")
 
     captured: list[str] = []
     sink_id = _loguru_logger.add(captured.append, format="{message}")
     try:
-        resolved = resolve_names(_TOOLS, ("aur.mcp.org.aurora.wx.*",))
+        resolved = resolve_names(_TOOLS, ("org.aurora.wx:tool/*",))
     finally:
         _loguru_logger.remove(sink_id)
 
@@ -151,8 +160,8 @@ def test_resolve_names_rejects_unmatched_exact_and_warns_unmatched_wildcards() -
 
 
 def test_pattern_matches_and_rejects_invalid_patterns() -> None:
-    assert pattern_matches("aur.**", "aur.a.b.c")
-    assert not pattern_matches("aur.serv.world.*", "aur.serv.world.read.deep")
+    assert pattern_matches("org.aurora.**", "org.aurora.qq:tool/qq_send_private_message")
+    assert not pattern_matches("aurora:tool/*", "aurora:tool/room/read")
 
     with pytest.raises(NamePatternError, match="不能为空"):
         resolve_names(_TOOLS, ("",))
@@ -164,6 +173,21 @@ def test_pattern_matches_and_rejects_invalid_patterns() -> None:
         resolve_names(_TOOLS, ("aur.[z-a].*",))
     with pytest.raises(NamePatternError, match="嵌套"):
         resolve_names(_TOOLS, ("aur.[[a].*",))
+
+
+def test_wildcard_reach_follows_the_id_level_syntax() -> None:
+    """`*` 不跨哪一层，取决于它落在哪一段——这正是 ID 的三段式语法。"""
+    # path 段只以 `/` 分层，`.` 是普通字符：单星够得到带点的工具名
+    assert pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/send.message")
+    assert pattern_matches("aurora:tool/world_*", "aurora:tool/world_read.deep")
+    # 但 `/` 仍是层级：单星只走一层，双星才跨
+    assert not pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/room/send")
+    assert pattern_matches("org.aurora.qq:tool/**", "org.aurora.qq:tool/room/send")
+    # 命名空间段仍以 `.` 分层：单星只够到一层命名空间
+    assert not pattern_matches("*:tool/*", "org.aurora.qq:tool/send")
+    assert pattern_matches("**:tool/*", "org.aurora.qq:tool/send")
+    # 第三方业务 scope 是自由文本，其中的 `:` 落在 path 段而不是层级
+    assert pattern_matches("qq:*", "qq:group:123")
 
 
 def test_platform_detection_maps_known_and_unknown_systems(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -191,6 +215,10 @@ def test_render_table_builds_bordered_columns_and_validates_shape() -> None:
     )
     assert render_table(("A",), [("1",)], banner=("Title",)) == (
         "+-------+\n| Title |\n+-------+\n| A     |\n|=======|\n| 1     |\n+-------+"
+    )
+
+    assert render_table(("项目", "内容"), [("系统", "windows")]) == (
+        "+------+---------+\n| 项目 | 内容    |\n|======+=========|\n| 系统 | windows |\n+------+---------+"
     )
 
     with pytest.raises(ValueError, match="列数"):

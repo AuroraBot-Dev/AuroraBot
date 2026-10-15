@@ -1,0 +1,28 @@
+# 标签集合：把一组 ID 或模式命名化，供其它配置引用。
+#
+# 引用写法为 #<namespace>:<path>，与 ID 语法一致；标签可以引用其它标签。
+# 展开时保留书写顺序，因此「最后匹配者胜」的语义与直接写模式完全相同：
+#   values = ["org.example:tool/*", "!org.example:tool/skip"]  等价于在引用处按顺序写这两条。
+# 模式的语言跟随 ID 语法：`:` 之前用 `.` 分层（命名空间），之后用 `/` 分层（path）。
+# 单星 `*` 只在本层内匹配，双星 `**` 跨全部层级；path 段里的 `.` 是普通字符，
+# 所以 `org.aurora.qq:tool/*` 够得到 `tool/send.message`。
+[[tag]]
+name = "aurora:tool/qq-send"
+values = [
+    "org.aurora.qq:tool/qq_send_*message",
+    "!org.aurora.qq:tool/qq_send_forward_message",
+]
+
+[[tag]]
+name = "aurora:tool/qq-read"
+values = [
+    "org.aurora.qq:tool/qq_get_*",
+    "org.aurora.qq:tool/qq_mark_*",
+]
+
+[[tag]]
+name = "aurora:tool/qq"
+values = [
+    "#aurora:tool/qq-send",
+    "#aurora:tool/qq-read",
+]

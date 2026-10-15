@@ -1,6 +1,6 @@
 [cadence]
 enabled = true
-agent = "builtin.triage"
+agent = "aurora:agent/triage"
 evoke_every = 1
 tick_seconds = 3600
 poll_seconds = 0.25

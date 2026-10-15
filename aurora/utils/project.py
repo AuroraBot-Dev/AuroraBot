@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import tomllib
-from typing import TYPE_CHECKING
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as distribution_version
+from pathlib import Path
 
-if TYPE_CHECKING:
-    from pathlib import Path
+_DISTRIBUTION_NAME = "AuroraBot"
 
 
 def get_project_version(root: Path) -> str | None:
@@ -17,6 +18,14 @@ def get_project_version(root: Path) -> str | None:
             return str(tomllib.load(stream)["project"]["version"])
     except (OSError, KeyError, TypeError, tomllib.TOMLDecodeError):
         return None
+
+
+def get_running_version() -> str:
+    """返回当前安装的 AuroraBot 版本；未安装时回退源码树中的 pyproject。"""
+    try:
+        return distribution_version(_DISTRIBUTION_NAME)
+    except PackageNotFoundError:
+        return get_project_version(Path(__file__).resolve().parents[2]) or "未知"
 
 
 def get_git_revision(root: Path) -> str | None:

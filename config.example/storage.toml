@@ -9,11 +9,6 @@ description = "WorldJournal 持久化目录"
 path = "%DATA_ROOT%/world/"
 
 [[storage]]
-name = "ops"
-description = "ops 与本地 Panel 数据目录"
-path = "%DATA_ROOT%/ops/"
-
-[[storage]]
 name = "logs"
 description = "轮转文件日志目录"
 path = "%DATA_ROOT%/logs/"

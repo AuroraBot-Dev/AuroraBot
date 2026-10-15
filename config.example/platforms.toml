@@ -1,27 +1,9 @@
 [[platform]]
-id = "builtin.console"
+id = "aurora:platform/console"
 enabled = true
 logging = "INFO"
 
 [[platform]]
-id = "builtin.panel"
-enabled = true
-logging = "INFO"
-
-[platform.config]
-host = "127.0.0.1"
-port = 8765
-frontend_url = "http://localhost:8766"
-allowed_origins = [
-  "http://localhost:8764",
-  "http://127.0.0.1:8764",
-  "http://localhost:8766",
-  "http://127.0.0.1:8766",
-]
-open_browser = false
-session_ttl_seconds = 604800
-
-[[platform]]
-id = "builtin.mcp"
+id = "aurora:platform/mcp"
 enabled = true
 logging = "INFO"

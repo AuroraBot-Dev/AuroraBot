@@ -60,6 +60,7 @@ class McpAppSpec:
     url: str | None = None
     environment: Mapping[str, str] = field(default_factory=dict, repr=False)
     auth_token: str | None = field(default=None, repr=False)
+    scopes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         self._validate_common()
@@ -173,7 +174,7 @@ class McpInboundEvent:
 
 @dataclass(frozen=True, slots=True)
 class McpAppSnapshot:
-    """ops 可安全公开的单个 App 状态，不含凭据。"""
+    """可安全公开的单个 App 状态，不含凭据。"""
 
     package: str
     configured_enabled: bool

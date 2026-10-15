@@ -7,22 +7,20 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from src.contracts import (
-    MCP_EVENT_RECEIVED,
-    TreeLauncher,
-    TreeLaunchRequest,
-    WorldCommit,
-    WorldFrontier,
-    WorldReader,
-    WorldWriter,
-)
+from src.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldCommit, WorldFrontier
+from src.contracts.identity import world_scope
 from src.utils import get_logger
+
+if TYPE_CHECKING:
+    from src.contracts.pkgs.runtime import TreeLauncher
+    from src.contracts.pkgs.world import WorldReader, WorldWriter
 
 _logger = get_logger(__name__)
 
-CADENCE_SCOPE = "aurora:cadence"
+CADENCE_SCOPE = f"{world_scope('aurora')}/cadence"
 CADENCE_TICK = "cadence.tick"
 CADENCE_TREE_PLANNED = "cadence.tree_planned"
 CADENCE_TREE_FAILED = "cadence.tree_failed"
@@ -33,7 +31,6 @@ DEFAULT_POLL_INTERVAL = 0.25
 DEFAULT_PAGE_SIZE = 1
 DEFAULT_LAUNCH_MESSAGE = "节律唤起：请初筛最近时间窗口内的世界活动。"
 _REACTIVE_MESSAGE_PREFIX = "即时会话事件：可以只生成回复正文，也可以用发送工具按人类节奏分多条发送。"
-_MCP_SCOPE_PREFIX = "aurora:mcp:"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,12 +56,6 @@ class ReactiveRule:
         if commit.data.get("event_kind") != self.event_kind:
             return False
         return not self.contains_any or any(term in commit.summary for term in self.contains_any)
-
-
-DEFAULT_REACTIVE_RULES: tuple[ReactiveRule, ...] = (
-    ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "builtin.chat"),
-    ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "builtin.chat", ("小光", "夜曦光")),
-)
 
 
 class Cadence:
@@ -248,10 +239,21 @@ class Cadence:
 
 
 def _business_frontier(commit: WorldCommit) -> WorldFrontier:
-    positions = {
-        scope: sequence for scope, sequence in commit.scopes.items() if not scope.startswith(_MCP_SCOPE_PREFIX)
-    }
+    """剔除触发本次唤起的事件来源自己拥有的域，让被唤起的那棵树仍能看见它。
+
+    MCP 事件的 source 形如 ``mcp:<package>``，它自己拥有的域是 ``<package>:world``；
+    这里不再靠硬编码前缀切分，而是按域命名规则现算。
+    """
+    own = _source_owned_scope(commit.source)
+    positions = {scope: sequence for scope, sequence in commit.scopes.items() if scope != own}
     return WorldFrontier(positions or commit.scopes)
+
+
+def _source_owned_scope(source: str) -> str | None:
+    prefix, separator, package = source.partition(":")
+    if separator and prefix == "mcp" and package:
+        return world_scope(package)
+    return None
 
 
 def _reactive_message(commit: WorldCommit) -> str:

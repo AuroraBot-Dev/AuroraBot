@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from src.contracts import (
+    WORLD_READ_TOOL,
+    WORLD_SCOPES_TOOL,
+    WORLD_TREES_TOOL,
+    ScopeCatalog,
+    ScopeKind,
     ToolCall,
     ToolDefinition,
     ToolOutput,
@@ -12,11 +18,10 @@ from src.contracts import (
     ToolScopes,
     ToolStatus,
     WorldCommit,
-    WorldJournal,
 )
 
-WORLD_READ_TOOL = "aur.serv.world.read"
-WORLD_TREES_TOOL = "aur.serv.world.trees"
+if TYPE_CHECKING:
+    from src.contracts.pkgs.world import WorldJournal
 
 _MAX_READ_LIMIT = 100
 _MAX_TREES_LIMIT = 256
@@ -36,7 +41,7 @@ class WorldReadTool:
                 "properties": {
                     "scope": {
                         "type": "string",
-                        "description": "要读取的世界 scope，例如 aurora:tree:<tree_id> 或环境 scope。",
+                        "description": "要读取的世界 scope，例如 aurora:run/<tree_id> 或环境 scope。",
                     },
                     "after": {
                         "type": "integer",
@@ -150,6 +155,68 @@ class WorldTreesTool:
                             "last_seen": item.last_seen.isoformat(),
                         }
                         for item in activity
+                    ],
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+
+
+class WorldScopesTool:
+    """列出域注册表：Bot 的世界由哪些分区组成、谁拥有它们、各是什么。"""
+
+    def __init__(self, catalog: ScopeCatalog) -> None:
+        self._catalog = catalog
+        self._definition = ToolDefinition(
+            WORLD_SCOPES_TOOL,
+            "列出 Bot 世界的域注册表：每个域的所有者、种类与说明。"
+            "用它了解自己的世界由哪些分区组成，再决定观察或读取哪一个域。"
+            "kind=run 的域只是引擎运转台账，不是可观察的世界资源。",
+            {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": [kind.value for kind in ScopeKind],
+                        "description": "只列出某一类域；省略时列出全部。",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        )
+
+    @property
+    def definition(self) -> ToolDefinition:
+        return self._definition
+
+    def resolve_scopes(self, call: ToolCall) -> ToolScopes:
+        _ = call
+        return ToolScopes()
+
+    async def execute(self, call: ToolCall) -> ToolResult:
+        raw = call.arguments.get("kind")
+        if raw is None:
+            catalog = self._catalog
+        elif isinstance(raw, str) and raw in {kind.value for kind in ScopeKind}:
+            catalog = ScopeCatalog(self._catalog.of_kind(ScopeKind(raw)))
+        else:
+            kinds = "、".join(kind.value for kind in ScopeKind)
+            return ToolOutput(f"域种类无效：kind 必须是 {kinds} 之一", status=ToolStatus.FAILED)
+        declarations = catalog.declarations
+        return ToolOutput(
+            json.dumps(
+                {
+                    "count": len(declarations),
+                    "owners": sorted(catalog.owners),
+                    "scopes": [
+                        {
+                            "pattern": item.pattern,
+                            "owner": item.owner,
+                            "kind": item.kind.value,
+                            "description": item.description,
+                        }
+                        for item in declarations
                     ],
                 },
                 ensure_ascii=False,

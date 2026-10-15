@@ -11,14 +11,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from src.contracts import (
-    MCP_APP_DISCONNECTED,
-    MCP_CATALOG_CHANGED,
-    MCP_EVENT_RECEIVED,
-    WorldFrontier,
-    mcp_scope,
-)
+from src.contracts import MCP_EVENT_RECEIVED, WorldFrontier
 from src.mcp.client import McpClientFactory, McpClientPort, SdkMcpClientFactory
+from src.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
 from src.mcp.models import (
     McpAppSnapshot,
     McpAppSpec,
@@ -27,7 +22,7 @@ from src.mcp.models import (
     McpRuntimeSnapshot,
     McpStartupError,
 )
-from src.mcp.scopes import validate_mcp_scope
+from src.mcp.scopes import mcp_scope, validate_mcp_scope
 from src.mcp.tool import McpTool, bind_mcp_tool
 from src.utils import get_logger
 
@@ -36,11 +31,12 @@ _logger = get_logger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from src.contracts import Tool, WorldWriter
+    from src.contracts import Tool
+    from src.contracts.pkgs.world import WorldWriter
     from src.mcp.tool import McpToolBinding
 
 _EVENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,159}")
-_RESERVED_EVENT_PREFIXES = ("engine.", "tool.", "output.", "cadence.", "ops.", "mcp.")
+_RESERVED_EVENT_PREFIXES = ("engine.", "tool.", "output.", "cadence.", "mcp.")
 _CONTROL_CHARACTER_LIMIT = 32
 _MAX_TOOL_PAGES = 1024
 _MAX_TOOLS = 10_000
@@ -317,7 +313,7 @@ async def _prepare_app(
         async with asyncio.timeout(record.spec.timeout_seconds):
             client = await factory.open(
                 record.spec,
-                lambda event: _append_inbound_event(world, package, event),
+                lambda event: _append_inbound_event(world, record.spec, event),
             )
             record.client = client
             record.negotiated_version = client.protocol_version
@@ -361,6 +357,7 @@ async def _discover_bindings(record: _AppRecord) -> tuple[McpToolBinding, ...]:
     visited: set[str] = set()
     bindings: list[McpToolBinding] = []
     raw_names: set[str] = set()
+    by_tool_id: dict[str, str] = {}
     page_count = 0
     while True:
         page_count += 1
@@ -371,7 +368,16 @@ async def _discover_bindings(record: _AppRecord) -> tuple[McpToolBinding, ...]:
             if remote.name in raw_names:
                 raise ValueError(f"MCP App 工具名称重复：{record.spec.package}/{remote.name}")
             raw_names.add(remote.name)
-            bindings.append(bind_mcp_tool(record.spec.package, remote))
+            binding = bind_mcp_tool(record.spec.package, remote)
+            tool_id = binding.definition.name
+            owner = by_tool_id.get(tool_id)
+            if owner is not None and owner != remote.name:
+                raise ValueError(
+                    f"MCP App 两个工具名收敛到同一个本地 ID：{record.spec.package}/{owner} 与 "
+                    f"{record.spec.package}/{remote.name} -> {tool_id}"
+                )
+            by_tool_id[tool_id] = remote.name
+            bindings.append(binding)
             if len(bindings) > _MAX_TOOLS:
                 raise ValueError(f"MCP App 工具数量过多：{record.spec.package}")
         cursor = page.next_cursor
@@ -383,7 +389,8 @@ async def _discover_bindings(record: _AppRecord) -> tuple[McpToolBinding, ...]:
     return tuple(bindings)
 
 
-async def _append_inbound_event(world: WorldWriter, package: str, event: McpInboundEvent) -> None:
+async def _append_inbound_event(world: WorldWriter, spec: McpAppSpec, event: McpInboundEvent) -> None:
+    package = spec.package
     if _EVENT_ID.fullmatch(event.event_id) is None:
         raise ValueError("MCP 业务事件 event_id 非法")
     try:
@@ -404,12 +411,17 @@ async def _append_inbound_event(world: WorldWriter, package: str, event: McpInbo
         kind=MCP_EVENT_RECEIVED,
         source=f"mcp:{package}",
         summary=event.summary,
-        scopes=frozenset({event.scope, mcp_scope(package)}),
+        scopes=frozenset({event.scope, *app_owned_scopes(spec)}),
         based_on=WorldFrontier(),
         data={"event_id": event.event_id, "event_kind": event.kind, "data": dict(event.data)},
         occurred_at=event.occurred_at.astimezone(UTC),
     )
     _logger.debug("MCP 业务事件已接收 package={} event_id={} kind={}", package, event.event_id, event.kind)
+
+
+def app_owned_scopes(spec: McpAppSpec) -> tuple[str, ...]:
+    """返回该 App 向世界发布事实时归属的域；未声明时退回它自己命名空间下的标准域。"""
+    return spec.scopes or (mcp_scope(spec.package),)
 
 
 def _reject_duplicate_packages(records: tuple[_AppRecord, ...]) -> None:
@@ -418,4 +430,4 @@ def _reject_duplicate_packages(records: tuple[_AppRecord, ...]) -> None:
         raise ValueError("MCP App package 不能重复")
 
 
-__all__ = ["McpRuntime", "prepare_mcp"]
+__all__ = ["McpRuntime", "app_owned_scopes", "prepare_mcp"]

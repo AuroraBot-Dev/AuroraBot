@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from src.contracts.identity import AGENT_PROMPT_PATH_PREFIX, matches_species
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -24,5 +26,8 @@ class PromptCatalog:
             raise ValueError("PromptCatalog requires at least one system fragment")
         if not agent_prompts:
             raise ValueError("PromptCatalog requires at least one Agent prompt")
+        unknown = sorted(key for key in agent_prompts if not matches_species(key, AGENT_PROMPT_PATH_PREFIX))
+        if unknown:
+            raise ValueError(f"Agent prompt ID 必须形如 <namespace>:prompt/agent/<name>：{', '.join(unknown)}")
         object.__setattr__(self, "system", system)
         object.__setattr__(self, "agent_prompts", MappingProxyType(agent_prompts))

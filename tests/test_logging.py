@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import assemble_runtime, load_config
-from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.configuration.storage import STORAGE_CONFIG, resolve_directory
-from aurora.runtime.support import configure_project_logging
+from aurora import load_config
+from aurora.configs.runtime import RUNTIME_CONFIG
+from aurora.configs.storage import STORAGE_CONFIG, resolve_directory
+from aurora.utils.logging import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
+from src.runtime import assemble_runtime
 from src.tools import ToolRegistry
 from src.utils import configure_console_logging
 
@@ -21,9 +22,9 @@ if TYPE_CHECKING:
 
 _ROOT = Path(__file__).parents[1]
 _LOGGED_RUNTIME_MODULES = (
-    "aurora/composer.py",
-    "aurora/runtime/core.py",
-    "aurora/runtime/run.py",
+    "src/kernel/compose.py",
+    "src/runtime/core.py",
+    "src/runtime/run.py",
     "src/agents/catalog.py",
     "src/ai/gateway.py",
     "src/cadence/cadence.py",
@@ -42,6 +43,9 @@ _LOGGED_RUNTIME_MODULES = (
 class _Model:
     result: str
 
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        del endpoint_id
+
     async def complete(self, request: ModelRequest) -> ChatMessage:
         del request
         return ChatMessage.assistant(self.result)
@@ -49,7 +53,7 @@ class _Model:
 
 class _FailingTool:
     definition = ToolDefinition(
-        "aur.test.logging",
+        "test:tool/logging",
         "日志边界测试工具",
         {"type": "object", "properties": {"token": {"type": "string"}}},
     )
@@ -59,21 +63,21 @@ class _FailingTool:
         raise RuntimeError("secret-in-exception")
 
 
-def test_logging_configuration_is_typed_and_project_relative(configured_project: Path) -> None:
+def test_logging_config_is_typed_and_project_relative(configured_project: Path) -> None:
     runtime = load_config(configured_project).get(RUNTIME_CONFIG)
 
     assert runtime.log_level == "INFO"
-    storage = load_config(configured_project).get(STORAGE_CONFIG)
+    storage = load_config(configured_project).get(STORAGE_CONFIG).entries
     assert resolve_directory(storage, "logs") == "data/logs"
 
 
 @pytest.mark.parametrize("level", ("TRACE", "warn", "WARN", ""))
-def test_logging_configuration_rejects_invalid_levels(
+def test_logging_config_rejects_invalid_levels(
     configured_project: Path,
     level: str,
 ) -> None:
     (configured_project / "config" / "runtime.toml").write_text(
-        (f'[runtime]\nprofile = "prod"\nnode_id = "root"\nagent = "builtin.root"\nlog_level = "{level}"\n'),
+        (f'[runtime]\nprofile = "prod"\nnode_id = "root"\nagent = "aurora:agent/root"\nlog_level = "{level}"\n'),
         encoding="utf-8",
     )
 
@@ -84,15 +88,15 @@ def test_logging_configuration_rejects_invalid_levels(
 def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_details(
     configured_project: Path,
 ) -> None:
-    configuration = load_config(configured_project)
-    configure_project_logging(configuration)
+    config = load_config(configured_project)
+    configure_project_logging(config)
     configure_console_logging(enabled=False)
-    runtime = assemble_runtime(configuration, _Model("secret-in-model-result"))
+    runtime = assemble_runtime(config, _Model("secret-in-model-result"))
 
     async def scenario() -> None:
         await asyncio.wait_for(runtime.run("secret-in-message", tree_id="logging-tree"), timeout=5)
         result = await ToolRegistry((_FailingTool(),)).execute(
-            ToolCall("logging-call", "aur.test.logging", {"token": "secret-in-arguments"})
+            ToolCall("logging-call", "test:tool/logging", {"token": "secret-in-arguments"})
         )
         assert isinstance(result, ToolOutput)
         assert result.is_error
@@ -101,13 +105,13 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     asyncio.run(scenario())
     logfile = (
         configured_project
-        / resolve_directory(load_config(configured_project).get(STORAGE_CONFIG), "logs")
+        / resolve_directory(load_config(configured_project).get(STORAGE_CONFIG).entries, "logs")
         / "aurora.log"
     )
     content = logfile.read_text(encoding="utf-8")
 
     assert "AgentTree 开始 tree_id=logging-tree" in content
-    assert "工具调用失败 tool=aur.test.logging call_id=logging-call error_type=RuntimeError" in content
+    assert "工具调用失败 tool=test:tool/logging call_id=logging-call error_type=RuntimeError" in content
     assert "secret-in-message" not in content
     assert "secret-in-model-result" not in content
     assert "secret-in-arguments" not in content

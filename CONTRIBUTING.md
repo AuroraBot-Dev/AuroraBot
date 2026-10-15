@@ -57,14 +57,14 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 
 小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、英文和日文入口。
 
-当前运行时、包边界和进程组合以唯一设计基准 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) 为准。
+当前运行时、包边界和进程组合以设计思想 [RFC 0300](docs/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](docs/architecture/)。
 
 ## 保持闭环完整
 
 贡献代码时，请守住几条能让 AuroraBot 可靠工作的边界：
 
 - 模型决定、运行时执行：assistant 只能回复或请求工具，真实外部效果只由 Tool 契约执行，普通模型文本不是效果；
-- 委派就是树操作：`aur.agent.delegate` 是普通可见 Tool，由 engine 解释并创建 child，child 完成后以 tool
+- 委派就是树操作：`aurora:tool/delegate` 是普通可见 Tool，由 engine 解释并创建 child，child 完成后以 tool
   结果恢复 parent；
 - engine 管理完整热路径，具体模型、工具与记忆实现通过 contracts Port 注入，节点不直接调用模型网关或平台客户端；
 - 结构配置继续使用 TOML，密钥继续只来自环境变量；

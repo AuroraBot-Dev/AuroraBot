@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -11,20 +10,6 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from src.contracts.model import ToolCall
-    from src.contracts.world import ToolScopes
-
-_AUR_TOOL_ID = re.compile(r"aur(?:\.[a-z][a-z0-9_-]*){2,}")
-_MCP_TOOL_ID = re.compile(r"aur\.mcp\.[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\.[A-Za-z][A-Za-z0-9_-]*")
-
-
-def is_valid_tool_id(name: str) -> bool:
-    """框架命名保持小写；MCP raw name 段属于第三方外部事实，允许大写风格。"""
-    return _AUR_TOOL_ID.fullmatch(name) is not None or _MCP_TOOL_ID.fullmatch(name) is not None
-
-
-def is_valid_mcp_tool_id(name: str) -> bool:
-    """校验 ``aur.mcp.<package>.<raw_name>``：package 段小写，raw name 段允许大写。"""
-    return _MCP_TOOL_ID.fullmatch(name) is not None
 
 
 class ToolStatus(StrEnum):
@@ -83,6 +68,14 @@ class DelegationRequest:
 
 type ToolResult = ToolOutput | DelegationRequest
 
+DELEGATE_TOOL = "aurora:tool/delegate"
+WAIT_TOOL = "aurora:tool/wait"
+WORLD_READ_TOOL = "aurora:tool/world_read"
+WORLD_SCOPES_TOOL = "aurora:tool/world_scopes"
+WORLD_TREES_TOOL = "aurora:tool/world_trees"
+
+BUILTIN_TOOL_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL})
+
 
 class Tool(Protocol):
     """工具域中可注册、可路由的统一效果端口。"""
@@ -91,12 +84,6 @@ class Tool(Protocol):
     def definition(self) -> ToolDefinition: ...
 
     async def execute(self, call: ToolCall) -> ToolResult: ...
-
-
-class ScopedTool(Tool, Protocol):
-    """可声明观察、发布世界域的可选 Tool 扩展契约。"""
-
-    def resolve_scopes(self, call: ToolCall) -> ToolScopes: ...
 
 
 def _freeze_json(value: object) -> object:

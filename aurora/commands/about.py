@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING
 
 from aurora.utils.platform import detect_os
 from aurora.utils.project import get_git_revision, get_project_version
+from aurora.utils.table import render_table
 
 if TYPE_CHECKING:
     import argparse
     from pathlib import Path
 
-    from aurora.commander import CommandSpec
+    from aurora.contracts.command import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "about",
@@ -31,24 +32,30 @@ ABOUT = """\
 它为 Agent 提供可以"生活"的运行环境. 她有自己的人格、状态, 可
 以在需要时与人和外部世界建立联系.  在她的世界里, 所有的消息都
 有一个"媒介": 你发给她的消息也必须先成为一个应用通知喔~
-
-文档站:     https://www.aurorabot.org/
-项目地址:   https://www.github.com/AuroraBot-Dev/AuroraBot
-爱发电:     https://ifdian.net/a/aurorabot
 """
 
+LINKS: tuple[tuple[str, str], ...] = (
+    ("文档站", "https://www.aurorabot.org/"),
+    ("项目地址", "https://www.github.com/AuroraBot-Dev/AuroraBot"),
+    ("爱发电", "https://ifdian.net/a/aurorabot"),
+)
 
-def _info_line(root: Path) -> str:
+
+def _info_rows(root: Path) -> list[tuple[str, str]]:
+    rows = [("系统", detect_os())]
     version = get_project_version(root)
-    revision = get_git_revision(root)
-    parts = [f"系统：{detect_os()}"]
     if version is not None:
-        parts.append(f"版本：{version}")
+        rows.append(("版本", version))
+    revision = get_git_revision(root)
     if revision is not None:
-        parts.append(f"提交：{revision}")
-    return " | ".join(parts)
+        rows.append(("提交", revision))
+    return rows
 
 
 def execute(arguments: argparse.Namespace) -> int:
-    sys.stdout.write(LOGO + "\n" + _info_line(arguments.root) + "\n\n" + ABOUT + "\n")
+    table = render_table(
+        ("项目", "内容"),
+        [*_info_rows(arguments.root), *LINKS],
+    )
+    sys.stdout.write(f"{LOGO}\n{ABOUT}\n{table}\n")
     return 0

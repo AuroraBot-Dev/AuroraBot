@@ -56,14 +56,14 @@ AuroraBot は、長期的に影響を与える設計上の決定を RFC に記�
 
 小さなバグ修正、テストの追加、文言の改善、公共の意味を変えない refactor は直接提出できます。公開ドキュメントを変更した場合は、中国語・英語・日本語の入口をまとめて更新してください。
 
-現在の runtime、パッケージ境界、プロセス構成は、唯一の設計基準 [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md) に従います。
+現在の runtime、パッケージ境界、プロセス構成は、設計思想 [RFC 0300](docs/rfc/0300-design-philosophy.md) を最上位の制約とし、現行の実装構造は [アーキテクチャ説明](docs/architecture/) にあります。
 
 ## 閉じたループを保つ
 
 コードに貢献するときは、AuroraBot を確実に動かすための境界を守ってください：
 
 - モデルが判断し、runtime が実行します。assistant は応答するか tool を要求するだけです。実際の外部 effect は Tool contract を通してのみ実行され、通常の model text は effect ではありません。
-- 委任は tree 操作です。`aur.agent.delegate` は普通に見える Tool で、engine が解釈して child を生成し、child の完了後は tool 結果で parent を再開します。
+- 委任は tree 操作です。`aurora:tool/delegate` は普通に見える Tool で、engine が解釈して child を生成し、child の完了後は tool 結果で parent を再開します。
 - engine が完全な hot path を管理し、具体的な model・tool・memory の実装は contracts Port から注入されます。node が model gateway や platform client を直接呼び出してはいけません。
 - 構造設定は引き続き TOML を使い、キーは環境変数だけから読み取ります。
 - 共有ログは `src.utils.logging.get_logger()` 経由で取得し、完全な prompt、モデル応答、機密 payload は記録しません。

@@ -5,27 +5,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.contracts import (
-    MODEL_COMPLETED,
-    MODEL_FAILED,
-    MODEL_REQUESTED,
-    TOOL_FAILED,
     AgentNode,
     AgentTree,
     ChatMessage,
     DelegationRequest,
-    MemoryReader,
-    Model,
     ModelRequest,
     ToolCall,
     ToolOutput,
     ToolScopes,
     ToolStatus,
     TreeStatus,
-    WorldCommit,
-    WorldFrontier,
-    WorldJournal,
-    tree_scope,
 )
+from src.engine.effects import NullEffectSink
 from src.engine.world_effects import EngineWorldEffects, render_delta
 from src.utils import get_logger
 
@@ -34,10 +25,14 @@ _logger = get_logger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.agents import AgentCatalog
     from src.contracts import ToolDefinition
-    from src.prompt import PromptAssembler
-    from src.tools import ToolRegistry
+    from src.contracts.pkgs.agents import AgentCatalog
+    from src.contracts.pkgs.ai import Model
+    from src.contracts.pkgs.memory import MemoryReader
+    from src.contracts.pkgs.prompt import PromptAssembler
+    from src.contracts.pkgs.tools import ToolRegistry
+    from src.contracts.pkgs.world import WorldJournal
+    from src.engine.effects import EngineEffectSink
 
 
 class AgentTreeRunner:
@@ -63,7 +58,7 @@ class AgentTreeRunner:
         self._agents = agents
         self._tools = tools
         self._world = world
-        self._world_effects = EngineWorldEffects(world) if world is not None else None
+        self._effects: EngineEffectSink = EngineWorldEffects(world) if world is not None else NullEffectSink()
         self._memory = memory
         self._max_depth = max_depth
         self._max_nodes = max_nodes
@@ -71,7 +66,7 @@ class AgentTreeRunner:
 
     @property
     def tool_definitions(self) -> tuple[ToolDefinition, ...]:
-        """暴露当前不可变工具目录给 ops 监测；核心循环不依赖此属性。"""
+        """暴露当前不可变工具目录供只读观察；核心循环不依赖此属性。"""
         return self._tools.definitions
 
     async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:
@@ -79,8 +74,7 @@ class AgentTreeRunner:
         self._validate_definitions(tree)
         if self._world is not None:
             await self._world.initialize()
-            assert self._world_effects is not None
-            await self._world_effects.record_tree_started(tree)
+        await self._effects.tree_started(tree)
         current = self._publish(tree, observer)
         for _ in range(self._max_steps):
             if current.status != TreeStatus.RUNNING:
@@ -101,13 +95,11 @@ class AgentTreeRunner:
                 )
                 continue
             current = await self._model_step(current, node, observer)
-        if self._world is not None:
-            assert self._world_effects is not None
-            await self._world_effects.record_tree_failed(
-                current,
-                "step limit exceeded",
-                {"tree_id": current.tree_id, "max_steps": self._max_steps},
-            )
+        await self._effects.tree_failed(
+            current,
+            "step limit exceeded",
+            {"tree_id": current.tree_id, "max_steps": self._max_steps},
+        )
         _logger.error("AgentTree 超出步数限制 tree_id={} max_steps={}", current.tree_id, self._max_steps)
         raise RuntimeError(f"AgentTree exceeded step limit {self._max_steps}")
 
@@ -134,7 +126,6 @@ class AgentTreeRunner:
         observer: Callable[[AgentTree], None] | None,
     ) -> AgentTree:
         step_index = sum(message.role == "assistant" for message in node.messages)
-        prefix = f"{tree.tree_id}:{node.node_id}:model:{step_index}"
         memory_scopes = frozenset(node.observed_frontier.positions) or None
         memory = await self._memory.recall(scopes=memory_scopes) if self._memory is not None else None
         request = ModelRequest(
@@ -149,22 +140,7 @@ class AgentTreeRunner:
             node.model,
             step_index,
         )
-        if self._world is not None:
-            assert self._world_effects is not None
-            await self._world_effects.append_commit(
-                commit_id=f"{prefix}:requested",
-                kind=MODEL_REQUESTED,
-                summary=f"请求模型：{node.model}",
-                scopes=frozenset({tree_scope(tree.tree_id)}),
-                based_on=node.observed_frontier,
-                data={
-                    "tree_id": tree.tree_id,
-                    "node_id": node.node_id,
-                    "model": node.model,
-                    "message_count": len(request.messages),
-                    "tool_count": len(request.tools),
-                },
-            )
+        await self._effects.model_requested(tree, node, request)
         try:
             response = await self._model.complete(request)
         except Exception as error:
@@ -175,67 +151,21 @@ class AgentTreeRunner:
                 node.model,
                 type(error).__name__,
             )
-            if self._world is not None:
-                assert self._world_effects is not None
-                await self._world_effects.append_commit(
-                    commit_id=f"{prefix}:failed",
-                    kind=MODEL_FAILED,
-                    summary=f"模型失败：{error}",
-                    scopes=frozenset({tree_scope(tree.tree_id)}),
-                    based_on=node.observed_frontier,
-                    data={
-                        "tree_id": tree.tree_id,
-                        "node_id": node.node_id,
-                        "model": node.model,
-                        "error": str(error),
-                    },
-                )
+            await self._effects.model_failed(tree, node, str(error))
             return await self._fail_node(tree, node.node_id, f"model failed: {error}")
         if response.role != "assistant":
             reason = "model must return an assistant message"
             _logger.error("模型响应角色无效 tree_id={} node_id={} role={}", tree.tree_id, node.node_id, response.role)
-            if self._world is not None:
-                assert self._world_effects is not None
-                await self._world_effects.append_commit(
-                    commit_id=f"{prefix}:failed",
-                    kind=MODEL_FAILED,
-                    summary=f"模型失败：{reason}",
-                    scopes=frozenset({tree_scope(tree.tree_id)}),
-                    based_on=node.observed_frontier,
-                    data={
-                        "tree_id": tree.tree_id,
-                        "node_id": node.node_id,
-                        "model": node.model,
-                        "role": response.role,
-                    },
-                )
+            await self._effects.model_role_invalid(tree, node, response.role)
             return await self._fail_node(tree, node.node_id, reason)
-        model_commit: WorldCommit | None = None
-        if self._world is not None:
-            assert self._world_effects is not None
-            model_commit = await self._world_effects.append_commit(
-                commit_id=f"{prefix}:completed",
-                kind=MODEL_COMPLETED,
-                summary=f"模型完成：{node.model}",
-                scopes=frozenset({tree_scope(tree.tree_id)}),
-                based_on=node.observed_frontier,
-                data={
-                    "tree_id": tree.tree_id,
-                    "node_id": node.node_id,
-                    "model": node.model,
-                    "content_length": len(response.content),
-                    "tool_call_count": len(response.tool_calls),
-                },
-            )
-        tree = tree.append(node.node_id, response)
+        frontier = await self._effects.model_completed(tree, node, response)
+        tree = tree.append(node.node_id, response).advance_frontier(node.node_id, frontier)
         _logger.debug(
             "模型步骤完成 tree_id={} node_id={} tool_call_count={}",
             tree.tree_id,
             node.node_id,
             len(response.tool_calls),
         )
-        if model_commit is not None:
-            tree = tree.advance_frontier(node.node_id, WorldFrontier(model_commit.scopes))
         tree = self._publish(tree, observer)
         if response.tool_calls:
             return tree
@@ -254,8 +184,7 @@ class AgentTreeRunner:
                 observe_scopes = frozenset(set(node.observed_frontier.positions) | tool_scopes)
                 delta = await self._world.delta(node.observed_frontier, observe_scopes)
                 if delta.commits:
-                    assert self._world_effects is not None
-                    await self._world_effects.record_delta_delivered(
+                    await self._effects.delta_delivered(
                         tree,
                         node_id,
                         delta,
@@ -269,8 +198,7 @@ class AgentTreeRunner:
                         delta.end,
                         reviewed=not delta.has_more,
                     )
-            assert self._world_effects is not None
-            requested = await self._world_effects.record_tool_requests(tree, node_id, calls, scopes)
+            requested = await self._effects.tool_requests(tree, node_id, calls, scopes)
             tree = tree.advance_frontier(node_id, requested).seal_calls(
                 node_id,
                 tuple(call.call_id for call in calls),
@@ -285,24 +213,7 @@ class AgentTreeRunner:
         calls: tuple[ToolCall, ...],
         error: Exception,
     ) -> AgentTree:
-        if self._world is not None:
-            assert self._world_effects is not None
-            for call in calls:
-                await self._world_effects.append_commit(
-                    commit_id=f"{tree.tree_id}:{node_id}:{call.call_id}:scope-error",
-                    kind=TOOL_FAILED,
-                    summary=f"工具 scope 解析失败：{call.name}",
-                    scopes=frozenset({tree_scope(tree.tree_id)}),
-                    based_on=tree.node(node_id).observed_frontier,
-                    data={
-                        "tree_id": tree.tree_id,
-                        "node_id": node_id,
-                        "tool_call_id": call.call_id,
-                        "tool": call.name,
-                        "error": str(error),
-                        "status": ToolStatus.FAILED.value,
-                    },
-                )
+        await self._effects.scope_rejected(tree, node_id, calls, error)
         rejected = tree
         for call in calls:
             rejected = rejected.append(
@@ -357,10 +268,8 @@ class AgentTreeRunner:
             node_id,
             request.agent,
         )
-        if self._world is not None:
-            assert self._world_effects is not None
-            child = spawned.node(f"{tree.tree_id}:{len(tree.nodes)}")
-            await self._world_effects.record_node_spawned(tree, child)
+        child = spawned.node(f"{tree.tree_id}:{len(tree.nodes)}")
+        await self._effects.node_spawned(tree, child)
         return spawned, None
 
     async def _append_tool_output(
@@ -370,12 +279,10 @@ class AgentTreeRunner:
         call: ToolCall,
         output: ToolOutput,
     ) -> AgentTree:
-        if self._world is not None:
-            assert self._world_effects is not None
-            node = tree.node(node_id)
-            scopes = node.sealed_call_scopes.get(call.call_id, ToolScopes())
-            frontier = await self._world_effects.record_tool_output(tree, node_id, call, output, scopes)
-            tree = tree.advance_frontier(node_id, frontier)
+        node = tree.node(node_id)
+        scopes = node.sealed_call_scopes.get(call.call_id, ToolScopes())
+        frontier = await self._effects.tool_output(tree, node_id, call, output, scopes)
+        tree = tree.advance_frontier(node_id, frontier)
         return tree.append(node_id, ChatMessage.tool(call.call_id, output.content, is_error=output.is_error))
 
     async def _complete_node(self, tree: AgentTree, node_id: str, result: str) -> AgentTree:
@@ -383,8 +290,7 @@ class AgentTreeRunner:
         if self._world is not None and not node.reviewed_world_update:
             delta = await self._world.delta(node.observed_frontier, frozenset(node.observed_frontier.positions))
             if delta.commits:
-                assert self._world_effects is not None
-                await self._world_effects.record_delta_delivered(
+                await self._effects.delta_delivered(
                     tree,
                     node_id,
                     delta,
@@ -399,22 +305,18 @@ class AgentTreeRunner:
         if node.parent_id is not None:
             completed = tree.complete(node_id, result)
             return await self._record_delegation_completion(completed, node, result, is_error=False)
-        if self._world is not None:
-            assert self._world_effects is not None
-            frontier = await self._world_effects.record_root_completion(tree, node_id, result)
-            tree = tree.advance_frontier(node_id, frontier)
+        frontier = await self._effects.root_completion(tree, node_id, result)
+        tree = tree.advance_frontier(node_id, frontier)
         return tree.complete(node_id, result)
 
     async def _fail_node(self, tree: AgentTree, node_id: str, error: str) -> AgentTree:
         node = tree.node(node_id)
         if node.parent_id is None:
-            if self._world is not None:
-                assert self._world_effects is not None
-                await self._world_effects.record_tree_failed(
-                    tree,
-                    error,
-                    {"tree_id": tree.tree_id, "node_id": node_id},
-                )
+            await self._effects.tree_failed(
+                tree,
+                error,
+                {"tree_id": tree.tree_id, "node_id": node_id},
+            )
             return tree.fail(node_id, error)
         failed = tree.fail(node_id, error)
         return await self._record_delegation_completion(failed, node, error, is_error=True)
@@ -427,8 +329,6 @@ class AgentTreeRunner:
         *,
         is_error: bool,
     ) -> AgentTree:
-        if self._world is None:
-            return tree
-        assert self._world_effects is not None and child.parent_id is not None
-        frontier = await self._world_effects.record_delegation_completion(tree, child, content, is_error=is_error)
+        assert child.parent_id is not None
+        frontier = await self._effects.delegation_completion(tree, child, content, is_error=is_error)
         return tree.advance_frontier(child.parent_id, frontier)

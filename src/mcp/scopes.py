@@ -5,12 +5,38 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.identity import WORLD_SCOPE_PATTERN, WORLD_SUB_SCOPE_PATTERN, world_scope
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 _PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _MAX_SCOPE_LENGTH = 256
 _CONTROL_CHARACTER_LIMIT = 32
+
+#: 扩展域在域注册表里的声明形状：命名空间即所有者，package 在发现前不可知。
+SCOPE_PATTERN = WORLD_SCOPE_PATTERN
+SUB_SCOPE_PATTERN = WORLD_SUB_SCOPE_PATTERN
+
+
+def mcp_scope(package: str) -> str:
+    """返回一个 MCP App 拥有的世界域：``<package>:world``。"""
+    return world_scope(package)
+
+
+def owned_scope_prefix(package: str) -> str:
+    """返回一个 MCP App 拥有的域前缀；扩展只能在自己名下声明域。"""
+    return mcp_scope(package)
+
+
+def owns_scope(package: str, scope: str) -> bool:
+    """判断一个域是否落在该 App 自己的命名空间下。
+
+    前缀必须整体成段匹配，避免 ``org.aurora.qq`` 误认领 ``org.aurora.qqq``；
+    子域用 ``/`` 继续细分（``<package>:world/room/1``）。
+    """
+    prefix = owned_scope_prefix(package)
+    return scope == prefix or scope.startswith(f"{prefix}/")
 
 
 def validate_mcp_scope(scope: str) -> str:
@@ -67,4 +93,11 @@ def render_scope_template(template: str, arguments: Mapping[str, Any]) -> str:
     return validate_mcp_scope("".join(pieces))
 
 
-__all__ = ["render_scope_template", "validate_mcp_scope", "validate_scope_template"]
+__all__ = [
+    "mcp_scope",
+    "owned_scope_prefix",
+    "owns_scope",
+    "render_scope_template",
+    "validate_mcp_scope",
+    "validate_scope_template",
+]

@@ -123,9 +123,9 @@ class FakeLauncher:
             raise self.failure
         self.requests.append(request)
         definition = AgentDefinition(
-            definition_id=request.agent or "builtin.root",
+            definition_id=request.agent or "aurora:agent/root",
             description="cadence 测试原型",
-            prompt_id="builtin.root",
+            prompt_id="aurora:prompt/agent/root",
             model="fake",
             tools=frozenset(),
             children=frozenset(),
@@ -147,12 +147,12 @@ def test_cadence_evokes_one_tree_per_five_counted_commits() -> None:
     reader = FakeReader([_page(0, tuple(_commit(f"c-{i}", MCP_EVENT_RECEIVED) for i in range(1, 6)))])
     writer = FakeWriter()
     launcher = FakeLauncher()
-    cadence = Cadence(reader, writer, launcher=launcher, agent="builtin.triage", poll_interval=0.01)
+    cadence = Cadence(reader, writer, launcher=launcher, agent="aurora:agent/triage", poll_interval=0.01)
 
     asyncio.run(cadence.evaluate_once())
 
     assert [request.tree_id for request in launcher.requests] == [launcher.requests[0].tree_id]
-    assert launcher.requests[0].agent == "builtin.triage"
+    assert launcher.requests[0].agent == "aurora:agent/triage"
     assert cadence.status()["pending"] == 0
     assert [item.kind for item in writer.inputs] == ["cadence.tree_planned"]
 
@@ -211,7 +211,7 @@ def test_reactive_rule_launches_immediately_with_business_frontier_and_exact_cur
         "mcp:org.aurora.qq",
         "QQ 私聊收到 Aurore 的消息: 在吗",
         datetime.now(UTC),
-        {"qq:private:42": 7, "aurora:mcp:org.aurora.qq": 11},
+        {"qq:private:42": 7, "org.aurora.qq:world": 11},
         WorldFrontier(),
         {"event_kind": "qq.message.private", "data": {"user_id": "42"}},
     )
@@ -222,14 +222,14 @@ def test_reactive_rule_launches_immediately_with_business_frontier_and_exact_cur
         reader,
         writer,
         launcher=launcher,
-        reactive_rules=(ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "builtin.chat"),),
+        reactive_rules=(ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/chat"),),
     )
 
     asyncio.run(cadence.evaluate_once())
 
     assert len(launcher.requests) == 1
     request = launcher.requests[0]
-    assert request.agent == "builtin.chat"
+    assert request.agent == "aurora:agent/chat"
     assert request.caused_by == commit.commit_id
     assert request.frontier == WorldFrontier({"qq:private:42": 7})
     assert "在吗" in request.message
@@ -259,7 +259,9 @@ def test_group_reactive_rule_requires_configured_name() -> None:
         FakeWriter(),
         launcher=launcher,
         evoke_every=5,
-        reactive_rules=(ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "builtin.chat", ("小光", "夜曦光")),),
+        reactive_rules=(
+            ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "aurora:agent/chat", ("小光", "夜曦光")),
+        ),
     )
 
     asyncio.run(cadence.evaluate_once())

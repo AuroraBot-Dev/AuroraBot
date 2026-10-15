@@ -56,14 +56,14 @@ AuroraBot records design decisions with long-term impact in RFCs. Update or add 
 
 Small bug fixes, test additions, copy improvements, and refactors that do not change public semantics can be submitted directly. When public documentation changes, update the Chinese, English, and Japanese entry points together.
 
-The current runtime, package boundaries, and process composition follow the single design baseline [RFC 0300](docs/rfc/0300-unified-architecture-and-contracts.md).
+The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](docs/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](docs/architecture/).
 
 ## Keep the loop closed
 
 While contributing code, hold the boundaries that keep AuroraBot reliable:
 
 - The model decides, the runtime executes: assistant may only reply or request tools; real external effects run only through the Tool contract, and plain model text is not an effect.
-- Delegation is a tree operation: `aur.agent.delegate` is an ordinary visible Tool that the engine interprets to spawn a child; when the child finishes, the parent resumes with the tool result.
+- Delegation is a tree operation: `aurora:tool/delegate` is an ordinary visible Tool that the engine interprets to spawn a child; when the child finishes, the parent resumes with the tool result.
 - The engine owns the full hot path; concrete model, tool, and memory implementations are injected through contracts Ports, and nodes never call the model gateway or platform clients directly.
 - Structural configuration stays in TOML; keys keep coming only from environment variables.
 - Shared logging goes through `src.utils.logging.get_logger()` and never records full prompts, model replies, or sensitive payloads.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -91,9 +91,3 @@ class ModelRequest:
         names = [tool.name for tool in self.tools]
         if len(names) != len(set(names)):
             raise ValueError("ModelRequest Tool names must be unique")
-
-
-class Model(Protocol):
-    """AgentTree 循环使用的唯一模型端口。"""
-
-    async def complete(self, request: ModelRequest) -> ChatMessage: ...

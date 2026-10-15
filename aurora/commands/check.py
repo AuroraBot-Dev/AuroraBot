@@ -10,7 +10,7 @@ from aurora.utils.process import EXIT_FAILURE, run_process
 if TYPE_CHECKING:
     import argparse
 
-    from aurora.commander import CommandSpec
+    from aurora.contracts.command import CommandSpec
 
 COMMAND: CommandSpec = {
     "name": "check",
@@ -24,7 +24,7 @@ COMMAND: CommandSpec = {
     },
 }
 _RUN = ("uv", "run", "--no-sync")
-_PATHS = ("aurora", "ops", "src", "tests")
+_PATHS = ("aurora", "src", "tests")
 _TEST_COMMAND = (*_RUN, "pytest", "-q", *(f"--cov={path}" for path in _PATHS if path != "tests"))
 
 

@@ -8,28 +8,21 @@ from pathlib import Path
 
 import pytest
 
-from aurora import AuroraConfig, assemble_runtime, load_config
-from aurora.composer import CompositionContext, InstanceKey, ModuleSpec, PackageSpec, build_module_specs, compose
-from aurora.composition import compose_project
-from aurora.composition.agents import AGENTS
-from aurora.composition.ai import MODEL
-from aurora.composition.cadence import CADENCE
-from aurora.composition.engine import ENGINE_RUNNER
-from aurora.composition.memory import MEMORY
-from aurora.composition.prompt import PROMPT_ASSEMBLER
-from aurora.config import ConfigSpec, assemble_config
-from aurora.configuration.agents import AGENTS_CONFIG
-from aurora.configuration.cadence import CADENCE_CONFIG
-from aurora.configuration.engine import ENGINE_CONFIG
-from aurora.configuration.memory import MEMORY_CONFIG
-from aurora.configuration.runtime import RUNTIME_CONFIG
-from aurora.contributions import TOOL_CONTRIBUTIONS
-from aurora.utils.toml import load_toml, text
+from aurora import AuroraConfig, load_config
+from aurora.configs.agents import AGENTS_CONFIG
+from aurora.configs.cadence import CADENCE_CONFIG
+from aurora.configs.engine import ENGINE_CONFIG
+from aurora.configs.memory import MEMORY_CONFIG
+from aurora.configs.providers import PROVIDERS_CONFIG
+from aurora.configs.runtime import RUNTIME_CONFIG
+from src.agents.config import AgentsConfig
 from src.ai import LiteLLMModelGateway
+from src.ai.config import ProvidersConfig
 from src.contracts import (
     MCP_EVENT_RECEIVED,
     ChatMessage,
     ModelRequest,
+    Tool,
     ToolCall,
     ToolDefinition,
     ToolOutput,
@@ -37,40 +30,55 @@ from src.contracts import (
     TreeStatus,
     WorldFrontier,
 )
+from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.cadence import Cadence
+from src.contracts.pkgs.engine import AgentTreeRunner
+from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.prompt import PromptAssembler
+from src.runtime import assemble_runtime
 
 EXPECTED_MAX_DEPTH = 4
 EXPECTED_WINDOW_MINUTES = 60
 EXPECTED_COMMITS_PER_SCOPE = 50
 
 
+_TEMPLATE_ENDPOINTS = frozenset({"default", "fast", "quality", "multimodal", "embedding"})
+
+
 @dataclass(slots=True)
 class FakeModel:
     requests: list[ModelRequest] = field(default_factory=list)
+
+    def validate_endpoint(self, endpoint_id: str) -> None:
+        if endpoint_id not in _TEMPLATE_ENDPOINTS:
+            raise ValueError(f"未知 model endpoint：{endpoint_id}")
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
         return ChatMessage.assistant("done")
 
 
-def test_project_configuration_builds_complete_runtime(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    runtime_configuration = configuration.get(RUNTIME_CONFIG)
-    definitions = configuration.get(AGENTS_CONFIG)
-    root_definition = next(item for item in definitions if item.id == runtime_configuration.agent)
+def test_project_config_builds_complete_runtime(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    runtime_config = config.get(RUNTIME_CONFIG)
+    definitions = config.get(AGENTS_CONFIG).agents
+    root_definition = next(item for item in definitions if item.id == runtime_config.agent)
     model = FakeModel()
-    runtime = assemble_runtime(configuration, model)
+    runtime = assemble_runtime(config, model)
 
     result = asyncio.run(runtime.run("hello", tree_id="tree"))
 
     assert result.status == TreeStatus.COMPLETED
     assert result.tree_id == "tree"
-    assert result.node(runtime_configuration.node_id).definition_id == runtime_configuration.agent
-    assert result.node(runtime_configuration.node_id).model == root_definition.model
+    assert result.node(runtime_config.node_id).definition_id == runtime_config.agent
+    assert result.node(runtime_config.node_id).model == root_definition.model
     assert model.requests[0].model == root_definition.model
     assert [tool.name for tool in model.requests[0].tools] == [
-        "aur.agent.delegate",
-        "aur.serv.world.read",
-        "aur.serv.world.trees",
+        "aurora:tool/delegate",
+        "aurora:tool/world_read",
+        "aurora:tool/world_scopes",
+        "aurora:tool/world_trees",
     ]
 
 
@@ -78,7 +86,7 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
     model = FakeModel()
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
-    cadence = runtime.assembly.get(CADENCE)
+    cadence = runtime.assembly.get(Cadence)
 
     async def scenario() -> None:
         await runtime.world.initialize()
@@ -105,8 +113,8 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
         assert after_cursor > before_cursor
         assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
         tree = next(iter(runtime._trees.values()))
-        assert tree.node(tree.root_id).definition_id == "builtin.triage"
-        assert echoed == ["Cadence> [builtin.triage] done"]
+        assert tree.node(tree.root_id).definition_id == "aurora:agent/triage"
+        assert echoed == ["Cadence> [aurora:agent/triage] done"]
 
     asyncio.run(scenario())
 
@@ -117,41 +125,41 @@ def test_launch_tree_echoes_root_text_without_external_delivery(configured_proje
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
-        result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="builtin.triage"))
+        result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="aurora:agent/triage"))
         assert result.status is TreeStatus.COMPLETED
-        assert echoed == ["Cadence> [builtin.triage] done"]
+        assert echoed == ["Cadence> [aurora:agent/triage] done"]
 
     asyncio.run(scenario())
 
 
 def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
+    config = load_config(configured_project)
     model = FakeModel()
-    runtime = assemble_runtime(configuration, model)
+    runtime = assemble_runtime(config, model)
 
     asyncio.run(runtime.run("hello", tree_id="tree-memory"))
 
     assert "最近时间窗口内的世界活动" in model.requests[0].messages[0].content
 
 
-def test_echo_node_texts_traces_tool_calls(configured_project: Path) -> None:
+def test_presenter_traces_tool_calls(configured_project: Path) -> None:
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=echoed.append)
     tree = runtime.create_tree("开始")
-    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("c1", "aur.test.echo", {"value": "hi"}),)))
+    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("c1", "test:tool/echo", {"value": "hi"}),)))
     tree = tree.append("root", ChatMessage.tool("c1", "hi"))
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
-    runtime._echo_node_texts(tree, {})
+    runtime.presenter.echo(tree)
 
     assert echoed == [
-        "  → [builtin.root] aur.test.echo",
-        "  ← [builtin.root] hi",
-        "Cadence> [builtin.root] 完成",
+        "  → [aurora:agent/root] test:tool/echo",
+        "  ← [aurora:agent/root] hi",
+        "Cadence> [aurora:agent/root] 完成",
     ]
 
 
-def test_echo_node_texts_renders_rich_for_terminal_sink(
+def test_presenter_renders_rich_for_terminal_sink(
     configured_project: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -159,21 +167,21 @@ def test_echo_node_texts_renders_rich_for_terminal_sink(
     tree = runtime.create_tree("开始")
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
-    runtime._echo_node_texts(tree, {})
+    runtime.presenter.echo(tree)
 
-    assert "Cadence> [builtin.root] 完成" in capsys.readouterr().out
+    assert "Cadence> [aurora:agent/root] 完成" in capsys.readouterr().out
 
 
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    assembly = compose_project(configuration, ((MODEL, FakeModel()),))
-    cadence = assembly.get(CADENCE)
-    memory = assembly.get(MEMORY)
-    memory_config = configuration.get(MEMORY_CONFIG)
+    config = load_config(configured_project)
+    assembly = assemble_runtime(config, FakeModel()).assembly
+    cadence = assembly.get(Cadence)
+    memory = assembly.get(MemoryReader)
+    memory_config = config.get(MEMORY_CONFIG)
 
-    assert cadence.enabled is configuration.get(CADENCE_CONFIG).enabled is True
-    assert cadence.agent == "builtin.triage"
-    assert memory is assembly.get(MEMORY)
+    assert cadence.enabled is config.get(CADENCE_CONFIG).enabled is True
+    assert cadence.agent == "aurora:agent/triage"
+    assert memory is assembly.get(MemoryReader)
     assert memory_config.window_minutes == EXPECTED_WINDOW_MINUTES
     assert memory_config.commits_per_scope == EXPECTED_COMMITS_PER_SCOPE
     assert memory_config.scope_include == ()
@@ -193,42 +201,40 @@ class FakeTool:
 
 
 def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    agents = configuration.get(AGENTS_CONFIG)
-    with_wildcard = configuration.with_value(
+    config = load_config(configured_project)
+    agents = config.get(AGENTS_CONFIG).agents
+    with_wildcard = config.with_value(
         AGENTS_CONFIG,
-        tuple(
-            replace(
-                item,
-                tools=tuple((*item.tools, "aur.mcp.org.aurora.qq.*", "!aur.mcp.org.aurora.qq.qq_send_group_message")),
+        AgentsConfig(
+            tuple(
+                replace(
+                    item,
+                    tools=tuple((*item.tools, "org.aurora.qq:tool/*", "!org.aurora.qq:tool/qq_send_group_message")),
+                )
+                if item.id == "aurora:agent/root"
+                else item
+                for item in agents
             )
-            if item.id == "builtin.root"
-            else item
-            for item in agents
         ),
     )
-    qq_tools = (
-        FakeTool("aur.mcp.org.aurora.qq.qq_send_private_message"),
-        FakeTool("aur.mcp.org.aurora.qq.qq_send_group_message"),
+    qq_tools: tuple[Tool, ...] = (
+        FakeTool("org.aurora.qq:tool/qq_send_private_message"),
+        FakeTool("org.aurora.qq:tool/qq_send_group_message"),
     )
-    assembly = compose_project(
-        with_wildcard,
-        ((MODEL, FakeModel()),),
-        tuple((TOOL_CONTRIBUTIONS, tool) for tool in qq_tools),
-    )
-    root_definition = assembly.get(AGENTS).get("builtin.root")
+    assembly = assemble_runtime(with_wildcard, FakeModel(), tools=qq_tools).assembly
+    root_definition = assembly.get(AgentCatalog).get("aurora:agent/root")
 
-    assert "aur.mcp.org.aurora.qq.qq_send_private_message" in root_definition.tools
-    assert "aur.mcp.org.aurora.qq.qq_send_group_message" not in root_definition.tools
+    assert "org.aurora.qq:tool/qq_send_private_message" in root_definition.tools
+    assert "org.aurora.qq:tool/qq_send_group_message" not in root_definition.tools
 
 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    agents = configuration.get(AGENTS_CONFIG)
+    config = load_config(configured_project)
+    agents = config.get(AGENTS_CONFIG).agents
     root = agents[0]
-    invalid = configuration.with_value(
+    invalid = config.with_value(
         AGENTS_CONFIG,
-        tuple((replace(root, tools=tuple((*root.tools, "aur.test.missing"))), *agents[1:])),
+        AgentsConfig(tuple((replace(root, tools=tuple((*root.tools, "test:tool/missing"))), *agents[1:]))),
     )
 
     with pytest.raises(ValueError, match="引用了未注册名称"):
@@ -236,97 +242,107 @@ def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> Non
 
 
 def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    runtime = configuration.get(RUNTIME_CONFIG)
-    agents = configuration.get(AGENTS_CONFIG)
+    config = load_config(configured_project)
+    runtime = config.get(RUNTIME_CONFIG)
+    agents = config.get(AGENTS_CONFIG).agents
     root = agents[0]
 
     with pytest.raises(ValueError, match="root 引用了未知 Agent definition"):
-        assemble_runtime(configuration.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
+        assemble_runtime(config.with_value(RUNTIME_CONFIG, replace(runtime, agent="missing")), FakeModel())
     with pytest.raises(ValueError, match="未知 Agent prompt"):
         assemble_runtime(
-            configuration.with_value(
+            config.with_value(
                 AGENTS_CONFIG,
-                tuple((replace(root, prompt="missing"), *agents[1:])),
+                AgentsConfig((replace(root, prompt="aurora:prompt/agent/missing"), *agents[1:])),
             ),
             FakeModel(),
         )
     with pytest.raises(ValueError, match="未知 model endpoint"):
         assemble_runtime(
-            configuration.with_value(
-                AGENTS_CONFIG,
-                tuple((replace(root, model="missing"), *agents[1:])),
-            ),
+            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, model="missing"), *agents[1:]))),
             FakeModel(),
         )
     with pytest.raises(ValueError, match=r"children.*可见性不一致"):
         assemble_runtime(
-            configuration.with_value(
-                AGENTS_CONFIG,
-                tuple((replace(root, tools=()), *agents[1:])),
-            ),
+            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, tools=()), *agents[1:]))),
             FakeModel(),
         )
 
 
-def test_configuration_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    engine = configuration.get(ENGINE_CONFIG)
-    assembly = compose_project(configuration, ((MODEL, FakeModel()),))
+def test_config_is_pure_data_until_composition_stages_run(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    engine = config.get(ENGINE_CONFIG)
+    assembly = assemble_runtime(config, FakeModel()).assembly
 
-    assert isinstance(configuration, AuroraConfig)
+    assert isinstance(config, AuroraConfig)
     assert engine.max_depth == EXPECTED_MAX_DEPTH
-    assert assembly.get(PROMPT_ASSEMBLER) is not None
-    assert assembly.get(AGENTS) is not None
-    assert assembly.get(ENGINE_RUNNER) is not None
+    assert assembly.get(PromptAssembler) is not None
+    assert assembly.get(AgentCatalog) is not None
+    assert assembly.get(AgentTreeRunner) is not None
 
 
 def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_project: Path) -> None:
-    qq_tools = (
-        FakeTool("aur.mcp.org.aurora.qq.qq_send_private_message"),
-        FakeTool("aur.mcp.org.aurora.qq.qq_send_group_message"),
-        FakeTool("aur.mcp.org.aurora.qq.qq_send_forward_message"),
-        FakeTool("aur.mcp.org.aurora.qq.qq_get_chat_history"),
-        FakeTool("aur.mcp.org.aurora.qq.qq_mark_chat_read"),
-        FakeTool("aur.mcp.org.aurora.qq.qq_delete_friend"),
+    qq_tools: tuple[Tool, ...] = (
+        FakeTool("org.aurora.qq:tool/qq_send_private_message"),
+        FakeTool("org.aurora.qq:tool/qq_send_group_message"),
+        FakeTool("org.aurora.qq:tool/qq_send_forward_message"),
+        FakeTool("org.aurora.qq:tool/qq_get_chat_history"),
+        FakeTool("org.aurora.qq:tool/qq_mark_chat_read"),
+        FakeTool("org.aurora.qq:tool/qq_delete_friend"),
     )
-    agents = compose_project(
-        load_config(configured_project),
-        ((MODEL, FakeModel()),),
-        tuple((TOOL_CONTRIBUTIONS, tool) for tool in qq_tools),
-    ).get(AGENTS)
-    triage = agents.get("builtin.triage")
-    root = agents.get("builtin.root")
-    worker = agents.get("builtin.worker")
-    fast_worker = agents.get("builtin.fast-worker")
-    reviewer = agents.get("builtin.reviewer")
+    agents = assemble_runtime(load_config(configured_project), FakeModel(), tools=qq_tools).assembly.get(AgentCatalog)
+    triage = agents.get("aurora:agent/triage")
+    root = agents.get("aurora:agent/root")
+    worker = agents.get("aurora:agent/worker")
+    fast_worker = agents.get("aurora:agent/fast-worker")
+    reviewer = agents.get("aurora:agent/reviewer")
 
-    assert triage.tools == frozenset({"aur.agent.delegate"})
-    assert triage.children == frozenset({"builtin.root", "builtin.fast-worker"})
-    assert root.tools == frozenset({"aur.agent.delegate", "aur.serv.world.read", "aur.serv.world.trees"})
-    assert root.children == frozenset({"builtin.worker", "builtin.fast-worker", "builtin.reviewer", "builtin.chat"})
+    assert triage.tools == frozenset({"aurora:tool/delegate"})
+    assert triage.children == frozenset({"aurora:agent/root", "aurora:agent/fast-worker"})
+    assert root.tools == frozenset(
+        {
+            "aurora:tool/delegate",
+            "aurora:tool/world_read",
+            "aurora:tool/world_scopes",
+            "aurora:tool/world_trees",
+        }
+    )
+    assert root.children == frozenset(
+        {"aurora:agent/worker", "aurora:agent/fast-worker", "aurora:agent/reviewer", "aurora:agent/chat"}
+    )
     assert worker.model == "quality"
-    assert worker.children == frozenset({"builtin.reviewer", "builtin.fast-worker"})
-    assert "aur.mcp.org.aurora.qq.qq_send_private_message" in worker.tools
-    assert "aur.mcp.org.aurora.qq.qq_delete_friend" in worker.tools
+    assert worker.children == frozenset({"aurora:agent/reviewer", "aurora:agent/fast-worker"})
+    assert "org.aurora.qq:tool/qq_send_private_message" in worker.tools
+    assert "org.aurora.qq:tool/qq_delete_friend" in worker.tools
     assert fast_worker.model == "fast"
-    assert fast_worker.prompt_id == "builtin.fast"
+    assert fast_worker.prompt_id == "aurora:prompt/agent/fast"
     assert fast_worker.children == frozenset()
     assert fast_worker.tools == frozenset(
         {
-            "aur.mcp.org.aurora.qq.qq_send_private_message",
-            "aur.mcp.org.aurora.qq.qq_send_group_message",
-            "aur.mcp.org.aurora.qq.qq_get_chat_history",
-            "aur.mcp.org.aurora.qq.qq_mark_chat_read",
+            "org.aurora.qq:tool/qq_send_private_message",
+            "org.aurora.qq:tool/qq_send_group_message",
+            "org.aurora.qq:tool/qq_get_chat_history",
+            "org.aurora.qq:tool/qq_mark_chat_read",
         }
     )
     assert reviewer.tools == frozenset() and reviewer.children == frozenset()
 
 
 def test_composition_builds_configured_model_when_caller_does_not_inject_one(configured_project: Path) -> None:
-    assembly = compose_project(load_config(configured_project))
+    assembly = assemble_runtime(load_config(configured_project)).assembly
 
-    assert isinstance(assembly.get(MODEL), LiteLLMModelGateway)
+    assert isinstance(assembly.get(Model), LiteLLMModelGateway)
+
+
+def test_assembly_rejects_agent_model_whose_provider_is_unusable(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    providers = config.get(PROVIDERS_CONFIG).providers
+    broken = ProvidersConfig(
+        tuple(replace(item, adapter="unknown") if item.name == "deepseek" else item for item in providers)
+    )
+
+    with pytest.raises(ValueError, match="尚未实现的 adapter"):
+        assemble_runtime(config.with_value(PROVIDERS_CONFIG, broken))
 
 
 def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
@@ -337,132 +353,8 @@ def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
         load_config(tmp_path)
 
 
-@dataclass(frozen=True, slots=True)
-class ExtraConfig:
-    value: str
+def test_assembly_bundles_the_project_config(configured_project: Path) -> None:
+    config = load_config(configured_project)
+    assembly = assemble_runtime(config, FakeModel()).assembly
 
-
-EXTRA_CONFIG = ConfigSpec[ExtraConfig](
-    name="extra",
-    path="config/extra.toml",
-    parse=lambda path: ExtraConfig(text(load_toml(path), "value")),
-)
-EXTRA_INSTANCE = InstanceKey[str]("extra.instance")
-
-
-def test_new_toml_and_component_only_need_module_registrars(tmp_path: Path) -> None:
-    config_directory = tmp_path / "config"
-    config_directory.mkdir()
-    (config_directory / "extra.toml").write_text('value = "已接入"\n', encoding="utf-8")
-
-    def register_component(context: CompositionContext) -> None:
-        context.provide(EXTRA_INSTANCE, context.config.get(EXTRA_CONFIG).value)
-
-    configuration = assemble_config(tmp_path, (EXTRA_CONFIG,))
-    spec = ModuleSpec(key=EXTRA_INSTANCE, requires=(), register=register_component)
-    assembly = compose(configuration, (spec,), ((MODEL, FakeModel()),))
-
-    assert configuration.names == ("extra",)
-    assert assembly.get(EXTRA_INSTANCE) == "已接入"
-
-
-def test_registries_reject_duplicate_names_and_missing_dependencies(tmp_path: Path) -> None:
-    config_directory = tmp_path / "config"
-    config_directory.mkdir()
-    (config_directory / "extra.toml").write_text('value = "first"\n', encoding="utf-8")
-
-    duplicate = ConfigSpec[ExtraConfig](
-        name="extra",
-        path="config/extra.toml",
-        parse=lambda path: ExtraConfig(text(load_toml(path), "value")),
-    )
-
-    with pytest.raises(ValueError, match="配置重复注册"):
-        assemble_config(tmp_path, (duplicate, duplicate))
-
-    configuration = assemble_config(tmp_path, ())
-
-    def require_missing(context: CompositionContext) -> None:
-        context.require(EXTRA_INSTANCE)
-
-    dummy_key = InstanceKey[str]("dummy.missing")
-    with pytest.raises(KeyError, match="组合依赖尚未注册"):
-        compose(
-            configuration, (ModuleSpec(key=dummy_key, requires=(), register=require_missing),), ((MODEL, FakeModel()),)
-        )
-
-    def provide_twice(context: CompositionContext) -> None:
-        context.provide(EXTRA_INSTANCE, "first")
-        context.provide(EXTRA_INSTANCE, "second")
-
-    with pytest.raises(ValueError, match="实例重复注册"):
-        compose(
-            configuration,
-            (ModuleSpec(key=EXTRA_INSTANCE, requires=(), register=provide_twice),),
-            ((MODEL, FakeModel()),),
-        )
-
-
-def _noop_register(context: CompositionContext) -> None:
-    del context
-
-
-def test_assembly_bundles_the_project_configuration(configured_project: Path) -> None:
-    configuration = load_config(configured_project)
-    assembly = compose_project(configuration, ((MODEL, FakeModel()),))
-
-    assert assembly.config is configuration
-
-
-def test_composition_registry_rejects_duplicate_providers(tmp_path: Path) -> None:
-    duplicate_a = InstanceKey[str]("dup.slot")
-    duplicate_b = InstanceKey[str]("dup.slot")
-
-    with pytest.raises(ValueError, match="多个代表模块声明提供"):
-        build_module_specs(
-            (
-                PackageSpec(key=duplicate_a, provides=(duplicate_a,), requires=(), register=_noop_register),
-                PackageSpec(key=duplicate_b, provides=(duplicate_b,), requires=(), register=_noop_register),
-            )
-        )
-
-
-def test_composition_registry_rejects_missing_provider(tmp_path: Path) -> None:
-    key = InstanceKey[str]("dummy.self")
-
-    with pytest.raises(ValueError, match=r"没有提供者：missing\.slot"):
-        build_module_specs(
-            (PackageSpec(key=key, provides=(key,), requires=("missing.slot",), register=_noop_register),)
-        )
-
-
-def test_composition_registry_resolves_requires_to_owner_primary_key(tmp_path: Path) -> None:
-    owner_key = InstanceKey[str]("owner.primary")
-    owner_ops = InstanceKey[str]("owner.ops")
-    dependent_key = InstanceKey[str]("dependent.primary")
-    specs = build_module_specs(
-        (
-            PackageSpec(key=owner_key, provides=(owner_key, owner_ops), requires=(), register=_noop_register),
-            PackageSpec(
-                key=dependent_key,
-                provides=(dependent_key,),
-                requires=(owner_ops.name,),
-                register=_noop_register,
-            ),
-        )
-    )
-    dependent_spec = next(spec for spec in specs if spec.key is dependent_key)
-
-    assert [item.name for item in dependent_spec.requires] == [owner_key.name]
-
-
-def test_context_requires_instances_by_name(tmp_path: Path) -> None:
-    config_directory = tmp_path / "config"
-    config_directory.mkdir()
-    key = InstanceKey[str]("name.slot")
-    context = CompositionContext(assemble_config(tmp_path, ()))
-    context.provide(key, "已接通")
-
-    assert context.require_name(key.name) == "已接通"
-    with pytest.raises(KeyError, match=r"组合依赖尚未注册：name\.missing"):
-        context.require_name("name.missing")
+    assert assembly.settings is config

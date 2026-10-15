@@ -1,55 +1,18 @@
-"""Bot 世界提交、观察前沿与存储端口。"""
+"""Bot 世界提交与观察前沿的值对象与常量。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
-# 稳定的世界 scope 与事件 kind 常量；scope 的实际归属由提交方决定，
-# world 只负责校验、编号与追加。
-SYSTEM_SCOPE = "aurora:system"
-CONFIG_SCOPE = "aurora:config"
-CONSOLE_SCOPE = "aurora:console"
-
-TREE_STARTED = "engine.tree.started"
-TREE_COMPLETED = "engine.tree.completed"
-TREE_FAILED = "engine.tree.failed"
-NODE_SPAWNED = "engine.node.spawned"
-NODE_COMPLETED = "engine.node.completed"
-NODE_FAILED = "engine.node.failed"
-MODEL_REQUESTED = "engine.model.requested"
-MODEL_COMPLETED = "engine.model.completed"
-MODEL_FAILED = "engine.model.failed"
-TOOL_REQUESTED = "tool.requested"
-TOOL_SUCCEEDED = "tool.succeeded"
-TOOL_FAILED = "tool.failed"
-TOOL_UNKNOWN = "tool.unknown"
-OUTPUT_REQUESTED = "output.requested"
-OUTPUT_COMMITTED = "output.committed"
-WORLD_DELTA_DELIVERED = "engine.world.delta_delivered"
-CONSOLE_INPUT = "console.input"
-MCP_APP_DISCONNECTED = "mcp.app.disconnected"
-MCP_CATALOG_CHANGED = "mcp.catalog.changed"
+# 跨包观察的业务事件 kind；各包自己的事件 kind 定义在各自包内，
+# scope 的实际归属由提交方决定，world 只负责校验、编号与追加。
 MCP_EVENT_RECEIVED = "mcp.event.received"
-
-
-def tree_scope(tree_id: str) -> str:
-    """返回一次 AgentTree 运行的标准世界 scope。"""
-    if not tree_id.strip():
-        raise ValueError("tree_id must not be empty")
-    return f"aurora:tree:{tree_id}"
-
-
-def mcp_scope(package: str) -> str:
-    """返回一个 MCP App 的标准世界 scope。"""
-    if not package.strip():
-        raise ValueError("package must not be empty")
-    return f"aurora:mcp:{package}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,63 +181,3 @@ class ToolScopes:
         object.__setattr__(self, "publish", frozenset(self.publish))
         if any(not scope.strip() for scope in (*self.observe, *self.publish)):
             raise ValueError("ToolScopes must not contain empty scopes")
-
-
-class WorldReader(Protocol):
-    """世界线的只读端口；供 prompt、memory、cadence 等消费者使用。"""
-
-    async def cursor(self) -> int: ...
-
-    async def head(self, scopes: frozenset[str]) -> WorldFrontier: ...
-
-    async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage: ...
-
-    async def active_scopes(self, since: datetime) -> tuple[str, ...]: ...
-
-    async def commit(self, commit_id: str) -> WorldCommit | None: ...
-
-    async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]: ...
-
-    async def stream(self, after: int, limit: int) -> WorldStreamPage: ...
-
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]: ...
-
-
-class MemoryReader(Protocol):
-    """按活跃 scope 提供世界记忆快照的只读端口。"""
-
-    async def recall(
-        self,
-        *,
-        now: datetime | None = None,
-        scopes: frozenset[str] | None = None,
-    ) -> MemorySnapshot: ...
-
-
-class WorldWriter(Protocol):
-    """世界线的只写端口；供 console、mcp、cadence 等生产者使用。"""
-
-    async def append_event(self, event: EnvironmentEvent) -> WorldCommit: ...
-
-    async def append_commit(
-        self,
-        *,
-        commit_id: str,
-        kind: str,
-        source: str,
-        summary: str,
-        scopes: frozenset[str],
-        based_on: WorldFrontier,
-        data: Mapping[str, Any],
-        occurred_at: datetime | None = None,
-    ) -> WorldCommit: ...
-
-    async def append_commits(self, inputs: tuple[WorldCommitInput, ...]) -> tuple[WorldCommit, ...]: ...
-
-
-class WorldJournal(WorldReader, WorldWriter, Protocol):
-    """世界事实与效果因果的唯一持久化端口。"""
-
-    async def initialize(self) -> None: ...
-
-    async def close(self) -> None: ...
