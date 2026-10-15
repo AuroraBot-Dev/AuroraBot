@@ -31,6 +31,23 @@ PLATFORM_PATH_PREFIX = "platform/"
 SYSTEM_PROMPT_PATH_PREFIX = f"{PROMPT_PATH_PREFIX}system/"
 AGENT_PROMPT_PATH_PREFIX = f"{PROMPT_PATH_PREFIX}agent/"
 
+#: 一个所有者拥有的世界域：``<owner>:world``，可再分 ``/子域``。
+WORLD_PATH = "world"
+WORLD_SCOPE_PATTERN = f"*:{WORLD_PATH}"
+WORLD_SUB_SCOPE_PATTERN = f"*:{WORLD_PATH}/*"
+
+
+def world_scope(owner: str) -> str:
+    """返回某个所有者拥有的世界域。
+
+    域的所有者就是命名空间：内置子系统拥有 ``aurora:world/<sub>``，
+    每个扩展拥有 ``<package>:world``。所有权与 ID 的所有权是同一条规则。
+    """
+    if not is_namespace(owner):
+        raise IdentityError(f"域所有者必须是合法命名空间：{owner!r}")
+    return f"{owner}:{WORLD_PATH}"
+
+
 _NAMESPACE = re.compile(r"[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*")
 _PATH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_][A-Za-z0-9_.-]*)*")
 _MAX_TAG_DEPTH = 16
@@ -206,6 +223,9 @@ __all__ = [
     "SYSTEM_PROMPT_PATH_PREFIX",
     "TAG_PREFIX",
     "TOOL_PATH_PREFIX",
+    "WORLD_PATH",
+    "WORLD_SCOPE_PATTERN",
+    "WORLD_SUB_SCOPE_PATTERN",
     "Identifier",
     "IdentityError",
     "TagDefinition",

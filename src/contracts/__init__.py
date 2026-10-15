@@ -36,6 +36,7 @@ from src.contracts.identity import (
     is_namespace,
     is_path,
     matches_species,
+    world_scope,
 )
 from src.contracts.kernel import ContributionKey, Settings
 from src.contracts.model import ChatMessage, ChatRole, ModelRequest, ToolCall
@@ -128,4 +129,5 @@ __all__ = [
     "is_namespace",
     "is_path",
     "matches_species",
+    "world_scope",
 ]
