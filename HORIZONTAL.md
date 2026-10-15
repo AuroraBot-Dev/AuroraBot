@@ -341,15 +341,16 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | # | 问题 | 证据 | 被什么解决 |
 |---|---|---|---|
 | 1 | 两套身份机制，字符串侧无唯一权威 → **8 套校验器** | `_validate_cross_references`、`_validate_agents`、`resolve_names`、`_reject_unknown`、`require_fields`、`AgentCatalog`、内核 `_validate_names`、`app` 的 24 个 `check_*` | H1+H3 |
-| 2 | **三套因果表示**：全局 `insertion_sequence`、每域 `sequence`、`based_on` 快照 | `based_on` 实测 **93.2% 重复**，生产代码只读一处 | 域模型 + 存储重设 |
-| 3 | 引擎台账与世界资源同居一条线 | 94 提交里 ~92 条是台账 | ✅ 读侧已分离（P1：记忆按 `kind` 排除运行域）；写侧仍同居一条线（P5） |
+| 2 | **三套因果表示**：全局 `insertion_sequence`、每域 `sequence`、`based_on` 快照 | `based_on` 实测 **93.2% 重复**，生产代码只读一处 | 域模型 + P5b |
+| 3 | 引擎台账与世界资源同居一条线 | 94 提交里 ~92 条是台账 | ✅ 读侧已分离（P1：记忆按 `kind` 排除运行域）；读代价已按域分区隔离（P5a）；写侧仍共用一条线（P5b） |
 | 4 | 两套扩展入口、两个生命周期、无共同语言 | `ModuleSpec`（11 个 `module.py`）vs `aurora app`（12 文件 / ~4150 行） | ✅ 两条入口都能声明「我拥有哪些域」（P3a / P3b） |
 | 5 | 域命名空间混了资源域与运行域 | 无区分标记 | ✅ **P1 已解决**：`kind` 字段 + 注册表 |
 | 6 | 正则 / 校验器跨包复制 | `toml.py:91-144` 与 `src/utils/validation.py:13-59` 六函数逐字相同 | H1 |
 | 7 | 另外三个操作可替换但**未声明、未校验** | 内核 `priority` 裁决已支持，`WorldReader`/`MemoryReader`/`WorldWriter` 都是 `provides=` 契约 | §7：声明扩展点 + 语义一致性校验 |
 
-**其中 #2、#3、#5 是同一件事**，并且与 `delta()` 的全表扫描（实测两万条提交
-= 40001 条 SQL / 14.35 秒）是**同一个改动**：域一旦成为物理分区键，三套因果和全表扫描一起消失。
+**其中 #2、#3、#5 是同一件事**，并且与 `delta()` 的全表扫描曾经是**同一个改动**：域成为物理分区键后，
+全表扫描已经消失（两万条提交：40001 条 SQL / 31.44 秒 → 1 条 SQL / 0.004 秒，见 §10 的 P5a）；
+三套因果表示的归一留给 P5b，它不再依赖存储结构，可以单独决定。
 
 ---
 
@@ -367,10 +368,12 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
 | **P3c** | 零工具的 Server 也能作为世界生产者登记（准入 = 至少一种贡献） | `aurora app` 准入规则 + `--events` | ✅ **已落地** |
 | **P4** | 声明四操作为扩展点 + 装配期校验（齐备性、世界单源） | `src/contracts/loop.py` + `src/runtime/assembly.py` | ✅ **已落地** |
-| **P5** | 域作为物理分区键 + `delta()` 下推 + 因果表示收敛 | `src/world` + migration | ⬜ |
+| **P5a** | 域作为物理分区键 + `delta()` 下推；世界线 schema 1 → 2 | `src/world` + migration | ✅ **已落地** |
+| **P5b** | 因果表示收敛（全局 `insertion_sequence` / 每域 `sequence` / `based_on` 三套归一） | `src/contracts/world.py` + `src/world` + 引擎与工具读侧 | ⬜ |
 
 P2 建议在 P1 之后（域注册表要先有地方挂 owner——现已具备）。
-P5 是唯一需要 schema migration 的阶段。
+P5a 是唯一需要 schema migration 的阶段：只增加索引、不改动提交数据，因此对既有世界线是就地升级。
+P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 P5a 的存储改动没有依赖关系，可以单独决定。
 
 ---
 
@@ -507,6 +510,27 @@ P5 是唯一需要 schema migration 的阶段。
 把旧接缝钉成了期望行为。它现在断言相反的事实，并另加一条 `/` 仍分层、
 `*:tool/*` 只够一层命名空间、`qq:*` 仍匹配 `qq:group:123` 的测试。
 
+### P5a：域分区索引与 `delta()` 下推
+
+| 文件 | 内容 |
+|---|---|
+| `src/world/models.py` | `world_commit_scopes` 增加覆盖索引 `world_commit_scope_partition (scope, sequence, commit_id)`；`(scope, sequence)` 自此是域分区键 |
+| `src/world/migration/v1.py` | 1 → 2：`CREATE INDEX IF NOT EXISTS`，只加索引、不触碰数据 |
+| `src/world/migration/__init__.py` | `TARGET_VERSION = 2`，`STEPS[1]` 注册该步 |
+| `src/world/store.py` | `delta()` 把域过滤与 `insertion_sequence` 排序下推到 SQL；`_has_more()` 只查分区索引；`_load_commits()` 按页批量载入正文（每页固定 2 条语句，取代每行 2 条） |
+
+实测（20000 条提交、20 个域、`page_size=64`）：
+
+| 场景 | 改前 | 改后 |
+|---|---|---|
+| 前沿已在 head（应返回 0 条） | 40001 条语句 / 31.44 s | 1 条语句 / 0.004 s |
+| 前沿在深处（返回一页） | 69634 条语句 / 54.70 s | 4 条语句 / 0.018 s |
+
+查询计划确认三条读路径都走覆盖索引：`delta()` 为 `MULTI-INDEX OR` + `SEARCH ... USING COVERING INDEX world_commit_scope_partition (scope=? AND sequence>?)`，
+`_has_more()` 与 `commits(scope, after, limit)` 同源。
+
+正确性用差分验证：把旧算法冻结成独立的 `sqlite3` 参照实现，在 5 种 `page_size`、随机域集合与随机前沿上跑 2000 组用例，`end` / 提交序列 / `has_more` 逐字段相等。
+
 ### 测试
 
 | 文件 | 覆盖 |
@@ -533,4 +557,4 @@ P5 是唯一需要 schema migration 的阶段。
 | 引入 `Daemon` / `MessageBus` / `ParallelTask` 类 | AGENTS.md 禁止引入与 AgentTree 平行的运行模型；三者应表达为 **AgentTree 的性质 + 域** |
 | **树内**并行 | 会砸掉「确定性单循环」，收益远小于代价。并行只做在树之间 |
 | 为「模型驱动」放宽静态检查 | 贵的是「类型做身份」那 23 个样板文件，不是注解；注解是实现层唯一抓 bug 的手段 |
-| 先改世界线 schema、再定域的分区语义 | 会改两次；域必须先被确认为物理分区键（P5 与域模型是同一个改动） |
+| 先改世界线 schema、再定域的分区语义 | 会改两次；域必须先被确认为物理分区键（P5a 与域模型是同一个改动） |
