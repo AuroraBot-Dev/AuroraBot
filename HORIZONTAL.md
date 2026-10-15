@@ -59,29 +59,52 @@ path       [A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*
 ### 现状 → 目标映射
 
 | 现状 | 目标 | 归属 |
+| 现在 | 目标 | 归属 | 状态 |
+|---|---|---|---|
+| `aur.agent.delegate` | `aurora:tool/delegate` | 内置 | ✅ 已落地 |
+| `aur.serv.world.read` | `aurora:tool/world_read` | 内置 | ✅ 已落地 |
+| `aur.builtin.wait` | `aurora:tool/wait` | 内置 | ✅ 已落地 |
+| `aur.mcp.<package>.<raw_name>` | `<package>:tool/<raw_name 或别名>` | 扩展 | ✅ 已落地 |
+| `builtin.root`（agent） | `aurora:agent/root` | 内置 | ⬜ |
+| `system.soul`（prompt） | `aurora:prompt/soul` | 内置 | ⬜ |
+| `builtin.console`（platform） | `aurora:platform/console` | 内置 | ⬜ |
+| `world` / `mcp` / `engine`（module） | 保持原样 | 内部诊断名 | **不改** |
+| `tools.catalog`（贡献键） | 保持原样 | 内部贡献键 | **不改** |
+| `aurora:console`（域） | `aurora:world/console` | 资源域 | ⬜ P2-2 |
+| `aurora:cadence`（域） | `aurora:world/cadence` | 资源域 | ⬜ P2-2 |
+| `aurora:mcp:<package>`（域） | `<package>:world` | 资源域 | ⬜ P2-2 |
+| `aurora:tree:<id>`（域） | `aurora:run/<id>` | **运行域** | ⬜ P2-2 |
+| `AuroraConfig` 等能力类型 | 保留 Python 类型（value 侧） | — | 不需要 ID |
+
+**只改「可被配置或模型寻址」的东西。** module 名与贡献键是内部诊断与接线标识，
+既不被配置引用也不被模型看见，改成命名空间化只是噪声——横向体系管的是**可寻址面**，不是所有字符串。
+
+### 外来名字的接纳规则（第三方 MCP 的接入面）
+
+MCP SDK 对 `Tool.name` **不做任何格式约束**（`annotation=str`），所以门只有我们这一道。
+这一层必须是**全函数**：
+
+| 情形 | 处理 | 理由 |
 |---|---|---|
-| `aur.agent.delegate` | `aurora:tool/delegate` | 内置 |
-| `aur.serv.world.read` | `aurora:tool/world_read` | 内置 |
-| `aur.builtin.wait` | `aurora:tool/wait` | 内置 |
-| `aur.mcp.org.aurora.qq.qq_send_message` | `org.aurora.qq:tool/qq_send_message` | 扩展 |
-| `builtin.root`（agent） | `aurora:agent/root` | 内置 |
-| `builtin.chat`（agent） | `aurora:agent/chat` | 内置 |
-| `system.soul`（prompt） | `aurora:prompt/soul` | 内置 |
-| `system.world`（prompt） | `aurora:prompt/world` | 内置 |
-| `builtin.console`（platform） | `aurora:platform/console` | 内置 |
-| `world` / `mcp` / `engine`（module） | `aurora:module/world` | 内置 |
-| `tools.catalog`（贡献键） | `aurora:contribution/tools_catalog` | 内置 |
-| `aurora:console`（域） | `aurora:world/console` | 资源域 |
-| `aurora:cadence`（域） | `aurora:world/cadence` | 资源域 |
-| `aurora:mcp:<package>`（域） | `<package>:world` | 资源域 |
-| `aurora:tree:<id>`（域） | `aurora:run/<id>` | **运行域** |
-| `AuroraConfig` 等能力类型 | 保留 Python 类型（value 侧） | 不需要 ID |
+| raw name 本身合法 | **原样使用**，零映射 | 模型看到的就是服务器给的名字 |
+| 否则 | 确定性别名 `<slug>-<8位哈希>` | 只依赖 raw ⇒ 服务器增删工具不会让已有工具 ID 漂移 |
+| 首尾带空白 / 空 | **拒绝**，报出是哪个名字 | 这是 Server 的缺陷；静默别名会让两个看似相同的名字变成两个 ID |
+
+迁移前 `_MCP_TOOL_ID` 会拒绝 `tool/read`、`2fa_verify`、`_private` 这类**完全合法**的第三方名字，
+而 discovery 失败会升级成 `McpStartupError` —— **一个古怪工具名就能让整个 AuroraBot 起不来**。
+这条现在关闭：任何第三方名字都能接入。
+
+### 已知接缝
+
+标签模式仍以 `.` 为段分隔符，而工具 path 里允许出现 `.`，所以单星 `*` 不跨点
+（`org.aurora.qq:tool/*` 不会匹配 `org.aurora.qq:tool/send.message`）。
+模式分隔符应当跟随 ID 语法，留待 P2-2 一并对齐。
 
 ### 修复的缺陷
 
-- `_MCP_TOOL_ID` 在 `src/tools/registry.py:15` 与 `src/mcp/tool.py:19` 写了两份 → 一个解析器
-- `aurora:`（域）与 `aur.`（工具）两套根 → 一套
-- `platform` / `module` / `contribution` 三类完全没有格式校验（只查非空）→ 同一套规则
+- `_MCP_TOOL_ID` 在 `src/tools/registry.py` 与 `src/mcp/tool.py` 写了两份 → **一个** `is_tool_id`（落在 contracts）
+- `aurora:`（域）与 `aur.`（工具）两套根 → 工具已并入命名空间化语法，域待 P2-2
+- 第三方工具名不合规 → 整个进程起不来 → 已接纳，只报真正无身份的名字
 
 ---
 
@@ -96,8 +119,8 @@ path       [A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*
 [[tag]]
 name = "aurora:tool/qq-send"
 values = [
-    "aur.mcp.org.aurora.qq.qq_send_*message",
-    "!aur.mcp.org.aurora.qq.qq_send_forward_message",
+    "org.aurora.qq:tool/qq_send_*message",
+    "!org.aurora.qq:tool/qq_send_forward_message",
 ]
 
 [[tag]]
@@ -286,7 +309,7 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 | 3 | 引擎台账与世界资源同居一条线 | 94 提交里 ~92 条是台账 | ✅ 读侧已分离（P1：记忆按 `kind` 排除运行域）；写侧仍同居一条线（P5） |
 | 4 | 两套扩展入口、两个生命周期、无共同语言 | `ModuleSpec`（11 个 `module.py`）vs `aurora app`（12 文件 / ~4150 行） | ✅ 两条入口都能声明「我拥有哪些域」（P3a / P3b） |
 | 5 | 域命名空间混了资源域与运行域 | 无区分标记 | ✅ **P1 已解决**：`kind` 字段 + 注册表 |
-| 6 | 正则 / 校验器跨包复制 | `_MCP_TOOL_ID` ×2；`toml.py:91-144` 与 `src/utils/validation.py:13-59` 六函数逐字相同 | H1 |
+| 6 | 正则 / 校验器跨包复制 | `toml.py:91-144` 与 `src/utils/validation.py:13-59` 六函数逐字相同 | H1 |
 | 7 | 另外三个操作可替换但**未声明、未校验** | 内核 `priority` 裁决已支持，`WorldReader`/`MemoryReader`/`WorldWriter` 都是 `provides=` 契约 | §7：声明扩展点 + 语义一致性校验 |
 
 **其中 #2、#3、#5 是同一件事**，并且与 `delta()` 的全表扫描（实测两万条提交
@@ -300,7 +323,9 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 |---|---|---|---|
 | **P0** | 身份层（`Identifier`）+ 标签集合 + 把策略搬出代码 | `src/contracts/identity.py`、新配置 | ✅ **已落地** |
 | **P1** | 域注册表 + `kind`（资源 / 运行）+ 给域一句 description | `src/contracts/scope.py`、新配置、`WorldScopesTool`、记忆可见性 | ✅ **已落地** |
-| **P2** | ID 语法切到 `namespace:path`（接受一次数据断层） | 全仓 ID 字面量 + `config.example` + 测试 | ⬜ |
+| **P2-1a** | 工具 ID 换根 + 第三方名字接纳（含修掉「古怪工具名让进程起不来」） | `registry` / `mcp.tool` / `config.example` / 测试 | ✅ **已落地** |
+| **P2-1b** | agent / prompt / platform ID 换根 | `config.example` + 测试 | ⬜ |
+| **P2-2** | 域换根到 `<owner>:world`（接受一次数据断层）+ 模式分隔符跟随 ID 语法 | 全仓域字面量 + `scopes.toml` + 模式引擎 | ⬜ |
 | **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
 | **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
 | **P3c** | 让只有 Resources 的 Server 也能作为世界生产者登记 | `aurora app` 准入规则 | ⬜ |
@@ -355,18 +380,28 @@ P5 是唯一需要 schema migration 的阶段。
 | `src/mcp/runtime.py` | `app_owned_scopes()`：发布事实时用声明值，未声明才退回标准域 |
 | `aurora/configs/apps.py` | `scopes` 加入白名单并保持可选（与 `event_mode` 同级） |
 
+### P2-1a：工具 ID 换根与外来名字接纳
+
+| 文件 | 内容 |
+|---|---|
+| `src/contracts/identity.py` | `alias_path()`：全函数，合法即零映射，否则 `<slug>-<8位哈希>` |
+| `src/tools/registry.py` | `is_tool_id()` 成为**唯一**工具 ID 校验器（旧的两份 `_MCP_TOOL_ID` 消失） |
+| `src/mcp/tool.py` | `mcp_tool_id()`：package 段我们必须合法，raw_name 段原样接纳或别名 |
+| `src/mcp/runtime.py` | 同一命名空间内两个远端名收敛到同一 ID 时，同时报出两个名字 |
+
 ### 测试
 
 | 文件 | 覆盖 |
 |---|---|
-| `tests/test_identity.py` | 22 项：ID 解析、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返 |
+| `tests/test_identity.py` | 45 项：ID 解析、`alias_path` 对 15 个真实外来名字的全函数性与稳定性、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返 |
 | `tests/test_scopes.py` | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
 | `tests/test_reactions_configs.py` | 9 项：模板往返、路由命中、字段缺失与未知字段 |
 | `tests/test_mcp_configs.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
+| `tests/test_mcp_tool.py` | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字 |
 | `tests/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
 | `tests/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
 
-验证：**1132 passed / 1 skipped**，`ruff` 与 `pyright` 均 0 error，配置 14 个 TOML ↔ 14 个 configs 模块（原 11 个 + `reactions` / `scopes` / `tags`）。
+验证：**1163 passed / 1 skipped**，`ruff` 与 `pyright` 均 0 error，配置 14 个 TOML ↔ 14 个 configs 模块（原 11 个 + `reactions` / `scopes` / `tags`）。
 
 ---
 
