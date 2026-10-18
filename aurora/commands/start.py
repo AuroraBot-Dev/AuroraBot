@@ -55,6 +55,16 @@ async def _run_runtime(config: AuroraConfig, *, headless: bool) -> None:
         restore_stop_handlers(installed)
 
 
+def _failure_lines(error: BaseException) -> list[str]:
+    """终端逐项显示异常组，保留原始运行错误和释放错误。"""
+    if isinstance(error, BaseExceptionGroup):
+        lines = []
+        for child in error.exceptions:
+            lines.extend(_failure_lines(child))
+        return lines
+    return [str(error)]
+
+
 def execute(arguments: argparse.Namespace) -> int:
     try:
         load_project_env(arguments.root)
@@ -64,6 +74,9 @@ def execute(arguments: argparse.Namespace) -> int:
         asyncio.run(_run_runtime(config, headless=headless))
     except KeyboardInterrupt:
         return EXIT_INTERRUPTED
+    except ExceptionGroup as error:
+        sys.stderr.write("运行失败：\n" + "\n".join(_failure_lines(error)) + "\n")
+        return EXIT_CONFIG_ERROR
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
         sys.stderr.write(f"启动失败：{error}\n")
         return EXIT_CONFIG_ERROR

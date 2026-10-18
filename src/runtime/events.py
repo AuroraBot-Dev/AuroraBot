@@ -4,3 +4,5 @@ from src.contracts.identity import world_scope
 
 RUNTIME_SCOPE = f"{world_scope('aurora')}/runtime"
 RUNTIME_INPUT = "runtime.input"
+
+RUNTIME_MODULE_FAILED = "runtime.module.failed"

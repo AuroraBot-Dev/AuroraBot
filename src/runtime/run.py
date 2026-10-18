@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, cast
 from src.contracts import FrontIO
 from src.contracts.pkgs.runtime import TerminalDispatcher
 from src.runtime.assembly import compose_runtime
+from src.runtime.supervision import supervise
 from src.utils import get_logger
 
 if TYPE_CHECKING:
@@ -84,11 +85,11 @@ async def run_runtime(
         context = _RuntimeFrontContext(runtime, readline=readline, output=output)
         fronts = tuple(bind(context) for bind in runtime.front_bindings)
         active = tuple(front for front in fronts if not (headless and front.interactive))
-        if active:
-            await asyncio.gather(*(front.run(stop) for front in active))
-        else:
-            await stop.wait()
-    finally:
+        await supervise(runtime, lifecycle, active, stop)
+    except BaseException as error:
+        _logger.exception("Aurora runtime 运行失败，开始关闭")
+        await lifecycle.abort(error)
+    else:
         _logger.info("Aurora runtime 开始关闭")
         await lifecycle.close()
         _logger.info("Aurora runtime 已关闭")

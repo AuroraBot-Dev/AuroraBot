@@ -852,3 +852,19 @@ def test_python_dash_m_aurora_dispatches_through_main(monkeypatch: pytest.Monkey
     monkeypatch.setattr("aurora.main.main", fake_main)
     runpy.run_path(str(Path(__file__).parents[1] / "aurora" / "__main__.py"), run_name="__main__")
     assert calls == [None]
+
+
+def test_start_reports_each_runtime_and_cleanup_failure(
+    configured_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """异常组不能只显示错误数量，原始运行错误和清理错误均需可读。"""
+
+    async def failed(config: object, *, headless: bool) -> None:
+        """模拟已经完成清理的运行失败。"""
+        raise ExceptionGroup("运行与资源清理同时失败", [ValueError("原始运行错误"), OSError("释放失败")])
+
+    monkeypatch.setattr(start, "_run_runtime", failed)
+    assert run(["--root", str(configured_project), start.COMMAND["name"], "--headless"]) == EXIT_CONFIG_ERROR
+    error = capsys.readouterr().err
+    assert "原始运行错误" in error
+    assert "释放失败" in error

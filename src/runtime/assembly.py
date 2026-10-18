@@ -19,6 +19,7 @@ from src.kernel import (
     resolve,
 )
 from src.runtime.factory import RuntimeFactory
+from src.utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
         ModuleSpec,
     )
     from src.runtime.core import AuroraRuntime
+
+_logger = get_logger(__name__)
 
 _PLUGIN_DIRECTORY = ("extensions", "plugins")
 
@@ -140,6 +143,6 @@ async def compose_runtime(
     lifecycle = await compose_managed(settings, _discover(settings), bindings, contributed)
     try:
         return _create(lifecycle.assembly, output), lifecycle
-    except BaseException:
-        await lifecycle.close()
-        raise
+    except BaseException as error:
+        _logger.exception("Bot 门面创建失败，开始关闭模组")
+        await lifecycle.abort(error)
