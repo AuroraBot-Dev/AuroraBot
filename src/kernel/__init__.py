@@ -15,6 +15,7 @@ from src.kernel.discovery import (
     EntryPointSource,
     StaticSource,
 )
+from src.kernel.failures import ModuleLifecycleError
 from src.kernel.lifecycle import ManagedAssembly
 from src.kernel.phase import (
     ACTIVATE,
@@ -51,6 +52,7 @@ __all__ = [
     "InstanceBinding",
     "ManagedAssembly",
     "ModuleContext",
+    "ModuleLifecycleError",
     "ModuleSpec",
     "Ordering",
     "Phase",

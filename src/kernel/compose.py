@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
 from src.kernel.context import _ModuleContext, _MutableContext
+from src.kernel.failures import ModuleCleanup, collect_failure, raise_with_cleanup
 from src.kernel.lifecycle import ManagedAssembly
 from src.kernel.phase import CLOSE, CONSTRUCTION_KINDS, PhaseKind
 from src.kernel.resolve import resolve
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from src.contracts import ContributionKey, Settings
     from src.kernel.context import Assembly
-    from src.kernel.declaration import AsyncCleanup, ModuleHook, ModulePrepare, ModuleRegistrar, ModuleSpec
+    from src.kernel.declaration import ModuleHook, ModulePrepare, ModuleRegistrar, ModuleSpec
 
 _logger = get_logger(__name__)
 
@@ -69,7 +69,7 @@ async def compose_managed(
     context = _MutableContext(settings, modules=resolution.modules)
     context.seed(instances)
     context.seed_contributions(contributions)
-    cleanups: list[AsyncCleanup] = []
+    cleanups: list[ModuleCleanup] = []
     constructed: list[ModuleSpec] = []
     try:
         for step in resolution.phases:
@@ -84,14 +84,15 @@ async def compose_managed(
                 if step.phase.kind is PhaseKind.SETUP:
                     cleanup = await cast("ModulePrepare", hook)(bound)
                     if cleanup is not None:
-                        cleanups.append(cleanup)
+                        cleanups.append(ModuleCleanup(spec.name, step.phase.name, cleanup))
                 else:
                     cast("ModuleRegistrar", hook)(bound)
                     _validate_provides(spec, bound)
                     constructed.append(spec)
-    except BaseException:
-        await _rollback(context, constructed, cleanups, resolution.providers)
-        raise
+    except BaseException as error:
+        _logger.exception("模组装配失败，开始回滚")
+        failures = await _rollback(context, constructed, cleanups, resolution.providers)
+        raise_with_cleanup(error, failures)
     assembly = context.freeze()
     _logger.info("项目组件装配完成 capability_count={}", len(assembly.capabilities))
     return ManagedAssembly(assembly, context, resolution, tuple(cleanups))
@@ -100,9 +101,11 @@ async def compose_managed(
 async def _rollback(
     context: _MutableContext,
     constructed: list[ModuleSpec],
-    cleanups: list[AsyncCleanup],
+    cleanups: list[ModuleCleanup],
     providers: Mapping[type, str],
-) -> None:
+) -> list[Exception]:
+    """回滚保留失败归属，调用者同时报告构造失败与所有释放失败。"""
+    failures: list[Exception] = []
     closed: set[str] = set()
     for spec in reversed(constructed):
         if spec.name in closed:
@@ -110,8 +113,12 @@ async def _rollback(
         closed.add(spec.name)
         hook = spec.hook(CLOSE)
         if hook is not None:
-            with suppress(Exception):
-                await cast("ModuleHook", hook)(_ModuleContext(context, spec.name, providers))
+            bound = _ModuleContext(context, spec.name, providers)
+            failure = await collect_failure(spec.name, CLOSE.name, cast("ModuleHook", hook)(bound))
+            if failure is not None:
+                failures.append(failure)
     for cleanup in reversed(cleanups):
-        with suppress(Exception):
-            await cleanup()
+        failure = await cleanup.run()
+        if failure is not None:
+            failures.append(failure)
+    return failures
