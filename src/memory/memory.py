@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from src.contracts import MemoryScopeSnapshot, MemorySnapshot, ScopeCatalog, ScopeKind
 from src.contracts.memory import MemoryRequest
+from src.memory.continuity import select_continuity
 from src.memory.index import MemoryIndex
 from src.utils import get_logger
 from src.utils.patterns import pattern_matches
@@ -77,7 +78,11 @@ class Memory:
             commits = tuple(commit for commit in recent if scope in commit.scopes)[-self._commits_per_scope :]
             scope_head = max(commit.scopes[scope] for commit in history.commits if scope in commit.scopes)
             snapshots.append(MemoryScopeSnapshot(scope, scope_head, commits))
-        continuity = await self._state.snapshot_at(history.cursor) if self._state is not None else None
+        continuity = (
+            select_continuity(await self._state.snapshot_at(history.cursor), request)
+            if self._state is not None
+            else None
+        )
         snapshot = MemorySnapshot(window_start, tuple(snapshots), continuity, history.cursor, observed_at)
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))
         return snapshot

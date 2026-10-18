@@ -9,7 +9,7 @@ from src.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySna
 from src.contracts.model import ContextBudgetError
 
 if TYPE_CHECKING:
-    from src.contracts.bot import BotSnapshot
+    from src.contracts.memory import MemoryContinuity
     from src.prompt.models import PromptCatalog
 
 _TRUNCATION_TAG = "部分对话未载入；请按检查点和证据引用恢复，必要时读取原始记录。"
@@ -111,9 +111,16 @@ class PromptAssembler:
         return "\n".join(lines)
 
     @staticmethod
-    def _render_continuity(snapshot: BotSnapshot) -> str:
+    def _render_continuity(snapshot: MemoryContinuity) -> str:
         """完整披露当前选择和恢复依据，避免推荐排序隐式遗忘任务。"""
         lines = [f"## 你的持久主体状态\nBot：{snapshot.bot_id}，version：{snapshot.version}"]
+        if snapshot.goal_counts or snapshot.wake_counts:
+            lines.append(
+                f"全部目标概览：{dict(snapshot.goal_counts)}；全部安排概览：{dict(snapshot.wake_counts)}。"
+                "下文只展开当前焦点；其他状态可用 aurora:tool/bot_state 分页发现，指定 goal_id 或 wake_id 读取详情。"
+            )
+        if snapshot.missing_goal_ids:
+            lines.append(f"指定目标尚不存在：{json.dumps(snapshot.missing_goal_ids, ensure_ascii=False)}")
         for goal in snapshot.goals:
             lines.extend(
                 (

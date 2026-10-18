@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
-    from src.contracts.bot import BotSnapshot
+    from src.contracts.memory import MemoryContinuity
 
 MCP_EVENT_RECEIVED = "mcp.event.received"
 
@@ -139,7 +139,7 @@ class MemorySnapshot:
 
     window_start: datetime
     scopes: tuple[MemoryScopeSnapshot, ...]
-    continuity: BotSnapshot | None = None
+    continuity: MemoryContinuity | None = None
     cursor: int = 0
     observed_at: datetime | None = None
 

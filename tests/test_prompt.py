@@ -14,7 +14,8 @@ from src.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from src.contracts.bot import BotSnapshot, Checkpoint, Goal
+from src.contracts.bot import Checkpoint, Goal
+from src.contracts.memory import MemoryContinuity
 from src.contracts.model import ContextBudgetError
 from src.prompt import PromptAssembler, PromptCatalog
 
@@ -102,7 +103,7 @@ def test_continuity_survives_memory_pressure_and_old_history_trimming() -> None:
     )
     commit = WorldCommit("large", "environment.fact", "test", "普通经历" * 300, now, {"test": 1}, WorldFrontier())
     memory = MemorySnapshot(
-        now, (MemoryScopeSnapshot("test", 1, (commit,)),), BotSnapshot("aurora:bot/test", 1, (goal,))
+        now, (MemoryScopeSnapshot("test", 1, (commit,)),), MemoryContinuity("aurora:bot/test", 1, (goal,))
     )
     tree = AgentTree.create("tree", "root", _agent(), "检查结果")
     tree = tree.append("root", ChatMessage.assistant("很久以前的讨论" * 300))

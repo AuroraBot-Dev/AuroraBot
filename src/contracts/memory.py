@@ -10,6 +10,21 @@ from src.contracts.identity import Identifier
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from src.contracts.bot import Goal, WakePlan
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryContinuity:
+    """本次工作所需的完整状态，以及未展开主体内容的明确概览。"""
+
+    bot_id: str
+    version: int
+    goals: tuple[Goal, ...] = ()
+    wakes: tuple[WakePlan, ...] = ()
+    goal_counts: tuple[tuple[str, int], ...] = ()
+    wake_counts: tuple[tuple[str, int], ...] = ()
+    missing_goal_ids: tuple[str, ...] = ()
+
 
 @dataclass(frozen=True, slots=True)
 class MemoryRequest:

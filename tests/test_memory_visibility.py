@@ -41,7 +41,8 @@ def test_memory_observation_and_cursor_exclude_late_and_future_information(tmp_p
             current = await memory.recall(MemoryRequest(observed_at=clock[0]))
             assert _ids(current.scopes) == {"known", "late", "aurora:bot/test:state:1", "aurora:bot/test:state:2"}
             assert current.continuity is not None
-            assert current.continuity.goal(goal.goal_id).status is GoalStatus.PAUSED
+            assert current.continuity.goals == ()
+            assert current.continuity.goal_counts == (("paused", 1),)
 
             history = await memory.recall(MemoryRequest(observed_at=first))
             bounded = await memory.recall(MemoryRequest(cursor=cutoff, observed_at=clock[0]))
@@ -49,7 +50,7 @@ def test_memory_observation_and_cursor_exclude_late_and_future_information(tmp_p
                 assert _ids(snapshot.scopes) == {"aurora:bot/test:state:1", "known"}
                 assert snapshot.cursor == cutoff
                 assert snapshot.continuity is not None
-                assert snapshot.continuity.goal(goal.goal_id).status is GoalStatus.ACTIVE
+                assert snapshot.continuity.goals[0].status is GoalStatus.ACTIVE
                 assert next(scope for scope in snapshot.scopes if scope.scope == "test:world/facts").head == 1
             rebuilt = await Memory(world, state=state).recall(MemoryRequest(observed_at=first))
             assert rebuilt == history
