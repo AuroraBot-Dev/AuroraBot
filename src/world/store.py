@@ -147,6 +147,7 @@ class SqlAlchemyWorldJournal:
                 recorded_at = self._now()
                 if recorded_at.tzinfo is None or recorded_at.utcoffset() is None:
                     raise ValueError("世界日志的时间来源必须包含时区")
+                recorded_at = recorded_at.astimezone(UTC)
                 recorded_at = max(recorded_at, _as_utc(last_recorded_at)) if last_recorded_at else recorded_at
                 last_recorded_at = recorded_at
                 occurred_at = item.occurred_at or recorded_at
@@ -375,6 +376,7 @@ def _matches_input(commit: WorldCommit, item: WorldCommitInput) -> bool:
         and set(commit.scopes) == set(item.scopes)
         and dict(commit.based_on.positions) == dict(item.based_on.positions)
         and dict(commit.data) == dict(item.data)
+        and (item.occurred_at is None or commit.occurred_at == item.occurred_at)
     )
 
 

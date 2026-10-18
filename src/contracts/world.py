@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -59,6 +60,7 @@ class EnvironmentEvent:
         if not all(field.strip() for field in fields):
             raise ValueError("EnvironmentEvent requires non-empty identity and summary fields")
         object.__setattr__(self, "data", freeze_object(self.data))
+        object.__setattr__(self, "occurred_at", _utc_time(self.occurred_at))
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +87,11 @@ class WorldCommit:
             raise ValueError("WorldCommit requires positive sequences for non-empty scopes")
         object.__setattr__(self, "scopes", MappingProxyType(scopes))
         object.__setattr__(self, "data", freeze_object(self.data))
+        object.__setattr__(self, "occurred_at", _utc_time(self.occurred_at))
         if self.cursor < 0:
             raise ValueError("世界提交的全局游标不能小于零")
-        if self.recorded_at is not None and (self.recorded_at.tzinfo is None or self.recorded_at.utcoffset() is None):
-            raise ValueError("世界提交的获知时间必须包含时区")
+        if self.recorded_at is not None:
+            object.__setattr__(self, "recorded_at", _utc_time(self.recorded_at))
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +115,15 @@ class WorldCommitInput:
         if not self.scopes or any(not scope.strip() for scope in self.scopes):
             raise ValueError("WorldCommitInput requires non-empty scopes")
         object.__setattr__(self, "data", freeze_object(self.data))
+        if self.occurred_at is not None:
+            object.__setattr__(self, "occurred_at", _utc_time(self.occurred_at))
+
+
+def _utc_time(value: datetime) -> datetime:
+    """记录实际瞬间，持久化与排序不依赖运行机器的本地时区。"""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("世界时间必须包含时区")
+    return value.astimezone(UTC)
 
 
 @dataclass(frozen=True, slots=True)
