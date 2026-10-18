@@ -107,14 +107,12 @@ def test_a_rejected_manifest_is_a_plan_error() -> None:
     [
         ('command = "uv run weather-mcp"', "aurora-app.toml 的 [server].command 必须是字符串数组"),
         ('command = ["uv", 123]', "aurora-app.toml 的 [server].command 必须是字符串数组"),
-        # 类型对了但内容为空：错误发生在 argv 校验那一步，那里只有 ``[server].command``
-        # 这个位置可指，因为同一段代码也给用户的 --command 报错。
         ("command = []", "[server].command 必须是非空的字符串数组"),
         ('command = { executable = "uv" }', "aurora-app.toml 的 [server].command 必须是字符串数组"),
     ],
 )
 def test_a_malformed_command_is_rejected(value: str, fragment: str) -> None:
-    """报错必须同时说清「哪个仓库」与「哪一处」：清单是用户刚写的那几行，改哪里要指得到。"""
+    """错误指向仓库及字段；空数组使用清单与显式命令共用的 argv 校验位置。"""
     with pytest.raises(ManifestError) as error_info:
         _parse(f"manifest_version = 1\n\n[server]\n{value}\n")
 

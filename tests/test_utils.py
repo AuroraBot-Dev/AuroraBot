@@ -114,6 +114,7 @@ _TOOLS = frozenset(
 
 
 def test_resolve_names_applies_ordered_patterns_with_last_match_wins() -> None:
+    """按顺序决定可见性；无冒号模式匹配命名空间前缀，双星号可跨层。"""
     assert resolve_names(_TOOLS, ("aurora:tool/delegate", "aurora:tool/world_*")) == frozenset(
         {"aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_trees"}
     )
@@ -121,7 +122,6 @@ def test_resolve_names_applies_ordered_patterns_with_last_match_wins() -> None:
         frozenset({"org.aurora.qq:tool/qq_send_private_message"})
     )
     assert resolve_names(_TOOLS, ("!org.aurora.qq:tool/*",)) == frozenset()
-    # 没有 `:` 的模式按命名空间前缀理解，`**` 跨全部层级
     assert resolve_names(_TOOLS, ("org.aurora.**",)) == frozenset(
         {
             "org.aurora.qq:tool/qq_send_private_message",
@@ -176,17 +176,13 @@ def test_pattern_matches_and_rejects_invalid_patterns() -> None:
 
 
 def test_wildcard_reach_follows_the_id_level_syntax() -> None:
-    """`*` 不跨哪一层，取决于它落在哪一段——这正是 ID 的三段式语法。"""
-    # path 段只以 `/` 分层，`.` 是普通字符：单星够得到带点的工具名
+    """单星号遵守命名空间与路径层级，路径中的点和业务域的冒号均为普通字符。"""
     assert pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/send.message")
     assert pattern_matches("aurora:tool/world_*", "aurora:tool/world_read.deep")
-    # 但 `/` 仍是层级：单星只走一层，双星才跨
     assert not pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/room/send")
     assert pattern_matches("org.aurora.qq:tool/**", "org.aurora.qq:tool/room/send")
-    # 命名空间段仍以 `.` 分层：单星只够到一层命名空间
     assert not pattern_matches("*:tool/*", "org.aurora.qq:tool/send")
     assert pattern_matches("**:tool/*", "org.aurora.qq:tool/send")
-    # 第三方业务 scope 是自由文本，其中的 `:` 落在 path 段而不是层级
     assert pattern_matches("qq:*", "qq:group:123")
 
 

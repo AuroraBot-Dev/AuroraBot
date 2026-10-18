@@ -167,6 +167,7 @@ def test_a_pre_existing_owner_directory_is_reused(tmp_path: Path) -> None:
 
 
 def test_registry_failure_rolls_the_final_directory_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """注册失败后目录回到暂存区，正式目录与注册表保持执行前的状态。"""
     store = _store(tmp_path)
     prepared = _prepared(store.project_root)
     monkeypatch.setattr(AppStore, "add_app", _failing_write)
@@ -174,7 +175,6 @@ def test_registry_failure_rolls_the_final_directory_back(tmp_path: Path, monkeyp
     with pytest.raises(RegistryWriteError):
         install_transaction(store, prepared)
 
-    # 用户看到的东西必须与执行之前完全一样：没有正式目录，注册表也没变。
     assert not store.project_root.joinpath(*_FINAL_PARTS).exists()
     assert _entries(store) == []
     assert prepared.staging.root.joinpath("pyproject.toml").is_file(), "内容必须回到 staging"
@@ -221,14 +221,12 @@ def test_rollback_failure_reports_the_exact_residue(tmp_path: Path, monkeypatch:
 
 
 def test_a_successful_commit_leaves_no_staging_behind(tmp_path: Path) -> None:
+    """事务将暂存目录发布为正式目录；scratch 由外层暂存上下文管理。"""
     store = _store(tmp_path)
     prepared = _prepared(store.project_root)
 
     install_transaction(store, prepared)
 
-    # staging 本体被 rename 成了正式目录。scratch 不在这里断言：它由
-    # staging_directory 的生命周期负责（真实流程里是 prepare_install 那个上下文
-    # 管理器），事务层既没建它也不该删它。
     entries = apps_root_entries(store.project_root)
     assert _STAGING_NAME not in entries
     assert _OWNER in entries

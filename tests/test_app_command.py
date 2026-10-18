@@ -1,4 +1,7 @@
-"""``aurora app`` 的命令注册、列表渲染与开关行为测试。"""
+"""``aurora app`` 的命令注册、列表渲染与开关行为测试。
+
+表头按竖线划分单元格，PACKAGE ID 保持为一个整体；表头位于等号分隔行之前。
+"""
 
 from __future__ import annotations
 
@@ -15,9 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _CONFIG = "config/apps.toml"
-# 表头单元格原文；带框渲染后每格由 | 分隔，"PACKAGE ID" 是一个整体。
 _HEADERS = ["PACKAGE ID", "TYPE", "TRANSPORT", "ENABLED", "STATE", "PATH"]
-# render_table 的表头分隔行形如 |====+====|，在它之前的最后一格是表头。
 _SEPARATOR_PREFIX = "|="
 _FULLWIDTH = frozenset(("F", "W"))
 
@@ -128,7 +129,7 @@ def test_list_reports_an_empty_registry(tmp_path: Path, capsys: pytest.CaptureFi
 
 
 def test_every_frame_line_renders_to_the_same_width(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """框线的全部意义就是每行等宽；宽度算错会让边框断开。"""
+    """顶部边框、横幅、列名与分隔行等宽，数据从列名分隔行之后开始。"""
     root = _project(
         tmp_path,
         _stdio("com.example.ready", "extensions/apps/example/ready")
@@ -142,7 +143,6 @@ def test_every_frame_line_renders_to_the_same_width(tmp_path: Path, capsys: pyte
 
     assert len(_widths(output)) == 1
     lines = output.splitlines()
-    # 顶部边框、banner、边框、表头、|====| 分隔行，随后才是数据。
     assert lines[0].startswith("+-") and lines[2].startswith("+-")
     assert lines[1].startswith("| ") and _CONFIG in lines[1]
     assert _header_row(output) == _HEADERS

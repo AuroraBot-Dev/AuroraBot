@@ -1,4 +1,4 @@
-"""共享测试配置；配置测试从发布模板创建隔离的个人目录。"""
+"""从发布模板创建隔离配置，并强制 LiteLLM 使用本地费用表以保持离线。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-# 测试必须离线：禁止 LiteLLM 在导入时拉取远程费用表
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
 _ROOT = Path(__file__).parents[1]

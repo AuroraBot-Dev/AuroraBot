@@ -285,6 +285,7 @@ def test_a_read_only_file_does_not_block_the_cleanup(tmp_path: Path) -> None:
 
 
 def test_registry_failure_renames_the_quarantine_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """删除注册失败后恢复回收目录与条目，使文件系统保持执行前的状态。"""
     store = _store(tmp_path)
     root = _installed(store)
     monkeypatch.setattr(AppStore, "remove_app", _failing_write)
@@ -292,7 +293,6 @@ def test_registry_failure_renames_the_quarantine_back(tmp_path: Path, monkeypatc
     with pytest.raises(RegistryWriteError):
         remove_transaction(store, Removal(_PACKAGE, root))
 
-    # 用户在文件系统上看到的东西必须与执行 remove 之前完全一样。
     assert (root / "src" / "main.py").is_file()
     assert store.raw_app(_PACKAGE) is not None
 

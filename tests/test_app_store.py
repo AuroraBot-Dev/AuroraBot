@@ -1,4 +1,7 @@
-"""``config/apps.toml`` 的读取、状态判定与原子写测试。"""
+"""``config/apps.toml`` 的读取、状态判定与原子写测试。
+
+安装展示与落盘共用表格编码，测试同时约束字段白名单以及生成文本能被配置解析器读回。
+"""
 
 from __future__ import annotations
 
@@ -242,12 +245,6 @@ def test_list_only_reads_registered_entries(tmp_path: Path) -> None:
     (root / "extensions" / "apps" / "ghost" / "unregistered").mkdir(parents=True)
 
     assert [item.package for item in AppStore(root).list_apps().apps] == ["com.example.known"]
-
-
-#
-# 安装确认时展示的那段 TOML 与最终写进文件的那一段出自同一个 app_table，所以这两组
-# 断言同时约束着两件事：键集必须是运行时白名单允许的那几个，且渲染出来的文本本身
-# 就是一份能被读回来的合法注册表。
 
 
 def _remote_config(package: str, *, auth_env: str | None = None) -> AppConfig:

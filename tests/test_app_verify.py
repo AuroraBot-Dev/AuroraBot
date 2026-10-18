@@ -4,7 +4,7 @@
 ``FakeMcpClientFactory``，超时靠一个永不返回的 open 加一个被改小的常量来触发，
 所以这个文件不会真的等 60 秒。
 
-源码、包管理器与远程 URL 安装共用检查机制。检查分两个阶段：协议连接与工具发现。
+源码、包管理器与远程 URL 安装共用协议连接、工具发现和资源关闭三个检查阶段。
 """
 
 from __future__ import annotations
@@ -320,7 +320,7 @@ def test_a_remote_failure_is_described_as_a_remote_endpoint() -> None:
 
 
 def test_a_timeout_is_reported_as_a_handshake_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # 把总超时改小：测的是「超时会被报成超时」，不是「Aurora 真的会等 60 秒」。
+    """缩短握手超时，验证错误类型与说明，避免测试等待默认时长。"""
     monkeypatch.setattr("aurora.commands.app.verify.DEFAULT_TIMEOUT_SECONDS", 0.05)
     factory = FakeMcpClientFactory(hang=True)
 

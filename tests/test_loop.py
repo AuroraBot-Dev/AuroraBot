@@ -49,9 +49,8 @@ def test_the_loop_declares_the_four_react_operations() -> None:
 
 
 def test_observe_and_effect_are_declared_as_one_world() -> None:
-    """三个世界端口必须同源，所以它们是一条不变量而不是三条。"""
+    """观察和效果端口属于同一世界，WorldJournal 是其完整视图，不增加循环操作。"""
     assert set(WORLD_PORTS) == {WorldReader, WorldWriter, WorldJournal}
-    # Observe 与 Effect 各绑定一个端口；WorldJournal 只是第三个视图，不是第五个操作
     assert {operation.capability for operation in LOOP_OPERATIONS} >= {WorldReader, WorldWriter}
 
 

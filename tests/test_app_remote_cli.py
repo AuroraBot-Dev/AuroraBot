@@ -1,8 +1,7 @@
 """``aurora app install <URL>``：把一个已经在运行的远程 MCP 端点写进注册表。
 
-这条路径与前两条的分界是「Aurora 不产生任何文件」：不 clone、不读
-``aurora-app.toml``、不装依赖，只记下地址与「凭据放在哪个环境变量里」。因此
-这个文件里最要紧的两类断言是：
+远程安装不下载源码、不读启动清单、不安装依赖，注册表保存端点地址与认证变量名。
+这个文件重点验证两类行为：
 
 * 握手是准入门槛 —— ``--yes`` 跳过的是提问，不是它；
 * token 的值一次都不落盘、不打印，注册表里存的是变量名。
@@ -31,9 +30,7 @@ _CONFIG = "config/apps.toml"
 _DEFAULT_PROTOCOL = "2025-06-18"
 _TOKEN_NAME = "MCP_TOKEN"
 _TOKEN_VALUE = "s3cr3t-value"
-# 一个不会被真实环境用到的名字，用来测「声明了却读不到值」。
 _UNSET_NAME = "AURORA_TEST_UNSET_TOKEN"
-# 这条路径上重复出现的最小参数组合：install <url> --package <id>。
 _BASE = ("install", ENDPOINT, "--package", ENDPOINT_PACKAGE)
 
 

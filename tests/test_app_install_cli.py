@@ -5,6 +5,7 @@ Git）换成替身，所以这个文件不发请求、不起子进程、不连�
 
 ``--npx`` / ``--uvx`` 是同一个子命令的另一条路径，它不读清单、不克隆，所以那些
 用例在 ``test_app_runner_cli.py``。
+安装路径在计划正文与注册表的工作目录字段中各展示一次。
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ _APP_PATH = "extensions/apps/Churk-Ben/Aurora-QQ"
 _CONFIG = "config/apps.toml"
 _REQUESTED = "churk-ben/aurora-qq"
 _COMMAND_JSON = '["node","./server.js"]'
-# 计划里 Install path 一次、注册表条目的 working_dir 一次。
 _PLAN_PATH_OCCURRENCES = 2
 
 

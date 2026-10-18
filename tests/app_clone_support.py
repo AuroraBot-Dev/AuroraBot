@@ -7,6 +7,7 @@
 实现，那它就没被任何测试真正验证过。所以 ``FakeProcessRunner`` 不模拟 git 的
 行为、也不生成 HEAD：它只记录 argv 与 env、返回预置结果；``FakeCloner`` 也不
 模拟 git，它只回答「clone 成功之后 staging 里应该有什么」，那是 fixture 的活。
+提交摘要使用固定的合法四十位十六进制值，结果无需依赖本机 Git 仓库。
 """
 
 from __future__ import annotations
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
 
     from aurora.commands.app.clone import Staging
 
-# 一个合法的 40 位十六进制 HEAD。
 DEFAULT_COMMIT = "3f2a1c9d4e5b6a7c8d9e0f1a2b3c4d5e6f7a8b9c"
 APP_PACKAGE = "github.churk-ben.aurora-qq"
 APP_PATH = "extensions/apps/Churk-Ben/Aurora-QQ"

@@ -7,6 +7,7 @@
 实现，那它就没被任何测试真正验证过。``FakeMcpClientFactory`` 不模拟 MCP：它只
 回答「按这份 spec 打开连接会成功还是抛什么」，握手到底是几个来回是 ``src/mcp``
 的事。
+默认共享提交摘要与合法启动清单，假服务提供一个工具以满足安装准入；Agent 夹具使用已发布的 worker。
 """
 
 from __future__ import annotations
@@ -37,20 +38,15 @@ if TYPE_CHECKING:
     from src.mcp.events import InboundEventHandler, McpInboundEvent
     from src.mcp.models import McpAppSpec
 
-# 一个合法的 40 位十六进制 HEAD，与 app_clone_support 同源。
 DEFAULT_COMMIT = "3f2a1c9d4e5b6a7c8d9e0f1a2b3c4d5e6f7a8b9c"
 DEFAULT_PROTOCOL = "2025-06-18"
 WEATHER_PACKAGE = "github.example.weather-mcp"
 WEATHER_PATH = "extensions/apps/example/weather-mcp"
 WEATHER_COMMAND = ("uv", "run", "weather-mcp")
 MANIFEST_EVIDENCE = f"{MANIFEST_NAME} [server].command"
-# 远程端点的准入测试反复用到的一个地址。
 ENDPOINT = "https://mcp.example.com/rpc"
 ENDPOINT_PACKAGE = "com.example.remote"
-# 假 Server 默认暴露的一个工具：安装检查要求「至少一个可注册工具」，所以默认
-# 必须有内容，否则每个用例都得先声明自己要装的东西有工具。
 DEFAULT_TOOL_NAMES = ("weather_now",)
-# 授权测试默认引用的 Agent：``config.example/agents.toml`` 里真实存在的一个 ID。
 DEFAULT_AGENT_ID = "aurora:agent/worker"
 
 
@@ -76,7 +72,6 @@ def manifest_text(
     return f"manifest_version = {version}\n\n[server]\ncommand = [{argv}]\n{extra}"
 
 
-# 默认清单一：所有需要「仓库声明了怎么启动」的用例都拿它当输入。
 MANIFEST = manifest_text()
 
 
@@ -163,12 +158,12 @@ class FakeMcpClientFactory:
         pages: Sequence[McpToolsPage] | None = None,
         list_failure: Exception | None = None,
     ) -> None:
+        """预置连接、发现与关闭结果；显式分页优先于默认工具名。"""
         self.protocol_version = protocol_version
         self.connected = connected
         self.failure = failure
         self.hang = hang
         self.close_failure = close_failure
-        # pages 优先于 tools：分页与非法响应需要自己指定每一页。
         self.pages = tuple(pages) if pages is not None else (tools_page(tools),)
         self.list_failure = list_failure
         self.specs: list[McpAppSpec] = []
@@ -282,7 +277,7 @@ def stub_cli(
     checker = MCPVerifier(FakeMcpClientFactory()) if verifier is None else verifier
 
     def build(store: AppStore, _source: GitHubSource) -> AppManager:
-        # 真 source 换成 FakeSource：CLI 的装配仍然走真实代码，只有出口被换掉。
+        """保留实际 CLI 装配，仅将 GitHub 与 Git 出口替换为可观察的替身。"""
         return real(store, source, cloner=cloner, verifier=checker)  # type: ignore[arg-type]
 
     monkeypatch.setattr(app_module, "AppManager", build)

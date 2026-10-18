@@ -1,7 +1,8 @@
-"""第三阶段的 Git 边界：准入、URL 交叉校验、配置隔离、argv、超时与 staging 清理。
+"""Git 边界：准入、URL 交叉校验、配置隔离、argv、超时与 staging 清理。
 
 全部离线：``FakeProcessRunner`` 返回预置结果；只有 ``CapturedProcessRunner`` 的
 用例会真的起子进程，起的也是当前解释器自己，不需要 git、uv、npm 或 Node。
+仓库简名和三种 GitHub 地址写法归一到同一身份，禁用与归档保留各自的拒绝原因。
 """
 
 from __future__ import annotations
@@ -63,7 +64,6 @@ _REMOTE_URL = "https://github.com/Churk-Ben/Aurora-QQ.git"
 _TOKEN = "ghp_SECRETTOKEN123"
 _EXIT_UNKNOWN = 3
 _EXIT_BAD_REVISION = 128
-# 两件不同的事，用户看到的理由也不同，不能都写成一句「不能装」。
 _REJECTION_REASONS = {"archived": "已归档", "disabled": "已禁用"}
 _PROBE_TIMEOUT_SECONDS = 1.0
 _RUNNER_TIMEOUT_SECONDS = 30.0
@@ -85,7 +85,6 @@ def test_invalid_repository_names_are_rejected(value: str) -> None:
         check_repository_name(value)
 
 
-# GitHub 页面上那个绿色按钮给的三种写法，加上 owner/repo 本身：四种归一成同一个。
 _ACCEPTED_INPUTS = [
     "example/weather-mcp",
     "example/weather-mcp/",

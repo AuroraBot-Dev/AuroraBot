@@ -138,16 +138,14 @@ def test_an_unknown_runner_is_rejected() -> None:
     [
         ("weather-mcp", "npx.app.weather-mcp"),
         ("@scope/weather", "npx.scope.weather"),
-        # 点不是分层记号（npm 的 scope 才是），它只是名字里的一个字符。
         ("Weather.MCP", "npx.app.weather-mcp"),
         ("weather_mcp", "npx.app.weather_mcp"),
-        # 首段以数字开头时补前缀：点分包名的第一段不能是数字。
         ("2fast", "npx.app.app-2fast"),
         ("@scope/2fast", "npx.scope.app-2fast"),
     ],
 )
 def test_the_runner_package_is_derived_from_the_package_name(specifier: str, expected: str) -> None:
-    """这类 App 没有仓库身份，包名才是它的长期 identity。"""
+    """包名决定身份，点视为普通字符，npm scope 划分层级，数字开头的段补字母前缀。"""
     assert runner_package("npx", specifier) == expected
 
 

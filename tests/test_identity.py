@@ -1,4 +1,4 @@
-"""横向身份层：命名空间 ID 与标签集合。"""
+"""横向身份层：命名空间 ID、标签集合，以及包含大小写、空格和符号的外部工具名。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from src.contracts.identity import (
 )
 from src.utils import resolve_names
 
-# 第三方 MCP Server 真的会给出这些名字；MCP SDK 对 Tool.name 不做任何格式约束。
 _FOREIGN_NAMES = (
     "send_message",
     "read-file",
