@@ -44,6 +44,7 @@ class McpAppState(StrEnum):
     READY = "ready"
     UNAVAILABLE = "unavailable"
     CLOSED = "closed"
+    CLOSE_FAILED = "close_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +212,18 @@ class McpStartupError(RuntimeError):
 
 class McpCallRejectedError(RuntimeError):
     """远端明确拒绝或可确定没有执行的 MCP 调用。"""
+
+
+class McpCloseError(RuntimeError):
+    """一个连接在停止事件或关闭资源时失败，保留应用与原始原因。"""
+
+    def __init__(self, package: str, phase: str, error: BaseException) -> None:
+        """错误归属独立于异常文本，宿主可以继续释放其他连接。"""
+        self.package = package
+        self.phase = phase
+        self.error = error
+        super().__init__(f"MCP App 关闭失败（{package}，{phase}）：{type(error).__name__}: {error}")
+        self.__cause__ = error
 
 
 class McpCallUnknownError(RuntimeError):

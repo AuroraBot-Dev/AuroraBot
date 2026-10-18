@@ -17,6 +17,7 @@ from src.mcp.models import (
     McpAppSnapshot,
     McpAppSpec,
     McpAppState,
+    McpCloseError,
     McpInboundEvent,
     McpRuntimeSnapshot,
     McpStartupError,
@@ -24,11 +25,13 @@ from src.mcp.models import (
 from src.mcp.scopes import mcp_scope, validate_mcp_scope
 from src.mcp.tool import McpTool, bind_mcp_tool
 from src.utils import get_logger, thaw_json
+from src.utils.tasks import raise_with_cleanup, wait_for_completion
 
 _logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from typing import Never
 
     from src.contracts import Tool
     from src.contracts.pkgs.world import WorldWriter
@@ -95,7 +98,7 @@ class McpRuntime:
         self._world = world
         self._startup_id = startup_id
         self._phase = _RuntimePhase.PREPARING
-        self._close_lock = asyncio.Lock()
+        self._closing: asyncio.Task[list[McpCloseError]] | None = None
         self._status_lock = asyncio.Lock()
 
     @classmethod
@@ -142,32 +145,58 @@ class McpRuntime:
             _logger.info("MCP runtime 已激活 app_count={} tool_count={}", len(self._records), len(self._tools))
 
     async def close(self) -> None:
-        """逆序且幂等地关闭 SDK Client 和 stdio/HTTP 资源。"""
-        async with self._close_lock:
-            if self._phase is _RuntimePhase.CLOSED:
-                return
-            async with self._status_lock:
-                self._phase = _RuntimePhase.CLOSING
-                for record in self._records:
-                    if record.client is not None:
+        """共享逆序清理任务，完整释放后报告错误或调用者取消。"""
+        failures, interrupted = await self._finish_close()
+        if interrupted is not None:
+            raise_with_cleanup(interrupted, failures)
+        if len(failures) == 1:
+            raise failures[0]
+        if failures:
+            raise ExceptionGroup("MCP 多个连接关闭失败", failures)
+
+    async def abort(self, error: BaseException) -> Never:
+        """启动已经失败时完成全部连接释放，并保留启动与清理错误。"""
+        failures, interrupted = await self._finish_close()
+        raise_with_cleanup(error, failures, interrupted)
+
+    async def _finish_close(self) -> tuple[list[McpCloseError], asyncio.CancelledError | None]:
+        """并发调用者等待同一次关闭，错误由发起关闭的调用者交付。"""
+        owner = self._closing is None
+        if self._closing is None:
+            self._closing = asyncio.create_task(self._close(), name="aurora:mcp:shutdown")
+        failures, interrupted = await wait_for_completion(self._closing)
+        return (failures if owner else []), interrupted
+
+    async def _close(self) -> list[McpCloseError]:
+        """一个连接失败不能截断其他连接，也不能被误记为已经关闭。"""
+        failures: list[McpCloseError] = []
+        async with self._status_lock:
+            self._phase = _RuntimePhase.CLOSING
+            for record in self._records:
+                if record.client is not None:
+                    try:
                         record.client.deactivate_events()
-            for record in reversed(self._records):
-                if record.client is None:
-                    continue
-                try:
-                    await record.client.close()
-                except Exception as error:  # noqa: BLE001 - one cleanup failure must not skip remaining clients
-                    _logger.error(
-                        "MCP App 关闭失败 package={} error_type={}",
-                        record.spec.package,
-                        type(error).__name__,
-                    )
-                    record.last_error = f"关闭失败：{type(error).__name__}: {error}"
-                finally:
-                    record.state = McpAppState.CLOSED
-            async with self._status_lock:
-                self._phase = _RuntimePhase.CLOSED
-            _logger.info("MCP runtime 已关闭")
+                    except BaseException as error:
+                        _logger.exception("MCP App 停止事件失败 package={}", record.spec.package)
+                        failure = McpCloseError(record.spec.package, "deactivate", error)
+                        record.last_error = str(failure)
+                        failures.append(failure)
+        for record in reversed(self._records):
+            if record.client is None:
+                continue
+            (result,) = await asyncio.gather(record.client.close(), return_exceptions=True)
+            if isinstance(result, BaseException):
+                failure = McpCloseError(record.spec.package, "close", result)
+                record.last_error = str(failure)
+                record.state = McpAppState.CLOSE_FAILED
+                failures.append(failure)
+                _logger.error("MCP App 关闭失败 package={} error_type={}", record.spec.package, type(result).__name__)
+            else:
+                record.state = McpAppState.CLOSED
+        async with self._status_lock:
+            self._phase = _RuntimePhase.CLOSED
+        _logger.info("MCP runtime 关闭结束 failure_count={}", len(failures))
+        return failures
 
     async def _catalog_changed(self, package: str) -> None:
         record = self._by_package[package]
@@ -292,9 +321,9 @@ async def prepare_mcp(
             await _prepare_app(runtime, record, tools_by_id, client_factory, world)
         await runtime._freeze(tools_by_id)
         return runtime
-    except BaseException:
-        await runtime.close()
-        raise
+    except BaseException as error:
+        _logger.exception("MCP 准备失败，开始释放连接")
+        await runtime.abort(error)
 
 
 async def _prepare_app(
