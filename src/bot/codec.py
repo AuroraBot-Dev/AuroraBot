@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from src.contracts.bot import BotChange, BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
+from src.contracts.bot import BotChange, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -80,14 +80,4 @@ def change_data(change: BotChange) -> dict[str, Any]:
         "expected_version": change.expected_version,
         "goals": [goal_data(goal) for goal in change.goals],
         "wakes": [wake_data(wake) for wake in change.wakes],
-    }
-
-
-def snapshot_data(snapshot: BotSnapshot) -> dict[str, Any]:
-    """编码可直接供 Bot 阅读的主体状态。"""
-    return {
-        "bot_id": snapshot.bot_id,
-        "version": snapshot.version,
-        "goals": [goal_data(goal) for goal in snapshot.goals],
-        "wakes": [wake_data(wake) for wake in snapshot.wakes],
     }

@@ -27,7 +27,7 @@ def test_terminal_discovers_inspects_and_calls_same_bot_operations(configured_pr
             discovered = await runtime.terminal.dispatch_terminal("/resources --domain bot --kind query")
             entries = json.loads(discovered.text or "[]")
             assert [item["resource"] for item in entries] == ["aurora:bot/query/state"]
-            inspected = await runtime.terminal.dispatch_terminal("/inspect aurora:bot/command/goal_set@1")
+            inspected = await runtime.terminal.dispatch_terminal("/inspect aurora:bot/command/goal_set@2")
             definition = json.loads(inspected.text or "{}")
             assert "expected_version" in definition["metadata"]["parameters"]["required"]
             payload = {
@@ -37,12 +37,12 @@ def test_terminal_discovers_inspects_and_calls_same_bot_operations(configured_pr
                 "success_condition": "结果已确认",
             }
             call = await runtime.terminal.dispatch_terminal(
-                f"/call aurora:bot/command/goal_set@1 {json.dumps(payload, ensure_ascii=False)}"
+                f"/call aurora:bot/command/goal_set@2 {json.dumps(payload, ensure_ascii=False)}"
             )
             assert not call.is_error
             result = json.loads(call.text or "{}")
             assert result["status"] == "succeeded"
-            assert result["revision"] == "1"
+            assert result["revision"] == "2"
             read = await runtime.terminal.dispatch_terminal("/call aurora:bot/query/state {}")
             snapshot = json.loads(read.text or "{}")["data"]
             assert snapshot["goals"][0]["goal_id"] == payload["goal_id"]

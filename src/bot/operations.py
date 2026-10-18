@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from src.bot.codec import snapshot_data
 from src.bot.inputs import CancelInput, GoalInput, ScheduleInput, StateInput
+from src.bot.views import change_view, state_view
 from src.contracts import ToolScopes
 from src.contracts.bot import BotChange, Goal, GoalStatus, WakePlan, WakeStatus
 from src.contracts.operation import (
@@ -56,12 +56,14 @@ class BotOperation:
             parameters = self._parameters.model_validate(thaw_json(request.arguments))
             if isinstance(parameters, StateInput):
                 snapshot = await self._state.snapshot()
+                data = state_view(snapshot, parameters)
             else:
                 change = await self._change(request, parameters)
                 snapshot = await self._state.apply(change)
+                data = change_view(snapshot, change)
         except (ValueError, LookupError) as error:
             return OperationResult(status=OperationStatus.FAILED, message=str(error))
-        return OperationResult(snapshot_data(snapshot))
+        return OperationResult(data)
 
     async def _change(self, request: OperationRequest, parameters: BaseModel) -> BotChange:
         """将已校验输入转换成原子状态选择。"""
@@ -91,7 +93,7 @@ def bot_operations(state: BotStateStore) -> tuple[Operation, ...]:
         (
             "aurora:bot/query/state",
             BOT_STATE_TOOL,
-            "读取自己的持久目标、恢复检查点与未来活动安排；修改前读取 version。",
+            "分页发现自己的目标或安排；指定 goal_id 或 wake_id 展开完整恢复状态。后续页用 expected_version 固定版本。",
             StateInput,
         ),
         (
@@ -116,7 +118,7 @@ def bot_operations(state: BotStateStore) -> tuple[Operation, ...]:
     return tuple(
         BotOperation(
             state,
-            OperationDefinition(ResourceRef(ResourceKey.parse(key), "1"), text, model.model_json_schema(), tool, True),
+            OperationDefinition(ResourceRef(ResourceKey.parse(key), "2"), text, model.model_json_schema(), tool, True),
             model,
         )
         for key, tool, text, model in definitions
