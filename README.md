@@ -69,6 +69,8 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 操作结果超过 64 KiB 时，正式装配的路由先保存完整 JSON 回执，再把 `result_ref` 与状态写入世界日志；普通小回执继续内联。宿主的结构化调用仍返回完整结果，并附带 `body_ref` 内容描述。重试从相同版本恢复，不再次执行已完成操作；正文缺失或损坏时拒绝恢复，保留原先的执行状态。
 
+模型工具和终端遇到大结果时只显示固定引用，并提供读取入口；正文包含完整的 `status`、`data`、`message` 和 `evidence_refs`。收到引用本身不会被记为模型已经读取正文中的证据。小结果保持原有输出格式。
+
 `aurora:artifacts/query/stat` 核对版本并返回大小与媒体类型；`aurora:artifacts/query/read` 返回有界字节块，以 `content_base64` 编码，用 `next_offset` 继续读取。root、worker 和记忆专员可使用对应的 `artifact_stat`、`artifact_read` 工具。`aurora:artifacts/command/put` 接受最多 1 MiB 的 base64 内容，无默认模型工具入口；更大的数据集、权重和导出内容使用流式端口。读取会校验内容完整性，损坏文件不能作为有效版本返回。
 
 ### 节律判断与训练

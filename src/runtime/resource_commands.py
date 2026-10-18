@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from src.contracts import TerminalResponse
+from src.contracts.artifact_codec import artifact_data
 from src.contracts.operation import OperationRequest, OperationStatus
 from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
 from src.utils.serialization import thaw_json
@@ -86,9 +87,15 @@ class ResourceCommands:
             "resource": str(definition.ref.key),
             "revision": definition.ref.revision,
             "status": result.status.value,
-            "data": thaw_json(result.data),
-            "message": result.message,
+            "data": thaw_json(result.data) if result.body_ref is None else None,
+            "message": result.message if result.body_ref is None else None,
         }
+        if result.body_ref is not None:
+            data.update(
+                result_ref=artifact_data(result.body_ref),
+                content_included=False,
+                read_operation="aurora:artifacts/query/read",
+            )
         return TerminalResponse(
             json.dumps(data, ensure_ascii=False, separators=(",", ":")),
             is_error=result.status is not OperationStatus.SUCCEEDED,

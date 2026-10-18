@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolStatus
+from src.contracts.artifact_codec import artifact_data
 from src.contracts.operation import OperationRequest, OperationStatus
 from src.utils.serialization import thaw_json
 
@@ -39,6 +40,18 @@ class OperationTool:
     async def execute(self, call: ToolCall) -> ToolOutput:
         """统一路由后只进行文本协议适配。"""
         result = await self._registry.dispatch(self._request(call))
+        if result.body_ref is not None:
+            content = json.dumps(
+                {
+                    "status": result.status.value,
+                    "result_ref": artifact_data(result.body_ref),
+                    "content_included": False,
+                    "read_tool": "aurora:tool/artifact_read",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            return ToolOutput(content, ToolStatus(result.status.value))
         content = (
             json.dumps(thaw_json(result.data), ensure_ascii=False, separators=(",", ":"))
             if result.status is OperationStatus.SUCCEEDED
