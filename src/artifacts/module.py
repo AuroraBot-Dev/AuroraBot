@@ -3,9 +3,11 @@
 from src.artifacts.config import ArtifactsConfig
 from src.artifacts.discovery import ArtifactFindOperation
 from src.artifacts.operations import ArtifactOperation
+from src.artifacts.provider import ArtifactProvider
 from src.artifacts.store import FileArtifactStore
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
 from src.contracts.pkgs.artifacts import ArtifactStore
+from src.contracts.pkgs.resources import RESOURCE_PROVIDERS
 from src.kernel import ModuleContext, module
 
 
@@ -28,7 +30,7 @@ async def prepare(context: ModuleContext) -> None:
     name="artifacts",
     provides=ArtifactStore,
     requires=ArtifactStore,
-    contributes=OPERATION_CONTRIBUTIONS,
+    contributes=(OPERATION_CONTRIBUTIONS, RESOURCE_PROVIDERS),
     resources=(
         ArtifactFindOperation.DEFINITION.resource,
         *(ArtifactOperation.definition_for(action).resource for action in ("stat", "read", "put")),
@@ -38,6 +40,7 @@ async def prepare(context: ModuleContext) -> None:
 def build(context: ModuleContext) -> ArtifactStore:
     """启动前提供的同一内容存储继续用于运行期操作。"""
     store = _store(context)
+    context.contribute(RESOURCE_PROVIDERS, ArtifactProvider(store))
     context.contribute(OPERATION_CONTRIBUTIONS, ArtifactFindOperation(store))
     for action in ("stat", "read", "put"):
         context.contribute(OPERATION_CONTRIBUTIONS, ArtifactOperation(store, action))

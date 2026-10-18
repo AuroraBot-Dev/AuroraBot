@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from src.contracts.identity import is_namespace
-from src.contracts.resource import ResourceKey
+from src.contracts.resource import ResourceDescriptor, ResourceKey
 
 MAX_RESOURCE_PAGE = 100
 MAX_RESOURCE_CURSOR_LENGTH = 2048
@@ -42,3 +42,23 @@ class ResourceQuery:
             expected is None or expected == actual
             for expected, actual in zip(self.filters, (key.namespace, key.domain, key.kind), strict=True)
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ResourcePage:
+    """按公共资源位置严格排序的一页；有后续结果时必须填满请求页。"""
+
+    items: tuple[ResourceDescriptor, ...]
+    next_cursor: str | None = None
+
+    def __post_init__(self) -> None:
+        """固定返回的定义，游标与查询使用同一大小边界。"""
+        object.__setattr__(self, "items", tuple(self.items))
+        if any(not isinstance(item, ResourceDescriptor) for item in self.items):
+            raise TypeError("资源发现结果必须使用 ResourceDescriptor")
+        if self.next_cursor is not None and (
+            not isinstance(self.next_cursor, str)
+            or not self.next_cursor
+            or len(self.next_cursor) > MAX_RESOURCE_CURSOR_LENGTH
+        ):
+            raise ValueError("资源分页游标必须是有界非空文本")

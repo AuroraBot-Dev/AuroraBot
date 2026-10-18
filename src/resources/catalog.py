@@ -5,16 +5,25 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from src.resources.browser import ResourceBrowser
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from src.contracts.pkgs.resources import ResourceProvider
     from src.contracts.resource import ResourceAlias, ResourceDescriptor, ResourceKey, ResourceRef
+    from src.contracts.resource_query import ResourcePage, ResourceQuery
 
 
 class ResourceCatalog:
     """目录只保存定义与引用，实际内容仍由所属模组持有。"""
 
-    def __init__(self, definitions: Iterable[ResourceDescriptor] = (), aliases: Iterable[ResourceAlias] = ()) -> None:
+    def __init__(
+        self,
+        definitions: Iterable[ResourceDescriptor] = (),
+        aliases: Iterable[ResourceAlias] = (),
+        providers: Iterable[ResourceProvider] = (),
+    ) -> None:
         """冻结目录，重名、悬空别名与含混绑定在装配时失败。"""
         entries: dict[ResourceRef, ResourceDescriptor] = {}
         versions: dict[ResourceKey, list[ResourceDescriptor]] = {}
@@ -33,6 +42,7 @@ class ResourceCatalog:
         self._entries = MappingProxyType(entries)
         self._versions = MappingProxyType({key: tuple(values) for key, values in versions.items()})
         self._aliases = MappingProxyType(bindings)
+        self._browser = ResourceBrowser(self, providers)
 
     def find(
         self, *, namespace: str | None = None, domain: str | None = None, kind: str | None = None
@@ -65,3 +75,11 @@ class ResourceCatalog:
         if contract is not None and descriptor.contract != contract:
             raise ValueError(f"资源不满足所需能力契约：{descriptor.ref.key}")
         return descriptor
+
+    async def browse(self, query: ResourceQuery) -> ResourcePage:
+        """合并静态定义与提供者的一页，实际数据继续由各来源持有。"""
+        return await self._browser.find(query)
+
+    async def inspect(self, ref: ResourceRef, *, contract: ResourceRef | None = None) -> ResourceDescriptor:
+        """定义可使用别名，动态内容必须指定确定版本。"""
+        return await self._browser.resolve(ref, contract=contract)
