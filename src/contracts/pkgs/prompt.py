@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
     from src.contracts.agent import AgentTree
     from src.contracts.prompt import PromptAssembly
+    from src.contracts.tool import ToolDefinition
     from src.contracts.world import MemorySnapshot
 
 
@@ -34,4 +35,5 @@ class PromptAssembler(Protocol):
         node_id: str,
         *,
         memory: MemorySnapshot | None = None,
+        tools: tuple[ToolDefinition, ...] = (),
     ) -> PromptAssembly: ...

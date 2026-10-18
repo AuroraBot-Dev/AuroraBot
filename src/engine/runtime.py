@@ -145,11 +145,12 @@ class AgentTreeRunner:
                 if self._memory is not None
                 else None
             )
-            assembled = self._assembler.assemble(tree, node.node_id, memory=memory)
+            tools = self._tools.definitions_for(node.tools)
+            assembled = self._assembler.assemble(tree, node.node_id, memory=memory, tools=tools)
             request = ModelRequest(
                 node.model,
                 assembled.messages,
-                self._tools.definitions_for(node.tools),
+                tools,
             )
         except ContextBudgetError as error:
             return self._publish(await self._fail_node(tree, node.node_id, str(error)), observer)

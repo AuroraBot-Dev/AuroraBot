@@ -13,6 +13,7 @@ from src.utils import thaw_json
 
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryContinuity
+    from src.contracts.tool import ToolDefinition
     from src.contracts.world import WorldCommit
     from src.prompt.models import PromptCatalog
 
@@ -24,9 +25,9 @@ class PromptAssembler:
     """无 I/O 的上下文组装器，必要状态超限时明确要求拆分工作。"""
 
     def __init__(self, catalog: PromptCatalog, *, max_characters: int = 32_000) -> None:
-        """指定提示词目录与字符容量基线。"""
+        """指定领域请求的字符容量基线，包含可见工具定义；不等同于模型的 token 上限。"""
         if max_characters <= 0:
-            raise ValueError("max_characters must be positive")
+            raise ValueError("上下文字符容量必须为正数")
         self._catalog = catalog
         self._max_characters = max_characters
 
@@ -41,13 +42,15 @@ class PromptAssembler:
         node_id: str,
         *,
         memory: MemorySnapshot | None = None,
+        tools: tuple[ToolDefinition, ...] = (),
     ) -> PromptAssembly:
         """保留原始意图、最新交互和主体状态，按完整交互组裁剪历史。"""
+        message_budget = self._max_characters - _tools_size(tools)
         node = tree.node(node_id)
         try:
             agent_prompt = self._catalog.agent_prompts[node.prompt_id]
         except KeyError as error:
-            raise ValueError(f"missing Agent prompt：{node.prompt_id}") from error
+            raise ValueError(f"Agent 提示词不存在：{node.prompt_id}") from error
         fragments = [*self._catalog.system, agent_prompt]
         if memory is not None and memory.continuity is not None:
             fragments.append(self._render_continuity(memory.continuity))
@@ -61,27 +64,27 @@ class PromptAssembler:
         required = groups[0] if len(groups) == 1 else (*groups[0], *groups[-1])
         base = "\n\n".join(fragments)
         minimum = len(base) + _total_size(required)
-        if minimum > self._max_characters:
-            raise ContextBudgetError("必要上下文超过容量，请拆分当前工作或增加上下文预算")
+        if minimum > message_budget:
+            raise ContextBudgetError("工具定义与必要上下文超过容量，请减少可见能力、拆分当前工作或增加预算")
         marker_size = len(_TRUNCATION_TAG) if len(groups) > _REQUIRED_HISTORY_GROUPS else 0
-        available = max(0, self._max_characters - minimum - marker_size)
+        available = max(0, message_budget - minimum - marker_size)
         selected_ids: tuple[str, ...] = ()
         if memory is not None:
             fragment, selected_ids = self._select_memory(memory, available)
             if fragment:
                 fragments.append(fragment)
         system = ChatMessage.system("\n\n".join(fragments))
-        if len(system.content) + _total_size(node.messages) <= self._max_characters:
+        if len(system.content) + _total_size(node.messages) <= message_budget:
             messages = (system, *node.messages)
         else:
-            messages = self._trim_history(system, groups)
+            messages = self._trim_history(system, groups, message_budget)
         return PromptAssembly(messages, _exposure(memory, selected_ids, messages))
 
     def _trim_history(
-        self, system: ChatMessage, groups: tuple[tuple[ChatMessage, ...], ...]
+        self, system: ChatMessage, groups: tuple[tuple[ChatMessage, ...], ...], message_budget: int
     ) -> tuple[ChatMessage, ...]:
         """整组保留最新历史，工具调用及结果共同进入或退出上下文。"""
-        budget = self._max_characters - len(system.content) - len(_TRUNCATION_TAG) - _total_size(groups[0])
+        budget = message_budget - len(system.content) - len(_TRUNCATION_TAG) - _total_size(groups[0])
         kept: list[tuple[ChatMessage, ...]] = []
         for group in reversed(groups[1:]):
             size = _total_size(group)
@@ -255,3 +258,13 @@ def _message_size(message: ChatMessage) -> int:
 def _total_size(messages: tuple[ChatMessage, ...]) -> int:
     """计算一组完整消息的字符占用。"""
     return sum(_message_size(message) for message in messages)
+
+
+def _tools_size(tools: tuple[ToolDefinition, ...]) -> int:
+    """按完整定义计算字符代理，不能通过省略工具参数结构挤占记忆预算。"""
+    if not tools:
+        return 0
+    definitions = [
+        {"name": tool.name, "description": tool.description, "parameters": thaw_json(tool.parameters)} for tool in tools
+    ]
+    return len(json.dumps(definitions, ensure_ascii=False, separators=(",", ":")))

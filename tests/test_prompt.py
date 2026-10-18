@@ -133,7 +133,7 @@ def test_latest_tool_batch_is_kept_whole_or_rejected() -> None:
 def test_assembler_rejects_missing_agent_prompt() -> None:
     tree = AgentTree.create("tree", "root", _agent("aurora:prompt/agent/missing"), "hello")
 
-    with pytest.raises(ValueError, match="missing Agent prompt"):
+    with pytest.raises(ValueError, match="Agent 提示词不存在"):
         _assembler().assemble(tree, "root")
 
 
@@ -164,5 +164,5 @@ def test_prompt_catalog_and_assembler_require_non_empty_bounds() -> None:
         PromptCatalog((), {"aurora:prompt/agent/root": "prompt"})
     with pytest.raises(ValueError, match="Agent prompt"):
         PromptCatalog(("system",), {})
-    with pytest.raises(ValueError, match="must be positive"):
+    with pytest.raises(ValueError, match="字符容量必须为正数"):
         PromptAssembler(PromptCatalog(("system",), {"aurora:prompt/agent/root": "prompt"}), max_characters=0)
