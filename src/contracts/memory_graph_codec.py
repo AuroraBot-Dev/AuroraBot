@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
 
 def ranking_data(request: MemoryRankingRequest) -> dict[str, Any]:
@@ -51,6 +51,23 @@ def ranking_fingerprint(request: MemoryRankingRequest) -> str:
     """指纹绑定确切候选、图前缀、特征和时间坐标。"""
     content = json.dumps(ranking_data(request), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def interactions_fingerprint(events: Iterable[MemoryInteraction]) -> str:
+    """逐条绑定交互内容和次序，不把候选或当前问题混入图状态身份。"""
+    digest = hashlib.sha256(b"aurora:memory/graph-prefix@1\n")
+    for event in events:
+        data = {
+            "cursor": event.cursor,
+            "recorded_at": event.recorded_at.astimezone(UTC).isoformat(),
+            "source": (event.source.kind, event.source.identity, event.source.text),
+            "target": (event.target.kind, event.target.identity, event.target.text),
+            "relation": event.relation,
+            "value": float(event.value),
+        }
+        digest.update(json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def read_ranking(data: Mapping[str, Any]) -> MemoryRankingRequest:

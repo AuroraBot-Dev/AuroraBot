@@ -6,7 +6,6 @@ import hashlib
 import math
 import threading
 from copy import deepcopy
-from dataclasses import dataclass, field
 from io import BytesIO
 from typing import TYPE_CHECKING
 
@@ -14,7 +13,9 @@ import torch
 from torch import Tensor, nn
 
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS, MemoryNode
-from src.contracts.resource import ResourceKey, ResourceRef
+from src.contracts.resource import ResourceRef
+from src.memory_model.coordinates import TGN_KEY, TIME_SCALE
+from src.memory_model.state import GraphState
 from src.utils.features import TEXT_FEATURE_SCHEMA, text_vector
 
 if TYPE_CHECKING:
@@ -23,21 +24,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from src.contracts.memory_graph import MemoryInteraction, MemoryRankingRequest
-
-TGN_KEY = ResourceKey.parse("aurora:memory/model/tgn")
-TIME_SCALE = 20.0
-type NodeKey = tuple[str, str]
-
-
-@dataclass(slots=True)
-class GraphState:
-    """一个确切历史前缀的节点投影，独立于可训练模型参数。"""
-
-    memories: dict[NodeKey, Tensor] = field(default_factory=dict)
-    nodes: dict[NodeKey, MemoryNode] = field(default_factory=dict)
-    updated_at: dict[NodeKey, datetime] = field(default_factory=dict)
-    neighbors: dict[NodeKey, set[NodeKey]] = field(default_factory=dict)
-    features: dict[tuple[NodeKey, str], Tensor] = field(default_factory=dict)
 
 
 class TemporalMemoryNetwork(nn.Module):
