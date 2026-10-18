@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.contracts.data import freeze_object
 from src.contracts.identity import Identifier, is_namespace, is_path
+from src.contracts.kernel import ContributionKey
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -110,3 +111,7 @@ class ResourceInstance:
             raise ValueError("资源实例必须属于一个 Bot 身份")
         if self.definition.revision is None:
             raise ValueError("资源实例必须引用确定的定义版本")
+
+
+RESOURCE_CONTRIBUTIONS = ContributionKey[ResourceDescriptor]("aurora:resources/contribution/definitions")
+RESOURCE_ALIASES = ContributionKey[ResourceAlias]("aurora:resources/contribution/aliases")
