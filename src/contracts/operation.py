@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
+    from src.contracts.artifact import ArtifactInfo
     from src.contracts.world import ToolScopes
 
 
@@ -116,6 +117,7 @@ class OperationResult:
     status: OperationStatus = OperationStatus.SUCCEEDED
     message: str | None = None
     evidence_refs: tuple[str, ...] = ()
+    body_ref: ArtifactInfo | None = None
 
     def __post_init__(self) -> None:
         """固定输出内容，失败与未知结果必须可解释。"""

@@ -12,7 +12,8 @@ from jsonschema import Draft202012Validator
 
 from src.contracts import ToolScopes, WorldFrontier
 from src.contracts.operation import OperationKind, OperationResult, OperationStatus
-from src.operations.codec import read_reference, read_result, reference_data, request_data, result_data
+from src.operations.codec import read_reference, reference_data, request_data
+from src.operations.receipts import DEFAULT_INLINE_RECEIPT, OperationReceipts
 from src.utils import get_logger
 from src.utils.serialization import thaw_json
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Iterable
 
     from src.contracts.operation import Operation, OperationDefinition, OperationRequest
+    from src.contracts.pkgs.artifacts import ArtifactStore
     from src.contracts.pkgs.resources import ResourceCatalog
     from src.contracts.pkgs.world import WorldJournal
     from src.contracts.resource import ResourceRef
@@ -48,12 +50,15 @@ class OperationRegistry:
         world: WorldJournal,
         *,
         now: Callable[[], datetime] | None = None,
+        artifacts: ArtifactStore | None = None,
+        inline_receipt_bytes: int = DEFAULT_INLINE_RECEIPT,
     ) -> None:
         """冻结处理者和参数校验器，远程 schema 引用在装配时拒绝。"""
         self._bot_id = bot_id
         self._resources = resources
         self._world = world
         self._now = now or (lambda: datetime.now(UTC))
+        self._receipts = OperationReceipts(artifacts, inline_receipt_bytes)
         self._operations: dict[ResourceRef, Operation] = {}
         self._validators: dict[ResourceRef, Draft202012Validator] = {}
         for operation in operations:
@@ -135,7 +140,7 @@ class OperationRegistry:
             raise ValueError("请求身份已被不同操作内容使用")
         receipt = await self._world.commit(f"{request.identity}:result")
         if receipt is not None:
-            return read_result(receipt.data)
+            return await self._receipts.decode(receipt.data)
         resolved = previous.data["resolved"]
         if resolved is None:
             return await self._record_result(
@@ -201,6 +206,7 @@ class OperationRegistry:
 
     async def _record_result(self, request: OperationRequest, result: OperationResult) -> OperationResult:
         """结果作为新事实回到主体世界，回执可直接用于幂等恢复。"""
+        data, body_ref = await self._receipts.encode(request, result)
         await self._world.append_commit(
             commit_id=f"{request.identity}:result",
             kind=f"operation.{result.status.value}",
@@ -208,9 +214,9 @@ class OperationRegistry:
             summary=f"操作结果 {result.status.value}：{request.target.key}",
             scopes=frozenset({self._scope}),
             based_on=WorldFrontier(),
-            data=result_data(result),
+            data=data,
         )
-        return result
+        return replace(result, body_ref=body_ref)
 
     @property
     def _scope(self) -> str:

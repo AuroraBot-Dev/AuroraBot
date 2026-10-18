@@ -44,7 +44,7 @@ def result_data(result: OperationResult) -> dict[str, Any]:
     """保留结果状态与可读取的结构化正文。"""
     return {
         "status": result.status.value,
-        "data": thaw_json(result.data),
+        "data": result.data,
         "message": result.message,
         "evidence_refs": list(result.evidence_refs),
     }

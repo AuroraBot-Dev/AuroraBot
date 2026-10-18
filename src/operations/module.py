@@ -2,6 +2,7 @@
 
 from src.contracts import TOOL_CONTRIBUTIONS
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
+from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.operations import OperationRegistry as OperationRegistryPort
 from src.contracts.pkgs.resources import ResourceCatalog
@@ -14,7 +15,7 @@ from src.operations.tool import operation_tools
 @module(
     name="operations",
     provides=OperationRegistryPort,
-    requires=(BotStateStore, ResourceCatalog, WorldJournal),
+    requires=(BotStateStore, ResourceCatalog, WorldJournal, ArtifactStore),
     consumes=OPERATION_CONTRIBUTIONS,
     contributes=TOOL_CONTRIBUTIONS,
     declares=OPERATION_CONTRIBUTIONS,
@@ -28,6 +29,7 @@ def build(context: ModuleContext) -> OperationRegistryPort:
         context.contributions(OPERATION_CONTRIBUTIONS),
         context.get(ResourceCatalog),
         context.get(WorldJournal),
+        artifacts=context.get(ArtifactStore),
     )
     for tool in operation_tools(registry, bot_id):
         context.contribute(TOOL_CONTRIBUTIONS, tool)
