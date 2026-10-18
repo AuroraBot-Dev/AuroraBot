@@ -42,6 +42,7 @@ def recall_data(recall: MemoryRecall) -> dict[str, Any]:
         "commits_per_scope": recall.commits_per_scope,
         "policy": {"key": str(recall.policy.key), "revision": recall.policy.revision},
         "parameters": dict(recall.parameters),
+        "input_digest": recall.input_digest,
         "ranking": [
             {
                 "memory_id": item.memory_id,
@@ -94,4 +95,5 @@ def read_recall(data: Mapping[str, Any]) -> MemoryRecall:
         data["commits_per_scope"],
         ranking,
         data["parameters"],
+        data.get("input_digest"),
     )

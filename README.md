@@ -110,6 +110,8 @@ Bot 可以主动改变查询问题、指定焦点目标并展开原始来源。�
 
 反馈命令 `aurora:memory/command/feedback` 接受 `model_request_id`、`memory_id`、`goal_id`、`helpful`、`reason` 和 `evidence_refs`。目标和记忆必须真实存在，记忆必须进入过指定请求，证据必须在该模型请求之后获知。反馈以 `reported` 自评保存，不会自动变成正确效用标签。判断变化时用 `supersedes` 指向原反馈；原始判断保留，重启重试不会重复写入同一次反馈。
 
+用于标注和训练时，可调用 `aurora:memory/query/training_input` 并传入 `model_request_id`。该查询按照审计保存的时间、游标、实际域和候选特征重建当时的完整排序输入，不调用当前推荐器；原始输入的 SHA256 指纹必须与重建结果一致。返回的 `request` 使用训练数据的输入格式，后续自评和新事实不会进入该历史前缀。效用和结果来源仍需独立提供；缺少原始指纹或重建不一致时明确拒绝导出。
+
 ## 快速开始
 
 ### 1. 克隆本仓库

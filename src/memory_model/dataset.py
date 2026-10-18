@@ -7,14 +7,15 @@ import math
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from src.contracts.identity import Identifier
-from src.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
+from src.contracts.memory_graph_codec import read_ranking
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
     from pathlib import Path
+
+    from src.contracts.memory_graph import MemoryRankingRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +104,7 @@ def read_episodes(path: Path) -> tuple[MemoryEpisode, ...]:
                 raise ValueError("不支持的数据版本")
             examples = tuple(
                 MemoryExample(
-                    _request(item["request"]),
+                    read_ranking(item["request"]),
                     tuple(item["utilities"]),
                     item["outcome_cursor"],
                     datetime.fromisoformat(item["outcome_at"]),
@@ -116,42 +117,6 @@ def read_episodes(path: Path) -> tuple[MemoryEpisode, ...]:
     if not episodes:
         raise ValueError("记忆训练数据不能为空")
     return tuple(episodes)
-
-
-def _request(data: Mapping[str, Any]) -> MemoryRankingRequest:
-    """只解码读取当时的候选和图交互，不接收任何结果字段。"""
-    candidates = tuple(
-        MemoryCandidate(
-            item["memory_id"],
-            item["text"],
-            item["cursor"],
-            datetime.fromisoformat(item["occurred_at"]),
-            datetime.fromisoformat(item["recorded_at"]),
-            item.get("similarity", 0),
-            item.get("goal_match", False),
-            item.get("entity_match", False),
-        )
-        for item in data["candidates"]
-    )
-    events = tuple(
-        MemoryInteraction(
-            item["cursor"],
-            datetime.fromisoformat(item["recorded_at"]),
-            MemoryNode(**item["source"]),
-            MemoryNode(**item["target"]),
-            item["relation"],
-            item.get("value", 1.0),
-        )
-        for item in data.get("interactions", ())
-    )
-    return MemoryRankingRequest(
-        data["query"],
-        tuple(data["focus_goal_ids"]),
-        data["cursor"],
-        datetime.fromisoformat(data["observed_at"]),
-        candidates,
-        events,
-    )
 
 
 def _json_time(value: object) -> str:

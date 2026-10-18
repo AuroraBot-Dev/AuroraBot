@@ -28,6 +28,14 @@ class SourceInput(BaseModel):
     observed_at: AwareDatetime | None = None
 
 
+class TrainingInput(BaseModel):
+    """以真实模型请求为身份导出当时的评分输入。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_request_id: str = Field(min_length=1)
+
+
 class ExposuresInput(BaseModel):
     """按固定世界上界扫描一页；未指定起点时读取最近一页。"""
 

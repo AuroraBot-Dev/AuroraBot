@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from src.contracts.memory import MemoryBundle, MemoryScore
 from src.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
+from src.contracts.memory_graph_codec import ranking_fingerprint
 from src.memory.graph import graph_interactions
 from src.memory.records import memory_links, memory_text
 from src.utils.features import text_similarity
@@ -31,6 +32,7 @@ class MemorySelection:
     bundles: tuple[MemoryBundle, ...]
     missing_refs: tuple[str, ...]
     ranking: tuple[MemoryScore, ...]
+    input_digest: str
 
 
 def select_memories(
@@ -56,7 +58,7 @@ def select_memories(
     required_ids = {commit.commit_id for commit in required}
     included = {commit.commit_id for commit in required}
     routes = {key: reasons for key, reasons in routes.items() if key not in replacements or key in required_refs}
-    ranked = _rank_candidates(history, routes, similarities, request, policy)
+    ranked, input_digest = _rank_candidates(history, routes, similarities, request, policy)
     budget = request.max_characters
     bundles: list[MemoryBundle] = []
     for item in ranked:
@@ -73,7 +75,7 @@ def select_memories(
         bundles.append(MemoryBundle(commits, score, tuple(sorted(routes[identity]))))
         included.update(commit.commit_id for commit in commits)
         budget -= size
-    return MemorySelection(required, tuple(bundles), missing, tuple(ranked))
+    return MemorySelection(required, tuple(bundles), missing, tuple(ranked), input_digest)
 
 
 def _closure(
@@ -131,7 +133,7 @@ def _rank_candidates(
     similarities: Mapping[str, float],
     request: MemoryRequest,
     policy: MemoryPolicy,
-) -> list[MemoryScore]:
+) -> tuple[list[MemoryScore], str]:
     """多路召回与学习排序共用可见候选和历史图前缀。"""
     if request.cursor is None or request.observed_at is None:
         raise ValueError("记忆排序需要明确游标和观察时间")
@@ -171,4 +173,4 @@ def _rank_candidates(
     ]
     cursors = {commit.commit_id: commit.cursor for commit in history}
     ranked.sort(key=lambda item: (-item.score, -cursors[item.memory_id], item.memory_id))
-    return ranked
+    return ranked, ranking_fingerprint(ranking)

@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from src.contracts.identity import Identifier
 
+_SHA256_HEX_LENGTH = 64
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
@@ -99,6 +101,7 @@ class MemoryRecall:
     commits_per_scope: int
     ranking: tuple[MemoryScore, ...] = ()
     parameters: Mapping[str, float | int] = field(default_factory=dict)
+    input_digest: str | None = None
 
     def __post_init__(self) -> None:
         """不能把未冻结的读取或未确定的模型版本记作可追溯输入。"""
@@ -111,6 +114,11 @@ class MemoryRecall:
             raise ValueError("召回评分身份不能重复")
         if any(not math.isfinite(value) for value in self.parameters.values()):
             raise ValueError("召回模型参数必须是有限数值")
+        if self.input_digest is not None and (
+            len(self.input_digest) != _SHA256_HEX_LENGTH
+            or any(char not in "0123456789abcdef" for char in self.input_digest)
+        ):
+            raise ValueError("召回输入指纹必须是 SHA256 十六进制值")
         object.__setattr__(self, "ranking", ranking)
         object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
 

@@ -123,6 +123,7 @@ class Memory:
                 self._commits_per_scope,
                 selection.ranking,
                 self._policy.parameters,
+                selection.input_digest,
             ),
         )
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))

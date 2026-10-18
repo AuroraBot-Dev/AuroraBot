@@ -16,6 +16,7 @@ from src.memory.feedback import MemoryFeedback
 from src.memory.index import MemoryIndex
 from src.memory.observations import MemoryExposures
 from src.memory.queries import MemoryRecallQuery, MemorySourceQuery
+from src.memory.replay import MemoryTrainingInput
 
 
 @module(
@@ -45,6 +46,7 @@ def build(context: ModuleContext) -> MemoryReader:
     )
     context.contribute(OPERATION_CONTRIBUTIONS, MemoryRecallQuery(memory))
     context.contribute(OPERATION_CONTRIBUTIONS, MemorySourceQuery(world, index))
+    context.contribute(OPERATION_CONTRIBUTIONS, MemoryTrainingInput(world, index, state.bot_id))
     return memory
 
 
