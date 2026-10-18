@@ -14,6 +14,7 @@ from src.contracts import ToolScopes, WorldFrontier
 from src.contracts.operation import OperationKind, OperationResult, OperationStatus
 from src.operations.codec import read_reference, reference_data, request_data
 from src.operations.receipts import DEFAULT_INLINE_RECEIPT, OperationReceipts
+from src.operations.requests import DEFAULT_INLINE_REQUEST, OperationRequests
 from src.utils import get_logger
 from src.utils.serialization import thaw_json
 
@@ -52,6 +53,7 @@ class OperationRegistry:
         now: Callable[[], datetime] | None = None,
         artifacts: ArtifactStore | None = None,
         inline_receipt_bytes: int = DEFAULT_INLINE_RECEIPT,
+        inline_request_bytes: int = DEFAULT_INLINE_REQUEST,
     ) -> None:
         """冻结处理者和参数校验器，远程 schema 引用在装配时拒绝。"""
         self._bot_id = bot_id
@@ -59,6 +61,7 @@ class OperationRegistry:
         self._world = world
         self._now = now or (lambda: datetime.now(UTC))
         self._receipts = OperationReceipts(artifacts, inline_receipt_bytes)
+        self._request_payloads = OperationRequests(artifacts, inline_request_bytes)
         self._operations: dict[ResourceRef, Operation] = {}
         self._validators: dict[ResourceRef, Draft202012Validator] = {}
         for operation in operations:
@@ -136,7 +139,7 @@ class OperationRegistry:
 
     async def _resume(self, request: OperationRequest, previous: WorldCommit) -> OperationResult:
         """重试使用已冻结目标；结果未知的非幂等命令不自动重放。"""
-        if thaw_json(previous.data["request"]) != request_data(request):
+        if await self._request_payloads.decode(previous.data["request"]) != request_data(request):
             raise ValueError("请求身份已被不同操作内容使用")
         receipt = await self._world.commit(f"{request.identity}:result")
         if receipt is not None:
@@ -191,6 +194,7 @@ class OperationRegistry:
 
     async def _record_request(self, request: OperationRequest, resolved: ResourceRef | None) -> None:
         """在任何领域效果发生前写入请求和冻结后的目标。"""
+        data = await self._request_payloads.encode(request)
         await self._world.append_commit(
             commit_id=f"{request.identity}:requested",
             kind="operation.requested",
@@ -199,7 +203,7 @@ class OperationRegistry:
             scopes=frozenset({self._scope}),
             based_on=WorldFrontier(),
             data={
-                "request": request_data(request),
+                "request": data,
                 "resolved": reference_data(resolved) if resolved is not None else None,
             },
         )

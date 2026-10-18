@@ -22,6 +22,7 @@ from src.contracts.pkgs.resources import ResourceCatalog
 from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.resource import ResourceKey, ResourceRef
 from src.runtime import assemble_runtime
+from src.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -114,3 +115,28 @@ def test_resource_config_requires_a_project_relative_directory(directory: str) -
     """资源持久目录不能由配置中的绝对路径隐式改变。"""
     with pytest.raises(ValueError, match="项目内相对目录"):
         ArtifactsConfig(directory)
+
+
+def test_large_content_upload_keeps_real_runtime_world_records_compact(configured_project: Path) -> None:
+    """大内容上传本身不能通过请求日志把 base64 正文再次带回世界索引。"""
+    runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=lambda _: None)
+
+    async def scenario() -> None:
+        try:
+            content = "连续训练经历".encode() * 10000
+            request = _request("put", {"key": _KEY, "content_base64": base64.b64encode(content).decode("ascii")})
+            operations = runtime.assembly.get(OperationRegistry)
+            result = await operations.dispatch(request)
+            assert result.status is OperationStatus.SUCCEEDED
+            info = read_artifact(result.data)
+            page = await runtime.world.stream(0, 10)
+            request_fact = next(commit for commit in page.commits if commit.kind == "operation.requested")
+            assert "request_ref" in request_fact.data["request"]
+            assert all("content_base64" not in json.dumps(thaw_json(commit.data)) for commit in page.commits)
+            assert await operations.dispatch(request) == result
+            stored = await runtime.assembly.get(ArtifactStore).read(info.ref, limit=info.size)
+            assert stored.content == content
+        finally:
+            await runtime.world.close()
+
+    asyncio.run(scenario())

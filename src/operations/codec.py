@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from src.contracts.operation import OperationResult, OperationStatus
 from src.contracts.resource import ResourceKey, ResourceRef
-from src.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -33,7 +32,7 @@ def request_data(request: OperationRequest) -> dict[str, Any]:
         "source": request.source,
         "target": reference_data(request.target),
         "kind": request.kind.value,
-        "arguments": thaw_json(request.arguments),
+        "arguments": request.arguments,
         "correlation_id": request.correlation_id,
         "caused_by": request.caused_by,
         "deadline_at": request.deadline_at.isoformat() if request.deadline_at is not None else None,
