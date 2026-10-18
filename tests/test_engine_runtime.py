@@ -214,6 +214,33 @@ def test_tool_result_returns_to_same_node_before_final_assistant() -> None:
     assert [tool.name for tool in model.requests[0].tools] == ["test:tool/echo"]
 
 
+def test_tool_execution_context_comes_from_runtime_and_scopes_call_ids_to_tree() -> None:
+    """模型调用身份相同也能区分不同认知树的实际操作。"""
+    calls: list[ToolCall] = []
+
+    class ContextTool(EchoTool):
+        """记录执行环境注入的上下文。"""
+
+        async def execute(self, call: ToolCall) -> ToolOutput:
+            """保留真实调用后正常返回。"""
+            calls.append(call)
+            return await super().execute(call)
+
+    root = _agent(tools=frozenset({"test:tool/echo"}))
+    original = ToolCall("same-call", "test:tool/echo", {"value": "好"})
+
+    async def scenario() -> None:
+        for tree_id in ("first", "second"):
+            model = FakeModel([ChatMessage.assistant(tool_calls=(original,)), ChatMessage.assistant("完成")])
+            await _runner(model, (root,), ContextTool()).run(AgentTree.create(tree_id, "root", root, "检查"))
+
+    asyncio.run(scenario())
+
+    assert original.context is None
+    assert all(call.context is not None for call in calls)
+    assert {call.context.tree_id for call in calls if call.context is not None} == {"first", "second"}
+
+
 def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
     delegate = ToolCall(
         "delegate-1",

@@ -19,12 +19,28 @@ class ContextBudgetError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ToolContext:
+    """由运行环境注入的调用归属与因果，模型不能通过工具参数设置。"""
+
+    bot_id: str
+    tree_id: str
+    node_id: str
+    caused_by: str | None = None
+
+    def __post_init__(self) -> None:
+        """调用上下文必须能唯一定位主体、认知树与节点。"""
+        if not all(value.strip() for value in (self.bot_id, self.tree_id, self.node_id)):
+            raise ValueError("工具上下文需要主体、认知树与节点身份")
+
+
+@dataclass(frozen=True, slots=True)
 class ToolCall:
     """assistant 请求的一次工具调用。"""
 
     call_id: str
     name: str
     arguments: Mapping[str, Any] = field(default_factory=dict)
+    context: ToolContext | None = None
 
     def __post_init__(self) -> None:
         if not self.call_id or not self.name:

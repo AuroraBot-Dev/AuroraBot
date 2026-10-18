@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from src.contracts import (
@@ -16,7 +17,7 @@ from src.contracts import (
     ToolStatus,
     TreeStatus,
 )
-from src.contracts.model import ContextBudgetError
+from src.contracts.model import ContextBudgetError, ToolContext
 from src.engine.effects import NullEffectSink
 from src.engine.world_effects import EngineWorldEffects, render_delta
 from src.utils import get_logger
@@ -48,6 +49,7 @@ class AgentTreeRunner:
         *,
         world: WorldJournal | None = None,
         memory: MemoryReader | None = None,
+        bot_id: str = "aurora:bot/default",
         max_depth: int = 4,
         max_nodes: int = 32,
         max_steps: int = 256,
@@ -61,6 +63,7 @@ class AgentTreeRunner:
         self._world = world
         self._effects: EngineEffectSink = EngineWorldEffects(world) if world is not None else NullEffectSink()
         self._memory = memory
+        self._bot_id = bot_id
         self._max_depth = max_depth
         self._max_nodes = max_nodes
         self._max_steps = max_steps
@@ -179,7 +182,7 @@ class AgentTreeRunner:
         node = tree.node(node_id)
         if self._world is not None and not set(call.call_id for call in calls) <= node.sealed_call_ids:
             try:
-                scopes = self._resolve_scopes(calls)
+                scopes = self._resolve_scopes(tree, node_id, calls)
             except Exception as error:
                 return await self._reject_scope_batch(tree, node_id, calls, error)
             if not node.reviewed_world_update:
@@ -226,10 +229,10 @@ class AgentTreeRunner:
             )
         return rejected
 
-    def _resolve_scopes(self, calls: tuple[ToolCall, ...]) -> dict[str, ToolScopes]:
+    def _resolve_scopes(self, tree: AgentTree, node_id: str, calls: tuple[ToolCall, ...]) -> dict[str, ToolScopes]:
         scopes: dict[str, ToolScopes] = {}
         for call in calls:
-            resolved = self._tools.scopes_for(call)
+            resolved = self._tools.scopes_for(self._contextual_call(tree, node_id, call))
             if not isinstance(resolved, ToolScopes):
                 raise TypeError(f"工具 scope resolver 返回无效结果：{call.name}")
             scopes[call.call_id] = resolved
@@ -243,13 +246,18 @@ class AgentTreeRunner:
                 call,
                 ToolOutput(f"当前 Agent 不可见此工具：{call.name}", status=ToolStatus.FAILED),
             )
-        result = await self._tools.execute(call)
+        result = await self._tools.execute(self._contextual_call(tree, node_id, call))
         if isinstance(result, ToolOutput):
             return await self._append_tool_output(tree, node_id, call, result)
         delegated, rejection = await self._apply_delegation(tree, node_id, call, result)
         if rejection is not None:
             return await self._append_tool_output(tree, node_id, call, rejection)
         return delegated
+
+    def _contextual_call(self, tree: AgentTree, node_id: str, call: ToolCall) -> ToolCall:
+        """用实际运行归属覆盖调用上下文，保留模型原始调用身份。"""
+        cause = f"{tree.tree_id}:{node_id}:{call.call_id}:requested" if self._world is not None else None
+        return replace(call, context=ToolContext(self._bot_id, tree.tree_id, node_id, cause))
 
     async def _apply_delegation(
         self,

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from src.contracts import DELEGATE_TOOL
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.engine import AgentTreeRunner as AgentTreeRunnerPort
 from src.contracts.pkgs.memory import MemoryReader
 from src.contracts.pkgs.prompt import PromptAssembler
@@ -41,7 +42,7 @@ def _validate_cross_references(
 @module(
     name="engine",
     provides=AgentTreeRunnerPort,
-    requires=(PromptAssembler, Model, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader),
+    requires=(PromptAssembler, Model, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader, BotStateStore),
     owns_scopes=TREE_SCOPE_PATTERN,
 )
 def build(context: ModuleContext) -> AgentTreeRunnerPort:
@@ -58,6 +59,7 @@ def build(context: ModuleContext) -> AgentTreeRunnerPort:
         tools,
         world=context.get(WorldJournal),
         memory=context.get(MemoryReader),
+        bot_id=context.get(BotStateStore).bot_id,
         max_depth=config.max_depth,
         max_nodes=config.max_nodes,
         max_steps=config.max_steps,
