@@ -24,12 +24,16 @@ dependencies = [
 [project.scripts]
 aurora = "aurora.main:main"
 
+[project.optional-dependencies]
+learning = ["torch>=2.6,<3", "numpy>=2,<3"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["aurora", "aurora.*", "src", "src.*"]
 
 [dependency-groups]
-dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
+dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov", { include-group = "learning" }]
+learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -103,3 +107,11 @@ build-backend = "setuptools.build_meta"
 [tool.uv]
 package = true
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
