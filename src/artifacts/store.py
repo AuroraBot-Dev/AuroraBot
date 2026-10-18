@@ -11,12 +11,15 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from src.artifacts.files import file_chunks, publish, signature, stage
+from src.artifacts.listing import find_artifacts
+from src.artifacts.metadata import MAX_MANIFEST_BYTES, binding_path, read_binding
 from src.contracts.artifact import (
     DEFAULT_ARTIFACT_CHUNK,
     MAX_ARTIFACT_CHUNK,
     ArtifactChunk,
     ArtifactInfo,
     ArtifactIntegrityError,
+    ArtifactPage,
     artifact_revision,
 )
 from src.contracts.resource import ResourceRef
@@ -26,11 +29,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from src.contracts.resource import ResourceKey
+    from src.contracts.resource_query import ResourceQuery
 
 _VERIFIED_CACHE_SIZE = 128
 _VERIFY_BLOCK = 1024 * 1024
 _READ_ATTEMPTS = 3
-_MAX_MANIFEST_BYTES = 16 * 1024
 type FileSignature = tuple[int, int, int, int, int]
 
 
@@ -61,6 +64,10 @@ class FileArtifactStore:
         """源文件变化会终止导入，不发布部分内容。"""
         return await self.put_stream(key, file_chunks(source), media_type=media_type)
 
+    async def find(self, query: ResourceQuery) -> ArtifactPage:
+        """发现当前已发布版本的元信息，正文完整性仍由 stat 或 read 核对。"""
+        return await asyncio.to_thread(find_artifacts, self._directory, query)
+
     async def stat(self, ref: ResourceRef) -> ArtifactInfo:
         """绑定和字节均需有效，缺失内容不伪装成可用资源。"""
         return await asyncio.to_thread(self._stat, ref)
@@ -88,7 +95,7 @@ class FileArtifactStore:
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode("utf-8")
-            if len(manifest) > _MAX_MANIFEST_BYTES:
+            if len(manifest) > MAX_MANIFEST_BYTES:
                 raise ValueError("资源身份和元信息超出清单大小上限")
             publish(staged, self._object_path(digest))
             staged.unlink(missing_ok=True)
@@ -120,21 +127,7 @@ class FileArtifactStore:
 
     def _metadata(self, ref: ResourceRef) -> ArtifactInfo:
         """绑定路径来自逻辑身份摘要，清单不能指定任意后端路径。"""
-        path = self._binding_path(ref)
-        try:
-            with path.open("rb") as stream:
-                raw = stream.read(_MAX_MANIFEST_BYTES + 1)
-        except FileNotFoundError as error:
-            raise LookupError(f"内容资源版本不存在：{ref.key}@{ref.revision}") from error
-        try:
-            if len(raw) > _MAX_MANIFEST_BYTES:
-                raise ValueError("资源绑定超出允许大小")
-            data = json.loads(raw)
-            if data["schema_version"] != 1 or data["key"] != str(ref.key) or data["revision"] != ref.revision:
-                raise ValueError("资源绑定不匹配")
-            return ArtifactInfo(ref, data["size"], data["media_type"])
-        except (ValueError, TypeError, KeyError) as error:
-            raise ArtifactIntegrityError(f"资源绑定已损坏：{ref.key}@{ref.revision}") from error
+        return read_binding(self._binding_path(ref), ref)
 
     def _read_content(self, info: ArtifactInfo, offset: int, limit: int) -> bytes:
         """缓存已验证的文件身份，外部变更会使缓存失效并重新核对摘要。"""
@@ -183,6 +176,4 @@ class FileArtifactStore:
 
     def _binding_path(self, ref: ResourceRef) -> Path:
         """同名资源可拥有多个不可变版本，名称也不能成为文件系统路径。"""
-        digest = artifact_revision(ref)
-        identity = hashlib.sha256(str(ref.key).encode("utf-8")).hexdigest()
-        return self._directory / "bindings" / identity / f"{digest}.json"
+        return binding_path(self._directory, ref)

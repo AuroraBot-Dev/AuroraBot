@@ -10,8 +10,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
-    from src.contracts.artifact import ArtifactChunk, ArtifactInfo
+    from src.contracts.artifact import ArtifactChunk, ArtifactInfo, ArtifactPage
     from src.contracts.resource import ResourceKey, ResourceRef
+    from src.contracts.resource_query import ResourceQuery
 
 
 class ArtifactStore(Protocol):
@@ -33,6 +34,10 @@ class ArtifactStore(Protocol):
         self, key: ResourceKey, source: Path, *, media_type: str = "application/octet-stream"
     ) -> ArtifactInfo:
         """导入文件快照，源文件发生变化时拒绝发布。"""
+        ...
+
+    async def find(self, query: ResourceQuery) -> ArtifactPage:
+        """发现已发布版本的元信息，不隐式读取或验证完整正文。"""
         ...
 
     async def stat(self, ref: ResourceRef) -> ArtifactInfo:

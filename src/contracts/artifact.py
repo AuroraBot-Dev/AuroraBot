@@ -71,3 +71,15 @@ class ArtifactChunk:
     def has_more(self) -> bool:
         """内容未读完时，调用方可按同一版本继续。"""
         return self.next_offset < self.info.size
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactPage:
+    """已发布版本的元信息页，不表示相应正文已通过完整性验证。"""
+
+    items: tuple[ArtifactInfo, ...]
+    next_cursor: str | None = None
+
+    def __post_init__(self) -> None:
+        """冻结结果，调用方不能改写一次发现返回的版本。"""
+        object.__setattr__(self, "items", tuple(self.items))
