@@ -62,6 +62,21 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 扩展通过 `OPERATION_CONTRIBUTIONS` 提供领域操作，通过 `RESOURCE_CONTRIBUTIONS` 提供其他资源定义，通过 `RESOURCE_ALIASES` 声明版本绑定。为操作填写 `tool_name` 后，框架会生成模型工具入口；Bot 的可见工具仍由 Agent 定义选择。
 
+### 节律判断与训练
+
+`cadence.toml` 控制世界消费入口、Agent 和检查频率，`rhythm.toml` 选择节律策略。规则基线按事件压力、即时路由和最长安静时间提供推理机会；GRU 模型使用相同的观察特征，并同时预测是否思考与下次检查时长。每次等待或唤醒都会记录策略版本、有效参数、观察、循环隐状态和后续运行结果。重启后恢复消费游标与等待安排，已经开始且结果未知的认知不会自动重放。
+
+训练依赖通过 `uv sync --extra learning` 安装；开发依赖组也包含训练环境。基础运行可以只安装非开发依赖并选择规则策略。模型使用 [PyTorch GRU](https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html)，不要求 CUDA。
+
+```text
+/call aurora:rhythm/query/observations {"after":0,"limit":100}
+aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
+```
+
+观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。训练数据每行是一段经历，包含 `schema_version = 1`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值。验证经历必须独立且晚于训练经历，报告同时列出学习模型和规则基线的误差与效用遗憾。
+
+使用导出的权重时，在 `rhythm.toml` 中指定 `policy = "aurora:rhythm/model/gru"` 和 `weights = "models/rhythm.pt"`。权重按内容生成版本；权重或推理参数变化后，节律会保留消费位置并清空不兼容的循环状态。训练命令不会自动启用新权重。
+
 ## 快速开始
 
 ### 1. 克隆本仓库

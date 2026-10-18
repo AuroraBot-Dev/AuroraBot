@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import Tensor, nn
 
+from src.contracts.resource import ResourceRef
 from src.contracts.rhythm import RHYTHM_FEATURES
 from src.rhythm.dataset import RhythmEpisode, validate_partition
 from src.rhythm.evaluation import evaluate_policy
@@ -31,7 +33,7 @@ class RhythmTrainingResult:
     training_episodes: tuple[str, ...]
     validation_episodes: tuple[str, ...]
 
-    def save(self, path: Path) -> None:
+    def save(self, path: Path) -> ResourceRef:
         """保存输入坐标、张量和训练来源，不保存可执行对象。"""
         path.parent.mkdir(parents=True, exist_ok=True)
         data: dict[str, Any] = {
@@ -51,6 +53,7 @@ class RhythmTrainingResult:
             },
         }
         torch.save(data, path)
+        return ResourceRef(GRU_KEY, hashlib.sha256(path.read_bytes()).hexdigest())
 
 
 def train(
