@@ -13,7 +13,9 @@ from src.kernel import ModuleContext, module
 from src.memory import Memory
 from src.memory.config import MemoryConfig
 from src.memory.feedback import MemoryFeedback
+from src.memory.index import MemoryIndex
 from src.memory.observations import MemoryExposures
+from src.memory.queries import MemoryRecallQuery, MemorySourceQuery
 
 
 @module(
@@ -29,7 +31,8 @@ def build(context: ModuleContext) -> MemoryReader:
     state = context.get(BotStateStore)
     context.contribute(OPERATION_CONTRIBUTIONS, MemoryExposures(world, state.bot_id))
     context.contribute(OPERATION_CONTRIBUTIONS, MemoryFeedback(world, state))
-    return Memory(
+    index = MemoryIndex(world)
+    memory = Memory(
         world,
         policy=context.get(MemoryPolicy),
         window=timedelta(minutes=config.window_minutes),
@@ -38,7 +41,11 @@ def build(context: ModuleContext) -> MemoryReader:
         scope_exclude=config.scope_exclude,
         catalog=context.settings.resolve(ScopeCatalog),
         state=state,
+        index=index,
     )
+    context.contribute(OPERATION_CONTRIBUTIONS, MemoryRecallQuery(memory))
+    context.contribute(OPERATION_CONTRIBUTIONS, MemorySourceQuery(world, index))
+    return memory
 
 
 MODULE = build

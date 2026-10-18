@@ -2,7 +2,30 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+
+class RecallInput(BaseModel):
+    """按问题和目标补取记忆摘要，原始证据另行展开。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = ""
+    focus_goal_ids: tuple[str, ...] = ()
+    scopes: tuple[str, ...] | None = None
+    cursor: int | None = Field(default=None, ge=0, strict=True)
+    observed_at: AwareDatetime | None = None
+    max_characters: int = Field(default=4000, ge=1, le=16000, strict=True)
+
+
+class SourceInput(BaseModel):
+    """在明确历史边界内展开一项世界证据。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    memory_id: str = Field(min_length=1)
+    cursor: int | None = Field(default=None, ge=0, strict=True)
+    observed_at: AwareDatetime | None = None
 
 
 class ExposuresInput(BaseModel):

@@ -28,12 +28,17 @@ tools = [
     "aurora:tool/goal_set",
     "aurora:tool/wake_schedule",
     "aurora:tool/wake_cancel",
+    "aurora:tool/memory_recall",
+    "aurora:tool/memory_source",
+    "aurora:tool/memory_exposures",
+    "aurora:tool/memory_feedback",
 ]
 children = [
     "aurora:agent/fast-worker",
     "aurora:agent/chat",
     "aurora:agent/worker",
     "aurora:agent/reviewer",
+    "aurora:agent/memory",
 ]
 
 [[agent]]
@@ -58,6 +63,10 @@ tools = [
     "aurora:tool/goal_set",
     "aurora:tool/wake_schedule",
     "aurora:tool/wake_cancel",
+    "aurora:tool/memory_recall",
+    "aurora:tool/memory_source",
+    "aurora:tool/memory_exposures",
+    "aurora:tool/memory_feedback",
     "org.aurora.qq:tool/*",
     "com.github.windows_mcp:tool/*",
 ]
@@ -73,8 +82,14 @@ children = []
 
 [[agent]]
 id = "aurora:agent/memory"
-description = "记忆专员：忠实整理长期记忆内容；当前未接入持久化端口，暂不参与派发。"
+description = "记忆专员：围绕目标召回经历、核对原始来源，并按后续证据记录可更正的记忆反馈。"
 prompt = "aurora:prompt/agent/memory"
 model = "quality"
-tools = []
+tools = [
+    "aurora:tool/memory_recall",
+    "aurora:tool/memory_source",
+    "aurora:tool/memory_exposures",
+    "aurora:tool/memory_feedback",
+    "aurora:tool/bot_state",
+]
 children = []

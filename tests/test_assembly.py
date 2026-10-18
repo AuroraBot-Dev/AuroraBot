@@ -78,6 +78,10 @@ def test_project_config_builds_complete_runtime(configured_project: Path) -> Non
         "aurora:tool/bot_state",
         "aurora:tool/delegate",
         "aurora:tool/goal_set",
+        "aurora:tool/memory_exposures",
+        "aurora:tool/memory_feedback",
+        "aurora:tool/memory_recall",
+        "aurora:tool/memory_source",
         "aurora:tool/wake_cancel",
         "aurora:tool/wake_schedule",
         "aurora:tool/world_read",
@@ -308,6 +312,10 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
             "aurora:tool/bot_state",
             "aurora:tool/delegate",
             "aurora:tool/goal_set",
+            "aurora:tool/memory_exposures",
+            "aurora:tool/memory_feedback",
+            "aurora:tool/memory_recall",
+            "aurora:tool/memory_source",
             "aurora:tool/wake_cancel",
             "aurora:tool/wake_schedule",
             "aurora:tool/world_read",
@@ -316,8 +324,17 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
         }
     )
     assert root.children == frozenset(
-        {"aurora:agent/worker", "aurora:agent/fast-worker", "aurora:agent/reviewer", "aurora:agent/chat"}
+        {
+            "aurora:agent/worker",
+            "aurora:agent/fast-worker",
+            "aurora:agent/reviewer",
+            "aurora:agent/chat",
+            "aurora:agent/memory",
+        }
     )
+    memory = agents.get("aurora:agent/memory")
+    assert {"aurora:tool/memory_source", "aurora:tool/memory_feedback"} <= memory.tools
+    assert memory.children == frozenset()
     assert worker.model == "quality"
     assert worker.children == frozenset({"aurora:agent/reviewer", "aurora:agent/fast-worker"})
     assert "org.aurora.qq:tool/qq_send_private_message" in worker.tools

@@ -94,6 +94,22 @@ aurora train memory train.jsonl validation.jsonl models/memory.pt
 
 使用权重时，在 `memory_model.toml` 中指定 `policy = "aurora:memory/model/tgn"` 和 `weights = "models/memory.pt"`。资源版本由实际权重内容生成，读取结果携带同一版本；输入坐标不兼容时拒绝加载。训练命令不会自动启用权重或在线更新参数。
 
+### 主动读取与记忆反馈
+
+Bot 可以主动改变查询问题、指定焦点目标并展开原始来源。默认总代理和执行者提供 `memory_recall`、`memory_source`、`memory_exposures` 和 `memory_feedback` 工具，也可委派给记忆专员。终端使用相同的领域操作：
+
+```text
+/call aurora:memory/query/recall {"query":"先前实验的结果","focus_goal_ids":["aurora:goal/check"]}
+/call aurora:memory/query/source {"memory_id":"experiment-started"}
+/call aurora:memory/query/exposures {}
+```
+
+召回返回有来源的摘要和依赖集合；`summary_complete` 明确表示摘要是否完整。来源查询返回完整世界记录与读取边界，以及该时点已经获知的 `superseded_by` 引用。精确知道 ID 也不能读取指定历史边界之后的内容。
+
+模型请求保存完整召回评分、模型版本和参数，并分别记录必要证据、推荐内容、实际载入和消息历史来源。工具结果与世界输入通过显式 `evidence_refs` 传递来源；装配器在裁剪之后报告实际保留的引用，不通过正文关键词猜测曝光。`included_ids` 表示已经进入本次模型请求，不表示模型采用了内容或目标获得收益。曝光查询默认扫描最近一页；传入 `after`、`until_cursor` 和 `limit` 可以在固定世界前缀上分页。
+
+反馈命令 `aurora:memory/command/feedback` 接受 `model_request_id`、`memory_id`、`goal_id`、`helpful`、`reason` 和 `evidence_refs`。目标和记忆必须真实存在，记忆必须进入过指定请求，证据必须在该模型请求之后获知。反馈以 `reported` 自评保存，不会自动变成正确效用标签。判断变化时用 `supersedes` 指向原反馈；原始判断保留，重启重试不会重复写入同一次反馈。
+
 ## 快速开始
 
 ### 1. 克隆本仓库

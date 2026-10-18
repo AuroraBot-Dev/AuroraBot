@@ -41,6 +41,7 @@ class Memory:
         catalog: ScopeCatalog | None = None,
         include_run_scopes: bool = False,
         state: BotStateStore | None = None,
+        index: MemoryIndex | None = None,
     ) -> None:
         """绑定经历来源与排序策略，读取范围和主体状态各自显式注入。"""
         if window <= timedelta(0):
@@ -49,7 +50,7 @@ class Memory:
             raise ValueError("commits_per_scope must be positive")
         self._reader = reader
         self._policy = policy
-        self._index = MemoryIndex(reader)
+        self._index = index if index is not None else MemoryIndex(reader)
         self._window = window
         self._commits_per_scope = commits_per_scope
         self._scope_include = tuple(scope_include)
