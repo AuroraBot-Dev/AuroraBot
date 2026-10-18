@@ -34,6 +34,7 @@ class ManagedAssembly:
     _failures: list[ModuleLifecycleError] = field(default_factory=list)
     _pending: deque[ModuleLifecycleError] = field(default_factory=deque)
     _changed: asyncio.Event = field(default_factory=asyncio.Event)
+    _closing: asyncio.Task[list[Exception]] | None = None
     _activated: bool = False
     _closed: bool = False
 
@@ -67,18 +68,38 @@ class ManagedAssembly:
 
     async def close(self) -> None:
         """回收后台、报告未交付故障，并释放全部关闭钩子与准备资源。"""
-        raise_failures(await self._close())
+        failures, interrupted = await self._close()
+        if interrupted is not None:
+            raise_with_cleanup(interrupted, failures)
+        raise_failures(failures)
 
     async def abort(self, error: BaseException) -> Never:
         """运行已经失败时完成同样的清理，同时保留原始错误。"""
-        raise_with_cleanup(error, await self._close())
+        failures, interrupted = await self._close()
+        if interrupted is not None and not isinstance(error, asyncio.CancelledError):
+            raise interrupted from BaseExceptionGroup("运行失败后的资源释放被取消", [error, *failures])
+        raise_with_cleanup(error, failures)
 
-    async def _close(self) -> list[Exception]:
-        """一次关闭释放所有资源，重复关闭不重复执行清理动作。"""
-        if self._closed:
-            return []
-        self._closed = True
-        self._changed.set()
+    async def _close(self) -> tuple[list[Exception], asyncio.CancelledError | None]:
+        """所有调用者等待同一次释放，调用者的取消延迟到资源回收结束。"""
+        owner = self._closing is None
+        if self._closing is None:
+            self._closed = True
+            self._changed.set()
+            self._closing = asyncio.create_task(self._release(), name="aurora:shutdown")
+        interrupted: asyncio.CancelledError | None = None
+        while True:
+            try:
+                failures = await asyncio.shield(self._closing)
+                return (failures if owner else []), interrupted
+            except asyncio.CancelledError as error:
+                if self._closing.cancelled():
+                    raise
+                if interrupted is None:
+                    interrupted = error
+
+    async def _release(self) -> list[Exception]:
+        """释放任务独立于调用者的取消，依次收集全部资源的清理结果。"""
         await self._cancel_tasks()
         failures: list[Exception] = list(self._pending)
         self._pending.clear()
