@@ -12,8 +12,11 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor, nn
 
+from src.contracts.memory_checkpoint import MemoryGraphPrefix
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS, MemoryNode
+from src.contracts.memory_graph_codec import interactions_fingerprint
 from src.contracts.resource import ResourceRef
+from src.memory_model.checkpoint import decode_state, encode_state
 from src.memory_model.coordinates import TGN_KEY, TIME_SCALE
 from src.memory_model.state import GraphState
 from src.utils.features import TEXT_FEATURE_SCHEMA, text_vector
@@ -23,6 +26,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
 
+    from src.contracts.memory_checkpoint import MemoryPolicyCheckpoint
     from src.contracts.memory_graph import MemoryInteraction, MemoryRankingRequest
 
 
@@ -139,7 +143,8 @@ class TGNMemoryPolicy:
         """绑定实际模型资源版本。"""
         self._network = deepcopy(network).cpu().eval().requires_grad_(False)
         self._ref = ResourceRef(TGN_KEY, revision)
-        self._interactions: tuple[MemoryInteraction, ...] = ()
+        self._interactions: tuple[MemoryInteraction, ...] | None = ()
+        self._prefix: MemoryGraphPrefix | None = None
         self._state = GraphState()
         self._lock = threading.Lock()
 
@@ -156,6 +161,8 @@ class TGNMemoryPolicy:
     def score(self, request: MemoryRankingRequest) -> tuple[float, ...]:
         """完整前缀一致才复用，较短查询不回退缓存，失败后丢弃未确认状态。"""
         with self._lock, torch.no_grad():
+            self._verify_restored(request)
+            assert self._interactions is not None
             previous = len(self._interactions)
             extends = len(request.interactions) >= previous and request.interactions[:previous] == self._interactions
             state = self._state if extends else GraphState()
@@ -169,13 +176,62 @@ class TGNMemoryPolicy:
                 if extends or len(request.interactions) > previous:
                     self._state = state
                     self._interactions = request.interactions
+                    if len(request.interactions) != previous or not extends:
+                        self._prefix = None
                 complete = True
                 return scores
             finally:
                 state.features.clear()
                 if not complete:
-                    self._state = GraphState()
-                    self._interactions = ()
+                    self._clear()
+
+    def checkpoint(self, *, after: str | None = None) -> MemoryPolicyCheckpoint | None:
+        """只保存已经过实际历史验证的投影，相同前缀不重复编码。"""
+        with self._lock, torch.no_grad():
+            if not self._interactions:
+                return None
+            if self._prefix is None:
+                last = self._interactions[-1]
+                self._prefix = MemoryGraphPrefix(
+                    len(self._interactions), last.cursor, last.recorded_at, interactions_fingerprint(self._interactions)
+                )
+            if self._prefix.digest == after:
+                return None
+            return encode_state(self._state, self.ref, self._prefix, **self.parameters)
+
+    def restore(self, checkpoint: MemoryPolicyCheckpoint) -> bool:
+        """有效载入只暂存状态，第一份实际查询必须再核对完整历史前缀。"""
+        state = decode_state(checkpoint, self.ref, **self.parameters)
+        if state is None:
+            return False
+        with self._lock:
+            self._state = state
+            self._interactions = None
+            self._prefix = checkpoint.prefix
+        return True
+
+    def _verify_restored(self, request: MemoryRankingRequest) -> None:
+        """旧查询、范围变化或世界分支不匹配时，从空投影开始。"""
+        if self._interactions is not None:
+            return
+        prefix = self._prefix
+        assert prefix is not None
+        events = request.interactions[: prefix.count]
+        if (
+            len(events) == prefix.count
+            and events[-1].cursor == prefix.cursor
+            and events[-1].recorded_at == prefix.recorded_at
+            and interactions_fingerprint(events) == prefix.digest
+        ):
+            self._interactions = events
+        else:
+            self._clear()
+
+    def _clear(self) -> None:
+        """计算失败和未确认历史不能留下可再次复用的部分状态。"""
+        self._state = GraphState()
+        self._interactions = ()
+        self._prefix = None
 
 
 def load_policy(path: Path) -> TGNMemoryPolicy:

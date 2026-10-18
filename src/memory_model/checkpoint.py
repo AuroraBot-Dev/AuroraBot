@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from io import BytesIO
 from pickle import UnpicklingError
 from typing import TYPE_CHECKING, Any
+from zipfile import is_zipfile
 
 import torch
 from torch import Tensor
@@ -57,7 +58,11 @@ def decode_state(
     if checkpoint.model != model:
         return None
     try:
-        data = torch.load(BytesIO(checkpoint.content), map_location="cpu", weights_only=True)
+        stream = BytesIO(checkpoint.content)
+        if not is_zipfile(stream):
+            raise ValueError("检查点必须使用完整的张量归档")
+        stream.seek(0)
+        data = torch.load(stream, map_location="cpu", weights_only=True)
         if not isinstance(data, dict):
             raise ValueError("检查点顶层必须是对象")
         if data["schema_version"] != _SCHEMA_VERSION or data["coordinates"] != _coordinates(
@@ -69,7 +74,7 @@ def decode_state(
         if data["prefix"] != _prefix_data(checkpoint.prefix):
             raise ValueError("检查点正文的历史边界不一致")
         return _read_nodes(data["nodes"], data["memories"], checkpoint.prefix, hidden_size)
-    except (ValueError, TypeError, KeyError, RuntimeError, EOFError, OSError, UnpicklingError) as error:
+    except (ValueError, TypeError, LookupError, RuntimeError, EOFError, OSError, UnpicklingError) as error:
         raise ValueError("时序记忆检查点已损坏，不能恢复节点状态") from error
 
 
