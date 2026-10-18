@@ -21,7 +21,7 @@ from src.rhythm.rules import RuleRhythmPolicy
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.resource import ResourceRef
+    from src.contracts.resource import ResourceKey, ResourceRef
     from src.contracts.training import TrainingProvenance
 
 
@@ -38,18 +38,23 @@ class RhythmTrainingResult:
     validation_episodes: tuple[str, ...]
     provenance: TrainingProvenance
 
+    @property
+    def model_key(self) -> ResourceKey:
+        """导出和资源发布使用模型自身声明的身份。"""
+        return GRU_KEY
+
     def save(self, path: Path) -> ResourceRef:
         """保存输入坐标、张量和训练来源，不保存可执行对象。"""
         content = self.to_bytes()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
-        return model_content_ref(content, GRU_KEY)
+        return model_content_ref(content, self.model_key)
 
     def to_bytes(self) -> bytes:
         """编码一次即可同时发布资源和导出文件，不从可变路径回读计算版本。"""
         data: dict[str, Any] = {
             "schema_version": 1,
-            "model_key": str(GRU_KEY),
+            "model_key": str(self.model_key),
             "features": list(RHYTHM_FEATURES),
             "hidden_size": self.network.hidden_size,
             "state_dict": self.network.state_dict(),

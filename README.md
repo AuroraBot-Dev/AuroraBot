@@ -90,6 +90,8 @@ aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 
 观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。训练数据每行是一段经历，包含 `schema_version = 1`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值。验证经历必须独立且晚于训练经历，报告同时列出学习模型和规则基线的误差与效用遗憾。
 
+两种训练命令都会先把实际输入 JSONL 固定为数据集资源，再从相同字节解析和训练。报告的 `inputs` 同时包含原始资源版本与解析后样本摘要，模型归档内保存同一份来源信息、训练参数、框架版本和独立验证指标。模型通过 `ArtifactStore` 发布，`artifact` 给出确切模型资源；输出文件是相同字节的导出，不覆盖已有文件。训练使用 `artifacts.toml` 的内容目录；单独训练时该配置不存在则使用 `data/artifacts`。
+
 使用导出的权重时，在 `rhythm.toml` 中指定 `policy = "aurora:rhythm/model/gru"` 和 `weights = "models/rhythm.pt"`。权重按内容生成版本；权重或推理参数变化后，节律会保留消费位置并清空不兼容的循环状态。训练命令不会自动启用新权重。
 
 ### 记忆读取与训练
@@ -100,7 +102,7 @@ aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 
 域声明的命名空间支持完整名称或 `*`，路径中的每个 `*` 匹配非空片段并可跨越 `/`，其余字符按字面匹配。操作请求、回执和引擎运行域属于 `run` 台账，默认不进入候选或时序图，避免完整导出和历史回执被反复索引。Bot 在检查点或依赖中明确引用的台账证据仍会恢复；显式读取范围和包含／排除配置继续约束所有来源。审计分别保存实际可见域与候选域，历史重建沿用当时的选择。
 
-`memory.toml` 管理读取范围；`memory_model.toml` 选择独立排序策略。规则基线比较文本、任务关联和时效性；时序图模型使用类型化节点、按获知间隔传递的消息、GRU 节点状态和邻域聚合，结构参考 [Temporal Graph Networks](https://arxiv.org/abs/2006.10637)。动态节点状态与权重分开，每次读取按可见历史重建；模型计算在线程中执行。
+`memory.toml` 管理读取范围；`memory_model.toml` 选择独立排序策略。规则基线比较文本、任务关联和时效性；时序图模型使用类型化节点、按获知间隔传递的消息、GRU 节点状态和邻域聚合，结构参考 [Temporal Graph Networks](https://arxiv.org/abs/2006.10637)。动态节点状态与权重分开，按实际可见历史投影并复用确切前缀；模型计算在线程中执行。
 
 ```text
 aurora train memory train.jsonl validation.jsonl models/memory.pt

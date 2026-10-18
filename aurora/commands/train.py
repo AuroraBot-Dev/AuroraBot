@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from aurora.configs.artifacts import CONFIG_SPEC as ARTIFACTS_CONFIG
+from aurora.configurator import assemble_config
 from aurora.utils.process import EXIT_FAILURE
+from src.artifacts.config import ArtifactsConfig
+from src.artifacts.store import FileArtifactStore
+from src.contracts.artifact_codec import artifact_data
+from src.contracts.artifact_io import artifact_content
+from src.contracts.model_artifact import MODEL_MEDIA_TYPE
+from src.contracts.resource import ResourceKey
+from src.contracts.training import TrainingProvenance, provenance_data
+from src.utils.files import write_new_file
 
 if TYPE_CHECKING:
     import argparse
+    from types import ModuleType
+    from typing import Any
 
     from aurora.contracts.command import CommandSpec, SubcommandSpec
+    from src.contracts.artifact import ArtifactInfo
+    from src.contracts.pkgs.artifacts import ArtifactStore
 
 
 def _training_spec(description: str) -> SubcommandSpec:
@@ -56,38 +71,70 @@ def execute(arguments: argparse.Namespace) -> int:
         sys.stderr.write("训练依赖未安装，请运行 uv sync --extra learning。\n")
         return EXIT_FAILURE
     try:
-        training = dataset.read_episodes(arguments.root / arguments.training)
-        validation = dataset.read_episodes(arguments.root / arguments.validation)
         output = arguments.root / arguments.output
         if output.exists():
             raise ValueError("输出权重已经存在，请为这次训练指定新的文件")
-        result = backend.train(
-            training,
-            validation,
-            hidden_size=arguments.hidden_size,
-            epochs=arguments.epochs,
-            learning_rate=arguments.learning_rate,
-            seed=arguments.seed,
-        )
-        ref = result.save(output)
+        report = asyncio.run(_train(arguments, dataset, backend, output))
     except (ValueError, OSError) as error:
         sys.stderr.write(f"模型训练失败：{error}\n")
         return EXIT_FAILURE
-    sys.stdout.write(
-        json.dumps(
-            {
-                "output": str(output),
-                "resource": str(ref.key),
-                "revision": ref.revision,
-                "parameters": result.parameters,
-                "final_loss": result.losses[-1],
-                "validation": result.metrics,
-                "baseline": result.baseline_metrics,
-                "training_episodes": result.training_episodes,
-                "validation_episodes": result.validation_episodes,
-            },
-            ensure_ascii=False,
-        )
-        + "\n"
-    )
+    sys.stdout.write(json.dumps(report, ensure_ascii=False) + "\n")
     return 0
+
+
+async def _train(
+    arguments: argparse.Namespace, dataset: ModuleType, backend: ModuleType, output: Path
+) -> dict[str, Any]:
+    """解析与训练均使用已发布的数据快照，不在完成训练后重新打开输入文件。"""
+    root = arguments.root
+    config = (
+        assemble_config(root, (ARTIFACTS_CONFIG,)).get(ARTIFACTS_CONFIG)
+        if (root / ARTIFACTS_CONFIG.path).is_file()
+        else ArtifactsConfig()
+    )
+    store = FileArtifactStore(root / config.directory)
+    domain = arguments.subcommand
+    training, training_info, training_digest = await _input(
+        store, dataset, ResourceKey("aurora", domain, "dataset", "training"), root / arguments.training
+    )
+    validation, validation_info, validation_digest = await _input(
+        store, dataset, ResourceKey("aurora", domain, "dataset", "validation"), root / arguments.validation
+    )
+    provenance = TrainingProvenance(domain, training_digest, validation_digest, training_info, validation_info)
+    result = await asyncio.to_thread(
+        backend.train,
+        training,
+        validation,
+        hidden_size=arguments.hidden_size,
+        epochs=arguments.epochs,
+        learning_rate=arguments.learning_rate,
+        seed=arguments.seed,
+        provenance=provenance,
+    )
+    content = await asyncio.to_thread(result.to_bytes)
+    model = await store.put(result.model_key, content, media_type=MODEL_MEDIA_TYPE)
+    await asyncio.to_thread(write_new_file, output, content)
+    return {
+        "output": str(output),
+        "resource": str(model.ref.key),
+        "revision": model.ref.revision,
+        "artifact": artifact_data(model),
+        "inputs": provenance_data(result.provenance),
+        "parameters": result.parameters,
+        "final_loss": result.losses[-1],
+        "validation": result.metrics,
+        "baseline": result.baseline_metrics,
+        "training_episodes": result.training_episodes,
+        "validation_episodes": result.validation_episodes,
+    }
+
+
+async def _input(
+    store: ArtifactStore, dataset: ModuleType, key: ResourceKey, path: Path
+) -> tuple[tuple[object, ...], ArtifactInfo, str]:
+    """源文件在导入期间变动会失败，后续操作只读取已经固定的资源版本。"""
+    info = await store.import_file(key, path, media_type="application/x-ndjson")
+    content = await artifact_content(store, info)
+    examples = await asyncio.to_thread(dataset.parse_episodes, content)
+    digest = await asyncio.to_thread(dataset.episodes_fingerprint, examples)
+    return examples, info, digest

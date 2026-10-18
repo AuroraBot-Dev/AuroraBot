@@ -23,7 +23,7 @@ from src.utils.features import TEXT_FEATURE_SCHEMA
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.resource import ResourceRef
+    from src.contracts.resource import ResourceKey, ResourceRef
     from src.contracts.training import TrainingProvenance
     from src.memory_model.dataset import MemoryExample
 
@@ -41,18 +41,23 @@ class MemoryTrainingResult:
     validation_episodes: tuple[str, ...]
     provenance: TrainingProvenance
 
+    @property
+    def model_key(self) -> ResourceKey:
+        """模型声明自己的资源身份，项目入口不另造一份名称映射。"""
+        return TGN_KEY
+
     def save(self, path: Path) -> ResourceRef:
         """权重只含张量和基础元数据；动态节点状态始终从经历恢复。"""
         content = self.to_bytes()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
-        return model_content_ref(content, TGN_KEY)
+        return model_content_ref(content, self.model_key)
 
     def to_bytes(self) -> bytes:
         """同一份归档用于模型资源和文件导出，版本不依赖输出路径。"""
         data: dict[str, Any] = {
             "schema_version": 1,
-            "model_key": str(TGN_KEY),
+            "model_key": str(self.model_key),
             "relations": list(MEMORY_RELATIONS),
             "node_kinds": list(MEMORY_NODE_KINDS),
             "time_scale": TIME_SCALE,
