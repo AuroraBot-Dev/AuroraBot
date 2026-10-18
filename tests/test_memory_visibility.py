@@ -14,6 +14,7 @@ from src.contracts.bot import BotChange, Goal, GoalStatus
 from src.contracts.memory import MemoryRequest
 from src.contracts.world import MemoryScopeSnapshot, WorldFrontier
 from src.memory import Memory
+from src.memory_model.rules import RuleMemoryPolicy
 from src.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ def test_memory_observation_and_cursor_exclude_late_and_future_information(tmp_p
             await _fact(world, "late", first - timedelta(minutes=5), "稍后才知道")
             await _fact(world, "future", first + timedelta(hours=1), "未来发生")
             await state.apply(BotChange("pause", 1, (replace(goal, status=GoalStatus.PAUSED),)))
-            memory = Memory(world, state=state)
+            memory = Memory(world, policy=RuleMemoryPolicy(), state=state)
             current = await memory.recall(MemoryRequest(observed_at=clock[0]))
             assert _ids(current.scopes) == {"known", "late", "aurora:bot/test:state:1", "aurora:bot/test:state:2"}
             assert current.continuity is not None
@@ -52,7 +53,9 @@ def test_memory_observation_and_cursor_exclude_late_and_future_information(tmp_p
                 assert snapshot.continuity is not None
                 assert snapshot.continuity.goals[0].status is GoalStatus.ACTIVE
                 assert next(scope for scope in snapshot.scopes if scope.scope == "test:world/facts").head == 1
-            rebuilt = await Memory(world, state=state).recall(MemoryRequest(observed_at=first))
+            rebuilt = await Memory(world, policy=RuleMemoryPolicy(), state=state).recall(
+                MemoryRequest(observed_at=first)
+            )
             assert rebuilt == history
             assert (await state.snapshot()).goal(goal.goal_id).status is GoalStatus.PAUSED
             empty = await memory.recall(MemoryRequest(cursor=0, observed_at=clock[0]))

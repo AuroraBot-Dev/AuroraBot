@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import json
 import math
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.contracts.memory import MemoryBundle
+from src.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
+from src.memory.graph import graph_interactions
+from src.memory.records import memory_links, memory_text
 from src.utils.features import text_similarity
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from datetime import datetime
-    from typing import Any
 
     from src.contracts.memory import MemoryContinuity, MemoryRequest
+    from src.contracts.pkgs.memory import MemoryPolicy
     from src.contracts.world import WorldCommit
 
 _CANDIDATES_PER_ROUTE = 32
@@ -36,9 +37,11 @@ def select_memories(
     recent: tuple[WorldCommit, ...],
     request: MemoryRequest,
     continuity: MemoryContinuity | None,
-    observed_at: datetime,
+    policy: MemoryPolicy,
 ) -> MemorySelection:
     """从近期、文本、目标和实体四路召回，再整体补全证据依赖。"""
+    if request.observed_at is None or request.cursor is None:
+        raise ValueError("记忆选择需要冻结的获知边界")
     records = {commit.commit_id: commit for commit in history}
     routes, similarities = _candidate_routes(history, recent, request, continuity)
     replacements: dict[str, list[str]] = defaultdict(list)
@@ -52,7 +55,7 @@ def select_memories(
     required_ids = {commit.commit_id for commit in required}
     included = {commit.commit_id for commit in required}
     routes = {key: reasons for key, reasons in routes.items() if key not in replacements or key in required_refs}
-    ranked = _rank_candidates(records, routes, similarities, observed_at)
+    ranked = _rank_candidates(history, routes, similarities, request, policy)
     budget = request.max_characters
     bundles: list[MemoryBundle] = []
     for score, identity in ranked:
@@ -69,32 +72,6 @@ def select_memories(
         included.update(commit.commit_id for commit in commits)
         budget -= size
     return MemorySelection(required, tuple(bundles), missing)
-
-
-def memory_text(commit: WorldCommit) -> str:
-    """保留可读内容和完整结构化事实，用作基线特征及容量估算。"""
-    return f"{commit.summary}\n{json.dumps(dict(commit.data), ensure_ascii=False, separators=(',', ':'))}"
-
-
-def memory_links(commit: WorldCommit, name: str) -> tuple[str, ...]:
-    """只读取显式关系元数据，格式错误的外部内容不产生图关系。"""
-    metadata = commit.data.get("memory")
-    links = _strings(metadata, name) if isinstance(metadata, dict) else ()
-    if name == "goal_ids":
-        direct = commit.data.get("goal_id")
-        links += (direct,) if isinstance(direct, str) and direct.strip() else ()
-        links += _strings(commit.data, "focus_goal_ids")
-    return tuple(dict.fromkeys(links))
-
-
-def _strings(data: Mapping[str, Any], name: str) -> tuple[str, ...]:
-    """接受显式字符串集合，不把任意嵌套文本当成结构化关系。"""
-    values = data.get(name, ())
-    if not isinstance(values, (list, tuple)) or any(
-        not isinstance(value, str) or not value.strip() for value in values
-    ):
-        return ()
-    return tuple(values)
 
 
 def _closure(
@@ -147,17 +124,46 @@ def _candidate_routes(
 
 
 def _rank_candidates(
-    records: Mapping[str, WorldCommit],
+    history: tuple[WorldCommit, ...],
     routes: Mapping[str, set[str]],
     similarities: Mapping[str, float],
-    observed_at: datetime,
+    request: MemoryRequest,
+    policy: MemoryPolicy,
 ) -> list[tuple[float, str]]:
-    """使用可比较的固定相关性、任务关联和时效性基线。"""
-    ranked: list[tuple[float, str]] = []
-    for identity, reasons in routes.items():
-        commit = records[identity]
-        age = max(0.0, (observed_at - commit.occurred_at).total_seconds())
-        score = 4 * similarities[identity] + 2 * ("goal" in reasons) + ("entity" in reasons) + math.exp(-age / 3600)
-        ranked.append((score, identity))
-    ranked.sort(key=lambda item: (-item[0], -records[item[1]].cursor, item[1]))
+    """多路召回与学习排序共用可见候选和历史图前缀。"""
+    if request.cursor is None or request.observed_at is None:
+        raise ValueError("记忆排序需要明确游标和观察时间")
+    candidates = []
+    for commit in history:
+        if commit.commit_id not in routes:
+            continue
+        if commit.recorded_at is None:
+            raise ValueError("记忆候选缺少获知时间")
+        reasons = routes[commit.commit_id]
+        candidates.append(
+            MemoryCandidate(
+                commit.commit_id,
+                memory_text(commit),
+                commit.cursor,
+                commit.occurred_at,
+                commit.recorded_at,
+                similarities[commit.commit_id],
+                "goal" in reasons,
+                "entity" in reasons,
+            )
+        )
+    ranking = MemoryRankingRequest(
+        request.query,
+        request.focus_goal_ids,
+        request.cursor,
+        request.observed_at,
+        tuple(candidates),
+        graph_interactions(history),
+    )
+    scores = policy.score(ranking)
+    if len(scores) != len(candidates) or any(not math.isfinite(score) for score in scores):
+        raise ValueError("记忆策略必须为每个候选返回有限评分")
+    ranked = [(score, item.memory_id) for score, item in zip(scores, candidates, strict=True)]
+    cursors = {commit.commit_id: commit.cursor for commit in history}
+    ranked.sort(key=lambda item: (-item[0], -cursors[item[1]], item[1]))
     return ranked

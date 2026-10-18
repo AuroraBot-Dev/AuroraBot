@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from src.utils.patterns import pattern_matches
 
 if TYPE_CHECKING:
     from src.contracts.pkgs.bot import BotStateStore
+    from src.contracts.pkgs.memory import MemoryPolicy
     from src.contracts.pkgs.world import WorldReader
 
 _logger = get_logger(__name__)
@@ -30,6 +32,7 @@ class Memory:
         self,
         reader: WorldReader,
         *,
+        policy: MemoryPolicy,
         window: timedelta = DEFAULT_MEMORY_WINDOW,
         commits_per_scope: int = DEFAULT_COMMITS_PER_SCOPE,
         scope_include: tuple[str, ...] = (),
@@ -43,6 +46,7 @@ class Memory:
         if commits_per_scope <= 0:
             raise ValueError("commits_per_scope must be positive")
         self._reader = reader
+        self._policy = policy
         self._index = MemoryIndex(reader)
         self._window = window
         self._commits_per_scope = commits_per_scope
@@ -80,7 +84,10 @@ class Memory:
             if self._state is not None
             else None
         )
-        selection = select_memories(eligible, tuple(recent_by_id.values()), request, continuity, observed_at)
+        normalized = replace(request, cursor=history.cursor, observed_at=observed_at)
+        if not normalized.focus_goal_ids and continuity is not None:
+            normalized = replace(normalized, focus_goal_ids=tuple(goal.goal_id for goal in continuity.goals))
+        selection = select_memories(eligible, tuple(recent_by_id.values()), normalized, continuity, self._policy)
         chosen = {commit.commit_id: commit for commit in selection.required}
         for bundle in selection.bundles:
             chosen.update((commit.commit_id, commit) for commit in bundle.commits)

@@ -8,6 +8,7 @@ from src.contracts import AgentDefinition, AgentTree, MemorySnapshot, WorldCommi
 from src.contracts.bot import Checkpoint, Goal
 from src.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
 from src.memory.selection import select_memories
+from src.memory_model.rules import RuleMemoryPolicy
 from src.prompt import PromptAssembler, PromptCatalog
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
@@ -35,10 +36,10 @@ def test_old_evidence_and_known_revision_are_kept_outside_recent_window() -> Non
     revised = _fact("revised", "接口新地址", 2, supersedes=[original.commit_id])
     goal = Goal("aurora:goal/check", "检查接口", "地址有效", checkpoint=Checkpoint(evidence_refs=("original",)))
     continuity = MemoryContinuity("aurora:bot/test", 1, (goal,))
-    selected = select_memories((original, revised), (), MemoryRequest(), continuity, _NOW)
+    selected = select_memories((original, revised), (), _request(), continuity, RuleMemoryPolicy())
     assert selected.required == (original, revised)
     assert selected.bundles == ()
-    historical = select_memories((original,), (), MemoryRequest(), continuity, _NOW)
+    historical = select_memories((original,), (), _request(), continuity, RuleMemoryPolicy())
     assert historical.required == (original,)
 
 
@@ -47,8 +48,8 @@ def test_old_task_and_entity_candidates_recall_complete_dependency_set() -> None
     support = _fact("support", "操作已经发起", 1)
     task = _fact("task", "需要核对这个状态", 2, goal_ids=["aurora:goal/check"], depends_on=["support"])
     entity = _fact("entity", "曾经出现过相同错误", 3, entity_ids=["operation-7"])
-    request = MemoryRequest(query="operation-7", focus_goal_ids=("aurora:goal/check",))
-    selected = select_memories((support, task, entity), (), request, None, _NOW)
+    request = _request(query="operation-7", focus_goal_ids=("aurora:goal/check",))
+    selected = select_memories((support, task, entity), (), request, None, RuleMemoryPolicy())
     assert {commit.commit_id for bundle in selected.bundles for commit in bundle.commits} == {
         "support",
         "task",
@@ -57,7 +58,7 @@ def test_old_task_and_entity_candidates_recall_complete_dependency_set() -> None
     task_bundle = next(bundle for bundle in selected.bundles if "goal" in bundle.routes)
     assert task_bundle.commits == (support, task)
     assert any("entity" in bundle.routes for bundle in selected.bundles)
-    constrained = select_memories((support, task), (task,), MemoryRequest(max_characters=1), None, _NOW)
+    constrained = select_memories((support, task), (task,), _request(max_characters=1), None, RuleMemoryPolicy())
     assert constrained.bundles == ()
 
 
@@ -66,7 +67,7 @@ def test_missing_dependencies_are_not_presented_as_complete_evidence() -> None:
     broken = _fact("broken", "尚未验证的结论", 1, depends_on=["unavailable"])
     goal = Goal("aurora:goal/check", "检查", "已确认", checkpoint=Checkpoint(evidence_refs=("unknown",)))
     continuity = MemoryContinuity("aurora:bot/test", 1, (goal,))
-    selected = select_memories((broken,), (broken,), MemoryRequest(), continuity, _NOW)
+    selected = select_memories((broken,), (broken,), _request(), continuity, RuleMemoryPolicy())
     assert selected.bundles == ()
     assert selected.missing_refs == ("unknown",)
 
@@ -90,3 +91,10 @@ def test_prompt_budget_does_not_drop_shared_dependency_when_skipping_large_bundl
     assert "接下来检查状态" in system
     assert "无关细节" not in system
     assert system.count("- support ") == 1
+
+
+def _request(query: str = "", focus_goal_ids: tuple[str, ...] = (), max_characters: int = 8000) -> MemoryRequest:
+    """为独立排序场景固定已知前缀。"""
+    return MemoryRequest(
+        query=query, focus_goal_ids=focus_goal_ids, max_characters=max_characters, cursor=99, observed_at=_NOW
+    )

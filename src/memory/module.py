@@ -6,18 +6,19 @@ from datetime import timedelta
 
 from src.contracts import ScopeCatalog
 from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.memory import MemoryPolicy, MemoryReader
 from src.contracts.pkgs.world import WorldReader
 from src.kernel import ModuleContext, module
 from src.memory import Memory
 from src.memory.config import MemoryConfig
 
 
-@module(name="memory", provides=MemoryReader, requires=(WorldReader, BotStateStore))
+@module(name="memory", provides=MemoryReader, requires=(WorldReader, BotStateStore, MemoryPolicy))
 def build(context: ModuleContext) -> MemoryReader:
     config = context.settings.resolve(MemoryConfig)
     return Memory(
         context.get(WorldReader),
+        policy=context.get(MemoryPolicy),
         window=timedelta(minutes=config.window_minutes),
         commits_per_scope=config.commits_per_scope,
         scope_include=config.scope_include,

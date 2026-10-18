@@ -9,6 +9,7 @@ import pytest
 from src.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, WorldCommitInput, WorldFrontier
 from src.contracts.memory import MemoryRequest
 from src.memory import Memory
+from src.memory_model.rules import RuleMemoryPolicy
 from src.utils.patterns import NamePatternError
 from src.world import SqlAlchemyWorldJournal
 
@@ -55,7 +56,9 @@ def test_memory_returns_recent_active_scopes_with_latest_details(tmp_path: Path)
                 ),
             )
         )
-        snapshot = await Memory(journal, commits_per_scope=1).recall(MemoryRequest(observed_at=now))
+        snapshot = await Memory(journal, policy=RuleMemoryPolicy(), commits_per_scope=1).recall(
+            MemoryRequest(observed_at=now)
+        )
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["aurora:run/tree", "qq:group"]
@@ -72,9 +75,9 @@ def test_memory_rejects_non_positive_window_and_limits() -> None:
             raise NotImplementedError
 
     with pytest.raises(ValueError, match="window"):
-        Memory(FakeReader(), window=timedelta(0))  # type: ignore[arg-type]
+        Memory(FakeReader(), policy=RuleMemoryPolicy(), window=timedelta(0))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="commits_per_scope"):
-        Memory(FakeReader(), commits_per_scope=0)  # type: ignore[arg-type]
+        Memory(FakeReader(), policy=RuleMemoryPolicy(), commits_per_scope=0)  # type: ignore[arg-type]
 
 
 def test_memory_filters_scopes_with_include_and_exclude_patterns(tmp_path: Path) -> None:
@@ -116,7 +119,13 @@ def test_memory_filters_scopes_with_include_and_exclude_patterns(tmp_path: Path)
                 ),
             )
         )
-        memory = Memory(journal, commits_per_scope=1, scope_include=("qq:*",), scope_exclude=("qq:secret",))
+        memory = Memory(
+            journal,
+            policy=RuleMemoryPolicy(),
+            commits_per_scope=1,
+            scope_include=("qq:*",),
+            scope_exclude=("qq:secret",),
+        )
         snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
@@ -154,7 +163,7 @@ def test_memory_include_negation_reinjects_an_excluded_scope(tmp_path: Path) -> 
                 ),
             )
         )
-        memory = Memory(journal, commits_per_scope=1, scope_include=("**", "!aurora:run/**"))
+        memory = Memory(journal, policy=RuleMemoryPolicy(), commits_per_scope=1, scope_include=("**", "!aurora:run/**"))
         snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
@@ -169,7 +178,7 @@ def test_memory_rejects_invalid_scope_patterns() -> None:
             raise NotImplementedError
 
     with pytest.raises(NamePatternError):
-        Memory(FakeReader(), scope_include=("qq:[",))  # type: ignore[arg-type]
+        Memory(FakeReader(), policy=RuleMemoryPolicy(), scope_include=("qq:[",))  # type: ignore[arg-type]
 
 
 _CATALOG = ScopeCatalog(
@@ -226,7 +235,7 @@ def test_memory_excludes_run_domains_declared_by_the_registry(tmp_path: Path) ->
     async def scenario() -> None:
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
         journal = await _two_scope_journal(tmp_path, now)
-        memory = Memory(journal, commits_per_scope=1, catalog=_CATALOG)
+        memory = Memory(journal, policy=RuleMemoryPolicy(), commits_per_scope=1, catalog=_CATALOG)
         snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
@@ -241,7 +250,7 @@ def test_memory_keeps_undeclared_scopes(tmp_path: Path) -> None:
     async def scenario() -> None:
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
         journal = await _two_scope_journal(tmp_path, now)
-        memory = Memory(journal, commits_per_scope=1, catalog=ScopeCatalog(()))
+        memory = Memory(journal, policy=RuleMemoryPolicy(), commits_per_scope=1, catalog=ScopeCatalog(()))
         snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
@@ -254,7 +263,9 @@ def test_memory_can_opt_into_run_domains(tmp_path: Path) -> None:
     async def scenario() -> None:
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
         journal = await _two_scope_journal(tmp_path, now)
-        memory = Memory(journal, commits_per_scope=1, catalog=_CATALOG, include_run_scopes=True)
+        memory = Memory(
+            journal, policy=RuleMemoryPolicy(), commits_per_scope=1, catalog=_CATALOG, include_run_scopes=True
+        )
         snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
