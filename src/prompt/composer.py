@@ -10,6 +10,7 @@ from src.contracts.model import ContextBudgetError
 
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryContinuity
+    from src.contracts.world import WorldCommit
     from src.prompt.models import PromptCatalog
 
 _TRUNCATION_TAG = "部分对话未载入；请按检查点和证据引用恢复，必要时读取原始记录。"
@@ -47,6 +48,12 @@ class PromptAssembler:
         fragments = [*self._catalog.system, agent_prompt]
         if memory is not None and memory.continuity is not None:
             fragments.append(self._render_continuity(memory.continuity))
+        if memory is not None and memory.required:
+            fragments.append(_render_commits(memory.required, "当前检查点的证据及修订"))
+        if memory is not None and memory.missing_refs:
+            fragments.append(
+                f"尚未取得的证据引用：{json.dumps(memory.missing_refs, ensure_ascii=False)}；请先核对来源。"
+            )
         groups = _transcript_groups(node.messages)
         required = groups[0] if len(groups) == 1 else (*groups[0], *groups[-1])
         base = "\n\n".join(fragments)
@@ -84,6 +91,8 @@ class PromptAssembler:
     @staticmethod
     def _select_memory(memory: MemorySnapshot, available: int) -> str:
         """逐条接纳有来源的经历，预算不足时保留展开入口。"""
+        if memory.bundles is not None:
+            return _select_bundles(memory, available)
         selected: list[MemoryScopeSnapshot] = []
         fragment = ""
         for scope in memory.scopes:
@@ -163,6 +172,37 @@ def _transcript_groups(messages: tuple[ChatMessage, ...]) -> tuple[tuple[ChatMes
     if current:
         groups.append(tuple(current))
     return tuple(groups)
+
+
+def _select_bundles(memory: MemorySnapshot, available: int) -> str:
+    """按推荐顺序整组接纳证据，只有实际载入后才能共享依赖。"""
+    included = {commit.commit_id for commit in memory.required}
+    commits = []
+    fragment = ""
+    for bundle in memory.bundles or ():
+        new = tuple(commit for commit in bundle.commits if commit.commit_id not in included)
+        if not new:
+            continue
+        candidate = _render_commits((*commits, *new), "与你当前工作相关的世界记忆")
+        if len(candidate) + len("\n\n") <= available:
+            commits.extend(new)
+            included.update(commit.commit_id for commit in new)
+            fragment = candidate
+    return fragment
+
+
+def _render_commits(commits: tuple[WorldCommit, ...], heading: str) -> str:
+    """披露事件身份、事件时间、获知时间和原始数据。"""
+    lines = [f"## {heading}"]
+    for commit in commits:
+        known_at = commit.recorded_at.isoformat() if commit.recorded_at is not None else "未记录"
+        lines.append(
+            f"- {commit.commit_id} [{commit.kind}] {commit.summary}；发生 {commit.occurred_at.isoformat()}；"
+            f"获知 {known_at}；游标 {commit.cursor}；域 {', '.join(commit.scopes)}"
+        )
+        if commit.data:
+            lines.append(f"  数据：{json.dumps(dict(commit.data), ensure_ascii=False, separators=(',', ':'))}")
+    return "\n".join(lines)
 
 
 def _message_size(message: ChatMessage) -> int:

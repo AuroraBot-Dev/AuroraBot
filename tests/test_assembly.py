@@ -143,7 +143,7 @@ def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path
 
     asyncio.run(runtime.run("hello", tree_id="tree-memory"))
 
-    assert "最近时间窗口内的世界活动" in model.requests[0].messages[0].content
+    assert "与你当前工作相关的世界记忆" in model.requests[0].messages[0].content
 
 
 def test_presenter_traces_tool_calls(configured_project: Path) -> None:

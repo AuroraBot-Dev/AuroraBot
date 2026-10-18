@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from src.contracts.bot import Goal, WakePlan
+    from src.contracts.world import WorldCommit
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryBundle:
+    """应共同进入上下文的一组经历，依赖和替代关系不能被预算拆散。"""
+
+    commits: tuple[WorldCommit, ...]
+    score: float
+    routes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +45,7 @@ class MemoryRequest:
     scopes: frozenset[str] | None = None
     cursor: int | None = None
     observed_at: datetime | None = None
+    max_characters: int = 8000
 
     def __post_init__(self) -> None:
         """固定任务条件，拒绝无效时间和不明确的目标身份。"""
@@ -46,6 +57,8 @@ class MemoryRequest:
                 raise ValueError("记忆焦点必须引用目标")
         if self.cursor is not None and self.cursor < 0:
             raise ValueError("记忆读取游标不能小于零")
+        if self.max_characters <= 0:
+            raise ValueError("记忆读取预算必须为正数")
         if self.observed_at is not None and (self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None):
             raise ValueError("记忆读取时间必须包含时区")
         if self.scopes is not None:

@@ -9,6 +9,7 @@ from src.contracts import MemoryScopeSnapshot, MemorySnapshot, ScopeCatalog, Sco
 from src.contracts.memory import MemoryRequest
 from src.memory.continuity import select_continuity
 from src.memory.index import MemoryIndex
+from src.memory.selection import select_memories
 from src.utils import get_logger
 from src.utils.patterns import pattern_matches
 
@@ -63,27 +64,49 @@ class Memory:
         observed_at = (request.observed_at or datetime.now(UTC)).astimezone(UTC)
         window_start = observed_at - self._window
         history = await self._index.visible(cursor, observed_at)
-        recent = tuple(commit for commit in history.commits if commit.occurred_at >= window_start)
-        latest: dict[str, datetime] = {}
-        for commit in recent:
-            for scope in commit.scopes:
-                latest[scope] = max(latest.get(scope, commit.occurred_at), commit.occurred_at)
-        active = tuple(sorted(latest, key=lambda scope: (-latest[scope].timestamp(), scope)))
-        selected = active if request.scopes is None else tuple(scope for scope in active if scope in request.scopes)
-        selected = self._filter_scopes(selected)
-        selected = self._exclude_run_scopes(selected)
-        _logger.debug("Memory recall 开始 active_scope_count={} selected_scope_count={}", len(active), len(selected))
-        snapshots: list[MemoryScopeSnapshot] = []
+        all_scopes = tuple(sorted({scope for commit in history.commits for scope in commit.scopes}))
+        selected = self._exclude_run_scopes(self._filter_scopes(all_scopes))
+        if request.scopes is not None:
+            selected = tuple(scope for scope in selected if scope in request.scopes)
+        eligible = tuple(commit for commit in history.commits if set(commit.scopes).intersection(selected))
+        recent_by_id = {}
         for scope in selected:
-            commits = tuple(commit for commit in recent if scope in commit.scopes)[-self._commits_per_scope :]
-            scope_head = max(commit.scopes[scope] for commit in history.commits if scope in commit.scopes)
-            snapshots.append(MemoryScopeSnapshot(scope, scope_head, commits))
+            recent = tuple(
+                commit for commit in eligible if scope in commit.scopes and commit.occurred_at >= window_start
+            )
+            recent_by_id.update((commit.commit_id, commit) for commit in recent[-self._commits_per_scope :])
         continuity = (
             select_continuity(await self._state.snapshot_at(history.cursor), request)
             if self._state is not None
             else None
         )
-        snapshot = MemorySnapshot(window_start, tuple(snapshots), continuity, history.cursor, observed_at)
+        selection = select_memories(eligible, tuple(recent_by_id.values()), request, continuity, observed_at)
+        chosen = {commit.commit_id: commit for commit in selection.required}
+        for bundle in selection.bundles:
+            chosen.update((commit.commit_id, commit) for commit in bundle.commits)
+        recent = tuple(sorted(chosen.values(), key=lambda commit: commit.cursor))
+        latest: dict[str, datetime] = {}
+        for commit in recent:
+            for scope in commit.scopes:
+                latest[scope] = max(latest.get(scope, commit.occurred_at), commit.occurred_at)
+        selected = tuple(
+            sorted((scope for scope in selected if scope in latest), key=lambda s: (-latest[s].timestamp(), s))
+        )
+        snapshots: list[MemoryScopeSnapshot] = []
+        for scope in selected:
+            commits = tuple(commit for commit in recent if scope in commit.scopes)
+            scope_head = max(commit.scopes[scope] for commit in history.commits if scope in commit.scopes)
+            snapshots.append(MemoryScopeSnapshot(scope, scope_head, commits))
+        snapshot = MemorySnapshot(
+            window_start,
+            tuple(snapshots),
+            continuity,
+            history.cursor,
+            observed_at,
+            selection.bundles,
+            selection.required,
+            selection.missing_refs,
+        )
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))
         return snapshot
 

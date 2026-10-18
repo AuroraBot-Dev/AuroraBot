@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
-    from src.contracts.memory import MemoryContinuity
+    from src.contracts.memory import MemoryBundle, MemoryContinuity
 
 MCP_EVENT_RECEIVED = "mcp.event.received"
 
@@ -142,6 +142,9 @@ class MemorySnapshot:
     continuity: MemoryContinuity | None = None
     cursor: int = 0
     observed_at: datetime | None = None
+    bundles: tuple[MemoryBundle, ...] | None = None
+    required: tuple[WorldCommit, ...] = ()
+    missing_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "scopes", tuple(self.scopes))
