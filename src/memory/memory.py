@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -95,19 +94,6 @@ class Memory:
             kept.append(scope)
         return tuple(kept)
 
-    @staticmethod
-    def render(snapshot: MemorySnapshot) -> str:
-        """把记忆快照渲染为 PromptAssembler 的 system 片段。"""
-        lines = ["## 最近时间窗口内的世界活动"]
-        lines.append(f"窗口起点：{snapshot.window_start.isoformat()}")
-        for scope in snapshot.scopes:
-            lines.append(f"### scope：{scope.scope}（head={scope.head}）")
-            for commit in scope.commits:
-                lines.append(f"- {commit.occurred_at.isoformat()} [{commit.kind}] {commit.summary}")
-                if commit.data:
-                    lines.append(f"  数据：{_compact_json(dict(commit.data))}")
-        return "\n".join(lines)
-
 
 def _last_match(patterns: tuple[str, ...], scope: str) -> bool | None:
     decision: bool | None = None
@@ -115,7 +101,3 @@ def _last_match(patterns: tuple[str, ...], scope: str) -> bool | None:
         if pattern_matches(entry, scope):
             decision = not entry.startswith("!")
     return decision
-
-
-def _compact_json(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))

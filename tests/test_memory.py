@@ -55,13 +55,12 @@ def test_memory_returns_recent_active_scopes_with_latest_details(tmp_path: Path)
             )
         )
         snapshot = await Memory(journal, commits_per_scope=1).recall(now=now)
-        rendered = Memory.render(snapshot)
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["aurora:run/tree", "qq:group"]
         assert [scope.commits[0].commit_id for scope in snapshot.scopes] == ["recent-2", "recent-1"]
-        assert "最近完成" in rendered
-        assert '"detail":"ok"' in rendered
+        assert snapshot.scopes[0].commits[0].summary == "最近完成"
+        assert snapshot.scopes[0].commits[0].data == {"detail": "ok"}
 
     asyncio.run(scenario())
 

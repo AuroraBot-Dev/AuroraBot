@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from src.contracts import TOOL_CONTRIBUTIONS, ScopeCatalog, Settings
 from src.contracts.pkgs.cadence import Cadence
 from src.contracts.pkgs.mcp import McpRuntime as McpRuntimePort
-from src.contracts.pkgs.world import WorldJournal
+from src.contracts.pkgs.world import WorldWriter
 from src.kernel import ModuleContext, module
 from src.mcp import McpAppSpec, McpClientFactory, McpEventMode, McpRuntime, McpTransport, prepare_mcp
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
@@ -97,7 +97,7 @@ async def prepare(context: ModuleContext) -> AsyncCleanup | None:
     runtime = await prepare_mcp(
         build_mcp_specs(context.settings),
         platform_enabled=platform.enabled,
-        world=context.get(WorldJournal),
+        world=context.get(WorldWriter),
         factory=factory,
     )
     context.provide(McpRuntimePort, runtime)
@@ -111,7 +111,7 @@ async def activate(context: ModuleContext) -> None:
 @module(
     name="mcp",
     provides=McpRuntimePort,
-    requires=(WorldJournal,),
+    requires=(WorldWriter,),
     contributes=(TOOL_CONTRIBUTIONS,),
     owns_scopes=(MCP_SCOPE_PATTERN, MCP_SUB_SCOPE_PATTERN),
     activation_after=(Cadence,),

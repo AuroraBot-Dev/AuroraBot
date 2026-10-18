@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from src.contracts.agent import AgentTree, TreeLaunchRequest
     from src.contracts.console import TerminalResponse
+    from src.contracts.world import WorldCommit
 
 
 class TreeLauncher(Protocol):
@@ -18,4 +19,4 @@ class TreeLauncher(Protocol):
 class TerminalDispatcher(Protocol):
     """把一次终端文本分派为本地命令或一次 AgentTree 运行。"""
 
-    async def dispatch_terminal(self, text: str) -> TerminalResponse: ...
+    async def dispatch_terminal(self, text: str, *, commit: WorldCommit | None = None) -> TerminalResponse: ...

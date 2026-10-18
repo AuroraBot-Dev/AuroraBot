@@ -126,8 +126,7 @@ class AgentTreeRunner:
         observer: Callable[[AgentTree], None] | None,
     ) -> AgentTree:
         step_index = sum(message.role == "assistant" for message in node.messages)
-        memory_scopes = frozenset(node.observed_frontier.positions) or None
-        memory = await self._memory.recall(scopes=memory_scopes) if self._memory is not None else None
+        memory = await self._memory.recall(scopes=node.memory_scopes) if self._memory is not None else None
         request = ModelRequest(
             node.model,
             self._assembler.assemble(tree, node.node_id, memory=memory),
@@ -181,7 +180,8 @@ class AgentTreeRunner:
                 return await self._reject_scope_batch(tree, node_id, calls, error)
             if not node.reviewed_world_update:
                 tool_scopes = {scope for item in scopes.values() for scope in item.observe}
-                observe_scopes = frozenset(set(node.observed_frontier.positions) | tool_scopes)
+                tree = tree.watch_scopes(node_id, frozenset(tool_scopes))
+                observe_scopes = node.observation_scopes | tool_scopes
                 delta = await self._world.delta(node.observed_frontier, observe_scopes)
                 if delta.commits:
                     await self._effects.delta_delivered(
@@ -288,7 +288,7 @@ class AgentTreeRunner:
     async def _complete_node(self, tree: AgentTree, node_id: str, result: str) -> AgentTree:
         node = tree.node(node_id)
         if self._world is not None and not node.reviewed_world_update:
-            delta = await self._world.delta(node.observed_frontier, frozenset(node.observed_frontier.positions))
+            delta = await self._world.delta(node.observed_frontier, node.observation_scopes)
             if delta.commits:
                 await self._effects.delta_delivered(
                     tree,

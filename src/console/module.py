@@ -38,7 +38,6 @@ def _bind_console(console: TerminalConsolePort) -> FrontBinding:
     provides=TerminalConsolePort,
     requires=(WorldWriter,),
     contributes=(FRONT_BINDINGS,),
-    declares=(FRONT_BINDINGS,),
     owns_scopes=CONSOLE_SCOPE,
 )
 def build(context: ModuleContext) -> TerminalConsolePort:

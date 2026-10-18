@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 class Capabilities(Protocol):
     """只读能力视图：按契约类型读取实例与贡献。"""
 
-    settings: Settings
+    @property
+    def settings(self) -> Settings: ...
 
     def get[T](self, capability: type[T]) -> T: ...
 

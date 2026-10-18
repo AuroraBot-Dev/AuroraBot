@@ -17,6 +17,7 @@ from prompt_toolkit.shortcuts import clear as clear_terminal
 from src.console.events import CONSOLE_INPUT, CONSOLE_SCOPE
 from src.console.models import TerminalControl
 from src.contracts import WorldFrontier
+from src.contracts.console import is_terminal_command
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
@@ -51,9 +52,9 @@ class _PromptReader:
 
 
 class TerminalConsole:
-    """本地终端；所有非空输入先进入世界线，再通过文本分派端口处理。"""
+    """本地终端；普通消息先进入世界线，本地命令只交给分派端口处理。"""
 
-    def __init__(self, world: WorldWriter | None = None) -> None:
+    def __init__(self, world: WorldWriter) -> None:
         self._world = world
 
     async def run(
@@ -84,8 +85,9 @@ class TerminalConsole:
                 if not raw:
                     continue
                 _logger.debug("本地终端收到非空输入 input_type={}", "operation" if raw.startswith("/") else "message")
-                if self._world is not None:
-                    await self._world.append_commit(
+                commit = None
+                if not is_terminal_command(raw):
+                    commit = await self._world.append_commit(
                         commit_id=f"console:{uuid4().hex}",
                         kind=CONSOLE_INPUT,
                         source="console",
@@ -95,7 +97,7 @@ class TerminalConsole:
                         data={"text": raw},
                         occurred_at=datetime.now(UTC),
                     )
-                response = await dispatcher.dispatch_terminal(raw)
+                response = await dispatcher.dispatch_terminal(raw, commit=commit)
                 _logger.debug("本地终端分派完成 is_error={} control={}", response.is_error, response.control.value)
                 if response.control is TerminalControl.CLEAR:
                     _clear_console(prompt_reader, output)

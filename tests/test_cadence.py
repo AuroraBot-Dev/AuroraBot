@@ -204,7 +204,7 @@ def test_cadence_rejects_invalid_bounds() -> None:
         Cadence(reader, writer, poll_interval=0)
 
 
-def test_reactive_rule_launches_immediately_with_business_frontier_and_exact_cursor() -> None:
+def test_reactive_rule_launches_with_disclosed_frontier_memory_scope_and_exact_cursor() -> None:
     commit = WorldCommit(
         "mcp:qq:event:1",
         MCP_EVENT_RECEIVED,
@@ -231,7 +231,8 @@ def test_reactive_rule_launches_immediately_with_business_frontier_and_exact_cur
     request = launcher.requests[0]
     assert request.agent == "aurora:agent/chat"
     assert request.caused_by == commit.commit_id
-    assert request.frontier == WorldFrontier({"qq:private:42": 7})
+    assert request.frontier == WorldFrontier(commit.scopes)
+    assert request.memory_scopes == frozenset(commit.scopes)
     assert "在吗" in request.message
     assert '"user_id":"42"' in request.message
     assert cadence.status()["cursor"] == 1

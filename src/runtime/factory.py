@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Protocol
 
 from src.contracts import FRONT_BINDINGS, TREE_LAUNCHER_BINDINGS
 from src.contracts.pkgs.agents import AgentCatalog
-from src.contracts.pkgs.console import TerminalConsole
 from src.contracts.pkgs.engine import AgentTreeRunner
 from src.contracts.pkgs.world import WorldJournal
 from src.runtime.config import RuntimeConfig
@@ -35,7 +34,6 @@ def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print)
         runner=assembly.get(AgentTreeRunner),
         agents=agents,
         root=root,
-        console=assembly.get(TerminalConsole),
         world=assembly.get(WorldJournal),
         output=output,
         front_bindings=assembly.contributions(FRONT_BINDINGS),

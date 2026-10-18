@@ -19,6 +19,7 @@ from src.engine.scopes import tree_scope
 from src.kernel import BuiltinSource, ModuleSpec
 from src.mcp.scopes import mcp_scope
 from src.runtime.assembly import declared_scopes, validate_declared_scopes
+from src.runtime.events import RUNTIME_SCOPE
 from src.tools import WORLD_SCOPES_TOOL, WorldScopesTool
 
 _EXPECTED_OWNED_SCOPES = (
@@ -27,6 +28,7 @@ _EXPECTED_OWNED_SCOPES = (
     "aurora:run/*",
     "aurora:world/cadence",
     "aurora:world/console",
+    "aurora:world/runtime",
 )
 
 _TEMPLATE = (
@@ -122,6 +124,7 @@ def test_template_declares_every_scope_the_runtime_produces(tmp_path: Path) -> N
 
     produced = (
         CONSOLE_SCOPE,
+        RUNTIME_SCOPE,
         CADENCE_SCOPE,
         mcp_scope("org.aurora.qq"),
         tree_scope("6f1c"),

@@ -89,6 +89,7 @@ class EngineWorldEffects:
             based_on=root.observed_frontier,
             data={
                 "tree_id": tree.tree_id,
+                "caused_by": tree.caused_by,
                 "root_id": tree.root_id,
                 "definition_id": root.definition_id,
                 "message": root.messages[0].content,

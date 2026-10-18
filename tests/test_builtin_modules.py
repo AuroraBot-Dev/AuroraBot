@@ -131,3 +131,11 @@ def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
 
     assert all(capability is not None for capability in capabilities)
     assert len({id(capability) for capability in capabilities}) == len(capabilities)
+
+
+def test_runtime_can_be_composed_without_the_console_module() -> None:
+    specs = tuple(spec for spec in BuiltinSource().discover() if spec.name != "console")
+    resolution = resolve(specs)
+
+    assert resolution.construction[-1].name == "runtime"
+    assert all(spec.name != "console" for spec in resolution.construction)

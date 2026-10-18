@@ -66,9 +66,11 @@ class FakeWorld:
 @dataclass(slots=True)
 class FakeDispatcher:
     inputs: list[str] = field(default_factory=list)
+    commits: list[WorldCommit | None] = field(default_factory=list)
 
-    async def dispatch_terminal(self, text: str) -> TerminalResponse:
+    async def dispatch_terminal(self, text: str, *, commit: WorldCommit | None = None) -> TerminalResponse:
         self.inputs.append(text)
+        self.commits.append(commit)
         if text == "/clear":
             return TerminalResponse(control=TerminalControl.CLEAR)
         if text == "/exit":
@@ -105,7 +107,7 @@ def test_terminal_console_routes_text_renders_controls_and_stops() -> None:
     stop = asyncio.Event()
 
     asyncio.run(
-        TerminalConsole().run(
+        TerminalConsole(FakeWorld()).run(
             dispatcher,
             stop_event=stop,
             readline=_readline(["", "你好", "/clear", "/exit"]),
@@ -120,7 +122,7 @@ def test_terminal_console_routes_text_renders_controls_and_stops() -> None:
     assert stop.is_set()
 
 
-def test_terminal_console_records_every_non_empty_input_to_worldline() -> None:
+def test_terminal_console_records_messages_and_keeps_commands_local() -> None:
     dispatcher = FakeDispatcher()
     world = FakeWorld()
     output: list[str] = []
@@ -135,7 +137,8 @@ def test_terminal_console_records_every_non_empty_input_to_worldline() -> None:
         )
     )
 
-    assert [commit.summary for commit in world.commits] == ["请处理", "/status", "/exit"]
+    assert [commit.summary for commit in world.commits] == ["请处理"]
+    assert dispatcher.commits == [world.commits[0], None, None]
     assert {scope for commit in world.commits for scope in commit.scopes} == {"aurora:world/console"}
     assert {commit.kind for commit in world.commits} == {"console.input"}
     assert dispatcher.inputs == ["请处理", "/status", "/exit"]
@@ -158,6 +161,8 @@ def test_project_console_runs_message_tree_and_local_commands(configured_project
 
     assert len(model.requests) == 1
     assert model.requests[0].messages[1].content == "请处理"
+    tree = next(iter(runtime._trees.values()))
+    assert tree.caused_by is not None and tree.caused_by.startswith("console:")
     assert runtime.runtime_status()["trees"]["completed"] == 1
     assert "Bot> 全链路完成" in output
     assert "Bot> 本地命令：/help /clear /quit" in output

@@ -21,7 +21,7 @@ from src.contracts import (
 )
 
 if TYPE_CHECKING:
-    from src.contracts.pkgs.world import WorldJournal
+    from src.contracts.pkgs.world import WorldReader
 
 _MAX_READ_LIMIT = 100
 _MAX_TREES_LIMIT = 256
@@ -30,7 +30,7 @@ _MAX_TREES_LIMIT = 256
 class WorldReadTool:
     """按 scope 有界读取提交正文；读取前声明观察该 scope，让未披露 delta 先送达。"""
 
-    def __init__(self, journal: WorldJournal) -> None:
+    def __init__(self, journal: WorldReader) -> None:
         self._journal = journal
         self._definition = ToolDefinition(
             WORLD_READ_TOOL,
@@ -108,7 +108,7 @@ class WorldReadTool:
 class WorldTreesTool:
     """列出世界日志已知的 AgentTree 活动摘要，构成 Bot 的持久森林索引。"""
 
-    def __init__(self, journal: WorldJournal) -> None:
+    def __init__(self, journal: WorldReader) -> None:
         self._journal = journal
         self._definition = ToolDefinition(
             WORLD_TREES_TOOL,

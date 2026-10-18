@@ -42,8 +42,11 @@ class TreeLaunchRequest:
     agent: str | None = None
     frontier: WorldFrontier = field(default_factory=WorldFrontier)
     caused_by: str | None = None
+    memory_scopes: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
+        if self.memory_scopes is not None:
+            object.__setattr__(self, "memory_scopes", frozenset(self.memory_scopes))
         if not self.message.strip():
             raise ValueError("TreeLaunchRequest requires a non-empty message")
         if self.caused_by is not None and not self.caused_by.strip():
@@ -94,6 +97,8 @@ class AgentNode:
     result: str | None = None
     error: str | None = None
     observed_frontier: WorldFrontier = field(default_factory=WorldFrontier)
+    observation_scopes: frozenset[str] = field(default_factory=frozenset)
+    memory_scopes: frozenset[str] | None = None
     reviewed_world_update: bool = False
     sealed_call_ids: frozenset[str] = field(default_factory=frozenset)
     sealed_call_scopes: Mapping[str, ToolScopes] = field(default_factory=dict)
@@ -101,6 +106,9 @@ class AgentNode:
     def __post_init__(self) -> None:
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", frozenset(self.tools))
+        object.__setattr__(self, "observation_scopes", frozenset(self.observation_scopes))
+        if self.memory_scopes is not None:
+            object.__setattr__(self, "memory_scopes", frozenset(self.memory_scopes))
         object.__setattr__(self, "sealed_call_ids", frozenset(self.sealed_call_ids))
         object.__setattr__(self, "sealed_call_scopes", MappingProxyType(dict(self.sealed_call_scopes)))
         if not self.node_id or not self.definition_id or not self.prompt_id or not self.model:
@@ -148,9 +156,12 @@ class AgentTree:
     root_id: str
     nodes: tuple[AgentNode, ...]
     status: TreeStatus = TreeStatus.RUNNING
+    caused_by: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "nodes", tuple(self.nodes))
+        if self.caused_by is not None and not self.caused_by.strip():
+            raise ValueError("AgentTree 触发提交不能为空")
         if not self.tree_id or not self.root_id or not self.nodes:
             raise ValueError("AgentTree requires tree_id, root_id and nodes")
         identifiers = [node.node_id for node in self.nodes]
@@ -158,9 +169,7 @@ class AgentTree:
             raise ValueError("AgentTree node IDs must be unique")
         by_id = {node.node_id: node for node in self.nodes}
         root = by_id.get(self.root_id)
-        if root is None or root.parent_id is not None:
-            raise ValueError("AgentTree requires exactly one root")
-        if sum(node.parent_id is None for node in self.nodes) != 1:
+        if root is None or root.parent_id is not None or sum(node.parent_id is None for node in self.nodes) != 1:
             raise ValueError("AgentTree requires exactly one root")
         for node in self.nodes:
             if node.parent_id is not None and node.parent_id not in by_id:
@@ -181,6 +190,9 @@ class AgentTree:
         definition: AgentDefinition,
         initial_message: str,
         frontier: WorldFrontier | None = None,
+        *,
+        caused_by: str | None = None,
+        memory_scopes: frozenset[str] | None = None,
     ) -> AgentTree:
         root = AgentNode(
             root_id,
@@ -192,8 +204,10 @@ class AgentTree:
             definition.tools,
             (ChatMessage.message(initial_message),),
             observed_frontier=frontier or WorldFrontier(),
+            observation_scopes=frozenset(frontier.positions) if frontier is not None else frozenset(),
+            memory_scopes=memory_scopes,
         )
-        return cls(tree_id, root_id, (root,))
+        return cls(tree_id, root_id, (root,), caused_by=caused_by)
 
     def node(self, node_id: str) -> AgentNode:
         try:
@@ -278,6 +292,11 @@ class AgentTree:
         """兼容单个 Tool 调用的世界更新交付。"""
         return self.defer_tools_for_world(node_id, (call_id,), content, frontier, reviewed=True)
 
+    def watch_scopes(self, node_id: str, scopes: frozenset[str]) -> AgentTree:
+        """显式增加待观察的域；内部提交只推进进度，不扩大观察范围。"""
+        node = self.node(node_id)
+        return self._replace_node(replace(node, observation_scopes=node.observation_scopes | scopes))
+
     def advance_frontier(self, node_id: str, frontier: WorldFrontier) -> AgentTree:
         """记录节点已经知晓的本次内部提交，不把它再次作为外部 delta 交付。"""
         node = self.node(node_id)
@@ -291,7 +310,15 @@ class AgentTree:
             raise ValueError("sealed Tool calls must be pending and unique")
         if set(scopes) != set(call_ids) or not all(isinstance(scope, ToolScopes) for scope in scopes.values()):
             raise ValueError("sealed Tool calls require one resolved scope each")
-        return self._replace_node(replace(node, sealed_call_ids=frozenset(call_ids), sealed_call_scopes=dict(scopes)))
+        observed = frozenset(scope for item in scopes.values() for scope in item.observe)
+        return self._replace_node(
+            replace(
+                node,
+                sealed_call_ids=frozenset(call_ids),
+                sealed_call_scopes=dict(scopes),
+                observation_scopes=node.observation_scopes | observed,
+            )
+        )
 
     def clear_world_review(self, node_id: str) -> AgentTree:
         """一次明确封口后的后续行动恢复普通新鲜度检查。"""
@@ -319,16 +346,13 @@ class AgentTree:
             definition.tools,
             (ChatMessage.message(instruction),),
             observed_frontier=parent.observed_frontier,
+            observation_scopes=parent.observation_scopes,
+            memory_scopes=parent.memory_scopes,
         )
         nodes = tuple(
             replace(node, status=AgentStatus.WAITING) if node.node_id == parent_id else node for node in self.nodes
         )
-        return AgentTree(
-            self.tree_id,
-            self.root_id,
-            (*nodes, child),
-            self.status,
-        )
+        return replace(self, nodes=(*nodes, child))
 
     def complete(self, node_id: str, result: str) -> AgentTree:
         node = self.node(node_id)
@@ -377,11 +401,10 @@ class AgentTree:
         return self._replace_node(resumed)
 
     def _replace_node(self, replacement: AgentNode, *, status: TreeStatus | None = None) -> AgentTree:
-        return AgentTree(
-            self.tree_id,
-            self.root_id,
-            tuple(replacement if node.node_id == replacement.node_id else node for node in self.nodes),
-            self.status if status is None else status,
+        return replace(
+            self,
+            nodes=tuple(replacement if node.node_id == replacement.node_id else node for node in self.nodes),
+            status=self.status if status is None else status,
         )
 
 

@@ -14,6 +14,11 @@ kind = "resource"
 description = "本地终端输入先进入的世界线；渲染输出不进入世界线。"
 
 [[scope]]
+pattern = "aurora:world/runtime"
+kind = "resource"
+description = "通过 Bot 运行门面直接提交的文本输入。"
+
+[[scope]]
 pattern = "aurora:world/cadence"
 kind = "resource"
 description = "节律 tick 与唤起决策的提交，记录 Bot 主动发起认知的理由。"

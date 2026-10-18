@@ -7,45 +7,31 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from aurora import load_config
-from src.contracts import LOOP_OPERATIONS, WORLD_PORTS
+from src.contracts import LOOP_OPERATIONS, WORLD_PORTS, Settings
 from src.contracts.pkgs.memory import MemoryReader
 from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from src.kernel import Assembly
 from src.runtime import assemble_runtime
 from src.runtime.assembly import validate_loop_operations
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
     from pathlib import Path
 
 
-class _Capabilities:
-    """只回答「能力齐不齐」的最小实现，用来单独驱动校验的两条分支。"""
-
-    def __init__(self, bindings: Mapping[type, object] | None = None) -> None:
-        self._bindings: dict[type, object] = dict(bindings or {})
-
-    def get[T](self, capability: type[T]) -> T:
-        return cast("T", self._bindings[capability])
-
-    def get_optional[T](self, capability: type[T]) -> T | None:
-        return cast("T | None", self._bindings.get(capability))
-
-    def contains(self, capability: type) -> bool:
-        return capability in self._bindings
-
-
-def _one_world(*, shared: bool) -> _Capabilities:
+def _one_world(*, shared: bool) -> Assembly:
     """四操作齐备的装配；``shared=False`` 时 Observe 与 Effect 落在两个世界上。"""
     world = object()
-    return _Capabilities(
+    return Assembly(
+        cast("Settings", object()),
         {
             WorldReader: world,
             WorldWriter: world if shared else object(),
             WorldJournal: world,
             MemoryReader: object(),
             ToolRegistry: object(),
-        }
+        },
+        {},
     )
 
 
@@ -83,7 +69,7 @@ def test_a_missing_operation_is_reported_by_name() -> None:
     }
 
     with pytest.raises(ValueError, match="缺少操作实现：recall"):
-        validate_loop_operations(_Capabilities(bindings))
+        validate_loop_operations(Assembly(cast("Settings", object()), bindings, {}))
 
 
 def test_observe_and_effect_must_be_the_same_object() -> None:

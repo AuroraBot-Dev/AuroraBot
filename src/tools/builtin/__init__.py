@@ -18,7 +18,7 @@ from src.tools.builtin.world import (
 if TYPE_CHECKING:
     from src.contracts import ScopeCatalog, Tool
     from src.contracts.pkgs.agents import AgentCatalog
-    from src.contracts.pkgs.world import WorldJournal
+    from src.contracts.pkgs.world import WorldReader
 
 __all__ = [
     "DELEGATE_TOOL",
@@ -38,7 +38,7 @@ __all__ = [
 def builtin_tools(
     *,
     agents: AgentCatalog,
-    journal: WorldJournal,
+    journal: WorldReader,
     scopes: ScopeCatalog,
 ) -> tuple[Tool, ...]:
     """返回框架内建工具；外部工具由组合根追加到同一 ToolRegistry。"""

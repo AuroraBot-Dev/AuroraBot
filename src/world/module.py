@@ -26,6 +26,10 @@ async def prepare(context: ModuleContext) -> AsyncCleanup:
         context.provide(WorldJournal, SqlAlchemyWorldJournal(_database_path(context)))
     journal = context.get(WorldJournal)
     await journal.initialize()
+    if not context.contains(WorldReader):
+        context.provide(WorldReader, journal)
+    if not context.contains(WorldWriter):
+        context.provide(WorldWriter, journal)
     return journal.close
 
 

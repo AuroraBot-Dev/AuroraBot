@@ -10,7 +10,7 @@ from src.cadence.config import CadenceConfig, ReactionsConfig
 from src.contracts import TREE_LAUNCHER_BINDINGS
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.cadence import Cadence as CadencePort
-from src.contracts.pkgs.world import WorldJournal
+from src.contracts.pkgs.world import WorldReader, WorldWriter
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
 @module(
     name="cadence",
     provides=CadencePort,
-    requires=(WorldJournal, AgentCatalog),
+    requires=(WorldReader, WorldWriter, AgentCatalog),
     contributes=(TREE_LAUNCHER_BINDINGS,),
     owns_scopes=CADENCE_SCOPE,
     activate=activate,
@@ -55,10 +55,9 @@ def build(context: ModuleContext) -> CadencePort:
     rules = _reactive_rules(context.settings.resolve(ReactionsConfig))
     agents = context.get(AgentCatalog)
     _validate_agents(config.agent, rules, agents)
-    journal = context.get(WorldJournal)
     cadence = Cadence(
-        journal,
-        journal,
+        context.get(WorldReader),
+        context.get(WorldWriter),
         agent=config.agent,
         enabled=config.enabled,
         evoke_every=config.evoke_every,

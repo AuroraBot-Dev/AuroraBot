@@ -149,7 +149,7 @@ class Cadence:
                     commit,
                     agent=rule.agent,
                     message=_reactive_message(commit),
-                    frontier=_business_frontier(commit),
+                    frontier=WorldFrontier(commit.scopes),
                     mode="reactive",
                 )
                 return
@@ -215,6 +215,7 @@ class Cadence:
                     agent=agent,
                     frontier=frontier,
                     caused_by=caused_by.commit_id,
+                    memory_scopes=frozenset(caused_by.scopes) if mode == "reactive" else None,
                 )
             )
             _logger.info("Cadence 已唤起 AgentTree tree_id={}", tree_id)
@@ -236,24 +237,6 @@ class Cadence:
     @staticmethod
     def _counts(commit: WorldCommit) -> bool:
         return commit.kind == MCP_EVENT_RECEIVED
-
-
-def _business_frontier(commit: WorldCommit) -> WorldFrontier:
-    """剔除触发本次唤起的事件来源自己拥有的域，让被唤起的那棵树仍能看见它。
-
-    MCP 事件的 source 形如 ``mcp:<package>``，它自己拥有的域是 ``<package>:world``；
-    这里不再靠硬编码前缀切分，而是按域命名规则现算。
-    """
-    own = _source_owned_scope(commit.source)
-    positions = {scope: sequence for scope, sequence in commit.scopes.items() if scope != own}
-    return WorldFrontier(positions or commit.scopes)
-
-
-def _source_owned_scope(source: str) -> str | None:
-    prefix, separator, package = source.partition(":")
-    if separator and prefix == "mcp" and package:
-        return world_scope(package)
-    return None
 
 
 def _reactive_message(commit: WorldCommit) -> str:

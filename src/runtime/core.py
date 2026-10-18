@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from src.contracts import AgentTree, EnvironmentEvent, WorldCommit, WorldFrontier
+from src.contracts import AgentTree, EnvironmentEvent, TreeLaunchRequest, WorldCommit, WorldFrontier
+from src.runtime.events import RUNTIME_INPUT, RUNTIME_SCOPE
 from src.runtime.presenter import TreeTextPresenter
 from src.runtime.terminal import TerminalCommandDispatcher
 from src.utils import get_logger
@@ -17,9 +19,8 @@ from src.utils import get_logger
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.contracts import FrontBinding, TreeLaunchRequest
+    from src.contracts import FrontBinding
     from src.contracts.pkgs.agents import AgentCatalog
-    from src.contracts.pkgs.console import TerminalConsole
     from src.contracts.pkgs.engine import AgentTreeRunner
     from src.contracts.pkgs.world import WorldJournal
     from src.kernel import Assembly
@@ -38,7 +39,6 @@ class AuroraRuntime:
         runner: AgentTreeRunner,
         agents: AgentCatalog,
         root: RuntimeConfig,
-        console: TerminalConsole,
         world: WorldJournal,
         output: Callable[[str], None] = print,
         front_bindings: tuple[FrontBinding, ...] = (),
@@ -48,12 +48,11 @@ class AuroraRuntime:
         self.runner = runner
         self.agents = agents
         self.root = root
-        self.console = console
         self.world = world
         self.output = output
         self.front_bindings = front_bindings
         self.presenter = TreeTextPresenter(output)
-        self.terminal = TerminalCommandDispatcher(self.run)
+        self.terminal = TerminalCommandDispatcher(self.run_from_commit)
         self._trees: dict[str, AgentTree] = {}
 
     def create_tree(
@@ -72,29 +71,59 @@ class AuroraRuntime:
         )
 
     async def run(self, message: str, *, tree_id: str | None = None) -> AgentTree:
-        tree = self.create_tree(message, tree_id=tree_id)
-        if tree.tree_id in self._trees:
-            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        _logger.info("AgentTree 已提交 tree_id={}", tree.tree_id)
-        return await self.runner.run(tree, observer=self._record_tree)
+        """直接文本输入也先提交到世界，再进入统一认知入口。"""
+        if not message.strip():
+            raise ValueError("运行输入不能为空")
+        if tree_id is not None and tree_id in self._trees:
+            raise ValueError(f"AgentTree 已存在：{tree_id}")
+        await self.world.initialize()
+        commit = await self.world.append_commit(
+            commit_id=f"runtime:{uuid4().hex}",
+            kind=RUNTIME_INPUT,
+            source="runtime",
+            summary=message,
+            scopes=frozenset({RUNTIME_SCOPE}),
+            based_on=WorldFrontier(),
+            data={"text": message},
+            occurred_at=datetime.now(UTC),
+        )
+        return await self.run_from_commit(commit, tree_id=tree_id)
+
+    async def run_from_commit(self, commit: WorldCommit, *, tree_id: str | None = None) -> AgentTree:
+        """以已提交事实启动认知，不重复提交输入或读取更新后的世界 head。"""
+        return await self._run_request(
+            TreeLaunchRequest(
+                commit.summary,
+                tree_id=tree_id,
+                frontier=WorldFrontier(commit.scopes),
+                caused_by=commit.commit_id,
+                memory_scopes=frozenset(commit.scopes),
+            ),
+        )
 
     async def launch_tree(self, request: TreeLaunchRequest) -> AgentTree:
         """cadence 等主动策略的统一唤起入口。"""
-        definition = self.agents.get(request.agent or self.root.agent)
+        return await self._run_request(request, echo=True)
+
+    async def _run_request(self, request: TreeLaunchRequest, *, echo: bool = False) -> AgentTree:
         tree = AgentTree.create(
             request.tree_id or uuid4().hex,
             self.root.node_id,
-            definition,
+            self.agents.get(request.agent or self.root.agent),
             request.message,
             request.frontier,
+            caused_by=request.caused_by,
+            memory_scopes=request.memory_scopes,
         )
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
 
         def observer(current: AgentTree) -> None:
             self._record_tree(current)
-            self.presenter.echo(current)
+            if echo:
+                self.presenter.echo(current)
 
+        _logger.info("AgentTree 已提交 tree_id={}", tree.tree_id)
         return await self.runner.run(tree, observer=observer)
 
     async def submit_event(self, event: EnvironmentEvent) -> WorldCommit:
@@ -106,12 +135,8 @@ class AuroraRuntime:
 
     async def start_tree_from_event(self, event: EnvironmentEvent, *, tree_id: str | None = None) -> AgentTree:
         """显式以一条已提交环境事实启动认知；入口本身不形成自动循环。"""
-        await self.submit_event(event)
-        frontier = await self.world.head(frozenset({event.scope}))
-        tree = self.create_tree(event.summary, tree_id=tree_id, frontier=frontier)
-        if tree.tree_id in self._trees:
-            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
-        return await self.runner.run(tree, observer=self._record_tree)
+        commit = await self.submit_event(event)
+        return await self.run_from_commit(commit, tree_id=tree_id)
 
     def runtime_status(self) -> dict[str, Any]:
         statuses = {"running": 0, "completed": 0, "failed": 0}
