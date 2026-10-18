@@ -110,6 +110,8 @@ aurora train memory train.jsonl validation.jsonl models/memory.pt
 
 使用权重时，在 `memory_model.toml` 中指定 `policy = "aurora:memory/model/tgn"` 和 `weights = "models/memory.pt"`。资源版本由实际权重内容生成，读取结果携带同一版本；输入坐标不兼容时拒绝加载。训练命令不会自动启用权重或在线更新参数。
 
+TGN 在线评分保存一份图前缀投影；交互历史逐项一致时只处理新增交互。问题、候选、焦点和读取时间每次重新评分，历史查询与不同分支独立构建，不能借用未来状态。并发评分由策略内部串行保护，失败后清空未确认的投影；训练仍从各样本的完整图输入计算梯度。该投影目前保存在进程内，重启后按世界历史重建。
+
 ### 主动读取与记忆反馈
 
 Bot 可以主动改变查询问题、指定焦点目标并展开原始来源。默认总代理和执行者提供 `memory_recall`、`memory_source`、`memory_exposures` 和 `memory_feedback` 工具，也可委派给记忆专员。终端使用相同的领域操作：

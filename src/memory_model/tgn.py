@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import threading
+from copy import deepcopy
 from dataclasses import dataclass, field
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -16,6 +18,7 @@ from src.contracts.resource import ResourceKey, ResourceRef
 from src.utils.features import TEXT_FEATURE_SCHEMA, text_vector
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from datetime import datetime
     from pathlib import Path
 
@@ -28,7 +31,7 @@ type NodeKey = tuple[str, str]
 
 @dataclass(slots=True)
 class GraphState:
-    """一次评分重建的节点状态，独立于可训练模型参数。"""
+    """一个确切历史前缀的节点投影，独立于可训练模型参数。"""
 
     memories: dict[NodeKey, Tensor] = field(default_factory=dict)
     nodes: dict[NodeKey, MemoryNode] = field(default_factory=dict)
@@ -60,9 +63,18 @@ class TemporalMemoryNetwork(nn.Module):
 
     def forward(self, request: MemoryRankingRequest) -> Tensor:
         """先处理已知交互，再评分；本次监督标签不会成为任何图消息。"""
-        state = GraphState()
-        for event in request.interactions:
+        return self.rank(request, self.project(request.interactions))
+
+    def project(self, interactions: Iterable[MemoryInteraction], state: GraphState | None = None) -> GraphState:
+        """按给定顺序更新显式图状态，训练默认从空状态开始。"""
+        if state is None:
+            state = GraphState()
+        for event in interactions:
             self.update(state, event)
+        return state
+
+    def rank(self, request: MemoryRankingRequest, state: GraphState) -> Tensor:
+        """候选、问题、焦点和读取时间只影响当前评分，不推进历史节点状态。"""
         query_text = self.query_encoder(torch.tensor(text_vector(request.query, self.text_dimensions)))
         focused = tuple(
             self.node_embedding(state, MemoryNode("goal", identity, identity), request.observed_at)
@@ -135,12 +147,15 @@ class TemporalMemoryNetwork(nn.Module):
 
 
 class TGNMemoryPolicy:
-    """固定权重读取可重放的历史图，节点状态不会写入权重文件。"""
+    """固定权重增量投影同一图前缀，其他历史分支独立重建。"""
 
     def __init__(self, network: TemporalMemoryNetwork, revision: str) -> None:
         """绑定实际模型资源版本。"""
-        self.network = network.cpu().eval()
+        self._network = deepcopy(network).cpu().eval().requires_grad_(False)
         self._ref = ResourceRef(TGN_KEY, revision)
+        self._interactions: tuple[MemoryInteraction, ...] = ()
+        self._state = GraphState()
+        self._lock = threading.Lock()
 
     @property
     def ref(self) -> ResourceRef:
@@ -150,12 +165,31 @@ class TGNMemoryPolicy:
     @property
     def parameters(self) -> dict[str, int]:
         """公开编码维度，词项和时间坐标由模型格式统一声明。"""
-        return {"hidden_size": self.network.hidden_size, "text_dimensions": self.network.text_dimensions}
+        return {"hidden_size": self._network.hidden_size, "text_dimensions": self._network.text_dimensions}
 
     def score(self, request: MemoryRankingRequest) -> tuple[float, ...]:
-        """在线读取不更新模型参数，也不保留其他查询的运行状态。"""
-        with torch.no_grad():
-            return tuple(self.network(request).tolist())
+        """完整前缀一致才复用，较短查询不回退缓存，失败后丢弃未确认状态。"""
+        with self._lock, torch.no_grad():
+            previous = len(self._interactions)
+            extends = len(request.interactions) >= previous and request.interactions[:previous] == self._interactions
+            state = self._state if extends else GraphState()
+            start = previous if extends else 0
+            complete = False
+            try:
+                self._network.project(request.interactions[start:], state)
+                scores = tuple(self._network.rank(request, state).tolist())
+                if len(scores) != len(request.candidates) or any(not math.isfinite(score) for score in scores):
+                    raise ValueError("时序图记忆模型返回了无效评分")
+                if extends or len(request.interactions) > previous:
+                    self._state = state
+                    self._interactions = request.interactions
+                complete = True
+                return scores
+            finally:
+                state.features.clear()
+                if not complete:
+                    self._state = GraphState()
+                    self._interactions = ()
 
 
 def load_policy(path: Path) -> TGNMemoryPolicy:

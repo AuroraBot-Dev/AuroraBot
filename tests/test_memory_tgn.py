@@ -1,4 +1,4 @@
-"""时序记忆网络使用真实循环状态和邻域信息，不跨查询共享隐状态。"""
+"""时序记忆网络保留真实循环与邻域信息，复用状态必须匹配确切历史。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def test_temporal_graph_history_changes_scores_and_receives_gradients() -> None:
             assert float(gradient.abs().sum()) > 0
 
 
-def test_policy_rebuilds_state_and_handles_empty_candidate_set() -> None:
+def test_policy_isolates_history_branches_and_handles_empty_candidate_set() -> None:
     """实时读取另一个历史后，重放原查询仍获得相同分数。"""
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(3)
