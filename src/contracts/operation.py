@@ -9,6 +9,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.contracts.data import freeze_object
+from src.contracts.evidence import freeze_evidence_refs
 from src.contracts.identity import Identifier
 from src.contracts.kernel import ContributionKey
 from src.contracts.resource import ResourceDescriptor, ResourceRef
@@ -114,6 +115,7 @@ class OperationResult:
     data: Mapping[str, Any] = field(default_factory=dict)
     status: OperationStatus = OperationStatus.SUCCEEDED
     message: str | None = None
+    evidence_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """固定输出内容，失败与未知结果必须可解释。"""
@@ -122,6 +124,7 @@ class OperationResult:
         if self.status is not OperationStatus.SUCCEEDED and (self.message is None or not self.message.strip()):
             raise ValueError("失败或未知结果需要提供原因")
         object.__setattr__(self, "data", freeze_object(self.data))
+        object.__setattr__(self, "evidence_refs", freeze_evidence_refs(self.evidence_refs))
 
 
 class Operation(Protocol):

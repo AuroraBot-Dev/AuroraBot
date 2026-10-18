@@ -218,6 +218,7 @@ class AgentTreeRunner:
                         render_delta(delta),
                         delta.end,
                         reviewed=not delta.has_more,
+                        evidence_refs=tuple(commit.commit_id for commit in delta.commits),
                     )
             requested = await self._effects.tool_requests(tree, node_id, calls, scopes)
             tree = tree.advance_frontier(node_id, requested).seal_calls(
@@ -309,7 +310,12 @@ class AgentTreeRunner:
         scopes = node.sealed_call_scopes.get(call.call_id, ToolScopes())
         frontier = await self._effects.tool_output(tree, node_id, call, output, scopes)
         tree = tree.advance_frontier(node_id, frontier)
-        return tree.append(node_id, ChatMessage.tool(call.call_id, output.content, is_error=output.is_error))
+        return tree.append(
+            node_id,
+            ChatMessage.tool(
+                call.call_id, output.content, is_error=output.is_error, evidence_refs=output.evidence_refs
+            ),
+        )
 
     async def _complete_node(self, tree: AgentTree, node_id: str, result: str) -> AgentTree:
         node = tree.node(node_id)
@@ -324,7 +330,9 @@ class AgentTreeRunner:
                 )
                 return tree.observe(
                     node_id,
-                    ChatMessage.message(render_delta(delta)),
+                    ChatMessage.message(
+                        render_delta(delta), evidence_refs=tuple(commit.commit_id for commit in delta.commits)
+                    ),
                     delta.end,
                     reviewed=not delta.has_more,
                 )

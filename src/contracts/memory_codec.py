@@ -19,6 +19,7 @@ def exposure_data(exposure: MemoryExposure) -> dict[str, Any]:
         "required_ids": list(exposure.required_ids),
         "recommended_ids": list(exposure.recommended_ids),
         "included_ids": list(exposure.included_ids),
+        "transcript_ids": list(exposure.transcript_ids),
         "missing_refs": list(exposure.missing_refs),
         "focus_goal_ids": list(exposure.focus_goal_ids),
         "state_version": exposure.state_version,
@@ -65,6 +66,7 @@ def read_exposure(data: Mapping[str, Any]) -> MemoryExposure:
         tuple(data["focus_goal_ids"]),
         data["state_version"],
         read_recall(data["recall"]) if data["recall"] is not None else None,
+        tuple(data.get("transcript_ids", ())),
     )
 
 

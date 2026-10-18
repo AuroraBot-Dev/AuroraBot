@@ -8,6 +8,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from src.contracts.evidence import freeze_evidence_refs
+
 if TYPE_CHECKING:
     from src.contracts.model import ToolCall
 
@@ -41,10 +43,12 @@ class ToolOutput:
 
     content: str
     status: ToolStatus = ToolStatus.SUCCEEDED
+    evidence_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.content.strip():
             raise ValueError("ToolOutput content must not be empty")
+        object.__setattr__(self, "evidence_refs", freeze_evidence_refs(self.evidence_refs))
         if not isinstance(self.status, ToolStatus):
             raise TypeError("ToolOutput status must be a ToolStatus")
 

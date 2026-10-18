@@ -74,7 +74,7 @@ class PromptAssembler:
             messages = (system, *node.messages)
         else:
             messages = self._trim_history(system, groups)
-        return PromptAssembly(messages, _exposure(memory, selected_ids))
+        return PromptAssembly(messages, _exposure(memory, selected_ids, messages))
 
     def _trim_history(
         self, system: ChatMessage, groups: tuple[tuple[ChatMessage, ...], ...]
@@ -202,10 +202,13 @@ def _select_bundles(memory: MemorySnapshot, available: int) -> tuple[str, tuple[
     return fragment, tuple(commit.commit_id for commit in commits)
 
 
-def _exposure(memory: MemorySnapshot | None, selected_ids: tuple[str, ...]) -> MemoryExposure | None:
+def _exposure(
+    memory: MemorySnapshot | None, selected_ids: tuple[str, ...], messages: tuple[ChatMessage, ...]
+) -> MemoryExposure | None:
     """装配器直接报告自己的选择，不从最终文本猜测引用。"""
+    transcript_ids = tuple(dict.fromkeys(identity for message in messages for identity in message.evidence_refs))
     if memory is None:
-        return None
+        return MemoryExposure(included_ids=transcript_ids, transcript_ids=transcript_ids) if transcript_ids else None
     recommended = (
         tuple(commit.commit_id for bundle in memory.bundles for commit in bundle.commits)
         if memory.bundles is not None
@@ -216,11 +219,12 @@ def _exposure(memory: MemorySnapshot | None, selected_ids: tuple[str, ...]) -> M
     return MemoryExposure(
         required,
         recommended,
-        (*required, *selected_ids),
+        (*required, *selected_ids, *transcript_ids),
         memory.missing_refs,
         tuple(goal.goal_id for goal in continuity.goals) if continuity is not None else (),
         continuity.version if continuity is not None else None,
         memory.recall,
+        transcript_ids,
     )
 
 

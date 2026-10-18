@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal
 
+from src.contracts.evidence import freeze_evidence_refs
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -57,9 +59,13 @@ class ChatMessage:
     tool_calls: tuple[ToolCall, ...] = ()
     tool_call_id: str | None = None
     is_error: bool = False
+    evidence_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tool_calls", tuple(self.tool_calls))
+        object.__setattr__(self, "evidence_refs", freeze_evidence_refs(self.evidence_refs))
+        if self.evidence_refs and self.role not in {"message", "tool"}:
+            raise ValueError("只有世界输入和工具结果可以声明原始证据来源")
         if self.role in {"system", "message"}:
             if not self.content.strip() or self.tool_calls or self.tool_call_id is not None or self.is_error:
                 raise ValueError(f"invalid {self.role} message")
@@ -79,16 +85,20 @@ class ChatMessage:
         return cls("system", content)
 
     @classmethod
-    def message(cls, content: str) -> ChatMessage:
-        return cls("message", content)
+    def message(cls, content: str, *, evidence_refs: tuple[str, ...] = ()) -> ChatMessage:
+        """环境提供来源，模型只看到对应的可读内容。"""
+        return cls("message", content, evidence_refs=evidence_refs)
 
     @classmethod
     def assistant(cls, content: str = "", *, tool_calls: tuple[ToolCall, ...] = ()) -> ChatMessage:
         return cls("assistant", content, tool_calls)
 
     @classmethod
-    def tool(cls, call_id: str, content: str, *, is_error: bool = False) -> ChatMessage:
-        return cls("tool", content, tool_call_id=call_id, is_error=is_error)
+    def tool(
+        cls, call_id: str, content: str, *, is_error: bool = False, evidence_refs: tuple[str, ...] = ()
+    ) -> ChatMessage:
+        """保留工具结果声明的来源，不让模型通过正文伪造引用元数据。"""
+        return cls("tool", content, tool_call_id=call_id, is_error=is_error, evidence_refs=evidence_refs)
 
 
 @dataclass(frozen=True, slots=True)

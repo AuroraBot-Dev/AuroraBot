@@ -44,7 +44,7 @@ class OperationTool:
             if result.status is OperationStatus.SUCCEEDED
             else result.message or "操作结果未确认"
         )
-        return ToolOutput(content, ToolStatus(result.status.value))
+        return ToolOutput(content, ToolStatus(result.status.value), result.evidence_refs)
 
     def _request(self, call: ToolCall) -> OperationRequest:
         """运行环境提供归属和因果，工具参数不能冒充其他主体。"""

@@ -101,7 +101,8 @@ class WorldReadTool:
                 },
                 ensure_ascii=False,
                 separators=(",", ":"),
-            )
+            ),
+            evidence_refs=tuple(commit.commit_id for commit in commits),
         )
 
 

@@ -126,13 +126,21 @@ class MemoryExposure:
     focus_goal_ids: tuple[str, ...] = ()
     state_version: int | None = None
     recall: MemoryRecall | None = None
+    transcript_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """实际载入必须来自完整证据或推荐集合，必要证据不能悄悄退出。"""
-        for name in ("required_ids", "recommended_ids", "included_ids", "missing_refs", "focus_goal_ids"):
+        for name in (
+            "required_ids",
+            "recommended_ids",
+            "included_ids",
+            "missing_refs",
+            "focus_goal_ids",
+            "transcript_ids",
+        ):
             object.__setattr__(self, name, tuple(dict.fromkeys(getattr(self, name))))
         included = set(self.included_ids)
         if not set(self.required_ids) <= included:
             raise ValueError("上下文曝光不能缺少必要证据")
-        if not included <= set(self.required_ids) | set(self.recommended_ids):
+        if not included <= set(self.required_ids) | set(self.recommended_ids) | set(self.transcript_ids):
             raise ValueError("上下文曝光含有未参与读取的记忆")

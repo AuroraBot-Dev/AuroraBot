@@ -42,9 +42,16 @@ def request_data(request: OperationRequest) -> dict[str, Any]:
 
 def result_data(result: OperationResult) -> dict[str, Any]:
     """保留结果状态与可读取的结构化正文。"""
-    return {"status": result.status.value, "data": thaw_json(result.data), "message": result.message}
+    return {
+        "status": result.status.value,
+        "data": thaw_json(result.data),
+        "message": result.message,
+        "evidence_refs": list(result.evidence_refs),
+    }
 
 
 def read_result(data: Mapping[str, Any]) -> OperationResult:
     """恢复一次已经持久确认的调用结果。"""
-    return OperationResult(data["data"], OperationStatus(data["status"]), data["message"])
+    return OperationResult(
+        data["data"], OperationStatus(data["status"]), data["message"], tuple(data.get("evidence_refs", ()))
+    )

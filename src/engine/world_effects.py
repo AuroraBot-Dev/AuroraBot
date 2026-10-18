@@ -268,6 +268,7 @@ class EngineWorldEffects:
                 "content": output.content,
                 "is_error": output.is_error,
                 "status": output.status.value,
+                "evidence_refs": list(output.evidence_refs),
             },
         )
         return WorldFrontier(commit.scopes)

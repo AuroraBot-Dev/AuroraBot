@@ -208,7 +208,7 @@ class AgentTree:
             definition.prompt_id,
             definition.model,
             definition.tools,
-            (ChatMessage.message(initial_message),),
+            (ChatMessage.message(initial_message, evidence_refs=(caused_by,) if caused_by is not None else ()),),
             observed_frontier=frontier or WorldFrontier(),
             observation_scopes=frozenset(frontier.positions) if frontier is not None else frozenset(),
             memory_scopes=memory_scopes,
@@ -281,6 +281,7 @@ class AgentTree:
         frontier: WorldFrontier,
         *,
         reviewed: bool,
+        evidence_refs: tuple[str, ...] = (),
     ) -> AgentTree:
         """以 tool 结果交付世界 delta，并使下一次提案成为显式封口。"""
         node = self.node(node_id)
@@ -289,7 +290,13 @@ class AgentTree:
             raise ValueError("world deferred Tool calls must be pending and unique")
         updated = replace(
             node,
-            messages=(*node.messages, *(ChatMessage.tool(call_id, content, is_error=True) for call_id in call_ids)),
+            messages=(
+                *node.messages,
+                *(
+                    ChatMessage.tool(call_id, content, is_error=True, evidence_refs=evidence_refs)
+                    for call_id in call_ids
+                ),
+            ),
             observed_frontier=node.observed_frontier.advance(frontier.positions),
             reviewed_world_update=reviewed,
         )
