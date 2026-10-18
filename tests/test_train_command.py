@@ -6,11 +6,14 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from memory_support import episodes
 from rhythm_support import make_episode
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
 from src.cadence.state import observation_data
+from src.memory_model.dataset import write_episodes
+from src.memory_model.tgn import load_policy as load_memory_policy
 from src.rhythm.gru import load_policy
 
 if TYPE_CHECKING:
@@ -77,3 +80,32 @@ def test_train_command_rejects_validation_leakage_before_export(
     assert run(arguments, registry=DEFAULT_REGISTRY) != 0
     assert "同一经历" in capsys.readouterr().err
     assert not (tmp_path / "rhythm.pt").exists()
+
+
+def test_memory_train_command_exports_real_graph_weights_and_baseline_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """同一训练入口选择记忆数据格式，并实际导出时序图模型。"""
+    write_episodes(tmp_path / "train.jsonl", episodes("train"))
+    write_episodes(tmp_path / "validation.jsonl", episodes("validation", days=1))
+    arguments = [
+        "--root",
+        str(tmp_path),
+        "train",
+        "memory",
+        "train.jsonl",
+        "validation.jsonl",
+        "memory.pt",
+        "--epochs",
+        "2",
+        "--hidden-size",
+        "4",
+    ]
+    assert run(arguments, registry=DEFAULT_REGISTRY) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["resource"] == "aurora:memory/model/tgn"
+    assert "top1_accuracy" in report["validation"]
+    assert "regret" in report["baseline"]
+    assert load_memory_policy(tmp_path / "memory.pt").ref.revision == report["revision"]
+    assert run(arguments, registry=DEFAULT_REGISTRY) != 0
+    assert "已经存在" in capsys.readouterr().err

@@ -56,8 +56,9 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 ```text
 /resources --domain bot --kind command
-/inspect aurora:bot/command/goal_set@1
+/inspect aurora:bot/command/goal_set@2
 /call aurora:bot/query/state {}
+/call aurora:bot/query/state {"goal_id":"aurora:goal/check"}
 ```
 
 扩展通过 `OPERATION_CONTRIBUTIONS` 提供领域操作，通过 `RESOURCE_CONTRIBUTIONS` 提供其他资源定义，通过 `RESOURCE_ALIASES` 声明版本绑定。为操作填写 `tool_name` 后，框架会生成模型工具入口；Bot 的可见工具仍由 Agent 定义选择。
@@ -76,6 +77,22 @@ aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。训练数据每行是一段经历，包含 `schema_version = 1`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值。验证经历必须独立且晚于训练经历，报告同时列出学习模型和规则基线的误差与效用遗憾。
 
 使用导出的权重时，在 `rhythm.toml` 中指定 `policy = "aurora:rhythm/model/gru"` 和 `weights = "models/rhythm.pt"`。权重按内容生成版本；权重或推理参数变化后，节律会保留消费位置并清空不兼容的循环状态。训练命令不会自动启用新权重。
+
+### 记忆读取与训练
+
+每次记忆读取先固定全局游标和观察时间，分别检查事件发生时间与 Bot 的获知时间。迟到事件、后续反馈和后来的目标修改不会进入过去的上下文。当前目标的完整检查点与其证据固定保留，其他主体状态通过数量概览和分页查询按需展开；必要内容超过容量时明确结束本次认知。
+
+候选来自近期经历、文本相关性、目标关系和实体关系。世界提交可在 `data.memory` 中显式声明 `goal_ids`、`entity_ids`、`depends_on`、`supersedes` 字符串数组。旧经历可以通过这些关系重新进入上下文；集合组装会补齐依赖、带上已知修订并去重。缺少前提的可选集合整体跳过，检查点缺少的证据引用则明确披露。原始提交仍由世界日志保存，不因退出上下文而删除。
+
+`memory.toml` 管理读取范围；`memory_model.toml` 选择独立排序策略。规则基线比较文本、任务关联和时效性；时序图模型使用类型化节点、按获知间隔传递的消息、GRU 节点状态和邻域聚合，结构参考 [Temporal Graph Networks](https://arxiv.org/abs/2006.10637)。动态节点状态与权重分开，每次读取按可见历史重建；模型计算在线程中执行。
+
+```text
+aurora train memory train.jsonl validation.jsonl models/memory.pt
+```
+
+记忆训练 JSONL 每行包含 `schema_version = 1`、`episode_id`、`bot_id` 和 `examples`。每个样本分别记录 `request`、与候选逐项对应的 `utilities`、`outcome_cursor` 和 `outcome_at`。`request` 中只有当时可见的查询、候选和时序交互；监督结果必须来自推荐之后的世界提交。`src.memory_model.dataset` 提供类型化读取和导出，训练按效用差加权排序，并要求全部训练结果先于独立验证查询获知。报告比较排序准确率、效用遗憾、NDCG 和正收益召回率。受控测试验证历史区分、梯度和重载一致性，真实任务收益需要独立效用数据评估。
+
+使用权重时，在 `memory_model.toml` 中指定 `policy = "aurora:memory/model/tgn"` 和 `weights = "models/memory.pt"`。资源版本由实际权重内容生成，读取结果携带同一版本；输入坐标不兼容时拒绝加载。训练命令不会自动启用权重或在线更新参数。
 
 ## 快速开始
 
