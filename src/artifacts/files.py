@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,15 +19,20 @@ _BLOCK_SIZE = 1024 * 1024
 
 def ensure_directory(path: Path) -> None:
     """创建目录并同步父目录，已有内部目录不能被文件或链接替代。"""
-    if path.is_symlink():
-        raise ArtifactIntegrityError("资源内部目录不能是符号链接")
-    if path.is_dir():
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        ensure_directory(path.parent)
+        try:
+            path.mkdir()
+        except FileExistsError:
+            ensure_directory(path)
+        sync_directory(path.parent)
         return
-    if path.exists():
+    if stat.S_ISLNK(mode):
+        raise ArtifactIntegrityError("资源内部目录不能是符号链接")
+    if not stat.S_ISDIR(mode):
         raise ArtifactIntegrityError("资源内部目录被其他文件占用")
-    ensure_directory(path.parent)
-    path.mkdir(exist_ok=True)
-    sync_directory(path.parent)
 
 
 def sync_directory(path: Path) -> None:
