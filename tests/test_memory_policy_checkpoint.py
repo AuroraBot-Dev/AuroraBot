@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -9,11 +11,15 @@ import pytest
 from test_memory_tgn import _request
 from test_memory_tgn_incremental import _cold, _network
 
+import src.memory_model.tgn as backend
+from src.contracts.memory_graph import MemoryNode
 from src.contracts.memory_graph_codec import interactions_fingerprint
 from src.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 
 if TYPE_CHECKING:
+    from src.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
     from src.contracts.memory_graph import MemoryInteraction
+    from src.contracts.resource import ResourceRef
     from src.memory_model.state import GraphState
 
 
@@ -96,3 +102,49 @@ def test_incompatible_or_damaged_checkpoint_does_not_replace_live_projection(mon
 
     monkeypatch.setattr(TemporalMemoryNetwork, "update", unexpected_update)
     assert policy.score(request) == expected
+
+
+def test_serialization_releases_scoring_lock_and_preserves_the_captured_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """归档暂停期间继续追加节点，也不能把新邻居或隐状态混入旧检查点。"""
+    original = _request(True)
+    prefix = replace(original, cursor=2, interactions=original.interactions[:-1])
+    extra = replace(
+        original.interactions[-1],
+        source=MemoryNode("memory", "first", "更新后的经历"),
+        target=MemoryNode("entity", "new-entity", "新实体"),
+        relation="entity",
+    )
+    full = replace(original, interactions=(*prefix.interactions, extra))
+    network = _network()
+    expected_prefix, expected_full = _cold(network, prefix), _cold(network, full)
+    policy = TGNMemoryPolicy(network, "same-weights")
+    assert policy.score(prefix) == expected_prefix
+    entered = threading.Event()
+    release = threading.Event()
+    actual_encode = backend.encode_state
+
+    def encode(
+        state: GraphState, model: ResourceRef, boundary: MemoryGraphPrefix, *, hidden_size: int, text_dimensions: int
+    ) -> MemoryPolicyCheckpoint:
+        """在真实编码开始前暂停，用事件控制线程次序。"""
+        entered.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("未收到编码继续信号")
+        return actual_encode(state, model, boundary, hidden_size=hidden_size, text_dimensions=text_dimensions)
+
+    monkeypatch.setattr(backend, "encode_state", encode)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        saving = workers.submit(policy.checkpoint)
+        try:
+            assert entered.wait(timeout=5)
+            scoring = workers.submit(policy.score, full)
+            assert scoring.result(timeout=5) == expected_full
+        finally:
+            release.set()
+        checkpoint = saving.result(timeout=5)
+    assert checkpoint is not None
+    assert checkpoint.prefix.digest == interactions_fingerprint(prefix.interactions)
+    restored = TGNMemoryPolicy(network, "same-weights")
+    assert restored.restore(checkpoint)
+    assert restored.score(prefix) == expected_prefix
+    assert restored.score(full) == expected_full

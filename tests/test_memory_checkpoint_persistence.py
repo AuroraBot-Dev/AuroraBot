@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -180,6 +181,28 @@ def test_unknown_world_prefix_is_not_published(tmp_path: Path) -> None:
                 await manager.save()
             assert not (tmp_path / "artifacts/bindings").exists()
             assert await world.cursor() == 0
+        finally:
+            await world.close()
+
+    asyncio.run(scenario())
+
+
+def test_policy_cannot_publish_a_checkpoint_for_another_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """端口返回的模型身份必须与已绑定策略相同，不能把错误声明写进世界。"""
+
+    async def scenario() -> None:
+        policy = TGNMemoryPolicy(_network(), "same-weights")
+        policy.score(_request(True))
+        checkpoint = policy.checkpoint()
+        assert checkpoint is not None
+        altered = replace(checkpoint, model=replace(checkpoint.model, revision="other-weights"))
+        monkeypatch.setattr(policy, "checkpoint", lambda **kwargs: altered)
+        world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        manager = MemoryModelCheckpoints(_BOT, policy, FileArtifactStore(tmp_path / "artifacts"), world)
+        try:
+            with pytest.raises(ValueError, match="当前模型版本不一致"):
+                await manager.save()
+            assert not (tmp_path / "artifacts").exists()
         finally:
             await world.close()
 

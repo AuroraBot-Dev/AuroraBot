@@ -24,3 +24,12 @@ class GraphState:
     updated_at: dict[NodeKey, datetime] = field(default_factory=dict)
     neighbors: dict[NodeKey, set[NodeKey]] = field(default_factory=dict)
     features: dict[tuple[NodeKey, str], Tensor] = field(default_factory=dict)
+
+    def snapshot(self) -> GraphState:
+        """复制节点容器与邻居集合；在线更新始终替换张量，不原地改写旧张量。"""
+        return GraphState(
+            memories=dict(self.memories),
+            nodes=dict(self.nodes),
+            updated_at=dict(self.updated_at),
+            neighbors={key: set(value) for key, value in self.neighbors.items()},
+        )

@@ -81,6 +81,8 @@ class MemoryModelCheckpoints:
             checkpoint = await asyncio.to_thread(self._policy.checkpoint, after=self._saved_digest)
             if checkpoint is None:
                 return None
+            if checkpoint.model != self._policy.ref:
+                raise ValueError("策略返回的检查点与当前模型版本不一致")
             await self._world.initialize()
             source = await self._world.stream(checkpoint.prefix.cursor - 1, 1)
             if (

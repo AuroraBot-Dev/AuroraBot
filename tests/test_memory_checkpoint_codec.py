@@ -65,6 +65,15 @@ def test_model_or_coordinate_mismatch_requires_a_fresh_projection() -> None:
     assert decode_state(_replace_data(checkpoint, data), _MODEL, **_DIMENSIONS) is None
 
 
+@pytest.mark.parametrize("coordinate", ["framework", "device", "dtype", "projection_schema"])
+def test_computation_runtime_changes_invalidate_the_old_projection(coordinate: str) -> None:
+    """相同权重也不能把不同执行坐标产生的节点状态混入当前推理。"""
+    checkpoint = _checkpoint()
+    data = torch.load(BytesIO(checkpoint.content), weights_only=True)
+    data["coordinates"][coordinate] = "other"
+    assert decode_state(_replace_data(checkpoint, data), _MODEL, **_DIMENSIONS) is None
+
+
 @pytest.mark.parametrize("damage", ["nan", "shape", "dtype", "duplicate", "neighbor", "future", "boundary"])
 def test_invalid_node_payload_is_rejected_as_a_whole(damage: str) -> None:
     """部分有效的节点不能掩盖损坏张量、断边或未来更新时间。"""

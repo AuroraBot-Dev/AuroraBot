@@ -82,6 +82,10 @@ def decode_state(
 def _coordinates(hidden_size: int, text_dimensions: int) -> dict[str, Any]:
     """计算语义变化后，动态状态必须重新投影。"""
     return {
+        "projection_schema": "aurora:memory/projection/tgn@1",
+        "framework": str(torch.__version__),
+        "device": "cpu",
+        "dtype": "float32",
         "hidden_size": hidden_size,
         "text_dimensions": text_dimensions,
         "node_kinds": list(MEMORY_NODE_KINDS),

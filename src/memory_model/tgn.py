@@ -197,7 +197,9 @@ class TGNMemoryPolicy:
                 )
             if self._prefix.digest == after:
                 return None
-            return encode_state(self._state, self.ref, self._prefix, **self.parameters)
+            state = self._state.snapshot()
+            prefix = self._prefix
+        return encode_state(state, self.ref, prefix, **self.parameters)
 
     def restore(self, checkpoint: MemoryPolicyCheckpoint) -> bool:
         """有效载入只暂存状态，第一份实际查询必须再核对完整历史前缀。"""
