@@ -9,6 +9,7 @@ from collections import Counter
 
 _WORDS = re.compile(r"[a-z0-9_]+|[\u3400-\u9fff]", re.IGNORECASE)
 _CHINESE = re.compile(r"[\u3400-\u9fff]{2,}")
+TEXT_FEATURE_SCHEMA = "words_cjk_bigrams_blake2b_v1"
 
 
 def text_terms(text: str) -> frozenset[str]:

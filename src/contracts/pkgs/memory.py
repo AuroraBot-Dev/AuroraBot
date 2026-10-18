@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from src.contracts.memory import MemoryRequest
     from src.contracts.memory_graph import MemoryRankingRequest
     from src.contracts.resource import ResourceRef
@@ -24,6 +26,6 @@ class MemoryPolicy(Protocol):
     def ref(self) -> ResourceRef: ...
 
     @property
-    def parameters(self) -> dict[str, float | int]: ...
+    def parameters(self) -> Mapping[str, float | int]: ...
 
     def score(self, request: MemoryRankingRequest) -> tuple[float, ...]: ...

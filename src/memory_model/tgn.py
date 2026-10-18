@@ -12,7 +12,7 @@ from torch import Tensor, nn
 
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS, MemoryNode
 from src.contracts.resource import ResourceKey, ResourceRef
-from src.utils.features import text_vector
+from src.utils.features import TEXT_FEATURE_SCHEMA, text_vector
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from src.contracts.memory_graph import MemoryInteraction, MemoryRankingRequest
 
 TGN_KEY = ResourceKey.parse("aurora:memory/model/tgn")
-_TIME_SCALE = 20.0
+TIME_SCALE = 20.0
 type NodeKey = tuple[str, str]
 
 
@@ -164,8 +164,8 @@ def load_policy(path: Path) -> TGNMemoryPolicy:
         raise ValueError("不支持的时序记忆权重格式")
     if tuple(data["relations"]) != MEMORY_RELATIONS or tuple(data["node_kinds"]) != MEMORY_NODE_KINDS:
         raise ValueError("时序记忆权重的关系坐标不兼容")
-    if data["time_scale"] != _TIME_SCALE:
-        raise ValueError("时序记忆权重的时间坐标不兼容")
+    if data["time_scale"] != TIME_SCALE or data["text_features"] != TEXT_FEATURE_SCHEMA:
+        raise ValueError("时序记忆权重的时间或文本坐标不兼容")
     network = TemporalMemoryNetwork(data["hidden_size"], data["text_dimensions"])
     network.load_state_dict(data["state_dict"], strict=True)
     return TGNMemoryPolicy(network, hashlib.sha256(path.read_bytes()).hexdigest())
@@ -173,4 +173,4 @@ def load_policy(path: Path) -> TGNMemoryPolicy:
 
 def _interval(now: datetime, previous: datetime) -> float:
     """使用真实获知间隔，不把迟到事件的发生时间当成状态更新时间。"""
-    return math.log1p(max(0.0, (now - previous).total_seconds())) / _TIME_SCALE
+    return math.log1p(max(0.0, (now - previous).total_seconds())) / TIME_SCALE
