@@ -10,6 +10,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from src.contracts.rhythm import RhythmObservation
+from src.utils.fingerprint import data_fingerprint
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -102,6 +103,11 @@ def validate_partition(training: tuple[RhythmEpisode, ...], validation: tuple[Rh
     validation_start = min(example.observation.observed_at for episode in validation for example in episode.examples)
     if training_end >= validation_start:
         raise ValueError("验证经历必须晚于训练经历，避免未来信息泄漏")
+
+
+def episodes_fingerprint(episodes: tuple[RhythmEpisode, ...]) -> str:
+    """绑定连续观察、效用与等待标签，而不只记录经历身份。"""
+    return data_fingerprint(episodes, schema="aurora:rhythm/dataset/episodes@1")
 
 
 def _observation(data: Mapping[str, Any]) -> RhythmObservation:

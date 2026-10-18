@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from src.contracts.identity import Identifier
 from src.contracts.memory_graph_codec import read_ranking
+from src.utils.fingerprint import data_fingerprint
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -81,6 +82,11 @@ def validate_partition(training: tuple[MemoryEpisode, ...], validation: tuple[Me
         last = max((example.outcome_cursor for item in prior for example in item.examples), default=-1)
         if min(example.request.cursor for example in episode.examples) <= last:
             raise ValueError("同一 Bot 的验证查询必须晚于训练结果游标")
+
+
+def episodes_fingerprint(episodes: tuple[MemoryEpisode, ...]) -> str:
+    """完整图输入、后续效用与结果边界一起绑定到数据版本。"""
+    return data_fingerprint(episodes, schema="aurora:memory/dataset/episodes@1")
 
 
 def write_episodes(path: Path, episodes: tuple[MemoryEpisode, ...]) -> None:

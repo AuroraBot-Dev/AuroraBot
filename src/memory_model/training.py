@@ -13,7 +13,8 @@ from torch import Tensor, nn
 
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS
 from src.contracts.model_artifact import model_content_ref
-from src.memory_model.dataset import MemoryEpisode, validate_partition
+from src.contracts.training import bind_training_provenance, provenance_data
+from src.memory_model.dataset import MemoryEpisode, episodes_fingerprint, validate_partition
 from src.memory_model.evaluation import evaluate_policy
 from src.memory_model.rules import RuleMemoryPolicy
 from src.memory_model.tgn import TGN_KEY, TIME_SCALE, TemporalMemoryNetwork, TGNMemoryPolicy
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from src.contracts.resource import ResourceRef
+    from src.contracts.training import TrainingProvenance
     from src.memory_model.dataset import MemoryExample
 
 
@@ -37,6 +39,7 @@ class MemoryTrainingResult:
     parameters: dict[str, float | int]
     training_episodes: tuple[str, ...]
     validation_episodes: tuple[str, ...]
+    provenance: TrainingProvenance
 
     def save(self, path: Path) -> ResourceRef:
         """权重只含张量和基础元数据；动态节点状态始终从经历恢复。"""
@@ -65,6 +68,7 @@ class MemoryTrainingResult:
                 "framework": {"name": "pytorch", "version": str(torch.__version__), "device": "cpu"},
                 "training_episodes": list(self.training_episodes),
                 "validation_episodes": list(self.validation_episodes),
+                "data": provenance_data(self.provenance),
             },
         }
         stream = BytesIO()
@@ -81,9 +85,13 @@ def train(
     epochs: int = 100,
     learning_rate: float = 0.01,
     seed: int = 0,
+    provenance: TrainingProvenance | None = None,
 ) -> MemoryTrainingResult:
     """按效用差加权成对排序，较晚验证经历不会参与梯度计算。"""
     validate_partition(training, validation)
+    provenance = bind_training_provenance(
+        "memory", episodes_fingerprint(training), episodes_fingerprint(validation), provenance
+    )
     if epochs <= 0 or not math.isfinite(learning_rate) or learning_rate <= 0:
         raise ValueError("训练轮数和学习率必须为正数")
     batches = tuple((example, _pairs(example)) for episode in training for example in episode.examples)
@@ -125,6 +133,7 @@ def train(
         },
         tuple(episode.episode_id for episode in training),
         tuple(episode.episode_id for episode in validation),
+        provenance,
     )
 
 

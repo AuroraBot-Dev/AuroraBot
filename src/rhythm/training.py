@@ -12,7 +12,8 @@ from torch import Tensor, nn
 
 from src.contracts.model_artifact import model_content_ref
 from src.contracts.rhythm import RHYTHM_FEATURES
-from src.rhythm.dataset import RhythmEpisode, validate_partition
+from src.contracts.training import bind_training_provenance, provenance_data
+from src.rhythm.dataset import RhythmEpisode, episodes_fingerprint, validate_partition
 from src.rhythm.evaluation import evaluate_policy
 from src.rhythm.gru import GRU_KEY, GRURhythmPolicy, RhythmNetwork
 from src.rhythm.rules import RuleRhythmPolicy
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from src.contracts.resource import ResourceRef
+    from src.contracts.training import TrainingProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,7 @@ class RhythmTrainingResult:
     parameters: dict[str, float | int]
     training_episodes: tuple[str, ...]
     validation_episodes: tuple[str, ...]
+    provenance: TrainingProvenance
 
     def save(self, path: Path) -> ResourceRef:
         """保存输入坐标、张量和训练来源，不保存可执行对象。"""
@@ -58,6 +61,7 @@ class RhythmTrainingResult:
                 "framework": {"name": "pytorch", "version": str(torch.__version__), "device": "cpu"},
                 "training_episodes": list(self.training_episodes),
                 "validation_episodes": list(self.validation_episodes),
+                "data": provenance_data(self.provenance),
             },
         }
         stream = BytesIO()
@@ -73,9 +77,13 @@ def train(
     epochs: int = 100,
     learning_rate: float = 0.01,
     seed: int = 0,
+    provenance: TrainingProvenance | None = None,
 ) -> RhythmTrainingResult:
     """经历内部反向传播，经历之间重置状态，验证集不参与优化。"""
     validate_partition(training, validation)
+    provenance = bind_training_provenance(
+        "rhythm", episodes_fingerprint(training), episodes_fingerprint(validation), provenance
+    )
     if epochs <= 0 or not math.isfinite(learning_rate) or learning_rate <= 0:
         raise ValueError("训练轮数与学习率必须大于零")
     losses: list[float] = []
@@ -110,6 +118,7 @@ def train(
         {"hidden_size": hidden_size, "epochs": epochs, "learning_rate": learning_rate, "seed": seed},
         tuple(episode.episode_id for episode in training),
         tuple(episode.episode_id for episode in validation),
+        provenance,
     )
 
 
