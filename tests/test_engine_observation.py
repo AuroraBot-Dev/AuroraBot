@@ -11,6 +11,7 @@ from test_engine_runtime import FakeModel, ScopedEchoTool, _agent, _assembler
 
 from src.agents import AgentCatalog
 from src.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
+from src.contracts.memory import MemoryRequest
 from src.engine import AgentTreeRunner
 from src.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
 from src.world import SqlAlchemyWorldJournal
@@ -23,9 +24,10 @@ class RecordingMemory:
     def __init__(self) -> None:
         self.scopes: list[frozenset[str] | None] = []
 
-    async def recall(self, *, now: datetime | None = None, scopes: frozenset[str] | None = None) -> MemorySnapshot:
-        self.scopes.append(scopes)
-        return MemorySnapshot(now or datetime(2026, 1, 1, tzinfo=UTC), ())
+    async def recall(self, request: MemoryRequest | None = None) -> MemorySnapshot:
+        request = request or MemoryRequest()
+        self.scopes.append(request.scopes)
+        return MemorySnapshot(request.observed_at or datetime(2026, 1, 1, tzinfo=UTC), ())
 
 
 class PublishOnlyTool(ScopedEchoTool):

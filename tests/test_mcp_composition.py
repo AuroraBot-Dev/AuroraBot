@@ -139,6 +139,8 @@ class FakeWorldJournal:
             scope_sequences,
             based_on,
             data,
+            cursor=len(self.commits_log) + 1,
+            recorded_at=datetime.now(UTC),
         )
         self.commits_log.append(commit)
         return commit

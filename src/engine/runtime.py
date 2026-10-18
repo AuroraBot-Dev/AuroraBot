@@ -17,6 +17,7 @@ from src.contracts import (
     ToolStatus,
     TreeStatus,
 )
+from src.contracts.memory import MemoryRequest
 from src.contracts.model import ContextBudgetError, ToolContext
 from src.engine.effects import NullEffectSink
 from src.engine.world_effects import EngineWorldEffects, render_delta
@@ -130,8 +131,18 @@ class AgentTreeRunner:
         observer: Callable[[AgentTree], None] | None,
     ) -> AgentTree:
         step_index = sum(message.role == "assistant" for message in node.messages)
-        memory = await self._memory.recall(scopes=node.memory_scopes) if self._memory is not None else None
         try:
+            memory = (
+                await self._memory.recall(
+                    MemoryRequest(
+                        query="\n".join(message.content for message in (node.messages[:1] + node.messages[-1:])),
+                        focus_goal_ids=node.focus_goal_ids,
+                        scopes=node.memory_scopes,
+                    )
+                )
+                if self._memory is not None
+                else None
+            )
             request = ModelRequest(
                 node.model,
                 self._assembler.assemble(tree, node.node_id, memory=memory),

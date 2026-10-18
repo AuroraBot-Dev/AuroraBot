@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from src.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, WorldCommitInput, WorldFrontier
+from src.contracts.memory import MemoryRequest
 from src.memory import Memory
 from src.utils.patterns import NamePatternError
 from src.world import SqlAlchemyWorldJournal
@@ -17,9 +18,9 @@ if TYPE_CHECKING:
 
 def test_memory_returns_recent_active_scopes_with_latest_details(tmp_path: Path) -> None:
     async def scenario() -> None:
-        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
-        await journal.initialize()
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3", now=lambda: now)
+        await journal.initialize()
         await journal.append_commits(
             (
                 WorldCommitInput(
@@ -54,7 +55,7 @@ def test_memory_returns_recent_active_scopes_with_latest_details(tmp_path: Path)
                 ),
             )
         )
-        snapshot = await Memory(journal, commits_per_scope=1).recall(now=now)
+        snapshot = await Memory(journal, commits_per_scope=1).recall(MemoryRequest(observed_at=now))
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["aurora:run/tree", "qq:group"]
@@ -78,9 +79,9 @@ def test_memory_rejects_non_positive_window_and_limits() -> None:
 
 def test_memory_filters_scopes_with_include_and_exclude_patterns(tmp_path: Path) -> None:
     async def scenario() -> None:
-        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
-        await journal.initialize()
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3", now=lambda: now)
+        await journal.initialize()
         await journal.append_commits(
             (
                 WorldCommitInput(
@@ -116,7 +117,7 @@ def test_memory_filters_scopes_with_include_and_exclude_patterns(tmp_path: Path)
             )
         )
         memory = Memory(journal, commits_per_scope=1, scope_include=("qq:*",), scope_exclude=("qq:secret",))
-        snapshot = await memory.recall(now=now)
+        snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["qq:group"]
@@ -126,9 +127,9 @@ def test_memory_filters_scopes_with_include_and_exclude_patterns(tmp_path: Path)
 
 def test_memory_include_negation_reinjects_an_excluded_scope(tmp_path: Path) -> None:
     async def scenario() -> None:
-        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
-        await journal.initialize()
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
+        journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3", now=lambda: now)
+        await journal.initialize()
         await journal.append_commits(
             (
                 WorldCommitInput(
@@ -154,7 +155,7 @@ def test_memory_include_negation_reinjects_an_excluded_scope(tmp_path: Path) -> 
             )
         )
         memory = Memory(journal, commits_per_scope=1, scope_include=("**", "!aurora:run/**"))
-        snapshot = await memory.recall(now=now)
+        snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["qq:group"]
@@ -180,7 +181,7 @@ _CATALOG = ScopeCatalog(
 
 
 async def _two_scope_journal(tmp_path: Path, now: datetime) -> SqlAlchemyWorldJournal:
-    journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+    journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3", now=lambda: now)
     await journal.initialize()
     await journal.append_commits(
         (
@@ -226,7 +227,7 @@ def test_memory_excludes_run_domains_declared_by_the_registry(tmp_path: Path) ->
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
         journal = await _two_scope_journal(tmp_path, now)
         memory = Memory(journal, commits_per_scope=1, catalog=_CATALOG)
-        snapshot = await memory.recall(now=now)
+        snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:world/cadence"]
@@ -241,7 +242,7 @@ def test_memory_keeps_undeclared_scopes(tmp_path: Path) -> None:
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
         journal = await _two_scope_journal(tmp_path, now)
         memory = Memory(journal, commits_per_scope=1, catalog=ScopeCatalog(()))
-        snapshot = await memory.recall(now=now)
+        snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:run/tree", "aurora:world/cadence"]
@@ -254,7 +255,7 @@ def test_memory_can_opt_into_run_domains(tmp_path: Path) -> None:
         now = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
         journal = await _two_scope_journal(tmp_path, now)
         memory = Memory(journal, commits_per_scope=1, catalog=_CATALOG, include_run_scopes=True)
-        snapshot = await memory.recall(now=now)
+        snapshot = await memory.recall(MemoryRequest(observed_at=now))
         await journal.close()
 
         assert [scope.scope for scope in snapshot.scopes] == ["qq:group", "aurora:run/tree", "aurora:world/cadence"]

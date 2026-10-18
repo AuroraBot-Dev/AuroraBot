@@ -140,6 +140,8 @@ class MemorySnapshot:
     window_start: datetime
     scopes: tuple[MemoryScopeSnapshot, ...]
     continuity: BotSnapshot | None = None
+    cursor: int = 0
+    observed_at: datetime | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "scopes", tuple(self.scopes))
