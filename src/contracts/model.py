@@ -14,6 +14,10 @@ if TYPE_CHECKING:
 ChatRole = Literal["system", "message", "assistant", "tool"]
 
 
+class ContextBudgetError(ValueError):
+    """必要的身份、任务输入和恢复状态超过上下文容量。"""
+
+
 @dataclass(frozen=True, slots=True)
 class ToolCall:
     """assistant 请求的一次工具调用。"""

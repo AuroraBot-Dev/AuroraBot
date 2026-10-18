@@ -1,4 +1,4 @@
-"""Bot 世界提交与观察前沿的值对象与常量。"""
+"""Bot 世界提交与观察前沿的值对象；事件由提交方生产并确定所属域。"""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
-# 跨包观察的业务事件 kind；各包自己的事件 kind 定义在各自包内，
-# scope 的实际归属由提交方决定，world 只负责校验、编号与追加。
+    from src.contracts.bot import BotSnapshot
+
 MCP_EVENT_RECEIVED = "mcp.event.received"
 
 
@@ -133,6 +133,7 @@ class MemorySnapshot:
 
     window_start: datetime
     scopes: tuple[MemoryScopeSnapshot, ...]
+    continuity: BotSnapshot | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "scopes", tuple(self.scopes))

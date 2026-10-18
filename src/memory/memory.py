@@ -10,6 +10,7 @@ from src.utils import get_logger
 from src.utils.patterns import pattern_matches
 
 if TYPE_CHECKING:
+    from src.contracts.pkgs.bot import BotStateStore
     from src.contracts.pkgs.world import WorldReader
 
 _logger = get_logger(__name__)
@@ -31,6 +32,7 @@ class Memory:
         scope_exclude: tuple[str, ...] = (),
         catalog: ScopeCatalog | None = None,
         include_run_scopes: bool = False,
+        state: BotStateStore | None = None,
     ) -> None:
         if window <= timedelta(0):
             raise ValueError("memory window must be positive")
@@ -43,6 +45,7 @@ class Memory:
         self._scope_exclude = tuple(scope_exclude)
         self._catalog = catalog
         self._include_run_scopes = include_run_scopes
+        self._state = state
         for entry in (*self._scope_include, *self._scope_exclude):
             pattern_matches(entry, "")
 
@@ -72,7 +75,8 @@ class Memory:
             recent = await self._reader.commits(scope, after, self._commits_per_scope)
             commits = tuple(commit for commit in recent if commit.occurred_at >= window_start)
             snapshots.append(MemoryScopeSnapshot(scope, head, commits))
-        snapshot = MemorySnapshot(window_start, tuple(snapshots))
+        continuity = await self._state.snapshot() if self._state is not None else None
+        snapshot = MemorySnapshot(window_start, tuple(snapshots), continuity)
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))
         return snapshot
 

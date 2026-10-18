@@ -16,6 +16,7 @@ from src.contracts import (
     ToolStatus,
     TreeStatus,
 )
+from src.contracts.model import ContextBudgetError
 from src.engine.effects import NullEffectSink
 from src.engine.world_effects import EngineWorldEffects, render_delta
 from src.utils import get_logger
@@ -127,11 +128,14 @@ class AgentTreeRunner:
     ) -> AgentTree:
         step_index = sum(message.role == "assistant" for message in node.messages)
         memory = await self._memory.recall(scopes=node.memory_scopes) if self._memory is not None else None
-        request = ModelRequest(
-            node.model,
-            self._assembler.assemble(tree, node.node_id, memory=memory),
-            self._tools.definitions_for(node.tools),
-        )
+        try:
+            request = ModelRequest(
+                node.model,
+                self._assembler.assemble(tree, node.node_id, memory=memory),
+                self._tools.definitions_for(node.tools),
+            )
+        except ContextBudgetError as error:
+            return self._publish(await self._fail_node(tree, node.node_id, str(error)), observer)
         _logger.debug(
             "模型步骤开始 tree_id={} node_id={} model={} step={}",
             tree.tree_id,

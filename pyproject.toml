@@ -1,7 +1,7 @@
 [project]
 name = "AuroraBot"
 version = "0.7.0"
-description = "以 AgentTree 为核心的自主智能体框架，为 Bot 提供可以持续生活、自主判断与行动的运行环境。"
+description = "以 Bot 为中心的主动智能体环境，支持持久目标、节律、记忆与可扩展能力。"
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
