@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.data import freeze_object
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
@@ -52,10 +54,11 @@ class EnvironmentEvent:
     data: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """冻结事件内容，调用方持有的嵌套容器不再影响已提交输入。"""
         fields = (self.event_id, self.source, self.scope, self.kind, self.summary)
         if not all(field.strip() for field in fields):
             raise ValueError("EnvironmentEvent requires non-empty identity and summary fields")
-        object.__setattr__(self, "data", MappingProxyType(dict(self.data)))
+        object.__setattr__(self, "data", freeze_object(self.data))
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,13 +77,14 @@ class WorldCommit:
     recorded_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        """提交元数据和任意深度的 JSON 内容都保持不可变。"""
         if not all((self.commit_id.strip(), self.kind.strip(), self.source.strip(), self.summary.strip())):
             raise ValueError("WorldCommit requires non-empty identity and summary fields")
         scopes = dict(self.scopes)
         if not scopes or any(not scope.strip() or sequence <= 0 for scope, sequence in scopes.items()):
             raise ValueError("WorldCommit requires positive sequences for non-empty scopes")
         object.__setattr__(self, "scopes", MappingProxyType(scopes))
-        object.__setattr__(self, "data", MappingProxyType(dict(self.data)))
+        object.__setattr__(self, "data", freeze_object(self.data))
         if self.cursor < 0:
             raise ValueError("世界提交的全局游标不能小于零")
         if self.recorded_at is not None and (self.recorded_at.tzinfo is None or self.recorded_at.utcoffset() is None):
@@ -101,12 +105,13 @@ class WorldCommitInput:
     occurred_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        """写入前复制完整内容，重试身份不会被外部容器修改。"""
         if not all((self.commit_id.strip(), self.kind.strip(), self.source.strip(), self.summary.strip())):
             raise ValueError("WorldCommitInput requires non-empty identity and summary fields")
         object.__setattr__(self, "scopes", frozenset(self.scopes))
         if not self.scopes or any(not scope.strip() for scope in self.scopes):
             raise ValueError("WorldCommitInput requires non-empty scopes")
-        object.__setattr__(self, "data", MappingProxyType(dict(self.data)))
+        object.__setattr__(self, "data", freeze_object(self.data))
 
 
 @dataclass(frozen=True, slots=True)

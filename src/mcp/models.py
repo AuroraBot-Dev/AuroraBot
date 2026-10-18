@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
+from src.contracts.data import freeze_object
 from src.utils import freeze_json
 
 if TYPE_CHECKING:
@@ -169,7 +170,8 @@ class McpInboundEvent:
     data: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "data", MappingProxyType(dict(self.data)))
+        """在 SDK 输入边界固定事件负载，排队期间不能被外部改写。"""
+        object.__setattr__(self, "data", freeze_object(self.data))
 
 
 @dataclass(frozen=True, slots=True)

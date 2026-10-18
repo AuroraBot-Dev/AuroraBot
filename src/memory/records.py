@@ -6,13 +6,15 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from src.utils import thaw_json
+
 if TYPE_CHECKING:
     from src.contracts.world import WorldCommit
 
 
 def memory_text(commit: WorldCommit) -> str:
     """保留可读内容和完整结构化事实，用作基线特征及容量估算。"""
-    return f"{commit.summary}\n{json.dumps(dict(commit.data), ensure_ascii=False, separators=(',', ':'))}"
+    return f"{commit.summary}\n{json.dumps(thaw_json(commit.data), ensure_ascii=False, separators=(',', ':'))}"
 
 
 def memory_links(commit: WorldCommit, name: str) -> tuple[str, ...]:

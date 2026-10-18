@@ -9,6 +9,7 @@ from src.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySna
 from src.contracts.memory import MemoryExposure
 from src.contracts.model import ContextBudgetError
 from src.contracts.prompt import PromptAssembly
+from src.utils import thaw_json
 
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryContinuity
@@ -127,7 +128,9 @@ class PromptAssembler:
             for commit in scope.commits:
                 lines.append(f"- {commit.commit_id} {commit.occurred_at.isoformat()} [{commit.kind}] {commit.summary}")
                 if commit.data:
-                    lines.append(f"  数据：{json.dumps(dict(commit.data), ensure_ascii=False, separators=(',', ':'))}")
+                    lines.append(
+                        f"  数据：{json.dumps(thaw_json(commit.data), ensure_ascii=False, separators=(',', ':'))}"
+                    )
         return "\n".join(lines)
 
     @staticmethod
@@ -238,14 +241,14 @@ def _render_commits(commits: tuple[WorldCommit, ...], heading: str) -> str:
             f"获知 {known_at}；游标 {commit.cursor}；域 {', '.join(commit.scopes)}"
         )
         if commit.data:
-            lines.append(f"  数据：{json.dumps(dict(commit.data), ensure_ascii=False, separators=(',', ':'))}")
+            lines.append(f"  数据：{json.dumps(thaw_json(commit.data), ensure_ascii=False, separators=(',', ':'))}")
     return "\n".join(lines)
 
 
 def _message_size(message: ChatMessage) -> int:
     """计算文本及结构化调用所占的字符。"""
     return len(message.content) + sum(
-        len(call.call_id) + len(call.name) + len(json.dumps(dict(call.arguments))) for call in message.tool_calls
+        len(call.call_id) + len(call.name) + len(json.dumps(thaw_json(call.arguments))) for call in message.tool_calls
     )
 
 

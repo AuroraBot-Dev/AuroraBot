@@ -7,7 +7,7 @@ import re
 from collections.abc import Mapping
 from enum import StrEnum
 from types import MappingProxyType
-from typing import cast
+from typing import Any, cast, overload
 
 
 class _Msg(StrEnum):
@@ -21,6 +21,14 @@ def freeze_json(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return tuple(freeze_json(item) for item in value)
     return value
+
+
+@overload
+def thaw_json(value: Mapping[str, Any]) -> dict[str, Any]: ...
+
+
+@overload
+def thaw_json(value: object) -> object: ...
 
 
 def thaw_json(value: object) -> object:

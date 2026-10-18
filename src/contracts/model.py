@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal
 
+from src.contracts.data import freeze_object
 from src.contracts.evidence import freeze_evidence_refs
 
 if TYPE_CHECKING:
@@ -45,9 +45,10 @@ class ToolCall:
     context: ToolContext | None = None
 
     def __post_init__(self) -> None:
+        """固定完整调用参数，环境适配器不能修改认知树中的原始提案。"""
         if not self.call_id or not self.name:
             raise ValueError("ToolCall requires call_id and name")
-        object.__setattr__(self, "arguments", MappingProxyType(dict(self.arguments)))
+        object.__setattr__(self, "arguments", freeze_object(self.arguments))
 
 
 @dataclass(frozen=True, slots=True)

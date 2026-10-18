@@ -18,7 +18,7 @@ from src.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from src.utils import get_logger
+from src.utils import get_logger, thaw_json
 from src.world.migration import STEPS, TARGET_VERSION
 from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommitRow, WorldCommitScopeRow
 
@@ -90,7 +90,7 @@ class SqlAlchemyWorldJournal:
             summary=event.summary,
             scopes=frozenset({event.scope}),
             based_on=WorldFrontier(),
-            data=dict(event.data),
+            data=event.data,
             occurred_at=event.occurred_at,
         )
 
@@ -157,7 +157,7 @@ class SqlAlchemyWorldJournal:
                     summary=item.summary,
                     occurred_at=occurred_at,
                     recorded_at=recorded_at,
-                    payload=dict(item.data),
+                    payload=thaw_json(item.data),
                 )
                 session.add(row)
                 session.add_all(

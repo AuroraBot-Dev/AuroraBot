@@ -481,7 +481,7 @@ def test_catalog_change_only_marks_restart_and_keeps_the_frozen_tools() -> None:
             assert len(changed) == 1
             assert changed[0].data == {
                 "restart_required": True,
-                "frozen_tool_ids": ["org.example.catalog:tool/before"],
+                "frozen_tool_ids": ("org.example.catalog:tool/before",),
             }
         finally:
             await runtime.close()
@@ -596,14 +596,17 @@ def test_inbound_event_rejects_invalid_identity_scope_kind_time_and_data_before_
                 valid.event_id,
                 valid.scope,
                 valid.kind,
-                datetime(2026, 8, 24),  # noqa: DTZ001 - deliberately exercises rejection of a naive timestamp
+                aware.replace(tzinfo=None),
                 valid.summary,
                 {},
             ),
-            McpInboundEvent(valid.event_id, valid.scope, valid.kind, aware, valid.summary, {"bad": object()}),
         )
         try:
             await runtime.activate()
+            attempts_before = world.append_attempts
+            with pytest.raises(TypeError, match="不支持的类型"):
+                McpInboundEvent(valid.event_id, valid.scope, valid.kind, aware, valid.summary, {"bad": object()})
+            assert world.append_attempts == attempts_before
             for event in invalid_events:
                 commits_before = len(world.commits)
                 attempts_before = world.append_attempts

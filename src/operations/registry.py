@@ -131,7 +131,7 @@ class OperationRegistry:
 
     async def _resume(self, request: OperationRequest, previous: WorldCommit) -> OperationResult:
         """重试使用已冻结目标；结果未知的非幂等命令不自动重放。"""
-        if previous.data["request"] != request_data(request):
+        if thaw_json(previous.data["request"]) != request_data(request):
             raise ValueError("请求身份已被不同操作内容使用")
         receipt = await self._world.commit(f"{request.identity}:result")
         if receipt is not None:

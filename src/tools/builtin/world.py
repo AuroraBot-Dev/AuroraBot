@@ -23,6 +23,8 @@ from src.contracts import (
 if TYPE_CHECKING:
     from src.contracts.pkgs.world import WorldReader
 
+from src.utils import thaw_json
+
 _MAX_READ_LIMIT = 100
 _MAX_TREES_LIMIT = 256
 
@@ -259,5 +261,5 @@ def _commit_dict(commit: WorldCommit) -> dict[str, object]:
         "occurred_at": commit.occurred_at.isoformat(),
         "scopes": dict(commit.scopes),
         "based_on": dict(commit.based_on.positions),
-        "data": dict(commit.data),
+        "data": thaw_json(commit.data),
     }

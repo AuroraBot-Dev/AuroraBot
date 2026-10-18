@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from dataclasses import dataclass
 from datetime import UTC
@@ -24,7 +23,7 @@ from src.mcp.models import (
 )
 from src.mcp.scopes import mcp_scope, validate_mcp_scope
 from src.mcp.tool import McpTool, bind_mcp_tool
-from src.utils import get_logger
+from src.utils import get_logger, thaw_json
 
 _logger = get_logger(__name__)
 
@@ -405,7 +404,6 @@ async def _append_inbound_event(world: WorldWriter, spec: McpAppSpec, event: Mcp
         raise ValueError("MCP 业务事件 summary 不能为空")
     if event.occurred_at.tzinfo is None:
         raise ValueError("MCP 业务事件 occurred_at 必须包含时区")
-    json.dumps(dict(event.data), ensure_ascii=False)
     await world.append_commit(
         commit_id=f"mcp:{package}:event:{event.event_id}",
         kind=MCP_EVENT_RECEIVED,
@@ -413,7 +411,7 @@ async def _append_inbound_event(world: WorldWriter, spec: McpAppSpec, event: Mcp
         summary=event.summary,
         scopes=frozenset({event.scope, *app_owned_scopes(spec)}),
         based_on=WorldFrontier(),
-        data={"event_id": event.event_id, "event_kind": event.kind, "data": dict(event.data)},
+        data={"event_id": event.event_id, "event_kind": event.kind, "data": thaw_json(event.data)},
         occurred_at=event.occurred_at.astimezone(UTC),
     )
     _logger.debug("MCP 业务事件已接收 package={} event_id={} kind={}", package, event.event_id, event.kind)

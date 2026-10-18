@@ -49,7 +49,7 @@ from src.mcp.models import (
     McpToolsPage,
     McpTransport,
 )
-from src.utils import get_logger
+from src.utils import get_logger, thaw_json
 
 _logger = get_logger(__name__)
 
@@ -188,7 +188,7 @@ class SdkMcpClient:
         try:
             result = await self._client.session.call_tool(
                 name,
-                dict(arguments),
+                thaw_json(arguments),
                 read_timeout_seconds=timeout_seconds,
                 allow_input_required=True,
             )

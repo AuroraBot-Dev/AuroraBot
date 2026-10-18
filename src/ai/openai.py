@@ -52,7 +52,7 @@ def to_openai_messages(
                     "type": "function",
                     "function": {
                         "name": aliases[call.name],
-                        "arguments": json.dumps(dict(call.arguments), ensure_ascii=False),
+                        "arguments": json.dumps(thaw_json(call.arguments), ensure_ascii=False),
                     },
                 }
                 for call in message.tool_calls

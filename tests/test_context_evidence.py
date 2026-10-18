@@ -119,7 +119,7 @@ def test_operation_sources_survive_receipt_tool_projection_engine_and_provider_b
             exposure = read_exposure(event.data["memory"])
             assert exposure.included_ids == ("source",)
             result = await world.commit("tree:root:read:result")
-            assert result is not None and result.data["evidence_refs"] == ["source"]
+            assert result is not None and result.data["evidence_refs"] == ("source",)
             assert model.requests[-1].messages[-1].evidence_refs == ("source",)
             assert all("evidence_refs" not in message for message in to_openai_messages(model.requests[-1].messages))
         finally:

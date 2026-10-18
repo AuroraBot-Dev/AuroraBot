@@ -23,7 +23,7 @@ from src.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, TreeStatus, Wor
 from src.contracts.bot import GoalStatus, WakeStatus
 from src.contracts.identity import Identifier
 from src.contracts.rhythm import RhythmAction, RhythmObservation
-from src.utils import get_logger
+from src.utils import get_logger, thaw_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -354,7 +354,7 @@ def _reactive_message(commit: WorldCommit) -> str:
         "occurred_at": commit.occurred_at.isoformat(),
         "summary": commit.summary,
         "event_kind": commit.data.get("event_kind"),
-        "event_data": event_data if isinstance(event_data, Mapping) else {},
+        "event_data": thaw_json(event_data) if isinstance(event_data, Mapping) else {},
     }
     return "即时会话事件：请先理解，再决定是否回应或行动。\n" + json.dumps(
         details, ensure_ascii=False, separators=(",", ":")
