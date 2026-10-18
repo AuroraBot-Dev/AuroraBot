@@ -6,12 +6,12 @@ import asyncio
 from typing import TYPE_CHECKING, Any, cast
 
 from src.kernel.context import _ModuleContext, _MutableContext
-from src.kernel.failures import ModuleCleanup, collect_failure, raise_with_cleanup
+from src.kernel.failures import ModuleCleanup, collect_failure
 from src.kernel.lifecycle import ManagedAssembly
 from src.kernel.phase import CLOSE, CONSTRUCTION_KINDS, PhaseKind
 from src.kernel.resolve import resolve
 from src.utils import get_logger
-from src.utils.tasks import wait_for_completion
+from src.utils.tasks import raise_with_cleanup, wait_for_completion
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping

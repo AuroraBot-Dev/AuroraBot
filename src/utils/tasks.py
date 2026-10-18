@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from typing import Never
 
 
 async def wait_for_completion[T](future: asyncio.Future[T]) -> tuple[T, asyncio.CancelledError | None]:
@@ -16,3 +21,17 @@ async def wait_for_completion[T](future: asyncio.Future[T]) -> tuple[T, asyncio.
                 raise
             if interrupted is None:
                 interrupted = error
+
+
+def raise_with_cleanup(
+    error: BaseException, failures: Iterable[BaseException], interrupted: asyncio.CancelledError | None = None
+) -> Never:
+    """清理错误不能覆盖原始错误，取消保持取消语义并携带全部失败原因。"""
+    additional = [failure for failure in failures if failure is not error]
+    if interrupted is not None and not isinstance(error, asyncio.CancelledError):
+        raise interrupted from BaseExceptionGroup("运行失败后的资源释放被取消", [error, *additional])
+    if not additional:
+        raise error
+    if isinstance(error, Exception):
+        raise BaseExceptionGroup("运行与资源清理同时失败", [error, *additional]) from None
+    raise error from BaseExceptionGroup("资源清理失败", additional)

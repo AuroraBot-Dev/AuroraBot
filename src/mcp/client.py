@@ -6,7 +6,6 @@ import asyncio
 import subprocess
 import sys
 from collections.abc import Mapping
-from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -29,6 +28,7 @@ from mcp.types import (
     TextContent,
     ToolListChangedNotification,
 )
+from src.mcp.connection import McpConnection
 from src.mcp.events import (
     WORLD_EVENT_NOTIFICATION,
     WORLD_EVENTS_EXTENSION,
@@ -55,6 +55,7 @@ _logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from contextlib import AsyncExitStack
     from typing import TextIO
 
     from mcp.client._transport import Transport
@@ -133,7 +134,7 @@ class SdkMcpClient:
     def __init__(
         self,
         client: Client,
-        resources: AsyncExitStack,
+        resources: McpConnection,
         callbacks: _Callbacks,
         event_gate: InboundEventGate,
         *,
@@ -318,7 +319,19 @@ class SdkMcpClientFactory:
     """只使用 SDK v2 公共 API 构造 stdio 或 Streamable HTTP Client。"""
 
     async def open(self, spec: McpAppSpec, event_handler: InboundEventHandler) -> McpClientPort:
-        resources = AsyncExitStack()
+        """为连接分配所属任务，避免宿主生命周期跨任务退出 SDK 上下文。"""
+        connection = McpConnection()
+
+        async def connect(resources: AsyncExitStack) -> McpClientPort:
+            """连接上下文由同一个任务建立、保有并释放。"""
+            return await self._open(spec, event_handler, resources, connection)
+
+        return await connection.open(connect)
+
+    async def _open(
+        self, spec: McpAppSpec, event_handler: InboundEventHandler, resources: AsyncExitStack, connection: McpConnection
+    ) -> McpClientPort:
+        """在连接所属任务中建立传输并完成协商。"""
         callbacks = _Callbacks()
         gate = InboundEventGate(event_handler)
         _logger.info("MCP SDK client 连接开始 package={} transport={}", spec.package, spec.transport.value)
@@ -350,9 +363,8 @@ class SdkMcpClientFactory:
             tool_contract = _has_v1_extension(client, TOOL_CONTRACT_EXTENSION)
         except BaseException:
             gate.deactivate()
-            await resources.aclose()
             raise
-        wrapper = SdkMcpClient(client, resources, callbacks, gate, tool_contract=tool_contract)
+        wrapper = SdkMcpClient(client, connection, callbacks, gate, tool_contract=tool_contract)
         callbacks.disconnected = wrapper._mark_disconnected
         _logger.info("MCP SDK client 连接完成 package={} protocol={}", spec.package, client.protocol_version)
         return wrapper

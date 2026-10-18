@@ -8,10 +8,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
 from src.kernel.context import _ModuleContext
-from src.kernel.failures import ModuleCleanup, ModuleLifecycleError, collect_failure, raise_failures, raise_with_cleanup
+from src.kernel.failures import ModuleCleanup, ModuleLifecycleError, collect_failure, raise_failures
 from src.kernel.phase import CONSTRUCTION_KINDS, PhaseKind
 from src.utils import get_logger
-from src.utils.tasks import wait_for_completion
+from src.utils.tasks import raise_with_cleanup, wait_for_completion
 
 if TYPE_CHECKING:
     from typing import Never

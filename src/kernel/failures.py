@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Iterable
-    from typing import Never
+    from collections.abc import Awaitable
 
     from src.kernel.declaration import AsyncCleanup
 
@@ -52,17 +51,3 @@ def raise_failures(failures: list[Exception]) -> None:
         raise failures[0]
     if failures:
         raise ExceptionGroup("模组关闭时发生多个错误", failures)
-
-
-def raise_with_cleanup(
-    error: BaseException, failures: Iterable[Exception], interrupted: asyncio.CancelledError | None = None
-) -> Never:
-    """清理失败不能覆盖运行失败，取消与进程退出仍保持原来的异常种类。"""
-    additional = [failure for failure in failures if failure is not error]
-    if interrupted is not None and not isinstance(error, asyncio.CancelledError):
-        raise interrupted from BaseExceptionGroup("运行失败后的资源释放被取消", [error, *additional])
-    if not additional:
-        raise error
-    if isinstance(error, Exception):
-        raise ExceptionGroup("运行与资源清理同时失败", [error, *additional]) from None
-    raise error from ExceptionGroup("资源清理失败", additional)
