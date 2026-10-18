@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontier
+from src.contracts.memory_codec import exposure_data
 from src.engine.events import (
     MODEL_COMPLETED,
     MODEL_FAILED,
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
         WorldCommit,
         WorldDeltaPage,
     )
+    from src.contracts.memory import MemoryExposure
     from src.contracts.pkgs.world import WorldJournal
 
 _TOOL_EVENT_KINDS = {
@@ -107,7 +109,10 @@ class EngineWorldEffects:
             data={"tree_id": tree.tree_id, "error": error, **data},
         )
 
-    async def model_requested(self, tree: AgentTree, node: AgentNode, request: ModelRequest) -> None:
+    async def model_requested(
+        self, tree: AgentTree, node: AgentNode, request: ModelRequest, *, memory: MemoryExposure | None = None
+    ) -> None:
+        """模型输入装配成功后保存实际记忆来源，失败请求仍保留尝试事实。"""
         await self._append(
             commit_id=f"{_model_prefix(tree, node)}:requested",
             kind=MODEL_REQUESTED,
@@ -120,6 +125,7 @@ class EngineWorldEffects:
                 "model": node.model,
                 "message_count": len(request.messages),
                 "tool_count": len(request.tools),
+                "memory": exposure_data(memory) if memory is not None else None,
             },
         )
 

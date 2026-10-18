@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from src.contracts.agent import AgentTree
-    from src.contracts.model import ChatMessage
+    from src.contracts.prompt import PromptAssembly
     from src.contracts.world import MemorySnapshot
 
 
@@ -34,4 +34,4 @@ class PromptAssembler(Protocol):
         node_id: str,
         *,
         memory: MemorySnapshot | None = None,
-    ) -> tuple[ChatMessage, ...]: ...
+    ) -> PromptAssembly: ...

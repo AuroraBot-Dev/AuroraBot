@@ -85,7 +85,7 @@ def test_prompt_budget_does_not_drop_shared_dependency_when_skipping_large_bundl
     agent = AgentDefinition("aurora:agent/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset())
     tree = AgentTree.create("tree", "root", agent, "继续")
     assembler = PromptAssembler(PromptCatalog(("你是 Aurora。",), {agent.prompt_id: "自行判断。"}), max_characters=700)
-    messages = assembler.assemble(tree, "root", memory=memory)
+    messages = assembler.assemble(tree, "root", memory=memory).messages
     system = messages[0].content
     assert "已经发起，请先核对结果" in system
     assert "接下来检查状态" in system

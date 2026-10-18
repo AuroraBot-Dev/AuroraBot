@@ -6,7 +6,9 @@ import json
 from typing import TYPE_CHECKING
 
 from src.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
+from src.contracts.memory import MemoryExposure
 from src.contracts.model import ContextBudgetError
+from src.contracts.prompt import PromptAssembly
 
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryContinuity
@@ -38,7 +40,7 @@ class PromptAssembler:
         node_id: str,
         *,
         memory: MemorySnapshot | None = None,
-    ) -> tuple[ChatMessage, ...]:
+    ) -> PromptAssembly:
         """保留原始意图、最新交互和主体状态，按完整交互组裁剪历史。"""
         node = tree.node(node_id)
         try:
@@ -62,14 +64,17 @@ class PromptAssembler:
             raise ContextBudgetError("必要上下文超过容量，请拆分当前工作或增加上下文预算")
         marker_size = len(_TRUNCATION_TAG) if len(groups) > _REQUIRED_HISTORY_GROUPS else 0
         available = max(0, self._max_characters - minimum - marker_size)
+        selected_ids: tuple[str, ...] = ()
         if memory is not None:
-            fragment = self._select_memory(memory, available)
+            fragment, selected_ids = self._select_memory(memory, available)
             if fragment:
                 fragments.append(fragment)
         system = ChatMessage.system("\n\n".join(fragments))
         if len(system.content) + _total_size(node.messages) <= self._max_characters:
-            return (system, *node.messages)
-        return self._trim_history(system, groups)
+            messages = (system, *node.messages)
+        else:
+            messages = self._trim_history(system, groups)
+        return PromptAssembly(messages, _exposure(memory, selected_ids))
 
     def _trim_history(
         self, system: ChatMessage, groups: tuple[tuple[ChatMessage, ...], ...]
@@ -89,23 +94,29 @@ class PromptAssembler:
         return (system, *groups[0], ChatMessage.message(_TRUNCATION_TAG), *suffix)
 
     @staticmethod
-    def _select_memory(memory: MemorySnapshot, available: int) -> str:
+    def _select_memory(memory: MemorySnapshot, available: int) -> tuple[str, tuple[str, ...]]:
         """逐条接纳有来源的经历，预算不足时保留展开入口。"""
         if memory.bundles is not None:
             return _select_bundles(memory, available)
         selected: list[MemoryScopeSnapshot] = []
+        selected_ids: list[str] = []
+        included = {commit.commit_id for commit in memory.required}
         fragment = ""
         for scope in memory.scopes:
             commits = []
             for commit in scope.commits:
+                if commit.commit_id in included:
+                    continue
                 candidate = MemoryScopeSnapshot(scope.scope, scope.head, (*commits, commit))
                 rendered = PromptAssembler._render_memory(MemorySnapshot(memory.window_start, (*selected, candidate)))
                 if len(rendered) + len("\n\n") <= available:
                     commits.append(commit)
+                    selected_ids.append(commit.commit_id)
+                    included.add(commit.commit_id)
                     fragment = rendered
             if commits:
                 selected.append(MemoryScopeSnapshot(scope.scope, scope.head, tuple(commits)))
-        return fragment
+        return fragment, tuple(selected_ids)
 
     @staticmethod
     def _render_memory(memory: MemorySnapshot) -> str:
@@ -174,7 +185,7 @@ def _transcript_groups(messages: tuple[ChatMessage, ...]) -> tuple[tuple[ChatMes
     return tuple(groups)
 
 
-def _select_bundles(memory: MemorySnapshot, available: int) -> str:
+def _select_bundles(memory: MemorySnapshot, available: int) -> tuple[str, tuple[str, ...]]:
     """按推荐顺序整组接纳证据，只有实际载入后才能共享依赖。"""
     included = {commit.commit_id for commit in memory.required}
     commits = []
@@ -188,7 +199,29 @@ def _select_bundles(memory: MemorySnapshot, available: int) -> str:
             commits.extend(new)
             included.update(commit.commit_id for commit in new)
             fragment = candidate
-    return fragment
+    return fragment, tuple(commit.commit_id for commit in commits)
+
+
+def _exposure(memory: MemorySnapshot | None, selected_ids: tuple[str, ...]) -> MemoryExposure | None:
+    """装配器直接报告自己的选择，不从最终文本猜测引用。"""
+    if memory is None:
+        return None
+    recommended = (
+        tuple(commit.commit_id for bundle in memory.bundles for commit in bundle.commits)
+        if memory.bundles is not None
+        else tuple(commit.commit_id for scope in memory.scopes for commit in scope.commits)
+    )
+    required = tuple(commit.commit_id for commit in memory.required)
+    continuity = memory.continuity
+    return MemoryExposure(
+        required,
+        recommended,
+        (*required, *selected_ids),
+        memory.missing_refs,
+        tuple(goal.goal_id for goal in continuity.goals) if continuity is not None else (),
+        continuity.version if continuity is not None else None,
+        memory.recall,
+    )
 
 
 def _render_commits(commits: tuple[WorldCommit, ...], heading: str) -> str:

@@ -143,9 +143,10 @@ class AgentTreeRunner:
                 if self._memory is not None
                 else None
             )
+            assembled = self._assembler.assemble(tree, node.node_id, memory=memory)
             request = ModelRequest(
                 node.model,
-                self._assembler.assemble(tree, node.node_id, memory=memory),
+                assembled.messages,
                 self._tools.definitions_for(node.tools),
             )
         except ContextBudgetError as error:
@@ -157,7 +158,7 @@ class AgentTreeRunner:
             node.model,
             step_index,
         )
-        await self._effects.model_requested(tree, node, request)
+        await self._effects.model_requested(tree, node, request, memory=assembled.memory)
         try:
             response = await self._model.complete(request)
         except Exception as error:

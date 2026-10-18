@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.contracts.memory import MemoryBundle
+from src.contracts.memory import MemoryBundle, MemoryScore
 from src.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
 from src.memory.graph import graph_interactions
 from src.memory.records import memory_links, memory_text
@@ -30,6 +30,7 @@ class MemorySelection:
     required: tuple[WorldCommit, ...]
     bundles: tuple[MemoryBundle, ...]
     missing_refs: tuple[str, ...]
+    ranking: tuple[MemoryScore, ...]
 
 
 def select_memories(
@@ -58,7 +59,8 @@ def select_memories(
     ranked = _rank_candidates(history, routes, similarities, request, policy)
     budget = request.max_characters
     bundles: list[MemoryBundle] = []
-    for score, identity in ranked:
+    for item in ranked:
+        score, identity = item.score, item.memory_id
         if identity in included:
             continue
         complete, absent = _closure((identity,), records, replacements)
@@ -71,7 +73,7 @@ def select_memories(
         bundles.append(MemoryBundle(commits, score, tuple(sorted(routes[identity]))))
         included.update(commit.commit_id for commit in commits)
         budget -= size
-    return MemorySelection(required, tuple(bundles), missing)
+    return MemorySelection(required, tuple(bundles), missing, tuple(ranked))
 
 
 def _closure(
@@ -129,7 +131,7 @@ def _rank_candidates(
     similarities: Mapping[str, float],
     request: MemoryRequest,
     policy: MemoryPolicy,
-) -> list[tuple[float, str]]:
+) -> list[MemoryScore]:
     """多路召回与学习排序共用可见候选和历史图前缀。"""
     if request.cursor is None or request.observed_at is None:
         raise ValueError("记忆排序需要明确游标和观察时间")
@@ -163,7 +165,10 @@ def _rank_candidates(
     scores = policy.score(ranking)
     if len(scores) != len(candidates) or any(not math.isfinite(score) for score in scores):
         raise ValueError("记忆策略必须为每个候选返回有限评分")
-    ranked = [(score, item.memory_id) for score, item in zip(scores, candidates, strict=True)]
+    ranked = [
+        MemoryScore(item.memory_id, score, item.similarity, tuple(sorted(routes[item.memory_id])))
+        for score, item in zip(scores, candidates, strict=True)
+    ]
     cursors = {commit.commit_id: commit.cursor for commit in history}
-    ranked.sort(key=lambda item: (-item[0], -cursors[item[1]], item[1]))
+    ranked.sort(key=lambda item: (-item.score, -cursors[item.memory_id], item.memory_id))
     return ranked

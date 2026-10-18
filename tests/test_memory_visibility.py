@@ -49,7 +49,8 @@ def test_memory_observation_and_cursor_exclude_late_and_future_information(tmp_p
             bounded = await memory.recall(MemoryRequest(cursor=cutoff, observed_at=clock[0]))
             for snapshot in (history, bounded):
                 assert _ids(snapshot.scopes) == {"aurora:bot/test:state:1", "known"}
-                assert snapshot.cursor == cutoff
+                assert snapshot.recall is not None
+                assert snapshot.recall.request.cursor == cutoff
                 assert snapshot.continuity is not None
                 assert snapshot.continuity.goals[0].status is GoalStatus.ACTIVE
                 assert next(scope for scope in snapshot.scopes if scope.scope == "test:world/facts").head == 1

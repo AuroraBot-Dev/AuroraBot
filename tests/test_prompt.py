@@ -42,7 +42,7 @@ def test_assembler_emits_one_system_then_node_transcript() -> None:
     )
     tree = tree.append("root", ChatMessage.tool("call-1", "12:00"))
 
-    messages = _assembler().assemble(tree, "root")
+    messages = _assembler().assemble(tree, "root").messages
 
     assert [message.role for message in messages] == ["system", "message", "assistant", "tool"]
     assert messages[0].content == ("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
@@ -63,7 +63,7 @@ def test_assembler_preserves_initial_intent_when_trimming_old_history() -> None:
     system_size = len("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
     tag = "部分对话未载入；请按检查点和证据引用恢复，必要时读取原始记录。"
 
-    messages = _assembler(limit=system_size + len(tag) + len("最新的世界事实") + 20).assemble(tree, "root")
+    messages = _assembler(limit=system_size + len(tag) + len("最新的世界事实") + 20).assemble(tree, "root").messages
 
     assert [message.role for message in messages] == ["system", "message", "message", "message"]
     assert messages[1].content == "原始任务"
@@ -84,7 +84,7 @@ def test_assembler_truncation_never_leaves_orphan_tool_message() -> None:
     tag = "部分对话未载入；请按检查点和证据引用恢复，必要时读取原始记录。"
 
     limit = system_size + len(tag) + len("初始消息最终回复")
-    messages = _assembler(limit=limit).assemble(tree, "root")
+    messages = _assembler(limit=limit).assemble(tree, "root").messages
 
     assert [message.role for message in messages] == ["system", "message", "message", "assistant"]
     assert messages[1].content == "初始消息"
@@ -110,7 +110,7 @@ def test_continuity_survives_memory_pressure_and_old_history_trimming() -> None:
     tree = tree.append("root", ChatMessage.message("恢复检查"))
 
     limit = 500
-    messages = _assembler(limit=limit).assemble(tree, "root", memory=memory)
+    messages = _assembler(limit=limit).assemble(tree, "root", memory=memory).messages
 
     assert "operation-7 已发起，先查询结果" in messages[0].content
     assert "started:7" in messages[0].content
@@ -151,7 +151,7 @@ def test_assembler_injects_memory_snapshot_into_system() -> None:
     memory = MemorySnapshot(commit.occurred_at, (MemoryScopeSnapshot("qq:group", 1, (commit,)),))
     tree = AgentTree.create("tree", "root", _agent(), "hello")
 
-    messages = _assembler().assemble(tree, "root", memory=memory)
+    messages = _assembler().assemble(tree, "root", memory=memory).messages
 
     assert "最近时间窗口内的世界活动" in messages[0].content
     assert "scope：qq:group" in messages[0].content

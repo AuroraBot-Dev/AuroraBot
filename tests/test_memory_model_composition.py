@@ -40,9 +40,9 @@ def test_configured_bot_reads_memory_using_the_exported_graph_model(configured_p
             assert runtime.assembly.get(ResourceCatalog).resolve(ref).ref == ref
             await runtime.run("继续核对已有事实。")
             snapshot = await runtime.assembly.get(MemoryReader).recall(MemoryRequest(query="已有事实"))
-            assert snapshot.policy == ref
-            assert snapshot.policy is not None
-            assert snapshot.policy.key == TGN_KEY
+            assert snapshot.recall is not None
+            assert snapshot.recall.policy == ref
+            assert snapshot.recall.policy.key == TGN_KEY
             assert snapshot.bundles
             assert model.requests
         finally:

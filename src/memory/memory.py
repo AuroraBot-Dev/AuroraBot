@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from src.contracts import MemoryScopeSnapshot, MemorySnapshot, ScopeCatalog, ScopeKind
-from src.contracts.memory import MemoryRequest
+from src.contracts.memory import MemoryRecall, MemoryRequest
 from src.memory.continuity import select_continuity
 from src.memory.index import MemoryIndex
 from src.memory.selection import select_memories
@@ -86,7 +86,7 @@ class Memory:
             if self._state is not None
             else None
         )
-        normalized = replace(request, cursor=history.cursor, observed_at=observed_at)
+        normalized = replace(request, cursor=history.cursor, observed_at=observed_at, scopes=frozenset(selected))
         if not normalized.focus_goal_ids and continuity is not None:
             normalized = replace(normalized, focus_goal_ids=tuple(goal.goal_id for goal in continuity.goals))
         selection = await asyncio.to_thread(
@@ -112,12 +112,17 @@ class Memory:
             window_start,
             tuple(snapshots),
             continuity,
-            history.cursor,
-            observed_at,
             selection.bundles,
             selection.required,
             selection.missing_refs,
-            self._policy.ref,
+            MemoryRecall(
+                normalized,
+                self._policy.ref,
+                window_start,
+                self._commits_per_scope,
+                selection.ranking,
+                self._policy.parameters,
+            ),
         )
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))
         return snapshot

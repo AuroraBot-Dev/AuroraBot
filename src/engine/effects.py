@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         ToolScopes,
         WorldDeltaPage,
     )
+    from src.contracts.memory import MemoryExposure
 
 
 class EngineEffectSink(Protocol):
@@ -28,7 +29,9 @@ class EngineEffectSink(Protocol):
 
     async def tree_failed(self, tree: AgentTree, error: str, data: Mapping[str, object]) -> None: ...
 
-    async def model_requested(self, tree: AgentTree, node: AgentNode, request: ModelRequest) -> None: ...
+    async def model_requested(
+        self, tree: AgentTree, node: AgentNode, request: ModelRequest, *, memory: MemoryExposure | None = None
+    ) -> None: ...
 
     async def model_failed(self, tree: AgentTree, node: AgentNode, error: str) -> None: ...
 
@@ -94,8 +97,10 @@ class NullEffectSink:
     async def tree_failed(self, tree: AgentTree, error: str, data: Mapping[str, object]) -> None:
         pass
 
-    async def model_requested(self, tree: AgentTree, node: AgentNode, request: ModelRequest) -> None:
-        pass
+    async def model_requested(
+        self, tree: AgentTree, node: AgentNode, request: ModelRequest, *, memory: MemoryExposure | None = None
+    ) -> None:
+        """没有世界线时不保存上下文来源。"""
 
     async def model_failed(self, tree: AgentTree, node: AgentNode, error: str) -> None:
         pass

@@ -32,7 +32,7 @@ def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() ->
     agent = AgentDefinition("aurora:agent/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset())
     tree = AgentTree.create("tree", "root", agent, "继续核对", focus_goal_ids=(target.goal_id,))
     prompt = PromptAssembler(PromptCatalog(("你是 Aurora。",), {agent.prompt_id: "按自己的判断行动。"}))
-    messages = prompt.assemble(tree, "root", memory=MemorySnapshot(now, (), continuity))
+    messages = prompt.assemble(tree, "root", memory=MemorySnapshot(now, (), continuity)).messages
     assert "operation-7 已发起，先核对结果" in messages[0].content
     assert "experiment:started:7" in messages[0].content
     assert "其他实验" not in messages[0].content
