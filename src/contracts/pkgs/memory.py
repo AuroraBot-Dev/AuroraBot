@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import Mapping
 
+    from src.contracts.artifact import ArtifactInfo
     from src.contracts.memory import MemoryRequest
     from src.contracts.memory_checkpoint import MemoryPolicyCheckpoint
     from src.contracts.memory_graph import MemoryRankingRequest
@@ -41,3 +43,13 @@ class MemoryPolicyState(Protocol):
     def checkpoint(self, *, after: str | None = None) -> MemoryPolicyCheckpoint | None: ...
 
     def restore(self, checkpoint: MemoryPolicyCheckpoint) -> bool: ...
+
+
+class MemoryCheckpoints(Protocol):
+    """为 Bot 持久化可重建的策略投影，失败时保持原始世界事实可用。"""
+
+    async def initialize(self) -> bool: ...
+
+    async def save(self) -> ArtifactInfo | None: ...
+
+    async def run(self, stop: asyncio.Event) -> None: ...

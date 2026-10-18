@@ -12,6 +12,7 @@ import torch
 from torch import Tensor
 
 from src.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
+from src.contracts.memory_checkpoint_codec import prefix_data
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS, MemoryNode
 from src.memory_model.coordinates import TIME_SCALE
 from src.memory_model.state import GraphState
@@ -32,7 +33,7 @@ def encode_state(
     data = {
         "schema_version": _SCHEMA_VERSION,
         "model": {"key": str(model.key), "revision": model.revision},
-        "prefix": _prefix_data(prefix),
+        "prefix": prefix_data(prefix),
         "coordinates": _coordinates(hidden_size, text_dimensions),
         "nodes": [
             {
@@ -71,21 +72,11 @@ def decode_state(
             return None
         if data["model"] != {"key": str(model.key), "revision": model.revision}:
             raise ValueError("检查点正文的模型身份不一致")
-        if data["prefix"] != _prefix_data(checkpoint.prefix):
+        if data["prefix"] != prefix_data(checkpoint.prefix):
             raise ValueError("检查点正文的历史边界不一致")
         return _read_nodes(data["nodes"], data["memories"], checkpoint.prefix, hidden_size)
     except (ValueError, TypeError, LookupError, RuntimeError, EOFError, OSError, UnpicklingError) as error:
         raise ValueError("时序记忆检查点已损坏，不能恢复节点状态") from error
-
-
-def _prefix_data(prefix: MemoryGraphPrefix) -> dict[str, Any]:
-    """正文与外层描述使用同一份前缀坐标。"""
-    return {
-        "count": prefix.count,
-        "cursor": prefix.cursor,
-        "recorded_at": prefix.recorded_at.isoformat(),
-        "digest": prefix.digest,
-    }
 
 
 def _coordinates(hidden_size: int, text_dimensions: int) -> dict[str, Any]:
