@@ -100,9 +100,6 @@ def test_an_empty_query_still_carries_the_topic_to_the_api() -> None:
     assert transport.calls[0]["params"]["q"] == TOPIC_CLAUSE
 
 
-# --- 请求形状 -----------------------------------------------------------------
-
-
 def test_arguments_are_checked_before_any_request() -> None:
     source, transport = _source(_page([]))
 
@@ -203,9 +200,6 @@ def test_the_token_only_ever_travels_in_the_authorization_header() -> None:
     assert _TOKEN not in call["url"]
     assert _TOKEN not in str(call["params"])
     assert call["headers"]["Authorization"] == f"Bearer {_TOKEN}"
-
-
-# --- 响应解析 -----------------------------------------------------------------
 
 
 def test_a_full_page_maps_every_field() -> None:
@@ -396,9 +390,6 @@ def test_a_realistic_page_stays_under_the_size_limit() -> None:
     assert len(source.search(page_size=MAX_PAGE_SIZE).items) == MAX_PAGE_SIZE
 
 
-# --- 状态映射 -----------------------------------------------------------------
-
-
 @pytest.mark.parametrize("status", [201, 204, 302])
 def test_anything_but_200_is_a_discovery_error(status: int) -> None:
     """只有 200 算成功：Search 不返回 201/204，而 302 说明请求被引向了别处。"""
@@ -492,9 +483,6 @@ def test_the_rate_limit_message_names_the_way_out() -> None:
         source.search()
 
 
-# --- 传输层异常与凭据 -----------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "error",
     [httpx2.ConnectError("boom"), httpx2.TimeoutException("boom"), httpx2.TooManyRedirects("boom")],
@@ -526,9 +514,6 @@ def test_no_error_message_ever_contains_the_token(status: int) -> None:
         source.search()
 
     assert _TOKEN not in str(error_info.value)
-
-
-# --- 默认 transport ----------------------------------------------------------------
 
 
 class _FakeClient:
@@ -591,9 +576,6 @@ def test_the_default_transport_closes_its_client(fake_client: list[_FakeClient])
     source.search()
 
     assert fake_client[0].closed is True
-
-
-# --- 清单（Contents API） ------------------------------------------------------
 
 
 def _contents(content: str, **overrides: object) -> httpx2.Response:

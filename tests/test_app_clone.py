@@ -74,9 +74,6 @@ def _environment_of(runner: FakeProcessRunner, index: int = 0) -> Mapping[str, s
     return runner.environment(index)
 
 
-# --- 仓库名与 URL -------------------------------------------------------------
-
-
 @pytest.mark.parametrize("value", ["example/weather-mcp", "Churk-Ben/Aurora-QQ", "a/b"])
 def test_valid_repository_names_are_returned_unchanged(value: str) -> None:
     assert check_repository_name(value) == value
@@ -164,9 +161,6 @@ def test_invalid_commit_output_is_rejected(value: str) -> None:
         check_commit(value)
 
 
-# --- 准入 ---------------------------------------------------------------------
-
-
 def test_admission_returns_canonical_full_name() -> None:
     assert check_admission(repository()) == "Churk-Ben/Aurora-QQ"
 
@@ -186,9 +180,6 @@ def test_admission_rejects_clone_url_pointing_elsewhere() -> None:
     with pytest.raises(PlanError) as failure:
         check_admission(repository(clone_url="https://github.com/evil/other.git"))
     assert "不一致" in str(failure.value)
-
-
-# --- Git 配置隔离 -------------------------------------------------------------
 
 
 def test_git_environment_isolates_global_and_system_configuration(tmp_path: Path) -> None:
@@ -211,9 +202,6 @@ def test_git_isolation_uses_a_real_empty_file(tmp_path: Path) -> None:
 
         assert Path(config).is_file()
         assert Path(config).stat().st_size == 0
-
-
-# --- clone argv ---------------------------------------------------------------
 
 
 def test_clone_argv_hardens_the_git_boundary(tmp_path: Path) -> None:
@@ -310,9 +298,6 @@ def test_clone_uses_a_bounded_timeout(tmp_path: Path) -> None:
     assert runner.calls[0]["timeout"] == GIT_CLONE_TIMEOUT_SECONDS
 
 
-# --- staging 生命周期 ---------------------------------------------------------
-
-
 def test_staging_lives_under_the_apps_root(tmp_path: Path) -> None:
     root = install_root(tmp_path)
     with staging_directory(root) as staging:
@@ -381,9 +366,6 @@ def test_install_root_rejects_a_symlinked_ancestor(tmp_path: Path) -> None:
 
     with pytest.raises(PlanError):
         install_root(tmp_path)
-
-
-# --- CapturedProcessRunner ----------------------------------------------------
 
 
 def _run(

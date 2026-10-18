@@ -93,9 +93,6 @@ def _failing_write(*_args: object, **_kwargs: object) -> None:
     raise RegistryWriteError("无法写入 apps.toml：磁盘满了")
 
 
-# --- 命令注册 -----------------------------------------------------------------
-
-
 def test_help_lists_every_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
         run(["app", "--help"], registry=DEFAULT_REGISTRY)
@@ -139,9 +136,6 @@ def test_install_without_a_target_says_what_it_wants(
 
     assert code == EXIT_CONFIG_ERROR
     assert "--npx" in err and "--uvx" in err
-
-
-# --- 计划展示 -----------------------------------------------------------------
 
 
 def test_the_plan_shows_every_fact_before_confirming(
@@ -236,9 +230,6 @@ def test_install_does_not_request_or_write_an_agent_grant(
     assert "agents = " not in (root / _CONFIG).read_text(encoding="utf-8")
 
 
-# --- GitHub 页面上的写法 ---------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "argument",
     [
@@ -275,9 +266,6 @@ def test_a_remote_url_uses_mcp_connect_without_github_requests(
     assert "remote.mcp.example.com.rpc" in out
     assert 'url = "https://mcp.example.com/rpc"' in (root / _CONFIG).read_text(encoding="utf-8")
     assert source.calls == [], "远程 MCP 不访问 GitHub"
-
-
-# --- 清单准入 -----------------------------------------------------------------
 
 
 def test_a_repository_without_a_manifest_is_rejected(
@@ -341,9 +329,6 @@ def test_a_broken_manifest_is_rejected_like_a_missing_one(
 
     assert code == EXIT_CONFIG_ERROR
     assert "aurora-app.toml" in err
-
-
-# --- 成功之后 -----------------------------------------------------------------
 
 
 def test_a_successful_install_reports_the_package(
@@ -431,9 +416,6 @@ def test_install_explains_that_bot_visibility_depends_on_project_policy(
 
     assert "Bot 能否调用取决于现有 Agent 的工具可见配置" in out
     assert "agents = " not in out
-
-
-# --- 取消与非交互 ---------------------------------------------------------------
 
 
 def test_yes_still_prints_the_plan(
@@ -561,9 +543,6 @@ def test_the_plan_is_still_shown_before_the_non_interactive_error(
     _, out, _ = _capture(capsys, root, "install", _REQUESTED)
 
     assert "Repository:" in out
-
-
-# --- 失败与退出码 ---------------------------------------------------------------
 
 
 def test_a_missing_registry_points_at_aurora_setup(

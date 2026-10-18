@@ -16,8 +16,6 @@ from aurora.commands.app.github import (
 )
 from aurora.commands.app.models import ConfigError
 
-# --- 查询构造 -----------------------------------------------------------------
-
 
 @pytest.mark.parametrize("query", [None, "", "   ", "\t\n"])
 def test_an_empty_query_leaves_only_the_topic_query(query: str | None) -> None:
@@ -35,9 +33,6 @@ def test_surrounding_whitespace_is_trimmed() -> None:
 def test_github_qualifiers_are_passed_through_untouched() -> None:
     """不解析高级搜索语法：``language:python`` 是给 GitHub 的，不是给我们解析的。"""
     assert build_search_query("weather language:python") == f"{TOPIC_CLAUSE} weather language:python"
-
-
-# --- 参数校验 -----------------------------------------------------------------
 
 
 @pytest.mark.parametrize("page", [0, -1])

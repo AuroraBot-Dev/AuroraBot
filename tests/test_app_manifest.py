@@ -28,9 +28,6 @@ def _parse(content: str, *, source: str = _SOURCE) -> Manifest:
     return parse_manifest(content, source=source)
 
 
-# --- 合规的清单 ---------------------------------------------------------------
-
-
 def test_a_minimal_manifest_yields_its_command() -> None:
     manifest = _parse(manifest_text(_COMMAND))
 
@@ -47,9 +44,6 @@ def test_the_command_keeps_every_argument_verbatim() -> None:
 def test_a_relative_executable_inside_the_repository_is_allowed() -> None:
     """仓库里自带的脚本是合法的入口：``./server`` 按 working_dir 解析。"""
     assert _parse(manifest_text(("./bin/server", "--port", "0"))).command == ("./bin/server", "--port", "0")
-
-
-# --- 顶层结构 -----------------------------------------------------------------
 
 
 def test_a_missing_version_is_rejected() -> None:
@@ -108,9 +102,6 @@ def test_a_rejected_manifest_is_a_plan_error() -> None:
         _parse("manifest_version = 1\n")
 
 
-# --- [server].command ---------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("value", "fragment"),
     [
@@ -158,9 +149,6 @@ def test_an_executable_outside_the_repository_is_rejected(executable: str) -> No
 def test_a_bare_executable_name_is_left_to_path_lookup() -> None:
     """不带路径分隔符的名字由 PATH 解析，这是「调用 uv」而不是「调用某个文件」。"""
     assert check_manifest_command(("uv", "run", "x"), source=_SOURCE) == ("uv", "run", "x")
-
-
-# --- 出处与两种失败说法 -------------------------------------------------------
 
 
 def test_manifest_source_names_owner_repo() -> None:

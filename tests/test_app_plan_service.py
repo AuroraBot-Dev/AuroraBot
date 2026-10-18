@@ -99,9 +99,6 @@ def _contents_call(http: FakeTransport) -> dict[str, object]:
     return http.calls[1]
 
 
-# --- 正常路径 -----------------------------------------------------------------
-
-
 def test_plan_carries_every_field_the_next_stage_needs(tmp_path: Path) -> None:
     setup = _setup(tmp_path)
 
@@ -198,9 +195,6 @@ def test_ref_is_passed_through_to_the_cloner(tmp_path: Path) -> None:
     setup.manager.plan_install(_REQUESTED_NAME, ref="9f8e7d6")
 
     assert setup.cloner.calls[0]["ref"] == "9f8e7d6"
-
-
-# --- 清单准入发生在 clone 之前 ---------------------------------------------------
 
 
 def test_the_manifest_is_read_from_the_requested_ref(tmp_path: Path) -> None:
@@ -303,9 +297,6 @@ def test_an_explicit_command_installs_a_repository_that_would_otherwise_be_rejec
     assert setup.cloner.calls != []
 
 
-# --- canonical identity -------------------------------------------------------
-
-
 def test_paths_and_package_come_from_the_api_not_from_the_user_string(tmp_path: Path) -> None:
     """GitHub 对大小写不敏感，canonical 只有 API 返回值这一个来源。"""
     setup = _setup(tmp_path)
@@ -348,9 +339,6 @@ def test_a_malformed_command_is_rejected_before_any_request(tmp_path: Path) -> N
     assert setup.cloner.calls == []
 
 
-# --- 失败路径的清理 -----------------------------------------------------------
-
-
 def test_staging_is_cleaned_up_when_clone_fails(tmp_path: Path) -> None:
     setup = _setup(tmp_path, failure=CloneError("git clone 失败"))
 
@@ -380,9 +368,6 @@ def test_final_path_collision_is_a_preflight_before_the_clone(tmp_path: Path) ->
 
     assert "安装目录已存在" in str(error_info.value)
     assert setup.cloner.calls == []
-
-
-# --- 准入 ---------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("flag", ["archived", "disabled"])
@@ -418,9 +403,6 @@ def test_a_disabled_repository_does_not_even_get_its_manifest_read(tmp_path: Pat
     assert len(setup.http.calls) == 1
 
 
-# --- --package ----------------------------------------------------------------
-
-
 def test_explicit_package_is_used_instead_of_the_derived_one(tmp_path: Path) -> None:
     setup = _setup(tmp_path)
 
@@ -438,9 +420,6 @@ def test_an_explicit_package_conflict_is_detected_before_the_clone(tmp_path: Pat
 
     assert CONFLICTING_PACKAGE in str(error_info.value)
     assert setup.cloner.calls == [], "查重在 clone 之前，用户不必白等一次下载"
-
-
-# --- prepare_install ----------------------------------------------------------
 
 
 def test_prepare_install_keeps_the_staging_directory_alive(tmp_path: Path) -> None:

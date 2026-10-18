@@ -72,9 +72,6 @@ def _failing_write(*_args: object, **_kwargs: object) -> None:
     raise RegistryWriteError("无法写入 apps.toml：磁盘满了")
 
 
-# --- 命令注册 -----------------------------------------------------------------
-
-
 def test_remove_help_lists_force(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
         run(["app", "remove", "--help"], registry=DEFAULT_REGISTRY)
@@ -88,9 +85,6 @@ def test_remove_help_lists_force(capsys: pytest.CaptureFixture[str]) -> None:
 def test_remove_requires_a_package_argument() -> None:
     with pytest.raises(SystemExit):
         run(["app", "remove"], registry=DEFAULT_REGISTRY)
-
-
-# --- 受管移除 -----------------------------------------------------------------
 
 
 def test_a_managed_remove_reports_the_deleted_directory(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -150,9 +144,6 @@ def test_a_non_managed_remove_only_unregisters(tmp_path: Path, capsys: pytest.Ca
     assert (local / "server.py").is_file()
 
 
-# --- 参数与注册表 ---------------------------------------------------------------
-
-
 def test_a_missing_package_is_a_config_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     root = _project(tmp_path, registry_entry(_OTHER_PACKAGE, _LOCAL))
 
@@ -189,9 +180,6 @@ def test_an_invalid_package_id_is_a_config_error(tmp_path: Path, capsys: pytest.
 
     assert code == EXIT_CONFIG_ERROR
     assert "package ID" in err
-
-
-# --- 归属校验 -----------------------------------------------------------------
 
 
 @pytest.mark.parametrize("origin", [_FOREIGN_ORIGIN, None], ids=["mismatched", "unreadable"])
@@ -261,9 +249,6 @@ def test_a_symlinked_managed_root_is_a_path_error_even_with_force(
     assert code == EXIT_CONFIG_ERROR
     assert "符号链接或联接" in err
     assert (elsewhere / "important.txt").is_file()
-
-
-# --- 回滚 ---------------------------------------------------------------------
 
 
 def test_a_registry_write_failure_puts_the_directory_back(

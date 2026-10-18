@@ -25,9 +25,6 @@ _FULLWIDTH = frozenset(("F", "W"))
 _DESCRIPTION_WIDTH = 50
 
 
-# --- 表格解析 -----------------------------------------------------------------
-
-
 def _cells(line: str) -> list[str]:
     return [cell.strip() for cell in line.strip("|").split("|")]
 
@@ -52,9 +49,6 @@ def _cell_width(text: str) -> int:
 def _widths(output: str) -> set[int]:
     """只量框线行 —— 表格下方还有一行普通文本的页脚。"""
     return {_cell_width(line) for line in output.splitlines() if line[:1] in ("+", "|")}
-
-
-# --- 表格渲染 -----------------------------------------------------------------
 
 
 def test_the_table_renders_the_search_columns(

@@ -244,7 +244,6 @@ def test_list_only_reads_registered_entries(tmp_path: Path) -> None:
     assert [item.package for item in AppStore(root).list_apps().apps] == ["com.example.known"]
 
 
-# --- 条目的渲染 ------------------------------------------------------------------
 #
 # 安装确认时展示的那段 TOML 与最终写进文件的那一段出自同一个 app_table，所以这两组
 # 断言同时约束着两件事：键集必须是运行时白名单允许的那几个，且渲染出来的文本本身

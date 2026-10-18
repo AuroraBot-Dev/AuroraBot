@@ -205,9 +205,6 @@ def test_repeating_a_toggle_reports_without_rewriting(
     assert path.read_text(encoding="utf-8") == before
 
 
-# --- TYPE 一列 ------------------------------------------------------------------
-
-
 def test_type_distinguishes_a_local_process_from_a_remote_endpoint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

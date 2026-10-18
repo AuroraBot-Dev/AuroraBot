@@ -25,9 +25,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-# --- 规范化 -------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
@@ -76,9 +73,6 @@ def test_every_derived_package_passes_the_shared_package_rule(full_name: str) ->
     assert check_user_package(derive_package(full_name)) == derive_package(full_name)
 
 
-# --- 显式 package 校验 --------------------------------------------------------
-
-
 @pytest.mark.parametrize("value", ["github.example.weather-mcp", "com.example.a1", "org.aurora.qq"])
 def test_valid_explicit_packages_are_accepted(value: str) -> None:
     assert check_user_package(value) == value
@@ -93,9 +87,6 @@ def test_invalid_explicit_packages_are_plan_errors(value: str) -> None:
         check_user_package(value)
 
     assert "--package" in str(failure.value)
-
-
-# --- 查重 ---------------------------------------------------------------------
 
 
 def test_missing_registry_is_not_a_conflict(tmp_path: Path) -> None:

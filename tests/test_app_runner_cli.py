@@ -77,9 +77,6 @@ def _terminal(monkeypatch: pytest.MonkeyPatch, answer: str = "n") -> None:
     monkeypatch.setattr(sys, "stdin", _Terminal(f"{answer}\n"))
 
 
-# --- 正常路径 -------------------------------------------------------------------
-
-
 def test_npx_registers_a_runnable_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -200,9 +197,6 @@ def test_enable_writes_enabled_true(
     assert "enabled = true" in (root / _CONFIG).read_text(encoding="utf-8")
 
 
-# --- verify 连的是项目根 ----------------------------------------------------------
-
-
 def test_verify_starts_the_process_in_the_project_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -233,9 +227,6 @@ def test_a_failed_verification_writes_nothing(
     assert code == EXIT_FAILURE
     assert "App 操作失败" in err
     assert (root / _CONFIG).read_text(encoding="utf-8") == _EMPTY_REGISTRY
-
-
-# --- 互斥 -----------------------------------------------------------------------
 
 
 def test_both_runners_at_once_is_rejected(
@@ -296,9 +287,6 @@ def test_neither_a_repository_nor_a_runner_is_rejected(
     assert code == EXIT_CONFIG_ERROR
     assert "--npx" in err
     assert source.calls == []
-
-
-# --- 准入与确认 ------------------------------------------------------------------
 
 
 def test_a_duplicate_package_is_rejected_before_the_question(

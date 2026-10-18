@@ -75,9 +75,6 @@ def _remote(*, auth_env: str | None = None) -> Handshake:
     return endpoint_target(ENDPOINT_PACKAGE, ENDPOINT, hints=endpoint_hints(ENDPOINT, auth_env), auth_env=auth_env)
 
 
-# --- 连接说明 -----------------------------------------------------------------
-
-
 def test_a_process_target_points_at_the_directory_it_was_given(tmp_path: Path) -> None:
     """安装期要连的是 staging 里那一份：正式路径上此刻什么都没有。"""
     working_dir = _working_dir(tmp_path)
@@ -163,9 +160,6 @@ def test_a_valid_package_label_is_kept_as_it_is() -> None:
     assert _remote().spec.package == ENDPOINT_PACKAGE
 
 
-# --- 建议语 -------------------------------------------------------------------
-
-
 def test_install_hints_say_what_to_run_by_hand() -> None:
     hints = "".join(install_hints(WEATHER_COMMAND))
 
@@ -190,9 +184,6 @@ def test_endpoint_hints_name_the_auth_variable_without_its_value() -> None:
 
 def test_endpoint_hints_omit_the_auth_line_when_there_is_no_variable() -> None:
     assert "Bearer" not in "".join(endpoint_hints(ENDPOINT, None))
-
-
-# --- 三个阶段 -----------------------------------------------------------------
 
 
 def test_a_successful_inspection_returns_the_protocol_version(tmp_path: Path) -> None:
@@ -369,9 +360,6 @@ def test_a_failing_close_does_not_mask_a_successful_handshake(tmp_path: Path) ->
     assert "随即断开" in str(error_info.value)
 
 
-# --- 环境与脱敏 ---------------------------------------------------------------
-
-
 def test_verify_environment_leaves_bootstrap_variables_to_sdk() -> None:
     assert verify_environment() == {}
 
@@ -428,9 +416,6 @@ def test_a_remote_failure_never_prints_the_bearer_token(monkeypatch: pytest.Monk
         _verifier(factory).inspect(_remote(auth_env=_TOKEN_NAME))
 
     assert _TOKEN_VALUE not in str(error_info.value)
-
-
-# --- 不留痕 -------------------------------------------------------------------
 
 
 def _manager(root: Path, factory: FakeMcpClientFactory) -> AppManager:

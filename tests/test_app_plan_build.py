@@ -34,9 +34,6 @@ _FULL_NAME = "Churk-Ben/Aurora-QQ"
 _FINAL_PATH = "extensions/apps/Churk-Ben/Aurora-QQ"
 
 
-# --- --command -------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "value",
     [
@@ -102,9 +99,6 @@ def test_the_two_candidates_are_distinguishable() -> None:
 )
 def test_runtime_is_classified_by_executable_name(command: tuple[str, ...], expected: str) -> None:
     assert runtime_of(command) == expected
-
-
-# --- 包管理器型安装（--npx / --uvx） ---------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -173,9 +167,6 @@ def test_a_runner_plan_runs_in_the_project_root() -> None:
 
 def test_a_runner_plan_carries_the_requested_initial_state() -> None:
     assert runner_plan(executable="uvx", specifier="demo", package="uvx.demo", enabled=True).enabled is True
-
-
-# --- 远程端点准入 ---------------------------------------------------------------
 
 
 def test_a_plain_https_endpoint_is_accepted() -> None:
@@ -250,9 +241,6 @@ def test_a_remote_config_rejects_a_non_https_url() -> None:
         check_remote_config("com.example.remote", "http://mcp.example.com/rpc", None)
 
 
-# --- 三个路径概念 ---------------------------------------------------------------
-
-
 def test_install_path_is_owner_and_repo_under_the_apps_root() -> None:
     assert install_path(_FULL_NAME) == "/".join((*APPS_DIRECTORY, "Churk-Ben", "Aurora-QQ"))
 
@@ -279,9 +267,6 @@ def test_subdir_parts_are_shared_by_the_plan_and_verify() -> None:
     """verify 要在 staging 里拼出同一个子目录，两边各拆一次迟早会拆出两个答案。"""
     assert subdir_parts(".") == ()
     assert subdir_parts("apps/weather") == ("apps", "weather")
-
-
-# --- 运行时校验 -----------------------------------------------------------------
 
 
 def test_a_plan_whose_working_dir_escapes_the_project_is_rejected() -> None:

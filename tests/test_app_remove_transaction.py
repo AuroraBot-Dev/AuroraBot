@@ -90,9 +90,6 @@ def _refuse_the_quarantine(path: Path) -> str | None:
     return _REAL_REMOVE_TREE(path)
 
 
-# --- 受管推导 -----------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "working_dir",
     [
@@ -156,9 +153,6 @@ def test_an_entry_without_working_dir_is_not_managed(tmp_path: Path) -> None:
     assert classify_managed_app(store.project_root, entry) is None
 
 
-# --- 非受管移除 ---------------------------------------------------------------
-
-
 def test_a_non_managed_app_only_loses_its_entry(tmp_path: Path) -> None:
     store = _store(tmp_path, "src/apps/qq-server")
     local = store.project_root / "src" / "apps" / "qq-server"
@@ -179,9 +173,6 @@ def test_a_non_managed_app_leaves_the_install_root_alone(tmp_path: Path) -> None
     remove_transaction(store, Removal(_PACKAGE, None))
 
     assert store.raw_app(_PACKAGE) is None
-
-
-# --- 归属校验 -----------------------------------------------------------------
 
 
 def test_a_matching_origin_is_accepted(tmp_path: Path) -> None:
@@ -250,9 +241,6 @@ def test_a_symlinked_managed_root_is_a_path_error_even_with_force(tmp_path: Path
 
     with pytest.raises(PathError):
         plan_removal(store, _raw(store), force=True)
-
-
-# --- 提交与回收 ---------------------------------------------------------------
 
 
 def test_a_managed_remove_deletes_the_directory(tmp_path: Path) -> None:
@@ -341,9 +329,6 @@ def test_rollback_failure_reports_the_residue(tmp_path: Path, monkeypatch: pytes
     assert REMOVE_PREFIX in message
     assert _PACKAGE in message
     assert "请手动把残留目录改回原路径" in message
-
-
-# --- 提交前重验证 -------------------------------------------------------------
 
 
 def test_a_package_that_vanished_before_commit_is_reported(tmp_path: Path) -> None:

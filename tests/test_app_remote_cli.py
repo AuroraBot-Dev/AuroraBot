@@ -74,9 +74,6 @@ def _pipe(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO())
 
 
-# --- 正常路径 -------------------------------------------------------------------
-
-
 def test_install_remote_registers_the_endpoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -196,9 +193,6 @@ def test_a_disabled_remote_entry_points_at_the_enable_command(
     assert f"aurora app enable {ENDPOINT_PACKAGE}" in out
 
 
-# --- 凭据只以变量名出现 ----------------------------------------------------------
-
-
 def test_auth_env_stores_only_the_variable_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -267,9 +261,6 @@ def test_a_bad_variable_name_is_rejected(
     assert "连接配置不合法" in err
 
 
-# --- 握手是准入门槛 ---------------------------------------------------------------
-
-
 def test_the_handshake_runs_before_registering(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -334,9 +325,6 @@ def test_the_handshake_failure_names_the_remote_subject(
     _, _, err = _capture(capsys, _project(tmp_path), *_BASE, "--yes")
 
     assert "远程 MCP 端点" in err
-
-
-# --- 输入准入 -------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

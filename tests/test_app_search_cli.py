@@ -26,9 +26,6 @@ _TOKEN = "ghp_SECRETTOKEN123"
 _CONFIG = "config/apps.toml"
 
 
-# --- 命令注册 -----------------------------------------------------------------
-
-
 def test_help_lists_the_search_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
         run(["app", "--help"], registry=DEFAULT_REGISTRY)
@@ -47,9 +44,6 @@ def test_search_help_lists_its_options(capsys: pytest.CaptureFixture[str]) -> No
         assert option in usage
 
 
-# --- 与注册表无关 ----------------------------------------------------------------
-
-
 def test_search_works_without_a_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """search 与 config/apps.toml 无关：注册表不存在也照样搜索。"""
     source = stub(monkeypatch, page((repository(),)))
@@ -66,9 +60,6 @@ def test_search_never_creates_the_registry(tmp_path: Path, monkeypatch: pytest.M
     assert cli(tmp_path, "search") == 0
 
     assert not (tmp_path / "config").exists()
-
-
-# --- 参数转发 -----------------------------------------------------------------
 
 
 def test_defaults_are_forwarded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,9 +88,6 @@ def test_arguments_are_forwarded(
     assert cli(tmp_path, *arguments) == 0
 
     assert {key: source.calls[0][key] for key in expected} == expected
-
-
-# --- 失败路径 -----------------------------------------------------------------
 
 
 def test_a_discovery_failure_is_a_general_failure(
@@ -178,9 +166,6 @@ def test_a_failed_search_never_prints_the_token(
     assert _TOKEN not in error
     assert _TOKEN not in output
     assert "GITHUB_TOKEN" in error
-
-
-# --- 环境载入与工厂组装 ---------------------------------------------------------
 
 
 @pytest.mark.parametrize("arguments", [("list",), ("search",), ("enable", "com.example.weather")])
