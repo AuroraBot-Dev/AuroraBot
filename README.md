@@ -73,6 +73,8 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 `aurora:artifacts/query/stat` 核对版本并返回大小与媒体类型；`aurora:artifacts/query/read` 返回有界字节块，以 `content_base64` 编码，用 `next_offset` 继续读取。root、worker 和记忆专员可使用对应的 `artifact_stat`、`artifact_read` 工具。`aurora:artifacts/command/put` 接受最多 1 MiB 的 base64 内容，无默认模型工具入口；更大的数据集、权重和导出内容使用流式端口。读取会校验内容完整性，损坏文件不能作为有效版本返回。
 
+阅读 JSON 回执或普通文本时，读取参数可指定 `encoding = "utf-8"`，结果通过 `text` 返回完整字符；中文或其他多字节字符跨块时，`next_offset` 会停在完整字符末尾，下一次从该字节位置继续。无效文本或错误的字符起点会明确失败，二进制内容仍用 base64 读取。
+
 ### 节律判断与训练
 
 `cadence.toml` 控制世界消费入口、Agent 和检查频率，`rhythm.toml` 选择节律策略。规则基线按事件压力、即时路由和最长安静时间提供推理机会；GRU 模型使用相同的观察特征，并同时预测是否思考与下次检查时长。每次等待或唤醒都会记录策略版本、有效参数、观察、循环隐状态和后续运行结果。重启后恢复消费游标与等待安排，已经开始且结果未知的认知不会自动重放。

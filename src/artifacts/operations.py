@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import codecs
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +16,7 @@ from src.contracts.resource import ResourceKey, ResourceRef
 from src.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
+    from src.contracts.artifact import ArtifactChunk
     from src.contracts.operation import OperationRequest
     from src.contracts.pkgs.artifacts import ArtifactStore
 
@@ -40,6 +42,7 @@ class ArtifactReadInput(ArtifactInput):
 
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=4096, ge=1, le=16384)
+    encoding: Literal["base64", "utf-8"] = "base64"
 
 
 class ArtifactPutInput(BaseModel):
@@ -62,7 +65,8 @@ class ArtifactOperation:
         models = {"stat": ArtifactInput, "read": ArtifactReadInput, "put": ArtifactPutInput}
         descriptions = {
             "stat": "核对资源内容版本并读取大小和媒体类型。",
-            "read": "按字节位置读取固定资源版本的小块内容；content_base64 是原始字节编码，next_offset 用于继续读取。",
+            "read": "按字节位置读取固定资源版本的小块内容。JSON 或文本可指定 encoding=utf-8 直接阅读 text；"
+            "默认返回 content_base64 原始字节编码。按 next_offset 继续，has_more 表示正文尚未读完。",
             "put": "保存有界的 base64 内容并返回 SHA256 固定版本；相同版本不会覆盖。",
         }
         kind = "command" if action == "put" else "query"
@@ -107,14 +111,32 @@ class ArtifactOperation:
         if self._action == "read":
             read = ArtifactReadInput.model_validate(arguments)
             chunk = await self._store.read(read.ref, offset=read.offset, limit=read.limit)
+            content, next_offset = _chunk_content(chunk, read.encoding)
             return OperationResult(
                 {
                     **artifact_data(chunk.info),
                     "offset": chunk.offset,
-                    "content_base64": base64.b64encode(chunk.content).decode("ascii"),
-                    "next_offset": chunk.next_offset,
-                    "has_more": chunk.has_more,
+                    "encoding": read.encoding,
+                    **content,
+                    "next_offset": next_offset,
+                    "has_more": next_offset < chunk.info.size,
                 }
             )
         args = ArtifactInput.model_validate(arguments)
         return OperationResult(artifact_data(await self._store.stat(args.ref)))
+
+
+def _chunk_content(chunk: ArtifactChunk, encoding: Literal["base64", "utf-8"]) -> tuple[dict[str, str], int]:
+    """UTF-8 分块只返回完整字符，未完整的尾部字节留给下一次读取。"""
+    if encoding == "base64":
+        return {"content_base64": base64.b64encode(chunk.content).decode("ascii")}, chunk.next_offset
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    try:
+        text = decoder.decode(chunk.content, final=not chunk.has_more)
+    except UnicodeDecodeError as error:
+        raise ValueError("资源内容或读取起点不是有效的 UTF-8；请核对位置，二进制内容使用 base64 读取") from error
+    pending, _ = decoder.getstate()
+    consumed = len(chunk.content) - len(pending)
+    if chunk.content and not consumed:
+        raise ValueError("读取上限不足以容纳一个 UTF-8 字符，请将 limit 增大至至少 4 字节")
+    return {"text": text}, chunk.offset + consumed

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -64,11 +63,13 @@ def test_large_tool_output_is_bounded_and_does_not_claim_unread_evidence(
                 "test",
                 reader.definition.ref,
                 OperationKind.QUERY,
-                {"key": str(info.ref.key), "revision": info.ref.revision},
+                body["read_arguments"],
             )
             chunk = await reader.execute(read)
             expected = await artifacts.read(info.ref, limit=4096)
-            assert base64.b64decode(chunk.data["content_base64"]) == expected.content
+            assert chunk.data["encoding"] == "utf-8"
+            assert expected.content.startswith(chunk.data["text"].encode())
+            assert chunk.data["next_offset"] == len(chunk.data["text"].encode())
             assert chunk.data["has_more"]
         finally:
             await world.close()

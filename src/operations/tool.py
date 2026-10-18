@@ -47,6 +47,11 @@ class OperationTool:
                     "result_ref": artifact_data(result.body_ref),
                     "content_included": False,
                     "read_tool": "aurora:tool/artifact_read",
+                    "read_arguments": {
+                        "key": str(result.body_ref.ref.key),
+                        "revision": result.body_ref.ref.revision,
+                        "encoding": "utf-8",
+                    },
                 },
                 ensure_ascii=False,
                 separators=(",", ":"),
