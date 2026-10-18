@@ -63,6 +63,8 @@ def test_due_wake_survives_restart_and_runs_once_without_external_input(tmp_path
             await clock.evaluate_once(_NOW + timedelta(hours=1))
             assert len(launcher.requests) == 1
             assert launcher.requests[0].tree_id == clock.tree_id(_WAKE)
+            cause_id = launcher.requests[0].caused_by
+            assert cause_id is not None and await reopened.commit(cause_id) is not None
             assert _GOAL.goal_id in launcher.requests[0].message
             assert (await state.snapshot()).wake(_WAKE.wake_id).status is WakeStatus.COMPLETED
         finally:

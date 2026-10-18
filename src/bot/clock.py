@@ -117,12 +117,14 @@ class PersistentBotClock:
     async def _launch(self, wake: WakePlan) -> None:
         """运行一次认知并保存结果；取消时保留交付状态供恢复核对。"""
         assert self._launcher is not None
+        snapshot = await self._state.snapshot()
         frontier = await self._world.head(frozenset({self._state.scope}))
         goal = f"\n关联目标：{wake.goal_id}" if wake.goal_id else ""
         request = TreeLaunchRequest(
             f"这是你安排的未来检查：{wake.message}{goal}\n请先核对自己的目标、检查点和未确认行动，再决定继续、调整或结束。",
             tree_id=self.tree_id(wake),
             frontier=frontier,
+            caused_by=f"{snapshot.bot_id}:state:{snapshot.version}",
         )
         try:
             result = await self._launcher.launch_tree(request)
