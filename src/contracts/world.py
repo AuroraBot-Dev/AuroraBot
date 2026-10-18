@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from src.contracts.memory import MemoryBundle, MemoryContinuity
+    from src.contracts.resource import ResourceRef
 
 MCP_EVENT_RECEIVED = "mcp.event.received"
 
@@ -121,7 +122,7 @@ class WorldDeltaPage:
 
 @dataclass(frozen=True, slots=True)
 class MemoryScopeSnapshot:
-    """记忆查询中一个有近期活动的 scope 及其最近提交。"""
+    """记忆查询中一个已选中的域及其可见来源。"""
 
     scope: str
     head: int
@@ -135,7 +136,7 @@ class MemoryScopeSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class MemorySnapshot:
-    """按活跃 scope 分组的世界记忆快照。"""
+    """同一获知截点上的连续性状态、来源和推荐集合。"""
 
     window_start: datetime
     scopes: tuple[MemoryScopeSnapshot, ...]
@@ -145,6 +146,7 @@ class MemorySnapshot:
     bundles: tuple[MemoryBundle, ...] | None = None
     required: tuple[WorldCommit, ...] = ()
     missing_refs: tuple[str, ...] = ()
+    policy: ResourceRef | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "scopes", tuple(self.scopes))

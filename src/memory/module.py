@@ -15,6 +15,7 @@ from src.memory.config import MemoryConfig
 
 @module(name="memory", provides=MemoryReader, requires=(WorldReader, BotStateStore, MemoryPolicy))
 def build(context: ModuleContext) -> MemoryReader:
+    """绑定只读经历、主体历史和可替换排序策略。"""
     config = context.settings.resolve(MemoryConfig)
     return Memory(
         context.get(WorldReader),

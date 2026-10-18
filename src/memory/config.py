@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class MemoryConfig:
-    """近期世界记忆召回配置。"""
+    """近期候选路线与世界域筛选配置。"""
 
     window_minutes: int
     commits_per_scope: int

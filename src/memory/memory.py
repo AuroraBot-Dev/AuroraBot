@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -41,6 +42,7 @@ class Memory:
         include_run_scopes: bool = False,
         state: BotStateStore | None = None,
     ) -> None:
+        """绑定经历来源与排序策略，读取范围和主体状态各自显式注入。"""
         if window <= timedelta(0):
             raise ValueError("memory window must be positive")
         if commits_per_scope <= 0:
@@ -87,7 +89,9 @@ class Memory:
         normalized = replace(request, cursor=history.cursor, observed_at=observed_at)
         if not normalized.focus_goal_ids and continuity is not None:
             normalized = replace(normalized, focus_goal_ids=tuple(goal.goal_id for goal in continuity.goals))
-        selection = select_memories(eligible, tuple(recent_by_id.values()), normalized, continuity, self._policy)
+        selection = await asyncio.to_thread(
+            select_memories, eligible, tuple(recent_by_id.values()), normalized, continuity, self._policy
+        )
         chosen = {commit.commit_id: commit for commit in selection.required}
         for bundle in selection.bundles:
             chosen.update((commit.commit_id, commit) for commit in bundle.commits)
@@ -113,6 +117,7 @@ class Memory:
             selection.bundles,
             selection.required,
             selection.missing_refs,
+            self._policy.ref,
         )
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))
         return snapshot

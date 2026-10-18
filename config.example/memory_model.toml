@@ -1,0 +1,5 @@
+[memory_model]
+# 推荐器只能使用本次读取边界内已经获知的事实。
+policy = "aurora:memory/model/rules"
+# 选择 aurora:memory/model/tgn 时填写权重文件路径；不会自动训练或更新参数。
+# weights = "models/memory.pt"
