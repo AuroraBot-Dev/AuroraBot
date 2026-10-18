@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     import asyncio
 
     from src.contracts.pkgs.runtime import TreeLauncher
+    from src.contracts.resource import ResourceRef
+    from src.contracts.rhythm import RhythmObservation, RhythmPrediction
+
+
+class RhythmPolicy(Protocol):
+    """轻量节律判断，与计时服务和认知运行器分别装配。"""
+
+    @property
+    def ref(self) -> ResourceRef:
+        """返回当前策略或权重的确定资源版本。"""
+        ...
+
+    def evaluate(self, observation: RhythmObservation, hidden: tuple[float, ...] = ()) -> RhythmPrediction:
+        """由显式输入和隐状态产生下一次推理机会。"""
+        ...
 
 
 class Cadence(Protocol):
