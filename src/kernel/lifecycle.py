@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
+from src.kernel.context import _ModuleContext
 from src.kernel.phase import CONSTRUCTION_KINDS, PhaseKind
 from src.utils import get_logger
 
@@ -63,11 +64,12 @@ class ManagedAssembly:
             hook = spec.hook(step.phase)
             if hook is None:
                 continue
+            bound = _ModuleContext(self._context, spec.name, self._resolution.providers)
             if step.phase.kind is PhaseKind.TASK:
-                task = asyncio.create_task(cast("ModuleRunner", hook)(self._context, stop), name=f"aurora:{spec.name}")
+                task = asyncio.create_task(cast("ModuleRunner", hook)(bound, stop), name=f"aurora:{spec.name}")
                 self._tasks.append(task)
             else:
-                await cast("ModuleHook", hook)(self._context)
+                await cast("ModuleHook", hook)(bound)
 
     async def _shutdown(self, step: PhaseStep, failures: list[Exception]) -> None:
         for spec in step.modules:
@@ -75,7 +77,8 @@ class ManagedAssembly:
             if hook is None:
                 continue
             try:
-                await cast("ModuleHook", hook)(self._context)
+                bound = _ModuleContext(self._context, spec.name, self._resolution.providers)
+                await cast("ModuleHook", hook)(bound)
             except Exception as error:  # noqa: BLE001 - 关闭必须继续释放剩余模块
                 failures.append(error)
 

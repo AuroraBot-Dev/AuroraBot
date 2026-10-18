@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 async def prepare(context: ModuleContext) -> None:
     """在构造前按确切字节载入节律权重，计算不阻塞事件循环。"""
-    if context.contains(RhythmPolicy):
+    if not context.is_provider(RhythmPolicy) or context.contains(RhythmPolicy):
         return
     config = context.settings.resolve(RhythmConfig)
     if config.policy != "aurora:rhythm/model/gru":
@@ -55,7 +55,7 @@ async def prepare(context: ModuleContext) -> None:
 @module(
     name="rhythm",
     provides=RhythmPolicy,
-    requires=(WorldReader, BotStateStore, ArtifactStore),
+    requires=(WorldReader, BotStateStore, ArtifactStore, RhythmPolicy),
     contributes=(RESOURCE_CONTRIBUTIONS, OPERATION_CONTRIBUTIONS),
     prepare=prepare,
 )

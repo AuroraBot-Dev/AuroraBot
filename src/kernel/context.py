@@ -34,6 +34,10 @@ class ModuleContext(Capabilities, Protocol):
 
     def contribute[T](self, key: ContributionKey[T], value: T) -> None: ...
 
+    def is_provider(self, capability: type) -> bool:
+        """当前模块是否被解析器选中来提供此能力。"""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class Assembly:
@@ -76,6 +80,10 @@ class _MutableContext:
     def contains(self, capability: type) -> bool:
         return capability in self._instances
 
+    def is_provider(self, capability: type) -> bool:
+        """底层容器接受显式种子，模块钩子通过受限视图访问。"""
+        return True
+
     def get[T](self, capability: type[T]) -> T:
         try:
             return cast("T", self._instances[capability])
@@ -107,3 +115,47 @@ class _MutableContext:
     def freeze(self) -> Assembly:
         contributions = {name: tuple(values) for name, values in self._contributions.items()}
         return Assembly(self.settings, self._instances, contributions)
+
+
+@dataclass(frozen=True, slots=True)
+class _ModuleContext:
+    """按解析结果约束单个模块的登记权，读取始终面向实际公共能力。"""
+
+    context: ModuleContext
+    name: str
+    providers: Mapping[type, str]
+
+    @property
+    def settings(self) -> Settings:
+        """配置仍来自同一份只读装配输入。"""
+        return self.context.settings
+
+    def is_provider(self, capability: type) -> bool:
+        """优先级裁决决定登记权，不依赖构造器到达的先后顺序。"""
+        return self.providers.get(capability) == self.name
+
+    def get[T](self, capability: type[T]) -> T:
+        """只返回已登记的有效提供者。"""
+        return self.context.get(capability)
+
+    def get_optional[T](self, capability: type[T]) -> T | None:
+        """未就绪的公共能力保持缺省，不暴露其他模块的候选实例。"""
+        return self.context.get_optional(capability)
+
+    def contains(self, capability: type) -> bool:
+        """查询公共能力是否已经就绪。"""
+        return self.context.contains(capability)
+
+    def provide[T](self, capability: type[T], instance: T) -> None:
+        """未选中的提供者不能抢占公共登记，未声明的可选辅助能力仍可登记。"""
+        if capability in self.providers and not self.is_provider(capability):
+            return
+        self.context.provide(capability, instance)
+
+    def contribute[T](self, key: ContributionKey[T], value: T) -> None:
+        """贡献不因某项能力被替换而丢失。"""
+        self.context.contribute(key, value)
+
+    def contributions[T](self, key: ContributionKey[T]) -> tuple[T, ...]:
+        """所有模块共用按装配顺序形成的贡献集合。"""
+        return self.context.contributions(key)

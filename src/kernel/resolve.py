@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.kernel.phase import ACTIVATE, BUILTIN_PHASES, CONSTRUCT, CONSTRUCTION_KINDS, PREPARE, Phase
@@ -28,6 +29,11 @@ class Resolution:
     construction: tuple[ModuleSpec, ...]
     activation: tuple[ModuleSpec, ...]
     phases: tuple[PhaseStep, ...]
+    providers: Mapping[type, str]
+
+    def __post_init__(self) -> None:
+        """登记权属于冻结的解析结果，运行阶段不能重新选择提供者。"""
+        object.__setattr__(self, "providers", MappingProxyType(dict(self.providers)))
 
     def step(self, phase: Phase) -> tuple[ModuleSpec, ...]:
         for entry in self.phases:
@@ -39,18 +45,28 @@ class Resolution:
 def resolve(specs: Iterable[ModuleSpec]) -> Resolution:
     listed = tuple(specs)
     _validate_names(listed)
-    active = _drop_unsatisfied_optional(listed)
-    providers = _providers(active)
+    available = _drop_unsatisfied_optional(listed)
+    providers = _providers(available)
+    active = tuple(
+        spec
+        for spec in available
+        if not spec.provides or spec.contributes or any(providers[item].name == spec.name for item in spec.provides)
+    )
     _validate_requires(active, providers)
     contributors = _contributors(active)
-    _validate_declarations(active)
+    _validate_declarations(active, available)
     _validate_orderings(active)
 
     construction = _topological(active, _construction_dependencies(providers, contributors), _by_name)
     phases = _collect_phases(active)
     _validate_phase_groups(phases)
     steps = tuple(PhaseStep(phase, _phase_modules(phase, active, providers, construction)) for phase in phases)
-    return Resolution(construction=construction, activation=_step_of(steps, ACTIVATE), phases=steps)
+    return Resolution(
+        construction=construction,
+        activation=_step_of(steps, ACTIVATE),
+        phases=steps,
+        providers={capability: spec.name for capability, spec in providers.items()},
+    )
 
 
 def _collect_phases(specs: Iterable[ModuleSpec]) -> tuple[Phase, ...]:
@@ -154,12 +170,13 @@ def _contributors(specs: Iterable[ModuleSpec]) -> dict[str, list[ModuleSpec]]:
     return contributors
 
 
-def _validate_declarations(specs: Iterable[ModuleSpec]) -> None:
+def _validate_declarations(specs: Iterable[ModuleSpec], owners: Iterable[ModuleSpec]) -> None:
+    """能力实现可以被替换，贡献点的声明仍由原始命名空间所有者提供。"""
     referenced: set[str] = set()
     for spec in specs:
         referenced.update(key.name for key in (*spec.contributes, *spec.consumes))
     declared: dict[str, list[str]] = {}
-    for spec in specs:
+    for spec in owners:
         for key in spec.declares:
             declared.setdefault(key.name, []).append(spec.name)
     missing = sorted(referenced - set(declared))

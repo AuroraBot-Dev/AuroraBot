@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 async def prepare(context: ModuleContext) -> None:
     """在资源目录冻结前，从确切资源字节构造实际策略。"""
-    if context.contains(MemoryPolicy):
+    if not context.is_provider(MemoryPolicy) or context.contains(MemoryPolicy):
         return
     config = context.settings.resolve(MemoryModelConfig)
     if config.policy != "aurora:memory/model/tgn":
@@ -63,7 +63,7 @@ async def close(context: ModuleContext) -> None:
 @module(
     name="memory_model",
     provides=(MemoryPolicy, MemoryCheckpoints),
-    requires=(ArtifactStore, BotStateStore, WorldJournal),
+    requires=(ArtifactStore, BotStateStore, WorldJournal, MemoryPolicy),
     contributes=(RESOURCE_CONTRIBUTIONS,),
     owns_scopes="aurora:run/memory-model/*",
     prepare=prepare,

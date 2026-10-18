@@ -19,11 +19,17 @@ def _store(context: ModuleContext) -> ArtifactStore:
 
 async def prepare(context: ModuleContext) -> None:
     """模型在构造前读取权重时，内容端口已经按依赖顺序就绪。"""
-    if not context.contains(ArtifactStore):
+    if context.is_provider(ArtifactStore) and not context.contains(ArtifactStore):
         context.provide(ArtifactStore, _store(context))
 
 
-@module(name="artifacts", provides=ArtifactStore, contributes=OPERATION_CONTRIBUTIONS, prepare=prepare)
+@module(
+    name="artifacts",
+    provides=ArtifactStore,
+    requires=ArtifactStore,
+    contributes=OPERATION_CONTRIBUTIONS,
+    prepare=prepare,
+)
 def build(context: ModuleContext) -> ArtifactStore:
     """启动前提供的同一内容存储继续用于运行期操作。"""
     store = _store(context)
