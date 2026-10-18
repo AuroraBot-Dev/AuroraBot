@@ -46,6 +46,22 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 每次认知都显式获得主体状态。上下文组装保留原始输入、最新完整交互和恢复依据，候选经历按剩余容量进入；必要状态超限会明确报错，需要拆分工作或调整容量。
 
+### 资源与领域操作
+
+资源使用 `namespace:domain/kind/path` 寻址，例如 `aurora:bot/query/state`。定义版本、可变别名和 Bot 的运行实例分别记录。存在多个版本时，调用方需要明确选择版本或绑定别名；进行能力替换时可以校验契约身份与版本。
+
+模组声明命令或查询的定义、参数结构、世界域和处理者。统一路由在执行前记录请求与确定版本，结果再次进入世界；重复请求复用持久回执。命令已经开始但结果未确认时，只有声明可安全重试的处理者可以再次执行。
+
+结构化工具和终端指令共用这些定义。终端可使用：
+
+```text
+/resources --domain bot --kind command
+/inspect aurora:bot/command/goal_set@1
+/call aurora:bot/query/state {}
+```
+
+扩展通过 `OPERATION_CONTRIBUTIONS` 提供领域操作，通过 `RESOURCE_CONTRIBUTIONS` 提供其他资源定义，通过 `RESOURCE_ALIASES` 声明版本绑定。为操作填写 `tool_name` 后，框架会生成模型工具入口；Bot 的可见工具仍由 Agent 定义选择。
+
 ## 快速开始
 
 ### 1. 克隆本仓库

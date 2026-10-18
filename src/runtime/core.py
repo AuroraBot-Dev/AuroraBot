@@ -14,6 +14,7 @@ from uuid import uuid4
 from src.contracts import AgentTree, EnvironmentEvent, TreeLaunchRequest, WorldCommit, WorldFrontier
 from src.runtime.events import RUNTIME_INPUT, RUNTIME_SCOPE
 from src.runtime.presenter import TreeTextPresenter
+from src.runtime.resource_commands import ResourceCommands
 from src.runtime.terminal import TerminalCommandDispatcher
 from src.utils import get_logger
 
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
     from src.contracts import FrontBinding
     from src.contracts.pkgs.agents import AgentCatalog
     from src.contracts.pkgs.engine import AgentTreeRunner
+    from src.contracts.pkgs.operations import OperationRegistry
+    from src.contracts.pkgs.resources import ResourceCatalog
     from src.contracts.pkgs.world import WorldJournal
     from src.kernel import Assembly
     from src.runtime.config import RuntimeConfig
@@ -41,6 +44,9 @@ class AuroraRuntime:
         agents: AgentCatalog,
         root: RuntimeConfig,
         world: WorldJournal,
+        resources: ResourceCatalog,
+        operations: OperationRegistry,
+        bot_id: str,
         output: Callable[[str], None] = print,
         front_bindings: tuple[FrontBinding, ...] = (),
     ) -> None:
@@ -53,7 +59,7 @@ class AuroraRuntime:
         self.output = output
         self.front_bindings = front_bindings
         self.presenter = TreeTextPresenter(output)
-        self.terminal = TerminalCommandDispatcher(self.run_from_commit)
+        self.terminal = TerminalCommandDispatcher(self.run_from_commit, ResourceCommands(resources, operations, bot_id))
         self._trees: dict[str, AgentTree] = {}
         self._cognition_lock = asyncio.Lock()
 

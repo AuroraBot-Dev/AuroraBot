@@ -165,7 +165,9 @@ def test_project_console_runs_message_tree_and_local_commands(configured_project
     assert tree.caused_by is not None and tree.caused_by.startswith("console:")
     assert runtime.runtime_status()["trees"]["completed"] == 1
     assert "Bot> 全链路完成" in output
-    assert "Bot> 本地命令：/help /clear /quit" in output
+    help_text = next(text for text in output if text.startswith("Bot> 本地命令："))
+    assert "/help /clear /quit" in help_text
+    assert "/resources" in help_text and "/inspect" in help_text and "/call" in help_text
     assert stop.is_set()
 
 
