@@ -25,6 +25,7 @@ from src.tools import WORLD_SCOPES_TOOL, WorldScopesTool
 _EXPECTED_OWNED_SCOPES = (
     "*:world",
     "*:world/*",
+    "*:world/bot/*",
     "aurora:run/*",
     "aurora:world/cadence",
     "aurora:world/console",

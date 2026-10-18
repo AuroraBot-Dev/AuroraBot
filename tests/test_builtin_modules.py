@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 from src.agents.config import AgentConfig, AgentsConfig
 from src.ai.config import EndpointConfig, EndpointsConfig, ProviderConfig, ProvidersConfig
+from src.bot.config import BotConfig
 from src.cadence.config import CadenceConfig, ReactionsConfig
 from src.contracts.identity import TagsConfig
 from src.contracts.pkgs.agents import AgentCatalog
@@ -63,6 +64,7 @@ def _settings(tmp_path: Path) -> _Settings:
                 (AgentConfig("aurora:agent/chat", "会话", "aurora:prompt/agent/chat", "chat", (), frozenset()),)
             ),
             EngineConfig: EngineConfig(2, 8, 16),
+            BotConfig: BotConfig("aurora:bot/default"),
             RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
             CadenceConfig: CadenceConfig(False, "aurora:agent/chat", 5, 3600, 0.25),
@@ -100,6 +102,7 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
     assert names == {
         "agents",
         "ai",
+        "bot",
         "cadence",
         "console",
         "engine",

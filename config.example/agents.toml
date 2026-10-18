@@ -19,7 +19,16 @@ id = "aurora:agent/root"
 description = "总代理：理解完整任务、整合结果。"
 prompt = "aurora:prompt/agent/root"
 model = "quality"
-tools = ["aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_scopes", "aurora:tool/world_trees"]
+tools = [
+    "aurora:tool/delegate",
+    "aurora:tool/world_read",
+    "aurora:tool/world_scopes",
+    "aurora:tool/world_trees",
+    "aurora:tool/bot_state",
+    "aurora:tool/goal_set",
+    "aurora:tool/wake_schedule",
+    "aurora:tool/wake_cancel",
+]
 children = [
     "aurora:agent/fast-worker",
     "aurora:agent/chat",
@@ -45,6 +54,10 @@ tools = [
     "aurora:tool/world_read",
     "aurora:tool/world_scopes",
     "aurora:tool/world_trees",
+    "aurora:tool/bot_state",
+    "aurora:tool/goal_set",
+    "aurora:tool/wake_schedule",
+    "aurora:tool/wake_cancel",
     "org.aurora.qq:tool/*",
     "com.github.windows_mcp:tool/*",
 ]
