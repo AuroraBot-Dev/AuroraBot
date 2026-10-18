@@ -8,6 +8,7 @@ requires-python = ">=3.12, <3.15"
 dependencies = [
     "aiosqlite>=0.20,<1",
     "httpx2>=2.5,<3",
+    "jsonschema>=4.23,<5",
     "litellm>=1.83.14",
     "loguru>=0.7,<1",
     "mcp>=2,<3",
