@@ -18,28 +18,29 @@ _MAX_PAGE = 256
 class RhythmObservations:
     """只读取决策当时的观察，不把过去的选择伪造为正确答案。"""
 
+    DEFINITION = OperationDefinition(
+        ResourceRef(ResourceKey.parse("aurora:rhythm/query/observations"), "1"),
+        "分页读取节律观察与实际选择，用于标注、回放和训练；返回内容不含自动生成的效用标签。",
+        {
+            "type": "object",
+            "properties": {
+                "after": {"type": "integer", "minimum": 0, "default": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_PAGE, "default": 100},
+            },
+            "additionalProperties": False,
+        },
+    )
+
     def __init__(self, reader: WorldReader, bot_id: str) -> None:
         """绑定当前主体的节律世界域。"""
         identifier = Identifier.parse(bot_id)
         self._scope = f"{identifier.namespace}:world/{identifier.path}/cadence"
         self._reader = reader
-        self._definition = OperationDefinition(
-            ResourceRef(ResourceKey.parse("aurora:rhythm/query/observations"), "1"),
-            "分页读取节律观察与实际选择，用于标注、回放和训练；返回内容不含自动生成的效用标签。",
-            {
-                "type": "object",
-                "properties": {
-                    "after": {"type": "integer", "minimum": 0, "default": 0},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_PAGE, "default": 100},
-                },
-                "additionalProperties": False,
-            },
-        )
 
     @property
     def definition(self) -> OperationDefinition:
         """观察导出也使用统一领域查询定义。"""
-        return self._definition
+        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """读取前披露节律域的变化。"""

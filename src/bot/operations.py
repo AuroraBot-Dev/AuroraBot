@@ -87,8 +87,8 @@ class BotOperation:
         raise TypeError("未知主体操作参数")
 
 
-def bot_operations(state: BotStateStore) -> tuple[Operation, ...]:
-    """提供主体读取、目标选择和未来安排的最小完整操作集。"""
+def bot_operation_specs() -> tuple[tuple[OperationDefinition, type[BaseModel]], ...]:
+    """声明主体读取、目标选择和未来安排的输入，不构造状态服务。"""
     definitions = (
         (
             "aurora:bot/query/state",
@@ -116,10 +116,14 @@ def bot_operations(state: BotStateStore) -> tuple[Operation, ...]:
         ),
     )
     return tuple(
-        BotOperation(
-            state,
+        (
             OperationDefinition(ResourceRef(ResourceKey.parse(key), "2"), text, model.model_json_schema(), tool, True),
             model,
         )
         for key, tool, text, model in definitions
     )
+
+
+def bot_operations(state: BotStateStore) -> tuple[Operation, ...]:
+    """把同一份定义与输入绑定到当前主体状态。"""
+    return tuple(BotOperation(state, definition, parameters) for definition, parameters in bot_operation_specs())

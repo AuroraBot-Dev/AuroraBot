@@ -29,6 +29,10 @@ async def prepare(context: ModuleContext) -> None:
     provides=ArtifactStore,
     requires=ArtifactStore,
     contributes=OPERATION_CONTRIBUTIONS,
+    resources=(
+        ArtifactFindOperation.DEFINITION.resource,
+        *(ArtifactOperation.definition_for(action).resource for action in ("stat", "read", "put")),
+    ),
     prepare=prepare,
 )
 def build(context: ModuleContext) -> ArtifactStore:

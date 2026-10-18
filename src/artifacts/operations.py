@@ -62,6 +62,11 @@ class ArtifactOperation:
         """从同一输入模型生成操作校验和可选工具入口。"""
         self._store = store
         self._action = action
+        self._definition = self.definition_for(action)
+
+    @staticmethod
+    def definition_for(action: Literal["stat", "read", "put"]) -> OperationDefinition:
+        """在连接内容存储前公开同一份参数和效果定义。"""
         models = {"stat": ArtifactInput, "read": ArtifactReadInput, "put": ArtifactPutInput}
         descriptions = {
             "stat": "核对资源内容版本并读取大小和媒体类型。",
@@ -71,7 +76,7 @@ class ArtifactOperation:
         }
         kind = "command" if action == "put" else "query"
         tool_name = None if action == "put" else f"aurora:tool/artifact_{action}"
-        self._definition = OperationDefinition(
+        return OperationDefinition(
             ResourceRef(ResourceKey("aurora", "artifacts", kind, action), "1"),
             descriptions[action],
             models[action].model_json_schema(),

@@ -57,6 +57,7 @@ async def prepare(context: ModuleContext) -> None:
     provides=RhythmPolicy,
     requires=(WorldReader, BotStateStore, ArtifactStore, RhythmPolicy),
     contributes=(RESOURCE_CONTRIBUTIONS, OPERATION_CONTRIBUTIONS),
+    resources=RhythmObservations.DEFINITION.resource,
     prepare=prepare,
 )
 def build(context: ModuleContext) -> RhythmPolicy:

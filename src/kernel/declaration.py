@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.resource import ResourceDescriptor
 from src.contracts.scope import ScopeDeclaration
 from src.kernel.phase import ACTIVATE, CLOSE, CONSTRUCT, DRAIN, PREPARE, READY, RUN, Ordering, Phase
 
@@ -38,6 +39,7 @@ class ModuleSpec:
     owns_scopes: tuple[str, ...] = ()
     observes_scopes: tuple[str, ...] = ()
     scopes: tuple[ScopeDeclaration, ...] = ()
+    resources: tuple[ResourceDescriptor, ...] = ()
     priority: int = 0
     optional: bool = False
     order: tuple[Ordering, ...] = ()
@@ -54,18 +56,21 @@ class ModuleSpec:
             "owns_scopes",
             "observes_scopes",
             "scopes",
+            "resources",
             "order",
         ):
             object.__setattr__(self, attribute, tuple(getattr(self, attribute)))
         object.__setattr__(self, "hooks", MappingProxyType(dict(self.hooks)))
         if any(not isinstance(scope, ScopeDeclaration) for scope in self.scopes):
             raise TypeError("模块的完整域声明必须使用 ScopeDeclaration")
+        if any(not isinstance(resource, ResourceDescriptor) for resource in self.resources):
+            raise TypeError("模块的资源定义必须使用 ResourceDescriptor")
         patterns = tuple(scope.pattern for scope in self.scopes)
         if len(self.owns_scopes) != len(set(self.owns_scopes)) or len(patterns) != len(set(patterns)):
             raise ValueError(f"模块重复声明域：{self.name}")
         if not self.name.strip():
             raise ValueError("模块名称不能为空")
-        if not self.provides and not self.contributes and not self.hooks:
+        if not any((self.provides, self.contributes, self.hooks, self.scopes, self.resources)):
             raise ValueError(f"模块既不提供能力也不贡献值：{self.name}")
         contribution_names = [key.name for key in (*self.contributes, *self.consumes)]
         if len(contribution_names) != len(set(contribution_names)):
@@ -108,6 +113,7 @@ def module(
     owns_scopes: str | tuple[str, ...] = (),
     observes_scopes: str | tuple[str, ...] = (),
     scopes: ScopeDeclaration | tuple[ScopeDeclaration, ...] = (),
+    resources: ResourceDescriptor | tuple[ResourceDescriptor, ...] = (),
     priority: int = 0,
     optional: bool = False,
     activation_after: type | tuple[type, ...] = (),
@@ -157,6 +163,7 @@ def module(
             owns_scopes=_as_tuple(owns_scopes),
             observes_scopes=_as_tuple(observes_scopes),
             scopes=_as_tuple(scopes),
+            resources=_as_tuple(resources),
             priority=priority,
             optional=optional,
             order=extra_order,

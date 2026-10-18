@@ -25,22 +25,23 @@ _PREVIEW_CHARACTERS = 240
 class MemoryRecallQuery:
     """Bot 可以主动改变问题和目标来补取经历，不被动接受固定 Top-K。"""
 
+    DEFINITION = OperationDefinition(
+        ResourceRef(ResourceKey.parse("aurora:memory/query/recall"), "1"),
+        "围绕问题和目标召回记忆摘要、必要证据和依赖集合；"
+        "summary_complete 表示摘要是否完整，原始数据用 memory_source 展开。",
+        RecallInput.model_json_schema(),
+        "aurora:tool/memory_recall",
+        True,
+    )
+
     def __init__(self, memory: MemoryReader) -> None:
         """沿用当前配置的读取范围、模型和集合组装。"""
         self._memory = memory
-        self._definition = OperationDefinition(
-            ResourceRef(ResourceKey.parse("aurora:memory/query/recall"), "1"),
-            "围绕问题和目标召回记忆摘要、必要证据和依赖集合；"
-            "summary_complete 表示摘要是否完整，原始数据用 memory_source 展开。",
-            RecallInput.model_json_schema(),
-            "aurora:tool/memory_recall",
-            True,
-        )
 
     @property
     def definition(self) -> OperationDefinition:
         """提供同一份查询和工具参数定义。"""
-        return self._definition
+        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """读取结果自身携带冻结的知识边界。"""
@@ -93,22 +94,23 @@ class MemoryRecallQuery:
 class MemorySourceQuery:
     """从原始世界记录展开证据，并说明该读取截点已知的替代关系。"""
 
+    DEFINITION = OperationDefinition(
+        ResourceRef(ResourceKey.parse("aurora:memory/query/source"), "1"),
+        "按 memory_id 读取完整原始证据；可指定历史游标和时间，返回当时已知的 superseded_by 引用。",
+        SourceInput.model_json_schema(),
+        "aurora:tool/memory_source",
+        True,
+    )
+
     def __init__(self, reader: WorldReader, index: MemoryIndex) -> None:
         """与记忆召回共享可重建索引，避免维护另一套事实。"""
         self._reader = reader
         self._index = index
-        self._definition = OperationDefinition(
-            ResourceRef(ResourceKey.parse("aurora:memory/query/source"), "1"),
-            "按 memory_id 读取完整原始证据；可指定历史游标和时间，返回当时已知的 superseded_by 引用。",
-            SourceInput.model_json_schema(),
-            "aurora:tool/memory_source",
-            True,
-        )
 
     @property
     def definition(self) -> OperationDefinition:
         """来源与召回各自拥有明确输入和结果。"""
-        return self._definition
+        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """单项来源读取通过结果披露实际域与时间，不推导新的观察订阅。"""

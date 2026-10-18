@@ -68,7 +68,8 @@ class OperationRegistry:
             definition = operation.definition
             if definition.ref in self._operations:
                 raise ValueError(f"操作版本重复注册：{definition.ref.key}")
-            resources.resolve(definition.ref)
+            if resources.resolve(definition.ref) != definition.resource:
+                raise ValueError(f"操作实现与声明的资源定义不一致：{definition.ref.key}")
             schema = cast("dict[str, Any]", thaw_json(definition.parameters))
             _validate_local_schema(schema)
             Draft202012Validator.check_schema(schema)

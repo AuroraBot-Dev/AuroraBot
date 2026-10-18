@@ -25,6 +25,10 @@ from src.memory.replay import MemoryTrainingInput
     provides=MemoryReader,
     requires=(WorldJournal, BotStateStore, MemoryPolicy, ScopeCatalog),
     contributes=(OPERATION_CONTRIBUTIONS,),
+    resources=tuple(
+        query.DEFINITION.resource
+        for query in (MemoryRecallQuery, MemorySourceQuery, MemoryExposures, MemoryFeedback, MemoryTrainingInput)
+    ),
     scopes=ScopeDeclaration("*:world/bot/*/memory", ScopeKind.RESOURCE, "记忆使用反馈及修正的持久事实。"),
 )
 def build(context: ModuleContext) -> MemoryReader:

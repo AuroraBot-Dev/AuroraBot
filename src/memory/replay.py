@@ -27,22 +27,23 @@ if TYPE_CHECKING:
 class MemoryTrainingInput:
     """供标注与离线训练使用的完整输入查询，不向模型上下文自动注入整张图。"""
 
+    DEFINITION = OperationDefinition(
+        ResourceRef(ResourceKey.parse("aurora:memory/query/training_input"), "1"),
+        "恢复一次真实推荐的完整候选和时序图，并核对输入指纹；返回内容不含自动生成的正确效用标签。",
+        TrainingInput.model_json_schema(),
+        retry_safe=True,
+    )
+
     def __init__(self, reader: WorldReader, index: MemoryIndex, bot_id: str) -> None:
         """只重建当前主体拥有且保留输入指纹的审计。"""
         self._reader = reader
         self._index = index
         self._bot_id = bot_id
-        self._definition = OperationDefinition(
-            ResourceRef(ResourceKey.parse("aurora:memory/query/training_input"), "1"),
-            "恢复一次真实推荐的完整候选和时序图，并核对输入指纹；返回内容不含自动生成的正确效用标签。",
-            TrainingInput.model_json_schema(),
-            retry_safe=True,
-        )
 
     @property
     def definition(self) -> OperationDefinition:
         """离线导出通过统一查询调用，不创建默认模型工具。"""
-        return self._definition
+        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """固定输入的世界前缀决定可见性。"""

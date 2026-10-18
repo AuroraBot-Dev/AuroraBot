@@ -63,7 +63,7 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 /call aurora:bot/query/state {"goal_id":"aurora:goal/check"}
 ```
 
-扩展通过 `OPERATION_CONTRIBUTIONS` 提供领域操作，通过 `RESOURCE_CONTRIBUTIONS` 提供其他资源定义，通过 `RESOURCE_ALIASES` 声明版本绑定。为操作填写 `tool_name` 后，框架会生成模型工具入口；Bot 的可见工具仍由 Agent 定义选择。
+扩展通过 `@module(resources=定义.resource)` 静态声明操作说明，通过 `OPERATION_CONTRIBUTIONS` 绑定处理者。处理者可以依赖资源目录，目录不依赖处理者的构造。定义与工具共用同一份参数结构；普通静态资源也可在模组声明中提供，依赖配置或模型状态的资源使用 `RESOURCE_CONTRIBUTIONS`，别名通过 `RESOURCE_ALIASES` 声明。为操作填写 `tool_name` 后，框架会生成模型工具入口；Bot 的可见工具仍由 Agent 定义选择。
 
 能力提供者由优先级在启动前选定，准备、构造和生命周期都使用同一份登记权；同优先级冲突会失败。能力全部被替换且没有贡献的模块不运行；部分能力被替换时保留其他端口和贡献。模块可用 `context.is_provider(契约类型)` 判断是否需要准备实现；若构造其他能力时需要读取自己提供的可替换端口，应同时把该端口列入 `requires`，让依赖跟随实际选中的提供者。
 

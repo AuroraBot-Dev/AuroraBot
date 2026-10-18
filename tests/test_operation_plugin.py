@@ -6,6 +6,7 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
@@ -47,7 +48,11 @@ class Echo:
         return OperationResult({"value": request.arguments["value"]})
 
 
-@module(name="lab_example", contributes=(OPERATION_CONTRIBUTIONS, RESOURCE_CONTRIBUTIONS, RESOURCE_ALIASES))
+@module(
+    name="lab_example",
+    contributes=(OPERATION_CONTRIBUTIONS, RESOURCE_CONTRIBUTIONS, RESOURCE_ALIASES),
+    resources=Echo.definition.resource,
+)
 def build(context):
     """声明自己的资源与处理者，不修改内核或内建模块。"""
     context.contribute(OPERATION_CONTRIBUTIONS, Echo())
@@ -85,3 +90,16 @@ def test_plugin_declaration_adds_resource_command_and_tool_without_host_edits(co
             await runtime.world.close()
 
     asyncio.run(scenario())
+
+
+def test_plugin_handler_must_match_its_declared_resource(configured_project: Path) -> None:
+    """同一版本不能宣称一套参数结构却执行另一套实现。"""
+    directory = configured_project / "extensions" / "plugins"
+    directory.mkdir(parents=True)
+    broken = _PLUGIN.replace(
+        "resources=Echo.definition.resource,",
+        'resources=ResourceDescriptor(Echo.definition.ref, "错误定义"),',
+    )
+    (directory / "mismatched.py").write_text(broken, encoding="utf-8")
+    with pytest.raises(ValueError, match="操作实现与声明的资源定义不一致"):
+        assemble_runtime(load_config(configured_project), FakeModel(), output=lambda _: None)
