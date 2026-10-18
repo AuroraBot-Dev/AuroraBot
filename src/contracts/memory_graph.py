@@ -104,6 +104,17 @@ class MemoryRankingRequest:
                 raise ValueError("记忆图交互必须按获知顺序排列")
             previous_cursor, previous_time = event.cursor, event.recorded_at
 
+    def ranked_indices(self, scores: tuple[float, ...]) -> tuple[int, ...]:
+        """在线与离线共用排序，等分时优先最近获知的候选。"""
+        if len(scores) != len(self.candidates) or any(not math.isfinite(score) for score in scores):
+            raise ValueError("记忆策略必须为每个候选返回有限评分")
+        return tuple(
+            sorted(
+                range(len(scores)),
+                key=lambda index: (-scores[index], -self.candidates[index].cursor, self.candidates[index].memory_id),
+            )
+        )
+
 
 def _aware(value: datetime) -> None:
     """所有跨历史边界的时间均带时区。"""

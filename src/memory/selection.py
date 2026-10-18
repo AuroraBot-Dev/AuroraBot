@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -165,12 +164,13 @@ def _rank_candidates(
         graph_interactions(history),
     )
     scores = policy.score(ranking)
-    if len(scores) != len(candidates) or any(not math.isfinite(score) for score in scores):
-        raise ValueError("记忆策略必须为每个候选返回有限评分")
     ranked = [
-        MemoryScore(item.memory_id, score, item.similarity, tuple(sorted(routes[item.memory_id])))
-        for score, item in zip(scores, candidates, strict=True)
+        MemoryScore(
+            candidates[index].memory_id,
+            scores[index],
+            candidates[index].similarity,
+            tuple(sorted(routes[candidates[index].memory_id])),
+        )
+        for index in ranking.ranked_indices(scores)
     ]
-    cursors = {commit.commit_id: commit.cursor for commit in history}
-    ranked.sort(key=lambda item: (-item.score, -cursors[item.memory_id], item.memory_id))
     return ranked, ranking_fingerprint(ranking)

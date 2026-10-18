@@ -18,10 +18,8 @@ def evaluate_policy(policy: MemoryPolicy, episodes: tuple[MemoryEpisode, ...], *
     accuracy = regret = ndcg = recall = 0.0
     for example in examples:
         scores = policy.score(example.request)
-        if len(scores) != len(example.utilities) or any(not math.isfinite(score) for score in scores):
-            raise ValueError("记忆策略没有返回有效完整评分")
         utilities = example.utilities
-        ranked = sorted(range(len(scores)), key=lambda index: (-scores[index], index))
+        ranked = example.request.ranked_indices(scores)
         best = max(utilities)
         accuracy += utilities[ranked[0]] == best
         regret += best - utilities[ranked[0]]

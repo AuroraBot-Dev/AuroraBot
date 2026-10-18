@@ -8,8 +8,12 @@ from datetime import timedelta
 import pytest
 from test_memory_selection import _NOW, _fact
 
+from src.contracts.memory import MemoryRequest
 from src.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
 from src.memory.graph import graph_interactions
+from src.memory.selection import select_memories
+from src.memory_model.dataset import MemoryEpisode, MemoryExample
+from src.memory_model.evaluation import evaluate_policy
 from src.memory_model.rules import RuleMemoryPolicy
 
 
@@ -48,3 +52,26 @@ def test_ranking_input_rejects_result_leakage_and_rule_scores_ignore_history() -
         replace(request, candidates=(replace(candidate, cursor=2),))
     with pytest.raises(ValueError, match="获知顺序"):
         replace(request, cursor=2, interactions=graph_interactions((future, fact)))
+
+
+def test_offline_metrics_use_the_same_tie_choice_as_online_recall() -> None:
+    """等分时旧输入顺序不能让离线报告评价另一条记忆。"""
+    old = _fact("older", "相同内容", 1)
+    new = _fact("newer", "相同内容", 2)
+    candidates = tuple(
+        MemoryCandidate(commit.commit_id, commit.summary, commit.cursor, commit.occurred_at, _NOW)
+        for commit in (old, new)
+    )
+    ranking = MemoryRankingRequest("", (), 2, _NOW, candidates, graph_interactions((old, new)))
+    example = MemoryExample(ranking, (0.0, 1.0), 3, _NOW + timedelta(seconds=1))
+    metrics = evaluate_policy(RuleMemoryPolicy(), (MemoryEpisode("ties", "aurora:bot/test", (example,)),))
+    selected = select_memories(
+        (old, new),
+        (old, new),
+        MemoryRequest(cursor=2, observed_at=_NOW),
+        None,
+        RuleMemoryPolicy(),
+    )
+    assert selected.ranking[0].memory_id == "newer"
+    assert metrics["top1_accuracy"] == 1.0
+    assert metrics["regret"] == 0.0
