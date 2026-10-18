@@ -24,6 +24,7 @@ from src.kernel import BuiltinSource, compose, resolve
 from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from src.memory.config import MemoryConfig
 from src.prompt.config import PromptConfig, PromptsConfig
+from src.rhythm.config import RhythmConfig
 from src.runtime.config import RuntimeConfig
 from src.world.config import StorageConfig, StorageEntry
 
@@ -67,7 +68,8 @@ def _settings(tmp_path: Path) -> _Settings:
             BotConfig: BotConfig("aurora:bot/default"),
             RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
-            CadenceConfig: CadenceConfig(False, "aurora:agent/chat", 5, 3600, 0.25),
+            CadenceConfig: CadenceConfig(False, "aurora:agent/chat", 0.25),
+            RhythmConfig: RhythmConfig(),
             ReactionsConfig: ReactionsConfig(()),
             AppsConfig: AppsConfig(
                 (
@@ -111,6 +113,7 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
         "operations",
         "prompt",
         "resources",
+        "rhythm",
         "runtime",
         "tools",
         "world",

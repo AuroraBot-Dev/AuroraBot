@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,6 +21,7 @@ from src.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
+from src.rhythm.rules import RuleRhythmPolicy
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -130,13 +131,14 @@ class FakeLauncher:
             tools=frozenset(),
             children=frozenset(),
         )
-        return AgentTree.create(
+        tree = AgentTree.create(
             request.tree_id or "root",
             "root",
             definition,
             request.message,
             request.frontier,
         )
+        return tree.complete("root", "测试完成")
 
 
 def _page(after: int, commits: tuple[WorldCommit, ...], *, end: int | None = None) -> WorldStreamPage:
@@ -147,14 +149,18 @@ def test_cadence_evokes_one_tree_per_five_counted_commits() -> None:
     reader = FakeReader([_page(0, tuple(_commit(f"c-{i}", MCP_EVENT_RECEIVED) for i in range(1, 6)))])
     writer = FakeWriter()
     launcher = FakeLauncher()
-    cadence = Cadence(reader, writer, launcher=launcher, agent="aurora:agent/triage", poll_interval=0.01)
+    cadence = Cadence(
+        reader, writer, policy=RuleRhythmPolicy(), launcher=launcher, agent="aurora:agent/triage", poll_interval=0.01
+    )
 
     asyncio.run(cadence.evaluate_once())
 
     assert [request.tree_id for request in launcher.requests] == [launcher.requests[0].tree_id]
     assert launcher.requests[0].agent == "aurora:agent/triage"
     assert cadence.status()["pending"] == 0
-    assert [item.kind for item in writer.inputs] == ["cadence.tree_planned"]
+    assert [item.kind for item in writer.inputs].count("cadence.tree_planned") == 1
+    assert writer.inputs[-1].kind == "cadence.tree_completed"
+    assert all(item.data["decision"]["action"] == "wait" for item in writer.inputs if item.kind == "cadence.decided")
 
 
 def test_cadence_ignores_engine_commits_when_counting() -> None:
@@ -165,7 +171,7 @@ def test_cadence_ignores_engine_commits_when_counting() -> None:
     reader = FakeReader([_page(0, commits)])
     writer = FakeWriter()
     launcher = FakeLauncher()
-    cadence = Cadence(reader, writer, launcher=launcher)
+    cadence = Cadence(reader, writer, policy=RuleRhythmPolicy(), launcher=launcher)
 
     asyncio.run(cadence.evaluate_once())
 
@@ -180,7 +186,7 @@ def test_cadence_tick_and_launch_failure_are_recorded() -> None:
     )
     writer = FakeWriter()
     launcher = FakeLauncher(failure=RuntimeError("launcher broken"))
-    cadence = Cadence(reader, writer, launcher=launcher, tick_every=timedelta(seconds=1))
+    cadence = Cadence(reader, writer, policy=RuleRhythmPolicy(max_idle_seconds=1), launcher=launcher)
 
     async def scenario() -> None:
         await cadence._submit_tick()
@@ -188,7 +194,9 @@ def test_cadence_tick_and_launch_failure_are_recorded() -> None:
 
     asyncio.run(scenario())
 
-    assert [item.kind for item in writer.inputs] == [CADENCE_TICK, "cadence.tree_planned", "cadence.tree_failed"]
+    kinds = [item.kind for item in writer.inputs]
+    assert kinds[0] == CADENCE_TICK
+    assert kinds[-2:] == ["cadence.tree_planned", "cadence.tree_failed"]
     assert writer.inputs[0].scopes == frozenset({CADENCE_SCOPE})
 
 
@@ -196,12 +204,8 @@ def test_cadence_rejects_invalid_bounds() -> None:
     reader = FakeReader([])
     writer = FakeWriter()
 
-    with pytest.raises(ValueError, match="evoke_every"):
-        Cadence(reader, writer, evoke_every=0)
-    with pytest.raises(ValueError, match="tick_every"):
-        Cadence(reader, writer, tick_every=timedelta(0))
     with pytest.raises(ValueError, match="poll_interval"):
-        Cadence(reader, writer, poll_interval=0)
+        Cadence(reader, writer, policy=RuleRhythmPolicy(), poll_interval=0)
 
 
 def test_reactive_rule_launches_with_disclosed_frontier_memory_scope_and_exact_cursor() -> None:
@@ -221,6 +225,7 @@ def test_reactive_rule_launches_with_disclosed_frontier_memory_scope_and_exact_c
     cadence = Cadence(
         reader,
         writer,
+        policy=RuleRhythmPolicy(),
         launcher=launcher,
         reactive_rules=(ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/chat"),),
     )
@@ -258,8 +263,8 @@ def test_group_reactive_rule_requires_configured_name() -> None:
     cadence = Cadence(
         reader,
         FakeWriter(),
+        policy=RuleRhythmPolicy(),
         launcher=launcher,
-        evoke_every=5,
         reactive_rules=(
             ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "aurora:agent/chat", ("小光", "夜曦光")),
         ),

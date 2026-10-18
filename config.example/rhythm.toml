@@ -1,0 +1,6 @@
+[rhythm]
+policy = "aurora:rhythm/model/rules"
+evoke_every = 1
+max_idle_seconds = 3600
+min_check_seconds = 1
+probability_threshold = 0.5

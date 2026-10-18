@@ -6,7 +6,6 @@ from aurora.contracts.config import (
     ConfigSpec,
     TableShape,
     boolean_field,
-    positive_integer_field,
     positive_number_field,
     text_field,
 )
@@ -20,8 +19,6 @@ CADENCE_CONFIG = ConfigSpec[CadenceConfig](
         fields=(
             boolean_field("enabled"),
             text_field("agent"),
-            positive_integer_field("evoke_every"),
-            positive_integer_field("tick_seconds"),
             positive_number_field("poll_seconds"),
         ),
         model=CadenceConfig,

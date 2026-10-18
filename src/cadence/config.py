@@ -11,8 +11,6 @@ class CadenceConfig:
 
     enabled: bool
     agent: str
-    evoke_every: int
-    tick_seconds: int
     poll_seconds: float
 
 

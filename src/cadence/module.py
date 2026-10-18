@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from src.cadence import CADENCE_SCOPE, Cadence, ReactiveRule
+from src.cadence import Cadence, ReactiveRule
 from src.cadence.config import CadenceConfig, ReactionsConfig
 from src.contracts import TREE_LAUNCHER_BINDINGS
 from src.contracts.pkgs.agents import AgentCatalog
+from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.cadence import Cadence as CadencePort
+from src.contracts.pkgs.cadence import RhythmPolicy
 from src.contracts.pkgs.world import WorldReader, WorldWriter
 from src.kernel import ModuleContext, module
 
@@ -44,9 +45,9 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
 @module(
     name="cadence",
     provides=CadencePort,
-    requires=(WorldReader, WorldWriter, AgentCatalog),
+    requires=(WorldReader, WorldWriter, AgentCatalog, BotStateStore, RhythmPolicy),
     contributes=(TREE_LAUNCHER_BINDINGS,),
-    owns_scopes=CADENCE_SCOPE,
+    owns_scopes="*:world/bot/*/cadence",
     activate=activate,
     run=run,
 )
@@ -60,8 +61,8 @@ def build(context: ModuleContext) -> CadencePort:
         context.get(WorldWriter),
         agent=config.agent,
         enabled=config.enabled,
-        evoke_every=config.evoke_every,
-        tick_every=timedelta(seconds=config.tick_seconds),
+        policy=context.get(RhythmPolicy),
+        state=context.get(BotStateStore),
         poll_interval=config.poll_seconds,
         reactive_rules=rules,
     )

@@ -19,7 +19,7 @@ kind = "resource"
 description = "通过 Bot 运行门面直接提交的文本输入。"
 
 [[scope]]
-pattern = "aurora:world/cadence"
+pattern = "*:world/bot/*/cadence"
 kind = "resource"
 description = "节律 tick 与唤起决策的提交，记录 Bot 主动发起认知的理由。"
 
