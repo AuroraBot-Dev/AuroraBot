@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
@@ -97,6 +99,12 @@ class OperationRequest:
         if self.deadline_at is not None and (self.deadline_at.tzinfo is None or self.deadline_at.utcoffset() is None):
             raise ValueError("操作期限必须包含时区")
         object.__setattr__(self, "arguments", freeze_object(self.arguments))
+
+    @property
+    def identity(self) -> str:
+        """在主体和来源内稳定定位请求，字段边界不会因文本内容混淆。"""
+        content = json.dumps((self.bot_id, self.source, self.request_id), ensure_ascii=False, separators=(",", ":"))
+        return f"operation:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
 
 
 @dataclass(frozen=True, slots=True)

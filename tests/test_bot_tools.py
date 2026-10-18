@@ -8,10 +8,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from src.bot.operations import BOT_STATE_TOOL, GOAL_SET_TOOL, WAKE_CANCEL_TOOL, WAKE_SCHEDULE_TOOL, bot_operations
 from src.bot.store import JournalBotState
-from src.bot.tools import BOT_STATE_TOOL, GOAL_SET_TOOL, WAKE_CANCEL_TOOL, WAKE_SCHEDULE_TOOL, bot_tools
 from src.contracts import ToolCall, ToolOutput
 from src.contracts.bot import WakeStatus
+from src.operations.registry import OperationRegistry
+from src.operations.tool import operation_tools
+from src.resources.catalog import ResourceCatalog
 from src.tools import ToolRegistry
 from src.world import SqlAlchemyWorldJournal
 
@@ -27,13 +30,21 @@ _GOAL_ARGUMENTS = {
 }
 
 
+def _tools(state: JournalBotState, world: SqlAlchemyWorldJournal) -> ToolRegistry:
+    """由实际操作定义生成测试工具目录。"""
+    operations = bot_operations(state)
+    resources = ResourceCatalog(operation.definition.resource for operation in operations)
+    registry = OperationRegistry(state.bot_id, operations, resources, world)
+    return ToolRegistry(operation_tools(registry, state.bot_id))
+
+
 def test_bot_can_choose_plan_cancel_and_retry_through_registered_tools(tmp_path: Path) -> None:
     """同一参数模型生成 schema 并验证真实执行输入。"""
 
     async def scenario() -> None:
         world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
         state = JournalBotState(world, "aurora:bot/test")
-        tools = ToolRegistry(bot_tools(state))
+        tools = _tools(state, world)
         try:
             read = await tools.execute(ToolCall("read", BOT_STATE_TOOL))
             assert isinstance(read, ToolOutput)
@@ -76,7 +87,7 @@ def test_invalid_tool_input_cannot_change_subject(tmp_path: Path, invalid: dict[
     async def scenario() -> None:
         world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
         state = JournalBotState(world, "aurora:bot/test")
-        tools = ToolRegistry(bot_tools(state))
+        tools = _tools(state, world)
         try:
             result = await tools.execute(ToolCall("invalid", GOAL_SET_TOOL, {**_GOAL_ARGUMENTS, **invalid}))
             assert isinstance(result, ToolOutput) and result.is_error

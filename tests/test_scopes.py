@@ -26,6 +26,7 @@ _EXPECTED_OWNED_SCOPES = (
     "*:world",
     "*:world/*",
     "*:world/bot/*",
+    "*:world/bot/*/operations",
     "aurora:run/*",
     "aurora:world/cadence",
     "aurora:world/console",

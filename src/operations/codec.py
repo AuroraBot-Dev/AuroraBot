@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import TYPE_CHECKING, Any
 
 from src.contracts.operation import OperationResult, OperationStatus
@@ -49,9 +48,3 @@ def result_data(result: OperationResult) -> dict[str, Any]:
 def read_result(data: Mapping[str, Any]) -> OperationResult:
     """恢复一次已经持久确认的调用结果。"""
     return OperationResult(data["data"], OperationStatus(data["status"]), data["message"])
-
-
-def request_prefix(request: OperationRequest) -> str:
-    """请求身份在所属主体与来源内唯一，避免外部名称碰撞。"""
-    content = f"{request.bot_id}\n{request.source}\n{request.request_id}"
-    return f"operation:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"

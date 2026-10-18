@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING
 
 from src.bot.clock import PersistentBotClock
 from src.bot.config import BotConfig
+from src.bot.operations import bot_operations
 from src.bot.store import JournalBotState
-from src.bot.tools import bot_tools
-from src.contracts import TOOL_CONTRIBUTIONS, TREE_LAUNCHER_BINDINGS
+from src.contracts import TREE_LAUNCHER_BINDINGS
+from src.contracts.operation import OPERATION_CONTRIBUTIONS
 from src.contracts.pkgs.bot import BotClock, BotStateStore
 from src.contracts.pkgs.world import WorldJournal
 from src.kernel import ModuleContext, module
@@ -31,7 +32,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     name="bot",
     provides=(BotStateStore, BotClock),
     requires=WorldJournal,
-    contributes=(TOOL_CONTRIBUTIONS, TREE_LAUNCHER_BINDINGS),
+    contributes=(OPERATION_CONTRIBUTIONS, TREE_LAUNCHER_BINDINGS),
     owns_scopes="*:world/bot/*",
     activate=activate,
     run=run,
@@ -44,8 +45,8 @@ def build(context: ModuleContext) -> BotStateStore:
     clock = PersistentBotClock(state, world)
     context.provide(BotClock, clock)
     context.contribute(TREE_LAUNCHER_BINDINGS, clock.bind_launcher)
-    for tool in bot_tools(state):
-        context.contribute(TOOL_CONTRIBUTIONS, tool)
+    for operation in bot_operations(state):
+        context.contribute(OPERATION_CONTRIBUTIONS, operation)
     return state
 
 

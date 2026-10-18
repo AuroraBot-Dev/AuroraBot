@@ -11,7 +11,7 @@ from jsonschema import Draft202012Validator
 
 from src.contracts import ToolScopes, WorldFrontier
 from src.contracts.operation import OperationKind, OperationResult, OperationStatus
-from src.operations.codec import read_reference, read_result, reference_data, request_data, request_prefix, result_data
+from src.operations.codec import read_reference, read_result, reference_data, request_data, result_data
 from src.utils import get_logger
 from src.utils.serialization import thaw_json
 
@@ -84,7 +84,7 @@ class OperationRegistry:
             raise ValueError("操作请求不属于当前 Bot")
         async with self._lock:
             await self._world.initialize()
-            prefix = request_prefix(request)
+            prefix = request.identity
             previous = await self._world.commit(f"{prefix}:requested")
             if previous is not None:
                 return await self._resume(request, previous)
@@ -103,7 +103,7 @@ class OperationRegistry:
         """重试使用已冻结目标；结果未知的非幂等命令不自动重放。"""
         if previous.data["request"] != request_data(request):
             raise ValueError("请求身份已被不同操作内容使用")
-        receipt = await self._world.commit(f"{request_prefix(request)}:result")
+        receipt = await self._world.commit(f"{request.identity}:result")
         if receipt is not None:
             return read_result(receipt.data)
         resolved = previous.data["resolved"]
@@ -157,7 +157,7 @@ class OperationRegistry:
     async def _record_request(self, request: OperationRequest, resolved: ResourceRef | None) -> None:
         """在任何领域效果发生前写入请求和冻结后的目标。"""
         await self._world.append_commit(
-            commit_id=f"{request_prefix(request)}:requested",
+            commit_id=f"{request.identity}:requested",
             kind="operation.requested",
             source=request.source,
             summary=f"收到{request.kind.value}操作：{request.target.key}",
@@ -172,7 +172,7 @@ class OperationRegistry:
     async def _record_result(self, request: OperationRequest, result: OperationResult) -> OperationResult:
         """结果作为新事实回到主体世界，回执可直接用于幂等恢复。"""
         await self._world.append_commit(
-            commit_id=f"{request_prefix(request)}:result",
+            commit_id=f"{request.identity}:result",
             kind=f"operation.{result.status.value}",
             source="operations",
             summary=f"操作结果 {result.status.value}：{request.target.key}",
