@@ -1,17 +1,12 @@
-"""域注册表契约：世界分区的所有者、种类与语义。
+"""Bot 世界域的归属、分类与声明匹配。
 
-域（scope）是世界的分区键：一次提交声明它属于哪些域，一个节点持有它已观察到每个域的序号。
-本模块只描述**域本身**——谁拥有它、它是哪一类、它是什么。
-它不含时序语义；序号与前沿仍由 ``src.contracts.world`` 承载。
-
-契约层只依赖自身，因此这里只支持域命名实际需要的三种模式：精确名、
-``<前缀>:*`` 尾部通配（``aurora:run:*``）、以及 ``*:<path>`` 的任意命名空间通配
-（``*:world*``——扩展的 package 在发现前不可知，注册表无法逐个列举）。
-完整的 gitignore 风格模式引擎属于 ``src.utils.patterns``，不在本层复制。
+命名空间使用确定名称或 ``*``；路径中的每个 ``*`` 匹配至少一个字符，可以跨越 ``/``。
+其余字符按字面匹配。目录按声明顺序裁决，具体声明应放在通用声明之前。
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -19,8 +14,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-_WILDCARD_SUFFIX = ":*"
-_NAMESPACE_WILDCARD = "*:"
 _NAMESPACE_ANY = "*"
 
 
@@ -40,10 +33,14 @@ class ScopeDeclaration:
     description: str
 
     def __post_init__(self) -> None:
+        """声明需要明确命名空间与路径，路径可以包含非空通配片段。"""
         if not isinstance(self.pattern, str) or not self.pattern.strip() or self.pattern != self.pattern.strip():
             raise ValueError("域声明需要去空白后的非空模式")
-        if ":" not in self.pattern:
+        owner, separator, path = self.pattern.partition(":")
+        if not separator or not owner or not path:
             raise ValueError(f"域声明必须带所有者命名空间：{self.pattern!r}")
+        if "*" in owner and owner != _NAMESPACE_ANY:
+            raise ValueError("域声明的命名空间只能是完整名称或 *")
         if not isinstance(self.kind, ScopeKind):
             raise ValueError(f"域声明需要 ScopeKind：{self.pattern!r}")
         if not self.description.strip():
@@ -55,25 +52,18 @@ class ScopeDeclaration:
         return self.pattern.partition(":")[0]
 
     def matches(self, scope: str) -> bool:
-        """匹配精确域、``<前缀>:*`` 一族域，或 ``*:<path>`` 的任意命名空间。
-
-        第三种形式是扩展域需要的：每个 App 拥有 ``<package>:world``，
-        而 package 在发现前并不可知，注册表无法逐个列举。
-        """
-        if self.pattern.startswith(_NAMESPACE_WILDCARD):
-            _, separator, path = scope.partition(":")
-            return bool(separator) and _matches_path(self.pattern[len(_NAMESPACE_WILDCARD) :], path)
-        return _matches_path(self.pattern, scope)
+        """命名空间与路径分开匹配，通配符不会跨过归属分隔符。"""
+        owner, separator, path = scope.partition(":")
+        if not separator or not owner or not path:
+            return False
+        return self.owner in (_NAMESPACE_ANY, owner) and _matches_path(self.pattern.partition(":")[2], path)
 
 
 def _matches_path(pattern: str, value: str) -> bool:
+    """只解释星号，避免把路径中的括号和其他字符当成正则语法。"""
     if pattern == value:
         return True
-    if pattern.endswith("*"):
-        # 尾部通配要求**至少还有一段**：``aurora:run/`` 不是合法域
-        prefix = pattern[:-1]
-        return value.startswith(prefix) and len(value) > len(prefix)
-    return False
+    return re.fullmatch(re.escape(pattern).replace(r"\*", ".+"), value) is not None
 
 
 @dataclass(frozen=True, slots=True)

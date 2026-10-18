@@ -66,6 +66,33 @@ def test_declaration_matches_exact_names_and_one_wildcard_family() -> None:
     assert not exact.matches("aurora:world/console:extra")
 
 
+def test_middle_wildcards_classify_real_bot_subdomains_without_overmatching() -> None:
+    """实际 Bot 身份填入后仍能匹配具体域声明，邻近域不会被误分类。"""
+    catalog = _catalog(
+        ScopeDeclaration("*:world/bot/*/operations", ScopeKind.RUN, "操作回执台账"),
+        ScopeDeclaration("*:world/bot/*/cadence", ScopeKind.RESOURCE, "主体节律"),
+        ScopeDeclaration("*:world/*", ScopeKind.RESOURCE, "世界域"),
+    )
+    assert catalog.classify("aurora:world/bot/default/operations") is ScopeKind.RUN
+    assert catalog.classify("home:world/bot/family/alice/operations") is ScopeKind.RUN
+    assert catalog.describe("home:world/bot/alice/cadence") == "主体节律"
+    assert catalog.classify("home:world/bot/alice/operations-archive") is ScopeKind.RESOURCE
+    declaration = catalog.declarations[0]
+    assert not declaration.matches("home:world/bot//operations")
+    assert not declaration.matches(":world/bot/alice/operations")
+    assert not declaration.matches("home:other:world/bot/alice/operations")
+
+
+def test_scope_wildcards_keep_other_characters_literal() -> None:
+    """域路径的方括号不表示字符集合，命名空间不做局部模糊匹配。"""
+    declaration = ScopeDeclaration("home:world/[room]/*", ScopeKind.RESOURCE, "明确房间")
+    assert declaration.matches("home:world/[room]/lamp")
+    assert not declaration.matches("home:world/r/lamp")
+    assert not declaration.matches("other:world/[room]/lamp")
+    with pytest.raises(ValueError, match="完整名称或"):
+        ScopeDeclaration("home*:world", ScopeKind.RESOURCE, "模糊归属")
+
+
 @pytest.mark.parametrize(
     "declaration",
     [
