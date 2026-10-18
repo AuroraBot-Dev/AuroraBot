@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -54,6 +55,7 @@ class AuroraRuntime:
         self.presenter = TreeTextPresenter(output)
         self.terminal = TerminalCommandDispatcher(self.run_from_commit)
         self._trees: dict[str, AgentTree] = {}
+        self._cognition_lock = asyncio.Lock()
 
     def create_tree(
         self,
@@ -106,6 +108,12 @@ class AuroraRuntime:
         return await self._run_request(request, echo=True)
 
     async def _run_request(self, request: TreeLaunchRequest, *, echo: bool = False) -> AgentTree:
+        """让主体的主要认知有序执行，外部事实仍可持续提交。"""
+        async with self._cognition_lock:
+            return await self._execute_request(request, echo=echo)
+
+    async def _execute_request(self, request: TreeLaunchRequest, *, echo: bool = False) -> AgentTree:
+        """构建并记录一棵具有独立身份的认知树。"""
         tree = AgentTree.create(
             request.tree_id or uuid4().hex,
             self.root.node_id,

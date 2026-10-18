@@ -10,7 +10,7 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import EnvironmentEvent, TreeLaunchRequest, WorldCommit, WorldFrontier
+from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, TreeLaunchRequest, WorldCommit, WorldFrontier
 from src.runtime import assemble_runtime
 from src.world import SqlAlchemyWorldJournal
 
@@ -94,5 +94,49 @@ def test_event_entry_does_not_skip_commits_arriving_after_its_trigger(configured
             assert any("稍后到达的事实" in content for content in disclosed)
         finally:
             await journal.close()
+
+    asyncio.run(scenario())
+
+
+def test_primary_cognition_is_serial_while_environment_inputs_remain_available(configured_project: Path) -> None:
+    """两次认知有序执行，等待模型期间仍能记录环境变化。"""
+
+    async def scenario() -> None:
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class BlockingModel(FakeModel):
+            """等待显式放行，以观察第二次认知的执行时机。"""
+
+            async def complete(self, request: ModelRequest) -> ChatMessage:
+                """首轮暂停，后续按确定顺序完成。"""
+                self.requests.append(request)
+                started.set()
+                await release.wait()
+                return ChatMessage.assistant("完成")
+
+        model = BlockingModel()
+        runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
+        tasks: list[asyncio.Task[object]] = []
+        try:
+            first = asyncio.create_task(runtime.run("第一次认知", tree_id="first"))
+            tasks.append(first)
+            await started.wait()
+            second = asyncio.create_task(runtime.launch_tree(TreeLaunchRequest("第二次认知", tree_id="second")))
+            tasks.append(second)
+            await asyncio.sleep(0)
+            assert len(model.requests) == 1
+            event = EnvironmentEvent(
+                "during-inference", "test", "test:world", "message", datetime(2026, 10, 18, tzinfo=UTC), "环境继续变化"
+            )
+            commit = await runtime.submit_event(event)
+            assert await runtime.world.commit(commit.commit_id) == commit
+            release.set()
+            await asyncio.gather(*tasks)
+            assert {tree.tree_id for tree in runtime._trees.values()} == {"first", "second"}
+        finally:
+            release.set()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await runtime.world.close()
 
     asyncio.run(scenario())
