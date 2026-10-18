@@ -58,8 +58,10 @@ _TOOL_SUMMARY_ACTIONS = {
 class EngineWorldEffects:
     """只构造并追加 engine 的世界提交，不改变 AgentTree。"""
 
-    def __init__(self, world: WorldJournal) -> None:
+    def __init__(self, world: WorldJournal, *, bot_id: str = "aurora:bot/default") -> None:
+        """绑定世界写入端口和实际运行归属。"""
         self._world = world
+        self._bot_id = bot_id
 
     async def _append(
         self,
@@ -92,6 +94,7 @@ class EngineWorldEffects:
             data={
                 "tree_id": tree.tree_id,
                 "caused_by": tree.caused_by,
+                "bot_id": self._bot_id,
                 "root_id": tree.root_id,
                 "definition_id": root.definition_id,
                 "focus_goal_ids": list(root.focus_goal_ids),
@@ -123,6 +126,7 @@ class EngineWorldEffects:
                 "tree_id": tree.tree_id,
                 "node_id": node.node_id,
                 "model": node.model,
+                "bot_id": self._bot_id,
                 "message_count": len(request.messages),
                 "tool_count": len(request.tools),
                 "memory": exposure_data(memory) if memory is not None else None,

@@ -62,7 +62,9 @@ class AgentTreeRunner:
         self._agents = agents
         self._tools = tools
         self._world = world
-        self._effects: EngineEffectSink = EngineWorldEffects(world) if world is not None else NullEffectSink()
+        self._effects: EngineEffectSink = (
+            EngineWorldEffects(world, bot_id=bot_id) if world is not None else NullEffectSink()
+        )
         self._memory = memory
         self._bot_id = bot_id
         self._max_depth = max_depth
