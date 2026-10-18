@@ -164,6 +164,10 @@ class Cadence:
                 self._state = replace(self._state, cursor=page.end)
                 commit = page.commits[0]
                 if not _counts(commit):
+                    if not self._has_decision or self._now() >= self._state.next_check_at:
+                        tick = await self._submit_tick()
+                        if await self._evaluate(tick):
+                            return
                     continue
                 rule = next((item for item in self.reactive_rules if item.matches(commit)), None)
                 self._state = replace(
@@ -346,6 +350,7 @@ def _reactive_message(commit: WorldCommit) -> str:
     event_data = commit.data.get("data")
     details = {
         "source": commit.source,
+        "occurred_at": commit.occurred_at.isoformat(),
         "summary": commit.summary,
         "event_kind": commit.data.get("event_kind"),
         "event_data": event_data if isinstance(event_data, Mapping) else {},

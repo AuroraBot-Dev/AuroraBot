@@ -151,6 +151,39 @@ def test_policy_revision_change_clears_incompatible_hidden_state(tmp_path: Path)
     asyncio.run(scenario())
 
 
+def test_internal_bookkeeping_cannot_postpone_a_due_time_check(tmp_path: Path) -> None:
+    """内部日志持续到达时，计时判断仍可按期获得一次推理机会。"""
+
+    async def scenario() -> None:
+        world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        await world.initialize()
+        clock = Clock()
+        launcher = FakeLauncher()
+        cadence = Cadence(world, world, policy=RuleRhythmPolicy(max_idle_seconds=60), launcher=launcher, now=clock)
+        try:
+            await cadence.evaluate_once()
+            await world.append_commit(
+                commit_id="engine-noise",
+                kind="engine.model.completed",
+                source="engine",
+                summary="内部记录",
+                scopes=frozenset({"test:run"}),
+                based_on=WorldFrontier(),
+                data={},
+            )
+            previous_head = await world.cursor()
+            clock.value += timedelta(seconds=60)
+            await cadence.evaluate_once()
+            records = await world.commits(cadence.scope, 0, 20)
+            decision = next(commit for commit in records if commit.kind == "cadence.tree_planned")
+            assert decision.data["observation"]["cursor"] < previous_head
+            assert len(launcher.requests) == 1
+        finally:
+            await world.close()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("already_started", [False, True])
 def test_restart_delivers_only_cognition_that_was_confirmed_not_started(tmp_path: Path, already_started: bool) -> None:
     """崩溃窗口以引擎记录核对，已经开始的认知不会被重复启动。"""
