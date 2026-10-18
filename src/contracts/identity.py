@@ -5,6 +5,9 @@
 
 标签（tag）把「一组 ID 或模式」命名化：声明处写一次，引用处写 ``#<namespace>:<path>``。
 标签可引用其它标签，展开时保留书写顺序，因此「最后匹配者胜」的语义不变。
+
+path 第一段表示工具、Agent、提示词或平台的资源种类，各自维护自己的目录。
+提示词区分全局 system 片段与 Agent 局部片段；世界域为 ``<owner>:world``，可用 ``/`` 细分。
 """
 
 from __future__ import annotations
@@ -21,17 +24,14 @@ if TYPE_CHECKING:
 TAG_PREFIX = "#"
 DEFAULT_NAMESPACE = "aurora"
 
-#: 物种前缀：path 的第一段。统一的是语法与所有者，不是注册表。
 TOOL_PATH_PREFIX = "tool/"
 AGENT_PATH_PREFIX = "agent/"
 PROMPT_PATH_PREFIX = "prompt/"
 PLATFORM_PATH_PREFIX = "platform/"
 
-#: 提示词的两种 kind：全局 system 片段与 Agent 局部提示词。
 SYSTEM_PROMPT_PATH_PREFIX = f"{PROMPT_PATH_PREFIX}system/"
 AGENT_PROMPT_PATH_PREFIX = f"{PROMPT_PATH_PREFIX}agent/"
 
-#: 一个所有者拥有的世界域：``<owner>:world``，可再分 ``/子域``。
 WORLD_PATH = "world"
 WORLD_SCOPE_PATTERN = f"*:{WORLD_PATH}"
 WORLD_SUB_SCOPE_PATTERN = f"*:{WORLD_PATH}/*"

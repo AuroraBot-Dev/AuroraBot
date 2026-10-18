@@ -10,6 +10,7 @@
 必须落在**同一个世界对象**上——Bot 不能经历一个自己写不进去的世界。
 
 这里只声明，不构造也不校验：契约层是叶子，校验需要装配结果。
+LOOP_OPERATIONS 按观察、回忆、记录效果、行动的顺序列出操作。
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ OBSERVE = LoopOperation(
 RECALL = LoopOperation(
     name="recall",
     capability=MemoryReader,
-    responsibility="把近期世界活动压成一次可注入的只读快照",
+    responsibility="按冻结的获知边界召回相关经历与任务恢复状态，形成显式上下文输入",
     invariants=(
         "只读：不写世界线，也不保存另一套认知运行状态",
         "运行域（kind=run）默认不进入快照",
@@ -71,10 +72,8 @@ ACT = LoopOperation(
     ),
 )
 
-#: 循环的四个操作，按一次运行里的自然顺序排列。
 LOOP_OPERATIONS = (OBSERVE, RECALL, EFFECT, ACT)
 
-#: Observe 与 Effect 必须由同一个对象提供：世界线只能有一个权威。
 WORLD_PORTS = (WorldReader, WorldWriter, WorldJournal)
 
 __all__ = [

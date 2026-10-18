@@ -1,4 +1,7 @@
-"""MCP 业务 scope 与模板的窄校验。"""
+"""MCP 业务域与模板校验。
+
+扩展以自己的命名空间拥有世界域，域声明模式允许发现前尚未知晓的扩展包名。
+"""
 
 from __future__ import annotations
 
@@ -14,7 +17,6 @@ _PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _MAX_SCOPE_LENGTH = 256
 _CONTROL_CHARACTER_LIMIT = 32
 
-#: 扩展域在域注册表里的声明形状：命名空间即所有者，package 在发现前不可知。
 SCOPE_PATTERN = WORLD_SCOPE_PATTERN
 SUB_SCOPE_PATTERN = WORLD_SUB_SCOPE_PATTERN
 

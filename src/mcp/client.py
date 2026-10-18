@@ -278,6 +278,7 @@ class SdkMcpClient:
             _logger.info("MCP SDK client 已关闭")
 
     async def _watch_catalog(self) -> None:
+        """持续消费目录订阅，同帧通知由 SDK 的消息处理器交付观察者。"""
         assert self._watch_ready is not None
         try:
             async with self._client.listen(tools_list_changed=True) as subscription:
@@ -287,7 +288,6 @@ class SdkMcpClient:
                 async for event in subscription:
                     if not isinstance(event, ToolsListChanged):
                         raise RuntimeError("MCP tools_list_changed 订阅返回了无关事件")
-                    # SDK 会把同一帧同步 tee 给 message_handler；这里只负责持续 drain。
                 raise RuntimeError("MCP tools_list_changed 订阅提前结束")
         except asyncio.CancelledError:
             if not self._watch_ready.done():

@@ -3,6 +3,7 @@
 模式的语言跟随 ID 的命名空间语法：``<namespace>:<path>``。
 命名空间用 ``.`` 分层，path 用 ``/`` 分层，``:`` 连接两者；
 ``*`` 与 ``?`` 只在本层内匹配，``**`` 跨全部层级。
+没有 ``:`` 的模式按命名空间前缀理解，用 ``.`` 划分层级。
 """
 
 from __future__ import annotations
@@ -24,11 +25,8 @@ _ID_SEPARATOR = ":"
 _NAMESPACE_LEVEL = "."
 _PATH_LEVEL = "/"
 
-# `*` / `?` 不跨的字符取决于它落在哪一段。ID 的层级语法是三段式的：
-# 命名空间用 `.` 分层，`:` 分隔命名空间与 path，path 用 `/` 分层。
 _NAMESPACE_BLOCKED = f"{_NAMESPACE_LEVEL}{_ID_SEPARATOR}"
 _PATH_BLOCKED = _PATH_LEVEL
-# 没有 `:` 的模式按命名空间前缀理解，保持 `.` 分层的老语义。
 _UNSCOPED_BLOCKED = _NAMESPACE_LEVEL
 
 

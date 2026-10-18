@@ -5,13 +5,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, cast, overload
-
-
-class _Msg(StrEnum):
-    INVALID_JSON_OBJECT = "Invalid JSON object format"
 
 
 def freeze_json(value: object) -> object:
@@ -41,18 +36,13 @@ def thaw_json(value: object) -> object:
 
 
 def extract_json_from_text(raw: str) -> dict[str, object] | None:
-    """从文本中提取 JSON 对象。
-
-    均失败返回 None。
-    """
+    """移除代码围栏并提取 JSON 对象，允许修复未转义的控制字符，失败返回空值。"""
     if not raw or not raw.strip():
         return None
     text = raw.strip()
 
-    # 移除可能的 "```json" 和 "```"
     text = re.sub(r"```json\s*|```\s*", "", text)
 
-    # 尝试解析 JSON 字符串
     try:
         result = json.loads(text)
         if isinstance(result, dict):
@@ -60,7 +50,6 @@ def extract_json_from_text(raw: str) -> dict[str, object] | None:
     except json.JSONDecodeError:
         pass
 
-    # 尝试匹配首尾花括号
     try:
         result = _safe_parse_json_object(text)
         if isinstance(result, dict):
@@ -68,7 +57,6 @@ def extract_json_from_text(raw: str) -> dict[str, object] | None:
     except ValueError:
         pass
 
-    # 尝试转义换行后重试
     fixed = _fix_json_multiline(text)
     if fixed != text:
         return extract_json_from_text(fixed)
@@ -111,12 +99,9 @@ def _fix_json_multiline(text: str) -> str:
 
 
 def _safe_parse_json_object(content: str) -> object:
-    """从文本中提取首个完整 JSON 对象
-
-    找不到时抛出 ValueError
-    """
+    """截取首个左花括号与最后一个右花括号之间的 JSON，格式错误时拒绝解析。"""
     left = content.find("{")
     right = content.rfind("}")
     if left == -1 or right == -1 or right <= left:
-        raise ValueError(_Msg.INVALID_JSON_OBJECT)
+        raise ValueError("文本中没有完整的 JSON 对象")
     return json.loads(content[left : right + 1])

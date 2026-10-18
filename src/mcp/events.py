@@ -1,4 +1,7 @@
-"""MCP 业务事件扩展、进程运行期事件 kind 与启动门闩。"""
+"""MCP 业务事件扩展、进程运行期事件与启动门闩。
+
+连接中断和目录变化描述本进程状态；跨包业务事件类型由公共契约声明。
+"""
 
 from __future__ import annotations
 
@@ -16,7 +19,6 @@ if TYPE_CHECKING:
 WORLD_EVENTS_EXTENSION = "org.aurorabot/world-events"
 WORLD_EVENT_NOTIFICATION = "notifications/org.aurorabot/world-events/event"
 
-# 进程运行期提交的生命周期事件 kind；mcp.event.received 是跨包业务事件，定义在 src.contracts。
 MCP_APP_DISCONNECTED = "mcp.app.disconnected"
 MCP_CATALOG_CHANGED = "mcp.catalog.changed"
 
