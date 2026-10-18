@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 import torch
 from rhythm_support import make_episode
+from test_assembly import FakeModel
 
+from aurora import load_config
+from aurora.configs.rhythm import RHYTHM_CONFIG
+from src.contracts import EnvironmentEvent
+from src.contracts.pkgs.cadence import Cadence, RhythmPolicy
+from src.rhythm.config import RhythmConfig
 from src.rhythm.dataset import RhythmEpisode, RhythmExample
 from src.rhythm.gru import GRURhythmPolicy, load_policy
 from src.rhythm.training import RhythmTrainingResult, train
+from src.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -96,3 +104,32 @@ def test_training_accounts_for_utility_magnitude_not_only_label_counts() -> None
     result = train(training, validation, hidden_size=_HIDDEN_SIZE, epochs=80, learning_rate=0.03)
     assert result.metrics["regret"] < result.baseline_metrics["regret"]
     assert result.losses[-1] < result.losses[0]
+
+
+def test_configured_bot_uses_real_weights_and_persists_gru_state(
+    configured_project: Path, learned: RhythmTrainingResult
+) -> None:
+    """实际组合选择导出的模型，世界日志记录同一版本与循环状态。"""
+    path = configured_project / "rhythm.pt"
+    learned.save(path)
+    config = load_config(configured_project).with_value(
+        RHYTHM_CONFIG, RhythmConfig(policy="aurora:rhythm/model/gru", weights="rhythm.pt")
+    )
+    runtime = assemble_runtime(config, FakeModel(), output=lambda _: None)
+
+    async def scenario() -> None:
+        try:
+            policy = runtime.assembly.get(RhythmPolicy)
+            assert policy.ref == load_policy(path).ref
+            await runtime.submit_event(EnvironmentEvent("first", "test", "test:world", "message", _NOW, "变化"))
+            cadence = runtime.assembly.get(Cadence)
+            await cadence.evaluate_once()
+            records = await runtime.world.commits("aurora:world/bot/default/cadence", 0, 20)
+            decisions = [record for record in records if "decision" in record.data]
+            assert decisions[-1].data["policy"]["revision"] == policy.ref.revision
+            assert len(decisions[-1].data["state"]["hidden"]) == _HIDDEN_SIZE
+            assert decisions[-1].data["policy_parameters"] == dict(policy.parameters)
+        finally:
+            await runtime.world.close()
+
+    asyncio.run(scenario())

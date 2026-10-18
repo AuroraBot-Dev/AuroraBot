@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from src.contracts import TreeLaunchRequest, WorldFrontier
 from src.contracts.resource import ResourceKey, ResourceRef
-from src.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from src.contracts.rhythm import RhythmDecision, RhythmObservation
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +28,17 @@ class CadenceState:
     reactive_commit: str | None = None
     reactive_agent: str | None = None
     failed_runs: int = 0
+
+    def __post_init__(self) -> None:
+        """在构造边界校验自己的计数、时间和数值状态。"""
+        if min(self.cursor, self.pending, self.failed_runs) < 0:
+            raise ValueError("节律状态计数不能小于零")
+        for value in (self.last_deliberated_at, self.next_check_at):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("节律状态时间必须包含时区")
+        if any(not math.isfinite(value) for value in self.hidden):
+            raise ValueError("节律隐状态必须由有限数值组成")
+        object.__setattr__(self, "hidden", tuple(self.hidden))
 
     def data(self) -> dict[str, Any]:
         """状态只使用可稳定编码的基础类型。"""
@@ -43,7 +56,7 @@ class CadenceState:
     @classmethod
     def restore(cls, data: Mapping[str, Any]) -> CadenceState:
         """恢复时核对时间与状态数值，日志损坏时明确失败。"""
-        state = cls(
+        return cls(
             data["cursor"],
             data["pending"],
             datetime.fromisoformat(data["last_deliberated_at"]),
@@ -51,12 +64,8 @@ class CadenceState:
             tuple(data["hidden"]),
             data["reactive_commit"],
             data["reactive_agent"],
-            data["failed_runs"],
+            data.get("failed_runs", 0),
         )
-        RhythmObservation("aurora:bot/validation", state.last_deliberated_at, state.cursor, state.pending, 0)
-        decision = RhythmDecision(RhythmAction.WAIT, state.next_check_at, "恢复检查")
-        RhythmPrediction(decision, state.hidden)
-        return state
 
 
 def observation_data(observation: RhythmObservation) -> dict[str, Any]:

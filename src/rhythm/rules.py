@@ -30,6 +30,11 @@ class RuleRhythmPolicy:
         """基线策略也有可审计的版本身份。"""
         return ResourceRef(ResourceKey.parse("aurora:rhythm/model/rules"), "1")
 
+    @property
+    def parameters(self) -> dict[str, float | int]:
+        """基线参数随每次判断进入持久记录。"""
+        return {"evoke_every": self.evoke_every, "max_idle_seconds": self.max_idle_seconds}
+
     def evaluate(self, observation: RhythmObservation, hidden: tuple[float, ...] = ()) -> RhythmPrediction:
         """等待结果和唤醒结果共享同一契约。"""
         if hidden:

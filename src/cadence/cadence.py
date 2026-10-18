@@ -225,6 +225,7 @@ class Cadence:
             data={
                 "schema_version": 1,
                 "policy": reference_data(self._policy.ref),
+                "policy_parameters": dict(self._policy.parameters),
                 "observation": observation_data(observation),
                 "decision": decision_data(decision),
                 "state": state.data(),
@@ -294,6 +295,7 @@ class Cadence:
             data={
                 "schema_version": 1,
                 "policy": reference_data(self._policy.ref),
+                "policy_parameters": dict(self._policy.parameters),
                 "state": state.data(),
                 "tree_id": request.tree_id,
                 "status": status,
@@ -309,7 +311,9 @@ class Cadence:
         if commit.data["schema_version"] != 1:
             raise ValueError("不支持的节律日志版本")
         state = CadenceState.restore(commit.data["state"])
-        if read_reference(commit.data["policy"]) != self._policy.ref:
+        if read_reference(commit.data["policy"]) != self._policy.ref or commit.data.get("policy_parameters") != dict(
+            self._policy.parameters
+        ):
             state = replace(state, hidden=(), next_check_at=self._now())
         self._state = state
         self._has_decision = True

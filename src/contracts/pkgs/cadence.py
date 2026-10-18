@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     import asyncio
+    from collections.abc import Mapping
 
     from src.contracts.pkgs.runtime import TreeLauncher
     from src.contracts.resource import ResourceRef
@@ -18,6 +19,11 @@ class RhythmPolicy(Protocol):
     @property
     def ref(self) -> ResourceRef:
         """返回当前策略或权重的确定资源版本。"""
+        ...
+
+    @property
+    def parameters(self) -> Mapping[str, float | int]:
+        """返回会影响判断的有效参数，供回放和恢复校验。"""
         ...
 
     def evaluate(self, observation: RhythmObservation, hidden: tuple[float, ...] = ()) -> RhythmPrediction:

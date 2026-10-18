@@ -10,7 +10,7 @@ from aurora.contracts.config import (
 )
 from src.rhythm.config import RhythmConfig
 
-CONFIG_SPEC = ConfigSpec[RhythmConfig](
+RHYTHM_CONFIG = ConfigSpec[RhythmConfig](
     name="rhythm",
     path="config/rhythm.toml",
     shape=TableShape(
@@ -26,3 +26,5 @@ CONFIG_SPEC = ConfigSpec[RhythmConfig](
         model=RhythmConfig,
     ),
 )
+
+CONFIG_SPEC = RHYTHM_CONFIG

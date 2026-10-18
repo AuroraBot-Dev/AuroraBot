@@ -46,6 +46,11 @@ class RecurrentPolicy:
         """可切换版本以检验隐状态隔离。"""
         return ResourceRef(ResourceKey.parse("test:rhythm/model/recurrent"), self.revision)
 
+    @property
+    def parameters(self) -> dict[str, float | int]:
+        """测试策略没有可变推理参数。"""
+        return {}
+
     def evaluate(self, observation: RhythmObservation, hidden: tuple[float, ...] = ()) -> RhythmPrediction:
         """用明确状态计数模拟循环模型，时间到达后分配推理机会。"""
         self.seen.append(hidden)
