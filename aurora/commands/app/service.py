@@ -125,6 +125,7 @@ class AppManager:
         """生成源码安装计划并暂存 clone；退出上下文时清理 staging。
 
         用户提供的 package 与 command 在请求 GitHub 前校验。
+        下载前核对路径和清单，提交前再次核对目标，避免执行已经失效的计划。
         """
         requested_name = check_requested_name(repository)
         requested_package = check_user_package(package) if package is not None else None
@@ -132,11 +133,9 @@ class AppManager:
         remote = self.source.repository(requested_name)
         full_name = check_admission(remote)
         path = install_path(full_name)
-        # 下载前先查路径；提交前会重查。
         check_final_path(self.store.project_root, path)
         resolved = requested_package if requested_package is not None else derive_package(full_name)
         check_package_collision(self.store, resolved)
-        # 先查清单再 clone，避免下载后才发现仓库未声明启动方式。
         if requested_command is not None:
             candidate = user_candidate(requested_command)
         else:
@@ -198,9 +197,9 @@ class AppManager:
         安装必须经过连接检查；``--disabled`` 只控制下次启动是否加载。
 
         ``--yes`` 只跳过确认，不跳过准入、冲突与连接检查。
+        注册表必须已由 setup 建立。连接检查在暂存目录执行，失败时正式目录与注册表不变。
+        发现的工具只返回到本次结果，运行期会重新发现。
         """
-        # 注册表是 aurora setup 生成的个人配置，install 不凭空造一个。这一句必须
-        # 在 clone 之前：等到提交时才发现，用户就白等了一整次 clone。
         self.store.require_registry()
         with self.prepare_install(
             repository,
@@ -213,7 +212,6 @@ class AppManager:
             plan = prepared.plan
             if not yes and not (confirm or _default_confirm)(plan):
                 return None
-            # 还在 staging 里，失败时正式目录和注册表都没有变化。
             staged = prepared.staging.root.joinpath(*subdir_parts(plan.repository_subdir))
             handshake = process_target(
                 plan.package, plan.command, working_dir=staged, hints=install_hints(plan.command)
@@ -221,7 +219,6 @@ class AppManager:
             inspection = require_contribution(
                 self.verifier.inspect(handshake), handshake, produces_events=plan.event_mode == "world_events"
             )
-            # 工具目录只留在本次结果里；运行期会重新发现。
             plan = replace(plan, tools=inspection.tool_ids)
             install_transaction(self.store, PreparedInstall(plan=plan, staging=prepared.staging))
             return plan

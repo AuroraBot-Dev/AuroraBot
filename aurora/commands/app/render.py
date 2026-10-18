@@ -1,4 +1,7 @@
-"""渲染 ``aurora app`` 的表格、计划与执行结果。"""
+"""渲染 ``aurora app`` 的表格、计划与执行结果。
+
+描述按显示宽度截断至 50 列，提交摘要只展示前八位，完整值保留在配置与错误信息中。
+"""
 
 from __future__ import annotations
 
@@ -21,19 +24,15 @@ _COLUMNS = ("PACKAGE ID", "TYPE", "TRANSPORT", "ENABLED", "STATE", "PATH")
 _TITLE = "Aurora App 注册表"
 _SEARCH_COLUMNS = ("REPOSITORY", "STARS", "STATUS", "UPDATED", "DESCRIPTION")
 _SEARCH_TITLE = "Aurora App Search"
-# 描述列按显示宽度截断：全角字符占两列，不截断会让中文描述把表格撑到几百列。
 _DESCRIPTION_WIDTH = 50
 _UPDATED_LENGTH = 10
 _ELLIPSIS = "…"
-# commit 展示前 8 位就够，注册表与错误信息里留的是完整的 40 位。
 _COMMIT_LENGTH = 8
-# 「这一条自身可用」的两种说法：本地条目已经 clone 到磁盘上，远程条目只是登记了
-# 一个端点。列表只对前者核对文件，所以它不该把后者的 configured 当异常。
 _HEALTHY_STATES = frozenset({"ready", "configured"})
 
 
 def healthy(result: AppList) -> bool:
-    """注册表里是否每一条都自身可用；调用方用它决定退出码。"""
+    """本地条目就绪、远程端点已登记即视为配置可用；调用方据此决定退出码。"""
     return all(item.state in _HEALTHY_STATES for item in result.apps)
 
 
@@ -142,6 +141,7 @@ def render_cancelled() -> None:
 
 
 def _install_plan_lines(plan: InstallPlan) -> list[str]:
+    """展示源码计划，明确启动命令来自仓库声明还是用户参数。"""
     return [
         f"Repository:    {plan.repository}",
         f"Ref:           {plan.ref}",
@@ -150,8 +150,6 @@ def _install_plan_lines(plan: InstallPlan) -> list[str]:
         "",
         f"Runtime:       {plan.runtime}",
         f"Command:       {' '.join(plan.command)}",
-        # 启动命令的出处：仓库自己的声明，还是用户显式给的。两者都不需要 Aurora
-        # 去猜，区别只在「谁负责说这个仓库能被 Aurora 安装」。
         f"Command from:  {plan.evidence}",
         "Verification:  pending",
         "",
@@ -175,13 +173,12 @@ def _runner_plan_lines(plan: RunnerPlan) -> list[str]:
 
 
 def _connect_plan_lines(plan: ConnectPlan) -> list[str]:
-    """远程连接计划；Auth env 那一行出现的只是变量名，不是 token。"""
+    """远程计划要求连接成功后才登记；认证只展示环境变量名。"""
     return [
         f"Package:       {plan.package}",
         f"URL:           {plan.url}",
         f"Auth env:      {plan.auth_env or '(none)'}",
         "",
-        # 远程登记同样以连接成功作为准入门槛。
         "Verification:  required before registering",
         "",
     ]
@@ -201,7 +198,7 @@ def _print(plan: AppPlan, lines: list[str]) -> None:
 
 
 def _print_tools(tools: tuple[str, ...]) -> None:
-    # 零工具可以走到这里：世界生产者（--events）本来就不暴露工具。
+    """展示发现的工具，允许只产生世界事件的连接具有空工具目录。"""
     sys.stdout.write(f"发现的工具：   {len(tools)} 个\n")
     for tool in tools:
         sys.stdout.write(f"  {tool}\n")

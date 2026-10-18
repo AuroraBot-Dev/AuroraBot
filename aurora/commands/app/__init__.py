@@ -55,7 +55,6 @@ if TYPE_CHECKING:
 
 _TOKEN_VARIABLE = "GITHUB_TOKEN"
 _CONTINUE_PROMPT = "Continue? [Y/n] "
-# 空回车即同意，与提示符里的大写 Y 一致；其余一律按拒绝处理。
 _AFFIRMATIVE = frozenset({"", "y", "yes"})
 
 COMMAND: CommandSpec = {
@@ -289,11 +288,10 @@ def _install_remote_source(manager: AppManager, arguments: argparse.Namespace, *
 
 
 def _install_repository_source(manager: AppManager, arguments: argparse.Namespace) -> int:
+    """源码入口只接受仓库清单或完整 command，额外参数由对应启动声明决定。"""
     if arguments.auth_env is not None:
         raise ConfigError("--auth-env 只适用于远程 MCP URL")
     if arguments.arg:
-        # 仓库型安装的启动命令来自 aurora-app.toml 或 --command，Aurora 不往里塞
-        # 参数：那会把「仓库声明的入口」改成一个用户拼出来的入口。
         raise ConfigError("--arg 只适用于 --npx / --uvx；源码安装的参数由仓库清单或 --command 决定")
     if arguments.repository is None:
         raise ConfigError("请给出 MCP HTTPS URL 或源码仓库，或用 --npx / --uvx 指定本地包")
@@ -398,11 +396,7 @@ def _toggle(manager: AppManager, package: str, *, enabled: bool) -> int:
 
 
 def _confirmed(assume_yes: bool) -> bool:
-    """一次确认；``--yes`` 跳过提问，但不跳过已经跑完的任何检查。
-
-    这里不是交互终端时直接拒绝，而不是等着读：管道或 CI 里等一个永远不会来的
-    回车看着像挂死，实际是 EOF 被 ``input()`` 当成空串。
-    """
+    """仅交互终端提问；回车、y 或 yes 同意，其余输入与 EOF 拒绝，yes 参数直接确认。"""
     if assume_yes:
         return True
     if not sys.stdin.isatty():

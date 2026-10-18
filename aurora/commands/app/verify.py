@@ -1,4 +1,7 @@
-"""连接 MCP Server 并检查协议握手与工具目录。"""
+"""连接 MCP Server 并检查协议握手与工具目录。
+
+诊断区分本地进程与远程端点，避免把远端连接问题表述成本机进程启动失败。
+"""
 
 from __future__ import annotations
 
@@ -25,8 +28,6 @@ if TYPE_CHECKING:
 _TAIL_LINES = 4
 _TAIL_CHARACTERS = 400
 _REDACTED = "***"
-# 失败信息里对「连的是什么」的称呼。本地是一个 Aurora 起的进程，远程是一个别人
-# 维护的端点 —— 同一句话套在两者身上，用户会以为是自己的机器出了问题。
 _SUBJECTS = {
     McpTransport.STDIO: "本地 MCP Server",
     McpTransport.STREAMABLE_HTTP: "远程 MCP 端点",
@@ -119,13 +120,13 @@ def process_target(
     """一个本地进程的连接说明。
 
     ``working_dir`` 由调用方决定：源码安装在 staging，包管理器安装在项目根目录。
+    标准错误输出交由 SDK 客户端管理。
     """
     spec = McpAppSpec(
         package=label,
         enabled=False,
         transport=McpTransport.STDIO,
         timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
-        # stderr 的去向由 SDK 客户端处理。
         terminal_logs=True,
         event_mode=McpEventMode(DEFAULT_EVENT_MODE),
         command=tuple(command),
@@ -211,12 +212,9 @@ class MCPVerifier:
         return asyncio.run(self.inspect_async(handshake))
 
     async def inspect_async(self, handshake: Handshake) -> Inspection:
-        """连接、确认握手、完整发现工具、关闭；三个阶段的失败理由各不相同。"""
+        """检查握手和完整工具目录，再关闭连接；优先报告已确认的握手或发现失败。"""
         port = await self._connect(handshake)
-        # 先读状态再关闭：关闭失败要报成「关闭阶段」，不能盖掉握手已经得出的结论。
         if not port.connected:
-            # 结论是「连上的东西不等协议收尾就退出」。关得掉关不掉都报这一条 ——
-            # 一条已成立的握手失败比它的清理结果更值得说，所以这里不报关闭错误。
             await _close_quietly(port)
             raise VerifyError(_message(handshake, "协议连接", "握手完成后随即断开"))
         version = port.protocol_version
@@ -225,7 +223,6 @@ class MCPVerifier:
         except VerifyError:
             raise
         except Exception as error:
-            # 发现阶段的失败也要关掉连接：这里起的进程不能留给调用方去收。
             reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets))
             await _close_quietly(port)
             raise VerifyError(_message(handshake, "工具发现", reason)) from error

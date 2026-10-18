@@ -66,17 +66,15 @@ def classify_managed_app(project_root: Path, entry: RawApp) -> Path | None:
 
     只判形状，不判安全：链接与越界归 ``check_project_directory``。两者失败的
     含义不同 —— 一个是「不该删」，一个是「不能删」。
+    路径校验将反斜杠视为分隔符并拒绝绝对路径与父目录段，再按大小写敏感的目录段判断安装根。
     """
     if entry.working_dir is None:
         return None
     try:
-        # 反斜杠、盘符、.. 都在这里被挡掉：形状判断不能建在一条可能越界的
-        # 路径上，否则 extensions/apps/../x 会推导出项目内的另一个目录。
         check_relative_directory(entry.working_dir, "app.working_dir")
     except ValueError:
         return None
     parts = PurePosixPath(entry.working_dir.replace("\\", "/")).parts
-    # 大小写敏感地比对前两段：写得不一样的目录名归为非受管，删不动总比删错好。
     if parts[: len(APPS_DIRECTORY)] != APPS_DIRECTORY or len(parts) < len(APPS_DIRECTORY) + 2:
         return None
     return project_root.joinpath(*parts[: len(APPS_DIRECTORY) + 2])
@@ -222,7 +220,7 @@ def registry_entry(plan: AppPlan) -> AppConfig:
 
     注册表的字段是封闭白名单，多写一个 key 会让 ``aurora start`` 直接拒绝整个
     文件，所以这里也顺手保证了「计划里有什么，注册表里就有什么」。
-
+    源码和包管理器计划共用本地条目，均显式记录工作目录与启动命令。
     """
     if isinstance(plan, ConnectPlan):
         return AppConfig(
@@ -234,9 +232,6 @@ def registry_entry(plan: AppPlan) -> AppConfig:
             url=plan.url,
             auth_env=plan.auth_env,
         )
-    # 源码安装与包管理器安装写出来的是同一种条目：它们的差别在「东西怎么到磁盘
-    # 上」（clone 一个仓库 / 交给包管理器），而注册表要记的是同一个问题 —— 怎么
-    # 启动它。两条路径的 working_dir 与 command 恰好都在这两个字段里。
     return AppConfig(
         package=plan.package,
         enabled=plan.enabled,
@@ -290,15 +285,13 @@ def _publish(source: Path, destination: Path) -> None:
 
 
 def _undo_install(staging_root: Path, destination: Path, *, published: bool, owner: Path | None) -> Path | None:
-    """把已经做出去的动作收回来；返回没能收回来的残留路径（都收回来了就是 None）。"""
+    """撤销已发布目录并返回无法回收的残留；新建父目录非空时保留，以免影响并发安装。"""
     if published and os.path.lexists(destination):
         try:
             destination.replace(staging_root)
         except OSError:
             return destination
     if owner is not None and os.path.lexists(owner):
-        # 删不掉就留着：这时候它要么不为空（并发的另一次安装刚用上），要么
-        # 根本不是一个目录。两种情况留下来都不影响正确性，报出来只会误导。
         with suppress(OSError):
             owner.rmdir()
     return None
@@ -340,11 +333,9 @@ def _discard_quarantine(project_root: Path, removal: Removal, quarantine: Path |
     这个 package，正式路径上也没有这个目录。不为了清理失败把条目写回来 ——
     写回会让用户得到一个指向「已经移走、但还在磁盘上某处」的条目，比残留一个
     目录更糟。
+    只有同时存在受管根与回收目录时才执行清理，并在错误中列出两条路径。
     """
     managed_root = removal.managed_root
-    # 两者同生同灭（``_quarantine`` 只在受管时产出回收目录），所以这个判断实际
-    # 只会因 quarantine 为 None 而返回；写成两条是为了让这段报告里的两个路径都
-    # 有出处，而不是靠一个跨函数的隐含不变量。
     if quarantine is None or managed_root is None:
         return
     residue = remove_tree(quarantine)

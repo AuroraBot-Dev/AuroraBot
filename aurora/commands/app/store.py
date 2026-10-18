@@ -250,6 +250,7 @@ def app_table(entry: AppConfig) -> Table:
     两种传输的键集不同，因为运行时解析器对它们各开了一份封闭白名单：stdio 条目
     多一个键就会被 ``aurora start`` 拒绝整个文件，streamable_http 条目多一个
     ``working_dir`` 同样如此。所以这里按 transport 分支，而不是写一份合并的。
+    远程条目未声明认证变量时省略 auth_env，避免写入不能被配置解析器接受的空值。
     """
     rendered = tomlkit.table()
     rendered["package"] = entry.package
@@ -261,8 +262,6 @@ def app_table(entry: AppConfig) -> Table:
         rendered["env"] = list(entry.env)
     else:
         rendered["url"] = entry.url
-        # auth_env 是可选的：没有它就是「这个端点不需要凭据」，而 TOML 里没有
-        # 这个键与它的值是 none 是同一件事。写一个空值反而会被解析器判为非法。
         if entry.auth_env is not None:
             rendered["auth_env"] = entry.auth_env
     rendered["timeout_seconds"] = entry.timeout_seconds
