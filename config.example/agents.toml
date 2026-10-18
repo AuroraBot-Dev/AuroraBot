@@ -30,6 +30,7 @@ tools = [
     "aurora:tool/wake_cancel",
     "aurora:tool/memory_recall",
     "aurora:tool/memory_source",
+    "aurora:tool/artifact_find",
     "aurora:tool/artifact_stat",
     "aurora:tool/artifact_read",
     "aurora:tool/memory_exposures",
@@ -67,6 +68,7 @@ tools = [
     "aurora:tool/wake_cancel",
     "aurora:tool/memory_recall",
     "aurora:tool/memory_source",
+    "aurora:tool/artifact_find",
     "aurora:tool/artifact_stat",
     "aurora:tool/artifact_read",
     "aurora:tool/memory_exposures",
@@ -92,6 +94,7 @@ model = "quality"
 tools = [
     "aurora:tool/memory_recall",
     "aurora:tool/memory_source",
+    "aurora:tool/artifact_find",
     "aurora:tool/artifact_stat",
     "aurora:tool/artifact_read",
     "aurora:tool/memory_exposures",

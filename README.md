@@ -77,6 +77,8 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 模型工具和终端遇到大结果时只显示固定引用，并提供读取入口；正文包含完整的 `status`、`data`、`message` 和 `evidence_refs`。收到引用本身不会被记为模型已经读取正文中的证据。小结果保持原有输出格式。
 
+`aurora:artifacts/query/find` 与 `artifact_find` 工具按命名空间、领域和类别发现已发布内容，包括训练产生的数据集与权重。每页默认 20 项、最多 100 项，用 `next_cursor` 作为 `after` 继续；结果明确标记 `content_verified=false`，不表示正文已读或可用。分页扫描当前清单，新增且排在游标之前的内容需重新查询；当前实现每页扫描全部小型清单，内存受页大小限制，尚未使用持久检索索引。
+
 `aurora:artifacts/query/stat` 核对版本并返回大小与媒体类型；`aurora:artifacts/query/read` 返回有界字节块，以 `content_base64` 编码，用 `next_offset` 继续读取。root、worker 和记忆专员可使用对应的 `artifact_stat`、`artifact_read` 工具。`aurora:artifacts/command/put` 接受最多 1 MiB 的 base64 内容，无默认模型工具入口；更大的数据集、权重和导出内容使用流式端口。读取会校验内容完整性，损坏文件不能作为有效版本返回。
 
 阅读 JSON 回执或普通文本时，读取参数可指定 `encoding = "utf-8"`，结果通过 `text` 返回完整字符；中文或其他多字节字符跨块时，`next_offset` 会停在完整字符末尾，下一次从该字节位置继续。无效文本或错误的字符起点会明确失败，二进制内容仍用 base64 读取。

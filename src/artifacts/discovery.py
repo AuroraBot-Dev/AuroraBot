@@ -1,0 +1,75 @@
+"""将已发布内容的有界发现提供给 Bot 与终端调用。"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from src.contracts import ToolScopes
+from src.contracts.artifact_codec import artifact_data
+from src.contracts.operation import OperationDefinition, OperationResult, OperationStatus
+from src.contracts.resource import ResourceKey, ResourceRef
+from src.contracts.resource_query import MAX_RESOURCE_CURSOR_LENGTH, MAX_RESOURCE_PAGE, ResourceQuery
+from src.utils.serialization import thaw_json
+
+if TYPE_CHECKING:
+    from src.contracts.operation import OperationRequest
+    from src.contracts.pkgs.artifacts import ArtifactStore
+
+
+class ArtifactFindInput(BaseModel):
+    """发现按命名空间、领域与类别筛选；续页保持这些条件不变。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    namespace: str | None = None
+    domain: str | None = None
+    kind: str | None = None
+    limit: int = Field(default=20, ge=1, le=MAX_RESOURCE_PAGE)
+    after: str | None = Field(default=None, min_length=1, max_length=MAX_RESOURCE_CURSOR_LENGTH)
+
+
+class ArtifactFindOperation:
+    """发现不会载入正文，读取固定版本需继续调用 stat 或 read。"""
+
+    def __init__(self, store: ArtifactStore) -> None:
+        """参数结构与工具帮助均从同一输入模型产生。"""
+        self._store = store
+        self._definition = OperationDefinition(
+            ResourceRef(ResourceKey("aurora", "artifacts", "query", "find"), "1"),
+            "分页发现已发布的数据集、模型和其他内容版本。items 只含清单元信息，content_verified=false。"
+            "使用 next_cursor 作为 after 继续，保持筛选不变；这是当前目录的动态列表，新增内容可能需要重新发现。"
+            "取得 key 与 revision 后，用 artifact_stat 核对完整性或 artifact_read 读取正文。",
+            ArtifactFindInput.model_json_schema(),
+            "aurora:tool/artifact_find",
+            True,
+        )
+
+    @property
+    def definition(self) -> OperationDefinition:
+        """返回可发现的固定版本查询定义。"""
+        return self._definition
+
+    def scopes_for(self, request: OperationRequest) -> ToolScopes:
+        """内容清单不产生新的业务世界域。"""
+        return ToolScopes()
+
+    async def execute(self, request: OperationRequest) -> OperationResult:
+        """查询参数和游标有误时明确失败，不能悄悄变更筛选。"""
+        try:
+            inputs = ArtifactFindInput.model_validate(thaw_json(request.arguments))
+            query = ResourceQuery(inputs.namespace, inputs.domain, inputs.kind, inputs.limit, inputs.after)
+            page = await self._store.find(query)
+            return OperationResult(
+                {
+                    "items": [artifact_data(info) for info in page.items],
+                    "next_cursor": page.next_cursor,
+                    "listing_mode": "live",
+                    "content_verified": False,
+                }
+            )
+        except ValidationError:
+            return OperationResult(status=OperationStatus.FAILED, message="资源发现参数不符合声明结构")
+        except (ValueError, LookupError) as error:
+            return OperationResult(status=OperationStatus.FAILED, message=str(error))

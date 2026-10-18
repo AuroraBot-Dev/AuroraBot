@@ -1,6 +1,7 @@
 """资源内容存储与操作入口的自描述装配。"""
 
 from src.artifacts.config import ArtifactsConfig
+from src.artifacts.discovery import ArtifactFindOperation
 from src.artifacts.operations import ArtifactOperation
 from src.artifacts.store import FileArtifactStore
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
@@ -33,6 +34,7 @@ async def prepare(context: ModuleContext) -> None:
 def build(context: ModuleContext) -> ArtifactStore:
     """启动前提供的同一内容存储继续用于运行期操作。"""
     store = _store(context)
+    context.contribute(OPERATION_CONTRIBUTIONS, ArtifactFindOperation(store))
     for action in ("stat", "read", "put"):
         context.contribute(OPERATION_CONTRIBUTIONS, ArtifactOperation(store, action))
     return store

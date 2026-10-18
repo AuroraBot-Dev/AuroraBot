@@ -21,6 +21,7 @@ from aurora.commands import DEFAULT_REGISTRY
 from src.artifacts.store import FileArtifactStore
 from src.contracts.artifact_codec import read_artifact
 from src.contracts.artifact_io import artifact_content
+from src.contracts.resource_query import ResourceQuery
 from src.memory_model.dataset import write_episodes
 from src.utils.files import write_new_file
 
@@ -69,9 +70,12 @@ def test_cli_publishes_the_exact_inputs_and_model_with_portable_provenance(
 
     async def scenario() -> None:
         store = FileArtifactStore(tmp_path / "data/artifacts")
+        published = await store.find(ResourceQuery(domain=domain))
+        assert model_info in published.items
         assert await artifact_content(store, model_info) == model_content
         for role, original in (("training", original_training), ("validation", original_validation)):
             source = read_artifact(report["inputs"][role]["source"])
+            assert source in published.items
             assert await artifact_content(store, source) == original
             assert source.ref.revision == hashlib.sha256(original).hexdigest()
             assert report["inputs"][role]["input_digest"] == dataset.episodes_fingerprint(

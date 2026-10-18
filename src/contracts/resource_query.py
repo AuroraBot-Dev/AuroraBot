@@ -6,7 +6,7 @@ from src.contracts.identity import is_namespace
 from src.contracts.resource import ResourceKey
 
 MAX_RESOURCE_PAGE = 100
-_MAX_CURSOR_LENGTH = 2048
+MAX_RESOURCE_CURSOR_LENGTH = 2048
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +27,7 @@ class ResourceQuery:
         if type(self.limit) is not int or not 1 <= self.limit <= MAX_RESOURCE_PAGE:
             raise ValueError(f"资源分页上限必须为 1..{MAX_RESOURCE_PAGE} 的整数")
         if self.after is not None and (
-            not isinstance(self.after, str) or not self.after or len(self.after) > _MAX_CURSOR_LENGTH
+            not isinstance(self.after, str) or not self.after or len(self.after) > MAX_RESOURCE_CURSOR_LENGTH
         ):
             raise ValueError("资源分页游标必须是有界非空文本")
 
