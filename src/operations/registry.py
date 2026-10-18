@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -16,7 +17,7 @@ from src.utils import get_logger
 from src.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import AsyncIterator, Callable, Iterable
 
     from src.contracts.operation import Operation, OperationDefinition, OperationRequest
     from src.contracts.pkgs.resources import ResourceCatalog
@@ -25,6 +26,15 @@ if TYPE_CHECKING:
     from src.contracts.world import WorldCommit
 
 _logger = get_logger(__name__)
+
+
+@dataclass(slots=True)
+class _RequestSlot:
+    """只让相同请求等待同一回执，不阻塞操作之间的调用。"""
+
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+    owner: asyncio.Task[object] | None = None
 
 
 class OperationRegistry:
@@ -56,7 +66,7 @@ class OperationRegistry:
             Draft202012Validator.check_schema(schema)
             self._operations[definition.ref] = operation
             self._validators[definition.ref] = Draft202012Validator(schema)
-        self._lock = asyncio.Lock()
+        self._requests: dict[str, _RequestSlot] = {}
 
     @property
     def definitions(self) -> tuple[OperationDefinition, ...]:
@@ -82,7 +92,7 @@ class OperationRegistry:
         """先固定目标与请求事实，随后执行并保存唯一回执。"""
         if request.bot_id != self._bot_id:
             raise ValueError("操作请求不属于当前 Bot")
-        async with self._lock:
+        async with self._serialize_request(request.identity):
             await self._world.initialize()
             prefix = request.identity
             previous = await self._world.commit(f"{prefix}:requested")
@@ -98,6 +108,26 @@ class OperationRegistry:
                 return await self._record_result(request, result)
             await self._record_request(request, definition.ref)
             return await self._execute(request, definition)
+
+    @asynccontextmanager
+    async def _serialize_request(self, identity: str) -> AsyncIterator[None]:
+        """合并同一请求的并发重试，允许处理者调用其他操作。"""
+        slot = self._requests.setdefault(identity, _RequestSlot())
+        current = asyncio.current_task()
+        if slot.owner is current:
+            raise ValueError("操作不能递归等待同一请求")
+        slot.users += 1
+        try:
+            async with slot.lock:
+                slot.owner = current
+                try:
+                    yield
+                finally:
+                    slot.owner = None
+        finally:
+            slot.users -= 1
+            if slot.users == 0:
+                self._requests.pop(identity)
 
     async def _resume(self, request: OperationRequest, previous: WorldCommit) -> OperationResult:
         """重试使用已冻结目标；结果未知的非幂等命令不自动重放。"""

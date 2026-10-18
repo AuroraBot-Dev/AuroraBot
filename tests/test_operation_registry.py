@@ -196,3 +196,34 @@ def test_remote_schema_references_are_rejected_without_network(tmp_path: Path) -
     world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
     with pytest.raises(ValueError, match="本地引用"):
         OperationRegistry(_BOT, (operation,), ResourceCatalog((operation.definition.resource,)), world)
+
+
+def test_operations_can_call_other_operations_without_blocking_the_registry(tmp_path: Path) -> None:
+    """模组之间的查询可以组合，同一请求的重试仍只执行一次。"""
+
+    async def scenario() -> None:
+        child = _operation(OperationKind.QUERY)
+        child.definition = replace(child.definition, ref=ResourceRef(ResourceKey.parse("lab:test/query/child"), "1"))
+        world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+
+        class ParentOperation(CountingOperation):
+            """通过公共协议读取另一个能力。"""
+
+            async def execute(self, request: OperationRequest) -> OperationResult:
+                """组合子操作的结果，保留独立调用身份。"""
+                self.calls += 1
+                nested = replace(request, request_id="child-request", target=child.definition.ref)
+                return await registry.dispatch(nested)
+
+        parent = ParentOperation(_operation(OperationKind.QUERY).definition)
+        resources = ResourceCatalog((parent.definition.resource, child.definition.resource))
+        registry = OperationRegistry(_BOT, (parent, child), resources, world)
+        try:
+            request = _request(parent)
+            results = await asyncio.wait_for(asyncio.gather(registry.dispatch(request), registry.dispatch(request)), 1)
+            assert results[0] == results[1]
+            assert parent.calls == child.calls == 1
+        finally:
+            await world.close()
+
+    asyncio.run(scenario())
