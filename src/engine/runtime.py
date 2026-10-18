@@ -151,6 +151,7 @@ class AgentTreeRunner:
                 node.model,
                 assembled.messages,
                 tools,
+                resources=assembled.resources,
             )
         except ContextBudgetError as error:
             return self._publish(await self._fail_node(tree, node.node_id, str(error)), observer)

@@ -75,7 +75,9 @@ class PromptAssembler:
             messages = (system, *node.messages)
         else:
             messages = self._trim_history(system, groups, message_budget)
-        return PromptAssembly(messages, _exposure(memory, selected_ids, messages))
+        return PromptAssembly(
+            messages, _exposure(memory, selected_ids, messages), resources=tuple(fragment.ref for fragment in sources)
+        )
 
     def _trim_history(
         self, system: ChatMessage, groups: tuple[tuple[ChatMessage, ...], ...], message_budget: int

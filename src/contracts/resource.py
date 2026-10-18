@@ -10,7 +10,7 @@ from src.contracts.identity import Identifier, is_namespace, is_path
 from src.contracts.kernel import ContributionKey
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -57,6 +57,16 @@ class ResourceRef:
         """版本一旦给出就必须是明确且非空的值。"""
         if self.revision is not None and (not self.revision.strip() or self.revision != self.revision.strip()):
             raise ValueError("资源版本必须是非空且无首尾空白的文本")
+
+
+def fixed_resource_refs(values: Iterable[ResourceRef]) -> tuple[ResourceRef, ...]:
+    """固定调用方实际使用的资源顺序，拒绝未解析版本和重复来源。"""
+    refs = tuple(values)
+    if any(not isinstance(ref, ResourceRef) or ref.revision is None for ref in refs):
+        raise ValueError("输入资源必须引用明确版本")
+    if len(refs) != len(set(refs)):
+        raise ValueError("输入资源引用不能重复")
+    return refs
 
 
 @dataclass(frozen=True, slots=True)

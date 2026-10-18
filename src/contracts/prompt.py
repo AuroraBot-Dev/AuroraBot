@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef, fixed_resource_refs
 
 if TYPE_CHECKING:
     from src.contracts.memory import MemoryExposure
@@ -51,9 +51,11 @@ class PromptAssembly:
 
     messages: tuple[ChatMessage, ...]
     memory: MemoryExposure | None = None
+    resources: tuple[ResourceRef, ...] = ()
 
     def __post_init__(self) -> None:
         """固定实际消息顺序，并确保模型输入以身份上下文开始。"""
         object.__setattr__(self, "messages", tuple(self.messages))
+        object.__setattr__(self, "resources", fixed_resource_refs(self.resources))
         if not self.messages or self.messages[0].role != "system":
             raise ValueError("上下文装配结果必须以 system 消息开始")

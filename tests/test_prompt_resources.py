@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from typing import TYPE_CHECKING
 
@@ -10,10 +11,11 @@ from test_assembly import FakeModel
 from test_kernel import _Settings
 
 from aurora import load_config
+from src.contracts import AgentDefinition, AgentTree, ChatMessage, ModelRequest
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.prompt import PROMPT_FRAGMENT_CONTRACT, PromptFragment
+from src.contracts.prompt import PROMPT_FRAGMENT_CONTRACT, PromptAssembly, PromptFragment
 from src.contracts.resource import ResourceKey, ResourceRef
 from src.kernel import compose, module
 from src.prompt import PromptAssembler as ConcreteAssembler
@@ -102,3 +104,56 @@ def test_resource_contribution_follows_the_selected_prompt_assembler() -> None:
     assert {descriptor.ref for descriptor in assembly.get(ResourceCatalog).find(domain="prompt")} == {
         fragment.ref for fragment in fragments
     }
+
+
+def test_assembly_records_only_the_selected_fragments_in_their_actual_order() -> None:
+    """未采用的 Agent 提示词不进入请求来源，系统片段顺序不可被资源排序替换。"""
+    first = PromptFragment(ResourceKey.parse("lab:prompt/system/z"), "第一个系统片段")
+    last = PromptFragment(ResourceKey.parse("lab:prompt/system/a"), "第二个系统片段")
+    selected = PromptFragment(ResourceKey.parse("lab:prompt/agent/selected"), "选定角色")
+    other = PromptFragment(ResourceKey.parse("lab:prompt/agent/other"), "其他角色")
+    assembler = ConcreteAssembler(PromptCatalog((first, other, last, selected)))
+    agent = AgentDefinition("lab:agent/root", "主体", str(selected.key), "model", frozenset(), frozenset())
+    result = assembler.assemble(AgentTree.create("tree", "root", agent, "开始"), "root")
+    assert result.resources == (first.ref, last.ref, selected.ref)
+    assert result.messages[0].content == "第一个系统片段\n\n第二个系统片段\n\n选定角色"
+
+
+@pytest.mark.parametrize("fixed", [False, True])
+def test_model_and_assembly_reject_unresolved_or_duplicate_resources(fixed: bool) -> None:
+    """请求审计必须有明确版本，重复引用也不能制造错误的来源计数。"""
+    key = ResourceKey.parse("lab:prompt/agent/root")
+    refs = (ResourceRef(key, "version"),) * 2 if fixed else (ResourceRef(key),)
+    message = ChatMessage.system("主体身份")
+    with pytest.raises(ValueError, match="输入资源"):
+        PromptAssembly((message,), resources=refs)
+    with pytest.raises(ValueError, match="输入资源"):
+        ModelRequest("model", (message,), resources=refs)
+
+
+def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(configured_project: Path) -> None:
+    """源文件改变后，模型输入与记录仍绑定装配时实际采用的内容版本。"""
+
+    async def scenario() -> None:
+        """读取实际世界事实，避免只检查组装器返回的元数据。"""
+        model = FakeModel()
+        runtime = assemble_runtime(load_config(configured_project), model)
+        assembler = runtime.assembly.get(PromptAssembler)
+        selected = assembler.catalog.for_agent("aurora:prompt/agent/root")
+        source = configured_project / "config" / "prompts" / "builtin" / "root.md"
+        source.write_text("这份新正文尚未用于当前运行。", encoding="utf-8")
+        try:
+            tree = await runtime.run("检查提示词来源", tree_id="prompt-source")
+            assert len(model.requests) == 1
+            request = model.requests[0]
+            assert request.resources == tuple(fragment.ref for fragment in selected)
+            assert "这份新正文尚未用于当前运行。" not in request.messages[0].content
+            record = await runtime.world.commit(f"prompt-source:{tree.root_id}:model:0:requested")
+            assert record is not None
+            assert list(record.data["resources"]) == [
+                {"key": str(ref.key), "revision": ref.revision} for ref in request.resources
+            ]
+        finally:
+            await runtime.world.close()
+
+    asyncio.run(scenario())

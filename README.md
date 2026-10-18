@@ -79,6 +79,8 @@ MCP 关闭会先停止各连接的事件入口，再逆序释放所有连接。�
 
 `/resources` 与 Bot 的 `resources_find` 共用 `aurora:resources/query/find`，返回 `items`、`next_cursor` 和 `listing_mode`；`/inspect` 与 `resources_inspect` 共用 `aurora:resources/query/inspect`。默认每页 20 项，用 `--after` 或结构化参数 `after` 继续同一筛选。查询经过统一操作路由并记录调用；检查动态内容需要确定版本并核对完整性，返回描述后仍需按读取入口取得正文。
 
+提示词使用 `namespace:prompt/system/path` 或 `namespace:prompt/agent/path` 身份，版本为实际采用文本的 UTF-8 SHA256。系统片段按配置顺序与节点选定的 Agent 片段共同进入上下文；目录、装配器与实际模型请求引用同一份冻结内容。`ModelRequest.resources` 和 `engine.model.requested` 的 `resources` 保存实际采用的明确版本，未采用的 Agent 片段不计入来源。替换提示词装配器时，资源贡献跟随实际选中的提供者。
+
 动态资源通过 `RESOURCE_PROVIDERS` 接入目录，不需要把全部版本登记到内核。每个提供者使用公共排序和游标，每次只返回一页；目录合并去重，静态声明优先，动态来源对同一版本的定义不一致时明确失败。提供者必须遵守页大小、筛选、顺序和续页规则，避免跨来源查询漏项。
 
 大对象通过 `ArtifactStore` 保存。逻辑名称采用同一套资源身份，版本是原始字节的 SHA256；同名新版本保留旧内容，相同字节可以跨名称复用。`artifacts.toml` 指定持久目录，需要与世界日志一起备份。宿主可流式保存内容或导入固定文件；查询只接受确定版本，不自动选择最新内容。

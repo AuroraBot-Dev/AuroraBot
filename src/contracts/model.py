@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from src.contracts.data import freeze_object
 from src.contracts.evidence import freeze_evidence_refs
+from src.contracts.resource import fixed_resource_refs
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from src.contracts.resource import ResourceRef
     from src.contracts.tool import ToolDefinition
 
 ChatRole = Literal["system", "message", "assistant", "tool"]
@@ -109,12 +111,14 @@ class ModelRequest:
     model: str
     messages: tuple[ChatMessage, ...]
     tools: tuple[ToolDefinition, ...] = ()
+    resources: tuple[ResourceRef, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.model:
             raise ValueError("ModelRequest requires model")
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", tuple(self.tools))
+        object.__setattr__(self, "resources", fixed_resource_refs(self.resources))
         if not self.messages or self.messages[0].role != "system":
             raise ValueError("ModelRequest messages must start with system")
         if any(message.role == "system" for message in self.messages[1:]):

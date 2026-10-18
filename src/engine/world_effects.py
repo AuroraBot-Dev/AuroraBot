@@ -129,6 +129,7 @@ class EngineWorldEffects:
                 "bot_id": self._bot_id,
                 "message_count": len(request.messages),
                 "tool_count": len(request.tools),
+                "resources": [{"key": str(ref.key), "revision": ref.revision} for ref in request.resources],
                 "memory": exposure_data(memory) if memory is not None else None,
             },
         )
