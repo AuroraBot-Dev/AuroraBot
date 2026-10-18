@@ -13,6 +13,7 @@ from src.contracts.pkgs.memory import MemoryReader
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.engine import AgentTreeRunner
 from src.engine.config import EngineConfig
 from src.engine.scopes import SCOPE_PATTERN as TREE_SCOPE_PATTERN
@@ -43,7 +44,9 @@ def _validate_cross_references(
     name="engine",
     provides=AgentTreeRunnerPort,
     requires=(PromptAssembler, Model, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader, BotStateStore),
-    owns_scopes=TREE_SCOPE_PATTERN,
+    scopes=ScopeDeclaration(
+        TREE_SCOPE_PATTERN, ScopeKind.RUN, "一次 AgentTree 运行的因果台账；默认不自动召回，可按证据引用展开。"
+    ),
 )
 def build(context: ModuleContext) -> AgentTreeRunnerPort:
     config = context.settings.resolve(EngineConfig)

@@ -120,6 +120,7 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
         "operations",
         "prompt",
         "resources",
+        "scopes",
         "rhythm",
         "runtime",
         "tools",
@@ -134,6 +135,7 @@ def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
 
     capabilities = (
         assembly.get(Model),
+        assembly.get(ScopeCatalog),
         assembly.get(ArtifactStore),
         assembly.get(PromptAssembler),
         assembly.get(AgentCatalog),

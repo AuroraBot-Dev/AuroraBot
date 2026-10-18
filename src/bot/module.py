@@ -12,6 +12,7 @@ from src.contracts import TREE_LAUNCHER_BINDINGS
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
 from src.contracts.pkgs.bot import BotClock, BotStateStore
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     provides=(BotStateStore, BotClock),
     requires=WorldJournal,
     contributes=(OPERATION_CONTRIBUTIONS, TREE_LAUNCHER_BINDINGS),
-    owns_scopes="*:world/bot/*",
+    scopes=ScopeDeclaration("*:world/bot/*", ScopeKind.RESOURCE, "Bot 的目标、恢复检查点与唤醒安排。"),
     activate=activate,
     run=run,
 )

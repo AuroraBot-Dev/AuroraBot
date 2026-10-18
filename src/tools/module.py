@@ -14,7 +14,7 @@ from src.tools.builtin import builtin_tools
 @module(
     name="tools",
     provides=ToolRegistryPort,
-    requires=(WorldReader, AgentCatalog),
+    requires=(WorldReader, AgentCatalog, ScopeCatalog),
     consumes=(TOOL_CONTRIBUTIONS,),
     declares=(TOOL_CONTRIBUTIONS,),
 )
@@ -22,7 +22,7 @@ def build(context: ModuleContext) -> ToolRegistryPort:
     journal = context.get(WorldReader)
     agents = context.get(AgentCatalog)
     external = context.contributions(TOOL_CONTRIBUTIONS)
-    scopes = context.settings.resolve(ScopeCatalog)
+    scopes = context.get(ScopeCatalog)
     return ToolRegistry((*builtin_tools(agents=agents, journal=journal, scopes=scopes), *external))
 
 

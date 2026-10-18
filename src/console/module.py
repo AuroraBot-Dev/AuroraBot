@@ -10,6 +10,7 @@ from src.contracts import FRONT_BINDINGS, Front, FrontContext, FrontIO
 from src.contracts.pkgs.console import TerminalConsole as TerminalConsolePort
 from src.contracts.pkgs.runtime import TerminalDispatcher
 from src.contracts.pkgs.world import WorldWriter
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ def _bind_console(console: TerminalConsolePort) -> FrontBinding:
     provides=TerminalConsolePort,
     requires=(WorldWriter,),
     contributes=(FRONT_BINDINGS,),
-    owns_scopes=CONSOLE_SCOPE,
+    scopes=ScopeDeclaration(CONSOLE_SCOPE, ScopeKind.RESOURCE, "本地终端输入先进入的世界线；渲染输出不进入世界线。"),
 )
 def build(context: ModuleContext) -> TerminalConsolePort:
     console = TerminalConsole(context.get(WorldWriter))

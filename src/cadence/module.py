@@ -12,6 +12,7 @@ from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.cadence import Cadence as CadencePort
 from src.contracts.pkgs.cadence import RhythmPolicy
 from src.contracts.pkgs.world import WorldReader, WorldWriter
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
@@ -47,7 +48,9 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     provides=CadencePort,
     requires=(WorldReader, WorldWriter, AgentCatalog, BotStateStore, RhythmPolicy),
     contributes=(TREE_LAUNCHER_BINDINGS,),
-    owns_scopes="*:world/bot/*/cadence",
+    scopes=ScopeDeclaration(
+        "*:world/bot/*/cadence", ScopeKind.RESOURCE, "节律 tick 与唤起决策，记录 Bot 主动发起认知的理由。"
+    ),
     activate=activate,
     run=run,
 )

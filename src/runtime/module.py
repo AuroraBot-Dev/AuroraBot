@@ -9,6 +9,7 @@ from src.contracts.pkgs.engine import AgentTreeRunner
 from src.contracts.pkgs.operations import OperationRegistry
 from src.contracts.pkgs.resources import ResourceCatalog
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
 from src.runtime.events import RUNTIME_SCOPE
 from src.runtime.factory import RuntimeFactory, create_runtime
@@ -20,7 +21,7 @@ from src.runtime.factory import RuntimeFactory, create_runtime
     requires=(AgentTreeRunner, AgentCatalog, WorldJournal, BotStateStore, ResourceCatalog, OperationRegistry),
     consumes=(TREE_LAUNCHER_BINDINGS, FRONT_BINDINGS),
     declares=(TREE_LAUNCHER_BINDINGS, FRONT_BINDINGS),
-    owns_scopes=RUNTIME_SCOPE,
+    scopes=ScopeDeclaration(RUNTIME_SCOPE, ScopeKind.RESOURCE, "通过 Bot 运行门面直接提交的文本输入。"),
 )
 def build(_context: ModuleContext) -> RuntimeFactory:
     return create_runtime

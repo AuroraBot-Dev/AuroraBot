@@ -1,47 +1,10 @@
-# 域注册表：世界的分区及其所有者、种类与语义。
-#
-# 域是世界的分区键。这份声明回答三个问题：谁拥有这个域、它属于哪一类、它是什么。
-# 判定按声明顺序，**第一条命中者胜出**，所以具体声明写在前、通配声明写在后。
-#
-#   kind = "resource"  长期存在、构成 Bot 可观察的世界资源
-#   kind = "run"       执行和投递的因果台账，默认不进入自动召回；仍可按来源读取
-#
-# 域与 ID 共用同一套命名空间语法：命名空间即所有者。
-# 内置子系统拥有 aurora:world/<sub>，每个扩展拥有 <package>:world（可再用 / 分子域）。
-[[scope]]
-pattern = "aurora:world/console"
-kind = "resource"
-description = "本地终端输入先进入的世界线；渲染输出不进入世界线。"
+# 项目级域声明与覆盖。模组自行声明拥有的域、分类和含义。
+# 相同模式的配置覆盖模组默认值；不同模式按路径具体度排列，通用声明不能遮蔽具体子域。
+# kind = "resource" 表示业务资源；kind = "run" 表示默认不自动召回的运行台账。
+scope = []
 
-[[scope]]
-pattern = "aurora:world/runtime"
-kind = "resource"
-description = "通过 Bot 运行门面直接提交的文本输入。"
-
-[[scope]]
-pattern = "*:world/bot/*/operations"
-kind = "run"
-description = "领域操作的请求和回执台账；业务事实由所属能力另行提交，回执可按需展开。"
-
-[[scope]]
-pattern = "*:world/bot/*/cadence"
-kind = "resource"
-description = "节律 tick 与唤起决策的提交，记录 Bot 主动发起认知的理由。"
-
-# 扩展的 package 在发现之前不可知，所以这里用命名空间通配；写成两条而不是
-# ``*:world*``，是为了让「域本身」和「子域」各自明确，也避免通配吃掉空余。
-# 它们必须排在具体声明之后，否则会抢先匹配内置域。
-[[scope]]
-pattern = "*:world"
-kind = "resource"
-description = "一个扩展拥有的世界域：<package>:world。"
-
-[[scope]]
-pattern = "*:world/*"
-kind = "resource"
-description = "扩展世界域的子域，例如 <package>:world/room/1。"
-
-[[scope]]
-pattern = "aurora:run/*"
-kind = "run"
-description = "一次 AgentTree 运行的因果台账；默认不自动召回，可按证据引用展开。"
+# 自定义时将 scope = [] 替换为以下形式的表：
+# [[scope]]
+# pattern = "home:world/room/*"
+# kind = "resource"
+# description = "家中各房间的传感器观察。"

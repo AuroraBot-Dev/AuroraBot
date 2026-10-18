@@ -29,7 +29,7 @@ def test_repeated_training_exports_do_not_feed_graph_payloads_back_into_memory(c
             registry = runtime.assembly.get(OperationRegistry)
             state = runtime.assembly.get(BotStateStore)
             ledger_scope = f"{state.scope}/operations"
-            assert runtime.settings.resolve(ScopeCatalog).classify(ledger_scope) is ScopeKind.RUN
+            assert runtime.assembly.get(ScopeCatalog).classify(ledger_scope) is ScopeKind.RUN
             original = await registry.dispatch(
                 request(runtime, "first-export", "query/training_input", {"model_request_id": original_model_id})
             )

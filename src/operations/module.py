@@ -7,6 +7,7 @@ from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.operations import OperationRegistry as OperationRegistryPort
 from src.contracts.pkgs.resources import ResourceCatalog
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
 from src.operations.registry import OperationRegistry
 from src.operations.tool import operation_tools
@@ -19,7 +20,9 @@ from src.operations.tool import operation_tools
     consumes=OPERATION_CONTRIBUTIONS,
     contributes=TOOL_CONTRIBUTIONS,
     declares=OPERATION_CONTRIBUTIONS,
-    owns_scopes="*:world/bot/*/operations",
+    scopes=ScopeDeclaration(
+        "*:world/bot/*/operations", ScopeKind.RUN, "领域操作的请求和回执台账；业务事实由所属能力另行提交。"
+    ),
 )
 def build(context: ModuleContext) -> OperationRegistryPort:
     """每个主体绑定一套操作目录与回执世界。"""

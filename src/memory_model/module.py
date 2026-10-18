@@ -12,6 +12,7 @@ from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryPolicyState
 from src.contracts.pkgs.world import WorldJournal
 from src.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceDescriptor, ResourceKey
+from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
 from src.memory_model.config import MemoryModelConfig
 from src.memory_model.persistence import MemoryModelCheckpoints
@@ -65,7 +66,7 @@ async def close(context: ModuleContext) -> None:
     provides=(MemoryPolicy, MemoryCheckpoints),
     requires=(ArtifactStore, BotStateStore, WorldJournal, MemoryPolicy),
     contributes=(RESOURCE_CONTRIBUTIONS,),
-    owns_scopes="aurora:run/memory-model/*",
+    scopes=ScopeDeclaration("aurora:run/memory-model/*", ScopeKind.RUN, "记忆推荐模型的投影检查点与重建位置。"),
     prepare=prepare,
     activate=activate,
     run=run,

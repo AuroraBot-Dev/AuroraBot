@@ -8,6 +8,7 @@ from src.contracts import LOOP_OPERATIONS, TOOL_CONTRIBUTIONS, WORLD_PORTS, Scop
 from src.contracts.pkgs.ai import Model
 from src.contracts.pkgs.mcp import McpRuntime
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.scope import merge_scope_catalog
 from src.kernel import (
     BuiltinSource,
     Capabilities,
@@ -15,6 +16,7 @@ from src.kernel import (
     EntryPointSource,
     compose,
     compose_managed,
+    resolve,
 )
 from src.runtime.factory import RuntimeFactory
 
@@ -37,15 +39,20 @@ _PLUGIN_DIRECTORY = ("extensions", "plugins")
 
 def declared_scopes(specs: Iterable[ModuleSpec]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """汇总全部模块声明所拥有与所观察的域，去重后按名称排序。"""
-    owns = {scope for spec in specs for scope in spec.owns_scopes}
+    specs = tuple(specs)
+    owns = {scope for spec in specs for scope in spec.owned_scopes}
     observes = {scope for spec in specs for scope in spec.observes_scopes}
     return tuple(sorted(owns)), tuple(sorted(observes))
 
 
 def validate_declared_scopes(settings: Settings, specs: Iterable[ModuleSpec]) -> None:
     """模块声明拥有或观察的域必须被域注册表覆盖；未注册即启动前失败。"""
-    owns, observes = declared_scopes(specs)
-    undeclared = settings.resolve(ScopeCatalog).undeclared((*owns, *observes))
+    available = resolve(specs).modules
+    owns, observes = declared_scopes(available)
+    catalog = merge_scope_catalog(
+        settings.resolve(ScopeCatalog), (scope for spec in available for scope in spec.scopes)
+    )
+    undeclared = catalog.undeclared((*owns, *observes))
     if undeclared:
         raise ValueError(f"模块声明了未注册的域：{', '.join(undeclared)}")
 
