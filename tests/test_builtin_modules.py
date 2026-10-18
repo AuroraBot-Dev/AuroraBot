@@ -16,7 +16,7 @@ from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.console import TerminalConsole
 from src.contracts.pkgs.engine import AgentTreeRunner
 from src.contracts.pkgs.mcp import McpRuntime
-from src.contracts.pkgs.memory import MemoryReader
+from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.pkgs.world import WorldJournal
@@ -140,6 +140,7 @@ def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
         assembly.get(ToolRegistry),
         assembly.get(WorldJournal),
         assembly.get(MemoryReader),
+        assembly.get(MemoryCheckpoints),
         assembly.get(TerminalConsole),
         assembly.get(McpRuntime),
         assembly.get(AgentTreeRunner),
