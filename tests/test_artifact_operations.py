@@ -140,3 +140,19 @@ def test_large_content_upload_keeps_real_runtime_world_records_compact(configure
             await runtime.world.close()
 
     asyncio.run(scenario())
+
+
+def test_strict_resource_input_reports_a_chinese_error(configured_project: Path) -> None:
+    """JSON Schema 允许整数形式的浮点数时，严格输入模型仍返回可理解的中文失败原因。"""
+    runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=lambda _: None)
+
+    async def scenario() -> None:
+        try:
+            request = _request("read", {"key": _KEY, "revision": "a" * 64, "limit": 1.0})
+            result = await runtime.assembly.get(OperationRegistry).dispatch(request)
+            assert result.status is OperationStatus.FAILED
+            assert result.message == "资源参数不符合声明结构"
+        finally:
+            await runtime.world.close()
+
+    asyncio.run(scenario())

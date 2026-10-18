@@ -187,3 +187,20 @@ def test_reads_never_interpret_revision_as_a_backend_path(tmp_path: Path, revisi
             await store.stat(ResourceRef(_KEY, revision))
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("long_field", ["key", "media_type"])
+def test_oversized_manifest_is_rejected_before_any_resource_is_published(tmp_path: Path, long_field: str) -> None:
+    """写入成功必须意味着元信息能按同一读取上限恢复，不能发布不可读版本。"""
+
+    async def scenario() -> None:
+        store = FileArtifactStore(tmp_path)
+        key = ResourceKey("lab", "memory", "dataset", "x" * 20000) if long_field == "key" else _KEY
+        media_type = "x" * 20000 if long_field == "media_type" else "text/plain"
+        with pytest.raises(ValueError, match="清单大小上限"):
+            await store.put(key, b"stable", media_type=media_type)
+        assert not (tmp_path / "objects").exists()
+        assert not (tmp_path / "bindings").exists()
+        assert not tuple((tmp_path / "temporary").iterdir())
+
+    asyncio.run(scenario())

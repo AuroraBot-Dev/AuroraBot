@@ -6,7 +6,7 @@ import base64
 import codecs
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.contracts import ToolScopes
 from src.contracts.artifact import MAX_ARTIFACT_CHUNK
@@ -92,6 +92,8 @@ class ArtifactOperation:
         """返回实际内容描述和有界字节，不替调用方猜测字符编码。"""
         try:
             return await self._execute(request)
+        except ValidationError:
+            return OperationResult(status=OperationStatus.FAILED, message="资源参数不符合声明结构")
         except (ValueError, LookupError) as error:
             return OperationResult(status=OperationStatus.FAILED, message=str(error))
 

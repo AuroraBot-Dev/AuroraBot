@@ -76,9 +76,6 @@ class FileArtifactStore:
         staged, digest, size = stage(chunks, self._directory / "temporary")
         try:
             info = ArtifactInfo(ResourceRef(key, digest), size, media_type)
-            publish(staged, self._object_path(digest))
-            staged.unlink(missing_ok=True)
-            self._read_content(info, 0, 0)
             manifest = json.dumps(
                 {
                     "schema_version": 1,
@@ -91,6 +88,11 @@ class FileArtifactStore:
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode("utf-8")
+            if len(manifest) > _MAX_MANIFEST_BYTES:
+                raise ValueError("资源身份和元信息超出清单大小上限")
+            publish(staged, self._object_path(digest))
+            staged.unlink(missing_ok=True)
+            self._read_content(info, 0, 0)
             metadata, _metadata_digest, _size = stage((manifest,), self._directory / "temporary")
             try:
                 publish(metadata, self._binding_path(info.ref))
