@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import dataclass, field
+from io import BytesIO
 from typing import TYPE_CHECKING
 
 import torch
@@ -159,7 +160,8 @@ class TGNMemoryPolicy:
 
 def load_policy(path: Path) -> TGNMemoryPolicy:
     """只接受张量及基础元数据，拒绝关系或时间编码不兼容的权重。"""
-    data = torch.load(path, map_location="cpu", weights_only=True)
+    content = path.read_bytes()
+    data = torch.load(BytesIO(content), map_location="cpu", weights_only=True)
     if data["schema_version"] != 1 or data["model_key"] != str(TGN_KEY):
         raise ValueError("不支持的时序记忆权重格式")
     if tuple(data["relations"]) != MEMORY_RELATIONS or tuple(data["node_kinds"]) != MEMORY_NODE_KINDS:
@@ -168,7 +170,9 @@ def load_policy(path: Path) -> TGNMemoryPolicy:
         raise ValueError("时序记忆权重的时间或文本坐标不兼容")
     network = TemporalMemoryNetwork(data["hidden_size"], data["text_dimensions"])
     network.load_state_dict(data["state_dict"], strict=True)
-    return TGNMemoryPolicy(network, hashlib.sha256(path.read_bytes()).hexdigest())
+    if any(not bool(torch.isfinite(parameter).all()) for parameter in network.parameters()):
+        raise ValueError("时序记忆权重包含非有限数值")
+    return TGNMemoryPolicy(network, hashlib.sha256(content).hexdigest())
 
 
 def _interval(now: datetime, previous: datetime) -> float:

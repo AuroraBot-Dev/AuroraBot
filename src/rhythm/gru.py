@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 from datetime import timedelta
+from io import BytesIO
 from typing import TYPE_CHECKING
 
 import torch
@@ -109,14 +110,17 @@ def load_policy(
     probability_threshold: float = 0.5,
 ) -> GRURhythmPolicy:
     """只加载张量与基础元数据，输入坐标变化时拒绝混用权重。"""
-    data = torch.load(path, map_location="cpu", weights_only=True)
+    content = path.read_bytes()
+    data = torch.load(BytesIO(content), map_location="cpu", weights_only=True)
     if data["schema_version"] != 1 or data["model_key"] != str(GRU_KEY):
         raise ValueError("不支持的节律权重格式")
     if tuple(data["features"]) != RHYTHM_FEATURES:
         raise ValueError("节律权重的输入特征不兼容")
     network = RhythmNetwork(data["hidden_size"])
     network.load_state_dict(data["state_dict"], strict=True)
-    revision = hashlib.sha256(path.read_bytes()).hexdigest()
+    if any(not bool(torch.isfinite(parameter).all()) for parameter in network.parameters()):
+        raise ValueError("节律权重包含非有限数值")
+    revision = hashlib.sha256(content).hexdigest()
     return GRURhythmPolicy(
         network,
         revision,
