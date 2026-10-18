@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -16,6 +15,7 @@ from aurora.commands.app.models import ConfigError, VerifyError, is_secret_name
 from src.mcp.client import SdkMcpClientFactory
 from src.mcp.models import McpAppSpec, McpEventMode, McpTransport
 from src.mcp.tool import bind_mcp_tool
+from src.utils.tasks import raise_with_cleanup, wait_for_completion
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -212,21 +212,28 @@ class MCPVerifier:
         return asyncio.run(self.inspect_async(handshake))
 
     async def inspect_async(self, handshake: Handshake) -> Inspection:
-        """检查握手和完整工具目录，再关闭连接；优先报告已确认的握手或发现失败。"""
+        """检查完整工具目录后释放连接，失败或取消也必须等待释放结束。"""
         port = await self._connect(handshake)
-        if not port.connected:
-            await _close_quietly(port)
-            raise VerifyError(_message(handshake, "协议连接", "握手完成后随即断开"))
-        version = port.protocol_version
         try:
-            tools = await _discover_bindings(handshake.spec.package, port)
-        except VerifyError:
+            inspection = await self._inspect_connected(handshake, port)
+        except BaseException as error:
+            await self._disconnect(handshake, port, primary=error)
             raise
+        await self._disconnect(handshake, port)
+        return inspection
+
+    async def _inspect_connected(self, handshake: Handshake, port: McpClientPort) -> Inspection:
+        """将握手状态和发现失败转换为有阶段、已脱敏的验证错误。"""
+        phase = "协议连接"
+        try:
+            if not port.connected:
+                raise ValueError("握手完成后随即断开")
+            version = port.protocol_version
+            phase = "工具发现"
+            tools = await _discover_bindings(handshake.spec.package, port)
         except Exception as error:
             reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets))
-            await _close_quietly(port)
-            raise VerifyError(_message(handshake, "工具发现", reason)) from error
-        await self._disconnect(handshake, port)
+            raise VerifyError(_message(handshake, phase, reason)) from error
         return Inspection(protocol_version=version, tools=tools)
 
     async def _connect(self, handshake: Handshake) -> McpClientPort:
@@ -241,23 +248,28 @@ class MCPVerifier:
             reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets))
             raise VerifyError(_message(handshake, "启动进程或协议连接", reason)) from error
 
-    async def _disconnect(self, handshake: Handshake, port: McpClientPort) -> None:
-        """关闭连接；关不掉说明对方不等协议收尾就退出，也是一种失败。"""
-        try:
-            await port.close()
-        except Exception as error:
-            reason = _tail(scrub_secrets(str(error), handshake.secrets))
-            raise VerifyError(_message(handshake, "关闭", reason)) from error
-
-
-async def _close_quietly(port: McpClientPort) -> None:
-    """尽力关闭一个已经断开的连接；失败不上报。
-
-    这条路径上调用方已经有一个更重要的结论要报（握手没成功），再叠一个清理失败
-    只会把用户的注意力引到次要问题上。
-    """
-    with suppress(Exception):
-        await port.close()
+    async def _disconnect(
+        self, handshake: Handshake, port: McpClientPort, *, primary: BaseException | None = None
+    ) -> None:
+        """完整等待关闭；公开诊断脱敏，原始错误与取消语义同时保留。"""
+        outcomes, interrupted = await wait_for_completion(asyncio.gather(port.close(), return_exceptions=True))
+        result = outcomes[0]
+        failure: VerifyError | None = None
+        if isinstance(result, BaseException):
+            reason = _tail(scrub_secrets(_error_detail(result), handshake.secrets))
+            failure = VerifyError(_message(handshake, "关闭", reason))
+            failure.__cause__ = result
+        failures = [failure] if failure is not None else []
+        if interrupted is not None:
+            raise_with_cleanup(primary if primary is not None else interrupted, failures, interrupted)
+        if failure is not None:
+            if primary is None:
+                raise failure
+            if isinstance(primary, Exception):
+                raise VerifyError(f"{primary}\n\n{failure}") from ExceptionGroup(
+                    "连接验证与资源释放同时失败", [primary, failure]
+                )
+            raise_with_cleanup(primary, failures)
 
 
 async def _ignore_event(_event: McpInboundEvent) -> None:
