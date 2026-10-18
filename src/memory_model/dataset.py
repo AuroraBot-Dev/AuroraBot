@@ -94,8 +94,13 @@ def write_episodes(path: Path, episodes: tuple[MemoryEpisode, ...]) -> None:
 
 def read_episodes(path: Path) -> tuple[MemoryEpisode, ...]:
     """逐行校验完整图前缀，监督标签不会被传给模型输入构造。"""
+    return parse_episodes(path.read_bytes())
+
+
+def parse_episodes(content: bytes) -> tuple[MemoryEpisode, ...]:
+    """解析已经固定版本的 JSONL 字节，文件后续变化不会改变本次输入。"""
     episodes: list[MemoryEpisode] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, line in enumerate(content.decode("utf-8").splitlines(), 1):
         if not line.strip():
             continue
         try:

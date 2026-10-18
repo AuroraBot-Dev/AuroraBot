@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 from dataclasses import dataclass
+from io import BytesIO
 from itertools import combinations
 from typing import TYPE_CHECKING, Any
 
@@ -12,7 +12,7 @@ import torch
 from torch import Tensor, nn
 
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS
-from src.contracts.resource import ResourceRef
+from src.contracts.model_artifact import model_content_ref
 from src.memory_model.dataset import MemoryEpisode, validate_partition
 from src.memory_model.evaluation import evaluate_policy
 from src.memory_model.rules import RuleMemoryPolicy
@@ -22,6 +22,7 @@ from src.utils.features import TEXT_FEATURE_SCHEMA
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from src.contracts.resource import ResourceRef
     from src.memory_model.dataset import MemoryExample
 
 
@@ -39,7 +40,13 @@ class MemoryTrainingResult:
 
     def save(self, path: Path) -> ResourceRef:
         """权重只含张量和基础元数据；动态节点状态始终从经历恢复。"""
+        content = self.to_bytes()
         path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return model_content_ref(content, TGN_KEY)
+
+    def to_bytes(self) -> bytes:
+        """同一份归档用于模型资源和文件导出，版本不依赖输出路径。"""
         data: dict[str, Any] = {
             "schema_version": 1,
             "model_key": str(TGN_KEY),
@@ -60,8 +67,9 @@ class MemoryTrainingResult:
                 "validation_episodes": list(self.validation_episodes),
             },
         }
-        torch.save(data, path)
-        return ResourceRef(TGN_KEY, hashlib.sha256(path.read_bytes()).hexdigest())
+        stream = BytesIO()
+        torch.save(data, stream)
+        return stream.getvalue()
 
 
 def train(

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
+from copy import deepcopy
 from datetime import timedelta
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor, nn
 
+from src.contracts.model_artifact import model_content_ref
 from src.contracts.resource import ResourceKey, ResourceRef
 from src.contracts.rhythm import RHYTHM_FEATURES, RhythmAction, RhythmDecision, RhythmPrediction
 
@@ -58,7 +59,7 @@ class GRURhythmPolicy:
         """时间范围由环境表达，模型在该范围内安排下一次检查。"""
         if not 0 < min_check_seconds <= max_check_seconds or not 0 < probability_threshold < 1:
             raise ValueError("节律检查间隔或概率阈值无效")
-        self.network = network.cpu().eval()
+        self._network = deepcopy(network).cpu().eval().requires_grad_(False)
         self._ref = ResourceRef(GRU_KEY, revision)
         self.min_check_seconds = min_check_seconds
         self.max_check_seconds = max_check_seconds
@@ -80,14 +81,14 @@ class GRURhythmPolicy:
 
     def evaluate(self, observation: RhythmObservation, hidden: tuple[float, ...] = ()) -> RhythmPrediction:
         """只使用已声明的观察特征，输出可直接持久化的状态。"""
-        if hidden and len(hidden) != self.network.hidden_size:
+        if hidden and len(hidden) != self._network.hidden_size:
             raise ValueError("节律隐状态与模型维度不匹配")
         if any(not math.isfinite(value) for value in hidden):
             raise ValueError("节律隐状态包含非有限数值")
         features = torch.tensor(observation.features(), dtype=torch.float32).reshape(1, 1, -1)
         previous = torch.tensor(hidden, dtype=torch.float32).reshape(1, 1, -1) if hidden else None
         with torch.no_grad():
-            logits, log_delay, updated = self.network(features, previous)
+            logits, log_delay, updated = self._network(features, previous)
         probability = float(logits.sigmoid().item())
         seconds = math.expm1(min(float(log_delay.item()), math.log1p(self.max_check_seconds)))
         seconds = min(self.max_check_seconds, max(self.min_check_seconds, seconds))
@@ -110,7 +111,25 @@ def load_policy(
     probability_threshold: float = 0.5,
 ) -> GRURhythmPolicy:
     """只加载张量与基础元数据，输入坐标变化时拒绝混用权重。"""
-    content = path.read_bytes()
+    return load_policy_bytes(
+        path.read_bytes(),
+        min_check_seconds=min_check_seconds,
+        max_check_seconds=max_check_seconds,
+        probability_threshold=probability_threshold,
+    )
+
+
+def load_policy_bytes(
+    content: bytes,
+    *,
+    expected: ResourceRef | None = None,
+    min_check_seconds: float = 1,
+    max_check_seconds: float = 3600,
+    probability_threshold: float = 0.5,
+) -> GRURhythmPolicy:
+    """按实际字节固定版本，可在张量解码前核对资源引用。"""
+    ref = model_content_ref(content, GRU_KEY, expected)
+    assert ref.revision is not None
     data = torch.load(BytesIO(content), map_location="cpu", weights_only=True)
     if data["schema_version"] != 1 or data["model_key"] != str(GRU_KEY):
         raise ValueError("不支持的节律权重格式")
@@ -120,10 +139,9 @@ def load_policy(
     network.load_state_dict(data["state_dict"], strict=True)
     if any(not bool(torch.isfinite(parameter).all()) for parameter in network.parameters()):
         raise ValueError("节律权重包含非有限数值")
-    revision = hashlib.sha256(content).hexdigest()
     return GRURhythmPolicy(
         network,
-        revision,
+        ref.revision,
         min_check_seconds=min_check_seconds,
         max_check_seconds=max_check_seconds,
         probability_threshold=probability_threshold,

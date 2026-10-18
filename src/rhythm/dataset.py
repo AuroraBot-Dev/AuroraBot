@@ -60,8 +60,13 @@ class RhythmEpisode:
 
 def read_episodes(path: Path) -> tuple[RhythmEpisode, ...]:
     """读取 JSONL；每行是一段独立经历及显式效用监督。"""
+    return parse_episodes(path.read_bytes())
+
+
+def parse_episodes(content: bytes) -> tuple[RhythmEpisode, ...]:
+    """从已固定的原始字节解析，训练时无需重新打开可变文件。"""
     episodes: list[RhythmEpisode] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for line_number, line in enumerate(content.decode("utf-8").splitlines(), start=1):
         if not line.strip():
             continue
         try:

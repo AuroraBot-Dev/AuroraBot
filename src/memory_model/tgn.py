@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 import threading
 from copy import deepcopy
@@ -15,6 +14,7 @@ from torch import Tensor, nn
 from src.contracts.memory_checkpoint import MemoryGraphPrefix
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS, MemoryNode
 from src.contracts.memory_graph_codec import interactions_fingerprint
+from src.contracts.model_artifact import model_content_ref
 from src.contracts.resource import ResourceRef
 from src.memory_model.checkpoint import decode_state, encode_state
 from src.memory_model.coordinates import TGN_KEY, TIME_SCALE
@@ -238,7 +238,13 @@ class TGNMemoryPolicy:
 
 def load_policy(path: Path) -> TGNMemoryPolicy:
     """只接受张量及基础元数据，拒绝关系或时间编码不兼容的权重。"""
-    content = path.read_bytes()
+    return load_policy_bytes(path.read_bytes())
+
+
+def load_policy_bytes(content: bytes, *, expected: ResourceRef | None = None) -> TGNMemoryPolicy:
+    """解码同一份确定版本的模型字节，不依赖加载过程中仍存在的路径。"""
+    ref = model_content_ref(content, TGN_KEY, expected)
+    assert ref.revision is not None
     data = torch.load(BytesIO(content), map_location="cpu", weights_only=True)
     if data["schema_version"] != 1 or data["model_key"] != str(TGN_KEY):
         raise ValueError("不支持的时序记忆权重格式")
@@ -250,7 +256,7 @@ def load_policy(path: Path) -> TGNMemoryPolicy:
     network.load_state_dict(data["state_dict"], strict=True)
     if any(not bool(torch.isfinite(parameter).all()) for parameter in network.parameters()):
         raise ValueError("时序记忆权重包含非有限数值")
-    return TGNMemoryPolicy(network, hashlib.sha256(content).hexdigest())
+    return TGNMemoryPolicy(network, ref.revision)
 
 
 def _interval(now: datetime, previous: datetime) -> float:
