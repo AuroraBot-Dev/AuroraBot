@@ -39,7 +39,7 @@ def compose(
 ) -> Assembly:
     """拓扑排序后同步构造所有模块（不执行异步 prepare）。"""
     resolution = resolve(specs)
-    context = _MutableContext(settings)
+    context = _MutableContext(settings, modules=resolution.modules)
     context.seed(instances)
     context.seed_contributions(contributions)
     for step in resolution.phases:
@@ -66,7 +66,7 @@ async def compose_managed(
 ) -> ManagedAssembly:
     """按阶段执行全部构造阶段（prepare/construct），并返回统一生命周期。"""
     resolution = resolve(specs)
-    context = _MutableContext(settings)
+    context = _MutableContext(settings, modules=resolution.modules)
     context.seed(instances)
     context.seed_contributions(contributions)
     cleanups: list[AsyncCleanup] = []

@@ -109,4 +109,24 @@ class ScopeCatalog:
         return tuple(sorted({scope for scope in scopes if self.declaration(scope) is None}))
 
 
-__all__ = ["ScopeCatalog", "ScopeDeclaration", "ScopeKind"]
+def merge_scope_catalog(configured: ScopeCatalog, defaults: Iterable[ScopeDeclaration]) -> ScopeCatalog:
+    """同模式配置覆盖模组默认值；较具体路径优先，通用配置不遮蔽模组子域。"""
+    declared: dict[str, ScopeDeclaration] = {}
+    for declaration in defaults:
+        existing = declared.get(declaration.pattern)
+        if existing is not None and existing != declaration:
+            raise ValueError(f"模组的域模式定义不一致：{declaration.pattern}")
+        declared[declaration.pattern] = declaration
+    combined = {declaration.pattern: declaration for declaration in configured.declarations}
+    for pattern, declaration in declared.items():
+        combined.setdefault(pattern, declaration)
+    return ScopeCatalog(tuple(sorted(combined.values(), key=_specificity)))
+
+
+def _specificity(declaration: ScopeDeclaration) -> tuple[int, int, bool]:
+    """比较路径字面量长度、星号数量和明确命名空间，相同具体度保持输入顺序。"""
+    owner, _, path = declaration.pattern.partition(":")
+    return -len(path.replace("*", "")), path.count("*"), owner == _NAMESPACE_ANY
+
+
+__all__ = ["ScopeCatalog", "ScopeDeclaration", "ScopeKind", "merge_scope_catalog"]

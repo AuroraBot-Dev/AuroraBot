@@ -30,10 +30,12 @@ class Resolution:
     activation: tuple[ModuleSpec, ...]
     phases: tuple[PhaseStep, ...]
     providers: Mapping[type, str]
+    modules: tuple[ModuleSpec, ...]
 
     def __post_init__(self) -> None:
         """登记权属于冻结的解析结果，运行阶段不能重新选择提供者。"""
         object.__setattr__(self, "providers", MappingProxyType(dict(self.providers)))
+        object.__setattr__(self, "modules", tuple(self.modules))
 
     def step(self, phase: Phase) -> tuple[ModuleSpec, ...]:
         for entry in self.phases:
@@ -66,6 +68,7 @@ def resolve(specs: Iterable[ModuleSpec]) -> Resolution:
         activation=_step_of(steps, ACTIVATE),
         phases=steps,
         providers={capability: spec.name for capability, spec in providers.items()},
+        modules=tuple(available),
     )
 
 

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from src.contracts import ContributionKey, Settings
+    from src.kernel.declaration import ModuleSpec
 
 
 class Capabilities(Protocol):
@@ -17,6 +18,9 @@ class Capabilities(Protocol):
 
     @property
     def settings(self) -> Settings: ...
+
+    @property
+    def modules(self) -> tuple[ModuleSpec, ...]: ...
 
     def get[T](self, capability: type[T]) -> T: ...
 
@@ -46,10 +50,12 @@ class Assembly:
     settings: Settings
     _instances: Mapping[type, object]
     _contributions: Mapping[str, tuple[object, ...]]
+    modules: tuple[ModuleSpec, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_instances", MappingProxyType(dict(self._instances)))
         object.__setattr__(self, "_contributions", MappingProxyType(dict(self._contributions)))
+        object.__setattr__(self, "modules", tuple(self.modules))
 
     def get[T](self, capability: type[T]) -> T:
         try:
@@ -74,6 +80,7 @@ class Assembly:
 @dataclass(slots=True)
 class _MutableContext:
     settings: Settings
+    modules: tuple[ModuleSpec, ...] = ()
     _instances: dict[type, object] = field(default_factory=dict)
     _contributions: dict[str, list[object]] = field(default_factory=dict)
 
@@ -114,7 +121,7 @@ class _MutableContext:
 
     def freeze(self) -> Assembly:
         contributions = {name: tuple(values) for name, values in self._contributions.items()}
-        return Assembly(self.settings, self._instances, contributions)
+        return Assembly(self.settings, self._instances, contributions, self.modules)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +136,11 @@ class _ModuleContext:
     def settings(self) -> Settings:
         """配置仍来自同一份只读装配输入。"""
         return self.context.settings
+
+    @property
+    def modules(self) -> tuple[ModuleSpec, ...]:
+        """静态声明在准备和构造之前已就绪，不需要等待其他模块产生贡献。"""
+        return self.context.modules
 
     def is_provider(self, capability: type) -> bool:
         """优先级裁决决定登记权，不依赖构造器到达的先后顺序。"""

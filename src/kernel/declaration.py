@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.scope import ScopeDeclaration
 from src.kernel.phase import ACTIVATE, CLOSE, CONSTRUCT, DRAIN, PREPARE, READY, RUN, Ordering, Phase
 
 if TYPE_CHECKING:
@@ -35,12 +37,32 @@ class ModuleSpec:
     declares: tuple[ContributionKey[Any], ...] = ()
     owns_scopes: tuple[str, ...] = ()
     observes_scopes: tuple[str, ...] = ()
+    scopes: tuple[ScopeDeclaration, ...] = ()
     priority: int = 0
     optional: bool = False
     order: tuple[Ordering, ...] = ()
     hooks: Mapping[Phase, PhaseHook] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """冻结声明容器，完整域声明也同时表达该模块的所有权。"""
+        for attribute in (
+            "provides",
+            "requires",
+            "contributes",
+            "consumes",
+            "declares",
+            "owns_scopes",
+            "observes_scopes",
+            "scopes",
+            "order",
+        ):
+            object.__setattr__(self, attribute, tuple(getattr(self, attribute)))
+        object.__setattr__(self, "hooks", MappingProxyType(dict(self.hooks)))
+        if any(not isinstance(scope, ScopeDeclaration) for scope in self.scopes):
+            raise TypeError("模块的完整域声明必须使用 ScopeDeclaration")
+        patterns = tuple(scope.pattern for scope in self.scopes)
+        if len(self.owns_scopes) != len(set(self.owns_scopes)) or len(patterns) != len(set(patterns)):
+            raise ValueError(f"模块重复声明域：{self.name}")
         if not self.name.strip():
             raise ValueError("模块名称不能为空")
         if not self.provides and not self.contributes and not self.hooks:
@@ -48,11 +70,16 @@ class ModuleSpec:
         contribution_names = [key.name for key in (*self.contributes, *self.consumes)]
         if len(contribution_names) != len(set(contribution_names)):
             raise ValueError(f"模块重复声明贡献点：{self.name}")
-        scopes = (*self.owns_scopes, *self.observes_scopes)
+        scopes = (*self.owned_scopes, *self.observes_scopes)
         if any(not scope.strip() or scope != scope.strip() for scope in scopes):
             raise ValueError(f"模块声明的域必须是非空且无首尾空白的文本：{self.name}")
         if len(scopes) != len(set(scopes)):
             raise ValueError(f"模块重复声明域：{self.name}")
+
+    @property
+    def owned_scopes(self) -> tuple[str, ...]:
+        """从声明推导所有权，不另存会在复制或替换声明后过期的模式列表。"""
+        return tuple(dict.fromkeys((*self.owns_scopes, *(scope.pattern for scope in self.scopes))))
 
     def hook(self, phase: Phase) -> PhaseHook | None:
         """返回本模块在该阶段注册的钩子；未参与返回 ``None``。"""
@@ -80,6 +107,7 @@ def module(
     declares: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
     owns_scopes: str | tuple[str, ...] = (),
     observes_scopes: str | tuple[str, ...] = (),
+    scopes: ScopeDeclaration | tuple[ScopeDeclaration, ...] = (),
     priority: int = 0,
     optional: bool = False,
     activation_after: type | tuple[type, ...] = (),
@@ -128,6 +156,7 @@ def module(
             declares=_as_tuple(declares),
             owns_scopes=_as_tuple(owns_scopes),
             observes_scopes=_as_tuple(observes_scopes),
+            scopes=_as_tuple(scopes),
             priority=priority,
             optional=optional,
             order=extra_order,
