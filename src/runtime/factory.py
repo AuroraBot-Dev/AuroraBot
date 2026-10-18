@@ -9,7 +9,6 @@ from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.engine import AgentTreeRunner
 from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.resources import ResourceCatalog
 from src.contracts.pkgs.world import WorldJournal
 from src.runtime.config import RuntimeConfig
 from src.runtime.core import AuroraRuntime
@@ -38,7 +37,6 @@ def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print)
         agents=agents,
         root=root,
         world=assembly.get(WorldJournal),
-        resources=assembly.get(ResourceCatalog),
         operations=assembly.get(OperationRegistry),
         bot_id=assembly.get(BotStateStore).bot_id,
         output=output,

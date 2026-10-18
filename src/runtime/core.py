@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from src.contracts.pkgs.agents import AgentCatalog
     from src.contracts.pkgs.engine import AgentTreeRunner
     from src.contracts.pkgs.operations import OperationRegistry
-    from src.contracts.pkgs.resources import ResourceCatalog
     from src.contracts.pkgs.world import WorldJournal
     from src.kernel import Assembly
     from src.runtime.config import RuntimeConfig
@@ -44,7 +43,6 @@ class AuroraRuntime:
         agents: AgentCatalog,
         root: RuntimeConfig,
         world: WorldJournal,
-        resources: ResourceCatalog,
         operations: OperationRegistry,
         bot_id: str,
         output: Callable[[str], None] = print,
@@ -59,7 +57,7 @@ class AuroraRuntime:
         self.output = output
         self.front_bindings = front_bindings
         self.presenter = TreeTextPresenter(output)
-        self.terminal = TerminalCommandDispatcher(self.run_from_commit, ResourceCommands(resources, operations, bot_id))
+        self.terminal = TerminalCommandDispatcher(self.run_from_commit, ResourceCommands(operations, bot_id))
         self._trees: dict[str, AgentTree] = {}
         self._cognition_lock = asyncio.Lock()
 

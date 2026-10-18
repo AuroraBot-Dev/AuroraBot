@@ -4,30 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
 from src.contracts import ToolScopes
 from src.contracts.artifact_codec import artifact_data
 from src.contracts.operation import OperationDefinition, OperationResult, OperationStatus
 from src.contracts.resource import ResourceKey, ResourceRef
-from src.contracts.resource_query import MAX_RESOURCE_CURSOR_LENGTH, MAX_RESOURCE_PAGE, ResourceQuery
+from src.contracts.resource_requests import ResourceQueryInput
 from src.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
     from src.contracts.operation import OperationRequest
     from src.contracts.pkgs.artifacts import ArtifactStore
-
-
-class ArtifactFindInput(BaseModel):
-    """发现按命名空间、领域与类别筛选；续页保持这些条件不变。"""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    namespace: str | None = None
-    domain: str | None = None
-    kind: str | None = None
-    limit: int = Field(default=20, ge=1, le=MAX_RESOURCE_PAGE)
-    after: str | None = Field(default=None, min_length=1, max_length=MAX_RESOURCE_CURSOR_LENGTH)
 
 
 class ArtifactFindOperation:
@@ -38,7 +26,7 @@ class ArtifactFindOperation:
         "分页发现已发布的数据集、模型和其他内容版本。items 只含清单元信息，content_verified=false。"
         "使用 next_cursor 作为 after 继续，保持筛选不变；这是当前目录的动态列表，新增内容可能需要重新发现。"
         "取得 key 与 revision 后，用 artifact_stat 核对完整性或 artifact_read 读取正文。",
-        ArtifactFindInput.model_json_schema(),
+        ResourceQueryInput.model_json_schema(),
         "aurora:tool/artifact_find",
         True,
     )
@@ -59,9 +47,8 @@ class ArtifactFindOperation:
     async def execute(self, request: OperationRequest) -> OperationResult:
         """查询参数和游标有误时明确失败，不能悄悄变更筛选。"""
         try:
-            inputs = ArtifactFindInput.model_validate(thaw_json(request.arguments))
-            query = ResourceQuery(inputs.namespace, inputs.domain, inputs.kind, inputs.limit, inputs.after)
-            page = await self._store.find(query)
+            inputs = ResourceQueryInput.model_validate(thaw_json(request.arguments))
+            page = await self._store.find(inputs.query)
             return OperationResult(
                 {
                     "items": [artifact_data(info) for info in page.items],

@@ -31,7 +31,7 @@ class TerminalCommandDispatcher:
         if text in {"/help", "/h"}:
             return TerminalResponse(
                 "本地命令：/help /clear /quit\n"
-                "资源发现：/resources [--namespace 名称] [--domain 领域] [--kind 类别]\n"
+                "资源发现：/resources [--namespace 名称] [--domain 领域] [--kind 类别] [--limit 数量] [--after 游标]\n"
                 "资源说明：/inspect namespace:domain/kind/path[@版本]\n"
                 "操作调用：/call namespace:domain/kind/path[@版本] JSON对象"
             )

@@ -57,7 +57,7 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 结构化工具和终端指令共用这些定义。终端可使用：
 
 ```text
-/resources --domain bot --kind command
+/resources --domain bot --kind command --limit 20
 /inspect aurora:bot/command/goal_set@2
 /call aurora:bot/query/state {}
 /call aurora:bot/query/state {"goal_id":"aurora:goal/check"}
@@ -68,6 +68,8 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 能力提供者由优先级在启动前选定，准备、构造和生命周期都使用同一份登记权；同优先级冲突会失败。能力全部被替换且没有贡献的模块不运行；部分能力被替换时保留其他端口和贡献。模块可用 `context.is_provider(契约类型)` 判断是否需要准备实现；若构造其他能力时需要读取自己提供的可替换端口，应同时把该端口列入 `requires`，让依赖跟随实际选中的提供者。
 
 模组通过 `@module(scopes=ScopeDeclaration(...))` 声明自己拥有的域、分类和含义。装配在业务准备前合并可用模组的声明，形成冻结的 `ScopeCatalog`；记忆、工具和 MCP 通过能力注入读取同一份目录。插件添加域无需修改宿主配置。`scopes.toml` 默认为空，仅填写项目扩展或覆盖：同模式配置优先，不同模式按路径具体度排列。同一模式的模组声明不一致时，启动前失败。
+
+`/resources` 与 Bot 的 `resources_find` 共用 `aurora:resources/query/find`，返回 `items`、`next_cursor` 和 `listing_mode`；`/inspect` 与 `resources_inspect` 共用 `aurora:resources/query/inspect`。默认每页 20 项，用 `--after` 或结构化参数 `after` 继续同一筛选。查询经过统一操作路由并记录调用；检查动态内容需要确定版本并核对完整性，返回描述后仍需按读取入口取得正文。
 
 动态资源通过 `RESOURCE_PROVIDERS` 接入目录，不需要把全部版本登记到内核。每个提供者使用公共排序和游标，每次只返回一页；目录合并去重，静态声明优先，动态来源对同一版本的定义不一致时明确失败。提供者必须遵守页大小、筛选、顺序和续页规则，避免跨来源查询漏项。
 

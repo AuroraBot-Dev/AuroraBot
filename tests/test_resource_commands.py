@@ -25,7 +25,9 @@ def test_terminal_discovers_inspects_and_calls_same_bot_operations(configured_pr
         runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
         try:
             discovered = await runtime.terminal.dispatch_terminal("/resources --domain bot --kind query")
-            entries = json.loads(discovered.text or "[]")
+            page = json.loads(discovered.text or "{}")
+            entries = page["items"]
+            assert page["next_cursor"] is None
             assert [item["resource"] for item in entries] == ["aurora:bot/query/state"]
             inspected = await runtime.terminal.dispatch_terminal("/inspect aurora:bot/command/goal_set@2")
             definition = json.loads(inspected.text or "{}")

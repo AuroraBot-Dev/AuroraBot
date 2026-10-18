@@ -28,6 +28,12 @@ class _Settings:
         raise AssertionError("本测试不应读取配置")
 
 
+@module(name="test_operation_owner", provides=bool, declares=OPERATION_CONTRIBUTIONS)
+def operation_owner(context: ModuleContext) -> bool:
+    """纯资源测试也显式声明查询处理者贡献点。"""
+    return True
+
+
 def test_resource_pack_needs_no_builder_and_freezes_its_definition_container() -> None:
     """声明包只发布定义，复制模组不会共享可变资源列表。"""
     descriptor = ResourceDescriptor(ResourceRef(ResourceKey.parse("lab:notes/document/guide"), "1"), "资源包指南")
@@ -35,7 +41,7 @@ def test_resource_pack_needs_no_builder_and_freezes_its_definition_container() -
     pack = ModuleSpec("notes", resources=cast("tuple[ResourceDescriptor, ...]", items))
     items.clear()
     assert replace(pack, priority=10).resources == (descriptor,)
-    assembly = compose(_Settings(), (pack, MODULE))
+    assembly = compose(_Settings(), (pack, MODULE, operation_owner))
     assert assembly.get(ResourceCatalog).resolve(descriptor.ref) is descriptor
 
 

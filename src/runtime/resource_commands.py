@@ -9,24 +9,29 @@ from uuid import uuid4
 
 from src.contracts import TerminalResponse
 from src.contracts.artifact_codec import artifact_data
-from src.contracts.operation import OperationRequest, OperationStatus
-from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from src.contracts.resource import ResourceKey, ResourceRef
+from src.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
 from src.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
     from src.contracts.pkgs.operations import OperationRegistry
-    from src.contracts.pkgs.resources import ResourceCatalog
 
 _COMMANDS = frozenset({"/resources", "/inspect", "/call"})
-_FILTER_FLAGS = {"--namespace": "namespace", "--domain": "domain", "--kind": "kind"}
+_FILTER_FLAGS = {
+    "--namespace": "namespace",
+    "--domain": "domain",
+    "--kind": "kind",
+    "--limit": "limit",
+    "--after": "after",
+}
 
 
 class ResourceCommands:
     """终端调用与模型工具共享能力定义、参数校验与执行回执。"""
 
-    def __init__(self, resources: ResourceCatalog, operations: OperationRegistry, bot_id: str) -> None:
-        """只绑定公共目录与执行端口。"""
-        self._resources = resources
+    def __init__(self, operations: OperationRegistry, bot_id: str) -> None:
+        """资源查询与调用全部经过同一操作端口。"""
         self._operations = operations
         self._bot_id = bot_id
 
@@ -43,9 +48,10 @@ class ResourceCommands:
         arguments = parts[1] if len(parts) > 1 else ""
         try:
             if command == "/resources":
-                data = self._list(arguments)
+                data = await self._list(arguments)
             elif command == "/inspect":
-                data = _descriptor_data(self._resources.resolve(_reference(arguments)))
+                ref = _reference(arguments)
+                data = await self._query(RESOURCE_INSPECT, {"resource": str(ref.key), "revision": ref.revision})
             elif command == "/call":
                 return await self._call(arguments)
             else:
@@ -54,18 +60,38 @@ class ResourceCommands:
             return TerminalResponse(str(error), is_error=True)
         return TerminalResponse(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
-    def _list(self, arguments: str) -> list[dict[str, object]]:
+    async def _list(self, arguments: str) -> dict[str, object]:
         """独立筛选命名空间、领域和资源类别。"""
         tokens = shlex.split(arguments)
         if len(tokens) % 2:
-            raise ValueError("资源筛选使用 --namespace、--domain、--kind，每个选项后填写一个值")
+            raise ValueError("资源筛选使用 --namespace、--domain、--kind、--limit、--after，每个选项后填写一个值")
         filters: dict[str, str] = {}
         for flag, value in zip(tokens[::2], tokens[1::2], strict=True):
             name = _FILTER_FLAGS.get(flag)
             if name is None or name in filters:
                 raise ValueError(f"资源筛选选项无效或重复：{flag}")
             filters[name] = value
-        return [_descriptor_data(item) for item in self._resources.find(**filters)]
+        arguments_data: dict[str, object] = dict(filters)
+        if "limit" in filters:
+            try:
+                arguments_data["limit"] = int(filters["limit"])
+            except ValueError as error:
+                raise ValueError("资源分页上限必须为整数") from error
+        return await self._query(RESOURCE_FIND, arguments_data)
+
+    async def _query(self, target: ResourceRef, arguments: dict[str, object]) -> dict[str, object]:
+        """发现与检查使用注册查询的同一校验和调用记录。"""
+        request = OperationRequest(uuid4().hex, self._bot_id, "console", target, OperationKind.QUERY, arguments)
+        result = await self._operations.dispatch(request)
+        if result.status is not OperationStatus.SUCCEEDED:
+            raise ValueError(result.message or "资源查询失败")
+        if result.body_ref is not None:
+            return {
+                "result_ref": artifact_data(result.body_ref),
+                "content_included": False,
+                "read_operation": "aurora:artifacts/query/read",
+            }
+        return thaw_json(result.data)
 
     async def _call(self, arguments: str) -> TerminalResponse:
         """先解析目标和 JSON，实际参数验证复用操作定义。"""
@@ -106,15 +132,3 @@ def _reference(text: str) -> ResourceRef:
     """把终端版本语法转换为结构化引用。"""
     key, separator, revision = text.strip().partition("@")
     return ResourceRef(ResourceKey.parse(key), revision if separator else None)
-
-
-def _descriptor_data(descriptor: ResourceDescriptor) -> dict[str, object]:
-    """完整保留可调用结构，终端帮助无需维护第二套参数。"""
-    return {
-        "resource": str(descriptor.ref.key),
-        "revision": descriptor.ref.revision,
-        "description": descriptor.description,
-        "contract": str(descriptor.contract.key) if descriptor.contract is not None else None,
-        "contract_revision": descriptor.contract.revision if descriptor.contract is not None else None,
-        "metadata": thaw_json(descriptor.metadata),
-    }

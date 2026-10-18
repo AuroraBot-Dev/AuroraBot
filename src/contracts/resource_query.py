@@ -16,7 +16,7 @@ class ResourceQuery:
     namespace: str | None = None
     domain: str | None = None
     kind: str | None = None
-    limit: int = 50
+    limit: int = 20
     after: str | None = None
 
     def __post_init__(self) -> None:

@@ -90,7 +90,7 @@ def test_terminal_large_result_returns_reference_and_preserves_error_status(
         registry = OperationRegistry(
             _BOT, (operation,), catalog, world, artifacts=FileArtifactStore(tmp_path / "artifacts")
         )
-        commands = ResourceCommands(catalog, registry, _BOT)
+        commands = ResourceCommands(registry, _BOT)
         try:
             response = await commands.dispatch(f"/call {operation.definition.ref.key}@1 {{}}")
             assert response.text is not None
