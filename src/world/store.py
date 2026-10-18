@@ -25,7 +25,7 @@ from src.world.models import Base, SchemaMetaRow, WorldCommitBaseRow, WorldCommi
 _logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
     from sqlalchemy import ColumnElement
@@ -38,7 +38,7 @@ _MAX_TREE_INDEX = 1000
 class SqlAlchemyWorldJournal:
     """使用 SQLite 与 SQLAlchemy ORM 保存 Bot 的只追加世界提交。"""
 
-    def __init__(self, database_path: Path, *, page_size: int = 64) -> None:
+    def __init__(self, database_path: Path, *, page_size: int = 64, now: Callable[[], datetime] | None = None) -> None:
         if page_size <= 0:
             raise ValueError("page_size must be positive")
         self.database_path = database_path
@@ -47,6 +47,7 @@ class SqlAlchemyWorldJournal:
         )
         self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
         self._page_size = page_size
+        self._now = now or (lambda: datetime.now(UTC))
         self._lock = asyncio.Lock()
         self._initialized = False
 
@@ -131,7 +132,8 @@ class SqlAlchemyWorldJournal:
             raise ValueError("WorldCommitInput commit IDs must be unique in one batch")
         async with self._lock, self._sessions.begin() as session:
             next_sequences: dict[str, int] = {}
-            appended: list[WorldCommit] = []
+            appended: list[WorldCommitRow] = []
+            last_recorded_at = await session.scalar(select(func.max(WorldCommitRow.recorded_at)))
             for item in inputs:
                 statement = select(WorldCommitRow).where(WorldCommitRow.commit_id == item.commit_id)
                 existing = await session.scalar(statement)
@@ -139,16 +141,22 @@ class SqlAlchemyWorldJournal:
                     (commit,) = await self._load_commits(session, (existing,))
                     if not _matches_input(commit, item):
                         raise ValueError(f"WorldCommit ID 已被不同内容使用：{item.commit_id}")
-                    appended.append(commit)
+                    appended.append(existing)
                     continue
                 sequences = await self._allocate_sequences(session, item.scopes, next_sequences)
-                occurred_at = item.occurred_at or datetime.now(UTC)
+                recorded_at = self._now()
+                if recorded_at.tzinfo is None or recorded_at.utcoffset() is None:
+                    raise ValueError("世界日志的时间来源必须包含时区")
+                recorded_at = max(recorded_at, _as_utc(last_recorded_at)) if last_recorded_at else recorded_at
+                last_recorded_at = recorded_at
+                occurred_at = item.occurred_at or recorded_at
                 row = WorldCommitRow(
                     commit_id=item.commit_id,
                     kind=item.kind,
                     source=item.source,
                     summary=item.summary,
                     occurred_at=occurred_at,
+                    recorded_at=recorded_at,
                     payload=dict(item.data),
                 )
                 session.add(row)
@@ -160,21 +168,10 @@ class SqlAlchemyWorldJournal:
                     WorldCommitBaseRow(commit_id=item.commit_id, scope=scope, sequence=sequence)
                     for scope, sequence in item.based_on.positions.items()
                 )
-                appended.append(
-                    WorldCommit(
-                        item.commit_id,
-                        item.kind,
-                        item.source,
-                        item.summary,
-                        occurred_at,
-                        sequences,
-                        item.based_on,
-                        item.data,
-                    )
-                )
+                appended.append(row)
             await session.flush()
             _logger.debug("世界提交已追加 commit_count={}", len(appended))
-            return tuple(appended)
+            return await self._load_commits(session, appended)
 
     @staticmethod
     async def _allocate_sequences(
@@ -367,6 +364,8 @@ def _as_commit(row: WorldCommitRow, scopes: dict[str, int], based_on: dict[str, 
         scopes,
         WorldFrontier(based_on),
         row.payload,
+        cursor=row.insertion_sequence,
+        recorded_at=_as_utc(row.recorded_at),
     )
 
 

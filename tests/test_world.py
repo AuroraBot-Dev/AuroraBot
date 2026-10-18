@@ -173,6 +173,8 @@ def test_sqlalchemy_journal_migrates_existing_world_to_partition_indexes(tmp_pat
         page = await journal.delta(WorldFrontier(), frozenset({"qq:group:1"}))
 
         assert legacy is not None and legacy.summary == "旧提交"
+        assert legacy.cursor == 1 and legacy.recorded_at is not None
+        assert legacy.recorded_at.tzinfo is not None
         assert [commit.commit_id for commit in page.commits] == ["legacy-1"]
         assert page.end.sequence("qq:group:1") == 1
         await journal.close()

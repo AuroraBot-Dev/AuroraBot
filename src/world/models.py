@@ -1,8 +1,6 @@
 """WorldJournal 的 SQLAlchemy 声明式 ORM 模型。"""
 
-from __future__ import annotations
-
-from datetime import datetime  # noqa: TC003 - SQLAlchemy resolves this annotation during model declaration
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
@@ -26,6 +24,7 @@ class WorldCommitRow(Base):
     """世界提交的不可变主体。"""
 
     __tablename__ = "world_commits"
+    __table_args__ = (Index("world_commit_recorded_at", "recorded_at"),)
 
     insertion_sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     commit_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -33,6 +32,7 @@ class WorldCommitRow(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)
     summary: Mapped[str] = mapped_column(String, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 

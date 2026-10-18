@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.world.migration.v1 import apply as apply_v1
+from src.world.migration.v2 import apply as apply_v2
 
-TARGET_VERSION = 2
+TARGET_VERSION = 3
 MigrationStep = Callable[..., None]
-STEPS: dict[int, MigrationStep] = {1: apply_v1}
+STEPS: dict[int, MigrationStep] = {1: apply_v1, 2: apply_v2}

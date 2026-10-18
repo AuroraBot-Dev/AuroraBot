@@ -70,6 +70,8 @@ class WorldCommit:
     scopes: Mapping[str, int]
     based_on: WorldFrontier
     data: Mapping[str, Any] = field(default_factory=dict)
+    cursor: int = 0
+    recorded_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not all((self.commit_id.strip(), self.kind.strip(), self.source.strip(), self.summary.strip())):
@@ -79,6 +81,10 @@ class WorldCommit:
             raise ValueError("WorldCommit requires positive sequences for non-empty scopes")
         object.__setattr__(self, "scopes", MappingProxyType(scopes))
         object.__setattr__(self, "data", MappingProxyType(dict(self.data)))
+        if self.cursor < 0:
+            raise ValueError("世界提交的全局游标不能小于零")
+        if self.recorded_at is not None and (self.recorded_at.tzinfo is None or self.recorded_at.utcoffset() is None):
+            raise ValueError("世界提交的获知时间必须包含时区")
 
 
 @dataclass(frozen=True, slots=True)
