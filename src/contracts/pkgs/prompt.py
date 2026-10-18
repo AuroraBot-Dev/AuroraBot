@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from src.contracts.agent import AgentTree
-    from src.contracts.prompt import PromptAssembly
+    from src.contracts.prompt import PromptAssembly, PromptFragment
+    from src.contracts.resource import ResourceRef
     from src.contracts.tool import ToolDefinition
     from src.contracts.world import MemorySnapshot
 
@@ -17,10 +18,17 @@ class PromptCatalog(Protocol):
     """四角色提示词目录。"""
 
     @property
+    def fragments(self) -> tuple[PromptFragment, ...]: ...
+
+    @property
     def system(self) -> tuple[str, ...]: ...
 
     @property
     def agent_prompts(self) -> Mapping[str, str]: ...
+
+    def get(self, ref: ResourceRef) -> PromptFragment: ...
+
+    def for_agent(self, prompt_id: str) -> tuple[PromptFragment, ...]: ...
 
 
 class PromptAssembler(Protocol):

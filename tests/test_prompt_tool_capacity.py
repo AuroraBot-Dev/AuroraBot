@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pytest
+from prompt_support import make_prompt_catalog
 from test_engine_runtime import FakeModel
 
 from src.agents import AgentCatalog
@@ -16,7 +17,7 @@ from src.contracts.bot import Goal
 from src.contracts.memory import MemoryContinuity
 from src.contracts.model import ContextBudgetError
 from src.engine import AgentTreeRunner
-from src.prompt import PromptAssembler, PromptCatalog
+from src.prompt import PromptAssembler
 from src.tools import ToolRegistry
 from src.utils.serialization import thaw_json
 
@@ -34,7 +35,7 @@ def _agent(tools: frozenset[str] = frozenset()) -> AgentDefinition:
 
 def _assembler(limit: int) -> PromptAssembler:
     """短提示词使测试的容量变化来自能力定义。"""
-    return PromptAssembler(PromptCatalog(("主体身份",), {_PROMPT: "读取世界并自行判断。"}), max_characters=limit)
+    return PromptAssembler(make_prompt_catalog(("主体身份",), {_PROMPT: "读取世界并自行判断。"}), max_characters=limit)
 
 
 def test_tool_schema_overflow_preserves_required_state_by_refusing_assembly() -> None:

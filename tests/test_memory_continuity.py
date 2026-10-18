@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from prompt_support import make_prompt_catalog
+
 from src.contracts import AgentDefinition, AgentTree, MemorySnapshot
 from src.contracts.bot import BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
 from src.contracts.memory import MemoryRequest
 from src.memory.continuity import select_continuity
-from src.prompt import PromptAssembler, PromptCatalog
+from src.prompt import PromptAssembler
 
 
 def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() -> None:
@@ -31,7 +33,7 @@ def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() ->
     assert dict(continuity.goal_counts) == {"active": 1, "completed": 1000}
     agent = AgentDefinition("aurora:agent/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset())
     tree = AgentTree.create("tree", "root", agent, "继续核对", focus_goal_ids=(target.goal_id,))
-    prompt = PromptAssembler(PromptCatalog(("你是 Aurora。",), {agent.prompt_id: "按自己的判断行动。"}))
+    prompt = PromptAssembler(make_prompt_catalog(("你是 Aurora。",), {agent.prompt_id: "按自己的判断行动。"}))
     messages = prompt.assemble(tree, "root", memory=MemorySnapshot(now, (), continuity)).messages
     assert "operation-7 已发起，先核对结果" in messages[0].content
     assert "experiment:started:7" in messages[0].content

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from prompt_support import make_prompt_catalog
+
 from src.contracts import AgentDefinition, AgentTree, MemorySnapshot, WorldCommit, WorldFrontier
 from src.contracts.bot import Checkpoint, Goal
 from src.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
 from src.memory.selection import select_memories
 from src.memory_model.rules import RuleMemoryPolicy
-from src.prompt import PromptAssembler, PromptCatalog
+from src.prompt import PromptAssembler
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 
@@ -84,7 +86,9 @@ def test_prompt_budget_does_not_drop_shared_dependency_when_skipping_large_bundl
     )
     agent = AgentDefinition("aurora:agent/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset())
     tree = AgentTree.create("tree", "root", agent, "继续")
-    assembler = PromptAssembler(PromptCatalog(("你是 Aurora。",), {agent.prompt_id: "自行判断。"}), max_characters=700)
+    assembler = PromptAssembler(
+        make_prompt_catalog(("你是 Aurora。",), {agent.prompt_id: "自行判断。"}), max_characters=700
+    )
     messages = assembler.assemble(tree, "root", memory=memory).messages
     system = messages[0].content
     assert "已经发起，请先核对结果" in system

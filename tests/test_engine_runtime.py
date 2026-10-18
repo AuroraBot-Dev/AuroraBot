@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
+from prompt_support import make_prompt_catalog
 
 from src.agents import AgentCatalog
 from src.contracts import (
@@ -28,7 +29,7 @@ from src.contracts import (
     WorldFrontier,
 )
 from src.engine import AgentTreeRunner
-from src.prompt import PromptAssembler, PromptCatalog
+from src.prompt import PromptAssembler
 from src.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
 from src.world import SqlAlchemyWorldJournal
 
@@ -125,7 +126,7 @@ def _agent_id(name: str) -> str:
 
 def _assembler() -> PromptAssembler:
     return PromptAssembler(
-        PromptCatalog(
+        make_prompt_catalog(
             ("You are Aurora.",),
             {_prompt_id("root"): "Solve the whole task.", _prompt_id("worker"): "Solve only the assigned part."},
         )

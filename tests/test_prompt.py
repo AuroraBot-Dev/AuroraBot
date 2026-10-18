@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from prompt_support import make_prompt_catalog
 
 from src.contracts import (
     AgentDefinition,
@@ -17,12 +18,12 @@ from src.contracts import (
 from src.contracts.bot import Checkpoint, Goal
 from src.contracts.memory import MemoryContinuity
 from src.contracts.model import ContextBudgetError
-from src.prompt import PromptAssembler, PromptCatalog
+from src.prompt import PromptAssembler
 
 
 def _assembler(*, limit: int = 1_000) -> PromptAssembler:
     return PromptAssembler(
-        PromptCatalog(
+        make_prompt_catalog(
             ("You are Aurora.", "The world continues between messages."),
             {"aurora:prompt/agent/root": "Act as the root."},
         ),
@@ -160,9 +161,9 @@ def test_assembler_injects_memory_snapshot_into_system() -> None:
 
 
 def test_prompt_catalog_and_assembler_require_non_empty_bounds() -> None:
-    with pytest.raises(ValueError, match="system fragment"):
-        PromptCatalog((), {"aurora:prompt/agent/root": "prompt"})
+    with pytest.raises(ValueError, match="system 片段"):
+        make_prompt_catalog((), {"aurora:prompt/agent/root": "prompt"})
     with pytest.raises(ValueError, match="Agent prompt"):
-        PromptCatalog(("system",), {})
+        make_prompt_catalog(("system",), {})
     with pytest.raises(ValueError, match="字符容量必须为正数"):
-        PromptAssembler(PromptCatalog(("system",), {"aurora:prompt/agent/root": "prompt"}), max_characters=0)
+        PromptAssembler(make_prompt_catalog(("system",), {"aurora:prompt/agent/root": "prompt"}), max_characters=0)

@@ -47,11 +47,8 @@ class PromptAssembler:
         """保留原始意图、最新交互和主体状态，按完整交互组裁剪历史。"""
         message_budget = self._max_characters - _tools_size(tools)
         node = tree.node(node_id)
-        try:
-            agent_prompt = self._catalog.agent_prompts[node.prompt_id]
-        except KeyError as error:
-            raise ValueError(f"Agent 提示词不存在：{node.prompt_id}") from error
-        fragments = [*self._catalog.system, agent_prompt]
+        sources = self._catalog.for_agent(node.prompt_id)
+        fragments = [fragment.content for fragment in sources]
         if memory is not None and memory.continuity is not None:
             fragments.append(self._render_continuity(memory.continuity))
         if memory is not None and memory.required:
