@@ -1,5 +1,5 @@
 {
-  "python.languageServer": "None",
+  "python.languageServer": "Default",
   "workbench.browser.openLocalhostLinks": false,
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
@@ -13,5 +13,6 @@
     ".gitignore": ".gitattributes, .gitmodules, .prettierrc.json",
     "package.json": "pnpm-lock.yaml, package-lock.json, yarn.lock, .npmrc, tsconfig*.json, vite.config.*, eslint.config.*, .prettierrc*, .stylelintrc*, uno.config.*, turbo.json"
   },
-  "basedpyright.analysis.inlayHints.variableTypes": false
+  "basedpyright.analysis.inlayHints.variableTypes": false,
+  "basedpyright.disableLanguageServices": true
 }
