@@ -1,4 +1,7 @@
-"""``aurora app`` 的纯值对象、错误体系与输入校验。"""
+"""``aurora app`` 的纯值对象、错误体系与输入校验。
+
+源码、包管理器和远程连接计划分别保存各自的来源，共用登记状态与工具目录。
+"""
 
 from __future__ import annotations
 
@@ -16,14 +19,11 @@ type AppState = Literal["ready", "missing", "invalid", "configured"]
 type AppKind = Literal["local", "remote"]
 type RepositoryStatus = Literal["active", "archived", "disabled"]
 
-# 凭据的判据是变量名，不是值的形状：值的形状千变万化，而一个叫 ``*_TOKEN`` 的
-# 变量的值没有理由出现在诊断信息里、也没有理由被塞进 URL。verify 的脱敏与
-# connect 的 URL 准入共用这一条判断。
 _SECRET_HINTS = ("TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "API_KEY", "APIKEY", "AUTH")
 
 
 def is_secret_name(name: str) -> bool:
-    """变量名看起来是不是在装凭据。"""
+    """按名称识别凭据字段，供诊断脱敏和连接 URL 校验共用，不检查凭据值的形状。"""
     upper = name.upper()
     return any(hint in upper for hint in _SECRET_HINTS)
 
@@ -254,7 +254,6 @@ class InstallPlan:
     event_mode: McpEventMode = "disabled"
 
 
-# 三种来源的计划分别保存源码仓库、包管理器命令或远程 URL，共用登记状态与工具目录。
 type AppPlan = InstallPlan | RunnerPlan | ConnectPlan
 
 

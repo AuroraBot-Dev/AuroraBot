@@ -1,4 +1,4 @@
-"""解析仓库的 ``aurora-app.toml`` 启动清单。"""
+"""解析仓库的 ``aurora-app.toml`` 启动清单，内容限制为 64 KiB。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from aurora.utils.toml import check_relative_directory
 
 MANIFEST_NAME = "aurora-app.toml"
 MANIFEST_VERSION = 1
-# 清单是一份几行的声明文件；超过这个大小说明读到的不是它。
 MAX_MANIFEST_BYTES = 64 * 1024
 
 _SERVER_FIELDS = frozenset({"command"})
@@ -66,6 +65,7 @@ def check_manifest_command(command: tuple[str, ...], *, source: str) -> tuple[st
     参数本身不设白名单：仓库作者声明的就是他要执行的，Aurora 不做「命令看起来危不
     危险」的判断 —— 那种判断既拦不住真的恶意，又会误伤合法的启动方式。这里只保证
     它是一个能直接交给 ``exec`` 的形状。
+    带路径分隔符的可执行名必须是仓库内的相对路径，避免按工作目录解析时越界。
     """
     if not command:
         raise ManifestError(f"{source} 必须是非空的字符串数组")
@@ -74,8 +74,6 @@ def check_manifest_command(command: tuple[str, ...], *, source: str) -> tuple[st
     if any(item.strip() != item for item in command):
         raise ManifestError(f"{source} 的每一项都不得含首尾空白")
     if "/" in command[0] or "\\" in command[0]:
-        # 带路径分隔符的可执行名按 cwd 解析，因此必须钉在仓库内：否则
-        # ["./../../x"] 会在 aurora start 时跑到仓库外面去执行。
         try:
             check_relative_directory(command[0], f"{source}[0]")
         except ValueError as error:

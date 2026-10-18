@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import asyncio
+    from collections.abc import Callable
+    from types import FrameType
+
+type SignalHandler = Callable[[int, FrameType | None], object] | int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +19,7 @@ class InstalledSignal:
     """记录一个可恢复的进程信号处理器。"""
 
     candidate: signal.Signals
-    previous: object
+    previous: SignalHandler
 
 
 def install_stop_handlers(stop: asyncio.Event) -> tuple[InstalledSignal, ...]:
@@ -39,4 +43,4 @@ def install_stop_handlers(stop: asyncio.Event) -> tuple[InstalledSignal, ...]:
 def restore_stop_handlers(installed: tuple[InstalledSignal, ...]) -> None:
     """恢复入口启动前的进程信号处理器。"""
     for item in installed:
-        signal.signal(item.candidate, item.previous)  # type: ignore[arg-type]
+        signal.signal(item.candidate, item.previous)

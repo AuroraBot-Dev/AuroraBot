@@ -29,7 +29,6 @@ DEFAULT_PAGE = 1
 DEFAULT_PAGE_SIZE = 20
 DEFAULT_ORDER = "desc"
 MAX_PAGE_SIZE = 100
-# GitHub Search API 只暴露前 1000 条结果，超出直接拒绝而不是发一个必然失败的请求。
 MAX_RESULTS = 1000
 
 _SEARCH_ENDPOINT = "https://api.github.com/search/repositories"
@@ -119,6 +118,7 @@ class GitHubSource:
         return _manifest_content(_payload(response), manifest_source(full_name, ref))
 
     def _get(self, url: str, parameters: Mapping[str, str | int]) -> httpx2.Response:
+        """发送元数据请求，公开错误只包含类型名，避免带出含认证信息的请求上下文。"""
         try:
             return self._transport.get(
                 url,
@@ -127,7 +127,6 @@ class GitHubSource:
                 timeout=_TIMEOUT_SECONDS,
             )
         except httpx2.HTTPError as error:
-            # 只带异常类型名：httpx 的异常文本可能带上请求上下文，而请求头里有 token。
             raise DiscoveryError(f"无法访问 GitHub（{type(error).__name__}）") from error
 
 
@@ -142,7 +141,7 @@ def build_search_query(query: str | None) -> str:
 
 
 def check_search_arguments(*, page: int, page_size: int, sort: str | None, order: str | None) -> None:
-    """在发请求前拒绝取不到或不成立的组合；参数问题属于配置错误，退出码 2。"""
+    """验证搜索参数，拒绝超过前 1000 条结果的分页；参数错误使用退出码 2。"""
     if page < 1:
         raise ConfigError("--page 必须大于等于 1")
     if not 1 <= page_size <= MAX_PAGE_SIZE:

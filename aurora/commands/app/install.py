@@ -1,4 +1,8 @@
-"""校验安装来源并生成本地或远程 App 的登记计划。"""
+"""校验安装来源并生成本地或远程 App 的登记计划。
+
+源码放在 ``extensions/apps``，包管理器条目以项目根目录为工作目录。
+本地安装使用 stdio，默认事件关闭、超时 60 秒；远程条目由独立连接计划描述。
+"""
 
 from __future__ import annotations
 
@@ -37,18 +41,10 @@ if TYPE_CHECKING:
 
     from aurora.commands.app.store import AppStore
 
-# 安装根目录，与 config.example/apps.toml 里既有 App 的 working_dir 同一层。
 APPS_DIRECTORY = ("extensions", "apps")
-# 本模块产出的计划一律是本地 stdio 进程：它要么是 clone 下来的源码，要么交给
-# 包管理器去取。远程端点走 ConnectPlan，那条路径不经过这里。
 DEFAULT_TRANSPORT: McpTransport = "stdio"
 DEFAULT_EVENT_MODE: McpEventMode = "disabled"
-# AppConfig 把这两个字段定义成必填，没有模块级默认常量；这里取的是项目惯例值，
-# 与 config.example/apps.toml 的 timeout_seconds = 60、event_mode = "disabled" 一致。
 DEFAULT_TIMEOUT_SECONDS = 60.0
-# 包管理器型安装（--npx / --uvx）的 working_dir：它不克隆任何仓库，进程的 cwd
-# 就是项目根 —— 安装根那条路径对它没有意义，而 stdio 的注册表条目必须声明一个
-# 项目内相对目录。
 PACKAGE_RUNNER_WORKING_DIR = "."
 _CONTROL_CHARACTER_LIMIT = 0x20
 
@@ -59,7 +55,6 @@ _FALLBACK_SEGMENT = "app"
 _FALLBACK_PREFIX = "app-"
 _LOWER_ASCII = frozenset(string.ascii_lowercase)
 _ALLOWED_SEGMENT_CHARS = _LOWER_ASCII | frozenset(string.digits) | {"_", "-"}
-# 认得出可执行名就归类，认不出就取可执行名本身——不发明一个 "unknown" 兜底值。
 _RUNTIME_BY_EXECUTABLE = {
     "uv": "python-uv",
     "uvx": "python-uv",
@@ -70,17 +65,10 @@ _RUNTIME_BY_EXECUTABLE = {
     "yarn": "node",
 }
 _PACKAGE_HINT = "--package 必须是 github.owner.repo 那样的小写点分包名"
-# 包管理器型安装的 package 前缀：它们没有仓库身份，用跑它的那个命令作根段。
 RUNNER_ROOTS = {"npx": "npx", "uvx": "uvx"}
-# 每个包管理器在包名之前需要的固定参数。``npx`` 的 ``-y`` 不是可选项：没有它时
-# npx 会在首次运行前停下来等一个确认，而 ``aurora start`` 是非交互的 —— 缺了它
-# 就变成一次静默挂起，用户看到的是「App 起不来」而不是「它在等你按 y」。
 RUNNER_ARGUMENTS = {"npx": ("-y",), "uvx": ()}
-# 包管理器型安装的包标识：一个 npm / PyPI 包名，允许 @scope/name、pkg[extra]、
-# pkg==1.0 这些写法，但不允许选项、空白与路径。
 _MAX_SPECIFIER_LENGTH = 200
 _URL_CREDENTIAL_HINT = "URL 里不放凭据：需要认证请用 --auth-env 指定一个环境变量名"
-# query 参数名里几个太短、做子串匹配会误伤变量名的凭据名。完整判据见 _credential_name。
 _URL_CREDENTIAL_NAMES = frozenset({"key", "apikey", "sig", "signature", "credential", "code"})
 
 
@@ -93,13 +81,12 @@ def check_requested_name(value: str) -> str:
 
 
 def check_admission(repository: Repository) -> str:
-    """校验 API 返回的仓库状态、名称和克隆地址，返回仓库全名。"""
+    """校验仓库状态，并确保 API 返回的名称和克隆地址指向同一个仓库。"""
     if repository.disabled or repository.archived:
         reason = "已禁用" if repository.disabled else "已归档"
         raise PlanError(f"仓库 {repository.full_name} {reason}，无法安装")
     try:
         full_name = check_repository_name(repository.full_name)
-        # 仓库名称和克隆 URL 必须指向同一目标。
         check_clone_url(repository.clone_url, full_name)
     except CloneError as error:
         raise PlanError(str(error)) from error
@@ -117,8 +104,6 @@ def normalize_segment(value: str) -> str:
     collapsed = "-".join(part for part in replaced.split("-") if part)
     if not collapsed:
         return _FALLBACK_SEGMENT
-    # 首字符不是 a-z 时补前缀。逐段判断是必须的：acme/2fast 的 repo 段加了前缀、
-    # owner 段没加，否则 github.acme.2fast 通不过 check_package_name 的点分规则。
     return collapsed if collapsed[0] in _LOWER_ASCII else f"{_FALLBACK_PREFIX}{collapsed}"
 
 
@@ -133,10 +118,10 @@ def runner_package(executable: str, specifier: str) -> str:
 
     取包名本身而不是当前目录名：这类 App 没有仓库身份，包名才是它的长期 identity。
     前导 ``@`` 是 npm 的 scope 记号，不是名字的一部分，去掉后再逐段规范化。
+    单段包名补入 ``app`` 层，保证默认名称至少有三个点分段。
     """
     segments = [normalize_segment(part) for part in specifier.lstrip("@").split("/") if part.strip()]
     root = RUNNER_ROOTS[executable]
-    # 单段包名（uvx 很常见）补上包名自己那一层，凑够点分规则要求的至少两段。
     return ".".join([root, *segments]) if len(segments) > 1 else f"{root}.{_FALLBACK_SEGMENT}.{segments[0]}"
 
 
@@ -196,6 +181,7 @@ def runner_command(executable: str, specifier: str, arguments: Sequence[str] = (
 
     ``arguments`` 是 Server 自己的参数（例如 Filesystem Server 要的允许目录），
     排在包名之后、原样保留为独立的 argv 元素。
+    npx 固定带 ``-y``，避免非交互启动等待安装确认。
     """
     try:
         runner_arguments = RUNNER_ARGUMENTS[executable]
@@ -303,7 +289,7 @@ def subdir_parts(repository_subdir: str) -> tuple[str, ...]:
 
 
 def derive_working_dir(path: str, repository_subdir: str) -> str:
-    """``working_dir = install_path / repository_subdir``。"""
+    """将安装目录与仓库子目录拼成项目内的工作目录。"""
     return str(PurePosixPath(path, *subdir_parts(repository_subdir)))
 
 

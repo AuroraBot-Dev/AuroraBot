@@ -1,4 +1,4 @@
-"""加载项目级本地环境变量。"""
+"""加载项目级本地环境变量，并让 LiteLLM 使用随包提供的费用表。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 if TYPE_CHECKING:
     from pathlib import Path
 
-# 禁止 LiteLLM 在导入时从 GitHub 拉取远程费用表，始终使用随包本地备份
 LITELLM_LOCAL_MODEL_COST_MAP = "LITELLM_LOCAL_MODEL_COST_MAP"
 
 

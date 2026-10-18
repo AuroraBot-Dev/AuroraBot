@@ -1,4 +1,8 @@
-"""安全地克隆 Git 仓库并管理暂存目录。"""
+"""安全地克隆 Git 仓库并管理暂存目录。
+
+暂存目录使用隐藏的单层名称，与受管安装的 ``owner/repo`` 两级路径区分。
+提交摘要接受至少七位十六进制字符，输入支持 GitHub 的 HTTPS、SSH 和 CLI 写法。
+"""
 
 from __future__ import annotations
 
@@ -20,10 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
 
 GIT_CLONE_TIMEOUT_SECONDS = 300.0
-# rev-parse 的输出用；git 自己接受的最短缩写就是 7 位。
 MIN_COMMIT_LENGTH = 7
-# extensions/apps/ 下的事务目录前缀。带点且不是 owner/repo 两级形状，所以它既不
-# 会与已注册的 App 路径混淆，也不会被「受管安装根」那条规则认领。
 STAGE_PREFIX = ".aurora-stage-"
 _SCRATCH_PREFIX = ".aurora-git-"
 _EMPTY_CONFIG_NAME = "empty-gitconfig"
@@ -33,7 +34,6 @@ _STDERR_TAIL = 400
 _STDERR_LINES = 4
 _GITHUB_HOST = "github.com"
 _GIT_SUFFIX = ".git"
-# GitHub 页面上那个绿色按钮给的三种写法里，两种带标记的前缀。
 _GH_CLONE_PREFIX = "gh repo clone"
 _SSH_USER = "git"
 _ACCEPTED_FORMS = "支持 owner/repo，以及 GitHub 页面上的 HTTPS、SSH、GitHub CLI 三种写法"
@@ -213,10 +213,9 @@ def _github_scp_path(text: str) -> str:
 
 
 def _github_url_path(text: str) -> str:
-    """``https://`` 与 ``ssh://`` 形式的 GitHub URL → ``owner/repo``。"""
+    """解析 HTTPS 或 SSH 仓库地址；HTTPS 与克隆地址、origin 使用同一套校验。"""
     scheme = urlsplit(text).scheme.lower()
     if scheme == "https":
-        # https 复用 clone / origin 那条既有规则：拒绝清单完全一致，不另立一套。
         path = github_https_path(text)
     elif scheme == "ssh":
         path = _github_ssh_url_path(text)
