@@ -108,7 +108,7 @@ def test_large_receipt_keeps_world_small_and_restores_exact_result_after_restart
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("failure", ["missing", "corrupt", "unconfigured"])
+@pytest.mark.parametrize("failure", ["missing", "missing_binding", "corrupt", "unconfigured"])
 def test_unreadable_receipt_never_repeats_the_command_or_rewrites_its_status(tmp_path: Path, failure: str) -> None:
     """已提交结果的正文丢失，不等价于动作尚未执行。"""
 
@@ -124,6 +124,8 @@ def test_unreadable_receipt_never_repeats_the_command_or_rewrites_its_status(tmp
             path = next((tmp_path / "artifacts/objects").rglob(first.body_ref.ref.revision or ""))
             if failure == "missing":
                 path.unlink()
+            elif failure == "missing_binding":
+                next((tmp_path / "artifacts/bindings").rglob("*.json")).unlink()
             elif failure == "corrupt":
                 path.write_bytes(b"lost content")
             restarted = OperationRegistry(

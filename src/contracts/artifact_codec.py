@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from typing import Any
 
 from src.contracts.artifact import ArtifactInfo
 from src.contracts.resource import ResourceKey, ResourceRef
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 
 def artifact_data(info: ArtifactInfo) -> dict[str, Any]:
@@ -23,4 +21,8 @@ def artifact_data(info: ArtifactInfo) -> dict[str, Any]:
 
 def read_artifact(data: Mapping[str, Any]) -> ArtifactInfo:
     """恢复固定内容版本，复用值对象的完整性约束。"""
+    if not isinstance(data, Mapping) or any(
+        not isinstance(data.get(field), str) for field in ("key", "revision", "media_type")
+    ):
+        raise ValueError("内容资源描述必须包含文本身份、版本和媒体类型")
     return ArtifactInfo(ResourceRef(ResourceKey.parse(data["key"]), data["revision"]), data["size"], data["media_type"])
