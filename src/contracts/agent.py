@@ -11,6 +11,7 @@ from src.contracts.identity import (
     AGENT_PATH_PREFIX,
     PROMPT_PATH_PREFIX,
     TOOL_PATH_PREFIX,
+    Identifier,
     matches_species,
 )
 from src.contracts.model import ChatMessage, ToolCall
@@ -43,8 +44,10 @@ class TreeLaunchRequest:
     frontier: WorldFrontier = field(default_factory=WorldFrontier)
     caused_by: str | None = None
     memory_scopes: frozenset[str] | None = None
+    focus_goal_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "focus_goal_ids", _focus_goals(self.focus_goal_ids))
         if self.memory_scopes is not None:
             object.__setattr__(self, "memory_scopes", frozenset(self.memory_scopes))
         if not self.message.strip():
@@ -102,8 +105,10 @@ class AgentNode:
     reviewed_world_update: bool = False
     sealed_call_ids: frozenset[str] = field(default_factory=frozenset)
     sealed_call_scopes: Mapping[str, ToolScopes] = field(default_factory=dict)
+    focus_goal_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "focus_goal_ids", _focus_goals(self.focus_goal_ids))
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", frozenset(self.tools))
         object.__setattr__(self, "observation_scopes", frozenset(self.observation_scopes))
@@ -193,6 +198,7 @@ class AgentTree:
         *,
         caused_by: str | None = None,
         memory_scopes: frozenset[str] | None = None,
+        focus_goal_ids: tuple[str, ...] = (),
     ) -> AgentTree:
         root = AgentNode(
             root_id,
@@ -206,6 +212,7 @@ class AgentTree:
             observed_frontier=frontier or WorldFrontier(),
             observation_scopes=frozenset(frontier.positions) if frontier is not None else frozenset(),
             memory_scopes=memory_scopes,
+            focus_goal_ids=focus_goal_ids,
         )
         return cls(tree_id, root_id, (root,), caused_by=caused_by)
 
@@ -348,6 +355,7 @@ class AgentTree:
             observed_frontier=parent.observed_frontier,
             observation_scopes=parent.observation_scopes,
             memory_scopes=parent.memory_scopes,
+            focus_goal_ids=parent.focus_goal_ids,
         )
         nodes = tuple(
             replace(node, status=AgentStatus.WAITING) if node.node_id == parent_id else node for node in self.nodes
@@ -452,3 +460,13 @@ def _depth(node_id: str, by_id: dict[str, AgentNode]) -> int:
         depth += 1
         current = by_id[current.parent_id]
     return depth
+
+
+def _focus_goals(values: tuple[str, ...]) -> tuple[str, ...]:
+    """认知焦点是明确目标引用，不从提示词中的文本推断。"""
+    goals = tuple(values)
+    if len(set(goals)) != len(goals):
+        raise ValueError("认知焦点目标不能重复")
+    if any(not Identifier.parse(goal_id).path.startswith("goal/") for goal_id in goals):
+        raise ValueError("认知焦点必须引用目标身份")
+    return goals

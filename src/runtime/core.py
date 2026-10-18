@@ -128,6 +128,7 @@ class AuroraRuntime:
             request.frontier,
             caused_by=request.caused_by,
             memory_scopes=request.memory_scopes,
+            focus_goal_ids=request.focus_goal_ids,
         )
         if tree.tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree.tree_id}")

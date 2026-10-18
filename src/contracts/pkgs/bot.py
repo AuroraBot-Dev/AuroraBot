@@ -29,6 +29,10 @@ class BotStateStore(Protocol):
         """读取包括最新持久提交的主体快照。"""
         ...
 
+    async def snapshot_at(self, cursor: int) -> BotSnapshot:
+        """只恢复截至某个世界游标已经存在的主体选择。"""
+        ...
+
     async def apply(self, change: BotChange) -> BotSnapshot:
         """原子提交修改，重复命令不重复产生效果。"""
         ...

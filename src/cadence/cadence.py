@@ -206,7 +206,7 @@ class Cadence:
         if decision.next_check_at <= now or not set(decision.focus_goal_ids) <= set(observation.active_goal_ids):
             raise ValueError("节律策略返回了无效的检查时间或目标引用")
         deliberating = decision.action is RhythmAction.DELIBERATE
-        request = await self._request(cause) if deliberating else None
+        request = await self._request(cause, decision.focus_goal_ids) if deliberating else None
         pending = self._state.pending
         if deliberating:
             pending = max(0, pending - 1) if self._state.reactive_commit is not None else 0
@@ -243,7 +243,7 @@ class Cadence:
             await self._launch(request)
         return deliberating
 
-    async def _request(self, cause: WorldCommit) -> TreeLaunchRequest:
+    async def _request(self, cause: WorldCommit, focus_goal_ids: tuple[str, ...]) -> TreeLaunchRequest:
         """即时事件保留会话域，其余机会交给主体理解近期世界。"""
         reactive = self._state.reactive_commit
         trigger = await self._reader.commit(reactive) if reactive is not None and reactive != cause.commit_id else cause
@@ -256,6 +256,7 @@ class Cadence:
             frontier=WorldFrontier(trigger.scopes) if reactive else WorldFrontier(),
             caused_by=trigger.commit_id,
             memory_scopes=frozenset(trigger.scopes) if reactive else None,
+            focus_goal_ids=focus_goal_ids,
         )
 
     async def _submit_tick(self) -> WorldCommit:

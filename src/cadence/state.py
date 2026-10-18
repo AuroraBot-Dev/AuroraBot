@@ -115,6 +115,7 @@ def launch_data(request: TreeLaunchRequest) -> dict[str, Any]:
         "frontier": dict(request.frontier.positions),
         "caused_by": request.caused_by,
         "memory_scopes": sorted(request.memory_scopes) if request.memory_scopes is not None else None,
+        "focus_goal_ids": list(request.focus_goal_ids),
     }
 
 
@@ -127,4 +128,5 @@ def read_launch(data: Mapping[str, Any]) -> TreeLaunchRequest:
         WorldFrontier(data["frontier"]),
         data["caused_by"],
         frozenset(data["memory_scopes"]) if data["memory_scopes"] is not None else None,
+        tuple(data.get("focus_goal_ids", ())),
     )

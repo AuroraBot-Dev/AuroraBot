@@ -54,6 +54,14 @@ class JournalBotState:
             await self._refresh()
             return self._snapshot
 
+    async def snapshot_at(self, cursor: int) -> BotSnapshot:
+        """历史读取使用独立投影，不回退或修改主体当前状态。"""
+        if cursor < 0:
+            raise ValueError("历史主体游标不能小于零")
+        projection = JournalBotState(self._world, self.bot_id)
+        await projection._refresh(until_cursor=cursor)
+        return projection._snapshot
+
     async def apply(self, change: BotChange) -> BotSnapshot:
         """按版本原子追加选择，拒绝覆盖更新后的主体状态。"""
         data = change_data(change)
@@ -88,7 +96,7 @@ class JournalBotState:
             self._commands[change.command_id] = data
             return self._snapshot
 
-    async def _refresh(self) -> None:
+    async def _refresh(self, *, until_cursor: int | None = None) -> None:
         """顺序重放增量；格式或版本断裂时停止恢复。"""
         await self._world.initialize()
         while True:
@@ -96,6 +104,8 @@ class JournalBotState:
             if not commits:
                 return
             for commit in commits:
+                if until_cursor is not None and commit.cursor > until_cursor:
+                    return
                 if commit.kind == _STATE_CHANGED:
                     self._restore(dict(commit.data))
                 self._position = commit.scopes[self.scope]

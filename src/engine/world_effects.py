@@ -92,6 +92,7 @@ class EngineWorldEffects:
                 "caused_by": tree.caused_by,
                 "root_id": tree.root_id,
                 "definition_id": root.definition_id,
+                "focus_goal_ids": list(root.focus_goal_ids),
                 "message": root.messages[0].content,
             },
         )

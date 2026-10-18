@@ -125,6 +125,7 @@ class PersistentBotClock:
             tree_id=self.tree_id(wake),
             frontier=frontier,
             caused_by=f"{snapshot.bot_id}:state:{snapshot.version}",
+            focus_goal_ids=(wake.goal_id,) if wake.goal_id is not None else (),
         )
         try:
             result = await self._launcher.launch_tree(request)
