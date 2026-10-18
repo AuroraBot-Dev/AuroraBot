@@ -18,6 +18,7 @@ RHYTHM_CONFIG = ConfigSpec[RhythmConfig](
         fields=(
             text_field("policy"),
             optional_text_field("weights"),
+            optional_text_field("weights_ref"),
             positive_integer_field("evoke_every"),
             positive_number_field("max_idle_seconds"),
             positive_number_field("min_check_seconds"),

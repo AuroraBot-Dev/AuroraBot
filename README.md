@@ -94,6 +94,8 @@ aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 
 使用导出的权重时，在 `rhythm.toml` 中指定 `policy = "aurora:rhythm/model/gru"` 和 `weights = "models/rhythm.pt"`。权重按内容生成版本；权重或推理参数变化后，节律会保留消费位置并清空不兼容的循环状态。训练命令不会自动启用新权重。
 
+也可将 `weights_ref` 设置为训练报告中的 `资源名@revision`，例如 `aurora:rhythm/model/gru@完整SHA256`。`weights` 与 `weights_ref` 二选一。常规 `aurora start` 的异步生命周期会把路径权重先导入内容存储，固定引用则直接读取对应版本；目录声明和实际模型使用同一份已校验字节，缺失或损坏不会静默切换模型。程序中使用资源权重时调用 `compose_runtime` 完成异步装配。
+
 ### 记忆读取与训练
 
 每次记忆读取先固定全局游标和观察时间，分别检查事件发生时间与 Bot 的获知时间。迟到事件、后续反馈和后来的目标修改不会进入过去的上下文。当前目标的完整检查点与其证据固定保留，其他主体状态通过数量概览和分页查询按需展开；必要内容超过容量时明确结束本次认知。
@@ -111,6 +113,8 @@ aurora train memory train.jsonl validation.jsonl models/memory.pt
 记忆训练 JSONL 每行包含 `schema_version = 1`、`episode_id`、`bot_id` 和 `examples`。每个样本分别记录 `request`、与候选逐项对应的 `utilities`、`outcome_cursor` 和 `outcome_at`。`request` 中只有当时可见的查询、候选和时序交互；监督结果必须来自推荐之后的世界提交。`src.memory_model.dataset` 提供类型化读取和导出，训练按效用差加权排序，并要求全部训练结果先于独立验证查询获知。报告比较排序准确率、效用遗憾、NDCG 和正收益召回率。受控测试验证历史区分、梯度和重载一致性，真实任务收益需要独立效用数据评估。
 
 使用权重时，在 `memory_model.toml` 中指定 `policy = "aurora:memory/model/tgn"` 和 `weights = "models/memory.pt"`。资源版本由实际权重内容生成，读取结果携带同一版本；输入坐标不兼容时拒绝加载。训练命令不会自动启用权重或在线更新参数。
+
+记忆模型也支持 `weights_ref = "aurora:memory/model/tgn@完整SHA256"`；与路径二选一，读取相同内容存储。原导出文件和训练输入路径移除后，已发布的固定模型版本仍可加载，训练来源也能按归档内引用复核。
 
 TGN 在线评分保存一份图前缀投影；交互历史逐项一致时只处理新增交互。问题、候选、焦点和读取时间每次重新评分，历史查询与不同分支独立构建，不能借用未来状态。并发评分由策略内部串行保护，失败后清空未确认的投影；训练仍从各样本的完整图输入计算梯度。
 

@@ -1,8 +1,15 @@
 """节律策略选择与模型推理参数。"""
 
-from dataclasses import dataclass
+from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from src.contracts.model_artifact import model_weight_reference
 from src.contracts.resource import ResourceKey
+
+if TYPE_CHECKING:
+    from src.contracts.resource import ResourceRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +22,7 @@ class RhythmConfig:
     max_idle_seconds: float = 3600
     min_check_seconds: float = 1
     probability_threshold: float = 0.5
+    weights_ref: str | None = None
 
     def __post_init__(self) -> None:
         """只接收节律模型资源，期限和概率保持有效。"""
@@ -25,3 +33,9 @@ class RhythmConfig:
             raise ValueError("节律阈值与检查间隔无效")
         if not 0 < self.probability_threshold < 1:
             raise ValueError("节律概率阈值必须位于零到一之间")
+        model_weight_reference(key, self.weights, self.weights_ref)
+
+    @property
+    def reference(self) -> ResourceRef | None:
+        """返回已经校验的具体模型资源版本。"""
+        return model_weight_reference(ResourceKey.parse(self.policy), self.weights, self.weights_ref)

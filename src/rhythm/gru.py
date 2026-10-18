@@ -5,13 +5,12 @@ from __future__ import annotations
 import math
 from copy import deepcopy
 from datetime import timedelta
-from io import BytesIO
 from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor, nn
 
-from src.contracts.model_artifact import model_content_ref
+from src.contracts.model_artifact import model_archive, model_content_ref
 from src.contracts.resource import ResourceKey, ResourceRef
 from src.contracts.rhythm import RHYTHM_FEATURES, RhythmAction, RhythmDecision, RhythmPrediction
 
@@ -130,7 +129,7 @@ def load_policy_bytes(
     """按实际字节固定版本，可在张量解码前核对资源引用。"""
     ref = model_content_ref(content, GRU_KEY, expected)
     assert ref.revision is not None
-    data = torch.load(BytesIO(content), map_location="cpu", weights_only=True)
+    data = torch.load(model_archive(content), map_location="cpu", weights_only=True)
     if data["schema_version"] != 1 or data["model_key"] != str(GRU_KEY):
         raise ValueError("不支持的节律权重格式")
     if tuple(data["features"]) != RHYTHM_FEATURES:

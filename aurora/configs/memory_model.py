@@ -8,7 +8,12 @@ MEMORY_MODEL_CONFIG = ConfigSpec[MemoryModelConfig](
     path="config/memory_model.toml",
     shape=TableShape(
         path=("memory_model",),
-        fields=(text_field("policy"), optional_text_field("weights"), positive_number_field("checkpoint_seconds")),
+        fields=(
+            text_field("policy"),
+            optional_text_field("weights"),
+            positive_number_field("checkpoint_seconds"),
+            optional_text_field("weights_ref"),
+        ),
         model=MemoryModelConfig,
     ),
 )

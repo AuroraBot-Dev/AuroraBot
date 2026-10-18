@@ -2,22 +2,47 @@
 
 from __future__ import annotations
 
+import asyncio
 from importlib import import_module
 from typing import TYPE_CHECKING
 
+from src.contracts.model_artifact import read_model_content
 from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryPolicyState
 from src.contracts.pkgs.world import WorldJournal
-from src.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceDescriptor
+from src.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceDescriptor, ResourceKey
 from src.kernel import ModuleContext, module
 from src.memory_model.config import MemoryModelConfig
 from src.memory_model.persistence import MemoryModelCheckpoints
 from src.memory_model.rules import RuleMemoryPolicy
 
 if TYPE_CHECKING:
-    import asyncio
     from pathlib import Path
+    from types import ModuleType
+
+
+async def prepare(context: ModuleContext) -> None:
+    """在资源目录冻结前，从确切资源字节构造实际策略。"""
+    if context.contains(MemoryPolicy):
+        return
+    config = context.settings.resolve(MemoryModelConfig)
+    if config.policy != "aurora:memory/model/tgn":
+        if config.weights_ref is not None:
+            raise ValueError("当前记忆策略不支持权重资源")
+        return
+    if config.weights is None and config.reference is None:
+        raise ValueError("时序图记忆模型需要指定 weights 或 weights_ref")
+    content, ref = await read_model_content(
+        context.get(ArtifactStore),
+        ResourceKey.parse(config.policy),
+        reference=config.reference,
+        path=context.settings.project_root / config.weights if config.weights is not None else None,
+    )
+    policy = await asyncio.to_thread(_backend().load_policy_bytes, content, expected=ref)
+    context.provide(MemoryPolicy, policy)
+    if not context.contains(MemoryPolicyState):
+        context.provide(MemoryPolicyState, policy)
 
 
 async def activate(context: ModuleContext) -> None:
@@ -41,6 +66,7 @@ async def close(context: ModuleContext) -> None:
     requires=(ArtifactStore, BotStateStore, WorldJournal),
     contributes=(RESOURCE_CONTRIBUTIONS,),
     owns_scopes="aurora:run/memory-model/*",
+    prepare=prepare,
     activate=activate,
     run=run,
     close=close,
@@ -74,20 +100,27 @@ def build(context: ModuleContext) -> None:
 
 def _policy(config: MemoryModelConfig, project_root: Path) -> tuple[MemoryPolicy, MemoryPolicyState | None]:
     """只有显式选择学习模型才加载计算框架。"""
+    if config.reference is not None:
+        raise ValueError("资源权重需要异步装配，请使用 compose_runtime")
     if config.policy == "aurora:memory/model/rules":
         return RuleMemoryPolicy(), None
     if config.policy != "aurora:memory/model/tgn":
         raise ValueError(f"未注册的记忆模型：{config.policy}")
     if config.weights is None:
         raise ValueError("时序图记忆模型需要指定 weights 文件")
+    policy = _backend().load_policy(project_root / config.weights)
+    return policy, policy
+
+
+def _backend() -> ModuleType:
+    """只有实际加载学习模型时才需要安装计算依赖。"""
     try:
         backend = import_module("src.memory_model.tgn")
     except ModuleNotFoundError as error:
         if error.name not in {"torch", "numpy"}:
             raise
         raise ValueError("学习模型依赖未安装，请运行 uv sync --extra learning") from error
-    policy = backend.load_policy(project_root / config.weights)
-    return policy, policy
+    return backend
 
 
 MODULE = build

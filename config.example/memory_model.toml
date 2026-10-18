@@ -3,5 +3,7 @@
 policy = "aurora:memory/model/rules"
 # 选择 aurora:memory/model/tgn 时填写权重文件路径；不会自动训练或更新参数。
 # weights = "models/memory.pt"
+# 也可使用训练报告中的固定资源；与 weights 二选一。
+# weights_ref = "aurora:memory/model/tgn@<SHA256>"
 # TGN 动态节点状态的保存间隔；相同历史不重复保存，规则策略不产生检查点。
 checkpoint_seconds = 60.0

@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 import threading
 from copy import deepcopy
-from io import BytesIO
 from typing import TYPE_CHECKING
 
 import torch
@@ -14,7 +13,7 @@ from torch import Tensor, nn
 from src.contracts.memory_checkpoint import MemoryGraphPrefix
 from src.contracts.memory_graph import MEMORY_NODE_KINDS, MEMORY_RELATIONS, MemoryNode
 from src.contracts.memory_graph_codec import interactions_fingerprint
-from src.contracts.model_artifact import model_content_ref
+from src.contracts.model_artifact import model_archive, model_content_ref
 from src.contracts.resource import ResourceRef
 from src.memory_model.checkpoint import decode_state, encode_state
 from src.memory_model.coordinates import TGN_KEY, TIME_SCALE
@@ -245,7 +244,7 @@ def load_policy_bytes(content: bytes, *, expected: ResourceRef | None = None) ->
     """解码同一份确定版本的模型字节，不依赖加载过程中仍存在的路径。"""
     ref = model_content_ref(content, TGN_KEY, expected)
     assert ref.revision is not None
-    data = torch.load(BytesIO(content), map_location="cpu", weights_only=True)
+    data = torch.load(model_archive(content), map_location="cpu", weights_only=True)
     if data["schema_version"] != 1 or data["model_key"] != str(TGN_KEY):
         raise ValueError("不支持的时序记忆权重格式")
     if tuple(data["relations"]) != MEMORY_RELATIONS or tuple(data["node_kinds"]) != MEMORY_NODE_KINDS:
