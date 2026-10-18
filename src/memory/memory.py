@@ -72,10 +72,13 @@ class Memory:
         window_start = observed_at - self._window
         history = await self._index.visible(cursor, observed_at)
         all_scopes = tuple(sorted({scope for commit in history.commits for scope in commit.scopes}))
-        selected = self._exclude_run_scopes(self._filter_scopes(all_scopes))
+        permitted = self._filter_scopes(all_scopes)
         if request.scopes is not None:
-            selected = tuple(scope for scope in selected if scope in request.scopes)
+            permitted = tuple(scope for scope in permitted if scope in request.scopes)
+        selected = self._exclude_run_scopes(permitted)
+        candidate_scopes = frozenset(selected)
         eligible = tuple(commit for commit in history.commits if set(commit.scopes).intersection(selected))
+        evidence = tuple(commit for commit in history.commits if set(commit.scopes).intersection(permitted))
         recent_by_id = {}
         for scope in selected:
             recent = tuple(
@@ -87,11 +90,17 @@ class Memory:
             if self._state is not None
             else None
         )
-        normalized = replace(request, cursor=history.cursor, observed_at=observed_at, scopes=frozenset(selected))
+        normalized = replace(request, cursor=history.cursor, observed_at=observed_at, scopes=frozenset(permitted))
         if not normalized.focus_goal_ids and continuity is not None:
             normalized = replace(normalized, focus_goal_ids=tuple(goal.goal_id for goal in continuity.goals))
         selection = await asyncio.to_thread(
-            select_memories, eligible, tuple(recent_by_id.values()), normalized, continuity, self._policy
+            select_memories,
+            eligible,
+            tuple(recent_by_id.values()),
+            normalized,
+            continuity,
+            self._policy,
+            evidence_history=evidence,
         )
         chosen = {commit.commit_id: commit for commit in selection.required}
         for bundle in selection.bundles:
@@ -102,7 +111,7 @@ class Memory:
             for scope in commit.scopes:
                 latest[scope] = max(latest.get(scope, commit.occurred_at), commit.occurred_at)
         selected = tuple(
-            sorted((scope for scope in selected if scope in latest), key=lambda s: (-latest[s].timestamp(), s))
+            sorted((scope for scope in permitted if scope in latest), key=lambda s: (-latest[s].timestamp(), s))
         )
         snapshots: list[MemoryScopeSnapshot] = []
         for scope in selected:
@@ -124,6 +133,7 @@ class Memory:
                 selection.ranking,
                 self._policy.parameters,
                 selection.input_digest,
+                candidate_scopes,
             ),
         )
         _logger.debug("Memory recall 完成 scope_count={}", len(snapshot.scopes))

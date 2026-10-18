@@ -40,14 +40,17 @@ def select_memories(
     request: MemoryRequest,
     continuity: MemoryContinuity | None,
     policy: MemoryPolicy,
+    *,
+    evidence_history: tuple[WorldCommit, ...] = (),
 ) -> MemorySelection:
     """从近期、文本、目标和实体四路召回，再整体补全证据依赖。"""
     if request.observed_at is None or request.cursor is None:
         raise ValueError("记忆选择需要冻结的获知边界")
     records = {commit.commit_id: commit for commit in history}
+    records.update((commit.commit_id, commit) for commit in evidence_history)
     routes, similarities = _candidate_routes(history, recent, request, continuity)
     replacements: dict[str, list[str]] = defaultdict(list)
-    for commit in history:
+    for commit in records.values():
         for old in memory_links(commit, "supersedes"):
             replacements[old].append(commit.commit_id)
     required_refs = (

@@ -18,7 +18,7 @@ _NAMESPACE_ANY = "*"
 
 
 class ScopeKind(StrEnum):
-    """域的种类；决定它是不是 Bot 可以观察的世界资源。"""
+    """区分普通世界资源与运行台账，供自动召回策略选择。"""
 
     RESOURCE = "resource"
     RUN = "run"

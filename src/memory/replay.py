@@ -81,7 +81,7 @@ def _rebuild(history: tuple[WorldCommit, ...], recall: MemoryRecall) -> MemoryRa
     request = recall.request
     if request.cursor is None or request.observed_at is None:
         raise ValueError("重建输入必须有确定时间与游标")
-    scopes = request.scopes or frozenset()
+    scopes = recall.candidate_scopes if recall.candidate_scopes is not None else request.scopes or frozenset()
     eligible = tuple(commit for commit in history if scopes.intersection(commit.scopes))
     scores = {item.memory_id: item for item in recall.ranking}
     candidates: list[MemoryCandidate] = []

@@ -43,6 +43,7 @@ def recall_data(recall: MemoryRecall) -> dict[str, Any]:
         "policy": {"key": str(recall.policy.key), "revision": recall.policy.revision},
         "parameters": dict(recall.parameters),
         "input_digest": recall.input_digest,
+        "candidate_scopes": sorted(recall.candidate_scopes) if recall.candidate_scopes is not None else None,
         "ranking": [
             {
                 "memory_id": item.memory_id,
@@ -96,4 +97,5 @@ def read_recall(data: Mapping[str, Any]) -> MemoryRecall:
         ranking,
         data["parameters"],
         data.get("input_digest"),
+        frozenset(data["candidate_scopes"]) if data.get("candidate_scopes") is not None else None,
     )

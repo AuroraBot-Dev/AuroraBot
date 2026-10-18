@@ -102,6 +102,7 @@ class MemoryRecall:
     ranking: tuple[MemoryScore, ...] = ()
     parameters: Mapping[str, float | int] = field(default_factory=dict)
     input_digest: str | None = None
+    candidate_scopes: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         """不能把未冻结的读取或未确定的模型版本记作可追溯输入。"""
@@ -121,6 +122,11 @@ class MemoryRecall:
             raise ValueError("召回输入指纹必须是 SHA256 十六进制值")
         object.__setattr__(self, "ranking", ranking)
         object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
+        if self.candidate_scopes is not None:
+            scopes = frozenset(self.candidate_scopes)
+            if not scopes <= (self.request.scopes or frozenset()):
+                raise ValueError("候选域不能超出实际读取范围")
+            object.__setattr__(self, "candidate_scopes", scopes)
 
 
 @dataclass(frozen=True, slots=True)
