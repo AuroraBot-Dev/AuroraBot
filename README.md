@@ -65,6 +65,10 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 扩展通过 `OPERATION_CONTRIBUTIONS` 提供领域操作，通过 `RESOURCE_CONTRIBUTIONS` 提供其他资源定义，通过 `RESOURCE_ALIASES` 声明版本绑定。为操作填写 `tool_name` 后，框架会生成模型工具入口；Bot 的可见工具仍由 Agent 定义选择。
 
+大对象通过 `ArtifactStore` 保存。逻辑名称采用同一套资源身份，版本是原始字节的 SHA256；同名新版本保留旧内容，相同字节可以跨名称复用。`artifacts.toml` 指定持久目录，需要与世界日志一起备份。宿主可流式保存内容或导入固定文件；查询只接受确定版本，不自动选择最新内容。
+
+`aurora:artifacts/query/stat` 核对版本并返回大小与媒体类型；`aurora:artifacts/query/read` 返回有界字节块，以 `content_base64` 编码，用 `next_offset` 继续读取。root、worker 和记忆专员可使用对应的 `artifact_stat`、`artifact_read` 工具。`aurora:artifacts/command/put` 接受最多 1 MiB 的 base64 内容，无默认模型工具入口；更大的数据集、权重和导出内容使用流式端口。读取会校验内容完整性，损坏文件不能作为有效版本返回。
+
 ### 节律判断与训练
 
 `cadence.toml` 控制世界消费入口、Agent 和检查频率，`rhythm.toml` 选择节律策略。规则基线按事件压力、即时路由和最长安静时间提供推理机会；GRU 模型使用相同的观察特征，并同时预测是否思考与下次检查时长。每次等待或唤醒都会记录策略版本、有效参数、观察、循环隐状态和后续运行结果。重启后恢复消费游标与等待安排，已经开始且结果未知的认知不会自动重放。

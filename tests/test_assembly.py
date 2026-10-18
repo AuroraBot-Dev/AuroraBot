@@ -75,6 +75,8 @@ def test_project_config_builds_complete_runtime(configured_project: Path) -> Non
     assert result.node(runtime_config.node_id).model == root_definition.model
     assert model.requests[0].model == root_definition.model
     assert [tool.name for tool in model.requests[0].tools] == [
+        "aurora:tool/artifact_read",
+        "aurora:tool/artifact_stat",
         "aurora:tool/bot_state",
         "aurora:tool/delegate",
         "aurora:tool/goal_set",
@@ -309,6 +311,8 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
     assert triage.children == frozenset({"aurora:agent/root", "aurora:agent/fast-worker"})
     assert root.tools == frozenset(
         {
+            "aurora:tool/artifact_read",
+            "aurora:tool/artifact_stat",
             "aurora:tool/bot_state",
             "aurora:tool/delegate",
             "aurora:tool/goal_set",

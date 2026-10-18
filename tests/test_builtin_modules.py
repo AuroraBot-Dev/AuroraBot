@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, cast
 
 from src.agents.config import AgentConfig, AgentsConfig
 from src.ai.config import EndpointConfig, EndpointsConfig, ProviderConfig, ProvidersConfig
+from src.artifacts.config import ArtifactsConfig
 from src.bot.config import BotConfig
 from src.cadence.config import CadenceConfig, ReactionsConfig
 from src.contracts.identity import TagsConfig
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.ai import Model
+from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.console import TerminalConsole
 from src.contracts.pkgs.engine import AgentTreeRunner
 from src.contracts.pkgs.mcp import McpRuntime
@@ -70,6 +72,7 @@ def _settings(tmp_path: Path) -> _Settings:
             RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
             MemoryModelConfig: MemoryModelConfig(),
+            ArtifactsConfig: ArtifactsConfig(),
             CadenceConfig: CadenceConfig(False, "aurora:agent/chat", 0.25),
             RhythmConfig: RhythmConfig(),
             ReactionsConfig: ReactionsConfig(()),
@@ -105,6 +108,7 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
 
     assert names == {
         "agents",
+        "artifacts",
         "ai",
         "bot",
         "cadence",
@@ -130,6 +134,7 @@ def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
 
     capabilities = (
         assembly.get(Model),
+        assembly.get(ArtifactStore),
         assembly.get(PromptAssembler),
         assembly.get(AgentCatalog),
         assembly.get(ToolRegistry),
