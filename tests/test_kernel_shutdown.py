@@ -228,3 +228,57 @@ def test_cancelled_waiter_cannot_interrupt_another_close() -> None:
         assert released == ["done"]
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("initially_cancelled", [False, True])
+def test_cancellation_during_construction_rollback_finishes_all_resources(initially_cancelled: bool) -> None:
+    """构造回滚也必须抵御取消，保留原始错误并释放全部已获得的资源。"""
+
+    async def scenario() -> None:
+        """在已构造资源的关闭中取消装配任务。"""
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        trace: list[str] = []
+        original = asyncio.CancelledError("构造被取消") if initially_cancelled else ValueError("构造失败")
+
+        async def prepare(context: ModuleContext) -> AsyncCleanup:
+            """准备资源需要在构造回滚之后释放。"""
+
+            async def cleanup() -> None:
+                """记录准备资源释放完成。"""
+                trace.append("prepare.cleaned")
+
+            return cleanup
+
+        async def close(context: ModuleContext) -> None:
+            """只延迟已构造资源的释放。"""
+            entered.set()
+            await release.wait()
+            trace.append("close.finished")
+
+        @module(name="resource", provides=str, prepare=prepare, close=close)
+        def resource(context: ModuleContext) -> str:
+            """先构造需要回收的依赖资源。"""
+            return "ready"
+
+        @module(name="broken", provides=int, requires=str)
+        def broken(context: ModuleContext) -> int:
+            """取得依赖之后才发生原始构造错误。"""
+            raise original
+
+        task = asyncio.create_task(compose_managed(_Settings(), (resource, broken)))
+        await entered.wait()
+        task.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError) as captured:
+            await task
+        assert task.cancelled()
+        assert trace == ["close.finished", "prepare.cleaned"]
+        if initially_cancelled:
+            assert captured.value is original
+        else:
+            cause = captured.value.__cause__
+            assert isinstance(cause, BaseExceptionGroup)
+            assert original in cause.exceptions
+
+    asyncio.run(scenario())

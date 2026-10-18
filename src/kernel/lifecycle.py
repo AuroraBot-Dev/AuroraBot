@@ -11,6 +11,7 @@ from src.kernel.context import _ModuleContext
 from src.kernel.failures import ModuleCleanup, ModuleLifecycleError, collect_failure, raise_failures, raise_with_cleanup
 from src.kernel.phase import CONSTRUCTION_KINDS, PhaseKind
 from src.utils import get_logger
+from src.utils.tasks import wait_for_completion
 
 if TYPE_CHECKING:
     from typing import Never
@@ -76,9 +77,7 @@ class ManagedAssembly:
     async def abort(self, error: BaseException) -> Never:
         """运行已经失败时完成同样的清理，同时保留原始错误。"""
         failures, interrupted = await self._close()
-        if interrupted is not None and not isinstance(error, asyncio.CancelledError):
-            raise interrupted from BaseExceptionGroup("运行失败后的资源释放被取消", [error, *failures])
-        raise_with_cleanup(error, failures)
+        raise_with_cleanup(error, failures, interrupted)
 
     async def _close(self) -> tuple[list[Exception], asyncio.CancelledError | None]:
         """所有调用者等待同一次释放，调用者的取消延迟到资源回收结束。"""
@@ -87,16 +86,8 @@ class ManagedAssembly:
             self._closed = True
             self._changed.set()
             self._closing = asyncio.create_task(self._release(), name="aurora:shutdown")
-        interrupted: asyncio.CancelledError | None = None
-        while True:
-            try:
-                failures = await asyncio.shield(self._closing)
-                return (failures if owner else []), interrupted
-            except asyncio.CancelledError as error:
-                if self._closing.cancelled():
-                    raise
-                if interrupted is None:
-                    interrupted = error
+        failures, interrupted = await wait_for_completion(self._closing)
+        return (failures if owner else []), interrupted
 
     async def _release(self) -> list[Exception]:
         """释放任务独立于调用者的取消，依次收集全部资源的清理结果。"""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, cast
 
 from src.kernel.context import _ModuleContext, _MutableContext
@@ -10,6 +11,7 @@ from src.kernel.lifecycle import ManagedAssembly
 from src.kernel.phase import CLOSE, CONSTRUCTION_KINDS, PhaseKind
 from src.kernel.resolve import resolve
 from src.utils import get_logger
+from src.utils.tasks import wait_for_completion
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -91,8 +93,11 @@ async def compose_managed(
                     constructed.append(spec)
     except BaseException as error:
         _logger.exception("模组装配失败，开始回滚")
-        failures = await _rollback(context, constructed, cleanups, resolution.providers)
-        raise_with_cleanup(error, failures)
+        rollback = asyncio.create_task(
+            _rollback(context, constructed, cleanups, resolution.providers), name="aurora:rollback"
+        )
+        failures, interrupted = await wait_for_completion(rollback)
+        raise_with_cleanup(error, failures, interrupted)
     assembly = context.freeze()
     _logger.info("项目组件装配完成 capability_count={}", len(assembly.capabilities))
     return ManagedAssembly(assembly, context, resolution, tuple(cleanups))

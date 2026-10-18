@@ -9,6 +9,7 @@ from uuid import uuid4
 from src.contracts import WorldFrontier
 from src.runtime.events import RUNTIME_MODULE_FAILED, RUNTIME_SCOPE
 from src.utils import get_logger
+from src.utils.tasks import wait_for_completion
 
 if TYPE_CHECKING:
     from src.contracts import Front
@@ -39,7 +40,8 @@ async def supervise(
     for task in tasks:
         if not task.done() and (task is not monitor or not claimed.is_set()):
             task.cancel()
-    outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+    outcomes, later_interruption = await wait_for_completion(asyncio.gather(*tasks, return_exceptions=True))
+    interrupted = interrupted or later_interruption
     failures = [outcome for outcome in outcomes if isinstance(outcome, Exception)]
     if interrupted is not None:
         if failures:

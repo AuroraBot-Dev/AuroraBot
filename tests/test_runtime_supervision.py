@@ -250,7 +250,10 @@ def test_world_recording_failure_preserves_the_original_module_error(configured_
     asyncio.run(scenario())
 
 
-def test_stop_waits_for_an_already_claimed_module_failure_to_be_recorded(configured_project: Path) -> None:
+@pytest.mark.parametrize("cancel_while_recording", [False, True])
+def test_stop_waits_for_an_already_claimed_module_failure_to_be_recorded(
+    configured_project: Path, cancel_while_recording: bool
+) -> None:
     """停止到达故障写入中途时，不能取消已取走的故障并把进程当成成功。"""
     _plugin(configured_project)
 
@@ -297,9 +300,18 @@ def test_stop_waits_for_an_already_claimed_module_failure_to_be_recorded(configu
             stop.set()
             await front_closed.wait()
             assert trace == []
+            if cancel_while_recording:
+                task.cancel()
             release.set()
-            with pytest.raises(ModuleLifecycleError):
-                await task
+            if cancel_while_recording:
+                with pytest.raises(asyncio.CancelledError) as captured:
+                    await task
+                cause = captured.value.__cause__
+                assert isinstance(cause, ExceptionGroup)
+                assert any(isinstance(error, ModuleLifecycleError) for error in cause.exceptions)
+            else:
+                with pytest.raises(ModuleLifecycleError):
+                    await task
         assert trace == ["world.closed"]
         reopened = SqlAlchemyWorldJournal(path)
         try:
@@ -308,5 +320,56 @@ def test_stop_waits_for_an_already_claimed_module_failure_to_be_recorded(configu
             assert any(commit.kind == RUNTIME_MODULE_FAILED for commit in page.commits)
         finally:
             await reopened.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("stop_first", [False, True])
+def test_cancellation_while_joining_fronts_waits_for_their_cleanup(configured_project: Path, stop_first: bool) -> None:
+    """退出期间再次取消宿主，也必须先完成前台清理再关闭世界。"""
+    trace: list[str] = []
+    world = _World(configured_project / "repeated-cancellation.sqlite3", trace)
+
+    async def scenario() -> None:
+        """用两个事件分别控制前台启动和清理中的取消点。"""
+        started = asyncio.Event()
+        cleaning = asyncio.Event()
+        release = asyncio.Event()
+        stop = asyncio.Event()
+
+        async def front(stop: asyncio.Event) -> None:
+            """清理尚未完成时仍持有世界资源。"""
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await release.wait()
+                trace.append("front.closed")
+
+        task = asyncio.create_task(
+            run_runtime(
+                load_config(configured_project),
+                FakeModel(),
+                headless=True,
+                stop_event=stop,
+                instances=((WorldJournal, world),),
+                contributions=((FRONT_BINDINGS, lambda _: Front(front)),),
+                output=lambda _: None,
+            )
+        )
+        async with asyncio.timeout(3):
+            await started.wait()
+            if stop_first:
+                stop.set()
+            else:
+                task.cancel()
+            await cleaning.wait()
+            task.cancel()
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert task.cancelled()
+        assert trace == ["front.closed", "world.closed"]
 
     asyncio.run(scenario())
