@@ -65,10 +65,7 @@ def test_node_rejects_duplicate_call_ids_across_assistant_messages() -> None:
             "root",
             None,
             None,
-            "root",
-            "root",
-            "model",
-            frozenset({"echo"}),
+            _agent(),
             (
                 ChatMessage.message("hello"),
                 ChatMessage.assistant(tool_calls=(call,)),
@@ -79,15 +76,12 @@ def test_node_rejects_duplicate_call_ids_across_assistant_messages() -> None:
 
 
 def test_tree_rejects_missing_parent() -> None:
-    root = AgentNode("root", None, None, "root", "root", "model", frozenset(), (ChatMessage.message("hello"),))
+    root = AgentNode("root", None, None, _agent(), (ChatMessage.message("hello"),))
     orphan = AgentNode(
         "orphan",
         "missing",
         "call",
-        "worker",
-        "worker",
-        "model",
-        frozenset(),
+        _agent("worker", "worker"),
         (ChatMessage.message("work"),),
     )
 
@@ -169,40 +163,34 @@ def test_agent_node_requires_parent_pairing_message_and_terminal_outcome() -> No
     message = (ChatMessage.message("hello"),)
 
     with pytest.raises(ValueError, match="node_id"):
-        AgentNode("", None, None, "root", "root", "model", frozenset(), message)
+        AgentNode("", None, None, _agent(), message)
     with pytest.raises(ValueError, match="root node"):
-        AgentNode("root", None, "call", "root", "root", "model", frozenset(), message)
+        AgentNode("root", None, "call", _agent(), message)
     with pytest.raises(ValueError, match="child node"):
-        AgentNode("child", "root", None, "worker", "worker", "model", frozenset(), message)
+        AgentNode("child", "root", None, _agent("worker", "worker"), message)
     with pytest.raises(ValueError, match="must start"):
-        AgentNode("root", None, None, "root", "root", "model", frozenset(), ())
+        AgentNode("root", None, None, _agent(), ())
     with pytest.raises(ValueError, match="only by PromptAssembler"):
         AgentNode(
             "root",
             None,
             None,
-            "root",
-            "root",
-            "model",
-            frozenset(),
+            _agent(),
             (ChatMessage.message("hello"), ChatMessage.system("system")),
         )
     with pytest.raises(ValueError, match="requires result"):
-        AgentNode("root", None, None, "root", "root", "model", frozenset(), message, AgentStatus.COMPLETED)
+        AgentNode("root", None, None, _agent(), message, AgentStatus.COMPLETED)
     with pytest.raises(ValueError, match="requires error"):
-        AgentNode("root", None, None, "root", "root", "model", frozenset(), message, AgentStatus.FAILED)
+        AgentNode("root", None, None, _agent(), message, AgentStatus.FAILED)
 
 
 def test_tree_requires_identity_unique_nodes_and_matching_root_status() -> None:
-    root = AgentNode("root", None, None, "root", "root", "model", frozenset(), (ChatMessage.message("hello"),))
+    root = AgentNode("root", None, None, _agent(), (ChatMessage.message("hello"),))
     completed = AgentNode(
         "root",
         None,
         None,
-        "root",
-        "root",
-        "model",
-        frozenset(),
+        _agent(),
         (ChatMessage.message("hello"), ChatMessage.assistant("done")),
         AgentStatus.COMPLETED,
         "done",
@@ -227,10 +215,7 @@ def test_only_tool_messages_may_answer_pending_calls() -> None:
             "root",
             None,
             None,
-            "root",
-            "root",
-            "model",
-            frozenset({"echo"}),
+            _agent(),
             (
                 ChatMessage.message("hello"),
                 ChatMessage.assistant(tool_calls=(call,)),

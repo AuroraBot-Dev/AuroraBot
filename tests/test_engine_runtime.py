@@ -373,7 +373,9 @@ def test_runner_rejects_node_facts_that_do_not_match_predefined_agent() -> None:
     model = FakeModel([ChatMessage.assistant("done")])
     root = _agent(model="expected")
     tree = AgentTree.create("tree", "root", root, "hello")
-    invalid = AgentTree(tree.tree_id, tree.root_id, (replace(tree.node("root"), model="other"),))
+    invalid = AgentTree(
+        tree.tree_id, tree.root_id, (replace(tree.node("root"), definition=replace(root, model="other")),)
+    )
 
     with pytest.raises(ValueError, match="预定义原型不一致"):
         asyncio.run(_runner(model, (root,)).run(invalid))

@@ -101,10 +101,7 @@ class AgentNode:
     node_id: str
     parent_id: str | None
     parent_call_id: str | None
-    definition_id: str
-    prompt_id: str
-    model: str
-    tools: frozenset[str]
+    definition: AgentDefinition
     messages: tuple[ChatMessage, ...]
     status: AgentStatus = AgentStatus.READY
     result: str | None = None
@@ -118,18 +115,18 @@ class AgentNode:
     focus_goal_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        """保留创建时的完整原型，运行状态不能另存一套会漂移的能力声明。"""
+        if not isinstance(self.definition, AgentDefinition):
+            raise TypeError("AgentNode 必须持有不可变的 AgentDefinition")
         object.__setattr__(self, "focus_goal_ids", _focus_goals(self.focus_goal_ids))
         object.__setattr__(self, "messages", tuple(self.messages))
-        object.__setattr__(self, "tools", frozenset(self.tools))
         object.__setattr__(self, "observation_scopes", frozenset(self.observation_scopes))
         if self.memory_scopes is not None:
             object.__setattr__(self, "memory_scopes", frozenset(self.memory_scopes))
         object.__setattr__(self, "sealed_call_ids", frozenset(self.sealed_call_ids))
         object.__setattr__(self, "sealed_call_scopes", MappingProxyType(dict(self.sealed_call_scopes)))
-        if not self.node_id or not self.definition_id or not self.prompt_id or not self.model:
-            raise ValueError("AgentNode requires node_id, definition_id, prompt_id and model")
-        if any(not name for name in self.tools):
-            raise ValueError("AgentNode Tool names must not be empty")
+        if not self.node_id:
+            raise ValueError("AgentNode requires node_id")
         if self.parent_id is None and self.parent_call_id is not None:
             raise ValueError("root node cannot have parent_call_id")
         if self.parent_id is not None and not self.parent_call_id:
@@ -146,6 +143,31 @@ class AgentNode:
             isinstance(scopes, ToolScopes) for scopes in self.sealed_call_scopes.values()
         ):
             raise ValueError("sealed Tool calls require resolved scopes")
+
+    @property
+    def definition_id(self) -> str:
+        """返回创建当前节点的原型身份。"""
+        return self.definition.definition_id
+
+    @property
+    def definition_ref(self) -> ResourceRef:
+        """返回创建当前节点时固定的完整原型版本。"""
+        return self.definition.ref
+
+    @property
+    def prompt_id(self) -> str:
+        """提示词选择来自同一份原型快照。"""
+        return self.definition.prompt_id
+
+    @property
+    def model(self) -> str:
+        """模型选择来自同一份原型快照。"""
+        return self.definition.model
+
+    @property
+    def tools(self) -> frozenset[str]:
+        """可见工具来自同一份原型快照。"""
+        return self.definition.tools
 
     @property
     def terminal(self) -> bool:
@@ -214,10 +236,7 @@ class AgentTree:
             root_id,
             None,
             None,
-            definition.definition_id,
-            definition.prompt_id,
-            definition.model,
-            definition.tools,
+            definition,
             (ChatMessage.message(initial_message, evidence_refs=(caused_by,) if caused_by is not None else ()),),
             observed_frontier=frontier or WorldFrontier(),
             observation_scopes=frozenset(frontier.positions) if frontier is not None else frozenset(),
@@ -364,10 +383,7 @@ class AgentTree:
             child_id,
             parent_id,
             call.call_id,
-            definition.definition_id,
-            definition.prompt_id,
-            definition.model,
-            definition.tools,
+            definition,
             (ChatMessage.message(instruction),),
             observed_frontier=parent.observed_frontier,
             observation_scopes=parent.observation_scopes,

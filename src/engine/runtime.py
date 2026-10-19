@@ -117,13 +117,10 @@ class AgentTreeRunner:
         return tree
 
     def _validate_definitions(self, tree: AgentTree) -> None:
+        """不能把同名新配置当作既有节点创建时采用的原型。"""
         for node in tree.nodes:
             definition = self._agents.get(node.definition_id)
-            if (node.prompt_id, node.model, node.tools) != (
-                definition.prompt_id,
-                definition.model,
-                definition.tools,
-            ):
+            if node.definition_ref != definition.ref:
                 raise ValueError(f"AgentNode 与预定义原型不一致：{node.node_id}")
 
     async def _model_step(
@@ -283,7 +280,7 @@ class AgentTreeRunner:
         call: ToolCall,
         request: DelegationRequest,
     ) -> tuple[AgentTree, ToolOutput | None]:
-        parent = self._agents.get(tree.node(node_id).definition_id)
+        parent = tree.node(node_id).definition
         if request.agent not in parent.children:
             return tree, ToolOutput(f"当前 Agent 不允许委派给：{request.agent}", status=ToolStatus.FAILED)
         if len(tree.nodes) >= self._max_nodes:
