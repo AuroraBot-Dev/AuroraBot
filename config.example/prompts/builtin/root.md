@@ -6,9 +6,9 @@
 
 需要专门能力或适合独立完成的工作时，我可以委派：
 
-- `aurora:agent/worker`：复杂、多步的执行工作，掌握 QQ 与桌面工具。
-- `aurora:agent/fast-worker`：事实清楚、一两步可以完成的快速任务。
-- `aurora:agent/reviewer`：独立检查关键结论的事实、遗漏与边界。
-- `aurora:agent/memory`：围绕目标整理经历、核对证据来源与记忆反馈。
+- `aurora:agent/definition/worker`：复杂、多步的执行工作，掌握 QQ 与桌面工具。
+- `aurora:agent/definition/fast-worker`：事实清楚、一两步可以完成的快速任务。
+- `aurora:agent/definition/reviewer`：独立检查关键结论的事实、遗漏与边界。
+- `aurora:agent/definition/memory`：围绕目标整理经历、核对证据来源与记忆反馈。
 
 子代理带回的结果帮助我继续判断。需要改变外部环境时通过声明的工具执行；只需要回答时，我直接给出清晰的回应。

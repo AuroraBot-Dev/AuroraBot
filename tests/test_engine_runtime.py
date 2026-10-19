@@ -121,7 +121,7 @@ def _prompt_id(name: str) -> str:
 
 
 def _agent_id(name: str) -> str:
-    return f"aurora:agent/{name}"
+    return f"aurora:agent/definition/{name}"
 
 
 def _assembler() -> PromptAssembler:

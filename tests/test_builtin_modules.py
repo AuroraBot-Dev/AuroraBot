@@ -65,15 +65,19 @@ def _settings(tmp_path: Path) -> _Settings:
                 )
             ),
             AgentsConfig: AgentsConfig(
-                (AgentConfig("aurora:agent/chat", "会话", "aurora:prompt/agent/chat", "chat", (), frozenset()),)
+                (
+                    AgentConfig(
+                        "aurora:agent/definition/chat", "会话", "aurora:prompt/agent/chat", "chat", (), frozenset()
+                    ),
+                )
             ),
             EngineConfig: EngineConfig(2, 8, 16),
             BotConfig: BotConfig("aurora:bot/default"),
-            RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/chat", "NONE"),
+            RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/definition/chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
             MemoryModelConfig: MemoryModelConfig(),
             ArtifactsConfig: ArtifactsConfig(),
-            CadenceConfig: CadenceConfig(False, "aurora:agent/chat", 0.25),
+            CadenceConfig: CadenceConfig(False, "aurora:agent/definition/chat", 0.25),
             RhythmConfig: RhythmConfig(),
             ReactionsConfig: ReactionsConfig(()),
             AppsConfig: AppsConfig(

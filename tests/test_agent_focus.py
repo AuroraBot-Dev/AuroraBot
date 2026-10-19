@@ -9,9 +9,11 @@ def test_goal_focus_survives_persistence_and_delegation() -> None:
     focus = ("aurora:goal/check",)
     request = TreeLaunchRequest("核对结果", focus_goal_ids=focus)
     assert read_launch(launch_data(request)) == request
-    root = AgentDefinition("aurora:agent/root", "根节点", "aurora:prompt/agent/root", "fake", frozenset(), frozenset())
+    root = AgentDefinition(
+        "aurora:agent/definition/root", "根节点", "aurora:prompt/agent/root", "fake", frozenset(), frozenset()
+    )
     child = AgentDefinition(
-        "aurora:agent/child", "子节点", "aurora:prompt/agent/child", "fake", frozenset(), frozenset()
+        "aurora:agent/definition/child", "子节点", "aurora:prompt/agent/child", "fake", frozenset(), frozenset()
     )
     tree = AgentTree.create("tree", "root", root, "核对", focus_goal_ids=request.focus_goal_ids)
     call = ToolCall("child", "aurora:tool/delegate", {})

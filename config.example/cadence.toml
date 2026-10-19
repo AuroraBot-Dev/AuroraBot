@@ -1,4 +1,4 @@
 [cadence]
 enabled = true
-agent = "aurora:agent/triage"
+agent = "aurora:agent/definition/triage"
 poll_seconds = 0.25

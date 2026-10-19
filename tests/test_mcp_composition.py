@@ -416,7 +416,7 @@ def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Pat
     assert runtime.world is world
     assert tree.status is TreeStatus.COMPLETED
     assert runtime.runtime_status()["trees"]["completed"] == 1
-    assert echoed == ["Cadence> [aurora:agent/root] 完成"]
+    assert echoed == ["Cadence> [aurora:agent/definition/root] 完成"]
 
 
 def test_launcher_binding_failure_closes_prepared_resources_before_activation(configured_project: Path) -> None:

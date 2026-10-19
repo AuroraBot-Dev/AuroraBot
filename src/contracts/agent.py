@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from src.contracts.agent_resource import agent_content
 from src.contracts.identity import (
     AGENT_PATH_PREFIX,
     PROMPT_PATH_PREFIX,
@@ -15,6 +17,7 @@ from src.contracts.identity import (
     matches_species,
 )
 from src.contracts.model import ChatMessage, ToolCall
+from src.contracts.resource import ResourceKey, ResourceRef
 from src.contracts.world import ToolScopes, WorldFrontier
 
 if TYPE_CHECKING:
@@ -66,14 +69,17 @@ class AgentDefinition:
     model: str
     tools: frozenset[str]
     children: frozenset[str]
+    content: bytes = field(init=False, repr=False)
+    ref: ResourceRef = field(init=False)
 
     def __post_init__(self) -> None:
+        """冻结能力声明，按实际可创建节点的完整原型计算内容版本。"""
         object.__setattr__(self, "tools", frozenset(self.tools))
         object.__setattr__(self, "children", frozenset(self.children))
         if not all((self.definition_id.strip(), self.description.strip(), self.prompt_id.strip(), self.model.strip())):
             raise ValueError("AgentDefinition requires definition_id, description, prompt_id and model")
         if not matches_species(self.definition_id, AGENT_PATH_PREFIX):
-            raise ValueError(f"Agent definition ID 必须形如 <namespace>:agent/<name>：{self.definition_id}")
+            raise ValueError(f"Agent definition ID 必须形如 <namespace>:agent/definition/<name>：{self.definition_id}")
         if not matches_species(self.prompt_id, PROMPT_PATH_PREFIX):
             raise ValueError(f"Agent prompt ID 必须形如 <namespace>:prompt/<kind>/<name>：{self.prompt_id}")
         if any(not name for name in (*self.tools, *self.children)):
@@ -82,6 +88,10 @@ class AgentDefinition:
             raise ValueError(f"AgentDefinition 引用了非工具 ID：{self.definition_id}")
         if any(not matches_species(name, AGENT_PATH_PREFIX) for name in self.children):
             raise ValueError(f"AgentDefinition 引用了非 Agent ID 的 child：{self.definition_id}")
+        content = agent_content(self)
+        key = ResourceKey.parse(self.definition_id)
+        object.__setattr__(self, "content", content)
+        object.__setattr__(self, "ref", ResourceRef(key, hashlib.sha256(content).hexdigest()))
 
 
 @dataclass(frozen=True, slots=True)

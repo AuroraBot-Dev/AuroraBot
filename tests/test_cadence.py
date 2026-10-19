@@ -124,7 +124,7 @@ class FakeLauncher:
             raise self.failure
         self.requests.append(request)
         definition = AgentDefinition(
-            definition_id=request.agent or "aurora:agent/root",
+            definition_id=request.agent or "aurora:agent/definition/root",
             description="cadence 测试原型",
             prompt_id="aurora:prompt/agent/root",
             model="fake",
@@ -150,13 +150,18 @@ def test_cadence_evokes_one_tree_per_five_counted_commits() -> None:
     writer = FakeWriter()
     launcher = FakeLauncher()
     cadence = Cadence(
-        reader, writer, policy=RuleRhythmPolicy(), launcher=launcher, agent="aurora:agent/triage", poll_interval=0.01
+        reader,
+        writer,
+        policy=RuleRhythmPolicy(),
+        launcher=launcher,
+        agent="aurora:agent/definition/triage",
+        poll_interval=0.01,
     )
 
     asyncio.run(cadence.evaluate_once())
 
     assert [request.tree_id for request in launcher.requests] == [launcher.requests[0].tree_id]
-    assert launcher.requests[0].agent == "aurora:agent/triage"
+    assert launcher.requests[0].agent == "aurora:agent/definition/triage"
     assert cadence.status()["pending"] == 0
     assert [item.kind for item in writer.inputs].count("cadence.tree_planned") == 1
     assert writer.inputs[-1].kind == "cadence.tree_completed"
@@ -227,14 +232,14 @@ def test_reactive_rule_launches_with_disclosed_frontier_memory_scope_and_exact_c
         writer,
         policy=RuleRhythmPolicy(),
         launcher=launcher,
-        reactive_rules=(ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/chat"),),
+        reactive_rules=(ReactiveRule("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/definition/chat"),),
     )
 
     asyncio.run(cadence.evaluate_once())
 
     assert len(launcher.requests) == 1
     request = launcher.requests[0]
-    assert request.agent == "aurora:agent/chat"
+    assert request.agent == "aurora:agent/definition/chat"
     assert request.caused_by == commit.commit_id
     assert request.frontier == WorldFrontier(commit.scopes)
     assert request.memory_scopes == frozenset(commit.scopes)
@@ -266,7 +271,7 @@ def test_group_reactive_rule_requires_configured_name() -> None:
         policy=RuleRhythmPolicy(),
         launcher=launcher,
         reactive_rules=(
-            ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "aurora:agent/chat", ("小光", "夜曦光")),
+            ReactiveRule("mcp:org.aurora.qq", "qq.message.group", "aurora:agent/definition/chat", ("小光", "夜曦光")),
         ),
     )
 

@@ -31,7 +31,9 @@ def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() ->
     continuity = select_continuity(BotSnapshot("aurora:bot/test", 1001, (*history, target)), request)
     assert continuity.goals == (target,)
     assert dict(continuity.goal_counts) == {"active": 1, "completed": 1000}
-    agent = AgentDefinition("aurora:agent/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset())
+    agent = AgentDefinition(
+        "aurora:agent/definition/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset()
+    )
     tree = AgentTree.create("tree", "root", agent, "继续核对", focus_goal_ids=(target.goal_id,))
     prompt = PromptAssembler(make_prompt_catalog(("你是 Aurora。",), {agent.prompt_id: "按自己的判断行动。"}))
     messages = prompt.assemble(tree, "root", memory=MemorySnapshot(now, (), continuity)).messages

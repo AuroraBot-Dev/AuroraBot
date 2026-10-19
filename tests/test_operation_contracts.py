@@ -56,4 +56,4 @@ def test_protocol_rejects_unversioned_definitions_and_naive_deadlines() -> None:
     with pytest.raises(ValueError, match="时区"):
         replace(request, deadline_at=datetime(2026, 10, 18, tzinfo=UTC).replace(tzinfo=None))
     with pytest.raises(ValueError, match="Bot"):
-        replace(request, bot_id="aurora:agent/root")
+        replace(request, bot_id="aurora:agent/definition/root")

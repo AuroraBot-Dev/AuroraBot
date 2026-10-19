@@ -84,7 +84,9 @@ def test_prompt_budget_does_not_drop_shared_dependency_when_skipping_large_bundl
         (),
         bundles=(MemoryBundle((support, large), 2.0), MemoryBundle((support, small), 1.0)),
     )
-    agent = AgentDefinition("aurora:agent/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset())
+    agent = AgentDefinition(
+        "aurora:agent/definition/test", "判断", "aurora:prompt/agent/root", "model", frozenset(), frozenset()
+    )
     tree = AgentTree.create("tree", "root", agent, "继续")
     assembler = PromptAssembler(
         make_prompt_catalog(("你是 Aurora。",), {agent.prompt_id: "自行判断。"}), max_characters=700

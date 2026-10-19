@@ -15,8 +15,8 @@ from src.cadence.config import ReactionConfig, ReactionsConfig
 from src.contracts import MCP_EVENT_RECEIVED, WorldCommit, WorldFrontier
 
 _TEMPLATE = (
-    ReactionConfig("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/chat", ()),
-    ReactionConfig("mcp:org.aurora.qq", "qq.message.group", "aurora:agent/chat", ("小光", "夜曦光")),
+    ReactionConfig("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/definition/chat", ()),
+    ReactionConfig("mcp:org.aurora.qq", "qq.message.group", "aurora:agent/definition/chat", ("小光", "夜曦光")),
 )
 
 
@@ -55,8 +55,8 @@ def test_declared_rules_route_private_and_mentioning_group_messages() -> None:
     mentioning = _commit("mcp:org.aurora.qq", "qq.message.group", "小光在吗")
     quiet = _commit("mcp:org.aurora.qq", "qq.message.group", "路人闲聊")
 
-    assert [rule.agent for rule in rules if rule.matches(private)] == ["aurora:agent/chat"]
-    assert [rule.agent for rule in rules if rule.matches(mentioning)] == ["aurora:agent/chat"]
+    assert [rule.agent for rule in rules if rule.matches(private)] == ["aurora:agent/definition/chat"]
+    assert [rule.agent for rule in rules if rule.matches(mentioning)] == ["aurora:agent/definition/chat"]
     assert [rule.agent for rule in rules if rule.matches(quiet)] == []
 
 
@@ -65,8 +65,8 @@ def test_declared_rules_route_private_and_mentioning_group_messages() -> None:
     [
         "",
         '[[reaction]]\nsource = "mcp:a"\n',
-        '[[reaction]]\nsource = ""\nevent_kind = "x"\nagent = "aurora:agent/chat"\ncontains_any = []\n',
-        '[[reaction]]\nsource = "mcp:a"\nevent_kind = "x"\nagent = "aurora:agent/chat"\nunknown = 1\n',
+        '[[reaction]]\nsource = ""\nevent_kind = "x"\nagent = "aurora:agent/definition/chat"\ncontains_any = []\n',
+        '[[reaction]]\nsource = "mcp:a"\nevent_kind = "x"\nagent = "aurora:agent/definition/chat"\nunknown = 1\n',
     ],
 )
 def test_reaction_template_rejects_incomplete_or_unknown_fields(tmp_path: Path, content: str) -> None:

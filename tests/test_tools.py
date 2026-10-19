@@ -77,15 +77,15 @@ def _agents() -> AgentCatalog:
     return AgentCatalog(
         (
             AgentDefinition(
-                "aurora:agent/root",
+                "aurora:agent/definition/root",
                 "总代理。",
                 "aurora:prompt/agent/root",
                 "quality",
                 frozenset({DELEGATE_TOOL}),
-                frozenset({"aurora:agent/worker"}),
+                frozenset({"aurora:agent/definition/worker"}),
             ),
             AgentDefinition(
-                "aurora:agent/worker",
+                "aurora:agent/definition/worker",
                 "通用执行者。",
                 "aurora:prompt/agent/worker",
                 "fast",
@@ -127,7 +127,7 @@ def test_registry_accepts_uppercase_mcp_raw_name_but_keeps_framework_ids_lowerca
     class WrongSpeciesTool(EchoTool):
         @property
         def definition(self) -> ToolDefinition:
-            return ToolDefinition("aurora:agent/delegate", "路径不在 tool/ 下的 ID 不是工具。", {})
+            return ToolDefinition("aurora:agent/definition/delegate", "路径不在 tool/ 下的 ID 不是工具。", {})
 
     registry = ToolRegistry((McpCamelTool(),))
     assert "com.github.windows_mcp:tool/Screenshot" in registry.names
@@ -163,19 +163,19 @@ def test_delegate_is_a_registered_tool_that_produces_a_tree_operation_request() 
                 "delegate",
                 DELEGATE_TOOL,
                 {
-                    "agent": "aurora:agent/worker",
+                    "agent": "aurora:agent/definition/worker",
                     "instruction": "检查一个边界",
                 },
             )
         )
     )
 
-    assert result == DelegationRequest("aurora:agent/worker", "检查一个边界")
+    assert result == DelegationRequest("aurora:agent/definition/worker", "检查一个边界")
     assert registry.definitions[0].name == DELEGATE_TOOL
     choices = registry.definitions[0].parameters["properties"]["agent"]["oneOf"]  # type: ignore[index]
     assert choices == (
-        {"const": "aurora:agent/root", "description": "总代理。"},
-        {"const": "aurora:agent/worker", "description": "通用执行者。"},
+        {"const": "aurora:agent/definition/root", "description": "总代理。"},
+        {"const": "aurora:agent/definition/worker", "description": "通用执行者。"},
     )
 
 

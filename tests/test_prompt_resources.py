@@ -133,7 +133,7 @@ def test_assembly_records_only_the_selected_fragments_in_their_actual_order() ->
     selected = PromptFragment(ResourceKey.parse("lab:prompt/agent/selected"), "选定角色")
     other = PromptFragment(ResourceKey.parse("lab:prompt/agent/other"), "其他角色")
     assembler = ConcreteAssembler(PromptCatalog((first, other, last, selected)))
-    agent = AgentDefinition("lab:agent/root", "主体", str(selected.key), "model", frozenset(), frozenset())
+    agent = AgentDefinition("lab:agent/definition/root", "主体", str(selected.key), "model", frozenset(), frozenset())
     result = assembler.assemble(AgentTree.create("tree", "root", agent, "开始"), "root")
     assert result.resources == (first.ref, last.ref, selected.ref)
     assert result.messages[0].content == "第一个系统片段\n\n第二个系统片段\n\n选定角色"

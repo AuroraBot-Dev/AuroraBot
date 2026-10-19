@@ -34,7 +34,12 @@ def _agent(
     children: frozenset[str] = frozenset(),
 ) -> AgentDefinition:
     return AgentDefinition(
-        f"aurora:agent/{definition_id}", "Test Agent.", f"aurora:prompt/agent/{prompt}", model, tools, children
+        f"aurora:agent/definition/{definition_id}",
+        "Test Agent.",
+        f"aurora:prompt/agent/{prompt}",
+        model,
+        tools,
+        children,
     )
 
 

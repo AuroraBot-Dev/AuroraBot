@@ -10,13 +10,32 @@ from src.contracts import (
     AgentDefinition,
     TagsConfig,
 )
+from src.contracts.agent_resource import AGENT_MEDIA_TYPE
 from src.contracts.pkgs.agents import AgentCatalog as AgentCatalogPort
+from src.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from src.kernel import ModuleContext, module
 from src.utils import resolve_names
 
 
-@module(name="agents", provides=AgentCatalogPort, consumes=(TOOL_CONTRIBUTIONS,))
+@module(
+    name="agents",
+    provides=AgentCatalogPort,
+    requires=AgentCatalogPort,
+    consumes=TOOL_CONTRIBUTIONS,
+    contributes=RESOURCE_CONTENTS,
+)
 def build(context: ModuleContext) -> AgentCatalogPort:
+    """读取实际选中目录，正文归档不反向参与工具和资源目录的构造。"""
+    catalog = context.get_optional(AgentCatalogPort)
+    if catalog is None:
+        catalog = _catalog(context)
+    for definition in catalog.definitions:
+        context.contribute(RESOURCE_CONTENTS, ResourceContent(definition.ref, definition.content, AGENT_MEDIA_TYPE))
+    return catalog
+
+
+def _catalog(context: ModuleContext) -> AgentCatalogPort:
+    """默认目录按实际工具目录展开标签和模式，再冻结完整原型。"""
     external = context.contributions(TOOL_CONTRIBUTIONS)
     available = BUILTIN_TOOL_NAMES | frozenset(tool.definition.name for tool in external)
     tags = context.settings.resolve(TagsConfig).table

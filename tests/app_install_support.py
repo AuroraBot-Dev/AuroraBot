@@ -47,7 +47,7 @@ MANIFEST_EVIDENCE = f"{MANIFEST_NAME} [server].command"
 ENDPOINT = "https://mcp.example.com/rpc"
 ENDPOINT_PACKAGE = "com.example.remote"
 DEFAULT_TOOL_NAMES = ("weather_now",)
-DEFAULT_AGENT_ID = "aurora:agent/worker"
+DEFAULT_AGENT_ID = "aurora:agent/definition/worker"
 
 
 def tools_page(names: Sequence[str] = DEFAULT_TOOL_NAMES, *, next_cursor: str | None = None) -> McpToolsPage:

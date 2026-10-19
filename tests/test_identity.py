@@ -56,8 +56,11 @@ def test_identifier_round_trips_namespace_and_path() -> None:
 def test_identifier_falls_back_to_the_default_namespace() -> None:
     assert str(Identifier.parse("tool/delegate", default_namespace="aurora")) == "aurora:tool/delegate"
     with pytest.raises(IdentityError, match="缺少命名空间"):
-        Identifier.parse("agent/delegate")
-    assert str(Identifier.parse("agent/delegate", default_namespace=DEFAULT_NAMESPACE)) == "aurora:agent/delegate"
+        Identifier.parse("agent/definition/delegate")
+    assert (
+        str(Identifier.parse("agent/definition/delegate", default_namespace=DEFAULT_NAMESPACE))
+        == "aurora:agent/definition/delegate"
+    )
 
 
 @pytest.mark.parametrize(
@@ -156,7 +159,7 @@ def test_tag_expansion_keeps_last_match_wins_semantics() -> None:
         )
     )
 
-    resolved = resolve_names(available, table.expand(("#aurora:tool/qq-send",), label="aurora:agent/chat"))
+    resolved = resolve_names(available, table.expand(("#aurora:tool/qq-send",), label="aurora:agent/definition/chat"))
 
     assert resolved == frozenset({"org.aurora.qq:tool/qq_send_message"})
 
@@ -184,7 +187,7 @@ def test_undeclared_tag_is_rejected() -> None:
     table = _table(TagDefinition("aurora:tool/qq", ("org.aurora.qq:tool/*",)))
 
     with pytest.raises(IdentityError, match="未声明的标签"):
-        table.expand(("#aurora:tool/missing",), label="aurora:agent/chat")
+        table.expand(("#aurora:tool/missing",), label="aurora:agent/definition/chat")
 
 
 def test_tag_cycles_are_rejected() -> None:

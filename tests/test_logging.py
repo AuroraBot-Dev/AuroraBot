@@ -77,7 +77,10 @@ def test_logging_config_rejects_invalid_levels(
     level: str,
 ) -> None:
     (configured_project / "config" / "runtime.toml").write_text(
-        (f'[runtime]\nprofile = "prod"\nnode_id = "root"\nagent = "aurora:agent/root"\nlog_level = "{level}"\n'),
+        (
+            '[runtime]\nprofile = "prod"\nnode_id = "root"\n'
+            f'agent = "aurora:agent/definition/root"\nlog_level = "{level}"\n'
+        ),
         encoding="utf-8",
     )
 

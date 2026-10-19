@@ -126,8 +126,8 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
         assert after_cursor > before_cursor
         assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
         tree = next(iter(runtime._trees.values()))
-        assert tree.node(tree.root_id).definition_id == "aurora:agent/triage"
-        assert echoed == ["Cadence> [aurora:agent/triage] done"]
+        assert tree.node(tree.root_id).definition_id == "aurora:agent/definition/triage"
+        assert echoed == ["Cadence> [aurora:agent/definition/triage] done"]
 
     asyncio.run(scenario())
 
@@ -138,9 +138,11 @@ def test_launch_tree_echoes_root_text_without_external_delivery(configured_proje
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
-        result = await runtime.launch_tree(TreeLaunchRequest("节律唤起：请初筛。", agent="aurora:agent/triage"))
+        result = await runtime.launch_tree(
+            TreeLaunchRequest("节律唤起：请初筛。", agent="aurora:agent/definition/triage")
+        )
         assert result.status is TreeStatus.COMPLETED
-        assert echoed == ["Cadence> [aurora:agent/triage] done"]
+        assert echoed == ["Cadence> [aurora:agent/definition/triage] done"]
 
     asyncio.run(scenario())
 
@@ -166,9 +168,9 @@ def test_presenter_traces_tool_calls(configured_project: Path) -> None:
     runtime.presenter.echo(tree)
 
     assert echoed == [
-        "  → [aurora:agent/root] test:tool/echo",
-        "  ← [aurora:agent/root] hi",
-        "Cadence> [aurora:agent/root] 完成",
+        "  → [aurora:agent/definition/root] test:tool/echo",
+        "  ← [aurora:agent/definition/root] hi",
+        "Cadence> [aurora:agent/definition/root] 完成",
     ]
 
 
@@ -182,7 +184,7 @@ def test_presenter_renders_rich_for_terminal_sink(
 
     runtime.presenter.echo(tree)
 
-    assert "Cadence> [aurora:agent/root] 完成" in capsys.readouterr().out
+    assert "Cadence> [aurora:agent/definition/root] 完成" in capsys.readouterr().out
 
 
 def test_cadence_and_memory_instances_are_composed_and_configured(configured_project: Path) -> None:
@@ -193,7 +195,7 @@ def test_cadence_and_memory_instances_are_composed_and_configured(configured_pro
     memory_config = config.get(MEMORY_CONFIG)
 
     assert cadence.enabled is config.get(CADENCE_CONFIG).enabled is True
-    assert cadence.agent == "aurora:agent/triage"
+    assert cadence.agent == "aurora:agent/definition/triage"
     assert memory is assembly.get(MemoryReader)
     assert memory_config.window_minutes == EXPECTED_WINDOW_MINUTES
     assert memory_config.commits_per_scope == EXPECTED_COMMITS_PER_SCOPE
@@ -224,7 +226,7 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
                     item,
                     tools=tuple((*item.tools, "org.aurora.qq:tool/*", "!org.aurora.qq:tool/qq_send_group_message")),
                 )
-                if item.id == "aurora:agent/root"
+                if item.id == "aurora:agent/definition/root"
                 else item
                 for item in agents
             )
@@ -235,7 +237,7 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
         FakeTool("org.aurora.qq:tool/qq_send_group_message"),
     )
     assembly = assemble_runtime(with_wildcard, FakeModel(), tools=qq_tools).assembly
-    root_definition = assembly.get(AgentCatalog).get("aurora:agent/root")
+    root_definition = assembly.get(AgentCatalog).get("aurora:agent/definition/root")
 
     assert "org.aurora.qq:tool/qq_send_private_message" in root_definition.tools
     assert "org.aurora.qq:tool/qq_send_group_message" not in root_definition.tools
@@ -304,14 +306,14 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
         FakeTool("org.aurora.qq:tool/qq_delete_friend"),
     )
     agents = assemble_runtime(load_config(configured_project), FakeModel(), tools=qq_tools).assembly.get(AgentCatalog)
-    triage = agents.get("aurora:agent/triage")
-    root = agents.get("aurora:agent/root")
-    worker = agents.get("aurora:agent/worker")
-    fast_worker = agents.get("aurora:agent/fast-worker")
-    reviewer = agents.get("aurora:agent/reviewer")
+    triage = agents.get("aurora:agent/definition/triage")
+    root = agents.get("aurora:agent/definition/root")
+    worker = agents.get("aurora:agent/definition/worker")
+    fast_worker = agents.get("aurora:agent/definition/fast-worker")
+    reviewer = agents.get("aurora:agent/definition/reviewer")
 
     assert triage.tools == frozenset({"aurora:tool/delegate"})
-    assert triage.children == frozenset({"aurora:agent/root", "aurora:agent/fast-worker"})
+    assert triage.children == frozenset({"aurora:agent/definition/root", "aurora:agent/definition/fast-worker"})
     assert root.tools == frozenset(
         {
             "aurora:tool/artifact_find",
@@ -335,18 +337,18 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
     )
     assert root.children == frozenset(
         {
-            "aurora:agent/worker",
-            "aurora:agent/fast-worker",
-            "aurora:agent/reviewer",
-            "aurora:agent/chat",
-            "aurora:agent/memory",
+            "aurora:agent/definition/worker",
+            "aurora:agent/definition/fast-worker",
+            "aurora:agent/definition/reviewer",
+            "aurora:agent/definition/chat",
+            "aurora:agent/definition/memory",
         }
     )
-    memory = agents.get("aurora:agent/memory")
+    memory = agents.get("aurora:agent/definition/memory")
     assert {"aurora:tool/memory_source", "aurora:tool/memory_feedback"} <= memory.tools
     assert memory.children == frozenset()
     assert worker.model == "quality"
-    assert worker.children == frozenset({"aurora:agent/reviewer", "aurora:agent/fast-worker"})
+    assert worker.children == frozenset({"aurora:agent/definition/reviewer", "aurora:agent/definition/fast-worker"})
     assert "org.aurora.qq:tool/qq_send_private_message" in worker.tools
     assert "org.aurora.qq:tool/qq_delete_friend" in worker.tools
     assert fast_worker.model == "fast"
