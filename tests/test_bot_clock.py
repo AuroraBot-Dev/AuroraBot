@@ -22,7 +22,12 @@ _NOW = datetime(2026, 10, 18, 12, tzinfo=UTC)
 _GOAL = Goal("aurora:goal/check", "检查结果", "确认结果")
 _WAKE = WakePlan("aurora:wake/check", _NOW, "核对先前发起的操作", _GOAL.goal_id)
 _AGENT = AgentDefinition(
-    "aurora:agent/definition/root", "认知", "aurora:prompt/agent/root", "fake", frozenset(), frozenset()
+    "aurora:agent/definition/root",
+    "认知",
+    "aurora:prompt/agent/root",
+    "test:ai/endpoint/fake",
+    frozenset(),
+    frozenset(),
 )
 
 

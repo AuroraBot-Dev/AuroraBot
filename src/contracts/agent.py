@@ -17,6 +17,7 @@ from src.contracts.identity import (
     matches_species,
 )
 from src.contracts.model import ChatMessage, ToolCall
+from src.contracts.model_binding import ai_resource_key
 from src.contracts.resource import ResourceKey, ResourceRef
 from src.contracts.world import ToolScopes, WorldFrontier
 
@@ -82,6 +83,7 @@ class AgentDefinition:
             raise ValueError(f"Agent definition ID 必须形如 <namespace>:agent/definition/<name>：{self.definition_id}")
         if not matches_species(self.prompt_id, PROMPT_PATH_PREFIX):
             raise ValueError(f"Agent prompt ID 必须形如 <namespace>:prompt/<kind>/<name>：{self.prompt_id}")
+        ai_resource_key(self.model, "endpoint")
         if any(not name for name in (*self.tools, *self.children)):
             raise ValueError("AgentDefinition Tool and child IDs must not be empty")
         if any(not matches_species(name, TOOL_PATH_PREFIX) for name in self.tools):

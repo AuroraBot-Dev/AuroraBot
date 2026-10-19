@@ -37,7 +37,7 @@ def _agent(
         f"aurora:agent/definition/{definition_id}",
         "Test Agent.",
         f"aurora:prompt/agent/{prompt}",
-        model,
+        f"test:ai/endpoint/{model}",
         tools,
         children,
     )
@@ -152,11 +152,11 @@ def test_model_request_requires_model_one_system_and_unique_tools() -> None:
     with pytest.raises(ValueError, match="requires model"):
         ModelRequest("", messages)
     with pytest.raises(ValueError, match="start with system"):
-        ModelRequest("model", (ChatMessage.message("hello"),))
+        ModelRequest("test:ai/endpoint/model", (ChatMessage.message("hello"),))
     with pytest.raises(ValueError, match="only one"):
-        ModelRequest("model", (ChatMessage.system("one"), ChatMessage.system("two")))
+        ModelRequest("test:ai/endpoint/model", (ChatMessage.system("one"), ChatMessage.system("two")))
     with pytest.raises(ValueError, match="must be unique"):
-        ModelRequest("model", messages, (tool, tool))
+        ModelRequest("test:ai/endpoint/model", messages, (tool, tool))
 
 
 def test_agent_node_requires_parent_pairing_message_and_terminal_outcome() -> None:

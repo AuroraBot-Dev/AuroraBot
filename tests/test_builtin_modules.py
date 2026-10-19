@@ -56,8 +56,10 @@ def _settings(tmp_path: Path) -> _Settings:
     return _Settings(
         tmp_path,
         {
-            ProvidersConfig: ProvidersConfig((ProviderConfig("provider", "litellm", "API_KEY"),)),
-            EndpointsConfig: EndpointsConfig((EndpointConfig("chat", "provider", "gpt"),)),
+            ProvidersConfig: ProvidersConfig((ProviderConfig("test:ai/provider/provider", "litellm", "API_KEY"),)),
+            EndpointsConfig: EndpointsConfig(
+                (EndpointConfig("test:ai/endpoint/chat", "test:ai/provider/provider", "gpt"),)
+            ),
             PromptsConfig: PromptsConfig(
                 (
                     PromptConfig("aurora:prompt/system/core", "system.txt"),
@@ -67,7 +69,12 @@ def _settings(tmp_path: Path) -> _Settings:
             AgentsConfig: AgentsConfig(
                 (
                     AgentConfig(
-                        "aurora:agent/definition/chat", "会话", "aurora:prompt/agent/chat", "chat", (), frozenset()
+                        "aurora:agent/definition/chat",
+                        "会话",
+                        "aurora:prompt/agent/chat",
+                        "test:ai/endpoint/chat",
+                        (),
+                        frozenset(),
                     ),
                 )
             ),

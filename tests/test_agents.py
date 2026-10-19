@@ -11,7 +11,7 @@ def _agent(definition_id: str, *, children: frozenset[str] = frozenset()) -> Age
         f"aurora:agent/definition/{definition_id}",
         f"{definition_id} Agent.",
         "aurora:prompt/agent/shared",
-        "model",
+        "test:ai/endpoint/model",
         frozenset(),
         frozenset(f"aurora:agent/definition/{child}" for child in children),
     )
@@ -43,13 +43,13 @@ def test_catalog_rejects_empty_duplicate_unknown_and_missing_child_definitions()
 
 def test_agent_definition_requires_complete_identity_and_non_empty_references() -> None:
     with pytest.raises(ValueError, match="requires definition_id"):
-        AgentDefinition("", "Agent.", "aurora:prompt/agent/profile", "model", frozenset(), frozenset())
+        AgentDefinition("", "Agent.", "aurora:prompt/agent/profile", "test:ai/endpoint/model", frozenset(), frozenset())
     with pytest.raises(ValueError, match="must not be empty"):
         AgentDefinition(
             "aurora:agent/definition/root",
             "Agent.",
             "aurora:prompt/agent/profile",
-            "model",
+            "test:ai/endpoint/model",
             frozenset({""}),
             frozenset(),
         )

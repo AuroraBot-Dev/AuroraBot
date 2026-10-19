@@ -43,7 +43,9 @@ EXPECTED_WINDOW_MINUTES = 60
 EXPECTED_COMMITS_PER_SCOPE = 50
 
 
-_TEMPLATE_ENDPOINTS = frozenset({"default", "fast", "quality", "multimodal", "embedding"})
+_TEMPLATE_ENDPOINTS = frozenset(
+    f"aurora:ai/endpoint/{name}" for name in ("default", "fast", "quality", "multimodal", "embedding")
+)
 
 
 @dataclass(slots=True)
@@ -282,7 +284,9 @@ def test_assembly_rejects_invalid_root_prompt_model_and_delegation_boundary(conf
         )
     with pytest.raises(ValueError, match="未知 model endpoint"):
         assemble_runtime(
-            config.with_value(AGENTS_CONFIG, AgentsConfig((replace(root, model="missing"), *agents[1:]))),
+            config.with_value(
+                AGENTS_CONFIG, AgentsConfig((replace(root, model="test:ai/endpoint/missing"), *agents[1:]))
+            ),
             FakeModel(),
         )
     with pytest.raises(ValueError, match=r"children.*可见性不一致"):
@@ -355,11 +359,11 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
     memory = agents.get("aurora:agent/definition/memory")
     assert {"aurora:tool/definition/memory_source", "aurora:tool/definition/memory_feedback"} <= memory.tools
     assert memory.children == frozenset()
-    assert worker.model == "quality"
+    assert worker.model == "aurora:ai/endpoint/quality"
     assert worker.children == frozenset({"aurora:agent/definition/reviewer", "aurora:agent/definition/fast-worker"})
     assert "org.aurora.qq:tool/definition/qq_send_private_message" in worker.tools
     assert "org.aurora.qq:tool/definition/qq_delete_friend" in worker.tools
-    assert fast_worker.model == "fast"
+    assert fast_worker.model == "aurora:ai/endpoint/fast"
     assert fast_worker.prompt_id == "aurora:prompt/agent/fast"
     assert fast_worker.children == frozenset()
     assert fast_worker.tools == frozenset(
@@ -383,7 +387,10 @@ def test_assembly_rejects_agent_model_whose_provider_is_unusable(configured_proj
     config = load_config(configured_project)
     providers = config.get(PROVIDERS_CONFIG).providers
     broken = ProvidersConfig(
-        tuple(replace(item, adapter="unknown") if item.name == "deepseek" else item for item in providers)
+        tuple(
+            replace(item, adapter="unknown") if item.name == "aurora:ai/provider/deepseek" else item
+            for item in providers
+        )
     )
 
     with pytest.raises(ValueError, match="尚未实现的 adapter"):

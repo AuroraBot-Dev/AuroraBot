@@ -144,7 +144,7 @@ def _agent(
         _agent_id(definition_id),
         f"{definition_id} Agent.",
         _prompt_id(prompt),
-        model,
+        f"test:ai/endpoint/{model}",
         tools,
         frozenset(_agent_id(child) for child in children),
     )
@@ -170,7 +170,7 @@ def test_root_completes_one_message_assistant_loop() -> None:
 
     assert result.status == TreeStatus.COMPLETED
     assert result.node("root").result == "done"
-    assert model.requests[0].model == "root-model"
+    assert model.requests[0].model == "test:ai/endpoint/root-model"
     assert [message.role for message in model.requests[0].messages] == ["system", "message"]
     assert model.requests[0].tools == ()
 
@@ -270,9 +270,13 @@ def test_delegate_creates_child_with_its_own_model_and_resumes_parent() -> None:
     child = result.nodes[1]
     assert child.parent_id == "root"
     assert child.definition_id == _agent_id("worker")
-    assert child.model == "small-model"
+    assert child.model == "test:ai/endpoint/small-model"
     assert child.status == AgentStatus.COMPLETED
-    assert [request.model for request in model.requests] == ["large-model", "small-model", "large-model"]
+    assert [request.model for request in model.requests] == [
+        "test:ai/endpoint/large-model",
+        "test:ai/endpoint/small-model",
+        "test:ai/endpoint/large-model",
+    ]
     parent_tool = next(message for message in result.node("root").messages if message.role == "tool")
     assert parent_tool.tool_call_id == "delegate-1"
     assert parent_tool.content == "child result"
@@ -342,7 +346,7 @@ def test_model_failure_becomes_tree_failure() -> None:
     result = asyncio.run(_runner(FailingModel(), (root,)).run(tree))
 
     assert result.status == TreeStatus.FAILED
-    assert result.node("root").error == "model failed: model"
+    assert result.node("root").error == "model failed: test:ai/endpoint/model"
 
 
 def test_tool_exception_and_hidden_tool_are_returned_to_model() -> None:
@@ -376,7 +380,9 @@ def test_runner_rejects_node_facts_that_do_not_match_predefined_agent() -> None:
     root = _agent(model="expected")
     tree = AgentTree.create("tree", "root", root, "hello")
     invalid = AgentTree(
-        tree.tree_id, tree.root_id, (replace(tree.node("root"), definition=replace(root, model="other")),)
+        tree.tree_id,
+        tree.root_id,
+        (replace(tree.node("root"), definition=replace(root, model="test:ai/endpoint/other")),),
     )
 
     with pytest.raises(ValueError, match="预定义原型不一致"):

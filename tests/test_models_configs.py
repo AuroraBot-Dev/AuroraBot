@@ -12,12 +12,12 @@ if TYPE_CHECKING:
 
 _PROVIDERS = """\
 [[provider]]
-name = "deepseek"
+name = "aurora:ai/provider/deepseek"
 adapter = "litellm"
 secret_env = "DEEPSEEK_API_KEY"
 
 [[provider]]
-name = "siliconflow"
+name = "aurora:ai/provider/siliconflow"
 adapter = "openai_compatible"
 base_url = "https://api.siliconflow.cn/v1"
 secret_env = "SILICONFLOW_API_KEY"
@@ -25,8 +25,8 @@ secret_env = "SILICONFLOW_API_KEY"
 
 _ENDPOINTS = """\
 [[endpoint]]
-name = "default"
-provider = "deepseek"
+name = "aurora:ai/endpoint/default"
+provider = "aurora:ai/provider/deepseek"
 model = "deepseek-chat"
 """
 
@@ -50,12 +50,15 @@ def test_template_exports_typed_provider_and_endpoint_config(configured_project:
     providers = config.get(PROVIDERS_CONFIG).providers
     endpoints = config.get(ENDPOINTS_CONFIG).endpoints
 
-    assert providers[0] == ProviderConfig("deepseek", "litellm", "DEEPSEEK_API_KEY")
+    assert providers[0] == ProviderConfig("aurora:ai/provider/deepseek", "litellm", "DEEPSEEK_API_KEY")
     assert providers[3] == ProviderConfig(
-        "siliconflow", "openai_compatible", "SILICONFLOW_API_KEY", base_url="https://api.siliconflow.cn/v1"
+        "aurora:ai/provider/siliconflow",
+        "openai_compatible",
+        "SILICONFLOW_API_KEY",
+        base_url="https://api.siliconflow.cn/v1",
     )
-    assert endpoints[0] == EndpointConfig("default", "deepseek", "deepseek-chat")
-    assert endpoints[1].name == "fast"
+    assert endpoints[0] == EndpointConfig("aurora:ai/endpoint/default", "aurora:ai/provider/deepseek", "deepseek-chat")
+    assert endpoints[1].name == "aurora:ai/endpoint/fast"
     assert endpoints[2].model == "deepseek-v4-pro"
 
 
@@ -69,5 +72,5 @@ def test_providers_parses_exact_values(tmp_path: Path) -> None:
 def test_endpoints_parses_exact_values(tmp_path: Path) -> None:
     endpoints = _load_endpoints(tmp_path, _ENDPOINTS)
 
-    assert endpoints[0].provider == "deepseek"
+    assert endpoints[0].provider == "aurora:ai/provider/deepseek"
     assert endpoints[0].model == "deepseek-chat"

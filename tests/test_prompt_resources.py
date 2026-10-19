@@ -133,7 +133,9 @@ def test_assembly_records_only_the_selected_fragments_in_their_actual_order() ->
     selected = PromptFragment(ResourceKey.parse("lab:prompt/agent/selected"), "选定角色")
     other = PromptFragment(ResourceKey.parse("lab:prompt/agent/other"), "其他角色")
     assembler = ConcreteAssembler(PromptCatalog((first, other, last, selected)))
-    agent = AgentDefinition("lab:agent/definition/root", "主体", str(selected.key), "model", frozenset(), frozenset())
+    agent = AgentDefinition(
+        "lab:agent/definition/root", "主体", str(selected.key), "test:ai/endpoint/model", frozenset(), frozenset()
+    )
     result = assembler.assemble(AgentTree.create("tree", "root", agent, "开始"), "root")
     assert result.resources == (first.ref, last.ref, selected.ref)
     assert result.messages[0].content == "第一个系统片段\n\n第二个系统片段\n\n选定角色"
@@ -148,7 +150,7 @@ def test_model_and_assembly_reject_unresolved_or_duplicate_resources(fixed: bool
     with pytest.raises(ValueError, match="输入资源"):
         PromptAssembly((message,), resources=refs)
     with pytest.raises(ValueError, match="输入资源"):
-        ModelRequest("model", (message,), resources=refs)
+        ModelRequest("test:ai/endpoint/model", (message,), resources=refs)
 
 
 def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(configured_project: Path) -> None:

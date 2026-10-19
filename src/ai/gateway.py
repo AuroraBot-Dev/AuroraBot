@@ -15,6 +15,7 @@ import litellm
 
 from src.ai.openai import openai_tool_name_map, to_openai_messages, to_openai_tools
 from src.contracts import ChatMessage, ModelRequest, ToolCall
+from src.contracts.model_binding import ai_resource_key
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
@@ -57,6 +58,11 @@ class LiteLLMModelGateway:
             raise ValueError("模型请求总超时不能小于单次尝试超时")
         if max_tokens is not None and max_tokens <= 0:
             raise ValueError("模型输出预算必须大于零")
+        for name in providers:
+            ai_resource_key(name, "provider")
+        for name, endpoint in endpoints.items():
+            ai_resource_key(name, "endpoint")
+            ai_resource_key(endpoint.provider, "provider")
         self._providers = MappingProxyType(dict(providers))
         self._endpoints = MappingProxyType(dict(endpoints))
         self._caller = caller or _litellm_completion

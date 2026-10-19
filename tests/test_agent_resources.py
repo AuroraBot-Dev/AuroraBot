@@ -45,7 +45,12 @@ if TYPE_CHECKING:
 def _definition() -> AgentDefinition:
     """使用完整原生资源身份创建一个原型。"""
     return AgentDefinition(
-        "lab:agent/definition/root", "研究原型", "lab:prompt/agent/research", "model", frozenset(), frozenset()
+        "lab:agent/definition/root",
+        "研究原型",
+        "lab:prompt/agent/research",
+        "test:ai/endpoint/model",
+        frozenset(),
+        frozenset(),
     )
 
 
@@ -56,7 +61,7 @@ def test_agent_version_covers_each_declaration(field: str) -> None:
     changes = {
         "description": "另一个研究原型",
         "prompt_id": "lab:prompt/agent/review",
-        "model": "other-model",
+        "model": "test:ai/endpoint/other-model",
         "tools": frozenset({"lab:tool/definition/read"}),
         "children": frozenset({"lab:agent/definition/worker"}),
     }

@@ -111,14 +111,14 @@ def test_litellm_gateway_round_trips_domain_tool_names_in_definitions_history_an
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"deepseek": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
-        {"quality": ModelEndpoint("deepseek", "deepseek-chat")},
+        {"test:ai/provider/deepseek": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {"test:ai/endpoint/quality": ModelEndpoint("test:ai/provider/deepseek", "deepseek-chat")},
         caller=call,
     )
     response = asyncio.run(
         model.complete(
             ModelRequest(
-                "quality",
+                "test:ai/endpoint/quality",
                 (
                     ChatMessage.system("系统"),
                     ChatMessage.message("消息"),
@@ -165,14 +165,18 @@ def test_litellm_gateway_uses_explicit_endpoint_and_normalizes_tool_calls(
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid/v1", "TEST_MODEL_KEY")},
-        {"quality": ModelEndpoint("provider", "model-name")},
+        {
+            "test:ai/provider/provider": ProviderEndpoint(
+                "openai_compatible", "https://example.invalid/v1", "TEST_MODEL_KEY"
+            )
+        },
+        {"test:ai/endpoint/quality": ModelEndpoint("test:ai/provider/provider", "model-name")},
         caller=call,
     )
     response = asyncio.run(
         model.complete(
             ModelRequest(
-                "quality",
+                "test:ai/endpoint/quality",
                 (ChatMessage.system("系统"), ChatMessage.message("消息")),
                 (ToolDefinition("test:tool/definition/echo", "回显", {"type": "object"}),),
             )
@@ -204,12 +208,16 @@ def test_litellm_gateway_accepts_null_tool_calls_for_text_response(
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid/v1", "TEST_MODEL_KEY")},
-        {"default": ModelEndpoint("provider", "model-name")},
+        {
+            "test:ai/provider/provider": ProviderEndpoint(
+                "openai_compatible", "https://example.invalid/v1", "TEST_MODEL_KEY"
+            )
+        },
+        {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model-name")},
         caller=call,
     )
 
-    request = ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+    request = ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
     response = asyncio.run(model.complete(request))
 
     assert response.content == "你好！"
@@ -220,15 +228,15 @@ def test_litellm_gateway_accepts_null_tool_calls_for_text_response(
     ("providers", "endpoints", "message"),
     [
         ({}, {}, "尚未配置"),
-        ({}, {"default": ModelEndpoint("missing", "model")}, "未知 provider"),
+        ({}, {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/missing", "model")}, "未知 provider"),
         (
-            {"provider": ProviderEndpoint("unknown", None, "KEY")},
-            {"default": ModelEndpoint("provider", "model")},
+            {"test:ai/provider/provider": ProviderEndpoint("unknown", None, "KEY")},
+            {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
             "尚未实现",
         ),
         (
-            {"provider": ProviderEndpoint("openai_compatible", None, "KEY")},
-            {"default": ModelEndpoint("provider", "model")},
+            {"test:ai/provider/provider": ProviderEndpoint("openai_compatible", None, "KEY")},
+            {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
             "缺少 base_url",
         ),
     ],
@@ -239,7 +247,7 @@ def test_litellm_gateway_rejects_invalid_endpoint_configuration(
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        LiteLLMModelGateway(providers, endpoints).validate_endpoint("default")
+        LiteLLMModelGateway(providers, endpoints).validate_endpoint("test:ai/endpoint/default")
 
 
 def test_litellm_gateway_requires_secret_without_calling_network(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -249,11 +257,11 @@ def test_litellm_gateway_requires_secret_without_calling_network(monkeypatch: py
         raise AssertionError("不应调用网络")
 
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid", "MISSING_KEY")},
-        {"default": ModelEndpoint("provider", "model")},
+        {"test:ai/provider/provider": ProviderEndpoint("openai_compatible", "https://example.invalid", "MISSING_KEY")},
+        {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
         caller=caller,
     )
-    request = ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("消息")))
+    request = ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("消息")))
 
     with pytest.raises(RuntimeError, match="环境变量"):
         asyncio.run(model.complete(request))
@@ -272,8 +280,12 @@ def test_litellm_gateway_disables_sdk_retries_and_bounds_aurora_attempts(
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid", "TEST_MODEL_KEY")},
-        {"default": ModelEndpoint("provider", "model")},
+        {
+            "test:ai/provider/provider": ProviderEndpoint(
+                "openai_compatible", "https://example.invalid", "TEST_MODEL_KEY"
+            )
+        },
+        {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
         caller=caller,
         timeout_seconds=MODEL_ATTEMPT_TIMEOUT_SECONDS,
         max_attempts=MODEL_MAX_ATTEMPTS,
@@ -281,7 +293,9 @@ def test_litellm_gateway_disables_sdk_retries_and_bounds_aurora_attempts(
     )
 
     response = asyncio.run(
-        model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好"))))
+        model.complete(
+            ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+        )
     )
 
     assert response.content == "恢复了"
@@ -297,8 +311,12 @@ def test_litellm_gateway_enforces_total_deadline(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("openai_compatible", "https://example.invalid", "TEST_MODEL_KEY")},
-        {"default": ModelEndpoint("provider", "model")},
+        {
+            "test:ai/provider/provider": ProviderEndpoint(
+                "openai_compatible", "https://example.invalid", "TEST_MODEL_KEY"
+            )
+        },
+        {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
         caller=caller,
         timeout_seconds=0.02,
         max_attempts=3,
@@ -306,7 +324,11 @@ def test_litellm_gateway_enforces_total_deadline(monkeypatch: pytest.MonkeyPatch
     )
 
     with pytest.raises(TimeoutError, match="总截止时间"):
-        asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))
+        asyncio.run(
+            model.complete(
+                ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+            )
+        )
 
 
 def test_litellm_gateway_passes_output_budget_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -318,13 +340,17 @@ def test_litellm_gateway_passes_output_budget_when_configured(monkeypatch: pytes
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
-        {"default": ModelEndpoint("provider", "model")},
+        {"test:ai/provider/provider": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
         caller=caller,
         max_tokens=MODEL_OUTPUT_BUDGET,
     )
 
-    asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))
+    asyncio.run(
+        model.complete(
+            ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+        )
+    )
 
     assert calls[0]["max_tokens"] == MODEL_OUTPUT_BUDGET
 
@@ -338,11 +364,15 @@ def test_litellm_gateway_omits_output_budget_by_default(monkeypatch: pytest.Monk
 
     monkeypatch.setenv("TEST_MODEL_KEY", "secret")
     model = LiteLLMModelGateway(
-        {"provider": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
-        {"default": ModelEndpoint("provider", "model")},
+        {"test:ai/provider/provider": ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
         caller=caller,
     )
 
-    asyncio.run(model.complete(ModelRequest("default", (ChatMessage.system("系统"), ChatMessage.message("你好")))))
+    asyncio.run(
+        model.complete(
+            ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+        )
+    )
 
     assert "max_tokens" not in calls[0]

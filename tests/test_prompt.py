@@ -33,7 +33,12 @@ def _assembler(*, limit: int = 1_000) -> PromptAssembler:
 
 def _agent(prompt: str = "aurora:prompt/agent/root") -> AgentDefinition:
     return AgentDefinition(
-        "aurora:agent/definition/test", "Test Agent.", prompt, "quality-model", frozenset(), frozenset()
+        "aurora:agent/definition/test",
+        "Test Agent.",
+        prompt,
+        "test:ai/endpoint/quality-model",
+        frozenset(),
+        frozenset(),
     )
 
 

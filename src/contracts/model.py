@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from src.contracts.data import freeze_object
 from src.contracts.evidence import freeze_evidence_refs
+from src.contracts.model_binding import ai_resource_key
 from src.contracts.resource import fixed_resource_refs
 
 if TYPE_CHECKING:
@@ -117,6 +118,7 @@ class ModelRequest:
         """工具版本直接来自实际输入的冻结接口，显式来源仍须先通过完整性检查。"""
         if not self.model:
             raise ValueError("ModelRequest requires model")
+        ai_resource_key(self.model, "endpoint")
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", tuple(self.tools))
         object.__setattr__(self, "resources", fixed_resource_refs(self.resources))

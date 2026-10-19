@@ -127,7 +127,7 @@ class FakeLauncher:
             definition_id=request.agent or "aurora:agent/definition/root",
             description="cadence 测试原型",
             prompt_id="aurora:prompt/agent/root",
-            model="fake",
+            model="test:ai/endpoint/fake",
             tools=frozenset(),
             children=frozenset(),
         )

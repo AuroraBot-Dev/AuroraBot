@@ -30,7 +30,7 @@ _LARGE = ToolDefinition(
 
 def _agent(tools: frozenset[str] = frozenset()) -> AgentDefinition:
     """测试主体只带显式选择的能力。"""
-    return AgentDefinition("aurora:agent/definition/root", "认知", _PROMPT, "fake", tools, frozenset())
+    return AgentDefinition("aurora:agent/definition/root", "认知", _PROMPT, "test:ai/endpoint/fake", tools, frozenset())
 
 
 def _assembler(limit: int) -> PromptAssembler:
