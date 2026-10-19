@@ -24,6 +24,7 @@ from src.kernel import compose_managed, module
 from src.prompt import PromptAssembler as ConcreteAssembler
 from src.prompt import PromptCatalog
 from src.prompt.module import MODULE as PROMPT_MODULE
+from src.resource_content.module import MODULE as CONTENT_MODULE
 from src.resources.module import MODULE as RESOURCES_MODULE
 from src.runtime import assemble_runtime
 
@@ -107,7 +108,7 @@ def test_resource_contribution_follows_the_selected_prompt_assembler(tmp_path: P
         store = FileArtifactStore(tmp_path / "content")
         lifecycle = await compose_managed(
             _Settings(),
-            (PROMPT_MODULE, RESOURCES_MODULE, ARTIFACTS_MODULE, build),
+            (PROMPT_MODULE, RESOURCES_MODULE, ARTIFACTS_MODULE, CONTENT_MODULE, build),
             instances=((ArtifactStore, store),),
         )
         try:

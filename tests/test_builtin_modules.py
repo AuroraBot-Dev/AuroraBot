@@ -120,6 +120,7 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
         "operations",
         "prompt",
         "resources",
+        "resource_content",
         "scopes",
         "rhythm",
         "runtime",

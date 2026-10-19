@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.prompt import PromptAssembler as PromptAssemblerPort
 from src.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
 from src.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceKey
+from src.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from src.kernel import ModuleContext, module
 from src.prompt import PromptAssembler, PromptCatalog
 from src.prompt.config import PromptConfig, PromptsConfig
@@ -16,21 +16,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-async def ready(context: ModuleContext) -> None:
-    """启动认知前保存实际片段，文件变化与重启不影响已记录版本的读取。"""
-    store = context.get(ArtifactStore)
-    for fragment in context.get(PromptAssemblerPort).catalog.fragments:
-        info = await store.put(fragment.key, fragment.content.encode("utf-8"), media_type=PROMPT_MEDIA_TYPE)
-        if info.ref != fragment.ref:
-            raise ValueError(f"提示词正文存储返回了不一致的版本：{fragment.key}")
-
-
 @module(
     name="prompt",
     provides=PromptAssemblerPort,
-    requires=(PromptAssemblerPort, ArtifactStore),
-    contributes=RESOURCE_CONTRIBUTIONS,
-    ready=ready,
+    requires=PromptAssemblerPort,
+    contributes=(RESOURCE_CONTRIBUTIONS, RESOURCE_CONTENTS),
 )
 def build(context: ModuleContext) -> PromptAssemblerPort:
     """资源描述来自实际载入的片段，不从配置路径推断内容版本。"""
@@ -41,6 +31,9 @@ def build(context: ModuleContext) -> PromptAssemblerPort:
         assembler = PromptAssembler(PromptCatalog(_read_prompts(directory, config.prompts)))
     for fragment in assembler.catalog.fragments:
         context.contribute(RESOURCE_CONTRIBUTIONS, fragment.resource)
+        context.contribute(
+            RESOURCE_CONTENTS, ResourceContent(fragment.ref, fragment.content.encode("utf-8"), PROMPT_MEDIA_TYPE)
+        )
     return assembler
 
 

@@ -81,7 +81,7 @@ MCP 关闭会先停止各连接的事件入口，再逆序释放所有连接。�
 
 提示词使用 `namespace:prompt/system/path` 或 `namespace:prompt/agent/path` 身份，版本为实际采用文本的 UTF-8 SHA256。系统片段按配置顺序与节点选定的 Agent 片段共同进入上下文；目录、装配器与实际模型请求引用同一份冻结内容。`ModelRequest.resources` 和 `engine.model.requested` 的 `resources` 保存实际采用的明确版本，未采用的 Agent 片段不计入来源。替换提示词装配器时，资源贡献跟随实际选中的提供者。
 
-提示词模块在生命周期的 `ready` 阶段将实际选中目录的正文保存到 `ArtifactStore`，成功后才启动后台任务。源文件改变或进程重启后，仍可通过 `aurora:artifacts/query/read` 按世界日志中的固定版本读取历史正文。写入失败或存储返回不同版本会使启动失败。同步 `assemble_runtime` 只构造实例，不执行生命周期，也不保证提示词正文已持久化；正式启动由 `aurora start` 执行完整生命周期。
+提示词模块通过 `RESOURCE_CONTENTS` 贡献实际选中目录的冻结正文，`resource_content` 模块在生命周期的 `ready` 阶段统一保存到 `ArtifactStore`，成功后才启动后台任务。正文归档不参与资源目录的构造依赖，其他领域可使用相同贡献入口。源文件改变或进程重启后，仍可通过 `aurora:artifacts/query/read` 按世界日志中的固定版本读取历史正文。写入失败或存储返回不同版本、大小或媒体类型会使启动失败。同步 `assemble_runtime` 只构造实例，不执行生命周期，也不保证提示词正文已持久化；正式启动由 `aurora start` 执行完整生命周期。
 
 动态资源通过 `RESOURCE_PROVIDERS` 接入目录，不需要把全部版本登记到内核。每个提供者使用公共排序和游标，每次只返回一页；目录合并去重，静态声明优先，动态来源对同一版本的定义不一致时明确失败。提供者必须遵守页大小、筛选、顺序和续页规则，避免跨来源查询漏项。
 

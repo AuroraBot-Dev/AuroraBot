@@ -27,6 +27,7 @@ from src.mcp.config import PlatformsConfig
 from src.prompt import PromptAssembler as ConcreteAssembler
 from src.prompt import PromptCatalog
 from src.prompt.module import MODULE as PROMPT_MODULE
+from src.resource_content.module import MODULE as CONTENT_MODULE
 from src.resources.module import MODULE as RESOURCES_MODULE
 from src.runtime import compose_runtime
 
@@ -124,7 +125,9 @@ def test_failed_prompt_publication_prevents_background_start(tmp_path: Path, *, 
 
     async def scenario() -> None:
         """激活失败自动关闭后，再次关闭仍可安全完成。"""
-        lifecycle = await compose_managed(_Settings(), (PROMPT_MODULE, ARTIFACTS_MODULE, RESOURCES_MODULE, selected))
+        lifecycle = await compose_managed(
+            _Settings(), (PROMPT_MODULE, ARTIFACTS_MODULE, RESOURCES_MODULE, CONTENT_MODULE, selected)
+        )
         try:
             error = ValueError if wrong_revision else OSError
             message = "不一致的版本" if wrong_revision else "内容存储不可写"
