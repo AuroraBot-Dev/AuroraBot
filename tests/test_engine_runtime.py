@@ -170,6 +170,41 @@ def test_root_completes_one_message_assistant_loop() -> None:
     assert model.requests[0].tools == ()
 
 
+@pytest.mark.parametrize("succeeds", [True, False])
+def test_terminal_result_on_the_final_allowed_iteration_is_returned(*, succeeds: bool) -> None:
+    """状态已经终止时不再消耗下一轮预算，也不能把完成或失败改成超限异常。"""
+
+    class RejectingModel(FakeModel):
+        """模拟模型调用失败后正常形成的失败终态。"""
+
+        async def complete(self, request: ModelRequest) -> ChatMessage:
+            """失败应由引擎转换为终态，而不是预算异常。"""
+            raise RuntimeError("推理失败")
+
+    root = _agent()
+    model = FakeModel([ChatMessage.assistant("已完成")]) if succeeds else RejectingModel([])
+    agents = AgentCatalog((root,))
+    runner = AgentTreeRunner(model, _assembler(), agents, ToolRegistry(), max_steps=1)
+    result = asyncio.run(runner.run(AgentTree.create("tree", "root", root, "检查最后一步")))
+    assert result.status is (TreeStatus.COMPLETED if succeeds else TreeStatus.FAILED)
+    if succeeds:
+        assert result.node("root").result == "已完成"
+    else:
+        assert result.node("root").error == "model failed: 推理失败"
+
+
+def test_exhausted_budget_does_not_execute_the_next_pending_tool() -> None:
+    """最后一轮只是提出行动时仍须停止，不能为了执行工具额外越过上界。"""
+    tool = ScopedEchoTool("lab:world")
+    root = _agent(tools=frozenset({tool.definition.name}))
+    call = ToolCall("pending", tool.definition.name, {"value": "不要执行"})
+    model = FakeModel([ChatMessage.assistant(tool_calls=(call,))])
+    runner = AgentTreeRunner(model, _assembler(), AgentCatalog((root,)), ToolRegistry((tool,)), max_steps=1)
+    with pytest.raises(RuntimeError, match="step limit"):
+        asyncio.run(runner.run(AgentTree.create("tree", "root", root, "检查边界")))
+    assert not tool.values
+
+
 def test_runner_publishes_each_immutable_tree_transition() -> None:
     model = FakeModel([ChatMessage.assistant("done")])
     root = _agent(model="root-model")

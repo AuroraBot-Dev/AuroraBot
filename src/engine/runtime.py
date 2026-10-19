@@ -102,6 +102,8 @@ class AgentTreeRunner:
                 )
                 continue
             current = await self._model_step(current, node, observer)
+        if current.status != TreeStatus.RUNNING:
+            return current
         await self._effects.tree_failed(
             current,
             "step limit exceeded",
