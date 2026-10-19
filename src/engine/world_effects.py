@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontier
 from src.contracts.memory_codec import exposure_data
+from src.contracts.resource_codec import resource_ref_data
 from src.engine.events import (
     MODEL_COMPLETED,
     MODEL_FAILED,
@@ -97,6 +98,7 @@ class EngineWorldEffects:
                 "bot_id": self._bot_id,
                 "root_id": tree.root_id,
                 "definition_id": root.definition_id,
+                "definition_ref": resource_ref_data(root.definition_ref),
                 "focus_goal_ids": list(root.focus_goal_ids),
                 "message": root.messages[0].content,
             },
@@ -126,10 +128,11 @@ class EngineWorldEffects:
                 "tree_id": tree.tree_id,
                 "node_id": node.node_id,
                 "model": node.model,
+                "definition_ref": resource_ref_data(node.definition_ref),
                 "bot_id": self._bot_id,
                 "message_count": len(request.messages),
                 "tool_count": len(request.tools),
-                "resources": [{"key": str(ref.key), "revision": ref.revision} for ref in request.resources],
+                "resources": [resource_ref_data(ref) for ref in request.resources],
                 "memory": exposure_data(memory) if memory is not None else None,
             },
         )
@@ -244,6 +247,7 @@ class EngineWorldEffects:
                 "parent_id": child.parent_id,
                 "tool_call_id": child.parent_call_id,
                 "definition_id": child.definition_id,
+                "definition_ref": resource_ref_data(child.definition_ref),
             },
         )
 

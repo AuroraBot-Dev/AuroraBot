@@ -129,6 +129,8 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
         original = runtime.assembly.get(AgentCatalog).get(identity)
         try:
             await lifecycle.activate(asyncio.Event())
+            tree = await runtime.run("记录实际使用的原型", tree_id="agent-version")
+            assert tree.node(tree.root_id).definition is original
         finally:
             await lifecycle.close()
         agents = config.get(AGENTS_CONFIG)
@@ -145,6 +147,10 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
             await handle.activate(asyncio.Event())
             current = resumed.assembly.get(AgentCatalog).get(identity)
             assert current.ref != original.ref
+            fact = await resumed.world.commit(f"agent-version:{tree.root_id}:model:0:requested")
+            assert fact is not None
+            assert fact.data["definition_ref"] == {"key": identity, "revision": original.ref.revision}
+            assert fact.data["definition_ref"] in fact.data["resources"]
             registry = resumed.assembly.get(OperationRegistry)
             for definition in (original, current):
                 request = OperationRequest(
@@ -153,7 +159,14 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
                     "test",
                     ResourceRef(ResourceKey.parse("aurora:artifacts/query/read"), "1"),
                     OperationKind.QUERY,
-                    {"key": identity, "revision": definition.ref.revision, "encoding": "utf-8", "limit": 16384},
+                    {
+                        "key": identity,
+                        "revision": fact.data["definition_ref"]["revision"]
+                        if definition is original
+                        else definition.ref.revision,
+                        "encoding": "utf-8",
+                        "limit": 16384,
+                    },
                 )
                 result = await registry.dispatch(request)
                 assert result.status is OperationStatus.SUCCEEDED

@@ -5,8 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.contracts.resource import ResourceDescriptor
+    from src.contracts.resource import ResourceDescriptor, ResourceRef
     from src.contracts.resource_query import ResourcePage
+
+
+def resource_ref_data(ref: ResourceRef) -> dict[str, str | None]:
+    """保留完整资源身份与指定版本，不根据名称猜测当前绑定。"""
+    return {"key": str(ref.key), "revision": ref.revision}
 
 
 def resource_data(descriptor: ResourceDescriptor) -> dict[str, Any]:

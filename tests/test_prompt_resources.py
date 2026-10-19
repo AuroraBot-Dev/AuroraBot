@@ -166,7 +166,10 @@ def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(co
             tree = await runtime.run("检查提示词来源", tree_id="prompt-source")
             assert len(model.requests) == 1
             request = model.requests[0]
-            assert request.resources == tuple(fragment.ref for fragment in selected)
+            assert request.resources == (
+                tree.node(tree.root_id).definition_ref,
+                *(fragment.ref for fragment in selected),
+            )
             assert "这份新正文尚未用于当前运行。" not in request.messages[0].content
             record = await runtime.world.commit(f"prompt-source:{tree.root_id}:model:0:requested")
             assert record is not None
