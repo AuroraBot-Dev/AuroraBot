@@ -15,6 +15,7 @@ PROVIDERS_CONFIG = ConfigSpec[ProvidersConfig](
             text_field("adapter"),
             text_field("secret_env"),
             optional_text_field("base_url"),
+            optional_text_field("sdk_provider"),
         ),
         model=ProviderConfig,
         container=ProvidersConfig,

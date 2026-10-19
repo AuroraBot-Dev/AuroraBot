@@ -50,12 +50,15 @@ def test_template_exports_typed_provider_and_endpoint_config(configured_project:
     providers = config.get(PROVIDERS_CONFIG).providers
     endpoints = config.get(ENDPOINTS_CONFIG).endpoints
 
-    assert providers[0] == ProviderConfig("aurora:ai/provider/deepseek", "litellm", "DEEPSEEK_API_KEY")
+    assert providers[0] == ProviderConfig(
+        "aurora:ai/provider/deepseek", "litellm", "DEEPSEEK_API_KEY", sdk_provider="deepseek"
+    )
     assert providers[3] == ProviderConfig(
         "aurora:ai/provider/siliconflow",
         "openai_compatible",
         "SILICONFLOW_API_KEY",
         base_url="https://api.siliconflow.cn/v1",
+        sdk_provider="openai",
     )
     assert endpoints[0] == EndpointConfig("aurora:ai/endpoint/default", "aurora:ai/provider/deepseek", "deepseek-chat")
     assert endpoints[1].name == "aurora:ai/endpoint/fast"

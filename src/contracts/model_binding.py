@@ -14,6 +14,7 @@ from src.contracts.resource_codec import resource_ref_data
 PROVIDER_MEDIA_TYPE = "application/vnd.aurora.ai-provider+json;version=1"
 MODEL_BINDING_MEDIA_TYPE = "application/vnd.aurora.ai-endpoint+json;version=1"
 _ENVIRONMENT_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_SDK_PROVIDER = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def ai_resource_key(name: str, kind: Literal["endpoint", "provider"]) -> ResourceKey:
@@ -35,6 +36,7 @@ class ProviderDefinition:
     adapter: str
     base_url: str | None
     secret_env: str
+    sdk_provider: str | None = None
     content: bytes = field(init=False, repr=False)
     ref: ResourceRef = field(init=False)
 
@@ -45,8 +47,22 @@ class ProviderDefinition:
             raise ValueError("模型提供方必须声明适配方式")
         if _ENVIRONMENT_KEY.fullmatch(self.secret_env) is None:
             raise ValueError("模型密钥引用必须是合法环境变量名")
+        route = self.sdk_provider
+        if route is None and self.adapter in {"litellm", "openai_compatible"}:
+            route = "openai" if self.adapter == "openai_compatible" else self.key.path
+        if route is not None and (not isinstance(route, str) or _SDK_PROVIDER.fullmatch(route) is None):
+            raise ValueError("sdk_provider 必须是非空协议前缀，不包含路径、冒号或空白")
+        if self.adapter == "openai_compatible" and route != "openai":
+            raise ValueError("OpenAI-compatible 适配必须使用 openai 作为 sdk_provider")
+        object.__setattr__(self, "sdk_provider", route)
         content = _content(
-            {"key": str(self.key), "adapter": self.adapter, "base_url": self.base_url, "secret_env": self.secret_env}
+            {
+                "key": str(self.key),
+                "adapter": self.adapter,
+                "base_url": self.base_url,
+                "secret_env": self.secret_env,
+                "sdk_provider": route,
+            }
         )
         object.__setattr__(self, "content", content)
         object.__setattr__(self, "ref", ResourceRef(self.key, hashlib.sha256(content).hexdigest()))

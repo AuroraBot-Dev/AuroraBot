@@ -1,20 +1,24 @@
 [[provider]]
 name = "aurora:ai/provider/deepseek"
 adapter = "litellm"
+sdk_provider = "deepseek"
 secret_env = "DEEPSEEK_API_KEY"
 
 [[provider]]
 name = "aurora:ai/provider/xiaomi_mimo"
 adapter = "litellm"
+sdk_provider = "xiaomi_mimo"
 secret_env = "XIAOMI_MIMO_API_KEY"
 
 [[provider]]
 name = "aurora:ai/provider/openai"
 adapter = "litellm"
+sdk_provider = "openai"
 secret_env = "OPENAI_API_KEY"
 
 [[provider]]
 name = "aurora:ai/provider/siliconflow"
 adapter = "openai_compatible"
+sdk_provider = "openai"
 base_url = "https://api.siliconflow.cn/v1"
 secret_env = "SILICONFLOW_API_KEY"

@@ -28,7 +28,10 @@ def _gateway(context: ModuleContext) -> Model:
     providers = context.settings.resolve(ProvidersConfig)
     endpoints = context.settings.resolve(EndpointsConfig)
     return LiteLLMModelGateway(
-        {item.name: ProviderEndpoint(item.adapter, item.base_url, item.secret_env) for item in providers.providers},
+        {
+            item.name: ProviderEndpoint(item.adapter, item.base_url, item.secret_env, item.sdk_provider)
+            for item in providers.providers
+        },
         {item.name: ModelEndpoint(item.provider, item.model) for item in endpoints.endpoints},
     )
 

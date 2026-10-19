@@ -15,6 +15,7 @@ class ProviderConfig:
     adapter: str
     secret_env: str
     base_url: str | None = None
+    sdk_provider: str | None = None
 
     def __post_init__(self) -> None:
         """提供方名称就是其资源身份，不通过默认命名空间隐式补全。"""

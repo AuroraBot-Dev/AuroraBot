@@ -105,6 +105,8 @@ Agent 原型使用 `namespace:agent/definition/path` 身份，可由统一资源
 
 LLM 端点使用 `namespace:ai/endpoint/path`，提供方使用 `namespace:ai/provider/path`。Agent 与每次 `ModelRequest` 都显式引用端点身份，端点配置再引用提供方身份；服务器要求的远端模型名称保持原始协议值。配置解析、网关目录与请求契约共同校验身份，不隐式补充默认命名空间。
 
+`providers.toml` 的 `sdk_provider` 单独声明 SDK 路由前缀。例如资源名可用 `lab:ai/provider/accounts/primary`，同时设置 `sdk_provider = "deepseek"`；实际调用仍使用 `deepseek/远端模型名`。路由前缀进入提供方的冻结正文与版本。省略时，`litellm` 采用资源的局部路径作为前缀，`openai_compatible` 固定为 `openai`；自定义或嵌套资源路径应显式填写该字段。
+
 网关将配置编译为不可变的 `ProviderDefinition` 与 `ModelBinding`，按规范 JSON 的 SHA256 确定内容版本。端点正文固定提供方版本、远端模型名称、单次超时、总期限、最大尝试次数和输出预算；路由、重试与 SDK 参数直接使用这份快照。提供方正文保存地址、适配方式和密钥环境变量名，实际密钥值在调用时读取。
 
 运行者在写入模型请求事实前调用 `Model.resolve_endpoint`，`ModelRequest.endpoint` 必须直接携带完整快照，`model` 从该快照读取。请求来源自动包含端点与提供方版本，世界事实通过 `endpoint_ref`、`provider_ref` 分别记录；网关拒绝同名但版本不同的请求。AI 模组将实际选中实现的端点和提供方正文贡献给统一归档，重启后可按世界引用读取历史配置。

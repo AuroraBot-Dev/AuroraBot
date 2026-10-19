@@ -28,6 +28,7 @@ class ProviderEndpoint:
     adapter: str
     base_url: str | None
     secret_env: str
+    sdk_provider: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +60,9 @@ class LiteLLMModelGateway:
         if max_tokens is not None and max_tokens <= 0:
             raise ValueError("模型输出预算必须大于零")
         compiled_providers = {
-            name: ProviderDefinition(ai_resource_key(name, "provider"), value.adapter, value.base_url, value.secret_env)
+            name: ProviderDefinition(
+                ai_resource_key(name, "provider"), value.adapter, value.base_url, value.secret_env, value.sdk_provider
+            )
             for name, value in providers.items()
         }
         compiled_endpoints: dict[str, ModelBinding] = {}
@@ -126,7 +129,7 @@ class LiteLLMModelGateway:
         }
         if endpoint.max_tokens is not None:
             parameters["max_tokens"] = endpoint.max_tokens
-        if provider.adapter == "openai_compatible":
+        if provider.base_url is not None:
             parameters["api_base"] = provider.base_url
         if request.tools:
             parameters["tools"] = to_openai_tools(request.tools, tool_names)
@@ -199,9 +202,8 @@ class LiteLLMModelGateway:
 
 
 def _gateway_model(endpoint: ModelBinding, provider: ProviderDefinition) -> str:
-    """将冻结提供方的资源名称映射到 LiteLLM 前缀，远端模型名保持原样。"""
-    prefix = "openai" if provider.adapter == "openai_compatible" else provider.key.path
-    return f"{prefix}/{endpoint.model}"
+    """协议前缀来自冻结的执行声明，资源名与远端模型名各自保留。"""
+    return f"{provider.sdk_provider}/{endpoint.model}"
 
 
 async def _litellm_completion(parameters: dict[str, Any]) -> object:
