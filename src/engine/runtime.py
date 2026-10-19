@@ -85,6 +85,8 @@ class AgentTreeRunner:
         self._validate_definitions(tree)
         if self._world is not None:
             await self._world.initialize()
+            if await self._world.commit(f"{tree.tree_id}:tree:started") is not None:
+                raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
         await self._effects.tree_started(tree)
         current = self._publish(tree, observer)
         for _ in range(self._process.max_steps):

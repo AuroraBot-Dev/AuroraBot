@@ -83,6 +83,8 @@ class AuroraRuntime:
         if tree_id is not None and tree_id in self._trees:
             raise ValueError(f"AgentTree 已存在：{tree_id}")
         await self.world.initialize()
+        if tree_id is not None:
+            await self._require_new_tree_id(tree_id)
         commit = await self.world.append_commit(
             commit_id=f"runtime:{uuid4().hex}",
             kind=RUNTIME_INPUT,
@@ -128,8 +130,8 @@ class AuroraRuntime:
             memory_scopes=request.memory_scopes,
             focus_goal_ids=request.focus_goal_ids,
         )
-        if tree.tree_id in self._trees:
-            raise ValueError(f"AgentTree 已存在：{tree.tree_id}")
+        await self.world.initialize()
+        await self._require_new_tree_id(tree.tree_id)
 
         def observer(current: AgentTree) -> None:
             self._record_tree(current)
@@ -138,6 +140,11 @@ class AuroraRuntime:
 
         _logger.info("AgentTree 已提交 tree_id={}", tree.tree_id)
         return await self.runner.run(tree, observer=observer)
+
+    async def _require_new_tree_id(self, tree_id: str) -> None:
+        """持久开始事实同样占用实例身份，重启不赋予再次执行的含义。"""
+        if tree_id in self._trees or await self.world.commit(f"{tree_id}:tree:started") is not None:
+            raise ValueError(f"AgentTree 已存在：{tree_id}")
 
     async def submit_event(self, event: EnvironmentEvent) -> WorldCommit:
         """将外部事实写入 Bot 世界，但不自动唤起新的 AgentTree。"""
