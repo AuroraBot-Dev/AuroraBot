@@ -1,5 +1,7 @@
 """组合微内核：模块声明、依赖解析、装配与统一生命周期。"""
 
+from src.contracts.module_manifest import ModuleManifest
+from src.kernel.api import KERNEL_API_VERSION
 from src.kernel.compose import (
     ContributionBinding,
     InstanceBinding,
@@ -38,6 +40,7 @@ __all__ = [
     "CLOSE",
     "CONSTRUCT",
     "DRAIN",
+    "KERNEL_API_VERSION",
     "PREPARE",
     "READY",
     "RUN",
@@ -53,6 +56,7 @@ __all__ = [
     "ManagedAssembly",
     "ModuleContext",
     "ModuleLifecycleError",
+    "ModuleManifest",
     "ModuleSpec",
     "Ordering",
     "Phase",

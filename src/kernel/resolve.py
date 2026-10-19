@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from src.kernel.api import KERNEL_API_VERSION
 from src.kernel.phase import ACTIVATE, BUILTIN_PHASES, CONSTRUCT, CONSTRUCTION_KINDS, PREPARE, Phase
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ class Resolution:
 
 def resolve(specs: Iterable[ModuleSpec]) -> Resolution:
     listed = tuple(specs)
+    _validate_module_api(listed)
     _validate_names(listed)
     available = _drop_unsatisfied_optional(listed)
     providers = _providers(available)
@@ -116,6 +118,16 @@ def _step_of(steps: Iterable[PhaseStep], phase: Phase) -> tuple[ModuleSpec, ...]
 
 def _by_name(spec: ModuleSpec) -> tuple[int, str]:
     return (0, spec.name)
+
+
+def _validate_module_api(specs: tuple[ModuleSpec, ...]) -> None:
+    """在筛选、准备与构造之前检查全部声明，跳过策略不能绕过兼容约束。"""
+    for spec in specs:
+        if not spec.manifest.accepts(KERNEL_API_VERSION):
+            raise ValueError(
+                f"模组 {spec.name}（{spec.manifest.version}）与内核 API {KERNEL_API_VERSION} 不兼容，"
+                f"要求：{spec.manifest.kernel_api}"
+            )
 
 
 def _validate_names(specs: tuple[ModuleSpec, ...]) -> None:

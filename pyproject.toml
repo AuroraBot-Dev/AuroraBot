@@ -12,6 +12,7 @@ dependencies = [
     "litellm>=1.83.14",
     "loguru>=0.7,<1",
     "mcp>=2,<3",
+    "packaging>=24,<27",
     "pydantic>=2.12,<3",
     "prompt-toolkit>=3.0,<4",
     "python-dotenv>=1.2,<2",

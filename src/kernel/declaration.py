@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.module_manifest import DEFAULT_MODULE_MANIFEST, ModuleManifest
 from src.contracts.resource import ResourceDescriptor
 from src.contracts.scope import ScopeDeclaration
 from src.kernel.phase import ACTIVATE, CLOSE, CONSTRUCT, DRAIN, PREPARE, READY, RUN, Ordering, Phase
@@ -44,6 +45,7 @@ class ModuleSpec:
     optional: bool = False
     order: tuple[Ordering, ...] = ()
     hooks: Mapping[Phase, PhaseHook] = field(default_factory=dict)
+    manifest: ModuleManifest = DEFAULT_MODULE_MANIFEST
 
     def __post_init__(self) -> None:
         """冻结声明容器，完整域声明也同时表达该模块的所有权。"""
@@ -61,10 +63,7 @@ class ModuleSpec:
         ):
             object.__setattr__(self, attribute, tuple(getattr(self, attribute)))
         object.__setattr__(self, "hooks", MappingProxyType(dict(self.hooks)))
-        if any(not isinstance(scope, ScopeDeclaration) for scope in self.scopes):
-            raise TypeError("模块的完整域声明必须使用 ScopeDeclaration")
-        if any(not isinstance(resource, ResourceDescriptor) for resource in self.resources):
-            raise TypeError("模块的资源定义必须使用 ResourceDescriptor")
+        self._validate_metadata()
         patterns = tuple(scope.pattern for scope in self.scopes)
         if len(self.owns_scopes) != len(set(self.owns_scopes)) or len(patterns) != len(set(patterns)):
             raise ValueError(f"模块重复声明域：{self.name}")
@@ -80,6 +79,15 @@ class ModuleSpec:
             raise ValueError(f"模块声明的域必须是非空且无首尾空白的文本：{self.name}")
         if len(scopes) != len(set(scopes)):
             raise ValueError(f"模块重复声明域：{self.name}")
+
+    def _validate_metadata(self) -> None:
+        """声明式元数据必须是公共值对象，不能把未校验字典带入解析阶段。"""
+        if not isinstance(self.manifest, ModuleManifest):
+            raise TypeError("模块清单必须使用 ModuleManifest")
+        if any(not isinstance(scope, ScopeDeclaration) for scope in self.scopes):
+            raise TypeError("模块的完整域声明必须使用 ScopeDeclaration")
+        if any(not isinstance(resource, ResourceDescriptor) for resource in self.resources):
+            raise TypeError("模块的资源定义必须使用 ResourceDescriptor")
 
     @property
     def owned_scopes(self) -> tuple[str, ...]:
@@ -105,6 +113,7 @@ def _as_tuple[T](value: T | tuple[T, ...] | None) -> tuple[T, ...]:
 def module(
     *,
     name: str,
+    manifest: ModuleManifest = DEFAULT_MODULE_MANIFEST,
     provides: type | tuple[type, ...] = (),
     requires: type | tuple[type, ...] = (),
     contributes: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
@@ -155,6 +164,7 @@ def module(
 
         return ModuleSpec(
             name=name,
+            manifest=manifest,
             provides=provided,
             requires=_as_tuple(requires),
             contributes=_as_tuple(contributes),
