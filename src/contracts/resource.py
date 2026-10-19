@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -121,6 +124,40 @@ class ResourceInstance:
             raise ValueError("资源实例必须属于一个 Bot 身份")
         if self.definition.revision is None:
             raise ValueError("资源实例必须引用确定的定义版本")
+
+    @property
+    def key(self) -> ResourceKey:
+        """以 Bot 和原始实例身份寻址，定义版本变化不改变实例名称。"""
+        definition = self.definition.key
+        return ResourceKey(
+            definition.namespace, definition.domain, "instance", _instance_path(self.bot_id, self.instance_id)
+        )
+
+
+def resource_instance_identity(key: ResourceKey) -> tuple[str, str]:
+    """从规范实例地址还原 Bot 与原始实例 ID，拒绝多义或损坏编码。"""
+    try:
+        if key.kind != "instance" or not key.path.startswith("v1_"):
+            raise ValueError("实例地址类别或编码版本无效")
+        token = key.path[3:]
+        raw = base64.b64decode(token + "=" * (-len(token) % 4), altchars=b"-_", validate=True)
+        identity = json.loads(raw)
+        if not isinstance(identity, list):
+            raise ValueError("实例地址必须包含 Bot 和实例身份")
+        bot_id, instance_id = identity
+        if not isinstance(bot_id, str) or not isinstance(instance_id, str) or not instance_id.strip():
+            raise ValueError("实例地址身份必须是非空文本")
+        if not Identifier.parse(bot_id).path.startswith("bot/") or key.path != _instance_path(bot_id, instance_id):
+            raise ValueError("实例地址不是规范编码")
+        return bot_id, instance_id
+    except (ValueError, TypeError, UnicodeError, binascii.Error) as error:
+        raise ValueError("资源实例地址无效") from error
+
+
+def _instance_path(bot_id: str, instance_id: str) -> str:
+    """原始身份用无损 UTF-8 编码进入资源路径，不改写 Bot 或运行 ID。"""
+    raw = json.dumps([bot_id, instance_id], ensure_ascii=False, separators=(",", ":")).encode()
+    return "v1_" + base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 RESOURCE_CONTRIBUTIONS = ContributionKey[ResourceDescriptor]("aurora:resources/contribution/definitions")

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.resource import ResourceInstance, ResourceKey, ResourceRef
+
 if TYPE_CHECKING:
-    from src.contracts.resource import ResourceDescriptor, ResourceInstance, ResourceRef
+    from src.contracts.resource import ResourceDescriptor
     from src.contracts.resource_query import ResourcePage
 
 
@@ -21,6 +24,26 @@ def resource_instance_data(instance: ResourceInstance) -> dict[str, Any]:
         "bot_id": instance.bot_id,
         "definition": resource_ref_data(instance.definition),
     }
+
+
+def parse_resource_ref(data: object) -> ResourceRef:
+    """读取完整引用，拒绝缺失字段、隐式转换及不确定的损坏版本。"""
+    if not isinstance(data, Mapping) or set(data) != {"key", "revision"}:
+        raise ValueError("资源引用必须包含 key 和 revision")
+    key, revision = data["key"], data["revision"]
+    if not isinstance(key, str) or (revision is not None and not isinstance(revision, str)):
+        raise ValueError("资源引用身份与版本必须使用文本")
+    return ResourceRef(ResourceKey.parse(key), revision)
+
+
+def parse_resource_instance(data: object) -> ResourceInstance:
+    """从持久事实读取实例，不用当前配置补写缺失的定义或归属。"""
+    if not isinstance(data, Mapping) or set(data) != {"instance_id", "bot_id", "definition"}:
+        raise ValueError("资源实例必须包含实例身份、Bot 和定义引用")
+    instance_id, bot_id = data["instance_id"], data["bot_id"]
+    if not isinstance(instance_id, str) or not isinstance(bot_id, str):
+        raise ValueError("资源实例身份与 Bot 必须使用文本")
+    return ResourceInstance(instance_id, bot_id, parse_resource_ref(data["definition"]))
 
 
 def resource_data(descriptor: ResourceDescriptor) -> dict[str, Any]:
