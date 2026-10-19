@@ -16,6 +16,8 @@ from src.utils import get_logger
 from src.utils.patterns import pattern_matches
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.contracts.pkgs.bot import BotStateStore
     from src.contracts.pkgs.memory import MemoryPolicy
     from src.contracts.pkgs.world import WorldReader
@@ -42,6 +44,7 @@ class Memory:
         include_run_scopes: bool = False,
         state: BotStateStore | None = None,
         index: MemoryIndex | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         """绑定经历来源与排序策略，读取范围和主体状态各自显式注入。"""
         if window <= timedelta(0):
@@ -58,6 +61,7 @@ class Memory:
         self._catalog = catalog
         self._include_run_scopes = include_run_scopes
         self._state = state
+        self._now = now or (lambda: datetime.now(UTC))
         for entry in (*self._scope_include, *self._scope_exclude):
             pattern_matches(entry, "")
 
@@ -68,7 +72,7 @@ class Memory:
         cursor = head if request.cursor is None else request.cursor
         if cursor > head:
             raise ValueError("记忆读取游标超出当前世界")
-        observed_at = (request.observed_at or datetime.now(UTC)).astimezone(UTC)
+        observed_at = (request.observed_at or self._now()).astimezone(UTC)
         window_start = observed_at - self._window
         history = await self._index.visible(cursor, observed_at)
         all_scopes = tuple(sorted({scope for commit in history.commits for scope in commit.scopes}))
