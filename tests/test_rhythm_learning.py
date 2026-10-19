@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,7 @@ from aurora.configs.rhythm import RHYTHM_CONFIG
 from src.contracts import EnvironmentEvent
 from src.contracts.pkgs.cadence import Cadence, RhythmPolicy
 from src.rhythm.config import RhythmConfig
-from src.rhythm.dataset import RhythmEpisode, RhythmExample
+from src.rhythm.dataset import RhythmEpisode
 from src.rhythm.gru import GRURhythmPolicy, load_policy
 from src.rhythm.training import RhythmTrainingResult, train
 from src.runtime import assemble_runtime
@@ -91,15 +92,15 @@ def test_incompatible_feature_coordinates_are_not_loaded(tmp_path: Path, learned
 
 def test_training_accounts_for_utility_magnitude_not_only_label_counts() -> None:
     """相同观察下两类标签各半，较大的延误损失应改变最优选择。"""
-    observation = make_episode("base", False, _NOW).examples[0].observation
-    later = make_episode("later", False, _NOW + timedelta(days=1)).examples[0].observation
+    example = make_episode("base", False, _NOW).examples[0]
+    later = make_episode("later", False, _NOW + timedelta(days=1)).examples[0]
     training = (
-        RhythmEpisode("valuable", (RhythmExample(observation, 20, 0, 10),)),
-        RhythmEpisode("costly", (RhythmExample(observation, 0, 1, 10),)),
+        RhythmEpisode("valuable", (replace(example, think_value=20, wait_value=0),)),
+        RhythmEpisode("costly", (replace(example, think_value=0, wait_value=1),)),
     )
     validation = (
-        RhythmEpisode("valid-valuable", (RhythmExample(later, 20, 0, 10),)),
-        RhythmEpisode("valid-costly", (RhythmExample(later, 0, 1, 10),)),
+        RhythmEpisode("valid-valuable", (replace(later, think_value=20, wait_value=0),)),
+        RhythmEpisode("valid-costly", (replace(later, think_value=0, wait_value=1),)),
     )
     result = train(training, validation, hidden_size=_HIDDEN_SIZE, epochs=80, learning_rate=0.03)
     assert result.metrics["regret"] < result.baseline_metrics["regret"]

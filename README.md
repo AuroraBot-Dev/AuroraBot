@@ -148,7 +148,7 @@ AgentTree 认知循环使用 `namespace:engine/process/path` 的 `TreeProcessDef
 aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 ```
 
-观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。训练数据每行是一段经历，包含 `schema_version = 1`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值。验证经历必须独立且晚于训练经历，报告同时列出学习模型和规则基线的误差与效用遗憾。
+观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。节律训练数据每行是一段经历，包含 `schema_version = 2`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`、`outcome_cursor` 和 `outcome_at`。结果必须在观察之后获得；验证观察必须晚于所有训练结果的获知时间，同一 Bot 的验证游标也必须越过训练结果。缺少标签边界的数据不能自动补成有效样本。`src.rhythm.dataset` 提供类型化读取和导出。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值；报告同时列出学习模型和规则基线的误差与效用遗憾。
 
 两种训练命令都会先把实际输入 JSONL 固定为数据集资源，再从相同字节解析和训练。报告的 `inputs` 同时包含原始资源版本与解析后样本摘要，模型归档内保存同一份来源信息、训练参数、框架版本和独立验证指标。模型通过 `ArtifactStore` 发布，`artifact` 给出确切模型资源；输出文件是相同字节的导出，不覆盖已有文件。训练使用 `artifacts.toml` 的内容目录；单独训练时该配置不存在则使用 `data/artifacts`。
 

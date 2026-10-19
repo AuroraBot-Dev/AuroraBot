@@ -11,9 +11,9 @@ from rhythm_support import make_episode
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
-from src.cadence.state import observation_data
 from src.memory_model.dataset import write_episodes
 from src.memory_model.tgn import load_policy as load_memory_policy
+from src.rhythm.dataset import write_episodes as write_rhythm_episodes
 from src.rhythm.gru import load_policy
 
 if TYPE_CHECKING:
@@ -28,20 +28,7 @@ _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 
 def _write(path: Path, episode: RhythmEpisode) -> None:
     """按公开 JSONL 结构写入测试经历，不调用网络。"""
-    data = {
-        "schema_version": 1,
-        "episode_id": episode.episode_id,
-        "examples": [
-            {
-                "observation": observation_data(example.observation),
-                "think_value": example.think_value,
-                "wait_value": example.wait_value,
-                "next_check_seconds": example.next_check_seconds,
-            }
-            for example in episode.examples
-        ],
-    }
-    path.write_text(json.dumps(data, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_rhythm_episodes(path, (episode,))
 
 
 def test_train_command_exports_reloadable_weights_and_independent_validation_report(
