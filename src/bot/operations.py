@@ -25,10 +25,10 @@ if TYPE_CHECKING:
     from src.contracts.operation import Operation
     from src.contracts.pkgs.bot import BotStateStore
 
-BOT_STATE_TOOL = "aurora:tool/bot_state"
-GOAL_SET_TOOL = "aurora:tool/goal_set"
-WAKE_SCHEDULE_TOOL = "aurora:tool/wake_schedule"
-WAKE_CANCEL_TOOL = "aurora:tool/wake_cancel"
+BOT_STATE_TOOL = "aurora:tool/definition/bot_state"
+GOAL_SET_TOOL = "aurora:tool/definition/goal_set"
+WAKE_SCHEDULE_TOOL = "aurora:tool/definition/wake_schedule"
+WAKE_CANCEL_TOOL = "aurora:tool/definition/wake_cancel"
 
 
 class BotOperation:

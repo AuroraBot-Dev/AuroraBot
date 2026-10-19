@@ -96,7 +96,7 @@ def test_tree_rejects_missing_parent() -> None:
         (lambda: ChatMessage.system(""), "invalid system"),
         (_empty_assistant, "invalid assistant"),
         (lambda: ChatMessage.tool("", "result"), "invalid tool"),
-        (lambda: ToolDefinition("", "description", {}), "requires name"),
+        (lambda: ToolDefinition("", "description", {}), "需要非空"),
         (lambda: ToolOutput(""), "must not be empty"),
     ],
 )
@@ -124,7 +124,7 @@ def test_tool_definition_deep_freezes_nested_json_schema() -> None:
         "properties": {"mode": {"type": "string", "enum": ["one", "two"]}},
         "required": ["mode"],
     }
-    definition = ToolDefinition("choose", "Choose a mode.", schema)
+    definition = ToolDefinition("test:tool/definition/choose", "Choose a mode.", schema)
 
     schema["properties"]["mode"]["enum"].append("mutated")
     schema["required"].append("mutated")
@@ -147,7 +147,7 @@ def test_assistant_rejects_duplicate_call_ids_in_one_message() -> None:
 
 def test_model_request_requires_model_one_system_and_unique_tools() -> None:
     messages = (ChatMessage.system("system"), ChatMessage.message("hello"))
-    tool = ToolDefinition("echo", "Echo.", {})
+    tool = ToolDefinition("test:tool/definition/echo", "Echo.", {})
 
     with pytest.raises(ValueError, match="requires model"):
         ModelRequest("", messages)

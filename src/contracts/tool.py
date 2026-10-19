@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from src.contracts.data import freeze_object
 from src.contracts.evidence import freeze_evidence_refs
+from src.contracts.tool_resource import tool_resource_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -34,7 +35,8 @@ class ToolDefinition:
     def __post_init__(self) -> None:
         """工具参数声明使用不可变 JSON，调用者不能改变已冻结目录。"""
         if not self.name or not self.description:
-            raise ValueError("ToolDefinition requires name and description")
+            raise ValueError("ToolDefinition 需要非空名称与说明")
+        tool_resource_key(self.name)
         object.__setattr__(self, "parameters", freeze_object(self.parameters))
 
 
@@ -73,11 +75,11 @@ class DelegationRequest:
 
 type ToolResult = ToolOutput | DelegationRequest
 
-DELEGATE_TOOL = "aurora:tool/delegate"
-WAIT_TOOL = "aurora:tool/wait"
-WORLD_READ_TOOL = "aurora:tool/world_read"
-WORLD_SCOPES_TOOL = "aurora:tool/world_scopes"
-WORLD_TREES_TOOL = "aurora:tool/world_trees"
+DELEGATE_TOOL = "aurora:tool/definition/delegate"
+WAIT_TOOL = "aurora:tool/definition/wait"
+WORLD_READ_TOOL = "aurora:tool/definition/world_read"
+WORLD_SCOPES_TOOL = "aurora:tool/definition/world_scopes"
+WORLD_TREES_TOOL = "aurora:tool/definition/world_trees"
 
 BUILTIN_TOOL_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL})
 

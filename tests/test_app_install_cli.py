@@ -373,7 +373,7 @@ def test_a_checked_install_reports_the_tools_it_found(
     _, out, _ = _capture(capsys, _project(tmp_path), "install", _REQUESTED, "--yes")
 
     assert "发现的工具：   1 个" in out
-    assert f"{_PACKAGE}:tool/weather_now" in out
+    assert f"{_PACKAGE}:tool/definition/weather_now" in out
     assert "未经过连接检查" not in out
 
 

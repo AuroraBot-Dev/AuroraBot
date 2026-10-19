@@ -63,7 +63,7 @@ class ReadingModel(FakeModel):
         self.requests.append(request)
         if len(self.requests) == 1:
             return ChatMessage.assistant(
-                tool_calls=(ToolCall("source", "aurora:tool/memory_source", {"memory_id": "tool-only"}),)
+                tool_calls=(ToolCall("source", "aurora:tool/definition/memory_source", {"memory_id": "tool-only"}),)
             )
         return ChatMessage.assistant("我已经读取补充来源。")
 

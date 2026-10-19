@@ -13,6 +13,7 @@ from src.contracts.evidence import freeze_evidence_refs
 from src.contracts.identity import Identifier
 from src.contracts.kernel import ContributionKey
 from src.contracts.resource import ResourceDescriptor, ResourceRef
+from src.contracts.tool_resource import tool_resource_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -54,8 +55,8 @@ class OperationDefinition:
         OperationKind(self.ref.key.kind)
         if not self.description.strip():
             raise ValueError("操作说明不能为空")
-        if self.tool_name is not None and not Identifier.parse(self.tool_name).path.startswith("tool/"):
-            raise ValueError("模型工具入口必须使用工具身份")
+        if self.tool_name is not None:
+            tool_resource_key(self.tool_name)
         object.__setattr__(self, "parameters", freeze_object(self.parameters))
 
     @property

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 TAG_PREFIX = "#"
 DEFAULT_NAMESPACE = "aurora"
 
-TOOL_PATH_PREFIX = "tool/"
+TOOL_PATH_PREFIX = "tool/definition/"
 AGENT_PATH_PREFIX = "agent/definition/"
 PROMPT_PATH_PREFIX = "prompt/"
 PLATFORM_PATH_PREFIX = "platform/"
@@ -128,7 +128,7 @@ class Identifier:
 def matches_species(value: str, path_prefix: str) -> bool:
     """判断一个 ID 是否合法，且其 path 落在某个物种前缀下。
 
-    物种由 path 的第一段表达：``aurora:tool/delegate``、``org.aurora.qq:tool/send``、
+    物种由 path 的第一段表达：``aurora:tool/definition/delegate``、``org.aurora.qq:tool/definition/send``、
     ``aurora:agent/definition/root``、``aurora:prompt/system/soul``、``aurora:platform/mcp``。
     统一的是语法与所有者，不是注册表——每个物种仍各自持有自己的目录。
     """

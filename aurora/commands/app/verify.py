@@ -70,7 +70,7 @@ class Inspection:
 
     @property
     def tool_ids(self) -> tuple[str, ...]:
-        """已发现的领域工具 ID（``<package>:tool/<raw_name>``）。"""
+        """已发现的领域工具 ID（``<package>:tool/definition/<raw_name>``）。"""
         return tuple(binding.definition.name for binding in self.tools)
 
 

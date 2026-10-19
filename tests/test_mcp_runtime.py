@@ -241,8 +241,8 @@ def test_prepare_mcp_reads_every_page_then_publishes_one_frozen_catalog() -> Non
             assert client.lifecycle[:3] == ["bind", "list:None", "list:page-2"]
             assert client.events_active is False
             assert tuple(tool.definition.name for tool in runtime.tools) == (
-                "org.example.clock:tool/alpha",
-                "org.example.clock:tool/zeta",
+                "org.example.clock:tool/definition/alpha",
+                "org.example.clock:tool/definition/zeta",
             )
             snapshot = runtime.snapshot()
             assert snapshot.tool_ids == tuple(tool.definition.name for tool in runtime.tools)
@@ -250,8 +250,8 @@ def test_prepare_mcp_reads_every_page_then_publishes_one_frozen_catalog() -> Non
             assert snapshot.apps[0].state is McpAppState.READY
             assert snapshot.apps[0].negotiated_version == "2026-07-28"
             assert snapshot.apps[0].tool_ids == (
-                "org.example.clock:tool/zeta",
-                "org.example.clock:tool/alpha",
+                "org.example.clock:tool/definition/zeta",
+                "org.example.clock:tool/definition/alpha",
             )
             assert world.commits == []
             assert client.catalog_changed is not None and client.disconnected is not None
@@ -472,7 +472,7 @@ def test_catalog_change_only_marks_restart_and_keeps_the_frozen_tools() -> None:
 
             snapshot = runtime.snapshot()
             assert runtime.tools is frozen_tools
-            assert snapshot.tool_ids == ("org.example.catalog:tool/before",)
+            assert snapshot.tool_ids == ("org.example.catalog:tool/definition/before",)
             assert snapshot.apps[0].state is McpAppState.READY
             assert snapshot.apps[0].restart_required is True
             assert snapshot.restart_required is True
@@ -481,7 +481,7 @@ def test_catalog_change_only_marks_restart_and_keeps_the_frozen_tools() -> None:
             assert len(changed) == 1
             assert changed[0].data == {
                 "restart_required": True,
-                "frozen_tool_ids": ("org.example.catalog:tool/before",),
+                "frozen_tool_ids": ("org.example.catalog:tool/definition/before",),
             }
         finally:
             await runtime.close()
@@ -506,7 +506,7 @@ def test_disconnect_marks_app_unavailable_and_prevents_later_tool_calls() -> Non
             await runtime.activate()
             await client.emit_disconnected("transport lost")
             result = await runtime.tools[0].execute(
-                ToolCall("call-after-disconnect", "org.example.offline:tool/ping", {})
+                ToolCall("call-after-disconnect", "org.example.offline:tool/definition/ping", {})
             )
 
             app = runtime.app(package)

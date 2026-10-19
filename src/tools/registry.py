@@ -6,21 +6,19 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.contracts import DelegationRequest, ToolOutput, ToolScopes, ToolStatus
-from src.contracts.identity import matches_species
+from src.contracts.tool_resource import tool_resource_key
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
 
-_TOOL_PATH_PREFIX = "tool/"
-
 
 def is_tool_id(name: str) -> bool:
-    """工具 ID 必须是一个 path 落在 ``tool/`` 下的命名空间化 ID。
-
-    第三方 MCP 工具名不受协议约束，所以外来名字先经 ``alias_path`` 收进 path 语法，
-    再到这里做**唯一一次**校验；框架内建工具直接写合法 ID。
-    """
-    return matches_species(name, _TOOL_PATH_PREFIX)
+    """工具定义必须具备完整资源身份，工具标签与其他领域不能作为工具执行。"""
+    try:
+        tool_resource_key(name)
+    except ValueError:
+        return False
+    return True
 
 
 if TYPE_CHECKING:
@@ -41,8 +39,6 @@ class ToolRegistry:
         definitions: dict[str, ToolDefinition] = {}
         for tool in tools:
             definition = tool.definition
-            if not is_tool_id(definition.name):
-                raise ToolRegistrationError(f"工具 ID 不符合命名空间约定：{definition.name}")
             if definition.name in bindings:
                 raise ToolRegistrationError(f"工具重复注册：{definition.name}")
             bindings[definition.name] = tool

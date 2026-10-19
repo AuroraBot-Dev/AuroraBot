@@ -46,15 +46,18 @@ def _table(*tags: TagDefinition) -> TagTable:
 
 
 def test_identifier_round_trips_namespace_and_path() -> None:
-    identifier = Identifier.parse("org.aurora.qq:tool/qq_send_message")
+    identifier = Identifier.parse("org.aurora.qq:tool/definition/qq_send_message")
 
-    assert str(identifier) == "org.aurora.qq:tool/qq_send_message"
+    assert str(identifier) == "org.aurora.qq:tool/definition/qq_send_message"
     assert identifier.namespace == "org.aurora.qq"
-    assert identifier.path == "tool/qq_send_message"
+    assert identifier.path == "tool/definition/qq_send_message"
 
 
 def test_identifier_falls_back_to_the_default_namespace() -> None:
-    assert str(Identifier.parse("tool/delegate", default_namespace="aurora")) == "aurora:tool/delegate"
+    assert (
+        str(Identifier.parse("tool/definition/delegate", default_namespace="aurora"))
+        == "aurora:tool/definition/delegate"
+    )
     with pytest.raises(IdentityError, match="缺少命名空间"):
         Identifier.parse("agent/definition/delegate")
     assert (
@@ -65,7 +68,16 @@ def test_identifier_falls_back_to_the_default_namespace() -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["", "   ", ":path", "aurora:", "Aurora:path", "aurora:tool//x", "aurora:tool/", "#aurora:tool/x"],
+    [
+        "",
+        "   ",
+        ":path",
+        "aurora:",
+        "Aurora:path",
+        "aurora:tool/definition//x",
+        "aurora:tool/definition/",
+        "#aurora:tool/tag/x",
+    ],
 )
 def test_identifier_rejects_malformed_text(text: str) -> None:
     with pytest.raises(IdentityError):
@@ -74,8 +86,8 @@ def test_identifier_rejects_malformed_text(text: str) -> None:
 
 def test_upper_case_is_allowed_only_in_the_path() -> None:
     assert str(Identifier.parse("org.aurora.qq:qq_sendMessage")) == "org.aurora.qq:qq_sendMessage"
-    assert Identifier.optional("AURORA:tool/x") is None
-    assert Identifier.optional("aurora:tool/x") is not None
+    assert Identifier.optional("AURORA:tool/definition/x") is None
+    assert Identifier.optional("aurora:tool/definition/x") is not None
 
 
 def test_namespace_and_path_predicates() -> None:
@@ -129,65 +141,75 @@ def test_alias_path_separates_names_that_would_otherwise_merge() -> None:
 
 
 def test_tags_pass_through_entries_that_are_not_references() -> None:
-    table = _table(TagDefinition("aurora:tool/qq", ("org.aurora.qq:tool/*",)))
+    table = _table(TagDefinition("aurora:tool/tag/qq", ("org.aurora.qq:tool/definition/*",)))
 
-    assert table.expand(("aurora:tool/delegate", "#aurora:tool/qq")) == (
-        "aurora:tool/delegate",
-        "org.aurora.qq:tool/*",
+    assert table.expand(("aurora:tool/definition/delegate", "#aurora:tool/tag/qq")) == (
+        "aurora:tool/definition/delegate",
+        "org.aurora.qq:tool/definition/*",
     )
 
 
 def test_tags_expand_nested_definitions_in_writing_order() -> None:
     table = _table(
-        TagDefinition("aurora:tool/send", ("org.aurora.qq:tool/qq_send_*message", "!org.aurora.qq:tool/skip")),
-        TagDefinition("aurora:tool/qq", ("#aurora:tool/send", "org.aurora.qq:tool/qq_get_*")),
+        TagDefinition(
+            "aurora:tool/tag/send",
+            ("org.aurora.qq:tool/definition/qq_send_*message", "!org.aurora.qq:tool/definition/skip"),
+        ),
+        TagDefinition("aurora:tool/tag/qq", ("#aurora:tool/tag/send", "org.aurora.qq:tool/definition/qq_get_*")),
     )
 
-    assert table.expand(("#aurora:tool/qq",)) == (
-        "org.aurora.qq:tool/qq_send_*message",
-        "!org.aurora.qq:tool/skip",
-        "org.aurora.qq:tool/qq_get_*",
+    assert table.expand(("#aurora:tool/tag/qq",)) == (
+        "org.aurora.qq:tool/definition/qq_send_*message",
+        "!org.aurora.qq:tool/definition/skip",
+        "org.aurora.qq:tool/definition/qq_get_*",
     )
 
 
 def test_tag_expansion_keeps_last_match_wins_semantics() -> None:
-    available = frozenset({"org.aurora.qq:tool/qq_send_message", "org.aurora.qq:tool/qq_send_forward_message"})
+    available = frozenset(
+        {"org.aurora.qq:tool/definition/qq_send_message", "org.aurora.qq:tool/definition/qq_send_forward_message"}
+    )
     table = _table(
         TagDefinition(
-            "aurora:tool/qq-send",
-            ("org.aurora.qq:tool/qq_send_*message", "!org.aurora.qq:tool/qq_send_forward_message"),
+            "aurora:tool/tag/qq-send",
+            (
+                "org.aurora.qq:tool/definition/qq_send_*message",
+                "!org.aurora.qq:tool/definition/qq_send_forward_message",
+            ),
         )
     )
 
-    resolved = resolve_names(available, table.expand(("#aurora:tool/qq-send",), label="aurora:agent/definition/chat"))
+    resolved = resolve_names(
+        available, table.expand(("#aurora:tool/tag/qq-send",), label="aurora:agent/definition/chat")
+    )
 
-    assert resolved == frozenset({"org.aurora.qq:tool/qq_send_message"})
+    assert resolved == frozenset({"org.aurora.qq:tool/definition/qq_send_message"})
 
 
 def test_tag_expansion_equals_writing_the_patterns_inline() -> None:
     patterns = (
-        "org.aurora.qq:tool/qq_send_*message",
-        "!org.aurora.qq:tool/qq_send_forward_message",
-        "org.aurora.qq:tool/qq_get_*",
+        "org.aurora.qq:tool/definition/qq_send_*message",
+        "!org.aurora.qq:tool/definition/qq_send_forward_message",
+        "org.aurora.qq:tool/definition/qq_get_*",
     )
-    table = _table(TagDefinition("aurora:tool/qq-send", patterns))
+    table = _table(TagDefinition("aurora:tool/tag/qq-send", patterns))
     available = frozenset(
         {
-            "org.aurora.qq:tool/qq_send_message",
-            "org.aurora.qq:tool/qq_send_forward_message",
-            "org.aurora.qq:tool/qq_get_profile",
-            "com.github.windows_mcp:tool/click",
+            "org.aurora.qq:tool/definition/qq_send_message",
+            "org.aurora.qq:tool/definition/qq_send_forward_message",
+            "org.aurora.qq:tool/definition/qq_get_profile",
+            "com.github.windows_mcp:tool/definition/click",
         }
     )
 
-    assert resolve_names(available, table.expand(("#aurora:tool/qq-send",))) == resolve_names(available, patterns)
+    assert resolve_names(available, table.expand(("#aurora:tool/tag/qq-send",))) == resolve_names(available, patterns)
 
 
 def test_undeclared_tag_is_rejected() -> None:
-    table = _table(TagDefinition("aurora:tool/qq", ("org.aurora.qq:tool/*",)))
+    table = _table(TagDefinition("aurora:tool/tag/qq", ("org.aurora.qq:tool/definition/*",)))
 
     with pytest.raises(IdentityError, match="未声明的标签"):
-        table.expand(("#aurora:tool/missing",), label="aurora:agent/definition/chat")
+        table.expand(("#aurora:tool/tag/missing",), label="aurora:agent/definition/chat")
 
 
 def test_tag_cycles_are_rejected() -> None:
@@ -210,19 +232,19 @@ def test_tag_nesting_is_bounded() -> None:
 
 def test_tag_definition_requires_a_valid_name_and_non_empty_values() -> None:
     with pytest.raises(IdentityError):
-        TagDefinition("Aurora:tool/x", ("aur.x.y",))
+        TagDefinition("Aurora:tool/tag/x", ("aur.x.y",))
     with pytest.raises(IdentityError):
-        TagDefinition("aurora:tool/x", ())
+        TagDefinition("aurora:tool/tag/x", ())
     with pytest.raises(IdentityError):
-        TagDefinition("aurora:tool/x", ("",))
+        TagDefinition("aurora:tool/tag/x", ("",))
 
 
 def test_duplicate_tag_declarations_are_rejected() -> None:
     with pytest.raises(IdentityError, match="标签重复声明"):
         TagsConfig(
             (
-                TagDefinition("aurora:tool/x", ("aur.x.y",)),
-                TagDefinition("aurora:tool/x", ("aur.x.z",)),
+                TagDefinition("aurora:tool/tag/x", ("aur.x.y",)),
+                TagDefinition("aurora:tool/tag/x", ("aur.x.z",)),
             )
         )
 
@@ -232,10 +254,10 @@ def test_template_declares_a_nested_tag_collection(tmp_path: Path) -> None:
     config = assemble_config(tmp_path, (TAGS_CONFIG,))
     table = config.get(TAGS_CONFIG).table
 
-    assert table.names == {"aurora:tool/qq-send", "aurora:tool/qq-read", "aurora:tool/qq"}
-    assert table.expand(("#aurora:tool/qq",)) == (
-        "org.aurora.qq:tool/qq_send_*message",
-        "!org.aurora.qq:tool/qq_send_forward_message",
-        "org.aurora.qq:tool/qq_get_*",
-        "org.aurora.qq:tool/qq_mark_*",
+    assert table.names == {"aurora:tool/tag/qq-send", "aurora:tool/tag/qq-read", "aurora:tool/tag/qq"}
+    assert table.expand(("#aurora:tool/tag/qq",)) == (
+        "org.aurora.qq:tool/definition/qq_send_*message",
+        "!org.aurora.qq:tool/definition/qq_send_forward_message",
+        "org.aurora.qq:tool/definition/qq_get_*",
+        "org.aurora.qq:tool/definition/qq_mark_*",
     )

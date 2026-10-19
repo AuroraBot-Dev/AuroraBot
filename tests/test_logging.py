@@ -53,7 +53,7 @@ class _Model:
 
 class _FailingTool:
     definition = ToolDefinition(
-        "test:tool/logging",
+        "test:tool/definition/logging",
         "日志边界测试工具",
         {"type": "object", "properties": {"token": {"type": "string"}}},
     )
@@ -99,7 +99,7 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     async def scenario() -> None:
         await asyncio.wait_for(runtime.run("secret-in-message", tree_id="logging-tree"), timeout=5)
         result = await ToolRegistry((_FailingTool(),)).execute(
-            ToolCall("logging-call", "test:tool/logging", {"token": "secret-in-arguments"})
+            ToolCall("logging-call", "test:tool/definition/logging", {"token": "secret-in-arguments"})
         )
         assert isinstance(result, ToolOutput)
         assert result.is_error
@@ -114,7 +114,7 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     content = logfile.read_text(encoding="utf-8")
 
     assert "AgentTree 开始 tree_id=logging-tree" in content
-    assert "工具调用失败 tool=test:tool/logging call_id=logging-call error_type=RuntimeError" in content
+    assert "工具调用失败 tool=test:tool/definition/logging call_id=logging-call error_type=RuntimeError" in content
     assert "secret-in-message" not in content
     assert "secret-in-model-result" not in content
     assert "secret-in-arguments" not in content

@@ -57,7 +57,7 @@ def test_agent_version_covers_each_declaration(field: str) -> None:
         "description": "另一个研究原型",
         "prompt_id": "lab:prompt/agent/review",
         "model": "other-model",
-        "tools": frozenset({"lab:tool/read"}),
+        "tools": frozenset({"lab:tool/definition/read"}),
         "children": frozenset({"lab:agent/definition/worker"}),
     }
     changed = replace(original, **{field: changes[field]})
@@ -69,11 +69,11 @@ def test_agent_version_covers_each_declaration(field: str) -> None:
 
 def test_agent_canonical_content_sorts_sets_and_rejects_incomplete_resource_identity() -> None:
     """同一声明不因集合输入顺序改变版本，原型身份必须可由统一资源解析器直接读取。"""
-    original = replace(_definition(), tools=frozenset({"lab:tool/z", "lab:tool/a"}))
-    equivalent = replace(original, tools=frozenset(("lab:tool/a", "lab:tool/z")))
+    original = replace(_definition(), tools=frozenset({"lab:tool/definition/z", "lab:tool/definition/a"}))
+    equivalent = replace(original, tools=frozenset(("lab:tool/definition/a", "lab:tool/definition/z")))
     assert original.content == equivalent.content
     assert original.ref == equivalent.ref
-    assert json.loads(original.content)["tools"] == ["lab:tool/a", "lab:tool/z"]
+    assert json.loads(original.content)["tools"] == ["lab:tool/definition/a", "lab:tool/definition/z"]
     with pytest.raises(ValueError, match="Agent definition ID"):
         replace(original, definition_id="lab:agent/root")
 

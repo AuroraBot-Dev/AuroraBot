@@ -46,7 +46,7 @@ class OperationTool:
                     "status": result.status.value,
                     "result_ref": artifact_data(result.body_ref),
                     "content_included": False,
-                    "read_tool": "aurora:tool/artifact_read",
+                    "read_tool": "aurora:tool/definition/artifact_read",
                     "read_arguments": {
                         "key": str(result.body_ref.ref.key),
                         "revision": result.body_ref.ref.revision,

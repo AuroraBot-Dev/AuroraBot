@@ -53,8 +53,8 @@ def test_tool_parameters_and_schema_stay_fixed_but_provider_uses_plain_json() ->
     """Provider 接收独立可序列化内容，无法通过共享容器改变原始调用。"""
     arguments: dict[str, Any] = {"items": [{"text": "原始参数"}]}
     schema: dict[str, Any] = {"type": "object", "properties": {"items": {"type": "array"}}}
-    call = ToolCall("call", "test:tool/echo", arguments)
-    definition = ToolDefinition("test:tool/echo", "回显", schema)
+    call = ToolCall("call", "test:tool/definition/echo", arguments)
+    definition = ToolDefinition("test:tool/definition/echo", "回显", schema)
     arguments["items"][0]["text"] = "修改后参数"
     schema["properties"]["items"]["type"] = "string"
     assert definition.parameters["properties"]["items"]["type"] == "array"

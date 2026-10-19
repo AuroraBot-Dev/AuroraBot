@@ -89,6 +89,8 @@ Agent 原型使用 `namespace:agent/definition/path` 身份，可由统一资源
 
 实际 `ModelRequest.resources` 包含当前节点的原型版本和装配器采用的输入资源，相同引用只记录一次。`engine.tree.started`、`engine.node.spawned` 与 `engine.model.requested` 的 `definition_ref` 都来自节点快照；模型请求事实同时保留完整的 `resources` 列表。重启后可从这些世界事实取出固定引用，再读取当时采用的原型正文。
 
+工具定义使用 `namespace:tool/definition/path`，工具集合标签使用 `namespace:tool/tag/path`，通过 `#namespace:tool/tag/path` 引用。标签先展开为定义身份或模式，再决定 Agent 可见工具；标签不能作为工具执行。MCP 适配器保留服务器原始名称与本地定义身份的冻结映射；Provider 请求中的协议别名也只在适配器边界转换。
+
 动态资源通过 `RESOURCE_PROVIDERS` 接入目录，不需要把全部版本登记到内核。每个提供者使用公共排序和游标，每次只返回一页；目录合并去重，静态声明优先，动态来源对同一版本的定义不一致时明确失败。提供者必须遵守页大小、筛选、顺序和续页规则，避免跨来源查询漏项。
 
 大对象通过 `ArtifactStore` 保存。逻辑名称采用同一套资源身份，版本是原始字节的 SHA256；同名新版本保留旧内容，相同字节可以跨名称复用。`artifacts.toml` 指定持久目录，需要与世界日志一起备份。宿主可流式保存内容或导入固定文件；查询只接受确定版本，不自动选择最新内容。

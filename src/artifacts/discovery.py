@@ -27,7 +27,7 @@ class ArtifactFindOperation:
         "使用 next_cursor 作为 after 继续，保持筛选不变；这是当前目录的动态列表，新增内容可能需要重新发现。"
         "取得 key 与 revision 后，用 artifact_stat 核对完整性或 artifact_read 读取正文。",
         ResourceQueryInput.model_json_schema(),
-        "aurora:tool/artifact_find",
+        "aurora:tool/definition/artifact_find",
         True,
     )
 

@@ -32,7 +32,7 @@ def test_terminal_and_bot_share_live_resource_pages_and_inspection(configured_pr
             versions = (await store.put(key, b"first"), await store.put(key, b"second"))
             tools = runtime.assembly.get(ToolRegistry)
             arguments = {"namespace": "lab", "limit": 1}
-            first = await tools.execute(ToolCall("find", "aurora:tool/resources_find", arguments))
+            first = await tools.execute(ToolCall("find", "aurora:tool/definition/resources_find", arguments))
             assert isinstance(first, ToolOutput)
             assert first.status is ToolStatus.SUCCEEDED
             assert first.evidence_refs == ()
@@ -51,7 +51,7 @@ def test_terminal_and_bot_share_live_resource_pages_and_inspection(configured_pr
             inspected = await tools.execute(
                 ToolCall(
                     "inspect",
-                    "aurora:tool/resources_inspect",
+                    "aurora:tool/definition/resources_inspect",
                     {"resource": selected["resource"], "revision": selected["revision"]},
                 )
             )
@@ -66,7 +66,7 @@ def test_terminal_and_bot_share_live_resource_pages_and_inspection(configured_pr
             body = await tools.execute(
                 ToolCall(
                     "body",
-                    "aurora:tool/artifact_read",
+                    "aurora:tool/definition/artifact_read",
                     {"key": selected["resource"], "revision": selected["revision"], "encoding": "utf-8"},
                 )
             )

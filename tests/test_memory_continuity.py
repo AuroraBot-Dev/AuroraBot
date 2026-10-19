@@ -40,7 +40,7 @@ def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() ->
     assert "operation-7 已发起，先核对结果" in messages[0].content
     assert "experiment:started:7" in messages[0].content
     assert "其他实验" not in messages[0].content
-    assert "aurora:tool/bot_state" in messages[0].content
+    assert "aurora:tool/definition/bot_state" in messages[0].content
 
 
 def test_default_focus_prefers_current_question_and_reports_missing_explicit_goal() -> None:

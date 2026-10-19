@@ -135,7 +135,7 @@ def test_verifier_closes_a_real_sdk_connection_before_returning(
         """在事件循环仍活跃时检查连接，避免把循环退出清理误当作验证器释放。"""
         target = process_target("test.verify", ("fake-server",), working_dir=tmp_path, hints=())
         result = await MCPVerifier(RecordingFactory()).inspect_async(target)
-        assert result.tool_ids == ("test.verify:tool/echo",)
+        assert result.tool_ids == ("test.verify:tool/definition/echo",)
         assert len(opened) == 1
         assert not opened[0].connected
 

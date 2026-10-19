@@ -36,7 +36,7 @@ class Echo:
         ResourceRef(ResourceKey.parse("lab:example/query/echo"), "1"),
         "回显扩展输入",
         {"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
-        "lab:tool/echo",
+        "lab:tool/definition/echo",
     )
 
     def scopes_for(self, request):
@@ -82,7 +82,7 @@ def test_plugin_declaration_adds_resource_command_and_tool_without_host_edits(co
             assert not response.is_error
             assert json.loads(response.text or "{}")["data"] == {"value": "好"}
             tools = runtime.assembly.get(ToolRegistry)
-            result = await tools.execute(ToolCall("echo", "lab:tool/echo", {"value": "好"}))
+            result = await tools.execute(ToolCall("echo", "lab:tool/definition/echo", {"value": "好"}))
             assert isinstance(result, ToolOutput) and not result.is_error
             assert json.loads(result.content) == {"value": "好"}
             assert model.requests == []

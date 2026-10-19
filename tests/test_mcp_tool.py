@@ -155,7 +155,7 @@ def test_mcp_tool_rejects_wrong_route_and_disconnected_client_without_sending() 
     )
     tool = McpTool(binding, client, _TIMEOUT_SECONDS)
 
-    wrong_route = asyncio.run(tool.execute(ToolCall("wrong", "org.example.tools:tool/other", {})))
+    wrong_route = asyncio.run(tool.execute(ToolCall("wrong", "org.example.tools:tool/definition/other", {})))
     client._connected = False
     disconnected = asyncio.run(tool.execute(ToolCall("offline", tool.definition.name, {})))
 
@@ -169,14 +169,14 @@ def test_bind_mcp_tool_rejects_whitespace_frame_and_invalid_package_without_rewr
         bind_mcp_tool("org.example.tools", McpRemoteTool(" valid_name", None, {"type": "object"}))
     with pytest.raises(ValueError, match="无首尾空白的文本"):
         bind_mcp_tool("org.example.tools", McpRemoteTool("valid_name ", None, {"type": "object"}))
-    with pytest.raises(ValueError, match="namespace 不符合命名空间约定"):
+    with pytest.raises(ValueError, match="资源命名空间无效"):
         bind_mcp_tool("Org.example.tools", McpRemoteTool("valid_name", None, {"type": "object"}))
     with pytest.raises(ValueError, match="input schema 必须是 object"):
         bind_mcp_tool("org.example.tools", McpRemoteTool("valid", None, {"type": "array"}))
 
     binding = bind_mcp_tool("org.example.tools", McpRemoteTool("valid_name", None, {"type": "object"}))
     assert binding.raw_name == "valid_name"
-    assert binding.definition.name == "org.example.tools:tool/valid_name"
+    assert binding.definition.name == "org.example.tools:tool/definition/valid_name"
     assert binding.definition.description == "MCP 工具：valid_name"
 
 
@@ -195,9 +195,9 @@ def test_bind_mcp_tool_accepts_any_third_party_name(raw_name: str) -> None:
     assert is_tool_id(binding.definition.name)
     expected = raw_name if is_path(raw_name) else None
     if expected is not None:
-        assert binding.definition.name == f"org.example.tools:tool/{expected}"
+        assert binding.definition.name == f"org.example.tools:tool/definition/{expected}"
     else:
-        assert binding.definition.name != f"org.example.tools:tool/{raw_name}"
+        assert binding.definition.name != f"org.example.tools:tool/definition/{raw_name}"
 
 
 def test_bind_mcp_tool_keeps_third_party_camelcase_raw_name_without_rewriting() -> None:
@@ -207,12 +207,12 @@ def test_bind_mcp_tool_keeps_third_party_camelcase_raw_name_without_rewriting() 
     )
 
     assert binding.raw_name == "Screenshot"
-    assert binding.definition.name == "com.github.windows_mcp:tool/Screenshot"
+    assert binding.definition.name == "com.github.windows_mcp:tool/definition/Screenshot"
     assert binding.definition.description == "截取屏幕"
 
     mixed = bind_mcp_tool("com.github.windows_mcp", McpRemoteTool("WaitFor", None, {"type": "object"}))
     assert mixed.raw_name == "WaitFor"
-    assert mixed.definition.name == "com.github.windows_mcp:tool/WaitFor"
+    assert mixed.definition.name == "com.github.windows_mcp:tool/definition/WaitFor"
 
 
 def test_mcp_remote_tool_and_definition_deep_freeze_nested_json() -> None:

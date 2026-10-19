@@ -24,7 +24,7 @@ class MemoryExposures:
         ResourceRef(ResourceKey.parse("aurora:memory/query/exposures"), "1"),
         "分页扫描自己的上下文记忆审计；默认最近一页。载入表示已装配进模型请求，未表示采用或产生收益。",
         ExposuresInput.model_json_schema(),
-        "aurora:tool/memory_exposures",
+        "aurora:tool/definition/memory_exposures",
         True,
     )
 

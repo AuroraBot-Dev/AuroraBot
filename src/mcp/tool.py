@@ -8,8 +8,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.contracts import Identifier, ToolCall, ToolDefinition, ToolOutput, ToolScopes, ToolStatus
+from src.contracts import ToolCall, ToolDefinition, ToolOutput, ToolScopes, ToolStatus
 from src.contracts.identity import alias_path
+from src.contracts.resource import ResourceKey
 from src.mcp.models import McpCallRejectedError, McpCallResult, McpCallUnknownError, McpRemoteTool
 from src.mcp.scopes import mcp_scope, render_scope_template, validate_scope_template
 from src.utils import get_logger
@@ -18,12 +19,12 @@ _logger = get_logger(__name__)
 
 
 def mcp_tool_id(package: str, raw_name: str) -> str:
-    """把一个远端工具名收进本地命名空间：``<package>:tool/<别名>``。
+    """把一个远端工具名收进本地命名空间：``<package>:tool/definition/<别名>``。
 
     package 段是我们自己的命名空间，必须合法；raw_name 段来自第三方，经 ``alias_path``
     原样接纳或确定性别名——第三方 Server 不需要为接入做任何改名。
     """
-    return str(Identifier(package, f"tool/{alias_path(raw_name)}"))
+    return str(ResourceKey(package, "tool", "definition", alias_path(raw_name)))
 
 
 if TYPE_CHECKING:

@@ -23,7 +23,7 @@ class MemoryFeedback:
         ResourceRef(ResourceKey.parse("aurora:memory/command/feedback"), "1"),
         "评估一次真实上下文中的记忆是否帮助目标；引用推荐之后获知的证据。自评保留为 reported，不自动作为正确答案。",
         FeedbackInput.model_json_schema(),
-        "aurora:tool/memory_feedback",
+        "aurora:tool/definition/memory_feedback",
         True,
     )
 

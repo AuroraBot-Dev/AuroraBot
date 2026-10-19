@@ -31,7 +31,7 @@ class PlanningModel(FakeModel):
                 tool_calls=(
                     ToolCall(
                         "goal",
-                        "aurora:tool/goal_set",
+                        "aurora:tool/definition/goal_set",
                         {
                             "expected_version": 0,
                             "goal_id": "aurora:goal/experiment",
@@ -51,7 +51,7 @@ class PlanningModel(FakeModel):
                 tool_calls=(
                     ToolCall(
                         "wake",
-                        "aurora:tool/wake_schedule",
+                        "aurora:tool/definition/wake_schedule",
                         {
                             "expected_version": 1,
                             "wake_id": "aurora:wake/experiment",

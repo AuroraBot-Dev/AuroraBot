@@ -142,7 +142,8 @@ class PromptAssembler:
         if snapshot.goal_counts or snapshot.wake_counts:
             lines.append(
                 f"全部目标概览：{dict(snapshot.goal_counts)}；全部安排概览：{dict(snapshot.wake_counts)}。"
-                "下文只展开当前焦点；其他状态可用 aurora:tool/bot_state 分页发现，指定 goal_id 或 wake_id 读取详情。"
+                "下文只展开当前焦点；其他状态可用 aurora:tool/definition/bot_state 分页发现，"
+                "指定 goal_id 或 wake_id 读取详情。"
             )
         if snapshot.missing_goal_ids:
             lines.append(f"指定目标尚不存在：{json.dumps(snapshot.missing_goal_ids, ensure_ascii=False)}")

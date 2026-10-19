@@ -41,9 +41,9 @@ def test_large_tool_output_is_bounded_and_does_not_claim_unread_evidence(
         registry = OperationRegistry(
             _BOT, (operation,), ResourceCatalog((operation.definition.resource,)), world, artifacts=artifacts
         )
-        definition = replace(operation.definition, tool_name="lab:tool/finish")
+        definition = replace(operation.definition, tool_name="lab:tool/definition/finish")
         tool = OperationTool(registry, definition, _BOT)
-        call = ToolCall("finish", "lab:tool/finish", {})
+        call = ToolCall("finish", "lab:tool/definition/finish", {})
         try:
             output = await tool.execute(call)
             assert output.status is ToolStatus(status.value)
@@ -51,7 +51,7 @@ def test_large_tool_output_is_bounded_and_does_not_claim_unread_evidence(
             assert _TEXT not in output.content
             body = json.loads(output.content)
             assert not body["content_included"]
-            assert body["read_tool"] == "aurora:tool/artifact_read"
+            assert body["read_tool"] == "aurora:tool/definition/artifact_read"
             info = read_artifact(body["result_ref"])
             assert info.size > len(output.content.encode())
             assert await tool.execute(call) == output
@@ -123,8 +123,10 @@ def test_small_tool_result_keeps_actual_evidence_and_existing_shape(tmp_path: Pa
                 world,
                 artifacts=FileArtifactStore(tmp_path / "artifacts"),
             )
-            definition = replace(operation.definition, tool_name="lab:tool/finish")
-            output = await OperationTool(registry, definition, _BOT).execute(ToolCall("small", "lab:tool/finish", {}))
+            definition = replace(operation.definition, tool_name="lab:tool/definition/finish")
+            output = await OperationTool(registry, definition, _BOT).execute(
+                ToolCall("small", "lab:tool/definition/finish", {})
+            )
             assert json.loads(output.content) == {"text": "短结果"}
             assert output.evidence_refs == ("source",)
         finally:

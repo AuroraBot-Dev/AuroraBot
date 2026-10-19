@@ -45,13 +45,17 @@ def test_openai_tool_adapter_preserves_native_schema() -> None:
         "properties": {"value": {"type": "string", "enum": ["one", "two"]}},
         "required": ["value"],
     }
-    definition = ToolDefinition("echo", "Echo text.", schema)
+    definition = ToolDefinition("test:tool/definition/echo", "Echo text.", schema)
     result = to_openai_tools((definition,))
 
     assert result == [
         {
             "type": "function",
-            "function": {"name": "echo", "description": "Echo text.", "parameters": schema},
+            "function": {
+                "name": openai_tool_name_map((definition.name,))[definition.name],
+                "description": "Echo text.",
+                "parameters": schema,
+            },
         }
     ]
     parameters = result[0]["function"]["parameters"]
@@ -63,7 +67,7 @@ def test_openai_tool_adapter_preserves_native_schema() -> None:
 
 
 def test_openai_adapter_maps_domain_tool_id_to_provider_safe_name() -> None:
-    domain_name = "aurora:tool/delegate"
+    domain_name = "aurora:tool/definition/delegate"
     aliases = openai_tool_name_map((domain_name,))
     alias = aliases[domain_name]
 
@@ -80,7 +84,7 @@ def test_openai_adapter_maps_domain_tool_id_to_provider_safe_name() -> None:
 def test_litellm_gateway_round_trips_domain_tool_names_in_definitions_history_and_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    domain_name = "aurora:tool/delegate"
+    domain_name = "aurora:tool/definition/delegate"
     captured: list[dict[str, Any]] = []
 
     async def call(parameters: dict[str, Any]) -> dict[str, Any]:
@@ -145,7 +149,14 @@ def test_litellm_gateway_uses_explicit_endpoint_and_normalizes_tool_calls(
                         "role": "assistant",
                         "content": "",
                         "tool_calls": [
-                            {"id": "call-1", "type": "function", "function": {"name": "echo", "arguments": '{"x": 1}'}},
+                            {
+                                "id": "call-1",
+                                "type": "function",
+                                "function": {
+                                    "name": parameters["tools"][0]["function"]["name"],
+                                    "arguments": '{"x": 1}',
+                                },
+                            },
                         ],
                     }
                 }
@@ -163,7 +174,7 @@ def test_litellm_gateway_uses_explicit_endpoint_and_normalizes_tool_calls(
             ModelRequest(
                 "quality",
                 (ChatMessage.system("系统"), ChatMessage.message("消息")),
-                (ToolDefinition("echo", "回显", {"type": "object"}),),
+                (ToolDefinition("test:tool/definition/echo", "回显", {"type": "object"}),),
             )
         )
     )

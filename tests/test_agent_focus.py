@@ -16,6 +16,6 @@ def test_goal_focus_survives_persistence_and_delegation() -> None:
         "aurora:agent/definition/child", "子节点", "aurora:prompt/agent/child", "fake", frozenset(), frozenset()
     )
     tree = AgentTree.create("tree", "root", root, "核对", focus_goal_ids=request.focus_goal_ids)
-    call = ToolCall("child", "aurora:tool/delegate", {})
+    call = ToolCall("child", "aurora:tool/definition/delegate", {})
     tree = tree.append("root", ChatMessage.assistant(tool_calls=(call,))).spawn("root", call, child, "检查证据")
     assert all(node.focus_goal_ids == focus for node in tree.nodes)

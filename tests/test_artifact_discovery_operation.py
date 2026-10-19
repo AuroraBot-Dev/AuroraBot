@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-_TOOL = "aurora:tool/artifact_find"
+_TOOL = "aurora:tool/definition/artifact_find"
 
 
 def test_discovered_content_can_be_read_via_the_same_model_tools(configured_project: Path) -> None:
@@ -54,7 +54,7 @@ def test_discovered_content_can_be_read_via_the_same_model_tools(configured_proj
             content = await tools.execute(
                 ToolCall(
                     "read",
-                    "aurora:tool/artifact_read",
+                    "aurora:tool/definition/artifact_read",
                     {"key": found[0]["key"], "revision": found[0]["revision"], "encoding": "utf-8"},
                 )
             )

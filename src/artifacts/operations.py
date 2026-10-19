@@ -75,7 +75,7 @@ class ArtifactOperation:
             "put": "保存有界的 base64 内容并返回 SHA256 固定版本；相同版本不会覆盖。",
         }
         kind = "command" if action == "put" else "query"
-        tool_name = None if action == "put" else f"aurora:tool/artifact_{action}"
+        tool_name = None if action == "put" else f"aurora:tool/definition/artifact_{action}"
         return OperationDefinition(
             ResourceRef(ResourceKey("aurora", "artifacts", kind, action), "1"),
             descriptions[action],

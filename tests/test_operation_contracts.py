@@ -21,7 +21,9 @@ _REF = ResourceRef(ResourceKey.parse("aurora:bot/command/goal_set"), "1")
 
 def test_definition_drives_resource_metadata_and_call_semantics() -> None:
     """资源种类唯一决定调用语义，工具只是一个可选入口。"""
-    definition = OperationDefinition(_REF, "选择目标", {"type": "object"}, "aurora:tool/goal_set", retry_safe=True)
+    definition = OperationDefinition(
+        _REF, "选择目标", {"type": "object"}, "aurora:tool/definition/goal_set", retry_safe=True
+    )
     assert definition.kind is OperationKind.COMMAND
     assert definition.resource.ref == _REF
     assert definition.resource.metadata["retry_safe"] is True

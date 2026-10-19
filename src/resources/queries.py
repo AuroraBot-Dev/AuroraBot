@@ -26,7 +26,7 @@ class ResourceFindQuery:
         "使用 next_cursor 作为 after 继续，保持筛选条件不变；当前动态列表中的新增内容可能需要重新发现。"
         "内容清单不表示正文已读，使用 resources_inspect 检查指定版本。",
         ResourceQueryInput.model_json_schema(),
-        "aurora:tool/resources_find",
+        "aurora:tool/definition/resources_find",
         True,
     )
 
@@ -62,7 +62,7 @@ class ResourceInspectQuery:
         "读取资源说明、参数结构与能力契约。静态定义可省略唯一版本或使用显式别名；动态内容必须指定 revision。"
         "检查内容版本会核对完整性；返回内容描述，正文仍需通过其 read_operation 按块读取。",
         ResourceInspectInput.model_json_schema(),
-        "aurora:tool/resources_inspect",
+        "aurora:tool/definition/resources_inspect",
         True,
     )
 

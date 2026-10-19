@@ -100,7 +100,7 @@ def _translate(pattern: str) -> str:
 
     - ``命名空间`` 段（``:`` 之前）用 ``.`` 分层，所以那里的 ``*`` 不跨 ``.``；
     - ``path`` 段（``:`` 之后）只以 ``/`` 分层，``.`` 是普通字符，
-      所以 ``org.aurora.qq:tool/*`` 匹配得到 ``org.aurora.qq:tool/send.message``；
+      所以 ``org.aurora.qq:tool/definition/*`` 匹配得到 ``org.aurora.qq:tool/definition/send.message``；
     - 没有 ``:`` 的模式按命名空间前缀理解（``org.aurora.**``）。
 
     ``**`` 在任意位置都跨全部层级。第三方 MCP 的业务 scope 是自由文本，

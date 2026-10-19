@@ -103,55 +103,55 @@ def test_logging_rejects_unknown_level() -> None:
 
 _TOOLS = frozenset(
     {
-        "aurora:tool/delegate",
-        "org.aurora.qq:tool/qq_send_private_message",
-        "org.aurora.qq:tool/qq_send_group_message",
-        "org.aurora.clock:tool/get_current_time",
-        "aurora:tool/world_read",
-        "aurora:tool/world_trees",
+        "aurora:tool/definition/delegate",
+        "org.aurora.qq:tool/definition/qq_send_private_message",
+        "org.aurora.qq:tool/definition/qq_send_group_message",
+        "org.aurora.clock:tool/definition/get_current_time",
+        "aurora:tool/definition/world_read",
+        "aurora:tool/definition/world_trees",
     }
 )
 
 
 def test_resolve_names_applies_ordered_patterns_with_last_match_wins() -> None:
     """按顺序决定可见性；无冒号模式匹配命名空间前缀，双星号可跨层。"""
-    assert resolve_names(_TOOLS, ("aurora:tool/delegate", "aurora:tool/world_*")) == frozenset(
-        {"aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_trees"}
+    assert resolve_names(_TOOLS, ("aurora:tool/definition/delegate", "aurora:tool/definition/world_*")) == frozenset(
+        {"aurora:tool/definition/delegate", "aurora:tool/definition/world_read", "aurora:tool/definition/world_trees"}
     )
-    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/*", "!org.aurora.qq:tool/qq_send_group_message")) == (
-        frozenset({"org.aurora.qq:tool/qq_send_private_message"})
-    )
-    assert resolve_names(_TOOLS, ("!org.aurora.qq:tool/*",)) == frozenset()
+    assert resolve_names(
+        _TOOLS, ("org.aurora.qq:tool/definition/*", "!org.aurora.qq:tool/definition/qq_send_group_message")
+    ) == (frozenset({"org.aurora.qq:tool/definition/qq_send_private_message"}))
+    assert resolve_names(_TOOLS, ("!org.aurora.qq:tool/definition/*",)) == frozenset()
     assert resolve_names(_TOOLS, ("org.aurora.**",)) == frozenset(
         {
-            "org.aurora.qq:tool/qq_send_private_message",
-            "org.aurora.qq:tool/qq_send_group_message",
-            "org.aurora.clock:tool/get_current_time",
+            "org.aurora.qq:tool/definition/qq_send_private_message",
+            "org.aurora.qq:tool/definition/qq_send_group_message",
+            "org.aurora.clock:tool/definition/get_current_time",
         }
     )
-    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/qq_send_*_message",)) == frozenset(
-        {"org.aurora.qq:tool/qq_send_private_message", "org.aurora.qq:tool/qq_send_group_message"}
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/definition/qq_send_*_message",)) == frozenset(
+        {"org.aurora.qq:tool/definition/qq_send_private_message", "org.aurora.qq:tool/definition/qq_send_group_message"}
     )
-    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/qq_send_?rivate_message",)) == frozenset(
-        {"org.aurora.qq:tool/qq_send_private_message"}
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/definition/qq_send_?rivate_message",)) == frozenset(
+        {"org.aurora.qq:tool/definition/qq_send_private_message"}
     )
-    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/qq_send_[gp]rivate_message",)) == frozenset(
-        {"org.aurora.qq:tool/qq_send_private_message"}
+    assert resolve_names(_TOOLS, ("org.aurora.qq:tool/definition/qq_send_[gp]rivate_message",)) == frozenset(
+        {"org.aurora.qq:tool/definition/qq_send_private_message"}
     )
-    assert resolve_names(_TOOLS, ("*:tool/*",)) == frozenset(
-        {"aurora:tool/delegate", "aurora:tool/world_read", "aurora:tool/world_trees"}
+    assert resolve_names(_TOOLS, ("*:tool/definition/*",)) == frozenset(
+        {"aurora:tool/definition/delegate", "aurora:tool/definition/world_read", "aurora:tool/definition/world_trees"}
     )
     assert resolve_names(_TOOLS, ()) == frozenset()
 
 
 def test_resolve_names_rejects_unmatched_exact_and_warns_unmatched_wildcards() -> None:
     with pytest.raises(NamePatternError, match="引用了未注册名称"):
-        resolve_names(_TOOLS, ("test:tool/missing",), label="agent-x")
+        resolve_names(_TOOLS, ("test:tool/definition/missing",), label="agent-x")
 
     captured: list[str] = []
     sink_id = _loguru_logger.add(captured.append, format="{message}")
     try:
-        resolved = resolve_names(_TOOLS, ("org.aurora.wx:tool/*",))
+        resolved = resolve_names(_TOOLS, ("org.aurora.wx:tool/definition/*",))
     finally:
         _loguru_logger.remove(sink_id)
 
@@ -160,8 +160,8 @@ def test_resolve_names_rejects_unmatched_exact_and_warns_unmatched_wildcards() -
 
 
 def test_pattern_matches_and_rejects_invalid_patterns() -> None:
-    assert pattern_matches("org.aurora.**", "org.aurora.qq:tool/qq_send_private_message")
-    assert not pattern_matches("aurora:tool/*", "aurora:tool/room/read")
+    assert pattern_matches("org.aurora.**", "org.aurora.qq:tool/definition/qq_send_private_message")
+    assert not pattern_matches("aurora:tool/definition/*", "aurora:tool/definition/room/read")
 
     with pytest.raises(NamePatternError, match="不能为空"):
         resolve_names(_TOOLS, ("",))
@@ -177,12 +177,12 @@ def test_pattern_matches_and_rejects_invalid_patterns() -> None:
 
 def test_wildcard_reach_follows_the_id_level_syntax() -> None:
     """单星号遵守命名空间与路径层级，路径中的点和业务域的冒号均为普通字符。"""
-    assert pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/send.message")
-    assert pattern_matches("aurora:tool/world_*", "aurora:tool/world_read.deep")
-    assert not pattern_matches("org.aurora.qq:tool/*", "org.aurora.qq:tool/room/send")
-    assert pattern_matches("org.aurora.qq:tool/**", "org.aurora.qq:tool/room/send")
-    assert not pattern_matches("*:tool/*", "org.aurora.qq:tool/send")
-    assert pattern_matches("**:tool/*", "org.aurora.qq:tool/send")
+    assert pattern_matches("org.aurora.qq:tool/definition/*", "org.aurora.qq:tool/definition/send.message")
+    assert pattern_matches("aurora:tool/definition/world_*", "aurora:tool/definition/world_read.deep")
+    assert not pattern_matches("org.aurora.qq:tool/definition/*", "org.aurora.qq:tool/definition/room/send")
+    assert pattern_matches("org.aurora.qq:tool/definition/**", "org.aurora.qq:tool/definition/room/send")
+    assert not pattern_matches("*:tool/definition/*", "org.aurora.qq:tool/definition/send")
+    assert pattern_matches("**:tool/definition/*", "org.aurora.qq:tool/definition/send")
     assert pattern_matches("qq:*", "qq:group:123")
 
 

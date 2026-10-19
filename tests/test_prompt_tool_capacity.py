@@ -22,9 +22,9 @@ from src.tools import ToolRegistry
 from src.utils.serialization import thaw_json
 
 _PROMPT = "aurora:prompt/agent/root"
-_SMALL = ToolDefinition("lab:tool/small", "读取一项实验状态", {"type": "object"})
+_SMALL = ToolDefinition("lab:tool/definition/small", "读取一项实验状态", {"type": "object"})
 _LARGE = ToolDefinition(
-    "lab:tool/large", "读取详细实验记录", {"type": "object", "properties": {"value": {"enum": ["x" * 2000]}}}
+    "lab:tool/definition/large", "读取详细实验记录", {"type": "object", "properties": {"value": {"enum": ["x" * 2000]}}}
 )
 
 

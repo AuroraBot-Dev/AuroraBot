@@ -75,23 +75,23 @@ def test_project_config_builds_complete_runtime(configured_project: Path) -> Non
     assert result.node(runtime_config.node_id).model == root_definition.model
     assert model.requests[0].model == root_definition.model
     assert [tool.name for tool in model.requests[0].tools] == [
-        "aurora:tool/artifact_find",
-        "aurora:tool/artifact_read",
-        "aurora:tool/artifact_stat",
-        "aurora:tool/bot_state",
-        "aurora:tool/delegate",
-        "aurora:tool/goal_set",
-        "aurora:tool/memory_exposures",
-        "aurora:tool/memory_feedback",
-        "aurora:tool/memory_recall",
-        "aurora:tool/memory_source",
-        "aurora:tool/resources_find",
-        "aurora:tool/resources_inspect",
-        "aurora:tool/wake_cancel",
-        "aurora:tool/wake_schedule",
-        "aurora:tool/world_read",
-        "aurora:tool/world_scopes",
-        "aurora:tool/world_trees",
+        "aurora:tool/definition/artifact_find",
+        "aurora:tool/definition/artifact_read",
+        "aurora:tool/definition/artifact_stat",
+        "aurora:tool/definition/bot_state",
+        "aurora:tool/definition/delegate",
+        "aurora:tool/definition/goal_set",
+        "aurora:tool/definition/memory_exposures",
+        "aurora:tool/definition/memory_feedback",
+        "aurora:tool/definition/memory_recall",
+        "aurora:tool/definition/memory_source",
+        "aurora:tool/definition/resources_find",
+        "aurora:tool/definition/resources_inspect",
+        "aurora:tool/definition/wake_cancel",
+        "aurora:tool/definition/wake_schedule",
+        "aurora:tool/definition/world_read",
+        "aurora:tool/definition/world_scopes",
+        "aurora:tool/definition/world_trees",
     ]
 
 
@@ -161,14 +161,16 @@ def test_presenter_traces_tool_calls(configured_project: Path) -> None:
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=echoed.append)
     tree = runtime.create_tree("开始")
-    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("c1", "test:tool/echo", {"value": "hi"}),)))
+    tree = tree.append(
+        "root", ChatMessage.assistant(tool_calls=(ToolCall("c1", "test:tool/definition/echo", {"value": "hi"}),))
+    )
     tree = tree.append("root", ChatMessage.tool("c1", "hi"))
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
     runtime.presenter.echo(tree)
 
     assert echoed == [
-        "  → [aurora:agent/definition/root] test:tool/echo",
+        "  → [aurora:agent/definition/root] test:tool/definition/echo",
         "  ← [aurora:agent/definition/root] hi",
         "Cadence> [aurora:agent/definition/root] 完成",
     ]
@@ -224,7 +226,13 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
             tuple(
                 replace(
                     item,
-                    tools=tuple((*item.tools, "org.aurora.qq:tool/*", "!org.aurora.qq:tool/qq_send_group_message")),
+                    tools=tuple(
+                        (
+                            *item.tools,
+                            "org.aurora.qq:tool/definition/*",
+                            "!org.aurora.qq:tool/definition/qq_send_group_message",
+                        )
+                    ),
                 )
                 if item.id == "aurora:agent/definition/root"
                 else item
@@ -233,14 +241,14 @@ def test_agent_tool_patterns_resolve_against_composed_tools(configured_project: 
         ),
     )
     qq_tools: tuple[Tool, ...] = (
-        FakeTool("org.aurora.qq:tool/qq_send_private_message"),
-        FakeTool("org.aurora.qq:tool/qq_send_group_message"),
+        FakeTool("org.aurora.qq:tool/definition/qq_send_private_message"),
+        FakeTool("org.aurora.qq:tool/definition/qq_send_group_message"),
     )
     assembly = assemble_runtime(with_wildcard, FakeModel(), tools=qq_tools).assembly
     root_definition = assembly.get(AgentCatalog).get("aurora:agent/definition/root")
 
-    assert "org.aurora.qq:tool/qq_send_private_message" in root_definition.tools
-    assert "org.aurora.qq:tool/qq_send_group_message" not in root_definition.tools
+    assert "org.aurora.qq:tool/definition/qq_send_private_message" in root_definition.tools
+    assert "org.aurora.qq:tool/definition/qq_send_group_message" not in root_definition.tools
 
 
 def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> None:
@@ -249,7 +257,7 @@ def test_assembly_rejects_unavailable_root_tool(configured_project: Path) -> Non
     root = agents[0]
     invalid = config.with_value(
         AGENTS_CONFIG,
-        AgentsConfig(tuple((replace(root, tools=tuple((*root.tools, "test:tool/missing"))), *agents[1:]))),
+        AgentsConfig(tuple((replace(root, tools=tuple((*root.tools, "test:tool/definition/missing"))), *agents[1:]))),
     )
 
     with pytest.raises(ValueError, match="引用了未注册名称"):
@@ -298,12 +306,12 @@ def test_config_is_pure_data_until_composition_stages_run(configured_project: Pa
 
 def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_project: Path) -> None:
     qq_tools: tuple[Tool, ...] = (
-        FakeTool("org.aurora.qq:tool/qq_send_private_message"),
-        FakeTool("org.aurora.qq:tool/qq_send_group_message"),
-        FakeTool("org.aurora.qq:tool/qq_send_forward_message"),
-        FakeTool("org.aurora.qq:tool/qq_get_chat_history"),
-        FakeTool("org.aurora.qq:tool/qq_mark_chat_read"),
-        FakeTool("org.aurora.qq:tool/qq_delete_friend"),
+        FakeTool("org.aurora.qq:tool/definition/qq_send_private_message"),
+        FakeTool("org.aurora.qq:tool/definition/qq_send_group_message"),
+        FakeTool("org.aurora.qq:tool/definition/qq_send_forward_message"),
+        FakeTool("org.aurora.qq:tool/definition/qq_get_chat_history"),
+        FakeTool("org.aurora.qq:tool/definition/qq_mark_chat_read"),
+        FakeTool("org.aurora.qq:tool/definition/qq_delete_friend"),
     )
     agents = assemble_runtime(load_config(configured_project), FakeModel(), tools=qq_tools).assembly.get(AgentCatalog)
     triage = agents.get("aurora:agent/definition/triage")
@@ -312,27 +320,27 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
     fast_worker = agents.get("aurora:agent/definition/fast-worker")
     reviewer = agents.get("aurora:agent/definition/reviewer")
 
-    assert triage.tools == frozenset({"aurora:tool/delegate"})
+    assert triage.tools == frozenset({"aurora:tool/definition/delegate"})
     assert triage.children == frozenset({"aurora:agent/definition/root", "aurora:agent/definition/fast-worker"})
     assert root.tools == frozenset(
         {
-            "aurora:tool/artifact_find",
-            "aurora:tool/artifact_read",
-            "aurora:tool/artifact_stat",
-            "aurora:tool/bot_state",
-            "aurora:tool/delegate",
-            "aurora:tool/goal_set",
-            "aurora:tool/memory_exposures",
-            "aurora:tool/memory_feedback",
-            "aurora:tool/memory_recall",
-            "aurora:tool/memory_source",
-            "aurora:tool/resources_find",
-            "aurora:tool/resources_inspect",
-            "aurora:tool/wake_cancel",
-            "aurora:tool/wake_schedule",
-            "aurora:tool/world_read",
-            "aurora:tool/world_scopes",
-            "aurora:tool/world_trees",
+            "aurora:tool/definition/artifact_find",
+            "aurora:tool/definition/artifact_read",
+            "aurora:tool/definition/artifact_stat",
+            "aurora:tool/definition/bot_state",
+            "aurora:tool/definition/delegate",
+            "aurora:tool/definition/goal_set",
+            "aurora:tool/definition/memory_exposures",
+            "aurora:tool/definition/memory_feedback",
+            "aurora:tool/definition/memory_recall",
+            "aurora:tool/definition/memory_source",
+            "aurora:tool/definition/resources_find",
+            "aurora:tool/definition/resources_inspect",
+            "aurora:tool/definition/wake_cancel",
+            "aurora:tool/definition/wake_schedule",
+            "aurora:tool/definition/world_read",
+            "aurora:tool/definition/world_scopes",
+            "aurora:tool/definition/world_trees",
         }
     )
     assert root.children == frozenset(
@@ -345,21 +353,21 @@ def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_pr
         }
     )
     memory = agents.get("aurora:agent/definition/memory")
-    assert {"aurora:tool/memory_source", "aurora:tool/memory_feedback"} <= memory.tools
+    assert {"aurora:tool/definition/memory_source", "aurora:tool/definition/memory_feedback"} <= memory.tools
     assert memory.children == frozenset()
     assert worker.model == "quality"
     assert worker.children == frozenset({"aurora:agent/definition/reviewer", "aurora:agent/definition/fast-worker"})
-    assert "org.aurora.qq:tool/qq_send_private_message" in worker.tools
-    assert "org.aurora.qq:tool/qq_delete_friend" in worker.tools
+    assert "org.aurora.qq:tool/definition/qq_send_private_message" in worker.tools
+    assert "org.aurora.qq:tool/definition/qq_delete_friend" in worker.tools
     assert fast_worker.model == "fast"
     assert fast_worker.prompt_id == "aurora:prompt/agent/fast"
     assert fast_worker.children == frozenset()
     assert fast_worker.tools == frozenset(
         {
-            "org.aurora.qq:tool/qq_send_private_message",
-            "org.aurora.qq:tool/qq_send_group_message",
-            "org.aurora.qq:tool/qq_get_chat_history",
-            "org.aurora.qq:tool/qq_mark_chat_read",
+            "org.aurora.qq:tool/definition/qq_send_private_message",
+            "org.aurora.qq:tool/definition/qq_send_group_message",
+            "org.aurora.qq:tool/definition/qq_get_chat_history",
+            "org.aurora.qq:tool/definition/qq_mark_chat_read",
         }
     )
     assert reviewer.tools == frozenset() and reviewer.children == frozenset()

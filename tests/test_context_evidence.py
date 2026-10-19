@@ -57,7 +57,7 @@ class EvidenceOperation:
             ResourceRef(ResourceKey.parse("test:records/query/read"), "1"),
             "读取原始证据",
             {"type": "object", "properties": {}, "additionalProperties": False},
-            "test:tool/read",
+            "test:tool/definition/read",
             True,
         )
 
@@ -96,12 +96,12 @@ def test_operation_sources_survive_receipt_tool_projection_engine_and_provider_b
                 definition.description,
                 definition.prompt_id,
                 definition.model,
-                frozenset({"test:tool/read"}),
+                frozenset({"test:tool/definition/read"}),
                 frozenset(),
             )
             model = FakeModel(
                 [
-                    ChatMessage.assistant(tool_calls=(ToolCall("read", "test:tool/read", {}),)),
+                    ChatMessage.assistant(tool_calls=(ToolCall("read", "test:tool/definition/read", {}),)),
                     ChatMessage.assistant("已核对"),
                 ]
             )

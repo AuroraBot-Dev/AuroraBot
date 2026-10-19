@@ -30,7 +30,7 @@ class MemoryRecallQuery:
         "围绕问题和目标召回记忆摘要、必要证据和依赖集合；"
         "summary_complete 表示摘要是否完整，原始数据用 memory_source 展开。",
         RecallInput.model_json_schema(),
-        "aurora:tool/memory_recall",
+        "aurora:tool/definition/memory_recall",
         True,
     )
 
@@ -98,7 +98,7 @@ class MemorySourceQuery:
         ResourceRef(ResourceKey.parse("aurora:memory/query/source"), "1"),
         "按 memory_id 读取完整原始证据；可指定历史游标和时间，返回当时已知的 superseded_by 引用。",
         SourceInput.model_json_schema(),
-        "aurora:tool/memory_source",
+        "aurora:tool/definition/memory_source",
         True,
     )
 

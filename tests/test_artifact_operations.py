@@ -67,7 +67,7 @@ def test_resource_content_is_available_through_port_registry_and_model_tools(con
             stat = await operations.dispatch(_request("stat", arguments, request_id="stat"))
             assert stat.data == result.data
             output = await tools.execute(
-                ToolCall("chunk", "aurora:tool/artifact_read", {**arguments, "offset": 1, "limit": 7})
+                ToolCall("chunk", "aurora:tool/definition/artifact_read", {**arguments, "offset": 1, "limit": 7})
             )
             assert isinstance(output, ToolOutput)
             body = json.loads(output.content)
@@ -75,7 +75,7 @@ def test_resource_content_is_available_through_port_registry_and_model_tools(con
             assert body["has_more"]
             assert body["next_offset"] == body["offset"] + len(base64.b64decode(body["content_base64"]))
             assert not output.evidence_refs
-            assert "aurora:tool/artifact_put" not in tools.names
+            assert "aurora:tool/definition/artifact_put" not in tools.names
         finally:
             await runtime.world.close()
 

@@ -3,7 +3,7 @@ id = "aurora:agent/definition/triage"
 description = "注意力初筛：判断眼前世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
 prompt = "aurora:prompt/agent/triage"
 model = "fast"
-tools = ["aurora:tool/delegate"]
+tools = ["aurora:tool/definition/delegate"]
 children = ["aurora:agent/definition/root", "aurora:agent/definition/fast-worker"]
 
 [[agent]]
@@ -11,7 +11,7 @@ id = "aurora:agent/definition/fast-worker"
 description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
 prompt = "aurora:prompt/agent/fast"
 model = "fast"
-tools = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]
+tools = ["#aurora:tool/tag/qq-send", "#aurora:tool/tag/qq-read"]
 children = []
 
 [[agent]]
@@ -20,23 +20,23 @@ description = "总代理：理解完整任务、整合结果。"
 prompt = "aurora:prompt/agent/root"
 model = "quality"
 tools = [
-    "aurora:tool/delegate",
-    "aurora:tool/world_read",
-    "aurora:tool/world_scopes",
-    "aurora:tool/world_trees",
-    "aurora:tool/bot_state",
-    "aurora:tool/goal_set",
-    "aurora:tool/wake_schedule",
-    "aurora:tool/wake_cancel",
-    "aurora:tool/memory_recall",
-    "aurora:tool/memory_source",
-    "aurora:tool/resources_find",
-    "aurora:tool/resources_inspect",
-    "aurora:tool/artifact_find",
-    "aurora:tool/artifact_stat",
-    "aurora:tool/artifact_read",
-    "aurora:tool/memory_exposures",
-    "aurora:tool/memory_feedback",
+    "aurora:tool/definition/delegate",
+    "aurora:tool/definition/world_read",
+    "aurora:tool/definition/world_scopes",
+    "aurora:tool/definition/world_trees",
+    "aurora:tool/definition/bot_state",
+    "aurora:tool/definition/goal_set",
+    "aurora:tool/definition/wake_schedule",
+    "aurora:tool/definition/wake_cancel",
+    "aurora:tool/definition/memory_recall",
+    "aurora:tool/definition/memory_source",
+    "aurora:tool/definition/resources_find",
+    "aurora:tool/definition/resources_inspect",
+    "aurora:tool/definition/artifact_find",
+    "aurora:tool/definition/artifact_stat",
+    "aurora:tool/definition/artifact_read",
+    "aurora:tool/definition/memory_exposures",
+    "aurora:tool/definition/memory_feedback",
 ]
 children = [
     "aurora:agent/definition/fast-worker",
@@ -51,7 +51,7 @@ id = "aurora:agent/definition/chat"
 description = "即时会话回复：生成回复正文，或用发送工具像人类一样分多条投递回原会话。"
 prompt = "aurora:prompt/agent/chat"
 model = "fast"
-tools = ["#aurora:tool/qq-send"]
+tools = ["#aurora:tool/tag/qq-send"]
 children = []
 
 [[agent]]
@@ -60,25 +60,25 @@ description = "通用执行者：掌握全部 QQ、Windows 桌面自动化工具
 prompt = "aurora:prompt/agent/worker"
 model = "quality"
 tools = [
-    "aurora:tool/delegate",
-    "aurora:tool/world_read",
-    "aurora:tool/world_scopes",
-    "aurora:tool/world_trees",
-    "aurora:tool/bot_state",
-    "aurora:tool/goal_set",
-    "aurora:tool/wake_schedule",
-    "aurora:tool/wake_cancel",
-    "aurora:tool/memory_recall",
-    "aurora:tool/memory_source",
-    "aurora:tool/resources_find",
-    "aurora:tool/resources_inspect",
-    "aurora:tool/artifact_find",
-    "aurora:tool/artifact_stat",
-    "aurora:tool/artifact_read",
-    "aurora:tool/memory_exposures",
-    "aurora:tool/memory_feedback",
-    "org.aurora.qq:tool/*",
-    "com.github.windows_mcp:tool/*",
+    "aurora:tool/definition/delegate",
+    "aurora:tool/definition/world_read",
+    "aurora:tool/definition/world_scopes",
+    "aurora:tool/definition/world_trees",
+    "aurora:tool/definition/bot_state",
+    "aurora:tool/definition/goal_set",
+    "aurora:tool/definition/wake_schedule",
+    "aurora:tool/definition/wake_cancel",
+    "aurora:tool/definition/memory_recall",
+    "aurora:tool/definition/memory_source",
+    "aurora:tool/definition/resources_find",
+    "aurora:tool/definition/resources_inspect",
+    "aurora:tool/definition/artifact_find",
+    "aurora:tool/definition/artifact_stat",
+    "aurora:tool/definition/artifact_read",
+    "aurora:tool/definition/memory_exposures",
+    "aurora:tool/definition/memory_feedback",
+    "org.aurora.qq:tool/definition/*",
+    "com.github.windows_mcp:tool/definition/*",
 ]
 children = ["aurora:agent/definition/reviewer", "aurora:agent/definition/fast-worker"]
 
@@ -96,15 +96,15 @@ description = "记忆专员：围绕目标召回经历、核对原始来源，�
 prompt = "aurora:prompt/agent/memory"
 model = "quality"
 tools = [
-    "aurora:tool/memory_recall",
-    "aurora:tool/memory_source",
-    "aurora:tool/resources_find",
-    "aurora:tool/resources_inspect",
-    "aurora:tool/artifact_find",
-    "aurora:tool/artifact_stat",
-    "aurora:tool/artifact_read",
-    "aurora:tool/memory_exposures",
-    "aurora:tool/memory_feedback",
-    "aurora:tool/bot_state",
+    "aurora:tool/definition/memory_recall",
+    "aurora:tool/definition/memory_source",
+    "aurora:tool/definition/resources_find",
+    "aurora:tool/definition/resources_inspect",
+    "aurora:tool/definition/artifact_find",
+    "aurora:tool/definition/artifact_stat",
+    "aurora:tool/definition/artifact_read",
+    "aurora:tool/definition/memory_exposures",
+    "aurora:tool/definition/memory_feedback",
+    "aurora:tool/definition/bot_state",
 ]
 children = []
