@@ -29,7 +29,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、docs/panel サブモジュールの初期化を行います。
+`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、apps/docsite、apps/panel サブモジュールの初期化を行います。
 
 ### 2. 必要な設定を記入
 
@@ -47,7 +47,7 @@ aurora start
 
 ## 変更の前に
 
-AuroraBot は、長期的に影響を与える設計上の決定を RFC に記録します。次の変更は、`docs/rfc/` の RFC を先に更新または新規作成してください：
+AuroraBot は、長期的に影響を与える設計上の決定を RFC に記録します。次の変更は、`apps/docsite/rfc/` の RFC を先に更新または新規作成してください：
 
 - module の責務または依存方向；
 - AgentTree、委任、tool 受領 contract；
@@ -56,7 +56,7 @@ AuroraBot は、長期的に影響を与える設計上の決定を RFC に記�
 
 小さなバグ修正、テストの追加、文言の改善、公共の意味を変えない refactor は直接提出できます。公開ドキュメントを変更した場合は、中国語・英語・日本語の入口をまとめて更新してください。
 
-現在の runtime、パッケージ境界、プロセス構成は、設計思想 [RFC 0300](docs/rfc/0300-design-philosophy.md) を最上位の制約とし、現行の実装構造は [アーキテクチャ説明](docs/architecture/) にあります。
+現在の runtime、パッケージ境界、プロセス構成は、設計思想 [RFC 0300](../apps/docsite/rfc/0300-design-philosophy.md) を最上位の制約とし、現行の実装構造は [アーキテクチャ説明](../apps/docsite/architecture/) にあります。
 
 ## 閉じたループを保つ
 

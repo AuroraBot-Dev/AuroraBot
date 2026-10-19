@@ -70,3 +70,11 @@ graphify-out/
 
 # personal config copied from config.example
 /config/
+
+# Node.js / Vue 应用工作区
+node_modules/
+.pnpm-store/
+.turbo/
+.vitepress/cache/
+.vitepress/dist/
+*.tsbuildinfo

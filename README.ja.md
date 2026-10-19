@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -50,7 +50,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、docs/panel サブモジュールの初期化を行います。
+`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、apps/docsite、apps/panel サブモジュールの初期化を行います。
 
 ### 2. 必要な設定を記入
 
@@ -70,7 +70,7 @@ aurora start
 
 ## コントリビューション
 
-[AuroraBot へのコントリビューション](CONTRIBUTING.ja.md)と [AuroraBot ドキュメントサイト](https://www.aurorabot.org)をご覧ください。コントリビューションを行うことで、プロジェクトの[行動規範](CODE_OF_CONDUCT.md)に同意したことになります。
+[AuroraBot へのコントリビューション](docs/CONTRIBUTING.ja.md)と [AuroraBot ドキュメントサイト](https://www.aurorabot.org)をご覧ください。コントリビューションを行うことで、プロジェクトの[行動規範](docs/CODE_OF_CONDUCT.md)に同意したことになります。
 
 ## オープンソースへの謝辞
 

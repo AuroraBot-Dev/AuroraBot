@@ -537,9 +537,8 @@ def test_setup_bootstraps_dependencies_submodules_and_config(
     assert (tmp_path / ".env").read_text(encoding="utf-8") == "DEEPSEEK_API_KEY=\n"
     assert calls == [
         (("uv", "sync"), tmp_path),
-        (("git", "submodule", "update", "--init", "docs", "panel"), tmp_path),
-        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "docs"),
-        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "panel"),
+        (("git", "submodule", "update", "--init", "apps/docsite", "apps/panel"), tmp_path),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path),
     ]
 
 
@@ -655,7 +654,7 @@ def test_setup_python_flag_only_syncs_dependencies(
     assert calls == [(("uv", "sync"), tmp_path)]
 
 
-def test_setup_docs_flag_initializes_only_docs(
+def test_setup_docs_flag_initializes_shared_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -671,8 +670,8 @@ def test_setup_docs_flag_initializes_only_docs(
 
     assert setup.execute(arguments) == 0
     assert calls == [
-        (("git", "submodule", "update", "--init", "docs"), tmp_path),
-        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "docs"),
+        (("git", "submodule", "update", "--init", "apps/docsite", "apps/panel"), tmp_path),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path),
     ]
 
 
@@ -700,8 +699,8 @@ def test_setup_combines_selected_flags_in_order(
     assert not (tmp_path / "config").exists()
     assert calls == [
         (("uv", "sync"), tmp_path),
-        (("git", "submodule", "update", "--init", "panel"), tmp_path),
-        (("pnpm", "install", "--frozen-lockfile"), tmp_path / "panel"),
+        (("git", "submodule", "update", "--init", "apps/docsite", "apps/panel"), tmp_path),
+        (("pnpm", "install", "--frozen-lockfile"), tmp_path),
     ]
 
 
@@ -760,8 +759,8 @@ def test_docs_command_passes_script_and_passthrough_to_process(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "apps" / "docsite").mkdir(parents=True)
+    (tmp_path / "apps" / "docsite" / "package.json").write_text("{}\n", encoding="utf-8")
     calls: list[tuple[tuple[str, ...], Path]] = []
 
     def fake_run(command: tuple[str, ...], root: Path) -> int:
@@ -774,7 +773,7 @@ def test_docs_command_passes_script_and_passthrough_to_process(
     )
 
     assert docs.execute(arguments) == 0
-    assert calls == [(("pnpm", "build", "--base", "/foo"), tmp_path / "docs")]
+    assert calls == [(("pnpm", "build", "--base", "/foo"), tmp_path / "apps" / "docsite")]
 
 
 def test_panel_command_passes_passthrough_without_separator(
@@ -782,8 +781,8 @@ def test_panel_command_passes_passthrough_without_separator(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "panel").mkdir()
-    (tmp_path / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "apps" / "panel").mkdir(parents=True)
+    (tmp_path / "apps" / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
     calls: list[tuple[tuple[str, ...], Path]] = []
 
     def fake_run(command: tuple[str, ...], root: Path) -> int:
@@ -794,7 +793,7 @@ def test_panel_command_passes_passthrough_without_separator(
     arguments = build_parser().parse_args(["--root", str(tmp_path), panel.COMMAND["name"], "dev", "--port", "5173"])
 
     assert panel.execute(arguments) == 0
-    assert calls == [(("pnpm", "dev", "--port", "5173"), tmp_path / "panel")]
+    assert calls == [(("pnpm", "dev", "--port", "5173"), tmp_path / "apps" / "panel")]
 
 
 def test_submodule_command_reports_uninitialized_submodule(
@@ -813,8 +812,8 @@ def test_submodule_command_reports_missing_process(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "panel").mkdir()
-    (tmp_path / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "apps" / "panel").mkdir(parents=True)
+    (tmp_path / "apps" / "panel" / "package.json").write_text("{}\n", encoding="utf-8")
 
     def raise_file_not_found(*_args: object, **_kwargs: object) -> None:
         raise FileNotFoundError
@@ -830,8 +829,8 @@ def test_submodule_command_preserves_failure_code(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "apps" / "docsite").mkdir(parents=True)
+    (tmp_path / "apps" / "docsite" / "package.json").write_text("{}\n", encoding="utf-8")
     monkeypatch.setattr(process, "run_process", lambda _command, _root: FAILED_EXIT_CODE)
     arguments = build_parser().parse_args(["--root", str(tmp_path), docs.COMMAND["name"], "dev"])
 

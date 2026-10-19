@@ -29,7 +29,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the docs/panel submodules.
+`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the apps/docsite、apps/panel submodules.
 
 ### 2. Fill in the required configuration
 
@@ -47,7 +47,7 @@ Running tests and static checks does not require real model keys. Keys live only
 
 ## Before making changes
 
-AuroraBot records design decisions with long-term impact in RFCs. Update or add an RFC under `docs/rfc/` for changes to:
+AuroraBot records design decisions with long-term impact in RFCs. Update or add an RFC under `apps/docsite/rfc/` for changes to:
 
 - module responsibilities or dependency direction;
 - AgentTree, delegation, and tool receipt contracts;
@@ -56,7 +56,7 @@ AuroraBot records design decisions with long-term impact in RFCs. Update or add 
 
 Small bug fixes, test additions, copy improvements, and refactors that do not change public semantics can be submitted directly. When public documentation changes, update the Chinese, English, and Japanese entry points together.
 
-The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](docs/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](docs/architecture/).
+The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](../apps/docsite/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](../apps/docsite/architecture/).
 
 ## Keep the loop closed
 

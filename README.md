@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -212,7 +212,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 docs/panel 子模块引导。
+`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 apps/docsite、apps/panel 子模块引导。
 
 ### 2. 填写必要配置
 
@@ -232,7 +232,7 @@ aurora start
 
 ## 参与贡献
 
-见[参与 AuroraBot](CONTRIBUTING.md)与[AuroraBot 文档站](https://www.aurorabot.org), 提交贡献即表示你同意遵守项目的[社区行为准则](CODE_OF_CONDUCT.md).
+见[参与 AuroraBot](docs/CONTRIBUTING.md)与[AuroraBot 文档站](https://www.aurorabot.org), 提交贡献即表示你同意遵守项目的[社区行为准则](docs/CODE_OF_CONDUCT.md).
 
 ## 开源致谢
 
@@ -250,3 +250,27 @@ AuroraBot 的诞生离不开许多优秀的开源项目：
 ## 许可证
 
 本项目以 [Apache License 2.0](LICENSE) 协议开源。
+
+## 应用工作区
+
+根目录同时提供 `pyproject.toml` 与 `package.json`：Python 使用 uv，Vue / TypeScript 使用 Node.js 24 与 pnpm 12。
+
+```text
+apps/docsite/  VitePress 2 文档站（Git 子模块）
+apps/panel/    Vue 面板及其本地包（Git 子模块）
+apps/landing/ Vue + TypeScript 落地页
+docs/         贡献指南、行为准则等仓库文档
+scripts/      安装脚本与 .mts 工程脚本
+```
+
+```bash
+git submodule update --init --recursive
+pnpm install --frozen-lockfile
+pnpm dev           # 落地页，http://localhost:5174
+pnpm dev:docs      # 文档站，http://localhost:5173
+pnpm dev:panel     # 面板
+pnpm typecheck
+pnpm build         # 构建全部应用
+```
+
+全部应用共享根目录 workspace 与锁文件。更多命令见[贡献指南](docs/CONTRIBUTING.md)。

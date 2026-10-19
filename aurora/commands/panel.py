@@ -1,4 +1,4 @@
-"""实现 ``aurora panel``：在 panel 子模块中运行 pnpm 脚本。"""
+"""实现 ``aurora panel``：在 apps/panel 中运行 pnpm 脚本。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 COMMAND: CommandSpec = {
     "name": "panel",
-    "help": "在 panel 子模块中运行 pnpm 脚本",
+    "help": "在 apps/panel 中运行 pnpm 脚本",
     "args": {
         "script": "pnpm 脚本名，例如 dev 或 build",
     },
@@ -25,6 +25,6 @@ def execute(arguments: argparse.Namespace) -> int:
     return run_pnpm(
         str(arguments.script),
         arguments.passthrough,
-        arguments.root / "panel",
+        arguments.root / "apps" / "panel",
         "panel",
     )

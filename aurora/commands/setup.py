@@ -21,11 +21,11 @@ COMMAND: CommandSpec = {
         "--python": "同步 Python 依赖",
         "--config": "从模板创建个人配置",
         "--env": "从模板创建环境文件",
-        "--docs": "初始化 docs 子模块并安装依赖",
-        "--panel": "初始化 panel 子模块并安装依赖",
+        "--docs": "初始化应用子模块并安装文档站工作区依赖",
+        "--panel": "初始化应用子模块并安装面板工作区依赖",
     },
 }
-_SUBMODULES = ("docs", "panel")
+_SUBMODULES = ("apps/docsite", "apps/panel")
 _FLAG_STEPS = ("python", "config", "env", "docs", "panel")
 
 
@@ -75,15 +75,14 @@ def execute(arguments: argparse.Namespace) -> int:
         return EXIT_FAILURE
     if selected["env"] and not _ensure_env_copy(root):
         return EXIT_FAILURE
-    submodules = tuple(name for name in _SUBMODULES if selected[name])
+    submodules = _SUBMODULES if selected["docs"] or selected["panel"] else ()
     if submodules:
         steps.append(("初始化子模块", ("git", "submodule", "update", "--init", *submodules), root))
         if shutil.which("pnpm") is None:
             names = "、".join(submodules)
             sys.stderr.write(f"未找到 pnpm，跳过 {names} 依赖安装；安装 pnpm 后重新运行本命令即可。\n")
         else:
-            for name in submodules:
-                steps.append((f"安装 {name} 依赖", ("pnpm", "install", "--frozen-lockfile"), root / name))
+            steps.append(("安装应用工作区依赖", ("pnpm", "install", "--frozen-lockfile"), root))
     for label, command, cwd in steps:
         if run_process(command, cwd) != 0:
             sys.stderr.write(f"{label}失败。\n")

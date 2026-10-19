@@ -20,7 +20,7 @@ AuroraBot 想做的不是一个工具一般的 Agent，而是一个能够持续�
 ### 1. 克隆本仓库
 
 需要 Python 3.12（推荐，以上版本未经充分验证）、Git 和 [uv](https://docs.astral.sh/uv/)。
-文档或面板开发还需要 [Node.js](https://nodejs.org/) 与 [pnpm](https://pnpm.io/)。
+文档站、面板、落地页和工程脚本需要 [Node.js](https://nodejs.org/) 24 与 [pnpm](https://pnpm.io/) 12。
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
@@ -30,7 +30,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 docs/panel 子模块引导。
+`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 apps/docsite、apps/panel 子模块引导。
 
 ### 2. 填写必要配置
 
@@ -48,7 +48,7 @@ aurora start
 
 ## 在改动之前
 
-AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `docs/rfc/` 中的 RFC：
+AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `apps/docsite/rfc/` 中的 RFC：
 
 - 模块职责或依赖方向；
 - AgentTree、委派与工具回执契约；
@@ -57,7 +57,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 
 小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、英文和日文入口。
 
-当前运行时、包边界和进程组合以设计思想 [RFC 0300](docs/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](docs/architecture/)。
+当前运行时、包边界和进程组合以设计思想 [RFC 0300](../apps/docsite/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](../apps/docsite/architecture/)。
 
 ## 保持闭环完整
 
@@ -127,3 +127,25 @@ uv run pyright
 - `aurora check` 已通过，或 Pull Request 清楚解释了未运行的部分。
 
 提交贡献即表示你同意遵守项目的[社区行为准则](CODE_OF_CONDUCT.md)。
+
+## Vue 应用与工程脚本
+
+根目录的 `pyproject.toml` 与 `package.json` 分别管理 Python 与 Node.js 工程；前端只使用根目录的 `pnpm-workspace.yaml` 和 `pnpm-lock.yaml`。
+
+```bash
+git submodule update --init --recursive
+pnpm install --frozen-lockfile
+pnpm dev:docs       # VitePress 文档站
+pnpm dev:panel      # Vue 面板
+pnpm dev:landing    # Vue 落地页（默认 pnpm dev）
+pnpm typecheck     # 工程脚本和应用的类型检查
+pnpm test          # 面板单元测试
+pnpm build         # 构建三个应用
+pnpm check:python  # Python 完整质量检查
+pnpm clean         # 清理应用构建产物
+pnpm clean --deps  # 同时清理 Node.js 依赖
+```
+
+新增 TypeScript 工程脚本放在 `scripts/*.mts`，通过 `pnpm exec tsx scripts/<name>.mts` 或根 `package.json` 的脚本运行。三平台安装脚本仍在各自平台目录。
+
+`aurora setup --docs`、`aurora setup --panel` 会初始化两个应用子模块，再在根目录统一安装依赖，因为 panel 的本地包也属于同一个工作区。

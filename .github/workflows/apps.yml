@@ -1,0 +1,62 @@
+name: Vue 应用
+
+on:
+  push:
+    branches: [main, dev, nightly]
+    paths:
+      - "apps/**"
+      - "scripts/**/*.mts"
+      - "package.json"
+      - "pnpm-*.yaml"
+      - "tsconfig.scripts.json"
+      - "turbo.json"
+      - ".node-version"
+      - ".github/workflows/apps.yml"
+  pull_request:
+    paths:
+      - "apps/**"
+      - "scripts/**/*.mts"
+      - "package.json"
+      - "pnpm-*.yaml"
+      - "tsconfig.scripts.json"
+      - "turbo.json"
+      - ".node-version"
+      - ".github/workflows/apps.yml"
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: 安装工作区依赖
+        run: pnpm install --frozen-lockfile
+      - name: 检查应用与脚本类型
+        run: pnpm typecheck
+      - name: 检查面板底座类型
+        run: pnpm --filter aurorabot-panel check:type
+      - name: 检查面板代码规范
+        run: pnpm lint
+      - name: 运行面板测试
+        run: pnpm test
+      - name: 构建全部应用
+        run: pnpm build
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+      - name: 保存静态产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurorabot-apps
+          include-hidden-files: true
+          path: |
+            apps/docsite/.vitepress/dist
+            apps/panel/apps/web/dist
+            apps/landing/dist
