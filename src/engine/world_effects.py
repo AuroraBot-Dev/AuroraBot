@@ -10,6 +10,7 @@ from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontie
 from src.contracts.memory_codec import exposure_data
 from src.contracts.resource import ResourceInstance
 from src.contracts.resource_codec import resource_instance_data, resource_ref_data
+from src.contracts.tree_lifecycle import TREE_COMPLETED, TREE_FAILED, TREE_STARTED, tree_scope
 from src.engine.events import (
     MODEL_COMPLETED,
     MODEL_FAILED,
@@ -23,12 +24,8 @@ from src.engine.events import (
     TOOL_REQUESTED,
     TOOL_SUCCEEDED,
     TOOL_UNKNOWN,
-    TREE_COMPLETED,
-    TREE_FAILED,
-    TREE_STARTED,
     WORLD_DELTA_DELIVERED,
 )
-from src.engine.scopes import tree_scope
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

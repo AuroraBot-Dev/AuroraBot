@@ -27,6 +27,7 @@ def test_published_content_is_discoverable_without_entering_the_static_registry(
     async def scenario() -> None:
         """发现未加载的内容，并验证损坏文件不能通过检查入口。"""
         try:
+            await runtime.world.initialize()
             store = runtime.assembly.get(ArtifactStore)
             catalog = runtime.assembly.get(ResourceCatalog)
             key = ResourceKey.parse("lab:memory/model/not-loaded")

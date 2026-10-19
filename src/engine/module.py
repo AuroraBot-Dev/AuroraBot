@@ -16,9 +16,9 @@ from src.contracts.pkgs.world import WorldJournal
 from src.contracts.process import TREE_PROCESS_MEDIA_TYPE, TreeProcessDefinition
 from src.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from src.contracts.scope import ScopeDeclaration, ScopeKind
+from src.contracts.tree_lifecycle import TREE_SCOPE_PATTERN
 from src.engine import AgentTreeRunner
 from src.engine.config import EngineConfig
-from src.engine.scopes import SCOPE_PATTERN as TREE_SCOPE_PATTERN
 from src.kernel import ModuleContext, module
 
 if TYPE_CHECKING:

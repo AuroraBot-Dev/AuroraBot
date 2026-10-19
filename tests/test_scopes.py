@@ -16,7 +16,7 @@ from src.cadence import CADENCE_SCOPE
 from src.console.events import CONSOLE_SCOPE
 from src.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, ToolCall, ToolOutput, ToolStatus
 from src.contracts.scope import merge_scope_catalog
-from src.engine.scopes import tree_scope
+from src.contracts.tree_lifecycle import tree_scope
 from src.kernel import BuiltinSource, ModuleSpec
 from src.mcp.scopes import mcp_scope
 from src.runtime.assembly import declared_scopes, validate_declared_scopes

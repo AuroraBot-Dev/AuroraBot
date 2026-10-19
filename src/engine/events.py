@@ -1,13 +1,7 @@
-"""``src.engine`` 在认知循环中提交的世界事件 kind。
-
-这些 kind 由 engine 生产并只被 engine 解释；其他包若需观察它们，应按字符串读取世界提交。
-"""
+"""认知循环的节点、模型与工具事实；树生命周期由公共契约声明。"""
 
 from __future__ import annotations
 
-TREE_STARTED = "engine.tree.started"
-TREE_COMPLETED = "engine.tree.completed"
-TREE_FAILED = "engine.tree.failed"
 NODE_SPAWNED = "engine.node.spawned"
 NODE_COMPLETED = "engine.node.completed"
 NODE_FAILED = "engine.node.failed"

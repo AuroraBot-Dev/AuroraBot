@@ -125,6 +125,7 @@ def test_builtin_modules_form_a_valid_dependency_graph() -> None:
         "cadence",
         "console",
         "engine",
+        "instances",
         "mcp",
         "memory",
         "memory_model",

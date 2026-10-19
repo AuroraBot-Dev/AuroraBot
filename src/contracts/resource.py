@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True, order=True)
 class ResourceKey:
-    """资源定义的稳定身份，版本与运行实例单独记录。"""
+    """资源的稳定身份，类别区分定义与实例，版本单独记录。"""
 
     namespace: str
     domain: str
@@ -74,7 +74,7 @@ def fixed_resource_refs(values: Iterable[ResourceRef]) -> tuple[ResourceRef, ...
 
 @dataclass(frozen=True, slots=True)
 class ResourceDescriptor:
-    """可发现的资源定义，内容可以由所属模组单独存储。"""
+    """可发现的固定资源版本，内容可以由所属模组单独存储。"""
 
     ref: ResourceRef
     description: str

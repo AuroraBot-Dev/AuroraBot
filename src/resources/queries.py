@@ -22,7 +22,7 @@ class ResourceFindQuery:
 
     DEFINITION = OperationDefinition(
         RESOURCE_FIND,
-        "按命名空间、领域和类别分页发现资源定义与已发布内容版本。"
+        "按命名空间、领域和类别分页发现资源定义、已发布内容与认知实例。"
         "使用 next_cursor 作为 after 继续，保持筛选条件不变；当前动态列表中的新增内容可能需要重新发现。"
         "内容清单不表示正文已读，使用 resources_inspect 检查指定版本。",
         ResourceQueryInput.model_json_schema(),
@@ -59,8 +59,8 @@ class ResourceInspectQuery:
 
     DEFINITION = OperationDefinition(
         RESOURCE_INSPECT,
-        "读取资源说明、参数结构与能力契约。静态定义可省略唯一版本或使用显式别名；动态内容必须指定 revision。"
-        "检查内容版本会核对完整性；返回内容描述，正文仍需通过其 read_operation 按块读取。",
+        "读取资源说明、参数结构与能力契约。静态定义可省略唯一版本或使用显式别名；动态内容与实例状态必须指定 revision。"
+        "检查内容版本会核对完整性；正文通过其 read_operation 按块读取。实例检查按指定版本重建世界记录摘要。",
         ResourceInspectInput.model_json_schema(),
         "aurora:tool/definition/resources_inspect",
         True,

@@ -91,6 +91,12 @@ def test_selected_runner_process_is_published_and_used_without_loading_default_l
                 "key": str(expected.key),
                 "revision": expected.ref.revision,
             }
+            instances = await lifecycle.assembly.get(ResourceCatalog).browse(
+                ResourceQuery(namespace="lab", domain="engine", kind="instance")
+            )
+            assert len(instances.items) == 1
+            assert instances.items[0].metadata["instance"] == started.data["instance"]
+            assert instances.items[0].metadata["state"] == "completed"
         finally:
             await lifecycle.close()
 
