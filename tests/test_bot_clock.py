@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.bot.clock import PersistentBotClock
 from src.bot.store import JournalBotState
+from src.clock import PersistentBotClock
 from src.contracts import AgentDefinition, AgentTree, TreeLaunchRequest, WorldFrontier
 from src.contracts.bot import BotChange, Goal, GoalStatus, WakePlan, WakeStatus
 from src.world import SqlAlchemyWorldJournal
