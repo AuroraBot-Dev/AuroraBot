@@ -1,15 +1,20 @@
 """正文发布独立于资源目录与领域能力的构造依赖。"""
 
 from src.contracts.artifact import ArtifactInfo
+from src.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
 from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.resource_content import RESOURCE_CONTENTS
+from src.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from src.kernel import ModuleContext, module
 
 
 async def ready(context: ModuleContext) -> None:
-    """归档全部实际贡献的正文，保存失败时不启动任何后台任务。"""
+    """归档可用模组声明与实际贡献正文，保存失败时不启动后台任务。"""
     store = context.get(ArtifactStore)
-    for resource in context.contributions(RESOURCE_CONTENTS):
+    contents = (
+        *(ResourceContent(spec.resource.ref, spec.content, MODULE_MANIFEST_MEDIA_TYPE) for spec in context.modules),
+        *context.contributions(RESOURCE_CONTENTS),
+    )
+    for resource in contents:
         info = await store.put(resource.ref.key, resource.content, media_type=resource.media_type)
         if info != ArtifactInfo(resource.ref, len(resource.content), resource.media_type):
             raise ValueError(f"资源正文存储返回了不一致的版本或元信息：{resource.ref.key}")

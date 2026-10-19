@@ -22,6 +22,7 @@ def build(context: ModuleContext) -> ResourceCatalogPort:
     """先读取模组静态定义，再合并依赖配置或模型状态的资源贡献。"""
     definitions = (
         *context.contributions(RESOURCE_CONTRIBUTIONS),
+        *(spec.resource for spec in context.modules),
         *(descriptor for spec in context.modules for descriptor in spec.resources),
     )
     catalog = context.get_optional(ResourceCatalogPort)

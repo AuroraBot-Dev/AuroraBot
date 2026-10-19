@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from dataclasses import dataclass, field
+from functools import wraps
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,7 @@ from src.contracts.identity import is_path
 from src.contracts.module_manifest import DEFAULT_MODULE_MANIFEST, ModuleManifest
 from src.contracts.resource import ResourceDescriptor, ResourceKey
 from src.contracts.scope import ScopeDeclaration
+from src.kernel.manifest import freeze_module
 from src.kernel.phase import ACTIVATE, CLOSE, CONSTRUCT, DRAIN, PREPARE, READY, RUN, Ordering, Phase
 
 if TYPE_CHECKING:
@@ -47,6 +49,8 @@ class ModuleSpec:
     order: tuple[Ordering, ...] = ()
     hooks: Mapping[Phase, PhaseHook] = field(default_factory=dict)
     manifest: ModuleManifest = DEFAULT_MODULE_MANIFEST
+    content: bytes = field(init=False, repr=False)
+    resource: ResourceDescriptor = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """冻结声明容器，完整域声明也同时表达该模块的所有权。"""
@@ -80,6 +84,9 @@ class ModuleSpec:
             raise ValueError(f"模块声明的域必须是非空且无首尾空白的文本：{self.name}")
         if len(scopes) != len(set(scopes)):
             raise ValueError(f"模块重复声明域：{self.name}")
+        content, resource = freeze_module(self)
+        object.__setattr__(self, "content", content)
+        object.__setattr__(self, "resource", resource)
 
     def _validate_metadata(self) -> None:
         """声明式元数据必须是公共值对象，不能把未校验字典带入解析阶段。"""
@@ -161,6 +168,7 @@ def module(
     named_hooks = ((PREPARE, prepare), (ACTIVATE, activate), (READY, ready), (RUN, run), (DRAIN, drain), (CLOSE, close))
 
     def decorator(builder: ModuleBuilder) -> ModuleSpec:
+        @wraps(builder)
         def register(context: ModuleContext) -> None:
             instance = builder(context)
             if instance is None:

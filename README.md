@@ -79,6 +79,8 @@ MCP 关闭会先停止各连接的事件入口，再逆序释放所有连接。�
 
 清单的 `namespace` 声明模组归属，默认 `aurora`；`@module(name=...)` 只填写局部资源路径。例如 `ModuleManifest(namespace="lab")` 与局部名 `memory` 共同形成 `lab:kernel/module/memory`。完整身份贯穿依赖解析、提供方登记、生命周期与故障记录；不同命名空间可以使用相同局部名，同一完整身份重复出现仍在启动前失败。
 
+`/resources --domain kernel --kind module` 可发现模组声明及已归档版本。清单内容版本覆盖发布版本、API 范围、能力与贡献声明、静态资源、域、优先级及生命周期约束，目录说明与归档正文使用同一 SHA256。启动在 `ready` 阶段保存这些正文；更换插件或重启后，仍可用制品读取入口核对旧声明。清单描述启动声明，实际 Python 实现由安装环境提供，生命周期钩子的实现变化需要作者发布新版本。
+
 模组通过 `@module(scopes=ScopeDeclaration(...))` 声明自己拥有的域、分类和含义。装配在业务准备前合并可用模组的声明，形成冻结的 `ScopeCatalog`；记忆、工具和 MCP 通过能力注入读取同一份目录。插件添加域无需修改宿主配置。`scopes.toml` 默认为空，仅填写项目扩展或覆盖：同模式配置优先，不同模式按路径具体度排列。同一模式的模组声明不一致时，启动前失败。
 
 `/resources` 与 Bot 的 `resources_find` 共用 `aurora:resources/query/find`，返回 `items`、`next_cursor` 和 `listing_mode`；`/inspect` 与 `resources_inspect` 共用 `aurora:resources/query/inspect`。默认每页 20 项，用 `--after` 或结构化参数 `after` 继续同一筛选。查询经过统一操作路由并记录调用；检查动态内容需要确定版本并核对完整性，返回描述后仍需按读取入口取得正文。

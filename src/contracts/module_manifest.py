@@ -6,6 +6,10 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from src.contracts.identity import is_namespace
+from src.contracts.resource import ResourceKey, ResourceRef
+
+MODULE_MANIFEST_MEDIA_TYPE = "application/vnd.aurora.module-manifest+json;version=1"
+MODULE_MANIFEST_CONTRACT = ResourceRef(ResourceKey("aurora", "kernel", "contract", "module"), "1")
 
 
 @dataclass(frozen=True, slots=True)
