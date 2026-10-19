@@ -1,5 +1,5 @@
 {
-  "name": "aurorabot-landing",
+  "name": "@aurorabot/landing",
   "version": "0.7.0",
   "private": true,
   "type": "module",
@@ -7,15 +7,19 @@
     "dev": "vite --port 5174",
     "build": "vite build",
     "preview": "vite preview --port 4174",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "lint": "pnpm --dir ../.. lint",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rimraf dist"
   },
   "dependencies": {
     "vue": "catalog:"
   },
   "devDependencies": {
+    "@vben/tsconfig": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
-    "vite": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vue-tsc": "catalog:"
   }
 }

@@ -4,24 +4,34 @@ on:
   push:
     branches: [main, dev, nightly]
     paths:
-      - "apps/**"
-      - "scripts/**/*.mts"
-      - "package.json"
-      - "pnpm-*.yaml"
-      - "tsconfig.scripts.json"
-      - "turbo.json"
-      - ".node-version"
-      - ".github/workflows/apps.yml"
+      - 'apps/**'
+      - 'scripts/**/*.mts'
+      - 'package.json'
+      - 'pnpm-*.yaml'
+      - 'tsconfig*.json'
+      - '*.config.ts'
+      - 'packages/**'
+      - 'tooling/**'
+      - '.prettierignore'
+      - '.stylelintignore'
+      - 'turbo.json'
+      - '.node-version'
+      - '.github/workflows/apps.yml'
   pull_request:
     paths:
-      - "apps/**"
-      - "scripts/**/*.mts"
-      - "package.json"
-      - "pnpm-*.yaml"
-      - "tsconfig.scripts.json"
-      - "turbo.json"
-      - ".node-version"
-      - ".github/workflows/apps.yml"
+      - 'apps/**'
+      - 'scripts/**/*.mts'
+      - 'package.json'
+      - 'pnpm-*.yaml'
+      - 'tsconfig*.json'
+      - '*.config.ts'
+      - 'packages/**'
+      - 'tooling/**'
+      - '.prettierignore'
+      - '.stylelintignore'
+      - 'turbo.json'
+      - '.node-version'
+      - '.github/workflows/apps.yml'
   workflow_dispatch:
 
 jobs:
@@ -30,7 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -41,9 +50,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 检查应用与脚本类型
         run: pnpm typecheck
-      - name: 检查面板底座类型
-        run: pnpm --filter aurorabot-panel check:type
-      - name: 检查面板代码规范
+      - name: 检查前端代码规范
         run: pnpm lint
       - name: 运行面板测试
         run: pnpm test
@@ -57,6 +64,6 @@ jobs:
           name: aurorabot-apps
           include-hidden-files: true
           path: |
-            apps/docsite/.vitepress/dist
-            apps/panel/apps/web/dist
+            apps/docsite/dist
+            apps/panel/dist
             apps/landing/dist

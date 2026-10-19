@@ -1,0 +1,59 @@
+{
+  "name": "@aurorabot/panel",
+  "version": "5.7.0",
+  "private": true,
+  "homepage": "https://github.com/AuroraBot-Dev/panel",
+  "bugs": "https://github.com/AuroraBot-Dev/panel/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AuroraBot-Dev/AuroraBot.git",
+    "directory": "apps/panel"
+  },
+  "license": "MIT",
+  "author": "AuroraBot Dev",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --mode development",
+    "build": "vite build --mode production",
+    "build:analyze": "vite build --mode analyze",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "lint": "pnpm --dir ../.. lint",
+    "test": "pnpm --dir ../.. test:panel",
+    "clean": "rimraf dist"
+  },
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "dependencies": {
+    "@vben/access": "workspace:*",
+    "@vben/common-ui": "workspace:*",
+    "@vben/constants": "workspace:*",
+    "@vben/hooks": "workspace:*",
+    "@vben/icons": "workspace:*",
+    "@vben/layouts": "workspace:*",
+    "@vben/locales": "workspace:*",
+    "@vben/plugins": "workspace:*",
+    "@vben/preferences": "workspace:*",
+    "@vben/request": "workspace:*",
+    "@vben/stores": "workspace:*",
+    "@vben/styles": "workspace:*",
+    "@vben/types": "workspace:*",
+    "@vben/utils": "workspace:*",
+    "@vueuse/core": "catalog:",
+    "dayjs": "catalog:",
+    "naive-ui": "catalog:",
+    "pinia": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "@vben/vite-config": "workspace:*",
+    "axios-mock-adapter": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

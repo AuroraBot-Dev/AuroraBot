@@ -17,9 +17,9 @@ AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一�
 
 文档按效力分层：
 
-- `apps/docsite/rfc/0300-design-philosophy.md` 是设计思想：只陈述不变量与判断准则，不含实现坐标（包名、文件名、字段名、类名、协议修订号、事件名等）；仅当设计思想、语义不变量或边界本身改变时才修订。
-- 其他 `apps/docsite/rfc/` 记录稳定的机制决策；`apps/docsite/architecture/` 记录现行实现结构，可随实现自由更新；`apps/docsite/reference/` 记录精确词汇与协议。
-- `apps/docsite/` 是独立文档仓库的子模块；RFC 先在 docs 仓库提交，再由主仓库更新子模块指针。
+- `apps/docsite/src/rfc/0300-design-philosophy.md` 是设计思想：只陈述不变量与判断准则，不含实现坐标（包名、文件名、字段名、类名、协议修订号、事件名等）；仅当设计思想、语义不变量或边界本身改变时才修订。
+- 其他 `apps/docsite/src/rfc/` 记录稳定的机制决策；`apps/docsite/src/architecture/` 记录现行实现结构，可随实现自由更新；`apps/docsite/src/reference/` 记录精确词汇与协议。
+- `apps/docsite/src/` 中的文档与应用、运行时代码由同一仓库管理，相关改动一起提交。
 - 仅当设计思想、语义不变量或边界改变时才更新 RFC；实现结构、配置字段、事件名等改动只更新 architecture/reference 与测试，不动 RFC。
 - Python 源码和测试的注释与 docstring 不提具体 RFC 编号，直接说明局部不变量。
 
@@ -59,8 +59,10 @@ src/resource_content/ 实际资源定义正文的生命周期归档
 src/instances/  从世界事实发现认知实例及其确定历史版本
 src/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
-apps/docsite/   VitePress 2 文档站点与唯一 RFC 子模块
-apps/panel/     Vue 前端子模块与工具链
+apps/docsite/   VitePress 2 文档站，正文位于 src/
+apps/panel/     Vue 面板，页面位于 src/
+packages/       前端共享库（保留各包原有授权）
+tooling/        共享 TypeScript、构建与检查配置包
 apps/landing/   Vue + TypeScript 落地页，多语言文案与静态资源
 docs/           不进入文档站的仓库文档（贡献指南、行为准则等）
 scripts/        三平台安装脚本与 TypeScript .mts 工程脚本
@@ -118,7 +120,7 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 ## Current scope
 
 当前实现持久 Bot 主体与未来安排、规则和可训练 GRU 节律、规则和可训练 TGN 记忆、统一资源和领域操作、可发现版本化模组、
-LiteLLM Model、Console、MCP SDK 2.x、完整 start 生命周期、世界持久化与内容归档；`apps/panel/` 子模块仅保留前端。
+LiteLLM Model、Console、MCP SDK 2.x、完整 start 生命周期、世界持久化与内容归档；`apps/panel/` 仅包含前端应用。
 不实现自动摘要、自动在线参数训练、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
 引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
 受控离线训练证明模型使用历史且可优化，不等同于真实任务收益；记忆索引和图投影仍随保留历史增长。

@@ -1,18 +1,16 @@
 packages:
   - apps/*
-  - apps/panel/internal/*
-  - apps/panel/packages/*
-  - apps/panel/packages/@core/*
-  - apps/panel/packages/effects/*
-  - apps/panel/apps/*
-  - apps/panel/scripts/*
+  - packages/*
+  - packages/@core/*
+  - packages/effects/*
+  - tooling/*
 publicHoistPattern:
   - lefthook
   - eslint
   - oxlint
   - stylelint
-  - "*postcss*"
-  - "@commitlint/*"
+  - '*postcss*'
+  - '@commitlint/*'
   - czg
 strictPeerDependencies: false
 autoInstallPeers: true
@@ -20,54 +18,56 @@ dedupePeerDependents: true
 verifyDepsBeforeRun: false
 minimumReleaseAge: 0
 overrides:
-  "@ast-grep/napi": "catalog:"
-  "@ctrl/tinycolor": "catalog:"
-  clsx: "catalog:"
-  pinia: "catalog:"
-  vue: "catalog:"
-  "@vue/compiler-sfc": 3.5.40
-  "@vue/shared": "catalog:"
+  '@ast-grep/napi': 'catalog:'
+  '@ctrl/tinycolor': 'catalog:'
+  '@vue/compiler-sfc': 3.5.40
+  '@vue/shared': 'catalog:'
+  clsx: 'catalog:'
+  pinia: 'catalog:'
+  vite: 'catalog:'
+  vue: 'catalog:'
 catalog:
-  "@ast-grep/napi": ^0.44.1
-  "@changesets/cli": ^2.31.1
-  "@changesets/git": ^3.0.4
-  "@commitlint/cli": ^21.2.1
-  "@commitlint/config-conventional": ^21.2.0
-  "@ctrl/tinycolor": ^4.2.0
-  "@eslint-community/eslint-plugin-eslint-comments": ^4.7.2
-  "@eslint/js": ^10.0.1
-  "@iconify/tailwind4": ^1.2.3
-  "@iconify/vue": ^5.0.1
-  "@intlify/core-base": ^11.4.7
-  "@intlify/unplugin-vue-i18n": ^11.2.4
-  "@jspm/generator": ^2.16.3
-  "@lucide/vue": ^1.26.0
-  "@manypkg/get-packages": ^3.1.0
-  "@pnpm/workspace.read-manifest": ^1000.3.1
-  "@stylistic/stylelint-plugin": ^5.2.1
-  "@tailwindcss/typography": ^0.5.20
-  "@tailwindcss/vite": ^4.3.3
-  "@tanstack/store": ^0.11.0
-  "@tanstack/vue-form": ^1.33.2
-  "@tanstack/vue-store": ^0.11.0
-  "@tsdown/css": ^0.22.13
-  "@types/archiver": ^8.0.0
-  "@types/html-minifier-terser": ^7.0.2
-  "@types/json-bigint": ^1.0.4
-  "@types/lodash.clonedeep": ^4.5.9
-  "@types/node": ^25.9.5
-  "@types/nprogress": ^0.2.3
-  "@types/qrcode": ^1.5.6
-  "@types/qs": ^6.15.1
-  "@types/sortablejs": ^1.15.9
-  "@typescript-eslint/parser": ^8.65.0
-  "@vitejs/plugin-vue": ^6.0.8
-  "@vitejs/plugin-vue-jsx": ^5.1.6
-  "@vue/shared": 3.5.40
-  "@vue/test-utils": ^2.4.11
-  "@vueuse/core": ^14.3.0
-  "@vueuse/integrations": ^14.3.0
-  "@vueuse/motion": ^3.0.3
+  '@ast-grep/napi': ^0.44.1
+  '@changesets/cli': ^2.31.1
+  '@changesets/git': ^3.0.4
+  '@commitlint/cli': ^21.2.1
+  '@commitlint/config-conventional': ^21.2.0
+  '@ctrl/tinycolor': ^4.2.0
+  '@eslint-community/eslint-plugin-eslint-comments': ^4.7.2
+  '@eslint/js': ^10.0.1
+  '@iconify/tailwind4': ^1.2.3
+  '@iconify/vue': ^5.0.1
+  '@intlify/core-base': ^11.4.7
+  '@intlify/unplugin-vue-i18n': ^11.2.4
+  '@jspm/generator': ^2.16.3
+  '@lucide/vue': ^1.26.0
+  '@manypkg/get-packages': ^3.1.0
+  '@nolebase/vitepress-plugin-enhanced-readabilities': ^2.18.2
+  '@pnpm/workspace.read-manifest': ^1000.3.1
+  '@stylistic/stylelint-plugin': ^5.2.1
+  '@tailwindcss/typography': ^0.5.20
+  '@tailwindcss/vite': ^4.3.3
+  '@tanstack/store': ^0.11.0
+  '@tanstack/vue-form': ^1.33.2
+  '@tanstack/vue-store': ^0.11.0
+  '@tsdown/css': ^0.22.13
+  '@types/archiver': ^8.0.0
+  '@types/html-minifier-terser': ^7.0.2
+  '@types/json-bigint': ^1.0.4
+  '@types/lodash.clonedeep': ^4.5.9
+  '@types/node': ^25.9.5
+  '@types/nprogress': ^0.2.3
+  '@types/qrcode': ^1.5.6
+  '@types/qs': ^6.15.1
+  '@types/sortablejs': ^1.15.9
+  '@typescript-eslint/parser': ^8.65.0
+  '@vitejs/plugin-vue': ^6.0.8
+  '@vitejs/plugin-vue-jsx': ^5.1.6
+  '@vue/shared': 3.5.40
+  '@vue/test-utils': ^2.4.11
+  '@vueuse/core': ^14.3.0
+  '@vueuse/integrations': ^14.3.0
+  '@vueuse/motion': ^3.0.3
   archiver: ^8.0.0
   axios: ^1.18.1
   axios-mock-adapter: ^2.1.0
@@ -103,10 +103,12 @@ catalog:
   happy-dom: ^20.11.1
   html-minifier-terser: ^7.2.0
   is-ci: ^4.1.0
+  jiti: ^2.7.0
   json-bigint: ^1.0.0
   knip: ^6.29.0
   lefthook: ^2.1.10
   lodash.clonedeep: ^4.5.0
+  mermaid: ^11.14.0
   naive-ui: ^2.44.1
   nitropack: ^2.13.4
   nprogress: ^0.2.0
@@ -144,15 +146,19 @@ catalog:
   theme-colors: ^0.1.0
   tippy.js: ^6.3.7
   tsdown: ^0.22.13
+  tsx: ^4.21.0
   turbo: ^2.10.6
   tw-animate-css: ^1.4.0
   typescript: ^6.0.3
   unplugin-dts: ^1.0.3
   unplugin-vue: ^7.2.0
-  vite: ^8.1.5
+  vite: 8.3.4
   vite-plugin-compression: ^0.5.1
   vite-plugin-pwa: ^1.3.0
   vite-plugin-vue-devtools: ^8.1.5
+  vitepress: 2.0.0-alpha.20
+  vitepress-plugin-mermaid: ^2.0.17
+  vitepress-sidebar: ^1.38.0
   vitest: ^4.1.10
   vue: 3.5.40
   vue-eslint-parser: ^10.4.1
@@ -165,11 +171,9 @@ catalog:
   yaml-eslint-parser: ^2.1.0
   zod: ^4.4.3
   zod-defaults: ^0.2.3
-  vitepress: 2.0.0-alpha.20
-  tsx: ^4.21.0
 allowBuilds:
-  lefthook: false
-  "@parcel/watcher": true
+  '@parcel/watcher': true
   core-js: true
   esbuild: true
+  lefthook: false
   vue-demi: true

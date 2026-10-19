@@ -39,8 +39,8 @@ def run_process(command: Sequence[str], root: Path) -> int:
 
 
 def run_pnpm(script: str, passthrough: Sequence[str], directory: Path, label: str) -> int:
-    """在子模块目录中执行 pnpm 脚本并统一呈现结果。"""
+    """在应用目录中执行 pnpm 脚本并统一呈现结果。"""
     if not (directory / "package.json").is_file():
-        sys.stderr.write(f"{label} 子模块未初始化，请先运行 aurora setup。\n")
+        sys.stderr.write(f"未找到 {label} 应用清单，请检查项目目录并运行 aurora setup。\n")
         return EXIT_FAILURE
     return run_process(("pnpm", script, *passthrough), directory)

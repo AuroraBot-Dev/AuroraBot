@@ -30,7 +30,7 @@ def run(arguments: list[str] | None = None) -> int:
 
 FAILED_EXIT_CODE = 3
 EXPECTED_LINT_COMMANDS = 3
-SETUP_PYTHON_STEPS = 2
+SETUP_PYTHON_STEPS = 1
 
 
 def test_bare_cli_and_about_show_ascii_art_without_effects(capsys: pytest.CaptureFixture[str]) -> None:
@@ -515,7 +515,7 @@ def test_donk_version_update_reports_new_version(
     assert "版本已更新为：1.2.3" in capsys.readouterr().out
 
 
-def test_setup_bootstraps_dependencies_submodules_and_config(
+def test_setup_bootstraps_dependencies_and_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -537,7 +537,6 @@ def test_setup_bootstraps_dependencies_submodules_and_config(
     assert (tmp_path / ".env").read_text(encoding="utf-8") == "DEEPSEEK_API_KEY=\n"
     assert calls == [
         (("uv", "sync"), tmp_path),
-        (("git", "submodule", "update", "--init", "apps/docsite", "apps/panel"), tmp_path),
         (("pnpm", "install", "--frozen-lockfile"), tmp_path),
     ]
 
@@ -670,7 +669,6 @@ def test_setup_docs_flag_initializes_shared_workspace(
 
     assert setup.execute(arguments) == 0
     assert calls == [
-        (("git", "submodule", "update", "--init", "apps/docsite", "apps/panel"), tmp_path),
         (("pnpm", "install", "--frozen-lockfile"), tmp_path),
     ]
 
@@ -699,7 +697,6 @@ def test_setup_combines_selected_flags_in_order(
     assert not (tmp_path / "config").exists()
     assert calls == [
         (("uv", "sync"), tmp_path),
-        (("git", "submodule", "update", "--init", "apps/docsite", "apps/panel"), tmp_path),
         (("pnpm", "install", "--frozen-lockfile"), tmp_path),
     ]
 
@@ -796,7 +793,7 @@ def test_panel_command_passes_passthrough_without_separator(
     assert calls == [(("pnpm", "dev", "--port", "5173"), tmp_path / "apps" / "panel")]
 
 
-def test_submodule_command_reports_uninitialized_submodule(
+def test_app_command_reports_missing_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -804,10 +801,10 @@ def test_submodule_command_reports_uninitialized_submodule(
     arguments = build_parser().parse_args(["--root", str(tmp_path), docs.COMMAND["name"], "dev"])
 
     assert docs.execute(arguments) == EXIT_FAILURE
-    assert "docs 子模块未初始化" in capsys.readouterr().err
+    assert "未找到 docs 应用清单" in capsys.readouterr().err
 
 
-def test_submodule_command_reports_missing_process(
+def test_app_command_reports_missing_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -825,7 +822,7 @@ def test_submodule_command_reports_missing_process(
     assert "未找到" in capsys.readouterr().err
 
 
-def test_submodule_command_preserves_failure_code(
+def test_app_command_preserves_failure_code(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1,0 +1,125 @@
+<script setup lang="ts">
+import type { ZodType } from 'zod';
+
+import type { FormCommonConfig, FormRenderProps, FormShape } from '../types';
+import type { NormalizedFormFieldSchema } from './schema';
+
+import { computed, toRaw } from 'vue';
+
+import { cn, isString } from '@vben-core/shared/utils';
+
+import { provideFormRenderProps } from './context';
+import { useExpandable } from './expandable';
+import FormField from './form-field.vue';
+import { getBaseRules, getDefaultValueInZodStack } from './helper';
+import { createFormFieldSchema } from './schema';
+
+interface Props extends FormRenderProps {}
+
+const props = withDefaults(
+  defineProps<Props & { globalCommonConfig?: FormCommonConfig }>(),
+  {
+    collapsedRows: 1,
+    commonConfig: () => ({}),
+    globalCommonConfig: () => ({}),
+    showCollapseButton: false,
+    wrapperClass: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3',
+  },
+);
+
+const emits = defineEmits<{
+  submit: [event: any];
+}>();
+
+const wrapperClass = computed(() => {
+  const cls = ['flex'];
+  if (props.layout === 'inline') {
+    cls.push('flex-wrap gap-x-2');
+  } else {
+    cls.push(props.compact ? 'gap-x-2' : 'gap-x-4', 'flex-col grid');
+  }
+  return cn(...cls, props.wrapperClass);
+});
+
+provideFormRenderProps(props);
+
+// @ts-expect-error unused
+const { isCalculated, keepFormItemIndex, wrapperRef } = useExpandable(props);
+
+const shapes = computed(() => {
+  const resultShapes: FormShape[] = [];
+  props.schema?.forEach((schema) => {
+    const { fieldName } = schema;
+    const rules = toRaw(schema.rules) as ZodType;
+
+    const baseRules = getBaseRules(rules) as ZodType;
+
+    resultShapes.push({
+      default: getDefaultValueInZodStack(rules),
+      fieldName,
+      required: Boolean(rules && !isString(rules) && !rules.isOptional()),
+      rules: baseRules,
+    });
+  });
+  return resultShapes;
+});
+
+const formComponent = 'form';
+
+const formComponentProps = computed(() => {
+  return props.form
+    ? {
+        onSubmit: props.form.handleSubmit(() => emits('submit', undefined)),
+      }
+    : {
+        onSubmit: (event: Event) => {
+          event.preventDefault();
+          emits('submit', event);
+        },
+      };
+});
+
+const formCollapsed = computed(() => {
+  return props.collapsed && isCalculated.value;
+});
+
+const computedSchema = computed((): NormalizedFormFieldSchema[] => {
+  return (props.schema || []).map((schema, index) => {
+    const keepIndex = keepFormItemIndex.value;
+
+    const hidden =
+      // 折叠状态 & 显示折叠按钮 & 当前索引大于保留索引
+      props.showCollapseButton && !!formCollapsed.value && keepIndex
+        ? keepIndex <= index
+        : false;
+
+    return createFormFieldSchema(schema as never, {
+      commonConfig: props.commonConfig,
+      globalCommonConfig: props.globalCommonConfig,
+      hidden,
+    });
+  });
+});
+</script>
+
+<template>
+  <component :is="formComponent" v-bind="formComponentProps">
+    <div ref="wrapperRef" :class="wrapperClass">
+      <template v-for="cSchema in computedSchema" :key="cSchema.fieldName">
+        <!-- <div v-if="$slots[cSchema.fieldName]" :class="cSchema.formItemClass">
+          <slot :definition="cSchema" :name="cSchema.fieldName"> </slot>
+        </div> -->
+        <FormField
+          v-bind="cSchema"
+          :class="cSchema.formItemClass"
+          :rules="cSchema.rules"
+        >
+          <template #default="slotProps">
+            <slot v-bind="slotProps" :name="cSchema.fieldName"> </slot>
+          </template>
+        </FormField>
+      </template>
+      <slot :shapes="shapes"></slot>
+    </div>
+  </component>
+</template>

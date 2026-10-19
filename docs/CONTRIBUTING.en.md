@@ -29,7 +29,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the apps/docsite、apps/panel submodules.
+`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the application workspace.
 
 ### 2. Fill in the required configuration
 
@@ -47,7 +47,7 @@ Running tests and static checks does not require real model keys. Keys live only
 
 ## Before making changes
 
-AuroraBot records design decisions with long-term impact in RFCs. Update or add an RFC under `apps/docsite/rfc/` for changes to:
+AuroraBot records design decisions with long-term impact in RFCs. Update or add an RFC under `apps/docsite/src/rfc/` for changes to:
 
 - module responsibilities or dependency direction;
 - AgentTree, delegation, and tool receipt contracts;
@@ -56,7 +56,7 @@ AuroraBot records design decisions with long-term impact in RFCs. Update or add 
 
 Small bug fixes, test additions, copy improvements, and refactors that do not change public semantics can be submitted directly. When public documentation changes, update the Chinese, English, and Japanese entry points together.
 
-The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](../apps/docsite/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](../apps/docsite/architecture/).
+The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](../apps/docsite/src/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](../apps/docsite/src/architecture/).
 
 ## Keep the loop closed
 
@@ -78,7 +78,7 @@ AuroraBot welcomes AI-assisted development, but generated content is bound by th
 - **Must be understood and owned**: you must read every generated line, be able to explain its behavior, and take responsibility for its correctness and security;
 - **Must respect boundaries**: generated code keeps the existing dependency direction and contracts, introducing no parallel run model or bypass around the closed loop;
 - **No masking quality**: do not use lint ignores to hide generated complexity; as a rule, no single file exceeds 600 lines;
-- **No replacing the base**: base code such as `packages/@core` in the panel submodule is not accepted as wholesale AI replacement;
+- **No replacing the base**: base code such as `packages/@core` in the frontend workspace is not accepted as wholesale AI replacement;
 - **Chinese text is authoritative**: user-facing copy is authoritative in Simplified Chinese, with no "experimental, refactoring, legacy, migration" narratives and no invented capabilities, APIs, or sample data;
 - **Source and safety**: do not introduce code of unknown origin or incompatible licenses, and do not generate or commit keys, real sessions, or private data;
 - **Disclose honestly**: state in the Pull Request description which parts were generated or assisted by AI, so reviewers can focus.

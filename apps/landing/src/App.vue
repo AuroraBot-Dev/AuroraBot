@@ -1,21 +1,24 @@
 <script setup lang="ts">
-import { useLanding } from "./useLanding";
+import { useTemplateRef } from 'vue';
+
+import { useLanding } from './useLanding';
+
+const languagePicker = useTemplateRef<HTMLElement>('languagePicker');
+const languageButton = useTemplateRef<HTMLButtonElement>('languageButton');
+const languageMenu = useTemplateRef<HTMLElement>('languageMenu');
 
 const {
   t,
   locale,
   menuOpen,
   copied,
-  languagePicker,
-  languageButton,
-  languageMenu,
   toggleLanguageMenu,
   openLanguageMenu,
   navigateLanguageMenu,
   selectLocale,
   toggleTheme,
   copyInstall,
-} = useLanding();
+} = useLanding({ languagePicker, languageButton, languageMenu });
 </script>
 
 <template>
@@ -116,15 +119,31 @@ const {
       <section class="hero" aria-labelledby="hero-title">
         <div>
           <p class="kicker" v-text="t('hero.kicker')"></p>
-          <h1 id="hero-title"><span v-text="t('hero.title')"></span><em v-text="t('hero.titleAccent')"></em></h1>
+          <h1 id="hero-title">
+            <span v-text="t('hero.title')"></span
+            ><em v-text="t('hero.titleAccent')"></em>
+          </h1>
           <p class="hero-lede" v-text="t('hero.description')"></p>
           <ul class="hero-points" :aria-label="t('hero.featuresLabel')">
-            <li v-text="t('hero.featureEquality')" :data-marker="t('common.marker')"></li>
-            <li v-text="t('hero.featureCollaboration')" :data-marker="t('common.marker')"></li>
-            <li v-text="t('hero.featureRhythm')" :data-marker="t('common.marker')"></li>
+            <li
+              v-text="t('hero.featureEquality')"
+              :data-marker="t('common.marker')"
+            ></li>
+            <li
+              v-text="t('hero.featureCollaboration')"
+              :data-marker="t('common.marker')"
+            ></li>
+            <li
+              v-text="t('hero.featureRhythm')"
+              :data-marker="t('common.marker')"
+            ></li>
           </ul>
           <div class="actions">
-            <a class="button primary" href="#start" v-text="t('hero.startAction')"></a>
+            <a
+              class="button primary"
+              href="#start"
+              v-text="t('hero.startAction')"
+            ></a>
             <a
               class="button secondary"
               href="https://www.aurorabot.org/start/getting-started"
@@ -179,22 +198,34 @@ const {
         </div>
         <div class="pillars">
           <article class="pillar">
-            <span class="pillar-number" v-text="t('philosophy.lifeMeta')"></span>
+            <span
+              class="pillar-number"
+              v-text="t('philosophy.lifeMeta')"
+            ></span>
             <h3 v-text="t('philosophy.lifeTitle')"></h3>
             <p v-text="t('philosophy.lifeDescription')"></p>
           </article>
           <article class="pillar">
-            <span class="pillar-number" v-text="t('philosophy.equalityMeta')"></span>
+            <span
+              class="pillar-number"
+              v-text="t('philosophy.equalityMeta')"
+            ></span>
             <h3 v-text="t('philosophy.equalityTitle')"></h3>
             <p v-text="t('philosophy.equalityDescription')"></p>
           </article>
           <article class="pillar">
-            <span class="pillar-number" v-text="t('philosophy.controlMeta')"></span>
+            <span
+              class="pillar-number"
+              v-text="t('philosophy.controlMeta')"
+            ></span>
             <h3 v-text="t('philosophy.controlTitle')"></h3>
             <p v-text="t('philosophy.controlDescription')"></p>
           </article>
         </div>
-        <p class="capability-summary" v-text="t('philosophy.capabilitySummary')"></p>
+        <p
+          class="capability-summary"
+          v-text="t('philosophy.capabilitySummary')"
+        ></p>
       </section>
 
       <section class="section" id="ways" aria-labelledby="ways-title">
@@ -236,8 +267,13 @@ const {
           <div class="terminal">
             <div class="terminal-bar">
               <div style="display: flex; align-items: center">
-                <span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span v-text="t('start.terminal')" style="margin-left: 1em"></span>
+                <span class="terminal-dots" aria-hidden="true"
+                  ><i></i><i></i><i></i
+                ></span>
+                <span
+                  v-text="t('start.terminal')"
+                  style="margin-left: 1em"
+                ></span>
               </div>
               <button
                 class="copy-button"

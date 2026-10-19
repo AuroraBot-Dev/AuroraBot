@@ -4,18 +4,23 @@
     "pnpm-lock.yaml",
     "**/.env.*local",
     "**/tsconfig*.json",
-    "apps/panel/internal/node-utils/*.json",
-    "apps/panel/internal/node-utils/src/**/*.ts",
-    "apps/panel/internal/vite-config/*.json",
-    "apps/panel/internal/vite-config/src/**/*.ts",
-    "apps/panel/scripts/*/src/**/*.ts",
-    "apps/panel/scripts/*/src/**/*.json"
+    "tooling/node-utils/*.json",
+    "tooling/node-utils/src/**/*.ts",
+    "tooling/vite-config/*.json",
+    "tooling/vite-config/src/**/*.ts",
+    "tooling/*/src/**/*.ts",
+    "tooling/*/src/**/*.json"
   ],
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "dist.zip", ".vitepress/dist.zip", ".vitepress/dist/**"]
+      "outputs": [
+        "dist/**",
+        "dist.zip",
+        ".vitepress/dist.zip",
+        ".vitepress/dist/**"
+      ]
     },
     "preview": {
       "dependsOn": ["^build"],

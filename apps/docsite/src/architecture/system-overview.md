@@ -1,0 +1,56 @@
+---
+order: 1
+---
+
+# 系统总览
+
+AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动环境。Bot 拥有世界日志与森林；`AgentTree` 是她的一次认知运行。进程退出不会结束她已经接受的目标或取消尚未到期的活动。
+
+## 持续闭环
+
+外部观察先进入 `WorldJournal`。节律根据轻量观察和显式循环状态分配推理机会，时间服务兑现 Bot 已经登记的活动。认知运行读取主体检查点与记忆快照，组装上下文后请求 LLM；目标修订、工具行动与结果再成为世界事实。
+
+外围环境提供可发现的能力、明确的执行结果和恢复入口。Bot 可以建立或修订目标、暂缓或放弃目标、安排检查、展开证据，也可以结束当前认知并等待。节律策略只决定推理机会，记忆策略只分配可选经历的位置；二者不代替主体作出行动选择。
+
+## 同级能力包
+
+| 包 | 职责 |
+| --- | --- |
+| `src/contracts`、`src/utils` | 公共值对象、能力端口、贡献契约与无上层依赖的工具 |
+| `src/kernel` | 模组发现、版本兼容、依赖解析、阶段计划、装配与生命周期监督 |
+| `src/runtime` | 从冻结装配创建 Bot 门面，绑定认知入口并驱动前台 |
+| `src/bot` | 从世界提交投影主体目标、检查点和唤醒安排 |
+| `src/clock` | 独立兑现主体保存的未来安排 |
+| `src/world` | 追加式世界日志、全局游标、域序号与 SQLite migration |
+| `src/cadence`、`src/rhythm` | 世界与时间驱动的调度、可替换的规则或 GRU 策略及训练 |
+| `src/memory`、`src/memory_model` | 时间正确的经历读取、连续性与集合组装、规则或 TGN 排序及训练 |
+| `src/agents`、`src/prompt` | 不可变 Agent 定义、提示词目录与无 I/O 的四角色上下文装配 |
+| `src/engine`、`src/tools` | 单循环认知、工具目录、普通效果与委派 |
+| `src/ai`、`src/mcp` | LLM Provider 协议适配、MCP 连接与冻结工具目录 |
+| `src/resources`、`src/scopes` | 资源寻址、版本与别名解析、领域声明与范围校验 |
+| `src/operations` | 统一命令与查询路由、回执、幂等及不确定效果处理 |
+| `src/artifacts`、`src/resource_content` | 大对象内容存储、固定版本校验与实际定义正文归档 |
+| `src/instances` | 从世界事实发现运行实例与确定历史版本 |
+| `src/console` | 本地异步终端、输入先入世界、领域指令入口 |
+
+功能包在运行期只引用自身、`contracts` 和 `utils`；模块声明可以引用 `kernel`，`runtime` 依赖 `kernel`。兄弟包的类型引用可放在 `TYPE_CHECKING` 中，实际能力经契约注入。外部库由使用它的包封装，数据库、SDK 与计算张量不泄漏到主体和消息契约。边界由 `tests/test_dependency_boundaries.py` 校验。
+
+每个可装配包在 `module.py` 导出唯一 `MODULE`。替换能力时，公开操作、前台、认知唤起绑定和生命周期均使用实际选中的实例；失选默认实现不应读取自己的无关配置或产生连接效果。主体状态与时间服务分别装配，默认工具和时钟共享同一个 `BotStateStore`。
+
+## 组合与发现
+
+发现源包括安装内的 `src` 包、项目本地 `extensions/plugins/` 与 `aurorabot_plugin` entry point。本地插件支持单文件或带 `module.py` 的包；包内相对导入与重新发现使用独立模块空间。
+
+模组以 `namespace:kernel/module/path` 标识，声明发布版本与内核 API 兼容范围，并按契约类型表达 `provides/requires`、按贡献点表达 `contributes/consumes/declares`。同优先级能力冲突、缺失依赖、未声明贡献和依赖环在启动效果前失败。完整模组声明冻结为规范 JSON，并在生命周期中归档；声明摘要描述发布清单，不等同于代码或整个 Python 环境的快照。
+
+生命周期默认经过 `prepare → construct → activate → ready → run → drain → close`，也支持声明额外阶段与顺序约束。构造阶段结束后冻结 `Assembly`；门面创建并完成所有 `TreeLauncher` 接线之后，才启动运行阶段。准备资源有逆序清理，后台失败交给宿主，关闭等待已启动的清理完成。第三方代码模组与进程同权限运行，当前没有操作系统隔离。
+
+## 项目入口
+
+`aurora` 负责 CLI、`.env`、只读配置解析、进程日志和信号处理，再调用 `src.runtime` 的装配入口。`src` 不导入 `aurora`。命令和配置按目录约定发现，新增能力不需要修改中心分派表。
+
+`aurora start` 和 `--headless` 共用生命周期；无界面模式只排除交互式前台。Console 普通输入先提交世界；本地帮助、清屏和退出不作为外部观察。领域命令由同一个操作定义解析和校验。
+
+运行日志只记录状态、身份、数量和错误类型等元数据，不记录 Prompt、消息正文、工具参数或密钥。世界日志保存需要恢复的业务事实，制品存储保存按固定引用展开的大对象，三者职责独立。
+
+相关机制见[认知与恢复](./runtime-core)、[配置与存储](./configs)和[质量与验收](./acceptance)。

@@ -30,7 +30,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 apps/docsite、apps/panel 子模块引导。
+`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 应用工作区依赖安装。
 
 ### 2. 填写必要配置
 
@@ -48,7 +48,7 @@ aurora start
 
 ## 在改动之前
 
-AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `apps/docsite/rfc/` 中的 RFC：
+AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `apps/docsite/src/rfc/` 中的 RFC：
 
 - 模块职责或依赖方向；
 - AgentTree、委派与工具回执契约；
@@ -57,7 +57,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
 
 小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、英文和日文入口。
 
-当前运行时、包边界和进程组合以设计思想 [RFC 0300](../apps/docsite/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](../apps/docsite/architecture/)。
+当前运行时、包边界和进程组合以设计思想 [RFC 0300](../apps/docsite/src/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](../apps/docsite/src/architecture/)。
 
 ## 保持闭环完整
 
@@ -80,7 +80,7 @@ AuroraBot 欢迎使用 AI 辅助开发，但生成的内容同样受项目边界
 - **必须理解并负责**：提交者必须逐行理解生成代码，能解释其行为，并对其正确性与安全性负责；
 - **必须守边界**：生成代码保持既有依赖方向与契约，不引入平行运行模型或绕过闭环的旁路；
 - **不得掩盖质量**：不用 lint ignore 掩盖生成代码的复杂度；单文件原则上不允许超过 600 行；
-- **不得替换底座**：panel 等子模块的 `packages/@core` 等底座代码不接受 AI 整段替换；
+- **不得替换底座**：`packages/@core` 等底座代码不接受 AI 整段替换；
 - **文本以中文为准**：生成的面向用户文案以简体中文为权威版本，不写"实验、重构、旧版、迁移"等历史阶段叙事，不虚构能力、API 或示例数据；
 - **来源与安全**：不引入来源不明或许可证不兼容的代码，不生成并提交密钥、真实会话或私人数据；
 - **如实披露**：在 Pull Request 描述中说明哪些内容由 AI 生成或辅助，便于评审聚焦。
@@ -133,7 +133,6 @@ uv run pyright
 根目录的 `pyproject.toml` 与 `package.json` 分别管理 Python 与 Node.js 工程；前端只使用根目录的 `pnpm-workspace.yaml` 和 `pnpm-lock.yaml`。
 
 ```bash
-git submodule update --init --recursive
 pnpm install --frozen-lockfile
 pnpm dev:docs       # VitePress 文档站
 pnpm dev:panel      # Vue 面板
@@ -148,4 +147,15 @@ pnpm clean --deps  # 同时清理 Node.js 依赖
 
 新增 TypeScript 工程脚本放在 `scripts/*.mts`，通过 `pnpm exec tsx scripts/<name>.mts` 或根 `package.json` 的脚本运行。三平台安装脚本仍在各自平台目录。
 
-`aurora setup --docs`、`aurora setup --panel` 会初始化两个应用子模块，再在根目录统一安装依赖，因为 panel 的本地包也属于同一个工作区。
+`aurora setup --docs`、`aurora setup --panel` 都在根目录统一安装应用工作区依赖。
+
+## TypeScript 配置与应用结构
+
+三个应用都使用 `src/`、`public/` 和 `dist/`。面板页面位于 `apps/panel/src/`；共享组件和工具库位于根 `packages/`；构建、TypeScript 与检查配置包位于根 `tooling/`。文档站正文位于 `apps/docsite/src/`，VitePress 配置与主题位于 `.vitepress/`。
+
+- 根 `tsconfig.json` 检查工程脚本及公共工具配置。
+- 应用 `tsconfig.json` 检查浏览器源码或文档主题。
+- 应用 `tsconfig.node.json` 检查 Vite / VitePress 配置。
+- `tooling/tsconfig/` 提供公共基线、浏览器、Node.js 与库配置；`pnpm typecheck` 从根目录运行完整应用检查。
+
+应用目录由主仓直接管理，克隆仓库后运行 `pnpm install --frozen-lockfile` 即可。`pnpm lint` 和 `pnpm format` 使用根目录的检查与格式配置，`pnpm test` 只发现应用、共享库和工程工具中的测试。

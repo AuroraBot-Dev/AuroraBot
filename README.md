@@ -212,7 +212,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 apps/docsite、apps/panel 子模块引导。
+`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 应用工作区依赖安装。
 
 ### 2. 填写必要配置
 
@@ -256,15 +256,14 @@ AuroraBot 的诞生离不开许多优秀的开源项目：
 根目录同时提供 `pyproject.toml` 与 `package.json`：Python 使用 uv，Vue / TypeScript 使用 Node.js 24 与 pnpm 12。
 
 ```text
-apps/docsite/  VitePress 2 文档站（Git 子模块）
-apps/panel/    Vue 面板及其本地包（Git 子模块）
+apps/docsite/  VitePress 2 文档站
+apps/panel/    Vue 面板
 apps/landing/ Vue + TypeScript 落地页
 docs/         贡献指南、行为准则等仓库文档
 scripts/      安装脚本与 .mts 工程脚本
 ```
 
 ```bash
-git submodule update --init --recursive
 pnpm install --frozen-lockfile
 pnpm dev           # 落地页，http://localhost:5174
 pnpm dev:docs      # 文档站，http://localhost:5173
