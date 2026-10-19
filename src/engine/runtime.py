@@ -19,6 +19,7 @@ from src.contracts import (
 )
 from src.contracts.memory import MemoryRequest
 from src.contracts.model import ContextBudgetError, ToolContext
+from src.contracts.process import DEFAULT_TREE_PROCESS, TreeProcessDefinition
 from src.engine.effects import NullEffectSink
 from src.engine.world_effects import EngineWorldEffects, render_delta
 from src.utils import get_logger
@@ -51,25 +52,28 @@ class AgentTreeRunner:
         world: WorldJournal | None = None,
         memory: MemoryReader | None = None,
         bot_id: str = "aurora:bot/default",
-        max_depth: int = 4,
-        max_nodes: int = 32,
-        max_steps: int = 256,
+        process: TreeProcessDefinition = DEFAULT_TREE_PROCESS,
     ) -> None:
-        if min(max_depth, max_nodes, max_steps) <= 0:
-            raise ValueError("runner limits must be positive")
+        if process.strategy != "depth_first":
+            raise ValueError(f"当前引擎不支持认知策略：{process.strategy}")
+        self._process = process
         self._model = model
         self._assembler = assembler
         self._agents = agents
         self._tools = tools
         self._world = world
         self._effects: EngineEffectSink = (
-            EngineWorldEffects(world, tools=tools.definitions, bot_id=bot_id) if world is not None else NullEffectSink()
+            EngineWorldEffects(world, tools=tools.definitions, process=process, bot_id=bot_id)
+            if world is not None
+            else NullEffectSink()
         )
         self._memory = memory
         self._bot_id = bot_id
-        self._max_depth = max_depth
-        self._max_nodes = max_nodes
-        self._max_steps = max_steps
+
+    @property
+    def process_definition(self) -> TreeProcessDefinition:
+        """公开当前循环真正采用的策略和上界，不从配置文件另造描述。"""
+        return self._process
 
     @property
     def tool_definitions(self) -> tuple[ToolDefinition, ...]:
@@ -83,7 +87,7 @@ class AgentTreeRunner:
             await self._world.initialize()
         await self._effects.tree_started(tree)
         current = self._publish(tree, observer)
-        for _ in range(self._max_steps):
+        for _ in range(self._process.max_steps):
             if current.status != TreeStatus.RUNNING:
                 _logger.info(
                     "AgentTree 结束 tree_id={} status={} node_count={}",
@@ -107,10 +111,10 @@ class AgentTreeRunner:
         await self._effects.tree_failed(
             current,
             "step limit exceeded",
-            {"tree_id": current.tree_id, "max_steps": self._max_steps},
+            {"tree_id": current.tree_id, "max_steps": self._process.max_steps},
         )
-        _logger.error("AgentTree 超出步数限制 tree_id={} max_steps={}", current.tree_id, self._max_steps)
-        raise RuntimeError(f"AgentTree exceeded step limit {self._max_steps}")
+        _logger.error("AgentTree 超出步数限制 tree_id={} max_steps={}", current.tree_id, self._process.max_steps)
+        raise RuntimeError(f"AgentTree exceeded step limit {self._process.max_steps}")
 
     @staticmethod
     def _publish(tree: AgentTree, observer: Callable[[AgentTree], None] | None) -> AgentTree:
@@ -285,9 +289,9 @@ class AgentTreeRunner:
         parent = tree.node(node_id).definition
         if request.agent not in parent.children:
             return tree, ToolOutput(f"当前 Agent 不允许委派给：{request.agent}", status=ToolStatus.FAILED)
-        if len(tree.nodes) >= self._max_nodes:
+        if len(tree.nodes) >= self._process.max_nodes:
             return tree, ToolOutput("AgentTree 已达到节点数上限", status=ToolStatus.FAILED)
-        if tree.depth(node_id) >= self._max_depth:
+        if tree.depth(node_id) >= self._process.max_depth:
             return tree, ToolOutput("AgentTree 已达到深度上限", status=ToolStatus.FAILED)
         spawned = tree.spawn(node_id, call, self._agents.get(request.agent), request.instruction)
         _logger.info(

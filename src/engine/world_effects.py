@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 
 from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontier
 from src.contracts.memory_codec import exposure_data
-from src.contracts.resource_codec import resource_ref_data
+from src.contracts.resource import ResourceInstance
+from src.contracts.resource_codec import resource_instance_data, resource_ref_data
 from src.engine.events import (
     MODEL_COMPLETED,
     MODEL_FAILED,
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     )
     from src.contracts.memory import MemoryExposure
     from src.contracts.pkgs.world import WorldJournal
+    from src.contracts.process import TreeProcessDefinition
 
 _TOOL_EVENT_KINDS = {
     ToolStatus.SUCCEEDED: TOOL_SUCCEEDED,
@@ -62,11 +64,17 @@ class EngineWorldEffects:
     """只构造并追加 engine 的世界提交，不改变 AgentTree。"""
 
     def __init__(
-        self, world: WorldJournal, *, tools: tuple[ToolDefinition, ...], bot_id: str = "aurora:bot/default"
+        self,
+        world: WorldJournal,
+        *,
+        tools: tuple[ToolDefinition, ...],
+        process: TreeProcessDefinition,
+        bot_id: str = "aurora:bot/default",
     ) -> None:
         """绑定世界与实际选中的冻结工具接口，不在写入时重新推断版本。"""
         self._world = world
         self._bot_id = bot_id
+        self._process = process
         self._tool_refs = MappingProxyType({tool.name: tool.ref for tool in tools})
 
     def _tool_ref_data(self, tree: AgentTree, node_id: str, name: str | None) -> dict[str, str | None] | None:
@@ -98,6 +106,7 @@ class EngineWorldEffects:
 
     async def tree_started(self, tree: AgentTree) -> None:
         root = tree.node(tree.root_id)
+        instance = ResourceInstance(tree.tree_id, self._bot_id, self._process.ref)
         await self._append(
             commit_id=f"{tree.tree_id}:tree:started",
             kind=TREE_STARTED,
@@ -111,6 +120,8 @@ class EngineWorldEffects:
                 "root_id": tree.root_id,
                 "definition_id": root.definition_id,
                 "definition_ref": resource_ref_data(root.definition_ref),
+                "process_ref": resource_ref_data(self._process.ref),
+                "instance": resource_instance_data(instance),
                 "focus_goal_ids": list(root.focus_goal_ids),
                 "message": root.messages[0].content,
             },

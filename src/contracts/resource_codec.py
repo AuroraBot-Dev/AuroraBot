@@ -5,13 +5,22 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.contracts.resource import ResourceDescriptor, ResourceRef
+    from src.contracts.resource import ResourceDescriptor, ResourceInstance, ResourceRef
     from src.contracts.resource_query import ResourcePage
 
 
 def resource_ref_data(ref: ResourceRef) -> dict[str, str | None]:
     """保留完整资源身份与指定版本，不根据名称猜测当前绑定。"""
     return {"key": str(ref.key), "revision": ref.revision}
+
+
+def resource_instance_data(instance: ResourceInstance) -> dict[str, Any]:
+    """实例保留原始运行身份和所属 Bot，执行定义使用固定版本。"""
+    return {
+        "instance_id": instance.instance_id,
+        "bot_id": instance.bot_id,
+        "definition": resource_ref_data(instance.definition),
+    }
 
 
 def resource_data(descriptor: ResourceDescriptor) -> dict[str, Any]:

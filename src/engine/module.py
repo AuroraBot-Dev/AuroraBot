@@ -13,6 +13,8 @@ from src.contracts.pkgs.memory import MemoryReader
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.contracts.pkgs.tools import ToolRegistry
 from src.contracts.pkgs.world import WorldJournal
+from src.contracts.process import TREE_PROCESS_MEDIA_TYPE, TreeProcessDefinition
+from src.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.engine import AgentTreeRunner
 from src.engine.config import EngineConfig
@@ -43,12 +45,33 @@ def _validate_cross_references(
 @module(
     name="engine",
     provides=AgentTreeRunnerPort,
-    requires=(PromptAssembler, Model, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader, BotStateStore),
+    requires=(
+        AgentTreeRunnerPort,
+        PromptAssembler,
+        Model,
+        AgentCatalog,
+        ToolRegistry,
+        WorldJournal,
+        MemoryReader,
+        BotStateStore,
+    ),
+    contributes=RESOURCE_CONTENTS,
     scopes=ScopeDeclaration(
         TREE_SCOPE_PATTERN, ScopeKind.RUN, "一次 AgentTree 运行的因果台账；默认不自动召回，可按证据引用展开。"
     ),
 )
 def build(context: ModuleContext) -> AgentTreeRunnerPort:
+    """过程资源来自实际被选中的运行器，不读取失选运行器的配置。"""
+    runner = context.get_optional(AgentTreeRunnerPort)
+    if runner is None:
+        runner = _runner(context)
+    process = runner.process_definition
+    context.contribute(RESOURCE_CONTENTS, ResourceContent(process.ref, process.content, TREE_PROCESS_MEDIA_TYPE))
+    return runner
+
+
+def _runner(context: ModuleContext) -> AgentTreeRunnerPort:
+    """把配置编译为同一份过程定义，并交给实际认知循环使用。"""
     config = context.settings.resolve(EngineConfig)
     assembler = context.get(PromptAssembler)
     agents = context.get(AgentCatalog)
@@ -63,9 +86,7 @@ def build(context: ModuleContext) -> AgentTreeRunnerPort:
         world=context.get(WorldJournal),
         memory=context.get(MemoryReader),
         bot_id=context.get(BotStateStore).bot_id,
-        max_depth=config.max_depth,
-        max_nodes=config.max_nodes,
-        max_steps=config.max_steps,
+        process=TreeProcessDefinition(config.max_depth, config.max_nodes, config.max_steps),
     )
 
 

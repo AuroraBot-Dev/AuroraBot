@@ -101,6 +101,8 @@ LLM 端点使用 `namespace:ai/endpoint/path`，提供方使用 `namespace:ai/pr
 
 运行者在写入模型请求事实前调用 `Model.resolve_endpoint`，`ModelRequest.endpoint` 必须直接携带完整快照，`model` 从该快照读取。请求来源自动包含端点与提供方版本，世界事实通过 `endpoint_ref`、`provider_ref` 分别记录；网关拒绝同名但版本不同的请求。AI 模组将实际选中实现的端点和提供方正文贡献给统一归档，重启后可按世界引用读取历史配置。
 
+AgentTree 认知循环使用 `namespace:engine/process/path` 的 `TreeProcessDefinition`。策略、最大深度、最大节点数和最大迭代次数共同确定内容版本，循环与委派直接读取这份冻结定义；默认定义为 `aurora:engine/process/agent_tree`。引擎模组归档实际选中运行器的定义，`engine.tree.started.process_ref` 固定本次采用的版本，`instance` 保留原始树 ID、所属 Bot 与过程引用。修改配置或重启不会改写已有实例的执行依据。
+
 动态资源通过 `RESOURCE_PROVIDERS` 接入目录，不需要把全部版本登记到内核。每个提供者使用公共排序和游标，每次只返回一页；目录合并去重，静态声明优先，动态来源对同一版本的定义不一致时明确失败。提供者必须遵守页大小、筛选、顺序和续页规则，避免跨来源查询漏项。
 
 大对象通过 `ArtifactStore` 保存。逻辑名称采用同一套资源身份，版本是原始字节的 SHA256；同名新版本保留旧内容，相同字节可以跨名称复用。`artifacts.toml` 指定持久目录，需要与世界日志一起备份。宿主可流式保存内容或导入固定文件；查询只接受确定版本，不自动选择最新内容。

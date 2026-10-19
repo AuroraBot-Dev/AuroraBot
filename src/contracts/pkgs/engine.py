@@ -8,11 +8,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from src.contracts.agent import AgentTree
+    from src.contracts.process import TreeProcessDefinition
     from src.contracts.tool import ToolDefinition
 
 
 class AgentTreeRunner(Protocol):
     """按给定树执行一次认知运行的引擎端口。"""
+
+    @property
+    def process_definition(self) -> TreeProcessDefinition: ...
 
     @property
     def tool_definitions(self) -> tuple[ToolDefinition, ...]: ...

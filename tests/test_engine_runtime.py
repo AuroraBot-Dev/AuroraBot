@@ -29,6 +29,7 @@ from src.contracts import (
     WorldCommit,
     WorldFrontier,
 )
+from src.contracts.process import TreeProcessDefinition
 from src.engine import AgentTreeRunner
 from src.prompt import PromptAssembler
 from src.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
@@ -184,7 +185,7 @@ def test_terminal_result_on_the_final_allowed_iteration_is_returned(*, succeeds:
     root = _agent()
     model = FakeModel([ChatMessage.assistant("已完成")]) if succeeds else RejectingModel([])
     agents = AgentCatalog((root,))
-    runner = AgentTreeRunner(model, _assembler(), agents, ToolRegistry(), max_steps=1)
+    runner = AgentTreeRunner(model, _assembler(), agents, ToolRegistry(), process=TreeProcessDefinition(max_steps=1))
     result = asyncio.run(runner.run(AgentTree.create("tree", "root", root, "检查最后一步")))
     assert result.status is (TreeStatus.COMPLETED if succeeds else TreeStatus.FAILED)
     if succeeds:
@@ -199,7 +200,9 @@ def test_exhausted_budget_does_not_execute_the_next_pending_tool() -> None:
     root = _agent(tools=frozenset({tool.definition.name}))
     call = ToolCall("pending", tool.definition.name, {"value": "不要执行"})
     model = FakeModel([ChatMessage.assistant(tool_calls=(call,))])
-    runner = AgentTreeRunner(model, _assembler(), AgentCatalog((root,)), ToolRegistry((tool,)), max_steps=1)
+    runner = AgentTreeRunner(
+        model, _assembler(), AgentCatalog((root,)), ToolRegistry((tool,)), process=TreeProcessDefinition(max_steps=1)
+    )
     with pytest.raises(RuntimeError, match="step limit"):
         asyncio.run(runner.run(AgentTree.create("tree", "root", root, "检查边界")))
     assert not tool.values
@@ -397,9 +400,15 @@ def test_tool_exception_and_hidden_tool_are_returned_to_model() -> None:
 def test_runner_rejects_invalid_limits() -> None:
     model = FakeModel([ChatMessage.assistant("done")])
     root = _agent()
-    with pytest.raises(ValueError, match="limits"):
+    with pytest.raises(ValueError, match="运行上界"):
         agents = AgentCatalog((root,))
-        AgentTreeRunner(model, _assembler(), agents, ToolRegistry((DelegateTool(agents),)), max_steps=0)
+        AgentTreeRunner(
+            model,
+            _assembler(),
+            agents,
+            ToolRegistry((DelegateTool(agents),)),
+            process=TreeProcessDefinition(max_steps=0),
+        )
 
 
 def test_runner_rejects_node_facts_that_do_not_match_predefined_agent() -> None:
