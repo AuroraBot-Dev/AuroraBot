@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+import pytest
 from memory_support import episodes
 from rhythm_support import make_episode
 from test_assembly import FakeModel
@@ -34,8 +35,10 @@ from src.kernel import BuiltinSource, compose_managed, module
 from src.mcp.config import PlatformsConfig
 from src.memory import Memory
 from src.memory_model.config import MemoryModelConfig
+from src.memory_model.rules import RuleMemoryPolicy
 from src.memory_model.training import train as train_memory
 from src.rhythm.config import RhythmConfig
+from src.rhythm.rules import RuleRhythmPolicy
 from src.rhythm.training import train as train_rhythm
 from src.runtime import create_runtime
 from src.utils import thaw_json
@@ -58,25 +61,36 @@ _HIDDEN_SIZE = 4
 _PLANNING_STEPS = 3
 
 
-def _config(project: Path) -> tuple[AuroraConfig, ResourceRef, ResourceRef]:
+def _config(
+    project: Path, *, learned_rhythm: bool, learned_memory: bool
+) -> tuple[AuroraConfig, ResourceRef, ResourceRef]:
     """小样本只验证真实训练权重的协作链路，不据此主张任务收益。"""
-    rhythm = train_rhythm(
-        (make_episode("train", True, _START),),
-        (make_episode("validation", True, _START + timedelta(days=1)),),
-        hidden_size=_HIDDEN_SIZE,
-        epochs=8,
-    ).save(project / "rhythm.pt")
-    memory = train_memory(episodes("train"), episodes("validation", days=1), hidden_size=4, epochs=2).save(
-        project / "memory.pt"
-    )
+    rhythm = RuleRhythmPolicy(evoke_every=1).ref
+    memory = RuleMemoryPolicy().ref
+    if learned_rhythm:
+        rhythm = train_rhythm(
+            (make_episode("train", True, _START),),
+            (make_episode("validation", True, _START + timedelta(days=1)),),
+            hidden_size=_HIDDEN_SIZE,
+            epochs=8,
+        ).save(project / "rhythm.pt")
+    if learned_memory:
+        memory = train_memory(episodes("train"), episodes("validation", days=1), hidden_size=4, epochs=2).save(
+            project / "memory.pt"
+        )
     config = load_config(project)
     config = config.with_value(CADENCE_CONFIG, replace(config.get(CADENCE_CONFIG), enabled=False))
     config = config.with_value(
         PLATFORMS_CONFIG,
         PlatformsConfig(tuple(replace(item, enabled=False) for item in config.get(PLATFORMS_CONFIG).platforms)),
     )
-    config = config.with_value(RHYTHM_CONFIG, RhythmConfig(str(rhythm.key), "rhythm.pt", probability_threshold=0.1))
-    config = config.with_value(MEMORY_MODEL_CONFIG, MemoryModelConfig(str(memory.key), "memory.pt"))
+    config = config.with_value(
+        RHYTHM_CONFIG,
+        RhythmConfig(str(rhythm.key), "rhythm.pt" if learned_rhythm else None, probability_threshold=0.1),
+    )
+    config = config.with_value(
+        MEMORY_MODEL_CONFIG, MemoryModelConfig(str(memory.key), "memory.pt" if learned_memory else None)
+    )
     return config, rhythm, memory
 
 
@@ -90,7 +104,7 @@ async def _compose(config: AuroraConfig, model: FakeModel, at: datetime) -> tupl
         priority=10,
     )
     def cadence(context: ModuleContext) -> CadencePort:
-        """默认节律实现依赖真实 GRU，手动兑现检查以消除后台时序竞争。"""
+        """默认节律使用实际所选策略，手动兑现检查以消除后台时序竞争。"""
         return Cadence(
             context.get(WorldReader),
             context.get(WorldWriter),
@@ -106,7 +120,7 @@ async def _compose(config: AuroraConfig, model: FakeModel, at: datetime) -> tupl
         priority=10,
     )
     def memory(context: ModuleContext) -> MemoryReader:
-        """默认记忆实现使用真实 TGN，与世界共用同一观察时间。"""
+        """默认记忆使用实际所选排序器，与世界共用同一观察时间。"""
         return Memory(
             context.get(WorldReader),
             policy=context.get(MemoryPolicy),
@@ -156,14 +170,16 @@ async def _first_life(config: AuroraConfig, rhythm: ResourceRef, memory: Resourc
         facts = (await runtime.world.stream(0, 256)).commits
         planned = next(item for item in facts if item.kind == "cadence.tree_planned")
         assert planned.data["policy"] == {"key": str(rhythm.key), "revision": rhythm.revision}
-        assert len(planned.data["state"]["hidden"]) == _HIDDEN_SIZE
+        expected_size = _HIDDEN_SIZE if config.get(RHYTHM_CONFIG).weights is not None else 0
+        assert len(planned.data["state"]["hidden"]) == expected_size
         requests = tuple(item for item in facts if item.kind == "engine.model.requested")
         assert len(requests) == _PLANNING_STEPS
         assert all(
             item.data["memory"]["recall"]["policy"] == {"key": str(memory.key), "revision": memory.revision}
             for item in requests
         )
-        assert await handle.assembly.get(MemoryCheckpoints).save() is not None
+        checkpoint = await handle.assembly.get(MemoryCheckpoints).save()
+        assert (checkpoint is not None) == (config.get(MEMORY_MODEL_CONFIG).weights is not None)
         return handle.assembly.get(CadencePort).status()
     finally:
         await handle.close()
@@ -171,16 +187,21 @@ async def _first_life(config: AuroraConfig, rhythm: ResourceRef, memory: Resourc
 
 def _archived(config: AuroraConfig, rhythm: ResourceRef, memory: ResourceRef) -> AuroraConfig:
     """移除路径依赖，第二次启动只能按确切资源版本读取归档字节。"""
-    (config.project_root / "rhythm.pt").unlink()
-    (config.project_root / "memory.pt").unlink()
-    config = config.with_value(
-        RHYTHM_CONFIG,
-        replace(config.get(RHYTHM_CONFIG), weights=None, weights_ref=f"{rhythm.key}@{rhythm.revision}"),
-    )
-    return config.with_value(
-        MEMORY_MODEL_CONFIG,
-        replace(config.get(MEMORY_MODEL_CONFIG), weights=None, weights_ref=f"{memory.key}@{memory.revision}"),
-    )
+    rhythm_config = config.get(RHYTHM_CONFIG)
+    if rhythm_config.weights is not None:
+        (config.project_root / rhythm_config.weights).unlink()
+        config = config.with_value(
+            RHYTHM_CONFIG,
+            replace(rhythm_config, weights=None, weights_ref=f"{rhythm.key}@{rhythm.revision}"),
+        )
+    memory_config = config.get(MEMORY_MODEL_CONFIG)
+    if memory_config.weights is not None:
+        (config.project_root / memory_config.weights).unlink()
+        config = config.with_value(
+            MEMORY_MODEL_CONFIG,
+            replace(memory_config, weights=None, weights_ref=f"{memory.key}@{memory.revision}"),
+        )
+    return config
 
 
 async def _second_life(
@@ -193,7 +214,8 @@ async def _second_life(
         assert handle.assembly.get(RhythmPolicy).ref == rhythm
         assert handle.assembly.get(MemoryPolicy).ref == memory
         assert handle.assembly.get(CadencePort).status() == before
-        assert await handle.assembly.get(MemoryCheckpoints).initialize()
+        restored = await handle.assembly.get(MemoryCheckpoints).initialize()
+        assert restored == (config.get(MEMORY_MODEL_CONFIG).weights_ref is not None)
         await handle.assembly.get(BotClock).evaluate_once()
         assert len(model.requests) == 1
         system = model.requests[0].messages[0].content
@@ -235,13 +257,21 @@ async def _continue_rhythm(runtime: AuroraRuntime, model: FakeModel) -> None:
     policy = runtime.assembly.get(RhythmPolicy)
     expected = policy.evaluate(observation, tuple(first.data["state"]["hidden"]))
     assert tuple(resumed.data["state"]["hidden"]) == expected.hidden
-    assert expected.hidden != policy.evaluate(observation).hidden
+    if first.data["state"]["hidden"]:
+        assert expected.hidden != policy.evaluate(observation).hidden
     assert len(model.requests) == len(plans)
 
 
-def test_trained_rhythm_and_memory_preserve_self_scheduled_activity_after_restart(configured_project: Path) -> None:
-    """真实 GRU、TGN 与持久主体在同一闭环里跨过一次无新输入的重启。"""
-    config, rhythm, memory = _config(configured_project)
+@pytest.mark.parametrize(
+    ("learned_rhythm", "learned_memory"),
+    [(False, False), (True, False), (False, True), (True, True)],
+    ids=["rules-rules", "gru-rules", "rules-tgn", "gru-tgn"],
+)
+def test_trained_rhythm_and_memory_preserve_self_scheduled_activity_after_restart(
+    configured_project: Path, learned_rhythm: bool, learned_memory: bool
+) -> None:
+    """规则与实际 GRU/TGN 的四种组合均能跨过一次无新输入的主体重启。"""
+    config, rhythm, memory = _config(configured_project, learned_rhythm=learned_rhythm, learned_memory=learned_memory)
 
     async def scenario() -> None:
         """先由环境唤起，再通过独立新装配兑现主体自己的等待。"""
