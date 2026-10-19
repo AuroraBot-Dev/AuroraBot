@@ -11,13 +11,16 @@ from test_assembly import FakeModel
 from test_kernel import _Settings
 
 from aurora import load_config
+from src.artifacts.module import MODULE as ARTIFACTS_MODULE
+from src.artifacts.store import FileArtifactStore
 from src.contracts import AgentDefinition, AgentTree, ChatMessage, ModelRequest
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
+from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.contracts.pkgs.resources import ResourceCatalog
 from src.contracts.prompt import PROMPT_FRAGMENT_CONTRACT, PromptAssembly, PromptFragment
 from src.contracts.resource import ResourceKey, ResourceRef
-from src.kernel import compose, module
+from src.kernel import compose_managed, module
 from src.prompt import PromptAssembler as ConcreteAssembler
 from src.prompt import PromptCatalog
 from src.prompt.module import MODULE as PROMPT_MODULE
@@ -86,7 +89,7 @@ def test_project_resource_catalog_matches_the_actual_prompt_fragments(configured
     assert "源文件现在已经改变。" not in assembler.catalog.agent_prompts["aurora:prompt/agent/root"]
 
 
-def test_resource_contribution_follows_the_selected_prompt_assembler() -> None:
+def test_resource_contribution_follows_the_selected_prompt_assembler(tmp_path: Path) -> None:
     """替换装配器时使用获胜者的实际片段，不再读取失选实现的配置文件。"""
     fragments = (
         PromptFragment(ResourceKey.parse("lab:prompt/system/identity"), "自定义身份"),
@@ -99,11 +102,27 @@ def test_resource_contribution_follows_the_selected_prompt_assembler() -> None:
         """实际能力覆盖默认装配器，测试配置没有任何提示词文件。"""
         return selected
 
-    assembly = compose(_Settings(), (PROMPT_MODULE, RESOURCES_MODULE, build))
-    assert assembly.get(PromptAssembler) is selected
-    assert {descriptor.ref for descriptor in assembly.get(ResourceCatalog).find(domain="prompt")} == {
-        fragment.ref for fragment in fragments
-    }
+    async def scenario() -> None:
+        """资源声明与正文存储都跟随选中实例，默认配置文件不参与读取。"""
+        store = FileArtifactStore(tmp_path / "content")
+        lifecycle = await compose_managed(
+            _Settings(),
+            (PROMPT_MODULE, RESOURCES_MODULE, ARTIFACTS_MODULE, build),
+            instances=((ArtifactStore, store),),
+        )
+        try:
+            assembly = lifecycle.assembly
+            assert assembly.get(PromptAssembler) is selected
+            assert {descriptor.ref for descriptor in assembly.get(ResourceCatalog).find(domain="prompt")} == {
+                fragment.ref for fragment in fragments
+            }
+            await lifecycle.activate(asyncio.Event())
+            for fragment in fragments:
+                assert (await store.read(fragment.ref)).content == fragment.content.encode("utf-8")
+        finally:
+            await lifecycle.close()
+
+    asyncio.run(scenario())
 
 
 def test_assembly_records_only_the_selected_fragments_in_their_actual_order() -> None:

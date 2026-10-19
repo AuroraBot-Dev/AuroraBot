@@ -16,7 +16,9 @@ from aurora.configs.memory_model import MEMORY_MODEL_CONFIG
 from aurora.configs.platforms import PLATFORMS_CONFIG
 from src.contracts import WorldFrontier
 from src.contracts.memory import MemoryRequest
+from src.contracts.pkgs.artifacts import ArtifactStore
 from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
+from src.contracts.resource_query import ResourceQuery
 from src.mcp.config import PlatformsConfig
 from src.memory_model.config import MemoryModelConfig
 from src.memory_model.tgn import TemporalMemoryNetwork
@@ -157,7 +159,7 @@ def test_rule_policy_lifecycle_does_not_create_model_state_resources(configured_
         finally:
             stop.set()
             await lifecycle.close()
-        assert not (configured_project / "data/artifacts").exists()
+        assert not (await runtime.assembly.get(ArtifactStore).find(ResourceQuery(domain="memory"))).items
 
     asyncio.run(scenario())
 
