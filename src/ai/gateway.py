@@ -199,7 +199,8 @@ class LiteLLMModelGateway:
 
 
 def _gateway_model(endpoint: ModelBinding, provider: ProviderDefinition) -> str:
-    prefix = "openai" if provider.adapter == "openai_compatible" else endpoint.provider
+    """将冻结提供方的资源名称映射到 LiteLLM 前缀，远端模型名保持原样。"""
+    prefix = "openai" if provider.adapter == "openai_compatible" else provider.key.path
     return f"{prefix}/{endpoint.model}"
 
 

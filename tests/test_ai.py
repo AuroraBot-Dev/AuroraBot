@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 import pytest
+from litellm import get_llm_provider
 
 from src.ai import (
     LiteLLMModelGateway,
@@ -21,6 +22,40 @@ PROVIDER_TOOL_NAME_MAX_LENGTH = 64
 MODEL_ATTEMPT_TIMEOUT_SECONDS = 0.1
 MODEL_MAX_ATTEMPTS = 2
 MODEL_OUTPUT_BUDGET = 51200
+
+
+@pytest.mark.parametrize(
+    ("provider", "remote_model"),
+    [("deepseek", "deepseek-v4-pro"), ("openai", "gpt-4o"), ("xiaomi_mimo", "mimo-v2.5-pro")],
+)
+def test_native_provider_resource_is_translated_into_an_sdk_recognized_route(
+    monkeypatch: pytest.MonkeyPatch, provider: str, remote_model: str
+) -> None:
+    """经过真实请求转换和 SDK 路由解析，资源对象不能泄漏到 model 字符串中。"""
+    calls: list[dict[str, Any]] = []
+
+    async def call(parameters: dict[str, Any]) -> dict[str, Any]:
+        """只替换网络调用，使用已安装 SDK 的真实提供方解析器。"""
+        parsed_model, parsed_provider, _, _ = get_llm_provider(parameters["model"], api_key="test-key")
+        assert parsed_provider == provider
+        assert parsed_model == remote_model
+        calls.append(parameters)
+        return {"choices": [{"message": {"role": "assistant", "content": "你好"}}]}
+
+    monkeypatch.setenv("TEST_MODEL_KEY", "test-key")
+    provider_id = f"lab.team:ai/provider/{provider}"
+    endpoint_id = "lab.team:ai/endpoint/quality"
+    gateway = LiteLLMModelGateway(
+        {provider_id: ProviderEndpoint("litellm", None, "TEST_MODEL_KEY")},
+        {endpoint_id: ModelEndpoint(provider_id, remote_model)},
+        caller=call,
+    )
+    endpoint = gateway.resolve_endpoint(endpoint_id)
+    result = asyncio.run(
+        gateway.complete(ModelRequest(endpoint, (ChatMessage.system("系统"), ChatMessage.message("你好"))))
+    )
+    assert result.content == "你好"
+    assert calls[0]["model"] == f"{provider}/{remote_model}"
 
 
 def test_openai_adapter_maps_only_message_role_to_user() -> None:
