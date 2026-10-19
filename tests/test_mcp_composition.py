@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from model_support import FakeModelDirectory
 
 from aurora.configs import load_config
 from aurora.configs.apps import APPS_CONFIG
@@ -48,11 +49,8 @@ _TOOL_ID = f"{_PACKAGE}:tool/definition/ping"
 
 
 @dataclass(slots=True)
-class FakeModel:
+class FakeModel(FakeModelDirectory):
     requests: list[ModelRequest] = field(default_factory=list)
-
-    def validate_endpoint(self, endpoint_id: str) -> None:
-        del endpoint_id
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)

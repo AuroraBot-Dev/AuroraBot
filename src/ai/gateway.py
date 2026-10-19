@@ -91,11 +91,7 @@ class LiteLLMModelGateway:
         """公开真正用于执行的端点快照，不从配置另造描述。"""
         return tuple(self._endpoints[name] for name in sorted(self._endpoints))
 
-    def validate_endpoint(self, endpoint_id: str) -> None:
-        """校验所选端点能够由当前网关执行。"""
-        self._binding_for(endpoint_id)
-
-    def _binding_for(self, endpoint_id: str) -> ModelBinding:
+    def resolve_endpoint(self, endpoint_id: str) -> ModelBinding:
         """验证端点后返回同一份冻结执行配置。"""
         endpoint = self._endpoints.get(endpoint_id)
         if endpoint is None:
@@ -108,7 +104,9 @@ class LiteLLMModelGateway:
         return endpoint
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
-        endpoint = self._binding_for(request.model)
+        endpoint = self.resolve_endpoint(request.model)
+        if endpoint.ref != request.endpoint.ref:
+            raise ValueError("模型请求端点版本与当前网关不一致")
         provider = endpoint.provider
         api_key = os.getenv(provider.secret_env)
         if not api_key:

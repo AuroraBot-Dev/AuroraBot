@@ -7,6 +7,7 @@ import hashlib
 from typing import TYPE_CHECKING
 
 import pytest
+from model_support import fake_endpoint
 from test_assembly import FakeModel
 from test_kernel import _Settings
 
@@ -150,7 +151,7 @@ def test_model_and_assembly_reject_unresolved_or_duplicate_resources(fixed: bool
     with pytest.raises(ValueError, match="输入资源"):
         PromptAssembly((message,), resources=refs)
     with pytest.raises(ValueError, match="输入资源"):
-        ModelRequest("test:ai/endpoint/model", (message,), resources=refs)
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), (message,), resources=refs)
 
 
 def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(configured_project: Path) -> None:
@@ -171,6 +172,8 @@ def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(co
             assert request.resources == (
                 tree.node(tree.root_id).definition_ref,
                 *(fragment.ref for fragment in selected),
+                request.endpoint.ref,
+                request.endpoint.provider.ref,
                 *(tool.ref for tool in request.tools),
             )
             assert "这份新正文尚未用于当前运行。" not in request.messages[0].content

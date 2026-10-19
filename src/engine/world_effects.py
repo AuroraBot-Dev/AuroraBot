@@ -139,7 +139,9 @@ class EngineWorldEffects:
             data={
                 "tree_id": tree.tree_id,
                 "node_id": node.node_id,
-                "model": node.model,
+                "model": request.model,
+                "endpoint_ref": resource_ref_data(request.endpoint.ref),
+                "provider_ref": resource_ref_data(request.endpoint.provider.ref),
                 "definition_ref": resource_ref_data(node.definition_ref),
                 "bot_id": self._bot_id,
                 "message_count": len(request.messages),

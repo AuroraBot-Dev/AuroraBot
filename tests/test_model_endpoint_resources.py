@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
+from model_support import fake_endpoint
 
 from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
 from src.ai.config import EndpointConfig, ProviderConfig
@@ -21,7 +22,7 @@ from src.contracts.resource import ResourceKey
 def test_model_request_rejects_incomplete_or_wrong_kind_endpoint(name: str) -> None:
     """每次推理必须明确选择端点，其他资源不能被当作模型名字。"""
     with pytest.raises(ValueError, match="模型资源身份"):
-        ModelRequest(name, (ChatMessage.system("主体身份"),))
+        ModelRequest(fake_endpoint(name), (ChatMessage.system("主体身份"),))
 
 
 def test_configuration_uses_separate_endpoint_and_provider_kinds() -> None:
@@ -91,7 +92,9 @@ def test_gateway_uses_the_same_frozen_binding_for_route_and_request_options(monk
     providers[provider_name] = ProviderEndpoint("openai_compatible", "https://another.invalid", "OTHER_KEY")
     endpoints[endpoint_name] = ModelEndpoint(provider_name, "another-model")
     monkeypatch.setenv("SERVICE_KEY", "private-live-value")
-    response = asyncio.run(gateway.complete(ModelRequest(endpoint_name, (ChatMessage.system("主体身份"),))))
+    response = asyncio.run(
+        gateway.complete(ModelRequest(gateway.resolve_endpoint(endpoint_name), (ChatMessage.system("主体身份"),)))
+    )
     assert response.content == "核对完成"
     assert gateway.endpoints[0] is binding
     assert captured[0]["api_base"] == binding.provider.base_url
@@ -100,3 +103,14 @@ def test_gateway_uses_the_same_frozen_binding_for_route_and_request_options(monk
     assert captured[0]["max_tokens"] == binding.max_tokens
     assert captured[0]["api_key"] == "private-live-value"
     assert b"private-live-value" not in binding.content + binding.provider.content
+
+
+def test_gateway_rejects_a_same_name_request_with_another_binding_version() -> None:
+    """同名路由改变后必须显式重建请求，不能在网关内悄悄换成新配置。"""
+    provider_name, endpoint_name = "lab:ai/provider/service", "lab:ai/endpoint/main"
+    providers = {provider_name: ProviderEndpoint("litellm", None, "SERVICE_KEY")}
+    original = LiteLLMModelGateway(providers, {endpoint_name: ModelEndpoint(provider_name, "original-model")})
+    revised = LiteLLMModelGateway(providers, {endpoint_name: ModelEndpoint(provider_name, "another-model")})
+    request = ModelRequest(original.resolve_endpoint(endpoint_name), (ChatMessage.system("主体身份"),))
+    with pytest.raises(ValueError, match="端点版本与当前网关不一致"):
+        asyncio.run(revised.complete(request))

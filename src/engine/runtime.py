@@ -145,7 +145,7 @@ class AgentTreeRunner:
             tools = self._tools.definitions_for(node.tools)
             assembled = self._assembler.assemble(tree, node.node_id, memory=memory, tools=tools)
             request = ModelRequest(
-                node.model,
+                self._model.resolve_endpoint(node.model),
                 assembled.messages,
                 tools,
                 resources=tuple(dict.fromkeys((node.definition_ref, *assembled.resources))),

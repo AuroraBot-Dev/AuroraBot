@@ -5,8 +5,10 @@ import shutil
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from model_support import FakeModelDirectory
 
 from aurora import AuroraConfig, load_config
 from aurora.configs.agents import AGENTS_CONFIG
@@ -38,6 +40,9 @@ from src.contracts.pkgs.memory import MemoryReader
 from src.contracts.pkgs.prompt import PromptAssembler
 from src.runtime import assemble_runtime
 
+if TYPE_CHECKING:
+    from src.contracts.model_binding import ModelBinding
+
 EXPECTED_MAX_DEPTH = 4
 EXPECTED_WINDOW_MINUTES = 60
 EXPECTED_COMMITS_PER_SCOPE = 50
@@ -49,12 +54,19 @@ _TEMPLATE_ENDPOINTS = frozenset(
 
 
 @dataclass(slots=True)
-class FakeModel:
+class FakeModel(FakeModelDirectory):
     requests: list[ModelRequest] = field(default_factory=list)
 
-    def validate_endpoint(self, endpoint_id: str) -> None:
+    @property
+    def endpoints(self) -> tuple[ModelBinding, ...]:
+        """正式组合测试只声明模板中配置的模型端点。"""
+        return tuple(FakeModelDirectory.resolve_endpoint(self, name) for name in sorted(_TEMPLATE_ENDPOINTS))
+
+    def resolve_endpoint(self, endpoint_id: str) -> ModelBinding:
+        """保持未知端点检查，返回实际用于请求的冻结配置。"""
         if endpoint_id not in _TEMPLATE_ENDPOINTS:
             raise ValueError(f"未知 model endpoint：{endpoint_id}")
+        return FakeModelDirectory.resolve_endpoint(self, endpoint_id)
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)

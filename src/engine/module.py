@@ -32,7 +32,7 @@ def _validate_cross_references(
     for definition in agents.definitions:
         if definition.prompt_id not in prompts:
             raise ValueError(f"{definition.definition_id} 引用了未知 Agent prompt：{definition.prompt_id}")
-        model.validate_endpoint(definition.model)
+        model.resolve_endpoint(definition.model)
         missing = definition.tools - tool_names
         if missing:
             raise ValueError(f"{definition.definition_id} 引用了不可用工具：{', '.join(sorted(missing))}")

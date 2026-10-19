@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from src.contracts.data import freeze_object
 from src.contracts.evidence import freeze_evidence_refs
-from src.contracts.model_binding import ai_resource_key
+from src.contracts.model_binding import ModelBinding
 from src.contracts.resource import fixed_resource_refs
 
 if TYPE_CHECKING:
@@ -109,16 +109,15 @@ class ChatMessage:
 class ModelRequest:
     """一次完整的四角色模型请求。"""
 
-    model: str
+    endpoint: ModelBinding
     messages: tuple[ChatMessage, ...]
     tools: tuple[ToolDefinition, ...] = ()
     resources: tuple[ResourceRef, ...] = ()
 
     def __post_init__(self) -> None:
-        """工具版本直接来自实际输入的冻结接口，显式来源仍须先通过完整性检查。"""
-        if not self.model:
-            raise ValueError("ModelRequest requires model")
-        ai_resource_key(self.model, "endpoint")
+        """端点与工具版本取自实际快照，显式来源仍须先通过完整性检查。"""
+        if not isinstance(self.endpoint, ModelBinding):
+            raise TypeError("模型请求必须持有完整端点快照")
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", tuple(self.tools))
         object.__setattr__(self, "resources", fixed_resource_refs(self.resources))
@@ -130,5 +129,16 @@ class ModelRequest:
         if len(names) != len(set(names)):
             raise ValueError("ModelRequest Tool names must be unique")
         object.__setattr__(
-            self, "resources", tuple(dict.fromkeys((*self.resources, *(tool.ref for tool in self.tools))))
+            self,
+            "resources",
+            tuple(
+                dict.fromkeys(
+                    (*self.resources, self.endpoint.ref, self.endpoint.provider.ref, *(tool.ref for tool in self.tools))
+                )
+            ),
         )
+
+    @property
+    def model(self) -> str:
+        """模型身份来自请求实际携带的端点快照，不另存可能不一致的名字。"""
+        return str(self.endpoint.key)

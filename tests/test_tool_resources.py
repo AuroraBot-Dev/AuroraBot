@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 
 import pytest
+from model_support import fake_endpoint
 
 from src.contracts import ChatMessage, ModelRequest, ToolDefinition
 from src.contracts.resource import ResourceKey
@@ -59,7 +60,10 @@ def test_model_input_records_only_its_actual_tool_definitions_once() -> None:
     selected = ToolDefinition("lab:tool/definition/read", "读取记录", {"type": "object"})
     other = ToolDefinition("lab:tool/definition/write", "写入记录", {"type": "object"})
     request = ModelRequest(
-        "test:ai/endpoint/model", (ChatMessage.system("主体身份"),), (selected,), resources=(selected.ref,)
+        fake_endpoint("test:ai/endpoint/model"),
+        (ChatMessage.system("主体身份"),),
+        (selected,),
+        resources=(selected.ref,),
     )
-    assert request.resources == (selected.ref,)
+    assert request.resources == (selected.ref, request.endpoint.ref, request.endpoint.provider.ref)
     assert other.ref not in request.resources

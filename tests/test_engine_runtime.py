@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
+from model_support import FakeModelDirectory
 from prompt_support import make_prompt_catalog
 
 from src.agents import AgentCatalog
@@ -45,12 +46,9 @@ _EXPECTED_SCOPE_SEQUENCE = 5
 
 
 @dataclass(slots=True)
-class FakeModel:
+class FakeModel(FakeModelDirectory):
     responses: list[ChatMessage]
     requests: list[ModelRequest] = field(default_factory=list)
-
-    def validate_endpoint(self, endpoint_id: str) -> None:
-        del endpoint_id
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
@@ -100,14 +98,11 @@ class ScopedEchoTool(EchoTool):
 
 
 @dataclass(slots=True)
-class EventInjectingModel:
+class EventInjectingModel(FakeModelDirectory):
     responses: list[ChatMessage]
     journal: SqlAlchemyWorldJournal
     event: EnvironmentEvent
     requests: list[ModelRequest] = field(default_factory=list)
-
-    def validate_endpoint(self, endpoint_id: str) -> None:
-        del endpoint_id
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         self.requests.append(request)
@@ -334,10 +329,7 @@ def test_unknown_tool_result_is_preserved_in_message_and_world_without_retry(tmp
 
 
 def test_model_failure_becomes_tree_failure() -> None:
-    class FailingModel:
-        def validate_endpoint(self, endpoint_id: str) -> None:
-            del endpoint_id
-
+    class FailingModel(FakeModelDirectory):
         async def complete(self, request: ModelRequest) -> ChatMessage:
             raise RuntimeError(request.model)
 

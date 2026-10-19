@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from model_support import FakeModelDirectory
 
 from aurora import load_config
 from aurora.configs.runtime import RUNTIME_CONFIG
@@ -40,11 +41,8 @@ _LOGGED_RUNTIME_MODULES = (
 
 
 @dataclass(slots=True)
-class _Model:
+class _Model(FakeModelDirectory):
     result: str
-
-    def validate_endpoint(self, endpoint_id: str) -> None:
-        del endpoint_id
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
         del request

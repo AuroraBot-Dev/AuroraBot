@@ -118,7 +118,7 @@ def test_litellm_gateway_round_trips_domain_tool_names_in_definitions_history_an
     response = asyncio.run(
         model.complete(
             ModelRequest(
-                "test:ai/endpoint/quality",
+                model.resolve_endpoint("test:ai/endpoint/quality"),
                 (
                     ChatMessage.system("系统"),
                     ChatMessage.message("消息"),
@@ -176,7 +176,7 @@ def test_litellm_gateway_uses_explicit_endpoint_and_normalizes_tool_calls(
     response = asyncio.run(
         model.complete(
             ModelRequest(
-                "test:ai/endpoint/quality",
+                model.resolve_endpoint("test:ai/endpoint/quality"),
                 (ChatMessage.system("系统"), ChatMessage.message("消息")),
                 (ToolDefinition("test:tool/definition/echo", "回显", {"type": "object"}),),
             )
@@ -217,7 +217,9 @@ def test_litellm_gateway_accepts_null_tool_calls_for_text_response(
         caller=call,
     )
 
-    request = ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+    request = ModelRequest(
+        model.resolve_endpoint("test:ai/endpoint/default"), (ChatMessage.system("系统"), ChatMessage.message("你好"))
+    )
     response = asyncio.run(model.complete(request))
 
     assert response.content == "你好！"
@@ -247,7 +249,7 @@ def test_litellm_gateway_rejects_invalid_endpoint_configuration(
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        LiteLLMModelGateway(providers, endpoints).validate_endpoint("test:ai/endpoint/default")
+        LiteLLMModelGateway(providers, endpoints).resolve_endpoint("test:ai/endpoint/default")
 
 
 def test_litellm_gateway_requires_secret_without_calling_network(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -261,7 +263,9 @@ def test_litellm_gateway_requires_secret_without_calling_network(monkeypatch: py
         {"test:ai/endpoint/default": ModelEndpoint("test:ai/provider/provider", "model")},
         caller=caller,
     )
-    request = ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("消息")))
+    request = ModelRequest(
+        model.resolve_endpoint("test:ai/endpoint/default"), (ChatMessage.system("系统"), ChatMessage.message("消息"))
+    )
 
     with pytest.raises(RuntimeError, match="环境变量"):
         asyncio.run(model.complete(request))
@@ -294,7 +298,10 @@ def test_litellm_gateway_disables_sdk_retries_and_bounds_aurora_attempts(
 
     response = asyncio.run(
         model.complete(
-            ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+            ModelRequest(
+                model.resolve_endpoint("test:ai/endpoint/default"),
+                (ChatMessage.system("系统"), ChatMessage.message("你好")),
+            )
         )
     )
 
@@ -326,7 +333,10 @@ def test_litellm_gateway_enforces_total_deadline(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(TimeoutError, match="总截止时间"):
         asyncio.run(
             model.complete(
-                ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+                ModelRequest(
+                    model.resolve_endpoint("test:ai/endpoint/default"),
+                    (ChatMessage.system("系统"), ChatMessage.message("你好")),
+                )
             )
         )
 
@@ -348,7 +358,10 @@ def test_litellm_gateway_passes_output_budget_when_configured(monkeypatch: pytes
 
     asyncio.run(
         model.complete(
-            ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+            ModelRequest(
+                model.resolve_endpoint("test:ai/endpoint/default"),
+                (ChatMessage.system("系统"), ChatMessage.message("你好")),
+            )
         )
     )
 
@@ -371,7 +384,10 @@ def test_litellm_gateway_omits_output_budget_by_default(monkeypatch: pytest.Monk
 
     asyncio.run(
         model.complete(
-            ModelRequest("test:ai/endpoint/default", (ChatMessage.system("系统"), ChatMessage.message("你好")))
+            ModelRequest(
+                model.resolve_endpoint("test:ai/endpoint/default"),
+                (ChatMessage.system("系统"), ChatMessage.message("你好")),
+            )
         )
     )
 

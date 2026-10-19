@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+from model_support import fake_endpoint
 
 from src.contracts import (
     AgentDefinition,
@@ -20,6 +21,8 @@ from src.contracts import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from src.contracts.model_binding import ModelBinding
 
 
 def _empty_assistant() -> ChatMessage:
@@ -149,14 +152,14 @@ def test_model_request_requires_model_one_system_and_unique_tools() -> None:
     messages = (ChatMessage.system("system"), ChatMessage.message("hello"))
     tool = ToolDefinition("test:tool/definition/echo", "Echo.", {})
 
-    with pytest.raises(ValueError, match="requires model"):
-        ModelRequest("", messages)
+    with pytest.raises(TypeError, match="完整端点快照"):
+        ModelRequest(cast("ModelBinding", None), messages)
     with pytest.raises(ValueError, match="start with system"):
-        ModelRequest("test:ai/endpoint/model", (ChatMessage.message("hello"),))
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), (ChatMessage.message("hello"),))
     with pytest.raises(ValueError, match="only one"):
-        ModelRequest("test:ai/endpoint/model", (ChatMessage.system("one"), ChatMessage.system("two")))
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), (ChatMessage.system("one"), ChatMessage.system("two")))
     with pytest.raises(ValueError, match="must be unique"):
-        ModelRequest("test:ai/endpoint/model", messages, (tool, tool))
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), messages, (tool, tool))
 
 
 def test_agent_node_requires_parent_pairing_message_and_terminal_outcome() -> None:
