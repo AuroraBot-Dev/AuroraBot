@@ -75,6 +75,10 @@ def test_actual_delegation_records_each_node_definition_at_the_time_of_use(confi
                 "key": child.definition_id,
                 "revision": child.definition_ref.revision,
             }
+            delegate = next(tool for tool in model.requests[0].tools if tool.name == DELEGATE_TOOL)
+            result = await runtime.world.commit(f"{tree.tree_id}:{root.node_id}:delegate:result")
+            assert result is not None
+            assert result.data["tool_ref"] == {"key": DELEGATE_TOOL, "revision": delegate.ref.revision}
         finally:
             await lifecycle.close()
 

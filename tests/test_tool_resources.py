@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from src.contracts import ToolDefinition
+from src.contracts import ChatMessage, ModelRequest, ToolDefinition
 from src.contracts.resource import ResourceKey
 from src.tools import is_tool_id
 
@@ -52,3 +52,12 @@ def test_equivalent_schema_key_order_does_not_change_tool_content_version() -> N
     second = ToolDefinition("lab:tool/definition/read", "读取记录", {"required": ["mode"], "type": "object"})
     assert first.content == second.content
     assert first.ref == second.ref
+
+
+def test_model_input_records_only_its_actual_tool_definitions_once() -> None:
+    """请求自行绑定采用的接口，已有相同来源不重复，也不包含未采用接口。"""
+    selected = ToolDefinition("lab:tool/definition/read", "读取记录", {"type": "object"})
+    other = ToolDefinition("lab:tool/definition/write", "写入记录", {"type": "object"})
+    request = ModelRequest("model", (ChatMessage.system("主体身份"),), (selected,), resources=(selected.ref,))
+    assert request.resources == (selected.ref,)
+    assert other.ref not in request.resources

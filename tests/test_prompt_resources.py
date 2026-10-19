@@ -169,6 +169,7 @@ def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(co
             assert request.resources == (
                 tree.node(tree.root_id).definition_ref,
                 *(fragment.ref for fragment in selected),
+                *(tool.ref for tool in request.tools),
             )
             assert "这份新正文尚未用于当前运行。" not in request.messages[0].content
             record = await runtime.world.commit(f"prompt-source:{tree.root_id}:model:0:requested")

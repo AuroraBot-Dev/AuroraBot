@@ -114,6 +114,7 @@ class ModelRequest:
     resources: tuple[ResourceRef, ...] = ()
 
     def __post_init__(self) -> None:
+        """工具版本直接来自实际输入的冻结接口，显式来源仍须先通过完整性检查。"""
         if not self.model:
             raise ValueError("ModelRequest requires model")
         object.__setattr__(self, "messages", tuple(self.messages))
@@ -126,3 +127,6 @@ class ModelRequest:
         names = [tool.name for tool in self.tools]
         if len(names) != len(set(names)):
             raise ValueError("ModelRequest Tool names must be unique")
+        object.__setattr__(
+            self, "resources", tuple(dict.fromkeys((*self.resources, *(tool.ref for tool in self.tools))))
+        )

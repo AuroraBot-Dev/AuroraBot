@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from src.contracts import ToolScopes, ToolStatus, WorldCommitInput, WorldFrontier
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
         ChatMessage,
         ModelRequest,
         ToolCall,
+        ToolDefinition,
         ToolOutput,
         WorldCommit,
         WorldDeltaPage,
@@ -59,10 +61,20 @@ _TOOL_SUMMARY_ACTIONS = {
 class EngineWorldEffects:
     """只构造并追加 engine 的世界提交，不改变 AgentTree。"""
 
-    def __init__(self, world: WorldJournal, *, bot_id: str = "aurora:bot/default") -> None:
-        """绑定世界写入端口和实际运行归属。"""
+    def __init__(
+        self, world: WorldJournal, *, tools: tuple[ToolDefinition, ...], bot_id: str = "aurora:bot/default"
+    ) -> None:
+        """绑定世界与实际选中的冻结工具接口，不在写入时重新推断版本。"""
         self._world = world
         self._bot_id = bot_id
+        self._tool_refs = MappingProxyType({tool.name: tool.ref for tool in tools})
+
+    def _tool_ref_data(self, tree: AgentTree, node_id: str, name: str | None) -> dict[str, str | None] | None:
+        """只记录已经注册且对当前节点可见的接口，其他调用保持版本未知。"""
+        if name is None or name not in tree.node(node_id).tools:
+            return None
+        ref = self._tool_refs.get(name)
+        return resource_ref_data(ref) if ref is not None else None
 
     async def _append(
         self,
@@ -132,6 +144,7 @@ class EngineWorldEffects:
                 "bot_id": self._bot_id,
                 "message_count": len(request.messages),
                 "tool_count": len(request.tools),
+                "tool_refs": [resource_ref_data(tool.ref) for tool in request.tools],
                 "resources": [resource_ref_data(ref) for ref in request.resources],
                 "memory": exposure_data(memory) if memory is not None else None,
             },
@@ -205,6 +218,7 @@ class EngineWorldEffects:
                     "node_id": node_id,
                     "tool_call_id": call.call_id,
                     "tool": call.name,
+                    "tool_ref": self._tool_ref_data(tree, node_id, call.name),
                     "error": str(error),
                     "status": ToolStatus.FAILED.value,
                 },
@@ -270,6 +284,7 @@ class EngineWorldEffects:
                 "node_id": node_id,
                 "tool_call_id": call.call_id,
                 "tool": call.name,
+                "tool_ref": self._tool_ref_data(tree, node_id, call.name),
                 "content": output.content,
                 "is_error": output.is_error,
                 "status": output.status.value,
@@ -300,6 +315,7 @@ class EngineWorldEffects:
                         "node_id": node_id,
                         "tool_call_id": call.call_id,
                         "tool": call.name,
+                        "tool_ref": self._tool_ref_data(tree, node_id, call.name),
                         "arguments": dict(call.arguments),
                     },
                 )
@@ -354,6 +370,16 @@ class EngineWorldEffects:
         is_error: bool,
     ) -> WorldFrontier:
         assert child.parent_id is not None and child.parent_call_id is not None
+        parent = tree.node(child.parent_id)
+        tool = next(
+            (
+                call.name
+                for message in parent.messages
+                for call in message.tool_calls
+                if call.call_id == child.parent_call_id
+            ),
+            None,
+        )
         tool_status = ToolStatus.FAILED if is_error else ToolStatus.SUCCEEDED
         commits = await self._world.append_commits(
             (
@@ -383,6 +409,8 @@ class EngineWorldEffects:
                         "node_id": child.parent_id,
                         "tool_call_id": child.parent_call_id,
                         "child_node_id": child.node_id,
+                        "tool": tool,
+                        "tool_ref": self._tool_ref_data(tree, child.parent_id, tool),
                         "content": content,
                         "is_error": is_error,
                         "status": tool_status.value,
