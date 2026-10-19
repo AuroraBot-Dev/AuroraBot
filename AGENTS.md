@@ -1,7 +1,7 @@
 # AuroraBot
 
 AuroraBot 是以 Bot 为主体的自主智能体框架：一切设计都以 Bot 为中心，Bot 拥有世界与森林，一棵 `AgentTree` 只是 Bot 的一次认知运行。
-当前工作树只描述现行架构与实现；只保留完整最小循环和项目级组合骨架。
+当前工作树描述持久主体、独立节律与记忆模型、完整认知循环和可扩展外围环境的现行实现。
 
 ## Design philosophy
 
@@ -38,6 +38,8 @@ src/utils/      无上层依赖的日志、时间、文本与序列化工具
 src/contracts/  公共值对象、常量与贡献契约；跨包能力端口按提供方放在 src/contracts/pkgs/<pkg>.py
 src/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
 src/runtime/    Bot 进程门面与装配入口：发现源、门面工厂、终端命令分派与文本呈现
+src/bot/        持久目标、检查点、未来活动与版本化主体状态操作
+src/clock/      与主体独立装配的持久活动兑现服务
 src/agents/     不可变 AgentDefinition 目录与唯一解析
 src/tools/      工具注册表与框架内建工具
 src/prompt/     四角色 PromptAssembler
@@ -45,8 +47,16 @@ src/engine/     AgentTree 的确定性单循环
 src/ai/         LiteLLM 模型网关与 Provider 协议映射
 src/mcp/        MCP SDK 2.x 客户端适配、冻结工具目录与业务事件入口
 src/world/      WorldJournal 唯一持久化实现与 migration
-src/cadence/    世界提交驱动的主动节律
-src/memory/     只读近期世界记忆快照
+src/cadence/    世界与时间驱动的主动调度、判断日志与隐状态恢复
+src/rhythm/     规则与 GRU 节律策略、训练、验证及权重加载
+src/memory/     时间正确的经历读取、必要连续性、集合组装与反馈审计
+src/memory_model/ 规则与 TGN 排序、训练、验证与可重建图投影
+src/resources/  资源版本、别名、契约与动态提供者的统一目录
+src/scopes/     世界域声明、分类与范围校验
+src/operations/ 命令与查询路由、幂等回执及未知效果恢复边界
+src/artifacts/  固定内容存储、校验与有界读取
+src/resource_content/ 实际资源定义正文的生命周期归档
+src/instances/  从世界事实发现认知实例及其确定历史版本
 src/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
 docs/           文档站点与唯一 RFC 子模块
@@ -66,16 +76,27 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
   `message` 映射成协议的 `user`。
 - `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务；世界记忆由 `src.memory` 生成 `MemorySnapshot`，
   作为显式参数注入，不在 assembler 内持有读取端口。
-- `AgentTreeRunner` 只执行给定树：依赖 contracts + agents + prompt + tools，并通过 `WorldJournal` 记录运行因果；普通 Tool 经端口执行，`delegate` 是唯一由 engine 解释的内建 Tool。
+- `AgentTreeRunner` 只执行给定树，通过 contracts 注入的模型、原型、提示词、工具、记忆和世界端口工作；
+  普通 Tool 经端口执行，内建 `delegate` 返回的 `DelegationRequest` 由 engine 应用为树操作。
 - `src/world` 是逻辑事件总线，代码上是叶子；`WorldReader / WorldWriter / WorldJournal` 端口只属于 contracts，其他包不得 import 实现。
 - 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
-- `src/cadence` 只按世界提交请求唤起一棵 AgentTree；`src/memory` 只消费 `WorldReader` 生成 PromptAssembler 的显式输入；
-  二者不得保存或解释另一套认知运行状态。
-- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线；`/help`、`/clear`、`/quit`
+- `src/bot` 是目标与恢复状态的唯一所有者，`src/clock` 兑现已登记活动；二者可独立替换，公开命令和默认时钟使用同一选中主体。
+- `src/cadence` 按世界变化、时间和主体压力调用 `RhythmPolicy`，持久记录判断与循环隐状态，再请求唤起 AgentTree；
+  `src/memory` 通过 `WorldReader`、主体状态和 `MemoryPolicy` 生成显式快照，不另建认知运行模型。
+- 记忆内容、主体检查点和模型投影分开保存；时间与游标决定可见历史，后续反馈不能泄漏到过去的查询。
+  上下文先保留必要状态、证据和完整交互，必要内容超限时在模型或行动效果前失败，不截断关键约束。
+- Console 输入先作为 `console.input` 提交到 `aurora:world/console`，终端渲染输出不进入世界线；`/help`、`/clear`、`/quit`
   是本地命令，不进入组合内核。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
 - `src/kernel` 是唯一组合机制：以契约类型为能力身份，`@module`/`ModuleSpec` 声明 `provides/requires/contributes/consumes`
-  与可选 `prepare/activate/run/close`；依赖解析、冲突裁决、可选跳过、环检测与拓扑装配都在内核，内核不认识具体 `src` 子包。
+  与 `prepare/construct/activate/ready/run/drain/close` 等声明阶段；依赖解析、冲突裁决、可选跳过、环检测与拓扑装配都在内核，
+  内核不认识具体 `src` 子包。接线和生命周期跟随实际选中能力，失选默认提供方不产生准备效果。
+- 模组使用 `namespace:kernel/module/path`，发布版本与内核 API 范围分别声明，兼容性在准备效果前校验。
+  清单归档固定声明而非可执行环境；目录、错误和生命周期监督都保留完整模组身份。
+- 资源使用 `namespace:domain/kind/path`，定义版本、别名和运行实例分别记录；实际模型、原型、Prompt、工具与过程版本进入世界审计。
+  提供方资源身份与 SDK 路由分离，`sdk_provider` 表达协议前缀，不从对象显示文本或嵌套资源路径推导请求模型。
+- 领域操作由同一份版本化定义生成结构化工具和终端入口；请求、回执与因果持久保存，大对象使用固定内容引用。
+  已开始且效果未知的非幂等操作不自动重放；模型曝光、自评和成功回执各自表达不同事实。
 - 每个 `src/<pkg>` 在 `module.py` 自描述唯一 `MODULE`；兄弟能力只经 `src.contracts` 的契约类型注入，模块之间不运行时相互
   import（类型位置允许 TYPE_CHECKING）。
 - 发现源：随安装发布的 `src` 包、项目内被 Git 忽略的 `extensions/plugins/` 与 `aurorabot_plugin` entry point；同优先级冲突、
@@ -95,10 +116,11 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 
 ## Current scope
 
-当前实现 `src/kernel` 组合微内核、自描述 `src` 模块、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start
-生命周期，以及 WorldJournal 持久化与 migration；`panel/` 子模块仅保留前端，后端链路已移除。
-不实现自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
+当前实现持久 Bot 主体与未来安排、规则和可训练 GRU 节律、规则和可训练 TGN 记忆、统一资源和领域操作、可发现版本化模组、
+LiteLLM Model、Console、MCP SDK 2.x、完整 start 生命周期、世界持久化与内容归档；`panel/` 子模块仅保留前端。
+不实现自动摘要、自动在线参数训练、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
 引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
+受控离线训练证明模型使用历史且可优化，不等同于真实任务收益；记忆索引和图投影仍随保留历史增长。
 
 ## Language and text
 
