@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from importlib import import_module
+from importlib import import_module, invalidate_caches
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -13,6 +13,7 @@ from src.kernel.declaration import ModuleSpec
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from types import ModuleType
 
 _MODULE_FILE = "module.py"
 _ENTRY_POINT_GROUP = "aurorabot_plugin"
@@ -73,7 +74,7 @@ class DirectorySource:
                 specs.append(_module_spec(_load_file(path, path.stem), str(path)))
             elif path.is_dir() and (path / _MODULE_FILE).is_file():
                 module_file = path / _MODULE_FILE
-                specs.append(_module_spec(_load_file(module_file, f"{path.name}_module"), str(module_file)))
+                specs.append(_module_spec(_load_file(module_file, path.name, package=True), str(module_file)))
         return specs
 
 
@@ -90,15 +91,30 @@ class EntryPointSource:
         return specs
 
 
-def _load_file(path: Path, name: str):
-    module_name = f"aurorabot_plugin_{name}"
-    spec = importlib.util.spec_from_file_location(module_name, path)
+def _load_file(path: Path, name: str, *, package: bool = False) -> ModuleType:
+    """目录入口具有包上下文，重新发现时只清理该插件拥有的导入缓存。"""
+    module_name = f"aurorabot_plugin_{'package' if package else 'file'}_{name}"
+    search = [str(path.parent)] if package else None
+    spec = importlib.util.spec_from_file_location(module_name, path, submodule_search_locations=search)
     if spec is None or spec.loader is None:
         raise ImportError(f"无法加载插件：{path}")
+    _drop_modules(module_name)
+    invalidate_caches()
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        _drop_modules(module_name)
+        raise
     return module
+
+
+def _drop_modules(module_name: str) -> None:
+    """相对导入产生的子模块与入口一起清理，不触及其他插件。"""
+    for name in tuple(sys.modules):
+        if name == module_name or name.startswith(f"{module_name}."):
+            del sys.modules[name]
 
 
 def _module_spec(source: object, origin: str) -> ModuleSpec:
