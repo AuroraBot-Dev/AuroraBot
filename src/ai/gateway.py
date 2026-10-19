@@ -15,7 +15,7 @@ import litellm
 
 from src.ai.openai import openai_tool_name_map, to_openai_messages, to_openai_tools
 from src.contracts import ChatMessage, ModelRequest, ToolCall
-from src.contracts.model_binding import ai_resource_key
+from src.contracts.model_binding import ModelBinding, ProviderDefinition, ai_resource_key
 from src.utils import get_logger
 
 _logger = get_logger(__name__)
@@ -58,35 +58,58 @@ class LiteLLMModelGateway:
             raise ValueError("模型请求总超时不能小于单次尝试超时")
         if max_tokens is not None and max_tokens <= 0:
             raise ValueError("模型输出预算必须大于零")
-        for name in providers:
-            ai_resource_key(name, "provider")
+        compiled_providers = {
+            name: ProviderDefinition(ai_resource_key(name, "provider"), value.adapter, value.base_url, value.secret_env)
+            for name, value in providers.items()
+        }
+        compiled_endpoints: dict[str, ModelBinding] = {}
         for name, endpoint in endpoints.items():
-            ai_resource_key(name, "endpoint")
-            ai_resource_key(endpoint.provider, "provider")
-        self._providers = MappingProxyType(dict(providers))
-        self._endpoints = MappingProxyType(dict(endpoints))
+            provider_key = ai_resource_key(endpoint.provider, "provider")
+            provider = compiled_providers.get(str(provider_key))
+            if provider is None:
+                raise ValueError(f"模型端点引用了未知 provider：{endpoint.provider}")
+            compiled_endpoints[name] = ModelBinding(
+                ai_resource_key(name, "endpoint"),
+                provider,
+                endpoint.model,
+                timeout_seconds,
+                max_attempts,
+                total_timeout_seconds,
+                max_tokens,
+            )
+        self._providers = MappingProxyType(compiled_providers)
+        self._endpoints = MappingProxyType(compiled_endpoints)
         self._caller = caller or _litellm_completion
-        self._timeout_seconds = timeout_seconds
-        self._max_attempts = max_attempts
-        self._total_timeout_seconds = total_timeout_seconds
-        self._max_tokens = max_tokens
+
+    @property
+    def providers(self) -> tuple[ProviderDefinition, ...]:
+        """公开实际保存的提供方快照，包含未被端点采用的已配置提供方。"""
+        return tuple(self._providers[name] for name in sorted(self._providers))
+
+    @property
+    def endpoints(self) -> tuple[ModelBinding, ...]:
+        """公开真正用于执行的端点快照，不从配置另造描述。"""
+        return tuple(self._endpoints[name] for name in sorted(self._endpoints))
 
     def validate_endpoint(self, endpoint_id: str) -> None:
+        """校验所选端点能够由当前网关执行。"""
+        self._binding_for(endpoint_id)
+
+    def _binding_for(self, endpoint_id: str) -> ModelBinding:
+        """验证端点后返回同一份冻结执行配置。"""
         endpoint = self._endpoints.get(endpoint_id)
         if endpoint is None:
             raise ValueError(f"模型端点尚未配置：{endpoint_id}")
-        provider = self._providers.get(endpoint.provider)
-        if provider is None:
-            raise ValueError(f"模型端点引用了未知 provider：{endpoint.provider}")
+        provider = endpoint.provider
         if provider.adapter not in {"litellm", "openai_compatible"}:
             raise ValueError(f"模型端点 {endpoint_id} 使用了尚未实现的 adapter：{provider.adapter}")
         if provider.adapter == "openai_compatible" and provider.base_url is None:
-            raise ValueError(f"OpenAI-compatible provider 缺少 base_url：{endpoint.provider}")
+            raise ValueError(f"OpenAI-compatible provider 缺少 base_url：{provider.key}")
+        return endpoint
 
     async def complete(self, request: ModelRequest) -> ChatMessage:
-        self.validate_endpoint(request.model)
-        endpoint = self._endpoints[request.model]
-        provider = self._providers[endpoint.provider]
+        endpoint = self._binding_for(request.model)
+        provider = endpoint.provider
         api_key = os.getenv(provider.secret_env)
         if not api_key:
             raise RuntimeError(f"模型密钥环境变量尚未设置：{provider.secret_env}")
@@ -100,11 +123,11 @@ class LiteLLMModelGateway:
             "model": _gateway_model(endpoint, provider),
             "messages": to_openai_messages(request.messages, tool_names),
             "api_key": api_key,
-            "timeout": self._timeout_seconds,
+            "timeout": endpoint.timeout_seconds,
             "max_retries": 0,
         }
-        if self._max_tokens is not None:
-            parameters["max_tokens"] = self._max_tokens
+        if endpoint.max_tokens is not None:
+            parameters["max_tokens"] = endpoint.max_tokens
         if provider.adapter == "openai_compatible":
             parameters["api_base"] = provider.base_url
         if request.tools:
@@ -117,12 +140,12 @@ class LiteLLMModelGateway:
         )
         started = monotonic()
         try:
-            async with asyncio.timeout(self._total_timeout_seconds):
-                response = await self._complete_with_attempts(request.model, parameters)
+            async with asyncio.timeout(endpoint.total_timeout_seconds):
+                response = await self._complete_with_attempts(endpoint, parameters)
         except TimeoutError as error:
             elapsed = monotonic() - started
             _logger.error("模型请求超过总截止时间 endpoint={} elapsed_seconds={:.3f}", request.model, elapsed)
-            raise TimeoutError(f"模型请求超过总截止时间：{self._total_timeout_seconds:g} 秒") from error
+            raise TimeoutError(f"模型请求超过总截止时间：{endpoint.total_timeout_seconds:g} 秒") from error
         except Exception as error:
             elapsed = monotonic() - started
             _logger.error(
@@ -144,22 +167,24 @@ class LiteLLMModelGateway:
         )
         return result
 
-    async def _complete_with_attempts(self, endpoint_id: str, parameters: dict[str, Any]) -> object:
-        for attempt in range(1, self._max_attempts + 1):
+    async def _complete_with_attempts(self, endpoint: ModelBinding, parameters: dict[str, Any]) -> object:
+        """每次尝试和总期限都采用端点快照中的同一份策略。"""
+        endpoint_id = str(endpoint.key)
+        for attempt in range(1, endpoint.max_attempts + 1):
             started = monotonic()
             try:
-                async with asyncio.timeout(self._timeout_seconds):
+                async with asyncio.timeout(endpoint.timeout_seconds):
                     response = await self._caller(parameters)
             except Exception as error:
                 elapsed = monotonic() - started
-                if attempt >= self._max_attempts:
+                if attempt >= endpoint.max_attempts:
                     raise
                 _logger.warning(
                     "模型请求尝试失败，准备重试 endpoint={} attempt={} max_attempts={} error_type={} "
                     "elapsed_seconds={:.3f}",
                     endpoint_id,
                     attempt,
-                    self._max_attempts,
+                    endpoint.max_attempts,
                     type(error).__name__,
                     elapsed,
                 )
@@ -168,14 +193,14 @@ class LiteLLMModelGateway:
                 "模型请求尝试完成 endpoint={} attempt={} max_attempts={} elapsed_seconds={:.3f}",
                 endpoint_id,
                 attempt,
-                self._max_attempts,
+                endpoint.max_attempts,
                 monotonic() - started,
             )
             return response
         raise AssertionError("模型请求尝试循环未返回")
 
 
-def _gateway_model(endpoint: ModelEndpoint, provider: ProviderEndpoint) -> str:
+def _gateway_model(endpoint: ModelBinding, provider: ProviderDefinition) -> str:
     prefix = "openai" if provider.adapter == "openai_compatible" else endpoint.provider
     return f"{prefix}/{endpoint.model}"
 
