@@ -46,7 +46,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
 @module(
     name="cadence",
     provides=CadencePort,
-    requires=(WorldReader, WorldWriter, AgentCatalog, BotStateStore, RhythmPolicy),
+    requires=(CadencePort, WorldReader, WorldWriter, AgentCatalog, BotStateStore, RhythmPolicy),
     contributes=(TREE_LAUNCHER_BINDINGS,),
     scopes=ScopeDeclaration(
         "*:world/bot/*/cadence", ScopeKind.RESOURCE, "节律 tick 与唤起决策，记录 Bot 主动发起认知的理由。"
@@ -55,11 +55,21 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     run=run,
 )
 def build(context: ModuleContext) -> CadencePort:
+    """唤起接线始终绑定实际选中端口，不构造失选的节律。"""
+    cadence = context.get_optional(CadencePort)
+    if cadence is None:
+        cadence = _configured_cadence(context)
+    context.contribute(TREE_LAUNCHER_BINDINGS, cadence.bind_launcher)
+    return cadence
+
+
+def _configured_cadence(context: ModuleContext) -> CadencePort:
+    """只有采用默认机制时才解析默认配置和即时规则。"""
     config = context.settings.resolve(CadenceConfig)
     rules = _reactive_rules(context.settings.resolve(ReactionsConfig))
     agents = context.get(AgentCatalog)
     _validate_agents(config.agent, rules, agents)
-    cadence = Cadence(
+    return Cadence(
         context.get(WorldReader),
         context.get(WorldWriter),
         agent=config.agent,
@@ -69,8 +79,6 @@ def build(context: ModuleContext) -> CadencePort:
         poll_interval=config.poll_seconds,
         reactive_rules=rules,
     )
-    context.contribute(TREE_LAUNCHER_BINDINGS, cadence.bind_launcher)
-    return cadence
 
 
 MODULE = build

@@ -103,7 +103,7 @@ class MemorySourceQuery:
     )
 
     def __init__(self, reader: WorldReader, index: MemoryIndex) -> None:
-        """与记忆召回共享可重建索引，避免维护另一套事实。"""
+        """与历史训练读取共享世界索引，原始证据始终来自同一世界。"""
         self._reader = reader
         self._index = index
 

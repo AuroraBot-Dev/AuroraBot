@@ -91,7 +91,8 @@ def build_mcp_specs(settings: Settings, *, catalog: ScopeCatalog | None = None) 
 
 
 async def prepare(context: ModuleContext) -> AsyncCleanup | None:
-    if context.get_optional(McpRuntimePort) is not None:
+    """只有被选中的默认实现才准备连接，外部实现拥有自己的准备过程。"""
+    if not context.is_provider(McpRuntimePort) or context.get_optional(McpRuntimePort) is not None:
         return None
     platform = _mcp_platform(context.settings)
     factory = context.get_optional(McpClientFactory)
@@ -112,7 +113,7 @@ async def activate(context: ModuleContext) -> None:
 @module(
     name="mcp",
     provides=McpRuntimePort,
-    requires=(WorldWriter, ScopeCatalog),
+    requires=(McpRuntimePort, WorldWriter, ScopeCatalog),
     contributes=(TOOL_CONTRIBUTIONS,),
     scopes=(
         ScopeDeclaration(MCP_SCOPE_PATTERN, ScopeKind.RESOURCE, "一个扩展拥有的世界域：<package>:world。"),

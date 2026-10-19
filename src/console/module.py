@@ -37,12 +37,15 @@ def _bind_console(console: TerminalConsolePort) -> FrontBinding:
 @module(
     name="console",
     provides=TerminalConsolePort,
-    requires=(WorldWriter,),
+    requires=(TerminalConsolePort, WorldWriter),
     contributes=(FRONT_BINDINGS,),
     scopes=ScopeDeclaration(CONSOLE_SCOPE, ScopeKind.RESOURCE, "本地终端输入先进入的世界线；渲染输出不进入世界线。"),
 )
 def build(context: ModuleContext) -> TerminalConsolePort:
-    console = TerminalConsole(context.get(WorldWriter))
+    """交互前台绑定实际选中的终端端口。"""
+    console = context.get_optional(TerminalConsolePort)
+    if console is None:
+        console = TerminalConsole(context.get(WorldWriter))
     context.contribute(FRONT_BINDINGS, _bind_console(console))
     return console
 
