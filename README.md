@@ -91,6 +91,8 @@ Agent 原型使用 `namespace:agent/definition/path` 身份，可由统一资源
 
 工具定义使用 `namespace:tool/definition/path`，工具集合标签使用 `namespace:tool/tag/path`，通过 `#namespace:tool/tag/path` 引用。标签先展开为定义身份或模式，再决定 Agent 可见工具；标签不能作为工具执行。MCP 适配器保留服务器原始名称与本地定义身份的冻结映射；Provider 请求中的协议别名也只在适配器边界转换。
 
+`ToolDefinition.ref` 的 SHA256 版本覆盖模型可见的名称、说明和完整参数结构，`content` 是对应的规范 JSON。实际选中目录通过 `RESOURCE_CONTENTS` 归档这些冻结接口；`/resources --domain tool --kind definition` 可发现已发布版本，并通过制品入口读取正文。接口变化产生新版本，原始字典或服务器后续变化不能改写当前目录的接口快照。
+
 动态资源通过 `RESOURCE_PROVIDERS` 接入目录，不需要把全部版本登记到内核。每个提供者使用公共排序和游标，每次只返回一页；目录合并去重，静态声明优先，动态来源对同一版本的定义不一致时明确失败。提供者必须遵守页大小、筛选、顺序和续页规则，避免跨来源查询漏项。
 
 大对象通过 `ArtifactStore` 保存。逻辑名称采用同一套资源身份，版本是原始字节的 SHA256；同名新版本保留旧内容，相同字节可以跨名称复用。`artifacts.toml` 指定持久目录，需要与世界日志一起备份。宿主可流式保存内容或导入固定文件；查询只接受确定版本，不自动选择最新内容。

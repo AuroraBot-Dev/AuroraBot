@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.contracts.data import freeze_object
 from src.contracts.evidence import freeze_evidence_refs
-from src.contracts.tool_resource import tool_resource_key
+from src.contracts.resource import ResourceRef
+from src.contracts.tool_resource import tool_content, tool_resource_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -31,13 +33,18 @@ class ToolDefinition:
     name: str
     description: str
     parameters: Mapping[str, Any]
+    content: bytes = field(init=False, repr=False)
+    ref: ResourceRef = field(init=False)
 
     def __post_init__(self) -> None:
         """工具参数声明使用不可变 JSON，调用者不能改变已冻结目录。"""
         if not self.name or not self.description:
             raise ValueError("ToolDefinition 需要非空名称与说明")
-        tool_resource_key(self.name)
+        key = tool_resource_key(self.name)
         object.__setattr__(self, "parameters", freeze_object(self.parameters))
+        content = tool_content(self)
+        object.__setattr__(self, "content", content)
+        object.__setattr__(self, "ref", ResourceRef(key, hashlib.sha256(content).hexdigest()))
 
 
 @dataclass(frozen=True, slots=True)
