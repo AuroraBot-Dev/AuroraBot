@@ -12,8 +12,8 @@ from test_engine_runtime import FakeModel as SequenceModel
 from test_engine_runtime import _agent, _runner
 
 from aurora import load_config
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.contracts import AgentTree, ChatMessage, TreeLaunchRequest
 from src.mcp.config import PlatformsConfig
 from src.runtime import compose_runtime

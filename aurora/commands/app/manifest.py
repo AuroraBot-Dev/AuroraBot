@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from aurora.commands.app.models import ManifestError
-from aurora.utils.toml import check_relative_directory
+from src.utils.validation import check_relative_directory
 
 MANIFEST_NAME = "aurora-app.toml"
 MANIFEST_VERSION = 1

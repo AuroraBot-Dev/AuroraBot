@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from aurora.configs import CONFIG_SPECS
+from aurora.configs import config_specs
 
 _ROOT = Path(__file__).parents[1]
 _LEAF_PACKAGES = frozenset({"contracts", "utils"})
@@ -72,11 +72,12 @@ def test_each_project_toml_has_one_registered_config_module() -> None:
         for path in (_ROOT / "aurora" / "configs").rglob("*.py")
         if path.stem != "__init__"
     }
-    registered_names = {spec.name for spec in CONFIG_SPECS}
+    specs = config_specs()
+    registered_names = {spec.name for spec in specs}
 
     assert toml_names == module_names == registered_names
-    assert len(CONFIG_SPECS) == len(registered_names)
-    assert {spec.path for spec in CONFIG_SPECS} == {f"config/{name}.toml" for name in registered_names}
+    assert len(specs) == len(registered_names)
+    assert {spec.path for spec in specs} == {f"config/{name}.toml" for name in registered_names}
 
 
 def test_runtime_core_does_not_store_unrelated_capabilities() -> None:

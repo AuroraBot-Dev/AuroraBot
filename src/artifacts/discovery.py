@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class ArtifactFindOperation:
     """发现不会载入正文，读取固定版本需继续调用 stat 或 read。"""
 
-    DEFINITION = OperationDefinition(
+    definition = OperationDefinition(
         ResourceRef(ResourceKey("aurora", "artifacts", "query", "find"), "1"),
         "分页发现已发布的数据集、模型和其他内容版本。items 只含清单元信息，content_verified=false。"
         "使用 next_cursor 作为 after 继续，保持筛选不变；这是当前目录的动态列表，新增内容可能需要重新发现。"
@@ -34,11 +34,6 @@ class ArtifactFindOperation:
     def __init__(self, store: ArtifactStore) -> None:
         """参数结构与工具帮助均从同一输入模型产生。"""
         self._store = store
-
-    @property
-    def definition(self) -> OperationDefinition:
-        """返回可发现的固定版本查询定义。"""
-        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """内容清单不产生新的业务世界域。"""

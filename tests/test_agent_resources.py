@@ -13,9 +13,9 @@ from test_assembly import FakeModel
 from test_kernel import _Settings
 
 from aurora import load_config
-from aurora.configs.agents import AGENTS_CONFIG
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.agents import AgentCatalog as ConcreteCatalog
 from src.agents.config import AgentsConfig
 from src.agents.module import MODULE as AGENTS_MODULE

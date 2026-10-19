@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableShape, positive_integer_field
 from src.engine.config import EngineConfig
 
-ENGINE_CONFIG = ConfigSpec[EngineConfig](
+CONFIG_SPEC = ConfigSpec[EngineConfig](
     name="engine",
     path="config/engine.toml",
     shape=TableShape(
@@ -18,5 +18,3 @@ ENGINE_CONFIG = ConfigSpec[EngineConfig](
         model=EngineConfig,
     ),
 )
-
-CONFIG_SPEC = ENGINE_CONFIG

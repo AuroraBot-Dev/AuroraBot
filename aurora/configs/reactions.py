@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableArrayShape, strings_field, text_field
 from src.cadence.config import ReactionConfig, ReactionsConfig
 
-REACTIONS_CONFIG = ConfigSpec[ReactionsConfig](
+CONFIG_SPEC = ConfigSpec[ReactionsConfig](
     name="reactions",
     path="config/reactions.toml",
     shape=TableArrayShape(
@@ -20,5 +20,3 @@ REACTIONS_CONFIG = ConfigSpec[ReactionsConfig](
         container=ReactionsConfig,
     ),
 )
-
-CONFIG_SPEC = REACTIONS_CONFIG

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.console import TerminalConsole
 from src.console.events import CONSOLE_SCOPE
+from src.console.shell import TerminalConsole
 from src.contracts import FRONT_BINDINGS, Front, FrontContext, FrontIO
 from src.contracts.pkgs.console import TerminalConsole as TerminalConsolePort
 from src.contracts.pkgs.runtime import TerminalDispatcher
@@ -17,6 +17,22 @@ if TYPE_CHECKING:
     import asyncio
 
     from src.contracts import FrontBinding
+
+
+@module(
+    name="console",
+    provides=TerminalConsolePort,
+    requires=(TerminalConsolePort, WorldWriter),
+    contributes=FRONT_BINDINGS,
+    scopes=ScopeDeclaration(CONSOLE_SCOPE, ScopeKind.RESOURCE, "本地终端输入先进入的世界线；渲染输出不进入世界线。"),
+)
+def build(context: ModuleContext) -> TerminalConsolePort:
+    """交互前台绑定实际选中的终端端口。"""
+    console = context.get_optional(TerminalConsolePort)
+    if console is None:
+        console = TerminalConsole(context.get(WorldWriter))
+    context.contribute(FRONT_BINDINGS, _bind_console(console))
+    return console
 
 
 def _bind_console(console: TerminalConsolePort) -> FrontBinding:
@@ -32,22 +48,6 @@ def _bind_console(console: TerminalConsolePort) -> FrontBinding:
         return Front(run, interactive=True)
 
     return bind
-
-
-@module(
-    name="console",
-    provides=TerminalConsolePort,
-    requires=(TerminalConsolePort, WorldWriter),
-    contributes=(FRONT_BINDINGS,),
-    scopes=ScopeDeclaration(CONSOLE_SCOPE, ScopeKind.RESOURCE, "本地终端输入先进入的世界线；渲染输出不进入世界线。"),
-)
-def build(context: ModuleContext) -> TerminalConsolePort:
-    """交互前台绑定实际选中的终端端口。"""
-    console = context.get_optional(TerminalConsolePort)
-    if console is None:
-        console = TerminalConsole(context.get(WorldWriter))
-    context.contribute(FRONT_BINDINGS, _bind_console(console))
-    return console
 
 
 MODULE = build

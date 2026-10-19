@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora import load_config
-from aurora.configs.storage import STORAGE_CONFIG, StorageEntry, resolve_directory
+from aurora.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
 from aurora.configurator import assemble_config
+from src.world.config import StorageEntry, resolve_storage_directory
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,9 +45,9 @@ def _load_storage(tmp_path: Path, content: str) -> tuple[StorageEntry, ...]:
 def test_template_exports_typed_storage_paths(configured_project: Path) -> None:
     storage = load_config(configured_project).get(STORAGE_CONFIG).entries
 
-    assert resolve_directory(storage, "DATA_ROOT") == "data"
-    assert resolve_directory(storage, "world") == "data/world"
-    assert resolve_directory(storage, "logs") == "data/logs"
+    assert resolve_storage_directory(storage, "DATA_ROOT") == "data"
+    assert resolve_storage_directory(storage, "world") == "data/world"
+    assert resolve_storage_directory(storage, "logs") == "data/logs"
     assert [entry.name for entry in storage] == ["DATA_ROOT", "world", "logs"]
 
 
@@ -56,7 +57,7 @@ def test_storage_rejects_non_project_relative_directories(tmp_path: Path, path: 
     storage = _load_storage(tmp_path, content)
 
     with pytest.raises(ValueError, match="项目内相对目录"):
-        resolve_directory(storage, "cache")
+        resolve_storage_directory(storage, "cache")
 
 
 def test_storage_rejects_unknown_variable_reference(tmp_path: Path) -> None:
@@ -64,7 +65,7 @@ def test_storage_rejects_unknown_variable_reference(tmp_path: Path) -> None:
     storage = _load_storage(tmp_path, content)
 
     with pytest.raises(ValueError, match="未声明的变量"):
-        resolve_directory(storage, "cache")
+        resolve_storage_directory(storage, "cache")
 
 
 def test_storage_rejects_cyclic_variable_reference(tmp_path: Path) -> None:
@@ -72,4 +73,4 @@ def test_storage_rejects_cyclic_variable_reference(tmp_path: Path) -> None:
     storage = _load_storage(tmp_path, content)
 
     with pytest.raises(ValueError, match="循环引用"):
-        resolve_directory(storage, "A")
+        resolve_storage_directory(storage, "A")

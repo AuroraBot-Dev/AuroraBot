@@ -11,9 +11,9 @@ from test_engine_runtime import FakeModel
 from test_tools import EchoTool
 
 from aurora import load_config
-from aurora.configs.agents import AGENTS_CONFIG
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.agents.config import AgentsConfig
 from src.contracts import ChatMessage, ToolCall, ToolOutput, TreeStatus
 from src.contracts.operation import OperationKind, OperationRequest, OperationStatus

@@ -66,27 +66,9 @@ class MemoryEpisode:
         object.__setattr__(self, "examples", examples)
 
 
-def validate_partition(training: tuple[MemoryEpisode, ...], validation: tuple[MemoryEpisode, ...]) -> None:
-    """训练结果必须先于验证查询获知，同一经历不能出现在两个分区。"""
-    if not training or not validation:
-        raise ValueError("记忆训练集与验证集均不能为空")
-    identities = [episode.episode_id for episode in (*training, *validation)]
-    if len(set(identities)) != len(identities):
-        raise ValueError("训练和验证经历身份不能重复")
-    training_end = max(example.outcome_at for episode in training for example in episode.examples)
-    validation_start = min(example.request.observed_at for episode in validation for example in episode.examples)
-    if training_end >= validation_start:
-        raise ValueError("验证查询必须晚于所有训练结果的获知时间")
-    for episode in validation:
-        prior = tuple(item for item in training if item.bot_id == episode.bot_id)
-        last = max((example.outcome_cursor for item in prior for example in item.examples), default=-1)
-        if min(example.request.cursor for example in episode.examples) <= last:
-            raise ValueError("同一 Bot 的验证查询必须晚于训练结果游标")
-
-
-def episodes_fingerprint(episodes: tuple[MemoryEpisode, ...]) -> str:
-    """完整图输入、后续效用与结果边界一起绑定到数据版本。"""
-    return data_fingerprint(episodes, schema="aurora:memory/dataset/episodes@1")
+def read_episodes(path: Path) -> tuple[MemoryEpisode, ...]:
+    """逐行校验完整图前缀，监督标签不会被传给模型输入构造。"""
+    return parse_episodes(path.read_bytes())
 
 
 def write_episodes(path: Path, episodes: tuple[MemoryEpisode, ...]) -> None:
@@ -96,11 +78,6 @@ def write_episodes(path: Path, episodes: tuple[MemoryEpisode, ...]) -> None:
         for episode in episodes
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def read_episodes(path: Path) -> tuple[MemoryEpisode, ...]:
-    """逐行校验完整图前缀，监督标签不会被传给模型输入构造。"""
-    return parse_episodes(path.read_bytes())
 
 
 def parse_episodes(content: bytes) -> tuple[MemoryEpisode, ...]:
@@ -128,6 +105,29 @@ def parse_episodes(content: bytes) -> tuple[MemoryEpisode, ...]:
     if not episodes:
         raise ValueError("记忆训练数据不能为空")
     return tuple(episodes)
+
+
+def validate_partition(training: tuple[MemoryEpisode, ...], validation: tuple[MemoryEpisode, ...]) -> None:
+    """训练结果必须先于验证查询获知，同一经历不能出现在两个分区。"""
+    if not training or not validation:
+        raise ValueError("记忆训练集与验证集均不能为空")
+    identities = [episode.episode_id for episode in (*training, *validation)]
+    if len(set(identities)) != len(identities):
+        raise ValueError("训练和验证经历身份不能重复")
+    training_end = max(example.outcome_at for episode in training for example in episode.examples)
+    validation_start = min(example.request.observed_at for episode in validation for example in episode.examples)
+    if training_end >= validation_start:
+        raise ValueError("验证查询必须晚于所有训练结果的获知时间")
+    for episode in validation:
+        prior = tuple(item for item in training if item.bot_id == episode.bot_id)
+        last = max((example.outcome_cursor for item in prior for example in item.examples), default=-1)
+        if min(example.request.cursor for example in episode.examples) <= last:
+            raise ValueError("同一 Bot 的验证查询必须晚于训练结果游标")
+
+
+def episodes_fingerprint(episodes: tuple[MemoryEpisode, ...]) -> str:
+    """完整图输入、后续效用与结果边界一起绑定到数据版本。"""
+    return data_fingerprint(episodes, schema="aurora:memory/dataset/episodes@1")
 
 
 def _json_time(value: object) -> str:

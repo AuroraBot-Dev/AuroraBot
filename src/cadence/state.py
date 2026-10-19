@@ -96,11 +96,6 @@ def decision_data(decision: RhythmDecision) -> dict[str, Any]:
     }
 
 
-def reference_data(ref: ResourceRef) -> dict[str, str | None]:
-    """资源身份与版本分别进入回放记录。"""
-    return {"key": str(ref.key), "revision": ref.revision}
-
-
 def read_reference(data: Mapping[str, Any]) -> ResourceRef:
     """读取记录中被冻结的策略版本。"""
     return ResourceRef(ResourceKey.parse(data["key"]), data["revision"])

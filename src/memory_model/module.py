@@ -65,7 +65,7 @@ async def close(context: ModuleContext) -> None:
     name="memory_model",
     provides=(MemoryPolicy, MemoryCheckpoints),
     requires=(ArtifactStore, BotStateStore, WorldJournal, MemoryPolicy),
-    contributes=(RESOURCE_CONTRIBUTIONS,),
+    contributes=RESOURCE_CONTRIBUTIONS,
     scopes=ScopeDeclaration("aurora:run/memory-model/*", ScopeKind.RUN, "记忆推荐模型的投影检查点与重建位置。"),
     prepare=prepare,
     activate=activate,
@@ -74,11 +74,10 @@ async def close(context: ModuleContext) -> None:
 )
 def build(context: ModuleContext) -> None:
     """默认规则策略与存储实现没有相互引用。"""
-    config = context.settings.resolve(MemoryModelConfig)
     policy = context.get_optional(MemoryPolicy)
     state = context.get_optional(MemoryPolicyState)
     if policy is None:
-        policy, state = _policy(config, context.settings.project_root)
+        policy, state = _policy(context.settings.resolve(MemoryModelConfig), context.settings.project_root)
         context.provide(MemoryPolicy, policy)
     if state is not None and state.ref != policy.ref:
         raise ValueError("记忆检查点能力必须属于当前排序模型版本")
@@ -90,7 +89,7 @@ def build(context: ModuleContext) -> None:
                 state,
                 context.get(ArtifactStore),
                 context.get(WorldJournal),
-                interval_seconds=config.checkpoint_seconds,
+                interval_seconds=context.settings.resolve(MemoryModelConfig).checkpoint_seconds,
             ),
         )
     context.contribute(

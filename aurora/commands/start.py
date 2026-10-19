@@ -36,7 +36,7 @@ def _load_config(project_root: Path) -> AuroraConfig:
 
 
 def _console_enabled(config: AuroraConfig) -> bool:
-    from aurora.configs.platforms import PLATFORMS_CONFIG
+    from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 
     for platform in config.get(PLATFORMS_CONFIG).platforms:
         if platform.id == _CONSOLE_PLATFORM_ID:

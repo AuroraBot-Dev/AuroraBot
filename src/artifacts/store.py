@@ -102,7 +102,7 @@ class FileArtifactStore:
             self._read_content(info, 0, 0)
             metadata, _metadata_digest, _size = stage((manifest,), self._directory / "temporary")
             try:
-                publish(metadata, self._binding_path(info.ref))
+                publish(metadata, binding_path(self._directory, info.ref))
                 existing = self._metadata(info.ref)
                 if existing != info:
                     raise ValueError("该内容版本已绑定其他资源元信息")
@@ -127,7 +127,7 @@ class FileArtifactStore:
 
     def _metadata(self, ref: ResourceRef) -> ArtifactInfo:
         """绑定路径来自逻辑身份摘要，清单不能指定任意后端路径。"""
-        return read_binding(self._binding_path(ref), ref)
+        return read_binding(binding_path(self._directory, ref), ref)
 
     def _read_content(self, info: ArtifactInfo, offset: int, limit: int) -> bytes:
         """缓存已验证的文件身份，外部变更会使缓存失效并重新核对摘要。"""
@@ -173,7 +173,3 @@ class FileArtifactStore:
     def _object_path(self, digest: str) -> Path:
         """存储布局只使用经过校验的摘要，不插入调用者提供的路径。"""
         return self._directory / "objects" / digest[:2] / digest
-
-    def _binding_path(self, ref: ResourceRef) -> Path:
-        """同名资源可拥有多个不可变版本，名称也不能成为文件系统路径。"""
-        return binding_path(self._directory, ref)

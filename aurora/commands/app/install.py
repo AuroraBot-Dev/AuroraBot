@@ -33,8 +33,8 @@ from aurora.commands.app.models import (
     is_secret_name,
     validate_package,
 )
-from aurora.utils.toml import check_https_url
 from src.mcp.config import AppConfig, McpEventMode, McpTransport
+from src.utils.validation import check_https_url
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

@@ -10,13 +10,14 @@ import pytest
 from model_support import FakeModelDirectory
 
 from aurora import load_config
-from aurora.configs.runtime import RUNTIME_CONFIG
-from aurora.configs.storage import STORAGE_CONFIG, resolve_directory
+from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
+from aurora.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
 from aurora.utils.logging import configure_project_logging
 from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
 from src.runtime import assemble_runtime
 from src.tools import ToolRegistry
 from src.utils import configure_console_logging
+from src.world.config import resolve_storage_directory
 
 if TYPE_CHECKING:
     from src.contracts import ToolResult
@@ -66,7 +67,7 @@ def test_logging_config_is_typed_and_project_relative(configured_project: Path) 
 
     assert runtime.log_level == "INFO"
     storage = load_config(configured_project).get(STORAGE_CONFIG).entries
-    assert resolve_directory(storage, "logs") == "data/logs"
+    assert resolve_storage_directory(storage, "logs") == "data/logs"
 
 
 @pytest.mark.parametrize("level", ("TRACE", "warn", "WARN", ""))
@@ -106,7 +107,7 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     asyncio.run(scenario())
     logfile = (
         configured_project
-        / resolve_directory(load_config(configured_project).get(STORAGE_CONFIG).entries, "logs")
+        / resolve_storage_directory(load_config(configured_project).get(STORAGE_CONFIG).entries, "logs")
         / "aurora.log"
     )
     content = logfile.read_text(encoding="utf-8")

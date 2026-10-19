@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableArrayShape, strings_field, text_field
 from src.contracts.identity import TagDefinition, TagsConfig
 
-TAGS_CONFIG = ConfigSpec[TagsConfig](
+CONFIG_SPEC = ConfigSpec[TagsConfig](
     name="tags",
     path="config/tags.toml",
     shape=TableArrayShape(
@@ -18,5 +18,3 @@ TAGS_CONFIG = ConfigSpec[TagsConfig](
         container=TagsConfig,
     ),
 )
-
-CONFIG_SPEC = TAGS_CONFIG

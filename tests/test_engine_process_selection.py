@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 from test_assembly import FakeModel
 
 from aurora import load_config
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.engine import ENGINE_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.contracts import TreeStatus
 from src.contracts.pkgs.agents import AgentCatalog
 from src.contracts.pkgs.ai import Model

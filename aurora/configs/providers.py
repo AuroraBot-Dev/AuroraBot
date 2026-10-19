@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableArrayShape, optional_text_field, text_field
 from src.ai.config import ProviderConfig, ProvidersConfig
 
-PROVIDERS_CONFIG = ConfigSpec[ProvidersConfig](
+CONFIG_SPEC = ConfigSpec[ProvidersConfig](
     name="providers",
     path="config/providers.toml",
     shape=TableArrayShape(
@@ -21,5 +21,3 @@ PROVIDERS_CONFIG = ConfigSpec[ProvidersConfig](
         container=ProvidersConfig,
     ),
 )
-
-CONFIG_SPEC = PROVIDERS_CONFIG

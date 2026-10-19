@@ -14,10 +14,10 @@ from test_assembly import FakeModel
 from test_bot_lifecycle import PlanningModel
 
 from aurora import load_config
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.memory_model import MEMORY_MODEL_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
-from aurora.configs.rhythm import RHYTHM_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from src.cadence import Cadence
 from src.cadence.state import observation_data
 from src.clock import PersistentBotClock

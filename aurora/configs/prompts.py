@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableArrayShape, boolean_field, text_field
 from src.prompt.config import PromptConfig, PromptsConfig
 
-PROMPTS_CONFIG = ConfigSpec[PromptsConfig](
+CONFIG_SPEC = ConfigSpec[PromptsConfig](
     name="prompts",
     path="config/prompts.toml",
     shape=TableArrayShape(
@@ -19,5 +19,3 @@ PROMPTS_CONFIG = ConfigSpec[PromptsConfig](
         container=PromptsConfig,
     ),
 )
-
-CONFIG_SPEC = PROMPTS_CONFIG

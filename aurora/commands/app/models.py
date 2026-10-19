@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from aurora.utils.toml import check_package_name
+from src.utils.validation import check_package_name
 
 if TYPE_CHECKING:
     from pathlib import Path

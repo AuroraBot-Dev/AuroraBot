@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora import load_config
-from aurora.configs.endpoints import ENDPOINTS_CONFIG, EndpointConfig
-from aurora.configs.providers import PROVIDERS_CONFIG, ProviderConfig
+from aurora.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
+from aurora.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
 from aurora.configurator import assemble_config
+from src.ai.config import EndpointConfig, ProviderConfig
 
 if TYPE_CHECKING:
     from pathlib import Path

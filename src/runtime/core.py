@@ -116,30 +116,26 @@ class AuroraRuntime:
     async def _run_request(self, request: TreeLaunchRequest, *, echo: bool = False) -> AgentTree:
         """让主体的主要认知有序执行，外部事实仍可持续提交。"""
         async with self._cognition_lock:
-            return await self._execute_request(request, echo=echo)
+            tree = AgentTree.create(
+                request.tree_id or uuid4().hex,
+                self.root.node_id,
+                self.agents.get(request.agent or self.root.agent),
+                request.message,
+                request.frontier,
+                caused_by=request.caused_by,
+                memory_scopes=request.memory_scopes,
+                focus_goal_ids=request.focus_goal_ids,
+            )
+            await self.world.initialize()
+            await self._require_new_tree_id(tree.tree_id)
 
-    async def _execute_request(self, request: TreeLaunchRequest, *, echo: bool = False) -> AgentTree:
-        """构建并记录一棵具有独立身份的认知树。"""
-        tree = AgentTree.create(
-            request.tree_id or uuid4().hex,
-            self.root.node_id,
-            self.agents.get(request.agent or self.root.agent),
-            request.message,
-            request.frontier,
-            caused_by=request.caused_by,
-            memory_scopes=request.memory_scopes,
-            focus_goal_ids=request.focus_goal_ids,
-        )
-        await self.world.initialize()
-        await self._require_new_tree_id(tree.tree_id)
+            def observer(current: AgentTree) -> None:
+                self._trees[current.tree_id] = current
+                if echo:
+                    self.presenter.echo(current)
 
-        def observer(current: AgentTree) -> None:
-            self._record_tree(current)
-            if echo:
-                self.presenter.echo(current)
-
-        _logger.info("AgentTree 已提交 tree_id={}", tree.tree_id)
-        return await self.runner.run(tree, observer=observer)
+            _logger.info("AgentTree 已提交 tree_id={}", tree.tree_id)
+            return await self.runner.run(tree, observer=observer)
 
     async def _require_new_tree_id(self, tree_id: str) -> None:
         """持久开始事实同样占用实例身份，重启不赋予再次执行的含义。"""
@@ -163,6 +159,3 @@ class AuroraRuntime:
         for tree in self._trees.values():
             statuses[tree.status.value] += 1
         return {"tree_count": len(self._trees), "trees": statuses}
-
-    def _record_tree(self, tree: AgentTree) -> None:
-        self._trees[tree.tree_id] = tree

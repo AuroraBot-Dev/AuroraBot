@@ -1,5 +1,7 @@
 """装配唯一持久主体，并让公开状态操作跟随实际选择。"""
 
+from __future__ import annotations
+
 from src.bot.config import BotConfig
 from src.bot.operations import bot_operation_specs, bot_operations
 from src.bot.store import JournalBotState

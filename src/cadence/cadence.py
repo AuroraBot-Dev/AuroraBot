@@ -17,11 +17,11 @@ from src.cadence.state import (
     observation_data,
     read_launch,
     read_reference,
-    reference_data,
 )
 from src.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, TreeStatus, WorldFrontier
 from src.contracts.bot import GoalStatus, WakeStatus
 from src.contracts.identity import Identifier
+from src.contracts.resource_codec import resource_ref_data
 from src.contracts.rhythm import RhythmAction, RhythmObservation
 from src.utils import get_logger, thaw_json
 
@@ -228,7 +228,7 @@ class Cadence:
             based_on=WorldFrontier(cause.scopes),
             data={
                 "schema_version": 1,
-                "policy": reference_data(self._policy.ref),
+                "policy": resource_ref_data(self._policy.ref),
                 "policy_parameters": dict(self._policy.parameters),
                 "observation": observation_data(observation),
                 "decision": decision_data(decision),
@@ -299,7 +299,7 @@ class Cadence:
             based_on=WorldFrontier(),
             data={
                 "schema_version": 1,
-                "policy": reference_data(self._policy.ref),
+                "policy": resource_ref_data(self._policy.ref),
                 "policy_parameters": dict(self._policy.parameters),
                 "state": state.data(),
                 "tree_id": request.tree_id,

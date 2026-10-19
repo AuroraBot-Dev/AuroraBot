@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, Any
 
-from aurora.commands.config.detail import read_source, render_effective
 from aurora.commands.config.editing import apply_sets, open_in_editor
 from aurora.commands.config.overview import render_overview
-from aurora.configs import config_names, config_spec
+from aurora.commands.config.render import render_value
+from aurora.configs import config_names, config_relative_path, config_spec
 from aurora.utils.process import EXIT_CONFIG_ERROR
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from aurora.commander import CommandSpec
+    from aurora.contracts.command import CommandSpec
     from aurora.contracts.config import ConfigSpec
 
 COMMAND: CommandSpec = {
@@ -72,7 +72,7 @@ def _named(root: Path, name: str, arguments: argparse.Namespace) -> int:
 
 def _show_effective(root: Path, spec: ConfigSpec[Any]) -> int:
     try:
-        rendered = render_effective(root, spec)
+        rendered = render_value(spec.load(root))
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"配置加载失败：{error}\n")
         return EXIT_CONFIG_ERROR
@@ -82,11 +82,11 @@ def _show_effective(root: Path, spec: ConfigSpec[Any]) -> int:
 
 def _show_raw(root: Path, name: str) -> int:
     try:
-        content = read_source(root, name)
+        content = (root / config_relative_path(name)).read_text(encoding="utf-8")
     except OSError as error:
         sys.stderr.write(f"无法读取配置 {name}：{error}\n")
         return EXIT_CONFIG_ERROR
-    sys.stdout.write(content)
+    sys.stdout.write(content if content.endswith("\n") or not content else f"{content}\n")
     return 0
 
 

@@ -11,7 +11,7 @@ from aurora.contracts.config import (
 )
 from src.cadence.config import CadenceConfig
 
-CADENCE_CONFIG = ConfigSpec[CadenceConfig](
+CONFIG_SPEC = ConfigSpec[CadenceConfig](
     name="cadence",
     path="config/cadence.toml",
     shape=TableShape(
@@ -24,5 +24,3 @@ CADENCE_CONFIG = ConfigSpec[CadenceConfig](
         model=CadenceConfig,
     ),
 )
-
-CONFIG_SPEC = CADENCE_CONFIG

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from aurora.configs.reactions import REACTIONS_CONFIG
+from aurora.configs.reactions import CONFIG_SPEC as REACTIONS_CONFIG
 from aurora.configurator import assemble_config
 from src.cadence import ReactiveRule
 from src.cadence.config import ReactionConfig, ReactionsConfig

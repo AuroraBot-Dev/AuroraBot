@@ -6,16 +6,12 @@ from typing import TYPE_CHECKING, Any
 
 from src.contracts.operation import OperationResult, OperationStatus
 from src.contracts.resource import ResourceKey, ResourceRef
+from src.contracts.resource_codec import resource_ref_data
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from src.contracts.operation import OperationRequest
-
-
-def reference_data(ref: ResourceRef) -> dict[str, Any]:
-    """分别记录资源身份和确定版本。"""
-    return {"key": str(ref.key), "revision": ref.revision}
 
 
 def read_reference(data: Mapping[str, Any]) -> ResourceRef:
@@ -30,7 +26,7 @@ def request_data(request: OperationRequest) -> dict[str, Any]:
         "request_id": request.request_id,
         "bot_id": request.bot_id,
         "source": request.source,
-        "target": reference_data(request.target),
+        "target": resource_ref_data(request.target),
         "kind": request.kind.value,
         "arguments": request.arguments,
         "correlation_id": request.correlation_id,

@@ -28,8 +28,8 @@ from aurora.commands.app.models import (
     RunnerPlan,
 )
 from aurora.commands.app.store import check_project_directory
-from aurora.utils.toml import check_relative_directory
 from src.mcp.config import AppConfig
+from src.utils.validation import check_relative_directory
 
 if TYPE_CHECKING:
     from aurora.commands.app.install import PreparedInstall

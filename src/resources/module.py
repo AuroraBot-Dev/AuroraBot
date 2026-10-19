@@ -1,5 +1,7 @@
 """从模组贡献构造统一资源目录。"""
 
+from __future__ import annotations
+
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
 from src.contracts.pkgs.resources import RESOURCE_PROVIDERS
 from src.contracts.pkgs.resources import ResourceCatalog as ResourceCatalogPort
@@ -14,19 +16,19 @@ from src.resources.queries import ResourceFindQuery, ResourceInspectQuery
     provides=ResourceCatalogPort,
     requires=ResourceCatalogPort,
     contributes=OPERATION_CONTRIBUTIONS,
-    resources=(ResourceFindQuery.DEFINITION.resource, ResourceInspectQuery.DEFINITION.resource),
     consumes=(RESOURCE_CONTRIBUTIONS, RESOURCE_ALIASES, RESOURCE_PROVIDERS),
     declares=(RESOURCE_CONTRIBUTIONS, RESOURCE_ALIASES, RESOURCE_PROVIDERS),
+    resources=(ResourceFindQuery.definition.resource, ResourceInspectQuery.definition.resource),
 )
 def build(context: ModuleContext) -> ResourceCatalogPort:
     """先读取模组静态定义，再合并依赖配置或模型状态的资源贡献。"""
-    definitions = (
-        *context.contributions(RESOURCE_CONTRIBUTIONS),
-        *(spec.resource for spec in context.modules),
-        *(descriptor for spec in context.modules for descriptor in spec.resources),
-    )
     catalog = context.get_optional(ResourceCatalogPort)
     if catalog is None:
+        definitions = (
+            *context.contributions(RESOURCE_CONTRIBUTIONS),
+            *(spec.resource for spec in context.modules),
+            *(descriptor for spec in context.modules for descriptor in spec.resources),
+        )
         catalog = ResourceCatalog(
             definitions, context.contributions(RESOURCE_ALIASES), context.contributions(RESOURCE_PROVIDERS)
         )

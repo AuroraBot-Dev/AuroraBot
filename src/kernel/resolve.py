@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -10,7 +11,7 @@ from src.kernel.api import KERNEL_API_VERSION
 from src.kernel.phase import ACTIVATE, BUILTIN_PHASES, CONSTRUCT, CONSTRUCTION_KINDS, PREPARE, Phase
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Iterable, Mapping
 
     from src.kernel.declaration import ModuleSpec
 
@@ -27,8 +28,6 @@ class PhaseStep:
 class Resolution:
     """一次解析结果：构造顺序、激活顺序与完整阶段计划。"""
 
-    construction: tuple[ModuleSpec, ...]
-    activation: tuple[ModuleSpec, ...]
     phases: tuple[PhaseStep, ...]
     providers: Mapping[type, str]
     modules: tuple[ModuleSpec, ...]
@@ -37,6 +36,16 @@ class Resolution:
         """登记权属于冻结的解析结果，运行阶段不能重新选择提供者。"""
         object.__setattr__(self, "providers", MappingProxyType(dict(self.providers)))
         object.__setattr__(self, "modules", tuple(self.modules))
+
+    @property
+    def construction(self) -> tuple[ModuleSpec, ...]:
+        """构造顺序直接来自阶段计划，不另存第二份可漂移的结果。"""
+        return self.step(CONSTRUCT)
+
+    @property
+    def activation(self) -> tuple[ModuleSpec, ...]:
+        """激活顺序与执行生命周期时读取的是同一份阶段计划。"""
+        return self.step(ACTIVATE)
 
     def step(self, phase: Phase) -> tuple[ModuleSpec, ...]:
         for entry in self.phases:
@@ -63,13 +72,13 @@ def resolve(specs: Iterable[ModuleSpec]) -> Resolution:
     _validate_declarations(active, available)
     _validate_orderings(active)
 
-    construction = _topological(active, _construction_dependencies(providers, contributors), _by_identity)
+    construction = _topological(
+        sorted(active, key=lambda spec: spec.module_id), _construction_dependencies(active, providers, contributors)
+    )
     phases = _collect_phases(active)
     _validate_phase_groups(phases)
-    steps = tuple(PhaseStep(phase, _phase_modules(phase, active, providers, construction)) for phase in phases)
+    steps = tuple(PhaseStep(phase, _phase_modules(phase, providers, construction)) for phase in phases)
     return Resolution(
-        construction=construction,
-        activation=_step_of(steps, ACTIVATE),
         phases=steps,
         providers={capability: spec.module_id for capability, spec in providers.items()},
         modules=tuple(available),
@@ -99,7 +108,6 @@ def _validate_phase_groups(phases: Iterable[Phase]) -> None:
 
 def _phase_modules(
     phase: Phase,
-    specs: Iterable[ModuleSpec],
     providers: Mapping[type, ModuleSpec],
     construction: tuple[ModuleSpec, ...],
 ) -> tuple[ModuleSpec, ...]:
@@ -108,18 +116,9 @@ def _phase_modules(
     if phase == PREPARE:
         return tuple(spec for spec in construction if spec.participates(PREPARE))
     base = tuple(reversed(construction)) if phase.shutdown else construction
-    return _ordered(specs, phase, providers, base)
-
-
-def _step_of(steps: Iterable[PhaseStep], phase: Phase) -> tuple[ModuleSpec, ...]:
-    for step in steps:
-        if step.phase == phase:
-            return step.modules
-    return ()
-
-
-def _by_identity(spec: ModuleSpec) -> tuple[int, str]:
-    return (0, spec.module_id)
+    participants = tuple(spec for spec in base if spec.participates(phase))
+    dependencies = {spec.module_id: _ordering_dependencies(spec, phase, providers) for spec in participants}
+    return _topological(participants, dependencies)
 
 
 def _validate_module_api(specs: tuple[ModuleSpec, ...]) -> None:
@@ -213,19 +212,16 @@ def _validate_orderings(specs: Iterable[ModuleSpec]) -> None:
 
 
 def _construction_dependencies(
+    specs: Iterable[ModuleSpec],
     providers: Mapping[type, ModuleSpec],
     contributors: Mapping[str, list[ModuleSpec]],
-) -> Callable[[ModuleSpec], set[str]]:
-    def dependencies(spec: ModuleSpec) -> set[str]:
-        result: set[str] = set()
-        for requirement in spec.requires:
-            _add(result, providers.get(requirement), spec)
-        for key in spec.consumes:
-            for contributor in contributors.get(key.name, ()):
-                _add(result, contributor, spec)
-        return result
-
-    return dependencies
+) -> dict[str, set[str]]:
+    """能力与贡献依赖编译为同一张图，由排序统一处理自依赖。"""
+    return {
+        spec.module_id: {providers[requirement].module_id for requirement in spec.requires}
+        | {contributor.module_id for key in spec.consumes for contributor in contributors.get(key.name, ())}
+        for spec in specs
+    }
 
 
 def _ordering_dependencies(spec: ModuleSpec, phase: Phase, providers: Mapping[type, ModuleSpec]) -> set[str]:
@@ -237,63 +233,36 @@ def _ordering_dependencies(spec: ModuleSpec, phase: Phase, providers: Mapping[ty
         if target != phase:
             continue
         for capability in ordering.after:
-            _add(result, providers.get(capability), spec)
+            if capability in providers:
+                result.add(providers[capability].module_id)
     return result
-
-
-def _add(dependencies: set[str], module: ModuleSpec | None, spec: ModuleSpec) -> None:
-    if module is not None and module.module_id != spec.module_id:
-        dependencies.add(module.module_id)
-
-
-def _ordered(
-    specs: Iterable[ModuleSpec],
-    phase: Phase,
-    providers: Mapping[type, ModuleSpec],
-    base_order: Iterable[ModuleSpec],
-) -> tuple[ModuleSpec, ...]:
-    participants = [spec for spec in specs if spec.participates(phase)]
-    if not participants:
-        return ()
-    index = {spec.module_id: position for position, spec in enumerate(base_order)}
-
-    def key(spec: ModuleSpec) -> tuple[int, str]:
-        return (index.get(spec.module_id, len(index)), spec.module_id)
-
-    return _topological(participants, lambda spec: _ordering_dependencies(spec, phase, providers), key)
 
 
 def _topological(
     specs: Iterable[ModuleSpec],
-    dependencies: Callable[[ModuleSpec], set[str]],
-    order_key: Callable[[ModuleSpec], tuple[int, str]],
+    dependencies: Mapping[str, set[str]],
 ) -> tuple[ModuleSpec, ...]:
-    ordered = sorted(specs, key=order_key)
-    by_identity = {spec.module_id: spec for spec in ordered}
-    names = set(by_identity)
-    resolved = {
-        spec.module_id: {name for name in dependencies(spec) if name in names and name != spec.module_id}
-        for spec in ordered
-    }
+    """按依赖排序；同时就绪的模块保持输入顺序，不依赖集合遍历顺序。"""
+    ordered = tuple(specs)
+    positions = {spec.module_id: index for index, spec in enumerate(ordered)}
+    names = set(positions)
+    resolved = {name: dependencies[name] & (names - {name}) for name in positions}
     in_degree = {name: len(deps) for name, deps in resolved.items()}
     dependents: dict[str, set[str]] = {spec.module_id: set() for spec in ordered}
     for name, deps in resolved.items():
         for dependency in deps:
             dependents[dependency].add(name)
 
-    queue = sorted(
-        (name for name, degree in in_degree.items() if degree == 0),
-        key=lambda name: order_key(by_identity[name]),
-    )
+    queue = [positions[name] for name, degree in in_degree.items() if degree == 0]
+    heapq.heapify(queue)
     result: list[ModuleSpec] = []
     while queue:
-        name = queue.pop(0)
-        result.append(by_identity[name])
-        for dependent in sorted(dependents[name]):
+        spec = ordered[heapq.heappop(queue)]
+        result.append(spec)
+        for dependent in dependents[spec.module_id]:
             in_degree[dependent] -= 1
             if in_degree[dependent] == 0:
-                queue.append(dependent)
-        queue.sort(key=lambda name: order_key(by_identity[name]))
+                heapq.heappush(queue, positions[dependent])
 
     if len(result) != len(ordered):
         cycle = sorted(names - {spec.module_id for spec in result})

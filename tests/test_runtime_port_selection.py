@@ -11,9 +11,9 @@ import pytest
 from test_assembly import FakeModel
 from test_model_provenance import _config
 
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.memory import MEMORY_CONFIG
-from aurora.configs.rhythm import RHYTHM_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
+from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from src.cadence import Cadence as ConcreteCadence
 from src.contracts import EnvironmentEvent, MemorySnapshot
 from src.contracts.operation import OperationKind, OperationRequest, OperationStatus

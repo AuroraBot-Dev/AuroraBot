@@ -11,10 +11,10 @@ from src.contracts.pkgs.memory import MemoryPolicy, MemoryReader
 from src.contracts.pkgs.world import WorldJournal
 from src.contracts.scope import ScopeDeclaration, ScopeKind
 from src.kernel import ModuleContext, module
-from src.memory import Memory
 from src.memory.config import MemoryConfig
 from src.memory.feedback import MemoryFeedback
 from src.memory.index import MemoryIndex
+from src.memory.memory import Memory
 from src.memory.observations import MemoryExposures
 from src.memory.queries import MemoryRecallQuery, MemorySourceQuery
 from src.memory.replay import MemoryTrainingInput
@@ -24,9 +24,9 @@ from src.memory.replay import MemoryTrainingInput
     name="memory",
     provides=MemoryReader,
     requires=(MemoryReader, WorldJournal, BotStateStore, MemoryPolicy, ScopeCatalog),
-    contributes=(OPERATION_CONTRIBUTIONS,),
+    contributes=OPERATION_CONTRIBUTIONS,
     resources=tuple(
-        query.DEFINITION.resource
+        query.definition.resource
         for query in (MemoryRecallQuery, MemorySourceQuery, MemoryExposures, MemoryFeedback, MemoryTrainingInput)
     ),
     scopes=ScopeDeclaration("*:world/bot/*/memory", ScopeKind.RESOURCE, "记忆使用反馈及修正的持久事实。"),

@@ -13,7 +13,7 @@ from rhythm_support import make_episode
 from test_assembly import FakeModel
 
 from aurora import load_config
-from aurora.configs.rhythm import RHYTHM_CONFIG
+from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from src.contracts import EnvironmentEvent
 from src.contracts.pkgs.cadence import Cadence, RhythmPolicy
 from src.rhythm.config import RhythmConfig

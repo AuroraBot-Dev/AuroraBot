@@ -12,7 +12,7 @@ from aurora.contracts.config import (
 )
 from src.mcp.config import PlatformConfig, PlatformsConfig
 
-PLATFORMS_CONFIG = ConfigSpec[PlatformsConfig](
+CONFIG_SPEC = ConfigSpec[PlatformsConfig](
     name="platforms",
     path="config/platforms.toml",
     shape=TableArrayShape(
@@ -27,5 +27,3 @@ PLATFORMS_CONFIG = ConfigSpec[PlatformsConfig](
         container=PlatformsConfig,
     ),
 )
-
-CONFIG_SPEC = PLATFORMS_CONFIG

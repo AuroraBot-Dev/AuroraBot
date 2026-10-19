@@ -1,5 +1,7 @@
 """装配统一操作入口并贡献由定义生成的工具。"""
 
+from __future__ import annotations
+
 from src.contracts import TOOL_CONTRIBUTIONS
 from src.contracts.operation import OPERATION_CONTRIBUTIONS
 from src.contracts.pkgs.artifacts import ArtifactStore
@@ -16,9 +18,9 @@ from src.operations.tool import operation_tools
 @module(
     name="operations",
     provides=OperationRegistryPort,
-    requires=(BotStateStore, ResourceCatalog, WorldJournal, ArtifactStore),
-    consumes=OPERATION_CONTRIBUTIONS,
+    requires=(OperationRegistryPort, BotStateStore, ResourceCatalog, WorldJournal, ArtifactStore),
     contributes=TOOL_CONTRIBUTIONS,
+    consumes=OPERATION_CONTRIBUTIONS,
     declares=OPERATION_CONTRIBUTIONS,
     scopes=ScopeDeclaration(
         "*:world/bot/*/operations", ScopeKind.RUN, "领域操作的请求和回执台账；业务事实由所属能力另行提交。"
@@ -27,13 +29,15 @@ from src.operations.tool import operation_tools
 def build(context: ModuleContext) -> OperationRegistryPort:
     """每个主体绑定一套操作目录与回执世界。"""
     bot_id = context.get(BotStateStore).bot_id
-    registry = OperationRegistry(
-        bot_id,
-        context.contributions(OPERATION_CONTRIBUTIONS),
-        context.get(ResourceCatalog),
-        context.get(WorldJournal),
-        artifacts=context.get(ArtifactStore),
-    )
+    registry = context.get_optional(OperationRegistryPort)
+    if registry is None:
+        registry = OperationRegistry(
+            bot_id,
+            context.contributions(OPERATION_CONTRIBUTIONS),
+            context.get(ResourceCatalog),
+            context.get(WorldJournal),
+            artifacts=context.get(ArtifactStore),
+        )
     for tool in operation_tools(registry, bot_id):
         context.contribute(TOOL_CONTRIBUTIONS, tool)
     return registry

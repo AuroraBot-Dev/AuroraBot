@@ -18,10 +18,10 @@ from test_train_command import _NOW, _write
 from aurora import load_config
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.memory_model import MEMORY_MODEL_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
-from aurora.configs.rhythm import RHYTHM_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from src.artifacts.store import FileArtifactStore
 from src.contracts import TreeStatus
 from src.contracts.model_artifact import MODEL_MEDIA_TYPE

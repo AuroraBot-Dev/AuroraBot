@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableArrayShape, text_field
 from src.ai.config import EndpointConfig, EndpointsConfig
 
-ENDPOINTS_CONFIG = ConfigSpec[EndpointsConfig](
+CONFIG_SPEC = ConfigSpec[EndpointsConfig](
     name="endpoints",
     path="config/endpoints.toml",
     shape=TableArrayShape(
@@ -19,5 +19,3 @@ ENDPOINTS_CONFIG = ConfigSpec[EndpointsConfig](
         container=EndpointsConfig,
     ),
 )
-
-CONFIG_SPEC = ENDPOINTS_CONFIG

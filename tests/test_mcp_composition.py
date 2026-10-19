@@ -9,9 +9,9 @@ import pytest
 from model_support import FakeModelDirectory
 
 from aurora.configs import load_config
-from aurora.configs.apps import APPS_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
-from aurora.configs.runtime import RUNTIME_CONFIG
+from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
 from src.contracts import (
     TREE_LAUNCHER_BINDINGS,
     ChatMessage,

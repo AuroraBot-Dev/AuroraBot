@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableShape, positive_integer_field, strings_field
 from src.memory.config import MemoryConfig
 
-MEMORY_CONFIG = ConfigSpec[MemoryConfig](
+CONFIG_SPEC = ConfigSpec[MemoryConfig](
     name="memory",
     path="config/memory.toml",
     shape=TableShape(
@@ -19,5 +19,3 @@ MEMORY_CONFIG = ConfigSpec[MemoryConfig](
         model=MemoryConfig,
     ),
 )
-
-CONFIG_SPEC = MEMORY_CONFIG

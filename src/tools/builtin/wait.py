@@ -20,27 +20,22 @@ _MAX_WAIT_SECONDS = 60.0
 class WaitTool:
     """可取消的本地等待；用于节律边界或给外部环境留出时间。"""
 
-    def __init__(self) -> None:
-        self._definition = ToolDefinition(
-            WAIT_TOOL,
-            "让当前 Agent 暂停指定秒数，再继续运行；上限 60 秒。",
-            {
-                "type": "object",
-                "properties": {
-                    "seconds": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": _MAX_WAIT_SECONDS,
-                        "description": "等待秒数（默认 1 秒）。",
-                    }
-                },
-                "additionalProperties": False,
+    definition = ToolDefinition(
+        WAIT_TOOL,
+        "让当前 Agent 暂停指定秒数，再继续运行；上限 60 秒。",
+        {
+            "type": "object",
+            "properties": {
+                "seconds": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": _MAX_WAIT_SECONDS,
+                    "description": "等待秒数（默认 1 秒）。",
+                }
             },
-        )
-
-    @property
-    def definition(self) -> ToolDefinition:
-        return self._definition
+            "additionalProperties": False,
+        },
+    )
 
     def resolve_scopes(self, call: ToolCall) -> ToolScopes:
         _ = call

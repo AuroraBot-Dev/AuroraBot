@@ -11,12 +11,12 @@ import pytest
 from model_support import FakeModelDirectory
 
 from aurora import AuroraConfig, load_config
-from aurora.configs.agents import AGENTS_CONFIG
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.engine import ENGINE_CONFIG
-from aurora.configs.memory import MEMORY_CONFIG
-from aurora.configs.providers import PROVIDERS_CONFIG
-from aurora.configs.runtime import RUNTIME_CONFIG
+from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
+from aurora.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
+from aurora.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
+from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
 from src.agents.config import AgentsConfig
 from src.ai import LiteLLMModelGateway
 from src.ai.config import ProvidersConfig

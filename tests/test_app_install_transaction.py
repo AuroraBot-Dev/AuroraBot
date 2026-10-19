@@ -25,7 +25,7 @@ from aurora.commands.app.install import PreparedInstall
 from aurora.commands.app.models import InstallError, PlanError, RawApp, RegistryWriteError
 from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
 from aurora.commands.app.transaction import install_transaction, plan_removal, read_origin
-from aurora.configs.apps import APPS_CONFIG
+from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
 from aurora.configurator import assemble_config
 
 if TYPE_CHECKING:

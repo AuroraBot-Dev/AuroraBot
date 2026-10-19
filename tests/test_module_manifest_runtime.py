@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 from test_assembly import FakeModel
 
 from aurora import load_config
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
 from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
 from src.contracts.pkgs.operations import OperationRegistry

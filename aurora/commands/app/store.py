@@ -26,19 +26,9 @@ from aurora.commands.app.models import (
     RegistryWriteError,
     registry_package,
 )
-from aurora.utils.toml import (
-    TomlTable,
-    boolean,
-    check_relative_directory,
-    check_unique_items,
-    load_toml,
-    optional_text,
-    positive_number,
-    strings,
-    table_array,
-    text,
-)
+from aurora.utils.toml import TomlTable, boolean, load_toml, optional_text, positive_number, strings, table_array, text
 from src.mcp.config import AppConfig, McpEventMode, McpTransport
+from src.utils.validation import check_relative_directory, check_unique_items
 
 if TYPE_CHECKING:
     from tomlkit.toml_document import TOMLDocument

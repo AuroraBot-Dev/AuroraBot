@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.clock import PersistentBotClock
+from src.clock.clock import PersistentBotClock
 from src.contracts import TREE_LAUNCHER_BINDINGS
 from src.contracts.pkgs.bot import BotStateStore
 from src.contracts.pkgs.clock import BotClock

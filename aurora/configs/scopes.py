@@ -14,7 +14,7 @@ def _parse_kind(value: str) -> ScopeKind:
         raise ValueError(f"域种类必须是 {kinds} 之一：{value!r}") from error
 
 
-SCOPES_CONFIG = ConfigSpec[ScopeCatalog](
+CONFIG_SPEC = ConfigSpec[ScopeCatalog](
     name="scopes",
     path="config/scopes.toml",
     shape=TableArrayShape(
@@ -28,5 +28,3 @@ SCOPES_CONFIG = ConfigSpec[ScopeCatalog](
         container=ScopeCatalog,
     ),
 )
-
-CONFIG_SPEC = SCOPES_CONFIG

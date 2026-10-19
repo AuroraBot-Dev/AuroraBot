@@ -12,7 +12,8 @@ from jsonschema import Draft202012Validator
 
 from src.contracts import ToolScopes, WorldFrontier
 from src.contracts.operation import OperationKind, OperationResult, OperationStatus
-from src.operations.codec import read_reference, reference_data, request_data
+from src.contracts.resource_codec import resource_ref_data
+from src.operations.codec import read_reference, request_data
 from src.operations.receipts import DEFAULT_INLINE_RECEIPT, OperationReceipts
 from src.operations.requests import DEFAULT_INLINE_REQUEST, OperationRequests
 from src.utils import get_logger
@@ -205,7 +206,7 @@ class OperationRegistry:
             based_on=WorldFrontier(),
             data={
                 "request": data,
-                "resolved": reference_data(resolved) if resolved is not None else None,
+                "resolved": resource_ref_data(resolved) if resolved is not None else None,
             },
         )
 

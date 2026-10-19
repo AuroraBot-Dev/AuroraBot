@@ -1,5 +1,7 @@
 """解析资源内容存储配置。"""
 
+from __future__ import annotations
+
 from aurora.contracts.config import ConfigSpec, TableShape, text_field
 from src.artifacts.config import ArtifactsConfig
 

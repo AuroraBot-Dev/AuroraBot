@@ -9,7 +9,7 @@ from memory_support import episodes
 from test_assembly import FakeModel
 
 from aurora import load_config
-from aurora.configs.memory_model import MEMORY_MODEL_CONFIG
+from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
 from src.contracts.memory import MemoryRequest
 from src.contracts.pkgs.memory import MemoryPolicy, MemoryReader
 from src.contracts.pkgs.resources import ResourceCatalog

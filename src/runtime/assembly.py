@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from src.kernel import (
         Assembly,
         ContributionBinding,
-        DiscoverySource,
         InstanceBinding,
         ManagedAssembly,
         ModuleSpec,
@@ -78,13 +77,10 @@ def validate_loop_operations(capabilities: Capabilities) -> None:
         raise ValueError(f"Observe 与 Effect 必须是同一个世界：{names} 必须由同一个对象提供")
 
 
-def _sources(settings: Settings) -> tuple[DiscoverySource, ...]:
-    plugin_directory = settings.project_root.joinpath(*_PLUGIN_DIRECTORY)
-    return (BuiltinSource(), DirectorySource(plugin_directory), EntryPointSource())
-
-
 def _discover(settings: Settings) -> tuple[ModuleSpec, ...]:
-    specs = tuple(spec for source in _sources(settings) for spec in source.discover())
+    plugin_directory = settings.project_root.joinpath(*_PLUGIN_DIRECTORY)
+    sources = (BuiltinSource(), DirectorySource(plugin_directory), EntryPointSource())
+    specs = tuple(spec for source in sources for spec in source.discover())
     validate_declared_scopes(settings, specs)
     return specs
 

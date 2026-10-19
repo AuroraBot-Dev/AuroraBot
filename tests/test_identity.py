@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from aurora.configs.tags import TAGS_CONFIG
+from aurora.configs.tags import CONFIG_SPEC as TAGS_CONFIG
 from aurora.configurator import assemble_config
 from src.contracts.identity import (
     DEFAULT_NAMESPACE,

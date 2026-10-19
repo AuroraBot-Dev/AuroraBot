@@ -6,39 +6,51 @@ from typing import TYPE_CHECKING
 
 from src.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
 from src.kernel import ModuleContext, module
-from src.world import SqlAlchemyWorldJournal
 from src.world.config import StorageConfig, resolve_storage_directory
+from src.world.store import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from src.kernel import AsyncCleanup
 
 
-def _database_path(context: ModuleContext) -> Path:
-    storage = context.settings.resolve(StorageConfig)
-    directory = resolve_storage_directory(storage.entries, "world")
-    return context.settings.project_root / directory / "world.sqlite3"
-
-
-async def prepare(context: ModuleContext) -> AsyncCleanup:
-    if context.get_optional(WorldJournal) is None:
-        context.provide(WorldJournal, SqlAlchemyWorldJournal(_database_path(context)))
-    journal = context.get(WorldJournal)
-    await journal.initialize()
+async def prepare(context: ModuleContext) -> AsyncCleanup | None:
+    """仅准备自己提供的存储；读写适配始终使用实际选中的世界。"""
+    owns_journal = context.is_provider(WorldJournal)
+    journal = context.get_optional(WorldJournal)
+    if journal is None:
+        if not owns_journal:
+            return None
+        journal = _create_default(context)
+        context.provide(WorldJournal, journal)
+    if owns_journal:
+        await journal.initialize()
     if not context.contains(WorldReader):
         context.provide(WorldReader, journal)
     if not context.contains(WorldWriter):
         context.provide(WorldWriter, journal)
-    return journal.close
+    return journal.close if owns_journal else None
 
 
-@module(name="world", provides=(WorldReader, WorldWriter, WorldJournal), prepare=prepare)
-def build(context: ModuleContext) -> WorldReader:
-    existing = context.get_optional(WorldJournal)
-    if existing is not None:
-        return existing
-    return SqlAlchemyWorldJournal(_database_path(context))
+@module(
+    name="world",
+    provides=(WorldReader, WorldWriter, WorldJournal),
+    requires=WorldJournal,
+    prepare=prepare,
+)
+def build(context: ModuleContext) -> WorldJournal:
+    """读写端口与存储端口绑定到同一个已选世界。"""
+    journal = context.get_optional(WorldJournal)
+    if journal is None:
+        journal = _create_default(context)
+    return journal
+
+
+def _create_default(context: ModuleContext) -> WorldJournal:
+    """按配置构造默认世界，不初始化或登记公共端口。"""
+    storage = context.settings.resolve(StorageConfig)
+    directory = resolve_storage_directory(storage.entries, "world")
+    path = context.settings.project_root / directory / "world.sqlite3"
+    return SqlAlchemyWorldJournal(path)
 
 
 MODULE = build

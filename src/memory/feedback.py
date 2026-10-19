@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class MemoryFeedback:
     """显式自评与实际曝光、任务结果分开，不自动生成正确效用标签。"""
 
-    DEFINITION = OperationDefinition(
+    definition = OperationDefinition(
         ResourceRef(ResourceKey.parse("aurora:memory/command/feedback"), "1"),
         "评估一次真实上下文中的记忆是否帮助目标；引用推荐之后获知的证据。自评保留为 reported，不自动作为正确答案。",
         FeedbackInput.model_json_schema(),
@@ -32,11 +32,6 @@ class MemoryFeedback:
         self._world = world
         self._state = state
         self._scope = f"{state.scope}/memory"
-
-    @property
-    def definition(self) -> OperationDefinition:
-        """由统一操作路由保护调用身份和幂等回执。"""
-        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """反馈观察主体和已有反馈，并在所属域发布新的判断。"""

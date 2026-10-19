@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from aurora.contracts.config import ConfigSpec
 from aurora.utils.toml import load_toml, optional_text, table_array, text
-from src.world.config import StorageConfig, StorageEntry, resolve_storage_directory
+from src.world.config import StorageConfig, StorageEntry
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,15 +30,8 @@ def _parse(path: Path) -> StorageConfig:
     return StorageConfig(entries)
 
 
-def resolve_directory(entries: tuple[StorageEntry, ...], name: str) -> str:
-    """按 name 查找目录并递归展开变量，返回规整后的项目相对路径。"""
-    return resolve_storage_directory(entries, name)
-
-
-STORAGE_CONFIG = ConfigSpec[StorageConfig](
+CONFIG_SPEC = ConfigSpec[StorageConfig](
     name="storage",
     path="config/storage.toml",
     parse=_parse,
 )
-
-CONFIG_SPEC = STORAGE_CONFIG

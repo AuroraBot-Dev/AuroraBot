@@ -10,7 +10,7 @@ from typing import cast
 
 import pytest
 
-from aurora.configs.scopes import SCOPES_CONFIG
+from aurora.configs.scopes import CONFIG_SPEC as SCOPES_CONFIG
 from aurora.configurator import assemble_config
 from src.cadence import CADENCE_SCOPE
 from src.console.events import CONSOLE_SCOPE

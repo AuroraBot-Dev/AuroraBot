@@ -57,15 +57,14 @@ async def prepare(context: ModuleContext) -> None:
     provides=RhythmPolicy,
     requires=(WorldReader, BotStateStore, ArtifactStore, RhythmPolicy),
     contributes=(RESOURCE_CONTRIBUTIONS, OPERATION_CONTRIBUTIONS),
-    resources=RhythmObservations.DEFINITION.resource,
+    resources=RhythmObservations.definition.resource,
     prepare=prepare,
 )
 def build(context: ModuleContext) -> RhythmPolicy:
     """策略实例与时间、认知运行器分别由内核绑定。"""
-    config = context.settings.resolve(RhythmConfig)
     policy = context.get_optional(RhythmPolicy)
     if policy is None:
-        policy = _policy(config, context.settings.project_root)
+        policy = _policy(context.settings.resolve(RhythmConfig), context.settings.project_root)
     context.contribute(
         OPERATION_CONTRIBUTIONS, RhythmObservations(context.get(WorldReader), context.get(BotStateStore).bot_id)
     )

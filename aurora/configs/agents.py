@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableArrayShape, strings_field, text_field
 from src.agents.config import AgentConfig, AgentsConfig
 
-AGENTS_CONFIG = ConfigSpec[AgentsConfig](
+CONFIG_SPEC = ConfigSpec[AgentsConfig](
     name="agents",
     path="config/agents.toml",
     shape=TableArrayShape(
@@ -22,5 +22,3 @@ AGENTS_CONFIG = ConfigSpec[AgentsConfig](
         container=AgentsConfig,
     ),
 )
-
-CONFIG_SPEC = AGENTS_CONFIG

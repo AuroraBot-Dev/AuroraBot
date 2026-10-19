@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, cast
 from aurora.contracts.config import ConfigSpec
 from aurora.utils.toml import (
     boolean,
-    check_unique_items,
     load_toml,
     optional_text,
     positive_number,
@@ -17,6 +16,7 @@ from aurora.utils.toml import (
     text,
 )
 from src.mcp.config import AppConfig, AppsConfig, McpEventMode, McpTransport
+from src.utils.validation import check_unique_items
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -69,10 +69,8 @@ def _parse_app(raw: TomlTable) -> AppConfig:
     )
 
 
-APPS_CONFIG = ConfigSpec[AppsConfig](
+CONFIG_SPEC = ConfigSpec[AppsConfig](
     name="apps",
     path="config/apps.toml",
     parse=_parse,
 )
-
-CONFIG_SPEC = APPS_CONFIG

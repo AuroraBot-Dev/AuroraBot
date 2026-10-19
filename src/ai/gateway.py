@@ -121,7 +121,7 @@ class LiteLLMModelGateway:
             )
         )
         parameters: dict[str, Any] = {
-            "model": _gateway_model(endpoint, provider),
+            "model": f"{provider.sdk_provider}/{endpoint.model}",
             "messages": to_openai_messages(request.messages, tool_names),
             "api_key": api_key,
             "timeout": endpoint.timeout_seconds,
@@ -199,11 +199,6 @@ class LiteLLMModelGateway:
             )
             return response
         raise AssertionError("模型请求尝试循环未返回")
-
-
-def _gateway_model(endpoint: ModelBinding, provider: ProviderDefinition) -> str:
-    """协议前缀来自冻结的执行声明，资源名与远端模型名各自保留。"""
-    return f"{provider.sdk_provider}/{endpoint.model}"
 
 
 async def _litellm_completion(parameters: dict[str, Any]) -> object:

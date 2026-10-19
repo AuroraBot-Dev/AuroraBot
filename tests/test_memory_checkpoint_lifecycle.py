@@ -11,9 +11,9 @@ from memory_support import episodes
 from test_assembly import FakeModel
 
 from aurora import load_config
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.memory_model import MEMORY_MODEL_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.contracts import WorldFrontier
 from src.contracts.memory import MemoryRequest
 from src.contracts.pkgs.artifacts import ArtifactStore

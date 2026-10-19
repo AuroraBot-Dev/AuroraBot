@@ -1,5 +1,7 @@
 """资源内容存储与操作入口的自描述装配。"""
 
+from __future__ import annotations
+
 from src.artifacts.config import ArtifactsConfig
 from src.artifacts.discovery import ArtifactFindOperation
 from src.artifacts.operations import ArtifactOperation
@@ -11,19 +13,10 @@ from src.contracts.pkgs.resources import RESOURCE_PROVIDERS
 from src.kernel import ModuleContext, module
 
 
-def _store(context: ModuleContext) -> ArtifactStore:
-    """按配置绑定本机存储，其余模组只依赖公共端口。"""
-    existing = context.get_optional(ArtifactStore)
-    if existing is not None:
-        return existing
-    config = context.settings.resolve(ArtifactsConfig)
-    return FileArtifactStore(context.settings.project_root / config.directory)
-
-
 async def prepare(context: ModuleContext) -> None:
     """模型在构造前读取权重时，内容端口已经按依赖顺序就绪。"""
     if context.is_provider(ArtifactStore) and not context.contains(ArtifactStore):
-        context.provide(ArtifactStore, _store(context))
+        context.provide(ArtifactStore, _create_default(context))
 
 
 @module(
@@ -32,19 +25,27 @@ async def prepare(context: ModuleContext) -> None:
     requires=ArtifactStore,
     contributes=(OPERATION_CONTRIBUTIONS, RESOURCE_PROVIDERS),
     resources=(
-        ArtifactFindOperation.DEFINITION.resource,
+        ArtifactFindOperation.definition.resource,
         *(ArtifactOperation.definition_for(action).resource for action in ("stat", "read", "put")),
     ),
     prepare=prepare,
 )
 def build(context: ModuleContext) -> ArtifactStore:
     """启动前提供的同一内容存储继续用于运行期操作。"""
-    store = _store(context)
+    store = context.get_optional(ArtifactStore)
+    if store is None:
+        store = _create_default(context)
     context.contribute(RESOURCE_PROVIDERS, ArtifactProvider(store))
     context.contribute(OPERATION_CONTRIBUTIONS, ArtifactFindOperation(store))
     for action in ("stat", "read", "put"):
         context.contribute(OPERATION_CONTRIBUTIONS, ArtifactOperation(store, action))
     return store
+
+
+def _create_default(context: ModuleContext) -> ArtifactStore:
+    """按配置构造默认存储，不选择或登记公共端口。"""
+    config = context.settings.resolve(ArtifactsConfig)
+    return FileArtifactStore(context.settings.project_root / config.directory)
 
 
 MODULE = build

@@ -1,9 +1,11 @@
 """解析记忆推荐模型的独立配置。"""
 
+from __future__ import annotations
+
 from aurora.contracts.config import ConfigSpec, TableShape, optional_text_field, positive_number_field, text_field
 from src.memory_model.config import MemoryModelConfig
 
-MEMORY_MODEL_CONFIG = ConfigSpec[MemoryModelConfig](
+CONFIG_SPEC = ConfigSpec[MemoryModelConfig](
     name="memory_model",
     path="config/memory_model.toml",
     shape=TableShape(
@@ -17,5 +19,3 @@ MEMORY_MODEL_CONFIG = ConfigSpec[MemoryModelConfig](
         model=MemoryModelConfig,
     ),
 )
-
-CONFIG_SPEC = MEMORY_MODEL_CONFIG

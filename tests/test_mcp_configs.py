@@ -6,10 +6,11 @@ from pathlib import Path
 import pytest
 
 from aurora import load_config
-from aurora.configs.apps import APPS_CONFIG, AppConfig
-from aurora.configs.platforms import PLATFORMS_CONFIG, PlatformConfig
+from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from aurora.configurator import assemble_config
 from src.mcp import McpAppSpec, McpEventMode, McpTransport
+from src.mcp.config import AppConfig, PlatformConfig
 from src.mcp.module import build_mcp_specs
 from src.mcp.runtime import app_owned_scopes
 from src.mcp.scopes import owns_scope

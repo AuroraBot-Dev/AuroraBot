@@ -9,8 +9,9 @@ from src.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
 from src.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceKey
 from src.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from src.kernel import ModuleContext, module
-from src.prompt import PromptAssembler, PromptCatalog
-from src.prompt.config import PromptConfig, PromptsConfig
+from src.prompt.composer import PromptAssembler
+from src.prompt.config import PromptsConfig
+from src.prompt.models import PromptCatalog
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -28,25 +29,18 @@ def build(context: ModuleContext) -> PromptAssemblerPort:
     if assembler is None:
         config = context.settings.resolve(PromptsConfig)
         directory = context.settings.project_root / "config" / "prompts"
-        assembler = PromptAssembler(PromptCatalog(_read_prompts(directory, config.prompts)))
+        fragments = tuple(
+            PromptFragment(ResourceKey.parse(item.id), _read_fragment(directory, item.source))
+            for item in config.prompts
+            if item.enabled
+        )
+        assembler = PromptAssembler(PromptCatalog(fragments))
     for fragment in assembler.catalog.fragments:
         context.contribute(RESOURCE_CONTRIBUTIONS, fragment.resource)
         context.contribute(
             RESOURCE_CONTENTS, ResourceContent(fragment.ref, fragment.content.encode("utf-8"), PROMPT_MEDIA_TYPE)
         )
     return assembler
-
-
-def _read_prompts(
-    directory: Path,
-    prompts: tuple[PromptConfig, ...],
-) -> tuple[PromptFragment, ...]:
-    """保留配置声明的资源身份与系统片段顺序。"""
-    return tuple(
-        PromptFragment(ResourceKey.parse(item.id), _read_fragment(directory, item.source))
-        for item in prompts
-        if item.enabled
-    )
 
 
 def _read_fragment(directory: Path, source: str) -> str:

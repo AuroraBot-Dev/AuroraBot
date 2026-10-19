@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from litellm import get_llm_provider
 from test_model_provenance import _config, _read_definition
 
-from aurora.configs.endpoints import ENDPOINTS_CONFIG
+from aurora.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
 from src.ai import gateway
 from src.ai.config import EndpointConfig, EndpointsConfig
 from src.contracts import TreeStatus

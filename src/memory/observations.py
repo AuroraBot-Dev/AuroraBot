@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class MemoryExposures:
     """分页显示实际装配的记忆，候选、推荐和载入保持独立。"""
 
-    DEFINITION = OperationDefinition(
+    definition = OperationDefinition(
         ResourceRef(ResourceKey.parse("aurora:memory/query/exposures"), "1"),
         "分页扫描自己的上下文记忆审计；默认最近一页。载入表示已装配进模型请求，未表示采用或产生收益。",
         ExposuresInput.model_json_schema(),
@@ -32,11 +32,6 @@ class MemoryExposures:
         """只读取当前 Bot 的模型请求，历史记录保持原样。"""
         self._reader = reader
         self._bot_id = bot_id
-
-    @property
-    def definition(self) -> OperationDefinition:
-        """操作定义同时提供终端和模型工具入口。"""
-        return self.DEFINITION
 
     def scopes_for(self, request: OperationRequest) -> ToolScopes:
         """全局游标查询的结果自身披露所扫描的知识边界。"""

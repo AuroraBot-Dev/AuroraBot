@@ -1,5 +1,7 @@
 """解析节律模型选择与基线参数。"""
 
+from __future__ import annotations
+
 from aurora.contracts.config import (
     ConfigSpec,
     TableShape,
@@ -10,7 +12,7 @@ from aurora.contracts.config import (
 )
 from src.rhythm.config import RhythmConfig
 
-RHYTHM_CONFIG = ConfigSpec[RhythmConfig](
+CONFIG_SPEC = ConfigSpec[RhythmConfig](
     name="rhythm",
     path="config/rhythm.toml",
     shape=TableShape(
@@ -27,5 +29,3 @@ RHYTHM_CONFIG = ConfigSpec[RhythmConfig](
         model=RhythmConfig,
     ),
 )
-
-CONFIG_SPEC = RHYTHM_CONFIG

@@ -1,5 +1,7 @@
 """正文发布独立于资源目录与领域能力的构造依赖。"""
 
+from __future__ import annotations
+
 from src.contracts.artifact import ArtifactInfo
 from src.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
 from src.contracts.pkgs.artifacts import ArtifactStore

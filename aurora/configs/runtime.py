@@ -5,7 +5,7 @@ from __future__ import annotations
 from aurora.contracts.config import ConfigSpec, TableShape, text_field
 from src.runtime.config import RuntimeConfig
 
-RUNTIME_CONFIG = ConfigSpec[RuntimeConfig](
+CONFIG_SPEC = ConfigSpec[RuntimeConfig](
     name="runtime",
     path="config/runtime.toml",
     shape=TableShape(
@@ -19,5 +19,3 @@ RUNTIME_CONFIG = ConfigSpec[RuntimeConfig](
         model=RuntimeConfig,
     ),
 )
-
-CONFIG_SPEC = RUNTIME_CONFIG

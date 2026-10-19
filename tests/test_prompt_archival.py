@@ -11,8 +11,8 @@ from test_assembly import FakeModel
 from test_kernel import _Settings
 
 from aurora import load_config
-from aurora.configs.cadence import CADENCE_CONFIG
-from aurora.configs.platforms import PLATFORMS_CONFIG
+from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from src.artifacts.module import MODULE as ARTIFACTS_MODULE
 from src.artifacts.store import FileArtifactStore
 from src.contracts.artifact import ArtifactInfo

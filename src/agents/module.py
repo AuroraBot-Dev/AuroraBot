@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.agents import AgentCatalog
+from src.agents.catalog import AgentCatalog
 from src.agents.config import AgentsConfig
 from src.contracts import (
     BUILTIN_TOOL_NAMES,
@@ -21,35 +21,30 @@ from src.utils import resolve_names
     name="agents",
     provides=AgentCatalogPort,
     requires=AgentCatalogPort,
-    consumes=TOOL_CONTRIBUTIONS,
     contributes=RESOURCE_CONTENTS,
+    consumes=TOOL_CONTRIBUTIONS,
 )
 def build(context: ModuleContext) -> AgentCatalogPort:
     """读取实际选中目录，正文归档不反向参与工具和资源目录的构造。"""
     catalog = context.get_optional(AgentCatalogPort)
     if catalog is None:
-        catalog = _catalog(context)
+        external = context.contributions(TOOL_CONTRIBUTIONS)
+        available = BUILTIN_TOOL_NAMES | frozenset(tool.definition.name for tool in external)
+        tags = context.settings.resolve(TagsConfig).table
+        catalog = AgentCatalog(
+            AgentDefinition(
+                item.id,
+                item.description,
+                item.prompt,
+                item.model,
+                resolve_names(available, tags.expand(item.tools, label=item.id), label=item.id),
+                item.children,
+            )
+            for item in context.settings.resolve(AgentsConfig).agents
+        )
     for definition in catalog.definitions:
         context.contribute(RESOURCE_CONTENTS, ResourceContent(definition.ref, definition.content, AGENT_MEDIA_TYPE))
     return catalog
-
-
-def _catalog(context: ModuleContext) -> AgentCatalogPort:
-    """默认目录按实际工具目录展开标签和模式，再冻结完整原型。"""
-    external = context.contributions(TOOL_CONTRIBUTIONS)
-    available = BUILTIN_TOOL_NAMES | frozenset(tool.definition.name for tool in external)
-    tags = context.settings.resolve(TagsConfig).table
-    return AgentCatalog(
-        AgentDefinition(
-            item.id,
-            item.description,
-            item.prompt,
-            item.model,
-            resolve_names(available, tags.expand(item.tools, label=item.id), label=item.id),
-            item.children,
-        )
-        for item in context.settings.resolve(AgentsConfig).agents
-    )
 
 
 MODULE = build
