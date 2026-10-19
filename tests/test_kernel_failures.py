@@ -61,7 +61,7 @@ def test_failure_can_be_delivered_before_close_without_losing_its_history() -> N
         async with asyncio.timeout(1):
             failure = await handle.next_failure()
         assert failure is not None
-        assert (failure.module_name, failure.phase_name) == ("sensor", "run")
+        assert (failure.module_name, failure.phase_name) == ("aurora:kernel/module/sensor", "run")
         assert isinstance(failure.error, ValueError)
         assert failure.__cause__ is failure.error
         assert handle.failures == (failure,)
@@ -144,7 +144,7 @@ def test_startup_error_and_cleanup_error_are_both_preserved(construction: bool) 
         assert captured.value.exceptions[0] is original
         cleanup_error = captured.value.exceptions[1]
         assert isinstance(cleanup_error, ModuleLifecycleError)
-        assert cleanup_error.module_name == "startup"
+        assert cleanup_error.module_name == "aurora:kernel/module/startup"
         assert isinstance(cleanup_error.error, OSError)
 
     asyncio.run(scenario())

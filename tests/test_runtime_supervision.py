@@ -92,7 +92,7 @@ def test_headless_background_failure_is_persisted_and_ends_the_process(configure
             failures = [commit for commit in page.commits if commit.kind == RUNTIME_MODULE_FAILED]
             assert len(failures) == 1
             assert failures[0].data == {
-                "module": "broken_sensor",
+                "module": "aurora:kernel/module/broken_sensor",
                 "phase": "run",
                 "error_type": "ValueError",
                 "message": "后台连接丢失",

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from src.contracts.identity import is_namespace
+
 
 @dataclass(frozen=True, slots=True)
 class ModuleManifest:
@@ -12,9 +14,12 @@ class ModuleManifest:
 
     version: str = "1.0.0"
     kernel_api: str = ">=1,<2"
+    namespace: str = "aurora"
 
     def __post_init__(self) -> None:
         """使用标准发布版本和范围语法，拒绝空白与格式无效的声明。"""
+        if not isinstance(self.namespace, str) or not is_namespace(self.namespace):
+            raise ValueError("模组必须声明合法命名空间")
         for value in (self.version, self.kernel_api):
             if not isinstance(value, str) or not value or value != value.strip():
                 raise ValueError("模组版本与内核 API 范围必须是非空且无首尾空白的文本")

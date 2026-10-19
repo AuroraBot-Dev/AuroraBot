@@ -30,7 +30,7 @@ def _validate_provides(spec: ModuleSpec, context: _ModuleContext) -> None:
     """仅核对当前模块实际被选中的能力，其他端口由其有效提供者登记。"""
     for capability in spec.provides:
         if context.is_provider(capability) and not context.contains(capability):
-            raise ValueError(f"{spec.name} 声明提供 {capability.__name__}，但构造期没有登记它")
+            raise ValueError(f"{spec.module_id} 声明提供 {capability.__name__}，但构造期没有登记它")
 
 
 def compose(
@@ -51,8 +51,8 @@ def compose(
             hook = spec.hook(step.phase)
             if hook is None:
                 continue
-            _logger.debug("执行组件注册 module={}", spec.name)
-            bound = _ModuleContext(context, spec.name, resolution.providers)
+            _logger.debug("执行组件注册 module={}", spec.module_id)
+            bound = _ModuleContext(context, spec.module_id, resolution.providers)
             cast("ModuleRegistrar", hook)(bound)
             _validate_provides(spec, bound)
     assembly = context.freeze()
@@ -81,12 +81,12 @@ async def compose_managed(
                 hook = spec.hook(step.phase)
                 if hook is None:
                     continue
-                _logger.debug("构造组件 module={} phase={}", spec.name, step.phase.name)
-                bound = _ModuleContext(context, spec.name, resolution.providers)
+                _logger.debug("构造组件 module={} phase={}", spec.module_id, step.phase.name)
+                bound = _ModuleContext(context, spec.module_id, resolution.providers)
                 if step.phase.kind is PhaseKind.SETUP:
                     cleanup = await cast("ModulePrepare", hook)(bound)
                     if cleanup is not None:
-                        cleanups.append(ModuleCleanup(spec.name, step.phase.name, cleanup))
+                        cleanups.append(ModuleCleanup(spec.module_id, step.phase.name, cleanup))
                 else:
                     cast("ModuleRegistrar", hook)(bound)
                     _validate_provides(spec, bound)
@@ -113,13 +113,13 @@ async def _rollback(
     failures: list[Exception] = []
     closed: set[str] = set()
     for spec in reversed(constructed):
-        if spec.name in closed:
+        if spec.module_id in closed:
             continue
-        closed.add(spec.name)
+        closed.add(spec.module_id)
         hook = spec.hook(CLOSE)
         if hook is not None:
-            bound = _ModuleContext(context, spec.name, providers)
-            failure = await collect_failure(spec.name, CLOSE.name, cast("ModuleHook", hook)(bound))
+            bound = _ModuleContext(context, spec.module_id, providers)
+            failure = await collect_failure(spec.module_id, CLOSE.name, cast("ModuleHook", hook)(bound))
             if failure is not None:
                 failures.append(failure)
     for cleanup in reversed(cleanups):

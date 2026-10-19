@@ -48,20 +48,22 @@ class Resolution:
 def resolve(specs: Iterable[ModuleSpec]) -> Resolution:
     listed = tuple(specs)
     _validate_module_api(listed)
-    _validate_names(listed)
+    _validate_identities(listed)
     available = _drop_unsatisfied_optional(listed)
     providers = _providers(available)
     active = tuple(
         spec
         for spec in available
-        if not spec.provides or spec.contributes or any(providers[item].name == spec.name for item in spec.provides)
+        if not spec.provides
+        or spec.contributes
+        or any(providers[item].module_id == spec.module_id for item in spec.provides)
     )
     _validate_requires(active, providers)
     contributors = _contributors(active)
     _validate_declarations(active, available)
     _validate_orderings(active)
 
-    construction = _topological(active, _construction_dependencies(providers, contributors), _by_name)
+    construction = _topological(active, _construction_dependencies(providers, contributors), _by_identity)
     phases = _collect_phases(active)
     _validate_phase_groups(phases)
     steps = tuple(PhaseStep(phase, _phase_modules(phase, active, providers, construction)) for phase in phases)
@@ -69,7 +71,7 @@ def resolve(specs: Iterable[ModuleSpec]) -> Resolution:
         construction=construction,
         activation=_step_of(steps, ACTIVATE),
         phases=steps,
-        providers={capability: spec.name for capability, spec in providers.items()},
+        providers={capability: spec.module_id for capability, spec in providers.items()},
         modules=tuple(available),
     )
 
@@ -116,8 +118,8 @@ def _step_of(steps: Iterable[PhaseStep], phase: Phase) -> tuple[ModuleSpec, ...]
     return ()
 
 
-def _by_name(spec: ModuleSpec) -> tuple[int, str]:
-    return (0, spec.name)
+def _by_identity(spec: ModuleSpec) -> tuple[int, str]:
+    return (0, spec.module_id)
 
 
 def _validate_module_api(specs: tuple[ModuleSpec, ...]) -> None:
@@ -125,27 +127,27 @@ def _validate_module_api(specs: tuple[ModuleSpec, ...]) -> None:
     for spec in specs:
         if not spec.manifest.accepts(KERNEL_API_VERSION):
             raise ValueError(
-                f"模组 {spec.name}（{spec.manifest.version}）与内核 API {KERNEL_API_VERSION} 不兼容，"
+                f"模组 {spec.module_id}（{spec.manifest.version}）与内核 API {KERNEL_API_VERSION} 不兼容，"
                 f"要求：{spec.manifest.kernel_api}"
             )
 
 
-def _validate_names(specs: tuple[ModuleSpec, ...]) -> None:
+def _validate_identities(specs: tuple[ModuleSpec, ...]) -> None:
     seen: set[str] = set()
     for spec in specs:
-        if spec.name in seen:
-            raise ValueError(f"模块名称重复：{spec.name}")
-        seen.add(spec.name)
+        if spec.module_id in seen:
+            raise ValueError(f"模块名称重复：{spec.module_id}")
+        seen.add(spec.module_id)
 
 
 def _drop_unsatisfied_optional(specs: tuple[ModuleSpec, ...]) -> list[ModuleSpec]:
     remaining = list(specs)
     while True:
         available = {capability for spec in remaining for capability in spec.provides}
-        skipped = {spec.name for spec in remaining if _is_unsatisfied(spec, available)}
+        skipped = {spec.module_id for spec in remaining if _is_unsatisfied(spec, available)}
         if not skipped:
             return remaining
-        remaining = [spec for spec in remaining if spec.name not in skipped]
+        remaining = [spec for spec in remaining if spec.module_id not in skipped]
 
 
 def _is_unsatisfied(spec: ModuleSpec, available: set[type]) -> bool:
@@ -162,9 +164,9 @@ def _providers(specs: Iterable[ModuleSpec]) -> dict[type, ModuleSpec]:
         if len(candidates) == 1:
             providers[capability] = candidates[0]
             continue
-        ordered = sorted(candidates, key=lambda spec: (-spec.priority, spec.name))
+        ordered = sorted(candidates, key=lambda spec: (-spec.priority, spec.module_id))
         if ordered[0].priority == ordered[1].priority:
-            names = ", ".join(spec.name for spec in ordered)
+            names = ", ".join(spec.module_id for spec in ordered)
             raise ValueError(f"能力 {capability.__name__} 被多个同优先级模块提供：{names}")
         providers[capability] = ordered[0]
     return providers
@@ -174,7 +176,7 @@ def _validate_requires(specs: Iterable[ModuleSpec], providers: Mapping[type, Mod
     for spec in specs:
         for requirement in spec.requires:
             if requirement not in providers:
-                raise ValueError(f"{spec.name} 依赖的能力没有提供者：{requirement.__name__}")
+                raise ValueError(f"{spec.module_id} 依赖的能力没有提供者：{requirement.__name__}")
 
 
 def _contributors(specs: Iterable[ModuleSpec]) -> dict[str, list[ModuleSpec]]:
@@ -193,7 +195,7 @@ def _validate_declarations(specs: Iterable[ModuleSpec], owners: Iterable[ModuleS
     declared: dict[str, list[str]] = {}
     for spec in owners:
         for key in spec.declares:
-            declared.setdefault(key.name, []).append(spec.name)
+            declared.setdefault(key.name, []).append(spec.module_id)
     missing = sorted(referenced - set(declared))
     if missing:
         raise ValueError(f"贡献点未被任何模块声明：{', '.join(missing)}")
@@ -207,7 +209,7 @@ def _validate_orderings(specs: Iterable[ModuleSpec]) -> None:
         for ordering in spec.order:
             target = ordering.after_phase or ordering.phase
             if target.order > ordering.phase.order:
-                raise ValueError(f"{spec.name} 的 {ordering.phase.name} 约束引用了更晚阶段 {target.name}")
+                raise ValueError(f"{spec.module_id} 的 {ordering.phase.name} 约束引用了更晚阶段 {target.name}")
 
 
 def _construction_dependencies(
@@ -240,8 +242,8 @@ def _ordering_dependencies(spec: ModuleSpec, phase: Phase, providers: Mapping[ty
 
 
 def _add(dependencies: set[str], module: ModuleSpec | None, spec: ModuleSpec) -> None:
-    if module is not None and module.name != spec.name:
-        dependencies.add(module.name)
+    if module is not None and module.module_id != spec.module_id:
+        dependencies.add(module.module_id)
 
 
 def _ordered(
@@ -253,10 +255,10 @@ def _ordered(
     participants = [spec for spec in specs if spec.participates(phase)]
     if not participants:
         return ()
-    index = {spec.name: position for position, spec in enumerate(base_order)}
+    index = {spec.module_id: position for position, spec in enumerate(base_order)}
 
     def key(spec: ModuleSpec) -> tuple[int, str]:
-        return (index.get(spec.name, len(index)), spec.name)
+        return (index.get(spec.module_id, len(index)), spec.module_id)
 
     return _topological(participants, lambda spec: _ordering_dependencies(spec, phase, providers), key)
 
@@ -267,32 +269,33 @@ def _topological(
     order_key: Callable[[ModuleSpec], tuple[int, str]],
 ) -> tuple[ModuleSpec, ...]:
     ordered = sorted(specs, key=order_key)
-    by_name = {spec.name: spec for spec in ordered}
-    names = set(by_name)
+    by_identity = {spec.module_id: spec for spec in ordered}
+    names = set(by_identity)
     resolved = {
-        spec.name: {name for name in dependencies(spec) if name in names and name != spec.name} for spec in ordered
+        spec.module_id: {name for name in dependencies(spec) if name in names and name != spec.module_id}
+        for spec in ordered
     }
     in_degree = {name: len(deps) for name, deps in resolved.items()}
-    dependents: dict[str, set[str]] = {spec.name: set() for spec in ordered}
+    dependents: dict[str, set[str]] = {spec.module_id: set() for spec in ordered}
     for name, deps in resolved.items():
         for dependency in deps:
             dependents[dependency].add(name)
 
     queue = sorted(
         (name for name, degree in in_degree.items() if degree == 0),
-        key=lambda name: order_key(by_name[name]),
+        key=lambda name: order_key(by_identity[name]),
     )
     result: list[ModuleSpec] = []
     while queue:
         name = queue.pop(0)
-        result.append(by_name[name])
+        result.append(by_identity[name])
         for dependent in sorted(dependents[name]):
             in_degree[dependent] -= 1
             if in_degree[dependent] == 0:
                 queue.append(dependent)
-        queue.sort(key=lambda name: order_key(by_name[name]))
+        queue.sort(key=lambda name: order_key(by_identity[name]))
 
     if len(result) != len(ordered):
-        cycle = sorted(names - {spec.name for spec in result})
+        cycle = sorted(names - {spec.module_id for spec in result})
         raise ValueError(f"模块存在循环依赖：{' → '.join(cycle)}")
     return tuple(result)

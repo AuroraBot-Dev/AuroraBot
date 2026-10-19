@@ -77,6 +77,8 @@ MCP 关闭会先停止各连接的事件入口，再逆序释放所有连接。�
 
 模组通过 `@module(manifest=ModuleManifest("2.4.0", ">=1,<2"), ...)` 声明自身发布版本与所需内核 API 范围。版本与范围使用标准 Python 打包语法，内核 API 当前为 `1.0`，独立于项目发布版本。未指定清单时使用模组版本 `1.0.0` 和范围 `>=1,<2`；该范围不会根据宿主 API 自动扩大。内置、本地目录和 entry point 的声明在发现后统一校验，任何不兼容声明都会在筛选与准备、构造之前失败，可选或被优先级替换的声明同样适用。
 
+清单的 `namespace` 声明模组归属，默认 `aurora`；`@module(name=...)` 只填写局部资源路径。例如 `ModuleManifest(namespace="lab")` 与局部名 `memory` 共同形成 `lab:kernel/module/memory`。完整身份贯穿依赖解析、提供方登记、生命周期与故障记录；不同命名空间可以使用相同局部名，同一完整身份重复出现仍在启动前失败。
+
 模组通过 `@module(scopes=ScopeDeclaration(...))` 声明自己拥有的域、分类和含义。装配在业务准备前合并可用模组的声明，形成冻结的 `ScopeCatalog`；记忆、工具和 MCP 通过能力注入读取同一份目录。插件添加域无需修改宿主配置。`scopes.toml` 默认为空，仅填写项目扩展或覆盖：同模式配置优先，不同模式按路径具体度排列。同一模式的模组声明不一致时，启动前失败。
 
 `/resources` 与 Bot 的 `resources_find` 共用 `aurora:resources/query/find`，返回 `items`、`next_cursor` 和 `listing_mode`；`/inspect` 与 `resources_inspect` 共用 `aurora:resources/query/inspect`。默认每页 20 项，用 `--after` 或结构化参数 `after` 继续同一筛选。查询经过统一操作路由并记录调用；检查动态内容需要确定版本并核对完整性，返回描述后仍需按读取入口取得正文。

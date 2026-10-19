@@ -129,7 +129,7 @@ class _ModuleContext:
     """按解析结果约束单个模块的登记权，读取始终面向实际公共能力。"""
 
     context: ModuleContext
-    name: str
+    module_id: str
     providers: Mapping[type, str]
 
     @property
@@ -144,7 +144,7 @@ class _ModuleContext:
 
     def is_provider(self, capability: type) -> bool:
         """优先级裁决决定登记权，不依赖构造器到达的先后顺序。"""
-        return self.providers.get(capability) == self.name
+        return self.providers.get(capability) == self.module_id
 
     def get[T](self, capability: type[T]) -> T:
         """只返回已登记的有效提供者。"""

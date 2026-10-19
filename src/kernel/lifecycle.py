@@ -109,11 +109,11 @@ class ManagedAssembly:
             hook = spec.hook(step.phase)
             if hook is None:
                 continue
-            bound = _ModuleContext(self._context, spec.name, self._resolution.providers)
+            bound = _ModuleContext(self._context, spec.module_id, self._resolution.providers)
             if step.phase.kind is PhaseKind.TASK:
                 task = asyncio.create_task(
-                    self._run_module(spec.name, step.phase.name, cast("ModuleRunner", hook), bound, stop),
-                    name=f"aurora:{spec.name}:{step.phase.name}",
+                    self._run_module(spec.module_id, step.phase.name, cast("ModuleRunner", hook), bound, stop),
+                    name=f"{spec.module_id}:{step.phase.name}",
                 )
                 task.add_done_callback(_retrieve_exception)
                 self._tasks.append(task)
@@ -148,8 +148,8 @@ class ManagedAssembly:
             hook = spec.hook(step.phase)
             if hook is None:
                 continue
-            bound = _ModuleContext(self._context, spec.name, self._resolution.providers)
-            failure = await collect_failure(spec.name, step.phase.name, cast("ModuleHook", hook)(bound))
+            bound = _ModuleContext(self._context, spec.module_id, self._resolution.providers)
+            failure = await collect_failure(spec.module_id, step.phase.name, cast("ModuleHook", hook)(bound))
             if failure is not None:
                 failures.append(failure)
 

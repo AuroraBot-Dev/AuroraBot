@@ -7,8 +7,9 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from src.contracts.identity import is_path
 from src.contracts.module_manifest import DEFAULT_MODULE_MANIFEST, ModuleManifest
-from src.contracts.resource import ResourceDescriptor
+from src.contracts.resource import ResourceDescriptor, ResourceKey
 from src.contracts.scope import ScopeDeclaration
 from src.kernel.phase import ACTIVATE, CLOSE, CONSTRUCT, DRAIN, PREPARE, READY, RUN, Ordering, Phase
 
@@ -84,10 +85,22 @@ class ModuleSpec:
         """声明式元数据必须是公共值对象，不能把未校验字典带入解析阶段。"""
         if not isinstance(self.manifest, ModuleManifest):
             raise TypeError("模块清单必须使用 ModuleManifest")
+        if not isinstance(self.name, str) or not is_path(self.name):
+            raise ValueError("模块名称必须是合法的局部资源路径")
         if any(not isinstance(scope, ScopeDeclaration) for scope in self.scopes):
             raise TypeError("模块的完整域声明必须使用 ScopeDeclaration")
         if any(not isinstance(resource, ResourceDescriptor) for resource in self.resources):
             raise TypeError("模块的资源定义必须使用 ResourceDescriptor")
+
+    @property
+    def key(self) -> ResourceKey:
+        """模组本身也是命名空间下的资源，局部同名不再产生全局冲突。"""
+        return ResourceKey(self.manifest.namespace, "kernel", "module", self.name)
+
+    @property
+    def module_id(self) -> str:
+        """解析、登记权与生命周期共同使用完整身份。"""
+        return str(self.key)
 
     @property
     def owned_scopes(self) -> tuple[str, ...]:
