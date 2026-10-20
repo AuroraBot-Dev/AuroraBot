@@ -53,16 +53,9 @@ export function useTabbar() {
 
   const { locale } = useI18n();
   const currentTabs = ref<RouteLocationNormalizedGeneric[]>();
-  watch(
-    [
-      () => tabbarStore.getTabs,
-      () => tabbarStore.updateTime,
-      () => locale.value,
-    ],
-    ([tabs]) => {
-      currentTabs.value = tabs.map((item) => wrapperTabLocale(item));
-    },
-  );
+  watch([() => tabbarStore.getTabs, () => tabbarStore.updateTime, () => locale.value], ([tabs]) => {
+    currentTabs.value = tabs.map((item) => wrapperTabLocale(item));
+  });
 
   /**
    * 初始化固定标签页
@@ -143,9 +136,7 @@ export function useTabbar() {
         },
         icon: affixTab ? PinOff : Pin,
         key: 'affix',
-        text: affixTab
-          ? $t('preferences.tabbar.contextMenu.unpin')
-          : $t('preferences.tabbar.contextMenu.pin'),
+        text: affixTab ? $t('preferences.tabbar.contextMenu.unpin') : $t('preferences.tabbar.contextMenu.pin'),
       },
       {
         handler: async () => {

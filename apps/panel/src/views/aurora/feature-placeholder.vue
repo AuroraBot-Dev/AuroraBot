@@ -29,11 +29,7 @@ const details = computed(() => [
   <Page>
     <NCard class="max-w-4xl" :title="$t(`${prefix}.title`)" bordered>
       <NDescriptions :column="1" bordered size="small">
-        <NDescriptionsItem
-          v-for="item in details"
-          :key="item.key"
-          :label="item.label"
-        >
+        <NDescriptionsItem v-for="item in details" :key="item.key" :label="item.label">
           {{ item.children }}
         </NDescriptionsItem>
       </NDescriptions>

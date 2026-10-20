@@ -16,12 +16,7 @@ const VbenDescriptionsItem = defineComponent({
   props: {
     content: {
       default: undefined,
-      type: [
-        String,
-        Number,
-        Function,
-        Object,
-      ] as PropType<DescriptionsRenderNode>,
+      type: [String, Number, Function, Object] as PropType<DescriptionsRenderNode>,
     },
     contentStyle: {
       default: undefined,
@@ -29,12 +24,7 @@ const VbenDescriptionsItem = defineComponent({
     },
     label: {
       default: undefined,
-      type: [
-        String,
-        Number,
-        Function,
-        Object,
-      ] as PropType<DescriptionsRenderNode>,
+      type: [String, Number, Function, Object] as PropType<DescriptionsRenderNode>,
     },
     labelStyle: {
       default: undefined,

@@ -22,10 +22,7 @@ class FileDownloader {
    * @param config 配置信息，可选。
    * @returns 如果config.responseReturn为'body'，则返回Blob(默认)，否则返回RequestResponse<Blob>
    */
-  public async download<T = Blob>(
-    url: string,
-    config?: DownloadRequestConfig,
-  ): Promise<T> {
+  public async download<T = Blob>(url: string, config?: DownloadRequestConfig): Promise<T> {
     const finalConfig: DownloadRequestConfig = {
       responseReturn: 'body',
       method: 'GET',

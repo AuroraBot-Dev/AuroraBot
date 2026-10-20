@@ -1,31 +1,13 @@
 <script lang="ts" setup>
-import type {
-  CadenceStatus,
-  EngineStatus,
-  McpStatus,
-  MemorySnapshot,
-} from '#/api';
+import type { CadenceStatus, EngineStatus, McpStatus, MemorySnapshot } from '#/api';
 
 import { computed, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import {
-  NAlert,
-  NCard,
-  NDescriptions,
-  NDescriptionsItem,
-  NSkeleton,
-  NStatistic,
-  NTag,
-} from 'naive-ui';
+import { NAlert, NCard, NDescriptions, NDescriptionsItem, NSkeleton, NStatistic, NTag } from 'naive-ui';
 
-import {
-  getCadenceStatus,
-  getEngineStatus,
-  getMcpStatus,
-  getMemorySnapshot,
-} from '#/api';
+import { getCadenceStatus, getEngineStatus, getMcpStatus, getMemorySnapshot } from '#/api';
 
 const loading = ref(true);
 const error = ref('');
@@ -35,10 +17,7 @@ const memory = ref<MemorySnapshot>();
 const mcp = ref<McpStatus>();
 
 const memoryCommitCount = computed(() =>
-  (memory.value?.scopes ?? []).reduce(
-    (total, scope) => total + scope.commits.length,
-    0,
-  ),
+  (memory.value?.scopes ?? []).reduce((total, scope) => total + scope.commits.length, 0),
 );
 
 async function load() {
@@ -50,25 +29,12 @@ async function load() {
     getMemorySnapshot(),
     getMcpStatus(),
   ]);
-  engine.value =
-    results[0].status === 'fulfilled'
-      ? (results[0].value ?? undefined)
-      : undefined;
-  cadence.value =
-    results[1].status === 'fulfilled'
-      ? (results[1].value ?? undefined)
-      : undefined;
-  memory.value =
-    results[2].status === 'fulfilled'
-      ? (results[2].value ?? undefined)
-      : undefined;
-  mcp.value =
-    results[3].status === 'fulfilled'
-      ? (results[3].value ?? undefined)
-      : undefined;
+  engine.value = results[0].status === 'fulfilled' ? (results[0].value ?? undefined) : undefined;
+  cadence.value = results[1].status === 'fulfilled' ? (results[1].value ?? undefined) : undefined;
+  memory.value = results[2].status === 'fulfilled' ? (results[2].value ?? undefined) : undefined;
+  mcp.value = results[3].status === 'fulfilled' ? (results[3].value ?? undefined) : undefined;
   const rejected = results.find((result) => result.status === 'rejected');
-  if (rejected?.status === 'rejected')
-    error.value = (rejected.reason as Error).message;
+  if (rejected?.status === 'rejected') error.value = (rejected.reason as Error).message;
   loading.value = false;
 }
 
@@ -82,11 +48,7 @@ onMounted(load);
       <NSkeleton v-for="row in 6" :key="row" text />
     </div>
     <template v-else>
-      <NAlert
-        class="mb-4"
-        title="当前 Panel 仅观察已装配状态，不开放 AgentTree 或进程控制。"
-        type="info"
-      />
+      <NAlert class="mb-4" title="当前 Panel 仅观察已装配状态，不开放 AgentTree 或进程控制。" type="info" />
       <section class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <NCard title="Engine 上界">
           <NDescriptions :column="1" size="small">
@@ -118,11 +80,7 @@ onMounted(load);
         </NCard>
         <NCard title="世界记忆">
           <NStatistic label="活跃 scope" :value="memory?.scopes.length ?? 0" />
-          <NStatistic
-            class="mt-3"
-            label="窗口内提交"
-            :value="memoryCommitCount"
-          />
+          <NStatistic class="mt-3" label="窗口内提交" :value="memoryCommitCount" />
         </NCard>
         <NCard title="MCP 目录">
           <NStatistic label="冻结工具" :value="mcp?.tool_ids.length ?? 0" />

@@ -12,9 +12,7 @@ describe('useAccessStore', () => {
     const store = useAccessStore();
     expect(store.accessMenus).toEqual([]);
     store.setAccessMenus([{ name: 'Dashboard', path: '/dashboard' }]);
-    expect(store.accessMenus).toEqual([
-      { name: 'Dashboard', path: '/dashboard' },
-    ]);
+    expect(store.accessMenus).toEqual([{ name: 'Dashboard', path: '/dashboard' }]);
   });
 
   it('updates accessToken state correctly', () => {

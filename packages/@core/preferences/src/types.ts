@@ -37,28 +37,20 @@ interface BaseCustomPreferencesField<
   tip?: string;
 }
 
-interface CustomPreferencesInputField<
-  TKey extends string = string,
-> extends BaseCustomPreferencesField<TKey, string> {
+interface CustomPreferencesInputField<TKey extends string = string> extends BaseCustomPreferencesField<TKey, string> {
   component: 'input';
 }
 
-interface CustomPreferencesNumberField<
-  TKey extends string = string,
-> extends BaseCustomPreferencesField<TKey, number> {
+interface CustomPreferencesNumberField<TKey extends string = string> extends BaseCustomPreferencesField<TKey, number> {
   component: 'number';
 }
 
-interface CustomPreferencesSelectField<
-  TKey extends string = string,
-> extends BaseCustomPreferencesField<TKey, string> {
+interface CustomPreferencesSelectField<TKey extends string = string> extends BaseCustomPreferencesField<TKey, string> {
   component: 'select';
   options: CustomPreferencesOption[];
 }
 
-interface CustomPreferencesSwitchField<
-  TKey extends string = string,
-> extends BaseCustomPreferencesField<TKey, boolean> {
+interface CustomPreferencesSwitchField<TKey extends string = string> extends BaseCustomPreferencesField<TKey, boolean> {
   component: 'switch';
 }
 
@@ -70,15 +62,11 @@ type AnyCustomPreferencesField =
   | CustomPreferencesSelectField
   | CustomPreferencesSwitchField;
 
-type CustomPreferencesField<
-  TCustomPreferences extends object = CustomPreferencesRecord,
-> =
+type CustomPreferencesField<TCustomPreferences extends object = CustomPreferencesRecord> =
   string extends Extract<keyof TCustomPreferences, string>
     ? AnyCustomPreferencesField
     : {
-        [
-          K in Extract<keyof TCustomPreferences, string>
-        ]: TCustomPreferences[K] extends boolean
+        [K in Extract<keyof TCustomPreferences, string>]: TCustomPreferences[K] extends boolean
           ? CustomPreferencesSwitchField<K>
           : TCustomPreferences[K] extends number
             ? CustomPreferencesNumberField<K>
@@ -87,9 +75,7 @@ type CustomPreferencesField<
               : never;
       }[Extract<keyof TCustomPreferences, string>];
 
-interface PreferencesExtension<
-  TCustomPreferences extends object = CustomPreferencesRecord,
-> {
+interface PreferencesExtension<TCustomPreferences extends object = CustomPreferencesRecord> {
   fields: Array<CustomPreferencesField<TCustomPreferences>>;
   tabLabel: string;
   title?: string;
@@ -433,9 +419,7 @@ interface Preferences {
 
 type PreferencesKeys = keyof Preferences;
 
-interface InitialOptions<
-  TCustomPreferences extends object = CustomPreferencesRecord,
-> {
+interface InitialOptions<TCustomPreferences extends object = CustomPreferencesRecord> {
   extension?: PreferencesExtension<TCustomPreferences>;
   namespace: string;
   overrides?: DeepPartial<Preferences>;

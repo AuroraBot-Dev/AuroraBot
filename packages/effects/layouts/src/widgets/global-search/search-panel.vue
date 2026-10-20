@@ -11,31 +11,20 @@ import { mapTree, traverseTreeValues, uniqueByField } from '@vben/utils';
 import { VbenIcon, VbenScrollbar } from '@vben-core/shadcn-ui';
 import { isHttpUrl } from '@vben-core/shared/utils';
 
-import {
-  onKeyStroke,
-  useEventListener,
-  useLocalStorage,
-  useThrottleFn,
-} from '@vueuse/core';
+import { onKeyStroke, useEventListener, useLocalStorage, useThrottleFn } from '@vueuse/core';
 
 defineOptions({
   name: 'SearchPanel',
 });
 
-const props = withDefaults(
-  defineProps<{ keyword?: string; menus?: MenuRecordRaw[] }>(),
-  {
-    keyword: '',
-    menus: () => [],
-  },
-);
+const props = withDefaults(defineProps<{ keyword?: string; menus?: MenuRecordRaw[] }>(), {
+  keyword: '',
+  menus: () => [],
+});
 const emit = defineEmits<{ close: [] }>();
 
 const router = useRouter();
-const searchHistory = useLocalStorage<MenuRecordRaw[]>(
-  `__search-history-${location.hostname}__`,
-  [],
-);
+const searchHistory = useLocalStorage<MenuRecordRaw[]>(`__search-history-${location.hostname}__`, []);
 const activeIndex = ref(-1);
 const searchItems = shallowRef<MenuRecordRaw[]>([]);
 const searchResults = ref<MenuRecordRaw[]>([]);
@@ -85,9 +74,7 @@ function search(searchKey: string) {
 // When the keyboard up and down keys move to an invisible place
 // the scroll bar needs to scroll automatically
 function scrollIntoView() {
-  const element = document.querySelector(
-    `[data-search-item="${activeIndex.value}"]`,
-  );
+  const element = document.querySelector(`[data-search-item="${activeIndex.value}"]`);
 
   if (element) {
     element.scrollIntoView({ block: 'nearest' });
@@ -167,22 +154,7 @@ function removeItem(index: number) {
 }
 
 // 存储所有需要转义的特殊字符
-const code = new Set([
-  '$',
-  '(',
-  ')',
-  '*',
-  '+',
-  '.',
-  '?',
-  '[',
-  '\\',
-  ']',
-  '^',
-  '{',
-  '|',
-  '}',
-]);
+const code = new Set(['$', '(', ')', '*', '+', '.', '?', '[', '\\', ']', '^', '{', '|', '}']);
 
 // 转换函数，用于转义特殊字符
 function transform(c: string) {
@@ -240,43 +212,28 @@ useEventListener('mousemove', () => {
   <VbenScrollbar>
     <div class="flex! h-full justify-center px-2 sm:max-h-112.5">
       <!-- 无搜索结果 -->
-      <div
-        v-if="keyword && searchResults.length === 0"
-        class="text-center text-muted-foreground"
-      >
+      <div v-if="keyword && searchResults.length === 0" class="text-center text-muted-foreground">
         <SearchX class="mx-auto mt-4 size-12" />
         <p class="mt-6 mb-10 text-xs">
           {{ $t('ui.widgets.search.noResults') }}
-          <span class="text-sm font-medium text-foreground">
-            "{{ keyword }}"
-          </span>
+          <span class="text-sm font-medium text-foreground"> "{{ keyword }}" </span>
         </p>
       </div>
       <!-- 历史搜索记录 & 没有搜索结果 -->
-      <div
-        v-if="!keyword && searchResults.length === 0"
-        class="text-center text-muted-foreground"
-      >
+      <div v-if="!keyword && searchResults.length === 0" class="text-center text-muted-foreground">
         <p class="my-10 text-xs">
           {{ $t('ui.widgets.search.noRecent') }}
         </p>
       </div>
 
       <ul v-show="searchResults.length > 0" class="w-full">
-        <li
-          v-if="searchHistory.length > 0 && !keyword"
-          class="mb-2 text-xs text-muted-foreground"
-        >
+        <li v-if="searchHistory.length > 0 && !keyword" class="mb-2 text-xs text-muted-foreground">
           {{ $t('ui.widgets.search.recent') }}
         </li>
         <li
           v-for="(item, index) in uniqueByField(searchResults, 'path')"
           :key="item.path"
-          :class="
-            activeIndex === index
-              ? 'active bg-primary text-primary-foreground'
-              : ''
-          "
+          :class="activeIndex === index ? 'active bg-primary text-primary-foreground' : ''"
           :data-index="index"
           :data-search-item="index"
           class="group mb-3 flex-center w-full cursor-pointer rounded-lg bg-accent p-4"

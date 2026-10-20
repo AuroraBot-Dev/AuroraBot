@@ -56,8 +56,7 @@ function syncInputBounds() {
 function scrollBottom() {
   void nextTick(() => {
     requestAnimationFrame(() => {
-      if (layoutScrollElement)
-        layoutScrollElement.scrollTop = layoutScrollElement.scrollHeight;
+      if (layoutScrollElement) layoutScrollElement.scrollTop = layoutScrollElement.scrollHeight;
     });
   });
 }
@@ -80,21 +79,14 @@ function lineKind(commit: WorldCommit): ChatLine['kind'] {
   const { data } = commit;
   if (commit.kind === CONSOLE_INPUT) return 'user';
   if (commit.kind === OUTPUT_COMMITTED) return 'assistant';
-  if (
-    commit.kind.endsWith('.failed') ||
-    data.is_error === true ||
-    data.error !== undefined
-  )
-    return 'error';
+  if (commit.kind.endsWith('.failed') || data.is_error === true || data.error !== undefined) return 'error';
   if (commit.kind.startsWith('tool.')) return 'tool';
   return 'system';
 }
 
 function lineText(commit: WorldCommit): string {
-  if (commit.kind === CONSOLE_INPUT)
-    return asString(commit.data.text) || commit.summary;
-  if (commit.kind === OUTPUT_COMMITTED)
-    return asString(commit.data.content) || commit.summary;
+  if (commit.kind === CONSOLE_INPUT) return asString(commit.data.text) || commit.summary;
+  if (commit.kind === OUTPUT_COMMITTED) return asString(commit.data.content) || commit.summary;
   return commit.summary;
 }
 
@@ -103,19 +95,14 @@ function append(commit: WorldCommit) {
   seen.add(commit.commit_id);
   const text = lineText(commit);
   if (commit.kind === CONSOLE_INPUT && text.startsWith('/')) return;
-  if (
-    commit.kind === 'output.requested' ||
-    commit.kind === 'engine.tree.completed'
-  )
-    return;
+  if (commit.kind === 'output.requested' || commit.kind === 'engine.tree.completed') return;
   lines.value.push({
     id: commit.commit_id,
     kind: lineKind(commit),
     text,
     meta: `${commit.kind} · ${formatTime(commit.occurred_at)}`,
   });
-  if (lines.value.length > MAX_LINES)
-    lines.value = lines.value.slice(-MAX_LINES);
+  if (lines.value.length > MAX_LINES) lines.value = lines.value.slice(-MAX_LINES);
 }
 
 async function poll() {
@@ -168,49 +155,24 @@ onBeforeUnmount(() => {
   <Page>
     <NAlert v-if="error" class="mb-4" :title="error" type="error" />
     <div class="mb-4 flex items-center justify-center gap-2">
-      <NTag
-        :bordered="false"
-        :type="consoleStatus?.enabled ? 'success' : 'default'"
-        round
-      >
-        {{
-          consoleStatus?.enabled
-            ? $t('page.aurora.panel.chat.consoleOn')
-            : $t('page.aurora.panel.chat.consoleOff')
-        }}
+      <NTag :bordered="false" :type="consoleStatus?.enabled ? 'success' : 'default'" round>
+        {{ consoleStatus?.enabled ? $t('page.aurora.panel.chat.consoleOn') : $t('page.aurora.panel.chat.consoleOff') }}
       </NTag>
-      <NTag :bordered="false" round>
-        {{ lines.length }} {{ $t('page.aurora.panel.chat.events') }}
-      </NTag>
+      <NTag :bordered="false" round> {{ lines.length }} {{ $t('page.aurora.panel.chat.events') }} </NTag>
     </div>
     <div ref="chatBody" class="chat-body">
       <div v-if="lines.length === 0" class="chat-empty">
         {{ $t('page.aurora.panel.chat.empty') }}
       </div>
-      <div
-        v-for="line in lines"
-        :key="line.id"
-        class="chat-line"
-        :class="[`chat-${line.kind}`]"
-      >
-        <NAvatar
-          v-if="line.kind !== 'user'"
-          class="chat-avatar"
-          :size="32"
-          round
-        >
+      <div v-for="line in lines" :key="line.id" class="chat-line" :class="[`chat-${line.kind}`]">
+        <NAvatar v-if="line.kind !== 'user'" class="chat-avatar" :size="32" round>
           <IconifyIcon :icon="chatAvatar.botIcon" class="size-4" />
         </NAvatar>
         <div class="chat-bubble">
           <small>{{ line.meta }}</small>
           <div class="whitespace-pre-wrap">{{ line.text }}</div>
         </div>
-        <NAvatar
-          v-if="line.kind === 'user'"
-          class="chat-avatar"
-          :size="32"
-          round
-        >
+        <NAvatar v-if="line.kind === 'user'" class="chat-avatar" :size="32" round>
           <IconifyIcon :icon="chatAvatar.userIcon" class="size-4" />
         </NAvatar>
       </div>
@@ -220,9 +182,7 @@ onBeforeUnmount(() => {
       <div class="chat-input-box">
         <div class="chat-readonly-row">
           <IconifyIcon
-            :icon="
-              consoleStatus?.enabled ? 'lucide:radio-tower' : 'lucide:terminal'
-            "
+            :icon="consoleStatus?.enabled ? 'lucide:radio-tower' : 'lucide:terminal'"
             class="chat-readonly-icon size-5"
           />
           <div class="chat-readonly-copy">

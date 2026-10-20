@@ -8,13 +8,7 @@ import { computed, useSlots } from 'vue';
 import { cn } from '@vben-core/shared/utils';
 
 import DescriptionsRow from './descriptions-row.vue';
-import {
-  calcRows,
-  normalizeItems,
-  parseItemsFromSlot,
-  resolveColumn,
-  useScreens,
-} from './use-descriptions';
+import { calcRows, normalizeItems, parseItemsFromSlot, resolveColumn, useScreens } from './use-descriptions';
 
 defineOptions({ name: 'VbenDescriptions' });
 
@@ -43,14 +37,10 @@ const resolvedItems = computed<DescriptionsItemType[]>(() => {
 });
 
 const mergedColumn = computed(() => resolveColumn(props.column, screens.value));
-const mergedItems = computed(() =>
-  normalizeItems(resolvedItems.value, screens.value),
-);
+const mergedItems = computed(() => normalizeItems(resolvedItems.value, screens.value));
 const rows = computed(() => calcRows(mergedItems.value, mergedColumn.value));
 
-const hasHeader = computed(
-  () => !!props.title || !!props.extra || !!slots.title || !!slots.extra,
-);
+const hasHeader = computed(() => !!props.title || !!props.extra || !!slots.title || !!slots.extra);
 
 const tableClass = computed(() =>
   cn(

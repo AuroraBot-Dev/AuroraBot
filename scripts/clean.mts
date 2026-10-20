@@ -11,9 +11,7 @@ async function clean(directory: string): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     // 只清理应用构建产物；cache 仅指 VitePress 的缓存目录。
-    const isTarget =
-      targets.has(entry.name) &&
-      (entry.name !== 'cache' || directory.endsWith('.vitepress'));
+    const isTarget = targets.has(entry.name) && (entry.name !== 'cache' || directory.endsWith('.vitepress'));
     if (isTarget || (withDependencies && entry.name === 'node_modules')) {
       await rm(path, { recursive: true, force: true });
       console.log(`已清理 ${path}`);
@@ -23,8 +21,6 @@ async function clean(directory: string): Promise<void> {
   }
 }
 
-for (const directory of ['apps', 'packages', 'tooling'])
-  await clean(join(root, directory));
+for (const directory of ['apps', 'packages', 'tooling']) await clean(join(root, directory));
 await rm(join(root, '.turbo'), { recursive: true, force: true });
-if (withDependencies)
-  await rm(join(root, 'node_modules'), { recursive: true, force: true });
+if (withDependencies) await rm(join(root, 'node_modules'), { recursive: true, force: true });

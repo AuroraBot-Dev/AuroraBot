@@ -153,19 +153,16 @@ export interface ModalState extends ModalProps {
 }
 
 export type ExtendedModalApi<TData = unknown> = ModalApi<TData> & {
-  useStore: <T = NoInfer<ModalState>>(
-    selector?: (state: NoInfer<ModalState>) => T,
-  ) => Readonly<Ref<T>>;
+  useStore: <T = NoInfer<ModalState>>(selector?: (state: NoInfer<ModalState>) => T) => Readonly<Ref<T>>;
 };
 
-type ModalComponentInstance<TComponent extends Component> =
-  TComponent extends abstract new (...args: any[]) => infer TInstance
-    ? TInstance
-    : never;
+type ModalComponentInstance<TComponent extends Component> = TComponent extends abstract new (
+  ...args: any[]
+) => infer TInstance
+  ? TInstance
+  : never;
 
-export type InferModalData<TComponent extends Component> = [
-  ModalComponentInstance<TComponent>,
-] extends [never]
+export type InferModalData<TComponent extends Component> = [ModalComponentInstance<TComponent>] extends [never]
   ? unknown
   : ModalComponentInstance<TComponent> extends {
         modalApi: ExtendedModalApi<infer TData>;
@@ -173,9 +170,7 @@ export type InferModalData<TComponent extends Component> = [
     ? TData
     : unknown;
 
-export interface ModalApiOptions<
-  TConnectedComponent extends Component = Component,
-> extends ModalState {
+export interface ModalApiOptions<TConnectedComponent extends Component = Component> extends ModalState {
   /**
    * 独立的弹窗组件
    */

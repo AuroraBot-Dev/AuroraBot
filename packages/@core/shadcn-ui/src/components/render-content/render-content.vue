@@ -9,8 +9,7 @@ export default defineComponent({
   name: 'RenderContent',
   props: {
     content: {
-      default: undefined as
-        PropType<(() => any) | Component | string> | undefined,
+      default: undefined as PropType<(() => any) | Component | string> | undefined,
       type: [Object, String, Function],
     },
     renderBr: {
@@ -23,9 +22,7 @@ export default defineComponent({
       if (!props.content) {
         return null;
       }
-      const isComponent =
-        (isObject(props.content) || isFunction(props.content)) &&
-        props.content !== null;
+      const isComponent = (isObject(props.content) || isFunction(props.content)) && props.content !== null;
       if (!isComponent) {
         if (props.renderBr && isString(props.content)) {
           const lines = props.content.split('\n');

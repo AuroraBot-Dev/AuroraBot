@@ -39,11 +39,7 @@ declare global {
 }
 
 const renderLink = (href: string, text: string) =>
-  h(
-    'a',
-    { href, target: '_blank', class: 'vben-link' },
-    { default: () => text },
-  );
+  h('a', { href, target: '_blank', class: 'vben-link' }, { default: () => text });
 
 const {
   authorEmail,
@@ -80,10 +76,7 @@ const vbenDescriptionItems: DescriptionItem[] = [
     title: 'Github',
   },
   {
-    content: h('div', [
-      renderLink(authorUrl, `${authorName}  `),
-      renderLink(`mailto:${authorEmail}`, authorEmail),
-    ]),
+    content: h('div', [renderLink(authorUrl, `${authorName}  `), renderLink(`mailto:${authorEmail}`, authorEmail)]),
     title: '作者',
   },
 ];

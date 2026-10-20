@@ -12,11 +12,7 @@ const DEFAULT_FILENAME = 'downloaded_file';
  * 通过 URL 下载文件，支持跨域
  * @throws {Error} - 当下载失败时抛出错误
  */
-export async function downloadFileFromUrl({
-  fileName,
-  source,
-  target = '_blank',
-}: DownloadOptions): Promise<void> {
+export async function downloadFileFromUrl({ fileName, source, target = '_blank' }: DownloadOptions): Promise<void> {
   if (!source || typeof source !== 'string') {
     throw new Error('Invalid URL.');
   }
@@ -55,10 +51,7 @@ export function downloadFileFromBase64({ fileName, source }: DownloadOptions) {
 /**
  * 通过图片 URL 下载图片文件
  */
-export async function downloadFileFromImageUrl({
-  fileName,
-  source,
-}: DownloadOptions) {
+export async function downloadFileFromImageUrl({ fileName, source }: DownloadOptions) {
   const base64 = await urlToBase64(source);
   downloadFileFromBase64({ fileName, source: base64 });
 }
@@ -66,10 +59,7 @@ export async function downloadFileFromImageUrl({
 /**
  * 通过 Blob 下载文件
  */
-export function downloadFileFromBlob({
-  fileName = DEFAULT_FILENAME,
-  source,
-}: DownloadOptions<Blob>): void {
+export function downloadFileFromBlob({ fileName = DEFAULT_FILENAME, source }: DownloadOptions<Blob>): void {
   if (!(source instanceof Blob)) {
     throw new TypeError('Invalid Blob data.');
   }
@@ -81,15 +71,9 @@ export function downloadFileFromBlob({
 /**
  * 下载文件，支持 Blob、字符串和其他 BlobPart 类型
  */
-export function downloadFileFromBlobPart({
-  fileName = DEFAULT_FILENAME,
-  source,
-}: DownloadOptions<BlobPart>): void {
+export function downloadFileFromBlobPart({ fileName = DEFAULT_FILENAME, source }: DownloadOptions<BlobPart>): void {
   // 如果 data 不是 Blob，则转换为 Blob
-  const blob =
-    source instanceof Blob
-      ? source
-      : new Blob([source], { type: 'application/octet-stream' });
+  const blob = source instanceof Blob ? source : new Blob([source], { type: 'application/octet-stream' });
 
   // 创建对象 URL 并触发下载
   const url = URL.createObjectURL(blob);
@@ -127,11 +111,7 @@ export function urlToBase64(url: string, mineType?: string): Promise<string> {
  * @param fileName - 下载文件的名称，如果未提供则自动识别
  * @param revokeDelay - 清理 URL 的延迟时间 (毫秒)
  */
-export function triggerDownload(
-  href: string,
-  fileName: string | undefined,
-  revokeDelay: number = 100,
-): void {
+export function triggerDownload(href: string, fileName: string | undefined, revokeDelay: number = 100): void {
   const defaultFileName = 'downloaded_file';
   const finalFileName = fileName || defaultFileName;
 

@@ -6,12 +6,7 @@ import type { ClassType } from '@vben/types';
 import { computed } from 'vue';
 
 import { ChevronsDown } from '@lucide/vue';
-import {
-  CollapsibleContent,
-  CollapsibleRoot,
-  CollapsibleTrigger,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger, useForwardPropsEmits } from 'reka-ui';
 
 const props = defineProps<
   CollapsibleRootProps & {
@@ -42,16 +37,8 @@ defineExpose({
 </script>
 
 <template>
-  <CollapsibleRoot
-    v-bind="forwarded"
-    v-model:open="open"
-    class="flex flex-col"
-    :unmount-on-hide="false"
-  >
-    <div
-      class="flex items-center justify-between"
-      v-if="$slots.label || showTrigger"
-    >
+  <CollapsibleRoot v-bind="forwarded" v-model:open="open" class="flex flex-col" :unmount-on-hide="false">
+    <div class="flex items-center justify-between" v-if="$slots.label || showTrigger">
       <slot name="label" v-if="$slots.label"> </slot>
       <CollapsibleTrigger
         v-if="showTrigger"

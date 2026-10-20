@@ -19,20 +19,10 @@ import { computed, ref } from 'vue';
 
 import { Copy, Pin, PinOff, RotateCw } from '@vben/icons';
 import { $t, loadLocaleMessages } from '@vben/locales';
-import {
-  clearCache,
-  preferences,
-  resetPreferences,
-  updateCustomPreferences,
-  usePreferences,
-} from '@vben/preferences';
+import { clearCache, preferences, resetPreferences, updateCustomPreferences, usePreferences } from '@vben/preferences';
 
 import { useVbenDrawer } from '@vben-core/popup-ui';
-import {
-  VbenButton,
-  VbenIconButton,
-  VbenSegmented,
-} from '@vben-core/shadcn-ui';
+import { VbenButton, VbenIconButton, VbenSegmented } from '@vben-core/shadcn-ui';
 import { globalShareState } from '@vben-core/shared/global-state';
 
 import { useClipboard } from '@vueuse/core';
@@ -74,15 +64,9 @@ const appContentCompact = defineModel<ContentCompactType>('appContentCompact');
 const appWatermark = defineModel<boolean>('appWatermark');
 const appWatermarkContent = defineModel<string>('appWatermarkContent');
 const appEnableCheckUpdates = defineModel<boolean>('appEnableCheckUpdates');
-const appEnableCopyPreferences = defineModel<boolean>(
-  'appEnableCopyPreferences',
-);
-const appEnableStickyPreferencesNavigationBar = defineModel<boolean>(
-  'appEnableStickyPreferencesNavigationBar',
-);
-const appPreferencesButtonPosition = defineModel<PreferencesButtonPositionType>(
-  'appPreferencesButtonPosition',
-);
+const appEnableCopyPreferences = defineModel<boolean>('appEnableCopyPreferences');
+const appEnableStickyPreferencesNavigationBar = defineModel<boolean>('appEnableStickyPreferencesNavigationBar');
+const appPreferencesButtonPosition = defineModel<PreferencesButtonPositionType>('appPreferencesButtonPosition');
 
 const transitionProgress = defineModel<boolean>('transitionProgress');
 const transitionName = defineModel<string>('transitionName');
@@ -102,26 +86,19 @@ const sidebarEnable = defineModel<boolean>('sidebarEnable');
 const sidebarWidth = defineModel<number>('sidebarWidth');
 const sidebarDraggable = defineModel<boolean>('sidebarDraggable');
 const sidebarCollapsed = defineModel<boolean>('sidebarCollapsed');
-const sidebarCollapsedShowTitle = defineModel<boolean>(
-  'sidebarCollapsedShowTitle',
-);
-const sidebarAutoActivateChild = defineModel<boolean>(
-  'sidebarAutoActivateChild',
-);
+const sidebarCollapsedShowTitle = defineModel<boolean>('sidebarCollapsedShowTitle');
+const sidebarAutoActivateChild = defineModel<boolean>('sidebarAutoActivateChild');
 const sidebarExpandOnHover = defineModel<boolean>('sidebarExpandOnHover');
 const sidebarCollapsedButton = defineModel<boolean>('sidebarCollapsedButton');
 const sidebarFixedButton = defineModel<boolean>('sidebarFixedButton');
 const headerEnable = defineModel<boolean>('headerEnable');
 const headerMode = defineModel<LayoutHeaderModeType>('headerMode');
-const headerMenuAlign =
-  defineModel<LayoutHeaderMenuAlignType>('headerMenuAlign');
+const headerMenuAlign = defineModel<LayoutHeaderMenuAlignType>('headerMenuAlign');
 
 const breadcrumbEnable = defineModel<boolean>('breadcrumbEnable');
 const breadcrumbShowIcon = defineModel<boolean>('breadcrumbShowIcon');
 const breadcrumbShowHome = defineModel<boolean>('breadcrumbShowHome');
-const breadcrumbStyleType = defineModel<BreadcrumbStyleType>(
-  'breadcrumbStyleType',
-);
+const breadcrumbStyleType = defineModel<BreadcrumbStyleType>('breadcrumbStyleType');
 const breadcrumbHideOnlyOne = defineModel<boolean>('breadcrumbHideOnlyOne');
 
 const tabbarEnable = defineModel<boolean>('tabbarEnable');
@@ -134,13 +111,9 @@ const tabbarDraggable = defineModel<boolean>('tabbarDraggable');
 const tabbarWheelable = defineModel<boolean>('tabbarWheelable');
 const tabbarStyleType = defineModel<string>('tabbarStyleType');
 const tabbarMaxCount = defineModel<number>('tabbarMaxCount');
-const tabbarMiddleClickToClose = defineModel<boolean>(
-  'tabbarMiddleClickToClose',
-);
+const tabbarMiddleClickToClose = defineModel<boolean>('tabbarMiddleClickToClose');
 
-const navigationStyleType = defineModel<NavigationStyleType>(
-  'navigationStyleType',
-);
+const navigationStyleType = defineModel<NavigationStyleType>('navigationStyleType');
 const navigationSplit = defineModel<boolean>('navigationSplit');
 const navigationAccordion = defineModel<boolean>('navigationAccordion');
 
@@ -152,56 +125,28 @@ const footerFixed = defineModel<boolean>('footerFixed');
 const copyrightSettingShow = defineModel<boolean>('copyrightSettingShow');
 const copyrightEnable = defineModel<boolean>('copyrightEnable');
 const copyrightCompanyName = defineModel<string>('copyrightCompanyName');
-const copyrightCompanySiteLink = defineModel<string>(
-  'copyrightCompanySiteLink',
-);
+const copyrightCompanySiteLink = defineModel<string>('copyrightCompanySiteLink');
 const copyrightDate = defineModel<string>('copyrightDate');
 const copyrightIcp = defineModel<string>('copyrightIcp');
 const copyrightIcpLink = defineModel<string>('copyrightIcpLink');
 
 const shortcutKeysEnable = defineModel<boolean>('shortcutKeysEnable');
-const shortcutKeysGlobalSearch = defineModel<boolean>(
-  'shortcutKeysGlobalSearch',
-);
-const shortcutKeysGlobalLogout = defineModel<boolean>(
-  'shortcutKeysGlobalLogout',
-);
-const shortcutKeysGlobalEscape = defineModel<boolean>(
-  'shortcutKeysGlobalEscape',
-);
+const shortcutKeysGlobalSearch = defineModel<boolean>('shortcutKeysGlobalSearch');
+const shortcutKeysGlobalLogout = defineModel<boolean>('shortcutKeysGlobalLogout');
+const shortcutKeysGlobalEscape = defineModel<boolean>('shortcutKeysGlobalEscape');
 
-const shortcutKeysGlobalLockScreen = defineModel<boolean>(
-  'shortcutKeysGlobalLockScreen',
-);
+const shortcutKeysGlobalLockScreen = defineModel<boolean>('shortcutKeysGlobalLockScreen');
 
-const widgetGlobalSearchButtonPosition = defineModel<string>(
-  'widgetGlobalSearchButtonPosition',
-);
-const widgetFullscreenButtonPosition = defineModel<string>(
-  'widgetFullscreenButtonPosition',
-);
-const widgetLanguageToggleButtonPosition = defineModel<string>(
-  'widgetLanguageToggleButtonPosition',
-);
-const widgetNotificationButtonPosition = defineModel<string>(
-  'widgetNotificationButtonPosition',
-);
-const widgetThemeToggleButtonPosition = defineModel<string>(
-  'widgetThemeToggleButtonPosition',
-);
-const widgetLockScreenButtonPosition = defineModel<string>(
-  'widgetLockScreenButtonPosition',
-);
-const widgetLogoutButtonPosition = defineModel<string>(
-  'widgetLogoutButtonPosition',
-);
+const widgetGlobalSearchButtonPosition = defineModel<string>('widgetGlobalSearchButtonPosition');
+const widgetFullscreenButtonPosition = defineModel<string>('widgetFullscreenButtonPosition');
+const widgetLanguageToggleButtonPosition = defineModel<string>('widgetLanguageToggleButtonPosition');
+const widgetNotificationButtonPosition = defineModel<string>('widgetNotificationButtonPosition');
+const widgetThemeToggleButtonPosition = defineModel<string>('widgetThemeToggleButtonPosition');
+const widgetLockScreenButtonPosition = defineModel<string>('widgetLockScreenButtonPosition');
+const widgetLogoutButtonPosition = defineModel<string>('widgetLogoutButtonPosition');
 const widgetOrder = defineModel<string[]>('widgetOrder', { required: true });
-const widgetRefreshButtonPosition = defineModel<string>(
-  'widgetRefreshButtonPosition',
-);
-const widgetTimezoneButtonPosition = defineModel<string>(
-  'widgetTimezoneButtonPosition',
-);
+const widgetRefreshButtonPosition = defineModel<string>('widgetRefreshButtonPosition');
+const widgetTimezoneButtonPosition = defineModel<string>('widgetTimezoneButtonPosition');
 
 const {
   customPreferences,
@@ -228,14 +173,11 @@ const customPreferencesTab = computed(() => {
 });
 
 const customTabLabel = computed(() => {
-  return customPreferencesTab.value?.tabLabel
-    ? $t(customPreferencesTab.value.tabLabel)
-    : '';
+  return customPreferencesTab.value?.tabLabel ? $t(customPreferencesTab.value.tabLabel) : '';
 });
 
 const customTabTitle = computed(() => {
-  const title =
-    customPreferencesTab.value?.title || customPreferencesTab.value?.tabLabel;
+  const title = customPreferencesTab.value?.title || customPreferencesTab.value?.tabLabel;
   return title ? $t(title) : '';
 });
 
@@ -288,12 +230,7 @@ const tabs = computed((): SegmentedItem[] => {
 });
 
 const showBreadcrumbConfig = computed(() => {
-  return (
-    !isFullContent.value &&
-    !isMixedNav.value &&
-    !isHeaderNav.value &&
-    preferences.header.enable
-  );
+  return !isFullContent.value && !isMixedNav.value && !isHeaderNav.value && preferences.header.enable;
 });
 
 async function handleCopy() {
@@ -326,11 +263,7 @@ function handleCustomPreferencesUpdate(updates: CustomPreferencesRecord) {
 
 <template>
   <div>
-    <Drawer
-      :description="$t('preferences.subtitle')"
-      :title="$t('preferences.title')"
-      class="border-0! sm:max-w-sm"
-    >
+    <Drawer :description="$t('preferences.subtitle')" :title="$t('preferences.title')" class="border-0! sm:max-w-sm">
       <template #extra>
         <div class="flex items-center">
           <VbenIconButton
@@ -339,10 +272,7 @@ function handleCustomPreferencesUpdate(updates: CustomPreferencesRecord) {
             class="relative"
             @click="handleReset"
           >
-            <span
-              v-if="mergedDiffPreference"
-              class="absolute top-0.5 right-0.5 size-2 rounded-sm bg-primary"
-            ></span>
+            <span v-if="mergedDiffPreference" class="absolute top-0.5 right-0.5 size-2 rounded-sm bg-primary"></span>
             <RotateCw class="size-4" />
           </VbenIconButton>
           <VbenIconButton
@@ -352,16 +282,9 @@ function handleCustomPreferencesUpdate(updates: CustomPreferencesRecord) {
                 : $t('preferences.enableStickyPreferencesNavigationBar')
             "
             class="relative"
-            @click="
-              () =>
-                (appEnableStickyPreferencesNavigationBar =
-                  !appEnableStickyPreferencesNavigationBar)
-            "
+            @click="() => (appEnableStickyPreferencesNavigationBar = !appEnableStickyPreferencesNavigationBar)"
           >
-            <PinOff
-              v-if="appEnableStickyPreferencesNavigationBar"
-              class="size-4"
-            />
+            <PinOff v-if="appEnableStickyPreferencesNavigationBar" class="size-4" />
             <Pin v-else class="size-4" />
           </VbenIconButton>
         </div>
@@ -476,10 +399,7 @@ function handleCustomPreferencesUpdate(updates: CustomPreferencesRecord) {
                 v-model:breadcrumb-show-home="breadcrumbShowHome"
                 v-model:breadcrumb-show-icon="breadcrumbShowIcon"
                 v-model:breadcrumb-style-type="breadcrumbStyleType"
-                :disabled="
-                  !showBreadcrumbConfig ||
-                  !(isSideNav || isSideMixedNav || isHeaderSidebarNav)
-                "
+                :disabled="!showBreadcrumbConfig || !(isSideNav || isSideMixedNav || isHeaderSidebarNav)"
               />
             </Block>
             <Block :title="$t('preferences.tabbar.title')">
@@ -499,49 +419,23 @@ function handleCustomPreferencesUpdate(updates: CustomPreferencesRecord) {
             </Block>
             <Block :title="$t('preferences.widget.title')">
               <Widget
-                v-model:app-preferences-button-position="
-                  appPreferencesButtonPosition
-                "
-                v-model:widget-fullscreen-button-position="
-                  widgetFullscreenButtonPosition
-                "
-                v-model:widget-global-search-button-position="
-                  widgetGlobalSearchButtonPosition
-                "
-                v-model:widget-language-toggle-button-position="
-                  widgetLanguageToggleButtonPosition
-                "
-                v-model:widget-lock-screen-button-position="
-                  widgetLockScreenButtonPosition
-                "
-                v-model:widget-logout-button-position="
-                  widgetLogoutButtonPosition
-                "
+                v-model:app-preferences-button-position="appPreferencesButtonPosition"
+                v-model:widget-fullscreen-button-position="widgetFullscreenButtonPosition"
+                v-model:widget-global-search-button-position="widgetGlobalSearchButtonPosition"
+                v-model:widget-language-toggle-button-position="widgetLanguageToggleButtonPosition"
+                v-model:widget-lock-screen-button-position="widgetLockScreenButtonPosition"
+                v-model:widget-logout-button-position="widgetLogoutButtonPosition"
                 v-model:widget-order="widgetOrder"
-                v-model:widget-notification-button-position="
-                  widgetNotificationButtonPosition
-                "
-                v-model:widget-refresh-button-position="
-                  widgetRefreshButtonPosition
-                "
-                v-model:widget-theme-toggle-button-position="
-                  widgetThemeToggleButtonPosition
-                "
-                v-model:widget-timezone-button-position="
-                  widgetTimezoneButtonPosition
-                "
+                v-model:widget-notification-button-position="widgetNotificationButtonPosition"
+                v-model:widget-refresh-button-position="widgetRefreshButtonPosition"
+                v-model:widget-theme-toggle-button-position="widgetThemeToggleButtonPosition"
+                v-model:widget-timezone-button-position="widgetTimezoneButtonPosition"
               />
             </Block>
             <Block :title="$t('preferences.footer.title')">
-              <Footer
-                v-model:footer-enable="footerEnable"
-                v-model:footer-fixed="footerFixed"
-              />
+              <Footer v-model:footer-enable="footerEnable" v-model:footer-fixed="footerFixed" />
             </Block>
-            <Block
-              v-if="copyrightSettingShow"
-              :title="$t('preferences.copyright.title')"
-            >
+            <Block v-if="copyrightSettingShow" :title="$t('preferences.copyright.title')">
               <Copyright
                 v-model:copyright-company-name="copyrightCompanyName"
                 v-model:copyright-company-site-link="copyrightCompanySiteLink"

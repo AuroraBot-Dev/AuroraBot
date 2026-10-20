@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { useAppConfig } from '@vben/hooks';
-import {
-  SvgGithubIcon,
-  SvgGoogleIcon,
-  SvgQQChatIcon,
-  SvgWeChatIcon,
-} from '@vben/icons';
+import { SvgGithubIcon, SvgGoogleIcon, SvgQQChatIcon, SvgWeChatIcon } from '@vben/icons';
 import { $t } from '@vben/locales';
 
 import { VbenIconButton } from '@vben-core/shadcn-ui';
@@ -32,32 +27,16 @@ const {
     </div>
 
     <div class="mt-4 flex flex-wrap justify-center">
-      <VbenIconButton
-        :tooltip="$t('authentication.wechatLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
+      <VbenIconButton :tooltip="$t('authentication.wechatLogin')" tooltip-side="top" class="mb-3">
         <SvgWeChatIcon />
       </VbenIconButton>
-      <VbenIconButton
-        :tooltip="$t('authentication.qqLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
+      <VbenIconButton :tooltip="$t('authentication.qqLogin')" tooltip-side="top" class="mb-3">
         <SvgQQChatIcon />
       </VbenIconButton>
-      <VbenIconButton
-        :tooltip="$t('authentication.githubLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
+      <VbenIconButton :tooltip="$t('authentication.githubLogin')" tooltip-side="top" class="mb-3">
         <SvgGithubIcon />
       </VbenIconButton>
-      <VbenIconButton
-        :tooltip="$t('authentication.googleLogin')"
-        tooltip-side="top"
-        class="mb-3"
-      >
+      <VbenIconButton :tooltip="$t('authentication.googleLogin')" tooltip-side="top" class="mb-3">
         <SvgGoogleIcon />
       </VbenIconButton>
       <DingdingLogin

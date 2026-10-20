@@ -13,9 +13,7 @@ const copyrightDate = defineModel<string>('copyrightDate');
 const copyrightIcp = defineModel<string>('copyrightIcp');
 const copyrightIcpLink = defineModel<string>('copyrightIcpLink');
 const copyrightCompanyName = defineModel<string>('copyrightCompanyName');
-const copyrightCompanySiteLink = defineModel<string>(
-  'copyrightCompanySiteLink',
-);
+const copyrightCompanySiteLink = defineModel<string>('copyrightCompanySiteLink');
 
 const itemDisabled = computed(() => props.disabled || !copyrightEnable.value);
 </script>

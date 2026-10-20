@@ -101,11 +101,7 @@ const pinType = 'text' as const;
   >
     <div class="relative flex w-full">
       <PinInputGroup class="mr-2">
-        <PinInputSlot
-          v-for="(item, index) in codeLength"
-          :key="item"
-          :index="index"
-        />
+        <PinInputSlot v-for="(item, index) in codeLength" :key="item" :index="index" />
       </PinInputGroup>
       <VbenButton
         :disabled="disabled"

@@ -35,9 +35,7 @@ function updateCSSVariables(preferences: Preferences) {
   }
 
   // 获取当前的内置主题
-  const currentBuiltType = [...BUILT_IN_THEME_PRESETS].find(
-    (item) => item.type === builtinType,
-  );
+  const currentBuiltType = [...BUILT_IN_THEME_PRESETS].find((item) => item.type === builtinType);
 
   let builtinTypeColorPrimary: string | undefined = '';
 
@@ -70,14 +68,8 @@ function updateCSSVariables(preferences: Preferences) {
   // 更新字体大小
   if (Reflect.has(theme, 'fontSize')) {
     const fontSize = theme.fontSize;
-    document.documentElement.style.setProperty(
-      '--font-size-base',
-      `${fontSize}px`,
-    );
-    document.documentElement.style.setProperty(
-      '--menu-font-size',
-      `calc(${fontSize}px * 0.875)`,
-    );
+    document.documentElement.style.setProperty('--font-size-base', `${fontSize}px`);
+    document.documentElement.style.setProperty('--menu-font-size', `calc(${fontSize}px * 0.875)`);
   }
 }
 
@@ -89,8 +81,7 @@ function updateMainColorVariables(preference: Preferences) {
   if (!preference.theme) {
     return;
   }
-  const { colorDestructive, colorPrimary, colorSuccess, colorWarning } =
-    preference.theme;
+  const { colorDestructive, colorPrimary, colorSuccess, colorWarning } = preference.theme;
 
   const colorVariables = generatorColorVariables([
     { color: colorPrimary, name: 'primary' },

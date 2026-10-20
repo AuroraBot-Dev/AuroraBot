@@ -15,10 +15,7 @@ const props = withDefaults(defineProps<TreeProps>(), treePropsDefaults());
       <slot :name="key" v-bind="slotProps"> </slot>
     </template>
   </VbenTree>
-  <div
-    v-else
-    class="flex-col-center cursor-pointer rounded-lg border p-10 text-sm font-medium text-muted-foreground"
-  >
+  <div v-else class="flex-col-center cursor-pointer rounded-lg border p-10 text-sm font-medium text-muted-foreground">
     <Inbox class="size-10" />
     <div class="mt-1">{{ $t('common.noData') }}</div>
   </div>

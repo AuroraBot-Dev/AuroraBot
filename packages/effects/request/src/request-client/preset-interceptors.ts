@@ -30,13 +30,9 @@ export const defaultResponseInterceptor = ({
         if (config.responseReturn === 'body') {
           return responseData;
         } else if (
-          isFunction(successCode)
-            ? successCode(responseData[codeField])
-            : responseData[codeField] === successCode
+          isFunction(successCode) ? successCode(responseData[codeField]) : responseData[codeField] === successCode
         ) {
-          return isFunction(dataField)
-            ? dataField(responseData)
-            : responseData[dataField];
+          return isFunction(dataField) ? dataField(responseData) : responseData[dataField];
         }
       }
       throw Object.assign({}, response, { response });
@@ -109,9 +105,7 @@ export const authenticateResponseInterceptor = ({
   };
 };
 
-export const errorMessageResponseInterceptor = (
-  makeErrorMessage?: MakeErrorMessageFn,
-): ResponseInterceptorConfig => {
+export const errorMessageResponseInterceptor = (makeErrorMessage?: MakeErrorMessageFn): ResponseInterceptorConfig => {
   return {
     rejected: (error: any) => {
       if (axios.isCancel(error)) {

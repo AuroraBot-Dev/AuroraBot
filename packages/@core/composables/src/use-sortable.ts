@@ -1,10 +1,7 @@
 import type { SortableOptions } from 'sortablejs';
 import type Sortable from 'sortablejs';
 
-function useSortable<T extends HTMLElement>(
-  sortableContainer: T,
-  options: SortableOptions = {},
-) {
+function useSortable<T extends HTMLElement>(sortableContainer: T, options: SortableOptions = {}) {
   const initializeSortable = async () => {
     const Sortable = await import(
       // @ts-expect-error - This is a dynamic import

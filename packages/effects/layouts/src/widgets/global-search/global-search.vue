@@ -3,13 +3,7 @@ import type { MenuRecordRaw } from '@vben/types';
 
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import {
-  ArrowDown,
-  ArrowUp,
-  CornerDownLeft,
-  MdiKeyboardEsc,
-  Search,
-} from '@vben/icons';
+import { ArrowDown, ArrowUp, CornerDownLeft, MdiKeyboardEsc, Search } from '@vben/icons';
 import { $t } from '@vben/locales';
 import { isWindowsOs } from '@vben/utils';
 
@@ -111,11 +105,7 @@ defineExpose({
 
 <template>
   <div>
-    <Modal
-      :fullscreen-button="false"
-      class="w-150"
-      header-class="py-2 border-b"
-    >
+    <Modal :fullscreen-button="false" class="w-150" header-class="py-2 border-b">
       <template #title>
         <div class="flex items-center">
           <Search class="mr-2 size-4 text-muted-foreground" />
@@ -152,12 +142,8 @@ defineExpose({
       class="group flex h-8 cursor-pointer items-center gap-3 rounded-2xl border-none bg-none px-2 py-0.5 outline-hidden md:bg-accent"
       @click="toggleOpen()"
     >
-      <Search
-        class="size-4 text-muted-foreground group-hover:text-foreground group-hover:opacity-100"
-      />
-      <span
-        class="hidden text-xs text-muted-foreground duration-300 group-hover:text-foreground md:block"
-      >
+      <Search class="size-4 text-muted-foreground group-hover:text-foreground group-hover:opacity-100" />
+      <span class="hidden text-xs text-muted-foreground duration-300 group-hover:text-foreground md:block">
         {{ $t('ui.widgets.search.title') }}
       </span>
       <span

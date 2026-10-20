@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import type {
-  DropdownMenuRadioItemEmits,
-  DropdownMenuRadioItemProps,
-} from 'reka-ui';
+import type { DropdownMenuRadioItemEmits, DropdownMenuRadioItemProps } from 'reka-ui';
 
 import type { HTMLAttributes } from 'vue';
 
@@ -10,15 +7,9 @@ import { cn } from '@vben-core/shared/utils';
 
 import { Circle } from '@lucide/vue';
 import { reactiveOmit } from '@vueuse/core';
-import {
-  DropdownMenuItemIndicator,
-  DropdownMenuRadioItem,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { DropdownMenuItemIndicator, DropdownMenuRadioItem, useForwardPropsEmits } from 'reka-ui';
 
-const props = defineProps<
-  DropdownMenuRadioItemProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<DropdownMenuRadioItemProps & { class?: HTMLAttributes['class'] }>();
 
 const emits = defineEmits<DropdownMenuRadioItemEmits>();
 
@@ -38,9 +29,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       )
     "
   >
-    <span
-      class="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center"
-    >
+    <span class="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
       <DropdownMenuItemIndicator>
         <slot name="indicator-icon">
           <Circle class="size-2 fill-current" />

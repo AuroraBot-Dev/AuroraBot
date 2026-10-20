@@ -2,11 +2,7 @@ import type { FormCodec } from '../src/types';
 
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import {
-  decodeFormValues,
-  encodeFormValues,
-  FormCodecError,
-} from '../src/form-codec';
+import { decodeFormValues, encodeFormValues, FormCodecError } from '../src/form-codec';
 
 interface FilterFormValues {
   period: [number, number];

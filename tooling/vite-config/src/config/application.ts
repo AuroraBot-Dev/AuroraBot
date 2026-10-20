@@ -80,19 +80,12 @@ function defineApplicationConfig(userConfigPromise?: DefineApplicationOptions) {
         port,
         warmup: {
           // 预热文件
-          clientFiles: [
-            './index.html',
-            './src/bootstrap.ts',
-            './src/{views,layouts,router,store,api,adapter}/*',
-          ],
+          clientFiles: ['./index.html', './src/bootstrap.ts', './src/{views,layouts,router,store,api,adapter}/*'],
         },
       },
     };
 
-    const mergedCommonConfig = mergeConfig(
-      await getCommonConfig(),
-      applicationConfig,
-    );
+    const mergedCommonConfig = mergeConfig(await getCommonConfig(), applicationConfig);
     return mergeConfig(mergedCommonConfig, vite);
   });
 }

@@ -64,13 +64,7 @@ onMounted(load);
   <Page>
     <NAlert v-if="error" class="mb-4" :title="error" type="error" />
     <NCard>
-      <NDataTable
-        :columns="toolColumns"
-        :data="tools"
-        :loading="loading"
-        :scroll-x="760"
-        size="small"
-      />
+      <NDataTable :columns="toolColumns" :data="tools" :loading="loading" :scroll-x="760" size="small" />
     </NCard>
     <NDrawer v-model:show="drawerOpen" width="min(680px, 92vw)">
       <div class="p-4"><JsonView :value="toolDetail" /></div>

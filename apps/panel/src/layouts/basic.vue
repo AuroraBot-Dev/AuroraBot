@@ -21,13 +21,9 @@ const showChatAvatarSettings = ref(false);
 const { destroyWatermark, updateWatermark } = useWatermark();
 const { isDark } = usePreferences();
 
-const displayName = computed(
-  () => userStore.userInfo?.realName || userStore.userInfo?.username || '',
-);
+const displayName = computed(() => userStore.userInfo?.realName || userStore.userInfo?.username || '');
 
-const avatar = computed(
-  () => userStore.userInfo?.avatar || preferences.app.defaultAvatar,
-);
+const avatar = computed(() => userStore.userInfo?.avatar || preferences.app.defaultAvatar);
 
 const userMenus = [
   {
@@ -72,12 +68,7 @@ watch(
 </script>
 
 <template>
-  <BasicLayout
-    :avatar
-    :text="displayName"
-    @clear-preferences-and-logout="handleLogout"
-    @logout="handleLogout"
-  >
+  <BasicLayout :avatar :text="displayName" @clear-preferences-and-logout="handleLogout" @logout="handleLogout">
     <template #user-dropdown>
       <UserDropdown
         :avatar
@@ -90,9 +81,7 @@ watch(
         <template #label>
           <div class="flex w-full flex-col gap-3">
             <div class="flex items-center gap-3">
-              <div
-                class="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted"
-              >
+              <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
                 <IconifyIcon :icon="chatAvatar.userIcon" class="size-5" />
               </div>
               <div class="min-w-0">
@@ -105,15 +94,11 @@ watch(
               </div>
             </div>
             <div class="flex items-center gap-3">
-              <div
-                class="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted"
-              >
+              <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
                 <IconifyIcon :icon="chatAvatar.botIcon" class="size-5" />
               </div>
               <div class="min-w-0">
-                <div
-                  class="flex items-center text-sm font-medium text-foreground"
-                >
+                <div class="flex items-center text-sm font-medium text-foreground">
                   {{ $t('page.aurora.features.chatAvatars.botName') }}
                   <span
                     class="ml-2 w-fit shrink-0 rounded-full border border-transparent bg-secondary px-2 py-0.5 text-xs font-medium whitespace-nowrap text-green-400"
@@ -131,10 +116,7 @@ watch(
       </UserDropdown>
     </template>
     <template #extra>
-      <AuthenticationLoginExpiredModal
-        v-model:open="accessStore.loginExpired"
-        :avatar
-      >
+      <AuthenticationLoginExpiredModal v-model:open="accessStore.loginExpired" :avatar>
         <LoginForm />
       </AuthenticationLoginExpiredModal>
     </template>

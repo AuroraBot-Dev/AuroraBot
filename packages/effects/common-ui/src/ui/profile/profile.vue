@@ -2,14 +2,7 @@
 import type { Props } from './types';
 
 import { preferences } from '@vben-core/preferences';
-import {
-  Card,
-  Separator,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  VbenAvatar,
-} from '@vben-core/shadcn-ui';
+import { Card, Separator, Tabs, TabsList, TabsTrigger, VbenAvatar } from '@vben-core/shadcn-ui';
 
 import { Page } from '../../components';
 
@@ -29,10 +22,7 @@ const tabsValue = defineModel<string>('modelValue');
     <div class="flex size-full">
       <Card class="w-1/6 flex-none">
         <div class="mt-4 flex-col-center h-40 gap-4">
-          <VbenAvatar
-            :src="userInfo?.avatar ?? preferences.app.defaultAvatar"
-            class="size-20"
-          />
+          <VbenAvatar :src="userInfo?.avatar ?? preferences.app.defaultAvatar" class="size-20" />
           <span class="text-lg font-semibold">
             {{ userInfo?.realName ?? '' }}
           </span>

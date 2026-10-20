@@ -133,19 +133,16 @@ export interface DrawerState extends DrawerProps {
 }
 
 export type ExtendedDrawerApi<TData = unknown> = DrawerApi<TData> & {
-  useStore: <T = NoInfer<DrawerState>>(
-    selector?: (state: NoInfer<DrawerState>) => T,
-  ) => Readonly<Ref<T>>;
+  useStore: <T = NoInfer<DrawerState>>(selector?: (state: NoInfer<DrawerState>) => T) => Readonly<Ref<T>>;
 };
 
-type DrawerComponentInstance<TComponent extends Component> =
-  TComponent extends abstract new (...args: any[]) => infer TInstance
-    ? TInstance
-    : never;
+type DrawerComponentInstance<TComponent extends Component> = TComponent extends abstract new (
+  ...args: any[]
+) => infer TInstance
+  ? TInstance
+  : never;
 
-export type InferDrawerData<TComponent extends Component> = [
-  DrawerComponentInstance<TComponent>,
-] extends [never]
+export type InferDrawerData<TComponent extends Component> = [DrawerComponentInstance<TComponent>] extends [never]
   ? unknown
   : DrawerComponentInstance<TComponent> extends {
         drawerApi: ExtendedDrawerApi<infer TData>;
@@ -153,9 +150,7 @@ export type InferDrawerData<TComponent extends Component> = [
     ? TData
     : unknown;
 
-export interface DrawerApiOptions<
-  TConnectedComponent extends Component = Component,
-> extends DrawerState {
+export interface DrawerApiOptions<TConnectedComponent extends Component = Component> extends DrawerState {
   /**
    * 独立的抽屉组件
    */

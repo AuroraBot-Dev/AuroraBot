@@ -10,13 +10,7 @@ const feature = (name: string, path: string, key: string, icon: string) => ({
   meta: { icon, title: $t(`page.aurora.features.${key}.title`) },
 });
 
-const realFeature = (
-  name: string,
-  path: string,
-  key: string,
-  icon: string,
-  component: () => Promise<unknown>,
-) => ({
+const realFeature = (name: string, path: string, key: string, icon: string, component: () => Promise<unknown>) => ({
   name,
   path,
   component,
@@ -51,20 +45,8 @@ const routes: RouteRecordRaw[] = [
         'lucide:sliders-horizontal',
         () => import('#/views/aurora/agent-settings.vue'),
       ),
-      realFeature(
-        'Models',
-        'models',
-        'models',
-        'lucide:boxes',
-        () => import('#/views/aurora/models.vue'),
-      ),
-      realFeature(
-        'Prompts',
-        'prompts',
-        'prompts',
-        'lucide:notebook-pen',
-        () => import('#/views/aurora/prompts.vue'),
-      ),
+      realFeature('Models', 'models', 'models', 'lucide:boxes', () => import('#/views/aurora/models.vue')),
+      realFeature('Prompts', 'prompts', 'prompts', 'lucide:notebook-pen', () => import('#/views/aurora/prompts.vue')),
     ],
   },
   {
@@ -77,20 +59,8 @@ const routes: RouteRecordRaw[] = [
       title: $t('page.aurora.nav.extensions'),
     },
     children: [
-      realFeature(
-        'Plugins',
-        'tools',
-        'plugins',
-        'lucide:plug-zap',
-        () => import('#/views/aurora/plugins.vue'),
-      ),
-      realFeature(
-        'Apps',
-        'apps',
-        'apps',
-        'lucide:boxes',
-        () => import('#/views/aurora/apps.vue'),
-      ),
+      realFeature('Plugins', 'tools', 'plugins', 'lucide:plug-zap', () => import('#/views/aurora/plugins.vue')),
+      realFeature('Apps', 'apps', 'apps', 'lucide:boxes', () => import('#/views/aurora/apps.vue')),
       feature('Marketplace', 'marketplace', 'marketplace', 'lucide:store'),
     ],
   },
@@ -104,26 +74,10 @@ const routes: RouteRecordRaw[] = [
       title: $t('page.aurora.nav.resources'),
     },
     children: [
-      realFeature(
-        'Memory',
-        'memory',
-        'memory',
-        'lucide:database-zap',
-        () => import('#/views/aurora/memory.vue'),
-      ),
+      realFeature('Memory', 'memory', 'memory', 'lucide:database-zap', () => import('#/views/aurora/memory.vue')),
       feature('EmojiPacks', 'emoji', 'emoji', 'lucide:smile-plus'),
-      feature(
-        'Expressions',
-        'expressions',
-        'expressions',
-        'lucide:message-square-text',
-      ),
-      feature(
-        'BlockedWords',
-        'blocked-words',
-        'blockedWords',
-        'lucide:badge-x',
-      ),
+      feature('Expressions', 'expressions', 'expressions', 'lucide:message-square-text'),
+      feature('BlockedWords', 'blocked-words', 'blockedWords', 'lucide:badge-x'),
       feature('Learning', 'learning', 'learning', 'lucide:brain-circuit'),
     ],
   },
@@ -137,13 +91,7 @@ const routes: RouteRecordRaw[] = [
       title: $t('page.aurora.nav.operations'),
     },
     children: [
-      realFeature(
-        'Logs',
-        'logs',
-        'logs',
-        'lucide:scroll-text',
-        () => import('#/views/aurora/logs.vue'),
-      ),
+      realFeature('Logs', 'logs', 'logs', 'lucide:scroll-text', () => import('#/views/aurora/logs.vue')),
       realFeature(
         'Diagnostics',
         'diagnostics',

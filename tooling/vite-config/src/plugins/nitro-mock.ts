@@ -23,9 +23,7 @@ export const viteNitroMockPlugin = ({
 
       const pkg = await getPackage(mockServerPackage);
       if (!pkg) {
-        consola.log(
-          `Package ${mockServerPackage} not found. Skip mock server.`,
-        );
+        consola.log(`Package ${mockServerPackage} not found. Skip mock server.`);
         return;
       }
 
@@ -69,14 +67,8 @@ async function runNitroServer(rootDir: string, port: number, verbose: boolean) {
               return;
             }
             verbose &&
-              consola.info(
-                `Nitro config updated:\n${diff
-                  .map((entry) => `  ${entry.toString()}`)
-                  .join('\n')}`,
-              );
-            await (diff.every((e) => hmrKeyRe.test(e.key))
-              ? nitro.updateConfig(newConfig.config)
-              : reload());
+              consola.info(`Nitro config updated:\n${diff.map((entry) => `  ${entry.toString()}`).join('\n')}`);
+            await (diff.every((e) => hmrKeyRe.test(e.key)) ? nitro.updateConfig(newConfig.config) : reload());
           },
         },
         watch: true,

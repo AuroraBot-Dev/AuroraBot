@@ -66,24 +66,16 @@ describe('fileDownloader', () => {
 
   it('should handle empty URL gracefully', async () => {
     const url = '';
-    mockAxiosInstance.get.mockRejectedValueOnce(
-      new Error('Request failed with status code 404'),
-    );
+    mockAxiosInstance.get.mockRejectedValueOnce(new Error('Request failed with status code 404'));
 
-    await expect(fileDownloader.download(url)).rejects.toThrow(
-      'Request failed with status code 404',
-    );
+    await expect(fileDownloader.download(url)).rejects.toThrow('Request failed with status code 404');
   });
 
   it('should handle null URL gracefully', async () => {
     const url = null as unknown as string;
-    mockAxiosInstance.get.mockRejectedValueOnce(
-      new Error('Request failed with status code 404'),
-    );
+    mockAxiosInstance.get.mockRejectedValueOnce(new Error('Request failed with status code 404'));
 
-    await expect(fileDownloader.download(url)).rejects.toThrow(
-      'Request failed with status code 404',
-    );
+    await expect(fileDownloader.download(url)).rejects.toThrow('Request failed with status code 404');
   });
 });
 
@@ -148,9 +140,7 @@ describe('fileDownloader use other method', () => {
     } as any;
 
     fileDownloader = new FileDownloader(mockAxiosInstance);
-    await expect(() =>
-      fileDownloader.download(url, { method: 'postt' }),
-    ).rejects.toThrow(
+    await expect(() => fileDownloader.download(url, { method: 'postt' })).rejects.toThrow(
       'RequestClient does not support method "POSTT". Please ensure the method is properly implemented in your RequestClient instance.',
     );
   });

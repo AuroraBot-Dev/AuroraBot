@@ -1,69 +1,23 @@
 <template>
-  <svg
-    class="custom-radio-image"
-    fill="none"
-    height="66"
-    width="104"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <svg class="custom-radio-image" fill="none" height="66" width="104" xmlns="http://www.w3.org/2000/svg">
     <g>
-      <rect
-        id="svg_1"
-        fill="currentColor"
-        fill-opacity="0.02"
-        height="66"
-        rx="4"
-        stroke="null"
-        width="104"
-      />
+      <rect id="svg_1" fill="currentColor" fill-opacity="0.02" height="66" rx="4" stroke="null" width="104" />
       <path
         id="svg_2"
         d="m-3.37838,3.61916a4.4919,4.02457 0 0 1 4.4919,-4.02457l26.35848,0l0,66.40541l-26.35848,0a4.4919,4.02457 0 0 1 -4.4919,-4.02457l0,-58.35627z"
         fill="hsl(var(--primary))"
         stroke="null"
       />
-      <rect
-        id="svg_3"
-        fill="#e5e5e5"
-        height="2.789"
-        rx="1.395"
-        width="17.66"
-        x="4.906"
-        y="23.884"
-      />
-      <rect
-        id="svg_4"
-        fill="#ffffff"
-        height="9.706"
-        rx="2"
-        width="9.811"
-        x="8.83"
-        y="5.881"
-      />
+      <rect id="svg_3" fill="#e5e5e5" height="2.789" rx="1.395" width="17.66" x="4.906" y="23.884" />
+      <rect id="svg_4" fill="#ffffff" height="9.706" rx="2" width="9.811" x="8.83" y="5.881" />
       <path
         id="svg_5"
         d="m4.906,35.833c0,-0.75801 0.63699,-1.395 1.395,-1.395l14.87,0c0.75801,0 1.395,0.63699 1.395,1.395l0,-0.001c0,0.75801 -0.63699,1.395 -1.395,1.395l-14.87,0c-0.75801,0 -1.395,-0.63699 -1.395,-1.395l0,0.001z"
         fill="#ffffff"
         opacity="undefined"
       />
-      <rect
-        id="svg_6"
-        fill="#ffffff"
-        height="2.789"
-        rx="1.395"
-        width="17.66"
-        x="4.906"
-        y="44.992"
-      />
-      <rect
-        id="svg_7"
-        fill="#ffffff"
-        height="2.789"
-        rx="1.395"
-        width="17.66"
-        x="4.906"
-        y="55.546"
-      />
+      <rect id="svg_6" fill="#ffffff" height="2.789" rx="1.395" width="17.66" x="4.906" y="44.992" />
+      <rect id="svg_7" fill="#ffffff" height="2.789" rx="1.395" width="17.66" x="4.906" y="55.546" />
       <rect
         id="svg_8"
         fill="currentColor"
@@ -75,46 +29,10 @@
         x="28.97986"
         y="1.42876"
       />
-      <rect
-        id="svg_9"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="32.039"
-        y="3.89903"
-      />
-      <rect
-        id="svg_10"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="80.75054"
-        y="3.62876"
-      />
-      <rect
-        id="svg_11"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="87.58249"
-        y="3.49362"
-      />
-      <rect
-        id="svg_12"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="94.6847"
-        y="3.62876"
-      />
+      <rect id="svg_9" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="32.039" y="3.89903" />
+      <rect id="svg_10" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="80.75054" y="3.62876" />
+      <rect id="svg_11" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="87.58249" y="3.49362" />
+      <rect id="svg_12" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="94.6847" y="3.62876" />
       <rect
         id="svg_13"
         fill="currentColor"

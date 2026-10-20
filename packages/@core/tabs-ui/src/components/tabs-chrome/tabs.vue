@@ -59,13 +59,7 @@ const tabsView = computed(() => {
 });
 
 function onMouseDown(e: MouseEvent, tab: TabConfig) {
-  if (
-    e.button === 1 &&
-    tab.closable &&
-    !tab.affixTab &&
-    tabsView.value.length > 1 &&
-    props.middleClickToClose
-  ) {
+  if (e.button === 1 && tab.closable && !tab.affixTab && tabsView.value.length > 1 && props.middleClickToClose) {
     e.preventDefault();
     e.stopPropagation();
     emit('close', tab.key);
@@ -99,12 +93,7 @@ function onMouseDown(e: MouseEvent, tab: TabConfig) {
         @click="active = tab.key"
         @mousedown="onMouseDown($event, tab)"
       >
-        <VbenContextMenu
-          :handler-data="tab"
-          :menus="contextMenus"
-          :modal="false"
-          item-class="pr-6"
-        >
+        <VbenContextMenu :handler-data="tab" :menus="contextMenus" :modal="false" item-class="pr-6">
           <div class="relative size-full px-1">
             <!-- divider -->
             <div
@@ -135,9 +124,7 @@ function onMouseDown(e: MouseEvent, tab: TabConfig) {
             </div>
 
             <!-- extra -->
-            <div
-              class="tabs-chrome__extra absolute top-1/2 right-(--gap) z-3 size-4 translate-y-[-50%]"
-            >
+            <div class="tabs-chrome__extra absolute top-1/2 right-(--gap) z-3 size-4 translate-y-[-50%]">
               <!-- close-icon -->
               <X
                 v-show="!tab.affixTab && tabsView.length > 1 && tab.closable"
@@ -179,9 +166,7 @@ function onMouseDown(e: MouseEvent, tab: TabConfig) {
   @apply cursor-pointer;
 }
 
-.tabs-chrome__item:not(.dragging):hover:not(.is-active)
-  + .tabs-chrome__item
-  .tabs-chrome__divider {
+.tabs-chrome__item:not(.dragging):hover:not(.is-active) + .tabs-chrome__item .tabs-chrome__divider {
   @apply opacity-0;
 }
 
@@ -189,13 +174,11 @@ function onMouseDown(e: MouseEvent, tab: TabConfig) {
   @apply opacity-0;
 }
 
-.tabs-chrome__item:not(.dragging):hover:not(.is-active)
-  .tabs-chrome__background {
+.tabs-chrome__item:not(.dragging):hover:not(.is-active) .tabs-chrome__background {
   @apply pb-0.5;
 }
 
-.tabs-chrome__item:not(.dragging):hover:not(.is-active)
-  .tabs-chrome__background-content {
+.tabs-chrome__item:not(.dragging):hover:not(.is-active) .tabs-chrome__background-content {
   @apply bg-accent mx-0.5 rounded-md;
 }
 
@@ -203,9 +186,7 @@ function onMouseDown(e: MouseEvent, tab: TabConfig) {
   @apply z-[2];
 }
 
-.tabs-chrome__item:not(.dragging).is-active
-  + .tabs-chrome__item
-  .tabs-chrome__divider {
+.tabs-chrome__item:not(.dragging).is-active + .tabs-chrome__item .tabs-chrome__divider {
   @apply opacity-0!;
 }
 </style>

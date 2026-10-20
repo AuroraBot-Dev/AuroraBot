@@ -9,9 +9,7 @@ import { Minus } from '@lucide/vue';
 import { reactiveOmit } from '@vueuse/core';
 import { NumberFieldDecrement, useForwardProps } from 'reka-ui';
 
-const props = defineProps<
-  NumberFieldDecrementProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<NumberFieldDecrementProps & { class?: HTMLAttributes['class'] }>();
 
 const delegatedProps = reactiveOmit(props, 'class');
 
@@ -23,10 +21,7 @@ const forwarded = useForwardProps(delegatedProps);
     data-slot="decrement"
     v-bind="forwarded"
     :class="
-      cn(
-        'absolute top-1/2 -translate-y-1/2 left-0 p-3 disabled:cursor-not-allowed disabled:opacity-20',
-        props.class,
-      )
+      cn('absolute top-1/2 -translate-y-1/2 left-0 p-3 disabled:cursor-not-allowed disabled:opacity-20', props.class)
     "
   >
     <slot>

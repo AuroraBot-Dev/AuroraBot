@@ -16,24 +16,15 @@ export default withSidebar(
       lastUpdated: true,
       ignoreDeadLinks: false,
       srcExclude: ['README.md', 'README.*.md', 'rfc/**'],
-      head: [
-        ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
-      ],
+      head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }]],
       vite: {
         publicDir: '../public',
         optimizeDeps: {
           include: ['fastdom', 'fastdom/extensions/fastdom-promised.js'],
-          exclude: [
-            '@nolebase/vitepress-plugin-enhanced-readabilities/client',
-            'vitepress',
-            '@nolebase/ui',
-          ],
+          exclude: ['@nolebase/vitepress-plugin-enhanced-readabilities/client', 'vitepress', '@nolebase/ui'],
         },
         ssr: {
-          noExternal: [
-            '@nolebase/vitepress-plugin-enhanced-readabilities',
-            '@nolebase/ui',
-          ],
+          noExternal: ['@nolebase/vitepress-plugin-enhanced-readabilities', '@nolebase/ui'],
         },
       },
       mermaid: {
@@ -104,13 +95,7 @@ export default withSidebar(
       includeFolderIndexFile: false,
       sortMenusByFrontmatterOrder: true,
       frontmatterOrderDefaultValue: 1000,
-      excludeByGlobPattern: [
-        '.vitepress/**',
-        'node_modules/**',
-        'public/**',
-        'rfc/**',
-        'README*',
-      ],
+      excludeByGlobPattern: ['.vitepress/**', 'node_modules/**', 'public/**', 'rfc/**', 'README*'],
     },
   ],
 );

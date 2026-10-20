@@ -1,10 +1,6 @@
 import type { PluginOption } from 'vite';
 
-import {
-  colors,
-  generatorContentHash,
-  readPackageJSON,
-} from '@vben/node-utils';
+import { colors, generatorContentHash, readPackageJSON } from '@vben/node-utils';
 
 import { loadEnv } from '../utils/env';
 
@@ -21,10 +17,7 @@ const VBEN_ADMIN_PRO_APP_CONF = '_VBEN_ADMIN_PRO_APP_CONF_';
  * @returns
  */
 
-async function viteExtraAppConfigPlugin({
-  isBuild,
-  root,
-}: PluginOptions): Promise<PluginOption | undefined> {
+async function viteExtraAppConfigPlugin({ isBuild, root }: PluginOptions): Promise<PluginOption | undefined> {
   let publicPath: string;
   let source: string;
   let hash: string;
@@ -51,11 +44,7 @@ async function viteExtraAppConfigPlugin({
 
         console.log(colors.cyan(`✨configuration file is build successfully!`));
       } catch (error) {
-        console.log(
-          colors.red(
-            `configuration file configuration file failed to package:\n${error}`,
-          ),
-        );
+        console.log(colors.red(`configuration file configuration file failed to package:\n${error}`));
       }
     },
     name: 'vite:extra-app-config',

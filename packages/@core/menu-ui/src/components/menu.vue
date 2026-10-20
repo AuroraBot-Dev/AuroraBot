@@ -3,34 +3,16 @@ import type { UseResizeObserverReturn } from '@vueuse/core';
 
 import type { SetupContext, VNodeArrayChildren } from 'vue';
 
-import type {
-  MenuItemClicked,
-  MenuItemRegistered,
-  MenuProps,
-  MenuProvider,
-} from '../types';
+import type { MenuItemClicked, MenuItemRegistered, MenuProps, MenuProvider } from '../types';
 
-import {
-  computed,
-  nextTick,
-  reactive,
-  ref,
-  toRef,
-  useSlots,
-  watch,
-  watchEffect,
-} from 'vue';
+import { computed, nextTick, reactive, ref, toRef, useSlots, watch, watchEffect } from 'vue';
 
 import { useNamespace } from '@vben-core/composables';
 import { Ellipsis } from '@vben-core/icons';
 
 import { useResizeObserver } from '@vueuse/core';
 
-import {
-  createMenuContext,
-  createSubMenuContext,
-  useMenuStyle,
-} from '../hooks';
+import { createMenuContext, createSubMenuContext, useMenuStyle } from '../hooks';
 import { useMenuScroll } from '../hooks/use-menu-scroll';
 import { flattedChildren } from '../utils';
 import SubMenu from './sub-menu.vue';
@@ -68,9 +50,7 @@ const subMenus = ref<MenuProvider['subMenus']>({});
 const mouseInChild = ref(false);
 
 const isMenuPopup = computed<MenuProvider['isMenuPopup']>(() => {
-  return (
-    props.mode === 'horizontal' || (props.mode === 'vertical' && props.collapse)
-  );
+  return props.mode === 'horizontal' || (props.mode === 'vertical' && props.collapse);
 });
 
 const getSlot = computed(() => {
@@ -78,13 +58,9 @@ const getSlot = computed(() => {
   const defaultSlots: VNodeArrayChildren = slots.default?.() ?? [];
 
   const originalSlot = flattedChildren(defaultSlots) as VNodeArrayChildren;
-  const slotDefault =
-    sliceIndex.value === -1
-      ? originalSlot
-      : originalSlot.slice(0, sliceIndex.value);
+  const slotDefault = sliceIndex.value === -1 ? originalSlot : originalSlot.slice(0, sliceIndex.value);
 
-  const slotMore =
-    sliceIndex.value === -1 ? [] : originalSlot.slice(sliceIndex.value);
+  const slotMore = sliceIndex.value === -1 ? [] : originalSlot.slice(sliceIndex.value);
 
   return { showSlotMore: slotMore.length > 0, slotDefault, slotMore };
 });
@@ -159,8 +135,7 @@ function calcSliceIndex() {
   const items = [...(menu.value?.childNodes ?? [])].filter(
     (item) =>
       // remove comment type node #12634
-      item.nodeName !== '#comment' &&
-      (item.nodeName !== '#text' || item.nodeValue),
+      item.nodeName !== '#comment' && (item.nodeName !== '#text' || item.nodeValue),
   ) as HTMLElement[];
 
   const moreItemWidth = 46;
@@ -208,9 +183,7 @@ function handleResize() {
   isFirstTimeRender = false;
 }
 
-const enableScroll = computed(
-  () => props.scrollToActive && props.mode === 'vertical' && !props.collapse,
-);
+const enableScroll = computed(() => props.scrollToActive && props.mode === 'vertical' && !props.collapse);
 
 useMenuScroll(activePath, {
   enable: enableScroll,
@@ -237,9 +210,7 @@ function initMenu() {
 function updateActiveName(val: string) {
   const itemsInData = items.value;
   const item =
-    itemsInData[val] ||
-    (activePath.value && itemsInData[activePath.value]) ||
-    itemsInData[props.defaultActive || ''];
+    itemsInData[val] || (activePath.value && itemsInData[activePath.value]) || itemsInData[props.defaultActive || ''];
 
   activePath.value = item ? item.path : val;
 }
@@ -301,9 +272,7 @@ function openMenu(path: string, parentPaths: string[]) {
     if (activeParentPaths.includes(path)) {
       parentPaths = activeParentPaths;
     }
-    openedMenus.value = openedMenus.value.filter((path: string) =>
-      parentPaths.includes(path),
-    );
+    openedMenus.value = openedMenus.value.filter((path: string) => parentPaths.includes(path));
   }
   openedMenus.value.push(path);
   emit('open', path, parentPaths);
@@ -386,8 +355,7 @@ $namespace: vben;
   align-items: center;
   height: var(--menu-item-height);
   padding: var(--menu-item-padding-y) var(--menu-item-padding-x);
-  margin: 0 var(--menu-item-margin-x) var(--menu-item-margin-y)
-    var(--menu-item-margin-x);
+  margin: 0 var(--menu-item-margin-x) var(--menu-item-margin-y) var(--menu-item-margin-x);
   font-size: var(--menu-font-size) !important;
   color: var(--menu-item-color);
   white-space: nowrap;
@@ -563,19 +531,14 @@ $namespace: vben;
       & .#{$namespace}-menu-item,
       & .#{$namespace}-sub-menu-content,
       & .#{$namespace}-menu-item-group__title {
-        padding-left: calc(
-          var(--menu-item-indent) + var(--menu-level) * var(--menu-item-indent)
-        );
+        padding-left: calc(var(--menu-item-indent) + var(--menu-level) * var(--menu-item-indent));
         white-space: nowrap;
       }
 
       & > .#{$namespace}-sub-menu {
         & > .#{$namespace}-menu {
           & > .#{$namespace}-menu-item {
-            padding-left: calc(
-              0px + var(--menu-item-indent) + var(--menu-level) *
-                var(--menu-item-indent)
-            );
+            padding-left: calc(0px + var(--menu-item-indent) + var(--menu-level) * var(--menu-item-indent));
           }
         }
 
@@ -670,10 +633,8 @@ $namespace: vben;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: var(--menu-item-collapse-padding-y)
-        var(--menu-item-collapse-padding-x);
-      margin: var(--menu-item-collapse-margin-y)
-        var(--menu-item-collapse-margin-x);
+      padding: var(--menu-item-collapse-padding-y) var(--menu-item-collapse-padding-x);
+      margin: var(--menu-item-collapse-margin-y) var(--menu-item-collapse-margin-x);
       transition: all 0.3s;
 
       &.is-active {

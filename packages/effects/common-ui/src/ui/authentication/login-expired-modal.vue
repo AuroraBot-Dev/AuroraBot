@@ -42,9 +42,7 @@ const getZIndex = computed(() => {
  */
 const zIndexExcludeClass = ['ant-message', 'loading'];
 function isZIndexExcludeClass(element: Element) {
-  return zIndexExcludeClass.some((className) =>
-    element.classList.contains(className),
-  );
+  return zIndexExcludeClass.some((className) => element.classList.contains(className));
 }
 
 /**
@@ -56,11 +54,7 @@ function calcZIndex() {
   [...elements].forEach((element) => {
     const style = window.getComputedStyle(element);
     const zIndex = style.getPropertyValue('z-index');
-    if (
-      zIndex &&
-      !Number.isNaN(Number.parseInt(zIndex)) &&
-      !isZIndexExcludeClass(element)
-    ) {
+    if (zIndex && !Number.isNaN(Number.parseInt(zIndex)) && !isZIndexExcludeClass(element)) {
       maxZ = Math.max(maxZ, Number.parseInt(zIndex));
     }
   });

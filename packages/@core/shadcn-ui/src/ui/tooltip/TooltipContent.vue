@@ -5,25 +5,17 @@ import { computed } from 'vue';
 
 import { cn } from '@vben-core/shared/utils';
 
-import {
-  TooltipArrow,
-  TooltipContent,
-  TooltipPortal,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { TooltipArrow, TooltipContent, TooltipPortal, useForwardPropsEmits } from 'reka-ui';
 
 defineOptions({
   inheritAttrs: false,
 });
 
-const props = withDefaults(
-  defineProps<TooltipContentProps & { class?: any }>(),
-  {
-    class: '',
-    side: 'right',
-    sideOffset: 5,
-  },
-);
+const props = withDefaults(defineProps<TooltipContentProps & { class?: any }>(), {
+  class: '',
+  side: 'right',
+  sideOffset: 5,
+});
 
 const emits = defineEmits<TooltipContentEmits>();
 

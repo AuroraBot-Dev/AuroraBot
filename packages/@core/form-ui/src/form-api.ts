@@ -103,8 +103,7 @@ export class FormApi<
     'arrayToStringFields' | 'codec' | 'fieldMappingTime' | 'schema'
   > = null;
 
-  private prevState: FormApiProps<TFormValues, T, P, TSubmitValues> | null =
-    null;
+  private prevState: FormApiProps<TFormValues, T, P, TSubmitValues> | null = null;
 
   constructor(options: FormApiProps<TFormValues, T, P, TSubmitValues> = {}) {
     const { ...storeState } = options;
@@ -127,25 +126,18 @@ export class FormApi<
     bindMethods(this);
   }
 
-  async clearValidation(
-    fieldNames?: FormFieldName<TFormValues> | FormFieldName<TFormValues>[],
-  ) {
+  async clearValidation(fieldNames?: FormFieldName<TFormValues> | FormFieldName<TFormValues>[]) {
     const form = await this.getForm();
     form.clearValidation(fieldNames);
   }
 
   formatValues(rawValues: Readonly<TFormValues>): TSubmitValues;
   /** @deprecated Declare the submit type on `useVbenForm` instead. */
-  formatValues<TResult extends FormValues>(
-    rawValues: Readonly<FormValues>,
-  ): TResult;
+  formatValues<TResult extends FormValues>(rawValues: Readonly<FormValues>): TResult;
   formatValues(rawValues: Readonly<FormValues>): FormValues {
     this.warnLegacyValueTransforms();
     if (this.state?.codec) {
-      return encodeFormValues(
-        this.state.codec,
-        cloneDeep(toRaw(rawValues)) as Readonly<TFormValues>,
-      );
+      return encodeFormValues(this.state.codec, cloneDeep(toRaw(rawValues)) as Readonly<TFormValues>);
     }
     return formatFormValues(
       toRaw(rawValues),
@@ -160,22 +152,13 @@ export class FormApi<
    * @param fieldName 字段名
    * @returns 组件实例
    */
-  getFieldComponentRef<T = ComponentPublicInstance>(
-    fieldName: string,
-  ): T | undefined {
+  getFieldComponentRef<T = ComponentPublicInstance>(fieldName: string): T | undefined {
     let target = this.componentRefMap.has(fieldName)
       ? (this.componentRefMap.get(fieldName) as ComponentPublicInstance)
       : undefined;
-    if (
-      target &&
-      target.$.type.name === 'AsyncComponentWrapper' &&
-      target.$.subTree.ref
-    ) {
+    if (target && target.$.type.name === 'AsyncComponentWrapper' && target.$.subTree.ref) {
       if (Array.isArray(target.$.subTree.ref)) {
-        if (
-          target.$.subTree.ref.length > 0 &&
-          isRef(target.$.subTree.ref[0]?.r)
-        ) {
+        if (target.$.subTree.ref.length > 0 && isRef(target.$.subTree.ref[0]?.r)) {
           target = target.$.subTree.ref[0]?.r.value as ComponentPublicInstance;
         }
       } else if (isRef(target.$.subTree.ref.r)) {
@@ -201,10 +184,7 @@ export class FormApi<
         if (!el) {
           continue;
         }
-        if (
-          el === document.activeElement ||
-          el.contains(document.activeElement)
-        ) {
+        if (el === document.activeElement || el.contains(document.activeElement)) {
           return fieldName;
         }
       }
@@ -236,13 +216,9 @@ export class FormApi<
     return this.formatValues(toRaw(form.values ?? {}));
   }
 
-  async getValueSnapshot(): Promise<
-    FormValueSnapshot<TFormValues, TSubmitValues>
-  >;
+  async getValueSnapshot(): Promise<FormValueSnapshot<TFormValues, TSubmitValues>>;
   /** @deprecated Declare form and submit value types on `useVbenForm`. */
-  async getValueSnapshot<TResult extends FormValues>(): Promise<
-    FormValueSnapshot<TResult>
-  >;
+  async getValueSnapshot<TResult extends FormValues>(): Promise<FormValueSnapshot<TResult>>;
   async getValueSnapshot(): Promise<FormValueSnapshot> {
     const rawValues = await this.getRawValues();
     return {
@@ -296,10 +272,7 @@ export class FormApi<
     return proxy;
   }
 
-  mount(
-    formActions: FormActions<TFormValues>,
-    componentRefMap?: Map<string, unknown>,
-  ) {
+  mount(formActions: FormActions<TFormValues>, componentRefMap?: Map<string, unknown>) {
     if (!this.isMounted) {
       this.form = formActions;
       this.stateHandler.setConditionTrue();
@@ -312,16 +285,12 @@ export class FormApi<
           if (!this.state?.codec) {
             throw error;
           }
-          console.warn(
-            '[Vben Form] Failed to encode initial values. Falling back to raw form values.',
-            error,
-          );
+          console.warn('[Vben Form] Failed to encode initial values. Falling back to raw form values.', error);
           initialValues = cloneDeep(rawInitialValues);
         }
       }
       this.setLatestSubmissionValues(initialValues as Partial<TSubmitValues>);
-      this.componentRefMap =
-        componentRefMap ?? this.componentRefMap ?? new Map();
+      this.componentRefMap = componentRefMap ?? this.componentRefMap ?? new Map();
       this.isMounted = true;
     }
   }
@@ -350,10 +319,7 @@ export class FormApi<
   }
 
   /** @deprecated Use `reset` instead. */
-  async resetForm(
-    state?: FormResetState<TFormValues>,
-    opts?: FormResetOptions,
-  ) {
+  async resetForm(state?: FormResetState<TFormValues>, opts?: FormResetOptions) {
     warnDeprecatedOnce(
       'form-api-reset-form',
       '[Vben Form] `formApi.resetForm()` is deprecated. Use `formApi.reset()` instead.',
@@ -375,16 +341,13 @@ export class FormApi<
    * @param errors 验证错误对象
    */
   scrollToFirstError(errors: Record<string, any> | string) {
-    const firstErrorFieldName =
-      typeof errors === 'string' ? errors : Object.keys(errors)[0];
+    const firstErrorFieldName = typeof errors === 'string' ? errors : Object.keys(errors)[0];
 
     if (!firstErrorFieldName) {
       return;
     }
 
-    let el = document.querySelector(
-      `[name="${firstErrorFieldName}"]`,
-    ) as HTMLElement;
+    let el = document.querySelector(`[name="${firstErrorFieldName}"]`) as HTMLElement;
 
     // 如果通过 name 属性找不到，尝试通过组件引用查找
     if (!el) {
@@ -440,16 +403,10 @@ export class FormApi<
     }
   }
 
-  async setSubmitValues(
-    values: TSubmitValues,
-    filterFields: boolean = true,
-    shouldValidate: boolean = false,
-  ) {
+  async setSubmitValues(values: TSubmitValues, filterFields: boolean = true, shouldValidate: boolean = false) {
     const codec = this.state?.codec;
     if (!codec) {
-      throw new Error(
-        '[Vben Form] `setSubmitValues()` requires a form `codec`.',
-      );
+      throw new Error('[Vben Form] `setSubmitValues()` requires a form `codec`.');
     }
     const formValues = decodeFormValues(codec, values);
     await this.setValues(formValues, filterFields, shouldValidate);
@@ -461,11 +418,7 @@ export class FormApi<
    * @param filterFields 过滤不在schema中定义的字段 默认为true
    * @param shouldValidate
    */
-  async setValues(
-    fields: Partial<TFormValues>,
-    filterFields: boolean = true,
-    shouldValidate: boolean = false,
-  ) {
+  async setValues(fields: Partial<TFormValues>, filterFields: boolean = true, shouldValidate: boolean = false) {
     const form = await this.getForm();
     if (!filterFields) {
       form.setValues(fields, shouldValidate);
@@ -475,16 +428,8 @@ export class FormApi<
     const schemaFieldPaths = (this.state?.schema ?? []).map(
       (schema) => resolveFieldNamePath(schema.fieldName).pathSegments,
     );
-    const filterValue = (
-      value: unknown,
-      parentPath: string[] = [],
-    ): unknown => {
-      if (
-        !isObject(value) ||
-        Array.isArray(value) ||
-        isDate(value) ||
-        isDayjsObject(value)
-      ) {
+    const filterValue = (value: unknown, parentPath: string[] = []): unknown => {
+      if (!isObject(value) || Array.isArray(value) || isDate(value) || isDayjsObject(value)) {
         return value;
       }
 
@@ -494,17 +439,13 @@ export class FormApi<
         const matchingPaths = schemaFieldPaths.filter(
           (schemaPath) =>
             schemaPath.length >= currentPath.length &&
-            currentPath.every(
-              (pathSegment, index) => schemaPath[index] === pathSegment,
-            ),
+            currentPath.every((pathSegment, index) => schemaPath[index] === pathSegment),
         );
         if (matchingPaths.length === 0) {
           continue;
         }
 
-        result[key] = matchingPaths.some(
-          (schemaPath) => schemaPath.length === currentPath.length,
-        )
+        result[key] = matchingPaths.some((schemaPath) => schemaPath.length === currentPath.length)
           ? currentValue
           : filterValue(currentValue, currentPath);
       }
@@ -542,20 +483,13 @@ export class FormApi<
 
   updateSchema(schema: Partial<FormApiSchema<TFormValues, T, P>>[]) {
     const updated: Partial<FormApiSchema<TFormValues, T, P>>[] = [...schema];
-    const hasField = updated.every(
-      (item) => Reflect.has(item, 'fieldName') && item.fieldName,
-    );
+    const hasField = updated.every((item) => Reflect.has(item, 'fieldName') && item.fieldName);
 
     if (!hasField) {
-      console.error(
-        'All items in the schema array must have a valid `fieldName` property to be updated',
-      );
+      console.error('All items in the schema array must have a valid `fieldName` property to be updated');
       return;
     }
-    const currentSchema = updateFormSchemaList(
-      [...(this.state?.schema ?? [])],
-      updated,
-    );
+    const currentSchema = updateFormSchemaList([...(this.state?.schema ?? [])], updated);
     this.setState({ schema: currentSchema });
   }
 
@@ -564,10 +498,7 @@ export class FormApi<
 
     const validateResult = await form.validate();
 
-    if (
-      Object.keys(validateResult?.errors ?? {}).length > 0 &&
-      this.state?.scrollToFirstError
-    ) {
+    if (Object.keys(validateResult?.errors ?? {}).length > 0 && this.state?.scrollToFirstError) {
       this.scrollToFirstError(validateResult.errors);
     }
     return validateResult;
@@ -592,10 +523,7 @@ export class FormApi<
     const form = await this.getForm();
     const validateResult = await form.validateField(fieldName);
 
-    if (
-      Object.keys(validateResult?.errors ?? {}).length > 0 &&
-      this.state?.scrollToFirstError
-    ) {
+    if (Object.keys(validateResult?.errors ?? {}).length > 0 && this.state?.scrollToFirstError) {
       this.scrollToFirstError(fieldName);
     }
     return validateResult;
@@ -624,17 +552,10 @@ export class FormApi<
     const prevSchema = this.prevState?.schema ?? [];
     // 进行了删除schema操作
     if (currentSchema.length < prevSchema.length) {
-      const currentFields = new Set(
-        currentSchema.map((item) => item.fieldName),
-      );
-      const deletedSchema = prevSchema.filter(
-        (item) => !currentFields.has(item.fieldName),
-      );
+      const currentFields = new Set(currentSchema.map((item) => item.fieldName));
+      const deletedSchema = prevSchema.filter((item) => !currentFields.has(item.fieldName));
       for (const schema of deletedSchema) {
-        this.form?.setFieldValue?.(
-          schema.fieldName,
-          undefined as FormFieldValue<TFormValues, string>,
-        );
+        this.form?.setFieldValue?.(schema.fieldName, undefined as FormFieldValue<TFormValues, string>);
       }
     }
   }
@@ -658,9 +579,7 @@ export class FormApi<
     }
     this.legacyTransformWarningState = warningState;
 
-    const hasValueFormat = (
-      items: FormApiSchema<TFormValues, T, P>[],
-    ): boolean => {
+    const hasValueFormat = (items: FormApiSchema<TFormValues, T, P>[]): boolean => {
       return items.some((schema) => {
         if (schema.valueFormat) {
           return true;
@@ -670,12 +589,9 @@ export class FormApi<
       });
     };
     const usesValueFormat = hasValueFormat(warningState.schema);
-    const usesFieldMappingTime =
-      (warningState.fieldMappingTime?.length ?? 0) > 0;
-    const usesArrayToStringFields =
-      (warningState.arrayToStringFields?.length ?? 0) > 0;
-    const usesLegacyTransform =
-      usesValueFormat || usesFieldMappingTime || usesArrayToStringFields;
+    const usesFieldMappingTime = (warningState.fieldMappingTime?.length ?? 0) > 0;
+    const usesArrayToStringFields = (warningState.arrayToStringFields?.length ?? 0) > 0;
+    const usesLegacyTransform = usesValueFormat || usesFieldMappingTime || usesArrayToStringFields;
 
     if (warningState.codec && usesLegacyTransform) {
       warnDeprecatedOnce(

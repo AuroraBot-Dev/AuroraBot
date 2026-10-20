@@ -54,11 +54,7 @@ function handleClick(e: MouseEvent) {
     <slot></slot>
   </VbenButton>
 
-  <VbenTooltip
-    v-else
-    :delay-duration="tooltipDelayDuration"
-    :side="tooltipSide"
-  >
+  <VbenTooltip v-else :delay-duration="tooltipDelayDuration" :side="tooltipSide">
     <template #trigger>
       <VbenButton
         :class="cn('rounded-full', props.class)"

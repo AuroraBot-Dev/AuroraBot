@@ -5,22 +5,13 @@ import { cn } from '@vben-core/shared/utils';
 
 import { X } from '@lucide/vue';
 import { reactiveOmit } from '@vueuse/core';
-import {
-  DialogClose,
-  DialogContent,
-  DialogOverlay,
-  DialogPortal,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { DialogClose, DialogContent, DialogOverlay, DialogPortal, useForwardPropsEmits } from 'reka-ui';
 
 defineOptions({
   inheritAttrs: false,
 });
 
-const props = withDefaults(
-  defineProps<DialogContentProps & { class?: any; zIndex?: number }>(),
-  { zIndex: 1000 },
-);
+const props = withDefaults(defineProps<DialogContentProps & { class?: any; zIndex?: number }>(), { zIndex: 1000 });
 const emits = defineEmits<DialogContentEmits>();
 
 const delegatedProps = reactiveOmit(props, 'class');
@@ -46,10 +37,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
           (event) => {
             const originalEvent = event.detail.originalEvent;
             const target = originalEvent.target as HTMLElement;
-            if (
-              originalEvent.offsetX > target.clientWidth ||
-              originalEvent.offsetY > target.clientHeight
-            ) {
+            if (originalEvent.offsetX > target.clientWidth || originalEvent.offsetY > target.clientHeight) {
               event.preventDefault();
             }
           }
@@ -57,9 +45,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       >
         <slot></slot>
 
-        <DialogClose
-          class="absolute top-4 right-4 p-0.5 transition-colors rounded-md hover:bg-secondary"
-        >
+        <DialogClose class="absolute top-4 right-4 p-0.5 transition-colors rounded-md hover:bg-secondary">
           <X class="size-4" />
           <span class="sr-only">Close</span>
         </DialogClose>

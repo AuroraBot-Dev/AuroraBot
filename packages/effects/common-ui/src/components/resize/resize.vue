@@ -3,16 +3,7 @@
  * This components is refactored from vue-drag-resize: https://github.com/kirillmurashov/vue-drag-resize
  */
 
-import {
-  computed,
-  getCurrentInstance,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  toRefs,
-  watch,
-} from 'vue';
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 
 const props = defineProps({
   stickSize: {
@@ -160,15 +151,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits([
-  'clicked',
-  'dragging',
-  'dragstop',
-  'resizing',
-  'resizestop',
-  'activated',
-  'deactivated',
-]);
+const emit = defineEmits(['clicked', 'dragging', 'dragstop', 'resizing', 'resizestop', 'activated', 'deactivated']);
 
 const styleMapping = {
   y: {
@@ -275,12 +258,7 @@ function getPointerPosition(
   const pointerX = ev.pageX ?? touch?.pageX;
   const pointerY = ev.pageY ?? touch?.pageY;
 
-  if (
-    pointerX === null ||
-    pointerX === undefined ||
-    pointerY === null ||
-    pointerY === undefined
-  ) {
+  if (pointerX === null || pointerX === undefined || pointerY === null || pointerY === undefined) {
     return null;
   }
 
@@ -292,11 +270,7 @@ const width = computed(() => {
   const currentLeft = left.value;
   const currentRight = right.value;
 
-  if (
-    currentParentWidth === null ||
-    currentLeft === null ||
-    currentRight === null
-  ) {
+  if (currentParentWidth === null || currentLeft === null || currentRight === null) {
     return 0;
   }
 
@@ -308,11 +282,7 @@ const height = computed(() => {
   const currentTop = top.value;
   const currentBottom = bottom.value;
 
-  if (
-    currentParentHeight === null ||
-    currentTop === null ||
-    currentBottom === null
-  ) {
+  if (currentParentHeight === null || currentTop === null || currentBottom === null) {
     return 0;
   }
 
@@ -326,13 +296,7 @@ const rect = computed(() => ({
   height: Math.round(height.value),
 }));
 
-const saveDimensionsBeforeMove = ({
-  pointerX,
-  pointerY,
-}: {
-  pointerX: number;
-  pointerY: number;
-}) => {
+const saveDimensionsBeforeMove = ({ pointerX, pointerY }: { pointerX: number; pointerY: number }) => {
   dimensionsBeforeMove.value.pointerX = pointerX;
   dimensionsBeforeMove.value.pointerY = pointerY;
 
@@ -347,10 +311,7 @@ const saveDimensionsBeforeMove = ({
   aspectFactor.value = width.value / height.value;
 };
 
-const sideCorrectionByLimit = (
-  limit: { max: number; min: number },
-  current: number,
-) => {
+const sideCorrectionByLimit = (limit: { max: number; min: number }, current: number) => {
   let value = current;
 
   if (limit.min !== null && current < limit.min) {
@@ -362,12 +323,7 @@ const sideCorrectionByLimit = (
   return value;
 };
 
-const rectCorrectionByLimit = (rect: {
-  newBottom: number;
-  newLeft: number;
-  newRight: number;
-  newTop: number;
-}) => {
+const rectCorrectionByLimit = (rect: { newBottom: number; newLeft: number; newRight: number; newTop: number }) => {
   // const { limits } = this;
   let { newRight, newLeft, newBottom, newTop } = rect;
 
@@ -379,10 +335,7 @@ const rectCorrectionByLimit = (rect: {
   newLeft = sideCorrectionByLimit(limits.value.left as RectRange, newLeft);
   newRight = sideCorrectionByLimit(limits.value.right as RectRange, newRight);
   newTop = sideCorrectionByLimit(limits.value.top as RectRange, newTop);
-  newBottom = sideCorrectionByLimit(
-    limits.value.bottom as RectRange,
-    newBottom,
-  );
+  newBottom = sideCorrectionByLimit(limits.value.bottom as RectRange, newBottom);
 
   return {
     newLeft,
@@ -404,12 +357,7 @@ const rectCorrectionByAspectRatio = (rect: {
   const stick = currentStick.value;
   const factor = aspectFactor.value;
 
-  if (
-    currentParentWidth === null ||
-    currentParentHeight === null ||
-    !stick ||
-    factor === null
-  ) {
+  if (currentParentWidth === null || currentParentHeight === null || !stick || factor === null) {
     return { newLeft, newRight, newTop, newBottom };
   }
 
@@ -465,10 +413,7 @@ const stickMove = (delta: { x: number; y: number }) => {
       if (snapToGrid.value) {
         newBottom =
           (parentHeight.value as number) -
-          Math.round(
-            ((parentHeight.value as number) - newBottom) / gridY.value,
-          ) *
-            gridY.value;
+          Math.round(((parentHeight.value as number) - newBottom) / gridY.value) * gridY.value;
       }
 
       break;
@@ -505,8 +450,7 @@ const stickMove = (delta: { x: number; y: number }) => {
       if (snapToGrid.value) {
         newRight =
           (parentWidth.value as number) -
-          Math.round(((parentWidth.value as number) - newRight) / gridX.value) *
-            gridX.value;
+          Math.round(((parentWidth.value as number) - newRight) / gridX.value) * gridX.value;
       }
 
       break;
@@ -589,12 +533,7 @@ const calcResizeLimits = () => {
   const currentBottom = bottom.value;
   const stick = currentStick.value;
 
-  if (
-    currentLeft === null ||
-    currentRight === null ||
-    currentTop === null ||
-    currentBottom === null
-  ) {
+  if (currentLeft === null || currentRight === null || currentTop === null || currentBottom === null) {
     return {
       left: { min: parentLim, max: parentLim },
       right: { min: parentLim, max: parentLim },
@@ -636,66 +575,39 @@ const calcResizeLimits = () => {
   if (aspectRatio.value && currentAspectFactor) {
     const aspectLimits = {
       left: {
-        min:
-          currentLeft -
-          Math.min(currentTop, currentBottom) * currentAspectFactor * 2,
-        max:
-          currentLeft +
-          ((height.value - minHeight) / 2) * currentAspectFactor * 2,
+        min: currentLeft - Math.min(currentTop, currentBottom) * currentAspectFactor * 2,
+        max: currentLeft + ((height.value - minHeight) / 2) * currentAspectFactor * 2,
       },
       right: {
-        min:
-          currentRight -
-          Math.min(currentTop, currentBottom) * currentAspectFactor * 2,
-        max:
-          currentRight +
-          ((height.value - minHeight) / 2) * currentAspectFactor * 2,
+        min: currentRight - Math.min(currentTop, currentBottom) * currentAspectFactor * 2,
+        max: currentRight + ((height.value - minHeight) / 2) * currentAspectFactor * 2,
       },
       top: {
-        min:
-          currentTop -
-          (Math.min(currentLeft, currentRight) / currentAspectFactor) * 2,
-        max:
-          currentTop + ((width.value - minWidth) / 2 / currentAspectFactor) * 2,
+        min: currentTop - (Math.min(currentLeft, currentRight) / currentAspectFactor) * 2,
+        max: currentTop + ((width.value - minWidth) / 2 / currentAspectFactor) * 2,
       },
       bottom: {
-        min:
-          currentBottom -
-          (Math.min(currentLeft, currentRight) / currentAspectFactor) * 2,
-        max:
-          currentBottom +
-          ((width.value - minWidth) / 2 / currentAspectFactor) * 2,
+        min: currentBottom - (Math.min(currentLeft, currentRight) / currentAspectFactor) * 2,
+        max: currentBottom + ((width.value - minWidth) / 2 / currentAspectFactor) * 2,
       },
     };
 
     if (stick?.[0] === 'm') {
       limits.left = {
-        min: Math.max(
-          limits.left.min ?? aspectLimits.left.min,
-          aspectLimits.left.min,
-        ),
+        min: Math.max(limits.left.min ?? aspectLimits.left.min, aspectLimits.left.min),
         max: Math.min(limits.left.max, aspectLimits.left.max),
       };
       limits.right = {
-        min: Math.max(
-          limits.right.min ?? aspectLimits.right.min,
-          aspectLimits.right.min,
-        ),
+        min: Math.max(limits.right.min ?? aspectLimits.right.min, aspectLimits.right.min),
         max: Math.min(limits.right.max, aspectLimits.right.max),
       };
     } else if (stick?.[1] === 'm') {
       limits.top = {
-        min: Math.max(
-          limits.top.min ?? aspectLimits.top.min,
-          aspectLimits.top.min,
-        ),
+        min: Math.max(limits.top.min ?? aspectLimits.top.min, aspectLimits.top.min),
         max: Math.min(limits.top.max, aspectLimits.top.max),
       };
       limits.bottom = {
-        min: Math.max(
-          limits.bottom.min ?? aspectLimits.bottom.min,
-          aspectLimits.bottom.min,
-        ),
+        min: Math.max(limits.bottom.min ?? aspectLimits.bottom.min, aspectLimits.bottom.min),
         max: Math.min(limits.bottom.max, aspectLimits.bottom.max),
       };
     }
@@ -741,14 +653,12 @@ const bodyMove = (delta: { x: number; y: number }) => {
     let diffB =
       (parentHeight.value as number) -
       newBottom -
-      Math.floor(((parentHeight.value as number) - newBottom) / gridY.value) *
-        gridY.value;
+      Math.floor(((parentHeight.value as number) - newBottom) / gridY.value) * gridY.value;
     let diffL = newLeft - Math.floor(newLeft / gridX.value) * gridX.value;
     let diffR =
       (parentWidth.value as number) -
       newRight -
-      Math.floor(((parentWidth.value as number) - newRight) / gridX.value) *
-        gridX.value;
+      Math.floor(((parentWidth.value as number) - newRight) / gridX.value) * gridX.value;
 
     if (diffT > gridY.value / 2) {
       diffT -= gridY.value;
@@ -809,11 +719,7 @@ const bodyUp = () => {
   };
 };
 
-const stickDown = (
-  stick: string,
-  ev: { pageX: any; pageY: any; touches?: any },
-  force = false,
-) => {
+const stickDown = (stick: string, ev: { pageX: any; pageY: any; touches?: any }, force = false) => {
   if ((!isResizable.value || !active.value) && !force) {
     return;
   }
@@ -847,12 +753,8 @@ const move = (ev: MouseEvent & TouchEvent) => {
   }
 
   const delta = {
-    x:
-      (dimensionsBeforeMove.value.pointerX - pointerPosition.pointerX) /
-      parentScaleX.value,
-    y:
-      (dimensionsBeforeMove.value.pointerY - pointerPosition.pointerY) /
-      parentScaleY.value,
+    x: (dimensionsBeforeMove.value.pointerX - pointerPosition.pointerX) / parentScaleX.value,
+    y: (dimensionsBeforeMove.value.pointerY - pointerPosition.pointerY) / parentScaleY.value,
   };
 
   if (stickDrag.value) {
@@ -921,37 +823,23 @@ onMounted(() => {
   left.value = x.value;
   top.value = y.value;
   const containerElement = container.value;
-  const contentWidth =
-    w.value === 'auto'
-      ? (containerElement?.scrollWidth ?? 0)
-      : (w.value as number);
-  const contentHeight =
-    h.value === 'auto'
-      ? (containerElement?.scrollHeight ?? 0)
-      : (h.value as number);
+  const contentWidth = w.value === 'auto' ? (containerElement?.scrollWidth ?? 0) : (w.value as number);
+  const contentHeight = h.value === 'auto' ? (containerElement?.scrollHeight ?? 0) : (h.value as number);
   right.value = (parentWidth.value ?? 0) - contentWidth - (left.value ?? 0);
   bottom.value = (parentHeight.value ?? 0) - contentHeight - (top.value ?? 0);
 
   addEvents(domEvents.value);
 
   if (dragHandle.value) {
-    [...($el?.querySelectorAll(dragHandle.value) || [])].forEach(
-      (dragHandle) => {
-        (dragHandle as HTMLElement).dataset.dragHandle = String(
-          currentInstance?.uid,
-        );
-      },
-    );
+    [...($el?.querySelectorAll(dragHandle.value) || [])].forEach((dragHandle) => {
+      (dragHandle as HTMLElement).dataset.dragHandle = String(currentInstance?.uid);
+    });
   }
 
   if (dragCancel.value) {
-    [...($el?.querySelectorAll(dragCancel.value) || [])].forEach(
-      (cancelHandle) => {
-        (cancelHandle as HTMLElement).dataset.dragCancel = String(
-          currentInstance?.uid,
-        );
-      },
-    );
+    [...($el?.querySelectorAll(dragCancel.value) || [])].forEach((cancelHandle) => {
+      (cancelHandle as HTMLElement).dataset.dragCancel = String(currentInstance?.uid);
+    });
   }
 });
 onBeforeUnmount(() => {
@@ -977,11 +865,7 @@ const bodyDown = (ev: MouseEvent & TouchEvent) => {
     return;
   }
 
-  if (
-    dragHandle.value &&
-    targetElement &&
-    targetElement.dataset.dragHandle !== uid
-  ) {
+  if (dragHandle.value && targetElement && targetElement.dataset.dragHandle !== uid) {
     return;
   }
 
@@ -1051,20 +935,13 @@ watch(
     const currentLeft = left.value;
     const currentTop = top.value;
 
-    if (
-      stickDrag.value ||
-      bodyDrag.value ||
-      currentLeft === null ||
-      currentTop === null ||
-      newVal === currentLeft
-    ) {
+    if (stickDrag.value || bodyDrag.value || currentLeft === null || currentTop === null || newVal === currentLeft) {
       return;
     }
 
     const delta = oldVal - newVal;
 
-    bodyDown({ pageX: currentLeft, pageY: currentTop } as MouseEvent &
-      TouchEvent);
+    bodyDown({ pageX: currentLeft, pageY: currentTop } as MouseEvent & TouchEvent);
     bodyMove({ x: delta, y: 0 });
 
     nextTick(() => {
@@ -1079,20 +956,13 @@ watch(
     const currentLeft = left.value;
     const currentTop = top.value;
 
-    if (
-      stickDrag.value ||
-      bodyDrag.value ||
-      currentLeft === null ||
-      currentTop === null ||
-      newVal === currentTop
-    ) {
+    if (stickDrag.value || bodyDrag.value || currentLeft === null || currentTop === null || newVal === currentTop) {
       return;
     }
 
     const delta = oldVal - newVal;
 
-    bodyDown({ pageX: currentLeft, pageY: currentTop } as MouseEvent &
-      TouchEvent);
+    bodyDown({ pageX: currentLeft, pageY: currentTop } as MouseEvent & TouchEvent);
     bodyMove({ x: 0, y: delta });
 
     nextTick(() => {
@@ -1118,11 +988,7 @@ watch(
     const stick = 'mr';
     const delta = (oldVal as number) - (newVal as number);
 
-    stickDown(
-      stick,
-      { pageX: currentRight, pageY: currentTop + height.value / 2 },
-      true,
-    );
+    stickDown(stick, { pageX: currentRight, pageY: currentTop + height.value / 2 }, true);
     stickMove({ x: delta, y: 0 });
 
     nextTick(() => {
@@ -1148,11 +1014,7 @@ watch(
     const stick = 'bm';
     const delta = (oldVal as number) - (newVal as number);
 
-    stickDown(
-      stick,
-      { pageX: currentLeft + width.value / 2, pageY: currentBottom },
-      true,
-    );
+    stickDown(stick, { pageX: currentLeft + width.value / 2, pageY: currentBottom }, true);
     stickMove({ x: 0, y: delta });
 
     nextTick(() => {
@@ -1196,12 +1058,8 @@ watch(
       :class="[`resize-stick-${stick}`, isResizable ? '' : 'not-resizable']"
       :style="stickStyles(stick)"
       class="resize-stick"
-      @mousedown.stop.prevent="
-        stickDown(stick, $event as TouchEvent & MouseEvent)
-      "
-      @touchstart.stop.prevent="
-        stickDown(stick, $event as TouchEvent & MouseEvent)
-      "
+      @mousedown.stop.prevent="stickDown(stick, $event as TouchEvent & MouseEvent)"
+      @touchstart.stop.prevent="stickDown(stick, $event as TouchEvent & MouseEvent)"
     ></div>
   </div>
 </template>

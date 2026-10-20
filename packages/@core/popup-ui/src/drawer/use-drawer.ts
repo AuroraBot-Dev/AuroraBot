@@ -1,23 +1,8 @@
 import type { Component } from 'vue';
 
-import type {
-  DrawerApiOptions,
-  DrawerProps,
-  ExtendedDrawerApi,
-  InferDrawerData,
-} from './drawer';
+import type { DrawerApiOptions, DrawerProps, ExtendedDrawerApi, InferDrawerData } from './drawer';
 
-import {
-  defineComponent,
-  h,
-  inject,
-  markRaw,
-  nextTick,
-  onBeforeUnmount,
-  provide,
-  ref,
-  shallowReactive,
-} from 'vue';
+import { defineComponent, h, inject, markRaw, nextTick, onBeforeUnmount, provide, ref, shallowReactive } from 'vue';
 
 import { usePreferences } from '@vben-core/preferences';
 import { useSelector } from '@vben-core/shared/store';
@@ -33,10 +18,7 @@ type DrawerDataNotProvided = {
   readonly [DRAWER_DATA_NOT_PROVIDED]: true;
 };
 
-type ResolvedDrawerData<
-  TData,
-  TConnectedComponent extends Component,
-> = TData extends DrawerDataNotProvided
+type ResolvedDrawerData<TData, TConnectedComponent extends Component> = TData extends DrawerDataNotProvided
   ? InferDrawerData<TConnectedComponent>
   : TData;
 
@@ -58,10 +40,9 @@ export function setDefaultDrawerProps(props: Partial<DrawerProps>) {
   Object.assign(DEFAULT_DRAWER_PROPS, props);
 }
 
-export function useVbenDrawer<
-  TData = DrawerDataNotProvided,
-  TConnectedComponent extends Component = Component,
->(options: DrawerApiOptions<TConnectedComponent> = {}) {
+export function useVbenDrawer<TData = DrawerDataNotProvided, TConnectedComponent extends Component = Component>(
+  options: DrawerApiOptions<TConnectedComponent> = {},
+) {
   type TResolvedData = ResolvedDrawerData<TData, TConnectedComponent>;
 
   // Drawer一般会抽离出来，所以如果有传入 connectedComponent，则表示为外部调用，与内部组件进行连接
@@ -96,12 +77,7 @@ export function useVbenDrawer<
           ...attrs,
           ...slots,
         });
-        return () =>
-          h(
-            isDrawerReady.value ? connectedComponent : 'div',
-            { ...props, ...attrs },
-            slots,
-          );
+        return () => h(isDrawerReady.value ? connectedComponent : 'div', { ...props, ...attrs }, slots);
       },
       // eslint-disable-next-line vue/one-component-per-file
       {
@@ -113,10 +89,7 @@ export function useVbenDrawer<
     return [Drawer, extendedApi] as const;
   }
 
-  const injectData = inject<DrawerInjectData<TResolvedData>>(
-    USER_DRAWER_INJECT_KEY,
-    {},
-  );
+  const injectData = inject<DrawerInjectData<TResolvedData>>(USER_DRAWER_INJECT_KEY, {});
   const isConsumed = injectData.consumed;
   const effectiveOptions = isConsumed ? {} : injectData.options;
   if (!isConsumed && injectData.consumed !== undefined) {
@@ -161,8 +134,7 @@ export function useVbenDrawer<
 
   const Drawer = defineComponent(
     (props: DrawerProps, { attrs, slots }) => {
-      return () =>
-        h(VbenDrawer, { ...props, ...attrs, drawerApi: extendedApi }, slots);
+      return () => h(VbenDrawer, { ...props, ...attrs, drawerApi: extendedApi }, slots);
     },
     // eslint-disable-next-line vue/one-component-per-file
     {
@@ -175,17 +147,14 @@ export function useVbenDrawer<
 }
 
 export function createVbenDrawer<TData = unknown>() {
-  return function useTypedVbenDrawer<
-    TConnectedComponent extends Component = Component,
-  >(options: DrawerApiOptions<TConnectedComponent> = {}) {
+  return function useTypedVbenDrawer<TConnectedComponent extends Component = Component>(
+    options: DrawerApiOptions<TConnectedComponent> = {},
+  ) {
     return useVbenDrawer<TData, TConnectedComponent>(options);
   };
 }
 
-async function checkProps<TData>(
-  api: ExtendedDrawerApi<TData>,
-  attrs: Record<string, any>,
-) {
+async function checkProps<TData>(api: ExtendedDrawerApi<TData>, attrs: Record<string, any>) {
   if (!attrs || Object.keys(attrs).length === 0) {
     return;
   }

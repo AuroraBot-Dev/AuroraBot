@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createArrayChildSchema,
-  createFormFieldSchema,
-} from '../src/form-render/schema';
+import { createArrayChildSchema, createFormFieldSchema } from '../src/form-render/schema';
 
 describe('form schema normalization', () => {
   it('resolves common component props with the field context', () => {

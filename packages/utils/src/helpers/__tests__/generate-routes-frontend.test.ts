@@ -2,10 +2,7 @@ import type { RouteRecordRaw } from 'vue-router';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  generateRoutesByFrontend,
-  hasAuthority,
-} from '../generate-routes-frontend';
+import { generateRoutesByFrontend, hasAuthority } from '../generate-routes-frontend';
 
 // Mock 路由数据
 const mockRoutes = [
@@ -52,9 +49,7 @@ describe('hasAuthority', () => {
 
 describe('generateRoutesByFrontend', () => {
   it('should handle routes without children', async () => {
-    const generatedRoutes = await generateRoutesByFrontend(mockRoutes, [
-      'user',
-    ]);
+    const generatedRoutes = await generateRoutesByFrontend(mockRoutes, ['user']);
     expect(generatedRoutes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -92,10 +87,7 @@ describe('generateRoutesByFrontend', () => {
       { meta: {}, path: '/path2' }, // Empty meta
       { meta: { authority: ['admin'] }, path: '/path3' }, // Only authority
     ];
-    const generatedRoutes = await generateRoutesByFrontend(
-      routesWithMissingMeta as RouteRecordRaw[],
-      ['admin'],
-    );
+    const generatedRoutes = await generateRoutesByFrontend(routesWithMissingMeta as RouteRecordRaw[], ['admin']);
     expect(generatedRoutes).toEqual([
       { path: '/path1' },
       { meta: {}, path: '/path2' },

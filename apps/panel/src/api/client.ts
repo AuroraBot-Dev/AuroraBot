@@ -5,19 +5,12 @@ import type { OperationEnvelope } from './types';
 import { LOGIN_PATH } from '@vben/constants';
 import { useAppConfig } from '@vben/hooks';
 import { preferences } from '@vben/preferences';
-import {
-  defaultResponseInterceptor,
-  errorMessageResponseInterceptor,
-  RequestClient,
-} from '@vben/request';
+import { defaultResponseInterceptor, errorMessageResponseInterceptor, RequestClient } from '@vben/request';
 import { resetAllStores, useAccessStore } from '@vben/stores';
 
 import { message } from '#/adapter/naive';
 
-const { apiURL: configuredApiURL } = useAppConfig(
-  import.meta.env,
-  import.meta.env.PROD,
-);
+const { apiURL: configuredApiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
 const apiURL = configuredApiURL || '/api';
 
 function formatToken(token: null | string) {
@@ -49,19 +42,10 @@ export async function clearPanelSession() {
 }
 
 function errorText(error: any, fallback: string) {
-  return (
-    error?.response?.data?.detail ??
-    error?.response?.data?.message ??
-    error?.detail ??
-    error?.message ??
-    fallback
-  );
+  return error?.response?.data?.detail ?? error?.response?.data?.message ?? error?.detail ?? error?.message ?? fallback;
 }
 
-function createBodyClient(
-  baseURL: string,
-  options: RequestClientOptions & { authenticated?: boolean } = {},
-) {
+function createBodyClient(baseURL: string, options: RequestClientOptions & { authenticated?: boolean } = {}) {
   const { authenticated = false, ...clientOptions } = options;
   const client = new RequestClient({
     ...clientOptions,
@@ -73,16 +57,9 @@ function createBodyClient(
     client.addRequestInterceptor({
       fulfilled: async (config) => {
         const accessStore = useAccessStore();
-        if (
-          accessStore.accessTokenExpiresAt &&
-          Date.parse(accessStore.accessTokenExpiresAt) <= Date.now()
-        ) {
+        if (accessStore.accessTokenExpiresAt && Date.parse(accessStore.accessTokenExpiresAt) <= Date.now()) {
           await clearPanelSession();
-          throw new PanelApiError(
-            '面板会话已过期，请重新登录。',
-            'SESSION_EXPIRED',
-            401,
-          );
+          throw new PanelApiError('面板会话已过期，请重新登录。', 'SESSION_EXPIRED', 401);
         }
         config.headers.Authorization = formatToken(accessStore.accessToken);
         config.headers['Accept-Language'] = preferences.app.locale;
@@ -135,20 +112,14 @@ export async function operationRequest<T>(
     signal?: AbortSignal;
   },
 ): Promise<null | T> {
-  const envelope = await panelRequestClient.request<OperationEnvelope<T>>(
-    `/ops${path}`,
-    {
-      method,
-      params: options?.params,
-      responseReturn: 'body',
-      signal: options?.signal,
-    },
-  );
+  const envelope = await panelRequestClient.request<OperationEnvelope<T>>(`/ops${path}`, {
+    method,
+    params: options?.params,
+    responseReturn: 'body',
+    signal: options?.signal,
+  });
   if (!envelope.ok || envelope.code !== 'ok') {
-    throw new PanelApiError(
-      envelope.message || envelope.code || '操作失败',
-      envelope.code,
-    );
+    throw new PanelApiError(envelope.message || envelope.code || '操作失败', envelope.code);
   }
   return envelope.data;
 }

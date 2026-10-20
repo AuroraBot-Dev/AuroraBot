@@ -11,8 +11,7 @@ function getHistoryPosition() {
   if (typeof window === 'undefined') {
     return undefined;
   }
-  const position = (window.history.state as null | { position?: unknown })
-    ?.position;
+  const position = (window.history.state as null | { position?: unknown })?.position;
   return typeof position === 'number' ? position : undefined;
 }
 
@@ -23,9 +22,7 @@ function getHashTarget(scrollElement: HTMLElement, hash: string) {
 
   const id = hash.slice(1);
   try {
-    return scrollElement.querySelector<HTMLElement>(
-      `#${CSS.escape(decodeURIComponent(id))}`,
-    );
+    return scrollElement.querySelector<HTMLElement>(`#${CSS.escape(decodeURIComponent(id))}`);
   } catch {
     return scrollElement.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
   }

@@ -7,8 +7,5 @@ export function listTools() {
 }
 
 export function getTool(toolId: string) {
-  return operationRequest<ToolDefinitionRecord>(
-    'GET',
-    `/tools/${encodeURIComponent(toolId)}`,
-  );
+  return operationRequest<ToolDefinitionRecord>('GET', `/tools/${encodeURIComponent(toolId)}`);
 }

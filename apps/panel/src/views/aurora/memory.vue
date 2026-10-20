@@ -7,14 +7,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import {
-  NAlert,
-  NCard,
-  NDataTable,
-  NStatistic,
-  NTabPane,
-  NTabs,
-} from 'naive-ui';
+import { NAlert, NCard, NDataTable, NStatistic, NTabPane, NTabs } from 'naive-ui';
 
 import { getMemorySnapshot } from '#/api';
 
@@ -32,14 +25,13 @@ const scopeColumns: DataTableColumns<MemoryScopeSnapshot> = [
   { key: 'head', title: 'Head', width: 100 },
   { key: 'commits', title: '窗口内提交', render: (row) => row.commits.length },
 ];
-const commitColumns: DataTableColumns<WorldCommit & { memory_scope: string }> =
-  [
-    { key: 'memory_scope', title: 'Scope', ellipsis: { tooltip: true } },
-    { key: 'kind', title: '事件类型' },
-    { key: 'source', title: '来源' },
-    { key: 'summary', title: '摘要', ellipsis: { tooltip: true } },
-    { key: 'occurred_at', title: '发生时间' },
-  ];
+const commitColumns: DataTableColumns<WorldCommit & { memory_scope: string }> = [
+  { key: 'memory_scope', title: 'Scope', ellipsis: { tooltip: true } },
+  { key: 'kind', title: '事件类型' },
+  { key: 'source', title: '来源' },
+  { key: 'summary', title: '摘要', ellipsis: { tooltip: true } },
+  { key: 'occurred_at', title: '发生时间' },
+];
 
 async function load() {
   loading.value = true;
@@ -69,11 +61,7 @@ onMounted(load);
       </NCard>
     </section>
     <NCard>
-      <NAlert
-        class="mb-4"
-        title="这是最近时间窗口内各活跃 scope 的最新世界提交快照。"
-        type="info"
-      />
+      <NAlert class="mb-4" title="这是最近时间窗口内各活跃 scope 的最新世界提交快照。" type="info" />
       <NTabs type="line" animated>
         <NTabPane name="scopes" tab="Scopes">
           <NDataTable
@@ -85,13 +73,7 @@ onMounted(load);
           />
         </NTabPane>
         <NTabPane name="commits" tab="提交">
-          <NDataTable
-            :columns="commitColumns"
-            :data="commits"
-            :loading="loading"
-            :scroll-x="980"
-            size="small"
-          />
+          <NDataTable :columns="commitColumns" :data="commits" :loading="loading" :scroll-x="980" size="small" />
         </NTabPane>
       </NTabs>
     </NCard>

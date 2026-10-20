@@ -30,12 +30,7 @@ const show = ref(false);
 
 <template>
   <div class="relative w-full">
-    <Input
-      v-bind="$attrs"
-      v-model="modelValue"
-      :class="cn(props.class)"
-      :type="show ? 'text' : 'password'"
-    />
+    <Input v-bind="$attrs" v-model="modelValue" :class="cn(props.class)" :type="show ? 'text' : 'password'" />
     <template v-if="passwordStrength">
       <PasswordStrength :password="modelValue" />
       <p v-if="slots.strengthText" class="text-muted-foreground mt-1.5 text-xs">

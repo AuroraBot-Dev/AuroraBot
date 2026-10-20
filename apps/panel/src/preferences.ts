@@ -9,8 +9,7 @@ export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
     accessMode: 'frontend',
-    defaultAvatar:
-      'https://api.dicebear.com/9.x/bottts-neutral/svg?seed=AuroraBot',
+    defaultAvatar: 'https://api.dicebear.com/9.x/bottts-neutral/svg?seed=AuroraBot',
     defaultHomePath: '/overview',
     enableCheckUpdates: false,
     layout: 'header-sidebar-nav',

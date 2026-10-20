@@ -14,9 +14,7 @@ export function unmountGlobalLoading() {
     loadingElement.classList.add('hidden');
 
     // 查找所有需要移除的注入 loading 元素
-    const injectLoadingElements = document.querySelectorAll(
-      '[data-app-loading^="inject"]',
-    );
+    const injectLoadingElements = document.querySelectorAll('[data-app-loading^="inject"]');
 
     // 当过渡动画结束时，移除 loading 元素和所有注入的 loading 元素
     loadingElement.addEventListener(

@@ -28,10 +28,7 @@ export default defineConfig({
       await mkdir(outDir, { recursive: true });
 
       for (const file of loadingAssets) {
-        await cp(
-          join(rootDir, 'src/plugins/inject-app-loading', file),
-          join(outDir, file),
-        );
+        await cp(join(rootDir, 'src/plugins/inject-app-loading', file), join(outDir, file));
       }
     },
   },

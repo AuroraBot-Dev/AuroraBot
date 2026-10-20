@@ -7,11 +7,7 @@ type Increment<A extends unknown[]> = [...A, unknown];
 /**
  * 深层递归所有属性为可选
  */
-type DeepPartial<
-  T,
-  D extends number = 10,
-  C extends unknown[] = [],
-> = C['length'] extends D
+type DeepPartial<T, D extends number = 10, C extends unknown[] = []> = C['length'] extends D
   ? T
   : T extends object
     ? {
@@ -22,11 +18,7 @@ type DeepPartial<
 /**
  * 深层递归所有属性为只读
  */
-type DeepReadonly<
-  T,
-  D extends number = 10,
-  C extends unknown[] = [],
-> = C['length'] extends D
+type DeepReadonly<T, D extends number = 10, C extends unknown[] = []> = C['length'] extends D
   ? T
   : T extends object
     ? {
@@ -38,9 +30,7 @@ type DeepReadonly<
  * 任意类型的异步函数
  */
 
-type AnyPromiseFunction<T extends any[] = any[], R = void> = (
-  ...arg: T
-) => PromiseLike<R>;
+type AnyPromiseFunction<T extends any[] = any[], R = void> = (...arg: T) => PromiseLike<R>;
 
 /**
  * 任意类型的普通函数
@@ -50,8 +40,7 @@ type AnyNormalFunction<T extends any[] = any[], R = void> = (...arg: T) => R;
 /**
  * 任意类型的函数
  */
-type AnyFunction<T extends any[] = any[], R = void> =
-  AnyNormalFunction<T, R> | AnyPromiseFunction<T, R>;
+type AnyFunction<T extends any[] = any[], R = void> = AnyNormalFunction<T, R> | AnyPromiseFunction<T, R>;
 
 /**
  *  T | null 包装
@@ -98,11 +87,7 @@ type MaybeReadonlyRef<T> = (() => T) | ComputedRef<T>;
 type MaybeComputedRef<T> = MaybeReadonlyRef<T> | MaybeRef<T>;
 
 type Merge<O extends object, T extends object> = {
-  [K in keyof O | keyof T]: K extends keyof T
-    ? T[K]
-    : K extends keyof O
-      ? O[K]
-      : never;
+  [K in keyof O | keyof T]: K extends keyof T ? T[K] : K extends keyof O ? O[K] : never;
 };
 
 /**
@@ -117,10 +102,10 @@ type Merge<O extends object, T extends object> = {
  *  age: string
  * }
  */
-type MergeAll<
-  T extends object[],
-  R extends object = Record<string, any>,
-> = T extends [infer F extends object, ...infer Rest extends object[]]
+type MergeAll<T extends object[], R extends object = Record<string, any>> = T extends [
+  infer F extends object,
+  ...infer Rest extends object[],
+]
   ? MergeAll<Rest, Merge<R, F>>
   : R;
 

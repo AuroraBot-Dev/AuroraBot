@@ -11,9 +11,7 @@ import { useIsMobile, useSortable } from '@vben-core/composables';
 // 可能会找到拖拽的子元素，这里需要确保拖拽的dom时tab元素
 function findParentElement(element: HTMLElement) {
   const parentCls = 'group';
-  return element.classList.contains(parentCls)
-    ? element
-    : element.closest(`.${parentCls}`);
+  return element.classList.contains(parentCls) ? element : element.closest(`.${parentCls}`);
 }
 
 export function useTabsDrag(props: TabsProps, emit: EmitType) {
@@ -22,9 +20,7 @@ export function useTabsDrag(props: TabsProps, emit: EmitType) {
   async function initTabsSortable() {
     await nextTick();
 
-    const el = document.querySelectorAll(
-      `.${props.contentClass}`,
-    )?.[0] as HTMLElement;
+    const el = document.querySelectorAll(`.${props.contentClass}`)?.[0] as HTMLElement;
 
     if (!el) {
       console.warn('Element not found for sortable initialization');

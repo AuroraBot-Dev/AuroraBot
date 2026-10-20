@@ -61,12 +61,8 @@ const PLAIN_PADDING: Record<DescriptionsSize, string> = {
 // 冒号通过伪元素追加，避免标签为渲染函数时无法拼接
 const COLON_CLASS = "after:content-[':']";
 
-const hasLabel = computed(
-  () => props.label !== null && props.label !== undefined,
-);
-const hasContent = computed(
-  () => props.content !== null && props.content !== undefined,
-);
+const hasLabel = computed(() => props.label !== null && props.label !== undefined);
+const hasContent = computed(() => props.content !== null && props.content !== undefined);
 
 // 数字 0 会被 VbenRenderContent 当作 falsy 隐藏，这里转为字符串保证展示；
 // 同时将 null 归一为 undefined，匹配 VbenRenderContent 的 content 类型
@@ -76,9 +72,7 @@ const displayLabel = computed(() => {
 });
 const displayContent = computed(() => {
   if (props.content === null || props.content === undefined) return undefined;
-  return typeof props.content === 'number'
-    ? String(props.content)
-    : props.content;
+  return typeof props.content === 'number' ? String(props.content) : props.content;
 });
 
 const cellClass = computed(() => {
@@ -86,18 +80,14 @@ const cellClass = computed(() => {
     return cn(
       'border border-border align-top break-words',
       BORDERED_PADDING[props.size],
-      props.type === 'label'
-        ? 'bg-muted/50 text-start font-normal text-foreground'
-        : 'text-foreground',
+      props.type === 'label' ? 'bg-muted/50 text-start font-normal text-foreground' : 'text-foreground',
       props.itemClass,
     );
   }
   return cn('align-top', PLAIN_PADDING[props.size], props.itemClass);
 });
 
-const labelClass = computed(() =>
-  cn('mr-2 shrink-0 text-muted-foreground', props.colon && COLON_CLASS),
-);
+const labelClass = computed(() => cn('mr-2 shrink-0 text-muted-foreground', props.colon && COLON_CLASS));
 </script>
 
 <template>
@@ -117,11 +107,7 @@ const labelClass = computed(() =>
       <span v-if="hasLabel" :class="labelClass" :style="labelStyle">
         <VbenRenderContent :content="displayLabel" />
       </span>
-      <span
-        v-if="hasContent"
-        class="break-words text-foreground"
-        :style="contentStyle"
-      >
+      <span v-if="hasContent" class="break-words text-foreground" :style="contentStyle">
         <VbenRenderContent :content="displayContent" />
       </span>
     </div>

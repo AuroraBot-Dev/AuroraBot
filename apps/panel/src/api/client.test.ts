@@ -28,15 +28,8 @@ describe('panel API client', () => {
   it('为认证请求添加 Bearer token', async () => {
     const accessStore = useAccessStore();
     accessStore.setAccessToken('session-token');
-    accessStore.setAccessTokenExpiresAt(
-      new Date(Date.now() + 60_000).toISOString(),
-    );
-    mock
-      .onGet('/probe')
-      .reply((config) => [
-        200,
-        { authorization: config.headers?.Authorization },
-      ]);
+    accessStore.setAccessTokenExpiresAt(new Date(Date.now() + 60_000).toISOString());
+    mock.onGet('/probe').reply((config) => [200, { authorization: config.headers?.Authorization }]);
     await expect(
       panelRequestClient.get<{ authorization: string }>('/probe', {
         responseReturn: 'body',
@@ -91,9 +84,7 @@ describe('panel API client', () => {
     const accessStore = useAccessStore();
     accessStore.setAccessToken('expired-token');
     mock.onGet('/ops/test').reply(401, { detail: '会话无效' });
-    await expect(operationRequest('GET', '/test')).rejects.toBeInstanceOf(
-      PanelApiError,
-    );
+    await expect(operationRequest('GET', '/test')).rejects.toBeInstanceOf(PanelApiError);
     expect(replace).toHaveBeenCalledOnce();
   });
 });

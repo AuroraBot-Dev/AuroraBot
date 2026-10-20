@@ -4,12 +4,7 @@ import type { NotificationItem } from './types';
 import { Bell, CircleCheckBig, CircleX, MailCheck } from '@vben/icons';
 import { $t } from '@vben/locales';
 
-import {
-  VbenButton,
-  VbenIconButton,
-  VbenPopover,
-  VbenScrollbar,
-} from '@vben-core/shadcn-ui';
+import { VbenButton, VbenIconButton, VbenPopover, VbenScrollbar } from '@vben-core/shadcn-ui';
 
 import { useToggle } from '@vueuse/core';
 
@@ -63,10 +58,7 @@ defineExpose({ toggle });
     <template #trigger>
       <div class="mr-2 flex-center h-full" @click.stop="toggle()">
         <VbenIconButton class="bell-button relative text-foreground">
-          <span
-            v-if="dot"
-            class="absolute top-0.5 right-0.5 size-2 rounded-sm bg-primary"
-          ></span>
+          <span v-if="dot" class="absolute top-0.5 right-0.5 size-2 rounded-sm bg-primary"></span>
           <Bell class="size-4" />
         </VbenIconButton>
       </div>
@@ -91,18 +83,10 @@ defineExpose({ toggle });
               @click="emit('onClick', item)"
             >
               <slot name="content" :item="item">
-                <span
-                  v-if="!item.isRead"
-                  class="absolute top-2 right-2 size-2 rounded-sm bg-primary"
-                ></span>
+                <span v-if="!item.isRead" class="absolute top-2 right-2 size-2 rounded-sm bg-primary"></span>
 
-                <span
-                  class="relative flex size-10 shrink-0 overflow-hidden rounded-full"
-                >
-                  <img
-                    :src="item.avatar"
-                    class="aspect-square size-full object-cover"
-                  />
+                <span class="relative flex size-10 shrink-0 overflow-hidden rounded-full">
+                  <img :src="item.avatar" class="aspect-square size-full object-cover" />
                 </span>
                 <div class="flex flex-col gap-1 leading-none">
                   <p class="font-semibold">{{ item.title }}</p>
@@ -113,9 +97,7 @@ defineExpose({ toggle });
                     {{ item.date }}
                   </p>
                 </div>
-                <div
-                  class="absolute top-1/2 right-3 flex -translate-y-1/2 flex-row gap-1"
-                >
+                <div class="absolute top-1/2 right-3 flex -translate-y-1/2 flex-row gap-1">
                   <slot name="action" :item="item">
                     <slot name="action-prepend" :item="item"></slot>
                     <VbenIconButton
@@ -153,15 +135,8 @@ defineExpose({ toggle });
         </div>
       </template>
 
-      <div
-        class="flex items-center justify-between border-t border-border px-4 py-3"
-      >
-        <VbenButton
-          :disabled="notifications.length <= 0"
-          size="sm"
-          variant="ghost"
-          @click="handleClear"
-        >
+      <div class="flex items-center justify-between border-t border-border px-4 py-3">
+        <VbenButton :disabled="notifications.length <= 0" size="sm" variant="ghost" @click="handleClear">
           {{ $t('ui.widgets.clearNotifications') }}
         </VbenButton>
         <VbenButton size="sm" @click="handleViewAll">

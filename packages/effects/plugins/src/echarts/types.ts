@@ -1,9 +1,4 @@
-import type {
-  BarSeriesOption,
-  LineSeriesOption,
-  PieSeriesOption,
-  RadarSeriesOption,
-} from 'echarts/charts';
+import type { BarSeriesOption, LineSeriesOption, PieSeriesOption, RadarSeriesOption } from 'echarts/charts';
 import type {
   DatasetComponentOption,
   GridComponentOption,

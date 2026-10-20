@@ -99,5 +99,4 @@ export class Stack<T> {
  * @param maxSize 栈的最大容量
  * @returns 栈实例
  */
-export const createStack = <T>(dedup = true, maxSize?: number) =>
-  new Stack<T>(dedup, maxSize);
+export const createStack = <T>(dedup = true, maxSize?: number) => new Stack<T>(dedup, maxSize);

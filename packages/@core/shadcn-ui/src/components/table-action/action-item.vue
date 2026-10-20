@@ -14,11 +14,7 @@ const props = defineProps<{ action: ActionItem }>();
 const open = ref(false);
 
 const buttonClass = computed(() =>
-  cn(
-    'gap-1',
-    props.action.danger && 'text-destructive hover:text-destructive',
-    props.action.class,
-  ),
+  cn('gap-1', props.action.danger && 'text-destructive hover:text-destructive', props.action.class),
 );
 
 const variant = computed(() => props.action.variant ?? 'link');
@@ -68,12 +64,7 @@ function onCancel() {
         <VbenButton size="default" variant="outline" @click="onCancel">
           {{ action.popConfirm.cancelText ?? 'Cancel' }}
         </VbenButton>
-        <VbenButton
-          :variant="action.danger ? 'destructive' : 'default'"
-          size="default"
-          class="p-2"
-          @click="onConfirm"
-        >
+        <VbenButton :variant="action.danger ? 'destructive' : 'default'" size="default" class="p-2" @click="onConfirm">
           {{ action.popConfirm.okText ?? 'OK' }}
         </VbenButton>
       </div>

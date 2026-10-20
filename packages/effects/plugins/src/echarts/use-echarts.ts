@@ -6,27 +6,11 @@ import type { Nullable } from '@vben/types';
 
 import type EchartsUI from './echarts-ui.vue';
 
-import {
-  computed,
-  nextTick,
-  onActivated,
-  onBeforeUnmount,
-  onDeactivated,
-  onMounted,
-  ref,
-  unref,
-  watch,
-} from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, unref, watch } from 'vue';
 
 import { usePreferences } from '@vben/preferences';
 
-import {
-  tryOnUnmounted,
-  useDebounceFn,
-  useResizeObserver,
-  useTimeoutFn,
-  useWindowSize,
-} from '@vueuse/core';
+import { tryOnUnmounted, useDebounceFn, useResizeObserver, useTimeoutFn, useWindowSize } from '@vueuse/core';
 
 import echarts from './echarts';
 
@@ -84,10 +68,7 @@ function useEcharts(chartRef: Ref<EchartsUIType>) {
     return chartInstance;
   };
 
-  const renderEcharts = (
-    options: EChartsOption,
-    clear = true,
-  ): Promise<Nullable<echarts.ECharts>> => {
+  const renderEcharts = (options: EChartsOption, clear = true): Promise<Nullable<echarts.ECharts>> => {
     if (!unref(isActiveRef)) {
       return Promise.resolve(null);
     }

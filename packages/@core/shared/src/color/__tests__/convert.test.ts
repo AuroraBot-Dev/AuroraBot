@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  convertToHsl,
-  convertToHslCssVar,
-  convertToRgb,
-  isValidColor,
-} from '../convert';
+import { convertToHsl, convertToHslCssVar, convertToRgb, isValidColor } from '../convert';
 
 describe('color conversion functions', () => {
   it('should correctly convert color to HSL format', () => {

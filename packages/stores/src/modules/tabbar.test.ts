@@ -277,9 +277,7 @@ describe('useAccessStore', () => {
     await store.closeTabByKey(keyToClose, router);
 
     expect(store.tabs).toHaveLength(2);
-    expect(
-      store.tabs.find((tab) => tab.fullPath === keyToClose),
-    ).toBeUndefined();
+    expect(store.tabs.find((tab) => tab.fullPath === keyToClose)).toBeUndefined();
   });
 
   it('refreshes the current tab', async () => {

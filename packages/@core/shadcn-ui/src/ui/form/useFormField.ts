@@ -1,18 +1,13 @@
 import { computed, inject } from 'vue';
 
-import {
-  FORM_FIELD_INJECTION_KEY,
-  FORM_ITEM_INJECTION_KEY,
-} from './injectionKeys';
+import { FORM_FIELD_INJECTION_KEY, FORM_ITEM_INJECTION_KEY } from './injectionKeys';
 
 export function useFormField() {
   const fieldContext = inject(FORM_FIELD_INJECTION_KEY);
   const fieldItemContext = inject(FORM_ITEM_INJECTION_KEY);
 
-  if (!fieldContext)
-    throw new Error('useFormField should be used within <FormField>');
-  if (!fieldItemContext)
-    throw new Error('useFormField should be used within <FormItem>');
+  if (!fieldContext) throw new Error('useFormField should be used within <FormField>');
+  if (!fieldItemContext) throw new Error('useFormField should be used within <FormItem>');
 
   const { dirty, error, name, touched, valid } = fieldContext;
   const id = fieldItemContext;

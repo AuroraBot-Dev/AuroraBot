@@ -1,9 +1,4 @@
-import type {
-  AxiosRequestConfig,
-  AxiosResponse,
-  CreateAxiosDefaults,
-  InternalAxiosRequestConfig,
-} from 'axios';
+import type { AxiosRequestConfig, AxiosResponse, CreateAxiosDefaults, InternalAxiosRequestConfig } from 'axios';
 
 type ExtendOptions<T = any> = {
   /**
@@ -13,12 +8,7 @@ type ExtendOptions<T = any> = {
    * - indices: ids[0]=1&ids[1]=2&ids[2]=3
    * - repeat: ids=1&ids=2&ids=3
    */
-  paramsSerializer?:
-    | 'brackets'
-    | 'comma'
-    | 'indices'
-    | 'repeat'
-    | AxiosRequestConfig<T>['paramsSerializer'];
+  paramsSerializer?: 'brackets' | 'comma' | 'indices' | 'repeat' | AxiosRequestConfig<T>['paramsSerializer'];
   /**
    * 响应数据的返回方式。
    * - raw: 原始的AxiosResponse，包括headers、status等，不做是否成功请求的检查。
@@ -52,16 +42,12 @@ interface SseRequestOptions extends RequestInit {
 interface RequestInterceptorConfig {
   fulfilled?: (
     config: ExtendOptions & InternalAxiosRequestConfig,
-  ) =>
-    | (ExtendOptions & InternalAxiosRequestConfig<any>)
-    | Promise<ExtendOptions & InternalAxiosRequestConfig<any>>;
+  ) => (ExtendOptions & InternalAxiosRequestConfig<any>) | Promise<ExtendOptions & InternalAxiosRequestConfig<any>>;
   rejected?: (error: any) => any;
 }
 
 interface ResponseInterceptorConfig<T = any> {
-  fulfilled?: (
-    response: RequestResponse<T>,
-  ) => Promise<RequestResponse> | RequestResponse;
+  fulfilled?: (response: RequestResponse<T>) => Promise<RequestResponse> | RequestResponse;
   rejected?: (error: any) => any;
 }
 

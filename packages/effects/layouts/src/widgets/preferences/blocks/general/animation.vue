@@ -32,10 +32,7 @@ function handleClick(value: string) {
   <SwitchItem v-model="transitionEnable">
     {{ $t('preferences.animation.transition') }}
   </SwitchItem>
-  <div
-    v-if="transitionEnable"
-    class="mt-3 mb-2 flex justify-between gap-3 px-2"
-  >
+  <div v-if="transitionEnable" class="mt-3 mb-2 flex justify-between gap-3 px-2">
     <div
       v-for="item in transitionPreset"
       :key="item"
@@ -45,10 +42,7 @@ function handleClick(value: string) {
       class="outline-box p-2"
       @click="handleClick(item)"
     >
-      <div
-        :class="`${item}-slow`"
-        class="h-10 w-12 rounded-md bg-primary"
-      ></div>
+      <div :class="`${item}-slow`" class="h-10 w-12 rounded-md bg-primary"></div>
     </div>
   </div>
 </template>

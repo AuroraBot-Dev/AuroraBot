@@ -8,11 +8,7 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { useNamespace } from '@vben-core/composables';
 
 import { ChevronsDown } from '@lucide/vue';
-import {
-  CollapsibleContent,
-  CollapsibleRoot,
-  CollapsibleTrigger,
-} from 'reka-ui';
+import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger } from 'reka-ui';
 
 import CollapsibleParamsItem from './collapsible-params-item.vue';
 
@@ -31,9 +27,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emits = defineEmits<{ 'update:value': [any, string] }>();
 
-const modelValue = defineModel<
-  Recordable<CollapsibleParamSchema['defaultValue']>
->('value', {
+const modelValue = defineModel<Recordable<CollapsibleParamSchema['defaultValue']>>('value', {
   default: () => ({}),
 });
 
@@ -45,9 +39,7 @@ const { b } = useNamespace('collapsible-params');
 const open = ref(props.defaultOpen);
 
 // 最小可见为1
-const finalVisibleCount = computed(() =>
-  Math.max(1, Math.floor(props.visibleCount)),
-);
+const finalVisibleCount = computed(() => Math.max(1, Math.floor(props.visibleCount)));
 
 const visibleRows = computed(() => {
   return props.params.slice(0, finalVisibleCount.value);
@@ -63,10 +55,7 @@ const bodyStyle = computed(() => {
   }
 
   return {
-    maxHeight:
-      typeof props.maxHeight === 'number'
-        ? `${props.maxHeight}px`
-        : props.maxHeight,
+    maxHeight: typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight,
   };
 });
 
@@ -107,9 +96,7 @@ function resetValues() {
   init(true);
 }
 
-function updateValues(
-  values: Recordable<CollapsibleParamSchema['defaultValue']>,
-) {
+function updateValues(values: Recordable<CollapsibleParamSchema['defaultValue']>) {
   const allowedKeys = new Set(props.params.map((param) => param.key));
   const patch = {} as Recordable<CollapsibleParamSchema['defaultValue']>;
 
@@ -145,31 +132,15 @@ defineExpose({
   >
     <div class="wrapper w-full relative flex flex-col overflow-x-auto">
       <div class="w-full min-w-fit">
-        <div
-          class="header bg-accent w-full flex-none flex items-center rounded-t-[0.5rem] border-b"
-        >
-          <div
-            class="header-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap"
-          >
-            Name
-          </div>
-          <div
-            class="header-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap"
-          >
-            Value
-          </div>
-          <div
-            class="header-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap"
-          >
-            Description
-          </div>
+        <div class="header bg-accent w-full flex-none flex items-center rounded-t-[0.5rem] border-b">
+          <div class="header-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap">Name</div>
+          <div class="header-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap">Value</div>
+          <div class="header-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap">Description</div>
         </div>
 
         <div
           class="body w-full flex-none flex flex-col overflow-x-hidden"
-          :class="[
-            open && !!props.maxHeight ? 'overflow-y-auto' : 'overflow-y-hidden',
-          ]"
+          :class="[open && !!props.maxHeight ? 'overflow-y-auto' : 'overflow-y-hidden']"
           :style="bodyStyle"
         >
           <CollapsibleParamsItem
@@ -195,10 +166,7 @@ defineExpose({
         </div>
       </div>
     </div>
-    <div
-      class="gutter h-[1.5rem]"
-      v-if="!open && collapsibleRows.length > 0"
-    ></div>
+    <div class="gutter h-[1.5rem]" v-if="!open && collapsibleRows.length > 0"></div>
     <div
       class="trigger-bar flex min-h-[2rem] border-t px-5 pt-1 pb-1 rounded-b-[0.5rem] z-1"
       :class="{
@@ -206,9 +174,7 @@ defineExpose({
       }"
       v-if="collapsibleRows.length > 0"
     >
-      <CollapsibleTrigger
-        class="cursor-pointer h-[2rem] flex items-center gap-2"
-      >
+      <CollapsibleTrigger class="cursor-pointer h-[2rem] flex items-center gap-2">
         <ChevronsDown
           class="transition-transform"
           :size="16"

@@ -1,11 +1,5 @@
 <template>
-  <svg
-    class="custom-radio-image"
-    fill="none"
-    height="66"
-    width="104"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <svg class="custom-radio-image" fill="none" height="66" width="104" xmlns="http://www.w3.org/2000/svg">
     <g>
       <rect
         id="svg_1"
@@ -104,16 +98,7 @@
         x="54.23033"
         y="3.07319"
       />
-      <rect
-        id="svg_4"
-        fill="#ffffff"
-        height="7.13843"
-        rx="2"
-        stroke="null"
-        width="7.78397"
-        x="1.5327"
-        y="0.881"
-      />
+      <rect id="svg_4" fill="#ffffff" height="7.13843" rx="2" stroke="null" width="7.78397" x="1.5327" y="0.881" />
     </g>
   </svg>
 </template>

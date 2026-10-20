@@ -1,16 +1,8 @@
 import { computed, nextTick, shallowRef } from 'vue';
 
-import {
-  getLayoutScrollElement,
-  getScrollbarWidth,
-  needsScrollbar,
-} from '@vben-core/shared/utils';
+import { getLayoutScrollElement, getScrollbarWidth, needsScrollbar } from '@vben-core/shared/utils';
 
-import {
-  useScrollLock as _useScrollLock,
-  tryOnBeforeUnmount,
-  tryOnMounted,
-} from '@vueuse/core';
+import { useScrollLock as _useScrollLock, tryOnBeforeUnmount, tryOnMounted } from '@vueuse/core';
 
 export const SCROLL_FIXED_CLASS = `_scroll__fixed_`;
 
@@ -39,8 +31,7 @@ export function useScrollLock(options: ScrollLockOptions = {}) {
       return;
     }
 
-    target.dataset.scrollbarGutter =
-      target.style.getPropertyValue('scrollbar-gutter');
+    target.dataset.scrollbarGutter = target.style.getPropertyValue('scrollbar-gutter');
     target.style.setProperty('scrollbar-gutter', 'stable');
     hasScrollbarGutter = true;
   }

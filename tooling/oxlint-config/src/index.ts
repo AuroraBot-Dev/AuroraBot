@@ -11,9 +11,7 @@ type VbenOxlintConfig = Omit<OxlintConfig, 'extends'> & {
 function defineConfig(config: VbenOxlintConfig = {}) {
   const { extends: extendedConfigs = [], ...restConfig } = config;
 
-  return defineOxlintConfig(
-    mergeOxlintConfigs(oxlintConfig, ...extendedConfigs, restConfig),
-  );
+  return defineOxlintConfig(mergeOxlintConfigs(oxlintConfig, ...extendedConfigs, restConfig));
 }
 
 export { defineConfig, oxlintConfig };

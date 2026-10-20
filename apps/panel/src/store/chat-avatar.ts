@@ -20,14 +20,8 @@ function loadState(): ChatAvatarState {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<ChatAvatarState>;
       return {
-        botIcon:
-          typeof parsed.botIcon === 'string'
-            ? parsed.botIcon
-            : DEFAULTS.botIcon,
-        userIcon:
-          typeof parsed.userIcon === 'string'
-            ? parsed.userIcon
-            : DEFAULTS.userIcon,
+        botIcon: typeof parsed.botIcon === 'string' ? parsed.botIcon : DEFAULTS.botIcon,
+        userIcon: typeof parsed.userIcon === 'string' ? parsed.userIcon : DEFAULTS.userIcon,
       };
     }
   } catch {

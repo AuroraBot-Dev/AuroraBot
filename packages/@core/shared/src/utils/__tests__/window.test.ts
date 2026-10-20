@@ -24,10 +24,6 @@ describe('openWindow', () => {
     openWindow(url, options);
 
     // 验证 window.open 是否被正确地调用
-    expect(window.open).toHaveBeenCalledWith(
-      url,
-      options.target,
-      'noopener=yes,noreferrer=yes',
-    );
+    expect(window.open).toHaveBeenCalledWith(url, options.target, 'noopener=yes,noreferrer=yes');
   });
 });

@@ -15,12 +15,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        "dist/**",
-        "dist.zip",
-        ".vitepress/dist.zip",
-        ".vitepress/dist/**"
-      ]
+      "outputs": ["dist/**", "dist.zip", ".vitepress/dist.zip", ".vitepress/dist/**"]
     },
     "preview": {
       "dependsOn": ["^build"],

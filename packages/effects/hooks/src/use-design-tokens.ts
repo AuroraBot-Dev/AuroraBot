@@ -50,8 +50,7 @@ export function useAntdDesignTokens() {
 
       getCssVariableValue('--primary-foreground');
 
-      tokens.colorBorderSecondary = tokens.colorBorder =
-        getCssVariableValue('--border');
+      tokens.colorBorderSecondary = tokens.colorBorder = getCssVariableValue('--border');
 
       tokens.colorBgElevated = getCssVariableValue('--popover');
 
@@ -139,14 +138,11 @@ export function useNaiveDesignTokens() {
 
       commonTokens.baseColor = getCssVariableValue('--primary-foreground');
 
-      commonTokens.dividerColor = commonTokens.borderColor =
-        getCssVariableValue('--border');
+      commonTokens.dividerColor = commonTokens.borderColor = getCssVariableValue('--border');
 
-      commonTokens.modalColor = commonTokens.popoverColor =
-        getCssVariableValue('--popover');
+      commonTokens.modalColor = commonTokens.popoverColor = getCssVariableValue('--popover');
 
-      commonTokens.tableColor = commonTokens.cardColor =
-        getCssVariableValue('--card');
+      commonTokens.tableColor = commonTokens.cardColor = getCssVariableValue('--card');
 
       commonTokens.bodyColor = getCssVariableValue('--background');
       commonTokens.invertedColor = getCssVariableValue('--background-deep');
@@ -305,9 +301,7 @@ export function useElementPlusDesignTokens() {
         '--el-fill-color-darker': getCssVariableValue('--accent-darker'),
 
         // 解决ElLoading背景色问题
-        '--el-mask-color': isDark.value
-          ? 'rgba(0,0,0,.8)'
-          : 'rgba(255,255,255,.9)',
+        '--el-mask-color': isDark.value ? 'rgba(0,0,0,.8)' : 'rgba(255,255,255,.9)',
 
         '--el-text-color-primary': getCssVariableValue('--foreground'),
 
@@ -339,9 +333,7 @@ export function useTDesignDesignTokens() {
   const getColorTokens = (tdName: string, vbenName: string) => {
     const dark = isDark.value;
     const getColor = (level?: number) =>
-      getCssVariableValue(
-        level === undefined ? `--${vbenName}` : `--${vbenName}-${level}`,
-      );
+      getCssVariableValue(level === undefined ? `--${vbenName}` : `--${vbenName}-${level}`);
 
     // 亮色模式 1 最浅、10 最深；暗色模式相反
     const lightScale = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -378,21 +370,17 @@ export function useTDesignDesignTokens() {
         '--td-text-color-brand': getCssVariableValue('--primary'),
         '--td-text-color-disabled': getCssVariableValue('--muted-foreground'),
         '--td-text-color-link': getCssVariableValue('--primary'),
-        '--td-text-color-placeholder': getCssVariableValue(
-          '--input-placeholder',
-        ),
+        '--td-text-color-placeholder': getCssVariableValue('--input-placeholder'),
         '--td-text-color-primary': getCssVariableValue('--foreground'),
         '--td-text-color-secondary': getCssVariableValue('--muted-foreground'),
 
         // 背景颜色
         '--td-bg-color-component': getCssVariableValue('--accent'),
-        '--td-bg-color-component-active':
-          getCssVariableValue('--accent-darker'),
+        '--td-bg-color-component-active': getCssVariableValue('--accent-darker'),
         '--td-bg-color-component-disabled': getCssVariableValue('--muted'),
         '--td-bg-color-component-hover': getCssVariableValue('--accent-hover'),
         '--td-bg-color-container': getCssVariableValue('--background'),
-        '--td-bg-color-container-active':
-          getCssVariableValue('--accent-darker'),
+        '--td-bg-color-container-active': getCssVariableValue('--accent-darker'),
         '--td-bg-color-container-hover': getCssVariableValue('--accent'),
         '--td-bg-color-container-select': getCssVariableValue('--accent'),
         '--td-bg-color-page': getCssVariableValue('--background-deep'),
@@ -410,9 +398,7 @@ export function useTDesignDesignTokens() {
 
       // TDesign 将亮/暗变量定义在 `:root[theme-mode='light'|'dark']` 下，
       // 需要写入相同优先级的选择器才能覆盖默认值
-      const selector = isDark.value
-        ? `:root[theme-mode='dark']`
-        : `:root[theme-mode='light']`;
+      const selector = isDark.value ? `:root[theme-mode='dark']` : `:root[theme-mode='light']`;
 
       updateCSSVariables(variables, `__vben_design_tdesign_styles__`, selector);
     },

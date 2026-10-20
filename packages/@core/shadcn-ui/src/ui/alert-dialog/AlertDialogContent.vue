@@ -8,11 +8,7 @@ import { ref } from 'vue';
 import { cn } from '@vben-core/shared/utils';
 
 import { reactiveOmit } from '@vueuse/core';
-import {
-  AlertDialogContent,
-  AlertDialogPortal,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { AlertDialogContent, AlertDialogPortal, useForwardPropsEmits } from 'reka-ui';
 
 import AlertDialogOverlay from './AlertDialogOverlay.vue';
 
@@ -33,9 +29,7 @@ const props = withDefaults(
   >(),
   { modal: true },
 );
-const emits = defineEmits<
-  AlertDialogContentEmits & { close: []; closed: []; opened: [] }
->();
+const emits = defineEmits<AlertDialogContentEmits & { close: []; closed: []; opened: [] }>();
 
 // reka-ui 的 AlertDialog 在 modal=true 时会将 body 设置 pointer-events:none，
 // 弹出层（如 Select 下拉框）会因此无法点击。这里通过在上层传入 :modal="false" 来
@@ -84,10 +78,8 @@ defineExpose({
         cn(
           'z-popup bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-[50%] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
           {
-            'data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-top-[48%]':
-              !centered,
-            'data-[state=closed]:slide-out-to-top-[148%] data-[state=open]:slide-in-from-top-[98%]':
-              centered,
+            'data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-top-[48%]': !centered,
+            'data-[state=closed]:slide-out-to-top-[148%] data-[state=open]:slide-in-from-top-[98%]': centered,
             'top-[10vh]': !centered,
             'top-1/2 -translate-y-1/2': centered,
           },

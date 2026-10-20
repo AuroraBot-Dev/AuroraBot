@@ -3,11 +3,7 @@ import type { ColPageProps } from './types';
 
 import { computed, ref, useSlots } from 'vue';
 
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@vben-core/shadcn-ui';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@vben-core/shadcn-ui';
 
 import Page from '../page/page.vue';
 
@@ -58,11 +54,7 @@ defineExpose({
 <template>
   <Page v-bind="delegatedProps">
     <!-- 继承默认的slot -->
-    <template
-      v-for="slotName in delegatedSlots"
-      :key="slotName"
-      #[slotName]="slotProps"
-    >
+    <template v-for="slotName in delegatedSlots" :key="slotName" #[slotName]="slotProps">
       <slot :name="slotName" v-bind="slotProps"></slot>
     </template>
 

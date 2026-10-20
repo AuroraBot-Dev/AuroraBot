@@ -132,21 +132,13 @@ describe('isObject', () => {
 describe('getFirstNonNullOrUndefined', () => {
   describe('getFirstNonNullOrUndefined', () => {
     it('should return the first non-null and non-undefined value for a number array', () => {
-      expect(getFirstNonNullOrUndefined<number>(undefined, null, 0, 42)).toBe(
-        0,
-      );
-      expect(getFirstNonNullOrUndefined<number>(null, undefined, 42, 123)).toBe(
-        42,
-      );
+      expect(getFirstNonNullOrUndefined<number>(undefined, null, 0, 42)).toBe(0);
+      expect(getFirstNonNullOrUndefined<number>(null, undefined, 42, 123)).toBe(42);
     });
 
     it('should return the first non-null and non-undefined value for a string array', () => {
-      expect(
-        getFirstNonNullOrUndefined<string>(undefined, null, '', 'hello'),
-      ).toBe('');
-      expect(
-        getFirstNonNullOrUndefined<string>(null, undefined, 'test', 'world'),
-      ).toBe('test');
+      expect(getFirstNonNullOrUndefined<string>(undefined, null, '', 'hello')).toBe('');
+      expect(getFirstNonNullOrUndefined<string>(null, undefined, 'test', 'world')).toBe('test');
     });
 
     it('should return undefined if all values are null or undefined', () => {
@@ -161,23 +153,12 @@ describe('getFirstNonNullOrUndefined', () => {
     });
 
     it('should handle mixed types correctly', () => {
-      expect(
-        getFirstNonNullOrUndefined<number | object | string>(
-          undefined,
-          null,
-          'test',
-          123,
-          { key: 'value' },
-        ),
-      ).toBe('test');
-      expect(
-        getFirstNonNullOrUndefined<number | object | string>(
-          null,
-          undefined,
-          [1, 2, 3],
-          'string',
-        ),
-      ).toEqual([1, 2, 3]);
+      expect(getFirstNonNullOrUndefined<number | object | string>(undefined, null, 'test', 123, { key: 'value' })).toBe(
+        'test',
+      );
+      expect(getFirstNonNullOrUndefined<number | object | string>(null, undefined, [1, 2, 3], 'string')).toEqual([
+        1, 2, 3,
+      ]);
     });
   });
 });

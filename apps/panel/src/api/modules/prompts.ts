@@ -7,8 +7,5 @@ export function listPrompts() {
 }
 
 export function getPrompt(promptId: string) {
-  return operationRequest<PromptDetail>(
-    'GET',
-    `/prompts/${encodeURIComponent(promptId)}`,
-  );
+  return operationRequest<PromptDetail>('GET', `/prompts/${encodeURIComponent(promptId)}`);
 }

@@ -1,7 +1,7 @@
 import type { Config } from 'prettier';
 
 export default {
-  printWidth: 80,
+  printWidth: 120,
   tabWidth: 2,
   proseWrap: 'preserve',
   semi: true,

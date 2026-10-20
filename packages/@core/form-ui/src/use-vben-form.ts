@@ -1,10 +1,4 @@
-import type {
-  BaseFormComponentType,
-  ExtendedFormApi,
-  FormValues,
-  VbenFormComponent,
-  VbenFormProps,
-} from './types';
+import type { BaseFormComponentType, ExtendedFormApi, FormValues, VbenFormComponent, VbenFormProps } from './types';
 
 import { defineComponent, h, isReactive, onBeforeUnmount, watch } from 'vue';
 
@@ -18,10 +12,7 @@ type UseVbenFormReturn<
   T extends BaseFormComponentType,
   P extends Record<string, any>,
   TSubmitValues extends FormValues = TValues,
-> = readonly [
-  VbenFormComponent<TValues, T, P, TSubmitValues>,
-  ExtendedFormApi<TValues, T, P, TSubmitValues>,
-];
+> = readonly [VbenFormComponent<TValues, T, P, TSubmitValues>, ExtendedFormApi<TValues, T, P, TSubmitValues>];
 
 export function useVbenForm<
   T extends BaseFormComponentType = BaseFormComponentType,
@@ -33,13 +24,9 @@ export function useVbenForm<
   T extends BaseFormComponentType = BaseFormComponentType,
   P extends Record<string, any> = Record<never, never>,
   TSubmitValues extends FormValues = TValues,
->(
-  options: VbenFormProps<T, P, TValues, TSubmitValues>,
-): UseVbenFormReturn<TValues, T, P, TSubmitValues>;
+>(options: VbenFormProps<T, P, TValues, TSubmitValues>): UseVbenFormReturn<TValues, T, P, TSubmitValues>;
 
-export function useVbenForm(
-  options: VbenFormProps<any, any, any, any>,
-): UseVbenFormReturn<any, any, any, any> {
+export function useVbenForm(options: VbenFormProps<any, any, any, any>): UseVbenFormReturn<any, any, any, any> {
   const IS_REACTIVE = isReactive(options);
   const api = new FormApi<any, any, any, any>(options);
   const extendedApi = api as ExtendedFormApi<any, any, any, any>;
@@ -53,8 +40,7 @@ export function useVbenForm(
         api.unmount();
       });
       api.setState({ ...props, ...attrs });
-      return () =>
-        h(VbenUseForm, { ...props, ...attrs, formApi: extendedApi }, slots);
+      return () => h(VbenUseForm, { ...props, ...attrs, formApi: extendedApi }, slots);
     },
     {
       name: 'VbenUseForm',
@@ -72,10 +58,5 @@ export function useVbenForm(
     );
   }
 
-  return [Form, extendedApi] as unknown as UseVbenFormReturn<
-    any,
-    any,
-    any,
-    any
-  >;
+  return [Form, extendedApi] as unknown as UseVbenFormReturn<any, any, any, any>;
 }

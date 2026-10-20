@@ -73,9 +73,7 @@ describe('sSE', () => {
 
   it('should throw error if fetch response not ok', async () => {
     vi.stubGlobal('fetch', createFetchMock([], false));
-    await expect(sse.requestSSE('/bad')).rejects.toThrow(
-      'HTTP error! status: 500',
-    );
+    await expect(sse.requestSSE('/bad')).rejects.toThrow('HTTP error! status: 500');
   });
 
   it('should trigger onMessage and onEnd callbacks', async () => {

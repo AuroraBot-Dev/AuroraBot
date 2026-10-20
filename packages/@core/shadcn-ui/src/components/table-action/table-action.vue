@@ -45,34 +45,21 @@ function checkVisible(item: ActionItem): boolean {
   return true;
 }
 
-const visibleActions = computed(() =>
-  (props.actions ?? []).filter((item) => checkVisible(item)),
-);
-const visibleDropdownActions = computed(() =>
-  (props.dropdownActions ?? []).filter((item) => checkVisible(item)),
-);
+const visibleActions = computed(() => (props.actions ?? []).filter((item) => checkVisible(item)));
+const visibleDropdownActions = computed(() => (props.dropdownActions ?? []).filter((item) => checkVisible(item)));
 
 const alignClass = computed(
-  () =>
-    ({ center: 'justify-center', end: 'justify-end', start: 'justify-start' })[
-      props.align
-    ],
+  () => ({ center: 'justify-center', end: 'justify-end', start: 'justify-start' })[props.align],
 );
 
 // 缓存根节点类名，避免每次渲染都执行 cn()（内部 tailwind-merge 解析开销较大）
-const wrapperClass = computed(() =>
-  cn('flex items-center gap-1', alignClass.value, props.class),
-);
+const wrapperClass = computed(() => cn('flex items-center gap-1', alignClass.value, props.class));
 
 function tooltipSide(action: ActionItem) {
-  return typeof action.tooltip === 'object'
-    ? (action.tooltip.side ?? 'top')
-    : 'top';
+  return typeof action.tooltip === 'object' ? (action.tooltip.side ?? 'top') : 'top';
 }
 function tooltipContent(action: ActionItem) {
-  return typeof action.tooltip === 'object'
-    ? action.tooltip.content
-    : action.tooltip;
+  return typeof action.tooltip === 'object' ? action.tooltip.content : action.tooltip;
 }
 
 /**
@@ -88,11 +75,7 @@ const renderedActions = computed(() => {
     const hasTooltip = !!action.tooltip && !action.popConfirm;
     return {
       action,
-      buttonClass: cn(
-        'gap-1 p-2',
-        action.danger && 'text-destructive hover:text-destructive',
-        action.class,
-      ),
+      buttonClass: cn('gap-1 p-2', action.danger && 'text-destructive hover:text-destructive', action.class),
       hasTooltip,
       isConfirm: !!action.popConfirm,
       key: action.key ?? index,
@@ -117,8 +100,7 @@ function onActionClick(action: ActionItem) {
  * Popover 内容被 Portal 渲染到菜单之外，默认会被判定为「点击外部」而关闭菜单。
  */
 function onContentInteractOutside(event: Event) {
-  const target = (event as CustomEvent).detail?.originalEvent?.target as
-    HTMLElement | null | undefined;
+  const target = (event as CustomEvent).detail?.originalEvent?.target as HTMLElement | null | undefined;
   if (target?.closest('[data-slot="popover-content"]')) {
     event.preventDefault();
   }
@@ -144,18 +126,11 @@ function onContentInteractOutside(event: Event) {
               :variant="item.variant"
               @click="onActionClick(item.action)"
             >
-              <VbenIcon
-                v-if="item.action.icon"
-                :icon="item.action.icon"
-                class="size-4"
-              />
+              <VbenIcon v-if="item.action.icon" :icon="item.action.icon" class="size-4" />
               <span v-if="item.action.text">{{ item.action.text }}</span>
             </VbenButton>
           </TooltipTrigger>
-          <TooltipContent
-            :side="item.tooltipSide"
-            class="side-content bg-accent text-popover-foreground rounded-md"
-          >
+          <TooltipContent :side="item.tooltipSide" class="side-content bg-accent text-popover-foreground rounded-md">
             {{ item.tooltipContent }}
           </TooltipContent>
         </Tooltip>
@@ -170,11 +145,7 @@ function onContentInteractOutside(event: Event) {
           :variant="item.variant"
           @click="onActionClick(item.action)"
         >
-          <VbenIcon
-            v-if="item.action.icon"
-            :icon="item.action.icon"
-            class="size-4"
-          />
+          <VbenIcon v-if="item.action.icon" :icon="item.action.icon" class="size-4" />
           <span v-if="item.action.text">{{ item.action.text }}</span>
         </VbenButton>
 
@@ -182,31 +153,17 @@ function onContentInteractOutside(event: Event) {
       </template>
     </TooltipProvider>
 
-    <DropdownMenu
-      v-if="visibleDropdownActions.length > 0"
-      v-model:open="dropdownOpen"
-    >
+    <DropdownMenu v-if="visibleDropdownActions.length > 0" v-model:open="dropdownOpen">
       <DropdownMenuTrigger as-child>
         <VbenButton class="gap-1 p-2" variant="link">
           <Ellipsis class="size-4" />
           <span v-if="moreText">{{ moreText }}</span>
         </VbenButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        @interact-outside="onContentInteractOutside"
-      >
-        <template
-          v-for="(item, index) in visibleDropdownActions"
-          :key="item.key ?? index"
-        >
-          <ActionDropdownItemComp
-            :action="item"
-            @confirm="dropdownOpen = false"
-          />
-          <DropdownMenuSeparator
-            v-if="divider && index < visibleDropdownActions.length - 1"
-          />
+      <DropdownMenuContent align="end" @interact-outside="onContentInteractOutside">
+        <template v-for="(item, index) in visibleDropdownActions" :key="item.key ?? index">
+          <ActionDropdownItemComp :action="item" @confirm="dropdownOpen = false" />
+          <DropdownMenuSeparator v-if="divider && index < visibleDropdownActions.length - 1" />
         </template>
       </DropdownMenuContent>
     </DropdownMenu>

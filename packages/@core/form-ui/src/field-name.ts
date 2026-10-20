@@ -1,9 +1,6 @@
 import { get, isObject, set } from '@vben-core/shared/utils';
 
-export function deleteValueByFieldName(
-  values: Record<string, any>,
-  fieldName: string,
-) {
+export function deleteValueByFieldName(values: Record<string, any>, fieldName: string) {
   const { pathSegments, rawKey } = resolveFieldNamePath(fieldName);
   if (rawKey) {
     Reflect.deleteProperty(values, rawKey);
@@ -30,18 +27,12 @@ export function deleteValueByFieldName(
   Reflect.deleteProperty(target, lastPathSegment);
 }
 
-export function getValueByFieldName(
-  values: Record<string, any>,
-  fieldName: string,
-) {
+export function getValueByFieldName(values: Record<string, any>, fieldName: string) {
   const { rawKey } = resolveFieldNamePath(fieldName);
   return rawKey ? values[rawKey] : get(values, fieldName);
 }
 
-export function resolveChildUpdateFieldName(
-  parentFieldName: string,
-  fieldName: string,
-) {
+export function resolveChildUpdateFieldName(parentFieldName: string, fieldName: string) {
   if (fieldName.startsWith(`${parentFieldName}.`)) {
     return fieldName.slice(parentFieldName.length + 1);
   }
@@ -73,10 +64,7 @@ export function resolveFieldNamePath(fieldName: string) {
   };
 }
 
-export function resolveValueFormatFieldName(
-  fieldName: string,
-  parentPath?: string,
-) {
+export function resolveValueFormatFieldName(fieldName: string, parentPath?: string) {
   if (!parentPath) {
     return fieldName;
   }
@@ -92,11 +80,7 @@ export function resolveValueFormatFieldName(
   return `${parentPath}.${fieldName}`;
 }
 
-export function setValueByFieldName(
-  values: Record<string, any>,
-  fieldName: string,
-  value: any,
-) {
+export function setValueByFieldName(values: Record<string, any>, fieldName: string, value: any) {
   const { rawKey } = resolveFieldNamePath(fieldName);
   if (rawKey) {
     values[rawKey] = value;

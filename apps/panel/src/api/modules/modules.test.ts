@@ -39,9 +39,7 @@ describe('read-only operation modules', () => {
     setActivePinia(createPinia());
     const accessStore = useAccessStore();
     accessStore.setAccessToken('test-token');
-    accessStore.setAccessTokenExpiresAt(
-      new Date(Date.now() + 60_000).toISOString(),
-    );
+    accessStore.setAccessTokenExpiresAt(new Date(Date.now() + 60_000).toISOString());
     mock = new MockAdapter(panelRequestClient.instance);
     mock.onAny().reply(200, {
       code: 'ok',
@@ -78,14 +76,8 @@ describe('read-only operation modules', () => {
     ]);
 
     expect(mock.history).toHaveLength(22);
-    expect(mock.history.every((request) => request.method === 'get')).toBe(
-      true,
-    );
-    const keys = new Set(
-      mock.history.map(
-        (request) => `${request.method?.toUpperCase()} ${request.url}`,
-      ),
-    );
+    expect(mock.history.every((request) => request.method === 'get')).toBe(true);
+    const keys = new Set(mock.history.map((request) => `${request.method?.toUpperCase()} ${request.url}`));
     expect(keys).toHaveLength(22);
     expect(keys).toContain('GET /ops/config/apps%2Fname');
     expect(keys).toContain('GET /ops/world/commits/commit%2Fname');

@@ -61,12 +61,7 @@ export interface ApiComponentProps {
    * - 函数：自定义选择逻辑，函数的参数为请求的结果数组，返回值为选择的选项
    * - false：不自动选择(默认)
    */
-  autoSelect?:
-    | 'first'
-    | 'last'
-    | 'one'
-    | ((item: ApiComponentOptionsItem[]) => ApiComponentOptionsItem)
-    | false;
+  autoSelect?: 'first' | 'last' | 'one' | ((item: ApiComponentOptionsItem[]) => ApiComponentOptionsItem) | false;
 }
 
 export type ApiComponentSharedProps = Omit<ApiComponentProps, 'component'>;

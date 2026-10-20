@@ -14,10 +14,7 @@ export class FormCodecError extends Error {
   }
 }
 
-export function decodeFormValues<
-  TFormValues extends FormValues,
-  TSubmitValues extends FormValues,
->(
+export function decodeFormValues<TFormValues extends FormValues, TSubmitValues extends FormValues>(
   codec: FormCodec<TFormValues, TSubmitValues>,
   values: Readonly<TSubmitValues>,
 ) {
@@ -28,10 +25,10 @@ export function decodeFormValues<
   }
 }
 
-export function encodeFormValues<
-  TFormValues extends FormValues,
-  TSubmitValues extends FormValues,
->(codec: FormCodec<TFormValues, TSubmitValues>, values: Readonly<TFormValues>) {
+export function encodeFormValues<TFormValues extends FormValues, TSubmitValues extends FormValues>(
+  codec: FormCodec<TFormValues, TSubmitValues>,
+  values: Readonly<TFormValues>,
+) {
   try {
     return codec.encode(values);
   } catch (error) {

@@ -16,8 +16,7 @@ defineOptions({ name: 'LayoutContent' });
 const tabbarStore = useTabbarStore();
 const { keepAlive } = usePreferences();
 
-const { getCachedTabs, getExcludeCachedTabs, renderRouteView } =
-  storeToRefs(tabbarStore);
+const { getCachedTabs, getExcludeCachedTabs, renderRouteView } = storeToRefs(tabbarStore);
 
 const { getEnabledTransition, getTransitionName } = useLayoutHook();
 
@@ -35,22 +34,14 @@ const showComponent = (route: RouteLocationNormalizedLoadedGeneric) => {
     <IFrameRouterView />
     <RouteCachedView />
     <RouterView v-slot="{ Component, route }">
-      <RouteCachedPage
-        :component="Component"
-        :route="route"
-        v-if="route.meta.domCached"
-      />
+      <RouteCachedPage :component="Component" :route="route" v-if="route.meta.domCached" />
       <Transition
         v-if="getEnabledTransition"
         :name="getTransitionName(route)"
         appear
         :leave-active-class="`${getTransitionName(route)}-leave-active page-route-leave-active`"
       >
-        <KeepAlive
-          v-if="keepAlive"
-          :exclude="getExcludeCachedTabs"
-          :include="getCachedTabs"
-        >
+        <KeepAlive v-if="keepAlive" :exclude="getExcludeCachedTabs" :include="getCachedTabs">
           <component
             :is="transformComponent(Component, route)"
             v-if="showComponent(route)"
@@ -58,18 +49,10 @@ const showComponent = (route: RouteLocationNormalizedLoadedGeneric) => {
             :key="getTabKey(route)"
           />
         </KeepAlive>
-        <component
-          :is="Component"
-          v-else-if="showComponent(route)"
-          :key="getTabKey(route)"
-        />
+        <component :is="Component" v-else-if="showComponent(route)" :key="getTabKey(route)" />
       </Transition>
       <template v-else>
-        <KeepAlive
-          v-if="keepAlive"
-          :exclude="getExcludeCachedTabs"
-          :include="getCachedTabs"
-        >
+        <KeepAlive v-if="keepAlive" :exclude="getExcludeCachedTabs" :include="getCachedTabs">
           <component
             :is="transformComponent(Component, route)"
             v-if="showComponent(route)"
@@ -77,11 +60,7 @@ const showComponent = (route: RouteLocationNormalizedLoadedGeneric) => {
             :key="getTabKey(route)"
           />
         </KeepAlive>
-        <component
-          :is="Component"
-          v-else-if="showComponent(route)"
-          :key="getTabKey(route)"
-        />
+        <component :is="Component" v-else-if="showComponent(route)" :key="getTabKey(route)" />
       </template>
     </RouterView>
   </div>

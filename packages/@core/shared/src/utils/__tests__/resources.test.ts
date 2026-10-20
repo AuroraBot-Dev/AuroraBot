@@ -12,9 +12,7 @@ describe('loadScript', () => {
     // happy-dom v20+ auto-fires 'load' via handleDisabledFileLoadingAsSuccess
     const promise = loadScript('/test-script.js');
 
-    const script = document.querySelector(
-      'script[src="/test-script.js"]',
-    ) as HTMLScriptElement;
+    const script = document.querySelector('script[src="/test-script.js"]') as HTMLScriptElement;
     expect(script).toBeTruthy();
 
     await expect(promise).resolves.toBeUndefined();
@@ -42,15 +40,13 @@ describe('loadScript', () => {
 
     // 拦截 append，捕获 script 元素但不插入 DOM，
     // 防止 happy-dom v20+ 自动触发 load 事件
-    const appendSpy = vi
-      .spyOn(document.head, 'append')
-      .mockImplementation((...nodes) => {
-        for (const node of nodes) {
-          if (node instanceof HTMLScriptElement) {
-            capturedScript = node;
-          }
+    const appendSpy = vi.spyOn(document.head, 'append').mockImplementation((...nodes) => {
+      for (const node of nodes) {
+        if (node instanceof HTMLScriptElement) {
+          capturedScript = node;
         }
-      });
+      }
+    });
 
     const promise = loadScript('error.js');
 
@@ -74,9 +70,7 @@ describe('loadScript', () => {
     await expect(p2).resolves.toBeUndefined();
 
     // 只插入一次
-    const scripts = document.head.querySelectorAll(
-      'script[src="/test-script.js"]',
-    );
+    const scripts = document.head.querySelectorAll('script[src="/test-script.js"]');
     expect(scripts).toHaveLength(1);
   });
 });

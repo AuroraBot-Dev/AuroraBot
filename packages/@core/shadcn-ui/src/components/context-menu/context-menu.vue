@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import type {
-  ContextMenuContentProps,
-  ContextMenuRootEmits,
-  ContextMenuRootProps,
-} from 'reka-ui';
+import type { ContextMenuContentProps, ContextMenuRootEmits, ContextMenuRootProps } from 'reka-ui';
 
 import type { ClassType } from '@vben/types';
 
@@ -44,13 +40,7 @@ const NATIVE_CONTEXT_SELECTORS = [
 ].join(', ');
 
 const delegatedProps = computed(() => {
-  const {
-    class: _cls,
-    contentClass: _,
-    contentProps: _cProps,
-    itemClass: _iCls,
-    ...delegated
-  } = props;
+  const { class: _cls, contentClass: _, contentProps: _cProps, itemClass: _iCls, ...delegated } = props;
 
   return delegated;
 });
@@ -96,11 +86,7 @@ onUnmounted(() => {
         <slot></slot>
       </div>
     </ContextMenuTrigger>
-    <ContextMenuContent
-      :class="contentClass"
-      v-bind="contentProps"
-      class="side-content z-popup"
-    >
+    <ContextMenuContent :class="contentClass" v-bind="contentProps" class="side-content z-popup">
       <template v-for="menu in menusView" :key="menu.key">
         <ContextMenuItem
           v-if="!menu.hidden"
@@ -110,11 +96,7 @@ onUnmounted(() => {
           class="cursor-pointer"
           @click="handleClick(menu)"
         >
-          <component
-            :is="menu.icon"
-            v-if="menu.icon"
-            class="mr-2 size-4 text-lg"
-          />
+          <component :is="menu.icon" v-if="menu.icon" class="mr-2 size-4 text-lg" />
 
           {{ menu.text }}
           <ContextMenuShortcut v-if="menu.shortcut">

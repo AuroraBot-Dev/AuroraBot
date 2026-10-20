@@ -42,12 +42,7 @@ const columns: DataTableColumns<AppRow> = [
   {
     key: 'state',
     title: '连接状态',
-    render: (row) =>
-      h(
-        NTag,
-        { type: row.active ? 'success' : 'default' },
-        { default: () => row.state },
-      ),
+    render: (row) => h(NTag, { type: row.active ? 'success' : 'default' }, { default: () => row.state }),
   },
   {
     key: 'tool_ids',
@@ -70,11 +65,7 @@ const columns: DataTableColumns<AppRow> = [
     title: '配置开关',
     width: 100,
     render: (row) =>
-      h(
-        NTag,
-        { type: row.enabled ? 'success' : 'default' },
-        { default: () => (row.enabled ? '已启用' : '未启用') },
-      ),
+      h(NTag, { type: row.enabled ? 'success' : 'default' }, { default: () => (row.enabled ? '已启用' : '未启用') }),
   },
 ];
 
@@ -82,26 +73,19 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const [runtime, config] = await Promise.all([
-      getMcpStatus(),
-      getConfigDocument('apps'),
-    ]);
-    const runtimeByPackage = new Map(
-      (runtime?.apps ?? []).map((app) => [app.package, app]),
-    );
-    apps.value = ((config?.values.app as AppConfig[] | undefined) ?? []).map(
-      (app) => {
-        const state = runtimeByPackage.get(app.package);
-        return {
-          ...app,
-          active: state?.active ?? false,
-          last_error: state?.last_error ?? null,
-          restart_required: state?.restart_required ?? false,
-          state: state?.state ?? 'not_started',
-          tool_ids: state?.tool_ids ?? [],
-        };
-      },
-    );
+    const [runtime, config] = await Promise.all([getMcpStatus(), getConfigDocument('apps')]);
+    const runtimeByPackage = new Map((runtime?.apps ?? []).map((app) => [app.package, app]));
+    apps.value = ((config?.values.app as AppConfig[] | undefined) ?? []).map((app) => {
+      const state = runtimeByPackage.get(app.package);
+      return {
+        ...app,
+        active: state?.active ?? false,
+        last_error: state?.last_error ?? null,
+        restart_required: state?.restart_required ?? false,
+        state: state?.state ?? 'not_started',
+        tool_ids: state?.tool_ids ?? [],
+      };
+    });
   } catch (loadError) {
     error.value = (loadError as Error).message;
   } finally {
@@ -124,11 +108,7 @@ onMounted(load);
 <template>
   <Page>
     <NAlert v-if="error" class="mb-4" :title="error" type="error" />
-    <NAlert
-      class="mb-4"
-      title="页面只读显示 MCP 运行快照与个人 apps 配置。"
-      type="info"
-    />
+    <NAlert class="mb-4" title="页面只读显示 MCP 运行快照与个人 apps 配置。" type="info" />
     <NCard>
       <NDataTable
         :columns="columns"

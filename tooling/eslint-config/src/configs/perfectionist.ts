@@ -3,9 +3,7 @@ import type { Linter } from 'eslint';
 import { interopDefault } from '../util';
 
 export async function perfectionist(): Promise<Linter.Config[]> {
-  const perfectionistPlugin = await interopDefault(
-    import('eslint-plugin-perfectionist'),
-  );
+  const perfectionistPlugin = await interopDefault(import('eslint-plugin-perfectionist'));
 
   return [
     perfectionistPlugin.configs['recommended-natural'],

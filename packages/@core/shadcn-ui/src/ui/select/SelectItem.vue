@@ -7,16 +7,9 @@ import { cn } from '@vben-core/shared/utils';
 
 import { Check } from '@lucide/vue';
 import { reactiveOmit } from '@vueuse/core';
-import {
-  SelectItem,
-  SelectItemIndicator,
-  SelectItemText,
-  useForwardProps,
-} from 'reka-ui';
+import { SelectItem, SelectItemIndicator, SelectItemText, useForwardProps } from 'reka-ui';
 
-const props = defineProps<
-  SelectItemProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<SelectItemProps & { class?: HTMLAttributes['class'] }>();
 
 const delegatedProps = reactiveOmit(props, 'class');
 

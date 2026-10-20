@@ -26,11 +26,7 @@ const props = defineProps<LoadingProps>();
 <template>
   <div :class="cn('relative min-h-20', props.class)">
     <slot></slot>
-    <VbenLoading
-      :min-loading-time="props.minLoadingTime"
-      :spinning="props.spinning"
-      :text="props.text"
-    >
+    <VbenLoading :min-loading-time="props.minLoadingTime" :spinning="props.spinning" :text="props.text">
       <template v-if="$slots.icon" #icon>
         <slot name="icon"></slot>
       </template>

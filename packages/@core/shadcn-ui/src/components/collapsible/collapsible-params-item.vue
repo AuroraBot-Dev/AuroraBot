@@ -80,36 +80,22 @@ defineExpose({
 </script>
 
 <template>
-  <div
-    class="body-row flex items-center w-full flex-nowrap not-last-of-type:border-b"
-  >
-    <div
-      class="body-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap"
-    >
+  <div class="body-row flex items-center w-full flex-nowrap not-last-of-type:border-b">
+    <div class="body-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap">
       {{ data.key }}
     </div>
-    <div
-      class="body-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap"
-    >
+    <div class="body-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap">
       <div class="flex-auto w-full">
-        <component
-          :is="FieldComponent"
-          v-bind="finalOption"
-          v-model:value="modelValue"
-        />
+        <component :is="FieldComponent" v-bind="finalOption" v-model:value="modelValue" />
       </div>
       <div class="flex items-center flex-none text-muted-foreground pl-2 gap-2">
         <span v-if="limitDisplay">
           {{ limitDisplay }}
         </span>
-        <span v-if="data.option.step && data.option.step !== 1">
-          step:{{ data.option.step }}
-        </span>
+        <span v-if="data.option.step && data.option.step !== 1"> step:{{ data.option.step }} </span>
       </div>
     </div>
-    <div
-      class="body-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap w-full"
-    >
+    <div class="body-cell pt-2 pb-2 px-5 leading-[1.5rem] flex items-center flex-nowrap w-full">
       <p
         class="line-clamp-2"
         v-tippy="{

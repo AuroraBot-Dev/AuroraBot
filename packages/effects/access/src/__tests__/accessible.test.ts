@@ -24,10 +24,7 @@ async function generate(routes: RouteRecordRaw[]) {
   return accessibleRoutes;
 }
 
-function findByName(
-  routes: RouteRecordRaw[],
-  name: string,
-): RouteRecordRaw | undefined {
+function findByName(routes: RouteRecordRaw[], name: string): RouteRecordRaw | undefined {
   for (const route of routes) {
     if (route.name === name) {
       return route;
@@ -126,9 +123,7 @@ describe('generateAccessible - redirect normalization', () => {
     ] as unknown as RouteRecordRaw[];
 
     const result = await generate(routes);
-    expect(findByName(result, 'SettingGroup')?.redirect).toBe(
-      '/setting/group/service',
-    );
+    expect(findByName(result, 'SettingGroup')?.redirect).toBe('/setting/group/service');
   });
 
   it('深层嵌套(上游风格)相对路径逐级生成正确的累计绝对 redirect', async () => {
@@ -169,12 +164,8 @@ describe('generateAccessible - redirect normalization', () => {
     const result = await generate(routes);
     // Demos 重定向到第一级子路由，子路由继续级联到叶子
     expect(findByName(result, 'Demos')?.redirect).toBe('/demos/nested');
-    expect(findByName(result, 'NestedDemos')?.redirect).toBe(
-      '/demos/nested/menu1',
-    );
-    expect(findByName(result, 'Menu2Demo')?.redirect).toBe(
-      '/demos/nested/menu2/menu2-1',
-    );
+    expect(findByName(result, 'NestedDemos')?.redirect).toBe('/demos/nested/menu1');
+    expect(findByName(result, 'Menu2Demo')?.redirect).toBe('/demos/nested/menu2/menu2-1');
   });
 
   it('首子路由为绝对路径(/foo)时不生成 redirect', async () => {

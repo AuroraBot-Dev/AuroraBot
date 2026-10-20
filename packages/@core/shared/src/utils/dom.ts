@@ -13,9 +13,7 @@ export interface VisibleDomRect {
  * 获取元素可见信息
  * @param element
  */
-export function getElementVisibleRect(
-  element?: HTMLElement | null | undefined,
-): VisibleDomRect {
+export function getElementVisibleRect(element?: HTMLElement | null | undefined): VisibleDomRect {
   if (!element) {
     return {
       bottom: 0,
@@ -27,18 +25,12 @@ export function getElementVisibleRect(
     };
   }
   const rect = element.getBoundingClientRect();
-  const viewHeight = Math.max(
-    document.documentElement.clientHeight,
-    window.innerHeight,
-  );
+  const viewHeight = Math.max(document.documentElement.clientHeight, window.innerHeight);
 
   const top = Math.max(rect.top, 0);
   const bottom = Math.min(rect.bottom, viewHeight);
 
-  const viewWidth = Math.max(
-    document.documentElement.clientWidth,
-    window.innerWidth,
-  );
+  const viewWidth = Math.max(document.documentElement.clientWidth, window.innerWidth);
 
   const left = Math.max(rect.left, 0);
   const right = Math.min(rect.right, viewWidth);

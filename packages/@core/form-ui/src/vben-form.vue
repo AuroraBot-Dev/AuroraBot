@@ -6,11 +6,7 @@ import { ref, watchEffect } from 'vue';
 import { useForwardPropsEmits } from '@vben-core/composables';
 
 import FormActions from './components/form-actions.vue';
-import {
-  COMPONENT_BIND_EVENT_MAP,
-  COMPONENT_MAP,
-  DEFAULT_FORM_COMMON_CONFIG,
-} from './config';
+import { COMPONENT_BIND_EVENT_MAP, COMPONENT_MAP, DEFAULT_FORM_COMMON_CONFIG } from './config';
 import { Form } from './form-render';
 import { provideFormProps, useFormInitial } from './use-form-context';
 
@@ -59,11 +55,7 @@ watchEffect(() => {
     :form="form"
     :global-common-config="DEFAULT_FORM_COMMON_CONFIG"
   >
-    <template
-      v-for="slotName in delegatedSlots"
-      :key="slotName"
-      #[slotName]="slotProps"
-    >
+    <template v-for="slotName in delegatedSlots" :key="slotName" #[slotName]="slotProps">
       <slot :name="slotName" v-bind="slotProps"></slot>
     </template>
     <template #default="slotProps">

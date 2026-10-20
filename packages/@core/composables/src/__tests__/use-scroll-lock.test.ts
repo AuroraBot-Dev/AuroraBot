@@ -98,9 +98,7 @@ describe('useScrollLock', () => {
       clientHeight: { configurable: true, value: 100 },
       scrollHeight: { configurable: true, value: 120 },
     });
-    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(
-      120,
-    );
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(120);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(100);
     vi.spyOn(window, 'getComputedStyle').mockReturnValue({
       overflowY: 'auto',

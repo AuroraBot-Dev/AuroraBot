@@ -8,14 +8,8 @@ import { dateUtil, readPackageJSON } from '@vben/node-utils';
  * 用于注入版权信息
  * @returns
  */
-async function viteLicensePlugin(
-  root = process.cwd(),
-): Promise<PluginOption | undefined> {
-  const {
-    description = '',
-    homepage = '',
-    version = '',
-  } = await readPackageJSON(root);
+async function viteLicensePlugin(root = process.cwd()): Promise<PluginOption | undefined> {
+  const { description = '', homepage = '', version = '' } = await readPackageJSON(root);
 
   return {
     apply: 'build',

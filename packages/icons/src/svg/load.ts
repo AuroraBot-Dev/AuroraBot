@@ -12,18 +12,11 @@ function parseSvg(svgData: string): IconifyIconStructure {
   // 提取 SVG 根元素的关键样式属性
   const getAttrs = (el: Element, attrs: string[]) =>
     attrs
-      .map((attr) =>
-        el.hasAttribute(attr) ? `${attr}="${el.getAttribute(attr)}"` : '',
-      )
+      .map((attr) => (el.hasAttribute(attr) ? `${attr}="${el.getAttribute(attr)}"` : ''))
       .filter(Boolean)
       .join(' ');
 
-  const rootAttrs = getAttrs(svgElement, [
-    'fill',
-    'stroke',
-    'fill-rule',
-    'stroke-width',
-  ]);
+  const rootAttrs = getAttrs(svgElement, ['fill', 'stroke', 'fill-rule', 'stroke-width']);
 
   const svgContent = [...svgElement.childNodes]
     .filter((node) => node.nodeType === Node.ELEMENT_NODE)
@@ -53,11 +46,7 @@ function parseSvg(svgData: string): IconifyIconStructure {
  * <Icon icon="svg:avatar"></Icon>
  */
 async function loadSvgIcons() {
-  if (
-    typeof DOMParser === 'undefined' ||
-    typeof Node === 'undefined' ||
-    typeof XMLSerializer === 'undefined'
-  ) {
+  if (typeof DOMParser === 'undefined' || typeof Node === 'undefined' || typeof XMLSerializer === 'undefined') {
     return;
   }
 

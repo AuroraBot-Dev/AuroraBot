@@ -19,11 +19,7 @@ class IndexedDBDriver implements IStorageDriver {
   private dbVersion: number;
   private storeName: string;
 
-  constructor({
-    dbName = 'vben-storage',
-    dbVersion = 1,
-    storeName = 'kv-store',
-  }: IndexedDBDriverOptions = {}) {
+  constructor({ dbName = 'vben-storage', dbVersion = 1, storeName = 'kv-store' }: IndexedDBDriverOptions = {}) {
     this.dbName = dbName;
     this.dbVersion = dbVersion;
     this.storeName = storeName;
@@ -38,9 +34,7 @@ class IndexedDBDriver implements IStorageDriver {
 
       tx.addEventListener('complete', () => resolve());
       tx.addEventListener('error', () => reject(tx.error));
-      tx.addEventListener('abort', () =>
-        reject(tx.error ?? new Error('Transaction aborted')),
-      );
+      tx.addEventListener('abort', () => reject(tx.error ?? new Error('Transaction aborted')));
     });
   }
 
@@ -51,9 +45,7 @@ class IndexedDBDriver implements IStorageDriver {
       const store = tx.objectStore(this.storeName);
       const request = store.get(key);
 
-      request.addEventListener('success', () =>
-        resolve(request.result ?? null),
-      );
+      request.addEventListener('success', () => resolve(request.result ?? null));
       request.addEventListener('error', () => reject(request.error));
     });
   }
@@ -65,9 +57,7 @@ class IndexedDBDriver implements IStorageDriver {
       const store = tx.objectStore(this.storeName);
       const request = store.getAllKeys();
 
-      request.addEventListener('success', () =>
-        resolve(request.result.map(String)),
-      );
+      request.addEventListener('success', () => resolve(request.result.map(String)));
       request.addEventListener('error', () => reject(request.error));
     });
   }
@@ -81,9 +71,7 @@ class IndexedDBDriver implements IStorageDriver {
 
       tx.addEventListener('complete', () => resolve());
       tx.addEventListener('error', () => reject(tx.error));
-      tx.addEventListener('abort', () =>
-        reject(tx.error ?? new Error('Transaction aborted')),
-      );
+      tx.addEventListener('abort', () => reject(tx.error ?? new Error('Transaction aborted')));
     });
   }
 
@@ -96,9 +84,7 @@ class IndexedDBDriver implements IStorageDriver {
 
       tx.addEventListener('complete', () => resolve());
       tx.addEventListener('error', () => reject(tx.error));
-      tx.addEventListener('abort', () =>
-        reject(tx.error ?? new Error('Transaction aborted')),
-      );
+      tx.addEventListener('abort', () => reject(tx.error ?? new Error('Transaction aborted')));
     });
   }
 

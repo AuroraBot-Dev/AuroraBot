@@ -28,10 +28,7 @@ export default defineComponent({
       return u * u * p0 + 2 * u * t * p1 + t * t * p2;
     }
 
-    function bezierPoint(
-      t: number,
-      star: ShootingStar,
-    ): { x: number; y: number } {
+    function bezierPoint(t: number, star: ShootingStar): { x: number; y: number } {
       return {
         x: bezier(t, star.p0.x, star.p1.x, star.p2.x),
         y: bezier(t, star.p0.y, star.p1.y, star.p2.y),
@@ -85,11 +82,7 @@ export default defineComponent({
       });
     }
 
-    function drawStar(
-      ctx: CanvasRenderingContext2D,
-      star: ShootingStar,
-      progress: number,
-    ) {
+    function drawStar(ctx: CanvasRenderingContext2D, star: ShootingStar, progress: number) {
       const pt = bezierPoint(progress, star);
       star.trail.push(pt);
       if (star.trail.length > TAIL_MAX) star.trail.shift();
@@ -133,10 +126,7 @@ export default defineComponent({
         if (!star) continue;
         const elapsed = now - star.startTime;
         const progress = Math.min(elapsed / STAR_DURATION, 1);
-        const eased =
-          progress < 0.5
-            ? 2 * progress * progress
-            : -1 + (4 - 2 * progress) * progress;
+        const eased = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
 
         if (progress >= 1) {
           stars.splice(i, 1);

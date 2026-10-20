@@ -1,11 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { dirname } from 'node:path';
 
-export async function outputJSON(
-  filePath: string,
-  data: any,
-  spaces: number = 2,
-) {
+export async function outputJSON(filePath: string, data: any, spaces: number = 2) {
   try {
     const dir = dirname(filePath);
     await fs.mkdir(dir, { recursive: true });

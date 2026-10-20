@@ -15,8 +15,7 @@ export default defineComponent({
       h(DefaultTheme.Layout, null, {
         'home-hero-after': () => h(ShootingStar),
         'nav-bar-content-after': () => h(NolebaseEnhancedReadabilitiesMenu),
-        'nav-screen-content-after': () =>
-          h(NolebaseEnhancedReadabilitiesScreenMenu),
+        'nav-screen-content-after': () => h(NolebaseEnhancedReadabilitiesScreenMenu),
       });
   },
 });

@@ -1,10 +1,6 @@
 import type { PanelHealth, PanelSession } from '../types';
 
-import {
-  panelRequestClient,
-  panelRootUrl,
-  publicRequestClient,
-} from '../client';
+import { panelRequestClient, panelRootUrl, publicRequestClient } from '../client';
 
 export namespace AuthApi {
   export interface LoginParams {

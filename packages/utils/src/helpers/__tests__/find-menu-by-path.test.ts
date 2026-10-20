@@ -49,19 +49,13 @@ describe('menu Finder Tests', () => {
   });
 
   it('handles menu items without children', () => {
-    const menu = findMenuByPath(
-      [{ path: '/only', children: undefined }] as any[],
-      '/only',
-    );
+    const menu = findMenuByPath([{ path: '/only', children: undefined }] as any[], '/only');
     expect(menu).toBeDefined();
     expect(menu?.path).toBe('/only');
   });
 
   it('finds root menu by path', () => {
-    const { findMenu, rootMenu, rootMenuPath } = findRootMenuByPath(
-      menus,
-      '/services/development/web',
-    );
+    const { findMenu, rootMenu, rootMenuPath } = findRootMenuByPath(menus, '/services/development/web');
 
     expect(findMenu).toBeDefined();
     expect(rootMenu).toBeUndefined();
@@ -77,10 +71,7 @@ describe('menu Finder Tests', () => {
   });
 
   it('checks for root menu when path does not exist', () => {
-    const { findMenu, rootMenu, rootMenuPath } = findRootMenuByPath(
-      menus,
-      '/non-existent',
-    );
+    const { findMenu, rootMenu, rootMenuPath } = findRootMenuByPath(menus, '/non-existent');
     expect(findMenu).toBeNull();
     expect(rootMenu).toBeUndefined();
     expect(rootMenuPath).toBeUndefined();

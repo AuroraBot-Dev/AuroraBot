@@ -1,34 +1,15 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type {
-  AgentDefinitionRecord,
-  ConfigDocument,
-  ConfigSnapshot,
-} from '#/api';
+import type { AgentDefinitionRecord, ConfigDocument, ConfigSnapshot } from '#/api';
 
 import { h, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NDataTable,
-  NDrawer,
-  NTabPane,
-  NTabs,
-  NTag,
-} from 'naive-ui';
+import { NAlert, NButton, NCard, NDataTable, NDrawer, NTabPane, NTabs, NTag } from 'naive-ui';
 
-import {
-  getAgentDefinition,
-  getAgentTools,
-  getConfigDocument,
-  getConfigSnapshot,
-  listAgentDefinitions,
-} from '#/api';
+import { getAgentDefinition, getAgentTools, getConfigDocument, getConfigSnapshot, listAgentDefinitions } from '#/api';
 import JsonView from '#/components/aurora/json-view.vue';
 
 const agents = ref<AgentDefinitionRecord[]>([]);
@@ -48,8 +29,7 @@ const columns: DataTableColumns<AgentDefinitionRecord> = [
   {
     key: 'tools',
     title: '可见工具',
-    render: (row) =>
-      h(NTag, { size: 'small' }, { default: () => `${row.tools.length} 个` }),
+    render: (row) => h(NTag, { size: 'small' }, { default: () => `${row.tools.length} 个` }),
   },
   {
     key: 'action',
@@ -73,15 +53,10 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const [agentCatalog, config] = await Promise.all([
-      listAgentDefinitions(),
-      getConfigSnapshot(),
-    ]);
+    const [agentCatalog, config] = await Promise.all([listAgentDefinitions(), getConfigSnapshot()]);
     agents.value = agentCatalog?.agents ?? [];
     snapshot.value = config ?? undefined;
-    const results = await Promise.allSettled(
-      (config?.sources ?? []).map((source) => getConfigDocument(source.name)),
-    );
+    const results = await Promise.allSettled((config?.sources ?? []).map((source) => getConfigDocument(source.name)));
     documents.value = results.flatMap((result) =>
       result.status === 'fulfilled' && result.value ? [result.value] : [],
     );
@@ -93,10 +68,7 @@ async function load() {
 }
 
 async function showAgent(agentId: string) {
-  const [agent, tools] = await Promise.all([
-    getAgentDefinition(agentId),
-    getAgentTools(agentId),
-  ]);
+  const [agent, tools] = await Promise.all([getAgentDefinition(agentId), getAgentTools(agentId)]);
   selectedAgent.value = agent ?? undefined;
   selectedTools.value = tools?.tools ?? [];
   drawerOpen.value = Boolean(agent);
@@ -111,23 +83,12 @@ onMounted(load);
     <NCard>
       <NTabs type="line" animated>
         <NTabPane name="agents" tab="Agent definitions">
-          <NDataTable
-            :columns="columns"
-            :data="agents"
-            :loading="loading"
-            :scroll-x="900"
-            size="small"
-          />
+          <NDataTable :columns="columns" :data="agents" :loading="loading" :scroll-x="900" size="small" />
         </NTabPane>
         <NTabPane name="sources" tab="配置来源">
           <JsonView :value="snapshot" />
         </NTabPane>
-        <NTabPane
-          v-for="document in documents"
-          :key="document.name"
-          :name="document.name"
-          :tab="document.name"
-        >
+        <NTabPane v-for="document in documents" :key="document.name" :name="document.name" :tab="document.name">
           <div class="mb-2 text-sm text-muted-foreground">
             {{ document.path }}
           </div>

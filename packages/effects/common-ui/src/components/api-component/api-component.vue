@@ -1,8 +1,5 @@
 <script lang="ts" setup>
-import type {
-  ApiComponentProps,
-  ApiComponentOptionsItem as OptionsItem,
-} from './types';
+import type { ApiComponentProps, ApiComponentOptionsItem as OptionsItem } from './types';
 
 import { computed, nextTick, ref, unref, useAttrs, watch } from 'vue';
 
@@ -53,32 +50,18 @@ const isFirstLoaded = ref(false);
 const hasPendingRequest = ref(false);
 
 const getOptions = computed(() => {
-  const {
-    labelField,
-    labelFn,
-    valueField,
-    disabledField,
-    childrenField,
-    numberToString,
-  } = props;
+  const { labelField, labelFn, valueField, disabledField, childrenField, numberToString } = props;
 
   function transformData(data: OptionsItem[] = []): OptionsItem[] {
     return data.map((item) => {
       const value = get(item, valueField);
       const children = childrenField ? get(item, childrenField) : item.children;
       return {
-        ...objectOmit(item, [
-          labelField,
-          valueField,
-          disabledField,
-          ...(childrenField ? [childrenField] : []),
-        ]),
+        ...objectOmit(item, [labelField, valueField, disabledField, ...(childrenField ? [childrenField] : [])]),
         label: labelFn ? labelFn(item) : get(item, labelField),
         value: numberToString ? `${value}` : value,
         disabled: get(item, disabledField),
-        ...(Array.isArray(children) && children.length > 0
-          ? { children: transformData(children) }
-          : {}),
+        ...(Array.isArray(children) && children.length > 0 ? { children: transformData(children) } : {}),
       };
     });
   }
@@ -125,11 +108,7 @@ async function fetchApi() {
       finalParams = (await beforeFetch(cloneDeep(finalParams))) || finalParams;
     }
     // 判断是否需要控制执行中断
-    if (
-      shouldFetch &&
-      isFunction(shouldFetch) &&
-      !(await shouldFetch(finalParams))
-    ) {
+    if (shouldFetch && isFunction(shouldFetch) && !(await shouldFetch(finalParams))) {
       return;
     }
     let res = await api(finalParams);
@@ -191,11 +170,7 @@ watch(
 );
 
 function emitChange() {
-  if (
-    modelValue.value === undefined &&
-    props.autoSelect &&
-    unref(getOptions).length > 0
-  ) {
+  if (modelValue.value === undefined && props.autoSelect && unref(getOptions).length > 0) {
     let firstOption;
     if (isFunction(props.autoSelect)) {
       firstOption = props.autoSelect(unref(getOptions));
@@ -237,12 +212,7 @@ defineExpose({
 });
 </script>
 <template>
-  <component
-    :is="component"
-    v-bind="bindProps"
-    :placeholder="$attrs.placeholder"
-    ref="componentRef"
-  >
+  <component :is="component" v-bind="bindProps" :placeholder="$attrs.placeholder" ref="componentRef">
     <template v-for="item in Object.keys($slots)" #[item]="data">
       <slot :name="item" v-bind="data || {}"></slot>
     </template>

@@ -1,22 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ELEMENT_ID_LAYOUT_SCROLL } from '../../constants';
-import {
-  getElementVisibleRect,
-  getLayoutScrollElement,
-  needsScrollbar,
-} from '../dom';
+import { getElementVisibleRect, getLayoutScrollElement, needsScrollbar } from '../dom';
 
 describe('getElementVisibleRect', () => {
   // 设置浏览器视口尺寸的 mock
   beforeEach(() => {
-    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(
-      800,
-    );
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(800);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
-    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
-      1000,
-    );
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1000);
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1000);
   });
 
@@ -180,24 +172,19 @@ describe('needsScrollbar', () => {
     expect(needsScrollbar(element)).toBe(false);
   });
 
-  it.each(['clip', 'hidden'])(
-    'should ignore %s overflow targets',
-    (overflowY) => {
-      const element = document.createElement('div');
-      vi.spyOn(element, 'clientHeight', 'get').mockReturnValue(100);
-      vi.spyOn(element, 'scrollHeight', 'get').mockReturnValue(120);
-      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-        overflowY,
-      } as CSSStyleDeclaration);
+  it.each(['clip', 'hidden'])('should ignore %s overflow targets', (overflowY) => {
+    const element = document.createElement('div');
+    vi.spyOn(element, 'clientHeight', 'get').mockReturnValue(100);
+    vi.spyOn(element, 'scrollHeight', 'get').mockReturnValue(120);
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      overflowY,
+    } as CSSStyleDeclaration);
 
-      expect(needsScrollbar(element)).toBe(false);
-    },
-  );
+    expect(needsScrollbar(element)).toBe(false);
+  });
 
   it('should fall back to document scrollbar state', () => {
-    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(
-      120,
-    );
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(120);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(100);
     vi.spyOn(window, 'getComputedStyle').mockReturnValue({
       overflowY: 'auto',

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  applyFormValueFormats,
-  formatFormValues,
-  transformRangeTimeValues,
-} from '../src/form-value-transform';
+import { applyFormValueFormats, formatFormValues, transformRangeTimeValues } from '../src/form-value-transform';
 
 describe('form value transforms', () => {
   it('maps array and range fields without mutating input values', () => {
@@ -13,11 +9,7 @@ describe('form value transforms', () => {
       tags: ['admin', 'editor'],
     };
 
-    const result = transformRangeTimeValues(
-      input,
-      [['period', ['startTime', 'endTime'], null]],
-      ['tags'],
-    );
+    const result = transformRangeTimeValues(input, [['period', ['startTime', 'endTime'], null]], ['tags']);
 
     expect(result).toEqual({
       endTime: 1_720_000_000_000,

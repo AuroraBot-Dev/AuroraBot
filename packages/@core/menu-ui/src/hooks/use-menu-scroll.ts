@@ -9,19 +9,14 @@ interface UseMenuScrollOptions {
   enable?: boolean | Ref<boolean>;
 }
 
-export function useMenuScroll(
-  activePath: Ref<string | undefined>,
-  options: UseMenuScrollOptions = {},
-) {
+export function useMenuScroll(activePath: Ref<string | undefined>, options: UseMenuScrollOptions = {}) {
   const { enable = true, delay = 320 } = options;
 
   function scrollToActiveItem() {
     const isEnabled = typeof enable === 'boolean' ? enable : enable.value;
     if (!isEnabled) return;
 
-    const activeElement = document.querySelector(
-      `aside a[role=menuitem].is-active`,
-    );
+    const activeElement = document.querySelector(`aside a[role=menuitem].is-active`);
     if (activeElement) {
       activeElement.scrollIntoView({
         behavior: 'smooth',

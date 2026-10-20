@@ -14,10 +14,7 @@ const BENCHMARK_OPTIONS = { time: 750, warmupTime: 150 } as const;
 const FIELD_COUNT = 100;
 const MOUNT_FIELD_COUNT = 50;
 
-function createFlatSchema(
-  fieldCount: number,
-  withRules: boolean = false,
-): FormSchema[] {
+function createFlatSchema(fieldCount: number, withRules: boolean = false): FormSchema[] {
   const rule = withRules ? z.string().min(1) : undefined;
   return Array.from({ length: fieldCount }, (_, index) => ({
     component: TestInput,
@@ -29,12 +26,7 @@ function createFlatSchema(
 }
 
 function createFlatValues(prefix: string) {
-  return Object.fromEntries(
-    Array.from({ length: FIELD_COUNT }, (_, index) => [
-      `field${index}`,
-      `${prefix} ${index}`,
-    ]),
-  );
+  return Object.fromEntries(Array.from({ length: FIELD_COUNT }, (_, index) => [`field${index}`, `${prefix} ${index}`]));
 }
 
 setupVbenForm({ config: {}, rules: {} });
@@ -46,12 +38,10 @@ const [FlatForm, flatFormApi] = useVbenForm<Record<string, string>>({
 });
 const flatWrapper = mount(FlatForm);
 
-const [ValidationForm, validationFormApi] = useVbenForm<Record<string, string>>(
-  {
-    schema: createFlatSchema(FIELD_COUNT, true),
-    showDefaultActions: false,
-  },
-);
+const [ValidationForm, validationFormApi] = useVbenForm<Record<string, string>>({
+  schema: createFlatSchema(FIELD_COUNT, true),
+  showDefaultActions: false,
+});
 const validationWrapper = mount(ValidationForm);
 
 const dependencySchema: FormSchema[] = [
@@ -74,12 +64,10 @@ const dependencySchema: FormSchema[] = [
     label: `Dependent ${index}`,
   })),
 ];
-const [DependencyForm, dependencyFormApi] = useVbenForm<Record<string, string>>(
-  {
-    schema: dependencySchema,
-    showDefaultActions: false,
-  },
-);
+const [DependencyForm, dependencyFormApi] = useVbenForm<Record<string, string>>({
+  schema: dependencySchema,
+  showDefaultActions: false,
+});
 const dependencyWrapper = mount(DependencyForm);
 
 await flushPromises();
@@ -144,10 +132,7 @@ describe('form value performance', () => {
     'reset 100 fields to alternate values',
     async () => {
       resetIteration += 1;
-      await flatFormApi.reset(
-        { values: batchValues[resetIteration % 2] ?? {} },
-        { force: true },
-      );
+      await flatFormApi.reset({ values: batchValues[resetIteration % 2] ?? {} }, { force: true });
       await nextTick();
     },
     BENCHMARK_OPTIONS,
@@ -179,10 +164,7 @@ describe('form schema performance', () => {
     'resolve 50 dependencies from one trigger',
     async () => {
       dependencyIteration += 1;
-      await dependencyFormApi.setFieldValue(
-        'mode',
-        dependencyIteration % 2 === 0 ? 'editable' : 'locked',
-      );
+      await dependencyFormApi.setFieldValue('mode', dependencyIteration % 2 === 0 ? 'editable' : 'locked');
       await flushPromises();
     },
     BENCHMARK_OPTIONS,

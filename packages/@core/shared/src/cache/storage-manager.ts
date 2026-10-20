@@ -1,8 +1,4 @@
-import type {
-  IStorageDriver,
-  StorageItem,
-  StorageManagerOptions,
-} from './types';
+import type { IStorageDriver, StorageItem, StorageManagerOptions } from './types';
 
 import { LocalStorageDriver } from './local-storage-driver';
 import { MemoryStorageDriver } from './memory-storage-driver';
@@ -59,10 +55,7 @@ class StorageManager {
    * @param defaultValue 当项不存在或已过期时返回的默认值
    * @returns 值，如果项已过期则返回默认值
    */
-  async getItem<T>(
-    key: string,
-    defaultValue: null | T = null,
-  ): Promise<null | T> {
+  async getItem<T>(key: string, defaultValue: null | T = null): Promise<null | T> {
     const fullKey = this.getFullKey(key);
     const raw = await this.driver.getItem<StorageItem<T>>(fullKey);
 
@@ -86,9 +79,7 @@ class StorageManager {
     const allKeys = await this.driver.keys();
     const fullPrefix = this.prefix ? `${this.prefix}-` : '';
     if (!fullPrefix) return allKeys;
-    return allKeys
-      .filter((key) => key.startsWith(fullPrefix))
-      .map((key) => key.slice(fullPrefix.length));
+    return allKeys.filter((key) => key.startsWith(fullPrefix)).map((key) => key.slice(fullPrefix.length));
   }
 
   /**
@@ -125,10 +116,7 @@ class StorageManager {
       }
     } catch (error) {
       // localStorage access denied (e.g. Safari private mode)
-      console.warn(
-        'localStorage is not accessible, falling back to MemoryStorageDriver:',
-        error,
-      );
+      console.warn('localStorage is not accessible, falling back to MemoryStorageDriver:', error);
     }
     return new MemoryStorageDriver();
   }

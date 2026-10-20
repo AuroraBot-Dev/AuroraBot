@@ -5,12 +5,7 @@ import { computed } from 'vue';
 
 import { preferences } from '@vben/preferences';
 
-import {
-  AuthenticationColorToggle,
-  AuthenticationLayoutToggle,
-  LanguageToggle,
-  ThemeToggle,
-} from '../widgets';
+import { AuthenticationColorToggle, AuthenticationLayoutToggle, LanguageToggle, ThemeToggle } from '../widgets';
 
 interface Props {
   toolbarList?: ToolbarType[];

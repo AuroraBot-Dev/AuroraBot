@@ -46,9 +46,7 @@ const handleQrCodeLogin = async () => {
   const { clientId, corpId } = props;
   if (!(window as any).DTFrameLogin) {
     // 二维码登录 加载资源
-    await loadScript(
-      'https://g.alicdn.com/dingding/h5-dingtalk-login/0.21.0/ddlogin.js',
-    );
+    await loadScript('https://g.alicdn.com/dingding/h5-dingtalk-login/0.21.0/ddlogin.js');
   }
   (window as any).DTFrameLogin(
     {
@@ -91,11 +89,7 @@ const handleLogin = () => {
 
 <template>
   <div>
-    <VbenIconButton
-      @click="handleLogin"
-      :tooltip="$t('authentication.dingdingLogin')"
-      tooltip-side="top"
-    >
+    <VbenIconButton @click="handleLogin" :tooltip="$t('authentication.dingdingLogin')" tooltip-side="top">
       <SvgDingDingIcon />
     </VbenIconButton>
     <Modal>

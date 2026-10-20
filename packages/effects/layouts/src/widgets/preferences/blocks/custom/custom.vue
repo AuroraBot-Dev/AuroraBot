@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import type {
-  CustomPreferencesField,
-  CustomPreferencesRecord,
-} from '@vben/preferences';
+import type { CustomPreferencesField, CustomPreferencesRecord } from '@vben/preferences';
 
 import { computed } from 'vue';
 
@@ -35,9 +32,7 @@ function handleBooleanUpdate(key: string, value: boolean | undefined) {
 }
 
 function resolveNumberValue(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function handleNumberUpdate(key: string, value: number | undefined) {

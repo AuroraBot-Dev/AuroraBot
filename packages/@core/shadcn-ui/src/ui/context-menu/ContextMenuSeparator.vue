@@ -8,9 +8,7 @@ import { cn } from '@vben-core/shared/utils';
 import { reactiveOmit } from '@vueuse/core';
 import { ContextMenuSeparator } from 'reka-ui';
 
-const props = defineProps<
-  ContextMenuSeparatorProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<ContextMenuSeparatorProps & { class?: HTMLAttributes['class'] }>();
 
 const delegatedProps = reactiveOmit(props, 'class');
 </script>

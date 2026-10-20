@@ -1,23 +1,8 @@
 import type { Component } from 'vue';
 
-import type {
-  ExtendedModalApi,
-  InferModalData,
-  ModalApiOptions,
-  ModalProps,
-} from './modal';
+import type { ExtendedModalApi, InferModalData, ModalApiOptions, ModalProps } from './modal';
 
-import {
-  defineComponent,
-  h,
-  inject,
-  markRaw,
-  nextTick,
-  onBeforeUnmount,
-  provide,
-  ref,
-  shallowReactive,
-} from 'vue';
+import { defineComponent, h, inject, markRaw, nextTick, onBeforeUnmount, provide, ref, shallowReactive } from 'vue';
 
 import { usePreferences } from '@vben-core/preferences';
 import { useSelector } from '@vben-core/shared/store';
@@ -33,10 +18,7 @@ type ModalDataNotProvided = {
   readonly [MODAL_DATA_NOT_PROVIDED]: true;
 };
 
-type ResolvedModalData<
-  TData,
-  TConnectedComponent extends Component,
-> = TData extends ModalDataNotProvided
+type ResolvedModalData<TData, TConnectedComponent extends Component> = TData extends ModalDataNotProvided
   ? InferModalData<TConnectedComponent>
   : TData;
 
@@ -57,10 +39,9 @@ export function setDefaultModalProps(props: Partial<ModalProps>) {
   Object.assign(DEFAULT_MODAL_PROPS, props);
 }
 
-export function useVbenModal<
-  TData = ModalDataNotProvided,
-  TConnectedComponent extends Component = Component,
->(options: ModalApiOptions<TConnectedComponent> = {}) {
+export function useVbenModal<TData = ModalDataNotProvided, TConnectedComponent extends Component = Component>(
+  options: ModalApiOptions<TConnectedComponent> = {},
+) {
   type TResolvedData = ResolvedModalData<TData, TConnectedComponent>;
 
   // Modal一般会抽离出来，所以如果有传入 connectedComponent，则表示为外部调用，与内部组件进行连接
@@ -115,10 +96,7 @@ export function useVbenModal<
     return [Modal, extendedApi] as const;
   }
 
-  const injectData = inject<ModalInjectData<TResolvedData>>(
-    USER_MODAL_INJECT_KEY,
-    {},
-  );
+  const injectData = inject<ModalInjectData<TResolvedData>>(USER_MODAL_INJECT_KEY, {});
   const isConsumed = injectData.consumed;
   const effectiveOptions = isConsumed ? {} : injectData.options;
   if (!isConsumed && injectData.consumed !== undefined) {
@@ -187,17 +165,14 @@ export function useVbenModal<
 }
 
 export function createVbenModal<TData = unknown>() {
-  return function useTypedVbenModal<
-    TConnectedComponent extends Component = Component,
-  >(options: ModalApiOptions<TConnectedComponent> = {}) {
+  return function useTypedVbenModal<TConnectedComponent extends Component = Component>(
+    options: ModalApiOptions<TConnectedComponent> = {},
+  ) {
     return useVbenModal<TData, TConnectedComponent>(options);
   };
 }
 
-async function checkProps<TData>(
-  api: ExtendedModalApi<TData>,
-  attrs: Record<string, any>,
-) {
+async function checkProps<TData>(api: ExtendedModalApi<TData>, attrs: Record<string, any>) {
   if (!attrs || Object.keys(attrs).length === 0) {
     return;
   }

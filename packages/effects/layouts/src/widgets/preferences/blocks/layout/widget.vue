@@ -13,36 +13,16 @@ defineOptions({
 
 const widgetOrder = defineModel<string[]>('widgetOrder', { required: true });
 
-const widgetGlobalSearchButtonPosition = defineModel<string>(
-  'widgetGlobalSearchButtonPosition',
-);
-const widgetFullscreenButtonPosition = defineModel<string>(
-  'widgetFullscreenButtonPosition',
-);
-const widgetLanguageToggleButtonPosition = defineModel<string>(
-  'widgetLanguageToggleButtonPosition',
-);
-const widgetNotificationButtonPosition = defineModel<string>(
-  'widgetNotificationButtonPosition',
-);
-const widgetThemeToggleButtonPosition = defineModel<string>(
-  'widgetThemeToggleButtonPosition',
-);
-const widgetLockScreenButtonPosition = defineModel<string>(
-  'widgetLockScreenButtonPosition',
-);
-const widgetLogoutButtonPosition = defineModel<string>(
-  'widgetLogoutButtonPosition',
-);
-const widgetRefreshButtonPosition = defineModel<string>(
-  'widgetRefreshButtonPosition',
-);
-const widgetTimezoneButtonPosition = defineModel<string>(
-  'widgetTimezoneButtonPosition',
-);
-const appPreferencesButtonPosition = defineModel<PreferencesButtonPositionType>(
-  'appPreferencesButtonPosition',
-);
+const widgetGlobalSearchButtonPosition = defineModel<string>('widgetGlobalSearchButtonPosition');
+const widgetFullscreenButtonPosition = defineModel<string>('widgetFullscreenButtonPosition');
+const widgetLanguageToggleButtonPosition = defineModel<string>('widgetLanguageToggleButtonPosition');
+const widgetNotificationButtonPosition = defineModel<string>('widgetNotificationButtonPosition');
+const widgetThemeToggleButtonPosition = defineModel<string>('widgetThemeToggleButtonPosition');
+const widgetLockScreenButtonPosition = defineModel<string>('widgetLockScreenButtonPosition');
+const widgetLogoutButtonPosition = defineModel<string>('widgetLogoutButtonPosition');
+const widgetRefreshButtonPosition = defineModel<string>('widgetRefreshButtonPosition');
+const widgetTimezoneButtonPosition = defineModel<string>('widgetTimezoneButtonPosition');
+const appPreferencesButtonPosition = defineModel<PreferencesButtonPositionType>('appPreferencesButtonPosition');
 
 const buttonPositionItems = computed((): SelectOption[] => [
   {
@@ -118,14 +98,11 @@ const draggableItems = computed(() =>
     key,
     label: $t(labelMap[key] ?? key),
     position: getPosition(key),
-    positionItems:
-      key === 'preferences' ? preferencesPositionItems.value : undefined,
+    positionItems: key === 'preferences' ? preferencesPositionItems.value : undefined,
   })),
 );
 
-function getPosition(
-  key: string,
-): 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown' {
+function getPosition(key: string): 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown' {
   const modelName = positionMap[key];
   if (!modelName) return 'none';
   const modelMap: Record<string, any> = {
@@ -147,10 +124,7 @@ function handleUpdateOrder(keys: string[]) {
   widgetOrder.value = keys;
 }
 
-function handleUpdatePosition(
-  key: string,
-  position: 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown',
-) {
+function handleUpdatePosition(key: string, position: 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown') {
   const modelName = positionMap[key];
   if (!modelName) return;
   const modelMap: Record<string, any> = {

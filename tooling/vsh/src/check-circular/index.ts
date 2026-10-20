@@ -8,8 +8,7 @@ import { extname, join } from 'node:path';
 import { execa, getStagedFiles } from '@vben/node-utils';
 
 const require = createRequire(import.meta.url);
-const circularScannerCli =
-  require.resolve('circular-dependency-scanner/dist/cli.js');
+const circularScannerCli = require.resolve('circular-dependency-scanner/dist/cli.js');
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -109,11 +108,7 @@ function formatCircles(circles: CircularDependencyResult[]): void {
  * @param options.config - 自定义配置
  * @returns Promise<void>
  */
-async function checkCircular({
-  config = {},
-  staged,
-  verbose,
-}: CommandOptions): Promise<void> {
+async function checkCircular({ config = {}, staged, verbose }: CommandOptions): Promise<void> {
   try {
     // 合并配置
     const finalConfig = {
@@ -174,15 +169,10 @@ async function checkCircular({
 
     // 如果发现循环依赖，只输出警告信息
     if (results.length > 0) {
-      console.log(
-        '\n⚠️ Warning: Circular dependencies found, please check and fix',
-      );
+      console.log('\n⚠️ Warning: Circular dependencies found, please check and fix');
     }
   } catch (error) {
-    console.error(
-      '❌ Error checking circular dependencies:',
-      error instanceof Error ? error.message : error,
-    );
+    console.error('❌ Error checking circular dependencies:', error instanceof Error ? error.message : error);
   }
 }
 

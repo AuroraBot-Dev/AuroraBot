@@ -34,23 +34,19 @@ const customConfig: Linter.Config[] = [
           patterns: [
             {
               group: ['#/api/*'],
-              message:
-                'The #/api package cannot be imported, please use the @core package itself',
+              message: 'The #/api package cannot be imported, please use the @core package itself',
             },
             {
               group: ['#/layouts/*'],
-              message:
-                'The #/layouts package cannot be imported, please use the @core package itself',
+              message: 'The #/layouts package cannot be imported, please use the @core package itself',
             },
             {
               group: ['#/locales/*'],
-              message:
-                'The #/locales package cannot be imported, please use the @core package itself',
+              message: 'The #/locales package cannot be imported, please use the @core package itself',
             },
             {
               group: ['#/stores/*'],
-              message:
-                'The #/stores package cannot be imported, please use the @core package itself',
+              message: 'The #/stores package cannot be imported, please use the @core package itself',
             },
           ],
         },
@@ -69,8 +65,7 @@ const customConfig: Linter.Config[] = [
           patterns: [
             {
               group: ['@vben/*', '!@vben/types'],
-              message:
-                'The @core package cannot import the @vben package, please use the @core package itself',
+              message: 'The @core package cannot import the @vben package, please use the @core package itself',
             },
           ],
         },
@@ -118,8 +113,7 @@ const customConfig: Linter.Config[] = [
           patterns: [
             {
               group: ['@vben/*', '!@vben/types'],
-              message:
-                'The @vben package cannot be imported, please use the @core package itself',
+              message: 'The @vben package cannot be imported, please use the @core package itself',
             },
           ],
         },

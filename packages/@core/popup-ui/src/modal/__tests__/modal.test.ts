@@ -75,12 +75,8 @@ describe('vben modal', () => {
     expect(header).toBeInstanceOf(HTMLElement);
     if (!(header instanceof HTMLElement)) return;
 
-    vi.spyOn(mainContent, 'getBoundingClientRect').mockReturnValue(
-      new DOMRect(100, 100, 800, 600),
-    );
-    vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue(
-      new DOMRect(300, 200, 400, 300),
-    );
+    vi.spyOn(mainContent, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 100, 800, 600));
+    vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, 200, 400, 300));
 
     header.dispatchEvent(
       new MouseEvent('mousedown', {

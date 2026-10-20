@@ -9,11 +9,7 @@ import { useRoute } from 'vue-router';
 
 import { useRefresh } from '@vben/hooks';
 import { $t, i18n } from '@vben/locales';
-import {
-  preferences,
-  updatePreferences,
-  usePreferences,
-} from '@vben/preferences';
+import { preferences, updatePreferences, usePreferences } from '@vben/preferences';
 import { useAccessStore, useTabbarStore, useTimezoneStore } from '@vben/stores';
 import { cloneDeep, mapTree } from '@vben/utils';
 
@@ -26,13 +22,7 @@ import { LayoutContent, LayoutContentSpinner } from './content';
 import { Copyright } from './copyright';
 import { LayoutFooter } from './footer';
 import { LayoutHeader } from './header';
-import {
-  LayoutExtraMenu,
-  LayoutMenu,
-  LayoutMixedMenu,
-  useExtraMenu,
-  useMixedMenu,
-} from './menu';
+import { LayoutExtraMenu, LayoutMenu, LayoutMixedMenu, useExtraMenu, useMixedMenu } from './menu';
 import { LayoutTabbar } from './tabbar';
 import { useLayoutScroll } from './use-layout-scroll';
 
@@ -116,24 +106,15 @@ const logoCollapsed = computed(() => {
   if (isHeaderNav.value || isMixedNav.value || isHeaderSidebarNav.value) {
     return false;
   }
-  return (
-    sidebarCollapsed.value || isSideMixedNav.value || isHeaderMixedNav.value
-  );
+  return sidebarCollapsed.value || isSideMixedNav.value || isHeaderMixedNav.value;
 });
 
 const showHeaderNav = computed(() => {
-  return (
-    !isMobile.value &&
-    (isHeaderNav.value || isMixedNav.value || isHeaderMixedNav.value)
-  );
+  return !isMobile.value && (isHeaderNav.value || isMixedNav.value || isHeaderMixedNav.value);
 });
 
 const logoTheme = computed(() => {
-  const showLogoInHeader =
-    !isSideMode.value ||
-    isHeaderSidebarNav.value ||
-    isMixedNav.value ||
-    isMobile.value;
+  const showLogoInHeader = !isSideMode.value || isHeaderSidebarNav.value || isMixedNav.value || isMobile.value;
   return showLogoInHeader ? headerTheme.value : sidebarTheme.value;
 });
 
@@ -141,8 +122,7 @@ const logoTheme = computed(() => {
  * layout-sidebar扩展区域插槽extra-title的高度
  */
 const sidebarExtraTitleHeight = computed<number | undefined>(() => {
-  const showSideExtraTitle =
-    preferences.logo.enable && preferences.logo.showText;
+  const showSideExtraTitle = preferences.logo.enable && preferences.logo.showText;
   return showSideExtraTitle ? undefined : 0;
 });
 
@@ -206,9 +186,7 @@ function clickLogo() {
 function autoCollapseMenuByRouteMeta(route: RouteLocationNormalizedLoaded) {
   // 只在双列模式下生效
   if (
-    ['header-mixed-nav', 'sidebar-mixed-nav'].includes(
-      preferences.app.layout,
-    ) &&
+    ['header-mixed-nav', 'sidebar-mixed-nav'].includes(preferences.app.layout) &&
     route.meta &&
     route.meta.hideInMenu
   ) {
@@ -298,23 +276,11 @@ const headerSlots = computed(() => {
     :z-index="preferences.app.zIndex"
     @side-mouse-leave="handleSideMouseLeave"
     @toggle-sidebar="toggleSidebar"
-    @update:sidebar-collapse="
-      (value: boolean) => updatePreferences({ sidebar: { collapsed: value } })
-    "
-    @update:sidebar-enable="
-      (value: boolean) => updatePreferences({ sidebar: { enable: value } })
-    "
-    @update:sidebar-expand-on-hover="
-      (value: boolean) =>
-        updatePreferences({ sidebar: { expandOnHover: value } })
-    "
-    @update:sidebar-extra-collapse="
-      (value: boolean) =>
-        updatePreferences({ sidebar: { extraCollapse: value } })
-    "
-    @update:sidebar-width="
-      (value: number) => updatePreferences({ sidebar: { width: value } })
-    "
+    @update:sidebar-collapse="(value: boolean) => updatePreferences({ sidebar: { collapsed: value } })"
+    @update:sidebar-enable="(value: boolean) => updatePreferences({ sidebar: { enable: value } })"
+    @update:sidebar-expand-on-hover="(value: boolean) => updatePreferences({ sidebar: { expandOnHover: value } })"
+    @update:sidebar-extra-collapse="(value: boolean) => updatePreferences({ sidebar: { extraCollapse: value } })"
+    @update:sidebar-width="(value: number) => updatePreferences({ sidebar: { width: value } })"
   >
     <!-- logo -->
     <template #logo>
@@ -346,10 +312,7 @@ const headerSlots = computed(() => {
         @clear-preferences-and-logout="clearPreferencesAndLogout"
         @logout="handleLogout"
       >
-        <template
-          v-if="!showHeaderNav && preferences.breadcrumb.enable"
-          #breadcrumb
-        >
+        <template v-if="!showHeaderNav && preferences.breadcrumb.enable" #breadcrumb>
           <Breadcrumb
             :hide-when-only-one="preferences.breadcrumb.hideOnlyOne"
             :show-home="preferences.breadcrumb.showHome"
@@ -430,11 +393,7 @@ const headerSlots = computed(() => {
     </template>
 
     <template #tabbar>
-      <LayoutTabbar
-        v-if="preferences.tabbar.enable"
-        :show-icon="preferences.tabbar.showIcon"
-        :theme="theme"
-      />
+      <LayoutTabbar v-if="preferences.tabbar.enable" :show-icon="preferences.tabbar.showIcon" :theme="theme" />
     </template>
 
     <!-- 主体内容 -->
@@ -449,10 +408,7 @@ const headerSlots = computed(() => {
     <!-- 页脚 -->
     <template v-if="preferences.footer.enable" #footer>
       <LayoutFooter>
-        <Copyright
-          v-if="preferences.copyright.enable"
-          v-bind="preferences.copyright"
-        />
+        <Copyright v-if="preferences.copyright.enable" v-bind="preferences.copyright" />
       </LayoutFooter>
     </template>
 

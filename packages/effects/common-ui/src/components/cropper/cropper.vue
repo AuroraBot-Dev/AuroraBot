@@ -27,15 +27,7 @@ type Dimension = [number, number, number, number]; // [top, right, bottom, left]
 
 // 拖拽点类型
 type DragAction =
-  | 'bottom'
-  | 'bottom-left'
-  | 'bottom-right'
-  | 'left'
-  | 'move'
-  | 'right'
-  | 'top'
-  | 'top-left'
-  | 'top-right';
+  'bottom' | 'bottom-left' | 'bottom-right' | 'left' | 'move' | 'right' | 'top' | 'top-left' | 'top-right';
 
 // DOM 引用
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -48,12 +40,8 @@ const cropperRef = ref<HTMLDivElement | null>(null);
 // 响应式数据
 const isCropperVisible = ref<boolean>(false);
 const validAspectRatio = ref<null | number>(null); // 有效比例值（null表示无固定比例）
-const containerWidth = ref<number>(
-  props.width ?? CROPPER_CONSTANTS.DEFAULT_WIDTH,
-);
-const containerHeight = ref<number>(
-  props.height ?? CROPPER_CONSTANTS.DEFAULT_HEIGHT,
-);
+const containerWidth = ref<number>(props.width ?? CROPPER_CONSTANTS.DEFAULT_WIDTH);
+const containerHeight = ref<number>(props.height ?? CROPPER_CONSTANTS.DEFAULT_HEIGHT);
 
 // 裁剪区域尺寸（top, right, bottom, left）
 const currentDimension = ref<Dimension>([50, 50, 50, 50]);
@@ -79,10 +67,8 @@ const calculateImageFitSize = () => {
   if (imgWidth === 0 || imgHeight === 0) return;
 
   // 计算缩放比例（使用传入的width/height，默认500/400）
-  const widthRatio =
-    (props.width ?? CROPPER_CONSTANTS.DEFAULT_WIDTH) / imgWidth;
-  const heightRatio =
-    (props.height ?? CROPPER_CONSTANTS.DEFAULT_HEIGHT) / imgHeight;
+  const widthRatio = (props.width ?? CROPPER_CONSTANTS.DEFAULT_WIDTH) / imgWidth;
+  const heightRatio = (props.height ?? CROPPER_CONSTANTS.DEFAULT_HEIGHT) / imgHeight;
   const scaleRatio = Math.min(widthRatio, heightRatio, 1); // 不放大图片，只缩小
 
   // 计算适配后的容器尺寸
@@ -292,24 +278,16 @@ const handleMoveCropBox = (diffX: number, diffY: number) => {
   const tempLeft = startDimension.value[3] + diffX;
 
   // 计算裁剪框的固定尺寸
-  const cropWidth =
-    containerWidth.value - startDimension.value[3] - startDimension.value[1];
-  const cropHeight =
-    containerHeight.value - startDimension.value[0] - startDimension.value[2];
+  const cropWidth = containerWidth.value - startDimension.value[3] - startDimension.value[1];
+  const cropHeight = containerHeight.value - startDimension.value[0] - startDimension.value[2];
 
   // 边界限制：确保裁剪框完全在容器内，且尺寸不变
   // 顶部边界：top >= 0，且 bottom = 容器高度 - top - 裁剪高度 >= 0
-  newDimension[0] = Math.max(
-    0,
-    Math.min(tempTop, containerHeight.value - cropHeight),
-  );
+  newDimension[0] = Math.max(0, Math.min(tempTop, containerHeight.value - cropHeight));
   // 底部边界：bottom = 容器高度 - top - 裁剪高度（由top推导，无需额外计算）
   newDimension[2] = containerHeight.value - newDimension[0] - cropHeight;
   // 左侧边界：left >= 0，且 right = 容器宽度 - left - 裁剪宽度 >= 0
-  newDimension[3] = Math.max(
-    0,
-    Math.min(tempLeft, containerWidth.value - cropWidth),
-  );
+  newDimension[3] = Math.max(0, Math.min(tempLeft, containerWidth.value - cropWidth));
   // 右侧边界：right = 容器宽度 - left - 裁剪宽度（由left推导，无需额外计算）
   newDimension[1] = containerWidth.value - newDimension[3] - cropWidth;
 
@@ -356,28 +334,22 @@ const handleFreeAspectResize = (diffX: number, diffY: number) => {
   );
 
   // 确保裁剪区域宽度和高度不小于最小值
-  const newWidth =
-    cropperWidth - currentDimensionNew[3] - currentDimensionNew[1];
-  const newHeight =
-    cropperHeight - currentDimensionNew[0] - currentDimensionNew[2];
+  const newWidth = cropperWidth - currentDimensionNew[3] - currentDimensionNew[1];
+  const newHeight = cropperHeight - currentDimensionNew[0] - currentDimensionNew[2];
 
   if (newWidth < CROPPER_CONSTANTS.MIN_WIDTH) {
     if (direction.value[3] === 1) {
-      currentDimensionNew[3] =
-        cropperWidth - currentDimensionNew[1] - CROPPER_CONSTANTS.MIN_WIDTH;
+      currentDimensionNew[3] = cropperWidth - currentDimensionNew[1] - CROPPER_CONSTANTS.MIN_WIDTH;
     } else {
-      currentDimensionNew[1] =
-        cropperWidth - currentDimensionNew[3] - CROPPER_CONSTANTS.MIN_WIDTH;
+      currentDimensionNew[1] = cropperWidth - currentDimensionNew[3] - CROPPER_CONSTANTS.MIN_WIDTH;
     }
   }
 
   if (newHeight < CROPPER_CONSTANTS.MIN_HEIGHT) {
     if (direction.value[0] === 1) {
-      currentDimensionNew[0] =
-        cropperHeight - currentDimensionNew[2] - CROPPER_CONSTANTS.MIN_HEIGHT;
+      currentDimensionNew[0] = cropperHeight - currentDimensionNew[2] - CROPPER_CONSTANTS.MIN_HEIGHT;
     } else {
-      currentDimensionNew[2] =
-        cropperHeight - currentDimensionNew[0] - CROPPER_CONSTANTS.MIN_HEIGHT;
+      currentDimensionNew[2] = cropperHeight - currentDimensionNew[0] - CROPPER_CONSTANTS.MIN_HEIGHT;
     }
   }
 
@@ -390,10 +362,8 @@ const handleFixedAspectResize = (diffX: number, diffY: number) => {
   const cropperHeight = containerHeight.value;
   // 有有效比例 - 固定比例裁剪
   const ratio = validAspectRatio.value;
-  const currentWidth =
-    cropperWidth - startDimension.value[3] - startDimension.value[1];
-  const currentHeight =
-    cropperHeight - startDimension.value[0] - startDimension.value[2];
+  const currentWidth = cropperWidth - startDimension.value[3] - startDimension.value[1];
+  const currentHeight = cropperHeight - startDimension.value[0] - startDimension.value[2];
 
   let newHeight: number, newWidth: number;
   let widthChange = 0;
@@ -407,36 +377,23 @@ const handleFixedAspectResize = (diffX: number, diffY: number) => {
   else if (direction.value[2] === -1) heightChange = diffY;
 
   const isCornerDrag =
-    (direction.value[3] === 1 || direction.value[1] === -1) &&
-    (direction.value[0] === 1 || direction.value[2] === -1);
+    (direction.value[3] === 1 || direction.value[1] === -1) && (direction.value[0] === 1 || direction.value[2] === -1);
 
   // 计算新尺寸
   if (isCornerDrag) {
     if (Math.abs(widthChange) > Math.abs(heightChange)) {
-      newWidth = Math.max(
-        CROPPER_CONSTANTS.MIN_WIDTH,
-        currentWidth + widthChange,
-      );
+      newWidth = Math.max(CROPPER_CONSTANTS.MIN_WIDTH, currentWidth + widthChange);
       newHeight = newWidth / ratio;
     } else {
-      newHeight = Math.max(
-        CROPPER_CONSTANTS.MIN_HEIGHT,
-        currentHeight + heightChange,
-      );
+      newHeight = Math.max(CROPPER_CONSTANTS.MIN_HEIGHT, currentHeight + heightChange);
       newWidth = newHeight * ratio;
     }
   } else {
     if (direction.value[3] === 1 || direction.value[1] === -1) {
-      newWidth = Math.max(
-        CROPPER_CONSTANTS.MIN_WIDTH,
-        currentWidth + widthChange,
-      );
+      newWidth = Math.max(CROPPER_CONSTANTS.MIN_WIDTH, currentWidth + widthChange);
       newHeight = newWidth / ratio;
     } else {
-      newHeight = Math.max(
-        CROPPER_CONSTANTS.MIN_HEIGHT,
-        currentHeight + heightChange,
-      );
+      newHeight = Math.max(CROPPER_CONSTANTS.MIN_HEIGHT, currentHeight + heightChange);
       newWidth = newHeight * ratio;
     }
   }
@@ -469,10 +426,7 @@ const handleFixedAspectResize = (diffX: number, diffY: number) => {
   } else if (!isCornerDrag) {
     // 居中调整
     const currentHorizontalCenter = startDimension.value[3] + currentWidth / 2;
-    newLeft = Math.max(
-      0,
-      Math.min(cropperWidth - newWidth, currentHorizontalCenter - newWidth / 2),
-    );
+    newLeft = Math.max(0, Math.min(cropperWidth - newWidth, currentHorizontalCenter - newWidth / 2));
     newRight = cropperWidth - newWidth - newLeft;
   }
 
@@ -483,13 +437,7 @@ const handleFixedAspectResize = (diffX: number, diffY: number) => {
   } else if (!isCornerDrag) {
     // 居中调整
     const currentVerticalCenter = startDimension.value[0] + currentHeight / 2;
-    newTop = Math.max(
-      0,
-      Math.min(
-        cropperHeight - newHeight,
-        currentVerticalCenter - newHeight / 2,
-      ),
-    );
+    newTop = Math.max(0, Math.min(cropperHeight - newHeight, currentVerticalCenter - newHeight / 2));
     newBottom = cropperHeight - newHeight - newTop;
   }
 
@@ -606,14 +554,8 @@ const getCropImage = async (
   // 5. 映射到原始图片的裁剪区域（精确到原始像素，防止越界）
   const originalCropX = Math.max(0, Math.floor(cropOnImgX * scaleX));
   const originalCropY = Math.max(0, Math.floor(cropOnImgY * scaleY));
-  const originalCropWidth = Math.min(
-    Math.floor(cropBoxWidth * scaleX),
-    tempImg.width - originalCropX,
-  );
-  const originalCropHeight = Math.min(
-    Math.floor(cropBoxHeight * scaleY),
-    tempImg.height - originalCropY,
-  );
+  const originalCropWidth = Math.min(Math.floor(cropBoxWidth * scaleX), tempImg.width - originalCropX);
+  const originalCropHeight = Math.min(Math.floor(cropBoxHeight * scaleY), tempImg.height - originalCropY);
 
   // 边界校验：裁剪尺寸非法则返回
   if (originalCropWidth <= 0 || originalCropHeight <= 0) return;
@@ -623,9 +565,7 @@ const getCropImage = async (
 
   // 最终画布尺寸（优先使用传入的目标尺寸，无则用原始裁剪尺寸）
   const finalWidth = targetWidth ? Math.max(1, targetWidth) : originalCropWidth;
-  const finalHeight = targetHeight
-    ? Math.max(1, targetHeight)
-    : originalCropHeight;
+  const finalHeight = targetHeight ? Math.max(1, targetHeight) : originalCropHeight;
 
   // 创建画布并获取绘制上下文
   const canvas = document.createElement('canvas');
@@ -689,11 +629,7 @@ onMounted(() => {
   document.addEventListener('mouseup', handleMouseUp);
 
   // 如果图片已经加载完成，手动触发创建裁剪器
-  if (
-    bgImageRef.value &&
-    bgImageRef.value.complete &&
-    bgImageRef.value.naturalWidth > 0
-  ) {
+  if (bgImageRef.value && bgImageRef.value.complete && bgImageRef.value.naturalWidth > 0) {
     createCropper();
   }
 });
@@ -782,10 +718,7 @@ defineExpose({ getCropImage });
           <span class="cropper-dashed-v"></span>
 
           <!-- 裁剪框拖拽区域 -->
-          <span
-            class="cropper-move-area"
-            @mousedown="handleMouseDown($event, 'move')"
-          ></span>
+          <span class="cropper-move-area" @mousedown="handleMouseDown($event, 'move')"></span>
 
           <!-- 边框线 -->
           <span class="cropper-line-e"></span>
@@ -794,54 +727,30 @@ defineExpose({ getCropImage });
           <span class="cropper-line-s"></span>
 
           <!-- 边角拖拽点 -->
-          <span
-            class="cropper-point cropper-point-ne"
-            @mousedown="handleMouseDown($event, 'top-right')"
-          >
+          <span class="cropper-point cropper-point-ne" @mousedown="handleMouseDown($event, 'top-right')">
             <span class="cropper-point-inner"></span>
           </span>
-          <span
-            class="cropper-point cropper-point-nw"
-            @mousedown="handleMouseDown($event, 'top-left')"
-          >
+          <span class="cropper-point cropper-point-nw" @mousedown="handleMouseDown($event, 'top-left')">
             <span class="cropper-point-inner"></span>
           </span>
-          <span
-            class="cropper-point cropper-point-sw"
-            @mousedown="handleMouseDown($event, 'bottom-left')"
-          >
+          <span class="cropper-point cropper-point-sw" @mousedown="handleMouseDown($event, 'bottom-left')">
             <span class="cropper-point-inner"></span>
           </span>
-          <span
-            class="cropper-point cropper-point-se"
-            @mousedown="handleMouseDown($event, 'bottom-right')"
-          >
+          <span class="cropper-point cropper-point-se" @mousedown="handleMouseDown($event, 'bottom-right')">
             <span class="cropper-point-inner"></span>
           </span>
 
           <!-- 边中点拖拽点 -->
-          <span
-            class="cropper-point cropper-point-e"
-            @mousedown="handleMouseDown($event, 'right')"
-          >
+          <span class="cropper-point cropper-point-e" @mousedown="handleMouseDown($event, 'right')">
             <span class="cropper-point-inner"></span>
           </span>
-          <span
-            class="cropper-point cropper-point-n"
-            @mousedown="handleMouseDown($event, 'top')"
-          >
+          <span class="cropper-point cropper-point-n" @mousedown="handleMouseDown($event, 'top')">
             <span class="cropper-point-inner"></span>
           </span>
-          <span
-            class="cropper-point cropper-point-w"
-            @mousedown="handleMouseDown($event, 'left')"
-          >
+          <span class="cropper-point cropper-point-w" @mousedown="handleMouseDown($event, 'left')">
             <span class="cropper-point-inner"></span>
           </span>
-          <span
-            class="cropper-point cropper-point-s"
-            @mousedown="handleMouseDown($event, 'bottom')"
-          >
+          <span class="cropper-point cropper-point-s" @mousedown="handleMouseDown($event, 'bottom')">
             <span class="cropper-point-inner"></span>
           </span>
         </div>
@@ -860,10 +769,8 @@ defineExpose({ getCropImage });
 
   /* 马赛克背景 */
   background-image:
-    linear-gradient(45deg, #ccc 25%, transparent 25%),
-    linear-gradient(-45deg, #ccc 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #ccc 75%),
-    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
   background-position:
     0 0,
     0 10px,

@@ -21,12 +21,8 @@ async function getStagedFiles(): Promise<string[]> {
     ]);
 
     const nullSeparator = '\u0000';
-    const normalizedStdout = stdout.endsWith(nullSeparator)
-      ? stdout.slice(0, -1)
-      : stdout;
-    let changedList = normalizedStdout
-      ? normalizedStdout.split(nullSeparator)
-      : [];
+    const normalizedStdout = stdout.endsWith(nullSeparator) ? stdout.slice(0, -1) : stdout;
+    let changedList = normalizedStdout ? normalizedStdout.split(nullSeparator) : [];
     changedList = changedList.map((item) => path.resolve(process.cwd(), item));
     const changedSet = new Set(changedList);
     changedSet.delete('');

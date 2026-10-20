@@ -6,11 +6,7 @@ import { $t } from '@vben/locales';
 import { useTimezoneStore } from '@vben/stores';
 
 import { useVbenModal } from '@vben-core/popup-ui';
-import {
-  RadioGroup,
-  RadioGroupItem,
-  VbenIconButton,
-} from '@vben-core/shadcn-ui';
+import { RadioGroup, RadioGroupItem, VbenIconButton } from '@vben-core/shadcn-ui';
 
 withDefaults(defineProps<{ showButton?: boolean }>(), { showButton: true });
 
@@ -75,9 +71,7 @@ defineExpose({ open });
             :key="`container${item.value}`"
           >
             <RadioGroupItem :id="item.value" :value="item.value" />
-            <label :for="item.value" class="cursor-pointer">{{
-              item.label
-            }}</label>
+            <label :for="item.value" class="cursor-pointer">{{ item.label }}</label>
           </div>
         </RadioGroup>
       </div>

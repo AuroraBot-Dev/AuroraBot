@@ -22,9 +22,7 @@ function escapeRegExp(value: string): string {
  * plugins: [viteCssLayerPlugin({ packageName: 'element-plus', layerName: 'el' })]
  * ```
  */
-export function viteCssLayerPlugin(
-  rules: CssLayerRule | CssLayerRule[],
-): Plugin {
+export function viteCssLayerPlugin(rules: CssLayerRule | CssLayerRule[]): Plugin {
   const list = Array.isArray(rules) ? rules : [rules];
   const matchers = list.map(({ layerName, packageName }) => ({
     layerName,

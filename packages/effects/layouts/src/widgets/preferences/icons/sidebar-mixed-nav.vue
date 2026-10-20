@@ -1,11 +1,5 @@
 <template>
-  <svg
-    class="custom-radio-image"
-    fill="none"
-    height="66"
-    width="104"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <svg class="custom-radio-image" fill="none" height="66" width="104" xmlns="http://www.w3.org/2000/svg">
     <g>
       <rect
         id="svg_1"
@@ -34,16 +28,7 @@
         x="1.64059"
         y="15.46086"
       />
-      <rect
-        id="svg_4"
-        fill="#ffffff"
-        height="7.67897"
-        rx="2"
-        stroke="null"
-        width="8.18938"
-        x="0.58676"
-        y="1.42154"
-      />
+      <rect id="svg_4" fill="#ffffff" height="7.67897" rx="2" stroke="null" width="8.18938" x="0.58676" y="1.42154" />
       <rect
         id="svg_8"
         fill="currentColor"
@@ -55,46 +40,10 @@
         x="25.38277"
         y="1.42876"
       />
-      <rect
-        id="svg_9"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="27.91529"
-        y="3.69284"
-      />
-      <rect
-        id="svg_10"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="80.75054"
-        y="3.62876"
-      />
-      <rect
-        id="svg_11"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="87.78868"
-        y="3.69981"
-      />
-      <rect
-        id="svg_12"
-        fill="#b2b2b2"
-        height="4.4"
-        rx="1"
-        stroke="null"
-        width="3.925"
-        x="94.6847"
-        y="3.62876"
-      />
+      <rect id="svg_9" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="27.91529" y="3.69284" />
+      <rect id="svg_10" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="80.75054" y="3.62876" />
+      <rect id="svg_11" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="87.78868" y="3.69981" />
+      <rect id="svg_12" fill="#b2b2b2" height="4.4" rx="1" stroke="null" width="3.925" x="94.6847" y="3.62876" />
       <rect
         id="svg_13"
         fill="currentColor"

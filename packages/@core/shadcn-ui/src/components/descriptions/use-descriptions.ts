@@ -24,15 +24,7 @@ export const DEFAULT_COLUMN_MAP: Record<DescriptionsBreakpoint, number> = {
 };
 
 /** 由大到小的断点顺序，matchScreen 按此顺序取第一个命中的值 */
-const RESPONSIVE_ARRAY: DescriptionsBreakpoint[] = [
-  'xxxl',
-  'xxl',
-  'xl',
-  'lg',
-  'md',
-  'sm',
-  'xs',
-];
+const RESPONSIVE_ARRAY: DescriptionsBreakpoint[] = ['xxxl', 'xxl', 'xl', 'lg', 'md', 'sm', 'xs'];
 
 /** 断点像素值 */
 const BREAKPOINT_PX = {
@@ -79,10 +71,7 @@ export function useScreens() {
 /**
  * 计算最终列数：固定数字直接返回，否则按断点解析
  */
-export function resolveColumn(
-  column: DescriptionsColumn | undefined,
-  screens: ScreenMap,
-): number {
+export function resolveColumn(column: DescriptionsColumn | undefined, screens: ScreenMap): number {
   if (typeof column === 'number') return column;
   return matchScreen(screens, { ...DEFAULT_COLUMN_MAP, ...column }) ?? 3;
 }
@@ -90,10 +79,7 @@ export function resolveColumn(
 /**
  * 归一化列表项：将 span 解析为数字，'filled' 标记为 filled
  */
-export function normalizeItems(
-  items: DescriptionsItemType[],
-  screens: ScreenMap,
-): InternalDescriptionsItem[] {
+export function normalizeItems(items: DescriptionsItemType[], screens: ScreenMap): InternalDescriptionsItem[] {
   return items.map((item, index) => {
     const { span, ...rest } = item;
     if (span === 'filled') {
@@ -111,10 +97,7 @@ export function normalizeItems(
  * 行装箱算法：根据列数与各项 span 将列表项拆分为多行，
  * 并补齐每行最后一项以占满列数。移植自 antdv-next useRow。
  */
-export function calcRows(
-  items: InternalDescriptionsItem[],
-  column: number,
-): InternalDescriptionsItem[][] {
+export function calcRows(items: InternalDescriptionsItem[], column: number): InternalDescriptionsItem[][] {
   let rows: InternalDescriptionsItem[][] = [];
   let tmpRow: InternalDescriptionsItem[] = [];
   let count = 0;
@@ -166,10 +149,7 @@ export const DESCRIPTIONS_ITEM_NAME = 'VbenDescriptionsItem';
 
 function isItemVNode(node: VNode): boolean {
   const type = node.type as any;
-  return (
-    !!type &&
-    (type.__isDescriptionsItem === true || type.name === DESCRIPTIONS_ITEM_NAME)
-  );
+  return !!type && (type.__isDescriptionsItem === true || type.name === DESCRIPTIONS_ITEM_NAME);
 }
 
 function flattenVNodes(nodes: VNode[]): VNode[] {
@@ -194,14 +174,9 @@ export function parseItemsFromSlot(nodes: VNode[]): DescriptionsItemType[] {
     .map((node) => {
       const props = (node.props ?? {}) as Record<string, any>;
       const children = (node.children ?? {}) as Record<string, any>;
-      const labelSlot =
-        typeof children.label === 'function' ? children.label : undefined;
-      const contentDefaultSlot =
-        typeof children.default === 'function' ? children.default : undefined;
-      const contentSlot =
-        typeof children.content === 'function'
-          ? children.content
-          : contentDefaultSlot;
+      const labelSlot = typeof children.label === 'function' ? children.label : undefined;
+      const contentDefaultSlot = typeof children.default === 'function' ? children.default : undefined;
+      const contentSlot = typeof children.content === 'function' ? children.content : contentDefaultSlot;
       return {
         class: props.class,
         content: contentSlot ?? props.content,

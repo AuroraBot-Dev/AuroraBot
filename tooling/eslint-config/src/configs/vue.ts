@@ -10,8 +10,7 @@ export async function vue(): Promise<Linter.Config[]> {
   ] as const);
 
   const flatEssential = pluginVue.configs?.['flat/essential'] || [];
-  const flatStronglyRecommended =
-    pluginVue.configs?.['flat/strongly-recommended'] || [];
+  const flatStronglyRecommended = pluginVue.configs?.['flat/strongly-recommended'] || [];
   const flatRecommended = pluginVue.configs?.['flat/recommended'] || [];
 
   return [
@@ -74,12 +73,7 @@ export async function vue(): Promise<Linter.Config[]> {
         'vue/define-macros-order': [
           'error',
           {
-            order: [
-              'defineOptions',
-              'defineProps',
-              'defineEmits',
-              'defineSlots',
-            ],
+            order: ['defineOptions', 'defineProps', 'defineEmits', 'defineSlots'],
           },
         ],
         'vue/dot-location': ['error', 'property'],
@@ -110,12 +104,7 @@ export async function vue(): Promise<Linter.Config[]> {
         'vue/no-irregular-whitespace': 'error',
         'vue/no-loss-of-precision': 'error',
         'vue/no-reserved-component-names': 'off',
-        'vue/no-restricted-syntax': [
-          'error',
-          'DebuggerStatement',
-          'LabeledStatement',
-          'WithStatement',
-        ],
+        'vue/no-restricted-syntax': ['error', 'DebuggerStatement', 'LabeledStatement', 'WithStatement'],
         'vue/no-restricted-v-bind': ['error', '/^v-/'],
         'vue/no-sparse-arrays': 'error',
         'vue/no-unused-refs': 'error',

@@ -7,8 +7,5 @@ export function getMcpStatus() {
 }
 
 export function getMcpApp(packageName: string) {
-  return operationRequest<McpAppRecord>(
-    'GET',
-    `/mcp/${encodeURIComponent(packageName)}`,
-  );
+  return operationRequest<McpAppRecord>('GET', `/mcp/${encodeURIComponent(packageName)}`);
 }

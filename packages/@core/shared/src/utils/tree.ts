@@ -10,11 +10,7 @@ interface TreeConfigOptions {
  * @param options 作为子节点数组的可选属性名称。
  * @returns 所有节点中指定的值的数组
  */
-function traverseTreeValues<T, V>(
-  tree: T[],
-  getValue: (node: T) => V,
-  options?: TreeConfigOptions,
-): V[] {
+function traverseTreeValues<T, V>(tree: T[], getValue: (node: T) => V, options?: TreeConfigOptions): V[] {
   const result: V[] = [];
   const { childProps } = options || {
     childProps: 'children',
@@ -89,12 +85,7 @@ function mapTree<T, V extends Record<string, any>>(
   return tree.map((node) => {
     const mapperNode: Record<string, any> = mapper(node, parent as null | V);
     if (mapperNode[childProps]) {
-      mapperNode[childProps] = mapTree(
-        mapperNode[childProps],
-        mapper,
-        options,
-        mapperNode as V,
-      );
+      mapperNode[childProps] = mapTree(mapperNode[childProps], mapper, options, mapperNode as V);
     }
     return mapperNode as V;
   });

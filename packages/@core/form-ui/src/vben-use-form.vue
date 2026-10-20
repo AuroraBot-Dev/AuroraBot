@@ -9,17 +9,9 @@ import { get, isEqual } from '@vben-core/shared/utils';
 import { useDebounceFn } from '@vueuse/core';
 
 import FormActions from './components/form-actions.vue';
-import {
-  COMPONENT_BIND_EVENT_MAP,
-  COMPONENT_MAP,
-  DEFAULT_FORM_COMMON_CONFIG,
-} from './config';
+import { COMPONENT_BIND_EVENT_MAP, COMPONENT_MAP, DEFAULT_FORM_COMMON_CONFIG } from './config';
 import { Form } from './form-render';
-import {
-  provideComponentRefMap,
-  provideFormProps,
-  useFormInitial,
-} from './use-form-context';
+import { provideComponentRefMap, provideFormProps, useFormInitial } from './use-form-context';
 
 // 通过 extends 会导致热更新卡死，所以重复写了一遍
 interface Props extends VbenFormProps {
@@ -27,10 +19,7 @@ interface Props extends VbenFormProps {
 }
 
 const props = defineProps<Props>();
-defineSlots<
-  Record<string, ((props: Record<string, any>) => any) | undefined> &
-    VbenFormSlots<any, any, any>
->();
+defineSlots<Record<string, ((props: Record<string, any>) => any) | undefined> & VbenFormSlots<any, any, any>>();
 
 const formApi = props.formApi;
 if (!formApi) {
@@ -95,15 +84,10 @@ watch(values, (currentValues, previousValues) => {
   const fields = state?.value.schema?.map((item) => item.fieldName) ?? [];
   if (handleValuesChange && fields.length > 0) {
     const changedFields = fields.filter((field) => {
-      return !isEqual(
-        get(currentValues, field),
-        get(previousValues ?? {}, field),
-      );
+      return !isEqual(get(currentValues, field), get(previousValues ?? {}, field));
     });
     if (changedFields.length > 0) {
-      handleValuesChange(readonly(currentValues), changedFields, () =>
-        formApi.formatValues(currentValues),
-      );
+      handleValuesChange(readonly(currentValues), changedFields, () => formApi.formatValues(currentValues));
     }
   }
   if (submitOnChange) {
@@ -122,61 +106,27 @@ watch(values, (currentValues, previousValues) => {
     :form="form"
     :global-common-config="DEFAULT_FORM_COMMON_CONFIG"
   >
-    <template
-      v-for="slotName in delegatedSlots"
-      :key="slotName"
-      #[slotName]="slotProps"
-    >
-      <slot
-        :name="slotName"
-        v-bind="slotProps"
-        :form-api="formApi"
-        :values="form.values"
-      ></slot>
+    <template v-for="slotName in delegatedSlots" :key="slotName" #[slotName]="slotProps">
+      <slot :name="slotName" v-bind="slotProps" :form-api="formApi" :values="form.values"></slot>
     </template>
     <template #default="slotProps">
-      <slot
-        v-if="$slots.default"
-        v-bind="slotProps"
-        :form-api="formApi"
-        :values="form.values"
-      ></slot>
+      <slot v-if="$slots.default" v-bind="slotProps" :form-api="formApi" :values="form.values"></slot>
       <FormActions
         v-else-if="forward.showDefaultActions"
         :model-value="state?.collapsed"
         @update:model-value="handleUpdateCollapsed"
       >
         <template #reset-before="resetSlotProps">
-          <slot
-            name="reset-before"
-            v-bind="resetSlotProps"
-            :form-api="formApi"
-            :values="form.values"
-          ></slot>
+          <slot name="reset-before" v-bind="resetSlotProps" :form-api="formApi" :values="form.values"></slot>
         </template>
         <template #submit-before="submitSlotProps">
-          <slot
-            name="submit-before"
-            v-bind="submitSlotProps"
-            :form-api="formApi"
-            :values="form.values"
-          ></slot>
+          <slot name="submit-before" v-bind="submitSlotProps" :form-api="formApi" :values="form.values"></slot>
         </template>
         <template #expand-before="expandBeforeSlotProps">
-          <slot
-            name="expand-before"
-            v-bind="expandBeforeSlotProps"
-            :form-api="formApi"
-            :values="form.values"
-          ></slot>
+          <slot name="expand-before" v-bind="expandBeforeSlotProps" :form-api="formApi" :values="form.values"></slot>
         </template>
         <template #expand-after="expandAfterSlotProps">
-          <slot
-            name="expand-after"
-            v-bind="expandAfterSlotProps"
-            :form-api="formApi"
-            :values="form.values"
-          ></slot>
+          <slot name="expand-after" v-bind="expandAfterSlotProps" :form-api="formApi" :values="form.values"></slot>
         </template>
       </FormActions>
     </template>

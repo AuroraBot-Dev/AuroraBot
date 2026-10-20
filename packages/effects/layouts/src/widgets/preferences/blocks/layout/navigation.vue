@@ -23,17 +23,10 @@ const stylesItems: SelectOption[] = [
 </script>
 
 <template>
-  <ToggleItem
-    v-model="navigationStyleType"
-    :disabled="disabled"
-    :items="stylesItems"
-  >
+  <ToggleItem v-model="navigationStyleType" :disabled="disabled" :items="stylesItems">
     {{ $t('preferences.navigationMenu.style') }}
   </ToggleItem>
-  <SwitchItem
-    v-model="navigationSplit"
-    :disabled="disabledNavigationSplit || disabled"
-  >
+  <SwitchItem v-model="navigationSplit" :disabled="disabledNavigationSplit || disabled">
     {{ $t('preferences.navigationMenu.split') }}
     <template #tip>
       {{ $t('preferences.navigationMenu.splitTip') }}

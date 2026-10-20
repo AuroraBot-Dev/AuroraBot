@@ -136,28 +136,25 @@ describe('formApi', () => {
     }
 
     const setValues = vi.fn();
-    const codecFormApi = new FormApi<
-      FilterFormValues,
-      BaseFormComponentType,
-      Record<never, never>,
-      FilterSubmitValues
-    >({
-      codec: {
-        decode(values) {
-          return {
-            period: [values.startTime, values.endTime],
-            tags: values.tags.split(','),
-          };
-        },
-        encode(values) {
-          return {
-            endTime: values.period[1],
-            startTime: values.period[0],
-            tags: values.tags.join(','),
-          };
+    const codecFormApi = new FormApi<FilterFormValues, BaseFormComponentType, Record<never, never>, FilterSubmitValues>(
+      {
+        codec: {
+          decode(values) {
+            return {
+              period: [values.startTime, values.endTime],
+              tags: values.tags.split(','),
+            };
+          },
+          encode(values) {
+            return {
+              endTime: values.period[1],
+              startTime: values.period[0],
+              tags: values.tags.join(','),
+            };
+          },
         },
       },
-    });
+    );
     const formActions: any = {
       meta: {},
       setValues,
@@ -176,14 +173,8 @@ describe('formApi', () => {
       values: { endTime: 2, startTime: 1, tags: 'admin,user' },
     });
 
-    await codecFormApi.setSubmitValues(
-      { endTime: 4, startTime: 3, tags: 'editor' },
-      false,
-    );
-    expect(setValues).toHaveBeenCalledWith(
-      { period: [3, 4], tags: ['editor'] },
-      false,
-    );
+    await codecFormApi.setSubmitValues({ endTime: 4, startTime: 3, tags: 'editor' }, false);
+    expect(setValues).toHaveBeenCalledWith({ period: [3, 4], tags: ['editor'] }, false);
   });
 
   it('should isolate codec results from live form values', async () => {
@@ -246,9 +237,7 @@ describe('formApi', () => {
       '[Vben Form] Failed to encode initial values. Falling back to raw form values.',
       expect.objectContaining({ phase: 'encode' }),
     );
-    await expect(codecFormApi.getValues()).rejects.toBeInstanceOf(
-      FormCodecError,
-    );
+    await expect(codecFormApi.getValues()).rejects.toBeInstanceOf(FormCodecError);
   });
 
   it('should scan deprecated schema transforms once for unchanged state', async () => {
@@ -289,12 +278,7 @@ describe('formApi', () => {
             {
               component: 'text',
               fieldName: 'name',
-              valueFormat: (
-                value: any,
-                setValue: any,
-                _values: any,
-                ctx: any,
-              ) => {
+              valueFormat: (value: any, setValue: any, _values: any, ctx: any) => {
                 setValue('normalizedName', value?.trim());
                 setValue('$root.firstRow', ctx?.rowIndex);
               },
@@ -332,11 +316,7 @@ describe('formApi', () => {
 
     await formApi.mount(formActions, new Map());
     await formApi.setFieldValue('name', 'new value');
-    expect(setFieldValueMock).toHaveBeenCalledWith(
-      'name',
-      'new value',
-      undefined,
-    );
+    expect(setFieldValueMock).toHaveBeenCalledWith('name', 'new value', undefined);
   });
 
   it('should set only known fields without losing provided values', async () => {
@@ -404,10 +384,7 @@ describe('formApi', () => {
 
     const result = await formApi.submit();
     expect(formActions.submit).toHaveBeenCalled();
-    expect(handleSubmitMock).toHaveBeenCalledWith(
-      { name: 'test' },
-      { name: 'test' },
-    );
+    expect(handleSubmitMock).toHaveBeenCalledWith({ name: 'test' }, { name: 'test' });
     expect(result).toEqual({ name: 'test' });
   });
 
@@ -489,9 +466,7 @@ describe('formApi', () => {
       validate: vi.fn().mockResolvedValue({ errors, valid: false }),
       values: { name: '' },
     };
-    const scrollToFirstError = vi
-      .spyOn(formApi as any, 'scrollToFirstError')
-      .mockImplementation(() => {});
+    const scrollToFirstError = vi.spyOn(formApi as any, 'scrollToFirstError').mockImplementation(() => {});
 
     formApi.setState({ handleSubmit, scrollToFirstError: true });
     await formApi.mount(formActions, new Map());
@@ -551,23 +526,14 @@ describe('updateSchema', () => {
       },
     ]);
 
-    expect((instance.state?.schema?.[0] as any)?.children?.[0]?.label).toBe(
-      'Full Name',
-    );
-    expect((instance.state?.schema?.[0] as any)?.children?.[1]?.label).toBe(
-      'Phone',
-    );
+    expect((instance.state?.schema?.[0] as any)?.children?.[0]?.label).toBe('Full Name');
+    expect((instance.state?.schema?.[0] as any)?.children?.[1]?.label).toBe('Phone');
   });
 
   it('should log an error if fieldName is missing in some items', () => {
-    const newSchema: any[] = [
-      { component: 'textarea', fieldName: 'name' },
-      { component: 'number' },
-    ];
+    const newSchema: any[] = [{ component: 'textarea', fieldName: 'name' }, { component: 'number' }];
 
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     instance.updateSchema(newSchema);
 

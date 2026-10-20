@@ -36,14 +36,11 @@ export function useLayoutContentStyle() {
     };
   });
 
-  const debouncedCalcHeight = useDebounceFn(
-    (_entries: ResizeObserverEntry[]) => {
-      visibleDomRect.value = getElementVisibleRect(contentElement.value);
-      contentHeight.value = `${visibleDomRect.value.height}px`;
-      contentWidth.value = `${visibleDomRect.value.width}px`;
-    },
-    16,
-  );
+  const debouncedCalcHeight = useDebounceFn((_entries: ResizeObserverEntry[]) => {
+    visibleDomRect.value = getElementVisibleRect(contentElement.value);
+    contentHeight.value = `${visibleDomRect.value.height}px`;
+    contentWidth.value = `${visibleDomRect.value.width}px`;
+  }, 16);
 
   onMounted(() => {
     if (contentElement.value && !resizeObserver) {

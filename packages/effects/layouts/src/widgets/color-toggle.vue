@@ -2,11 +2,7 @@
 import type { BuiltinThemeType } from '@vben/types';
 
 import { Palette } from '@vben/icons';
-import {
-  COLOR_PRESETS,
-  preferences,
-  updatePreferences,
-} from '@vben/preferences';
+import { COLOR_PRESETS, preferences, updatePreferences } from '@vben/preferences';
 
 import { VbenIconButton } from '@vben-core/shadcn-ui';
 
@@ -26,14 +22,9 @@ function handleUpdate(colorPrimary: string, type: BuiltinThemeType) {
 
 <template>
   <div class="group relative flex items-center overflow-hidden">
-    <div
-      class="flex w-0 overflow-hidden transition-all duration-500 ease-out group-hover:w-60"
-    >
+    <div class="flex w-0 overflow-hidden transition-all duration-500 ease-out group-hover:w-60">
       <template v-for="preset in COLOR_PRESETS" :key="preset.color">
-        <VbenIconButton
-          class="flex-center shrink-0"
-          @click="handleUpdate(preset.color, preset.type)"
-        >
+        <VbenIconButton class="flex-center shrink-0" @click="handleUpdate(preset.color, preset.type)">
           <div
             :style="{ backgroundColor: preset.color }"
             class="relative flex-center size-5 rounded-full hover:scale-110"

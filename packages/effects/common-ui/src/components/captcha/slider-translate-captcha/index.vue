@@ -6,15 +6,7 @@ import type {
   SliderTranslateCaptchaProps,
 } from '../types';
 
-import {
-  computed,
-  onMounted,
-  reactive,
-  ref,
-  unref,
-  useTemplateRef,
-  watch,
-} from 'vue';
+import { computed, onMounted, reactive, ref, unref, useTemplateRef, watch } from 'vue';
 
 import { $t } from '@vben/locales';
 
@@ -73,9 +65,7 @@ function setLeft(val: string) {
 
 const verifyTip = computed(() => {
   return state.isPassing
-    ? $t('ui.captcha.sliderTranslateSuccessTip', [
-        ((state.endTime - state.startTime) / 1000).toFixed(1),
-      ])
+    ? $t('ui.captcha.sliderTranslateSuccessTip', [((state.endTime - state.startTime) / 1000).toFixed(1)])
     : $t('ui.captcha.sliderTranslateFailTip');
 });
 function handleStart() {
@@ -162,12 +152,7 @@ function initCanvas() {
     const pieceLength = squareLength + 2 * circleRadius + 3;
     const sx = state.pieceX;
     const sy = state.pieceY - 2 * circleRadius - 1;
-    const imageData = pieceCanvasCtx.getImageData(
-      sx,
-      sy,
-      pieceLength,
-      pieceLength,
-    );
+    const imageData = pieceCanvasCtx.getImageData(sx, sy, pieceLength, pieceLength);
     pieceCanvas.width = pieceLength;
     pieceCanvasCtx.putImageData(imageData, 0, sy);
     setLeft('0');
@@ -185,49 +170,22 @@ function draw(ctx1: CanvasRenderingContext2D, ctx2: CanvasRenderingContext2D) {
     squareLength + 2 * circleRadius,
     canvasWidth - (squareLength + 2 * circleRadius),
   );
-  state.pieceY = getRandomNumberByRange(
-    3 * circleRadius,
-    canvasHeight - (squareLength + 2 * circleRadius),
-  );
+  state.pieceY = getRandomNumberByRange(3 * circleRadius, canvasHeight - (squareLength + 2 * circleRadius));
   drawPiece(ctx1, state.pieceX, state.pieceY, canvasOpr.fill);
   drawPiece(ctx2, state.pieceX, state.pieceY, canvasOpr.clip);
 }
 
 // 绘制拼图切块
-function drawPiece(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  opr: CanvasOpr,
-) {
+function drawPiece(ctx: CanvasRenderingContext2D, x: number, y: number, opr: CanvasOpr) {
   const { squareLength, circleRadius } = props;
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.arc(
-    x + squareLength / 2,
-    y - circleRadius + 2,
-    circleRadius,
-    0.72 * PI,
-    2.26 * PI,
-  );
+  ctx.arc(x + squareLength / 2, y - circleRadius + 2, circleRadius, 0.72 * PI, 2.26 * PI);
   ctx.lineTo(x + squareLength, y);
-  ctx.arc(
-    x + squareLength + circleRadius - 2,
-    y + squareLength / 2,
-    circleRadius,
-    1.21 * PI,
-    2.78 * PI,
-  );
+  ctx.arc(x + squareLength + circleRadius - 2, y + squareLength / 2, circleRadius, 1.21 * PI, 2.78 * PI);
   ctx.lineTo(x + squareLength, y + squareLength);
   ctx.lineTo(x, y + squareLength);
-  ctx.arc(
-    x + circleRadius - 2,
-    y + squareLength / 2,
-    circleRadius + 0.4,
-    2.76 * PI,
-    1.24 * PI,
-    true,
-  );
+  ctx.arc(x + circleRadius - 2, y + squareLength / 2, circleRadius + 0.4, 2.76 * PI, 1.24 * PI, true);
   ctx.lineTo(x, y);
   ctx.lineWidth = 2;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
@@ -260,15 +218,8 @@ onMounted(() => {
 
 <template>
   <div class="relative flex flex-col items-center">
-    <div
-      class="relative flex cursor-pointer overflow-hidden border border-border shadow-md"
-    >
-      <canvas
-        ref="puzzleCanvasRef"
-        :width="canvasWidth"
-        :height="canvasHeight"
-        @click="resume"
-      ></canvas>
+    <div class="relative flex cursor-pointer overflow-hidden border border-border shadow-md">
+      <canvas ref="puzzleCanvasRef" :width="canvasWidth" :height="canvasHeight" @click="resume"></canvas>
       <canvas
         ref="pieceCanvasRef"
         :width="canvasWidth"
@@ -277,9 +228,7 @@ onMounted(() => {
         class="absolute"
         @click="resume"
       ></canvas>
-      <div
-        class="absolute bottom-3 left-0 z-10 block h-15 w-full text-center text-xs leading-[30px] text-white"
-      >
+      <div class="absolute bottom-3 left-0 z-10 block h-15 w-full text-center text-xs leading-[30px] text-white">
         <div
           v-if="state.showTip"
           :class="{

@@ -1,13 +1,12 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
 
-const { animationDuration = 2, animationIterationCount = 'infinite' } =
-  defineProps<{
-    // 动画持续时间，单位秒
-    animationDuration?: number;
-    // 动画是否只执行一次
-    animationIterationCount?: 'infinite' | number;
-  }>();
+const { animationDuration = 2, animationIterationCount = 'infinite' } = defineProps<{
+  // 动画持续时间，单位秒
+  animationDuration?: number;
+  // 动画是否只执行一次
+  animationIterationCount?: 'infinite' | number;
+}>();
 
 const style = computed(() => {
   return {
@@ -23,8 +22,7 @@ const style = computed(() => {
 <style>
 .vben-spine-text {
   background:
-    radial-gradient(circle at center, rgb(255 255 255 / 80%), #f000) -200% 50% /
-      200% 100% no-repeat,
+    radial-gradient(circle at center, rgb(255 255 255 / 80%), #f000) -200% 50% / 200% 100% no-repeat,
     #000;
 
   /* animation: shine 3s linear infinite; */
@@ -32,8 +30,7 @@ const style = computed(() => {
 
 .dark .vben-spine-text {
   background:
-    radial-gradient(circle at center, rgb(24 24 26 / 80%), transparent) -200%
-      50% / 200% 100% no-repeat,
+    radial-gradient(circle at center, rgb(24 24 26 / 80%), transparent) -200% 50% / 200% 100% no-repeat,
     #f4f4f4;
 }
 

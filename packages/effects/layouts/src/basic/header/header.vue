@@ -8,11 +8,7 @@ import { preferences, usePreferences } from '@vben/preferences';
 import { useAccessStore } from '@vben/stores';
 
 import { useVbenModal } from '@vben-core/popup-ui';
-import {
-  VbenFullScreen,
-  VbenIconButton,
-  VbenTooltip,
-} from '@vben-core/shadcn-ui';
+import { VbenFullScreen, VbenIconButton, VbenTooltip } from '@vben-core/shadcn-ui';
 
 import { useMagicKeys, whenever } from '@vueuse/core';
 
@@ -60,24 +56,16 @@ const emit = defineEmits<{
 const REFERENCE_VALUE = 100;
 
 const accessStore = useAccessStore();
-const {
-  globalLockScreenShortcutKey,
-  globalLogoutShortcutKey,
-  globalSearchShortcutKey,
-  preferencesButtonPosition,
-} = usePreferences();
+const { globalLockScreenShortcutKey, globalLogoutShortcutKey, globalSearchShortcutKey, preferencesButtonPosition } =
+  usePreferences();
 const slots = useSlots();
 const { refresh } = useRefresh();
 
 const showLockInHeader = computed(
-  () =>
-    preferences.widget.lockScreen &&
-    preferences.widget.lockScreenButtonPosition === 'header',
+  () => preferences.widget.lockScreen && preferences.widget.lockScreenButtonPosition === 'header',
 );
 
-const showLogoutInHeader = computed(
-  () => preferences.widget.logoutButtonPosition === 'header',
-);
+const showLogoutInHeader = computed(() => preferences.widget.logoutButtonPosition === 'header');
 
 const enableLockScreenShortcutKey = computed(() => {
   return showLockInHeader.value && globalLockScreenShortcutKey.value;
@@ -148,9 +136,7 @@ const rightSlots = computed(() => {
   // 按 widget.order 顺序遍历，检查每个部件是否应在 header 中显示
   const widgetChecks: Record<string, { slotName: string; visible: boolean }> = {
     globalSearch: {
-      visible:
-        preferences.widget.globalSearch &&
-        preferences.widget.globalSearchButtonPosition === 'header',
+      visible: preferences.widget.globalSearch && preferences.widget.globalSearchButtonPosition === 'header',
       slotName: 'global-search',
     },
     preferences: {
@@ -158,45 +144,31 @@ const rightSlots = computed(() => {
       slotName: 'preferences',
     },
     themeToggle: {
-      visible:
-        preferences.widget.themeToggle &&
-        preferences.widget.themeToggleButtonPosition === 'header',
+      visible: preferences.widget.themeToggle && preferences.widget.themeToggleButtonPosition === 'header',
       slotName: 'theme-toggle',
     },
     languageToggle: {
-      visible:
-        preferences.widget.languageToggle &&
-        preferences.widget.languageToggleButtonPosition === 'header',
+      visible: preferences.widget.languageToggle && preferences.widget.languageToggleButtonPosition === 'header',
       slotName: 'language-toggle',
     },
     timezone: {
-      visible:
-        preferences.widget.timezone &&
-        preferences.widget.timezoneButtonPosition === 'header',
+      visible: preferences.widget.timezone && preferences.widget.timezoneButtonPosition === 'header',
       slotName: 'timezone',
     },
     fullscreen: {
-      visible:
-        preferences.widget.fullscreen &&
-        preferences.widget.fullscreenButtonPosition === 'header',
+      visible: preferences.widget.fullscreen && preferences.widget.fullscreenButtonPosition === 'header',
       slotName: 'fullscreen',
     },
     refresh: {
-      visible:
-        preferences.widget.refresh &&
-        preferences.widget.refreshButtonPosition === 'header',
+      visible: preferences.widget.refresh && preferences.widget.refreshButtonPosition === 'header',
       slotName: 'refresh',
     },
     notification: {
-      visible:
-        preferences.widget.notification &&
-        preferences.widget.notificationButtonPosition === 'header',
+      visible: preferences.widget.notification && preferences.widget.notificationButtonPosition === 'header',
       slotName: 'notification',
     },
     lockScreenBtn: {
-      visible:
-        preferences.widget.lockScreen &&
-        preferences.widget.lockScreenButtonPosition === 'header',
+      visible: preferences.widget.lockScreen && preferences.widget.lockScreenButtonPosition === 'header',
       slotName: 'lock-screen-btn',
     },
     logoutBtn: {
@@ -248,8 +220,7 @@ const leftSlots = computed(() => {
  * @param list 列表
  */
 function nextIndex(list: Array<SlotItem>) {
-  const index =
-    list.length > 0 ? Math.max(...list.map((item) => item.index)) : 0;
+  const index = list.length > 0 ? Math.max(...list.map((item) => item.index)) : 0;
   return index + 1;
 }
 
@@ -259,12 +230,7 @@ function clearPreferencesAndLogout() {
 </script>
 
 <template>
-  <LockModal
-    v-if="showLockInHeader"
-    :avatar="avatar"
-    :text="text"
-    @submit="handleSubmitLock"
-  />
+  <LockModal v-if="showLockInHeader" :avatar="avatar" :text="text" @submit="handleSubmitLock" />
 
   <LogoutModal
     v-if="showLogoutInHeader"
@@ -280,10 +246,7 @@ function clearPreferencesAndLogout() {
     {{ $t('ui.widgets.logoutTip') }}
   </LogoutModal>
 
-  <template
-    v-for="slot in leftSlots.filter((item) => item.index < REFERENCE_VALUE)"
-    :key="slot.name"
-  >
+  <template v-for="slot in leftSlots.filter((item) => item.index < REFERENCE_VALUE)" :key="slot.name">
     <slot :name="slot.name">
       <template v-if="slot.name === 'refresh'">
         <VbenIconButton class="my-0 mr-1 rounded-md" @click="refresh">
@@ -295,16 +258,10 @@ function clearPreferencesAndLogout() {
   <div class="flex-center hidden lg:block">
     <slot name="breadcrumb"></slot>
   </div>
-  <template
-    v-for="slot in leftSlots.filter((item) => item.index > REFERENCE_VALUE)"
-    :key="slot.name"
-  >
+  <template v-for="slot in leftSlots.filter((item) => item.index > REFERENCE_VALUE)" :key="slot.name">
     <slot :name="slot.name"></slot>
   </template>
-  <div
-    :class="`menu-align-${preferences.header.menuAlign}`"
-    class="flex h-full min-w-0 flex-1 items-center"
-  >
+  <div :class="`menu-align-${preferences.header.menuAlign}`" class="flex h-full min-w-0 flex-1 items-center">
     <slot name="menu"></slot>
   </div>
   <div class="flex h-full min-w-0 shrink-0 items-center">
@@ -321,10 +278,7 @@ function clearPreferencesAndLogout() {
         <template v-else-if="slot.name === 'preferences'">
           <VbenTooltip side="bottom">
             <template #trigger>
-              <PreferencesButton
-                class="mr-1"
-                @clear-preferences-and-logout="clearPreferencesAndLogout"
-              />
+              <PreferencesButton class="mr-1" @clear-preferences-and-logout="clearPreferencesAndLogout" />
             </template>
             {{ $t('preferences.title') }}
           </VbenTooltip>
@@ -346,29 +300,18 @@ function clearPreferencesAndLogout() {
           </VbenTooltip>
         </template>
         <template v-else-if="slot.name === 'fullscreen'">
-          <VbenFullScreen
-            class="mr-1"
-            :tooltip="$t('preferences.widget.fullscreen')"
-          />
+          <VbenFullScreen class="mr-1" :tooltip="$t('preferences.widget.fullscreen')" />
         </template>
         <template v-else-if="slot.name === 'timezone'">
           <TimezoneButton class="mt-0.5 mr-1" />
         </template>
         <template v-else-if="slot.name === 'lock-screen-btn'">
-          <VbenIconButton
-            class="mr-1"
-            :tooltip="$t('ui.widgets.lockScreen.title')"
-            @click="handleOpenLock"
-          >
+          <VbenIconButton class="mr-1" :tooltip="$t('ui.widgets.lockScreen.title')" @click="handleOpenLock">
             <LockKeyhole class="size-4" />
           </VbenIconButton>
         </template>
         <template v-else-if="slot.name === 'logout-btn'">
-          <VbenIconButton
-            class="mr-1"
-            :tooltip="$t('common.logout')"
-            @click="handleLogout"
-          >
+          <VbenIconButton class="mr-1" :tooltip="$t('common.logout')" @click="handleLogout">
             <LogOut class="size-4" />
           </VbenIconButton>
         </template>
@@ -381,11 +324,7 @@ function clearPreferencesAndLogout() {
           </VbenTooltip>
         </template>
         <template v-else-if="slot.name === 'refresh'">
-          <VbenIconButton
-            class="my-0 mr-1 rounded-md"
-            :tooltip="$t('preferences.widget.refresh')"
-            @click="refresh"
-          >
+          <VbenIconButton class="my-0 mr-1 rounded-md" :tooltip="$t('preferences.widget.refresh')" @click="refresh">
             <RotateCw class="size-4" />
           </VbenIconButton>
         </template>

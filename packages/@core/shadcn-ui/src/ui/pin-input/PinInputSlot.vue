@@ -8,9 +8,7 @@ import { cn } from '@vben-core/shared/utils';
 import { reactiveOmit } from '@vueuse/core';
 import { PinInputInput, useForwardProps } from 'reka-ui';
 
-const props = defineProps<
-  PinInputInputProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<PinInputInputProps & { class?: HTMLAttributes['class'] }>();
 
 const delegatedProps = reactiveOmit(props, 'class');
 

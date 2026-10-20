@@ -41,9 +41,7 @@ async function getShimsUrl(provide: string) {
 
 let generator: Generator;
 
-async function viteImportMapPlugin(
-  pluginOptions?: pluginOptions,
-): Promise<Plugin[]> {
+async function viteImportMapPlugin(pluginOptions?: pluginOptions): Promise<Plugin[]> {
   const { importmap } = pluginOptions || {};
 
   let isSSR = false;
@@ -84,11 +82,7 @@ async function viteImportMapPlugin(
   });
   const inputMapImports = Object.keys(imports);
 
-  const allDepNames: string[] = [
-    ...(importmap?.map((item) => item.name) || []),
-    ...inputMapImports,
-    ...inputMapScopes,
-  ];
+  const allDepNames: string[] = [...(importmap?.map((item) => item.name) || []), ...inputMapImports, ...inputMapScopes];
   const depNames = new Set<string>(allDepNames);
 
   const installDeps = importmap?.map((item) => ({
@@ -124,9 +118,7 @@ async function viteImportMapPlugin(
         }
         try {
           installed = true;
-          await Promise.allSettled(
-            (installDeps || []).map((dep) => generator.install(dep)),
-          );
+          await Promise.allSettled((installDeps || []).map((dep) => generator.install(dep)));
         } catch (error: any) {
           installError = error;
           installed = false;
@@ -156,14 +148,9 @@ async function viteImportMapPlugin(
             return html;
           }
 
-          const esModuleShimsSrc = await getShimsUrl(
-            options.defaultProvider || DEFAULT_PROVIDER,
-          );
+          const esModuleShimsSrc = await getShimsUrl(options.defaultProvider || DEFAULT_PROVIDER);
 
-          const resultHtml = await injectShimsToHtml(
-            html,
-            esModuleShimsSrc || '',
-          );
+          const resultHtml = await injectShimsToHtml(html, esModuleShimsSrc || '');
           html = await minify(resultHtml || html, {
             collapseWhitespace: true,
             minifyCSS: true,

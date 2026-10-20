@@ -5,11 +5,7 @@ import type { FormCommonConfig, FormSchema } from '../types';
 import { computed } from 'vue';
 
 import { Plus, X } from '@vben-core/icons';
-import {
-  VbenButton,
-  VbenIconButton,
-  VbenRenderContent,
-} from '@vben-core/shadcn-ui';
+import { VbenButton, VbenIconButton, VbenRenderContent } from '@vben-core/shadcn-ui';
 import { cn, get, set } from '@vben-core/shared/utils';
 
 import { injectRenderFormProps } from '../form-render/context';
@@ -75,18 +71,12 @@ const arrayLength = formActions.useSelector((state) => {
   const value = get(state.values, props.name);
   return Array.isArray(value) ? value.length : 0;
 });
-const rowIndexes = computed(() =>
-  Array.from({ length: arrayLength.value }, (_, index) => index),
-);
+const rowIndexes = computed(() => Array.from({ length: arrayLength.value }, (_, index) => index));
 
 const canAdd = computed(() => arrayLength.value < props.max);
 const canRemove = computed(() => arrayLength.value > props.min);
 const gridStyle = computed(() => {
-  const columns = [
-    ...(props.showIndex ? ['3rem'] : []),
-    ...props.schema.map(() => 'minmax(0, 1fr)'),
-    '4rem',
-  ];
+  const columns = [...(props.showIndex ? ['3rem'] : []), ...props.schema.map(() => 'minmax(0, 1fr)'), '4rem'];
   return {
     gridTemplateColumns: columns.join(' '),
   };
@@ -136,24 +126,14 @@ function rowSchemas(index: number) {
   );
 }
 
-const normalizedRowSchemas = computed(() =>
-  Array.from({ length: arrayLength.value }, (_, index) => rowSchemas(index)),
-);
+const normalizedRowSchemas = computed(() => Array.from({ length: arrayLength.value }, (_, index) => rowSchemas(index)));
 </script>
 
 <template>
   <div :class="cn('w-full', $attrs.class as string)">
     <div class="border-border/70 overflow-hidden rounded-md border">
-      <div
-        class="bg-muted/30 border-border hidden border-b px-2 sm:grid"
-        :style="gridStyle"
-      >
-        <div
-          v-if="showIndex"
-          class="text-muted-foreground px-2 py-2 text-left text-sm font-normal"
-        >
-          #
-        </div>
+      <div class="bg-muted/30 border-border hidden border-b px-2 sm:grid" :style="gridStyle">
+        <div v-if="showIndex" class="text-muted-foreground px-2 py-2 text-left text-sm font-normal">#</div>
         <div
           v-for="col in schema"
           :key="col.fieldName"
@@ -161,9 +141,7 @@ const normalizedRowSchemas = computed(() =>
         >
           <VbenRenderContent :content="col.label" />
         </div>
-        <div
-          class="text-muted-foreground px-2 py-2 text-left text-sm font-normal"
-        >
+        <div class="text-muted-foreground px-2 py-2 text-left text-sm font-normal">
           {{ actionText }}
         </div>
       </div>
@@ -174,28 +152,17 @@ const normalizedRowSchemas = computed(() =>
         class="border-border/60 border-b p-3 last:border-b-0 sm:grid sm:p-0"
         :style="gridStyle"
       >
-        <div
-          v-if="showIndex"
-          class="text-muted-foreground mb-2 text-sm sm:mb-0 sm:px-4 sm:py-3"
-        >
+        <div v-if="showIndex" class="text-muted-foreground mb-2 text-sm sm:mb-0 sm:px-4 sm:py-3">
           <span class="sm:hidden">#</span>
           {{ index + 1 }}
         </div>
 
-        <template
-          v-for="(childSchema, childIndex) in normalizedRowSchemas[index]"
-          :key="childSchema.fieldName"
-        >
+        <template v-for="(childSchema, childIndex) in normalizedRowSchemas[index]" :key="childSchema.fieldName">
           <div class="min-w-0 py-2 sm:px-2">
-            <div
-              class="text-muted-foreground mb-1 text-xs font-medium sm:hidden"
-            >
+            <div class="text-muted-foreground mb-1 text-xs font-medium sm:hidden">
               <VbenRenderContent :content="schema?.[childIndex]?.label" />
             </div>
-            <FormField
-              v-bind="childSchema"
-              :class="childSchema.formItemClass"
-            />
+            <FormField v-bind="childSchema" :class="childSchema.formItemClass" />
           </div>
         </template>
 
@@ -211,10 +178,7 @@ const normalizedRowSchemas = computed(() =>
         </div>
       </div>
 
-      <div
-        v-if="arrayLength === 0"
-        class="text-muted-foreground py-6 text-center text-sm"
-      >
+      <div v-if="arrayLength === 0" class="text-muted-foreground py-6 text-center text-sm">
         {{ emptyText }}
       </div>
     </div>

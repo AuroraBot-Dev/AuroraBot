@@ -31,14 +31,15 @@ const operationEntries: Array<readonly [string, string, string]> = [
   ['/mcp/{package}', '/extensions/apps', 'MCP App 详情'],
 ];
 
-export const operationCoverage: OperationCoverage[] = operationEntries.map(
-  ([path, route, feature]) => ({ feature, method: 'GET', path, route }),
-);
+export const operationCoverage: OperationCoverage[] = operationEntries.map(([path, route, feature]) => ({
+  feature,
+  method: 'GET',
+  path,
+  route,
+}));
 
 export function operationKey(method: string, path: string) {
   return `${method.toUpperCase()} ${path}`;
 }
 
-export const operationCoverageKeys = new Set(
-  operationCoverage.map(({ method, path }) => operationKey(method, path)),
-);
+export const operationCoverageKeys = new Set(operationCoverage.map(({ method, path }) => operationKey(method, path)));

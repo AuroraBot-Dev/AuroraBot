@@ -1,18 +1,7 @@
 <template>
-  <svg
-    height="41"
-    viewBox="0 0 64 41"
-    width="64"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <svg height="41" viewBox="0 0 64 41" width="64" xmlns="http://www.w3.org/2000/svg">
     <g fill="none" fill-rule="evenodd" transform="translate(0 1)">
-      <ellipse
-        cx="32"
-        cy="33"
-        fill="hsl(var(--background-deep))"
-        rx="32"
-        ry="7"
-      />
+      <ellipse cx="32" cy="33" fill="hsl(var(--background-deep))" rx="32" ry="7" />
       <g fill-rule="nonzero" stroke="hsl(var(--heavy))">
         <path
           d="M55 12.76L44.854 1.258C44.367.474 43.656 0 42.907 0H21.093c-.749 0-1.46.474-1.947 1.257L9 12.761V22h46v-9.24z"

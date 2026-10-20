@@ -6,12 +6,7 @@ import { useContentMaximize, useTabs } from '@vben/hooks';
 import { preferences } from '@vben/preferences';
 import { useTabbarStore } from '@vben/stores';
 
-import {
-  TabsToolMore,
-  TabsToolRefresh,
-  TabsToolScreen,
-  TabsView,
-} from '@vben-core/tabs-ui';
+import { TabsToolMore, TabsToolRefresh, TabsToolScreen, TabsView } from '@vben-core/tabs-ui';
 
 import { useTabbar } from './use-tabbar';
 
@@ -26,13 +21,7 @@ const tabbarStore = useTabbarStore();
 const { contentIsMaximize, toggleMaximize } = useContentMaximize();
 const { refreshTab, unpinTab } = useTabs();
 
-const {
-  createContextMenus,
-  currentActive,
-  currentTabs,
-  handleClick,
-  handleClose,
-} = useTabbar();
+const { createContextMenus, currentActive, currentTabs, handleClick, handleClose } = useTabbar();
 
 const menus = computed(() => {
   const tab = tabbarStore.getTabByKey(currentActive.value);
@@ -70,10 +59,7 @@ if (!preferences.tabbar.persist) {
   />
   <div class="flex-center h-full">
     <TabsToolMore v-if="preferences.tabbar.showMore" :menus="menus" />
-    <TabsToolRefresh
-      v-if="preferences.tabbar.showRefresh"
-      @refresh="refreshTab"
-    />
+    <TabsToolRefresh v-if="preferences.tabbar.showRefresh" @refresh="refreshTab" />
     <TabsToolScreen
       v-if="preferences.tabbar.showMaximize"
       :screen="contentIsMaximize"

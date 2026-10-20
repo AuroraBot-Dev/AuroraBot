@@ -18,9 +18,7 @@ type ChartOption = Parameters<typeof renderEcharts>[0];
 
 const treeData = computed(() => {
   const counts = new Map<string, number>();
-  props.trees.forEach((tree) =>
-    counts.set(tree.status, (counts.get(tree.status) ?? 0) + 1),
-  );
+  props.trees.forEach((tree) => counts.set(tree.status, (counts.get(tree.status) ?? 0) + 1));
   return [...counts].map(([name, value]) => ({ name, value }));
 });
 const memoryData = computed(() =>
@@ -37,23 +35,15 @@ function options(): ChartOption {
       color: ['#1677ff', '#52c41a', '#ff4d4f'],
       legend: { bottom: 0, textStyle: { color: '#64748b' } },
       series: [{ data: values, radius: ['42%', '68%'], type: 'pie' }],
-      title:
-        values.length > 0
-          ? undefined
-          : { left: 'center', text: '暂无 Tree', top: 'middle' },
+      title: values.length > 0 ? undefined : { left: 'center', text: '暂无 Tree', top: 'middle' },
       tooltip: { trigger: 'item' },
     };
   }
   return {
     color: ['#13c2c2'],
     grid: { bottom: 50, containLabel: true, left: 15, right: 25, top: 20 },
-    series: [
-      { barMaxWidth: 30, data: values.map((item) => item.value), type: 'bar' },
-    ],
-    title:
-      values.length > 0
-        ? undefined
-        : { left: 'center', text: '暂无 Memory scope', top: 'middle' },
+    series: [{ barMaxWidth: 30, data: values.map((item) => item.value), type: 'bar' }],
+    title: values.length > 0 ? undefined : { left: 'center', text: '暂无 Memory scope', top: 'middle' },
     tooltip: { trigger: 'axis' },
     xAxis: {
       axisLabel: { color: '#64748b', interval: 0, rotate: 20 },

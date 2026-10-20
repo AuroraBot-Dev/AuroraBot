@@ -5,14 +5,7 @@ const props = withDefaults(defineProps<{ password?: string }>(), {
   password: '',
 });
 
-const strengthList: string[] = [
-  '',
-  '#e74242',
-  '#ED6F6F',
-  '#EFBD47',
-  '#55D18780',
-  '#55D187',
-];
+const strengthList: string[] = ['', '#e74242', '#ED6F6F', '#EFBD47', '#55D18780', '#55D187'];
 
 const currentStrength = computed(() => {
   return checkPasswordStrength(props.password);
@@ -50,9 +43,7 @@ function checkPasswordStrength(password: string) {
 <template>
   <div class="relative mt-2 flex items-center justify-between">
     <template v-for="index in 5" :key="index">
-      <div
-        class="bg-heavy dark:bg-input-background relative mr-1 h-1.5 w-1/5 rounded-sm last:mr-0"
-      >
+      <div class="bg-heavy dark:bg-input-background relative mr-1 h-1.5 w-1/5 rounded-sm last:mr-0">
         <span
           :style="{
             backgroundColor: currentColor,

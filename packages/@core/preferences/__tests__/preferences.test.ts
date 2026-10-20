@@ -5,9 +5,7 @@ import { isDarkTheme } from '../src/update-css-variables';
 
 describe('preferences', () => {
   let PreferenceManager: typeof import('../src/preferences').PreferenceManager;
-  let preferenceManager: InstanceType<
-    typeof import('../src/preferences').PreferenceManager
-  >;
+  let preferenceManager: InstanceType<typeof import('../src/preferences').PreferenceManager>;
 
   // 模拟 window.matchMedia 方法
   vi.stubGlobal(
@@ -169,9 +167,7 @@ describe('preferences', () => {
       navigation: { styleType: 'flat' },
     } as any);
 
-    expect(preferenceManager.getPreferences().navigation.styleType).toBe(
-      'flat',
-    );
+    expect(preferenceManager.getPreferences().navigation.styleType).toBe('flat');
   });
 
   it('resets preferences to default correctly', async () => {
@@ -317,10 +313,9 @@ describe('preferences', () => {
       namespace: 'custom-readonly',
     });
 
-    const initialCustomPreferences =
-      preferenceManager.getInitialCustomPreferences<{
-        pageSize: number;
-      }>() as { pageSize: number };
+    const initialCustomPreferences = preferenceManager.getInitialCustomPreferences<{
+      pageSize: number;
+    }>() as { pageSize: number };
     const preferencesExtension = preferenceManager.getPreferencesExtension<{
       pageSize: number;
     }>() as {
@@ -419,9 +414,7 @@ describe('preferences', () => {
       unknownField: 'value',
     } as any);
 
-    expect(preferenceManager.getCustomPreferences()).toEqual(
-      originalCustomPreferences,
-    );
+    expect(preferenceManager.getCustomPreferences()).toEqual(originalCustomPreferences);
   });
 
   it('enforces custom number field min max and step constraints', async () => {
@@ -539,8 +532,6 @@ describe('isDarkTheme', () => {
     }));
 
     expect(isDarkTheme('auto')).toBe(true);
-    expect(window.matchMedia).toHaveBeenCalledWith(
-      '(prefers-color-scheme: dark)',
-    );
+    expect(window.matchMedia).toHaveBeenCalledWith('(prefers-color-scheme: dark)');
   });
 });

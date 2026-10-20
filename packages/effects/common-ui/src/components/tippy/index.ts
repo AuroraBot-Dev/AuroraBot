@@ -20,13 +20,7 @@ import 'tippy.js/animations/perspective.css';
 const { isDark } = usePreferences();
 export type TippyProps = Partial<
   Props & {
-    animation?:
-      | 'fade'
-      | 'perspective'
-      | 'scale'
-      | 'shift-away'
-      | 'shift-toward'
-      | boolean;
+    animation?: 'fade' | 'perspective' | 'scale' | 'shift-away' | 'shift-toward' | boolean;
     theme?: 'auto' | 'dark' | 'light';
   }
 >;

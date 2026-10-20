@@ -143,23 +143,12 @@ function sortCspellJson(): Linter.Config {
 
 function sortTsconfig(): Linter.Config {
   return {
-    files: [
-      '**/tsconfig.json',
-      '**/tsconfig.*.json',
-      'tooling/tsconfig/*.json',
-    ],
+    files: ['**/tsconfig.json', '**/tsconfig.*.json', 'tooling/tsconfig/*.json'],
     rules: {
       'jsonc/sort-keys': [
         'error',
         {
-          order: [
-            'extends',
-            'compilerOptions',
-            'references',
-            'files',
-            'include',
-            'exclude',
-          ],
+          order: ['extends', 'compilerOptions', 'references', 'files', 'include', 'exclude'],
           pathPattern: '^$',
         },
         {

@@ -17,12 +17,7 @@ export function useSidebarDrag() {
   let cleanup: (() => void) | null = null;
   let dragOverlay: HTMLElement | null = null;
 
-  const startDrag = (
-    e: MouseEvent,
-    options: DragOptions,
-    elements: DragElements,
-    onDrag: DragCallback,
-  ) => {
+  const startDrag = (e: MouseEvent, options: DragOptions, elements: DragElements, onDrag: DragCallback) => {
     const { min, max } = options;
     const { dragBar, target } = elements;
 
@@ -75,8 +70,7 @@ export function useSidebarDrag() {
 
       const newLeft = startLeft + (currentWidth - startWidth);
 
-      if (dragOverlay)
-        dragOverlay.style.cursor = isOutOfBounds ? 'not-allowed' : 'col-resize';
+      if (dragOverlay) dragOverlay.style.cursor = isOutOfBounds ? 'not-allowed' : 'col-resize';
 
       dragBar.style.left = `${newLeft}px`;
 

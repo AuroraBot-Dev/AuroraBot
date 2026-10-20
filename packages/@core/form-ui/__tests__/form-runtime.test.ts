@@ -75,10 +75,7 @@ describe('form runtime', () => {
   });
 
   it('preserves empty string field updates', async () => {
-    const { form, wrapper } = mountRuntime(
-      { name: 'initial' },
-      async () => undefined,
-    );
+    const { form, wrapper } = mountRuntime({ name: 'initial' }, async () => undefined);
     expect(form).toBeDefined();
     if (!form) return;
 

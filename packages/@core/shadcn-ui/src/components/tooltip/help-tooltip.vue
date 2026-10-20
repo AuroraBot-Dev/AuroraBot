@@ -17,12 +17,7 @@ defineProps<{ triggerClass?: string }>();
     <template #trigger>
       <slot name="trigger">
         <CircleHelp
-          :class="
-            cn(
-              'text-foreground/80 hover:text-foreground inline-flex size-5 cursor-pointer',
-              triggerClass,
-            )
-          "
+          :class="cn('text-foreground/80 hover:text-foreground inline-flex size-5 cursor-pointer', triggerClass)"
         />
       </slot>
     </template>

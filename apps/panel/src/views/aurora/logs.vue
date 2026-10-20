@@ -17,10 +17,7 @@ let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const logText = computed(() =>
   commits.value
-    .map(
-      (commit) =>
-        `${commit.occurred_at} [${commit.kind}] ${commit.source} ${commit.summary} (${commit.commit_id})`,
-    )
+    .map((commit) => `${commit.occurred_at} [${commit.kind}] ${commit.source} ${commit.summary} (${commit.commit_id})`)
     .join('\n'),
 );
 
@@ -60,13 +57,7 @@ onBeforeUnmount(() => {
 <template>
   <Page>
     <div ref="logBody" class="log-body">
-      <NInput
-        class="log-textarea"
-        placeholder="尚无世界事件。"
-        readonly
-        type="textarea"
-        :value="logText"
-      />
+      <NInput class="log-textarea" placeholder="尚无世界事件。" readonly type="textarea" :value="logText" />
     </div>
   </Page>
 </template>

@@ -19,9 +19,7 @@ const appDynamicTitle = defineModel<boolean>('appDynamicTitle');
 const appWatermark = defineModel<boolean>('appWatermark');
 const appWatermarkContent = defineModel<string>('appWatermarkContent');
 const appEnableCheckUpdates = defineModel<boolean>('appEnableCheckUpdates');
-const appEnableCopyPreferences = defineModel<boolean>(
-  'appEnableCopyPreferences',
-);
+const appEnableCopyPreferences = defineModel<boolean>('appEnableCopyPreferences');
 const timezoneStore = useTimezoneStore();
 
 const timezoneOptionsRef = ref<
@@ -61,11 +59,7 @@ onMounted(async () => {
   >
     {{ $t('preferences.watermark') }}
   </SwitchItem>
-  <InputItem
-    v-if="appWatermark"
-    v-model="appWatermarkContent"
-    :placeholder="$t('preferences.watermarkContent')"
-  >
+  <InputItem v-if="appWatermark" v-model="appWatermarkContent" :placeholder="$t('preferences.watermarkContent')">
     {{ $t('preferences.watermarkContent') }}
   </InputItem>
   <SwitchItem v-model="appEnableCheckUpdates">

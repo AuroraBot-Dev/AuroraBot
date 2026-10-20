@@ -19,10 +19,6 @@ withDefaults(defineProps<Props>(), {
       class="absolute inline-flex size-full animate-ping rounded-full opacity-75"
     >
     </span>
-    <span
-      :class="dotClass"
-      :style="dotStyle"
-      class="relative inline-flex size-1.5 rounded-full"
-    ></span>
+    <span :class="dotClass" :style="dotStyle" class="relative inline-flex size-1.5 rounded-full"></span>
   </span>
 </template>

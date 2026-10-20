@@ -8,9 +8,7 @@ import { join } from 'node:path';
 
 import { ZipArchive } from 'archiver';
 
-export const viteArchiverPlugin = (
-  options: ArchiverPluginOptions = {},
-): PluginOption => {
+export const viteArchiverPlugin = (options: ArchiverPluginOptions = {}): PluginOption => {
   return {
     apply: 'build',
     closeBundle: {
@@ -43,10 +41,7 @@ export const viteArchiverPlugin = (
   };
 };
 
-async function zipFolder(
-  folderPath: string,
-  outputPath: string,
-): Promise<void> {
+async function zipFolder(folderPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outputPath);
 
@@ -55,9 +50,7 @@ async function zipFolder(
     });
 
     output.on('close', () => {
-      console.log(
-        `ZIP file created: ${outputPath} (${archive.pointer()} total bytes)`,
-      );
+      console.log(`ZIP file created: ${outputPath} (${archive.pointer()} total bytes)`);
       resolve();
     });
 

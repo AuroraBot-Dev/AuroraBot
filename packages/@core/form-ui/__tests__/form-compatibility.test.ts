@@ -3,10 +3,7 @@ import type { BaseFormComponentType } from '../src/types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { setupVbenForm } from '../src/config';
-import {
-  resetDeprecationWarnings,
-  warnDeprecatedOnce,
-} from '../src/deprecation';
+import { resetDeprecationWarnings, warnDeprecatedOnce } from '../src/deprecation';
 import { FormApi } from '../src/form-api';
 import { getFormRule } from '../src/rule-registry';
 

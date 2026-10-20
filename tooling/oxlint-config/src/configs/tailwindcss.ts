@@ -15,9 +15,7 @@ const selectors = [
   },
 ];
 
-const entryPoint = fileURLToPath(
-  new URL('../../../../tailwind-config/src/theme.css', import.meta.url),
-);
+const entryPoint = fileURLToPath(new URL('../../../../tailwind-config/src/theme.css', import.meta.url));
 
 const settings = {
   entryPoint,

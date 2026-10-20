@@ -1,11 +1,5 @@
 <template>
-  <svg
-    class="custom-radio-image"
-    fill="none"
-    height="66"
-    width="104"
-    xmlns="http://www.w3.org/2000/svg"
-  >
+  <svg class="custom-radio-image" fill="none" height="66" width="104" xmlns="http://www.w3.org/2000/svg">
     <g>
       <path
         id="svg_1"

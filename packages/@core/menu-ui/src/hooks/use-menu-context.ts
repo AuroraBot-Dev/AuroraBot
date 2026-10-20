@@ -47,9 +47,4 @@ function useSubMenuContext() {
   return subMenu;
 }
 
-export {
-  createMenuContext,
-  createSubMenuContext,
-  useMenuContext,
-  useSubMenuContext,
-};
+export { createMenuContext, createSubMenuContext, useMenuContext, useSubMenuContext };

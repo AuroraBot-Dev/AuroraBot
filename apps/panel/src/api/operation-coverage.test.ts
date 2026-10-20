@@ -7,11 +7,7 @@ import { describe, expect, it } from 'vitest';
 import auroraRoutes from '#/router/routes/modules/aurora';
 import dashboardRoutes from '#/router/routes/modules/dashboard';
 
-import {
-  operationCoverage,
-  operationCoverageKeys,
-  operationKey,
-} from './operation-coverage';
+import { operationCoverage, operationCoverageKeys, operationKey } from './operation-coverage';
 
 const backendOperations = [
   ['GET', '/'],
@@ -40,17 +36,11 @@ const backendOperations = [
 
 describe('aurora operation coverage', () => {
   it('与 22 个只读后端 OperationSpec 双向一致', () => {
-    const backendKeys = new Set(
-      backendOperations.map(([method, path]) => operationKey(method, path)),
-    );
+    const backendKeys = new Set(backendOperations.map(([method, path]) => operationKey(method, path)));
     expect(operationCoverage).toHaveLength(22);
     expect(operationCoverageKeys.size).toBe(22);
-    expect([...operationCoverageKeys].toSorted()).toEqual(
-      [...backendKeys].toSorted(),
-    );
-    expect(operationCoverage.every(({ method }) => method === 'GET')).toBe(
-      true,
-    );
+    expect([...operationCoverageKeys].toSorted()).toEqual([...backendKeys].toSorted());
+    expect(operationCoverage.every(({ method }) => method === 'GET')).toBe(true);
   });
 
   it('每个映射都指向真实 Vue route', () => {

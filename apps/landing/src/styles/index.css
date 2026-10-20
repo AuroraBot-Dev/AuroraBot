@@ -20,26 +20,18 @@
   font-family: 'Punctuation SC';
   font-style: normal;
   font-weight: 400;
-  src:
-    local('PingFang SC Regular'), local('Noto Sans CJK SC'),
-    local('Microsoft YaHei');
+  src: local('PingFang SC Regular'), local('Noto Sans CJK SC'), local('Microsoft YaHei');
   font-display: swap;
-  unicode-range:
-    U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7,
-    U+007E, U+002F;
+  unicode-range: U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
 }
 
 @font-face {
   font-family: 'Punctuation SC';
   font-style: normal;
   font-weight: 500;
-  src:
-    local('PingFang SC Regular'), local('Noto Sans CJK SC'),
-    local('Microsoft YaHei');
+  src: local('PingFang SC Regular'), local('Noto Sans CJK SC'), local('Microsoft YaHei');
   font-display: swap;
-  unicode-range:
-    U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7,
-    U+007E, U+002F;
+  unicode-range: U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
 }
 
 :root {
@@ -55,17 +47,13 @@
   --line: #d8d5c8;
   --line-soft: #e5e3d8;
   --serif:
-    'KingHwa', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Noto Serif CJK TC',
-    'Songti SC', stsong, simsun, 'Iowan Old Style', charter, georgia, serif;
+    'KingHwa', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Noto Serif CJK TC', 'Songti SC', stsong, simsun,
+    'Iowan Old Style', charter, georgia, serif;
   --vp-font-family-base:
-    'Punctuation SC', 'Inter', ui-sans-serif, system-ui, sans-serif,
-    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --ui:
-    system-ui, -apple-system, 'Segoe UI', roboto, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --mono:
-    'SFMono-Regular', ui-monospace, consolas, 'Cascadia Mono',
-    'Liberation Mono', monospace;
+    'Punctuation SC', 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+  --ui: system-ui, -apple-system, 'Segoe UI', roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: 'SFMono-Regular', ui-monospace, consolas, 'Cascadia Mono', 'Liberation Mono', monospace;
 
   color-scheme: light;
 }
@@ -87,9 +75,8 @@
 
 html[lang='ja-JP'] {
   --serif:
-    'Yu Mincho', yumincho, 'Hiragino Mincho ProN', 'Noto Serif CJK JP',
-    'Source Han Serif JP', 'Source Han Serif SC', 'Songti SC', 'MS Mincho',
-    georgia, serif;
+    'Yu Mincho', yumincho, 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Source Han Serif JP', 'Source Han Serif SC',
+    'Songti SC', 'MS Mincho', georgia, serif;
 }
 
 * {

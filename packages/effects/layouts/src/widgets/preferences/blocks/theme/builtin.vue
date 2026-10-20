@@ -104,13 +104,9 @@ function selectColor() {
 watch(
   () => [modelValue.value, props.isDark] as [BuiltinThemeType, boolean],
   ([themeType, isDark]) => {
-    const theme = builtinThemePresets.value.find(
-      (item) => item.type === themeType,
-    );
+    const theme = builtinThemePresets.value.find((item) => item.type === themeType);
     if (theme) {
-      const primaryColor = isDark
-        ? theme.darkPrimaryColor || theme.primaryColor
-        : theme.primaryColor;
+      const primaryColor = isDark ? theme.darkPrimaryColor || theme.primaryColor : theme.primaryColor;
 
       themeColorPrimary.value = primaryColor || theme.color;
     }
@@ -129,17 +125,12 @@ watch(
           class="group outline-box flex-center cursor-pointer"
         >
           <template v-if="theme.type !== 'custom'">
-            <div
-              :style="{ backgroundColor: theme.color }"
-              class="mx-9 my-2 size-5 rounded-md"
-            ></div>
+            <div :style="{ backgroundColor: theme.color }" class="mx-9 my-2 size-5 rounded-md"></div>
           </template>
           <template v-else>
             <div class="size-full px-9 py-2" @click.stop="selectColor">
               <div class="relative flex-center size-5 rounded-sm">
-                <UserRoundPen
-                  class="absolute z-1 size-5 opacity-60 group-hover:opacity-100"
-                />
+                <UserRoundPen class="absolute z-1 size-5 opacity-60 group-hover:opacity-100" />
                 <input
                   ref="colorInput"
                   :value="inputValue"

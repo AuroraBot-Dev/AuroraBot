@@ -6,19 +6,11 @@ type AsyncFieldValidator = (...args: any[]) => Promise<unknown> | unknown;
 
 export type FieldValidationInvalidator = () => void;
 
-const asyncValidatorKeys = [
-  'onBlurAsync',
-  'onChangeAsync',
-  'onDynamicAsync',
-  'onSubmitAsync',
-] as const;
+const asyncValidatorKeys = ['onBlurAsync', 'onChangeAsync', 'onDynamicAsync', 'onSubmitAsync'] as const;
 
 export function createRuntimeFieldComponent(
   fieldComponent: Component,
-  registerInvalidator: (
-    fieldName: string,
-    invalidator: FieldValidationInvalidator,
-  ) => () => void,
+  registerInvalidator: (fieldName: string, invalidator: FieldValidationInvalidator) => () => void,
 ) {
   return markRaw(
     defineComponent({
@@ -39,17 +31,14 @@ export function createRuntimeFieldComponent(
           }
           const wrappedValidators = { ...validators };
           for (const key of asyncValidatorKeys) {
-            const validator = validators[key] as
-              AsyncFieldValidator | undefined;
+            const validator = validators[key] as AsyncFieldValidator | undefined;
             if (!validator) {
               continue;
             }
             wrappedValidators[key] = async (...args: any[]) => {
               const currentValidationRunId = ++validationRunId;
               const result = await validator(...args);
-              return currentValidationRunId === validationRunId
-                ? result
-                : undefined;
+              return currentValidationRunId === validationRunId ? result : undefined;
             };
           }
           cachedValidators = validators;
@@ -58,8 +47,7 @@ export function createRuntimeFieldComponent(
         }
 
         return () => {
-          const validators = attrs.validators as
-            Record<string, any> | undefined;
+          const validators = attrs.validators as Record<string, any> | undefined;
           return h(
             fieldComponent,
             {

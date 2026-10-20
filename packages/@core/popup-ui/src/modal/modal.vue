@@ -1,16 +1,7 @@
 <script lang="ts" setup>
 import type { ExtendedModalApi, ModalProps } from './modal';
 
-import {
-  computed,
-  nextTick,
-  onDeactivated,
-  provide,
-  ref,
-  unref,
-  useId,
-  watch,
-} from 'vue';
+import { computed, nextTick, onDeactivated, provide, ref, unref, useId, watch } from 'vue';
 
 import { usePriorityValues, useSimpleLocale } from '@vben-core/composables';
 import { Expand, Shrink } from '@vben-core/icons';
@@ -98,13 +89,9 @@ const {
 
 const shouldFullscreen = computed(() => fullscreen.value);
 
-const shouldDraggable = computed(
-  () => draggable.value && !shouldFullscreen.value && header.value,
-);
+const shouldDraggable = computed(() => draggable.value && !shouldFullscreen.value && header.value);
 
-const shouldCentered = computed(
-  () => centered.value && !shouldFullscreen.value,
-);
+const shouldCentered = computed(() => centered.value && !shouldFullscreen.value);
 
 const getAppendTo = computed(() => {
   return appendToMain.value ? `#${ELEMENT_ID_MAIN_CONTENT}` : undefined;
@@ -194,11 +181,7 @@ function handleOpenAutoFocus(e: Event) {
 function pointerDownOutside(e: Event) {
   const target = e.target as HTMLElement;
   const isDismissableModal = target?.dataset.dismissableModal;
-  if (
-    !closeOnClickModal.value ||
-    isDismissableModal !== id ||
-    submitting.value
-  ) {
+  if (!closeOnClickModal.value || isDismissableModal !== id || submitting.value) {
     e.preventDefault();
     e.stopPropagation();
   }
@@ -229,11 +212,7 @@ function handleClosed() {
 }
 </script>
 <template>
-  <Dialog
-    :modal="false"
-    :open="state?.isOpen"
-    @update:open="() => (!submitting ? modalApi?.close() : undefined)"
-  >
+  <Dialog :modal="false" :open="state?.isOpen" @update:open="() => (!submitting ? modalApi?.close() : undefined)">
     <DialogContent
       ref="contentRef"
       :append-to="getAppendTo"
@@ -244,10 +223,8 @@ function handleClosed() {
           {
             'border border-border': bordered,
             'shadow-3xl': !bordered,
-            'max-h-[min(80%,calc(100dvh-20px))] max-w-[calc(100vw-20px)]':
-              !shouldFullscreen,
-            'top-0 left-0 size-full! max-h-full! max-w-full! transform-[translate(0,0)]!':
-              shouldFullscreen,
+            'max-h-[min(80%,calc(100dvh-20px))] max-w-[calc(100vw-20px)]': !shouldFullscreen,
+            'top-0 left-0 size-full! max-h-full! max-w-full! transform-[translate(0,0)]!': shouldFullscreen,
             'top-1/2': centered && !shouldFullscreen,
             'duration-300': !dragging,
             hidden: isClosed,

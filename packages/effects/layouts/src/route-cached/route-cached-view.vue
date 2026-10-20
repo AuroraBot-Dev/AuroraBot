@@ -11,8 +11,7 @@ const route = useRoute();
 
 const tabbarStore = useTabbarStore();
 
-const { getTabs, getCachedRoutes, getExcludeCachedTabs } =
-  storeToRefs(tabbarStore);
+const { getTabs, getCachedRoutes, getExcludeCachedTabs } = storeToRefs(tabbarStore);
 const { removeCachedRoute } = tabbarStore;
 
 const { getEnabledTransition, getTransitionName } = useLayoutHook();
@@ -74,22 +73,11 @@ const computedCurrentRouteKey = computed(() => {
 <template>
   <template v-if="computedShowView">
     <template v-for="item in computedCachedRoutes" :key="item.key">
-      <Transition
-        v-if="getEnabledTransition"
-        appear
-        mode="out-in"
-        :name="getTransitionName(item.route)"
-      >
-        <component
-          v-show="item.key === computedCurrentRouteKey"
-          :is="transformComponent(item.component, item.route)"
-        />
+      <Transition v-if="getEnabledTransition" appear mode="out-in" :name="getTransitionName(item.route)">
+        <component v-show="item.key === computedCurrentRouteKey" :is="transformComponent(item.component, item.route)" />
       </Transition>
       <template v-else>
-        <component
-          v-show="item.key === computedCurrentRouteKey"
-          :is="transformComponent(item.component, item.route)"
-        />
+        <component v-show="item.key === computedCurrentRouteKey" :is="transformComponent(item.component, item.route)" />
       </template>
     </template>
   </template>

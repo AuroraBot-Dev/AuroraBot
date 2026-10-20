@@ -7,8 +7,5 @@ export function getConfigSnapshot() {
 }
 
 export function getConfigDocument(name: string) {
-  return operationRequest<ConfigDocument>(
-    'GET',
-    `/config/${encodeURIComponent(name)}`,
-  );
+  return operationRequest<ConfigDocument>('GET', `/config/${encodeURIComponent(name)}`);
 }

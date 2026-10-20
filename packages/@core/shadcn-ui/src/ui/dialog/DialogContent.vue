@@ -10,12 +10,7 @@ import { computed, ref } from 'vue';
 import { cn } from '@vben-core/shared/utils';
 
 import { X } from '@lucide/vue';
-import {
-  DialogClose,
-  DialogContent,
-  DialogPortal,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { DialogClose, DialogContent, DialogPortal, useForwardPropsEmits } from 'reka-ui';
 
 import DialogOverlay from './DialogOverlay.vue';
 
@@ -45,29 +40,16 @@ const props = withDefaults(
     showCloseButton: true,
   },
 );
-const emits = defineEmits<
-  DialogContentEmits & { close: []; closed: []; opened: [] }
->();
+const emits = defineEmits<DialogContentEmits & { close: []; closed: []; opened: [] }>();
 
 const delegatedProps = computed(() => {
-  const {
-    class: _,
-    modal: _modal,
-    open: _open,
-    showCloseButton: __,
-    animationType: ___,
-    ...delegated
-  } = props;
+  const { class: _, modal: _modal, open: _open, showCloseButton: __, animationType: ___, ...delegated } = props;
 
   return delegated;
 });
 
 function isAppendToBody() {
-  return (
-    props.appendTo === 'body' ||
-    props.appendTo === document.body ||
-    !props.appendTo
-  );
+  return props.appendTo === 'body' || props.appendTo === document.body || !props.appendTo;
 }
 
 const position = computed(() => {

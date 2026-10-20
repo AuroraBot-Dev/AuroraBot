@@ -2,9 +2,7 @@ export type SupportedLanguagesType = 'en-US' | 'ja-JP' | 'zh-CN';
 
 export type ImportLocaleFn = () => Promise<{ default: Record<string, string> }>;
 
-export type LoadMessageFn = (
-  lang: SupportedLanguagesType,
-) => Promise<Record<string, string> | undefined>;
+export type LoadMessageFn = (lang: SupportedLanguagesType) => Promise<Record<string, string> | undefined>;
 
 export interface LocaleSetupOptions {
   /**

@@ -9,9 +9,7 @@ defineProps<{
 </script>
 
 <template>
-  <div
-    class="relative flex-col-center bg-background px-6 py-10 lg:flex-initial lg:px-8 dark:bg-background-deep"
-  >
+  <div class="relative flex-col-center bg-background px-6 py-10 lg:flex-initial lg:px-8 dark:bg-background-deep">
     <slot></slot>
     <!-- Router View with Transition and KeepAlive -->
     <RouterView v-slot="{ Component, route }">
@@ -29,9 +27,7 @@ defineProps<{
 
     <!-- Footer Copyright -->
 
-    <div
-      class="absolute right-0 bottom-3 left-0 flex justify-center text-center text-xs text-muted-foreground"
-    >
+    <div class="absolute right-0 bottom-3 left-0 flex justify-center text-center text-xs text-muted-foreground">
       <slot name="copyright"> </slot>
     </div>
   </div>

@@ -19,16 +19,11 @@ type ExtendFormProps = VbenFormProps & {
 };
 
 export const [injectFormProps, provideFormProps] =
-  createContext<[ComputedRef<ExtendFormProps> | ExtendFormProps, FormActions]>(
-    'VbenFormProps',
-  );
+  createContext<[ComputedRef<ExtendFormProps> | ExtendFormProps, FormActions]>('VbenFormProps');
 
-export const [injectComponentRefMap, provideComponentRefMap] =
-  createContext<Map<string, unknown>>('ComponentRefMap');
+export const [injectComponentRefMap, provideComponentRefMap] = createContext<Map<string, unknown>>('ComponentRefMap');
 
-export function useFormInitial(
-  props: ComputedRef<VbenFormProps> | VbenFormProps,
-) {
+export function useFormInitial(props: ComputedRef<VbenFormProps> | VbenFormProps) {
   const slots = useSlots();
   const initialValues = generateInitialValues();
 

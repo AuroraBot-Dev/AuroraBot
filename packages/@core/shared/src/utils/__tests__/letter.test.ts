@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  capitalizeFirstLetter,
-  kebabToCamelCase,
-  toCamelCase,
-  toLowerCaseFirstLetter,
-} from '../letter';
+import { capitalizeFirstLetter, kebabToCamelCase, toCamelCase, toLowerCaseFirstLetter } from '../letter';
 
 describe('capitalizeFirstLetter', () => {
   it('should capitalize the first letter of a string', () => {
@@ -30,9 +25,7 @@ describe('capitalizeFirstLetter', () => {
 describe('toLowerCaseFirstLetter', () => {
   it('should convert the first letter to lowercase', () => {
     expect(toLowerCaseFirstLetter('CommonAppName')).toBe('commonAppName');
-    expect(toLowerCaseFirstLetter('AnotherKeyExample')).toBe(
-      'anotherKeyExample',
-    );
+    expect(toLowerCaseFirstLetter('AnotherKeyExample')).toBe('anotherKeyExample');
   });
 
   it('should return the same string if the first letter is already lowercase', () => {

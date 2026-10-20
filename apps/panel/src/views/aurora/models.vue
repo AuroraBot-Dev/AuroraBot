@@ -1,25 +1,13 @@
 <script lang="ts" setup>
 import type { DataTableColumns } from 'naive-ui';
 
-import type {
-  ModelEndpointDetail,
-  ModelEndpointRecord,
-  ModelProviderRecord,
-} from '#/api';
+import type { ModelEndpointDetail, ModelEndpointRecord, ModelProviderRecord } from '#/api';
 
 import { h, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NDataTable,
-  NDrawer,
-  NTabPane,
-  NTabs,
-} from 'naive-ui';
+import { NAlert, NButton, NCard, NDataTable, NDrawer, NTabPane, NTabs } from 'naive-ui';
 
 import { getModel, listModels } from '#/api';
 import JsonView from '#/components/aurora/json-view.vue';
@@ -87,22 +75,10 @@ onMounted(load);
     <NCard>
       <NTabs type="line" animated>
         <NTabPane name="endpoints" tab="模型 endpoints">
-          <NDataTable
-            :columns="endpointColumns"
-            :data="endpoints"
-            :loading="loading"
-            :scroll-x="720"
-            size="small"
-          />
+          <NDataTable :columns="endpointColumns" :data="endpoints" :loading="loading" :scroll-x="720" size="small" />
         </NTabPane>
         <NTabPane name="providers" tab="Providers">
-          <NDataTable
-            :columns="providerColumns"
-            :data="providers"
-            :loading="loading"
-            :scroll-x="760"
-            size="small"
-          />
+          <NDataTable :columns="providerColumns" :data="providers" :loading="loading" :scroll-x="760" size="small" />
         </NTabPane>
       </NTabs>
     </NCard>

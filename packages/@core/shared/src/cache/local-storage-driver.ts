@@ -14,18 +14,13 @@ interface LocalStorageDriverOptions {
 class LocalStorageDriver implements IStorageDriver {
   private storage: Storage;
 
-  constructor({
-    storageType = 'localStorage',
-  }: LocalStorageDriverOptions = {}) {
+  constructor({ storageType = 'localStorage' }: LocalStorageDriverOptions = {}) {
     if (typeof window === 'undefined') {
       throw new TypeError(
         'LocalStorageDriver is not available in non-browser environments. Use MemoryStorageDriver instead.',
       );
     }
-    this.storage =
-      storageType === 'localStorage'
-        ? window.localStorage
-        : window.sessionStorage;
+    this.storage = storageType === 'localStorage' ? window.localStorage : window.sessionStorage;
   }
 
   async clear(): Promise<void> {

@@ -6,19 +6,13 @@ import type { HTMLAttributes } from 'vue';
 import { cn } from '@vben-core/shared/utils';
 
 import { reactiveOmit } from '@vueuse/core';
-import {
-  ContextMenuContent,
-  ContextMenuPortal,
-  useForwardPropsEmits,
-} from 'reka-ui';
+import { ContextMenuContent, ContextMenuPortal, useForwardPropsEmits } from 'reka-ui';
 
 defineOptions({
   inheritAttrs: false,
 });
 
-const props = defineProps<
-  ContextMenuContentProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<ContextMenuContentProps & { class?: HTMLAttributes['class'] }>();
 const emits = defineEmits<ContextMenuContentEmits>();
 
 const delegatedProps = reactiveOmit(props, 'class');

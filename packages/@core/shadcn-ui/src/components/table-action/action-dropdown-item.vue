@@ -6,12 +6,7 @@ import { computed, ref } from 'vue';
 import { useSimpleLocale } from '@vben-core/composables';
 import { cn } from '@vben-core/shared/utils';
 
-import {
-  DropdownMenuItem,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '../../ui';
+import { DropdownMenuItem, Popover, PopoverContent, PopoverTrigger } from '../../ui';
 import { VbenButton } from '../button';
 import { VbenIcon } from '../icon';
 
@@ -21,10 +16,7 @@ const { $t } = useSimpleLocale();
 const open = ref(false);
 
 const itemClass = computed(() =>
-  cn(
-    'cursor-pointer gap-2',
-    props.action.danger && 'text-destructive focus:text-destructive',
-  ),
+  cn('cursor-pointer gap-2', props.action.danger && 'text-destructive focus:text-destructive'),
 );
 
 /**
@@ -67,24 +59,14 @@ function onCancel() {
   -->
   <Popover v-if="action.popConfirm" v-model:open="open">
     <PopoverTrigger as-child>
-      <DropdownMenuItem
-        as-child
-        :class="itemClass"
-        :disabled="action.disabled"
-        @select="preventDefault"
-      >
+      <DropdownMenuItem as-child :class="itemClass" :disabled="action.disabled" @select="preventDefault">
         <div>
           <VbenIcon v-if="action.icon" :icon="action.icon" class="size-4" />
           {{ action.text }}
         </div>
       </DropdownMenuItem>
     </PopoverTrigger>
-    <PopoverContent
-      class="z-popup w-60"
-      side="left"
-      @focus-outside="preventDefault"
-      @open-auto-focus="preventDefault"
-    >
+    <PopoverContent class="z-popup w-60" side="left" @focus-outside="preventDefault" @open-auto-focus="preventDefault">
       <div class="text-foreground mb-3 text-sm">
         {{ action.popConfirm.title ?? $t('confirmTitle') }}
       </div>
@@ -92,11 +74,7 @@ function onCancel() {
         <VbenButton size="sm" variant="outline" @click="onCancel">
           {{ action.popConfirm.cancelText ?? $t('cancel') }}
         </VbenButton>
-        <VbenButton
-          :variant="action.danger ? 'destructive' : 'default'"
-          size="sm"
-          @click="onConfirm"
-        >
+        <VbenButton :variant="action.danger ? 'destructive' : 'default'" size="sm" @click="onConfirm">
           {{ action.popConfirm.okText ?? $t('confirm') }}
         </VbenButton>
       </div>
@@ -104,12 +82,7 @@ function onCancel() {
   </Popover>
 
   <!-- 普通下拉项 -->
-  <DropdownMenuItem
-    v-else
-    :class="itemClass"
-    :disabled="action.disabled"
-    @click="onClick"
-  >
+  <DropdownMenuItem v-else :class="itemClass" :disabled="action.disabled" @click="onClick">
     <VbenIcon v-if="action.icon" :icon="action.icon" class="size-4" />
     {{ action.text }}
   </DropdownMenuItem>

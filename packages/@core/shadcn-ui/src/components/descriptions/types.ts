@@ -1,8 +1,7 @@
 import type { Component, CSSProperties } from 'vue';
 
 /** 响应式断点，与 antdv-next 保持一致 */
-export type DescriptionsBreakpoint =
-  'lg' | 'md' | 'sm' | 'xl' | 'xs' | 'xxl' | 'xxxl';
+export type DescriptionsBreakpoint = 'lg' | 'md' | 'sm' | 'xl' | 'xs' | 'xxl' | 'xxxl';
 
 /** 当前命中的断点集合 */
 export type ScreenMap = Partial<Record<DescriptionsBreakpoint, boolean>>;
@@ -12,12 +11,10 @@ export type DescriptionsLayout = 'horizontal' | 'vertical';
 export type DescriptionsSize = 'large' | 'middle' | 'small';
 
 /** 列数，可为固定数字或按断点配置 */
-export type DescriptionsColumn =
-  number | Partial<Record<DescriptionsBreakpoint, number>>;
+export type DescriptionsColumn = number | Partial<Record<DescriptionsBreakpoint, number>>;
 
 /** 单项跨列，支持固定数字、'filled'（占满当前行剩余）或按断点配置 */
-export type DescriptionsItemSpan =
-  'filled' | number | Partial<Record<DescriptionsBreakpoint, number>>;
+export type DescriptionsItemSpan = 'filled' | number | Partial<Record<DescriptionsBreakpoint, number>>;
 
 /** 可渲染内容：字符串/数字/渲染函数/组件 */
 export type DescriptionsRenderNode = (() => any) | Component | number | string;

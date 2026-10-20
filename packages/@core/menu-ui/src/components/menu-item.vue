@@ -30,29 +30,18 @@ const subMenu = useSubMenuContext();
 const { parentMenu, parentPaths } = useMenu();
 
 const active = computed(() => props.path === rootMenu?.activePath);
-const menuIcon = computed(() =>
-  active.value ? props.activeIcon || props.icon : props.icon,
-);
+const menuIcon = computed(() => (active.value ? props.activeIcon || props.icon : props.icon));
 
 const isHttp = computed(() => isHttpUrl(item.parentPaths.at(-1)));
 
-const isTopLevelMenuItem = computed(
-  () => parentMenu.value?.type.name === 'MenuUI',
-);
+const isTopLevelMenuItem = computed(() => parentMenu.value?.type.name === 'MenuUI');
 
 const collapseShowTitle = computed(
-  () =>
-    rootMenu.props?.collapseShowTitle &&
-    isTopLevelMenuItem.value &&
-    rootMenu.props.collapse,
+  () => rootMenu.props?.collapseShowTitle && isTopLevelMenuItem.value && rootMenu.props.collapse,
 );
 
 const showTooltip = computed(
-  () =>
-    rootMenu.props.mode === 'vertical' &&
-    isTopLevelMenuItem.value &&
-    rootMenu.props?.collapse &&
-    slots.title,
+  () => rootMenu.props.mode === 'vertical' && isTopLevelMenuItem.value && rootMenu.props?.collapse && slots.title,
 );
 
 const item: MenuItemRegistered = reactive({
@@ -90,10 +79,7 @@ onBeforeUnmount(() => {
   <router-link
     v-slot="{ href }"
     custom
-    :to="
-      (item.parentPaths.at(-1) ?? '') +
-      (item?.query ? `?${qs.stringify(item?.query)}` : '')
-    "
+    :to="(item.parentPaths.at(-1) ?? '') + (item?.query ? `?${qs.stringify(item?.query)}` : '')"
   >
     <a
       :href="isHttp ? item.parentPaths.at(-1) : href"
@@ -107,11 +93,7 @@ onBeforeUnmount(() => {
       role="menuitem"
       @click.prevent.stop="handleClick"
     >
-      <VbenTooltip
-        v-if="showTooltip"
-        :content-class="[rootMenu.theme]"
-        side="right"
-      >
+      <VbenTooltip v-if="showTooltip" :content-class="[rootMenu.theme]" side="right">
         <template #trigger>
           <div :class="[nsMenu.be('tooltip', 'trigger')]">
             <VbenIcon :class="nsMenu.e('icon')" :icon="menuIcon" fallback />
@@ -124,11 +106,7 @@ onBeforeUnmount(() => {
         <slot name="title"></slot>
       </VbenTooltip>
       <div v-show="!showTooltip" :class="[e('content')]">
-        <MenuBadge
-          v-if="rootMenu.props.mode !== 'horizontal'"
-          class="right-2"
-          v-bind="props"
-        />
+        <MenuBadge v-if="rootMenu.props.mode !== 'horizontal'" class="right-2" v-bind="props" />
         <VbenIcon :class="nsMenu.e('icon')" :icon="menuIcon" />
         <slot></slot>
         <slot name="title"></slot>

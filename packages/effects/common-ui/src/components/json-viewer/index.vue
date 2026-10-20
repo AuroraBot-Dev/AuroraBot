@@ -3,12 +3,7 @@ import type { SetupContext } from 'vue';
 
 import type { Recordable } from '@vben/types';
 
-import type {
-  JsonViewerAction,
-  JsonViewerProps,
-  JsonViewerToggle,
-  JsonViewerValue,
-} from './types';
+import type { JsonViewerAction, JsonViewerProps, JsonViewerToggle, JsonViewerValue } from './types';
 
 import { computed, ref, useAttrs } from 'vue';
 import VueJsonPretty from 'vue-json-pretty';
@@ -82,10 +77,7 @@ const jsonData = computed<Record<string, any>>(() => {
 });
 
 const bindProps = computed<Recordable<any>>(() => {
-  const prettyTheme =
-    props.theme === 'dark' || props.theme === 'dark-json-theme'
-      ? 'dark'
-      : 'light';
+  const prettyTheme = props.theme === 'dark' || props.theme === 'dark-json-theme' ? 'dark' : 'light';
 
   return {
     ...attrs,
@@ -112,11 +104,7 @@ const bindProps = computed<Recordable<any>>(() => {
             :class="[{ 'is-copied': copiedPath === node.path }]"
             @click.stop="handleCopy(node, defaultActions.copy)"
           >
-            {{
-              copiedPath === node.path
-                ? copyConfig.copiedText
-                : copyConfig.copyText
-            }}
+            {{ copiedPath === node.path ? copyConfig.copiedText : copyConfig.copyText }}
           </span>
         </slot>
       </template>

@@ -25,10 +25,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   updateOrder: [keys: string[]];
-  updatePosition: [
-    key: string,
-    position: 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown',
-  ];
+  updatePosition: [key: string, position: 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown'];
 }>();
 
 const listRef = ref<HTMLElement>();
@@ -38,13 +35,9 @@ let sortableInstance: null | Sortable = null;
 // - hidden：position === 'none'（不显示）
 // - sortable：其它（含 auto/fixed，偏好按钮的智能模式视觉归入顶栏组参与排序，
 //   避免 preferences 从 widget.order 丢失）
-const sortableList = computed(() =>
-  props.items.filter((item) => item.position !== 'none'),
-);
+const sortableList = computed(() => props.items.filter((item) => item.position !== 'none'));
 
-const hiddenList = computed(() =>
-  props.items.filter((item) => item.position === 'none'),
-);
+const hiddenList = computed(() => props.items.filter((item) => item.position === 'none'));
 function initSortable() {
   const container = listRef.value;
   if (!container) return;
@@ -55,9 +48,7 @@ function initSortable() {
     onEnd() {
       // Sortable 已经改了 DOM，但 sortableList computed 还是旧顺序。
       // 直接从 DOM 读 children 的 data-key 拿新顺序，再追加 hidden 部分。
-      const newOrder = [...container.children]
-        .map((el) => (el as HTMLElement).dataset.key)
-        .filter(Boolean) as string[];
+      const newOrder = [...container.children].map((el) => (el as HTMLElement).dataset.key).filter(Boolean) as string[];
       emit('updateOrder', [...newOrder, ...hiddenList.value.map((i) => i.key)]);
     },
   });
@@ -71,11 +62,7 @@ onUnmounted(() => {
 
 function setPosition(key: string, value: string | undefined) {
   if (!value) return;
-  emit(
-    'updatePosition',
-    key,
-    value as 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown',
-  );
+  emit('updatePosition', key, value as 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown');
   nextTick(() => {
     emit(
       'updateOrder',
@@ -94,16 +81,12 @@ function setPosition(key: string, value: string | undefined) {
         :data-key="item.key"
         class="bg-accent flex items-center rounded-md pl-2"
       >
-        <GripVertical
-          class="drag-handle size-4 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
-        />
+        <GripVertical class="drag-handle size-4 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" />
         <SelectItem
           :items="item.positionItems ?? positionItems"
           :model-value="item.position"
           class="min-w-0 flex-1"
-          @update:model-value="
-            (v: string | undefined) => setPosition(item.key, v)
-          "
+          @update:model-value="(v: string | undefined) => setPosition(item.key, v)"
         >
           <span class="truncate">{{ item.label }}</span>
         </SelectItem>
@@ -113,22 +96,14 @@ function setPosition(key: string, value: string | undefined) {
       <div class="text-muted-foreground mb-1 text-xs font-medium">
         {{ $t('preferences.widget.hidden') }}
       </div>
-      <div
-        v-for="item in hiddenList"
-        :key="item.key"
-        class="flex items-center rounded-md"
-      >
+      <div v-for="item in hiddenList" :key="item.key" class="flex items-center rounded-md">
         <SelectItem
           :items="item.positionItems ?? positionItems"
           :model-value="item.position"
           class="min-w-0 flex-1"
-          @update:model-value="
-            (v: string | undefined) => setPosition(item.key, v)
-          "
+          @update:model-value="(v: string | undefined) => setPosition(item.key, v)"
         >
-          <span
-            class="text-muted-foreground truncate line-through decoration-dotted"
-          >
+          <span class="text-muted-foreground truncate line-through decoration-dotted">
             {{ item.label }}
           </span>
         </SelectItem>

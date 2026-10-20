@@ -8,9 +8,7 @@ import { cn } from '@vben-core/shared/utils';
 import { reactiveOmit } from '@vueuse/core';
 import { PaginationList } from 'reka-ui';
 
-const props = defineProps<
-  PaginationListProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<PaginationListProps & { class?: HTMLAttributes['class'] }>();
 
 const delegatedProps = reactiveOmit(props, 'class');
 </script>

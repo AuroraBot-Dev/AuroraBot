@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import type {
-  LayoutHeaderMenuAlignType,
-  LayoutHeaderModeType,
-  SelectOption,
-} from '@vben/types';
+import type { LayoutHeaderMenuAlignType, LayoutHeaderModeType, SelectOption } from '@vben/types';
 
 import { $t } from '@vben/locales';
 
@@ -15,8 +11,7 @@ defineProps<{ disabled: boolean }>();
 
 const headerEnable = defineModel<boolean>('headerEnable');
 const headerMode = defineModel<LayoutHeaderModeType>('headerMode');
-const headerMenuAlign =
-  defineModel<LayoutHeaderMenuAlignType>('headerMenuAlign');
+const headerMenuAlign = defineModel<LayoutHeaderMenuAlignType>('headerMenuAlign');
 
 const localeItems: SelectOption[] = [
   {
@@ -57,18 +52,10 @@ const headerMenuAlignItems: SelectOption[] = [
   <SwitchItem v-model="headerEnable" :disabled="disabled">
     {{ $t('preferences.header.visible') }}
   </SwitchItem>
-  <SelectItem
-    v-model="headerMode"
-    :disabled="!headerEnable"
-    :items="localeItems"
-  >
+  <SelectItem v-model="headerMode" :disabled="!headerEnable" :items="localeItems">
     {{ $t('preferences.mode') }}
   </SelectItem>
-  <ToggleItem
-    v-model="headerMenuAlign"
-    :disabled="!headerEnable"
-    :items="headerMenuAlignItems"
-  >
+  <ToggleItem v-model="headerMenuAlign" :disabled="!headerEnable" :items="headerMenuAlignItems">
     {{ $t('preferences.header.menuAlign') }}
   </ToggleItem>
 </template>

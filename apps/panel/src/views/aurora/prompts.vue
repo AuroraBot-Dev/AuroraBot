@@ -5,15 +5,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NDescriptions,
-  NDescriptionsItem,
-  NInput,
-  NSelect,
-} from 'naive-ui';
+import { NAlert, NButton, NCard, NDescriptions, NDescriptionsItem, NInput, NSelect } from 'naive-ui';
 
 import { message } from '#/adapter/naive';
 import { getPrompt, listPrompts } from '#/api';
@@ -24,13 +16,9 @@ const selected = ref('system');
 const loading = ref(false);
 const error = ref('');
 const options = computed(() =>
-  ['system', ...Object.keys(catalog.value?.agent_prompts ?? {})].map(
-    (value) => ({ label: value, value }),
-  ),
+  ['system', ...Object.keys(catalog.value?.agent_prompts ?? {})].map((value) => ({ label: value, value })),
 );
-const content = computed(
-  () => prompt.value?.fragments?.join('\n\n') ?? prompt.value?.content ?? '',
-);
+const content = computed(() => prompt.value?.fragments?.join('\n\n') ?? prompt.value?.content ?? '');
 
 async function loadCatalog() {
   catalog.value = (await listPrompts()) ?? undefined;
@@ -70,23 +58,12 @@ onMounted(loadCatalog);
         </NDescriptionsItem>
       </NDescriptions>
       <div class="mb-4 flex flex-col gap-2 sm:flex-row">
-        <NSelect
-          v-model:value="selected"
-          class="sm:w-72"
-          :options="options"
-          filterable
-          @update:value="loadPrompt"
-        />
+        <NSelect v-model:value="selected" class="sm:w-72" :options="options" filterable @update:value="loadPrompt" />
         <NButton :loading="loading" @click="loadPrompt">读取</NButton>
         <NButton :disabled="!content" @click="copyPrompt">复制提示词</NButton>
       </div>
       <NAlert v-if="error" class="mb-4" :title="error" type="error" />
-      <NInput
-        type="textarea"
-        :value="content"
-        :autosize="{ minRows: 18, maxRows: 35 }"
-        readonly
-      />
+      <NInput type="textarea" :value="content" :autosize="{ minRows: 18, maxRows: 35 }" readonly />
     </NCard>
   </Page>
 </template>

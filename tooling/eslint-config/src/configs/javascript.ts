@@ -70,9 +70,7 @@ const rulesCoveredByOxlint = new Set([
 
 export async function javascript(): Promise<Linter.Config[]> {
   const recommendedRules = Object.fromEntries(
-    Object.entries(js.configs.recommended.rules).filter(
-      ([ruleName]) => !rulesCoveredByOxlint.has(ruleName),
-    ),
+    Object.entries(js.configs.recommended.rules).filter(([ruleName]) => !rulesCoveredByOxlint.has(ruleName)),
   );
 
   return [
@@ -112,8 +110,7 @@ export async function javascript(): Promise<Linter.Config[]> {
         'no-restricted-properties': [
           'error',
           {
-            message:
-              'Use `Object.getPrototypeOf` or `Object.setPrototypeOf` instead.',
+            message: 'Use `Object.getPrototypeOf` or `Object.setPrototypeOf` instead.',
             property: '__proto__',
           },
           {

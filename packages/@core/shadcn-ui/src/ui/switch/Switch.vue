@@ -8,9 +8,7 @@ import { cn } from '@vben-core/shared/utils';
 import { reactiveOmit } from '@vueuse/core';
 import { SwitchRoot, SwitchThumb, useForwardPropsEmits } from 'reka-ui';
 
-const props = defineProps<
-  SwitchRootProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<SwitchRootProps & { class?: HTMLAttributes['class'] }>();
 
 const emits = defineEmits<SwitchRootEmits>();
 

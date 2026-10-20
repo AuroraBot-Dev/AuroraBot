@@ -82,10 +82,7 @@ useTabsDrag(props, emit);
         @scroll-at="handleScrollAt"
         @wheel="onWheel"
       >
-        <TabsChrome
-          v-if="styleType === 'chrome'"
-          v-bind="{ ...forward, ...$attrs, ...$props }"
-        />
+        <TabsChrome v-if="styleType === 'chrome'" v-bind="{ ...forward, ...$attrs, ...$props }" />
 
         <Tabs v-else v-bind="{ ...forward, ...$attrs, ...$props }" />
       </VbenScrollbar>

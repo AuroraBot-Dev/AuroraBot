@@ -143,10 +143,7 @@ describe('form array performance', () => {
     'edit one field in a 100-row array',
     async () => {
       arrayEditIteration += 1;
-      await arrayFormApi.setFieldValue(
-        'contacts[50].name',
-        `Contact ${arrayEditIteration}`,
-      );
+      await arrayFormApi.setFieldValue('contacts[50].name', `Contact ${arrayEditIteration}`);
       await nextTick();
     },
     { time: 1000, warmupTime: 200 },
@@ -167,9 +164,7 @@ describe('form array performance', () => {
     'update one child schema across 100 rows',
     async () => {
       arraySchemaIteration += 1;
-      arrayFormApi.updateSchema([
-        arraySchemaPatches[arraySchemaIteration % 2] ?? {},
-      ]);
+      arrayFormApi.updateSchema([arraySchemaPatches[arraySchemaIteration % 2] ?? {}]);
       await nextTick();
     },
     { time: 1000, warmupTime: 200 },

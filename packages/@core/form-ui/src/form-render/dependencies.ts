@@ -12,13 +12,7 @@ import type {
 
 import { computed, isRef, onScopeDispose, shallowRef, watch } from 'vue';
 
-import {
-  cloneDeep,
-  get,
-  isBoolean,
-  isEqual,
-  isFunction,
-} from '@vben-core/shared/utils';
+import { cloneDeep, get, isBoolean, isEqual, isFunction } from '@vben-core/shared/utils';
 
 import { warnDeprecatedOnce } from '../deprecation';
 import { resolveFieldNamePath } from '../field-name';
@@ -39,15 +33,7 @@ interface DependencyState {
   isShow: boolean;
 }
 
-const legacyDependencyKeys = [
-  'componentProps',
-  'disabled',
-  'if',
-  'required',
-  'rules',
-  'show',
-  'trigger',
-] as const;
+const legacyDependencyKeys = ['componentProps', 'disabled', 'if', 'required', 'rules', 'show', 'trigger'] as const;
 
 const mixedDependenciesWarnings = new WeakSet<object>();
 
@@ -56,10 +42,7 @@ const mixedDependenciesWarnings = new WeakSet<object>();
  * @param values 表单值
  * @param fieldName 字段名
  */
-function resolveValueByFieldName(
-  values: Record<string, any>,
-  fieldName: string,
-) {
+function resolveValueByFieldName(values: Record<string, any>, fieldName: string) {
   // [] 表示禁用嵌套
   const { rawKey } = resolveFieldNamePath(fieldName);
   if (rawKey) {
@@ -69,18 +52,13 @@ function resolveValueByFieldName(
   return get(values, fieldName);
 }
 
-function createDependencyState(
-  patch: FormDependenciesResolvedState = {},
-): DependencyState {
+function createDependencyState(patch: FormDependenciesResolvedState = {}): DependencyState {
   return {
     dynamicComponentProps: patch.componentProps ?? {},
     dynamicHelp: patch.help,
     dynamicHelpResolved: Reflect.has(patch, 'help'),
     dynamicRenderComponentContent: patch.renderComponentContent,
-    dynamicRenderComponentContentResolved: Reflect.has(
-      patch,
-      'renderComponentContent',
-    ),
+    dynamicRenderComponentContentResolved: Reflect.has(patch, 'renderComponentContent'),
     dynamicRules: patch.rules,
     dynamicRulesResolved: Reflect.has(patch, 'rules'),
     isDisabled: patch.disabled ?? false,
@@ -90,9 +68,7 @@ function createDependencyState(
   };
 }
 
-function isResolveDependencies(
-  dependencies: FormItemDependencies,
-): dependencies is FormItemDependenciesResolve {
+function isResolveDependencies(dependencies: FormItemDependencies): dependencies is FormItemDependenciesResolve {
   return isFunction(dependencies.resolve);
 }
 
@@ -100,9 +76,7 @@ function warnMixedDependencies(dependencies: FormItemDependenciesResolve) {
   if (
     import.meta.env.PROD ||
     mixedDependenciesWarnings.has(dependencies) ||
-    !legacyDependencyKeys.some(
-      (key) => Reflect.get(dependencies, key) !== undefined,
-    )
+    !legacyDependencyKeys.some((key) => Reflect.get(dependencies, key) !== undefined)
   ) {
     return;
   }
@@ -118,15 +92,7 @@ async function resolveLegacyDependencies(
 ): Promise<FormDependenciesResolvedState> {
   const patch: FormDependenciesResolvedState = {};
   const { actions, controller, values } = context;
-  const {
-    componentProps,
-    disabled,
-    if: whenIf,
-    required,
-    rules,
-    show,
-    trigger,
-  } = dependencies;
+  const { componentProps, disabled, if: whenIf, required, rules, show, trigger } = dependencies;
 
   if (isFunction(whenIf)) {
     patch.if = !!(await whenIf(values, actions, controller));
@@ -183,9 +149,7 @@ export default function useDependencies(
 
   // 在 dependencies 里提供访问extendApi的能力
   function getController(): ExtendedFormApi {
-    const controller = isRef(extendApi)
-      ? extendApi.value.formApi
-      : extendApi.formApi;
+    const controller = isRef(extendApi) ? extendApi.value.formApi : extendApi.formApi;
 
     if (!controller) {
       throw new Error('formApi is required in useDependencies');
@@ -204,9 +168,7 @@ export default function useDependencies(
     const triggerFields = getDependencies()?.triggerFields ?? [];
     const usesInitialTriggerFields =
       triggerFields.length === initialTriggerFields.length &&
-      triggerFields.every(
-        (fieldName, index) => fieldName === initialTriggerFields[index],
-      );
+      triggerFields.every((fieldName, index) => fieldName === initialTriggerFields[index]);
     if (usesInitialTriggerFields) {
       return initialTriggerValues.value;
     }
@@ -272,23 +234,13 @@ export default function useDependencies(
   });
 
   return {
-    dynamicComponentProps: computed(
-      () => dependencyState.value.dynamicComponentProps,
-    ),
+    dynamicComponentProps: computed(() => dependencyState.value.dynamicComponentProps),
     dynamicHelp: computed(() => dependencyState.value.dynamicHelp),
-    dynamicHelpResolved: computed(
-      () => dependencyState.value.dynamicHelpResolved,
-    ),
-    dynamicRenderComponentContent: computed(
-      () => dependencyState.value.dynamicRenderComponentContent,
-    ),
-    dynamicRenderComponentContentResolved: computed(
-      () => dependencyState.value.dynamicRenderComponentContentResolved,
-    ),
+    dynamicHelpResolved: computed(() => dependencyState.value.dynamicHelpResolved),
+    dynamicRenderComponentContent: computed(() => dependencyState.value.dynamicRenderComponentContent),
+    dynamicRenderComponentContentResolved: computed(() => dependencyState.value.dynamicRenderComponentContentResolved),
     dynamicRules: computed(() => dependencyState.value.dynamicRules),
-    dynamicRulesResolved: computed(
-      () => dependencyState.value.dynamicRulesResolved,
-    ),
+    dynamicRulesResolved: computed(() => dependencyState.value.dynamicRulesResolved),
     isDisabled: computed(() => dependencyState.value.isDisabled),
     isIf: computed(() => dependencyState.value.isIf),
     isRequired: computed(() => dependencyState.value.isRequired),

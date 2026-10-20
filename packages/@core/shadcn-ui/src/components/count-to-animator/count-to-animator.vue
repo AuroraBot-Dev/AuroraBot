@@ -92,9 +92,7 @@ function run() {
       emit('started');
       emit('onStarted');
     },
-    ...(props.useEasing
-      ? { transition: TransitionPresets[props.transition] }
-      : {}),
+    ...(props.useEasing ? { transition: TransitionPresets[props.transition] } : {}),
   });
 }
 

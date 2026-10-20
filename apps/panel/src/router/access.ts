@@ -1,7 +1,4 @@
-import type {
-  ComponentRecordType,
-  GenerateMenuAndRoutesOptions,
-} from '@vben/types';
+import type { ComponentRecordType, GenerateMenuAndRoutesOptions } from '@vben/types';
 
 import { generateAccessible } from '@vben/access';
 import { preferences } from '@vben/preferences';

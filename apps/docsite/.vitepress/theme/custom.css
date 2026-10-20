@@ -8,15 +8,12 @@
 @keyframes breathe-glow {
   0%,
   100% {
-    filter: drop-shadow(0 0 36px rgba(75, 121, 236, 0.28))
-      drop-shadow(0 0 72px rgba(75, 121, 236, 0.16))
+    filter: drop-shadow(0 0 36px rgba(75, 121, 236, 0.28)) drop-shadow(0 0 72px rgba(75, 121, 236, 0.16))
       drop-shadow(0 0 120px rgba(75, 121, 236, 0.08));
   }
   50% {
-    filter: drop-shadow(0 0 54px rgba(75, 121, 236, 0.38))
-      drop-shadow(0 0 96px rgba(75, 121, 236, 0.22))
-      drop-shadow(0 0 150px rgba(75, 121, 236, 0.13))
-      drop-shadow(0 0 210px rgba(75, 121, 236, 0.06));
+    filter: drop-shadow(0 0 54px rgba(75, 121, 236, 0.38)) drop-shadow(0 0 96px rgba(75, 121, 236, 0.22))
+      drop-shadow(0 0 150px rgba(75, 121, 236, 0.13)) drop-shadow(0 0 210px rgba(75, 121, 236, 0.06));
   }
 }
 

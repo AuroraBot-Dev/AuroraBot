@@ -12,12 +12,7 @@ export class DrawerApi<TData = unknown> {
 
   private api: Pick<
     DrawerApiOptions,
-    | 'onBeforeClose'
-    | 'onCancel'
-    | 'onClosed'
-    | 'onConfirm'
-    | 'onOpenChange'
-    | 'onOpened'
+    'onBeforeClose' | 'onCancel' | 'onClosed' | 'onConfirm' | 'onOpenChange' | 'onOpened'
   >;
 
   // private prevState!: DrawerState;
@@ -155,10 +150,7 @@ export class DrawerApi<TData = unknown> {
     return this;
   }
 
-  setState(
-    stateOrFn:
-      ((prev: DrawerState) => Partial<DrawerState>) | Partial<DrawerState>,
-  ) {
+  setState(stateOrFn: ((prev: DrawerState) => Partial<DrawerState>) | Partial<DrawerState>) {
     if (isFunction(stateOrFn)) {
       this.store.setState(stateOrFn);
     } else {

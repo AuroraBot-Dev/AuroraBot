@@ -1,10 +1,6 @@
 import type { Component, Ref } from 'vue';
 
-import type {
-  MenuRecordBadgeRaw,
-  Recordable,
-  ThemeModeType,
-} from '@vben/types';
+import type { MenuRecordBadgeRaw, Recordable, ThemeModeType } from '@vben/types';
 
 interface MenuProps {
   /**

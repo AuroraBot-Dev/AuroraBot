@@ -8,9 +8,7 @@ import { cn } from '@vben-core/shared/utils';
 import { reactiveOmit } from '@vueuse/core';
 import { DialogTitle, useForwardProps } from 'reka-ui';
 
-const props = defineProps<
-  DialogTitleProps & { class?: HTMLAttributes['class'] }
->();
+const props = defineProps<DialogTitleProps & { class?: HTMLAttributes['class'] }>();
 
 const delegatedProps = reactiveOmit(props, 'class');
 

@@ -27,9 +27,7 @@ describe('modal public data types', () => {
       modalApi.setData({ id: '1', mode: 'edit' });
     }
 
-    expectTypeOf<
-      InferModalData<typeof TypedModal>
-    >().toEqualTypeOf<ModalData>();
+    expectTypeOf<InferModalData<typeof TypedModal>>().toEqualTypeOf<ModalData>();
     expectTypeOf(assertInferredData).toBeFunction();
   });
 

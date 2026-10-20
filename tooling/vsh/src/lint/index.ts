@@ -64,11 +64,7 @@ async function runSerial(commands: Command[]) {
   }
 
   if (failed.length > 0) {
-    throw new Error(
-      `Lint failed:\n${failed
-        .map((command) => `  - ${formatCommand(command)}`)
-        .join('\n')}`,
-    );
+    throw new Error(`Lint failed:\n${failed.map((command) => `  - ${formatCommand(command)}`).join('\n')}`);
   }
 }
 
@@ -106,8 +102,7 @@ async function runLint({ format, threads }: LintCommandOptions) {
 
   // CPU 核心数充足且可用内存充足时，默认线程数提升到 4，否则维持 2；
   // 用户通过 --threads 显式指定时优先使用其值。
-  const defaultThreads =
-    cpuCores > CPU_CORE_THRESHOLD && freemem() > FREE_MEMORY_THRESHOLD ? 4 : 2;
+  const defaultThreads = cpuCores > CPU_CORE_THRESHOLD && freemem() > FREE_MEMORY_THRESHOLD ? 4 : 2;
   const threadsArg = `--threads=${threads || defaultThreads}`;
 
   if (format) {
@@ -129,9 +124,7 @@ async function runLint({ format, threads }: LintCommandOptions) {
 
   // 低配机器（CPU 核心数较少）串行执行，避免多进程并发导致瞬时占用飙升；
   // 高配机器并行执行以缩短整体耗时。
-  await (cpuCores <= CPU_CORE_THRESHOLD
-    ? runSerial(commands)
-    : runParallel(commands));
+  await (cpuCores <= CPU_CORE_THRESHOLD ? runSerial(commands) : runParallel(commands));
 }
 
 function defineLintCommand(cac: CAC) {

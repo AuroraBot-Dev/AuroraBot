@@ -1,8 +1,4 @@
-import type {
-  ModelEndpointDetail,
-  ModelEndpointRecord,
-  ModelProviderRecord,
-} from '../types';
+import type { ModelEndpointDetail, ModelEndpointRecord, ModelProviderRecord } from '../types';
 
 import { operationRequest } from '../client';
 
@@ -14,8 +10,5 @@ export function listModels() {
 }
 
 export function getModel(endpointId: string) {
-  return operationRequest<ModelEndpointDetail>(
-    'GET',
-    `/models/${encodeURIComponent(endpointId)}`,
-  );
+  return operationRequest<ModelEndpointDetail>('GET', `/models/${encodeURIComponent(endpointId)}`);
 }

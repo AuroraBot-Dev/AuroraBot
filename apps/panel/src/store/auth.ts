@@ -32,10 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
   const router = useRouter();
   const loginLoading = ref(false);
 
-  async function authLogin(
-    params: Recordable<any>,
-    onSuccess?: () => Promise<void> | void,
-  ) {
+  async function authLogin(params: Recordable<any>, onSuccess?: () => Promise<void> | void) {
     let userInfo: null | UserInfo = null;
     try {
       loginLoading.value = true;
@@ -80,9 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
     resetAllStores();
     await router.replace({
       path: LOGIN_PATH,
-      query: redirect
-        ? { redirect: encodeURIComponent(router.currentRoute.value.fullPath) }
-        : {},
+      query: redirect ? { redirect: encodeURIComponent(router.currentRoute.value.fullPath) } : {},
     });
   }
 

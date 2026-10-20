@@ -15,16 +15,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
-import {
-  NAlert,
-  NCard,
-  NDataTable,
-  NDescriptions,
-  NDescriptionsItem,
-  NTabPane,
-  NTabs,
-  NTag,
-} from 'naive-ui';
+import { NAlert, NCard, NDataTable, NDescriptions, NDescriptionsItem, NTabPane, NTabs, NTag } from 'naive-ui';
 
 import {
   getApiHealth,
@@ -53,23 +44,18 @@ const consoleStatus = ref<ConsoleStatus>();
 const loading = ref(false);
 const error = ref('');
 const unknownOperations = computed(() =>
-  (catalog.value?.operations ?? []).filter(
-    (item) => !operationCoverageKeys.has(operationKey(item.method, item.path)),
-  ),
+  (catalog.value?.operations ?? []).filter((item) => !operationCoverageKeys.has(operationKey(item.method, item.path))),
 );
 const catalogsMatch = computed(
-  () =>
-    JSON.stringify(catalog.value?.operations ?? []) ===
-    JSON.stringify(systemInfo.value?.operations ?? []),
+  () => JSON.stringify(catalog.value?.operations ?? []) === JSON.stringify(systemInfo.value?.operations ?? []),
 );
 
-const catalogColumns: DataTableColumns<OperationCatalog['operations'][number]> =
-  [
-    { key: 'method', title: '方法', width: 80 },
-    { key: 'path', title: 'Path', ellipsis: { tooltip: true } },
-    { key: 'name', title: '名称' },
-    { key: 'summary', title: '说明', ellipsis: { tooltip: true } },
-  ];
+const catalogColumns: DataTableColumns<OperationCatalog['operations'][number]> = [
+  { key: 'method', title: '方法', width: 80 },
+  { key: 'path', title: 'Path', ellipsis: { tooltip: true } },
+  { key: 'name', title: '名称' },
+  { key: 'summary', title: '说明', ellipsis: { tooltip: true } },
+];
 
 async function load() {
   loading.value = true;
@@ -85,39 +71,17 @@ async function load() {
     getCadenceStatus(),
     getConsoleStatus(),
   ]);
-  apiHealth.value =
-    results[0].status === 'fulfilled' ? results[0].value : undefined;
-  rootHealth.value =
-    results[1].status === 'fulfilled' ? results[1].value : undefined;
-  catalog.value =
-    results[2].status === 'fulfilled' ? results[2].value : undefined;
-  systemInfo.value =
-    results[3].status === 'fulfilled'
-      ? (results[3].value ?? undefined)
-      : undefined;
-  config.value =
-    results[4].status === 'fulfilled'
-      ? (results[4].value ?? undefined)
-      : undefined;
-  utils.value =
-    results[5].status === 'fulfilled'
-      ? (results[5].value ?? undefined)
-      : undefined;
-  contracts.value =
-    results[6].status === 'fulfilled'
-      ? (results[6].value ?? undefined)
-      : undefined;
-  cadence.value =
-    results[7].status === 'fulfilled'
-      ? (results[7].value ?? undefined)
-      : undefined;
-  consoleStatus.value =
-    results[8].status === 'fulfilled'
-      ? (results[8].value ?? undefined)
-      : undefined;
+  apiHealth.value = results[0].status === 'fulfilled' ? results[0].value : undefined;
+  rootHealth.value = results[1].status === 'fulfilled' ? results[1].value : undefined;
+  catalog.value = results[2].status === 'fulfilled' ? results[2].value : undefined;
+  systemInfo.value = results[3].status === 'fulfilled' ? (results[3].value ?? undefined) : undefined;
+  config.value = results[4].status === 'fulfilled' ? (results[4].value ?? undefined) : undefined;
+  utils.value = results[5].status === 'fulfilled' ? (results[5].value ?? undefined) : undefined;
+  contracts.value = results[6].status === 'fulfilled' ? (results[6].value ?? undefined) : undefined;
+  cadence.value = results[7].status === 'fulfilled' ? (results[7].value ?? undefined) : undefined;
+  consoleStatus.value = results[8].status === 'fulfilled' ? (results[8].value ?? undefined) : undefined;
   const rejected = results.find((item) => item.status === 'rejected');
-  if (rejected?.status === 'rejected')
-    error.value = (rejected.reason as Error).message;
+  if (rejected?.status === 'rejected') error.value = (rejected.reason as Error).message;
   loading.value = false;
 }
 
@@ -127,17 +91,8 @@ onMounted(load);
 <template>
   <Page>
     <NAlert v-if="error" class="mb-4" :title="error" type="warning" />
-    <NAlert
-      class="mb-4"
-      title="当前 Panel 是纯观察后端，不提供写入、Tree 控制或进程控制。"
-      type="info"
-    />
-    <NAlert
-      v-if="unknownOperations.length"
-      class="mb-4"
-      title="后端目录中存在未映射 Operation。"
-      type="warning"
-    />
+    <NAlert class="mb-4" title="当前 Panel 是纯观察后端，不提供写入、Tree 控制或进程控制。" type="info" />
+    <NAlert v-if="unknownOperations.length" class="mb-4" title="后端目录中存在未映射 Operation。" type="warning" />
 
     <section class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <NCard title="/api/health">
@@ -155,9 +110,7 @@ onMounted(load);
           {{ catalog?.operations.length ?? 0 }} /
           {{ operationCoverageKeys.size }}
         </NTag>
-        <div class="mt-2 text-sm">
-          目录：{{ catalogsMatch ? '一致' : '不一致' }}
-        </div>
+        <div class="mt-2 text-sm">目录：{{ catalogsMatch ? '一致' : '不一致' }}</div>
       </NCard>
       <NCard title="本地终端">
         <NTag :type="consoleStatus?.enabled ? 'success' : 'default'">

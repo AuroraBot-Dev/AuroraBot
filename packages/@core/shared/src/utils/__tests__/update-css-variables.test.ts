@@ -33,11 +33,7 @@ it('updateCSSVariables should support a custom selector', () => {
   document.head.innerHTML = `<style id="tdesign-styles"></style>`;
 
   // 使用自定义选择器（如 TDesign 的 theme-mode 选择器）更新 CSS 变量
-  updateCSSVariables(
-    { '--td-brand-color': 'rgb(0, 82, 217)' },
-    'tdesign-styles',
-    ":root[theme-mode='dark']",
-  );
+  updateCSSVariables({ '--td-brand-color': 'rgb(0, 82, 217)' }, 'tdesign-styles', ":root[theme-mode='dark']");
 
   const styleElement = document.querySelector('#tdesign-styles');
   const content = styleElement?.textContent ?? '';

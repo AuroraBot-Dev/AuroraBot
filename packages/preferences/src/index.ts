@@ -1,10 +1,6 @@
 import type { DeepPartial } from '@vben/types';
 
-import type {
-  CustomPreferencesRecord,
-  Preferences,
-  PreferencesExtension,
-} from '@vben-core/preferences';
+import type { CustomPreferencesRecord, Preferences, PreferencesExtension } from '@vben-core/preferences';
 
 /**
  * 如果你想所有的app都使用相同的默认偏好设置，你可以在这里定义
@@ -17,9 +13,9 @@ function defineOverridesPreferences(preferences: DeepPartial<Preferences>) {
   return preferences;
 }
 
-function definePreferencesExtension<
-  TCustomPreferences extends object = CustomPreferencesRecord,
->(extension: PreferencesExtension<TCustomPreferences>) {
+function definePreferencesExtension<TCustomPreferences extends object = CustomPreferencesRecord>(
+  extension: PreferencesExtension<TCustomPreferences>,
+) {
   return extension;
 }
 
@@ -29,10 +25,6 @@ const appCopyrightPreferences = {
   icpLink: 'https://beian.miit.gov.cn/',
 } satisfies DeepPartial<Preferences>['copyright'];
 
-export {
-  appCopyrightPreferences,
-  defineOverridesPreferences,
-  definePreferencesExtension,
-};
+export { appCopyrightPreferences, defineOverridesPreferences, definePreferencesExtension };
 
 export * from '@vben-core/preferences';

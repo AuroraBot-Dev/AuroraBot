@@ -17,8 +17,7 @@ type ThemeModeType = 'auto' | 'dark' | 'light';
  * user-dropdown 用户的下拉弹出框中
  * none 不显示
  */
-type PreferencesButtonPositionType =
-  'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown';
+type PreferencesButtonPositionType = 'auto' | 'fixed' | 'header' | 'none' | 'user-dropdown';
 
 type BuiltinThemeType =
   | 'custom'

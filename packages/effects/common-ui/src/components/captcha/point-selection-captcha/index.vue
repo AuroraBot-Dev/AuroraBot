@@ -126,11 +126,7 @@ function handleConfirm() {
     </template>
 
     <template #extra>
-      <VbenIconButton
-        :aria-label="$t('ui.captcha.refreshAriaLabel')"
-        class="ml-1"
-        @click="handleRefresh"
-      >
+      <VbenIconButton :aria-label="$t('ui.captcha.refreshAriaLabel')" class="ml-1" @click="handleRefresh">
         <RotateCw class="size-5" />
       </VbenIconButton>
       <VbenButton
@@ -165,10 +161,7 @@ function handleConfirm() {
         :src="hintImage"
         class="h-10 w-full rounded-sm border border-border"
       />
-      <div
-        v-else-if="hintText"
-        class="flex-center h-10 w-full rounded-sm border border-border"
-      >
+      <div v-else-if="hintText" class="flex-center h-10 w-full rounded-sm border border-border">
         {{ `${$t('ui.captcha.clickInOrder')}` + `【${hintText}】` }}
       </div>
     </template>

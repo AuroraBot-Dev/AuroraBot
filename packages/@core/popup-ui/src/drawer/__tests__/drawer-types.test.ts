@@ -27,9 +27,7 @@ describe('drawer public data types', () => {
       drawerApi.setData({ id: '1', mode: 'edit' });
     }
 
-    expectTypeOf<
-      InferDrawerData<typeof TypedDrawer>
-    >().toEqualTypeOf<DrawerData>();
+    expectTypeOf<InferDrawerData<typeof TypedDrawer>>().toEqualTypeOf<DrawerData>();
     expectTypeOf(assertInferredData).toBeFunction();
   });
 

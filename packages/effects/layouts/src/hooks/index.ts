@@ -1,8 +1,5 @@
 import type { VNode } from 'vue';
-import type {
-  RouteLocationNormalizedLoaded,
-  RouteLocationNormalizedLoadedGeneric,
-} from 'vue-router';
+import type { RouteLocationNormalizedLoaded, RouteLocationNormalizedLoadedGeneric } from 'vue-router';
 
 import { computed } from 'vue';
 
@@ -13,15 +10,10 @@ import { preferences, usePreferences } from '@vben/preferences';
  * @param component
  * @param route
  */
-export function transformComponent(
-  component: VNode,
-  route: RouteLocationNormalizedLoadedGeneric,
-) {
+export function transformComponent(component: VNode, route: RouteLocationNormalizedLoadedGeneric) {
   // 组件视图未找到，如果有设置后备视图，则返回后备视图，如果没有，则抛出错误
   if (!component) {
-    console.error(
-      'Component view not found，please check the route configuration',
-    );
+    console.error('Component view not found，please check the route configuration');
     return undefined;
   }
 

@@ -20,10 +20,7 @@ interface CodeWorkspaceCommandOptions {
   spaces?: number;
 }
 
-async function createCodeWorkspace({
-  autoCommit = false,
-  spaces = 2,
-}: CodeWorkspaceCommandOptions) {
+async function createCodeWorkspace({ autoCommit = false, spaces = 2 }: CodeWorkspaceCommandOptions) {
   const { packages, rootDir } = await getPackages();
 
   let folders = packages.map((pkg) => {
@@ -46,10 +43,7 @@ async function createCodeWorkspace({
   }
 }
 
-async function runCodeWorkspace({
-  autoCommit,
-  spaces,
-}: CodeWorkspaceCommandOptions) {
+async function runCodeWorkspace({ autoCommit, spaces }: CodeWorkspaceCommandOptions) {
   await createCodeWorkspace({
     autoCommit,
     spaces,

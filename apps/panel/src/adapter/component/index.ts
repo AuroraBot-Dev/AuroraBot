@@ -21,11 +21,7 @@ import type {
 
 import type { Component } from 'vue';
 
-import type {
-  ApiComponentSharedProps,
-  BaseFormComponentType,
-  IconPickerProps,
-} from '@vben/common-ui';
+import type { ApiComponentSharedProps, BaseFormComponentType, IconPickerProps } from '@vben/common-ui';
 import type { Recordable } from '@vben/types';
 
 import { defineAsyncComponent, defineComponent, h, ref } from 'vue';
@@ -35,54 +31,22 @@ import { $t } from '@vben/locales';
 
 import { message } from '#/adapter/naive';
 
-const NButton = defineAsyncComponent(() =>
-  import('naive-ui/es/button').then((res) => res.NButton),
-);
-const NCheckbox = defineAsyncComponent(() =>
-  import('naive-ui/es/checkbox').then((res) => res.NCheckbox),
-);
-const NCheckboxGroup = defineAsyncComponent(() =>
-  import('naive-ui/es/checkbox').then((res) => res.NCheckboxGroup),
-);
-const NDatePicker = defineAsyncComponent(() =>
-  import('naive-ui/es/date-picker').then((res) => res.NDatePicker),
-);
-const NDivider = defineAsyncComponent(() =>
-  import('naive-ui/es/divider').then((res) => res.NDivider),
-);
-const NInput = defineAsyncComponent(() =>
-  import('naive-ui/es/input').then((res) => res.NInput),
-);
-const NInputNumber = defineAsyncComponent(() =>
-  import('naive-ui/es/input-number').then((res) => res.NInputNumber),
-);
-const NRadio = defineAsyncComponent(() =>
-  import('naive-ui/es/radio').then((res) => res.NRadio),
-);
-const NRadioButton = defineAsyncComponent(() =>
-  import('naive-ui/es/radio').then((res) => res.NRadioButton),
-);
-const NRadioGroup = defineAsyncComponent(() =>
-  import('naive-ui/es/radio').then((res) => res.NRadioGroup),
-);
-const NSelect = defineAsyncComponent(() =>
-  import('naive-ui/es/select').then((res) => res.NSelect),
-);
-const NSpace = defineAsyncComponent(() =>
-  import('naive-ui/es/space').then((res) => res.NSpace),
-);
-const NSwitch = defineAsyncComponent(() =>
-  import('naive-ui/es/switch').then((res) => res.NSwitch),
-);
-const NTimePicker = defineAsyncComponent(() =>
-  import('naive-ui/es/time-picker').then((res) => res.NTimePicker),
-);
-const NTreeSelect = defineAsyncComponent(() =>
-  import('naive-ui/es/tree-select').then((res) => res.NTreeSelect),
-);
-const NUpload = defineAsyncComponent(() =>
-  import('naive-ui/es/upload').then((res) => res.NUpload),
-);
+const NButton = defineAsyncComponent(() => import('naive-ui/es/button').then((res) => res.NButton));
+const NCheckbox = defineAsyncComponent(() => import('naive-ui/es/checkbox').then((res) => res.NCheckbox));
+const NCheckboxGroup = defineAsyncComponent(() => import('naive-ui/es/checkbox').then((res) => res.NCheckboxGroup));
+const NDatePicker = defineAsyncComponent(() => import('naive-ui/es/date-picker').then((res) => res.NDatePicker));
+const NDivider = defineAsyncComponent(() => import('naive-ui/es/divider').then((res) => res.NDivider));
+const NInput = defineAsyncComponent(() => import('naive-ui/es/input').then((res) => res.NInput));
+const NInputNumber = defineAsyncComponent(() => import('naive-ui/es/input-number').then((res) => res.NInputNumber));
+const NRadio = defineAsyncComponent(() => import('naive-ui/es/radio').then((res) => res.NRadio));
+const NRadioButton = defineAsyncComponent(() => import('naive-ui/es/radio').then((res) => res.NRadioButton));
+const NRadioGroup = defineAsyncComponent(() => import('naive-ui/es/radio').then((res) => res.NRadioGroup));
+const NSelect = defineAsyncComponent(() => import('naive-ui/es/select').then((res) => res.NSelect));
+const NSpace = defineAsyncComponent(() => import('naive-ui/es/space').then((res) => res.NSpace));
+const NSwitch = defineAsyncComponent(() => import('naive-ui/es/switch').then((res) => res.NSwitch));
+const NTimePicker = defineAsyncComponent(() => import('naive-ui/es/time-picker').then((res) => res.NTimePicker));
+const NTreeSelect = defineAsyncComponent(() => import('naive-ui/es/tree-select').then((res) => res.NTreeSelect));
+const NUpload = defineAsyncComponent(() => import('naive-ui/es/upload').then((res) => res.NUpload));
 
 const withDefaultPlaceholder = (
   component: Component,
@@ -93,10 +57,7 @@ const withDefaultPlaceholder = (
     name: component.name,
     inheritAttrs: false,
     setup: (props: any, { attrs, expose, slots }) => {
-      const placeholder =
-        props?.placeholder ||
-        attrs?.placeholder ||
-        $t(`ui.placeholder.${type}`);
+      const placeholder = props?.placeholder || attrs?.placeholder || $t(`ui.placeholder.${type}`);
       // 透传组件暴露的方法
       const innerRef = ref();
       expose(
@@ -108,12 +69,7 @@ const withDefaultPlaceholder = (
           },
         ),
       );
-      return () =>
-        h(
-          component,
-          { ...componentProps, placeholder, ...props, ...attrs, ref: innerRef },
-          slots,
-        );
+      return () => h(component, { ...componentProps, placeholder, ...props, ...attrs, ref: innerRef }, slots);
     },
   });
 };
@@ -204,11 +160,7 @@ async function initComponentAdapter() {
           defaultSlot = () => options.map((option) => h(NCheckbox, option));
         }
       }
-      return h(
-        NCheckboxGroup,
-        { ...props, ...attrs },
-        { default: defaultSlot },
-      );
+      return h(NCheckboxGroup, { ...props, ...attrs }, { default: defaultSlot });
     },
     DatePicker: NDatePicker,
     // 自定义默认按钮
@@ -233,20 +185,11 @@ async function initComponentAdapter() {
       } else {
         const { options } = attrs;
         if (Array.isArray(options)) {
-          defaultSlot = () =>
-            options.map((option) =>
-              h(attrs.isButton ? NRadioButton : NRadio, option),
-            );
+          defaultSlot = () => options.map((option) => h(attrs.isButton ? NRadioButton : NRadio, option));
         }
       }
-      const groupRender = h(
-        NRadioGroup,
-        { ...props, ...attrs },
-        { default: defaultSlot },
-      );
-      return attrs.isButton
-        ? h(NSpace, { vertical: true }, () => groupRender)
-        : groupRender;
+      const groupRender = h(NRadioGroup, { ...props, ...attrs }, { default: defaultSlot });
+      return attrs.isButton ? h(NSpace, { vertical: true }, () => groupRender) : groupRender;
     },
     Select: withDefaultPlaceholder(NSelect, 'select'),
     Space: NSpace,

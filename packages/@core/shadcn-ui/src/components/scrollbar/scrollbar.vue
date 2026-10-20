@@ -54,11 +54,7 @@ const showShadowRight = computed(() => props.shadow && props.shadowRight);
 
 const computedShadowClasses = computed(() => {
   return {
-    'both-shadow':
-      !isAtLeft.value &&
-      !isAtRight.value &&
-      showShadowLeft.value &&
-      showShadowRight.value,
+    'both-shadow': !isAtLeft.value && !isAtRight.value && showShadowLeft.value && showShadowRight.value,
     'left-shadow': !isAtLeft.value && showShadowLeft.value,
     'right-shadow': !isAtRight.value && showShadowRight.value,
   };
@@ -74,12 +70,8 @@ function handleScroll(event: Event) {
   const scrollWidth = target?.scrollWidth ?? 0;
   isAtTop.value = scrollTop <= 0;
   isAtLeft.value = scrollLeft <= 0;
-  isAtBottom.value =
-    Math.abs(scrollTop) + clientHeight >=
-    scrollHeight - ARRIVED_STATE_THRESHOLD_PIXELS;
-  isAtRight.value =
-    Math.abs(scrollLeft) + clientWidth >=
-    scrollWidth - ARRIVED_STATE_THRESHOLD_PIXELS;
+  isAtBottom.value = Math.abs(scrollTop) + clientHeight >= scrollHeight - ARRIVED_STATE_THRESHOLD_PIXELS;
+  isAtRight.value = Math.abs(scrollLeft) + clientWidth >= scrollWidth - ARRIVED_STATE_THRESHOLD_PIXELS;
 
   emit('scrollAt', {
     bottom: isAtBottom.value,
@@ -113,11 +105,7 @@ function handleScroll(event: Event) {
       }"
       class="scrollbar-bottom-shadow pointer-events-none absolute bottom-0 z-10 h-12 w-full opacity-0 transition-opacity duration-300 ease-in-out will-change-[opacity]"
     ></div>
-    <ScrollBar
-      v-if="horizontal"
-      :class="cn(scrollBarClass)"
-      orientation="horizontal"
-    />
+    <ScrollBar v-if="horizontal" :class="cn(scrollBarClass)" orientation="horizontal" />
   </ScrollArea>
 </template>
 
@@ -128,38 +116,19 @@ function handleScroll(event: Event) {
   }
 
   &:not(.both-shadow).right-shadow {
-    mask-image: linear-gradient(
-      90deg,
-      #000 0%,
-      #000 calc(100% - 16px),
-      transparent
-    );
+    mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 16px), transparent);
   }
 
   &.both-shadow {
-    mask-image: linear-gradient(
-      90deg,
-      transparent,
-      #000 16px,
-      #000 calc(100% - 16px),
-      transparent 100%
-    );
+    mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent 100%);
   }
 }
 
 .scrollbar-top-shadow {
-  background: linear-gradient(
-    to bottom,
-    hsl(var(--scroll-shadow, var(--background))),
-    transparent
-  );
+  background: linear-gradient(to bottom, hsl(var(--scroll-shadow, var(--background))), transparent);
 }
 
 .scrollbar-bottom-shadow {
-  background: linear-gradient(
-    to top,
-    hsl(var(--scroll-shadow, var(--background))),
-    transparent
-  );
+  background: linear-gradient(to top, hsl(var(--scroll-shadow, var(--background))), transparent);
 }
 </style>

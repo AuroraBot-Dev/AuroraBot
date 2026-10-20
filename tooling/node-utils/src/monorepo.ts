@@ -4,8 +4,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import * as manypkg from '@manypkg/get-packages';
-const { getPackages: getPackagesFunc, getPackagesSync: getPackagesSyncFunc } =
-  manypkg;
+const { getPackages: getPackagesFunc, getPackagesSync: getPackagesSyncFunc } = manypkg;
 
 /**
  * 查找大仓的根目录

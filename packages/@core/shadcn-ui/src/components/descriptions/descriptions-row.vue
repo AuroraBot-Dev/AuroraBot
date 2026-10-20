@@ -24,10 +24,7 @@ withDefaults(defineProps<Props>(), {
   vertical: false,
 });
 
-function mergeStyle(
-  base?: CSSProperties,
-  override?: CSSProperties,
-): CSSProperties | undefined {
+function mergeStyle(base?: CSSProperties, override?: CSSProperties): CSSProperties | undefined {
   if (!base && !override) return undefined;
   return { ...base, ...override };
 }

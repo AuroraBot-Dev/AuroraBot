@@ -45,30 +45,18 @@ interface LandingElements {
   languageMenu: TemplateRef<HTMLElement>;
 }
 
-export function useLanding({
-  languagePicker,
-  languageButton,
-  languageMenu,
-}: LandingElements) {
+export function useLanding({ languagePicker, languageButton, languageMenu }: LandingElements) {
   const locale = ref<Locale>(
-    normalizeLocale(
-      new URLSearchParams(location.search).get('lang') ??
-        stored('aurora-locale') ??
-        navigator.language,
-    ),
+    normalizeLocale(new URLSearchParams(location.search).get('lang') ?? stored('aurora-locale') ?? navigator.language),
   );
-  const theme = ref(
-    stored('aurora-theme') ??
-      (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  );
+  const theme = ref(stored('aurora-theme') ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   const menuOpen = ref(false);
   const copied = ref(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
   function t(path: string): string {
     let value: unknown = messages[locale.value];
-    for (const part of path.split('.'))
-      value = (value as Record<string, unknown> | undefined)?.[part];
+    for (const part of path.split('.')) value = (value as Record<string, unknown> | undefined)?.[part];
     return typeof value === 'string' ? value : '';
   }
 
@@ -78,17 +66,12 @@ export function useLanding({
     document.documentElement.dir = meta.direction;
     document.documentElement.dataset.theme = theme.value;
     document.title = meta.title;
-    document
-      .querySelectorAll<HTMLElement>('head [data-i18n-attr]')
-      .forEach((element) => {
-        for (const binding of (element.dataset.i18nAttr ?? '').split(',')) {
-          const separator = binding.indexOf(':');
-          element.setAttribute(
-            binding.slice(0, separator),
-            t(binding.slice(separator + 1)),
-          );
-        }
-      });
+    document.querySelectorAll<HTMLElement>('head [data-i18n-attr]').forEach((element) => {
+      for (const binding of (element.dataset.i18nAttr ?? '').split(',')) {
+        const separator = binding.indexOf(':');
+        element.setAttribute(binding.slice(0, separator), t(binding.slice(separator + 1)));
+      }
+    });
     const schema = document.querySelector('#structured-data');
     if (schema) schema.textContent = JSON.stringify(meta.schema);
   });
@@ -96,9 +79,7 @@ export function useLanding({
   async function openLanguageMenu(): Promise<void> {
     menuOpen.value = true;
     await nextTick();
-    languageMenu.value
-      ?.querySelector<HTMLButtonElement>('[aria-checked="true"]')
-      ?.focus();
+    languageMenu.value?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
   }
   function closeLanguageMenu(): void {
     menuOpen.value = false;
@@ -114,16 +95,9 @@ export function useLanding({
       closeLanguageMenu();
     } else if (['ArrowDown', 'ArrowUp', 'End', 'Home'].includes(event.key)) {
       event.preventDefault();
-      const options = [
-        ...(languageMenu.value?.querySelectorAll<HTMLButtonElement>('button') ??
-          []),
-      ];
-      const index = options.indexOf(
-        document.activeElement as HTMLButtonElement,
-      );
-      let next =
-        (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) %
-        options.length;
+      const options = [...(languageMenu.value?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+      const index = options.indexOf(document.activeElement as HTMLButtonElement);
+      let next = (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
       if (event.key === 'Home') next = 0;
       if (event.key === 'End') next = options.length - 1;
       options[next]?.focus();
@@ -142,8 +116,7 @@ export function useLanding({
     remember('aurora-theme', theme.value);
   }
   async function copyInstall(): Promise<void> {
-    const command =
-      document.querySelector<HTMLElement>('#quick-command')?.innerText;
+    const command = document.querySelector<HTMLElement>('#quick-command')?.innerText;
     if (!command || !navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(command);
@@ -157,11 +130,7 @@ export function useLanding({
     }
   }
   function outsideClick(event: MouseEvent): void {
-    if (
-      event.target instanceof Node &&
-      !languagePicker.value?.contains(event.target)
-    )
-      menuOpen.value = false;
+    if (event.target instanceof Node && !languagePicker.value?.contains(event.target)) menuOpen.value = false;
   }
   onMounted(() => document.addEventListener('click', outsideClick));
   onUnmounted(() => {

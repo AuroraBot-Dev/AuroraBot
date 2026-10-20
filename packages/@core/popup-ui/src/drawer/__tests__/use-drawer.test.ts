@@ -72,8 +72,7 @@ afterEach(() => {
 
 describe('useVbenDrawer', () => {
   it('rebinds the parent api when the consumer is recreated', async () => {
-    const { consumerKey, getCurrentApi, onOpenChange, parentApi } =
-      await mountRebindingHarness();
+    const { consumerKey, getCurrentApi, onOpenChange, parentApi } = await mountRebindingHarness();
     const initialApi = getCurrentApi();
 
     expect(initialApi).toBeDefined();

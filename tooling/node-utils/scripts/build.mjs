@@ -7,16 +7,7 @@ const pnpmCommand =
 
 const steps = [
   ['exec', 'tsdown', '--no-dts'],
-  [
-    'exec',
-    'tsc',
-    '-p',
-    'tsconfig.build.json',
-    '--emitDeclarationOnly',
-    '--declaration',
-    '--outDir',
-    'dist',
-  ],
+  ['exec', 'tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly', '--declaration', '--outDir', 'dist'],
 ];
 
 for (const args of steps) {

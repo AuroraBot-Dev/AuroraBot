@@ -67,10 +67,7 @@ type DiffResult<T> = Partial<{
 type ArrayComparator = (a: any[], b: any[]) => boolean;
 
 function createDiff(arrayEquals: ArrayComparator) {
-  return function <T extends Record<string, any>>(
-    obj1: T,
-    obj2: T,
-  ): DiffResult<T> {
+  return function <T extends Record<string, any>>(obj1: T, obj2: T): DiffResult<T> {
     function findDifferences(o1: any, o2: any): any {
       if (Array.isArray(o1) && Array.isArray(o2)) {
         if (!arrayEquals(o1, o2)) {
@@ -79,12 +76,7 @@ function createDiff(arrayEquals: ArrayComparator) {
         return undefined;
       }
 
-      if (
-        typeof o1 === 'object' &&
-        typeof o2 === 'object' &&
-        o1 !== null &&
-        o2 !== null
-      ) {
+      if (typeof o1 === 'object' && typeof o2 === 'object' && o1 !== null && o2 !== null) {
         const diffResult: any = {};
 
         const keys = new Set([...Object.keys(o1), ...Object.keys(o2)]);

@@ -92,22 +92,14 @@ const shouldUseFullLogo = computed(() => {
  * @zh_CN 根据配置展示 logo text
  */
 const shouldShowText = computed(() => {
-  return (
-    props.showText &&
-    !props.collapsed &&
-    !shouldUseFullLogo.value &&
-    !!props.text
-  );
+  return props.showText && !props.collapsed && !shouldUseFullLogo.value && !!props.text;
 });
 
 /**
  * @zh_CN full 模式下logo的样式
  */
 const fullLogoStyle = computed(() => ({
-  height:
-    typeof props.fullLogoHeight === 'number'
-      ? `${props.fullLogoHeight}px`
-      : props.fullLogoHeight,
+  height: typeof props.fullLogoHeight === 'number' ? `${props.fullLogoHeight}px` : props.fullLogoHeight,
   objectFit: props.fit,
 }));
 </script>
@@ -115,22 +107,11 @@ const fullLogoStyle = computed(() => ({
 <template>
   <div :class="theme" class="flex h-full items-center text-lg">
     <a
-      :class="[
-        $attrs.class,
-        shouldShowText
-          ? 'gap-2 px-3 justify-start'
-          : 'w-full p-0 justify-center',
-      ]"
+      :class="[$attrs.class, shouldShowText ? 'gap-2 px-3 justify-start' : 'w-full p-0 justify-center']"
       :href="href"
       class="flex h-full items-center overflow-hidden text-lg leading-normal transition-all duration-500"
     >
-      <img
-        v-if="logoSrc && shouldUseFullLogo"
-        :alt="text"
-        :src="logoSrc"
-        :style="fullLogoStyle"
-        class="w-full"
-      />
+      <img v-if="logoSrc && shouldUseFullLogo" :alt="text" :src="logoSrc" :style="fullLogoStyle" class="w-full" />
 
       <VbenAvatar
         v-else-if="logoSrc"

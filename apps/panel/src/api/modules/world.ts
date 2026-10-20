@@ -9,8 +9,5 @@ export function getWorldStream(after = 0, limit = 64) {
 }
 
 export function getWorldCommit(commitId: string) {
-  return operationRequest<WorldCommit>(
-    'GET',
-    `/world/commits/${encodeURIComponent(commitId)}`,
-  );
+  return operationRequest<WorldCommit>('GET', `/world/commits/${encodeURIComponent(commitId)}`);
 }

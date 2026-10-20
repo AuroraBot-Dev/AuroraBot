@@ -11,9 +11,7 @@ function loadScript(src: string) {
     const script = document.createElement('script');
     script.src = src;
     script.addEventListener('load', () => resolve());
-    script.addEventListener('error', () =>
-      reject(new Error(`Failed to load script: ${src}`)),
-    );
+    script.addEventListener('error', () => reject(new Error(`Failed to load script: ${src}`)));
     document.head.append(script);
   });
 }
