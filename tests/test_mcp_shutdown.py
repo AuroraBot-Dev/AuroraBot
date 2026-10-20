@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from test_mcp_runtime import FakeClient, FakeFactory, FakeWorld, _spec, _tool
 
 from aurorabot.mcp import McpAppState, McpCloseError, McpStartupError, McpToolsPage, prepare_mcp
+from tests.test_mcp_runtime import FakeClient, FakeFactory, FakeWorld, _spec, _tool
 
 
 @pytest.mark.parametrize("self_cancelled", [False, True])

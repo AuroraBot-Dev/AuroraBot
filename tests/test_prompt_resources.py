@@ -7,9 +7,6 @@ import hashlib
 from typing import TYPE_CHECKING
 
 import pytest
-from model_support import fake_endpoint
-from test_assembly import FakeModel
-from test_kernel import _Settings
 
 from aurora import load_config
 from aurorabot.artifacts.module import MODULE as ARTIFACTS_MODULE
@@ -28,6 +25,9 @@ from aurorabot.prompt.module import MODULE as PROMPT_MODULE
 from aurorabot.resource_content.module import MODULE as CONTENT_MODULE
 from aurorabot.resources.module import MODULE as RESOURCES_MODULE
 from aurorabot.runtime import assemble_runtime
+from tests.kernel_support import Settings as _Settings
+from tests.model_support import TemplateModel as FakeModel
+from tests.model_support import fake_endpoint
 
 if TYPE_CHECKING:
     from pathlib import Path

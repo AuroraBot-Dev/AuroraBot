@@ -7,9 +7,9 @@ from importlib.metadata import EntryPoint
 from typing import TYPE_CHECKING
 
 import pytest
-from test_kernel import _Settings
 
 from aurorabot.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed, discovery
+from tests.kernel_support import Settings as _Settings
 
 if TYPE_CHECKING:
     from pathlib import Path

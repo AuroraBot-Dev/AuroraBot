@@ -6,8 +6,6 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from memory_operations_support import feedback_arguments, prepared_runtime, request
-
 from aurorabot.contracts import WorldFrontier
 from aurorabot.contracts.memory_codec import exposure_data, read_exposure
 from aurorabot.contracts.memory_graph_codec import ranking_fingerprint, read_ranking
@@ -15,6 +13,7 @@ from aurorabot.contracts.operation import OperationStatus
 from aurorabot.contracts.pkgs.memory import MemoryPolicy
 from aurorabot.contracts.pkgs.operations import OperationRegistry
 from aurorabot.memory_model.rules import RuleMemoryPolicy
+from tests.memory_operations_support import feedback_arguments, prepared_runtime, request
 
 if TYPE_CHECKING:
     from pathlib import Path

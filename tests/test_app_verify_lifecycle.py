@@ -7,12 +7,12 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_mcp_runtime import FakeClient
-from test_mcp_sdk_client import _route_stdio_to_server, _server
 
 from aurora.commands.app.models import VerifyError
 from aurora.commands.app.verify import MCPVerifier, process_target
 from aurorabot.mcp import McpToolsPage, SdkMcpClientFactory
+from tests.test_mcp_runtime import FakeClient
+from tests.test_mcp_sdk_client import _route_stdio_to_server, _server
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import DEFAULT_COMMIT, FakeProcessRunner, apps_root_entries, cloning_runner, repository
 
 from aurora.commands.app.clone import (
     GIT_CLONE_TIMEOUT_SECONDS,
@@ -31,6 +30,7 @@ from aurora.commands.app.clone import (
 )
 from aurora.commands.app.install import check_admission, install_root
 from aurora.commands.app.models import CloneError, PlanError
+from tests.app_clone_support import DEFAULT_COMMIT, FakeProcessRunner, apps_root_entries, cloning_runner, repository
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

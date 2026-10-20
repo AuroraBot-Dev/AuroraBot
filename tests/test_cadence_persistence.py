@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
-from test_cadence import FakeLauncher
 
 from aurorabot.cadence import Cadence
 from aurorabot.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldFrontier
@@ -16,6 +15,7 @@ from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
 from aurorabot.rhythm.rules import RuleRhythmPolicy
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.test_cadence import FakeLauncher
 
 if TYPE_CHECKING:
     from pathlib import Path

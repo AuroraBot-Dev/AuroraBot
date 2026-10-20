@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
 
 from aurora import load_config
 from aurorabot.contracts import (
@@ -20,6 +19,7 @@ from aurorabot.contracts import (
 )
 from aurorabot.runtime import assemble_runtime
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

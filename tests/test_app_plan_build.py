@@ -8,8 +8,6 @@
 from __future__ import annotations
 
 import pytest
-from app_clone_support import APPS_DIRECTORY
-from app_install_support import ENDPOINT, MANIFEST_EVIDENCE, WEATHER_COMMAND, candidate, manifest_text
 
 from aurora.commands.app.install import (
     PACKAGE_RUNNER_WORKING_DIR,
@@ -29,6 +27,8 @@ from aurora.commands.app.install import (
     user_candidate,
 )
 from aurora.commands.app.models import PlanError
+from tests.app_clone_support import APPS_DIRECTORY
+from tests.app_install_support import ENDPOINT, MANIFEST_EVIDENCE, WEATHER_COMMAND, candidate, manifest_text
 
 _FULL_NAME = "Churk-Ben/Aurora-QQ"
 _FINAL_PATH = "extensions/apps/Churk-Ben/Aurora-QQ"

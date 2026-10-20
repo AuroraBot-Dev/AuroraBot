@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 import torch
-from test_memory_selection import _NOW, _fact
 
 from aurorabot.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
 from aurorabot.memory.graph import graph_interactions
 from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from tests.test_memory_selection import _NOW, _fact
 
 
 def _request(helpful: bool) -> MemoryRankingRequest:

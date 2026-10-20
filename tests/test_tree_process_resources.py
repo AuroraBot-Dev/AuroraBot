@@ -8,9 +8,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
-from test_engine_runtime import FakeModel as SequenceModel
-from test_engine_runtime import _agent, _assembler
 
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
@@ -27,6 +24,9 @@ from aurorabot.engine.config import EngineConfig
 from aurorabot.mcp.config import PlatformsConfig
 from aurorabot.runtime import compose_runtime
 from aurorabot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from tests.model_support import ScriptedModel as SequenceModel
+from tests.model_support import TemplateModel as FakeModel
+from tests.test_engine_runtime import _agent, _assembler
 
 if TYPE_CHECKING:
     from pathlib import Path

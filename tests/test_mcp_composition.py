@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from model_support import FakeModelDirectory
 
 from aurora.configs import load_config
 from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
@@ -33,6 +32,7 @@ from aurorabot.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemote
 from aurorabot.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from aurorabot.mcp.module import build_mcp_specs
 from aurorabot.runtime import assemble_runtime, create_runtime, run_runtime
+from tests.model_support import FakeModelDirectory
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping

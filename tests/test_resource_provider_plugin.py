@@ -6,10 +6,9 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurorabot.runtime import assemble_runtime
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

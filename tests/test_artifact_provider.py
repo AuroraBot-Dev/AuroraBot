@@ -6,7 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
 
 from aurora import load_config
 from aurorabot.contracts.artifact import ArtifactIntegrityError
@@ -15,6 +14,7 @@ from aurorabot.contracts.pkgs.resources import ResourceCatalog
 from aurorabot.contracts.resource import ResourceKey
 from aurorabot.contracts.resource_query import ResourceQuery
 from aurorabot.runtime import assemble_runtime
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

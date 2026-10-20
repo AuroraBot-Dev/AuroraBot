@@ -142,4 +142,6 @@ LiteLLM Model、Console、MCP SDK 2.x、完整 start 生命周期、世界持久
 - 单个源码文件不超过 600 行, 数据模型定义（ORM/DataClass）如 SQLAlchemy 或 Pydantic 模型，如果只是字段声明（无逻辑），允许 1000+ 行，因为它们是声明式配置。
 - 不以 lint ignore 掩盖核心复杂度。
 - 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 的临时 SQLite 集成测试外不使用数据库。
+- pytest 使用 importlib 模式，测试工具经 `tests.*` 显式导入；优先保护行为、边界与失败恢复，避免重复用例和测试辅助函数自身的测试。
+- 日常检查不采集覆盖率；`uv run aurora check --test --coverage` 按需采集，CI 总体下限为 80%。
 - 提交前运行 `uv run aurora check --fix`。

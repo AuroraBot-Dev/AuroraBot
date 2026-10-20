@@ -4,10 +4,11 @@ import asyncio
 from dataclasses import replace
 
 import pytest
-from test_engine_runtime import FakeModel, _agent, _runner
 
 from aurorabot.contracts import AgentTree, ChatMessage, ToolCall
 from aurorabot.contracts.tool import DELEGATE_TOOL
+from tests.model_support import ScriptedModel as FakeModel
+from tests.test_engine_runtime import _agent, _runner
 
 
 def test_tree_transitions_keep_the_original_definition_object() -> None:

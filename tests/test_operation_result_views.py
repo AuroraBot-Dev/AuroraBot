@@ -8,7 +8,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_operation_receipts import LargeOperation
 
 from aurorabot.artifacts.operations import ArtifactOperation
 from aurorabot.artifacts.store import FileArtifactStore
@@ -20,6 +19,7 @@ from aurorabot.operations.tool import OperationTool
 from aurorabot.resources.catalog import ResourceCatalog
 from aurorabot.runtime.resource_commands import ResourceCommands
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.test_operation_receipts import LargeOperation
 
 if TYPE_CHECKING:
     from pathlib import Path

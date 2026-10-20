@@ -11,7 +11,6 @@ import stat
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import project
 
 from aurora.commands.app.clone import remove_tree
 from aurora.commands.app.models import AppNotFoundError, PathError, RegistryWriteError, RemoveError
@@ -23,6 +22,7 @@ from aurora.commands.app.transaction import (
     plan_removal,
     remove_transaction,
 )
+from tests.app_clone_support import project
 
 if TYPE_CHECKING:
     from pathlib import Path

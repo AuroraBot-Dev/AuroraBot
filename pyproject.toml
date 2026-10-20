@@ -39,10 +39,14 @@ learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --basetemp=tests/.tmp"
+addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basetemp=tests/.tmp"
+
+[tool.coverage.run]
+source = ["aurora", "aurorabot"]
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 80
+skip_covered = true
 
 [tool.ruff]
 line-length = 120

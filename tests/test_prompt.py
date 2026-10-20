@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from prompt_support import make_prompt_catalog
 
 from aurorabot.contracts import (
     AgentDefinition,
@@ -19,6 +18,7 @@ from aurorabot.contracts.bot import Checkpoint, Goal
 from aurorabot.contracts.memory import MemoryContinuity
 from aurorabot.contracts.model import ContextBudgetError
 from aurorabot.prompt import PromptAssembler
+from tests.prompt_support import make_prompt_catalog
 
 
 def _assembler(*, limit: int = 1_000) -> PromptAssembler:

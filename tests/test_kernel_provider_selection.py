@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
-from test_model_resource_loading import _config
 
 from aurorabot.contracts.kernel import ContributionKey
 from aurorabot.contracts.pkgs.ai import Model
@@ -16,22 +13,14 @@ from aurorabot.contracts.pkgs.memory import MemoryPolicy
 from aurorabot.contracts.pkgs.resources import ResourceCatalog
 from aurorabot.kernel import BuiltinSource, compose, compose_managed, module
 from aurorabot.memory_model.rules import RuleMemoryPolicy
+from tests.kernel_support import NoConfigSettings as _Settings
+from tests.model_support import TemplateModel as FakeModel
+from tests.test_model_resource_loading import _config
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from aurorabot.kernel import ModuleContext
-
-
-class _Settings:
-    """不依赖项目文件的内核配置入口。"""
-
-    @property
-    def project_root(self) -> Path:
-        """该测试不执行文件操作。"""
-        return Path()
-
-    def resolve[T](self, config_type: type[T]) -> T:
-        """本场景不读取任何配置。"""
-        raise AssertionError("不应读取项目配置")
 
 
 class Alpha:

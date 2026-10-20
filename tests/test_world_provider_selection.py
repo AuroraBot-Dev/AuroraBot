@@ -6,13 +6,13 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from test_kernel import _Settings
 
 from aurorabot.contracts import WorldFrontier
 from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
 from aurorabot.kernel import compose, compose_managed, module
 from aurorabot.world import SqlAlchemyWorldJournal
 from aurorabot.world.module import MODULE
+from tests.kernel_support import Settings as _Settings
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -15,10 +15,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import httpx2
-from app_search_support import FakeTransport
 
 from aurora.commands.app.clone import ProcessResult
 from aurora.commands.app.models import CloneResult, Repository
+from tests.app_search_support import FakeTransport
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

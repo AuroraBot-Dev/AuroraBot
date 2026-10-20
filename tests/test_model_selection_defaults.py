@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
 
 from aurora import load_config
 from aurorabot.contracts.pkgs.ai import Model
@@ -19,6 +18,7 @@ from aurorabot.memory_model.config import MemoryModelConfig
 from aurorabot.memory_model.rules import RuleMemoryPolicy
 from aurorabot.rhythm.config import RhythmConfig
 from aurorabot.rhythm.rules import RuleRhythmPolicy
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

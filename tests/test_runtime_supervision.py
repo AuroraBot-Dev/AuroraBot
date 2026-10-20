@@ -6,7 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
 
 from aurora import load_config
 from aurorabot.contracts import FRONT_BINDINGS, Front
@@ -15,6 +14,7 @@ from aurorabot.kernel import ModuleLifecycleError
 from aurorabot.runtime import run_runtime
 from aurorabot.runtime.events import RUNTIME_MODULE_FAILED
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

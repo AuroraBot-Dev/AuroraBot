@@ -7,8 +7,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_engine_runtime import FakeModel
-from test_tools import EchoTool
 
 from aurora import load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
@@ -23,6 +21,8 @@ from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.contracts.tool import WAIT_TOOL
 from aurorabot.mcp.config import PlatformsConfig
 from aurorabot.runtime import compose_runtime
+from tests.model_support import ScriptedModel as FakeModel
+from tests.test_tools import EchoTool
 
 if TYPE_CHECKING:
     from pathlib import Path

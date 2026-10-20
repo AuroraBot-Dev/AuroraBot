@@ -6,10 +6,6 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from test_engine_runtime import FakeModel
-from test_memory_selection import _NOW, _fact
-from test_prompt import _agent, _assembler
-
 from aurorabot.agents import AgentCatalog
 from aurorabot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
 from aurorabot.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
@@ -18,6 +14,9 @@ from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.engine import AgentTreeRunner
 from aurorabot.tools import ToolRegistry
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.model_support import ScriptedModel as FakeModel
+from tests.test_memory_selection import _NOW, _fact
+from tests.test_prompt import _agent, _assembler
 
 if TYPE_CHECKING:
     from pathlib import Path

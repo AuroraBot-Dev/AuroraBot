@@ -12,7 +12,7 @@ from __future__ import annotations
 import unicodedata
 from typing import TYPE_CHECKING
 
-from app_search_support import captured, page, repository, stub
+from tests.app_search_support import captured, page, repository, stub
 
 if TYPE_CHECKING:
     from pathlib import Path

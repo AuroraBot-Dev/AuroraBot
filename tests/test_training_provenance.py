@@ -9,11 +9,11 @@ from io import BytesIO
 
 import pytest
 import torch
-from memory_support import episodes
-from rhythm_support import make_episode
 
 from aurorabot.contracts.training import TrainingProvenance, provenance_data
 from aurorabot.rhythm.dataset import episodes_fingerprint
+from tests.memory_support import episodes
+from tests.rhythm_support import make_episode
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 

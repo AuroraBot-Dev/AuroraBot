@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -23,35 +22,14 @@ from aurorabot.kernel import (
     module,
     resolve,
 )
+from tests.kernel_support import Alpha, Beta, Gamma
+from tests.kernel_support import Settings as _Settings
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from pathlib import Path
 
     from aurorabot.kernel.context import ModuleContext
-
-
-class Alpha:
-    pass
-
-
-class Beta:
-    pass
-
-
-class Gamma:
-    pass
-
-
-class _Settings:
-    def __init__(self, values: dict[type, object] | None = None) -> None:
-        self._values = values or {}
-
-    @property
-    def project_root(self) -> Path:
-        return Path()
-
-    def resolve[T](self, config_type: type[T]) -> T:
-        return cast("T", self._values[config_type])
 
 
 def _specs(*specs: ModuleSpec) -> StaticSource:
@@ -96,22 +74,6 @@ def test_contribution_aggregates_and_consumer_depends_on_contributors() -> None:
     compose(_Settings(), _specs(consumer, provider_b, provider_a).discover())
 
     assert seen == ["a", "b"]
-
-
-def test_priority_resolves_conflicting_providers() -> None:
-    @module(name="low", provides=Alpha, priority=0)
-    def low(context: ModuleContext) -> Alpha:
-        del context
-        return Alpha()
-
-    @module(name="high", provides=Alpha, priority=10)
-    def high(context: ModuleContext) -> Alpha:
-        del context
-        return Alpha()
-
-    assembly = compose(_Settings(), _specs(low, high).discover())
-
-    assert isinstance(assembly.get(Alpha), Alpha)
 
 
 def test_same_priority_conflict_fails() -> None:

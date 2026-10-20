@@ -12,9 +12,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 import torch
-from memory_support import episodes
-from rhythm_support import make_episode
-from test_train_command import _NOW, _write
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
@@ -24,6 +21,9 @@ from aurorabot.contracts.artifact_io import artifact_content
 from aurorabot.contracts.resource_query import ResourceQuery
 from aurorabot.memory_model.dataset import write_episodes
 from aurorabot.utils.files import write_new_file
+from tests.memory_support import episodes
+from tests.rhythm_support import make_episode
+from tests.test_train_command import _NOW, _write
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -7,14 +7,13 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from aurorabot.contracts import EnvironmentEvent
 from aurorabot.contracts.pkgs.cadence import Cadence
 from aurorabot.rhythm.config import RhythmConfig
 from aurorabot.runtime import assemble_runtime
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

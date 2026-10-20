@@ -7,12 +7,12 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import anyio
-from test_kernel import _Settings
-from test_mcp_sdk_client import _ignore_event, _route_stdio_to_server, _server, _stdio_spec
 
 from aurorabot.kernel import compose_managed, module
 from aurorabot.mcp import SdkMcpClientFactory
 from aurorabot.mcp.connection import McpConnection
+from tests.kernel_support import Settings as _Settings
+from tests.test_mcp_sdk_client import _ignore_event, _route_stdio_to_server, _server, _stdio_spec
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 import torch
-from memory_support import episodes
 
 from aurorabot.memory_model.dataset import read_episodes, validate_partition, write_episodes
 from aurorabot.memory_model.tgn import TGNMemoryPolicy, load_policy
 from aurorabot.memory_model.training import train
+from tests.memory_support import episodes
 
 if TYPE_CHECKING:
     from io import BytesIO

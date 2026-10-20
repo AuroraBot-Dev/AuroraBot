@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
-from test_engine_runtime import FakeModel, ScopedEchoTool, _agent, _assembler
 
 from aurorabot.agents import AgentCatalog
 from aurorabot.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
@@ -15,6 +14,8 @@ from aurorabot.contracts.memory import MemoryRequest
 from aurorabot.engine import AgentTreeRunner
 from aurorabot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.model_support import ScriptedModel as FakeModel
+from tests.test_engine_runtime import ScopedEchoTool, _agent, _assembler
 
 if TYPE_CHECKING:
     from pathlib import Path

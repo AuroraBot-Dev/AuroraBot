@@ -17,7 +17,8 @@ COMMAND: CommandSpec = {
     "help": "运行代码质量检查",
     "options": {
         "--lint": "运行 Ruff 与 Pyright",
-        "--test": "运行 Pytest 与覆盖率检查",
+        "--test": "运行 Pytest",
+        "--coverage": "为测试生成覆盖率报告并检查最低覆盖率",
         "--fix": "允许 Ruff 修复和格式化代码",
         "--unsafe-fixes": "允许 Ruff 使用不安全修复",
         "--check": "修复代码时仍只预览格式变更",
@@ -25,7 +26,6 @@ COMMAND: CommandSpec = {
 }
 _RUN = ("uv", "run", "--no-sync")
 _PATHS = ("src", "tests")
-_TEST_COMMAND = (*_RUN, "pytest", "-q", "--cov=aurora", "--cov=aurorabot")
 
 
 def _lint_commands(arguments: argparse.Namespace) -> tuple[tuple[str, ...], ...]:
@@ -48,12 +48,13 @@ def _lint_commands(arguments: argparse.Namespace) -> tuple[tuple[str, ...], ...]
 
 def execute(arguments: argparse.Namespace) -> int:
     """按选项运行 lint、类型、格式和测试检查，并汇总全部失败。"""
-    if arguments.lint and not arguments.test:
+    test_command = (*_RUN, "pytest", "-q", *(("--cov",) if arguments.coverage else ()))
+    if arguments.lint and not (arguments.test or arguments.coverage):
         commands = _lint_commands(arguments)
     elif arguments.test and not arguments.lint:
-        commands = (_TEST_COMMAND,)
+        commands = (test_command,)
     else:
-        commands = (*_lint_commands(arguments), _TEST_COMMAND)
+        commands = (*_lint_commands(arguments), test_command)
     failures = sum(run_process(command, arguments.root) != 0 for command in commands)
     if failures:
         sys.stderr.write(f"\n{failures} 项检查失败。\n")

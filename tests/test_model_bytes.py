@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 import torch
-from memory_support import episodes
-from rhythm_support import make_episode
 
 from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.memory_model.dataset import write_episodes
 from aurorabot.rhythm.gru import GRURhythmPolicy
 from aurorabot.rhythm.training import train as train_rhythm
+from tests.memory_support import episodes
+from tests.rhythm_support import make_episode
 
 if TYPE_CHECKING:
     from pathlib import Path

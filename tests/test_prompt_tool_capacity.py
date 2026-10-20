@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pytest
-from prompt_support import make_prompt_catalog
-from test_engine_runtime import FakeModel
 
 from aurorabot.agents import AgentCatalog
 from aurorabot.contracts import (
@@ -28,6 +26,8 @@ from aurorabot.engine import AgentTreeRunner
 from aurorabot.prompt import PromptAssembler
 from aurorabot.tools import ToolRegistry
 from aurorabot.utils.serialization import thaw_json
+from tests.model_support import ScriptedModel as FakeModel
+from tests.prompt_support import make_prompt_catalog
 
 _PROMPT = "aurora:prompt/agent/root"
 _SMALL = ToolDefinition("lab:tool/definition/small", "读取一项实验状态", {"type": "object"})

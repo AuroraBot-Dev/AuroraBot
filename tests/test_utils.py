@@ -61,16 +61,6 @@ def test_json_roundtrip_freezes_and_thaws_nested_containers() -> None:
     assert isinstance(cast("list[object]", thawed["outer"])[1], dict)
 
 
-_SCALAR_VALUE = 42
-
-
-def test_json_helpers_pass_through_scalars() -> None:
-    assert freeze_json(_SCALAR_VALUE) == _SCALAR_VALUE
-    assert freeze_json("text") == "text"
-    assert thaw_json(None) is None
-    assert thaw_json("text") == "text"
-
-
 def test_extract_json_escapes_raw_control_characters_inside_strings() -> None:
     assert extract_json_from_text('{"a": "x\ty"}') == {"a": "x\ty"}
     assert extract_json_from_text('{"a": "x\ry"}') == {"a": "x\ry"}

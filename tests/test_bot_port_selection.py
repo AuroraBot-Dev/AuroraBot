@@ -6,9 +6,6 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from test_assembly import FakeModel
-from test_model_provenance import _config
-
 from aurorabot.bot.store import JournalBotState
 from aurorabot.clock import PersistentBotClock
 from aurorabot.contracts.bot import WakeStatus
@@ -21,6 +18,8 @@ from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader
 from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.kernel import BuiltinSource, compose_managed, module
 from aurorabot.runtime import create_runtime
+from tests.model_support import TemplateModel as FakeModel
+from tests.test_model_provenance import _config
 
 if TYPE_CHECKING:
     from pathlib import Path

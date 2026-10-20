@@ -15,14 +15,13 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from app_clone_support import FakeCloner, repository
-
 from aurora.commands import app as app_module
 from aurora.commands.app.clone import Staging
 from aurora.commands.app.manifest import MANIFEST_NAME, MANIFEST_VERSION
 from aurora.commands.app.models import InstallPlan, LaunchCandidate, Repository
 from aurora.commands.app.verify import MCPVerifier
 from aurorabot.mcp.models import McpRemoteTool, McpToolsPage
+from tests.app_clone_support import FakeCloner, repository
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping, Sequence

@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import apps_root_entries, project, registry_entry
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
@@ -18,6 +17,7 @@ from aurora.commands.app.models import RegistryWriteError
 from aurora.commands.app.store import AppStore
 from aurora.commands.app.transaction import REMOVE_PREFIX
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
+from tests.app_clone_support import apps_root_entries, project, registry_entry
 
 if TYPE_CHECKING:
     from pathlib import Path

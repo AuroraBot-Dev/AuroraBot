@@ -10,7 +10,10 @@ order: 6
 
 Python 3.12，使用 uv；Ruff 行宽 120、LF、双引号；公开 API 有类型注解，值对象优先 frozen + slots dataclass。源码文件不超过 600 行，纯字段模型可例外；不通过新增 lint ignore 掩盖核心复杂度。测试使用确定输入和 fake 外部模型、工具，无网络或真实密钥依赖；世界持久化使用临时 SQLite，训练和推理使用实际 CPU 模型。
 
-提交前运行 `uv run aurora check --fix`，同时检查 Ruff、格式、Pyright、完整测试和覆盖率。仅修改文档时还应运行文档站的 `pnpm build`，确认 Markdown 与内部链接可构建。
+提交前运行 `uv run aurora check --fix`，检查 Ruff、格式、Pyright 和完整测试。
+覆盖率按需使用 `uv run aurora check --test --coverage`，CI 使用同一命令并设置 80% 总体下限。
+测试优先保护业务行为、依赖边界与失败恢复；不为覆盖率补充重复断言或验证测试辅助函数自身。
+仅修改文档时还应运行根目录 `pnpm build:docs`，确认 Markdown 与内部链接可构建。
 
 ## 主体与认知
 

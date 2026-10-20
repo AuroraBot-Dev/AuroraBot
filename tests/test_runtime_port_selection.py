@@ -8,8 +8,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
-from test_model_provenance import _config
 
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
@@ -30,6 +28,8 @@ from aurorabot.kernel import BuiltinSource, compose_managed, module
 from aurorabot.mcp.runtime import McpRuntime as ConcreteMcpRuntime
 from aurorabot.rhythm.config import RhythmConfig
 from aurorabot.runtime import create_runtime, run_runtime
+from tests.model_support import TemplateModel as FakeModel
+from tests.test_model_provenance import _config
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import httpx2
 import pytest
-from app_clone_support import (
+
+from aurora.commands.app.github import GitHubSource
+from aurora.commands.app.manifest import MANIFEST_NAME
+from aurora.commands.app.models import CloneError, GitHubRateLimitError, InstallPlan, ManifestError, PlanError
+from aurora.commands.app.service import AppManager
+from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
+from tests.app_clone_support import (
     APP_PATH,
     CONFLICTING_PACKAGE,
     DEFAULT_COMMIT,
@@ -26,14 +32,8 @@ from app_clone_support import (
     registry_entry,
     repository_payload,
 )
-from app_install_support import MANIFEST, WEATHER_COMMAND, manifest_text
-from app_search_support import FakeTransport
-
-from aurora.commands.app.github import GitHubSource
-from aurora.commands.app.manifest import MANIFEST_NAME
-from aurora.commands.app.models import CloneError, GitHubRateLimitError, InstallPlan, ManifestError, PlanError
-from aurora.commands.app.service import AppManager
-from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
+from tests.app_install_support import MANIFEST, WEATHER_COMMAND, manifest_text
+from tests.app_search_support import FakeTransport
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

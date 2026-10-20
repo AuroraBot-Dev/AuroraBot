@@ -6,9 +6,6 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from test_assembly import FakeModel
-from test_tools import EchoTool
-
 from aurora import load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
@@ -23,6 +20,8 @@ from aurorabot.contracts.tool_resource import TOOL_MEDIA_TYPE
 from aurorabot.kernel import BuiltinSource, compose_managed, module
 from aurorabot.mcp.config import PlatformsConfig
 from aurorabot.tools import ToolRegistry as ConcreteRegistry
+from tests.model_support import TemplateModel as FakeModel
+from tests.test_tools import EchoTool
 
 if TYPE_CHECKING:
     from pathlib import Path

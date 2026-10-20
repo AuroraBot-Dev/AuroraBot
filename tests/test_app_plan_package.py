@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import APP_PACKAGE, CONFLICTING_PACKAGE, project, registry_entry
 
 from aurora.commands.app.install import (
     check_package_collision,
@@ -20,6 +19,7 @@ from aurora.commands.app.install import (
 )
 from aurora.commands.app.models import PlanError
 from aurora.commands.app.store import AppStore
+from tests.app_clone_support import APP_PACKAGE, CONFLICTING_PACKAGE, project, registry_entry
 
 if TYPE_CHECKING:
     from pathlib import Path

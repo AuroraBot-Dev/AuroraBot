@@ -7,10 +7,10 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from test_kernel import _Settings
 
 from aurorabot.contracts.module_manifest import ModuleManifest
 from aurorabot.kernel import KERNEL_API_VERSION, ModuleSpec, compose, compose_managed, module, resolve
+from tests.kernel_support import Settings as _Settings
 
 if TYPE_CHECKING:
     from aurorabot.kernel import ModuleContext

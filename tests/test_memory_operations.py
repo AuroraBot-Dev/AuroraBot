@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from memory_operations_support import GOAL, OUTCOME, SOURCE, feedback_arguments, prepared_runtime, request
-
 from aurorabot.contracts import WorldFrontier
 from aurorabot.contracts.operation import OperationStatus
 from aurorabot.contracts.pkgs.bot import BotStateStore
 from aurorabot.contracts.pkgs.operations import OperationRegistry
 from aurorabot.memory.graph import graph_interactions
+from tests.memory_operations_support import GOAL, OUTCOME, SOURCE, feedback_arguments, prepared_runtime, request
 
 if TYPE_CHECKING:
     from pathlib import Path

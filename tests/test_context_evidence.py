@@ -6,8 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from test_engine_runtime import FakeModel
-from test_prompt import _agent, _assembler
 
 from aurorabot.agents import AgentCatalog
 from aurorabot.ai.openai import to_openai_messages
@@ -21,6 +19,8 @@ from aurorabot.operations.tool import operation_tools
 from aurorabot.resources.catalog import ResourceCatalog
 from aurorabot.tools import ToolRegistry
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.model_support import ScriptedModel as FakeModel
+from tests.test_prompt import _agent, _assembler
 
 if TYPE_CHECKING:
     from pathlib import Path

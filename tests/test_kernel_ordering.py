@@ -6,9 +6,9 @@ from itertools import permutations
 from typing import TYPE_CHECKING
 
 import pytest
-from test_kernel import Alpha, Beta, Gamma
 
 from aurorabot.kernel import ACTIVATE, CLOSE, CONSTRUCT, RUN, ModuleSpec, Ordering, Phase, resolve
+from tests.kernel_support import Alpha, Beta, Gamma
 
 if TYPE_CHECKING:
     import asyncio

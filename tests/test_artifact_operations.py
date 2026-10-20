@@ -8,7 +8,6 @@ import json
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
 
 from aurora import load_config
 from aurora.configs.artifacts import CONFIG_SPEC
@@ -23,6 +22,7 @@ from aurorabot.contracts.pkgs.tools import ToolRegistry
 from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.runtime import assemble_runtime
 from aurorabot.utils.serialization import thaw_json
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

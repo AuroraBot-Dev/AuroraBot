@@ -8,10 +8,6 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
-from memory_support import episodes
-from rhythm_support import make_episode
-from test_assembly import FakeModel
-from test_bot_lifecycle import PlanningModel
 
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
@@ -43,6 +39,10 @@ from aurorabot.rhythm.training import train as train_rhythm
 from aurorabot.runtime import create_runtime
 from aurorabot.utils import thaw_json
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.memory_support import episodes
+from tests.model_support import TemplateModel as FakeModel
+from tests.rhythm_support import make_episode
+from tests.test_bot_lifecycle import PlanningModel
 
 if TYPE_CHECKING:
     from pathlib import Path

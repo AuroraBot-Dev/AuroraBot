@@ -6,8 +6,6 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from memory_operations_support import GOAL, SOURCE, prepared_runtime, request
-
 from aurorabot.contracts import ScopeCatalog, ScopeKind, TreeLaunchRequest
 from aurorabot.contracts.bot import BotChange, Checkpoint
 from aurorabot.contracts.memory import MemoryRequest
@@ -16,6 +14,7 @@ from aurorabot.contracts.operation import OperationStatus
 from aurorabot.contracts.pkgs.bot import BotStateStore
 from aurorabot.contracts.pkgs.memory import MemoryReader
 from aurorabot.contracts.pkgs.operations import OperationRegistry
+from tests.memory_operations_support import GOAL, SOURCE, prepared_runtime, request
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -7,8 +7,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_assembly import FakeModel
-from test_kernel import _Settings
 
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
@@ -30,6 +28,8 @@ from aurorabot.prompt.module import MODULE as PROMPT_MODULE
 from aurorabot.resource_content.module import MODULE as CONTENT_MODULE
 from aurorabot.resources.module import MODULE as RESOURCES_MODULE
 from aurorabot.runtime import compose_runtime
+from tests.kernel_support import Settings as _Settings
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

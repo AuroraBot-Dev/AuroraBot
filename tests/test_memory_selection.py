@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from prompt_support import make_prompt_catalog
-
 from aurorabot.contracts import AgentDefinition, AgentTree, MemorySnapshot, WorldCommit, WorldFrontier
 from aurorabot.contracts.bot import Checkpoint, Goal
 from aurorabot.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
 from aurorabot.memory.selection import select_memories
 from aurorabot.memory_model.rules import RuleMemoryPolicy
 from aurorabot.prompt import PromptAssembler
+from tests.prompt_support import make_prompt_catalog
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 

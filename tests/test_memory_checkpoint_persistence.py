@@ -7,8 +7,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_memory_tgn import _request
-from test_memory_tgn_incremental import _cold, _network
 
 from aurorabot.artifacts.store import FileArtifactStore
 from aurorabot.contracts import WorldFrontier
@@ -16,6 +14,8 @@ from aurorabot.memory_model.persistence import MemoryModelCheckpoints
 from aurorabot.memory_model.tgn import TGNMemoryPolicy
 from aurorabot.utils.serialization import thaw_json
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.test_memory_tgn import _request
+from tests.test_memory_tgn_incremental import _cold, _network
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -6,15 +6,14 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from memory_support import episodes
-from rhythm_support import make_episode
-
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
 from aurorabot.memory_model.dataset import write_episodes
 from aurorabot.memory_model.tgn import load_policy as load_memory_policy
 from aurorabot.rhythm.dataset import write_episodes as write_rhythm_episodes
 from aurorabot.rhythm.gru import load_policy
+from tests.memory_support import episodes
+from tests.rhythm_support import make_episode
 
 if TYPE_CHECKING:
     from pathlib import Path

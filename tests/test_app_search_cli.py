@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING
 
 import httpx2
 import pytest
-from app_search_support import FakeTransport, captured, cli, page, repository, stub, use_fake_transport
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
 from aurora.commands import app as app_module
 from aurora.commands.app.models import DiscoveryError
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
+from tests.app_search_support import FakeTransport, captured, cli, page, repository, stub, use_fake_transport
 
 if TYPE_CHECKING:
     from pathlib import Path

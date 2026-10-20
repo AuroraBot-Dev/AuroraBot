@@ -6,9 +6,9 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
-from test_kernel import _Settings
 
 from aurorabot.kernel import DirectorySource, compose
+from tests.kernel_support import Settings as _Settings
 
 if TYPE_CHECKING:
     from pathlib import Path

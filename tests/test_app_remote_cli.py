@@ -14,13 +14,13 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import FakeCloner, registry_entry
-from app_install_support import ENDPOINT, ENDPOINT_PACKAGE, FakeMcpClientFactory, FakeSource, stub_cli
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
 from aurora.commands.app.verify import MCPVerifier
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
+from tests.app_clone_support import FakeCloner, registry_entry
+from tests.app_install_support import ENDPOINT, ENDPOINT_PACKAGE, FakeMcpClientFactory, FakeSource, stub_cli
 
 if TYPE_CHECKING:
     from pathlib import Path

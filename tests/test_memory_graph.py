@@ -6,7 +6,6 @@ from dataclasses import replace
 from datetime import timedelta
 
 import pytest
-from test_memory_selection import _NOW, _fact
 
 from aurorabot.contracts.memory import MemoryRequest
 from aurorabot.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
@@ -15,6 +14,7 @@ from aurorabot.memory.selection import select_memories
 from aurorabot.memory_model.dataset import MemoryEpisode, MemoryExample
 from aurorabot.memory_model.evaluation import evaluate_policy
 from aurorabot.memory_model.rules import RuleMemoryPolicy
+from tests.test_memory_selection import _NOW, _fact
 
 
 def test_graph_does_not_backfill_future_node_text_or_result_feedback() -> None:

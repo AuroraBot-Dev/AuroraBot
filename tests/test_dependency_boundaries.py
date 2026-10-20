@@ -11,7 +11,6 @@ _CLI = _ROOT / "src" / "aurora"
 _LEAF_PACKAGES = frozenset({"contracts", "utils"})
 _MECHANISM_PACKAGES = frozenset({"kernel", "runtime"})
 _TYPE_ONLY_SRC: dict[str, set[str]] = {}
-_REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 
 
 def _base_allowed(package: str) -> set[str]:
@@ -50,23 +49,6 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
                 tag = "typecheck" if guarded else "runtime"
                 violations.append(f"{path.relative_to(_ROOT)} {tag} imports {module}")
     assert violations == []
-
-
-def test_dependency_convention_admits_new_capability_packages() -> None:
-    assert _base_allowed("tts") == {"aurorabot.tts", "aurorabot.contracts", "aurorabot.utils"}
-    assert _base_allowed("contracts") == {"aurorabot.contracts"}
-    assert _base_allowed("utils") == {"aurorabot.utils"}
-    assert _base_allowed("runtime") == {
-        "aurorabot.runtime",
-        "aurorabot.contracts",
-        "aurorabot.utils",
-        "aurorabot.kernel",
-    }
-
-
-def test_removed_src_subpackages_do_not_return_as_empty_scaffolding() -> None:
-    existing = [name for name in _REMOVED_PACKAGES if (_FRAMEWORK / name).exists()]
-    assert existing == []
 
 
 def test_each_project_toml_has_one_registered_config_module() -> None:

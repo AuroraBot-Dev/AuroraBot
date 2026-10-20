@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
-from model_support import fake_endpoint
 
 from aurorabot.contracts import (
     AgentDefinition,
@@ -18,6 +17,7 @@ from aurorabot.contracts import (
     ToolStatus,
     TreeStatus,
 )
+from tests.model_support import fake_endpoint
 
 if TYPE_CHECKING:
     from collections.abc import Callable

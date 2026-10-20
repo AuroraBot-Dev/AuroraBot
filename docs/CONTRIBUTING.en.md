@@ -108,10 +108,16 @@ To narrow the scope, run separately:
 
 ```powershell
 uv run pytest
+uv run pytest tests/test_bot_lifecycle.py -q
+uv run aurora check --test --coverage
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 ```
+
+Install development dependencies with `uv sync --locked --group dev`. Pytest uses importlib mode and explicit
+`tests.*` imports; common fakes belong in support modules. Coverage is optional locally and enforced at 80% in CI.
+Prefer behavior, boundary, and recovery tests over duplicate cases, tests of test helpers, or assertions added only for coverage.
 
 Tests must be offline, deterministic, and repeatable. Models, clocks, and MCP use fakes; no real quota is consumed and no public network is needed. Bug fixes should cover the original failure path; event and effect tests should also verify transactional boundaries, idempotency, and causal parent-child relationships.
 

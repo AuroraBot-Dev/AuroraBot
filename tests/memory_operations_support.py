@@ -5,8 +5,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurorabot.contracts import TreeLaunchRequest, WorldFrontier
 from aurorabot.contracts.bot import BotChange, Checkpoint, Goal
@@ -14,6 +12,7 @@ from aurorabot.contracts.operation import OperationKind, OperationRequest
 from aurorabot.contracts.pkgs.bot import BotStateStore
 from aurorabot.contracts.resource import ResourceKey, ResourceRef
 from aurorabot.runtime import assemble_runtime
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

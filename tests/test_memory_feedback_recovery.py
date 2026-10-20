@@ -6,14 +6,14 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from memory_operations_support import feedback_arguments, prepared_runtime, request
-from test_assembly import FakeModel
 
 from aurora import load_config
 from aurorabot.contracts.operation import OperationRequest, OperationResult, OperationStatus
 from aurorabot.contracts.pkgs.bot import BotStateStore
 from aurorabot.contracts.pkgs.operations import OperationRegistry
 from aurorabot.runtime import assemble_runtime
+from tests.memory_operations_support import feedback_arguments, prepared_runtime, request
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

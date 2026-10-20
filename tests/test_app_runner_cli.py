@@ -11,13 +11,12 @@ import io
 import sys
 from typing import TYPE_CHECKING
 
-from app_clone_support import FakeCloner, apps_root_entries, registry_entry
-from app_install_support import DEFAULT_PROTOCOL, FakeMcpClientFactory, FakeSource, stub_cli
-
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
 from aurora.commands.app.verify import MCPVerifier
 from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
+from tests.app_clone_support import FakeCloner, apps_root_entries, registry_entry
+from tests.app_install_support import DEFAULT_PROTOCOL, FakeMcpClientFactory, FakeSource, stub_cli
 
 if TYPE_CHECKING:
     from pathlib import Path

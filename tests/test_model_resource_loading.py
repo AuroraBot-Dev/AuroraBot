@@ -10,10 +10,6 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 import pytest
-from memory_support import episodes
-from rhythm_support import make_episode
-from test_assembly import FakeModel
-from test_train_command import _NOW, _write
 
 from aurora import load_config
 from aurora.commander import run
@@ -35,6 +31,10 @@ from aurorabot.memory_model.config import MemoryModelConfig
 from aurorabot.memory_model.dataset import write_episodes
 from aurorabot.rhythm.config import RhythmConfig
 from aurorabot.runtime import compose_runtime
+from tests.memory_support import episodes
+from tests.model_support import TemplateModel as FakeModel
+from tests.rhythm_support import make_episode
+from tests.test_train_command import _NOW, _write
 
 if TYPE_CHECKING:
     from pathlib import Path

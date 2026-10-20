@@ -9,13 +9,13 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
-from model_support import fake_endpoint
 
 from aurorabot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
 from aurorabot.ai.config import EndpointConfig, ProviderConfig
 from aurorabot.contracts import ChatMessage, ModelRequest
 from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition
 from aurorabot.contracts.resource import ResourceKey
+from tests.model_support import fake_endpoint
 
 
 @pytest.mark.parametrize("name", ["default", "lab:ai/provider/default", "lab:memory/model/tgn"])

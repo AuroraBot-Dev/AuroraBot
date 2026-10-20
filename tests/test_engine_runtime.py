@@ -7,8 +7,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
-from model_support import FakeModelDirectory
-from prompt_support import make_prompt_catalog
 
 from aurorabot.agents import AgentCatalog
 from aurorabot.contracts import (
@@ -34,6 +32,9 @@ from aurorabot.engine import AgentTreeRunner
 from aurorabot.prompt import PromptAssembler
 from aurorabot.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
 from aurorabot.world import SqlAlchemyWorldJournal
+from tests.model_support import FakeModelDirectory
+from tests.model_support import ScriptedModel as FakeModel
+from tests.prompt_support import make_prompt_catalog
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,16 +45,6 @@ if TYPE_CHECKING:
 EXPECTED_DELEGATION_NODES = 2
 _SECOND_REQUEST = 2
 _EXPECTED_SCOPE_SEQUENCE = 5
-
-
-@dataclass(slots=True)
-class FakeModel(FakeModelDirectory):
-    responses: list[ChatMessage]
-    requests: list[ModelRequest] = field(default_factory=list)
-
-    async def complete(self, request: ModelRequest) -> ChatMessage:
-        self.requests.append(request)
-        return self.responses.pop(0)
 
 
 class EchoTool:

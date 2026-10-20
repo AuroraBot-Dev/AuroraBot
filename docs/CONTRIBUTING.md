@@ -110,10 +110,17 @@ aurora check
 
 ```powershell
 uv run pytest
+uv run pytest tests/test_bot_lifecycle.py -q
+uv run aurora check --test --coverage
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 ```
+
+先运行 `uv sync --locked --group dev` 安装开发依赖。pytest 使用 importlib 模式，
+测试工具通过 `tests.*` 显式导入，常用 fake 放在支持模块中。
+日常检查不采集覆盖率；CI 使用 80% 总体下限。优先验证行为、关键边界和失败恢复，
+避免重复用例、对测试辅助函数自身的测试，以及只为覆盖行数添加的断言。
 
 测试必须离线、确定且可重复。模型、时钟和 MCP 使用 fake，不消耗真实额度或依赖公网服务。缺陷修复应覆盖原始失败路径；
 事件与效果测试还应验证事务边界、幂等性和因果父子关系。

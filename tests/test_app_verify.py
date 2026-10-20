@@ -12,16 +12,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import APP_PATH, FakeCloner, project, repository
-from app_install_support import (
-    ENDPOINT,
-    ENDPOINT_PACKAGE,
-    WEATHER_COMMAND,
-    WEATHER_PACKAGE,
-    FakeMcpClientFactory,
-    FakeSource,
-    tools_page,
-)
 
 from aurora.commands.app.install import check_remote_config
 from aurora.commands.app.models import ConfigError, PlanError, VerifyError
@@ -38,6 +28,16 @@ from aurora.commands.app.verify import (
     verify_environment,
 )
 from aurorabot.mcp.models import McpEventMode, McpRemoteTool, McpToolsPage, McpTransport
+from tests.app_clone_support import APP_PATH, FakeCloner, project, repository
+from tests.app_install_support import (
+    ENDPOINT,
+    ENDPOINT_PACKAGE,
+    WEATHER_COMMAND,
+    WEATHER_PACKAGE,
+    FakeMcpClientFactory,
+    FakeSource,
+    tools_page,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 import torch
-from test_memory_tgn import _request
 
 from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from tests.test_memory_tgn import _request
 
 if TYPE_CHECKING:
     from aurorabot.contracts.memory_graph import MemoryInteraction, MemoryRankingRequest

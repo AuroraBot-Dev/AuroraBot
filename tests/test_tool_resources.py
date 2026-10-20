@@ -5,11 +5,11 @@ import json
 from dataclasses import replace
 
 import pytest
-from model_support import fake_endpoint
 
 from aurorabot.contracts import ChatMessage, ModelRequest, ToolDefinition
 from aurorabot.contracts.resource import ResourceKey
 from aurorabot.tools import is_tool_id
+from tests.model_support import fake_endpoint
 
 
 @pytest.mark.parametrize(

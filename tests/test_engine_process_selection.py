@@ -6,8 +6,6 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
@@ -31,6 +29,7 @@ from aurorabot.engine.config import EngineConfig
 from aurorabot.kernel import BuiltinSource, compose_managed, module
 from aurorabot.mcp.config import PlatformsConfig
 from aurorabot.runtime import create_runtime
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

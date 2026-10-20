@@ -5,15 +5,14 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from memory_operations_support import GOAL, SOURCE, prepared_runtime, request
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, TreeLaunchRequest, WorldFrontier
 from aurorabot.contracts.memory_codec import read_exposure
 from aurorabot.contracts.operation import OperationStatus
 from aurorabot.contracts.pkgs.operations import OperationRegistry
 from aurorabot.runtime import assemble_runtime
+from tests.memory_operations_support import GOAL, SOURCE, prepared_runtime, request
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

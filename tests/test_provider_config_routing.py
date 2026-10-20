@@ -7,7 +7,6 @@ import json
 from typing import TYPE_CHECKING
 
 from litellm import get_llm_provider
-from test_model_provenance import _config, _read_definition
 
 from aurora.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
 from aurorabot.ai import gateway
@@ -15,6 +14,7 @@ from aurorabot.ai.config import EndpointConfig, EndpointsConfig
 from aurorabot.contracts import TreeStatus
 from aurorabot.contracts.pkgs.ai import Model
 from aurorabot.runtime import compose_runtime
+from tests.test_model_provenance import _config, _read_definition
 
 if TYPE_CHECKING:
     from pathlib import Path

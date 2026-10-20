@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from model_support import FakeModelDirectory
-
 from aurora import load_config
 from aurorabot.console import TerminalConsole, TerminalControl, TerminalResponse
 from aurorabot.contracts import (
@@ -23,6 +21,7 @@ from aurorabot.contracts import (
 )
 from aurorabot.contracts.pkgs.world import WorldJournal
 from aurorabot.runtime import run_runtime
+from tests.model_support import FakeModelDirectory
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping

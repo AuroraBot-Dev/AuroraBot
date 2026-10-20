@@ -11,15 +11,6 @@ import tomllib
 from typing import TYPE_CHECKING
 
 import pytest
-from app_clone_support import apps_root_entries, project, registry_entry
-from app_install_support import (
-    DEFAULT_COMMIT,
-    WEATHER_PACKAGE,
-    WEATHER_PATH,
-    plan,
-    staging,
-    write_origin,
-)
 
 from aurora.commands.app.install import PreparedInstall
 from aurora.commands.app.models import InstallError, PlanError, RawApp, RegistryWriteError
@@ -27,6 +18,15 @@ from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
 from aurora.commands.app.transaction import install_transaction, plan_removal, read_origin
 from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
 from aurora.configurator import assemble_config
+from tests.app_clone_support import apps_root_entries, project, registry_entry
+from tests.app_install_support import (
+    DEFAULT_COMMIT,
+    WEATHER_PACKAGE,
+    WEATHER_PATH,
+    plan,
+    staging,
+    write_origin,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

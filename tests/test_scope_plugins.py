@@ -6,8 +6,6 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurorabot.contracts import ScopeCatalog, ScopeKind, ToolCall, ToolOutput, WorldFrontier
 from aurorabot.contracts.memory import MemoryRequest
@@ -15,6 +13,7 @@ from aurorabot.contracts.pkgs.memory import MemoryReader
 from aurorabot.contracts.pkgs.tools import ToolRegistry
 from aurorabot.runtime import assemble_runtime
 from aurorabot.tools import WORLD_SCOPES_TOOL
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

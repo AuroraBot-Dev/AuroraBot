@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from model_support import FakeModelDirectory
 
 from aurora import load_config
 from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
@@ -18,6 +17,7 @@ from aurorabot.runtime import assemble_runtime
 from aurorabot.tools import ToolRegistry
 from aurorabot.utils import configure_console_logging
 from aurorabot.world.config import resolve_storage_directory
+from tests.model_support import FakeModelDirectory
 
 if TYPE_CHECKING:
     from aurorabot.contracts import ToolResult

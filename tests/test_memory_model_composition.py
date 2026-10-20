@@ -5,9 +5,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from memory_support import episodes
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
 from aurorabot.contracts.memory import MemoryRequest
@@ -17,6 +14,8 @@ from aurorabot.memory_model.config import MemoryModelConfig
 from aurorabot.memory_model.tgn import TGN_KEY, load_policy
 from aurorabot.memory_model.training import train
 from aurorabot.runtime import assemble_runtime
+from tests.memory_support import episodes
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path

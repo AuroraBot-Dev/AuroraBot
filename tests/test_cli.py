@@ -461,6 +461,12 @@ def test_check_fix_flags_and_test_selection(monkeypatch: pytest.MonkeyPatch) -> 
     assert check.execute(parser.parse_args([check.COMMAND["name"], "--test"])) == 0
     assert len(calls) == 1
     assert "pytest" in calls[0]
+    assert "--cov" not in calls[0]
+
+    calls.clear()
+    assert check.execute(parser.parse_args([check.COMMAND["name"], "--test", "--coverage"])) == 0
+    assert len(calls) == 1
+    assert "--cov" in calls[0]
 
 
 def test_donk_show_runs_tool_and_reports_chinese_version(

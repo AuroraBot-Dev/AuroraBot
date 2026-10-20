@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
-from model_support import FakeModelDirectory
 
 from aurora import AuroraConfig, load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
@@ -23,7 +21,6 @@ from aurorabot.ai.config import ProvidersConfig
 from aurorabot.contracts import (
     MCP_EVENT_RECEIVED,
     ChatMessage,
-    ModelRequest,
     Tool,
     ToolCall,
     ToolDefinition,
@@ -39,38 +36,11 @@ from aurorabot.contracts.pkgs.engine import AgentTreeRunner
 from aurorabot.contracts.pkgs.memory import MemoryReader
 from aurorabot.contracts.pkgs.prompt import PromptAssembler
 from aurorabot.runtime import assemble_runtime
-
-if TYPE_CHECKING:
-    from aurorabot.contracts.model_binding import ModelBinding
+from tests.model_support import TemplateModel as FakeModel
 
 EXPECTED_MAX_DEPTH = 4
 EXPECTED_WINDOW_MINUTES = 60
 EXPECTED_COMMITS_PER_SCOPE = 50
-
-
-_TEMPLATE_ENDPOINTS = frozenset(
-    f"aurora:ai/endpoint/{name}" for name in ("default", "fast", "quality", "multimodal", "embedding")
-)
-
-
-@dataclass(slots=True)
-class FakeModel(FakeModelDirectory):
-    requests: list[ModelRequest] = field(default_factory=list)
-
-    @property
-    def endpoints(self) -> tuple[ModelBinding, ...]:
-        """正式组合测试只声明模板中配置的模型端点。"""
-        return tuple(FakeModelDirectory.resolve_endpoint(self, name) for name in sorted(_TEMPLATE_ENDPOINTS))
-
-    def resolve_endpoint(self, endpoint_id: str) -> ModelBinding:
-        """保持未知端点检查，返回实际用于请求的冻结配置。"""
-        if endpoint_id not in _TEMPLATE_ENDPOINTS:
-            raise ValueError(f"未知 model endpoint：{endpoint_id}")
-        return FakeModelDirectory.resolve_endpoint(self, endpoint_id)
-
-    async def complete(self, request: ModelRequest) -> ChatMessage:
-        self.requests.append(request)
-        return ChatMessage.assistant("done")
 
 
 def test_project_config_builds_complete_runtime(configured_project: Path) -> None:

@@ -7,8 +7,6 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from test_assembly import FakeModel
-
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
@@ -20,6 +18,7 @@ from aurorabot.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPEC
 from aurorabot.engine.config import EngineConfig
 from aurorabot.mcp.config import PlatformsConfig
 from aurorabot.runtime import compose_runtime
+from tests.model_support import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

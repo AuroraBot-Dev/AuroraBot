@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
-from test_memory_tgn import _request
-
 from aurorabot.memory_model.dataset import MemoryEpisode, MemoryExample
+from tests.test_memory_tgn import _request
 
 
 def episodes(prefix: str, *, days: int = 0) -> tuple[MemoryEpisode, ...]:

@@ -8,13 +8,13 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
-from test_memory_tgn import _request
-from test_memory_tgn_incremental import _cold, _network
 
 import aurorabot.memory_model.tgn as backend
 from aurorabot.contracts.memory_graph import MemoryNode
 from aurorabot.contracts.memory_graph_codec import interactions_fingerprint
 from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from tests.test_memory_tgn import _request
+from tests.test_memory_tgn_incremental import _cold, _network
 
 if TYPE_CHECKING:
     from aurorabot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint

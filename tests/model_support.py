@@ -1,5 +1,8 @@
 """离线模型共用真实端点值对象，只替换实际推理行为。"""
 
+from dataclasses import dataclass, field
+
+from aurorabot.contracts import ChatMessage, ModelRequest
 from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition, ai_resource_key
 from aurorabot.contracts.resource import ResourceKey
 
@@ -58,3 +61,40 @@ class FakeModelDirectory:
             return _ENDPOINTS[endpoint_id]
         except KeyError as error:
             raise ValueError(f"未知 model endpoint：{endpoint_id}") from error
+
+
+_TEMPLATE_ENDPOINTS = frozenset(
+    f"aurora:ai/endpoint/{name}" for name in ("default", "fast", "quality", "multimodal", "embedding")
+)
+
+
+@dataclass(slots=True)
+class TemplateModel(FakeModelDirectory):
+    """组合测试使用配置模板中的端点，记录请求并返回固定回复。"""
+
+    requests: list[ModelRequest] = field(default_factory=list)
+
+    @property
+    def endpoints(self) -> tuple[ModelBinding, ...]:
+        return tuple(FakeModelDirectory.resolve_endpoint(self, name) for name in sorted(_TEMPLATE_ENDPOINTS))
+
+    def resolve_endpoint(self, endpoint_id: str) -> ModelBinding:
+        if endpoint_id not in _TEMPLATE_ENDPOINTS:
+            raise ValueError(f"未知 model endpoint：{endpoint_id}")
+        return FakeModelDirectory.resolve_endpoint(self, endpoint_id)
+
+    async def complete(self, request: ModelRequest) -> ChatMessage:
+        self.requests.append(request)
+        return ChatMessage.assistant("done")
+
+
+@dataclass(slots=True)
+class ScriptedModel(FakeModelDirectory):
+    """认知循环测试逐次消费明确给定的回复，并保留实际请求。"""
+
+    responses: list[ChatMessage]
+    requests: list[ModelRequest] = field(default_factory=list)
+
+    async def complete(self, request: ModelRequest) -> ChatMessage:
+        self.requests.append(request)
+        return self.responses.pop(0)

@@ -6,9 +6,9 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from test_kernel import _Settings
 
 from aurorabot.kernel import ModuleLifecycleError, compose_managed, module
+from tests.kernel_support import Settings as _Settings
 
 if TYPE_CHECKING:
     from aurorabot.kernel import AsyncCleanup, ModuleContext
