@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from sqlalchemy import ColumnElement
-    from sqlalchemy.engine import Connection, Row
+    from sqlalchemy.engine import Connection, RowMapping
 
 _MAX_BODY_PAGE = 256
 _MAX_TREE_INDEX = 1000
@@ -293,7 +293,7 @@ class SqlAlchemyWorldJournal:
                 .order_by(func.max(WorldCommitRow.occurred_at).desc())
                 .limit(limit)
             )
-        return tuple(_tree_activity(row) for row in rows)
+        return tuple(_tree_activity(row._mapping) for row in rows)
 
     async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage:
         """按域分区读取前沿之后的一页提交；域过滤与排序全部由 SQLite 的索引完成。"""
@@ -380,11 +380,11 @@ def _matches_input(commit: WorldCommit, item: WorldCommitInput) -> bool:
     )
 
 
-def _tree_activity(row: Row[Any]) -> TreeActivity:
-    tree_id = row.tree_id
+def _tree_activity(row: RowMapping) -> TreeActivity:
+    tree_id = row["tree_id"]
     if not isinstance(tree_id, str):
         raise RuntimeError("世界提交的 tree_id 必须是字符串")
-    return TreeActivity(tree_id, int(row.commit_count), _as_utc(row.first_seen), _as_utc(row.last_seen))
+    return TreeActivity(tree_id, int(row["commit_count"]), _as_utc(row["first_seen"]), _as_utc(row["last_seen"]))
 
 
 def _as_utc(value: datetime) -> datetime:

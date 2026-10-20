@@ -130,16 +130,13 @@ def test_sqlalchemy_journal_delta_cost_follows_the_page_not_the_world(tmp_path: 
         statements: list[str] = []
 
         def record(
-            connection: object,
-            cursor: object,
+            *,
             statement: str,
-            parameters: object,
-            context: object,
-            executemany: bool,
+            **_kwargs: object,
         ) -> None:
             statements.append(statement)
 
-        event.listen(Engine, "before_cursor_execute", record)
+        event.listen(Engine, "before_cursor_execute", record, named=True)
         try:
             settled = await journal.delta(head, scopes)
             settled_statements = len(statements)

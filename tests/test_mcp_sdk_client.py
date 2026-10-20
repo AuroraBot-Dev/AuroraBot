@@ -581,6 +581,7 @@ def test_sdk_adapter_maps_call_arguments_text_and_nontext_blocks(
     ],
 )
 def test_sdk_adapter_classifies_call_failures(
+    *,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     error: Exception,
