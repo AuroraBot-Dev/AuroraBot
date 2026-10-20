@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora.commands.app.install import PreparedInstall
-from aurora.commands.app.models import InstallError, PlanError, RawApp, RegistryWriteError
+from aurora.commands.app.models import InstallError, PathError, PlanError, RawApp, RegistryWriteError
 from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
 from aurora.commands.app.transaction import install_transaction, plan_removal, read_origin
 from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
@@ -256,6 +256,43 @@ def test_revalidation_rejects_a_final_path_that_appeared_during_the_wait(tmp_pat
 
     assert "安装目录已存在" in str(error_info.value)
     assert prepared.staging.root.is_dir()
+
+
+@pytest.mark.parametrize("outside", [False, True])
+def test_revalidation_rejects_a_linked_owner_before_publication(tmp_path: Path, outside: bool) -> None:
+    store = _store(tmp_path / "project")
+    prepared = _prepared(store.project_root)
+    target = (tmp_path if outside else store.project_root) / "elsewhere"
+    target.mkdir()
+    owner = store.project_root.joinpath(*_FINAL_PARTS[:-1])
+    try:
+        owner.symlink_to(target, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"当前环境无法创建符号链接：{error}")
+
+    with pytest.raises(PathError, match="符号链接或联接"):
+        install_transaction(store, prepared)
+
+    assert list(target.iterdir()) == []
+    assert prepared.staging.root.joinpath("pyproject.toml").is_file()
+    assert _entries(store) == []
+
+
+def test_revalidation_rejects_a_junction_owner_before_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    prepared = _prepared(store.project_root)
+    owner = store.project_root.joinpath(*_FINAL_PARTS[:-1])
+    owner.mkdir()
+    monkeypatch.setattr(type(owner), "is_junction", lambda path: path == owner)
+
+    with pytest.raises(PathError, match="符号链接或联接"):
+        install_transaction(store, prepared)
+
+    assert list(owner.iterdir()) == []
+    assert prepared.staging.root.joinpath("pyproject.toml").is_file()
+    assert _entries(store) == []
 
 
 def test_revalidation_does_not_append_a_second_entry(tmp_path: Path) -> None:

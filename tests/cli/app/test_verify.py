@@ -408,14 +408,24 @@ def test_a_process_failure_never_prints_a_secret(tmp_path: Path, monkeypatch: py
     assert "***" in message
 
 
-def test_a_remote_failure_never_prints_the_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(_TOKEN_NAME, _TOKEN_VALUE)
-    factory = FakeMcpClientFactory(failure=RuntimeError(f"401 Unauthorized: Bearer {_TOKEN_VALUE}"))
+@pytest.mark.parametrize("auth_env", [_TOKEN_NAME, "MCP_KEY"])
+@pytest.mark.parametrize("phase", ["connect", "discover", "close"])
+def test_a_remote_failure_never_prints_the_bearer_token(
+    monkeypatch: pytest.MonkeyPatch, auth_env: str, phase: str
+) -> None:
+    monkeypatch.setenv(auth_env, _TOKEN_VALUE)
+    error = RuntimeError(f"{phase}: Bearer {_TOKEN_VALUE}")
+    factory = FakeMcpClientFactory(
+        failure=error if phase == "connect" else None,
+        list_failure=error if phase == "discover" else None,
+        close_failure=error if phase == "close" else None,
+    )
 
     with pytest.raises(VerifyError) as error_info:
-        _verifier(factory).inspect(_remote(auth_env=_TOKEN_NAME))
+        _verifier(factory).inspect(_remote(auth_env=auth_env))
 
     assert _TOKEN_VALUE not in str(error_info.value)
+    assert "***" in str(error_info.value)
 
 
 def _manager(root: Path, factory: FakeMcpClientFactory) -> AppManager:

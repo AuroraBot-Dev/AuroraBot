@@ -161,12 +161,13 @@ def endpoint_target(
     return Handshake(label=label, subject=_SUBJECTS[spec.transport], spec=spec, hints=hints, secrets=secrets)
 
 
-def scrub_secrets(text: str, environment: Mapping[str, str]) -> str:
-    """把文本里出现的敏感环境变量值换成 ``***``。
+def scrub_secrets(text: str, environment: Mapping[str, str], *, auth_token: str | None = None) -> str:
+    """将显式认证凭据和敏感环境变量值替换为 ``***``。
 
-    错误信息会被直接打印给用户。判据是变量名而不是值的形状：值的形状千变万化，
-    而一个叫 ``*_TOKEN`` 的变量的值没有理由出现在任何一段诊断信息里。
+    显式认证凭据始终脱敏；其余进程环境按变量名识别，保留工作目录等诊断信息。
     """
+    if auth_token:
+        text = text.replace(auth_token, _REDACTED)
     for name, value in environment.items():
         if value and is_secret_name(name):
             text = text.replace(value, _REDACTED)
@@ -232,7 +233,7 @@ class MCPVerifier:
             phase = "工具发现"
             tools = await _discover_bindings(handshake.spec.package, port)
         except Exception as error:
-            reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets))
+            reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets, auth_token=handshake.spec.auth_token))
             raise VerifyError(_message(handshake, phase, reason)) from error
         return Inspection(protocol_version=version, tools=tools)
 
@@ -245,7 +246,7 @@ class MCPVerifier:
             reason = f"超过 {spec.timeout_seconds:g} 秒仍未完成握手"
             raise VerifyError(_message(handshake, "协议连接", reason)) from error
         except Exception as error:
-            reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets))
+            reason = _tail(scrub_secrets(_error_detail(error), handshake.secrets, auth_token=handshake.spec.auth_token))
             raise VerifyError(_message(handshake, "启动进程或协议连接", reason)) from error
 
     async def _disconnect(
@@ -256,7 +257,9 @@ class MCPVerifier:
         result = outcomes[0]
         failure: VerifyError | None = None
         if isinstance(result, BaseException):
-            reason = _tail(scrub_secrets(_error_detail(result), handshake.secrets))
+            reason = _tail(
+                scrub_secrets(_error_detail(result), handshake.secrets, auth_token=handshake.spec.auth_token)
+            )
             failure = VerifyError(_message(handshake, "关闭", reason))
             failure.__cause__ = result
         failures = [failure] if failure is not None else []

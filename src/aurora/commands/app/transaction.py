@@ -186,6 +186,7 @@ def revalidate_install(store: AppStore, plan: InstallPlan) -> None:
     几十秒到几分钟。期间用户可能改过注册表或目标目录。
     """
     check_package_collision(store, plan.package)
+    check_project_directory(store.project_root, project_path(store.project_root, plan.install_path), "安装目录")
     check_final_path(store.project_root, plan.install_path)
 
 
