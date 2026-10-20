@@ -1,6 +1,14 @@
 # AuroraBot 落地页
 
-Vue 3 + TypeScript + Vite 应用。文案、图标、字体位于 `src/assets/`，默认中文，提供英文和日文切换。
+Vue 3 + TypeScript + Vite 应用，默认中文，提供英文和日文切换。
+
+```text
+src/assets/   页面使用的 Logo、图标与字体，由 Vite 处理资源引用
+src/locales/  中文、英文与日文文案
+src/styles/   全局样式与字体声明
+```
+
+页面与 favicon 共用 `src/assets/logo.svg`。需要固定 URL、原样复制的文件时再使用 `public/`。
 
 在主仓根目录安装依赖并运行：
 

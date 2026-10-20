@@ -158,7 +158,7 @@ pnpm clean --deps  # 同时清理 Node.js 依赖
 
 ## TypeScript 配置与应用结构
 
-三个应用都使用 `src/`、`public/` 和 `dist/`。面板页面位于 `apps/panel/src/`；共享组件和工具库位于根 `packages/`；构建、TypeScript 与检查配置包位于根 `tooling/`。文档站正文位于 `apps/docsite/src/`，VitePress 配置与主题位于 `.vitepress/`。
+应用源码位于 `src/`，构建产物位于 `dist/`；需要原样复制的静态文件放在 `public/`，没有这类文件时无需保留空目录。落地页的图标与字体位于 `src/assets/`，样式和文案分别位于 `src/styles/`、`src/locales/`。面板页面位于 `apps/panel/src/`；共享组件和工具库位于根 `packages/`；构建、TypeScript 与检查配置包位于根 `tooling/`。文档站正文位于 `apps/docsite/src/`，VitePress 配置与主题位于 `.vitepress/`。
 
 - 根 `tsconfig.json` 检查工程脚本及公共工具配置。
 - 应用 `tsconfig.json` 检查浏览器源码或文档主题。

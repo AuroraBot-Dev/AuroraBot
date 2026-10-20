@@ -2,7 +2,7 @@
   font-family: KingHwa;
   font-style: normal;
   font-weight: 400;
-  src: url('fonts/kinghwa-lt.woff2') format('woff2');
+  src: url('../assets/fonts/kinghwa-lt.woff2') format('woff2');
   font-display: swap;
   unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF;
 }
@@ -11,7 +11,7 @@
   font-family: KingHwa;
   font-style: normal;
   font-weight: 500;
-  src: url('fonts/kinghwa-lt.woff2') format('woff2');
+  src: url('../assets/fonts/kinghwa-lt.woff2') format('woff2');
   font-display: swap;
   unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF;
 }
@@ -196,23 +196,23 @@ strong {
 }
 
 .icon-language {
-  --icon: url('icons/language.svg');
+  --icon: url('../assets/icons/language.svg');
 }
 
 .icon-moon {
-  --icon: url('icons/moon.svg');
+  --icon: url('../assets/icons/moon.svg');
 }
 
 .icon-sun {
-  --icon: url('icons/sun.svg');
+  --icon: url('../assets/icons/sun.svg');
 }
 
 .icon-docs {
-  --icon: url('icons/docs.svg');
+  --icon: url('../assets/icons/docs.svg');
 }
 
 .icon-github {
-  --icon: url('icons/github.svg');
+  --icon: url('../assets/icons/github.svg');
 }
 
 .language-picker {

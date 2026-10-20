@@ -2,9 +2,9 @@ import type { TemplateRef } from 'vue';
 
 import { nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 
-import en from './assets/i18n/en-US.json';
-import ja from './assets/i18n/ja-JP.json';
-import zh from './assets/i18n/zh-CN.json';
+import en from './locales/en-US.json';
+import ja from './locales/ja-JP.json';
+import zh from './locales/zh-CN.json';
 
 const messages = { 'zh-CN': zh, 'en-US': en, 'ja-JP': ja };
 type Locale = keyof typeof messages;
