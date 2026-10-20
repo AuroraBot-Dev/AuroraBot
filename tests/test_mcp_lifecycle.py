@@ -10,9 +10,9 @@ import anyio
 from test_kernel import _Settings
 from test_mcp_sdk_client import _ignore_event, _route_stdio_to_server, _server, _stdio_spec
 
-from src.kernel import compose_managed, module
-from src.mcp import SdkMcpClientFactory
-from src.mcp.connection import McpConnection
+from aurorabot.kernel import compose_managed, module
+from aurorabot.mcp import SdkMcpClientFactory
+from aurorabot.mcp.connection import McpConnection
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from src.kernel import AsyncCleanup, ModuleContext
-    from src.mcp.client import McpClientPort
+    from aurorabot.kernel import AsyncCleanup, ModuleContext
+    from aurorabot.mcp.client import McpClientPort
 
 
 def test_kernel_can_release_a_real_sdk_connection_from_its_cleanup_task(

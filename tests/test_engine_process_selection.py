@@ -12,30 +12,30 @@ from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.contracts import TreeStatus
-from src.contracts.pkgs.agents import AgentCatalog
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.engine import AgentTreeRunner
-from src.contracts.pkgs.memory import MemoryReader
-from src.contracts.pkgs.prompt import PromptAssembler
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.pkgs.world import WorldJournal
-from src.contracts.process import TreeProcessDefinition
-from src.contracts.resource import ResourceKey
-from src.contracts.resource_query import ResourceQuery
-from src.engine import AgentTreeRunner as ConcreteRunner
-from src.engine.config import EngineConfig
-from src.kernel import BuiltinSource, compose_managed, module
-from src.mcp.config import PlatformsConfig
-from src.runtime import create_runtime
+from aurorabot.contracts import TreeStatus
+from aurorabot.contracts.pkgs.agents import AgentCatalog
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.pkgs.engine import AgentTreeRunner
+from aurorabot.contracts.pkgs.memory import MemoryReader
+from aurorabot.contracts.pkgs.prompt import PromptAssembler
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.pkgs.world import WorldJournal
+from aurorabot.contracts.process import TreeProcessDefinition
+from aurorabot.contracts.resource import ResourceKey
+from aurorabot.contracts.resource_query import ResourceQuery
+from aurorabot.engine import AgentTreeRunner as ConcreteRunner
+from aurorabot.engine.config import EngineConfig
+from aurorabot.kernel import BuiltinSource, compose_managed, module
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.runtime import create_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 def test_selected_runner_process_is_published_and_used_without_loading_default_limits(configured_project: Path) -> None:

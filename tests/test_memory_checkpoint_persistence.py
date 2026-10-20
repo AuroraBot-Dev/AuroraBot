@@ -10,20 +10,20 @@ import pytest
 from test_memory_tgn import _request
 from test_memory_tgn_incremental import _cold, _network
 
-from src.artifacts.store import FileArtifactStore
-from src.contracts import WorldFrontier
-from src.memory_model.persistence import MemoryModelCheckpoints
-from src.memory_model.tgn import TGNMemoryPolicy
-from src.utils.serialization import thaw_json
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts import WorldFrontier
+from aurorabot.memory_model.persistence import MemoryModelCheckpoints
+from aurorabot.memory_model.tgn import TGNMemoryPolicy
+from aurorabot.utils.serialization import thaw_json
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.artifact import ArtifactInfo
-    from src.contracts.memory_graph import MemoryInteraction
-    from src.memory_model.state import GraphState
-    from src.memory_model.tgn import TemporalMemoryNetwork
+    from aurorabot.contracts.artifact import ArtifactInfo
+    from aurorabot.contracts.memory_graph import MemoryInteraction
+    from aurorabot.memory_model.state import GraphState
+    from aurorabot.memory_model.tgn import TemporalMemoryNetwork
 
 _BOT = "lab:bot/test"
 

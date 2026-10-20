@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.bot.inputs import StateInput
-from src.bot.views import change_view, state_view
-from src.contracts.bot import BotChange, BotSnapshot, Checkpoint, Goal, StateConflictError, WakePlan
+from aurorabot.bot.inputs import StateInput
+from aurorabot.bot.views import change_view, state_view
+from aurorabot.contracts.bot import BotChange, BotSnapshot, Checkpoint, Goal, StateConflictError, WakePlan
 
 
 def test_goal_index_is_paged_and_details_are_explicit() -> None:

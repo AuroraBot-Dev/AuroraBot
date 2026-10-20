@@ -178,7 +178,7 @@ def test_start_runs_real_shared_lifecycle(
     async def fake_run_project(config: object, *, headless: bool, stop_event: object) -> None:
         calls.append((config, headless))
 
-    monkeypatch.setattr("src.runtime.run_runtime", fake_run_project)
+    monkeypatch.setattr("aurorabot.runtime.run_runtime", fake_run_project)
 
     assert run(["--root", str(configured_project), start.COMMAND["name"], "--headless"]) == 0
     assert len(calls) == 1
@@ -846,7 +846,7 @@ def test_python_dash_m_aurora_dispatches_through_main(monkeypatch: pytest.Monkey
         calls.append(argv)
 
     monkeypatch.setattr("aurora.main.main", fake_main)
-    runpy.run_path(str(Path(__file__).parents[1] / "aurora" / "__main__.py"), run_name="__main__")
+    runpy.run_path(str(Path(__file__).parents[1] / "src" / "aurora" / "__main__.py"), run_name="__main__")
     assert calls == [None]
 
 

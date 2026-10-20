@@ -9,11 +9,11 @@ from memory_operations_support import GOAL, SOURCE, prepared_runtime, request
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import ChatMessage, ModelRequest, ToolCall, TreeLaunchRequest, WorldFrontier
-from src.contracts.memory_codec import read_exposure
-from src.contracts.operation import OperationStatus
-from src.contracts.pkgs.operations import OperationRegistry
-from src.runtime import assemble_runtime
+from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, TreeLaunchRequest, WorldFrontier
+from aurorabot.contracts.memory_codec import read_exposure
+from aurorabot.contracts.operation import OperationStatus
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

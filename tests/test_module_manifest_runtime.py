@@ -12,24 +12,24 @@ from test_assembly import FakeModel
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
-from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
-from src.mcp.config import PlatformsConfig
-from src.runtime import compose_runtime
+from aurorabot.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from src.contracts.resource import ResourceDescriptor
-    from src.runtime.core import AuroraRuntime
+    from aurorabot.contracts.resource import ResourceDescriptor
+    from aurorabot.runtime.core import AuroraRuntime
 
 _PLUGIN = '''"""用于核对环境声明的独立插件。"""
 
-from src.kernel import ModuleManifest, module
+from aurorabot.kernel import ModuleManifest, module
 
 
 @module(name="environment", provides=str, manifest=ModuleManifest({version!r}, namespace="lab"))

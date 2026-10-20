@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING, Any
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import TreeLaunchRequest, WorldFrontier
-from src.contracts.bot import BotChange, Checkpoint, Goal
-from src.contracts.operation import OperationKind, OperationRequest
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.runtime import assemble_runtime
+from aurorabot.contracts import TreeLaunchRequest, WorldFrontier
+from aurorabot.contracts.bot import BotChange, Checkpoint, Goal
+from aurorabot.contracts.operation import OperationKind, OperationRequest
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
 
-    from src.runtime.core import AuroraRuntime
+    from aurorabot.runtime.core import AuroraRuntime
 
 GOAL = "aurora:goal/check"
 SOURCE = "experiment-started"

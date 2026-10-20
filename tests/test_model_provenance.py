@@ -10,14 +10,14 @@ from aurora import load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.agents.config import AgentsConfig
-from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
-from src.contracts import TreeStatus
-from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.mcp.config import PlatformsConfig
-from src.runtime import compose_runtime
+from aurorabot.agents.config import AgentsConfig
+from aurorabot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
+from aurorabot.contracts import TreeStatus
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     import pytest
 
     from aurora import AuroraConfig
-    from src.runtime.core import AuroraRuntime
+    from aurorabot.runtime.core import AuroraRuntime
 
 
 def _config(project: Path, endpoint_name: str) -> AuroraConfig:

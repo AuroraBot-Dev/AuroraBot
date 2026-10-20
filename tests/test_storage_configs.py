@@ -7,7 +7,7 @@ import pytest
 from aurora import load_config
 from aurora.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
 from aurora.configurator import assemble_config
-from src.world.config import StorageEntry, resolve_storage_directory
+from aurorabot.world.config import StorageEntry, resolve_storage_directory
 
 if TYPE_CHECKING:
     from pathlib import Path

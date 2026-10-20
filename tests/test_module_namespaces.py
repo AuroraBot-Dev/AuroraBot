@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import _Settings
 
-from src.contracts.module_manifest import ModuleManifest
-from src.contracts.resource import ResourceKey
-from src.kernel import ModuleSpec, compose, compose_managed, module, resolve
+from aurorabot.contracts.module_manifest import ModuleManifest
+from aurorabot.contracts.resource import ResourceKey
+from aurorabot.kernel import ModuleSpec, compose, compose_managed, module, resolve
 
 if TYPE_CHECKING:
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 def _spec(

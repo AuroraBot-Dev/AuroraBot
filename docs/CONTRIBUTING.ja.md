@@ -66,7 +66,7 @@ AuroraBot は、長期的に影響を与える設計上の決定を RFC に記�
 - 委任は tree 操作です。`aurora:tool/delegate` は普通に見える Tool で、engine が解釈して child を生成し、child の完了後は tool 結果で parent を再開します。
 - engine が完全な hot path を管理し、具体的な model・tool・memory の実装は contracts Port から注入されます。node が model gateway や platform client を直接呼び出してはいけません。
 - 構造設定は引き続き TOML を使い、キーは環境変数だけから読み取ります。
-- 共有ログは `src.utils.logging.get_logger()` 経由で取得し、完全な prompt、モデル応答、機密 payload は記録しません。
+- 共有ログは `aurorabot.utils.logging.get_logger()` 経由で取得し、完全な prompt、モデル応答、機密 payload は記録しません。
 
 より完全なメンテナー境界は、リポジトリルートの `AGENTS.md` を参照してください。
 

@@ -4,32 +4,32 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from src.agents.config import AgentConfig, AgentsConfig
-from src.ai.config import EndpointConfig, EndpointsConfig, ProviderConfig, ProvidersConfig
-from src.artifacts.config import ArtifactsConfig
-from src.bot.config import BotConfig
-from src.cadence.config import CadenceConfig, ReactionsConfig
-from src.contracts.identity import TagsConfig
-from src.contracts.pkgs.agents import AgentCatalog
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.console import TerminalConsole
-from src.contracts.pkgs.engine import AgentTreeRunner
-from src.contracts.pkgs.mcp import McpRuntime
-from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
-from src.contracts.pkgs.prompt import PromptAssembler
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.pkgs.world import WorldJournal
-from src.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
-from src.engine.config import EngineConfig
-from src.kernel import BuiltinSource, compose, resolve
-from src.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
-from src.memory.config import MemoryConfig
-from src.memory_model.config import MemoryModelConfig
-from src.prompt.config import PromptConfig, PromptsConfig
-from src.rhythm.config import RhythmConfig
-from src.runtime.config import RuntimeConfig
-from src.world.config import StorageConfig, StorageEntry
+from aurorabot.agents.config import AgentConfig, AgentsConfig
+from aurorabot.ai.config import EndpointConfig, EndpointsConfig, ProviderConfig, ProvidersConfig
+from aurorabot.artifacts.config import ArtifactsConfig
+from aurorabot.bot.config import BotConfig
+from aurorabot.cadence.config import CadenceConfig, ReactionsConfig
+from aurorabot.contracts.identity import TagsConfig
+from aurorabot.contracts.pkgs.agents import AgentCatalog
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.console import TerminalConsole
+from aurorabot.contracts.pkgs.engine import AgentTreeRunner
+from aurorabot.contracts.pkgs.mcp import McpRuntime
+from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
+from aurorabot.contracts.pkgs.prompt import PromptAssembler
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.pkgs.world import WorldJournal
+from aurorabot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
+from aurorabot.engine.config import EngineConfig
+from aurorabot.kernel import BuiltinSource, compose, resolve
+from aurorabot.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
+from aurorabot.memory.config import MemoryConfig
+from aurorabot.memory_model.config import MemoryModelConfig
+from aurorabot.prompt.config import PromptConfig, PromptsConfig
+from aurorabot.rhythm.config import RhythmConfig
+from aurorabot.runtime.config import RuntimeConfig
+from aurorabot.world.config import StorageConfig, StorageEntry
 
 if TYPE_CHECKING:
     from pathlib import Path

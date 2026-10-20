@@ -18,39 +18,39 @@ from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from src.cadence import Cadence
-from src.cadence.state import observation_data
-from src.clock import PersistentBotClock
-from src.contracts import ScopeCatalog, WorldFrontier
-from src.contracts.bot import WakeStatus
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.cadence import Cadence as CadencePort
-from src.contracts.pkgs.cadence import RhythmPolicy
-from src.contracts.pkgs.clock import BotClock
-from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryReader
-from src.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
-from src.contracts.rhythm import RhythmObservation
-from src.kernel import BuiltinSource, compose_managed, module
-from src.mcp.config import PlatformsConfig
-from src.memory import Memory
-from src.memory_model.config import MemoryModelConfig
-from src.memory_model.rules import RuleMemoryPolicy
-from src.memory_model.training import train as train_memory
-from src.rhythm.config import RhythmConfig
-from src.rhythm.rules import RuleRhythmPolicy
-from src.rhythm.training import train as train_rhythm
-from src.runtime import create_runtime
-from src.utils import thaw_json
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.cadence import Cadence
+from aurorabot.cadence.state import observation_data
+from aurorabot.clock import PersistentBotClock
+from aurorabot.contracts import ScopeCatalog, WorldFrontier
+from aurorabot.contracts.bot import WakeStatus
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.pkgs.cadence import Cadence as CadencePort
+from aurorabot.contracts.pkgs.cadence import RhythmPolicy
+from aurorabot.contracts.pkgs.clock import BotClock
+from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryReader
+from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from aurorabot.contracts.rhythm import RhythmObservation
+from aurorabot.kernel import BuiltinSource, compose_managed, module
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.memory import Memory
+from aurorabot.memory_model.config import MemoryModelConfig
+from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurorabot.memory_model.training import train as train_memory
+from aurorabot.rhythm.config import RhythmConfig
+from aurorabot.rhythm.rules import RuleRhythmPolicy
+from aurorabot.rhythm.training import train as train_rhythm
+from aurorabot.runtime import create_runtime
+from aurorabot.utils import thaw_json
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora import AuroraConfig
-    from src.contracts.resource import ResourceRef
-    from src.kernel import ManagedAssembly, ModuleContext
-    from src.runtime.core import AuroraRuntime
+    from aurorabot.contracts.resource import ResourceRef
+    from aurorabot.kernel import ManagedAssembly, ModuleContext
+    from aurorabot.runtime.core import AuroraRuntime
 
 _START = datetime(2026, 10, 18, tzinfo=UTC)
 _DUE = _START + timedelta(hours=12)

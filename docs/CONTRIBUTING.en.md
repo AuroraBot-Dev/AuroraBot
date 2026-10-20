@@ -66,7 +66,7 @@ While contributing code, hold the boundaries that keep AuroraBot reliable:
 - Delegation is a tree operation: `aurora:tool/delegate` is an ordinary visible Tool that the engine interprets to spawn a child; when the child finishes, the parent resumes with the tool result.
 - The engine owns the full hot path; concrete model, tool, and memory implementations are injected through contracts Ports, and nodes never call the model gateway or platform clients directly.
 - Structural configuration stays in TOML; keys keep coming only from environment variables.
-- Shared logging goes through `src.utils.logging.get_logger()` and never records full prompts, model replies, or sensitive payloads.
+- Shared logging goes through `aurorabot.utils.logging.get_logger()` and never records full prompts, model replies, or sensitive payloads.
 
 For the fuller maintainer boundaries, see `AGENTS.md` at the repository root.
 

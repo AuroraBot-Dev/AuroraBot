@@ -10,24 +10,24 @@ from typing import TYPE_CHECKING
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import ToolCall, ToolOutput
-from src.contracts.operation import OPERATION_CONTRIBUTIONS
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.pkgs.world import WorldJournal
-from src.kernel import BuiltinSource, compose, module
-from src.operations.registry import OperationRegistry as Registry
-from src.runtime import create_runtime
+from aurorabot.contracts import ToolCall, ToolOutput
+from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.pkgs.world import WorldJournal
+from aurorabot.kernel import BuiltinSource, compose, module
+from aurorabot.operations.registry import OperationRegistry as Registry
+from aurorabot.runtime import create_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.operation import OperationRequest, OperationResult
-    from src.kernel import ModuleContext
+    from aurorabot.contracts.operation import OperationRequest, OperationResult
+    from aurorabot.kernel import ModuleContext
 
 
 class _SelectedRegistry(Registry):

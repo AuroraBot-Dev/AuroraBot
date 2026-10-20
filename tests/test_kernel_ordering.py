@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import Alpha, Beta, Gamma
 
-from src.kernel import ACTIVATE, CLOSE, CONSTRUCT, RUN, ModuleSpec, Ordering, Phase, resolve
+from aurorabot.kernel import ACTIVATE, CLOSE, CONSTRUCT, RUN, ModuleSpec, Ordering, Phase, resolve
 
 if TYPE_CHECKING:
     import asyncio
 
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 def _build(context: ModuleContext) -> None:

@@ -6,6 +6,8 @@ from pathlib import Path
 from aurora.configs import config_specs
 
 _ROOT = Path(__file__).parents[1]
+_FRAMEWORK = _ROOT / "src" / "aurorabot"
+_CLI = _ROOT / "src" / "aurora"
 _LEAF_PACKAGES = frozenset({"contracts", "utils"})
 _MECHANISM_PACKAGES = frozenset({"kernel", "runtime"})
 _TYPE_ONLY_SRC: dict[str, set[str]] = {}
@@ -13,35 +15,35 @@ _REMOVED_PACKAGES = ("apps", "config", "platform", "sandbox")
 
 
 def _base_allowed(package: str) -> set[str]:
-    """按约定推导一个 src 包运行时可依赖的 src 包集合。
+    """按约定推导一个框架包运行时可依赖的框架包集合。
 
     叶子包只依赖自身；其他包可依赖 contracts 与 utils；机制包额外可依赖 kernel。
     新增能力包无需修改本文件。
     """
     if package in _LEAF_PACKAGES:
-        return {f"src.{package}"}
-    allowed = {f"src.{package}", "src.contracts", "src.utils"}
+        return {f"aurorabot.{package}"}
+    allowed = {f"aurorabot.{package}", "aurorabot.contracts", "aurorabot.utils"}
     if package in _MECHANISM_PACKAGES:
-        allowed.add("src.kernel")
+        allowed.add("aurorabot.kernel")
     return allowed
 
 
 def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
-    """功能 src 包运行时只能依赖 contracts/utils/自身；跨包能力只允许 TYPE_CHECKING。
+    """功能包运行时只能依赖 contracts/utils/自身；跨包能力只允许 TYPE_CHECKING。
 
-    每个包的 ``module.py`` 是组合元数据，额外允许引用 ``src.kernel`` 声明自身。
+    每个包的 ``module.py`` 是组合元数据，额外允许引用 ``aurorabot.kernel`` 声明自身。
     """
     violations: list[str] = []
-    for path in (_ROOT / "src").rglob("*.py"):
-        package = path.relative_to(_ROOT / "src").parts[0]
+    for path in _FRAMEWORK.rglob("*.py"):
+        package = path.relative_to(_FRAMEWORK).parts[0]
         base = _base_allowed(package)
         if path.name == "module.py":
-            base = base | {"src.kernel"}
+            base = base | {"aurorabot.kernel"}
         type_only = base | _TYPE_ONLY_SRC.get(package, frozenset())
         for module, guarded in _imports_of(path):
             if module in {"aurora", "ops"} or module.startswith(("aurora.", "ops.")):
                 violations.append(f"{path.relative_to(_ROOT)} imports {module}")
-            if not module.startswith("src.") or _src_package(module) == f"src.{package}":
+            if not module.startswith("aurorabot.") or _src_package(module) == f"aurorabot.{package}":
                 continue
             allowed = type_only if guarded else base
             if _src_package(module) not in {_src_package(item) for item in allowed}:
@@ -51,14 +53,19 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
 
 
 def test_dependency_convention_admits_new_capability_packages() -> None:
-    assert _base_allowed("tts") == {"src.tts", "src.contracts", "src.utils"}
-    assert _base_allowed("contracts") == {"src.contracts"}
-    assert _base_allowed("utils") == {"src.utils"}
-    assert _base_allowed("runtime") == {"src.runtime", "src.contracts", "src.utils", "src.kernel"}
+    assert _base_allowed("tts") == {"aurorabot.tts", "aurorabot.contracts", "aurorabot.utils"}
+    assert _base_allowed("contracts") == {"aurorabot.contracts"}
+    assert _base_allowed("utils") == {"aurorabot.utils"}
+    assert _base_allowed("runtime") == {
+        "aurorabot.runtime",
+        "aurorabot.contracts",
+        "aurorabot.utils",
+        "aurorabot.kernel",
+    }
 
 
 def test_removed_src_subpackages_do_not_return_as_empty_scaffolding() -> None:
-    existing = [name for name in _REMOVED_PACKAGES if (_ROOT / "src" / name).exists()]
+    existing = [name for name in _REMOVED_PACKAGES if (_FRAMEWORK / name).exists()]
     assert existing == []
 
 
@@ -68,8 +75,8 @@ def test_each_project_toml_has_one_registered_config_module() -> None:
         for path in (_ROOT / "config.example").rglob("*.toml")
     }
     module_names = {
-        path.relative_to(_ROOT / "aurora" / "configs").with_suffix("").as_posix()
-        for path in (_ROOT / "aurora" / "configs").rglob("*.py")
+        path.relative_to(_CLI / "configs").with_suffix("").as_posix()
+        for path in (_CLI / "configs").rglob("*.py")
         if path.stem != "__init__"
     }
     specs = config_specs()
@@ -82,14 +89,14 @@ def test_each_project_toml_has_one_registered_config_module() -> None:
 
 def test_runtime_core_does_not_store_unrelated_capabilities() -> None:
     """门面只依赖实际调用的能力，避免为接线或观察转存其他模块。"""
-    path = _ROOT / "src" / "runtime" / "core.py"
-    unrelated = {"src.cadence", "src.memory", "src.mcp"}
+    path = _FRAMEWORK / "runtime" / "core.py"
+    unrelated = {"aurorabot.cadence", "aurorabot.memory", "aurorabot.mcp"}
 
     assert not {_src_package(module) for module, _ in _imports_of(path)} & unrelated
 
 
 def test_cli_main_only_dispatches_through_command_layer() -> None:
-    path = _ROOT / "aurora" / "main.py"
+    path = _CLI / "main.py"
     aurora_imports = {
         module
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))

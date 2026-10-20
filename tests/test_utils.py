@@ -11,7 +11,7 @@ from loguru import logger as _loguru_logger
 from aurora.utils.platform import detect_os, is_linux, is_macos, is_windows
 from aurora.utils.project import get_git_revision
 from aurora.utils.table import render_table
-from src.utils import (
+from aurorabot.utils import (
     NamePatternError,
     UnsupportedLoggingLevelError,
     bounded_summary,

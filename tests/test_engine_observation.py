@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 import pytest
 from test_engine_runtime import FakeModel, ScopedEchoTool, _agent, _assembler
 
-from src.agents import AgentCatalog
-from src.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
-from src.contracts.memory import MemoryRequest
-from src.engine import AgentTreeRunner
-from src.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.agents import AgentCatalog
+from aurorabot.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
+from aurorabot.contracts.memory import MemoryRequest
+from aurorabot.engine import AgentTreeRunner
+from aurorabot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

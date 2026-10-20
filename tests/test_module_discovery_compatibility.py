@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import _Settings
 
-from src.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed, discovery
+from aurorabot.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed, discovery
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.kernel import DiscoverySource
+    from aurorabot.kernel import DiscoverySource
 
 _PLUGIN = '''"""携带兼容清单的真实 Python 模组。"""
 
 from pathlib import Path
-from src.kernel import ModuleManifest, module
+from aurorabot.kernel import ModuleManifest, module
 
 
 async def prepare(context):

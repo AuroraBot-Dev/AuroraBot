@@ -14,7 +14,7 @@ import pytest
 from aurora.commands.app import store as store_module
 from aurora.commands.app.models import AppListItem, AppNotFoundError, ConfigError, PathError, RegistryError
 from aurora.commands.app.store import AppStore, app_table, render_entry
-from src.mcp.config import AppConfig
+from aurorabot.mcp.config import AppConfig
 
 if TYPE_CHECKING:
     from pathlib import Path

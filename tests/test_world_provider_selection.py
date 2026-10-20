@@ -8,16 +8,16 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import _Settings
 
-from src.contracts import WorldFrontier
-from src.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
-from src.kernel import compose, compose_managed, module
-from src.world import SqlAlchemyWorldJournal
-from src.world.module import MODULE
+from aurorabot.contracts import WorldFrontier
+from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from aurorabot.kernel import compose, compose_managed, module
+from aurorabot.world import SqlAlchemyWorldJournal
+from aurorabot.world.module import MODULE
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.kernel import AsyncCleanup, ModuleContext
+    from aurorabot.kernel import AsyncCleanup, ModuleContext
 
 
 @pytest.mark.parametrize("managed", [False, True])

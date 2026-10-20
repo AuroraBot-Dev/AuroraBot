@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.contracts.operation import (
+from aurorabot.contracts.operation import (
     OperationDefinition,
     OperationKind,
     OperationRequest,
     OperationResult,
     OperationStatus,
 )
-from src.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
 
 _REF = ResourceRef(ResourceKey.parse("aurora:bot/command/goal_set"), "1")
 

@@ -1,11 +1,11 @@
 """安装用例测试的共享辅助：假 MCP 工厂、``aurora-app.toml`` 与计划夹具。
 
 沿用 ``app_clone_support.py`` 建立的惯例：文件名不以 ``test_`` 开头，pytest 不
-收集它，覆盖率也只统计 ``aurora`` 与 ``src``。
+收集它，覆盖率也只统计 ``aurora`` 与 ``aurorabot``。
 
 只放 fake、fixture 与 builder，不复制生产业务规则 —— 一份规则若在这里有第二个
 实现，那它就没被任何测试真正验证过。``FakeMcpClientFactory`` 不模拟 MCP：它只
-回答「按这份 spec 打开连接会成功还是抛什么」，握手到底是几个来回是 ``src/mcp``
+回答「按这份 spec 打开连接会成功还是抛什么」，握手到底是几个来回是 ``src/aurorabot/mcp``
 的事。
 默认共享提交摘要与合法启动清单，假服务提供一个工具以满足安装准入；Agent 夹具使用已发布的 worker。
 """
@@ -22,7 +22,7 @@ from aurora.commands.app.clone import Staging
 from aurora.commands.app.manifest import MANIFEST_NAME, MANIFEST_VERSION
 from aurora.commands.app.models import InstallPlan, LaunchCandidate, Repository
 from aurora.commands.app.verify import MCPVerifier
-from src.mcp.models import McpRemoteTool, McpToolsPage
+from aurorabot.mcp.models import McpRemoteTool, McpToolsPage
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -34,9 +34,9 @@ if TYPE_CHECKING:
     from aurora.commands.app.github import GitHubSource
     from aurora.commands.app.service import AppManager
     from aurora.commands.app.store import AppStore
-    from src.mcp.client import CatalogChangedHandler, DisconnectedHandler, McpCallResult, McpClientPort
-    from src.mcp.events import InboundEventHandler, McpInboundEvent
-    from src.mcp.models import McpAppSpec
+    from aurorabot.mcp.client import CatalogChangedHandler, DisconnectedHandler, McpCallResult, McpClientPort
+    from aurorabot.mcp.events import InboundEventHandler, McpInboundEvent
+    from aurorabot.mcp.models import McpAppSpec
 
 DEFAULT_COMMIT = "3f2a1c9d4e5b6a7c8d9e0f1a2b3c4d5e6f7a8b9c"
 DEFAULT_PROTOCOL = "2025-06-18"

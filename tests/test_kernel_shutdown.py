@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import _Settings
 
-from src.kernel import ModuleLifecycleError, compose_managed, module
+from aurorabot.kernel import ModuleLifecycleError, compose_managed, module
 
 if TYPE_CHECKING:
-    from src.kernel import AsyncCleanup, ModuleContext
+    from aurorabot.kernel import AsyncCleanup, ModuleContext
 
 
 def test_concurrent_close_waits_for_the_same_resource_release() -> None:

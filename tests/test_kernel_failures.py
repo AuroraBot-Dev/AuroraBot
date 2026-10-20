@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import _Settings
 
-from src.kernel import ModuleLifecycleError, compose_managed, module
+from aurorabot.kernel import ModuleLifecycleError, compose_managed, module
 
 _EXPECTED_RELEASE_ERRORS = 2
 
 if TYPE_CHECKING:
-    from src.kernel import AsyncCleanup, ModuleContext
+    from aurorabot.kernel import AsyncCleanup, ModuleContext
 
 
 def test_background_failure_is_not_discarded_when_closing() -> None:

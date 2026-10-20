@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 
 from memory_operations_support import GOAL, OUTCOME, SOURCE, feedback_arguments, prepared_runtime, request
 
-from src.contracts import WorldFrontier
-from src.contracts.operation import OperationStatus
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.operations import OperationRegistry
-from src.memory.graph import graph_interactions
+from aurorabot.contracts import WorldFrontier
+from aurorabot.contracts.operation import OperationStatus
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.memory.graph import graph_interactions
 
 if TYPE_CHECKING:
     from pathlib import Path

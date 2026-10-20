@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from src.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
-from src.kernel import compose, compose_managed, module
-from src.scopes.module import MODULE
+from aurorabot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
+from aurorabot.kernel import compose, compose_managed, module
+from aurorabot.scopes.module import MODULE
 
 if TYPE_CHECKING:
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 @dataclass(frozen=True, slots=True)

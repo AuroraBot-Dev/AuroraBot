@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from prompt_support import make_prompt_catalog
 
-from src.contracts import (
+from aurorabot.contracts import (
     AgentDefinition,
     AgentTree,
     ChatMessage,
@@ -15,10 +15,10 @@ from src.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from src.contracts.bot import Checkpoint, Goal
-from src.contracts.memory import MemoryContinuity
-from src.contracts.model import ContextBudgetError
-from src.prompt import PromptAssembler
+from aurorabot.contracts.bot import Checkpoint, Goal
+from aurorabot.contracts.memory import MemoryContinuity
+from aurorabot.contracts.model import ContextBudgetError
+from aurorabot.prompt import PromptAssembler
 
 
 def _assembler(*, limit: int = 1_000) -> PromptAssembler:

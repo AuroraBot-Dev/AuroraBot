@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.contracts.prompt import PromptFragment
-from src.contracts.resource import ResourceKey
-from src.prompt import PromptCatalog
+from aurorabot.contracts.prompt import PromptFragment
+from aurorabot.contracts.resource import ResourceKey
+from aurorabot.prompt import PromptCatalog
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

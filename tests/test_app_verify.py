@@ -37,7 +37,7 @@ from aurora.commands.app.verify import (
     scrub_secrets,
     verify_environment,
 )
-from src.mcp.models import McpEventMode, McpRemoteTool, McpToolsPage, McpTransport
+from aurorabot.mcp.models import McpEventMode, McpRemoteTool, McpToolsPage, McpTransport
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -201,7 +201,7 @@ def test_a_successful_inspection_closes_the_connection(tmp_path: Path) -> None:
 
 
 def test_a_successful_inspection_reports_the_discovered_tools(tmp_path: Path) -> None:
-    """工具 ID 由 ``src.mcp`` 的发现规则生成，CLI 只报告它，不自己拼一个名字。"""
+    """工具 ID 由 ``aurorabot.mcp`` 的发现规则生成，CLI 只报告它，不自己拼一个名字。"""
     factory = FakeMcpClientFactory(tools=("read_text_file", "list_allowed_directories"))
 
     inspection = _verifier(factory).inspect(_process(tmp_path))

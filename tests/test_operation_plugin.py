@@ -10,23 +10,23 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import ToolCall, ToolOutput
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.runtime import assemble_runtime
+from aurorabot.contracts import ToolCall, ToolOutput
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 _PLUGIN = '''"""独立的示例领域模组。"""
 
-from src.contracts import ToolScopes
-from src.contracts.operation import OPERATION_CONTRIBUTIONS, OperationDefinition, OperationResult
-from src.contracts.resource import (
+from aurorabot.contracts import ToolScopes
+from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationDefinition, OperationResult
+from aurorabot.contracts.resource import (
     RESOURCE_ALIASES, RESOURCE_CONTRIBUTIONS, ResourceAlias, ResourceDescriptor, ResourceKey, ResourceRef,
 )
-from src.kernel import module
+from aurorabot.kernel import module
 
 
 class Echo:

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from src.contracts import (
+from aurorabot.contracts import (
     MCP_EVENT_RECEIVED,
     EnvironmentEvent,
     ToolCall,
@@ -18,7 +18,7 @@ from src.contracts import (
     WorldCommitInput,
     WorldFrontier,
 )
-from src.mcp import (
+from aurorabot.mcp import (
     McpAppSpec,
     McpAppState,
     McpCallResult,
@@ -29,13 +29,13 @@ from src.mcp import (
     McpTransport,
     prepare_mcp,
 )
-from src.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
-from src.mcp.scopes import mcp_scope
+from aurorabot.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
+from aurorabot.mcp.scopes import mcp_scope
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
-    from src.mcp.client import InboundEventHandler
+    from aurorabot.mcp.client import InboundEventHandler
 
 _TIMEOUT_SECONDS = 5.0
 

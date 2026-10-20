@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.contracts import ContributionKey
-from src.contracts.module_manifest import MODULE_MANIFEST_CONTRACT, ModuleManifest
-from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
-from src.contracts.scope import ScopeDeclaration, ScopeKind
-from src.kernel import CONSTRUCT, READY, ModuleSpec, Ordering, module
+from aurorabot.contracts import ContributionKey
+from aurorabot.contracts.module_manifest import MODULE_MANIFEST_CONTRACT, ModuleManifest
+from aurorabot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from aurorabot.contracts.scope import ScopeDeclaration, ScopeKind
+from aurorabot.kernel import CONSTRUCT, READY, ModuleSpec, Ordering, module
 
 if TYPE_CHECKING:
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 _RESOURCE = ResourceDescriptor(
     ResourceRef(ResourceKey.parse("lab:example/query/read"), "1"),

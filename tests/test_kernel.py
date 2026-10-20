@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from src.contracts import ContributionKey
-from src.kernel import (
+from aurorabot.contracts import ContributionKey
+from aurorabot.kernel import (
     RUN,
     DirectorySource,
     ManagedAssembly,
@@ -27,7 +27,7 @@ from src.kernel import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from src.kernel.context import ModuleContext
+    from aurorabot.kernel.context import ModuleContext
 
 
 class Alpha:
@@ -419,7 +419,7 @@ def test_construction_phase_after_runtime_phase_fails() -> None:
 def test_directory_source_loads_plugin_file(tmp_path: Path) -> None:
     plugin = tmp_path / "my_plugin.py"
     plugin.write_text(
-        "from src.kernel import module\n\n"
+        "from aurorabot.kernel import module\n\n"
         "class Widget:\n"
         "    pass\n\n"
         "@module(name='external.alpha', provides=Widget)\n"

@@ -10,15 +10,15 @@ import pytest
 from test_assembly import FakeModel
 from test_model_resource_loading import _config
 
-from src.contracts.kernel import ContributionKey
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.memory import MemoryPolicy
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.kernel import BuiltinSource, compose, compose_managed, module
-from src.memory_model.rules import RuleMemoryPolicy
+from aurorabot.contracts.kernel import ContributionKey
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.memory import MemoryPolicy
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.kernel import BuiltinSource, compose, compose_managed, module
+from aurorabot.memory_model.rules import RuleMemoryPolicy
 
 if TYPE_CHECKING:
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 class _Settings:

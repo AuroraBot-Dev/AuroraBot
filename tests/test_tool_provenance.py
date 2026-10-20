@@ -14,15 +14,15 @@ from aurora import load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.agents.config import AgentsConfig
-from src.contracts import ChatMessage, ToolCall, ToolOutput, TreeStatus
-from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.contracts.tool import WAIT_TOOL
-from src.mcp.config import PlatformsConfig
-from src.runtime import compose_runtime
+from aurorabot.agents.config import AgentsConfig
+from aurorabot.contracts import ChatMessage, ToolCall, ToolOutput, TreeStatus
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.contracts.tool import WAIT_TOOL
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

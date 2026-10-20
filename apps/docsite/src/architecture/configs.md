@@ -49,6 +49,6 @@ Agent 显式选择 `namespace:ai/endpoint/path`；端点冻结提供方版本、
 
 ## 持久数据
 
-`storage.toml` 是具名路径列表，可通过 `%DATA_ROOT%` 引用其他条目。`world` 目录保存 `world.sqlite3`；`src/world/migration` 维护递增 schema 和完整升级步骤。数据库只归档世界提交及其索引，不保存 Python 协程或整棵运行树对象。
+`storage.toml` 是具名路径列表，可通过 `%DATA_ROOT%` 引用其他条目。`world` 目录保存 `world.sqlite3`；`src/aurorabot/world/migration` 维护递增 schema 和完整升级步骤。数据库只归档世界提交及其索引，不保存 Python 协程或整棵运行树对象。
 
 `artifacts.toml` 指定固定内容目录。原始字节的 SHA256 是内容版本，同名的新版本保留旧正文；别名和运行实例不覆盖定义内容。大请求、回执、权重、训练数据及投影以资源引用进入世界。世界数据库与内容目录应一起备份，缺失或损坏的正文不能作为有效历史静默恢复。

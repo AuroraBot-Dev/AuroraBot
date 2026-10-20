@@ -12,8 +12,8 @@ import torch
 from memory_support import episodes
 from rhythm_support import make_episode
 
-from src.contracts.training import TrainingProvenance, provenance_data
-from src.rhythm.dataset import episodes_fingerprint
+from aurorabot.contracts.training import TrainingProvenance, provenance_data
+from aurorabot.rhythm.dataset import episodes_fingerprint
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 
@@ -21,7 +21,7 @@ _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 @pytest.mark.parametrize("domain", ["rhythm", "memory"])
 def test_actual_dataset_fingerprints_are_saved_inside_model_bytes(domain: str) -> None:
     """直接调用训练器也产生输入内容身份，未发布的原始来源保持空值。"""
-    package = "src.rhythm" if domain == "rhythm" else "src.memory_model"
+    package = "aurorabot.rhythm" if domain == "rhythm" else "aurorabot.memory_model"
     dataset = import_module(f"{package}.dataset")
     trainer = import_module(f"{package}.training")
     if domain == "rhythm":
@@ -46,7 +46,7 @@ def test_changed_labels_with_the_same_episode_ids_reject_original_source_declara
     domain: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """在任何参数初始化和优化之前，声明必须与当前输入摘要相符。"""
-    package = "src.rhythm" if domain == "rhythm" else "src.memory_model"
+    package = "aurorabot.rhythm" if domain == "rhythm" else "aurorabot.memory_model"
     dataset = import_module(f"{package}.dataset")
     trainer = import_module(f"{package}.training")
     if domain == "rhythm":

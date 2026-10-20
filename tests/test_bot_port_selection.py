@@ -9,23 +9,23 @@ from typing import TYPE_CHECKING
 from test_assembly import FakeModel
 from test_model_provenance import _config
 
-from src.bot.store import JournalBotState
-from src.clock import PersistentBotClock
-from src.contracts.bot import WakeStatus
-from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.clock import BotClock
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.world import WorldJournal, WorldReader
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.kernel import BuiltinSource, compose_managed, module
-from src.runtime import create_runtime
+from aurorabot.bot.store import JournalBotState
+from aurorabot.clock import PersistentBotClock
+from aurorabot.contracts.bot import WakeStatus
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.pkgs.clock import BotClock
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.kernel import BuiltinSource, compose_managed, module
+from aurorabot.runtime import create_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 _DUE = datetime(2026, 10, 18, tzinfo=UTC)
 _GOAL = "aurora:goal/selected-state"

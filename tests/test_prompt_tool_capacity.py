@@ -11,15 +11,23 @@ import pytest
 from prompt_support import make_prompt_catalog
 from test_engine_runtime import FakeModel
 
-from src.agents import AgentCatalog
-from src.contracts import AgentDefinition, AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolDefinition, ToolOutput
-from src.contracts.bot import Goal
-from src.contracts.memory import MemoryContinuity
-from src.contracts.model import ContextBudgetError
-from src.engine import AgentTreeRunner
-from src.prompt import PromptAssembler
-from src.tools import ToolRegistry
-from src.utils.serialization import thaw_json
+from aurorabot.agents import AgentCatalog
+from aurorabot.contracts import (
+    AgentDefinition,
+    AgentTree,
+    ChatMessage,
+    MemorySnapshot,
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+)
+from aurorabot.contracts.bot import Goal
+from aurorabot.contracts.memory import MemoryContinuity
+from aurorabot.contracts.model import ContextBudgetError
+from aurorabot.engine import AgentTreeRunner
+from aurorabot.prompt import PromptAssembler
+from aurorabot.tools import ToolRegistry
+from aurorabot.utils.serialization import thaw_json
 
 _PROMPT = "aurora:prompt/agent/root"
 _SMALL = ToolDefinition("lab:tool/definition/small", "读取一项实验状态", {"type": "object"})

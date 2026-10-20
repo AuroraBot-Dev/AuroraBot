@@ -10,9 +10,9 @@ import pytest
 
 from aurora.configs.reactions import CONFIG_SPEC as REACTIONS_CONFIG
 from aurora.configurator import assemble_config
-from src.cadence import ReactiveRule
-from src.cadence.config import ReactionConfig, ReactionsConfig
-from src.contracts import MCP_EVENT_RECEIVED, WorldCommit, WorldFrontier
+from aurorabot.cadence import ReactiveRule
+from aurorabot.cadence.config import ReactionConfig, ReactionsConfig
+from aurorabot.contracts import MCP_EVENT_RECEIVED, WorldCommit, WorldFrontier
 
 _TEMPLATE = (
     ReactionConfig("mcp:org.aurora.qq", "qq.message.private", "aurora:agent/definition/chat", ()),

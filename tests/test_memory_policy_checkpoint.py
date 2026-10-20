@@ -11,16 +11,16 @@ import pytest
 from test_memory_tgn import _request
 from test_memory_tgn_incremental import _cold, _network
 
-import src.memory_model.tgn as backend
-from src.contracts.memory_graph import MemoryNode
-from src.contracts.memory_graph_codec import interactions_fingerprint
-from src.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+import aurorabot.memory_model.tgn as backend
+from aurorabot.contracts.memory_graph import MemoryNode
+from aurorabot.contracts.memory_graph_codec import interactions_fingerprint
+from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 
 if TYPE_CHECKING:
-    from src.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
-    from src.contracts.memory_graph import MemoryInteraction
-    from src.contracts.resource import ResourceRef
-    from src.memory_model.state import GraphState
+    from aurorabot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
+    from aurorabot.contracts.memory_graph import MemoryInteraction
+    from aurorabot.contracts.resource import ResourceRef
+    from aurorabot.memory_model.state import GraphState
 
 
 def test_restored_prefix_only_updates_the_remaining_real_interactions(monkeypatch: pytest.MonkeyPatch) -> None:

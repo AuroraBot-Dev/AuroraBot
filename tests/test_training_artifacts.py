@@ -18,12 +18,12 @@ from test_train_command import _NOW, _write
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
-from src.artifacts.store import FileArtifactStore
-from src.contracts.artifact_codec import read_artifact
-from src.contracts.artifact_io import artifact_content
-from src.contracts.resource_query import ResourceQuery
-from src.memory_model.dataset import write_episodes
-from src.utils.files import write_new_file
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts.artifact_codec import read_artifact
+from aurorabot.contracts.artifact_io import artifact_content
+from aurorabot.contracts.resource_query import ResourceQuery
+from aurorabot.memory_model.dataset import write_episodes
+from aurorabot.utils.files import write_new_file
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,7 +44,7 @@ def test_cli_publishes_the_exact_inputs_and_model_with_portable_provenance(
         write_episodes(validation_path, episodes("validation", days=1))
     original_training = training_path.read_bytes()
     original_validation = validation_path.read_bytes()
-    package = "src.rhythm" if domain == "rhythm" else "src.memory_model"
+    package = "aurorabot.rhythm" if domain == "rhythm" else "aurorabot.memory_model"
     backend = import_module(f"{package}.training")
     dataset = import_module(f"{package}.dataset")
     actual_train = backend.train

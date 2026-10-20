@@ -7,9 +7,9 @@ from dataclasses import replace
 import pytest
 from model_support import fake_endpoint
 
-from src.contracts import ChatMessage, ModelRequest, ToolDefinition
-from src.contracts.resource import ResourceKey
-from src.tools import is_tool_id
+from aurorabot.contracts import ChatMessage, ModelRequest, ToolDefinition
+from aurorabot.contracts.resource import ResourceKey
+from aurorabot.tools import is_tool_id
 
 
 @pytest.mark.parametrize(

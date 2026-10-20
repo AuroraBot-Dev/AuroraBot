@@ -10,8 +10,8 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts.pkgs.bot import BotStateStore
-from src.runtime import assemble_runtime
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -70,6 +70,11 @@ aurora start
 
 ## コントリビューション
 
+このリポジトリは Python の src layout と pnpm workspace を併用します。`src/aurora/` は CLI と設定解析、
+`src/aurorabot/` は Bot フレームワークです。`uv sync --locked --group dev` で開発環境にインストールし、
+`aurora` と `aurorabot` を import します。フロントエンドは `apps/`、共有ライブラリは `packages/`、
+ビルド設定は `tooling/` に配置します。Python は uv、Vue と TypeScript は pnpm/Vite で依存関係とビルドを個別に管理します。
+
 [AuroraBot へのコントリビューション](docs/CONTRIBUTING.ja.md)と [AuroraBot ドキュメントサイト](https://www.aurorabot.org)をご覧ください。コントリビューションを行うことで、プロジェクトの[行動規範](docs/CODE_OF_CONDUCT.md)に同意したことになります。
 
 ## オープンソースへの謝辞

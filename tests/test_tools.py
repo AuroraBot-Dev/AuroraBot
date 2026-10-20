@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from src.agents import AgentCatalog
-from src.contracts import (
+from aurorabot.agents import AgentCatalog
+from aurorabot.contracts import (
     AgentDefinition,
     DelegationRequest,
     EnvironmentEvent,
@@ -26,7 +26,7 @@ from src.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from src.tools import (
+from aurorabot.tools import (
     DELEGATE_TOOL,
     WAIT_TOOL,
     WORLD_READ_TOOL,
@@ -39,7 +39,7 @@ from src.tools import (
     WorldReadTool,
     WorldTreesTool,
 )
-from src.tools.builtin import builtin_tools
+from aurorabot.tools.builtin import builtin_tools
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

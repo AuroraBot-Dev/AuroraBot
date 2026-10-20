@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents import AgentCatalog, AgentDefinitionError
-from src.contracts import AgentDefinition
+from aurorabot.agents import AgentCatalog, AgentDefinitionError
+from aurorabot.contracts import AgentDefinition
 
 
 def _agent(definition_id: str, *, children: frozenset[str] = frozenset()) -> AgentDefinition:

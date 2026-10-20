@@ -7,10 +7,10 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
-from src.contracts.resource_paging import resource_cursor, resource_order, resource_position
-from src.contracts.resource_query import ResourcePage, ResourceQuery
-from src.resources.catalog import ResourceCatalog
+from aurorabot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from aurorabot.contracts.resource_paging import resource_cursor, resource_order, resource_position
+from aurorabot.contracts.resource_query import ResourcePage, ResourceQuery
+from aurorabot.resources.catalog import ResourceCatalog
 
 
 def _descriptor(path: str, description: str = "已发布资源") -> ResourceDescriptor:

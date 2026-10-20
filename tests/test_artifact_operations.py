@@ -12,17 +12,17 @@ from test_assembly import FakeModel
 
 from aurora import load_config
 from aurora.configs.artifacts import CONFIG_SPEC
-from src.artifacts.config import ArtifactsConfig
-from src.contracts import ToolCall, ToolOutput
-from src.contracts.artifact_codec import read_artifact
-from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.runtime import assemble_runtime
-from src.utils.serialization import thaw_json
+from aurorabot.artifacts.config import ArtifactsConfig
+from aurorabot.contracts import ToolCall, ToolOutput
+from aurorabot.contracts.artifact_codec import read_artifact
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.runtime import assemble_runtime
+from aurorabot.utils.serialization import thaw_json
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

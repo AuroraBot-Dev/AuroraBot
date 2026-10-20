@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.artifacts.operations import ArtifactOperation
-from src.artifacts.store import FileArtifactStore
-from src.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from src.contracts.resource import ResourceKey
+from aurorabot.artifacts.operations import ArtifactOperation
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.resource import ResourceKey
 
 if TYPE_CHECKING:
     from pathlib import Path

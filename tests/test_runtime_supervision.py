@@ -9,22 +9,22 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import FRONT_BINDINGS, Front
-from src.contracts.pkgs.world import WorldJournal
-from src.kernel import ModuleLifecycleError
-from src.runtime import run_runtime
-from src.runtime.events import RUNTIME_MODULE_FAILED
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.contracts import FRONT_BINDINGS, Front
+from aurorabot.contracts.pkgs.world import WorldJournal
+from aurorabot.kernel import ModuleLifecycleError
+from aurorabot.runtime import run_runtime
+from aurorabot.runtime.events import RUNTIME_MODULE_FAILED
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts import WorldCommit, WorldCommitInput
+    from aurorabot.contracts import WorldCommit, WorldCommitInput
 
 
 _PLUGIN = '''"""失败的后台模组。"""
 
-from src.kernel import module
+from aurorabot.kernel import module
 
 
 async def run(context, stop):

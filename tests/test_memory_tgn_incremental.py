@@ -11,11 +11,11 @@ import pytest
 import torch
 from test_memory_tgn import _request
 
-from src.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 
 if TYPE_CHECKING:
-    from src.contracts.memory_graph import MemoryInteraction, MemoryRankingRequest
-    from src.memory_model.tgn import GraphState
+    from aurorabot.contracts.memory_graph import MemoryInteraction, MemoryRankingRequest
+    from aurorabot.memory_model.tgn import GraphState
 
 
 def _network() -> TemporalMemoryNetwork:

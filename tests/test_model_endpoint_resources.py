@@ -11,11 +11,11 @@ from typing import Any
 import pytest
 from model_support import fake_endpoint
 
-from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
-from src.ai.config import EndpointConfig, ProviderConfig
-from src.contracts import ChatMessage, ModelRequest
-from src.contracts.model_binding import ModelBinding, ProviderDefinition
-from src.contracts.resource import ResourceKey
+from aurorabot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
+from aurorabot.ai.config import EndpointConfig, ProviderConfig
+from aurorabot.contracts import ChatMessage, ModelRequest
+from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition
+from aurorabot.contracts.resource import ResourceKey
 
 
 @pytest.mark.parametrize("name", ["default", "lab:ai/provider/default", "lab:memory/model/tgn"])

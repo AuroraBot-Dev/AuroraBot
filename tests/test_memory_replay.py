@@ -8,20 +8,20 @@ from typing import TYPE_CHECKING
 
 from memory_operations_support import feedback_arguments, prepared_runtime, request
 
-from src.contracts import WorldFrontier
-from src.contracts.memory_codec import exposure_data, read_exposure
-from src.contracts.memory_graph_codec import ranking_fingerprint, read_ranking
-from src.contracts.operation import OperationStatus
-from src.contracts.pkgs.memory import MemoryPolicy
-from src.contracts.pkgs.operations import OperationRegistry
-from src.memory_model.rules import RuleMemoryPolicy
+from aurorabot.contracts import WorldFrontier
+from aurorabot.contracts.memory_codec import exposure_data, read_exposure
+from aurorabot.contracts.memory_graph_codec import ranking_fingerprint, read_ranking
+from aurorabot.contracts.operation import OperationStatus
+from aurorabot.contracts.pkgs.memory import MemoryPolicy
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.memory_model.rules import RuleMemoryPolicy
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
 
-    from src.contracts.memory_graph import MemoryRankingRequest
+    from aurorabot.contracts.memory_graph import MemoryRankingRequest
 
 
 def test_training_input_rebuilds_exact_history_without_current_model_or_future_feedback(

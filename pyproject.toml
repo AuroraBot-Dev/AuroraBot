@@ -29,15 +29,15 @@ aurora = "aurora.main:main"
 learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["aurora", "aurora.*", "src", "src.*"]
+where = ["src"]
+include = ["aurora", "aurora.*", "aurorabot", "aurorabot.*"]
+namespaces = false
 
 [dependency-groups]
 dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov", { include-group = "learning" }]
 learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra --basetemp=tests/.tmp"
 
@@ -87,16 +87,16 @@ ignore = [
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]
-"aurora/__init__.py" = ["PLC0415"]
-"aurora/commands/start.py" = ["PLC0415"]
-"aurora/utils/logging.py" = ["PLC0415"]
-"src/engine/runtime.py" = ["BLE001"]
+"src/aurora/__init__.py" = ["PLC0415"]
+"src/aurora/commands/start.py" = ["PLC0415"]
+"src/aurora/utils/logging.py" = ["PLC0415"]
+"src/aurorabot/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "src", "tests"]
+include = ["src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"

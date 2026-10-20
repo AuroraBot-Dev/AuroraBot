@@ -10,9 +10,16 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import ChatMessage, EnvironmentEvent, ModelRequest, TreeLaunchRequest, WorldCommit, WorldFrontier
-from src.runtime import assemble_runtime
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.contracts import (
+    ChatMessage,
+    EnvironmentEvent,
+    ModelRequest,
+    TreeLaunchRequest,
+    WorldCommit,
+    WorldFrontier,
+)
+from aurorabot.runtime import assemble_runtime
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

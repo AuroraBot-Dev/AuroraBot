@@ -1,7 +1,7 @@
 """离线模型共用真实端点值对象，只替换实际推理行为。"""
 
-from src.contracts.model_binding import ModelBinding, ProviderDefinition, ai_resource_key
-from src.contracts.resource import ResourceKey
+from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition, ai_resource_key
+from aurorabot.contracts.resource import ResourceKey
 
 _PROVIDER = ProviderDefinition(ResourceKey("test", "ai", "provider", "fake"), "fake", None, "AURORA_FAKE_MODEL_KEY")
 

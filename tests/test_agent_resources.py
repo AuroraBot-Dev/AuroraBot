@@ -16,30 +16,30 @@ from aurora import load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.agents import AgentCatalog as ConcreteCatalog
-from src.agents.config import AgentsConfig
-from src.agents.module import MODULE as AGENTS_MODULE
-from src.artifacts.module import MODULE as ARTIFACTS_MODULE
-from src.artifacts.store import FileArtifactStore
-from src.contracts import TOOL_CONTRIBUTIONS, AgentDefinition
-from src.contracts.agent_resource import AGENT_MEDIA_TYPE
-from src.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.agents import AgentCatalog
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.contracts.resource_query import ResourceQuery
-from src.kernel import compose_managed, module
-from src.mcp.config import PlatformsConfig
-from src.resource_content.module import MODULE as CONTENT_MODULE
-from src.resources.module import MODULE as RESOURCES_MODULE
-from src.runtime import compose_runtime
+from aurorabot.agents import AgentCatalog as ConcreteCatalog
+from aurorabot.agents.config import AgentsConfig
+from aurorabot.agents.module import MODULE as AGENTS_MODULE
+from aurorabot.artifacts.module import MODULE as ARTIFACTS_MODULE
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts import TOOL_CONTRIBUTIONS, AgentDefinition
+from aurorabot.contracts.agent_resource import AGENT_MEDIA_TYPE
+from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.agents import AgentCatalog
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.contracts.resource_query import ResourceQuery
+from aurorabot.kernel import compose_managed, module
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.resource_content.module import MODULE as CONTENT_MODULE
+from aurorabot.resources.module import MODULE as RESOURCES_MODULE
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 def _definition() -> AgentDefinition:

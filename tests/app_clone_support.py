@@ -1,7 +1,7 @@
 """clone 与 GitHub 测试的共享辅助：假进程、假 GitHub、假 clone 与仓库夹具。
 
 沿用 ``app_search_support.py`` 建立的惯例：文件名不以 ``test_`` 开头，pytest
-不收集它，覆盖率也只统计 ``aurora`` 与 ``src``。
+不收集它，覆盖率也只统计 ``aurora`` 与 ``aurorabot``。
 
 只放 fake、fixture 与 builder，不复制生产业务规则 —— 一份规则若在这里有第二个
 实现，那它就没被任何测试真正验证过。所以 ``FakeProcessRunner`` 不模拟 git 的

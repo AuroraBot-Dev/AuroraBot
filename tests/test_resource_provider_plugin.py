@@ -9,18 +9,18 @@ from typing import TYPE_CHECKING
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.runtime import assemble_runtime
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 _PLUGIN = '''"""独立资源提供者。"""
 
-from src.contracts.pkgs.resources import RESOURCE_PROVIDERS
-from src.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
-from src.contracts.resource_paging import resource_order, resource_position
-from src.contracts.resource_query import ResourcePage
-from src.kernel import module
+from aurorabot.contracts.pkgs.resources import RESOURCE_PROVIDERS
+from aurorabot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from aurorabot.contracts.resource_paging import resource_order, resource_position
+from aurorabot.contracts.resource_query import ResourcePage
+from aurorabot.kernel import module
 
 _ENTRY = ResourceDescriptor(
     ResourceRef(ResourceKey.parse("lab:experiments/dataset/measurements"), "edition-1"),

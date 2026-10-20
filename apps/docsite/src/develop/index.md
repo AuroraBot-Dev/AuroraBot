@@ -70,7 +70,7 @@ AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应�
   结果恢复 parent；
 - engine 管理完整热路径，具体模型、工具与记忆实现通过 contracts Port 注入，节点不直接调用模型网关或平台客户端；
 - 结构配置继续使用 TOML，密钥继续只来自环境变量；
-- 共享日志通过 `src.utils.logging.get_logger()` 获取，不记录完整提示词、模型回复或敏感载荷。
+- 共享日志通过 `aurorabot.utils.logging.get_logger()` 获取，不记录完整提示词、模型回复或敏感载荷。
 
 更完整的维护者边界见仓库根目录 `AGENTS.md`。
 

@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.bot.store import JournalBotState
-from src.contracts.bot import BotChange, Checkpoint, Goal, GoalStatus, StateConflictError, WakePlan, WakeStatus
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.bot.store import JournalBotState
+from aurorabot.contracts.bot import BotChange, Checkpoint, Goal, GoalStatus, StateConflictError, WakePlan, WakeStatus
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

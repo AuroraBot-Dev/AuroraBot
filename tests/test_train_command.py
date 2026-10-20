@@ -11,17 +11,17 @@ from rhythm_support import make_episode
 
 from aurora.commander import run
 from aurora.commands import DEFAULT_REGISTRY
-from src.memory_model.dataset import write_episodes
-from src.memory_model.tgn import load_policy as load_memory_policy
-from src.rhythm.dataset import write_episodes as write_rhythm_episodes
-from src.rhythm.gru import load_policy
+from aurorabot.memory_model.dataset import write_episodes
+from aurorabot.memory_model.tgn import load_policy as load_memory_policy
+from aurorabot.rhythm.dataset import write_episodes as write_rhythm_episodes
+from aurorabot.rhythm.gru import load_policy
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
 
-    from src.rhythm.dataset import RhythmEpisode
+    from aurorabot.rhythm.dataset import RhythmEpisode
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 

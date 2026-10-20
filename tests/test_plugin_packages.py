@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 import pytest
 from test_kernel import _Settings
 
-from src.kernel import DirectorySource, compose
+from aurorabot.kernel import DirectorySource, compose
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 _ENTRY = '''"""使用同包服务的插件入口。"""
 
-from src.kernel import ModuleManifest, module
+from aurorabot.kernel import ModuleManifest, module
 from .service import VALUE
 
 
@@ -87,7 +87,7 @@ def test_file_and_directory_plugins_have_separate_python_import_roots(tmp_path: 
     (package / "module.py").write_text(entry, encoding="utf-8")
     expected = 7
     (tmp_path / "example_module.py").write_text(
-        "from src.kernel import ModuleManifest, module\n"
+        "from aurorabot.kernel import ModuleManifest, module\n"
         '@module(name="example", provides=int, manifest=ModuleManifest(namespace="other"))\n'
         "def build(context):\n"
         f"    return {expected}\n"

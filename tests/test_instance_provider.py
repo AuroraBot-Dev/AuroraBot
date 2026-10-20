@@ -9,23 +9,23 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.artifacts.provider import ArtifactProvider
-from src.artifacts.store import FileArtifactStore
-from src.contracts.process import DEFAULT_TREE_PROCESS
-from src.contracts.resource import ResourceInstance, ResourceKey, ResourceRef
-from src.contracts.resource_codec import resource_instance_data, resource_ref_data
-from src.contracts.resource_query import ResourceQuery
-from src.contracts.tree_lifecycle import TREE_COMPLETED, TREE_FAILED, TREE_STARTED, tree_scope
-from src.contracts.world import WorldCommitInput, WorldFrontier
-from src.instances.provider import InstanceProvider
-from src.resources.catalog import ResourceCatalog
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.artifacts.provider import ArtifactProvider
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts.process import DEFAULT_TREE_PROCESS
+from aurorabot.contracts.resource import ResourceInstance, ResourceKey, ResourceRef
+from aurorabot.contracts.resource_codec import resource_instance_data, resource_ref_data
+from aurorabot.contracts.resource_query import ResourceQuery
+from aurorabot.contracts.tree_lifecycle import TREE_COMPLETED, TREE_FAILED, TREE_STARTED, tree_scope
+from aurorabot.contracts.world import WorldCommitInput, WorldFrontier
+from aurorabot.instances.provider import InstanceProvider
+from aurorabot.resources.catalog import ResourceCatalog
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
 
-    from src.contracts.world import WorldStreamPage
+    from aurorabot.contracts.world import WorldStreamPage
 
 _BOT = "aurora:bot/default"
 

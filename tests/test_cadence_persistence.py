@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 import pytest
 from test_cadence import FakeLauncher
 
-from src.cadence import Cadence
-from src.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldFrontier
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
-from src.rhythm.rules import RuleRhythmPolicy
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.cadence import Cadence
+from aurorabot.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldFrontier
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
+from aurorabot.rhythm.rules import RuleRhythmPolicy
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

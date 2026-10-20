@@ -14,25 +14,25 @@ from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.contracts import WorldFrontier
-from src.contracts.memory import MemoryRequest
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
-from src.contracts.resource_query import ResourceQuery
-from src.mcp.config import PlatformsConfig
-from src.memory_model.config import MemoryModelConfig
-from src.memory_model.tgn import TemporalMemoryNetwork
-from src.memory_model.training import train
-from src.runtime import compose_runtime
+from aurorabot.contracts import WorldFrontier
+from aurorabot.contracts.memory import MemoryRequest
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
+from aurorabot.contracts.resource_query import ResourceQuery
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.memory_model.config import MemoryModelConfig
+from aurorabot.memory_model.tgn import TemporalMemoryNetwork
+from aurorabot.memory_model.training import train
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora import AuroraConfig
-    from src.contracts.artifact import ArtifactInfo
-    from src.contracts.memory_graph import MemoryInteraction
-    from src.memory_model.state import GraphState
-    from src.runtime.core import AuroraRuntime
+    from aurorabot.contracts.artifact import ArtifactInfo
+    from aurorabot.contracts.memory_graph import MemoryInteraction
+    from aurorabot.memory_model.state import GraphState
+    from aurorabot.runtime.core import AuroraRuntime
 
 
 def _config(project: Path, *, interval: float = 3600.0, learned: bool = True) -> AuroraConfig:

@@ -10,9 +10,9 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
-from src.contracts import EnvironmentEvent, WorldCommitInput, WorldFrontier
-from src.world import SqlAlchemyWorldJournal
-from src.world.migration import TARGET_VERSION
+from aurorabot.contracts import EnvironmentEvent, WorldCommitInput, WorldFrontier
+from aurorabot.world import SqlAlchemyWorldJournal
+from aurorabot.world.migration import TARGET_VERSION
 
 if TYPE_CHECKING:
     from pathlib import Path

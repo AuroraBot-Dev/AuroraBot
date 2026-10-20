@@ -12,13 +12,13 @@ from test_mcp_sdk_client import _route_stdio_to_server, _server
 
 from aurora.commands.app.models import VerifyError
 from aurora.commands.app.verify import MCPVerifier, process_target
-from src.mcp import McpToolsPage, SdkMcpClientFactory
+from aurorabot.mcp import McpToolsPage, SdkMcpClientFactory
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.mcp import McpAppSpec
-    from src.mcp.client import InboundEventHandler, McpClientPort
+    from aurorabot.mcp import McpAppSpec
+    from aurorabot.mcp.client import InboundEventHandler, McpClientPort
 
 
 @dataclass(frozen=True, slots=True)

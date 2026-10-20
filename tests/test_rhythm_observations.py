@@ -11,10 +11,10 @@ from test_assembly import FakeModel
 
 from aurora import load_config
 from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from src.contracts import EnvironmentEvent
-from src.contracts.pkgs.cadence import Cadence
-from src.rhythm.config import RhythmConfig
-from src.runtime import assemble_runtime
+from aurorabot.contracts import EnvironmentEvent
+from aurorabot.contracts.pkgs.cadence import Cadence
+from aurorabot.rhythm.config import RhythmConfig
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

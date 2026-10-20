@@ -8,7 +8,7 @@ order: 5
 
 ## 传输与协商
 
-`src/mcp` 是 MCP Python SDK 2.x 的客户端适配包，依赖 `mcp>=2,<3`，首选协议修订版 `2026-07-28`。客户端使用 SDK v2 的自动协商模式：现代 Server 使用 `server/discover` 与无会话语义，旧 Server 可由同一 SDK 显式协商回退到早期修订版。适配器必须在状态中暴露实际 negotiated version；不允许通过 TOML 选择 SDK v1 实现或伪装协议版本。支持本地 stdio 与 HTTPS Streamable HTTP，不新建旧 HTTP+SSE 连接。
+`src/aurorabot/mcp` 是 MCP Python SDK 2.x 的客户端适配包，依赖 `mcp>=2,<3`，首选协议修订版 `2026-07-28`。客户端使用 SDK v2 的自动协商模式：现代 Server 使用 `server/discover` 与无会话语义，旧 Server 可由同一 SDK 显式协商回退到早期修订版。适配器必须在状态中暴露实际 negotiated version；不允许通过 TOML 选择 SDK v1 实现或伪装协议版本。支持本地 stdio 与 HTTPS Streamable HTTP，不新建旧 HTTP+SSE 连接。
 
 ## 启动发现与冻结
 

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 from model_support import fake_endpoint
 
-from src.contracts import (
+from aurorabot.contracts import (
     AgentDefinition,
     AgentNode,
     AgentStatus,
@@ -22,7 +22,7 @@ from src.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.contracts.model_binding import ModelBinding
+    from aurorabot.contracts.model_binding import ModelBinding
 
 
 def _empty_assistant() -> ChatMessage:

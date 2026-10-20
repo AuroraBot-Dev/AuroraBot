@@ -9,7 +9,7 @@ import pytest
 
 from aurora.configs.tags import CONFIG_SPEC as TAGS_CONFIG
 from aurora.configurator import assemble_config
-from src.contracts.identity import (
+from aurorabot.contracts.identity import (
     DEFAULT_NAMESPACE,
     Identifier,
     IdentityError,
@@ -20,7 +20,7 @@ from src.contracts.identity import (
     is_namespace,
     is_path,
 )
-from src.utils import resolve_names
+from aurorabot.utils import resolve_names
 
 _FOREIGN_NAMES = (
     "send_message",

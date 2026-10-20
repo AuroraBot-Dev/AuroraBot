@@ -22,19 +22,19 @@ from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from src.artifacts.store import FileArtifactStore
-from src.contracts import TreeStatus
-from src.contracts.model_artifact import MODEL_MEDIA_TYPE
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.cadence import RhythmPolicy
-from src.contracts.pkgs.memory import MemoryPolicy
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.mcp.config import PlatformsConfig
-from src.memory_model.config import MemoryModelConfig
-from src.memory_model.dataset import write_episodes
-from src.rhythm.config import RhythmConfig
-from src.runtime import compose_runtime
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts import TreeStatus
+from aurorabot.contracts.model_artifact import MODEL_MEDIA_TYPE
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.cadence import RhythmPolicy
+from aurorabot.contracts.pkgs.memory import MemoryPolicy
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.memory_model.config import MemoryModelConfig
+from aurorabot.memory_model.dataset import write_episodes
+from aurorabot.rhythm.config import RhythmConfig
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -133,7 +133,7 @@ def test_wrong_archive_or_media_type_is_not_used_as_model_weights(
 @pytest.mark.parametrize("domain", ["rhythm", "memory"])
 def test_path_weights_are_imported_before_runtime_construction(configured_project: Path, domain: str) -> None:
     """路径只在准备阶段读取一次，实际策略、资源目录和存储使用同一版本。"""
-    backend = import_module(f"{'src.rhythm' if domain == 'rhythm' else 'src.memory_model'}.training")
+    backend = import_module(f"{'aurorabot.rhythm' if domain == 'rhythm' else 'aurorabot.memory_model'}.training")
     if domain == "rhythm":
         training = (make_episode("training", False, _NOW),)
         validation = (make_episode("validation", False, _NOW + timedelta(days=1)),)

@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import ChatMessage, ModelRequest, ToolCall, TreeStatus
-from src.contracts.bot import BotChange, Checkpoint, Goal, WakeStatus
-from src.contracts.pkgs.bot import BotClock, BotStateStore
-from src.runtime import assemble_runtime
+from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, TreeStatus
+from aurorabot.contracts.bot import BotChange, Checkpoint, Goal, WakeStatus
+from aurorabot.contracts.pkgs.bot import BotClock, BotStateStore
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

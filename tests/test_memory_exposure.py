@@ -10,14 +10,14 @@ from test_engine_runtime import FakeModel
 from test_memory_selection import _NOW, _fact
 from test_prompt import _agent, _assembler
 
-from src.agents import AgentCatalog
-from src.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
-from src.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
-from src.contracts.memory_codec import exposure_data, read_exposure
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.engine import AgentTreeRunner
-from src.tools import ToolRegistry
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.agents import AgentCatalog
+from aurorabot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
+from aurorabot.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
+from aurorabot.contracts.memory_codec import exposure_data, read_exposure
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.engine import AgentTreeRunner
+from aurorabot.tools import ToolRegistry
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

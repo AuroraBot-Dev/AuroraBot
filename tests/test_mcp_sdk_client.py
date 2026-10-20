@@ -29,7 +29,7 @@ from mcp.types import (
 )
 from pydantic import Field
 
-from src.mcp import (
+from aurorabot.mcp import (
     TOOL_CONTRACT_EXTENSION,
     WORLD_EVENT_NOTIFICATION,
     WORLD_EVENTS_EXTENSION,
@@ -197,7 +197,7 @@ def _route_stdio_to_server(monkeypatch: pytest.MonkeyPatch, server: MCPServer) -
         _ = errlog
         return server
 
-    monkeypatch.setattr("src.mcp.client.stdio_client", fake_stdio_client)
+    monkeypatch.setattr("aurorabot.mcp.client.stdio_client", fake_stdio_client)
 
 
 def test_official_sdk_v2_in_memory_negotiates_discovers_and_calls() -> None:
@@ -237,7 +237,7 @@ def test_sdk_adapter_uses_frozen_client_options_and_projects_official_results(
         captured.update(options)
         return official_client(server_or_transport, **options)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("src.mcp.client.Client", recording_client)
+    monkeypatch.setattr("aurorabot.mcp.client.Client", recording_client)
 
     async def scenario() -> None:
         client = await SdkMcpClientFactory().open(_stdio_spec(tmp_path), _ignore_event)
@@ -280,7 +280,7 @@ def test_stdio_factory_preserves_command_whitelist_cwd_and_log_policy(
         captured["errlog"] = errlog
         return server
 
-    monkeypatch.setattr("src.mcp.client.stdio_client", fake_stdio_client)
+    monkeypatch.setattr("aurorabot.mcp.client.stdio_client", fake_stdio_client)
 
     async def scenario() -> None:
         client = await SdkMcpClientFactory().open(_stdio_spec(tmp_path), _ignore_event)
@@ -498,8 +498,8 @@ def test_http_factory_disables_redirects_uses_one_timeout_and_releases_client(mo
         captured["http_client"] = http_client
         return server
 
-    monkeypatch.setattr("src.mcp.client.httpx2.AsyncClient", make_http_client)
-    monkeypatch.setattr("src.mcp.client.streamable_http_client", fake_streamable_http_client)
+    monkeypatch.setattr("aurorabot.mcp.client.httpx2.AsyncClient", make_http_client)
+    monkeypatch.setattr("aurorabot.mcp.client.streamable_http_client", fake_streamable_http_client)
 
     async def scenario() -> None:
         client = await SdkMcpClientFactory().open(_http_spec(), _ignore_event)

@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from src.utils.tasks import wait_for_completion
+from aurorabot.utils.tasks import wait_for_completion
 
 
 @pytest.mark.parametrize("cancelled", [False, True])

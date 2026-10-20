@@ -11,15 +11,15 @@ import pytest
 import torch
 from memory_support import episodes
 
-from src.memory_model.dataset import read_episodes, validate_partition, write_episodes
-from src.memory_model.tgn import TGNMemoryPolicy, load_policy
-from src.memory_model.training import train
+from aurorabot.memory_model.dataset import read_episodes, validate_partition, write_episodes
+from aurorabot.memory_model.tgn import TGNMemoryPolicy, load_policy
+from aurorabot.memory_model.training import train
 
 if TYPE_CHECKING:
     from io import BytesIO
     from pathlib import Path
 
-    from src.memory_model.training import MemoryTrainingResult
+    from aurorabot.memory_model.training import MemoryTrainingResult
 
 
 @pytest.fixture(scope="module")

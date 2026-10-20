@@ -1,7 +1,7 @@
 """认知焦点从安排、运行到委派保持显式传递。"""
 
-from src.cadence.state import launch_data, read_launch
-from src.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, TreeLaunchRequest
+from aurorabot.cadence.state import launch_data, read_launch
+from aurorabot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, TreeLaunchRequest
 
 
 def test_goal_focus_survives_persistence_and_delegation() -> None:

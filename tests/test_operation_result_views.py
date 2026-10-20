@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING
 import pytest
 from test_operation_receipts import LargeOperation
 
-from src.artifacts.operations import ArtifactOperation
-from src.artifacts.store import FileArtifactStore
-from src.contracts import ToolCall, ToolStatus
-from src.contracts.artifact_codec import read_artifact
-from src.contracts.operation import OperationKind, OperationRequest, OperationResult, OperationStatus
-from src.operations.registry import OperationRegistry
-from src.operations.tool import OperationTool
-from src.resources.catalog import ResourceCatalog
-from src.runtime.resource_commands import ResourceCommands
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.artifacts.operations import ArtifactOperation
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts import ToolCall, ToolStatus
+from aurorabot.contracts.artifact_codec import read_artifact
+from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationResult, OperationStatus
+from aurorabot.operations.registry import OperationRegistry
+from aurorabot.operations.tool import OperationTool
+from aurorabot.resources.catalog import ResourceCatalog
+from aurorabot.runtime.resource_commands import ResourceCommands
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

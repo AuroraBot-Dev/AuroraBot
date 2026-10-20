@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.artifacts.files import file_chunks
-from src.artifacts.store import FileArtifactStore
-from src.contracts.artifact import MAX_ARTIFACT_CHUNK, ArtifactIntegrityError
-from src.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.artifacts.files import file_chunks
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts.artifact import MAX_ARTIFACT_CHUNK, ArtifactIntegrityError
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

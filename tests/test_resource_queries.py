@@ -10,11 +10,11 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts import ToolCall, ToolOutput, ToolStatus
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.resource import ResourceKey
-from src.runtime import assemble_runtime
+from aurorabot.contracts import ToolCall, ToolOutput, ToolStatus
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.resource import ResourceKey
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

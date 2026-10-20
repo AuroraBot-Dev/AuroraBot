@@ -15,15 +15,15 @@ order: 3
 ```python
 """提供 Bot 可发现的回显查询。"""
 
-from src.contracts import ToolScopes
-from src.contracts.operation import (
+from aurorabot.contracts import ToolScopes
+from aurorabot.contracts.operation import (
     OPERATION_CONTRIBUTIONS,
     OperationDefinition,
     OperationRequest,
     OperationResult,
 )
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.kernel import ModuleContext, ModuleManifest, module
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.kernel import ModuleContext, ModuleManifest, module
 
 
 class Echo:
@@ -76,7 +76,7 @@ MODULE = build
 
 ## 端口与依赖
 
-`provides` 与 `requires` 使用公开契约类型，运行时通过 `context.get` 获取实际实现。功能包不运行时导入兄弟实现，也不直接访问其数据库表。内建端口位于 `src.contracts.pkgs`；独立扩展共享的领域契约应稳定发布，消费者与提供者使用同一个类型身份。
+`provides` 与 `requires` 使用公开契约类型，运行时通过 `context.get` 获取实际实现。功能包不运行时导入兄弟实现，也不直接访问其数据库表。内建端口位于 `aurorabot.contracts.pkgs`；独立扩展共享的领域契约应稳定发布，消费者与提供者使用同一个类型身份。
 
 用组合和结构化 `Protocol` 表达能力，不要求所有实现继承同一个基类。单值能力由优先级选取，平级冲突启动即失败；多值扩展使用已声明的贡献点。消费方使用 `consumes` 声明对完整贡献集合的依赖，不手动枚举插件或维护 import 列表。
 

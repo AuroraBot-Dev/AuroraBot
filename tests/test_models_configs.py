@@ -6,7 +6,7 @@ from aurora import load_config
 from aurora.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
 from aurora.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
 from aurora.configurator import assemble_config
-from src.ai.config import EndpointConfig, ProviderConfig
+from aurorabot.ai.config import EndpointConfig, ProviderConfig
 
 if TYPE_CHECKING:
     from pathlib import Path

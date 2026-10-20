@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 
 from prompt_support import make_prompt_catalog
 
-from src.contracts import AgentDefinition, AgentTree, MemorySnapshot
-from src.contracts.bot import BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
-from src.contracts.memory import MemoryRequest
-from src.memory.continuity import select_continuity
-from src.prompt import PromptAssembler
+from aurorabot.contracts import AgentDefinition, AgentTree, MemorySnapshot
+from aurorabot.contracts.bot import BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
+from aurorabot.contracts.memory import MemoryRequest
+from aurorabot.memory.continuity import select_continuity
+from aurorabot.prompt import PromptAssembler
 
 
 def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() -> None:

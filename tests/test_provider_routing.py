@@ -10,10 +10,10 @@ from typing import Any, cast
 import pytest
 from litellm import get_llm_provider
 
-from src.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
-from src.contracts import ChatMessage, ModelRequest
-from src.contracts.model_binding import ModelBinding, ProviderDefinition
-from src.contracts.resource import ResourceKey
+from aurorabot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
+from aurorabot.contracts import ChatMessage, ModelRequest
+from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition
+from aurorabot.contracts.resource import ResourceKey
 
 
 @pytest.mark.parametrize(

@@ -10,8 +10,8 @@ import pytest
 from model_support import FakeModelDirectory
 from prompt_support import make_prompt_catalog
 
-from src.agents import AgentCatalog
-from src.contracts import (
+from aurorabot.agents import AgentCatalog
+from aurorabot.contracts import (
     AgentDefinition,
     AgentStatus,
     AgentTree,
@@ -29,17 +29,17 @@ from src.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from src.contracts.process import TreeProcessDefinition
-from src.engine import AgentTreeRunner
-from src.prompt import PromptAssembler
-from src.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.contracts.process import TreeProcessDefinition
+from aurorabot.engine import AgentTreeRunner
+from aurorabot.prompt import PromptAssembler
+from aurorabot.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.contracts.pkgs.ai import Model
-    from src.contracts.pkgs.world import WorldJournal
+    from aurorabot.contracts.pkgs.ai import Model
+    from aurorabot.contracts.pkgs.world import WorldJournal
 
 EXPECTED_DELEGATION_NODES = 2
 _SECOND_REQUEST = 2

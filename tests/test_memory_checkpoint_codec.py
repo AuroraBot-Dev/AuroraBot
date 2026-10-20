@@ -12,11 +12,11 @@ import torch
 from test_memory_tgn import _request
 from test_memory_tgn_incremental import _network
 
-from src.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
-from src.contracts.memory_graph_codec import interactions_fingerprint
-from src.contracts.resource import ResourceRef
-from src.memory_model.checkpoint import decode_state, encode_state
-from src.memory_model.coordinates import TGN_KEY
+from aurorabot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
+from aurorabot.contracts.memory_graph_codec import interactions_fingerprint
+from aurorabot.contracts.resource import ResourceRef
+from aurorabot.memory_model.checkpoint import decode_state, encode_state
+from aurorabot.memory_model.coordinates import TGN_KEY
 
 _MODEL = ResourceRef(TGN_KEY, "controlled")
 _DIMENSIONS = {"hidden_size": 8, "text_dimensions": 16}

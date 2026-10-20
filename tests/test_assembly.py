@@ -17,10 +17,10 @@ from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
 from aurora.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
 from aurora.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
 from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
-from src.agents.config import AgentsConfig
-from src.ai import LiteLLMModelGateway
-from src.ai.config import ProvidersConfig
-from src.contracts import (
+from aurorabot.agents.config import AgentsConfig
+from aurorabot.ai import LiteLLMModelGateway
+from aurorabot.ai.config import ProvidersConfig
+from aurorabot.contracts import (
     MCP_EVENT_RECEIVED,
     ChatMessage,
     ModelRequest,
@@ -32,16 +32,16 @@ from src.contracts import (
     TreeStatus,
     WorldFrontier,
 )
-from src.contracts.pkgs.agents import AgentCatalog
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.cadence import Cadence
-from src.contracts.pkgs.engine import AgentTreeRunner
-from src.contracts.pkgs.memory import MemoryReader
-from src.contracts.pkgs.prompt import PromptAssembler
-from src.runtime import assemble_runtime
+from aurorabot.contracts.pkgs.agents import AgentCatalog
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.cadence import Cadence
+from aurorabot.contracts.pkgs.engine import AgentTreeRunner
+from aurorabot.contracts.pkgs.memory import MemoryReader
+from aurorabot.contracts.pkgs.prompt import PromptAssembler
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
-    from src.contracts.model_binding import ModelBinding
+    from aurorabot.contracts.model_binding import ModelBinding
 
 EXPECTED_MAX_DEPTH = 4
 EXPECTED_WINDOW_MINUTES = 60

@@ -11,11 +11,11 @@ from test_engine_runtime import FakeModel
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.contracts import ChatMessage, ToolCall, TreeStatus
-from src.contracts.pkgs.agents import AgentCatalog
-from src.contracts.tool import DELEGATE_TOOL
-from src.mcp.config import PlatformsConfig
-from src.runtime import compose_runtime
+from aurorabot.contracts import ChatMessage, ToolCall, TreeStatus
+from aurorabot.contracts.pkgs.agents import AgentCatalog
+from aurorabot.contracts.tool import DELEGATE_TOOL
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

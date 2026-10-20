@@ -14,13 +14,13 @@ from test_assembly import FakeModel
 
 from aurora import load_config
 from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from src.contracts import EnvironmentEvent
-from src.contracts.pkgs.cadence import Cadence, RhythmPolicy
-from src.rhythm.config import RhythmConfig
-from src.rhythm.dataset import RhythmEpisode
-from src.rhythm.gru import GRURhythmPolicy, load_policy
-from src.rhythm.training import RhythmTrainingResult, train
-from src.runtime import assemble_runtime
+from aurorabot.contracts import EnvironmentEvent
+from aurorabot.contracts.pkgs.cadence import Cadence, RhythmPolicy
+from aurorabot.rhythm.config import RhythmConfig
+from aurorabot.rhythm.dataset import RhythmEpisode
+from aurorabot.rhythm.gru import GRURhythmPolicy, load_policy
+from aurorabot.rhythm.training import RhythmTrainingResult, train
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

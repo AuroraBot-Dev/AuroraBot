@@ -1,7 +1,7 @@
 """``aurora app search`` 测试的共享辅助：假 GitHub 层、值对象工厂、CLI 入口。
 
 三个 search 测试模块共用这一份，免得每个文件各养一套同名私有辅助。文件名不以
-``test_`` 开头，pytest 不会收集它，覆盖率也只统计 ``aurora`` 与 ``src``。
+``test_`` 开头，pytest 不会收集它，覆盖率也只统计 ``aurora`` 与 ``aurorabot``。
 
 假 GitHub 层有两级：``StubSource`` 把整条网络路径换成预置结果，``FakeTransport``
 则保留真实的 ``GitHubSource``、只换掉发请求那一步——后者用来验证「线真的接上了」。

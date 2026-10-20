@@ -9,18 +9,18 @@ import pytest
 from test_engine_runtime import FakeModel
 from test_prompt import _agent, _assembler
 
-from src.agents import AgentCatalog
-from src.ai.openai import to_openai_messages
-from src.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, ToolScopes, WorldFrontier
-from src.contracts.memory_codec import read_exposure
-from src.contracts.operation import OperationDefinition, OperationRequest, OperationResult
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.engine import AgentTreeRunner
-from src.operations.registry import OperationRegistry
-from src.operations.tool import operation_tools
-from src.resources.catalog import ResourceCatalog
-from src.tools import ToolRegistry
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.agents import AgentCatalog
+from aurorabot.ai.openai import to_openai_messages
+from aurorabot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, ToolScopes, WorldFrontier
+from aurorabot.contracts.memory_codec import read_exposure
+from aurorabot.contracts.operation import OperationDefinition, OperationRequest, OperationResult
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.engine import AgentTreeRunner
+from aurorabot.operations.registry import OperationRegistry
+from aurorabot.operations.tool import operation_tools
+from aurorabot.resources.catalog import ResourceCatalog
+from aurorabot.tools import ToolRegistry
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

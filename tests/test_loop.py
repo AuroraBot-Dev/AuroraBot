@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from aurora import load_config
-from src.contracts import LOOP_OPERATIONS, WORLD_PORTS, Settings
-from src.contracts.pkgs.memory import MemoryReader
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
-from src.kernel import Assembly
-from src.runtime import assemble_runtime
-from src.runtime.assembly import validate_loop_operations
+from aurorabot.contracts import LOOP_OPERATIONS, WORLD_PORTS, Settings
+from aurorabot.contracts.pkgs.memory import MemoryReader
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from aurorabot.kernel import Assembly
+from aurorabot.runtime import assemble_runtime
+from aurorabot.runtime.assembly import validate_loop_operations
 
 if TYPE_CHECKING:
     from pathlib import Path

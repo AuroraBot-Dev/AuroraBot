@@ -11,8 +11,8 @@ import pytest
 from rhythm_support import make_episode
 from test_train_command import _write
 
-from src.cadence.state import observation_data
-from src.rhythm.dataset import read_episodes, validate_partition
+from aurorabot.cadence.state import observation_data
+from aurorabot.rhythm.dataset import read_episodes, validate_partition
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -13,28 +13,28 @@ from test_kernel import _Settings
 from aurora import load_config
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.artifacts.module import MODULE as ARTIFACTS_MODULE
-from src.artifacts.store import FileArtifactStore
-from src.contracts.artifact import ArtifactInfo
-from src.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.operations import OperationRegistry
-from src.contracts.pkgs.prompt import PromptAssembler
-from src.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
-from src.contracts.resource import ResourceKey, ResourceRef
-from src.kernel import compose_managed, module
-from src.mcp.config import PlatformsConfig
-from src.prompt import PromptAssembler as ConcreteAssembler
-from src.prompt import PromptCatalog
-from src.prompt.module import MODULE as PROMPT_MODULE
-from src.resource_content.module import MODULE as CONTENT_MODULE
-from src.resources.module import MODULE as RESOURCES_MODULE
-from src.runtime import compose_runtime
+from aurorabot.artifacts.module import MODULE as ARTIFACTS_MODULE
+from aurorabot.artifacts.store import FileArtifactStore
+from aurorabot.contracts.artifact import ArtifactInfo
+from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.contracts.pkgs.prompt import PromptAssembler
+from aurorabot.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
+from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurorabot.kernel import compose_managed, module
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.prompt import PromptAssembler as ConcreteAssembler
+from aurorabot.prompt import PromptCatalog
+from aurorabot.prompt.module import MODULE as PROMPT_MODULE
+from aurorabot.resource_content.module import MODULE as CONTENT_MODULE
+from aurorabot.resources.module import MODULE as RESOURCES_MODULE
+from aurorabot.runtime import compose_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from src.kernel import ModuleContext
+    from aurorabot.kernel import ModuleContext
 
 
 def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(configured_project: Path) -> None:

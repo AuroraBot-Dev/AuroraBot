@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 from model_support import FakeModelDirectory
 
 from aurora import load_config
-from src.console import TerminalConsole, TerminalControl, TerminalResponse
-from src.contracts import (
+from aurorabot.console import TerminalConsole, TerminalControl, TerminalResponse
+from aurorabot.contracts import (
     FRONT_BINDINGS,
     ChatMessage,
     EnvironmentEvent,
@@ -21,8 +21,8 @@ from src.contracts import (
     WorldCommitInput,
     WorldFrontier,
 )
-from src.contracts.pkgs.world import WorldJournal
-from src.runtime import run_runtime
+from aurorabot.contracts.pkgs.world import WorldJournal
+from aurorabot.runtime import run_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping

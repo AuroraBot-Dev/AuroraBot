@@ -5,7 +5,7 @@ order: 3
 # 配置
 
 AuroraBot 的项目配置位于个人 `config/` 目录，由 `config.example/` 模板复制而来；`config/` 属于个人文件，不进入 Git。
-每个 TOML 只由 `aurora/configs` 中同相对路径的模块解析为类型化的只读配置。
+每个 TOML 只由 `src/aurora/configs` 中同相对路径的模块解析为类型化的只读配置。
 
 ## 查看与编辑
 

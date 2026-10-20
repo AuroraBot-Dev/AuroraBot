@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.contracts.resource import ResourceAlias, ResourceDescriptor, ResourceKey, ResourceRef
-from src.resources.catalog import ResourceCatalog
+from aurorabot.contracts.resource import ResourceAlias, ResourceDescriptor, ResourceKey, ResourceRef
+from aurorabot.resources.catalog import ResourceCatalog
 
 
 def _definition(namespace: str, revision: str = "1") -> ResourceDescriptor:

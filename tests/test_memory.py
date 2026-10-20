@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, WorldCommitInput, WorldFrontier
-from src.contracts.memory import MemoryRequest
-from src.memory import Memory
-from src.memory_model.rules import RuleMemoryPolicy
-from src.utils.patterns import NamePatternError
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, WorldCommitInput, WorldFrontier
+from aurorabot.contracts.memory import MemoryRequest
+from aurorabot.memory import Memory
+from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurorabot.utils.patterns import NamePatternError
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from test_memory_tgn import _request
 
-from src.memory_model.dataset import MemoryEpisode, MemoryExample
+from aurorabot.memory_model.dataset import MemoryEpisode, MemoryExample
 
 
 def episodes(prefix: str, *, days: int = 0) -> tuple[MemoryEpisode, ...]:

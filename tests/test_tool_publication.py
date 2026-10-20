@@ -13,24 +13,24 @@ from aurora import load_config
 from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
 from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from src.agents.config import AgentsConfig
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.artifacts import ArtifactStore
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.contracts.pkgs.tools import ToolRegistry
-from src.contracts.resource_query import ResourceQuery
-from src.contracts.tool_resource import TOOL_MEDIA_TYPE
-from src.kernel import BuiltinSource, compose_managed, module
-from src.mcp.config import PlatformsConfig
-from src.tools import ToolRegistry as ConcreteRegistry
+from aurorabot.agents.config import AgentsConfig
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.artifacts import ArtifactStore
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.contracts.pkgs.tools import ToolRegistry
+from aurorabot.contracts.resource_query import ResourceQuery
+from aurorabot.contracts.tool_resource import TOOL_MEDIA_TYPE
+from aurorabot.kernel import BuiltinSource, compose_managed, module
+from aurorabot.mcp.config import PlatformsConfig
+from aurorabot.tools import ToolRegistry as ConcreteRegistry
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
 
-    from src.contracts import Tool
-    from src.kernel import ModuleContext
+    from aurorabot.contracts import Tool
+    from aurorabot.kernel import ModuleContext
 
 
 def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
@@ -54,7 +54,7 @@ def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
         """不允许在选中目录之外额外构造默认工具。"""
         raise AssertionError("失选工具不应被构造")
 
-    monkeypatch.setattr("src.tools.module.builtin_tools", unexpected_builtins)
+    monkeypatch.setattr("aurorabot.tools.module.builtin_tools", unexpected_builtins)
 
     @module(name="selected_tools", provides=ToolRegistry, priority=10)
     def custom(context: ModuleContext) -> ToolRegistry:

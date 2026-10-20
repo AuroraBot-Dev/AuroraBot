@@ -6,8 +6,8 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from src.contracts import EnvironmentEvent
-from src.world import SqlAlchemyWorldJournal
+from aurorabot.contracts import EnvironmentEvent
+from aurorabot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -10,22 +10,22 @@ import pytest
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts.pkgs.ai import Model
-from src.contracts.pkgs.cadence import RhythmPolicy
-from src.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.kernel import BuiltinSource, compose, compose_managed, module
-from src.memory_model.config import MemoryModelConfig
-from src.memory_model.rules import RuleMemoryPolicy
-from src.rhythm.config import RhythmConfig
-from src.rhythm.rules import RuleRhythmPolicy
+from aurorabot.contracts.pkgs.ai import Model
+from aurorabot.contracts.pkgs.cadence import RhythmPolicy
+from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.kernel import BuiltinSource, compose, compose_managed, module
+from aurorabot.memory_model.config import MemoryModelConfig
+from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurorabot.rhythm.config import RhythmConfig
+from aurorabot.rhythm.rules import RuleRhythmPolicy
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora.contracts.config import AuroraConfig
-    from src.contracts.artifact import ArtifactInfo
-    from src.kernel import ModuleContext
+    from aurorabot.contracts.artifact import ArtifactInfo
+    from aurorabot.kernel import ModuleContext
 
 
 @dataclass(frozen=True, slots=True)

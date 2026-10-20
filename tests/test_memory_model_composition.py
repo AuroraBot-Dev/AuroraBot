@@ -10,13 +10,13 @@ from test_assembly import FakeModel
 
 from aurora import load_config
 from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
-from src.contracts.memory import MemoryRequest
-from src.contracts.pkgs.memory import MemoryPolicy, MemoryReader
-from src.contracts.pkgs.resources import ResourceCatalog
-from src.memory_model.config import MemoryModelConfig
-from src.memory_model.tgn import TGN_KEY, load_policy
-from src.memory_model.training import train
-from src.runtime import assemble_runtime
+from aurorabot.contracts.memory import MemoryRequest
+from aurorabot.contracts.pkgs.memory import MemoryPolicy, MemoryReader
+from aurorabot.contracts.pkgs.resources import ResourceCatalog
+from aurorabot.memory_model.config import MemoryModelConfig
+from aurorabot.memory_model.tgn import TGN_KEY, load_policy
+from aurorabot.memory_model.training import train
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

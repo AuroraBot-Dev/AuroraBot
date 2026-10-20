@@ -7,9 +7,9 @@ from dataclasses import replace
 import torch
 from test_memory_selection import _NOW, _fact
 
-from src.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
-from src.memory.graph import graph_interactions
-from src.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from aurorabot.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
+from aurorabot.memory.graph import graph_interactions
+from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 
 
 def _request(helpful: bool) -> MemoryRankingRequest:

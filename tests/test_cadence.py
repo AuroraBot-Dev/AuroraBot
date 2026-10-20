@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from src.cadence import CADENCE_SCOPE, CADENCE_TICK, Cadence, ReactiveRule
-from src.contracts import (
+from aurorabot.cadence import CADENCE_SCOPE, CADENCE_TICK, Cadence, ReactiveRule
+from aurorabot.contracts import (
     MCP_EVENT_RECEIVED,
     AgentDefinition,
     AgentTree,
@@ -21,7 +21,7 @@ from src.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from src.rhythm.rules import RuleRhythmPolicy
+from aurorabot.rhythm.rules import RuleRhythmPolicy
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

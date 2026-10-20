@@ -7,7 +7,7 @@ import asyncio
 import pytest
 from test_mcp_runtime import FakeClient, FakeFactory, FakeWorld, _spec, _tool
 
-from src.mcp import McpAppState, McpCloseError, McpStartupError, McpToolsPage, prepare_mcp
+from aurorabot.mcp import McpAppState, McpCloseError, McpStartupError, McpToolsPage, prepare_mcp
 
 
 @pytest.mark.parametrize("self_cancelled", [False, True])

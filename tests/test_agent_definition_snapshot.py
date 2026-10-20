@@ -6,8 +6,8 @@ from dataclasses import replace
 import pytest
 from test_engine_runtime import FakeModel, _agent, _runner
 
-from src.contracts import AgentTree, ChatMessage, ToolCall
-from src.contracts.tool import DELEGATE_TOOL
+from aurorabot.contracts import AgentTree, ChatMessage, ToolCall
+from aurorabot.contracts.tool import DELEGATE_TOOL
 
 
 def test_tree_transitions_keep_the_original_definition_object() -> None:

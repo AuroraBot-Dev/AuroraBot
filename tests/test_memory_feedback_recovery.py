@@ -10,10 +10,10 @@ from memory_operations_support import feedback_arguments, prepared_runtime, requ
 from test_assembly import FakeModel
 
 from aurora import load_config
-from src.contracts.operation import OperationRequest, OperationResult, OperationStatus
-from src.contracts.pkgs.bot import BotStateStore
-from src.contracts.pkgs.operations import OperationRegistry
-from src.runtime import assemble_runtime
+from aurorabot.contracts.operation import OperationRequest, OperationResult, OperationStatus
+from aurorabot.contracts.pkgs.bot import BotStateStore
+from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurorabot.runtime import assemble_runtime
 
 if TYPE_CHECKING:
     from pathlib import Path

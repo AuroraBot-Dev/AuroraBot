@@ -6,12 +6,12 @@ from datetime import UTC, datetime, timedelta
 
 from prompt_support import make_prompt_catalog
 
-from src.contracts import AgentDefinition, AgentTree, MemorySnapshot, WorldCommit, WorldFrontier
-from src.contracts.bot import Checkpoint, Goal
-from src.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
-from src.memory.selection import select_memories
-from src.memory_model.rules import RuleMemoryPolicy
-from src.prompt import PromptAssembler
+from aurorabot.contracts import AgentDefinition, AgentTree, MemorySnapshot, WorldCommit, WorldFrontier
+from aurorabot.contracts.bot import Checkpoint, Goal
+from aurorabot.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
+from aurorabot.memory.selection import select_memories
+from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurorabot.prompt import PromptAssembler
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 

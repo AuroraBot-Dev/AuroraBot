@@ -13,31 +13,31 @@ from aurora import load_config
 from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
 from aurora.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
 from aurora.utils.logging import configure_project_logging
-from src.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
-from src.runtime import assemble_runtime
-from src.tools import ToolRegistry
-from src.utils import configure_console_logging
-from src.world.config import resolve_storage_directory
+from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
+from aurorabot.runtime import assemble_runtime
+from aurorabot.tools import ToolRegistry
+from aurorabot.utils import configure_console_logging
+from aurorabot.world.config import resolve_storage_directory
 
 if TYPE_CHECKING:
-    from src.contracts import ToolResult
+    from aurorabot.contracts import ToolResult
 
 _ROOT = Path(__file__).parents[1]
 _LOGGED_RUNTIME_MODULES = (
-    "src/kernel/compose.py",
-    "src/runtime/core.py",
-    "src/runtime/run.py",
-    "src/agents/catalog.py",
-    "src/ai/gateway.py",
-    "src/cadence/cadence.py",
-    "src/console/shell.py",
-    "src/engine/runtime.py",
-    "src/mcp/client.py",
-    "src/mcp/runtime.py",
-    "src/mcp/tool.py",
-    "src/memory/memory.py",
-    "src/tools/registry.py",
-    "src/world/store.py",
+    "src/aurorabot/kernel/compose.py",
+    "src/aurorabot/runtime/core.py",
+    "src/aurorabot/runtime/run.py",
+    "src/aurorabot/agents/catalog.py",
+    "src/aurorabot/ai/gateway.py",
+    "src/aurorabot/cadence/cadence.py",
+    "src/aurorabot/console/shell.py",
+    "src/aurorabot/engine/runtime.py",
+    "src/aurorabot/mcp/client.py",
+    "src/aurorabot/mcp/runtime.py",
+    "src/aurorabot/mcp/tool.py",
+    "src/aurorabot/memory/memory.py",
+    "src/aurorabot/tools/registry.py",
+    "src/aurorabot/world/store.py",
 )
 
 
@@ -126,7 +126,7 @@ def test_key_runtime_modules_use_the_unified_logging_facility() -> None:
         tree = ast.parse((_ROOT / relative).read_text(encoding="utf-8"))
         imports_facility = any(
             isinstance(node, ast.ImportFrom)
-            and node.module == "src.utils"
+            and node.module == "aurorabot.utils"
             and any(alias.name == "get_logger" for alias in node.names)
             for node in ast.walk(tree)
         )
