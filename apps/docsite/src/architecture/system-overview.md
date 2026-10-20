@@ -33,7 +33,7 @@ AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动�
 | `src/aurorabot/instances` | 从世界事实发现运行实例与确定历史版本 |
 | `src/aurorabot/console` | 本地异步终端、输入先入世界、领域指令入口 |
 
-功能包在运行期只引用自身、`contracts` 和 `utils`；模块声明可以引用 `kernel`，`runtime` 依赖 `kernel`。兄弟包的类型引用可放在 `TYPE_CHECKING` 中，实际能力经契约注入。外部库由使用它的包封装，数据库、SDK 与计算张量不泄漏到主体和消息契约。边界由 `tests/test_dependency_boundaries.py` 校验。
+功能包在运行期只引用自身、`contracts` 和 `utils`；模块声明可以引用 `kernel`，`runtime` 依赖 `kernel`。兄弟包的类型引用可放在 `TYPE_CHECKING` 中，实际能力经契约注入。外部库由使用它的包封装，数据库、SDK 与计算张量不泄漏到主体和消息契约。边界由 `tests/foundation/test_dependency_boundaries.py` 校验。
 
 每个可装配包在 `module.py` 导出唯一 `MODULE`。替换能力时，公开操作、前台、认知唤起绑定和生命周期均使用实际选中的实例；失选默认实现不应读取自己的无关配置或产生连接效果。主体状态与时间服务分别装配，默认工具和时钟共享同一个 `BotStateStore`。
 

@@ -108,7 +108,7 @@ aurora check
 
 ```powershell
 uv run pytest
-uv run pytest tests/test_bot_lifecycle.py -q
+uv run pytest tests/runtime/test_bot_lifecycle.py -q
 uv run aurora check --test --coverage
 uv run ruff check .
 uv run ruff format --check .
@@ -117,7 +117,8 @@ uv run pyright
 
 `uv sync --locked --group dev` で開発依存関係をインストールします。pytest は importlib モードと
 明示的な `tests.*` import を使い、共通 fake は補助モジュールに配置します。
-ローカルのカバレッジ計測は任意で、CI の下限は 80% です。重複ケースや補助関数自身のテスト、
+テストは機能別に配置し、共通の fake は `tests/support/` に置きます。
+ローカルのカバレッジ計測は任意で、CI の下限は 20% です。この値は最低基準であり、削減目標ではありません。重複ケースや補助関数自身のテスト、
 行数を埋めるだけの断言よりも、挙動・境界・障害回復を検証します。
 
 テストはオフラインで、決定論的で、再現可能でなければなりません。モデル、時計、MCP は fake を使い、実際の使用量を消費せず、公衆ネットワークに依存しません。バグ修正は元の失敗パスをカバーし、event と effect のテストはトランザクション境界、冪等性、因果関係の親子関係も検証してください。

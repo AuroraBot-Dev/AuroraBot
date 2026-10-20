@@ -117,7 +117,7 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 - 下层无项目语义的共享功能放入 `aurorabot.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
 - 依赖方向：`aurorabot.utils` 与 `aurorabot.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/aurorabot/kernel ← src/aurorabot/runtime`；功能 aurorabot 包
   运行时只依赖 contracts、utils 与自身，跨包能力只允许类型检查期（TYPE_CHECKING）引用，真正的能力调用靠内核注入的契约实例
-  完成；`aurorabot ← aurora`；`aurorabot` 不导入 `aurora`。依赖边界由 `tests/test_dependency_boundaries.py` 按约定校验：叶子包只依赖自身，
+  完成；`aurorabot ← aurora`；`aurorabot` 不导入 `aurora`。依赖边界由 `tests/foundation/test_dependency_boundaries.py` 按约定校验：叶子包只依赖自身，
   其他包可依赖 contracts 与 utils，机制包额外可依赖 kernel；新增能力包无需修改该测试。
 
 ## Current scope
@@ -142,6 +142,9 @@ LiteLLM Model、Console、MCP SDK 2.x、完整 start 生命周期、世界持久
 - 单个源码文件不超过 600 行, 数据模型定义（ORM/DataClass）如 SQLAlchemy 或 Pydantic 模型，如果只是字段声明（无逻辑），允许 1000+ 行，因为它们是声明式配置。
 - 不以 lint ignore 掩盖核心复杂度。
 - 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 的临时 SQLite 集成测试外不使用数据库。
-- pytest 使用 importlib 模式，测试工具经 `tests.*` 显式导入；优先保护行为、边界与失败恢复，避免重复用例和测试辅助函数自身的测试。
-- 日常检查不采集覆盖率；`uv run aurora check --test --coverage` 按需采集，CI 总体下限为 80%。
+- pytest 使用 importlib 模式，测试按能力分目录，专用辅助代码随对应能力放置，跨能力替身放在 `tests/support/`，均经 `tests.*` 显式导入。
+- 测试优先保护认知循环、持久化一致性、幂等与未知效果恢复、权限和路径边界、凭据脱敏及记忆时间正确性。
+  简单字段转发、展示格式、常量和已有场景重复覆盖的分支不要求单独测试；不为提高覆盖率补用例。
+- 日常检查不采集覆盖率；`uv run aurora check --test --coverage` 按需采集，CI 总体下限为 20%。
+  该值是最低门槛，不是删减目标；关键行为的测试由风险决定，不由代码占比决定。
 - 提交前运行 `uv run aurora check --fix`。

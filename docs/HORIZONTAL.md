@@ -1,6 +1,6 @@
 # AuroraBot 横向体系
 
-> 纵向（分层）由 `tests/test_dependency_boundaries.py` 强制，已经清晰，本文不重复。
+> 纵向（分层）由 `tests/foundation/test_dependency_boundaries.py` 强制，已经清晰，本文不重复。
 > 本文只管**横向**：名字、集合、因果、扩展——那些穿透所有分层的东西。
 
 ---
@@ -327,7 +327,7 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 1. 域已经驱动了三阶段——`Observe/Recall/Effect` 的参数本来就是域。
 2. **另外三个操作在内核层面一直可替换，缺的从来不是可替换性，而是「谁知道这件事」。**
    内核按 `priority` 裁决同契约的多个 provider（`src/kernel/resolve.py`，
-   测试 `tests/test_kernel.py`），而三个操作都是 `provides=` 的契约类型。
+   测试 `tests/kernel/test_kernel.py`），而三个操作都是 `provides=` 的契约类型。
    所以这里做的不是端口化，是**声明 + 校验**（见 §9 的 P4）。
 3. 校验只补内核问不了的那件事：**替换之后是否仍是一个完整循环。**
 
@@ -505,7 +505,7 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 翻译从「按 `.` 切段」改成「逐字符走、按位置取屏蔽集」，因此不需要知道模式里
 哪个点属于命名空间、哪个属于名字——**位置本身就说明了这件事**。
 
-**只改了一处断言的语义**：`tests/test_utils.py` 里原本写着
+**只改了一处断言的语义**：`tests/foundation/test_utils.py` 里原本写着
 `not pattern_matches("aurora:tool/*", "aurora:tool/world_read.deep")`，
 把旧接缝钉成了期望行为。它现在断言相反的事实，并另加一条 `/` 仍分层、
 `*:tool/*` 只够一层命名空间、`qq:*` 仍匹配 `qq:group:123` 的测试。
@@ -535,16 +535,16 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 | 文件 | 覆盖 |
 |---|---|
-| `tests/test_identity.py` | 45 项：ID 解析、`alias_path` 对 15 个真实外来名字的全函数性与稳定性、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返 |
-| `tests/test_scopes.py` | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
-| `tests/test_reactions_configs.py` | 9 项：模板往返、路由命中、字段缺失与未知字段 |
-| `tests/test_mcp_configs.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
-| `tests/test_app_verify.py` | +2 项：零工具 + `world_events` 作为世界生产者登记且声明落进注册表；远程端点拒绝 `--events` |
-| `tests/test_app_install_cli.py` | +2 项：`--events` 的 CLI 通路（零工具也登记）与「不加 `--events` 仍拒绝」 |
-| `tests/test_loop.py` | 6 项：四操作的名字与契约互不相同、职责与不变量非空、三个世界端口同源声明、齐备时通过、缺操作报出名字、两个世界被拒、**内建组合恰好满足全部四条不变量** |
-| `tests/test_mcp_tool.py` | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字 |
-| `tests/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
-| `tests/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
+| `tests/foundation/test_identity.py` | 45 项：ID 解析、`alias_path` 对 15 个真实外来名字的全函数性与稳定性、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返 |
+| `tests/resources/test_scopes.py` | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
+| `tests/cli/configs/test_reactions.py` | 9 项：模板往返、路由命中、字段缺失与未知字段 |
+| `tests/cli/configs/test_mcp.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
+| `tests/cli/app/test_verify.py` | +2 项：零工具 + `world_events` 作为世界生产者登记且声明落进注册表；远程端点拒绝 `--events` |
+| `tests/cli/app/test_install_cli.py` | +2 项：`--events` 的 CLI 通路（零工具也登记）与「不加 `--events` 仍拒绝」 |
+| `tests/engine/test_loop.py` | 6 项：四操作的名字与契约互不相同、职责与不变量非空、三个世界端口同源声明、齐备时通过、缺操作报出名字、两个世界被拒、**内建组合恰好满足全部四条不变量** |
+| `tests/mcp/test_mcp_tool.py` | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字 |
+| `tests/memory/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
+| `tests/kernel/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
 
 验证：**1163 passed / 1 skipped**，`ruff` 与 `pyright` 均 0 error，配置 14 个 TOML ↔ 14 个 configs 模块（原 11 个 + `reactions` / `scopes` / `tags`）。
 

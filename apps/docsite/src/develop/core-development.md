@@ -102,4 +102,4 @@ MODULE = build
 
 至少验证该能力的成功、参数拒绝、失败及未知效果路径；有外部副作用时验证幂等身份和恢复边界。替换既有端口时，用真实装配检查调用落在被选中的实例上。网络服务用 fake，世界恢复使用临时 SQLite，模型机制使用确定的离线输入。
 
-运行 `uv run aurora check --fix`；示例对应的插件集成行为见 `tests/test_operation_plugin.py`。清单发布版本与内核 API 范围分别表达，宿主在任何准备效果前校验兼容性。清单归档能核对声明，不能恢复未安装的代码和依赖环境。
+运行 `uv run aurora check --fix`；示例对应的插件集成行为见 `tests/operations/test_operation_plugin.py`。清单发布版本与内核 API 范围分别表达，宿主在任何准备效果前校验兼容性。清单归档能核对声明，不能恢复未安装的代码和依赖环境。

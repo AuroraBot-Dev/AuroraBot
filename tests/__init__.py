@@ -1,1 +1,5 @@
-"""AuroraBot 离线测试与共用测试工具，不随运行时包安装。"""
+"""离线行为测试与项目定位。"""
+
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]

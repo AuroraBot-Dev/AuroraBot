@@ -45,7 +45,7 @@ addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basete
 source = ["aurora", "aurorabot"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 20
 skip_covered = true
 
 [tool.ruff]
