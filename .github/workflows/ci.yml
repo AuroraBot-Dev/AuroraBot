@@ -31,6 +31,9 @@ jobs:
       - name: Lint
         run: uv run aurora check --lint
 
+      - name: Build Python distributions
+        run: uv build
+
   test:
     runs-on: ubuntu-latest
     strategy:
