@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -50,7 +50,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the docs/panel submodules.
+`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the application workspace.
 
 ### 2. Fill in the required configuration
 
@@ -70,7 +70,12 @@ This project contains code written with assistance from generative models such a
 
 ## Contributing
 
-See [Contributing to AuroraBot](CONTRIBUTING.en.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](CODE_OF_CONDUCT.md).
+The repository uses Python src layout alongside a pnpm workspace. `src/aurora/` contains the CLI and configuration;
+`src/aurorabot/` contains the Bot framework. Install Python development dependencies with `uv sync --locked --group dev`,
+then import `aurora` or `aurorabot`. Frontend applications live in `apps/`, with shared libraries in `packages/` and
+build configuration in `tooling/`. Python uses uv; Vue and TypeScript use pnpm/Vite, with independent dependencies and builds.
+
+See [Contributing to AuroraBot](docs/CONTRIBUTING.en.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](docs/CODE_OF_CONDUCT.md).
 
 ## Acknowledgements
 
@@ -80,7 +85,6 @@ AuroraBot would not exist without many excellent open-source projects:
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider integration and call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP client and tool protocol                       |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Local Panel backend                                |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console and terminal experience                    |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal persistence                           |
 

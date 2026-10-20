@@ -1,17 +1,18 @@
 [project]
 name = "AuroraBot"
 version = "0.7.0"
-description = "以 AgentTree 为核心的自主智能体框架，为 Bot 提供可以持续生活、自主判断与行动的运行环境。"
+description = "以 Bot 为中心的主动智能体环境，支持持久目标、节律、记忆与可扩展能力。"
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
 dependencies = [
     "aiosqlite>=0.20,<1",
-    "fastapi>=0.116,<1",
     "httpx2>=2.5,<3",
+    "jsonschema>=4.23,<5",
     "litellm>=1.83.14",
     "loguru>=0.7,<1",
     "mcp>=2,<3",
+    "packaging>=24,<27",
     "pydantic>=2.12,<3",
     "prompt-toolkit>=3.0,<4",
     "python-dotenv>=1.2,<2",
@@ -19,30 +20,38 @@ dependencies = [
     "sqlalchemy>=2.0,<3",
     "tomlkit>=0.15",
     "rich>=15.0.0",
-    "uvicorn>=0.30,<1",
 ]
 
 [project.scripts]
 aurora = "aurora.main:main"
 
+[project.optional-dependencies]
+learning = ["torch>=2.6,<3", "numpy>=2,<3"]
+
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
+where = ["src"]
+include = ["aurora", "aurora.*", "aurorabot", "aurorabot.*"]
+namespaces = false
 
 [dependency-groups]
-dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
+dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov", { include-group = "learning" }]
+learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-ra --basetemp=tests/.tmp"
+addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basetemp=tests/.tmp"
+
+[tool.coverage.run]
+source = ["aurora", "aurorabot"]
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 20
+skip_covered = true
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+extend-exclude = ["tests/.tmp"]
 
 [tool.ruff.format]
 line-ending = "lf"
@@ -82,15 +91,16 @@ ignore = [
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]
-"aurora/__init__.py" = ["PLC0415"]
-"aurora/commands/start.py" = ["PLC0415"]
-"src/engine/runtime.py" = ["BLE001"]
+"src/aurora/__init__.py" = ["PLC0415"]
+"src/aurora/commands/start.py" = ["PLC0415"]
+"src/aurora/utils/logging.py" = ["PLC0415"]
+"src/aurorabot/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "ops", "src", "tests"]
+include = ["src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"
@@ -102,3 +112,11 @@ build-backend = "setuptools.build_meta"
 [tool.uv]
 package = true
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

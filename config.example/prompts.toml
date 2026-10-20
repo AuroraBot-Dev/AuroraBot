@@ -1,44 +1,44 @@
 [[prompt]]
-id = "system.soul"
+id = "aurora:prompt/system/soul"
 source = "system/SOUL.md"
 enabled = true
 
 [[prompt]]
-id = "system.world"
+id = "aurora:prompt/system/world"
 source = "system/WORLD.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.triage"
+id = "aurora:prompt/agent/triage"
 source = "builtin/triage.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.fast"
+id = "aurora:prompt/agent/fast"
 source = "builtin/fast.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.chat"
+id = "aurora:prompt/agent/chat"
 source = "builtin/chat.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.root"
+id = "aurora:prompt/agent/root"
 source = "builtin/root.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.worker"
+id = "aurora:prompt/agent/worker"
 source = "builtin/worker.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.reviewer"
+id = "aurora:prompt/agent/reviewer"
 source = "builtin/reviewer.md"
 enabled = true
 
 [[prompt]]
-id = "builtin.memory"
+id = "aurora:prompt/agent/memory"
 source = "builtin/memory.md"
 enabled = true

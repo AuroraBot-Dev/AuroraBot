@@ -1,0 +1,9 @@
+[rhythm]
+policy = "aurora:rhythm/model/rules"
+# 选择 aurora:rhythm/model/gru 时，路径与固定资源引用二选一。
+# weights = "models/rhythm.pt"
+# weights_ref = "aurora:rhythm/model/gru@<SHA256>"
+evoke_every = 1
+max_idle_seconds = 3600
+min_check_seconds = 1
+probability_threshold = 0.5

@@ -45,11 +45,14 @@ config.ini
 # Project data
 logs/
 data/
+/models/
 temp/
 extensions/
 
 # IDE / Editor
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .editor/
 .cursor/
 .idea/
@@ -66,4 +69,26 @@ graphify-out/
 .npm-cache/
 
 # personal config copied from config.example
-config/
+/config/
+
+# Node.js / Vue 应用工作区
+node_modules/
+.pnpm-store/
+.turbo/
+.vitepress/cache/
+.vitepress/dist/
+*.tsbuildinfo
+
+# 前端构建与检查缓存
+.vitepress/.temp/
+.eslintcache
+.stylelintcache
+.nitro/
+.output/
+*.log
+*.local
+# 随应用发布的构建配置
+!/apps/panel/.env
+!/apps/panel/.env.analyze
+!/apps/panel/.env.development
+!/apps/panel/.env.production

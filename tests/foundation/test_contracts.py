@@ -1,0 +1,227 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
+
+import pytest
+
+from aurorabot.contracts import (
+    AgentDefinition,
+    AgentNode,
+    AgentStatus,
+    AgentTree,
+    ChatMessage,
+    ModelRequest,
+    ToolCall,
+    ToolDefinition,
+    ToolOutput,
+    ToolStatus,
+    TreeStatus,
+)
+from tests.support.model import fake_endpoint
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from aurorabot.contracts.model_binding import ModelBinding
+
+
+def _empty_assistant() -> ChatMessage:
+    return ChatMessage.assistant()
+
+
+def _agent(
+    definition_id: str = "root",
+    prompt: str = "root",
+    model: str = "model",
+    tools: frozenset[str] = frozenset(),
+    children: frozenset[str] = frozenset(),
+) -> AgentDefinition:
+    return AgentDefinition(
+        f"aurora:agent/definition/{definition_id}",
+        "Test Agent.",
+        f"aurora:prompt/agent/{prompt}",
+        f"test:ai/endpoint/{model}",
+        tools,
+        children,
+    )
+
+
+def test_chat_message_accepts_exactly_four_roles() -> None:
+    assert ChatMessage.system("system").role == "system"
+    assert ChatMessage.message("message").role == "message"
+    assert ChatMessage.assistant("assistant").role == "assistant"
+    assert ChatMessage.tool("call", "tool").role == "tool"
+
+
+def test_tool_message_must_match_an_unanswered_call() -> None:
+    tree = AgentTree.create("tree", "root", _agent(), "hello")
+
+    with pytest.raises(ValueError, match="must match"):
+        tree.append("root", ChatMessage.tool("missing", "result"))
+
+
+def test_node_rejects_duplicate_call_ids_across_assistant_messages() -> None:
+    call = ToolCall("same", "echo", {})
+
+    with pytest.raises(ValueError, match="unique"):
+        AgentNode(
+            "root",
+            None,
+            None,
+            _agent(),
+            (
+                ChatMessage.message("hello"),
+                ChatMessage.assistant(tool_calls=(call,)),
+                ChatMessage.tool("same", "one"),
+                ChatMessage.assistant(tool_calls=(call,)),
+            ),
+        )
+
+
+def test_tree_rejects_missing_parent() -> None:
+    root = AgentNode("root", None, None, _agent(), (ChatMessage.message("hello"),))
+    orphan = AgentNode(
+        "orphan",
+        "missing",
+        "call",
+        _agent("worker", "worker"),
+        (ChatMessage.message("work"),),
+    )
+
+    with pytest.raises(ValueError, match="missing parent"):
+        AgentTree("tree", "root", (root, orphan))
+
+
+@pytest.mark.parametrize(
+    ("factory", "message"),
+    [
+        (lambda: ToolCall("", "tool", {}), "requires call_id"),
+        (lambda: ChatMessage.system(""), "invalid system"),
+        (_empty_assistant, "invalid assistant"),
+        (lambda: ChatMessage.tool("", "result"), "invalid tool"),
+        (lambda: ToolDefinition("", "description", {}), "需要非空"),
+        (lambda: ToolOutput(""), "must not be empty"),
+    ],
+)
+def test_model_value_objects_reject_empty_required_fields(factory: Callable[[], object], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        factory()
+
+
+def test_tool_output_has_three_statuses_and_derives_is_error() -> None:
+    succeeded = ToolOutput("done")
+    failed = ToolOutput("failed", status=ToolStatus.FAILED)
+    unknown = ToolOutput("unknown", status=ToolStatus.UNKNOWN)
+
+    assert succeeded.status is ToolStatus.SUCCEEDED
+    assert succeeded.is_error is False
+    assert failed.is_error is True
+    assert unknown.is_error is True
+    with pytest.raises(TypeError, match="ToolStatus"):
+        ToolOutput("invalid", status="failed")  # type: ignore[arg-type]
+
+
+def test_tool_definition_deep_freezes_nested_json_schema() -> None:
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"mode": {"type": "string", "enum": ["one", "two"]}},
+        "required": ["mode"],
+    }
+    definition = ToolDefinition("test:tool/definition/choose", "Choose a mode.", schema)
+
+    schema["properties"]["mode"]["enum"].append("mutated")
+    schema["required"].append("mutated")
+
+    mode = definition.parameters["properties"]["mode"]
+    assert mode["enum"] == ("one", "two")
+    assert definition.parameters["required"] == ("mode",)
+    with pytest.raises(TypeError):
+        mode["type"] = "integer"
+    with pytest.raises(TypeError):
+        cast("dict[str, Any]", definition.parameters)["new"] = True
+
+
+def test_assistant_rejects_duplicate_call_ids_in_one_message() -> None:
+    with pytest.raises(ValueError, match="must be unique"):
+        ChatMessage.assistant(
+            tool_calls=(ToolCall("same", "one", {}), ToolCall("same", "two", {})),
+        )
+
+
+def test_model_request_requires_model_one_system_and_unique_tools() -> None:
+    messages = (ChatMessage.system("system"), ChatMessage.message("hello"))
+    tool = ToolDefinition("test:tool/definition/echo", "Echo.", {})
+
+    with pytest.raises(TypeError, match="完整端点快照"):
+        ModelRequest(cast("ModelBinding", None), messages)
+    with pytest.raises(ValueError, match="start with system"):
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), (ChatMessage.message("hello"),))
+    with pytest.raises(ValueError, match="only one"):
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), (ChatMessage.system("one"), ChatMessage.system("two")))
+    with pytest.raises(ValueError, match="must be unique"):
+        ModelRequest(fake_endpoint("test:ai/endpoint/model"), messages, (tool, tool))
+
+
+def test_agent_node_requires_parent_pairing_message_and_terminal_outcome() -> None:
+    message = (ChatMessage.message("hello"),)
+
+    with pytest.raises(ValueError, match="node_id"):
+        AgentNode("", None, None, _agent(), message)
+    with pytest.raises(ValueError, match="root node"):
+        AgentNode("root", None, "call", _agent(), message)
+    with pytest.raises(ValueError, match="child node"):
+        AgentNode("child", "root", None, _agent("worker", "worker"), message)
+    with pytest.raises(ValueError, match="must start"):
+        AgentNode("root", None, None, _agent(), ())
+    with pytest.raises(ValueError, match="only by PromptAssembler"):
+        AgentNode(
+            "root",
+            None,
+            None,
+            _agent(),
+            (ChatMessage.message("hello"), ChatMessage.system("system")),
+        )
+    with pytest.raises(ValueError, match="requires result"):
+        AgentNode("root", None, None, _agent(), message, AgentStatus.COMPLETED)
+    with pytest.raises(ValueError, match="requires error"):
+        AgentNode("root", None, None, _agent(), message, AgentStatus.FAILED)
+
+
+def test_tree_requires_identity_unique_nodes_and_matching_root_status() -> None:
+    root = AgentNode("root", None, None, _agent(), (ChatMessage.message("hello"),))
+    completed = AgentNode(
+        "root",
+        None,
+        None,
+        _agent(),
+        (ChatMessage.message("hello"), ChatMessage.assistant("done")),
+        AgentStatus.COMPLETED,
+        "done",
+    )
+
+    with pytest.raises(ValueError, match="requires tree_id"):
+        AgentTree("", "root", (root,))
+    with pytest.raises(ValueError, match="must be unique"):
+        AgentTree("tree", "root", (root, root))
+    with pytest.raises(ValueError, match="exactly one root"):
+        AgentTree("tree", "missing", (root,))
+    with pytest.raises(ValueError, match=r"running.*terminal"):
+        AgentTree("tree", "root", (completed,))
+    with pytest.raises(ValueError, match=r"completed.*requires"):
+        AgentTree("tree", "root", (root,), TreeStatus.COMPLETED)
+
+
+def test_only_tool_messages_may_answer_pending_calls() -> None:
+    call = ToolCall("call", "echo", {})
+    with pytest.raises(ValueError, match="only tool messages"):
+        AgentNode(
+            "root",
+            None,
+            None,
+            _agent(),
+            (
+                ChatMessage.message("hello"),
+                ChatMessage.assistant(tool_calls=(call,)),
+                ChatMessage.message("interrupt"),
+            ),
+        )

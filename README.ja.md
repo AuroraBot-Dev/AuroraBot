@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -50,7 +50,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、docs/panel サブモジュールの初期化を行います。
+`setup.sh` は git/uv/pnpm を確認し、aurora をユーザーのツールディレクトリにグローバルリンクするか確認した後、`aurora setup` が依存関係、個人設定、アプリ workspace の依存関係のインストールを行います。
 
 ### 2. 必要な設定を記入
 
@@ -70,7 +70,12 @@ aurora start
 
 ## コントリビューション
 
-[AuroraBot へのコントリビューション](CONTRIBUTING.ja.md)と [AuroraBot ドキュメントサイト](https://www.aurorabot.org)をご覧ください。コントリビューションを行うことで、プロジェクトの[行動規範](CODE_OF_CONDUCT.md)に同意したことになります。
+このリポジトリは Python の src layout と pnpm workspace を併用します。`src/aurora/` は CLI と設定解析、
+`src/aurorabot/` は Bot フレームワークです。`uv sync --locked --group dev` で開発環境にインストールし、
+`aurora` と `aurorabot` を import します。フロントエンドは `apps/`、共有ライブラリは `packages/`、
+ビルド設定は `tooling/` に配置します。Python は uv、Vue と TypeScript は pnpm/Vite で依存関係とビルドを個別に管理します。
+
+[AuroraBot へのコントリビューション](docs/CONTRIBUTING.ja.md)と [AuroraBot ドキュメントサイト](https://www.aurorabot.org)をご覧ください。コントリビューションを行うことで、プロジェクトの[行動規範](docs/CODE_OF_CONDUCT.md)に同意したことになります。
 
 ## オープンソースへの謝辞
 
@@ -80,7 +85,6 @@ AuroraBot は、多くの優れたオープンソース・プロジェクトな�
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider 接続と call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP client と tool protocol               |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | ローカル Panel backend                    |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console と terminal experience            |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal 永続化                       |
 

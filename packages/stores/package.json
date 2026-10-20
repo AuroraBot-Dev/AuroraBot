@@ -1,0 +1,32 @@
+{
+  "name": "@vben/stores",
+  "version": "5.7.0",
+  "homepage": "https://github.com/AuroraBot-Dev/AuroraBot",
+  "bugs": "https://github.com/AuroraBot-Dev/AuroraBot/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AuroraBot-Dev/AuroraBot.git",
+    "directory": "packages/stores"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@vben-core/preferences": "workspace:*",
+    "@vben-core/shared": "workspace:*",
+    "@vben/types": "workspace:*",
+    "pinia": "catalog:",
+    "pinia-plugin-persistedstate": "catalog:",
+    "secure-ls": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  }
+}

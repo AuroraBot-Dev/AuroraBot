@@ -1,0 +1,10 @@
+# 项目级域声明与覆盖。模组自行声明拥有的域、分类和含义。
+# 相同模式的配置覆盖模组默认值；不同模式按路径具体度排列，通用声明不能遮蔽具体子域。
+# kind = "resource" 表示业务资源；kind = "run" 表示默认不自动召回的运行台账。
+scope = []
+
+# 自定义时将 scope = [] 替换为以下形式的表：
+# [[scope]]
+# pattern = "home:world/room/*"
+# kind = "resource"
+# description = "家中各房间的传感器观察。"

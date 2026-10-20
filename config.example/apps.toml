@@ -1,14 +1,3 @@
-# 内建 Clock 应用
-[[app]]
-package = "org.aurora.clock"
-enabled = false
-transport = "stdio"
-working_dir = "src/apps/aurora-app-clock"
-command = ["uv", "run", "--no-sync", "python", "mcp_server.py"]
-env = []
-timeout_seconds = 30
-event_mode = "disabled"
-
 [[app]]
 package = "com.github.windows_mcp"
 enabled = false
@@ -28,3 +17,6 @@ command = ["uv", "run", "--frozen", "aurora-qq-mcp"]
 env = ["AURORA_QQ_TOKEN", "AURORA_QQ_CONFIG"]
 timeout_seconds = 60
 event_mode = "world_events"
+# 这个 App 拥有的世界域；只能声明自己命名空间下的域。
+# 不声明时退回 org.aurora.qq:world。
+scopes = ["org.aurora.qq:world"]
