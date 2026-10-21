@@ -1,68 +1,64 @@
 # 扩展 AuroraBot
 
-扩展 AuroraBot，意味着为她增加一种新的做事方式，或一种新的协作角色。当前提供三条入口：
+`extensions/` 保存本机为 Bot 安装的 MCP 应用源码与 Python 插件。Bot 通过这些扩展感知外部环境、执行工具或获得新的能力。
 
-- **MCP 应用**把时间、文件、服务或设备等外部能力带进来。
-- **Agent profile** 定义一个 Agent 使用什么模型、拥有哪些能力，以及可以把工作交给谁。
-- **Python 插件**向组合内核追加一个自描述模块，贡献工具、前台或唤起绑定等稳定能力。
+| 目录 | 用途 |
+| --- | --- |
+| `apps/` | `aurora app install owner/repo` 克隆的源码，存放于 `<owner>/<repo>/` |
+| `plugins/` | 启动时自动发现的本地 Python 模组 |
 
-前两者只改 TOML，不写 Python；第三条在 `extensions/plugins/` 放置源码即可，无需修改任何随包发布的模块。
-`extensions/` 下的应用源码与插件由 Git 忽略，只有本说明和占位文件进入版本库。
+仓库只跟踪本说明和目录占位文件；本机安装的应用与插件由 Git 忽略。没有安装扩展时，这两个目录可以为空。
+Agent 定义位于 `config/agents.toml`，不从 `extensions/` 加载。
 
-## 从一个 MCP 应用开始
+## 接入 MCP 应用
 
-MCP 应用最接近 AuroraBot 的“感知器与执行器”：它可以提供工具，也可以在环境发生变化时发回事件。
-`extensions/apps/` 下的 `Windows-MCP` 与 `Aurora-QQ` 是可直接启用的示例。
+MCP 应用为 Bot 提供外部工具；符合事件协议并启用相应配置的应用也可向她的世界提交事件。
 
-1. 实现一个 stdio 或 HTTPS Streamable HTTP MCP Server。
-2. 在 `config/apps.toml` 中只声明 package、transport、连接或启动方式和超时。
-3. MCP Server 通过标准 `tools/list` 暴露工具，无需在 AuroraBot 中维护工具 allowlist。
-4. 在 `config/agents.toml` 中用精确 Tool ID、`package.*` 或 `*` 设置 Agent profile 的能力策略。
-5. 使用 `uv run --env-file .env aurora start --platform mcp` 启动并验证完整闭环。
+1. 运行 `aurora setup` 初始化个人配置。
+2. 使用 `aurora app install owner/repo` 安装源码应用，或在 `config/apps.toml` 配置已有 Server。
+3. 在 `config/agents.toml` 的 `tools` 中为相应 Agent 配置工具可见范围。
+4. 使用 `aurora start` 启动；不需要本地终端时使用 `aurora start --headless`。
 
-AuroraBot 会在启动时动态发现 Server 的全部工具，并以配置 package 为 raw tool name 添加前缀，形成
-`aur.mcp.<package>.<tool>` 领域 ID。模型只有在 Agent profile 的能力策略允许时才能请求工具；参数仍按 Server
-提供的 JSON Schema 校验，执行结果则作为统一工具回执交还原先等待的 Agent。
+源码安装需要仓库提供 `aurora-app.toml`，或通过 `--command` 显式指定启动命令。
+包管理器安装（`--npx` / `--uvx`）和远程 HTTPS 端点登记不把 Server 源码放入 `apps/`。
+完整参数与安装、移除行为见 [应用管理命令](../src/aurora_cli/commands/app/README.md)。
 
-## 定义一个 Agent profile
+`config.example/apps.toml` 中的 Windows-MCP 与 Aurora-QQ 是默认禁用的配置示例，仓库不附带它们的源码。
+手动启用前需要准备对应应用并核对 `working_dir`、启动命令和环境变量；通过安装命令登记的应用使用实际安装路径。
 
-Agent profile 在 `config/agents.toml` 中显式配置，包括：
+启动时，AuroraBot 发现并冻结 Server 的工具目录，将远端工具映射为 `<package>:tool/definition/<别名>`。
+例如 `org.aurora.qq:tool/definition/*` 表示该应用的工具可见范围；也可使用精确工具 ID、`#` 标签引用和 `!` 排除规则。
+工具参数按 JSON Schema 校验，外部行动经 Tool 执行，结果作为世界事件回到 Bot。
+应用开发与事件接入见 [MCP 应用开发](../apps/docsite/src/develop/app-development.md)。
 
-- 唯一 `id`；
-- 使用的模型端点与角色提示词（提示词正文在 `config/prompts.toml` 与 `config/prompts/` 中声明）；
-- 能力策略：可用 Tool ID、`package.*` 通配或 `!` 排除；
-- 是否允许委派，以及允许创建哪些 child profile。
+## 配置 Agent
 
-所有 profile 都通过同一种 `AgentTree` 运行：委派只是同一循环内的一次 child 创建，不引入平行的运行模型。
+在 `config/agents.toml` 中声明 Agent 的 `id`、`description`、`model`、`prompt`、`tools` 和 `children`。
+模型端点由 `config/endpoints.toml` 定义，提示词由 `config/prompts.toml` 和引用的正文文件定义。
+委派需要可见的 `aurora:tool/definition/delegate` 工具，并受 `children` 中列出的目标约束。
 
-## 写一个 Python 插件
+Bot 的一次认知运行由一棵 `AgentTree` 表示。root 与 child 使用同一种节点和循环，委派在同一棵树内创建 child。
+配置示例见 [Agent 配置模板](../config.example/agents.toml)。
 
-发现源在启动时扫描 `extensions/plugins/`：其中每个 `*.py` 文件，或每个含 `module.py` 的子目录，都是一个插件，
-必须导出唯一 `MODULE`。插件用内核的 `@module` 装饰器自描述，与内置能力使用同一装配机制：
+## 编写 Python 插件
 
-```python
-from aurora_bot.contracts import TOOL_CONTRIBUTIONS
-from aurora_bot.kernel import ModuleContext, module
+启动时会扫描 `extensions/plugins/`：每个 `*.py` 文件，或每个含 `module.py` 的子目录，都是一个插件入口。
+入口必须导出唯一的 `MODULE`，其值为 `@module` 生成的 `ModuleSpec`；包形式支持相对导入。
 
+插件与内置能力使用同一套组合机制：`provides` / `requires` 声明能力端口，
+`contributes` / `consumes` 声明贡献点，清单声明命名空间、发布版本和内核 API 兼容范围。
+完整可运行示例、生命周期和验证要求见 [模组开发](../apps/docsite/src/develop/core-development.md)。
 
-@module(name="my.echo", contributes=(TOOL_CONTRIBUTIONS,))
-def build(context: ModuleContext) -> None:
-    context.contribute(TOOL_CONTRIBUTIONS, EchoTool())
-
-
-MODULE = build
-```
-
-`provides` 以契约类型登记能力实例，`requires` 声明依赖的能力，`contributes`/`consumes` 使用已声明的稳定贡献键。
-工具、前台（`FRONT_BINDINGS`）与唤起绑定（`TREE_LAUNCHER_BINDINGS`）的贡献键已由内置模块声明，插件只需贡献、不再声明。
-也可通过 `aurorabot_plugin` entry point 发布模块。
+也可将插件安装为独立 Python 包，通过 `aurorabot_plugin` entry point 提供入口。
+修改本地插件或配置后需要重启，当前不做热加载。
 
 ## 扩展边界
 
-- 插件与宿主在同一进程、同一权限下运行，这是有意的信任边界；只加载你信任的源码。
-- 插件运行时只依赖 `aurora_bot.contracts` 与 `aurora_bot.kernel`；不要运行时 import 其他 `aurora_bot.<pkg>`，跨包能力经内核注入的契约实例调用。
-- 不要直接读写 `data/` 下的 WorldJournal；环境效果必须经已声明的 Tool 执行。
-- 依赖缺失、依赖环、同优先级能力冲突、未声明贡献点与重复模块名都在启动前失败，不做静默降级。
-- 密钥只通过环境变量注入，结构与启用状态继续由 TOML 决定；当前不做热加载。
+- Python 插件与宿主在同一进程、同一权限下运行，只加载可信源码。
+- 插件通过 `aurora_bot.contracts`、`aurora_bot.kernel` 和 `aurora_bot.utils` 使用公共契约、组合机制与底层工具；跨包能力经内核注入，不运行时导入兄弟能力实现。
+- 世界读写通过声明的端口完成，不直接访问 WorldJournal 的数据库；外部行动必须经声明的 Tool 执行。
+- 依赖缺失、依赖环、同优先级冲突、未声明贡献点和重复模组身份在启动前失败。
+- 凭据值通过环境变量提供，配置只记录变量名；结构与启用状态由 TOML 决定。
 
-若扩展需要新的公共协议、端口类型或运行时边界，请先按 [RFC 流程](../docs/rfc/README.md) 提出设计。
+涉及公共协议或运行时边界的扩展，应先核对 [设计思想](../apps/docsite/src/rfc/0300-design-philosophy.md)
+与 [模组协议](../apps/docsite/src/rfc/0302-microkernel-and-module-protocol.md)。
