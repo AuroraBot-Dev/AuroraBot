@@ -2,18 +2,18 @@ import type { OxlintConfig } from 'oxlint';
 
 import { defineConfig as defineOxlintConfig } from 'oxlint';
 
-import { command } from './command';
-import { comments } from './comments';
-import { ignores } from './ignores';
-import { importPluginConfig } from './import';
-import { javascript } from './javascript';
-import { node } from './node';
-import { overrides } from './overrides';
-import { plugins } from './plugins';
-import { test } from './test';
-import { typescript } from './typescript';
-import { unicorn } from './unicorn';
-import { vue } from './vue';
+import { command } from './command.ts';
+import { comments } from './comments.ts';
+import { ignores } from './ignores.ts';
+import { importPluginConfig } from './import.ts';
+import { javascript } from './javascript.ts';
+import { node } from './node.ts';
+import { overrides } from './overrides.ts';
+import { plugins } from './plugins.ts';
+import { test } from './test.ts';
+import { typescript } from './typescript.ts';
+import { unicorn } from './unicorn.ts';
+import { vue } from './vue.ts';
 
 function mergeOxlintConfigs(...configs: OxlintConfig[]): OxlintConfig {
   const merged: OxlintConfig = {};

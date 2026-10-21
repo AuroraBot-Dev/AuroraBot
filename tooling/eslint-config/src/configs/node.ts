@@ -1,6 +1,6 @@
 import type { Linter } from 'eslint';
 
-import { interopDefault } from '../util';
+import { interopDefault } from '../util.ts';
 
 export async function node(): Promise<Linter.Config[]> {
   const pluginNode = await interopDefault(import('eslint-plugin-n'));
@@ -16,7 +16,7 @@ export async function node(): Promise<Linter.Config[]> {
         'n/no-extraneous-import': [
           'error',
           {
-            allowModules: ['tsdown', 'vitest', 'vite'],
+            allowModules: ['vitest', 'vite'],
           },
         ],
         // 'n/no-unpublished-import': 'off',
@@ -24,7 +24,7 @@ export async function node(): Promise<Linter.Config[]> {
           'error',
           {
             ignores: [],
-            version: '>=22.18.0',
+            version: '>=24.12.0 <25',
           },
         ],
         'n/prefer-global/buffer': ['error', 'never'],

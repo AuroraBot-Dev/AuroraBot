@@ -2,7 +2,7 @@ import type { OxlintConfig } from 'oxlint';
 
 import { defineConfig as defineOxlintConfig } from 'oxlint';
 
-import { mergeOxlintConfigs, oxlintConfig } from './configs';
+import { mergeOxlintConfigs, oxlintConfig } from './configs/index.ts';
 
 type VbenOxlintConfig = Omit<OxlintConfig, 'extends'> & {
   extends?: OxlintConfig[];
@@ -15,5 +15,5 @@ function defineConfig(config: VbenOxlintConfig = {}) {
 }
 
 export { defineConfig, oxlintConfig };
-export * from './configs';
+export * from './configs/index.ts';
 export type { OxlintConfig, VbenOxlintConfig };

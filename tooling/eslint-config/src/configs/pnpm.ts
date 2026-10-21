@@ -1,6 +1,6 @@
 import type { Linter } from 'eslint';
 
-import { interopDefault } from '../util';
+import { interopDefault } from '../util.ts';
 
 export async function pnpm(): Promise<Linter.Config[]> {
   const [pluginPnpm, parserPnpm] = await Promise.all([

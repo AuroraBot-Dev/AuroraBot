@@ -163,7 +163,7 @@ export async function javascript(): Promise<Linter.Config[]> {
             disallowRedundantWrapping: true,
           },
         ],
-        'spaced-comment': 'error',
+        'spaced-comment': ['error', 'always', { markers: ['/'] }],
         'space-before-function-paren': 'off',
 
         'unused-imports/no-unused-imports': 'error',

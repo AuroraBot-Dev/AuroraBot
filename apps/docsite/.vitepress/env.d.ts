@@ -1,3 +1,3 @@
-// / <reference types="vitepress/client" />
+/// <reference types="vitepress/client" />
 
 declare module '*.css';

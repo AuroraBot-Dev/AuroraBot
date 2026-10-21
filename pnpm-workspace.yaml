@@ -17,19 +17,14 @@ overrides:
   vite: 'catalog:'
   vue: 'catalog:'
 catalog:
-  '@changesets/git': ^3.0.4
   '@eslint-community/eslint-plugin-eslint-comments': ^4.8.1
   '@eslint/js': ^10.0.1
-  '@manypkg/get-packages': ^3.1.0
   '@nolebase/vitepress-plugin-enhanced-readabilities': ^2.21.1
   '@stylistic/stylelint-plugin': ^5.3.1
-  '@types/node': ^25.9.9
+  '@types/node': ^24.0.0
   '@typescript-eslint/parser': ^8.72.0
   '@vitejs/plugin-vue': ^6.0.10
   '@vue/shared': 3.5.44
-  chalk: ^5.6.2
-  consola: ^3.4.2
-  dayjs: ^1.11.23
   eslint: ^10.13.0
   eslint-plugin-command: ^3.5.3
   eslint-plugin-jsonc: ^3.4.2
@@ -39,15 +34,12 @@ catalog:
   eslint-plugin-unused-imports: ^4.4.1
   eslint-plugin-vue: ^10.11.1
   eslint-plugin-yml: ^3.9.0
-  execa: ^10.2.0
   globals: ^17.13.0
   happy-dom: ^20.14.6
   jiti: ^2.7.0
   mermaid: ^11.17.2
-  ora: ^9.4.1
   oxlint: ^1.89.0
   oxlint-tsgolint: ^7.0.2004
-  pkg-types: ^2.4.0
   postcss: ^8.5.31
   postcss-html: ^2.0.0
   postcss-scss: ^4.0.9
@@ -61,7 +53,6 @@ catalog:
   stylelint-config-standard: ^40.0.0
   stylelint-order: ^8.1.2
   stylelint-scss: ^7.3.0
-  tsdown: ^0.22.14
   tsx: ^4.23.15
   typescript: ^6.0.3
   vite: 8.3.4

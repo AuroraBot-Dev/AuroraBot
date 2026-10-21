@@ -1,6 +1,6 @@
 import type { Linter } from 'eslint';
 
-import { interopDefault } from '../util';
+import { interopDefault } from '../util.ts';
 
 /**
  * @typescript-eslint 的规则已迁移到 oxlint（typescript 插件）。

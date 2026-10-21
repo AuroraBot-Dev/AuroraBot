@@ -15,6 +15,7 @@ on:
       - '.stylelintignore'
       - '.node-version'
       - '.github/workflows/apps.yml'
+      - '.github/workflows/deploy-docs.yml'
   pull_request:
     paths:
       - 'apps/**'
@@ -28,6 +29,7 @@ on:
       - '.stylelintignore'
       - '.node-version'
       - '.github/workflows/apps.yml'
+      - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
 jobs:
@@ -44,14 +46,8 @@ jobs:
           cache: pnpm
       - name: 安装工作区依赖
         run: pnpm install --frozen-lockfile
-      - name: 检查应用与脚本类型
-        run: pnpm typecheck
-      - name: 检查前端代码规范
-        run: pnpm lint
-      - name: 运行前端测试
-        run: pnpm test
-      - name: 构建全部应用
-        run: pnpm build
+      - name: 检查并构建全部应用
+        run: pnpm check:apps
         env:
           NODE_OPTIONS: --max-old-space-size=8192
       - name: 保存静态产物

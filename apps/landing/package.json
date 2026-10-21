@@ -9,8 +9,8 @@
     "preview": "vite preview --port 4174",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "pnpm --dir ../.. lint",
-    "test": "vitest run --passWithNoTests",
-    "clean": "rimraf dist"
+    "test": "pnpm --dir ../.. test apps/landing --passWithNoTests",
+    "clean": "rimraf dist node_modules/.vite node_modules/.vitepress .vitepress/.temp .vitepress/cache"
   },
   "dependencies": {
     "vue": "catalog:"

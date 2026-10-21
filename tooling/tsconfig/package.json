@@ -13,7 +13,6 @@
   "type": "module",
   "files": [
     "base.json",
-    "library.json",
     "node.json",
     "web.json"
   ],

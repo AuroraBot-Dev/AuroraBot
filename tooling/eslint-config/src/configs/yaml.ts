@@ -1,6 +1,6 @@
 import type { Linter } from 'eslint';
 
-import { interopDefault } from '../util';
+import { interopDefault } from '../util.ts';
 
 export async function yaml(): Promise<Linter.Config[]> {
   const [pluginYaml, parserYaml] = await Promise.all([

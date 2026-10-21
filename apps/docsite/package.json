@@ -1,6 +1,6 @@
 {
   "name": "@aurorabot/docsite",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "AuroraBot 文档站",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
     "preview": "vitepress preview .",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "pnpm --dir ../.. lint",
-    "test": "vitest run --passWithNoTests",
-    "clean": "rimraf dist"
+    "test": "pnpm --dir ../.. test apps/docsite --passWithNoTests",
+    "clean": "rimraf dist node_modules/.vite node_modules/.vitepress .vitepress/.temp .vitepress/cache"
   },
   "devDependencies": {
     "@nolebase/vitepress-plugin-enhanced-readabilities": "catalog:",

@@ -1,7 +1,7 @@
 import type { Linter } from 'eslint';
 
-import { ignores, javascript, jsonc, node, perfectionist, pnpm, typescript, vue, yaml } from './configs';
-import { customConfig } from './custom-config';
+import { ignores, javascript, jsonc, node, perfectionist, pnpm, typescript, vue, yaml } from './configs/index.ts';
+import { customConfig } from './custom-config.ts';
 
 type FlatConfig = Linter.Config;
 
