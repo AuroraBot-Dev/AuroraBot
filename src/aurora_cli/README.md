@@ -4,6 +4,35 @@
 
 通用组合机制由 `aurora_kernel` 提供，Bot 装配与运行由 `aurora_bot.runtime` 负责。CLI 通过命令执行器调用这些能力；Bot 不依赖 CLI。
 
+## 运行 Playground
+
+在项目根目录执行 [CLI Playground](../../playground/cli_playground.py)：
+
+```bash
+uv sync --locked --group dev
+uv run python playground/cli_playground.py
+```
+
+默认运行全部场景，也可单独选择：
+
+```bash
+uv run python playground/cli_playground.py commands --name Aurora
+uv run python playground/cli_playground.py plugins --name 小极光
+uv run python playground/cli_playground.py config --message "你好，Aurora"
+uv run python playground/cli_playground.py validation
+```
+
+| 场景 | 观察内容 |
+| --- | --- |
+| `commands` | 命令规格、子命令帮助、选项解析、参数透传与退出码 |
+| `plugins` | 内存声明和目录插件发现、帮助输出的构造边界、ctx 注入与独立 Host |
+| `config` | 模板初始化、配置编辑、类型化读取、内存值替换与资源补齐 |
+| `validation` | 命令重名、依赖缺失、调用点缺失、路径越界和配置目标冲突 |
+
+示例使用真实 CLI 接口，通过显式来源选择演示插件。插件、配置和资源保存在临时目录中，结束后清理；运行无需网络、模型或个人配置。输出中的 `$ aurora ...` 表示脚本使用演示命令目录执行的调用，`demo`、`greet` 和 `local` 在该目录中注册。
+
+脚本在关键边界检查实际结果。预期的参数错误和声明冲突会显示对应提示，异常结果会使脚本失败。可调整脚本中的 `COMMAND`、namespace、配置形状或无效声明，观察真实接口的行为。
+
 ## 模块职责
 
 | 模块 | 职责 |
