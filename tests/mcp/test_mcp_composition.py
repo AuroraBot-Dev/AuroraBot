@@ -7,11 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurora.configs import load_config
-from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     TREE_LAUNCHER_BINDINGS,
     ChatMessage,
     EnvironmentEvent,
@@ -24,25 +20,29 @@ from aurorabot.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.mcp import McpRuntime
-from aurorabot.contracts.pkgs.world import WorldJournal
-from aurorabot.kernel import BuiltinSource, compose, module
-from aurorabot.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemoteTool, McpToolsPage, prepare_mcp
-from aurorabot.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
-from aurorabot.mcp.module import build_mcp_specs
-from aurorabot.runtime import assemble_runtime, create_runtime, run_runtime
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.mcp import McpRuntime
+from aurora_bot.contracts.pkgs.world import WorldJournal
+from aurora_bot.kernel import BuiltinSource, compose, module
+from aurora_bot.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemoteTool, McpToolsPage, prepare_mcp
+from aurora_bot.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
+from aurora_bot.mcp.module import build_mcp_specs
+from aurora_bot.runtime import assemble_runtime, create_runtime, run_runtime
+from aurora_cli.configs import load_config
+from aurora_cli.configs.apps import CONFIG_SPEC as APPS_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora_cli.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
 from tests.support.model import FakeModelDirectory
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
     from pathlib import Path
 
-    from aurora.contracts.config import AuroraConfig
-    from aurorabot.contracts import TreeActivity
-    from aurorabot.contracts.pkgs.runtime import TreeLauncher
-    from aurorabot.kernel import ModuleContext
-    from aurorabot.mcp.client import InboundEventHandler
+    from aurora_bot.contracts import TreeActivity
+    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.kernel import ModuleContext
+    from aurora_bot.mcp.client import InboundEventHandler
+    from aurora_cli.contracts.config import AuroraConfig
 
 _PACKAGE = "org.example.lifecycle"
 _TOOL_ID = f"{_PACKAGE}:tool/definition/ping"

@@ -6,35 +6,35 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.contracts import TreeStatus
-from aurorabot.contracts.pkgs.agents import AgentCatalog
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.engine import AgentTreeRunner
-from aurorabot.contracts.pkgs.memory import MemoryReader
-from aurorabot.contracts.pkgs.prompt import PromptAssembler
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.pkgs.world import WorldJournal
-from aurorabot.contracts.process import TreeProcessDefinition
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.contracts.resource_query import ResourceQuery
-from aurorabot.engine import AgentTreeRunner as ConcreteRunner
-from aurorabot.engine.config import EngineConfig
-from aurorabot.kernel import BuiltinSource, compose_managed, module
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.runtime import create_runtime
+from aurora_bot.contracts import TreeStatus
+from aurora_bot.contracts.pkgs.agents import AgentCatalog
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.engine import AgentTreeRunner
+from aurora_bot.contracts.pkgs.memory import MemoryReader
+from aurora_bot.contracts.pkgs.prompt import PromptAssembler
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.pkgs.world import WorldJournal
+from aurora_bot.contracts.process import TreeProcessDefinition
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.contracts.resource_query import ResourceQuery
+from aurora_bot.engine import AgentTreeRunner as ConcreteRunner
+from aurora_bot.engine.config import EngineConfig
+from aurora_bot.kernel import BuiltinSource, compose_managed, module
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.runtime import create_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def test_selected_runner_process_is_published_and_used_without_loading_default_limits(configured_project: Path) -> None:

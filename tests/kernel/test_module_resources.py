@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationDefinition
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
-from aurorabot.kernel import ModuleSpec, compose, module
-from aurorabot.resources.module import MODULE
+from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationDefinition
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from aurora_bot.kernel import ModuleSpec, compose, module
+from aurora_bot.resources.module import MODULE
 
 if TYPE_CHECKING:
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 class _Settings:

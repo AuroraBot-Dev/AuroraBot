@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.bot.store import JournalBotState
-from aurorabot.clock import PersistentBotClock
-from aurorabot.contracts import AgentDefinition, AgentTree, TreeLaunchRequest, WorldFrontier
-from aurorabot.contracts.bot import BotChange, Goal, GoalStatus, WakePlan, WakeStatus
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.bot.store import JournalBotState
+from aurora_bot.clock import PersistentBotClock
+from aurora_bot.contracts import AgentDefinition, AgentTree, TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts.bot import BotChange, Goal, GoalStatus, WakePlan, WakeStatus
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

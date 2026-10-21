@@ -41,8 +41,8 @@ Agent profile 在 `config/agents.toml` 中显式配置，包括：
 必须导出唯一 `MODULE`。插件用内核的 `@module` 装饰器自描述，与内置能力使用同一装配机制：
 
 ```python
-from aurorabot.contracts import TOOL_CONTRIBUTIONS
-from aurorabot.kernel import ModuleContext, module
+from aurora_bot.contracts import TOOL_CONTRIBUTIONS
+from aurora_bot.kernel import ModuleContext, module
 
 
 @module(name="my.echo", contributes=(TOOL_CONTRIBUTIONS,))
@@ -60,7 +60,7 @@ MODULE = build
 ## 扩展边界
 
 - 插件与宿主在同一进程、同一权限下运行，这是有意的信任边界；只加载你信任的源码。
-- 插件运行时只依赖 `aurorabot.contracts` 与 `aurorabot.kernel`；不要运行时 import 其他 `aurorabot.<pkg>`，跨包能力经内核注入的契约实例调用。
+- 插件运行时只依赖 `aurora_bot.contracts` 与 `aurora_bot.kernel`；不要运行时 import 其他 `aurora_bot.<pkg>`，跨包能力经内核注入的契约实例调用。
 - 不要直接读写 `data/` 下的 WorldJournal；环境效果必须经已声明的 Tool 执行。
 - 依赖缺失、依赖环、同优先级能力冲突、未声明贡献点与重复模块名都在启动前失败，不做静默降级。
 - 密钥只通过环境变量注入，结构与启用状态继续由 TOML 决定；当前不做热加载。

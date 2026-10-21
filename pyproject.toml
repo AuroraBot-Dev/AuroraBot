@@ -23,14 +23,14 @@ dependencies = [
 ]
 
 [project.scripts]
-aurora = "aurora.main:main"
+aurora = "aurora_cli.main:main"
 
 [project.optional-dependencies]
 learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["aurora", "aurora.*", "aurorabot", "aurorabot.*"]
+include = ["aurora_cli", "aurora_cli.*", "aurora_bot", "aurora_bot.*"]
 namespaces = false
 
 [dependency-groups]
@@ -42,7 +42,7 @@ testpaths = ["tests"]
 addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basetemp=tests/.tmp"
 
 [tool.coverage.run]
-source = ["aurora", "aurorabot"]
+source = ["aurora_cli", "aurora_bot"]
 
 [tool.coverage.report]
 fail_under = 20
@@ -91,10 +91,10 @@ ignore = [
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/aurora/__init__.py" = ["PLC0415"]
-"src/aurora/commands/start.py" = ["PLC0415"]
-"src/aurora/utils/logging.py" = ["PLC0415"]
-"src/aurorabot/engine/runtime.py" = ["BLE001"]
+"src/aurora_cli/__init__.py" = ["PLC0415"]
+"src/aurora_cli/commands/start.py" = ["PLC0415"]
+"src/aurora_cli/utils/logging.py" = ["PLC0415"]
+"src/aurora_bot/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]
 pythonVersion = "3.12"

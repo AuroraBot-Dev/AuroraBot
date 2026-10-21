@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
-from aurora.configurator import assemble_config
-from aurorabot.world.config import StorageEntry, resolve_storage_directory
+from aurora_bot.world.config import StorageEntry, resolve_storage_directory
+from aurora_cli import load_config
+from aurora_cli.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
+from aurora_cli.configurator import assemble_config
 
 if TYPE_CHECKING:
     from pathlib import Path

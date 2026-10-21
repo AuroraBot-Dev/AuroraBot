@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from litellm import get_llm_provider
 
-from aurorabot.ai import (
+from aurora_bot.ai import (
     LiteLLMModelGateway,
     ModelEndpoint,
     ProviderEndpoint,
@@ -16,7 +16,7 @@ from aurorabot.ai import (
     to_openai_messages,
     to_openai_tools,
 )
-from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition
+from aurora_bot.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition
 
 PROVIDER_TOOL_NAME_MAX_LENGTH = 64
 MODEL_ATTEMPT_TIMEOUT_SECONDS = 0.1

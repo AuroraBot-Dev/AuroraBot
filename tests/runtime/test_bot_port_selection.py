@@ -6,25 +6,25 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurorabot.bot.store import JournalBotState
-from aurorabot.clock import PersistentBotClock
-from aurorabot.contracts.bot import WakeStatus
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.clock import BotClock
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.kernel import BuiltinSource, compose_managed, module
-from aurorabot.runtime import create_runtime
+from aurora_bot.bot.store import JournalBotState
+from aurora_bot.clock import PersistentBotClock
+from aurora_bot.contracts.bot import WakeStatus
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.clock import BotClock
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.kernel import BuiltinSource, compose_managed, module
+from aurora_bot.runtime import create_runtime
 from tests.ai.endpoint_support import _config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 _DUE = datetime(2026, 10, 18, tzinfo=UTC)
 _GOAL = "aurora:goal/selected-state"

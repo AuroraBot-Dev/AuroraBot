@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurora.commands.app.models import DiscoveryError, RegistryWriteError
-from aurora.commands.app.store import AppStore
-from aurora.commands.app.verify import MCPVerifier
-from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.commands.app.models import DiscoveryError, RegistryWriteError
+from aurora_cli.commands.app.store import AppStore
+from aurora_cli.commands.app.verify import MCPVerifier
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 from tests.cli.app.clone_support import CONFLICTING_PACKAGE, apps_root_entries, registry_entry, repository
 from tests.cli.app.install_support import DEFAULT_PROTOCOL, FakeMcpClientFactory, stub_cli
 

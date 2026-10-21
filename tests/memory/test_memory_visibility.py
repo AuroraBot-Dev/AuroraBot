@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.bot.store import JournalBotState
-from aurorabot.contracts.bot import BotChange, Goal, GoalStatus
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.contracts.world import MemoryScopeSnapshot, WorldFrontier
-from aurorabot.memory import Memory
-from aurorabot.memory_model.rules import RuleMemoryPolicy
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.bot.store import JournalBotState
+from aurora_bot.contracts.bot import BotChange, Goal, GoalStatus
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.contracts.world import MemoryScopeSnapshot, WorldFrontier
+from aurora_bot.memory import Memory
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

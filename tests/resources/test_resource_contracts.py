@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts.data import freeze_object
-from aurorabot.contracts.resource import ResourceAlias, ResourceDescriptor, ResourceInstance, ResourceKey, ResourceRef
+from aurora_bot.contracts.data import freeze_object
+from aurora_bot.contracts.resource import ResourceAlias, ResourceDescriptor, ResourceInstance, ResourceKey, ResourceRef
 
 if TYPE_CHECKING:
     from typing import Any

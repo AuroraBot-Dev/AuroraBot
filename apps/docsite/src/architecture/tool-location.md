@@ -10,7 +10,7 @@ order: 7
 
 ## 动机
 
-当前 setup、check、docs、panel、donk 等命令通过 `shutil.which` / `command -v` 在 PATH 中解析 git、uv、pnpm 等外部工具（`src/aurora/utils/process.py`、`src/aurora/commands/setup.py`、`src/aurora/utils/pnpm.py`）。这要求这些工具预先安装并暴露在 PATH 中。
+当前 setup、check、docs、panel、donk 等命令通过 `shutil.which` / `command -v` 在 PATH 中解析 git、uv、pnpm 等外部工具（`src/aurora_cli/utils/process.py`、`src/aurora_cli/commands/setup.py`、`src/aurora_cli/utils/pnpm.py`）。这要求这些工具预先安装并暴露在 PATH 中。
 
 未来会引入启动器：在软件内部携带并维护独立的 python/uv/pnpm/git，供项目引导与运行使用。启动器不能依赖系统的 PATH，因此外部工具的位置必须可以被显式指定。
 
@@ -21,13 +21,13 @@ order: 7
 1. **配置**：`config/runtime.toml` 新增 `[runtime.tools]` 段，为可选字段：`git`、`uv`、`pnpm`、`python`。值是可执行文件路径（绝对路径或相对路径）。
 2. **环境变量**：`AURORA_GIT_PATH`、`AURORA_UV_PATH`、`AURORA_PNPM_PATH`、`AURORA_PYTHON_PATH` 作为兜底，供启动器在尚未写入个人配置时注入内部工具位置。
 3. **解析顺序**：显式配置 → 环境变量 → PATH 查找。解析结果只在该次进程运行中使用，不写回配置。
-4. **统一解析入口**：`src/aurora/utils/process.py` 提供 `resolve_tool(name)`，`run_process` 与 `src/aurora/utils/pnpm.py`、`src/aurora/commands/setup.py` 改用它；工具路径仅在进程启动时读取一次。
+4. **统一解析入口**：`src/aurora_cli/utils/process.py` 提供 `resolve_tool(name)`，`run_process` 与 `src/aurora_cli/utils/pnpm.py`、`src/aurora_cli/commands/setup.py` 改用它；工具路径仅在进程启动时读取一次。
 
 ## 影响面
 
-- `src/aurora/configs/runtime.py`：解析 `[runtime.tools]`。
-- `src/aurora/utils/process.py`：`resolve_tool` 与 `run_process` 改造。
-- `src/aurora/utils/pnpm.py`、`src/aurora/commands/setup.py`、`src/aurora/commands/check.py`、`src/aurora/commands/donk.py`：改用统一解析。
+- `src/aurora_cli/configs/runtime.py`：解析 `[runtime.tools]`。
+- `src/aurora_cli/utils/process.py`：`resolve_tool` 与 `run_process` 改造。
+- `src/aurora_cli/utils/pnpm.py`、`src/aurora_cli/commands/setup.py`、`src/aurora_cli/commands/check.py`、`src/aurora_cli/commands/donk.py`：改用统一解析。
 - `scripts/{linux,macos,windows}/setup.*`：前置检查改用解析结果；接收可选工具路径参数或环境变量。
 - 测试：离线 fake 工具路径，不依赖真实安装。
 

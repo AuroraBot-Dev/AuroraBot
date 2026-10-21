@@ -1,7 +1,7 @@
 """clone 与 GitHub 测试的共享辅助：假进程、假 GitHub、假 clone 与仓库夹具。
 
 沿用 ``app_search_support.py`` 建立的惯例：文件名不以 ``test_`` 开头，pytest
-不收集它，覆盖率也只统计 ``aurora`` 与 ``aurorabot``。
+不收集它，覆盖率也只统计 ``aurora_cli`` 与 ``aurora_bot``。
 
 只放 fake、fixture 与 builder，不复制生产业务规则 —— 一份规则若在这里有第二个
 实现，那它就没被任何测试真正验证过。所以 ``FakeProcessRunner`` 不模拟 git 的
@@ -16,15 +16,15 @@ from typing import TYPE_CHECKING, Any
 
 import httpx2
 
-from aurora.commands.app.clone import ProcessResult
-from aurora.commands.app.models import CloneResult, Repository
+from aurora_cli.commands.app.clone import ProcessResult
+from aurora_cli.commands.app.models import CloneResult, Repository
 from tests.cli.app.search_support import FakeTransport
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
-    from aurora.commands.app.clone import Staging
+    from aurora_cli.commands.app.clone import Staging
 
 DEFAULT_COMMIT = "3f2a1c9d4e5b6a7c8d9e0f1a2b3c4d5e6f7a8b9c"
 APP_PACKAGE = "github.churk-ben.aurora-qq"

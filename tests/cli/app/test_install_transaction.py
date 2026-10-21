@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app.install import PreparedInstall
-from aurora.commands.app.models import InstallError, PathError, PlanError, RawApp, RegistryWriteError
-from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
-from aurora.commands.app.transaction import install_transaction, plan_removal, read_origin
-from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
-from aurora.configurator import assemble_config
+from aurora_cli.commands.app.install import PreparedInstall
+from aurora_cli.commands.app.models import InstallError, PathError, PlanError, RawApp, RegistryWriteError
+from aurora_cli.commands.app.store import APPS_RELATIVE_PATH, AppStore
+from aurora_cli.commands.app.transaction import install_transaction, plan_removal, read_origin
+from aurora_cli.configs.apps import CONFIG_SPEC as APPS_CONFIG
+from aurora_cli.configurator import assemble_config
 from tests.cli.app.clone_support import apps_root_entries, project, registry_entry
 from tests.cli.app.install_support import (
     DEFAULT_COMMIT,
@@ -209,7 +209,7 @@ def test_rollback_failure_reports_the_exact_residue(tmp_path: Path, monkeypatch:
     """回滚也失败是严重状态：必须报出确切的残留路径，而不是一句「安装失败」。"""
     store = _store(tmp_path)
     monkeypatch.setattr(AppStore, "add_app", _failing_write)
-    monkeypatch.setattr("aurora.commands.app.transaction._undo_install", _cannot_undo)
+    monkeypatch.setattr("aurora_cli.commands.app.transaction._undo_install", _cannot_undo)
 
     with pytest.raises(InstallError) as error_info:
         install_transaction(store, _prepared(store.project_root))

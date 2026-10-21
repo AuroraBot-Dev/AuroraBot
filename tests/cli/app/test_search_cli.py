@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 import httpx2
 import pytest
 
-from aurora.commands import app as app_module
-from aurora.commands.app.models import DiscoveryError
-from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
+from aurora_cli.commands import app as app_module
+from aurora_cli.commands.app.models import DiscoveryError
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
 from tests.cli.app.search_support import FakeTransport, captured, cli, page, repository, stub, use_fake_transport
 
 if TYPE_CHECKING:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
-from aurorabot.memory_model.dataset import MemoryEpisode, MemoryExample
+from aurora_bot.memory_model.dataset import MemoryEpisode, MemoryExample
 from tests.memory.tgn_support import _request
 
 

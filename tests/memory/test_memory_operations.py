@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from aurorabot.contracts import WorldFrontier
-from aurorabot.contracts.operation import OperationStatus
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.memory.graph import graph_interactions
+from aurora_bot.contracts import WorldFrontier
+from aurora_bot.contracts.operation import OperationStatus
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.memory.graph import graph_interactions
 from tests.memory.operations_support import GOAL, OUTCOME, SOURCE, feedback_arguments, prepared_runtime, request
 
 if TYPE_CHECKING:

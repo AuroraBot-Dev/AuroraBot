@@ -20,7 +20,7 @@ from mcp.types import (
     TextContent,
 )
 
-from aurorabot.mcp import (
+from aurora_bot.mcp import (
     TOOL_CONTRACT_EXTENSION,
     McpCallRejectedError,
     McpCallUnknownError,
@@ -84,7 +84,7 @@ def test_sdk_adapter_uses_frozen_client_options_and_projects_official_results(
         captured.update(options)
         return official_client(server_or_transport, **options)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("aurorabot.mcp.client.Client", recording_client)
+    monkeypatch.setattr("aurora_bot.mcp.client.Client", recording_client)
 
     async def scenario() -> None:
         client = await SdkMcpClientFactory().open(_stdio_spec(tmp_path), _ignore_event)
@@ -127,7 +127,7 @@ def test_stdio_factory_preserves_command_whitelist_cwd_and_log_policy(
         captured["errlog"] = errlog
         return server
 
-    monkeypatch.setattr("aurorabot.mcp.client.stdio_client", fake_stdio_client)
+    monkeypatch.setattr("aurora_bot.mcp.client.stdio_client", fake_stdio_client)
 
     async def scenario() -> None:
         client = await SdkMcpClientFactory().open(_stdio_spec(tmp_path), _ignore_event)
@@ -329,8 +329,8 @@ def test_http_factory_disables_redirects_uses_one_timeout_and_releases_client(mo
         captured["http_client"] = http_client
         return server
 
-    monkeypatch.setattr("aurorabot.mcp.client.httpx2.AsyncClient", make_http_client)
-    monkeypatch.setattr("aurorabot.mcp.client.streamable_http_client", fake_streamable_http_client)
+    monkeypatch.setattr("aurora_bot.mcp.client.httpx2.AsyncClient", make_http_client)
+    monkeypatch.setattr("aurora_bot.mcp.client.streamable_http_client", fake_streamable_http_client)
 
     async def scenario() -> None:
         client = await SdkMcpClientFactory().open(_http_spec(), _ignore_event)

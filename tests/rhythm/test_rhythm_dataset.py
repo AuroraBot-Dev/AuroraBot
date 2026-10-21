@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.cadence.state import observation_data
-from aurorabot.rhythm.dataset import read_episodes, validate_partition
+from aurora_bot.cadence.state import observation_data
+from aurora_bot.rhythm.dataset import read_episodes, validate_partition
 from tests.rhythm.support import make_episode
 from tests.support.training import _write
 

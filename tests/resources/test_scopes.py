@@ -10,18 +10,18 @@ from typing import cast
 
 import pytest
 
-from aurora.configs.scopes import CONFIG_SPEC as SCOPES_CONFIG
-from aurora.configurator import assemble_config
-from aurorabot.cadence import CADENCE_SCOPE
-from aurorabot.console.events import CONSOLE_SCOPE
-from aurorabot.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, ToolCall, ToolOutput, ToolStatus
-from aurorabot.contracts.scope import merge_scope_catalog
-from aurorabot.contracts.tree_lifecycle import tree_scope
-from aurorabot.kernel import BuiltinSource, ModuleSpec
-from aurorabot.mcp.scopes import mcp_scope
-from aurorabot.runtime.assembly import declared_scopes, validate_declared_scopes
-from aurorabot.runtime.events import RUNTIME_SCOPE
-from aurorabot.tools import WORLD_SCOPES_TOOL, WorldScopesTool
+from aurora_bot.cadence import CADENCE_SCOPE
+from aurora_bot.console.events import CONSOLE_SCOPE
+from aurora_bot.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, ToolCall, ToolOutput, ToolStatus
+from aurora_bot.contracts.scope import merge_scope_catalog
+from aurora_bot.contracts.tree_lifecycle import tree_scope
+from aurora_bot.kernel import BuiltinSource, ModuleSpec
+from aurora_bot.mcp.scopes import mcp_scope
+from aurora_bot.runtime.assembly import declared_scopes, validate_declared_scopes
+from aurora_bot.runtime.events import RUNTIME_SCOPE
+from aurora_bot.tools import WORLD_SCOPES_TOOL, WorldScopesTool
+from aurora_cli.configs.scopes import CONFIG_SPEC as SCOPES_CONFIG
+from aurora_cli.configurator import assemble_config
 from tests import PROJECT_ROOT
 
 _EXPECTED_OWNED_SCOPES = (

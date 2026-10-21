@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts.artifact import ArtifactIntegrityError
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.contracts.resource_query import MAX_RESOURCE_PAGE, ResourceQuery
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts.artifact import ArtifactIntegrityError
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.contracts.resource_query import MAX_RESOURCE_PAGE, ResourceQuery
 
 if TYPE_CHECKING:
     from pathlib import Path

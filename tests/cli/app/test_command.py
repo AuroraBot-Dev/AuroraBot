@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurora.utils.process import EXIT_FAILURE
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.utils.process import EXIT_FAILURE
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -9,28 +9,28 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts import ToolScopes
-from aurorabot.contracts.artifact import ArtifactIntegrityError
-from aurorabot.contracts.operation import (
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts import ToolScopes
+from aurora_bot.contracts.artifact import ArtifactIntegrityError
+from aurora_bot.contracts.operation import (
     OperationDefinition,
     OperationKind,
     OperationRequest,
     OperationResult,
     OperationStatus,
 )
-from aurorabot.contracts.resource import ResourceAlias, ResourceKey, ResourceRef
-from aurorabot.operations.registry import OperationRegistry
-from aurorabot.operations.requests import DEFAULT_INLINE_REQUEST
-from aurorabot.resources.catalog import ResourceCatalog
-from aurorabot.utils.serialization import thaw_json
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts.resource import ResourceAlias, ResourceKey, ResourceRef
+from aurora_bot.operations.registry import OperationRegistry
+from aurora_bot.operations.requests import DEFAULT_INLINE_REQUEST
+from aurora_bot.resources.catalog import ResourceCatalog
+from aurora_bot.utils.serialization import thaw_json
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
-    from aurorabot.contracts.artifact import ArtifactInfo
+    from aurora_bot.contracts.artifact import ArtifactInfo
 
 _BOT = "lab:bot/persistent"
 _TEXT = "完整原始参数" * (2 * DEFAULT_INLINE_REQUEST)

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from aurorabot.contracts import AgentDefinition, AgentTree, MemorySnapshot
-from aurorabot.contracts.bot import Checkpoint, Goal
-from aurorabot.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
-from aurorabot.memory.selection import select_memories
-from aurorabot.memory_model.rules import RuleMemoryPolicy
-from aurorabot.prompt import PromptAssembler
+from aurora_bot.contracts import AgentDefinition, AgentTree, MemorySnapshot
+from aurora_bot.contracts.bot import Checkpoint, Goal
+from aurora_bot.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
+from aurora_bot.memory.selection import select_memories
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.prompt import PromptAssembler
 from tests.memory.facts import _NOW, _fact
 from tests.support.prompt import make_prompt_catalog
 

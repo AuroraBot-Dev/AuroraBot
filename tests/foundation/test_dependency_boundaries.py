@@ -3,15 +3,15 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
-from aurora.configs import config_specs
+from aurora_cli.configs import config_specs
 from tests import PROJECT_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 _ROOT = PROJECT_ROOT
-_FRAMEWORK = _ROOT / "src" / "aurorabot"
-_CLI = _ROOT / "src" / "aurora"
+_FRAMEWORK = _ROOT / "src" / "aurora_bot"
+_CLI = _ROOT / "src" / "aurora_cli"
 _LEAF_PACKAGES = frozenset({"contracts", "utils"})
 _MECHANISM_PACKAGES = frozenset({"kernel", "runtime"})
 _TYPE_ONLY_SRC: dict[str, set[str]] = {}
@@ -24,29 +24,29 @@ def _base_allowed(package: str) -> set[str]:
     新增能力包无需修改本文件。
     """
     if package in _LEAF_PACKAGES:
-        return {f"aurorabot.{package}"}
-    allowed = {f"aurorabot.{package}", "aurorabot.contracts", "aurorabot.utils"}
+        return {f"aurora_bot.{package}"}
+    allowed = {f"aurora_bot.{package}", "aurora_bot.contracts", "aurora_bot.utils"}
     if package in _MECHANISM_PACKAGES:
-        allowed.add("aurorabot.kernel")
+        allowed.add("aurora_bot.kernel")
     return allowed
 
 
 def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
     """功能包运行时只能依赖 contracts/utils/自身；跨包能力只允许 TYPE_CHECKING。
 
-    每个包的 ``module.py`` 是组合元数据，额外允许引用 ``aurorabot.kernel`` 声明自身。
+    每个包的 ``module.py`` 是组合元数据，额外允许引用 ``aurora_bot.kernel`` 声明自身。
     """
     violations: list[str] = []
     for path in _FRAMEWORK.rglob("*.py"):
         package = path.relative_to(_FRAMEWORK).parts[0]
         base = _base_allowed(package)
         if path.name == "module.py":
-            base = base | {"aurorabot.kernel"}
+            base = base | {"aurora_bot.kernel"}
         type_only = base | _TYPE_ONLY_SRC.get(package, frozenset())
         for module, guarded in _imports_of(path):
-            if module in {"aurora", "ops"} or module.startswith(("aurora.", "ops.")):
+            if module in {"aurora_cli", "ops"} or module.startswith(("aurora_cli.", "ops.")):
                 violations.append(f"{path.relative_to(_ROOT)} imports {module}")
-            if not module.startswith("aurorabot.") or _src_package(module) == f"aurorabot.{package}":
+            if not module.startswith("aurora_bot.") or _src_package(module) == f"aurora_bot.{package}":
                 continue
             allowed = type_only if guarded else base
             if _src_package(module) not in {_src_package(item) for item in allowed}:
@@ -76,7 +76,7 @@ def test_each_project_toml_has_one_registered_config_module() -> None:
 def test_runtime_core_does_not_store_unrelated_capabilities() -> None:
     """门面只依赖实际调用的能力，避免为接线或观察转存其他模块。"""
     path = _FRAMEWORK / "runtime" / "core.py"
-    unrelated = {"aurorabot.cadence", "aurorabot.memory", "aurorabot.mcp"}
+    unrelated = {"aurora_bot.cadence", "aurora_bot.memory", "aurora_bot.mcp"}
 
     assert not {_src_package(module) for module, _ in _imports_of(path)} & unrelated
 
@@ -86,9 +86,9 @@ def test_cli_main_only_dispatches_through_command_layer() -> None:
     aurora_imports = {
         module
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if (module := _imported_module(node)).startswith("aurora.")
+        if (module := _imported_module(node)).startswith("aurora_cli.")
     }
-    assert aurora_imports == {"aurora.commands", "aurora.commander"}
+    assert aurora_imports == {"aurora_cli.commands", "aurora_cli.commander"}
 
 
 def _imports_of(path: Path) -> list[tuple[str, bool]]:

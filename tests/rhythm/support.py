@@ -3,8 +3,8 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from aurorabot.contracts.rhythm import RhythmObservation
-from aurorabot.rhythm.dataset import RhythmEpisode, RhythmExample
+from aurora_bot.contracts.rhythm import RhythmObservation
+from aurora_bot.rhythm.dataset import RhythmEpisode, RhythmExample
 
 
 def make_episode(episode_id: str, high_pressure: bool, at: datetime) -> RhythmEpisode:

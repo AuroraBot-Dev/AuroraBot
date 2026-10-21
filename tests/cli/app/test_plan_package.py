@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app.install import (
+from aurora_cli.commands.app.install import (
     check_package_collision,
     check_user_package,
     derive_package,
     normalize_segment,
 )
-from aurora.commands.app.models import PlanError
-from aurora.commands.app.store import AppStore
+from aurora_cli.commands.app.models import PlanError
+from aurora_cli.commands.app.store import AppStore
 from tests.cli.app.clone_support import APP_PACKAGE, CONFLICTING_PACKAGE, project, registry_entry
 
 if TYPE_CHECKING:

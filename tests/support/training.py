@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurorabot.rhythm.dataset import write_episodes as write_rhythm_episodes
+from aurora_bot.rhythm.dataset import write_episodes as write_rhythm_episodes
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.rhythm.dataset import RhythmEpisode
+    from aurora_bot.rhythm.dataset import RhythmEpisode
 
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)

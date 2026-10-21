@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.apps import CONFIG_SPEC as APPS_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurora.configurator import assemble_config
-from aurorabot.mcp import McpAppSpec, McpEventMode, McpTransport
-from aurorabot.mcp.config import AppConfig, PlatformConfig
-from aurorabot.mcp.module import build_mcp_specs
-from aurorabot.mcp.runtime import app_owned_scopes
-from aurorabot.mcp.scopes import owns_scope
+from aurora_bot.mcp import McpAppSpec, McpEventMode, McpTransport
+from aurora_bot.mcp.config import AppConfig, PlatformConfig
+from aurora_bot.mcp.module import build_mcp_specs
+from aurora_bot.mcp.runtime import app_owned_scopes
+from aurora_bot.mcp.scopes import owns_scope
+from aurora_cli import load_config
+from aurora_cli.configs.apps import CONFIG_SPEC as APPS_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora_cli.configurator import assemble_config
 
 _STDIO = """\
 [[app]]

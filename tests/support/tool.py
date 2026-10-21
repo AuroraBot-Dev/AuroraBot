@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     ToolCall,
     ToolDefinition,
     ToolOutput,

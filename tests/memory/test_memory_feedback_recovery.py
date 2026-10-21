@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts.operation import OperationRequest, OperationResult, OperationStatus
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts.operation import OperationRequest, OperationResult, OperationStatus
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.memory.operations_support import feedback_arguments, prepared_runtime, request
 from tests.support.model import TemplateModel as FakeModel
 

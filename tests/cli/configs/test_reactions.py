@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.configs.reactions import CONFIG_SPEC as REACTIONS_CONFIG
-from aurora.configurator import assemble_config
-from aurorabot.cadence import ReactiveRule
-from aurorabot.cadence.config import ReactionConfig, ReactionsConfig
-from aurorabot.contracts import MCP_EVENT_RECEIVED, WorldCommit, WorldFrontier
+from aurora_bot.cadence import ReactiveRule
+from aurora_bot.cadence.config import ReactionConfig, ReactionsConfig
+from aurora_bot.contracts import MCP_EVENT_RECEIVED, WorldCommit, WorldFrontier
+from aurora_cli.configs.reactions import CONFIG_SPEC as REACTIONS_CONFIG
+from aurora_cli.configurator import assemble_config
 from tests import PROJECT_ROOT
 
 if TYPE_CHECKING:

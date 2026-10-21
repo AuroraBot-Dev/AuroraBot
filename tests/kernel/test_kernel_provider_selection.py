@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts.kernel import ContributionKey
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.memory import MemoryPolicy
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.kernel import BuiltinSource, compose, compose_managed, module
-from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.contracts.kernel import ContributionKey
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.memory import MemoryPolicy
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.kernel import BuiltinSource, compose, compose_managed, module
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
 from tests.ai.learning_support import _config
 from tests.kernel.support import NoConfigSettings as _Settings
 from tests.support.model import TemplateModel as FakeModel
@@ -20,7 +20,7 @@ from tests.support.model import TemplateModel as FakeModel
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 class Alpha:

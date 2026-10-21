@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
-from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from aurora_bot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 from tests.memory.tgn_support import _cold, _network, _request
 
 if TYPE_CHECKING:
-    from aurorabot.contracts.memory_graph import MemoryInteraction
-    from aurorabot.memory_model.tgn import GraphState
+    from aurora_bot.contracts.memory_graph import MemoryInteraction
+    from aurora_bot.memory_model.tgn import GraphState
 
 
 def test_unchanged_prefix_only_applies_new_interactions(monkeypatch: pytest.MonkeyPatch) -> None:

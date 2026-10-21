@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurorabot.contracts.prompt import PromptFragment
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.prompt import PromptCatalog
+from aurora_bot.contracts.prompt import PromptFragment
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.prompt import PromptCatalog
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     AgentDefinition,
 )
-from aurorabot.prompt import PromptAssembler
+from aurora_bot.prompt import PromptAssembler
 
 
 def make_prompt_catalog(system: tuple[str, ...], agents: Mapping[str, str]) -> PromptCatalog:

@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:

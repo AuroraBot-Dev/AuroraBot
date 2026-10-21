@@ -8,31 +8,31 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.contracts import WorldFrontier
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
-from aurorabot.contracts.resource_query import ResourceQuery
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.memory_model.config import MemoryModelConfig
-from aurorabot.memory_model.tgn import TemporalMemoryNetwork
-from aurorabot.memory_model.training import train
-from aurorabot.runtime import compose_runtime
+from aurora_bot.contracts import WorldFrontier
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
+from aurora_bot.contracts.resource_query import ResourceQuery
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.memory_model.config import MemoryModelConfig
+from aurora_bot.memory_model.tgn import TemporalMemoryNetwork
+from aurora_bot.memory_model.training import train
+from aurora_bot.runtime import compose_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.memory.support import episodes
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora import AuroraConfig
-    from aurorabot.contracts.artifact import ArtifactInfo
-    from aurorabot.contracts.memory_graph import MemoryInteraction
-    from aurorabot.memory_model.state import GraphState
-    from aurorabot.runtime.core import AuroraRuntime
+    from aurora_bot.contracts.artifact import ArtifactInfo
+    from aurora_bot.contracts.memory_graph import MemoryInteraction
+    from aurora_bot.memory_model.state import GraphState
+    from aurora_bot.runtime.core import AuroraRuntime
+    from aurora_cli import AuroraConfig
 
 
 def _config(project: Path, *, interval: float = 3600.0, learned: bool = True) -> AuroraConfig:

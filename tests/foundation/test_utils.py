@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 from loguru import logger as _loguru_logger
 
-from aurorabot.utils import (
+from aurora_bot.utils import (
     NamePatternError,
     configure_console_logging,
     configure_logging,

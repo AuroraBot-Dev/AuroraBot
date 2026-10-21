@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from aurorabot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
-from aurorabot.contracts import TreeStatus
-from aurorabot.runtime import compose_runtime
+from aurora_bot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
+from aurora_bot.contracts import TreeStatus
+from aurora_bot.runtime import compose_runtime
 from tests.ai.endpoint_support import _config, _read_definition
 
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from aurorabot.runtime.core import AuroraRuntime
+    from aurora_bot.runtime.core import AuroraRuntime
 
 
 def test_actual_gateway_versions_are_recorded_before_call_and_survive_config_replacement(

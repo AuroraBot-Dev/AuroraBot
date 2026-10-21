@@ -5,15 +5,15 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.contracts.pkgs.memory import MemoryPolicy, MemoryReader
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.memory_model.config import MemoryModelConfig
-from aurorabot.memory_model.tgn import TGN_KEY, load_policy
-from aurorabot.memory_model.training import train
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.contracts.pkgs.memory import MemoryPolicy, MemoryReader
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.memory_model.config import MemoryModelConfig
+from aurora_bot.memory_model.tgn import TGN_KEY, load_policy
+from aurora_bot.memory_model.training import train
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
 from tests.memory.support import episodes
 from tests.support.model import TemplateModel as FakeModel
 

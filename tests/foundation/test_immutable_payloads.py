@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurorabot.ai.openai import to_openai_messages
-from aurorabot.contracts import (
+from aurora_bot.ai.openai import to_openai_messages
+from aurora_bot.contracts import (
     ChatMessage,
     EnvironmentEvent,
     ToolCall,
@@ -19,12 +19,12 @@ from aurorabot.contracts import (
     WorldCommitInput,
     WorldFrontier,
 )
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.mcp.models import McpInboundEvent
-from aurorabot.memory import Memory
-from aurorabot.memory_model.rules import RuleMemoryPolicy
-from aurorabot.utils import thaw_json
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.mcp.models import McpInboundEvent
+from aurora_bot.memory import Memory
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.utils import thaw_json
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

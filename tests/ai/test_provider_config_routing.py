@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 from litellm import get_llm_provider
 
-from aurora.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
-from aurorabot.ai import gateway
-from aurorabot.ai.config import EndpointConfig, EndpointsConfig
-from aurorabot.contracts import TreeStatus
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.runtime import compose_runtime
+from aurora_bot.ai import gateway
+from aurora_bot.ai.config import EndpointConfig, EndpointsConfig
+from aurora_bot.contracts import TreeStatus
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.runtime import compose_runtime
+from aurora_cli.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
 from tests.ai.endpoint_support import _config, _read_definition
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from aurora import AuroraConfig
+    from aurora_cli import AuroraConfig
 
 _PROVIDER = "lab:ai/provider/accounts/primary"
 _ENDPOINT = "lab:ai/endpoint/main"

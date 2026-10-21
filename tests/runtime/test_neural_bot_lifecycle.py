@@ -9,36 +9,36 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from aurorabot.cadence import Cadence
-from aurorabot.cadence.state import observation_data
-from aurorabot.clock import PersistentBotClock
-from aurorabot.contracts import ScopeCatalog, WorldFrontier
-from aurorabot.contracts.bot import WakeStatus
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.cadence import Cadence as CadencePort
-from aurorabot.contracts.pkgs.cadence import RhythmPolicy
-from aurorabot.contracts.pkgs.clock import BotClock
-from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryReader
-from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
-from aurorabot.contracts.rhythm import RhythmObservation
-from aurorabot.kernel import BuiltinSource, compose_managed, module
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.memory import Memory
-from aurorabot.memory_model.config import MemoryModelConfig
-from aurorabot.memory_model.rules import RuleMemoryPolicy
-from aurorabot.memory_model.training import train as train_memory
-from aurorabot.rhythm.config import RhythmConfig
-from aurorabot.rhythm.rules import RuleRhythmPolicy
-from aurorabot.rhythm.training import train as train_rhythm
-from aurorabot.runtime import create_runtime
-from aurorabot.utils import thaw_json
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.cadence import Cadence
+from aurora_bot.cadence.state import observation_data
+from aurora_bot.clock import PersistentBotClock
+from aurora_bot.contracts import ScopeCatalog, WorldFrontier
+from aurora_bot.contracts.bot import WakeStatus
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.cadence import Cadence as CadencePort
+from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
+from aurora_bot.contracts.pkgs.clock import BotClock
+from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryReader
+from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from aurora_bot.contracts.rhythm import RhythmObservation
+from aurora_bot.kernel import BuiltinSource, compose_managed, module
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.memory import Memory
+from aurora_bot.memory_model.config import MemoryModelConfig
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.memory_model.training import train as train_memory
+from aurora_bot.rhythm.config import RhythmConfig
+from aurora_bot.rhythm.rules import RuleRhythmPolicy
+from aurora_bot.rhythm.training import train as train_rhythm
+from aurora_bot.runtime import create_runtime
+from aurora_bot.utils import thaw_json
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora_cli.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from tests.memory.support import episodes
 from tests.rhythm.support import make_episode
 from tests.runtime.support import PlanningModel
@@ -47,10 +47,10 @@ from tests.support.model import TemplateModel as FakeModel
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora import AuroraConfig
-    from aurorabot.contracts.resource import ResourceRef
-    from aurorabot.kernel import ManagedAssembly, ModuleContext
-    from aurorabot.runtime.core import AuroraRuntime
+    from aurora_bot.contracts.resource import ResourceRef
+    from aurora_bot.kernel import ManagedAssembly, ModuleContext
+    from aurora_bot.runtime.core import AuroraRuntime
+    from aurora_cli import AuroraConfig
 
 _START = datetime(2026, 10, 18, tzinfo=UTC)
 _DUE = _START + timedelta(hours=12)

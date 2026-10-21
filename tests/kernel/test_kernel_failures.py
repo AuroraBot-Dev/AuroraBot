@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.kernel import ModuleLifecycleError, compose_managed, module
+from aurora_bot.kernel import ModuleLifecycleError, compose_managed, module
 from tests.kernel.support import Settings as _Settings
 
 _EXPECTED_RELEASE_ERRORS = 2
 
 if TYPE_CHECKING:
-    from aurorabot.kernel import AsyncCleanup, ModuleContext
+    from aurora_bot.kernel import AsyncCleanup, ModuleContext
 
 
 def test_background_failure_is_not_discarded_when_closing() -> None:

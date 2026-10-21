@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     EnvironmentEvent,
     WorldCommit,
     WorldCommitInput,
     WorldFrontier,
 )
-from aurorabot.mcp import (
+from aurora_bot.mcp import (
     McpAppSpec,
     McpCallResult,
     McpInboundEvent,
@@ -25,7 +25,7 @@ from aurorabot.mcp import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
-    from aurorabot.mcp.client import InboundEventHandler
+    from aurora_bot.mcp.client import InboundEventHandler
 
 
 _TIMEOUT_SECONDS = 5.0

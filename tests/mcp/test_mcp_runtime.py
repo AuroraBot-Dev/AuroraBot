@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     MCP_EVENT_RECEIVED,
     ToolCall,
     ToolOutput,
     ToolStatus,
 )
-from aurorabot.mcp import (
+from aurora_bot.mcp import (
     McpAppSpec,
     McpAppState,
     McpCallResult,
@@ -21,11 +21,11 @@ from aurorabot.mcp import (
     McpToolsPage,
     prepare_mcp,
 )
-from aurorabot.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
-from aurorabot.mcp.scopes import mcp_scope
+from aurora_bot.mcp.events import MCP_APP_DISCONNECTED, MCP_CATALOG_CHANGED
+from aurora_bot.mcp.scopes import mcp_scope
 
 if TYPE_CHECKING:
-    from aurorabot.mcp.client import InboundEventHandler
+    from aurora_bot.mcp.client import InboundEventHandler
 
 from tests.mcp.support import FakeClient, FakeFactory, FakeWorld, _client, _spec, _tool
 

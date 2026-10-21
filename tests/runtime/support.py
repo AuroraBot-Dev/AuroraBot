@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     AgentDefinition,
     AgentTree,
     ChatMessage,

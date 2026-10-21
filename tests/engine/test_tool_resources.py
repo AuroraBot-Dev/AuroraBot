@@ -6,9 +6,9 @@ from dataclasses import replace
 
 import pytest
 
-from aurorabot.contracts import ChatMessage, ModelRequest, ToolDefinition
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.tools import is_tool_id
+from aurora_bot.contracts import ChatMessage, ModelRequest, ToolDefinition
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.tools import is_tool_id
 from tests.support.model import fake_endpoint
 
 

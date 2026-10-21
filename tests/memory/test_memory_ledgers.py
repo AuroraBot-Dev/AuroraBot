@@ -6,14 +6,14 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurorabot.contracts import ScopeCatalog, ScopeKind, TreeLaunchRequest
-from aurorabot.contracts.bot import BotChange, Checkpoint
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.contracts.memory_graph_codec import read_ranking
-from aurorabot.contracts.operation import OperationStatus
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.memory import MemoryReader
-from aurorabot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts import ScopeCatalog, ScopeKind, TreeLaunchRequest
+from aurora_bot.contracts.bot import BotChange, Checkpoint
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.contracts.memory_graph_codec import read_ranking
+from aurora_bot.contracts.operation import OperationStatus
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.memory import MemoryReader
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from tests.memory.operations_support import GOAL, SOURCE, prepared_runtime, request
 
 if TYPE_CHECKING:

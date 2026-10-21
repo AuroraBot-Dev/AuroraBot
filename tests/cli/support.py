@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.commander import build_parser as _build_parser
-from aurora.commander import run as _run
-from aurora.commands import DEFAULT_REGISTRY
+from aurora_cli.commander import build_parser as _build_parser
+from aurora_cli.commander import run as _run
+from aurora_cli.commands import DEFAULT_REGISTRY
 
 if TYPE_CHECKING:
     import argparse
@@ -22,5 +22,5 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(arguments: list[str] | None = None) -> int:
-    """按默认命令目录运行 CLI 输入，与 aurora.main.main 的分派一致。"""
+    """按默认命令目录运行 CLI 输入，与 aurora_cli.main.main 的分派一致。"""
     return _run(arguments, registry=DEFAULT_REGISTRY)

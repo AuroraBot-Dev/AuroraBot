@@ -1,7 +1,7 @@
 """``aurora app search`` 测试的共享辅助：假 GitHub 层、值对象工厂、CLI 入口。
 
 三个 search 测试模块共用这一份，免得每个文件各养一套同名私有辅助。文件名不以
-``test_`` 开头，pytest 不会收集它，覆盖率也只统计 ``aurora`` 与 ``aurorabot``。
+``test_`` 开头，pytest 不会收集它，覆盖率也只统计 ``aurora_cli`` 与 ``aurora_bot``。
 
 假 GitHub 层有两级：``StubSource`` 把整条网络路径换成预置结果，``FakeTransport``
 则保留真实的 ``GitHubSource``、只换掉发请求那一步——后者用来验证「线真的接上了」。
@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 import httpx2
 
-from aurora.commander import build_parser
-from aurora.commands import DEFAULT_REGISTRY
-from aurora.commands import app as app_module
-from aurora.commands.app.models import Repository, RepositoryPage
+from aurora_cli.commander import build_parser
+from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.commands import app as app_module
+from aurora_cli.commands.app.models import Repository, RepositoryPage
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

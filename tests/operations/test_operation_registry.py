@@ -10,18 +10,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts import ToolScopes
-from aurorabot.contracts.operation import (
+from aurora_bot.contracts import ToolScopes
+from aurora_bot.contracts.operation import (
     OperationDefinition,
     OperationKind,
     OperationRequest,
     OperationResult,
     OperationStatus,
 )
-from aurorabot.contracts.resource import ResourceAlias, ResourceKey, ResourceRef
-from aurorabot.operations.registry import OperationRegistry
-from aurorabot.resources.catalog import ResourceCatalog
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts.resource import ResourceAlias, ResourceKey, ResourceRef
+from aurora_bot.operations.registry import OperationRegistry
+from aurora_bot.resources.catalog import ResourceCatalog
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

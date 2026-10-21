@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-from aurora.commander import build_registry
-from aurora.commander import run as _run
-from aurora.commands import CommandSpec, about, check, docs
-from aurora.utils.process import EXIT_FAILURE, EXIT_INTERRUPTED, run_process
+from aurora_cli.commander import build_registry
+from aurora_cli.commander import run as _run
+from aurora_cli.commands import CommandSpec, about, check, docs
+from aurora_cli.utils.process import EXIT_FAILURE, EXIT_INTERRUPTED, run_process
 from tests.cli.support import EXPECTED_LINT_COMMANDS, FAILED_EXIT_CODE, build_parser
 
 if TYPE_CHECKING:
@@ -68,14 +68,14 @@ def test_process_boundary_reports_failure_and_interrupt(
     class Result:
         returncode = FAILED_EXIT_CODE
 
-    monkeypatch.setattr("aurora.utils.process.subprocess.run", lambda *_args, **_kwargs: Result())
+    monkeypatch.setattr("aurora_cli.utils.process.subprocess.run", lambda *_args, **_kwargs: Result())
     assert run_process(("example",), tmp_path) == FAILED_EXIT_CODE
     assert "命令失败" in capsys.readouterr().err
 
     def interrupt(*_args: object, **_kwargs: object) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("aurora.utils.process.subprocess.run", interrupt)
+    monkeypatch.setattr("aurora_cli.utils.process.subprocess.run", interrupt)
     assert run_process(("example",), tmp_path) == EXIT_INTERRUPTED
 
 

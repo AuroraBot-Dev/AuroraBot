@@ -6,11 +6,11 @@ import json
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurorabot.memory_model.dataset import write_episodes
-from aurorabot.memory_model.tgn import load_policy as load_memory_policy
-from aurorabot.rhythm.gru import load_policy
+from aurora_bot.memory_model.dataset import write_episodes
+from aurora_bot.memory_model.tgn import load_policy as load_memory_policy
+from aurora_bot.rhythm.gru import load_policy
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
 from tests.memory.support import episodes
 from tests.rhythm.support import make_episode
 from tests.support.training import _NOW, _write

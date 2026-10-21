@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app.install import check_remote_config
-from aurora.commands.app.models import ConfigError, PlanError, VerifyError
-from aurora.commands.app.service import AppManager
-from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
-from aurora.commands.app.verify import (
+from aurora_bot.mcp.models import McpEventMode, McpRemoteTool, McpToolsPage, McpTransport
+from aurora_cli.commands.app.install import check_remote_config
+from aurora_cli.commands.app.models import ConfigError, PlanError, VerifyError
+from aurora_cli.commands.app.service import AppManager
+from aurora_cli.commands.app.store import APPS_RELATIVE_PATH, AppStore
+from aurora_cli.commands.app.verify import (
     Handshake,
     MCPVerifier,
     endpoint_hints,
@@ -27,7 +28,6 @@ from aurora.commands.app.verify import (
     scrub_secrets,
     verify_environment,
 )
-from aurorabot.mcp.models import McpEventMode, McpRemoteTool, McpToolsPage, McpTransport
 from tests.cli.app.clone_support import APP_PATH, FakeCloner, project, repository
 from tests.cli.app.install_support import (
     ENDPOINT,
@@ -201,7 +201,7 @@ def test_a_successful_inspection_closes_the_connection(tmp_path: Path) -> None:
 
 
 def test_a_successful_inspection_reports_the_discovered_tools(tmp_path: Path) -> None:
-    """工具 ID 由 ``aurorabot.mcp`` 的发现规则生成，CLI 只报告它，不自己拼一个名字。"""
+    """工具 ID 由 ``aurora_bot.mcp`` 的发现规则生成，CLI 只报告它，不自己拼一个名字。"""
     factory = FakeMcpClientFactory(tools=("read_text_file", "list_allowed_directories"))
 
     inspection = _verifier(factory).inspect(_process(tmp_path))
@@ -321,7 +321,7 @@ def test_a_remote_failure_is_described_as_a_remote_endpoint() -> None:
 
 def test_a_timeout_is_reported_as_a_handshake_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """缩短握手超时，验证错误类型与说明，避免测试等待默认时长。"""
-    monkeypatch.setattr("aurora.commands.app.verify.DEFAULT_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("aurora_cli.commands.app.verify.DEFAULT_TIMEOUT_SECONDS", 0.05)
     factory = FakeMcpClientFactory(hang=True)
 
     with pytest.raises(VerifyError) as error_info:

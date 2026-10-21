@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts import WorldFrontier
-from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
-from aurorabot.kernel import compose, compose_managed, module
-from aurorabot.world import SqlAlchemyWorldJournal
-from aurorabot.world.module import MODULE
+from aurora_bot.contracts import WorldFrontier
+from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from aurora_bot.kernel import compose, compose_managed, module
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_bot.world.module import MODULE
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import AsyncCleanup, ModuleContext
+    from aurora_bot.kernel import AsyncCleanup, ModuleContext
 
 
 @pytest.mark.parametrize("managed", [False, True])

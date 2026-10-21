@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts import LOOP_OPERATIONS, WORLD_PORTS, Settings
-from aurorabot.contracts.pkgs.memory import MemoryReader
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
-from aurorabot.kernel import Assembly
-from aurorabot.runtime import assemble_runtime
-from aurorabot.runtime.assembly import validate_loop_operations
+from aurora_bot.contracts import LOOP_OPERATIONS, WORLD_PORTS, Settings
+from aurora_bot.contracts.pkgs.memory import MemoryReader
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
+from aurora_bot.kernel import Assembly
+from aurora_bot.runtime import assemble_runtime
+from aurora_bot.runtime.assembly import validate_loop_operations
+from aurora_cli import load_config
 
 if TYPE_CHECKING:
     from pathlib import Path

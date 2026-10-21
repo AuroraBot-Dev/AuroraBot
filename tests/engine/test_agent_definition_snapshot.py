@@ -5,8 +5,8 @@ from dataclasses import replace
 
 import pytest
 
-from aurorabot.contracts import AgentTree, ChatMessage, ToolCall
-from aurorabot.contracts.tool import DELEGATE_TOOL
+from aurora_bot.contracts import AgentTree, ChatMessage, ToolCall
+from aurora_bot.contracts.tool import DELEGATE_TOOL
 from tests.engine.support import _agent, _runner
 from tests.support.model import ScriptedModel as FakeModel
 

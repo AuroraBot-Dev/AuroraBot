@@ -25,42 +25,42 @@ AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一�
 
 ## Project layout
 
-Python 采用 src layout：`src/` 是源码目录，`aurora` 与 `aurorabot` 是同一发行包中的两个导入包。
+Python 采用 src layout：`src/` 是源码目录，`aurora_cli` 与 `aurora_bot` 是同一发行包中的两个导入包。
 uv 管理 Python，pnpm workspace 管理前端；两者独立构建、共享仓库。运行测试前先通过 uv 安装项目。
 
 ```text
 config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configs 模块
 config/         从模板复制的个人生效配置，始终由 Git 忽略
-src/aurora/     项目级入口与配置解析
-src/aurora/commands/       每个 CLI 命令一个自动发现模块
-src/aurora/configs/        每个 TOML 一个解析模块，引用 src/aurorabot/<pkg> 的配置 DTO 并导出唯一 CONFIG_SPEC
-src/aurora/contracts/      配置与命令的公共值对象契约；并列模块只从这里导入声明类型
-src/aurora/configurator.py 按注册顺序合并 TOML 为只读 AuroraConfig；同时实现 aurorabot.contracts.Settings
-src/aurora/utils/          项目级进程、环境、日志、信号、平台、TOML 与包发现工具
-src/aurorabot/utils/      无上层依赖的日志、时间、文本与序列化工具
-src/aurorabot/contracts/  公共值对象、常量与贡献契约；跨包能力端口按提供方放在 src/aurorabot/contracts/pkgs/<pkg>.py
-src/aurorabot/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
-src/aurorabot/runtime/    Bot 进程门面与装配入口：发现源、门面工厂、终端命令分派与文本呈现
-src/aurorabot/bot/        持久目标、检查点、未来活动与版本化主体状态操作
-src/aurorabot/clock/      与主体独立装配的持久活动兑现服务
-src/aurorabot/agents/     不可变 AgentDefinition 目录与唯一解析
-src/aurorabot/tools/      工具注册表与框架内建工具
-src/aurorabot/prompt/     四角色 PromptAssembler
-src/aurorabot/engine/     AgentTree 的确定性单循环
-src/aurorabot/ai/         LiteLLM 模型网关与 Provider 协议映射
-src/aurorabot/mcp/        MCP SDK 2.x 客户端适配、冻结工具目录与业务事件入口
-src/aurorabot/world/      WorldJournal 唯一持久化实现与 migration
-src/aurorabot/cadence/    世界与时间驱动的主动调度、判断日志与隐状态恢复
-src/aurorabot/rhythm/     规则与 GRU 节律策略、训练、验证及权重加载
-src/aurorabot/memory/     时间正确的经历读取、必要连续性、集合组装与反馈审计
-src/aurorabot/memory_model/ 规则与 TGN 排序、训练、验证与可重建图投影
-src/aurorabot/resources/  资源版本、别名、契约与动态提供者的统一目录
-src/aurorabot/scopes/     世界域声明、分类与范围校验
-src/aurorabot/operations/ 命令与查询路由、幂等回执及未知效果恢复边界
-src/aurorabot/artifacts/  固定内容存储、校验与有界读取
-src/aurorabot/resource_content/ 实际资源定义正文的生命周期归档
-src/aurorabot/instances/  从世界事实发现认知实例及其确定历史版本
-src/aurorabot/console/    输入先入世界线的本地异步终端
+src/aurora_cli/     项目级入口与配置解析
+src/aurora_cli/commands/       每个 CLI 命令一个自动发现模块
+src/aurora_cli/configs/        每个 TOML 一个解析模块，引用 src/aurora_bot/<pkg> 的配置 DTO 并导出唯一 CONFIG_SPEC
+src/aurora_cli/contracts/      配置与命令的公共值对象契约；并列模块只从这里导入声明类型
+src/aurora_cli/configurator.py 按注册顺序合并 TOML 为只读 AuroraConfig；同时实现 aurora_bot.contracts.Settings
+src/aurora_cli/utils/          项目级进程、环境、日志、信号、平台、TOML 与包发现工具
+src/aurora_bot/utils/      无上层依赖的日志、时间、文本与序列化工具
+src/aurora_bot/contracts/  公共值对象、常量与贡献契约；跨包能力端口按提供方放在 src/aurora_bot/contracts/pkgs/<pkg>.py
+src/aurora_bot/kernel/     组合微内核：@module/ModuleSpec、依赖解析、拓扑装配、生命周期与发现源
+src/aurora_bot/runtime/    Bot 进程门面与装配入口：发现源、门面工厂、终端命令分派与文本呈现
+src/aurora_bot/bot/        持久目标、检查点、未来活动与版本化主体状态操作
+src/aurora_bot/clock/      与主体独立装配的持久活动兑现服务
+src/aurora_bot/agents/     不可变 AgentDefinition 目录与唯一解析
+src/aurora_bot/tools/      工具注册表与框架内建工具
+src/aurora_bot/prompt/     四角色 PromptAssembler
+src/aurora_bot/engine/     AgentTree 的确定性单循环
+src/aurora_bot/ai/         LiteLLM 模型网关与 Provider 协议映射
+src/aurora_bot/mcp/        MCP SDK 2.x 客户端适配、冻结工具目录与业务事件入口
+src/aurora_bot/world/      WorldJournal 唯一持久化实现与 migration
+src/aurora_bot/cadence/    世界与时间驱动的主动调度、判断日志与隐状态恢复
+src/aurora_bot/rhythm/     规则与 GRU 节律策略、训练、验证及权重加载
+src/aurora_bot/memory/     时间正确的经历读取、必要连续性、集合组装与反馈审计
+src/aurora_bot/memory_model/ 规则与 TGN 排序、训练、验证与可重建图投影
+src/aurora_bot/resources/  资源版本、别名、契约与动态提供者的统一目录
+src/aurora_bot/scopes/     世界域声明、分类与范围校验
+src/aurora_bot/operations/ 命令与查询路由、幂等回执及未知效果恢复边界
+src/aurora_bot/artifacts/  固定内容存储、校验与有界读取
+src/aurora_bot/resource_content/ 实际资源定义正文的生命周期归档
+src/aurora_bot/instances/  从世界事实发现认知实例及其确定历史版本
+src/aurora_bot/console/    输入先入世界线的本地异步终端
 tests/          离线行为、组合与边界测试
 apps/docsite/   VitePress 2 文档站，正文位于 src/
 apps/panel/     Vue 面板，页面位于 src/
@@ -80,44 +80,44 @@ extensions/     本机 MCP 应用与本地插件运行时目录，始终由 Git 
 - root 与 child 使用同一种 `AgentNode` 和循环。实例只因 prompt、初始 message、可见 tools 和 LLM model 不同。
 - `ChatMessage` 只允许 `system`、`message`、`assistant`、`tool` 四种领域 role；只有 Provider adapter 可把
   `message` 映射成协议的 `user`。
-- `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务；世界记忆由 `aurorabot.memory` 生成 `MemorySnapshot`，
+- `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务；世界记忆由 `aurora_bot.memory` 生成 `MemorySnapshot`，
   作为显式参数注入，不在 assembler 内持有读取端口。
 - `AgentTreeRunner` 只执行给定树，通过 contracts 注入的模型、原型、提示词、工具、记忆和世界端口工作；
   普通 Tool 经端口执行，内建 `delegate` 返回的 `DelegationRequest` 由 engine 应用为树操作。
-- `src/aurorabot/world` 是逻辑事件总线，代码上是叶子；`WorldReader / WorldWriter / WorldJournal` 端口只属于 contracts，其他包不得 import 实现。
+- `src/aurora_bot/world` 是逻辑事件总线，代码上是叶子；`WorldReader / WorldWriter / WorldJournal` 端口只属于 contracts，其他包不得 import 实现。
 - 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
-- `src/aurorabot/bot` 是目标与恢复状态的唯一所有者，`src/aurorabot/clock` 兑现已登记活动；二者可独立替换，公开命令和默认时钟使用同一选中主体。
-- `src/aurorabot/cadence` 按世界变化、时间和主体压力调用 `RhythmPolicy`，持久记录判断与循环隐状态，再请求唤起 AgentTree；
-  `src/aurorabot/memory` 通过 `WorldReader`、主体状态和 `MemoryPolicy` 生成显式快照，不另建认知运行模型。
+- `src/aurora_bot/bot` 是目标与恢复状态的唯一所有者，`src/aurora_bot/clock` 兑现已登记活动；二者可独立替换，公开命令和默认时钟使用同一选中主体。
+- `src/aurora_bot/cadence` 按世界变化、时间和主体压力调用 `RhythmPolicy`，持久记录判断与循环隐状态，再请求唤起 AgentTree；
+  `src/aurora_bot/memory` 通过 `WorldReader`、主体状态和 `MemoryPolicy` 生成显式快照，不另建认知运行模型。
 - 记忆内容、主体检查点和模型投影分开保存；时间与游标决定可见历史，后续反馈不能泄漏到过去的查询。
   上下文先保留必要状态、证据和完整交互，必要内容超限时在模型或行动效果前失败，不截断关键约束。
 - Console 输入先作为 `console.input` 提交到 `aurora:world/console`，终端渲染输出不进入世界线；`/help`、`/clear`、`/quit`
   是本地命令，不进入组合内核。
 - model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
-- `src/aurorabot/kernel` 是唯一组合机制：以契约类型为能力身份，`@module`/`ModuleSpec` 声明 `provides/requires/contributes/consumes`
+- `src/aurora_bot/kernel` 是唯一组合机制：以契约类型为能力身份，`@module`/`ModuleSpec` 声明 `provides/requires/contributes/consumes`
   与 `prepare/construct/activate/ready/run/drain/close` 等声明阶段；依赖解析、冲突裁决、可选跳过、环检测与拓扑装配都在内核，
-  内核不认识具体 `aurorabot` 子包。接线和生命周期跟随实际选中能力，失选默认提供方不产生准备效果。
+  内核不认识具体 `aurora_bot` 子包。接线和生命周期跟随实际选中能力，失选默认提供方不产生准备效果。
 - 模组使用 `namespace:kernel/module/path`，发布版本与内核 API 范围分别声明，兼容性在准备效果前校验。
   清单归档固定声明而非可执行环境；目录、错误和生命周期监督都保留完整模组身份。
 - 资源使用 `namespace:domain/kind/path`，定义版本、别名和运行实例分别记录；实际模型、原型、Prompt、工具与过程版本进入世界审计。
   提供方资源身份与 SDK 路由分离，`sdk_provider` 表达协议前缀，不从对象显示文本或嵌套资源路径推导请求模型。
 - 领域操作由同一份版本化定义生成结构化工具和终端入口；请求、回执与因果持久保存，大对象使用固定内容引用。
   已开始且效果未知的非幂等操作不自动重放；模型曝光、自评和成功回执各自表达不同事实。
-- 每个 `src/aurorabot/<pkg>` 在 `module.py` 自描述唯一 `MODULE`；兄弟能力只经 `aurorabot.contracts` 的契约类型注入，模块之间不运行时相互
+- 每个 `src/aurora_bot/<pkg>` 在 `module.py` 自描述唯一 `MODULE`；兄弟能力只经 `aurora_bot.contracts` 的契约类型注入，模块之间不运行时相互
   import（类型位置允许 TYPE_CHECKING）。
-- 发现源：随安装发布的 `aurorabot` 包、项目内被 Git 忽略的 `extensions/plugins/` 与 `aurorabot_plugin` entry point；同优先级冲突、
+- 发现源：随安装发布的 `aurora_bot` 包、项目内被 Git 忽略的 `extensions/plugins/` 与 `aurorabot_plugin` entry point；同优先级冲突、
   缺失依赖与依赖环都在启动前失败。
-- `aurora` 只负责 CLI 命令分发与配置解析：`configs` 引用 `src/aurorabot/<pkg>` 的配置 DTO，`configurator` 合并为只读 `AuroraConfig`
-  并实现 `aurorabot.contracts.Settings`；配置与命令的公共值对象放在 `aurora.contracts`，并列模块只从这里导入声明类型；
-  `aurora start` 只负责 `.env`、配置加载、进程日志与 SIGINT/SIGTERM，然后调用 `aurorabot.runtime`
+- `aurora_cli` 只负责 CLI 命令分发与配置解析：`configs` 引用 `src/aurora_bot/<pkg>` 的配置 DTO，`configurator` 合并为只读 `AuroraConfig`
+  并实现 `aurora_bot.contracts.Settings`；配置与命令的公共值对象放在 `aurora_cli.contracts`，并列模块只从这里导入声明类型；
+  `aurora start` 只负责 `.env`、配置加载、进程日志与 SIGINT/SIGTERM，然后调用 `aurora_bot.runtime`
   的装配入口，不含组合逻辑。
-- `src/aurorabot/runtime` 是 Bot 进程门面与装配入口：发现模块声明、从冻结 `Assembly` 创建门面并接线 `TreeLauncher` 绑定；
+- `src/aurora_bot/runtime` 是 Bot 进程门面与装配入口：发现模块声明、从冻结 `Assembly` 创建门面并接线 `TreeLauncher` 绑定；
   终端命令分派与文本呈现各自独立。
-- 命令与配置模块按目录自动发现：新增并列项只增加该能力自己的配置模板、`configs`/`src/aurorabot/<pkg>/module.py`/测试。
-- 下层无项目语义的共享功能放入 `aurorabot.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
-- 依赖方向：`aurorabot.utils` 与 `aurorabot.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/aurorabot/kernel ← src/aurorabot/runtime`；功能 aurorabot 包
+- 命令与配置模块按目录自动发现：新增并列项只增加该能力自己的配置模板、`configs`/`src/aurora_bot/<pkg>/module.py`/测试。
+- 下层无项目语义的共享功能放入 `aurora_bot.utils`；项目组合工具放入 `aurora_cli.utils`；并列模块不得寄存彼此的工具函数。
+- 依赖方向：`aurora_bot.utils` 与 `aurora_bot.contracts` 是最底层叶子，任何包都可以运行时直接引用；`src/aurora_bot/kernel ← src/aurora_bot/runtime`；功能 aurora_bot 包
   运行时只依赖 contracts、utils 与自身，跨包能力只允许类型检查期（TYPE_CHECKING）引用，真正的能力调用靠内核注入的契约实例
-  完成；`aurorabot ← aurora`；`aurorabot` 不导入 `aurora`。依赖边界由 `tests/foundation/test_dependency_boundaries.py` 按约定校验：叶子包只依赖自身，
+  完成；`aurora_bot ← aurora_cli`；`aurora_bot` 不导入 `aurora_cli`。依赖边界由 `tests/foundation/test_dependency_boundaries.py` 按约定校验：叶子包只依赖自身，
   其他包可依赖 contracts 与 utils，机制包额外可依赖 kernel；新增能力包无需修改该测试。
 
 ## Current scope

@@ -6,8 +6,8 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
@@ -15,11 +15,11 @@ if TYPE_CHECKING:
 
 _PLUGIN = '''"""独立资源提供者。"""
 
-from aurorabot.contracts.pkgs.resources import RESOURCE_PROVIDERS
-from aurorabot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
-from aurorabot.contracts.resource_paging import resource_order, resource_position
-from aurorabot.contracts.resource_query import ResourcePage
-from aurorabot.kernel import module
+from aurora_bot.contracts.pkgs.resources import RESOURCE_PROVIDERS
+from aurora_bot.contracts.resource import ResourceDescriptor, ResourceKey, ResourceRef
+from aurora_bot.contracts.resource_paging import resource_order, resource_position
+from aurora_bot.contracts.resource_query import ResourcePage
+from aurora_bot.kernel import module
 
 _ENTRY = ResourceDescriptor(
     ResourceRef(ResourceKey.parse("lab:experiments/dataset/measurements"), "edition-1"),

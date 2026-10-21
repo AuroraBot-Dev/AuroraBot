@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts import EnvironmentEvent, WorldCommit, WorldCommitInput, WorldFrontier
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.memory import Memory
-from aurorabot.memory_model.rules import RuleMemoryPolicy
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts import EnvironmentEvent, WorldCommit, WorldCommitInput, WorldFrontier
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.memory import Memory
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

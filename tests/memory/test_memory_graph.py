@@ -7,13 +7,13 @@ from datetime import timedelta
 
 import pytest
 
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
-from aurorabot.memory.graph import graph_interactions
-from aurorabot.memory.selection import select_memories
-from aurorabot.memory_model.dataset import MemoryEpisode, MemoryExample
-from aurorabot.memory_model.evaluation import evaluate_policy
-from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.contracts.memory_graph import MemoryCandidate, MemoryRankingRequest
+from aurora_bot.memory.graph import graph_interactions
+from aurora_bot.memory.selection import select_memories
+from aurora_bot.memory_model.dataset import MemoryEpisode, MemoryExample
+from aurora_bot.memory_model.evaluation import evaluate_policy
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
 from tests.memory.facts import _NOW, _fact
 
 

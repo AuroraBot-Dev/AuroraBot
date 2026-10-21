@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from aurorabot.agents import AgentCatalog
-from aurorabot.contracts import (
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.contracts import (
     AgentDefinition,
     AgentTree,
     ChatMessage,
@@ -19,13 +19,13 @@ from aurorabot.contracts import (
     ToolDefinition,
     ToolOutput,
 )
-from aurorabot.contracts.bot import Goal
-from aurorabot.contracts.memory import MemoryContinuity
-from aurorabot.contracts.model import ContextBudgetError
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.prompt import PromptAssembler
-from aurorabot.tools import ToolRegistry
-from aurorabot.utils.serialization import thaw_json
+from aurora_bot.contracts.bot import Goal
+from aurora_bot.contracts.memory import MemoryContinuity
+from aurora_bot.contracts.model import ContextBudgetError
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.prompt import PromptAssembler
+from aurora_bot.tools import ToolRegistry
+from aurora_bot.utils.serialization import thaw_json
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.prompt import make_prompt_catalog
 

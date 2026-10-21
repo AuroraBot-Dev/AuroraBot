@@ -46,7 +46,7 @@ Bot 可以通过 `bot_state` 读取自己的状态，通过 `goal_set` 建立、
 
 主体状态与时间服务分别由 `bot`、`clock` 两个同级模组提供。目标命令、认知恢复与到期唤起共同使用选中的 `BotStateStore`；`BotClock` 可以独立替换，并依赖默认主体状态，接线始终落在实际选中的时间服务上。
 
-世界输入、已提交事实和工具参数使用递归不可变的 JSON 值；原调用方改写嵌套容器不会改变历史或缓存。适配器向数据库和外部协议发送内容时，通过 `aurorabot.utils.thaw_json` 产生普通 JSON 副本。世界的发生时间与获知时间必须带时区，并统一转换为 UTC；同一事实身份可以用等价的时区表示重试，但不能改写发生时刻。
+世界输入、已提交事实和工具参数使用递归不可变的 JSON 值；原调用方改写嵌套容器不会改变历史或缓存。适配器向数据库和外部协议发送内容时，通过 `aurora_bot.utils.thaw_json` 产生普通 JSON 副本。世界的发生时间与获知时间必须带时区，并统一转换为 UTC；同一事实身份可以用等价的时区表示重试，但不能改写发生时刻。
 
 每次认知都显式获得主体状态。上下文字符预算先为本节点可见工具的名称、说明与完整参数结构预留容量，再保留原始输入、最新完整交互和恢复依据，候选经历按剩余容量进入；必要状态与能力定义超限时明确报错，需要减少可见能力、拆分工作或调整容量。字符预算是领域输入的代理计量，不等同于模型的实际 token 上限。
 
@@ -148,7 +148,7 @@ AgentTree 认知循环使用 `namespace:engine/process/path` 的 `TreeProcessDef
 aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 ```
 
-观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。节律训练数据每行是一段经历，包含 `schema_version = 2`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`、`outcome_cursor` 和 `outcome_at`。结果必须在观察之后获得；验证观察必须晚于所有训练结果的获知时间，同一 Bot 的验证游标也必须越过训练结果。缺少标签边界的数据不能自动补成有效样本。`aurorabot.rhythm.dataset` 提供类型化读取和导出。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值；报告同时列出学习模型和规则基线的误差与效用遗憾。
+观察查询返回原始决策输入与实际选择，供标注和可回放实验使用，不自动生成“正确”标签。节律训练数据每行是一段经历，包含 `schema_version = 2`、`episode_id` 和 `examples`；每个样本分别记录 `observation`、`think_value`、`wait_value`、`next_check_seconds`、`outcome_cursor` 和 `outcome_at`。结果必须在观察之后获得；验证观察必须晚于所有训练结果的获知时间，同一 Bot 的验证游标也必须越过训练结果。缺少标签边界的数据不能自动补成有效样本。`aurora_bot.rhythm.dataset` 提供类型化读取和导出。效用需要由任务结果、独立标注或受控回放提供，监督目标是思考相对等待的增量价值；报告同时列出学习模型和规则基线的误差与效用遗憾。
 
 两种训练命令都会先把实际输入 JSONL 固定为数据集资源，再从相同字节解析和训练。报告的 `inputs` 同时包含原始资源版本与解析后样本摘要，模型归档内保存同一份来源信息、训练参数、框架版本和独立验证指标。模型通过 `ArtifactStore` 发布，`artifact` 给出确切模型资源；输出文件是相同字节的导出，不覆盖已有文件。训练使用 `artifacts.toml` 的内容目录；单独训练时该配置不存在则使用 `data/artifacts`。
 
@@ -170,7 +170,7 @@ aurora train rhythm train.jsonl validation.jsonl models/rhythm.pt
 aurora train memory train.jsonl validation.jsonl models/memory.pt
 ```
 
-记忆训练 JSONL 每行包含 `schema_version = 1`、`episode_id`、`bot_id` 和 `examples`。每个样本分别记录 `request`、与候选逐项对应的 `utilities`、`outcome_cursor` 和 `outcome_at`。`request` 中只有当时可见的查询、候选和时序交互；监督结果必须来自推荐之后的世界提交。`aurorabot.memory_model.dataset` 提供类型化读取和导出，训练按效用差加权排序，并要求全部训练结果先于独立验证查询获知。报告比较排序准确率、效用遗憾、NDCG 和正收益召回率。受控测试验证历史区分、梯度和重载一致性，真实任务收益需要独立效用数据评估。
+记忆训练 JSONL 每行包含 `schema_version = 1`、`episode_id`、`bot_id` 和 `examples`。每个样本分别记录 `request`、与候选逐项对应的 `utilities`、`outcome_cursor` 和 `outcome_at`。`request` 中只有当时可见的查询、候选和时序交互；监督结果必须来自推荐之后的世界提交。`aurora_bot.memory_model.dataset` 提供类型化读取和导出，训练按效用差加权排序，并要求全部训练结果先于独立验证查询获知。报告比较排序准确率、效用遗憾、NDCG 和正收益召回率。受控测试验证历史区分、梯度和重载一致性，真实任务收益需要独立效用数据评估。
 
 使用权重时，在 `memory_model.toml` 中指定 `policy = "aurora:memory/model/tgn"` 和 `weights = "models/memory.pt"`。资源版本由实际权重内容生成，读取结果携带同一版本；输入坐标不兼容时拒绝加载。训练命令不会自动启用权重或在线更新参数。
 
@@ -257,8 +257,8 @@ AuroraBot 的诞生离不开许多优秀的开源项目：
 仓库采用 Python src layout 与 pnpm workspace：两套工具链分别管理依赖、测试与构建，代码和文档在同一个仓库中协作。
 
 ```text
-src/aurora/    Python CLI、配置解析与项目工具
-src/aurorabot/ Bot 框架、公共契约与能力模组
+src/aurora_cli/    Python CLI、配置解析与项目工具
+src/aurora_bot/ Bot 框架、公共契约与能力模组
 tests/        Python 离线测试
 apps/docsite/  VitePress 2 文档站
 apps/panel/    Vue 面板
@@ -269,7 +269,7 @@ docs/         贡献指南、行为准则等仓库文档
 scripts/      安装脚本与 .mts 工程脚本
 ```
 
-Python 包通过 `uv sync --locked --group dev` 安装到开发环境，使用 `aurora` 和 `aurorabot` 导入。
+Python 包通过 `uv sync --locked --group dev` 安装到开发环境，使用 `aurora_cli` 和 `aurora_bot` 导入。
 `src/` 仅是源码目录。运行 Python 测试不需要安装前端依赖；运行前端应用不需要启动 Bot。
 
 ```bash

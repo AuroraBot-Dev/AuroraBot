@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from aurorabot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind, merge_scope_catalog
-from aurorabot.kernel import PREPARE, ModuleSpec, compose, compose_managed, module
+from aurora_bot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind, merge_scope_catalog
+from aurora_bot.kernel import PREPARE, ModuleSpec, compose, compose_managed, module
 from tests.kernel.support import NoConfigSettings as _Settings
 
 if TYPE_CHECKING:
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def test_full_scope_metadata_is_visible_before_any_module_is_constructed() -> None:

@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.agents import AgentCatalog
-from aurorabot.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.engine.support import ScopedEchoTool, _agent, _assembler
 from tests.support.model import ScriptedModel as FakeModel
 

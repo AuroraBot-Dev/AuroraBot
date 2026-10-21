@@ -16,11 +16,11 @@ from typing import TYPE_CHECKING, NamedTuple
 import httpx2
 import pytest
 
-from aurora.commands.app.github import GitHubSource
-from aurora.commands.app.manifest import MANIFEST_NAME
-from aurora.commands.app.models import CloneError, GitHubRateLimitError, InstallPlan, ManifestError, PlanError
-from aurora.commands.app.service import AppManager
-from aurora.commands.app.store import APPS_RELATIVE_PATH, AppStore
+from aurora_cli.commands.app.github import GitHubSource
+from aurora_cli.commands.app.manifest import MANIFEST_NAME
+from aurora_cli.commands.app.models import CloneError, GitHubRateLimitError, InstallPlan, ManifestError, PlanError
+from aurora_cli.commands.app.service import AppManager
+from aurora_cli.commands.app.store import APPS_RELATIVE_PATH, AppStore
 from tests.cli.app.clone_support import (
     APP_PATH,
     CONFLICTING_PACKAGE,

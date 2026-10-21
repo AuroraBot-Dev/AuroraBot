@@ -8,21 +8,21 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts import WorldFrontier
-from aurorabot.memory_model.persistence import MemoryModelCheckpoints
-from aurorabot.memory_model.tgn import TGNMemoryPolicy
-from aurorabot.utils.serialization import thaw_json
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts import WorldFrontier
+from aurora_bot.memory_model.persistence import MemoryModelCheckpoints
+from aurora_bot.memory_model.tgn import TGNMemoryPolicy
+from aurora_bot.utils.serialization import thaw_json
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.memory.tgn_support import _cold, _network, _request
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.contracts.artifact import ArtifactInfo
-    from aurorabot.contracts.memory_graph import MemoryInteraction
-    from aurorabot.memory_model.state import GraphState
-    from aurorabot.memory_model.tgn import TemporalMemoryNetwork
+    from aurora_bot.contracts.artifact import ArtifactInfo
+    from aurora_bot.contracts.memory_graph import MemoryInteraction
+    from aurora_bot.memory_model.state import GraphState
+    from aurora_bot.memory_model.tgn import TemporalMemoryNetwork
 
 _BOT = "lab:bot/test"
 

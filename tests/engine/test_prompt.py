@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     AgentTree,
     ChatMessage,
     MemoryScopeSnapshot,
@@ -13,10 +13,10 @@ from aurorabot.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from aurorabot.contracts.bot import Checkpoint, Goal
-from aurorabot.contracts.memory import MemoryContinuity
-from aurorabot.contracts.model import ContextBudgetError
-from aurorabot.prompt import PromptAssembler
+from aurora_bot.contracts.bot import Checkpoint, Goal
+from aurora_bot.contracts.memory import MemoryContinuity
+from aurora_bot.contracts.model import ContextBudgetError
+from aurora_bot.prompt import PromptAssembler
 from tests.support.prompt import _agent, _assembler, make_prompt_catalog
 
 

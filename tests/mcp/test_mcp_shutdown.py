@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from aurorabot.mcp import McpAppState, McpCloseError, McpStartupError, McpToolsPage, prepare_mcp
+from aurora_bot.mcp import McpAppState, McpCloseError, McpStartupError, McpToolsPage, prepare_mcp
 from tests.mcp.support import FakeClient, FakeFactory, FakeWorld, _spec, _tool
 
 

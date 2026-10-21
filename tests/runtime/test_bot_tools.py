@@ -8,15 +8,21 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.bot.operations import BOT_STATE_TOOL, GOAL_SET_TOOL, WAKE_CANCEL_TOOL, WAKE_SCHEDULE_TOOL, bot_operations
-from aurorabot.bot.store import JournalBotState
-from aurorabot.contracts import ToolCall, ToolOutput
-from aurorabot.contracts.bot import WakeStatus
-from aurorabot.operations.registry import OperationRegistry
-from aurorabot.operations.tool import operation_tools
-from aurorabot.resources.catalog import ResourceCatalog
-from aurorabot.tools import ToolRegistry
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.bot.operations import (
+    BOT_STATE_TOOL,
+    GOAL_SET_TOOL,
+    WAKE_CANCEL_TOOL,
+    WAKE_SCHEDULE_TOOL,
+    bot_operations,
+)
+from aurora_bot.bot.store import JournalBotState
+from aurora_bot.contracts import ToolCall, ToolOutput
+from aurora_bot.contracts.bot import WakeStatus
+from aurora_bot.operations.registry import OperationRegistry
+from aurora_bot.operations.tool import operation_tools
+from aurora_bot.resources.catalog import ResourceCatalog
+from aurora_bot.tools import ToolRegistry
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

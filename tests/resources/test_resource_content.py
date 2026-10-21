@@ -5,8 +5,8 @@ from typing import cast
 
 import pytest
 
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.contracts.resource_content import ResourceContent
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.resource_content import ResourceContent
 
 _KEY = ResourceKey.parse("lab:document/text/notes")
 _CONTENT = "实验记录".encode()

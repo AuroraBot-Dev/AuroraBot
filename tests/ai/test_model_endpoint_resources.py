@@ -10,11 +10,11 @@ from typing import Any
 
 import pytest
 
-from aurorabot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
-from aurorabot.ai.config import EndpointConfig, ProviderConfig
-from aurorabot.contracts import ChatMessage, ModelRequest
-from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition
-from aurorabot.contracts.resource import ResourceKey
+from aurora_bot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
+from aurora_bot.ai.config import EndpointConfig, ProviderConfig
+from aurora_bot.contracts import ChatMessage, ModelRequest
+from aurora_bot.contracts.model_binding import ModelBinding, ProviderDefinition
+from aurora_bot.contracts.resource import ResourceKey
 from tests.support.model import fake_endpoint
 
 

@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 import anyio
 
-from aurorabot.kernel import compose_managed, module
-from aurorabot.mcp import SdkMcpClientFactory
-from aurorabot.mcp.connection import McpConnection
+from aurora_bot.kernel import compose_managed, module
+from aurora_bot.mcp import SdkMcpClientFactory
+from aurora_bot.mcp.connection import McpConnection
 from tests.kernel.support import Settings as _Settings
 from tests.mcp.sdk_support import _ignore_event, _route_stdio_to_server, _server, _stdio_spec
 
@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from aurorabot.kernel import AsyncCleanup, ModuleContext
-    from aurorabot.mcp.client import McpClientPort
+    from aurora_bot.kernel import AsyncCleanup, ModuleContext
+    from aurora_bot.mcp.client import McpClientPort
 
 
 def test_kernel_can_release_a_real_sdk_connection_from_its_cleanup_task(

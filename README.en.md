@@ -70,9 +70,9 @@ This project contains code written with assistance from generative models such a
 
 ## Contributing
 
-The repository uses Python src layout alongside a pnpm workspace. `src/aurora/` contains the CLI and configuration;
-`src/aurorabot/` contains the Bot framework. Install Python development dependencies with `uv sync --locked --group dev`,
-then import `aurora` or `aurorabot`. Frontend applications live in `apps/`, with shared libraries in `packages/` and
+The repository uses Python src layout alongside a pnpm workspace. `src/aurora_cli/` contains the CLI and configuration;
+`src/aurora_bot/` contains the Bot framework. Install Python development dependencies with `uv sync --locked --group dev`,
+then import `aurora_cli` or `aurora_bot`. Frontend applications live in `apps/`, with shared libraries in `packages/` and
 build configuration in `tooling/`. Python uses uv; Vue and TypeScript use pnpm/Vite, with independent dependencies and builds.
 
 See [Contributing to AuroraBot](docs/CONTRIBUTING.en.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](docs/CODE_OF_CONDUCT.md).

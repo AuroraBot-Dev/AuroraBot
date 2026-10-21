@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import pytest
 
-from aurora.commands.app.github import (
+from aurora_cli.commands.app.github import (
     MAX_PAGE_SIZE,
     MAX_RESULTS,
     check_search_arguments,
 )
-from aurora.commands.app.models import ConfigError
+from aurora_cli.commands.app.models import ConfigError
 
 
 @pytest.mark.parametrize("page_size", [0, -1, MAX_PAGE_SIZE + 1, 1000])

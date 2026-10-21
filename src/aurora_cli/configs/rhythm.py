@@ -1,0 +1,31 @@
+"""解析节律模型选择与基线参数。"""
+
+from __future__ import annotations
+
+from aurora_bot.rhythm.config import RhythmConfig
+from aurora_cli.contracts.config import (
+    ConfigSpec,
+    TableShape,
+    optional_text_field,
+    positive_integer_field,
+    positive_number_field,
+    text_field,
+)
+
+CONFIG_SPEC = ConfigSpec[RhythmConfig](
+    name="rhythm",
+    path="config/rhythm.toml",
+    shape=TableShape(
+        path=("rhythm",),
+        fields=(
+            text_field("policy"),
+            optional_text_field("weights"),
+            optional_text_field("weights_ref"),
+            positive_integer_field("evoke_every"),
+            positive_number_field("max_idle_seconds"),
+            positive_number_field("min_check_seconds"),
+            positive_number_field("probability_threshold"),
+        ),
+        model=RhythmConfig,
+    ),
+)

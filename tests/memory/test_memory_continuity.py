@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from aurorabot.contracts import AgentDefinition, AgentTree, MemorySnapshot
-from aurorabot.contracts.bot import BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.memory.continuity import select_continuity
-from aurorabot.prompt import PromptAssembler
+from aurora_bot.contracts import AgentDefinition, AgentTree, MemorySnapshot
+from aurora_bot.contracts.bot import BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.memory.continuity import select_continuity
+from aurora_bot.prompt import PromptAssembler
 from tests.support.prompt import make_prompt_catalog
 
 

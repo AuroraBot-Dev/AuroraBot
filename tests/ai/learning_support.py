@@ -5,19 +5,19 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.memory_model.config import MemoryModelConfig
-from aurorabot.rhythm.config import RhythmConfig
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.memory_model.config import MemoryModelConfig
+from aurora_bot.rhythm.config import RhythmConfig
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.memory_model import CONFIG_SPEC as MEMORY_MODEL_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+from aurora_cli.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora import AuroraConfig
+    from aurora_cli import AuroraConfig
 
 
 def _config(project: Path, domain: str, *, weights: str | None = None, ref: str | None = None) -> AuroraConfig:

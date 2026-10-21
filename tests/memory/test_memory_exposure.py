@@ -6,14 +6,14 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurorabot.agents import AgentCatalog
-from aurorabot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
-from aurorabot.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
-from aurorabot.contracts.memory_codec import exposure_data, read_exposure
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.tools import ToolRegistry
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
+from aurora_bot.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
+from aurora_bot.contracts.memory_codec import exposure_data, read_exposure
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.tools import ToolRegistry
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.memory.facts import _NOW, _fact
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.prompt import _agent, _assembler

@@ -8,19 +8,19 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts.artifact import ArtifactIntegrityError
-from aurorabot.contracts.operation import (
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts.artifact import ArtifactIntegrityError
+from aurora_bot.contracts.operation import (
     OperationKind,
     OperationRequest,
     OperationResult,
     OperationStatus,
 )
-from aurorabot.operations.receipts import DEFAULT_INLINE_RECEIPT
-from aurorabot.operations.registry import OperationRegistry
-from aurorabot.resources.catalog import ResourceCatalog
-from aurorabot.utils.serialization import thaw_json
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.operations.receipts import DEFAULT_INLINE_RECEIPT
+from aurora_bot.operations.registry import OperationRegistry
+from aurora_bot.resources.catalog import ResourceCatalog
+from aurora_bot.utils.serialization import thaw_json
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.operations.support import _REF, LargeOperation
 
 if TYPE_CHECKING:

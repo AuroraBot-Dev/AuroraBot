@@ -7,24 +7,24 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts import FRONT_BINDINGS, Front
-from aurorabot.contracts.pkgs.world import WorldJournal
-from aurorabot.kernel import ModuleLifecycleError
-from aurorabot.runtime import run_runtime
-from aurorabot.runtime.events import RUNTIME_MODULE_FAILED
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts import FRONT_BINDINGS, Front
+from aurora_bot.contracts.pkgs.world import WorldJournal
+from aurora_bot.kernel import ModuleLifecycleError
+from aurora_bot.runtime import run_runtime
+from aurora_bot.runtime.events import RUNTIME_MODULE_FAILED
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.contracts import WorldCommit, WorldCommitInput
+    from aurora_bot.contracts import WorldCommit, WorldCommitInput
 
 
 _PLUGIN = '''"""失败的后台模组。"""
 
-from aurorabot.kernel import module
+from aurora_bot.kernel import module
 
 
 async def run(context, stop):

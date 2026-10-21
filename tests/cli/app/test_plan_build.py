@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from aurora.commands.app.install import (
+from aurora_cli.commands.app.install import (
     PACKAGE_RUNNER_WORKING_DIR,
     check_app_config,
     check_connect_url,
@@ -26,7 +26,7 @@ from aurora.commands.app.install import (
     subdir_parts,
     user_candidate,
 )
-from aurora.commands.app.models import PlanError
+from aurora_cli.commands.app.models import PlanError
 from tests.cli.app.clone_support import APPS_DIRECTORY
 from tests.cli.app.install_support import ENDPOINT, MANIFEST_EVIDENCE, WEATHER_COMMAND, candidate, manifest_text
 

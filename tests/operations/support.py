@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aurorabot.contracts import ToolScopes
-from aurorabot.contracts.operation import (
+from aurora_bot.contracts import ToolScopes
+from aurora_bot.contracts.operation import (
     OperationDefinition,
     OperationRequest,
     OperationResult,
 )
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 
 _REF = ResourceRef(ResourceKey.parse("lab:experiment/command/finish"), "1")
 

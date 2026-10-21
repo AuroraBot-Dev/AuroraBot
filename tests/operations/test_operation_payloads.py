@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts.artifact import ArtifactInfo, ArtifactIntegrityError
-from aurorabot.contracts.artifact_codec import read_artifact
-from aurorabot.contracts.data import freeze_object
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.operations import payloads
-from aurorabot.operations.payloads import OperationPayloads
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts.artifact import ArtifactInfo, ArtifactIntegrityError
+from aurora_bot.contracts.artifact_codec import read_artifact
+from aurora_bot.contracts.data import freeze_object
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.operations import payloads
+from aurora_bot.operations.payloads import OperationPayloads
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

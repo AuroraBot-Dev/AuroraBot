@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.memory_model.dataset import write_episodes
-from aurorabot.rhythm.gru import GRURhythmPolicy
-from aurorabot.rhythm.training import train as train_rhythm
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.memory_model.dataset import write_episodes
+from aurora_bot.rhythm.gru import GRURhythmPolicy
+from aurora_bot.rhythm.training import train as train_rhythm
 from tests.memory.support import episodes
 from tests.rhythm.support import make_episode
 
@@ -22,12 +22,12 @@ if TYPE_CHECKING:
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 
 
-@pytest.mark.parametrize("package", ["aurorabot.rhythm", "aurorabot.memory_model"])
+@pytest.mark.parametrize("package", ["aurora_bot.rhythm", "aurora_bot.memory_model"])
 def test_model_export_bytes_are_independent_of_output_path(package: str, tmp_path: Path) -> None:
     """一次归档可同时保存到不同位置，加载与保存报告使用同一内容摘要。"""
     trainer = import_module(f"{package}.training")
-    model = import_module(f"{package}.{'gru' if package == 'aurorabot.rhythm' else 'tgn'}")
-    if package == "aurorabot.rhythm":
+    model = import_module(f"{package}.{'gru' if package == 'aurora_bot.rhythm' else 'tgn'}")
+    if package == "aurora_bot.rhythm":
         training = (make_episode("training", False, _NOW),)
         validation = (make_episode("validation", False, _NOW + timedelta(days=1)),)
     else:
@@ -41,11 +41,11 @@ def test_model_export_bytes_are_independent_of_output_path(package: str, tmp_pat
     assert first == second == model.load_policy_bytes(content, expected=first).ref
 
 
-@pytest.mark.parametrize("package", ["aurorabot.rhythm", "aurorabot.memory_model"])
+@pytest.mark.parametrize("package", ["aurora_bot.rhythm", "aurora_bot.memory_model"])
 def test_model_version_is_checked_before_tensor_decoding(package: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """错误版本或错误模型身份不能先把字节交给计算框架加载。"""
-    model = import_module(f"{package}.{'gru' if package == 'aurorabot.rhythm' else 'tgn'}")
-    key = model.GRU_KEY if package == "aurorabot.rhythm" else model.TGN_KEY
+    model = import_module(f"{package}.{'gru' if package == 'aurora_bot.rhythm' else 'tgn'}")
+    key = model.GRU_KEY if package == "aurora_bot.rhythm" else model.TGN_KEY
 
     def unavailable(*args: object, **kwargs: object) -> None:
         """版本校验失败时不应访问张量解析器。"""
@@ -62,7 +62,7 @@ def test_model_version_is_checked_before_tensor_decoding(package: str, monkeypat
 
 def test_dataset_parsing_uses_captured_bytes_after_original_file_changes(tmp_path: Path) -> None:
     """训练快照来自捕获的字节，原文件变化不会改变已解析样本。"""
-    dataset = import_module("aurorabot.memory_model.dataset")
+    dataset = import_module("aurora_bot.memory_model.dataset")
     path = tmp_path / "memory.jsonl"
     original = episodes("training")
     write_episodes(path, original)

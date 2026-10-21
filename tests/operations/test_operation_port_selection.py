@@ -7,26 +7,26 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurorabot.contracts import ToolCall, ToolOutput
-from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.pkgs.world import WorldJournal
-from aurorabot.kernel import BuiltinSource, compose, module
-from aurorabot.operations.registry import OperationRegistry as Registry
-from aurorabot.runtime import create_runtime
+from aurora_bot.contracts import ToolCall, ToolOutput
+from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.pkgs.world import WorldJournal
+from aurora_bot.kernel import BuiltinSource, compose, module
+from aurora_bot.operations.registry import OperationRegistry as Registry
+from aurora_bot.runtime import create_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.contracts.operation import OperationRequest, OperationResult
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.contracts.operation import OperationRequest, OperationResult
+    from aurora_bot.kernel import ModuleContext
 
 
 class _SelectedRegistry(Registry):

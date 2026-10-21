@@ -9,21 +9,21 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.agents import AgentCatalog
-from aurorabot.contracts import AgentTree, ChatMessage, ToolCall, TreeStatus
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.process import TreeProcessDefinition
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.engine.config import EngineConfig
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.runtime import compose_runtime
-from aurorabot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.contracts import AgentTree, ChatMessage, ToolCall, TreeStatus
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.process import TreeProcessDefinition
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine.config import EngineConfig
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.runtime import compose_runtime
+from aurora_bot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.engine.support import _agent, _assembler
 from tests.support.model import ScriptedModel as SequenceModel
 from tests.support.model import TemplateModel as FakeModel

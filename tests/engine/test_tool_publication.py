@@ -6,20 +6,20 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.agents.config import AgentsConfig
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.resource_query import ResourceQuery
-from aurorabot.contracts.tool_resource import TOOL_MEDIA_TYPE
-from aurorabot.kernel import BuiltinSource, compose_managed, module
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.tools import ToolRegistry as ConcreteRegistry
+from aurora_bot.agents.config import AgentsConfig
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.resource_query import ResourceQuery
+from aurora_bot.contracts.tool_resource import TOOL_MEDIA_TYPE
+from aurora_bot.kernel import BuiltinSource, compose_managed, module
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.tools import ToolRegistry as ConcreteRegistry
+from aurora_cli import load_config
+from aurora_cli.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.support.model import TemplateModel as FakeModel
 from tests.support.tool import EchoTool
 
@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from aurorabot.contracts import Tool
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.contracts import Tool
+    from aurora_bot.kernel import ModuleContext
 
 
 def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
@@ -53,7 +53,7 @@ def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
         """不允许在选中目录之外额外构造默认工具。"""
         raise AssertionError("失选工具不应被构造")
 
-    monkeypatch.setattr("aurorabot.tools.module.builtin_tools", unexpected_builtins)
+    monkeypatch.setattr("aurora_bot.tools.module.builtin_tools", unexpected_builtins)
 
     @module(name="selected_tools", provides=ToolRegistry, priority=10)
     def custom(context: ModuleContext) -> ToolRegistry:

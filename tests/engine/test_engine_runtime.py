@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.agents import AgentCatalog
-from aurorabot.contracts import (
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.contracts import (
     AgentStatus,
     AgentTree,
     ChatMessage,
@@ -23,10 +23,10 @@ from aurorabot.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from aurorabot.contracts.process import TreeProcessDefinition
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts.process import TreeProcessDefinition
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.support.model import FakeModelDirectory
 from tests.support.model import ScriptedModel as FakeModel
 

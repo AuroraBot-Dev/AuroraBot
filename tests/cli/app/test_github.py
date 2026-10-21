@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Any
 import httpx2
 import pytest
 
-from aurora.commands.app.github import (
+from aurora_cli.commands.app.github import (
     TOPIC_CLAUSE,
     GitHubSource,
     HttpxTransport,
 )
-from aurora.commands.app.manifest import MANIFEST_NAME, MAX_MANIFEST_BYTES
-from aurora.commands.app.models import (
+from aurora_cli.commands.app.manifest import MANIFEST_NAME, MAX_MANIFEST_BYTES
+from aurora_cli.commands.app.models import (
     ConfigError,
     DiscoveryError,
     GitHubRateLimitError,

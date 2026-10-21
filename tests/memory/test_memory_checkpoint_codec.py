@@ -10,11 +10,11 @@ from typing import Any
 import pytest
 import torch
 
-from aurorabot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
-from aurorabot.contracts.memory_graph_codec import interactions_fingerprint
-from aurorabot.contracts.resource import ResourceRef
-from aurorabot.memory_model.checkpoint import decode_state, encode_state
-from aurorabot.memory_model.coordinates import TGN_KEY
+from aurora_bot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
+from aurora_bot.contracts.memory_graph_codec import interactions_fingerprint
+from aurora_bot.contracts.resource import ResourceRef
+from aurora_bot.memory_model.checkpoint import decode_state, encode_state
+from aurora_bot.memory_model.coordinates import TGN_KEY
 from tests.memory.tgn_support import _network, _request
 
 _MODEL = ResourceRef(TGN_KEY, "controlled")

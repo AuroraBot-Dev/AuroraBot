@@ -38,7 +38,7 @@ uv run aurora train memory train-memory.jsonl valid-memory.jsonl models/memory.p
 | `outcome_cursor` | 严格晚于观察的结果获知游标 |
 | `outcome_at` | 不早于观察、带时区的结果获知时间 |
 
-`aurorabot.rhythm.dataset` 提供 `RhythmExample`、`RhythmEpisode`、`write_episodes`、`read_episodes` 和 `validate_partition`。没有结果时间或游标的输入不能自动补成有效样本。标签可以来自独立任务评估、受控回放或标注，但要记录该效用何时真正可知。
+`aurora_bot.rhythm.dataset` 提供 `RhythmExample`、`RhythmEpisode`、`write_episodes`、`read_episodes` 和 `validate_partition`。没有结果时间或游标的输入不能自动补成有效样本。标签可以来自独立任务评估、受控回放或标注，但要记录该效用何时真正可知。
 
 训练与验证不能共享经历 ID，全部训练结果的获知时间必须早于任一验证观察；同一 Bot 的验证游标还必须越过它的全部训练结果。仅仅保证训练观察早于验证观察不够，因为训练标签可能来自更晚的结果。
 
@@ -48,7 +48,7 @@ uv run aurora train memory train-memory.jsonl valid-memory.jsonl models/memory.p
 
 `request` 保存当时的查询、焦点目标、世界游标、观察时间、候选内容和有序图交互。候选的发生时间、获知时间与游标不得超过本次读取边界；后续“采用”“成功”或反馈不能成为本次评分输入。每个候选需要有限效用标签，训练集至少有一组效用不同的候选。
 
-`aurorabot.memory_model.dataset` 提供类型化读取和导出。监督结果必须晚于推荐游标，全部训练结果先于验证查询获知；同一 Bot 的验证查询不能复用训练结果之前的世界前缀。验证保留完整经历边界，不随机拆散相邻事件。
+`aurora_bot.memory_model.dataset` 提供类型化读取和导出。监督结果必须晚于推荐游标，全部训练结果先于验证查询获知；同一 Bot 的验证查询不能复用训练结果之前的世界前缀。验证保留完整经历边界，不随机拆散相邻事件。
 
 ## 从实际运行收集输入
 

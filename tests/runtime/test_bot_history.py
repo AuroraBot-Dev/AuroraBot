@@ -6,9 +6,9 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurorabot.bot.store import JournalBotState
-from aurorabot.contracts.bot import BotChange, Goal, GoalStatus
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.bot.store import JournalBotState
+from aurora_bot.contracts.bot import BotChange, Goal, GoalStatus
+from aurora_bot.world import SqlAlchemyWorldJournal
 
 if TYPE_CHECKING:
     from pathlib import Path

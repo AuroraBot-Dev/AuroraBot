@@ -8,24 +8,24 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.cadence import RhythmPolicy
-from aurorabot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.kernel import BuiltinSource, compose, compose_managed, module
-from aurorabot.memory_model.config import MemoryModelConfig
-from aurorabot.memory_model.rules import RuleMemoryPolicy
-from aurorabot.rhythm.config import RhythmConfig
-from aurorabot.rhythm.rules import RuleRhythmPolicy
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
+from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.kernel import BuiltinSource, compose, compose_managed, module
+from aurora_bot.memory_model.config import MemoryModelConfig
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.rhythm.config import RhythmConfig
+from aurora_bot.rhythm.rules import RuleRhythmPolicy
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora.contracts.config import AuroraConfig
-    from aurorabot.contracts.artifact import ArtifactInfo
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.contracts.artifact import ArtifactInfo
+    from aurora_bot.kernel import ModuleContext
+    from aurora_cli.contracts.config import AuroraConfig
 
 
 @dataclass(frozen=True, slots=True)

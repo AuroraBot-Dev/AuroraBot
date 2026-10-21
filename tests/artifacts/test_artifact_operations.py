@@ -9,19 +9,19 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.artifacts import CONFIG_SPEC
-from aurorabot.artifacts.config import ArtifactsConfig
-from aurorabot.contracts import ToolCall, ToolOutput
-from aurorabot.contracts.artifact_codec import read_artifact
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.runtime import assemble_runtime
-from aurorabot.utils.serialization import thaw_json
+from aurora_bot.artifacts.config import ArtifactsConfig
+from aurora_bot.contracts import ToolCall, ToolOutput
+from aurora_bot.contracts.artifact_codec import read_artifact
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.runtime import assemble_runtime
+from aurora_bot.utils.serialization import thaw_json
+from aurora_cli import load_config
+from aurora_cli.configs.artifacts import CONFIG_SPEC
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:

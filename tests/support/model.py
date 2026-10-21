@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass, field
 
-from aurorabot.contracts import ChatMessage, ModelRequest
-from aurorabot.contracts.model_binding import ModelBinding, ProviderDefinition, ai_resource_key
-from aurorabot.contracts.resource import ResourceKey
+from aurora_bot.contracts import ChatMessage, ModelRequest
+from aurora_bot.contracts.model_binding import ModelBinding, ProviderDefinition, ai_resource_key
+from aurora_bot.contracts.resource import ResourceKey
 
 _PROVIDER = ProviderDefinition(ResourceKey("test", "ai", "provider", "fake"), "fake", None, "AURORA_FAKE_MODEL_KEY")
 

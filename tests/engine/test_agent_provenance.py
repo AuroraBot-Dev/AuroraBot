@@ -6,14 +6,14 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.contracts import ChatMessage, ToolCall, TreeStatus
-from aurorabot.contracts.pkgs.agents import AgentCatalog
-from aurorabot.contracts.tool import DELEGATE_TOOL
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.runtime import compose_runtime
+from aurora_bot.contracts import ChatMessage, ToolCall, TreeStatus
+from aurora_bot.contracts.pkgs.agents import AgentCatalog
+from aurora_bot.contracts.tool import DELEGATE_TOOL
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.runtime import compose_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.support.model import ScriptedModel as FakeModel
 
 if TYPE_CHECKING:

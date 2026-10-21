@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora.commands import setup
-from aurora.utils.process import EXIT_FAILURE
+from aurora_cli.commands import setup
+from aurora_cli.utils.process import EXIT_FAILURE
 from tests.cli.support import FAILED_EXIT_CODE, SETUP_PYTHON_STEPS, build_parser
 
 if TYPE_CHECKING:

@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurora.commands.app import store as store_module
-from aurora.commands.app.models import PackageError, RegistryError, registry_package, validate_package
-from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.commands.app import store as store_module
+from aurora_cli.commands.app.models import PackageError, RegistryError, registry_package, validate_package
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
 
 if TYPE_CHECKING:
     from pathlib import Path

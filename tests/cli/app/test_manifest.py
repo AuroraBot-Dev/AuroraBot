@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from aurora.commands.app.manifest import (
+from aurora_cli.commands.app.manifest import (
     MANIFEST_NAME,
     Manifest,
     check_manifest_command,
@@ -17,7 +17,7 @@ from aurora.commands.app.manifest import (
     parse_manifest,
     unusable_manifest,
 )
-from aurora.commands.app.models import ManifestError, PlanError
+from aurora_cli.commands.app.models import ManifestError, PlanError
 from tests.cli.app.install_support import manifest_text
 
 _SOURCE = "example/weather-mcp"

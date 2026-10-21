@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, TreeLaunchRequest, WorldFrontier
-from aurorabot.contracts.memory_codec import read_exposure
-from aurorabot.contracts.operation import OperationStatus
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts import ChatMessage, ModelRequest, ToolCall, TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts.memory_codec import read_exposure
+from aurora_bot.contracts.operation import OperationStatus
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.memory.operations_support import GOAL, SOURCE, prepared_runtime, request
 from tests.support.model import TemplateModel as FakeModel
 

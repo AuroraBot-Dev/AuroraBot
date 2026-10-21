@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from aurora.commands import config
-from aurora.utils.process import EXIT_CONFIG_ERROR
+from aurora_cli.commands import config
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR
 from tests.cli.support import run
 
 if TYPE_CHECKING:

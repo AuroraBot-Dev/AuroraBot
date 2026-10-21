@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts import ToolCall, ToolOutput
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts import ToolCall, ToolOutput
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
@@ -21,12 +21,12 @@ if TYPE_CHECKING:
 
 _PLUGIN = '''"""独立的示例领域模组。"""
 
-from aurorabot.contracts import ToolScopes
-from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationDefinition, OperationResult
-from aurorabot.contracts.resource import (
+from aurora_bot.contracts import ToolScopes
+from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationDefinition, OperationResult
+from aurora_bot.contracts.resource import (
     RESOURCE_ALIASES, RESOURCE_CONTRIBUTIONS, ResourceAlias, ResourceDescriptor, ResourceKey, ResourceRef,
 )
-from aurorabot.kernel import module
+from aurora_bot.kernel import module
 
 
 class Echo:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from aurorabot.contracts import WorldCommit, WorldFrontier
+from aurora_bot.contracts import WorldCommit, WorldFrontier
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 

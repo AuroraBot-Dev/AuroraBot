@@ -8,17 +8,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app.models import VerifyError
-from aurora.commands.app.verify import MCPVerifier, process_target
-from aurorabot.mcp import McpToolsPage, SdkMcpClientFactory
+from aurora_bot.mcp import McpToolsPage, SdkMcpClientFactory
+from aurora_cli.commands.app.models import VerifyError
+from aurora_cli.commands.app.verify import MCPVerifier, process_target
 from tests.mcp.sdk_support import _route_stdio_to_server, _server
 from tests.mcp.support import FakeClient
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.mcp import McpAppSpec
-    from aurorabot.mcp.client import InboundEventHandler, McpClientPort
+    from aurora_bot.mcp import McpAppSpec
+    from aurora_bot.mcp.client import InboundEventHandler, McpClientPort
 
 
 @dataclass(frozen=True, slots=True)

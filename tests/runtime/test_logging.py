@@ -6,20 +6,20 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
-from aurora.utils.logging import configure_project_logging
-from aurorabot.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
-from aurorabot.runtime import assemble_runtime
-from aurorabot.tools import ToolRegistry
-from aurorabot.utils import configure_console_logging
-from aurorabot.world.config import resolve_storage_directory
+from aurora_bot.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
+from aurora_bot.runtime import assemble_runtime
+from aurora_bot.tools import ToolRegistry
+from aurora_bot.utils import configure_console_logging
+from aurora_bot.world.config import resolve_storage_directory
+from aurora_cli import load_config
+from aurora_cli.configs.storage import CONFIG_SPEC as STORAGE_CONFIG
+from aurora_cli.utils.logging import configure_project_logging
 from tests.support.model import FakeModelDirectory
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.contracts import ToolResult
+    from aurora_bot.contracts import ToolResult
 
 
 @dataclass(slots=True)

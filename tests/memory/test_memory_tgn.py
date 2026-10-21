@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import torch
 
-from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+from aurora_bot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 from tests.memory.tgn_support import _request
 
 

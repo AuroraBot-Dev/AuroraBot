@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts import (
+from aurora_bot.contracts import (
     ChatMessage,
     EnvironmentEvent,
     ModelRequest,
@@ -17,8 +16,9 @@ from aurorabot.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from aurorabot.runtime import assemble_runtime
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.runtime import assemble_runtime
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:

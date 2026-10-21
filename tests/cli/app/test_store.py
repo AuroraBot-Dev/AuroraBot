@@ -11,15 +11,15 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app import store as store_module
-from aurora.commands.app.models import AppListItem, AppNotFoundError, ConfigError, PathError, RegistryError
-from aurora.commands.app.store import AppStore, app_table, render_entry
-from aurorabot.mcp.config import AppConfig
+from aurora_bot.mcp.config import AppConfig
+from aurora_cli.commands.app import store as store_module
+from aurora_cli.commands.app.models import AppListItem, AppNotFoundError, ConfigError, PathError, RegistryError
+from aurora_cli.commands.app.store import AppStore, app_table, render_entry
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora.commands.app.models import AppList
+    from aurora_cli.commands.app.models import AppList
 
 _CONFIG_DIRECTORY = "config"
 _GROUP_READABLE = 0o640

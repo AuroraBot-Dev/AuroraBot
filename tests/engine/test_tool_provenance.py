@@ -8,26 +8,26 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.agents.config import AgentsConfig
-from aurorabot.contracts import ChatMessage, ToolCall, ToolOutput, TreeStatus
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.contracts.tool import WAIT_TOOL
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.runtime import compose_runtime
+from aurora_bot.agents.config import AgentsConfig
+from aurora_bot.contracts import ChatMessage, ToolCall, ToolOutput, TreeStatus
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.tool import WAIT_TOOL
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.runtime import compose_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.tool import EchoTool
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora import AuroraConfig
+    from aurora_cli import AuroraConfig
 
 
 def _config(project: Path) -> AuroraConfig:

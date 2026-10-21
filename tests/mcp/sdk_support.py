@@ -16,7 +16,7 @@ from mcp.types import (
 )
 from pydantic import Field
 
-from aurorabot.mcp import (
+from aurora_bot.mcp import (
     TOOL_CONTRACT_EXTENSION,
     WORLD_EVENT_NOTIFICATION,
     WORLD_EVENTS_EXTENSION,
@@ -185,7 +185,7 @@ def _route_stdio_to_server(monkeypatch: pytest.MonkeyPatch, server: MCPServer) -
         _ = errlog
         return server
 
-    monkeypatch.setattr("aurorabot.mcp.client.stdio_client", fake_stdio_client)
+    monkeypatch.setattr("aurora_bot.mcp.client.stdio_client", fake_stdio_client)
 
 
 @dataclass(slots=True)

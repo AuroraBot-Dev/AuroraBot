@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.kernel import ModuleLifecycleError, compose_managed, module
+from aurora_bot.kernel import ModuleLifecycleError, compose_managed, module
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:
-    from aurorabot.kernel import AsyncCleanup, ModuleContext
+    from aurora_bot.kernel import AsyncCleanup, ModuleContext
 
 
 def test_concurrent_close_waits_for_the_same_resource_release() -> None:

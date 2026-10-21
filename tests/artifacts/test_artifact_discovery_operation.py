@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts import ToolCall, ToolOutput, ToolStatus
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.contracts.resource_query import MAX_RESOURCE_PAGE
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts import ToolCall, ToolOutput, ToolStatus
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.resource_query import MAX_RESOURCE_PAGE
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:

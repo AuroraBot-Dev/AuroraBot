@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from aurorabot.artifacts.files import ensure_directory
-from aurorabot.contracts.artifact import ArtifactIntegrityError
+from aurora_bot.artifacts.files import ensure_directory
+from aurora_bot.contracts.artifact import ArtifactIntegrityError
 
 
 def test_directory_created_between_status_lookups_remains_valid(

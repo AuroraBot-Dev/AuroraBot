@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.contracts import AgentTree, ChatMessage, TreeLaunchRequest
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.runtime import compose_runtime
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.contracts import AgentTree, ChatMessage, TreeLaunchRequest
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.runtime import compose_runtime
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.engine.support import _agent, _runner
 from tests.support.model import ScriptedModel as SequenceModel
 from tests.support.model import TemplateModel as FakeModel

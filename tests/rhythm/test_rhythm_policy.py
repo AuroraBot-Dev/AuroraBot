@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from aurorabot.contracts.rhythm import RHYTHM_FEATURES, RhythmAction, RhythmObservation, RhythmPrediction
-from aurorabot.rhythm.rules import RuleRhythmPolicy
+from aurora_bot.contracts.rhythm import RHYTHM_FEATURES, RhythmAction, RhythmObservation, RhythmPrediction
+from aurora_bot.rhythm.rules import RuleRhythmPolicy
 
 _NOW = datetime(2026, 10, 18, 12, tzinfo=UTC)
 _OBSERVATION = RhythmObservation("aurora:bot/test", _NOW, 7, 1, 20, ("aurora:goal/check",))

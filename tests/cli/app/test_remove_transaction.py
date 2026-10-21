@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app.clone import remove_tree
-from aurora.commands.app.models import AppNotFoundError, PathError, RegistryWriteError, RemoveError
-from aurora.commands.app.store import AppStore
-from aurora.commands.app.transaction import (
+from aurora_cli.commands.app.clone import remove_tree
+from aurora_cli.commands.app.models import AppNotFoundError, PathError, RegistryWriteError, RemoveError
+from aurora_cli.commands.app.store import AppStore
+from aurora_cli.commands.app.transaction import (
     REMOVE_PREFIX,
     Removal,
     classify_managed_app,
@@ -27,7 +27,7 @@ from tests.cli.app.clone_support import project
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurora.commands.app.models import RawApp
+    from aurora_cli.commands.app.models import RawApp
 
 _PACKAGE = "github.example.weather-mcp"
 _OWNER = "example"
@@ -303,7 +303,7 @@ def test_cleanup_failure_reports_the_residue_but_keeps_the_entry_deleted(
     """注册表删成功、目录删不掉：remove 逻辑上已经完成，不为了清理失败把条目写回来。"""
     store = _store(tmp_path)
     root = _installed(store)
-    monkeypatch.setattr("aurora.commands.app.transaction.remove_tree", _refuse_the_quarantine)
+    monkeypatch.setattr("aurora_cli.commands.app.transaction.remove_tree", _refuse_the_quarantine)
 
     with pytest.raises(RemoveError) as error_info:
         remove_transaction(store, Removal(_PACKAGE, root))
@@ -319,7 +319,7 @@ def test_rollback_failure_reports_the_residue(tmp_path: Path, monkeypatch: pytes
     store = _store(tmp_path)
     root = _installed(store)
     monkeypatch.setattr(AppStore, "remove_app", _failing_write)
-    monkeypatch.setattr("aurora.commands.app.transaction._undo_remove", _cannot_undo)
+    monkeypatch.setattr("aurora_cli.commands.app.transaction._undo_remove", _cannot_undo)
 
     with pytest.raises(RemoveError) as error_info:
         remove_transaction(store, Removal(_PACKAGE, root))

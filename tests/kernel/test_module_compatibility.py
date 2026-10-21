@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from aurorabot.contracts.module_manifest import ModuleManifest
-from aurorabot.kernel import KERNEL_API_VERSION, ModuleSpec, compose, compose_managed, module, resolve
+from aurora_bot.contracts.module_manifest import ModuleManifest
+from aurora_bot.kernel import KERNEL_API_VERSION, ModuleSpec, compose, compose_managed, module, resolve
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def test_release_version_and_supported_api_are_independent() -> None:

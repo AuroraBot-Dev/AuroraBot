@@ -9,25 +9,25 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
-from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from aurorabot.cadence import Cadence as ConcreteCadence
-from aurorabot.contracts import EnvironmentEvent, MemorySnapshot
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.pkgs.cadence import Cadence, RhythmPolicy
-from aurorabot.contracts.pkgs.console import TerminalConsole
-from aurorabot.contracts.pkgs.mcp import McpRuntime
-from aurorabot.contracts.pkgs.memory import MemoryReader
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.pkgs.world import WorldReader, WorldWriter
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.kernel import BuiltinSource, compose_managed, module
-from aurorabot.mcp.runtime import McpRuntime as ConcreteMcpRuntime
-from aurorabot.rhythm.config import RhythmConfig
-from aurorabot.runtime import create_runtime, run_runtime
+from aurora_bot.cadence import Cadence as ConcreteCadence
+from aurora_bot.contracts import EnvironmentEvent, MemorySnapshot
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.pkgs.cadence import Cadence, RhythmPolicy
+from aurora_bot.contracts.pkgs.console import TerminalConsole
+from aurora_bot.contracts.pkgs.mcp import McpRuntime
+from aurora_bot.contracts.pkgs.memory import MemoryReader
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.pkgs.world import WorldReader, WorldWriter
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.kernel import BuiltinSource, compose_managed, module
+from aurora_bot.mcp.runtime import McpRuntime as ConcreteMcpRuntime
+from aurora_bot.rhythm.config import RhythmConfig
+from aurora_bot.runtime import create_runtime, run_runtime
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
+from aurora_cli.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from tests.ai.endpoint_support import _config
 from tests.support.model import TemplateModel as FakeModel
 
@@ -35,9 +35,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from aurorabot.contracts.memory import MemoryRequest
-    from aurorabot.contracts.pkgs.runtime import TerminalDispatcher
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.contracts.memory import MemoryRequest
+    from aurora_bot.contracts.pkgs.runtime import TerminalDispatcher
+    from aurora_bot.kernel import ModuleContext
 
 _NOW = datetime(2026, 10, 18, tzinfo=UTC)
 
@@ -144,7 +144,7 @@ def test_unselected_mcp_provider_does_not_prepare_default_connections(
         del args, kwargs
         raise AssertionError("失选的 MCP 实现不应准备连接")
 
-    monkeypatch.setattr("aurorabot.mcp.module.prepare_mcp", unexpected)
+    monkeypatch.setattr("aurora_bot.mcp.module.prepare_mcp", unexpected)
 
     @module(name="selected_mcp", provides=McpRuntime, priority=10)
     def selected(context: ModuleContext) -> McpRuntime:

@@ -6,13 +6,13 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurorabot.contracts import ScopeCatalog, ScopeKind, ToolCall, ToolOutput, WorldFrontier
-from aurorabot.contracts.memory import MemoryRequest
-from aurorabot.contracts.pkgs.memory import MemoryReader
-from aurorabot.contracts.pkgs.tools import ToolRegistry
-from aurorabot.runtime import assemble_runtime
-from aurorabot.tools import WORLD_SCOPES_TOOL
+from aurora_bot.contracts import ScopeCatalog, ScopeKind, ToolCall, ToolOutput, WorldFrontier
+from aurora_bot.contracts.memory import MemoryRequest
+from aurora_bot.contracts.pkgs.memory import MemoryReader
+from aurora_bot.contracts.pkgs.tools import ToolRegistry
+from aurora_bot.runtime import assemble_runtime
+from aurora_bot.tools import WORLD_SCOPES_TOOL
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
 _PLUGIN = '''"""异步实验插件自行描述过程台账。"""
 
-from aurorabot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
-from aurorabot.kernel import ModuleContext, module
+from aurora_bot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
+from aurora_bot.kernel import ModuleContext, module
 
 
 @module(

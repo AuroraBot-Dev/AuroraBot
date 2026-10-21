@@ -7,25 +7,25 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
-from aurorabot.engine.config import EngineConfig
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.runtime import compose_runtime
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
+from aurora_bot.engine.config import EngineConfig
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.runtime import compose_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from aurorabot.contracts.operation import OperationResult
-    from aurorabot.contracts.process import TreeProcessDefinition
+    from aurora_bot.contracts.operation import OperationResult
+    from aurora_bot.contracts.process import TreeProcessDefinition
 
 
 def _query(request_id: str, target: ResourceRef, arguments: Mapping[str, Any]) -> OperationRequest:

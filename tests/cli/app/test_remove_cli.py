@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurora.commands.app.models import RegistryWriteError
-from aurora.commands.app.store import AppStore
-from aurora.commands.app.transaction import REMOVE_PREFIX
-from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.commands.app.models import RegistryWriteError
+from aurora_cli.commands.app.store import AppStore
+from aurora_cli.commands.app.transaction import REMOVE_PREFIX
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
 from tests.cli.app.clone_support import apps_root_entries, project, registry_entry
 
 if TYPE_CHECKING:

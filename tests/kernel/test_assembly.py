@@ -8,17 +8,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import AuroraConfig, load_config
-from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
-from aurora.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
-from aurora.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
-from aurora.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
-from aurorabot.agents.config import AgentsConfig
-from aurorabot.ai import LiteLLMModelGateway
-from aurorabot.ai.config import ProvidersConfig
-from aurorabot.contracts import (
+from aurora_bot.agents.config import AgentsConfig
+from aurora_bot.ai import LiteLLMModelGateway
+from aurora_bot.ai.config import ProvidersConfig
+from aurora_bot.contracts import (
     MCP_EVENT_RECEIVED,
     ChatMessage,
     Tool,
@@ -29,13 +22,20 @@ from aurorabot.contracts import (
     TreeStatus,
     WorldFrontier,
 )
-from aurorabot.contracts.pkgs.agents import AgentCatalog
-from aurorabot.contracts.pkgs.ai import Model
-from aurorabot.contracts.pkgs.cadence import Cadence
-from aurorabot.contracts.pkgs.engine import AgentTreeRunner
-from aurorabot.contracts.pkgs.memory import MemoryReader
-from aurorabot.contracts.pkgs.prompt import PromptAssembler
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts.pkgs.agents import AgentCatalog
+from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.contracts.pkgs.cadence import Cadence
+from aurora_bot.contracts.pkgs.engine import AgentTreeRunner
+from aurora_bot.contracts.pkgs.memory import MemoryReader
+from aurora_bot.contracts.pkgs.prompt import PromptAssembler
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import AuroraConfig, load_config
+from aurora_cli.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
+from aurora_cli.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
+from aurora_cli.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
+from aurora_cli.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
 from tests import PROJECT_ROOT
 from tests.support.model import TemplateModel as FakeModel
 

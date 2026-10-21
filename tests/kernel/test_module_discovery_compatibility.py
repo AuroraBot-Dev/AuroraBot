@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed, discovery
+from aurora_bot.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed, discovery
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import DiscoverySource
+    from aurora_bot.kernel import DiscoverySource
 
 _PLUGIN = '''"""携带兼容清单的真实 Python 模组。"""
 
 from pathlib import Path
-from aurorabot.kernel import ModuleManifest, module
+from aurora_bot.kernel import ModuleManifest, module
 
 
 async def prepare(context):

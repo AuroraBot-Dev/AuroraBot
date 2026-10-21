@@ -4,9 +4,9 @@ from dataclasses import replace
 
 import pytest
 
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.contracts.resource_paging import resource_cursor, resource_order, resource_position
-from aurorabot.contracts.resource_query import ResourceQuery
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.resource_paging import resource_cursor, resource_order, resource_position
+from aurora_bot.contracts.resource_query import ResourceQuery
 
 _MAX_CURSOR_BYTES = 512
 

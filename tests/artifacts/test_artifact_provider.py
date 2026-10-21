@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.contracts.artifact import ArtifactIntegrityError
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.contracts.resource_query import ResourceQuery
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts.artifact import ArtifactIntegrityError
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.contracts.resource_query import ResourceQuery
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:

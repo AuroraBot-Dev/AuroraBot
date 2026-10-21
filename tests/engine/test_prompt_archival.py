@@ -8,33 +8,33 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.artifacts.module import MODULE as ARTIFACTS_MODULE
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts.artifact import ArtifactInfo
-from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.pkgs.prompt import PromptAssembler
-from aurorabot.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.kernel import compose_managed, module
-from aurorabot.mcp.config import PlatformsConfig
-from aurorabot.prompt import PromptAssembler as ConcreteAssembler
-from aurorabot.prompt import PromptCatalog
-from aurorabot.prompt.module import MODULE as PROMPT_MODULE
-from aurorabot.resource_content.module import MODULE as CONTENT_MODULE
-from aurorabot.resources.module import MODULE as RESOURCES_MODULE
-from aurorabot.runtime import compose_runtime
+from aurora_bot.artifacts.module import MODULE as ARTIFACTS_MODULE
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts.artifact import ArtifactInfo
+from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.pkgs.prompt import PromptAssembler
+from aurora_bot.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.kernel import compose_managed, module
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_bot.prompt import PromptAssembler as ConcreteAssembler
+from aurora_bot.prompt import PromptCatalog
+from aurora_bot.prompt.module import MODULE as PROMPT_MODULE
+from aurora_bot.resource_content.module import MODULE as CONTENT_MODULE
+from aurora_bot.resources.module import MODULE as RESOURCES_MODULE
+from aurora_bot.runtime import compose_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 from tests.kernel.support import Settings as _Settings
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(configured_project: Path) -> None:

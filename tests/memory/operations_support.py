@@ -5,20 +5,20 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
-from aurora import load_config
-from aurorabot.contracts import TreeLaunchRequest, WorldFrontier
-from aurorabot.contracts.bot import BotChange, Checkpoint, Goal
-from aurorabot.contracts.operation import OperationKind, OperationRequest
-from aurorabot.contracts.pkgs.bot import BotStateStore
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts import TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts.bot import BotChange, Checkpoint, Goal
+from aurora_bot.contracts.operation import OperationKind, OperationRequest
+from aurora_bot.contracts.pkgs.bot import BotStateStore
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
 
-    from aurorabot.runtime.core import AuroraRuntime
+    from aurora_bot.runtime.core import AuroraRuntime
 
 GOAL = "aurora:goal/check"
 SOURCE = "experiment-started"

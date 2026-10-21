@@ -6,9 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurorabot.console import TerminalConsole, TerminalControl, TerminalResponse
-from aurorabot.contracts import (
+from aurora_bot.console import TerminalConsole, TerminalControl, TerminalResponse
+from aurora_bot.contracts import (
     FRONT_BINDINGS,
     ChatMessage,
     EnvironmentEvent,
@@ -19,8 +18,9 @@ from aurorabot.contracts import (
     WorldCommitInput,
     WorldFrontier,
 )
-from aurorabot.contracts.pkgs.world import WorldJournal
-from aurorabot.runtime import run_runtime
+from aurora_bot.contracts.pkgs.world import WorldJournal
+from aurora_bot.runtime import run_runtime
+from aurora_cli import load_config
 from tests.support.model import FakeModelDirectory
 
 if TYPE_CHECKING:

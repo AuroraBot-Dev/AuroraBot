@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aurorabot.agents import AgentCatalog
-from aurorabot.contracts import (
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.contracts import (
     AgentDefinition,
     ChatMessage,
     EnvironmentEvent,
@@ -18,16 +18,16 @@ from aurorabot.contracts import (
     ToolScopes,
     ToolStatus,
 )
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.prompt import PromptAssembler
-from aurorabot.tools import DelegateTool, ToolRegistry
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.prompt import PromptAssembler
+from aurora_bot.tools import DelegateTool, ToolRegistry
 from tests.support.model import FakeModelDirectory
 from tests.support.prompt import make_prompt_catalog
 
 if TYPE_CHECKING:
-    from aurorabot.contracts.pkgs.ai import Model
-    from aurorabot.contracts.pkgs.world import WorldJournal
-    from aurorabot.world import SqlAlchemyWorldJournal
+    from aurora_bot.contracts.pkgs.ai import Model
+    from aurora_bot.contracts.pkgs.world import WorldJournal
+    from aurora_bot.world import SqlAlchemyWorldJournal
 
 
 EXPECTED_DELEGATION_NODES = 2

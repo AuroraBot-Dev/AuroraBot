@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import torch
 
-from aurorabot.memory_model.dataset import read_episodes, validate_partition, write_episodes
-from aurorabot.memory_model.tgn import TGNMemoryPolicy, load_policy
-from aurorabot.memory_model.training import train
+from aurora_bot.memory_model.dataset import read_episodes, validate_partition, write_episodes
+from aurora_bot.memory_model.tgn import TGNMemoryPolicy, load_policy
+from aurora_bot.memory_model.training import train
 from tests.memory.support import episodes
 
 if TYPE_CHECKING:
     from io import BytesIO
     from pathlib import Path
 
-    from aurorabot.memory_model.training import MemoryTrainingResult
+    from aurora_bot.memory_model.training import MemoryTrainingResult
 
 
 @pytest.fixture(scope="module")

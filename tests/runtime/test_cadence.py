@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.cadence import CADENCE_SCOPE, CADENCE_TICK, Cadence, ReactiveRule
-from aurorabot.contracts import (
+from aurora_bot.cadence import CADENCE_SCOPE, CADENCE_TICK, Cadence, ReactiveRule
+from aurora_bot.contracts import (
     MCP_EVENT_RECEIVED,
     EnvironmentEvent,
     TreeActivity,
@@ -17,7 +17,7 @@ from aurorabot.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from aurorabot.rhythm.rules import RuleRhythmPolicy
+from aurora_bot.rhythm.rules import RuleRhythmPolicy
 from tests.runtime.support import FakeLauncher
 
 if TYPE_CHECKING:

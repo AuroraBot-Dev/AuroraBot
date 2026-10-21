@@ -5,22 +5,22 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from aurora import load_config
-from aurora.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
-from aurora.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
-from aurora.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from aurorabot.agents.config import AgentsConfig
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.mcp.config import PlatformsConfig
+from aurora_bot.agents.config import AgentsConfig
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.mcp.config import PlatformsConfig
+from aurora_cli import load_config
+from aurora_cli.configs.agents import CONFIG_SPEC as AGENTS_CONFIG
+from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
+from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from aurora import AuroraConfig
-    from aurorabot.runtime.core import AuroraRuntime
+    from aurora_bot.runtime.core import AuroraRuntime
+    from aurora_cli import AuroraConfig
 
 
 def _config(project: Path, endpoint_name: str) -> AuroraConfig:

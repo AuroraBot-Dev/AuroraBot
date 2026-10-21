@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from aurorabot.contracts.resource import ResourceInstance, ResourceKey, ResourceRef, resource_instance_identity
-from aurorabot.contracts.resource_codec import parse_resource_instance, parse_resource_ref, resource_instance_data
+from aurora_bot.contracts.resource import ResourceInstance, ResourceKey, ResourceRef, resource_instance_identity
+from aurora_bot.contracts.resource_codec import parse_resource_instance, parse_resource_ref, resource_instance_data
 
 
 @pytest.mark.parametrize("instance_id", ["run-1", "process:tree", "森林/树:一", " raw id ", "🌲"])

@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts.artifact_codec import read_artifact
-from aurorabot.contracts.artifact_io import artifact_content
-from aurorabot.contracts.resource_query import ResourceQuery
-from aurorabot.memory_model.dataset import write_episodes
-from aurorabot.utils.files import write_new_file
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts.artifact_codec import read_artifact
+from aurora_bot.contracts.artifact_io import artifact_content
+from aurora_bot.contracts.resource_query import ResourceQuery
+from aurora_bot.memory_model.dataset import write_episodes
+from aurora_bot.utils.files import write_new_file
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
 from tests.memory.support import episodes
 from tests.rhythm.support import make_episode
 from tests.support.training import _NOW, _write
@@ -44,7 +44,7 @@ def test_cli_publishes_the_exact_inputs_and_model_with_portable_provenance(
         write_episodes(validation_path, episodes("validation", days=1))
     original_training = training_path.read_bytes()
     original_validation = validation_path.read_bytes()
-    package = "aurorabot.rhythm" if domain == "rhythm" else "aurorabot.memory_model"
+    package = "aurora_bot.rhythm" if domain == "rhythm" else "aurora_bot.memory_model"
     backend = import_module(f"{package}.training")
     dataset = import_module(f"{package}.dataset")
     actual_train = backend.train

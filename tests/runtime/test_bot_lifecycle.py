@@ -6,11 +6,11 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora import load_config
-from aurorabot.contracts import TreeStatus
-from aurorabot.contracts.bot import BotChange, Checkpoint, Goal, WakeStatus
-from aurorabot.contracts.pkgs.bot import BotClock, BotStateStore
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts import TreeStatus
+from aurora_bot.contracts.bot import BotChange, Checkpoint, Goal, WakeStatus
+from aurora_bot.contracts.pkgs.bot import BotClock, BotStateStore
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.runtime.support import PlanningModel
 from tests.support.model import TemplateModel as FakeModel
 

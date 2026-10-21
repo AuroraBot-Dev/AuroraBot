@@ -7,18 +7,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.agents import AgentCatalog
-from aurorabot.ai.openai import to_openai_messages
-from aurorabot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, ToolScopes, WorldFrontier
-from aurorabot.contracts.memory_codec import read_exposure
-from aurorabot.contracts.operation import OperationDefinition, OperationRequest, OperationResult
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.engine import AgentTreeRunner
-from aurorabot.operations.registry import OperationRegistry
-from aurorabot.operations.tool import operation_tools
-from aurorabot.resources.catalog import ResourceCatalog
-from aurorabot.tools import ToolRegistry
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.agents import AgentCatalog
+from aurora_bot.ai.openai import to_openai_messages
+from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, ToolScopes, WorldFrontier
+from aurora_bot.contracts.memory_codec import read_exposure
+from aurora_bot.contracts.operation import OperationDefinition, OperationRequest, OperationResult
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.operations.registry import OperationRegistry
+from aurora_bot.operations.tool import operation_tools
+from aurora_bot.resources.catalog import ResourceCatalog
+from aurora_bot.tools import ToolRegistry
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.prompt import _agent, _assembler
 

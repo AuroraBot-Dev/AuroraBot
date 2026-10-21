@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.contracts.module_manifest import ModuleManifest
-from aurorabot.contracts.resource import ResourceKey
-from aurorabot.kernel import ModuleSpec, compose, compose_managed, module, resolve
+from aurora_bot.contracts.module_manifest import ModuleManifest
+from aurora_bot.contracts.resource import ResourceKey
+from aurora_bot.kernel import ModuleSpec, compose, compose_managed, module, resolve
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def _spec(

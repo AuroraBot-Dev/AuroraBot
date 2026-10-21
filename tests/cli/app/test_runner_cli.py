@@ -11,10 +11,10 @@ import io
 import sys
 from typing import TYPE_CHECKING
 
-from aurora.commander import run
-from aurora.commands import DEFAULT_REGISTRY
-from aurora.commands.app.verify import MCPVerifier
-from aurora.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
+from aurora_cli.commander import run
+from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.commands.app.verify import MCPVerifier
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 from tests.cli.app.clone_support import FakeCloner, apps_root_entries, registry_entry
 from tests.cli.app.install_support import DEFAULT_PROTOCOL, FakeMcpClientFactory, FakeSource, stub_cli
 

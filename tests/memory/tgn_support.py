@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import torch
 
-from aurorabot.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
-from aurorabot.memory.graph import graph_interactions
-from aurorabot.memory_model.tgn import TemporalMemoryNetwork
+from aurora_bot.contracts.memory_graph import MemoryCandidate, MemoryInteraction, MemoryNode, MemoryRankingRequest
+from aurora_bot.memory.graph import graph_interactions
+from aurora_bot.memory_model.tgn import TemporalMemoryNetwork
 from tests.memory.facts import _NOW, _fact
 
 

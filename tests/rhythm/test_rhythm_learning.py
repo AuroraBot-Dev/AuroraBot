@@ -10,15 +10,15 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
-from aurora import load_config
-from aurora.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
-from aurorabot.contracts import EnvironmentEvent
-from aurorabot.contracts.pkgs.cadence import Cadence, RhythmPolicy
-from aurorabot.rhythm.config import RhythmConfig
-from aurorabot.rhythm.dataset import RhythmEpisode
-from aurorabot.rhythm.gru import GRURhythmPolicy, load_policy
-from aurorabot.rhythm.training import RhythmTrainingResult, train
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.contracts import EnvironmentEvent
+from aurora_bot.contracts.pkgs.cadence import Cadence, RhythmPolicy
+from aurora_bot.rhythm.config import RhythmConfig
+from aurora_bot.rhythm.dataset import RhythmEpisode
+from aurora_bot.rhythm.gru import GRURhythmPolicy, load_policy
+from aurora_bot.rhythm.training import RhythmTrainingResult, train
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
+from aurora_cli.configs.rhythm import CONFIG_SPEC as RHYTHM_CONFIG
 from tests.rhythm.support import make_episode
 from tests.support.model import TemplateModel as FakeModel
 

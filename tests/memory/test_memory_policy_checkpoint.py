@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-import aurorabot.memory_model.tgn as backend
-from aurorabot.contracts.memory_graph import MemoryNode
-from aurorabot.contracts.memory_graph_codec import interactions_fingerprint
-from aurorabot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
+import aurora_bot.memory_model.tgn as backend
+from aurora_bot.contracts.memory_graph import MemoryNode
+from aurora_bot.contracts.memory_graph_codec import interactions_fingerprint
+from aurora_bot.memory_model.tgn import TemporalMemoryNetwork, TGNMemoryPolicy
 from tests.memory.tgn_support import _cold, _network, _request
 
 if TYPE_CHECKING:
-    from aurorabot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
-    from aurorabot.contracts.memory_graph import MemoryInteraction
-    from aurorabot.contracts.resource import ResourceRef
-    from aurorabot.memory_model.state import GraphState
+    from aurora_bot.contracts.memory_checkpoint import MemoryGraphPrefix, MemoryPolicyCheckpoint
+    from aurora_bot.contracts.memory_graph import MemoryInteraction
+    from aurora_bot.contracts.resource import ResourceRef
+    from aurora_bot.memory_model.state import GraphState
 
 
 def test_restored_prefix_only_updates_the_remaining_real_interactions(monkeypatch: pytest.MonkeyPatch) -> None:

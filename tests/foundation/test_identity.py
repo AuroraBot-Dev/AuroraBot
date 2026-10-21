@@ -7,9 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.configs.tags import CONFIG_SPEC as TAGS_CONFIG
-from aurora.configurator import assemble_config
-from aurorabot.contracts.identity import (
+from aurora_bot.contracts.identity import (
     DEFAULT_NAMESPACE,
     Identifier,
     IdentityError,
@@ -20,7 +18,9 @@ from aurorabot.contracts.identity import (
     is_namespace,
     is_path,
 )
-from aurorabot.utils import resolve_names
+from aurora_bot.utils import resolve_names
+from aurora_cli.configs.tags import CONFIG_SPEC as TAGS_CONFIG
+from aurora_cli.configurator import assemble_config
 from tests import PROJECT_ROOT
 
 if TYPE_CHECKING:

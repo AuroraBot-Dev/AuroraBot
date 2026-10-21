@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora.commands.app.clone import (
+from aurora_cli.commands.app.clone import (
     GIT_CLONE_TIMEOUT_SECONDS,
     STAGE_PREFIX,
     CapturedProcessRunner,
@@ -28,8 +28,8 @@ from aurora.commands.app.clone import (
     normalize_repository_input,
     staging_directory,
 )
-from aurora.commands.app.install import check_admission, install_root
-from aurora.commands.app.models import CloneError, PlanError
+from aurora_cli.commands.app.install import check_admission, install_root
+from aurora_cli.commands.app.models import CloneError, PlanError
 from tests.cli.app.clone_support import DEFAULT_COMMIT, FakeProcessRunner, apps_root_entries, cloning_runner, repository
 
 if TYPE_CHECKING:

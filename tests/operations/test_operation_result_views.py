@@ -9,16 +9,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.artifacts.operations import ArtifactOperation
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts import ToolCall, ToolStatus
-from aurorabot.contracts.artifact_codec import read_artifact
-from aurorabot.contracts.operation import OperationKind, OperationRequest, OperationResult, OperationStatus
-from aurorabot.operations.registry import OperationRegistry
-from aurorabot.operations.tool import OperationTool
-from aurorabot.resources.catalog import ResourceCatalog
-from aurorabot.runtime.resource_commands import ResourceCommands
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.artifacts.operations import ArtifactOperation
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts import ToolCall, ToolStatus
+from aurora_bot.contracts.artifact_codec import read_artifact
+from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationResult, OperationStatus
+from aurora_bot.operations.registry import OperationRegistry
+from aurora_bot.operations.tool import OperationTool
+from aurora_bot.resources.catalog import ResourceCatalog
+from aurora_bot.runtime.resource_commands import ResourceCommands
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.operations.support import LargeOperation
 
 if TYPE_CHECKING:

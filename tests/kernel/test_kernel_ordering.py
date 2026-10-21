@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.kernel import ACTIVATE, CLOSE, CONSTRUCT, RUN, ModuleSpec, Ordering, Phase, resolve
+from aurora_bot.kernel import ACTIVATE, CLOSE, CONSTRUCT, RUN, ModuleSpec, Ordering, Phase, resolve
 from tests.kernel.support import Alpha, Beta, Gamma
 
 if TYPE_CHECKING:
     import asyncio
 
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def _build(context: ModuleContext) -> None:

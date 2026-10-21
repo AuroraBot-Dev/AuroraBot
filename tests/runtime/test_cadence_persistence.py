@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurorabot.cadence import Cadence
-from aurorabot.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldFrontier
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
-from aurorabot.rhythm.rules import RuleRhythmPolicy
-from aurorabot.world import SqlAlchemyWorldJournal
+from aurora_bot.cadence import Cadence
+from aurora_bot.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
+from aurora_bot.rhythm.rules import RuleRhythmPolicy
+from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.runtime.support import FakeLauncher
 
 if TYPE_CHECKING:

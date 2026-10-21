@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from aurorabot.contracts import ToolCall, ToolStatus
-from aurorabot.contracts.identity import is_path
-from aurorabot.mcp import (
+from aurora_bot.contracts import ToolCall, ToolStatus
+from aurora_bot.contracts.identity import is_path
+from aurora_bot.mcp import (
     McpCallRejectedError,
     McpCallResult,
     McpCallUnknownError,
@@ -18,7 +18,7 @@ from aurorabot.mcp import (
     McpToolsPage,
     bind_mcp_tool,
 )
-from aurorabot.tools import is_tool_id
+from aurora_bot.tools import is_tool_id
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping

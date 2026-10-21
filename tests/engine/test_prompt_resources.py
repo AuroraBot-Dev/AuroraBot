@@ -8,23 +8,23 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora import load_config
-from aurorabot.artifacts.module import MODULE as ARTIFACTS_MODULE
-from aurorabot.artifacts.store import FileArtifactStore
-from aurorabot.contracts import AgentDefinition, AgentTree, ChatMessage, ModelRequest
-from aurorabot.contracts.operation import OPERATION_CONTRIBUTIONS
-from aurorabot.contracts.pkgs.artifacts import ArtifactStore
-from aurorabot.contracts.pkgs.prompt import PromptAssembler
-from aurorabot.contracts.pkgs.resources import ResourceCatalog
-from aurorabot.contracts.prompt import PROMPT_FRAGMENT_CONTRACT, PromptAssembly, PromptFragment
-from aurorabot.contracts.resource import ResourceKey, ResourceRef
-from aurorabot.kernel import compose_managed, module
-from aurorabot.prompt import PromptAssembler as ConcreteAssembler
-from aurorabot.prompt import PromptCatalog
-from aurorabot.prompt.module import MODULE as PROMPT_MODULE
-from aurorabot.resource_content.module import MODULE as CONTENT_MODULE
-from aurorabot.resources.module import MODULE as RESOURCES_MODULE
-from aurorabot.runtime import assemble_runtime
+from aurora_bot.artifacts.module import MODULE as ARTIFACTS_MODULE
+from aurora_bot.artifacts.store import FileArtifactStore
+from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ModelRequest
+from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS
+from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
+from aurora_bot.contracts.pkgs.prompt import PromptAssembler
+from aurora_bot.contracts.pkgs.resources import ResourceCatalog
+from aurora_bot.contracts.prompt import PROMPT_FRAGMENT_CONTRACT, PromptAssembly, PromptFragment
+from aurora_bot.contracts.resource import ResourceKey, ResourceRef
+from aurora_bot.kernel import compose_managed, module
+from aurora_bot.prompt import PromptAssembler as ConcreteAssembler
+from aurora_bot.prompt import PromptCatalog
+from aurora_bot.prompt.module import MODULE as PROMPT_MODULE
+from aurora_bot.resource_content.module import MODULE as CONTENT_MODULE
+from aurora_bot.resources.module import MODULE as RESOURCES_MODULE
+from aurora_bot.runtime import assemble_runtime
+from aurora_cli import load_config
 from tests.kernel.support import Settings as _Settings
 from tests.support.model import TemplateModel as FakeModel
 from tests.support.model import fake_endpoint
@@ -32,7 +32,7 @@ from tests.support.model import fake_endpoint
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from aurorabot.kernel import ModuleContext
+    from aurora_bot.kernel import ModuleContext
 
 
 def test_fragment_version_matches_the_exact_normalized_utf8_content() -> None:

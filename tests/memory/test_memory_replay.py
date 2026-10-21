@@ -6,13 +6,13 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurorabot.contracts import WorldFrontier
-from aurorabot.contracts.memory_codec import exposure_data, read_exposure
-from aurorabot.contracts.memory_graph_codec import ranking_fingerprint, read_ranking
-from aurorabot.contracts.operation import OperationStatus
-from aurorabot.contracts.pkgs.memory import MemoryPolicy
-from aurorabot.contracts.pkgs.operations import OperationRegistry
-from aurorabot.memory_model.rules import RuleMemoryPolicy
+from aurora_bot.contracts import WorldFrontier
+from aurora_bot.contracts.memory_codec import exposure_data, read_exposure
+from aurora_bot.contracts.memory_graph_codec import ranking_fingerprint, read_ranking
+from aurora_bot.contracts.operation import OperationStatus
+from aurora_bot.contracts.pkgs.memory import MemoryPolicy
+from aurora_bot.contracts.pkgs.operations import OperationRegistry
+from aurora_bot.memory_model.rules import RuleMemoryPolicy
 from tests.memory.operations_support import feedback_arguments, prepared_runtime, request
 
 if TYPE_CHECKING:
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from aurorabot.contracts.memory_graph import MemoryRankingRequest
+    from aurora_bot.contracts.memory_graph import MemoryRankingRequest
 
 
 def test_training_input_rebuilds_exact_history_without_current_model_or_future_feedback(
