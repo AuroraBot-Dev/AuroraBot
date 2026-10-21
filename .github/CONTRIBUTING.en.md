@@ -10,7 +10,7 @@ Whether you bring a bug fix, a more natural introduction, an MCP application, or
 - **First contribution**: fix documentation, add tests, or pick a small, well-bounded issue.
 - **Application developers**: start from the built-in Clock app and connect new MCP capabilities to AuroraBot.
 - **Runtime developers**: improve AgentTree, the engine, the model gateway, MCP integration, or the local interaction experience.
-- **Design participants**: propose RFCs for public contracts and module boundaries, and drive discussion with executable acceptance criteria.
+- **Design participants**: discuss use cases, public contracts, and module boundaries in Issues or Discussions.
 
 If you are not sure where to start, describe the experience you want to improve in a Discussion or an Issue first.
 
@@ -47,23 +47,16 @@ Running tests and static checks does not require real model keys. Keys live only
 
 ## Before making changes
 
-AuroraBot records design decisions with long-term impact in RFCs. Update or add an RFC under `apps/docsite/src/rfc/` for changes to:
+For changes to public contracts, persistence, or module boundaries, identify the Bot use case, invariants, and verification method. See [AGENTS.md](../AGENTS.md) for development constraints and the [system overview](../apps/docsite/src/architecture/system-overview.md) for component responsibilities. Discuss larger designs in Issues or Discussions.
 
-- module responsibilities or dependency direction;
-- AgentTree, delegation, and tool receipt contracts;
-- TOML configuration, extension protocols, or model call contracts;
-- behavior that changes platform composition, process entry points, or persistence semantics.
-
-Small bug fixes, test additions, copy improvements, and refactors that do not change public semantics can be submitted directly. When public documentation changes, update the Chinese, English, and Japanese entry points together.
-
-The current runtime, package boundaries, and process composition are governed by the design philosophy [RFC 0300](../apps/docsite/src/rfc/0300-design-philosophy.md); the current implementation structure lives in the [architecture docs](../apps/docsite/src/architecture/).
+Documentation describes current usage, capabilities, and limits. Record changes in [docs/CHANGELOG.md](../docs/CHANGELOG.md). Simplified Chinese is authoritative; keep corresponding translations in sync.
 
 ## Keep the loop closed
 
 While contributing code, hold the boundaries that keep AuroraBot reliable:
 
 - The model decides, the runtime executes: assistant may only reply or request tools; real external effects run only through the Tool contract, and plain model text is not an effect.
-- Delegation is a tree operation: `aurora:tool/delegate` is an ordinary visible Tool that the engine interprets to spawn a child; when the child finishes, the parent resumes with the tool result.
+- The default executor uses `aurora:tool/definition/delegate` to spawn a child; when the child finishes, the parent resumes with the tool result.
 - The engine owns the full hot path; concrete model, tool, and memory implementations are injected through contracts Ports, and nodes never call the model gateway or platform clients directly.
 - Structural configuration stays in TOML; keys keep coming only from environment variables.
 - Shared logging goes through `aurora_bot.utils.logging.get_logger()` and never records full prompts, model replies, or sensitive payloads.
@@ -92,7 +85,7 @@ Consequences of violations:
 
 1. Create a short-lived branch from `dev`, preferably with a `feat/`, `fix/`, or `refact/` prefix.
 2. Keep each Pull Request focused on one reviewable goal, with matching tests and documentation.
-3. Set `dev` as the merge target and describe user-visible or behavioral changes, verification commands, known boundaries, and related RFCs/Issues.
+3. Set `dev` as the merge target and describe behavioral changes, verification results, and related Issues.
 4. Wait for CI and review, then delete the finished branch.
 
 ## Verification
@@ -125,7 +118,7 @@ Tests must be offline, deterministic, and repeatable. Models, clocks, and MCP us
 
 - Users can understand the behavioral difference from the docs or tests.
 - New behavior does not bypass the closed loop between model decisions, Tool execution, and world commits.
-- Configuration, README, module docs, tests, and RFCs do not contradict each other.
+- Configuration, documentation, and tests are consistent.
 - Logs and test fixtures contain no real keys, sessions, or private data.
 - `aurora check` passes, or the Pull Request clearly explains what could not be run.
 

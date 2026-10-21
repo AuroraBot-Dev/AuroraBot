@@ -10,7 +10,7 @@ AuroraBot が目指すのは、道具のような Agent ではありません。
 - **初めての貢献**：ドキュメントの修正、テストの追加、境界が明確な小さい問題の選択。
 - **アプリケーション開発者**：内蔵 Clock アプリから始めて、AuroraBot に新しい MCP 機能を接続する。
 - **runtime 開発者**：AgentTree、engine、model gateway、MCP 統合、ローカルの対話体験を改善する。
-- **設計への参加**：公共 contract と module 境界の RFC を提案し、実行可能な acceptance criteria で議論を進める。
+- **設計への参加**：Issue や Discussion でユースケース、公開 contract、module 境界を議論する。
 
 どこから始めればよいか分からない場合は、まず Discussion や Issue で改善したい体験を説明してください。
 
@@ -47,23 +47,16 @@ aurora start
 
 ## 変更の前に
 
-AuroraBot は、長期的に影響を与える設計上の決定を RFC に記録します。次の変更は、`apps/docsite/src/rfc/` の RFC を先に更新または新規作成してください：
+公開 contract、永続化、module 境界を変更する場合は、Bot のユースケース、不変条件、検証方法を明確にしてください。開発上の制約は [AGENTS.md](../AGENTS.md)、各コンポーネントの責務は[システム概要](../apps/docsite/src/architecture/system-overview.md)を参照してください。大きな設計は Issue や Discussion で議論します。
 
-- module の責務または依存方向；
-- AgentTree、委任、tool 受領 contract；
-- TOML 設定、extension protocol、または model call contract；
-- platform の構成、プロセス入口、永続化の意味を変える挙動。
-
-小さなバグ修正、テストの追加、文言の改善、公共の意味を変えない refactor は直接提出できます。公開ドキュメントを変更した場合は、中国語・英語・日本語の入口をまとめて更新してください。
-
-現在の runtime、パッケージ境界、プロセス構成は、設計思想 [RFC 0300](../apps/docsite/src/rfc/0300-design-philosophy.md) を最上位の制約とし、現行の実装構造は [アーキテクチャ説明](../apps/docsite/src/architecture/) にあります。
+ドキュメントには現在の使い方、機能、制限を記載し、変更経緯は [docs/CHANGELOG.md](../docs/CHANGELOG.md) に記録します。簡体中文を基準とし、対応する翻訳も更新してください。
 
 ## 閉じたループを保つ
 
 コードに貢献するときは、AuroraBot を確実に動かすための境界を守ってください：
 
 - モデルが判断し、runtime が実行します。assistant は応答するか tool を要求するだけです。実際の外部 effect は Tool contract を通してのみ実行され、通常の model text は effect ではありません。
-- 委任は tree 操作です。`aurora:tool/delegate` は普通に見える Tool で、engine が解釈して child を生成し、child の完了後は tool 結果で parent を再開します。
+- 既定の executor は `aurora:tool/definition/delegate` で child を生成し、child の完了後は tool 結果で parent を再開します。
 - engine が完全な hot path を管理し、具体的な model・tool・memory の実装は contracts Port から注入されます。node が model gateway や platform client を直接呼び出してはいけません。
 - 構造設定は引き続き TOML を使い、キーは環境変数だけから読み取ります。
 - 共有ログは `aurora_bot.utils.logging.get_logger()` 経由で取得し、完全な prompt、モデル応答、機密 payload は記録しません。
@@ -92,7 +85,7 @@ AuroraBot は AI を活用した開発を歓迎しますが、生成された内
 
 1. `dev` から短命のブランチを作成します。`feat/`、`fix/`、`refact/` のプレフィックスを推奨します。
 2. 各 Pull Request を、レビュー可能な 1 つの目標に集中させ、対応するテストとドキュメントを添えます。
-3. マージ先を `dev` に設定し、ユーザーに見える変化や挙動の変化、検証コマンド、既知の境界、関連 RFC/Issue を説明します。
+3. マージ先を `dev` に設定し、挙動の変化、検証結果、関連 Issue を説明します。
 4. CI とレビューが通るまで待ち、完了したブランチを削除します。
 
 ## 検証
@@ -126,7 +119,7 @@ uv run pyright
 
 - 利用者がドキュメントやテストから変更による挙動の違いを理解できる。
 - 新しい挙動がモデルの判断、Tool 実行、world commit の閉じたループを迂回していない。
-- 設定、README、module ドキュメント、テスト、RFC が互いに矛盾していない。
+- 設定、ドキュメント、テストが互いに矛盾していない。
 - ログとテストフィクスチャに実際のキー、セッション、プライベートデータが含まれていない。
 - `aurora check` が通っているか、Pull Request で実行できなかった部分が明確に説明されている。
 

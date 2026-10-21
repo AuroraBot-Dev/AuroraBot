@@ -5,15 +5,14 @@ order: 1
 
 # 快速开始
 
-::: info
-此版本暂时只支持从源码运行. 后期会提供一键包安装.
-:::
+从源码安装并在终端运行 AuroraBot。
 
 ## 前期准备
 
-- Python 3.12+
+- Python 3.12
 - Git
 - [uv](https://docs.astral.sh/uv/)
+- [Node.js](https://nodejs.org/) 24 与 [pnpm](https://pnpm.io/) 12
 
 ## 克隆仓库
 
@@ -22,9 +21,7 @@ git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 cd AuroraBot
 ```
 
-::: tip
-或者你可以通过 [Releases](https://github.com/AuroraBot-Dev/AuroraBot/releases) 下载最新稳定版本的源码压缩包, 并解压到 `AuroraBot` 目录下.
-:::
+也可从 [Releases](https://github.com/AuroraBot-Dev/AuroraBot/releases) 下载源码压缩包并解压。
 
 ## 快捷安装
 
@@ -34,27 +31,22 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 应用工作区依赖安装。
+安装脚本检查依赖工具，询问是否全局链接 `aurora`，并准备依赖、个人配置和应用工作区。
 
 ## 配置密钥
 
-::: tip
-在 `.env` 中配置你的密钥:
+在 `.env` 中填写所选模型提供方的密钥，默认模型使用：
 
-```
+```dotenv
 DEEPSEEK_API_KEY=
-# XIAOMI_MIMO_API_KEY=
-# OPENAI_API_KEY=
-# SILICONFLOW_API_KEY=
 ```
 
-更多配置说明见 [配置](./configs)
-:::
+更多设置见[配置](./configs)。
 
-## 启动Bot
+## 启动 Bot
 
 ```bash
 aurora start
 ```
 
-此时你的Bot将会以默认人格`小光`启动，直接输入消息即可对话；输入 `/help` 查看操作，输入 `/exit` 停止。
+Bot 以默认人格“小光”启动。直接输入消息即可对话；输入 `/help` 查看操作，输入 `/exit` 停止。

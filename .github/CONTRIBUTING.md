@@ -9,9 +9,9 @@ AuroraBot 想做的不是一个工具一般的 Agent，而是一个能够持续�
 ## 找到适合你的入口
 
 - **第一次贡献**：修正文档、补充测试，或选择边界清晰的小问题。
-- **应用开发者**：从内建 Clock 应用出发，为 AuroraBot 接入新的 MCP 能力。
-- **运行时开发者**：改进 AgentTree、engine、模型网关、MCP 适配或本地交互体验。
-- **设计参与者**：对公共契约和模块边界提出 RFC，并通过可执行验收标准推动讨论。
+- **应用开发者**：通过 MCP App 或领域模组为 Bot 提供能力。
+- **运行时开发者**：改进认知执行、模型网关、MCP 适配或本地交互体验。
+- **设计参与者**：通过 Issue 或 Discussion 讨论用例、公共契约与模块边界。
 
 如果还不确定从哪里开始，可以先在 Discussion 或 Issue 中描述你希望改善的使用体验。
 
@@ -48,26 +48,19 @@ aurora start
 
 ## 在改动之前
 
-AuroraBot 用 RFC 记录会长期影响项目的设计决策。以下改动应先更新或新增 `apps/docsite/src/rfc/` 中的 RFC：
+涉及公共契约、持久化或模块边界时，先明确 Bot 用例、不变量和验证方法。开发约束见 [AGENTS.md](../AGENTS.md)，组件职责见[系统总览](../apps/docsite/src/architecture/system-overview.md)。较大设计通过 Issue 或 Discussion 讨论。
 
-- 模块职责或依赖方向；
-- AgentTree、委派与工具回执契约；
-- TOML 配置、扩展协议或模型调用契约；
-- 会改变平台组合、进程入口或持久化语义的行为。
-
-小型缺陷修复、测试补充、文案改进和不改变公共语义的重构可以直接提交。公开说明发生变化时，请同步更新中文、英文和日文入口。
-
-当前运行时、包边界和进程组合以设计思想 [RFC 0300](../apps/docsite/src/rfc/0300-design-philosophy.md) 为最高约束，现行实现结构见 [架构说明](../apps/docsite/src/architecture/)。
+文档直接说明当前用法、能力和限制，变更经过写入 [docs/CHANGELOG.md](../docs/CHANGELOG.md)。公开说明以简体中文为准，并同步更新对应翻译。
 
 ## 保持闭环完整
 
 贡献代码时，请守住几条能让 AuroraBot 可靠工作的边界：
 
 - 模型决定、运行时执行：assistant 只能回复或请求工具，真实外部效果只由 Tool 契约执行，普通模型文本不是效果；
-- 委派就是树操作：`aurora:tool/delegate` 是普通可见 Tool，由 engine 解释并创建 child，child 完成后以 tool
+- 默认执行器通过 `aurora:tool/definition/delegate` 创建 child，child 完成后以 tool
   结果恢复 parent；
 - engine 管理完整热路径，具体模型、工具与记忆实现通过 contracts Port 注入，节点不直接调用模型网关或平台客户端；
-- 结构配置继续使用 TOML，密钥继续只来自环境变量；
+- 结构配置使用 TOML，密钥只来自环境变量；
 - 共享日志通过 `aurora_bot.utils.logging.get_logger()` 获取，不记录完整提示词、模型回复或敏感载荷。
 
 更完整的维护者边界见仓库根目录 `AGENTS.md`。
@@ -94,7 +87,7 @@ AuroraBot 欢迎使用 AI 辅助开发，但生成的内容同样受项目边界
 
 1. 从 `dev` 创建短生命周期分支，推荐 `feat/`、`fix/` 或 `refact/` 前缀。
 2. 让每个 Pull Request 聚焦一个可审查目标，并补充对应测试和文档。
-3. 合并目标设为 `dev`，说明使用体验或行为变化、验证命令、已知边界和相关 RFC/Issue。
+3. 合并目标设为 `dev`，说明行为变化、验证结果和相关 Issue。
 4. 等待 CI 与评审通过后合并，并删除已经完成的分支。
 
 ## 验证
@@ -129,7 +122,7 @@ uv run pyright
 
 - 使用者能从文档或测试看懂改动带来的行为差异。
 - 新行为没有绕过模型决定、Tool 执行与世界提交的闭环。
-- 配置、README、模块文档、测试和 RFC 没有互相矛盾。
+- 配置、文档与测试保持一致。
 - 日志和测试夹具不包含真实密钥、会话或私人数据。
 - `aurora check` 已通过，或 Pull Request 清楚解释了未运行的部分。
 

@@ -12,6 +12,6 @@ export const sidebar = [
     includeFolderIndexFile: false,
     sortMenusByFrontmatterOrder: true,
     frontmatterOrderDefaultValue: 1000,
-    excludeByGlobPattern: ['.vitepress/**', 'node_modules/**', 'public/**', 'rfc/**', 'README*'],
+    excludeByGlobPattern: ['.vitepress/**', 'node_modules/**', 'public/**', 'README*'],
   },
 ] satisfies VitePressSidebarOptions[];

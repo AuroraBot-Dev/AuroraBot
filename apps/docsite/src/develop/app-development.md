@@ -45,36 +45,30 @@ pnpm build --help                # 查看任务支持的目标
 | `clean`     | `artifacts`、`deps`                                      | 清理产物与缓存；`deps` 额外删除依赖，保留锁文件 |
 
 `pnpm check apps` 依次执行全部类型检查、规范检查、测试及应用构建。
-`pnpm check all` 先执行 Python 检查，再执行前端检查。单独 `pnpm build all` 不会替代类型检查。
+`pnpm check all` 先执行 Python 检查，再执行前端检查。
 自动修复先运行 Oxlint、ESLint、Stylelint，最后统一应用 Prettier 格式。
 
-应用目录内的 `dev`、`build`、`preview`、`typecheck` 和 `clean` 已有明确作用范围，直接运行对应工具。
+应用目录内的 `dev`、`build`、`preview`、`typecheck` 和 `clean` 直接运行对应工具。
 应用的 `test` 转发到根任务入口并限定测试项目，`lint` 转发到根 `lint all`。
-因此 `aurora docs dev`、`aurora docs build` 等 CLI 转发也不需要选择菜单。
 
 ## 配置的职责
 
-- 根 `package.json` 只暴露任务入口；`scripts/tasks.ts` 声明选项和执行计划，`scripts/run.ts` 负责参数、菜单及进程执行。参数作为独立数组传给进程，不拼接 shell 命令。
-- scripts 按 `task`、`dev`、`build`、`preview`、`check`、`typecheck`、`lint`、`format`、`test`、`clean` 排列，根和应用遵循同一顺序，由 ESLint 检查。
+- 根 `package.json` 暴露任务入口；`scripts/tasks.ts` 声明选项和执行计划，`scripts/run.ts` 处理参数、菜单及进程执行。
 - `pnpm-workspace.yaml` 声明包范围和集中依赖版本，锁文件固定实际依赖。
 - `apps/landing/vite.config.ts` 注册 Vue 插件，HTML 入口为 `apps/landing/index.html`。
 - `apps/docsite/.vitepress/config.ts` 装配 `configs/` 下的站点、主题、侧边栏、Markdown、Mermaid 和 Vite 配置，各文件按职责维护。
 - 应用的 `tsconfig.json` 检查浏览器代码，`tsconfig.node.json` 检查构建配置，共享选项位于 `tooling/tsconfig/`。
 - 根 `tsconfig.json` 检查根配置和 `scripts/**/*.ts`；工具包各自的 `typecheck` 检查其源码和测试。
-- ESLint、Oxlint 和 Stylelint 的根配置加载 `tooling/` 中对应的本地包。TypeScript 规则包直接导出源码，无须先构建；修改规则后重新运行检查即可生效。
-- Prettier 负责格式，Oxlint 负责语义与类型感知规则，ESLint 补充 Vue、导入排序及配置文件规则，Stylelint 检查样式。Prettier 按目录覆盖 `apps/`、`tooling/`、`scripts/`、`docs/` 和 `.github/`，新增的受支持文件自动纳入；未知后缀由 `--ignore-unknown` 跳过，构建产物与锁文件由 `.prettierignore` 排除。
-
-TypeScript 声明文件的三斜线指令必须保持 `///`。注释空格规则允许这一标记，自动修复不得把类型引用改成普通注释。
+- 规范配置位于 `tooling/`：Prettier 负责格式，Oxlint 检查语义与类型，ESLint 检查 Vue、导入排序和配置文件，Stylelint 检查样式。
 
 ## 测试与清理边界
 
 根 `vitest.config.ts` 固定仓库根路径，区分 `landing`、`docsite` 和 `tooling` 三个测试项目。
-两个应用使用 happy-dom 和 Vue 插件，工程工具与脚本使用 Node 环境。按项目限定范围后，再应用测试文件过滤条件，避免跨应用运行。
+两个应用使用 happy-dom 和 Vue 插件，工程工具与脚本使用 Node 环境。测试目标限定项目，透传参数可继续筛选测试文件。
 应用尚无测试时，其过滤命令允许空结果；根 `pnpm test all` 要求至少发现测试。
-工程回归测试覆盖声明自动修复、分发取消与失败、参数边界及清理范围，不能替代应用功能测试。
 
 落地页缓存位于 `apps/landing/node_modules/.vite`，文档站缓存位于 `apps/docsite/node_modules/.vitepress`。
-`pnpm clean artifacts` 只删除根工具缓存和直属工作区包的已知产物及缓存，不递归搜索源码中的同名目录，也不删除根 `dist/` 中的 Python 发行产物。
+`pnpm clean artifacts` 删除前端构建产物与缓存，保留依赖、源码及 Python 发行产物。
 清理后可直接运行检查和构建；`pnpm clean deps` 会额外删除根目录和各包的 `node_modules`，之后须重新安装依赖。
 
 文档站的页面源目录为 `src/`，Vite 的 `publicDir: '../public'` 指向 `apps/docsite/public/`，该目录的资源保持文件名复制到构建目录。

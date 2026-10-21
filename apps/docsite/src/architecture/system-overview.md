@@ -51,7 +51,7 @@ Bot 领域模组以 `namespace:kernel/module/path` 标识，声明发布版本�
 ## 项目入口
 
 Python 使用 src layout：`src/aurora_cli/` 提供项目入口，`src/aurora_kernel/` 提供通用宿主，`src/aurora_bot/` 提供领域框架，
-由同一份 `pyproject.toml` 发布为 AuroraBot。导入使用 `aurora_cli`、`aurora_kernel` 与 `aurora_bot`，`src/` 仅是源码目录。终端命令仍为 `aurora`，由 `aurora_cli.main:main` 提供入口。
+由同一份 `pyproject.toml` 发布为 AuroraBot。终端命令 `aurora` 由 `aurora_cli.main:main` 提供入口。
 开发时先执行 `uv sync --locked --group dev`，测试与运行均使用安装后的包。
 
 前端应用位于 `apps/`，工程配置位于 `tooling/`，

@@ -4,17 +4,19 @@ order: 6
 
 # 质量与验收
 
-本页把现行能力和可核对的离线证据对应起来。通过测试证明实现行为，不代表学习模型在开放环境中的收益已经成立。
+本页列出开发检查与主要行为测试。
 
 ## 质量门禁
 
-Python 3.12，使用 uv；Ruff 行宽 120、LF、双引号；公开 API 有类型注解，值对象优先 frozen + slots dataclass。源码文件不超过 600 行，纯字段模型可例外；不通过新增 lint ignore 掩盖核心复杂度。测试使用确定输入和 fake 外部模型、工具，无网络或真实密钥依赖；世界持久化使用临时 SQLite，训练和推理使用实际 CPU 模型。
+Python 3.12，使用 uv；Ruff 行宽 120、LF、双引号。公开 API 保留类型注解，值对象优先 frozen + slots dataclass。源码文件不超过 600 行，纯字段模型可例外。
 
-提交前运行 `uv run aurora check --fix`，检查 Ruff、格式、Pyright 和完整测试。
+Python 检查使用 `uv run aurora check --fix`，包含 Ruff、格式、Pyright 和完整测试。
 覆盖率按需使用 `uv run aurora check --test --coverage`，CI 使用同一命令并设置 20% 总体下限。
 测试按能力组织，优先保护认知循环、持久化一致性、幂等与失败恢复、权限和路径边界、凭据脱敏及记忆时间正确性。
 20% 是最低门槛，不是删减目标；简单展示、字段转发和常量不要求逐项测试，不为覆盖率补充用例。
-仅修改文档时还应运行根目录 `pnpm build docsite`，确认 Markdown 与内部链接可构建。
+文档构建使用根目录 `pnpm build docsite`，前端完整检查使用 `pnpm check apps`。
+
+测试按能力分目录，使用 importlib 模式；跨能力 fake 放在 `tests/support/`，通过 `tests.*` 导入。输入保持确定，外部模型、工具与 MCP 使用 fake；世界持久化使用临时 SQLite，训练和推理可使用实际 CPU 模型。测试不依赖网络或真实密钥。
 
 ## 主体与认知
 
@@ -26,30 +28,19 @@ Python 3.12，使用 uv；Ruff 行宽 120、LF、双引号；公开 API 有类�
 | 原始输入、最新完整交互、必要恢复状态和证据受到保护；工具定义也计入预算     | `tests/runtime/test_bot_lifecycle.py`、`tests/engine/test_context_evidence.py`             |
 | 世界只追加，域序号和全局游标单调，历史状态与当前状态分离                   | `tests/runtime/test_bot_history.py`、`tests/runtime/test_bot_views.py`、WorldJournal 测试  |
 
-`aurora:tool/definition/delegate` 是注册表中的内建工具，返回的 `DelegationRequest` 由 engine 应用。领域消息只含四种角色，Provider 边界单独完成 `message → user` 映射。必要内容超限时在模型和行动效果前失败，不能以截断关键约束换取继续运行。
-
 ## 两个学习模型
 
 | 验收行为                                                                                                                  | 主要证据                                                                                                                 |
 | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| GRU 确实训练、损失变化、利用序列历史，独立较晚经历且结果获知边界参与验证，导出重载保持判断                                | `tests/rhythm/test_rhythm_learning.py`、`tests/rhythm/test_rhythm_dataset.py`                                            |
+| GRU 训练、序列依赖、数据时间边界与导出重载一致性                                                                          | `tests/rhythm/test_rhythm_learning.py`、`tests/rhythm/test_rhythm_dataset.py`                                            |
 | 等待判断和推理机会都可恢复；时间到期和环境变化分别触发检查                                                                | `tests/runtime/test_cadence.py`、`tests/rhythm/test_rhythm_policy.py`、`tests/rhythm/test_rhythm_observations.py`        |
-| TGN 确实计算图梯度并训练，历史关系影响排序，导出重载保持结果                                                              | `tests/memory/test_memory_learning.py`、`tests/memory/test_memory_tgn.py`                                                |
+| TGN 梯度训练、图关系排序与导出重载一致性                                                                                  | `tests/memory/test_memory_learning.py`、`tests/memory/test_memory_tgn.py`                                                |
 | 候选受获知时间和游标约束；新旧修订、必要证据与历史回放不泄漏未来反馈                                                      | `tests/memory/test_memory_visibility.py`、`tests/memory/test_memory_continuity.py`、`tests/memory/test_memory_replay.py` |
 | TGN 投影周期保存和重启恢复，前缀不兼容或内容损坏时重建                                                                    | `tests/memory/test_memory_checkpoint_lifecycle.py`、`tests/memory/test_memory_checkpoint_persistence.py`                 |
 | 规则/GRU 与规则/TGN 四种组合在同一主体闭环中独立替换，学习模型删除导出文件后按归档版本重启，兑现自定安排并承接 GRU 隐状态 | `tests/runtime/test_neural_bot_lifecycle.py`                                                                             |
 | 训练输入、权重、参数和验证结果拥有同一份可读取来源                                                                        | `tests/ai/test_training_artifacts.py`、`tests/ai/test_training_provenance.py`                                            |
 
-同一场景逐项覆盖以下组合：
-
-| 节律 | 记忆 | 共同验证                                                 |
-| ---- | ---- | -------------------------------------------------------- |
-| 规则 | 规则 | 环境唤起、自主保存目标、无新输入重启、到期认知与必要证据 |
-| GRU  | 规则 | 相同闭环，另验证归档权重与循环隐状态承接                 |
-| 规则 | TGN  | 相同闭环，另验证归档权重与图投影检查点恢复               |
-| GRU  | TGN  | 相同闭环，两个学习模型同时恢复和工作                     |
-
-联合场景使用确定的 fake LLM 表达 Bot 选择，真实世界、内核、工具、GRU、TGN、内容存储和时钟完成其余链路。它证明协作与连续性，不能证明相对于基线的真实任务增益。曝光和自评不是自动正确标签；收益评估需要独立效用来源、严格时间划分和固定预算的比较。当前图索引随历史增长，不承诺恒定内存或无限运行规模。
+这些测试验证训练与恢复行为。真实任务的收益评估方法见[节律与记忆模型](./learning#如何判断是否有帮助)。
 
 ## 模组与资源
 
@@ -68,4 +59,4 @@ Python 3.12，使用 uv；Ruff 行宽 120、LF、双引号；公开 API 有类�
 
 Console 输入先提交世界，本地帮助、清屏和退出不产生额外观察；普通和无界面模式共用装配及关闭。MCP 使用 SDK 2.x 的连接与协商，分页目录完整冻结，未选中的提供方不建立默认连接，事件只追加世界。未知效果不降为失败，不自动重试；目录变化不热替换正在运行的节点。日志不包含 Prompt、工具正文或密钥。
 
-这些边界由 Console、runtime、MCP 和日志测试分别验证。当前不提供抢占、并行认知、通用沙箱或自动在线参数训练；新增能力需要独立用例与测试，不能仅由消息名或接口声明推断已经存在。
+对应测试位于 `tests/runtime/` 和 `tests/mcp/`，其中 Console 测试为 `tests/runtime/test_console.py`。

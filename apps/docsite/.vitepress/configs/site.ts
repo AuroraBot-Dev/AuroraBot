@@ -11,6 +11,6 @@ export const site = {
   cleanUrls: true,
   lastUpdated: true,
   ignoreDeadLinks: false,
-  srcExclude: ['README.md', 'README.*.md', 'rfc/**'],
+  srcExclude: ['README.md', 'README.*.md'],
   head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }]],
 } satisfies UserConfig;
