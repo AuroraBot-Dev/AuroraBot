@@ -32,7 +32,7 @@ She has her own persona and state, and can connect with people and the outside w
 
 AuroraBot treats the Bot as the subject of her world, not an interface to be called: she persists, with her own persona, state, and boundaries, and everything is designed around her life. This principle lands in three points in the architecture:
 
-- **She owns the world; a tree is only one of her runs**: the Bot holds an append-only world journal (WorldJournal) and multiple `AgentTree`s. A tree is only one run, not another subject parallel to her; chats, tasks, and delegations are episodes in her life, and when an episode ends, she still exists.
+- **She owns the world; each run is an experience**: the Bot has her own world, goals, and memories. Each cognitive run is an episode in her life; chats, tasks, and delegations are episodes in her life, and when an episode ends, she still exists.
 - **Every input has a medium**: any change that affects her must first become a world event. The message you send her must first be committed to her world as `console.input`, and so are application events, MCP reports, tool results, and the passage of time. She is not responding to an interface; she is experiencing her world.
 - **She understands before she decides**: a message from a user does not automatically become the highest command just because of its source. She first understands what happened, then decides to respond, act, delegate, or stay quiet; the model is only responsible for understanding and judgment, external actions must go through declared Tools, and outcomes return to her world as new events.
 
@@ -70,12 +70,7 @@ This project contains code written with assistance from generative models such a
 
 ## Contributing
 
-The repository uses Python src layout alongside a pnpm workspace. `src/aurora_cli/` contains the CLI and configuration;
-`src/aurora_bot/` contains the Bot framework. Install Python development dependencies with `uv sync --locked --group dev`,
-then import `aurora_cli` or `aurora_bot`. Frontend applications live in `apps/`, with shared libraries in `packages/` and
-build configuration in `tooling/`. Python uses uv; Vue and TypeScript use pnpm/Vite, with independent dependencies and builds.
-
-See [Contributing to AuroraBot](docs/CONTRIBUTING.en.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](docs/CODE_OF_CONDUCT.md).
+See [Contributing to AuroraBot](apps/docsite/src/develop/index.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](apps/docsite/src/reference/CODE_OF_CONDUCT.md).
 
 ## Acknowledgements
 
