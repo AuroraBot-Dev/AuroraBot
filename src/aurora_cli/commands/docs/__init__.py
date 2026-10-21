@@ -1,9 +1,10 @@
-"""实现 ``aurora docs``：在 apps/docsite 中运行 pnpm 脚本。"""
+"""提供 ``aurora docs`` 命令插件，在 apps/docsite 中运行 pnpm 脚本。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.process import run_pnpm
 
 if TYPE_CHECKING:
@@ -26,3 +27,6 @@ def execute(arguments: argparse.Namespace) -> int:
         arguments.root / "apps" / "docsite",
         "docs",
     )
+
+
+MODULE = command_plugin("aurora.cli.commands.docs", COMMAND, execute)

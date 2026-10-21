@@ -43,6 +43,7 @@ from aurora_cli.commands.app.render import (
 )
 from aurora_cli.commands.app.service import AppManager
 from aurora_cli.commands.app.store import AppStore
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.environment import load_project_env
 from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 
@@ -440,4 +441,6 @@ def _label(error: AppError) -> str:
     return "App 操作失败" if _exit_code(error) == EXIT_FAILURE else "App 配置错误"
 
 
-__all__ = ["COMMAND", "execute"]
+MODULE = command_plugin("aurora.cli.commands.app", COMMAND, execute)
+
+__all__ = ["COMMAND", "MODULE", "execute"]

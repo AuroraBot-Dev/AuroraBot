@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from aurora_cli.commands.app import store as store_module
 from aurora_cli.commands.app.models import PackageError, RegistryError, registry_package, validate_package
 from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE
@@ -52,7 +51,7 @@ def _stdio(package: str, working_dir: str = "extensions/apps/example/weather") -
 
 
 def _cli(root: Path, *arguments: str) -> int:
-    return run(["--root", str(root), "app", *arguments], registry=DEFAULT_REGISTRY)
+    return run(["--root", str(root), "app", *arguments])
 
 
 @pytest.mark.parametrize("package", _LEGAL_PACKAGES)

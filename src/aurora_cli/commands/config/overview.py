@@ -4,27 +4,28 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora_cli.configs import config_relative_path, config_spec
 from aurora_cli.utils.table import render_table
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from pathlib import Path
+
+    from aurora_cli.plugins.configs import ConfigCatalog
 
 _LOAD_ERRORS = (OSError, ValueError, TypeError, KeyError)
 
 
-def render_overview(root: Path, names: Sequence[str], *, check: bool) -> tuple[str, int]:
+def render_overview(root: Path, catalog: ConfigCatalog, *, check: bool) -> tuple[str, int]:
     """返回总览表与加载失败数量；``check`` 为真时才逐个加载并校验配置。"""
     rows: list[tuple[str, ...]] = []
     failures = 0
-    for name in names:
-        path = config_relative_path(name)
+    for spec in catalog.specs:
+        name, path = spec.name, spec.path
         if not check:
             rows.append((name, path))
             continue
         try:
-            config_spec(name).load(root)
+            catalog.path(root, name)
+            spec.load(root)
         except _LOAD_ERRORS as error:
             failures += 1
             rows.append((name, path, f"错误：{error}"))

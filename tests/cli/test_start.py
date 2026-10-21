@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
     import pytest
 
+    from aurora_cli.plugins.catalog import PluginCatalog
+
 
 def test_start_loads_config_and_runs_shared_lifecycle(
     configured_project: Path,
@@ -30,9 +32,9 @@ def test_start_loads_config_and_runs_shared_lifecycle(
 
     original_load_config = start._load_config
 
-    def tracked_load_config(root: Path) -> object:
+    def tracked_load_config(root: Path, catalog: PluginCatalog) -> object:
         order.append("config")
-        return original_load_config(root)
+        return original_load_config(root, catalog)
 
     async def fake_run(config: object, *, headless: bool) -> None:
         order.append("runtime")
@@ -78,7 +80,7 @@ def test_start_reports_config_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fail_load(_root: Path) -> None:
+    def fail_load(_root: Path, _catalog: PluginCatalog) -> None:
         raise ValueError("模型配置错误")
 
     monkeypatch.setattr(start, "_load_config", fail_load)
@@ -107,7 +109,7 @@ def test_start_maps_keyboard_interrupt_to_exit_code(monkeypatch: pytest.MonkeyPa
     async def interrupted(config: object, *, headless: bool) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(start, "_load_config", lambda _root: object())
+    monkeypatch.setattr(start, "_load_config", lambda _root, _catalog: object())
     monkeypatch.setattr(start, "configure_project_logging", lambda _config: None)
     monkeypatch.setattr(start, "_run_runtime", interrupted)
 

@@ -22,7 +22,6 @@ from aurora_bot.memory_model.dataset import write_episodes
 from aurora_bot.rhythm.config import RhythmConfig
 from aurora_bot.runtime import compose_runtime
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from tests.ai.learning_support import _config
 from tests.memory.support import episodes
 from tests.rhythm.support import make_episode
@@ -58,7 +57,6 @@ def test_training_resource_loads_after_export_and_input_files_are_removed(
                 "--epochs",
                 "1",
             ],
-            registry=DEFAULT_REGISTRY,
         )
         == 0
     )

@@ -12,6 +12,7 @@ order: 3
 - **前端开发者**：开发落地页、文档主题或工程脚本，见[开发应用](./app-development)。
 - **应用开发者**：接入 MCP 能力，或按[模组开发](./core-development)贡献领域操作。
 - **通用模块开发者**：通过 [Namespace 与 hook](./namespace-modules) 注册调用点并使用共享 ctx。
+- **CLI 扩展开发者**：通过 [CLI 命令与配置插件](./cli-plugins) 贡献命令、配置解析与默认资源。
 - **运行时开发者**：改进认知执行、委派、engine、模型网关、MCP 适配或本地交互体验。
 - **设计参与者**：通过 Issue 或 Discussion 讨论用例、公共契约与模块边界。
 

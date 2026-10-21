@@ -6,7 +6,9 @@ order: 3
 
 ## 个人配置与模板
 
-`src/aurora_cli/configs/<name>/` 保存同名的 `.py` 解析器和 `.toml` 模板，配套文件放在该项的 `resources/` 中。`aurora start` 在加载前补齐个人 `config/` 中缺失的文件，已有内容不覆盖；加载器本身不回退模板。每个配置项导出唯一 `CONFIG_SPEC`，形成只读 `AuroraConfig`；运行包只通过 `Settings.resolve` 取得自己的 DTO。
+`src/aurora_cli/configs/<name>/` 保存同名的 `.py` 解析器和 `.toml` 模板，配套文件放在该项的 `resources/` 中。每项以 `MODULE: CliPlugin` 贡献 `CONFIG_SPEC` 和模板，与外部 CLI 插件共用加载器。`aurora start` 在加载前补齐入选配置中缺失的文件，已有内容不覆盖；加载器本身不回退模板。全部配置形成只读 `AuroraConfig`，运行包只通过 `Settings.resolve` 取得自己的 DTO。
+
+内置配置默认写入个人 `config/`；插件可声明工作目录内的其他相对文件路径。配置名、源配置目标与附属资源的目标冲突在创建文件前失败。配置总览、编辑、初始化与启动均使用声明中的路径。扩展方式见 [CLI 命令与配置插件](../develop/cli-plugins)。
 
 `aurora config` 默认只读；`--init` 补齐缺失文件，`--edit` 或 `--set` 修改个人配置。`.env` 只补充尚不存在的进程环境变量，不改写 TOML，不覆盖调用者的环境。配置与世界记录仅保存密钥变量名，真实值只在 SDK 调用时读取。
 

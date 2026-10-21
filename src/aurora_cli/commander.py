@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from aurora_cli.contracts.command import CommandBinding, CommandRegistry, CommandSpec, SubcommandSpec
+from aurora_cli.plugins.catalog import load_plugins
+from aurora_cli.utils.process import EXIT_CONFIG_ERROR
 from aurora_cli.utils.project import get_running_version
 
 if TYPE_CHECKING:
@@ -43,9 +45,11 @@ def build_registry(bindings: Iterable[CommandBinding]) -> CommandRegistry:
 
 def build_parser(registry: CommandRegistry) -> argparse.ArgumentParser:
     """构建顶层解析器，并注册目录中的全部命令与子命令。"""
-    parser: argparse.ArgumentParser = _ChineseArgumentParser(prog="aurora", description="AuroraBot 运行时")
-    parser.add_argument("-v", "--version", action="store_true", help="显示版本并退出")
-    parser.add_argument("-r", "--root", type=Path, default=Path.cwd(), help="项目根目录")
+    parser: argparse.ArgumentParser = _ChineseArgumentParser(
+        prog="aurora", description="AuroraBot CLI", allow_abbrev=False
+    )
+    parser.add_argument("-v", "--version", action="store_true", help="查看版本")
+    parser.add_argument("-r", "--root", type=Path, default=Path.cwd(), help="指定项目根目录")
     subparsers = cast(
         "argparse._SubParsersAction[argparse.ArgumentParser]",
         parser.add_subparsers(dest="command"),
@@ -94,8 +98,23 @@ def _apply_spec(
         parser.set_defaults(executor=executor)
 
 
-def run(argv: Sequence[str] | None = None, *, registry: CommandRegistry) -> int:
+def run(argv: Sequence[str] | None = None, *, registry: CommandRegistry | None = None) -> int:
     """按目录构建解析器，解析输入并分派到命令执行器。"""
+    if registry is None:
+        bootstrap = _ChineseArgumentParser(add_help=False, allow_abbrev=False)
+        bootstrap.add_argument("-r", "--root", type=Path, default=Path.cwd())
+        bootstrap.add_argument("-v", "--version", action="store_true")
+        # 只解析顶层参数；命令自己的 --root 等同名选项不能改变插件发现目录。
+        bootstrap.add_argument("remaining", nargs=argparse.REMAINDER)
+        early, unknown = bootstrap.parse_known_args(argv)
+        if early.version and not early.remaining and not unknown:
+            sys.stdout.write(f"AuroraBot {get_running_version()}\n")
+            return 0
+        try:
+            registry = load_plugins(early.root).registry()
+        except (OSError, ImportError, TypeError, ValueError) as error:
+            sys.stderr.write(f"CLI 插件加载失败：{error}\n")
+            return EXIT_CONFIG_ERROR
     parser = build_parser(registry)
     arguments = parser.parse_args(argv)
     if getattr(arguments, "version", False):
@@ -108,7 +127,7 @@ def run(argv: Sequence[str] | None = None, *, registry: CommandRegistry) -> int:
     return cast("Callable[[argparse.Namespace], int]", executor)(arguments)
 
 
-def main(argv: Sequence[str] | None = None, *, registry: CommandRegistry) -> None:
+def main(argv: Sequence[str] | None = None, *, registry: CommandRegistry | None = None) -> None:
     raise SystemExit(run(argv, registry=registry))
 
 

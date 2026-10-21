@@ -8,6 +8,7 @@ import sys
 from importlib import import_module, invalidate_caches
 from importlib.metadata import entry_points
 from pathlib import Path
+from pkgutil import iter_modules
 from typing import TYPE_CHECKING, Any, Protocol
 
 from aurora_kernel.declaration import ModuleSpec, Namespace
@@ -37,25 +38,32 @@ class StaticSource:
 
 
 class PackageSource:
-    """扫描指定包的子目录，读取每个目录的 module.py。"""
+    """扫描包内声明；默认读取子目录的 module.py，也可读取直接子模块。"""
 
-    def __init__(self, package: str, *, extract: Callable | None = None) -> None:
+    def __init__(self, package: str, *, extract: Callable | None = None, entry_module: str | None = "module") -> None:
         self._package = package
         self._extract = extract or module_spec
+        self._entry_module = entry_module
 
     def discover(self) -> Iterable[Any]:
         package = import_module(self._package)
         specs: list[Any] = []
+        if self._entry_module is None:
+            names = sorted(item.name for item in iter_modules(package.__path__) if not item.name.startswith("_"))
+            for name in names:
+                origin = f"{self._package}.{name}"
+                specs.append(self._extract(import_module(origin), origin))
+            return specs
         for root in sorted({Path(path).resolve() for path in package.__path__}):
             if not root.is_dir():
                 continue
             for directory in sorted(root.iterdir()):
                 if not directory.is_dir() or directory.name.startswith(("_", ".")):
                     continue
-                if not (directory / _MODULE_FILE).is_file():
+                if not (directory / f"{self._entry_module}.py").is_file():
                     continue
-                module = import_module(f"{self._package}.{directory.name}.module")
-                specs.append(self._extract(module, f"{self._package}.{directory.name}.module"))
+                origin = f"{self._package}.{directory.name}.{self._entry_module}"
+                specs.append(self._extract(import_module(origin), origin))
         return specs
 
 

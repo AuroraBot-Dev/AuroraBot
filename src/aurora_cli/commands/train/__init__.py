@@ -1,4 +1,4 @@
-"""训练并验证 Bot 的节律和记忆策略，导出明确版本的模型权重。"""
+"""提供训练命令插件，验证 Bot 的节律和记忆策略并导出明确版本的模型权重。"""
 
 from __future__ import annotations
 
@@ -17,8 +17,7 @@ from aurora_bot.contracts.model_artifact import MODEL_MEDIA_TYPE
 from aurora_bot.contracts.resource import ResourceKey
 from aurora_bot.contracts.training import TrainingProvenance, provenance_data
 from aurora_bot.utils.files import write_new_file
-from aurora_cli.configs.artifacts import CONFIG_SPEC as ARTIFACTS_CONFIG
-from aurora_cli.configurator import assemble_config
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.process import EXIT_FAILURE
 
 if TYPE_CHECKING:
@@ -87,11 +86,9 @@ async def _train(
 ) -> dict[str, Any]:
     """解析与训练均使用已发布的数据快照，不在完成训练后重新打开输入文件。"""
     root = arguments.root
-    config = (
-        assemble_config(root, (ARTIFACTS_CONFIG,)).get(ARTIFACTS_CONFIG)
-        if (root / ARTIFACTS_CONFIG.path).is_file()
-        else ArtifactsConfig()
-    )
+    catalog = arguments.cli.configs
+    spec = catalog.spec("artifacts")
+    config = spec.load(root) if catalog.path(root, "artifacts").is_file() else ArtifactsConfig()
     store = FileArtifactStore(root / config.directory)
     domain = arguments.subcommand
     training, training_info, training_digest = await _input(
@@ -138,3 +135,6 @@ async def _input(
     examples = await asyncio.to_thread(dataset.parse_episodes, content)
     digest = await asyncio.to_thread(dataset.episodes_fingerprint, examples)
     return examples, info, digest
+
+
+MODULE = command_plugin("aurora.cli.commands.train", COMMAND, execute)

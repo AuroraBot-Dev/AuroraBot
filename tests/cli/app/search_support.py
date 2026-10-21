@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Any
 import httpx2
 
 from aurora_cli.commander import build_parser
-from aurora_cli.commands import DEFAULT_REGISTRY
 from aurora_cli.commands import app as app_module
 from aurora_cli.commands.app.models import Repository, RepositoryPage
+from aurora_cli.plugins.catalog import load_plugins
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -129,7 +129,7 @@ def page(items: tuple[Repository, ...] = (), **overrides: object) -> RepositoryP
 
 def cli(root: Path, *arguments: str) -> int:
     """借真实解析器造出 Namespace 再调 execute；参数解析必须是真的。"""
-    namespace = build_parser(DEFAULT_REGISTRY).parse_args(["--root", str(root), "app", *arguments])
+    namespace = build_parser(load_plugins(root).registry()).parse_args(["--root", str(root), "app", *arguments])
     return app_module.execute(namespace)
 
 

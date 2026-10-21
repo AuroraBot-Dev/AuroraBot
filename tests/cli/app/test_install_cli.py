@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from aurora_cli.commands.app.models import DiscoveryError, RegistryWriteError
 from aurora_cli.commands.app.store import AppStore
 from aurora_cli.commands.app.verify import MCPVerifier
@@ -45,7 +44,7 @@ def _project(tmp_path: Path, apps_toml: str = _EMPTY_REGISTRY) -> Path:
 
 
 def _cli(root: Path, *arguments: str) -> int:
-    return run(["--root", str(root), "app", *arguments], registry=DEFAULT_REGISTRY)
+    return run(["--root", str(root), "app", *arguments])
 
 
 def _capture(capsys: pytest.CaptureFixture[str], root: Path, *arguments: str) -> tuple[int, str, str]:

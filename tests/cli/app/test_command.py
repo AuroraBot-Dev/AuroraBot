@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from aurora_cli.utils.process import EXIT_FAILURE
 
 if TYPE_CHECKING:
@@ -37,7 +36,7 @@ def _stdio(package: str, working_dir: str, *, enabled: bool = False) -> str:
 
 
 def _cli(root: Path, *arguments: str) -> int:
-    return run(["--root", str(root), "app", *arguments], registry=DEFAULT_REGISTRY)
+    return run(["--root", str(root), "app", *arguments])
 
 
 def _cells(line: str) -> list[str]:

@@ -1,10 +1,11 @@
-"""实现 ``aurora about``。"""
+"""提供 ``aurora about`` 命令插件。"""
 
 from __future__ import annotations
 
 import sys
 from typing import TYPE_CHECKING
 
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.platform import detect_os
 from aurora_cli.utils.project import get_git_revision, get_project_version
 from aurora_cli.utils.table import render_table
@@ -59,3 +60,6 @@ def execute(arguments: argparse.Namespace) -> int:
     )
     sys.stdout.write(f"{LOGO}\n{ABOUT}\n{table}\n")
     return 0
+
+
+MODULE = command_plugin("aurora.cli.commands.about", COMMAND, execute)

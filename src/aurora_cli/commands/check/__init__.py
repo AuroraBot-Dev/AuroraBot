@@ -1,10 +1,11 @@
-"""实现 ``aurora check``。"""
+"""提供 ``aurora check`` 命令插件。"""
 
 from __future__ import annotations
 
 import sys
 from typing import TYPE_CHECKING
 
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.process import EXIT_FAILURE, run_process
 
 if TYPE_CHECKING:
@@ -61,3 +62,6 @@ def execute(arguments: argparse.Namespace) -> int:
         return EXIT_FAILURE
     sys.stdout.write("\n全部检查通过。\n")
     return 0
+
+
+MODULE = command_plugin("aurora.cli.commands.check", COMMAND, execute)

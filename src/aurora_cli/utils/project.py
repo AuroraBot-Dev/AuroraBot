@@ -8,7 +8,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
 
-_DISTRIBUTION_NAME = "AuroraBot"
+_DISTRIBUTION_NAME = "aurorabot-ai"
 
 
 def get_project_version(root: Path) -> str | None:

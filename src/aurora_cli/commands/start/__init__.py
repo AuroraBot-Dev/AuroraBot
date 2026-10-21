@@ -1,4 +1,4 @@
-"""实现 ``aurora start``。"""
+"""提供 ``aurora start`` 命令插件。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import sys
 from typing import TYPE_CHECKING
 
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.environment import load_project_env
 from aurora_cli.utils.logging import configure_project_logging
 from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_INTERRUPTED
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
     from aurora_cli.contracts.command import CommandSpec
     from aurora_cli.contracts.config import AuroraConfig
+    from aurora_cli.plugins.catalog import PluginCatalog
 
 _CONSOLE_PLATFORM_ID = "aurora:platform/console"
 
@@ -29,17 +31,17 @@ COMMAND: CommandSpec = {
 }
 
 
-def _load_config(project_root: Path) -> AuroraConfig:
+def _load_config(project_root: Path, catalog: PluginCatalog) -> AuroraConfig:
     from aurora_cli.configs import initialize_configs, load_config
 
-    initialize_configs(project_root)
-    return load_config(project_root)
+    initialize_configs(project_root, catalog=catalog)
+    return load_config(project_root, catalog=catalog)
 
 
 def _console_enabled(config: AuroraConfig) -> bool:
-    from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
+    from aurora_bot.mcp.config import PlatformsConfig
 
-    for platform in config.get(PLATFORMS_CONFIG).platforms:
+    for platform in config.resolve(PlatformsConfig).platforms:
         if platform.id == _CONSOLE_PLATFORM_ID:
             return platform.enabled
     return False
@@ -69,7 +71,7 @@ def _failure_lines(error: BaseException) -> list[str]:
 def execute(arguments: argparse.Namespace) -> int:
     try:
         load_project_env(arguments.root)
-        config = _load_config(arguments.root)
+        config = _load_config(arguments.root, arguments.cli)
         configure_project_logging(config)
         headless = arguments.headless or not _console_enabled(config)
         asyncio.run(_run_runtime(config, headless=headless))
@@ -82,3 +84,6 @@ def execute(arguments: argparse.Namespace) -> int:
         sys.stderr.write(f"启动失败：{error}\n")
         return EXIT_CONFIG_ERROR
     return 0
+
+
+MODULE = command_plugin("aurora.cli.commands.start", COMMAND, execute)

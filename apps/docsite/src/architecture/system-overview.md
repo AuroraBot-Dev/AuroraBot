@@ -51,14 +51,16 @@ Bot 领域模组以 `namespace:kernel/module/path` 标识，声明发布版本�
 ## 项目入口
 
 Python 使用 src layout：`src/aurora_cli/` 提供项目入口，`src/aurora_kernel/` 提供通用宿主，`src/aurora_bot/` 提供领域框架，
-由同一份 `pyproject.toml` 发布为 AuroraBot。终端命令 `aurora` 由 `aurora_cli.main:main` 提供入口。
+由同一份 `pyproject.toml` 发布为 `aurorabot-ai`。终端命令 `aurora` 由 `aurora_cli.main:main` 提供入口。
 开发时先执行 `uv sync --locked --group dev`，测试与运行均使用安装后的包。
 
 前端应用位于 `apps/`，工程配置位于 `tooling/`，
 由根目录 pnpm workspace 管理。uv 与 pnpm 各自维护依赖锁、测试和构建；
 根目录 `pnpm check all` 汇总两侧检查，Python 开发也可以独立使用 `uv run aurora check`。
 
-`aurora_cli` 负责 CLI、`.env`、只读配置解析、进程日志和信号处理，再调用 `aurora_bot.runtime` 的装配入口。命令执行通过 namespace 调用点进入独立宿主；Bot 装配使用自己的宿主与 ctx。`aurora_bot` 不导入 `aurora_cli`。命令和配置按目录约定发现，新增能力不需要修改中心分派表。
+`aurora_cli` 负责 CLI、`.env`、只读配置解析、进程日志和信号处理，再调用 `aurora_bot.runtime` 的装配入口。命令执行通过 namespace 调用点进入独立宿主；Bot 装配使用自己的宿主与 ctx。`aurora_bot` 不导入 `aurora_cli`。
+
+内置命令和配置均导出 `MODULE: CliPlugin`，与工作目录 `extensions/cli/` 和 `aurora_cli_plugin` 安装入口走同一加载流程。CLI 先确定 `--root`，再统一校验模块依赖、命令与配置贡献；配置查看、模板初始化和启动共享本次目录，不使用全局配置缓存。声明与扩展方式见 [CLI 命令与配置插件](../develop/cli-plugins)。
 
 `aurora start` 和 `--headless` 共用生命周期；无界面模式只排除交互式前台。Console 普通输入先提交世界；本地帮助、清屏和退出不作为外部观察。领域命令由同一个操作定义解析和校验。
 

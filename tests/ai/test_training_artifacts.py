@@ -20,7 +20,6 @@ from aurora_bot.contracts.resource_query import ResourceQuery
 from aurora_bot.memory_model.dataset import write_episodes
 from aurora_bot.utils.files import write_new_file
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from tests.memory.support import episodes
 from tests.rhythm.support import make_episode
 from tests.support.training import _NOW, _write
@@ -58,7 +57,6 @@ def test_cli_publishes_the_exact_inputs_and_model_with_portable_provenance(
     monkeypatch.setattr(backend, "train", train)
     code = run(
         ["--root", str(tmp_path), "train", domain, "training.jsonl", "validation.jsonl", "model.pt", "--epochs", "1"],
-        registry=DEFAULT_REGISTRY,
     )
     assert code == 0
     report = json.loads(capsys.readouterr().out)
@@ -107,7 +105,6 @@ def test_training_uses_the_artifact_directory_from_its_own_config(
                 "--epochs",
                 "1",
             ],
-            registry=DEFAULT_REGISTRY,
         )
         == 0
     )

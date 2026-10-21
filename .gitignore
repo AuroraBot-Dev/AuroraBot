@@ -43,11 +43,10 @@ tests/.tmp/
 config.ini
 
 # Project data
-logs/
-data/
+/data/
 /models/
-temp/
-extensions/
+/extensions/
+/config/
 
 # IDE / Editor
 .vscode/*
@@ -67,9 +66,6 @@ graphify-out/
 
 # cache
 .npm-cache/
-
-# personal config initialized by aurora_cli
-/config/
 
 # Node.js / Vue 应用工作区
 node_modules/

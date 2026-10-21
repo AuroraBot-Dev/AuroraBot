@@ -1,5 +1,5 @@
 [project]
-name = "AuroraBot"
+name = "aurorabot-ai"
 version = "0.7.0"
 description = "以 Bot 为中心的主动智能体环境，支持持久目标、节律、记忆与可扩展能力。"
 license = "Apache-2.0"
@@ -21,6 +21,11 @@ dependencies = [
     "tomlkit>=0.15",
     "rich>=15.0.0",
 ]
+
+[project.urls]
+Homepage = "https://www.aurorabot.org/"
+Repository = "https://github.com/AuroraBot-Dev/AuroraBot"
+Issues = "https://github.com/AuroraBot-Dev/AuroraBot/issues"
 
 [project.scripts]
 aurora = "aurora_cli.main:main"
@@ -96,7 +101,7 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 
 [tool.ruff.lint.per-file-ignores]
 "src/aurora_cli/__init__.py" = ["PLC0415"]
-"src/aurora_cli/commands/start.py" = ["PLC0415"]
+"src/aurora_cli/commands/start/__init__.py" = ["PLC0415"]
 "src/aurora_cli/utils/logging.py" = ["PLC0415"]
 "src/aurora_bot/engine/runtime.py" = ["BLE001"]
 

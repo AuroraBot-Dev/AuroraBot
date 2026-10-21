@@ -1,9 +1,10 @@
-"""将 ``aurora setup`` 转交统一工程引导入口。"""
+"""提供 ``aurora setup`` 命令插件，转交统一工程引导入口。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.process import run_process
 
 if TYPE_CHECKING:
@@ -29,3 +30,6 @@ def execute(arguments: argparse.Namespace) -> int:
     root: Path = arguments.root
     flags = tuple(f"--{name}" for name in _FLAG_STEPS if getattr(arguments, name))
     return run_process(("node", str(root / "scripts" / "setup.ts"), "--no-link", *flags), root)
+
+
+MODULE = command_plugin("aurora.cli.commands.setup", COMMAND, execute)

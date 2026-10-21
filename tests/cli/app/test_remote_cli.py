@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from aurora_cli.commands.app.verify import MCPVerifier
 from aurora_cli.utils.process import EXIT_CONFIG_ERROR, EXIT_FAILURE, EXIT_INTERRUPTED
 from tests.cli.app.clone_support import FakeCloner, registry_entry
@@ -42,7 +41,7 @@ def _project(tmp_path: Path, apps_toml: str = _EMPTY_REGISTRY) -> Path:
 
 
 def _capture(capsys: pytest.CaptureFixture[str], root: Path, *arguments: str) -> tuple[int, str, str]:
-    code = run(["--root", str(root), "app", *arguments], registry=DEFAULT_REGISTRY)
+    code = run(["--root", str(root), "app", *arguments])
     streams = capsys.readouterr()
     return code, streams.out, streams.err
 

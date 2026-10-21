@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_cli.commander import run
-from aurora_cli.commands import DEFAULT_REGISTRY
 from aurora_cli.commands.app.models import RegistryWriteError
 from aurora_cli.commands.app.store import AppStore
 from aurora_cli.commands.app.transaction import REMOVE_PREFIX
@@ -59,7 +58,7 @@ def _quarantines(root: Path) -> list[str]:
 
 
 def _cli(root: Path, *arguments: str) -> int:
-    return run(["--root", str(root), "app", *arguments], registry=DEFAULT_REGISTRY)
+    return run(["--root", str(root), "app", *arguments])
 
 
 def _capture(capsys: pytest.CaptureFixture[str], root: Path, *arguments: str) -> tuple[int, str, str]:
@@ -74,7 +73,7 @@ def _failing_write(*_args: object, **_kwargs: object) -> None:
 
 def test_remove_help_lists_force(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
-        run(["app", "remove", "--help"], registry=DEFAULT_REGISTRY)
+        run(["app", "remove", "--help"])
 
     assert exit_info.value.code == 0
     usage = " ".join(capsys.readouterr().out.split())
@@ -84,7 +83,7 @@ def test_remove_help_lists_force(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_remove_requires_a_package_argument() -> None:
     with pytest.raises(SystemExit):
-        run(["app", "remove"], registry=DEFAULT_REGISTRY)
+        run(["app", "remove"])
 
 
 def test_a_managed_remove_reports_the_deleted_directory(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

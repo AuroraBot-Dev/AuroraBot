@@ -121,6 +121,8 @@ Bot 启动发现内置模块、`extensions/plugins/`、`aurorabot_plugin` 和 `a
 
 发现源的扫描、导入和入口排序统一由 `aurora_kernel.discovery` 完成；Bot 适配层只指定默认来源与声明提取规则。
 
+CLI 的内置命令、内置配置与外部插件也复用这些发现源，通过 `CliPlugin` 声明贡献，并由独立同步 Host 执行命令。CLI 专用入口、配置资源与完整示例见 [CLI 命令与配置插件](./cli-plugins)。
+
 Bot 适配层保留契约类型、资源声明、世界域与清单归档。`context.ctx` / `assembly.ctx` 暴露共享上下文，`get()` 与 `contributions()` 从其中实时读取：
 
 | ctx 空间               | 内容                                                                           |

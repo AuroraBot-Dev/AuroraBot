@@ -81,7 +81,7 @@ def test_cli_main_only_dispatches_through_command_layer() -> None:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
         if (module := _imported_module(node)).startswith("aurora_cli.")
     }
-    assert aurora_imports == {"aurora_cli.commands", "aurora_cli.commander"}
+    assert aurora_imports == {"aurora_cli.commander"}
 
 
 def _imports_of(path: Path) -> list[tuple[str, bool]]:

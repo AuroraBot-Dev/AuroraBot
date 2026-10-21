@@ -1,10 +1,11 @@
-"""实现 ``aurora donk`` 版本管理命令。"""
+"""提供 ``aurora donk`` 版本管理命令插件。"""
 
 from __future__ import annotations
 
 import sys
 from typing import TYPE_CHECKING
 
+from aurora_cli.plugins import command_plugin
 from aurora_cli.utils.process import EXIT_FAILURE, run_process
 from aurora_cli.utils.project import get_project_version
 
@@ -44,3 +45,6 @@ def execute(arguments: argparse.Namespace) -> int:
                 sys.stderr.write(f"未知子命令：{subcommand}\n")
                 return EXIT_FAILURE
     return 0
+
+
+MODULE = command_plugin("aurora.cli.commands.donk", COMMAND, execute)

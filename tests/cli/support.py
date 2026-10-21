@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aurora_cli.commander import build_parser as _build_parser
 from aurora_cli.commander import run as _run
-from aurora_cli.commands import DEFAULT_REGISTRY
+from aurora_cli.plugins.catalog import load_plugins
 
 if TYPE_CHECKING:
     import argparse
@@ -17,9 +18,9 @@ EXPECTED_LINT_COMMANDS = 3
 
 def build_parser() -> argparse.ArgumentParser:
     """以默认命令目录构建顶层解析器。"""
-    return _build_parser(DEFAULT_REGISTRY)
+    return _build_parser(load_plugins(Path.cwd()).registry())
 
 
 def run(arguments: list[str] | None = None) -> int:
     """按默认命令目录运行 CLI 输入，与 aurora_cli.main.main 的分派一致。"""
-    return _run(arguments, registry=DEFAULT_REGISTRY)
+    return _run(arguments)
