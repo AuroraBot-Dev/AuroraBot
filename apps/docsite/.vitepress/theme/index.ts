@@ -5,10 +5,10 @@ import { InjectionKey } from '@nolebase/vitepress-plugin-enhanced-readabilities/
 import { defaultZhCNLocale } from '@nolebase/vitepress-plugin-enhanced-readabilities/locales';
 import DefaultTheme from 'vitepress/theme';
 
-import Layout from './Layout';
+import Layout from './Layout.vue';
 
-import './custom.css';
 import '@nolebase/vitepress-plugin-enhanced-readabilities/client/style.css';
+import './styles/custom.css';
 
 export default {
   extends: DefaultTheme,
