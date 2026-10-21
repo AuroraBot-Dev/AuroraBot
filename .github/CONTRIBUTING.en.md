@@ -19,7 +19,7 @@ If you are not sure where to start, describe the experience you want to improve 
 ### 1. Clone this repository
 
 You need Python 3.12 (recommended; newer versions are not fully verified), Git, and [uv](https://docs.astral.sh/uv/).
-Docs or panel development additionally needs [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/).
+Docs or landing page development additionally needs [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/).
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
@@ -78,7 +78,6 @@ AuroraBot welcomes AI-assisted development, but generated content is bound by th
 - **Must be understood and owned**: you must read every generated line, be able to explain its behavior, and take responsibility for its correctness and security;
 - **Must respect boundaries**: generated code keeps the existing dependency direction and contracts, introducing no parallel run model or bypass around the closed loop;
 - **No masking quality**: do not use lint ignores to hide generated complexity; as a rule, no single file exceeds 600 lines;
-- **No replacing the base**: base code such as `packages/@core` in the frontend workspace is not accepted as wholesale AI replacement;
 - **Chinese text is authoritative**: user-facing copy is authoritative in Simplified Chinese, with no "experimental, refactoring, legacy, migration" narratives and no invented capabilities, APIs, or sample data;
 - **Source and safety**: do not introduce code of unknown origin or incompatible licenses, and do not generate or commit keys, real sessions, or private data;
 - **Disclose honestly**: state in the Pull Request description which parts were generated or assisted by AI, so reviewers can focus.

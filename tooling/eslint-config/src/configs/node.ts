@@ -16,15 +16,7 @@ export async function node(): Promise<Linter.Config[]> {
         'n/no-extraneous-import': [
           'error',
           {
-            allowModules: [
-              'tsdown',
-              'unplugin-vue',
-              '@vben/vite-config',
-              'vitest',
-              'vite',
-              '@vue/test-utils',
-              '@playwright/test',
-            ],
+            allowModules: ['tsdown', 'vitest', 'vite'],
           },
         ],
         // 'n/no-unpublished-import': 'off',
@@ -50,13 +42,6 @@ export async function node(): Promise<Linter.Config[]> {
         '**/*.benchmark.?([cm])[jt]s?(x)',
       ],
       rules: {
-        'n/prefer-global/process': 'off',
-      },
-    },
-    {
-      files: ['**/**/playwright.config.ts'],
-      rules: {
-        'n/prefer-global/buffer': 'off',
         'n/prefer-global/process': 'off',
       },
     },

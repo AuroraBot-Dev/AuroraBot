@@ -20,7 +20,7 @@ AuroraBot 想做的不是一个工具一般的 Agent，而是一个能够持续�
 ### 1. 克隆本仓库
 
 需要 Python 3.12（推荐，以上版本未经充分验证）、Git 和 [uv](https://docs.astral.sh/uv/)。
-文档站、面板、落地页和工程脚本需要 [Node.js](https://nodejs.org/) 24 与 [pnpm](https://pnpm.io/) 12。
+文档站、落地页和工程脚本需要 [Node.js](https://nodejs.org/) 24 与 [pnpm](https://pnpm.io/) 12。
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
@@ -80,7 +80,6 @@ AuroraBot 欢迎使用 AI 辅助开发，但生成的内容同样受项目边界
 - **必须理解并负责**：提交者必须逐行理解生成代码，能解释其行为，并对其正确性与安全性负责；
 - **必须守边界**：生成代码保持既有依赖方向与契约，不引入平行运行模型或绕过闭环的旁路；
 - **不得掩盖质量**：不用 lint ignore 掩盖生成代码的复杂度；单文件原则上不允许超过 600 行；
-- **不得替换底座**：`packages/@core` 等底座代码不接受 AI 整段替换；
 - **文本以中文为准**：生成的面向用户文案以简体中文为权威版本，不写"实验、重构、旧版、迁移"等历史阶段叙事，不虚构能力、API 或示例数据；
 - **来源与安全**：不引入来源不明或许可证不兼容的代码，不生成并提交密钥、真实会话或私人数据；
 - **如实披露**：在 Pull Request 描述中说明哪些内容由 AI 生成或辅助，便于评审聚焦。
@@ -143,11 +142,10 @@ uv run pyright
 ```bash
 pnpm install --frozen-lockfile
 pnpm dev:docs       # VitePress 文档站
-pnpm dev:panel      # Vue 面板
 pnpm dev:landing    # Vue 落地页（默认 pnpm dev）
 pnpm typecheck     # 工程脚本和应用的类型检查
-pnpm test          # 面板单元测试
-pnpm build         # 构建三个应用
+pnpm test          # 前端单元测试
+pnpm build         # 构建两个应用
 pnpm check:python  # Python 完整质量检查
 pnpm clean         # 清理应用构建产物
 pnpm clean --deps  # 同时清理 Node.js 依赖
@@ -155,11 +153,11 @@ pnpm clean --deps  # 同时清理 Node.js 依赖
 
 新增 TypeScript 工程脚本放在 `scripts/*.mts`，通过 `pnpm exec tsx scripts/<name>.mts` 或根 `package.json` 的脚本运行。三平台安装脚本仍在各自平台目录。
 
-`aurora setup --docs`、`aurora setup --panel` 都在根目录统一安装应用工作区依赖。
+`aurora setup --docs` 在根目录统一安装应用工作区依赖。
 
 ## TypeScript 配置与应用结构
 
-应用源码位于 `src/`，构建产物位于 `dist/`；需要原样复制的静态文件放在 `public/`，没有这类文件时无需保留空目录。落地页的图标与字体位于 `src/assets/`，样式和文案分别位于 `src/styles/`、`src/locales/`。面板页面位于 `apps/panel/src/`；共享组件和工具库位于根 `packages/`；构建、TypeScript 与检查配置包位于根 `tooling/`。文档站正文位于 `apps/docsite/src/`，VitePress 配置与主题位于 `.vitepress/`。
+应用源码位于 `src/`，构建产物位于 `dist/`；需要原样复制的静态文件放在 `public/`，没有这类文件时无需保留空目录。落地页的图标与字体位于 `src/assets/`，样式和文案分别位于 `src/styles/`、`src/locales/`。构建、TypeScript 与检查配置包位于根 `tooling/`。文档站正文位于 `apps/docsite/src/`，VitePress 配置与主题位于 `.vitepress/`。
 
 - 根 `tsconfig.json` 检查工程脚本及公共工具配置。
 - 应用 `tsconfig.json` 检查浏览器源码或文档主题。

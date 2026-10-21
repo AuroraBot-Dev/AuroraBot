@@ -1,13 +1,11 @@
 import Vue from '@vitejs/plugin-vue';
-import VueJsx from '@vitejs/plugin-vue-jsx';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [Vue(), VueJsx()],
+  plugins: [Vue()],
   test: {
     include: [
       'apps/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}',
-      'packages/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}',
       'tooling/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}',
     ],
     environment: 'happy-dom',

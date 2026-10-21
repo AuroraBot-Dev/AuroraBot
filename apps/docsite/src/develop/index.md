@@ -22,7 +22,7 @@ AuroraBot 想做的不是一个工具一般的 Agent，而是一个能够持续�
 ### 1. 克隆仓库
 
 需要 Python 3.12（推荐，以上版本未经充分验证）、Git 和 [uv](https://docs.astral.sh/uv/)。
-文档或面板开发还需要 [Node.js](https://nodejs.org/) 与 [pnpm](https://pnpm.io/)。
+文档或落地页开发还需要 [Node.js](https://nodejs.org/) 与 [pnpm](https://pnpm.io/)。
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
@@ -82,7 +82,6 @@ AuroraBot 欢迎使用 AI 辅助开发，但生成的内容同样受项目边界
 - **必须理解并负责**：提交者必须逐行理解生成代码，能解释其行为，并对其正确性与安全性负责；
 - **必须守边界**：生成代码保持既有依赖方向与契约，不引入平行运行模型或绕过闭环的旁路；
 - **不得掩盖质量**：不用 lint ignore 掩盖生成代码的复杂度；单文件原则上不允许超过 600 行；
-- **不得替换底座**：panel 等子模块的 `packages/@core` 等底座代码不接受 AI 整段替换；
 - **文本以中文为准**：生成的面向用户文案以简体中文为权威版本，不写"实验、重构、旧版、迁移"等历史阶段叙事，不虚构能力、API 或示例数据；
 - **来源与安全**：不引入来源不明或许可证不兼容的代码，不生成并提交密钥、真实会话或私人数据；
 - **如实披露**：在 Pull Request 描述中说明哪些内容由 AI 生成或辅助，便于评审聚焦。

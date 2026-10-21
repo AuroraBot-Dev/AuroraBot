@@ -10,11 +10,9 @@ on:
       - 'pnpm-*.yaml'
       - 'tsconfig*.json'
       - '*.config.ts'
-      - 'packages/**'
       - 'tooling/**'
       - '.prettierignore'
       - '.stylelintignore'
-      - 'turbo.json'
       - '.node-version'
       - '.github/workflows/apps.yml'
   pull_request:
@@ -25,11 +23,9 @@ on:
       - 'pnpm-*.yaml'
       - 'tsconfig*.json'
       - '*.config.ts'
-      - 'packages/**'
       - 'tooling/**'
       - '.prettierignore'
       - '.stylelintignore'
-      - 'turbo.json'
       - '.node-version'
       - '.github/workflows/apps.yml'
   workflow_dispatch:
@@ -52,7 +48,7 @@ jobs:
         run: pnpm typecheck
       - name: 检查前端代码规范
         run: pnpm lint
-      - name: 运行面板测试
+      - name: 运行前端测试
         run: pnpm test
       - name: 构建全部应用
         run: pnpm build
@@ -65,5 +61,4 @@ jobs:
           include-hidden-files: true
           path: |
             apps/docsite/dist
-            apps/panel/dist
             apps/landing/dist

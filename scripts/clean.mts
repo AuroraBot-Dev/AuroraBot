@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const withDependencies = process.argv.includes('--deps');
-const targets = new Set(['.turbo', 'cache', 'dist', 'dist.zip']);
+const targets = new Set(['cache', 'dist', 'dist.zip']);
 const skip = new Set(['.git', 'node_modules', 'public', 'src']);
 
 async function clean(directory: string): Promise<void> {
@@ -21,6 +21,5 @@ async function clean(directory: string): Promise<void> {
   }
 }
 
-for (const directory of ['apps', 'packages', 'tooling']) await clean(join(root, directory));
-await rm(join(root, '.turbo'), { recursive: true, force: true });
+for (const directory of ['apps', 'tooling']) await clean(join(root, directory));
 if (withDependencies) await rm(join(root, 'node_modules'), { recursive: true, force: true });

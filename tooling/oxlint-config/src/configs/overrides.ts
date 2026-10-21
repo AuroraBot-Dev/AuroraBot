@@ -66,18 +66,6 @@ const overrides: OxlintConfig = {
       },
     },
     {
-      files: ['packages/@core/shared/src/utils/inference.ts'],
-      rules: {
-        'vue/prefer-import-from-vue': 'off',
-      },
-    },
-    {
-      files: ['packages/@core/menu-ui/src/sub-menu.vue'],
-      rules: {
-        'import/no-self-import': 'off',
-      },
-    },
-    {
       files: [
         'scripts/**/*.js',
         'scripts/**/*.cjs',

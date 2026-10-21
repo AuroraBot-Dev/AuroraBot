@@ -2,7 +2,6 @@
 **/dist/**
 **/.vitepress/.temp/**
 **/.vitepress/cache/**
-**/.turbo/**
 **/__snapshots__/**
 **/*.snap
 pnpm-lock.yaml

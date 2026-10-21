@@ -74,7 +74,6 @@ graphify-out/
 # Node.js / Vue 应用工作区
 node_modules/
 .pnpm-store/
-.turbo/
 .vitepress/cache/
 .vitepress/dist/
 *.tsbuildinfo
@@ -83,12 +82,5 @@ node_modules/
 .vitepress/.temp/
 .eslintcache
 .stylelintcache
-.nitro/
-.output/
 *.log
 *.local
-# 随应用发布的构建配置
-!/apps/panel/.env
-!/apps/panel/.env.analyze
-!/apps/panel/.env.development
-!/apps/panel/.env.production

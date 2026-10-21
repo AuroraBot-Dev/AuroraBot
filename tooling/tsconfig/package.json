@@ -15,11 +15,9 @@
     "base.json",
     "library.json",
     "node.json",
-    "web-app.json",
     "web.json"
   ],
   "dependencies": {
-    "@vben/types": "workspace:*",
     "vite": "catalog:"
   }
 }
