@@ -1,6 +1,7 @@
 {
   "name": "@aurorabot/landing",
   "version": "0.7.0",
+  "description": "AuroraBot 落地页",
   "private": true,
   "type": "module",
   "scripts": {
