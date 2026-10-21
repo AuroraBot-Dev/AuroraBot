@@ -22,20 +22,32 @@
 
 ```bash
 uv sync --locked --group dev
-uv run python playground/kernel_playground.py
+uv run python -m playground
 ```
 
-也可以单独观察一个场景：
+每行输入一个 JSON 对象，查询操作格式、调用真实内核并取得结构化结果：
+
+```json
+{"action":"describe","module":"kernel"}
+{"module":"kernel","operation":"increment","input":{"amount":3}}
+{"module":"kernel","operation":"state"}
+{"module":"kernel","operation":"reset","input":{"extension":false}}
+{"action":"exit"}
+```
+
+状态保留至重置或退出；默认扩展将增量乘以 2。输入与输出 schema、调用示例由 `describe` 返回，完整协议见 [Playground 说明](../../playground/README.md)。
+
+也可以运行预设场景：
 
 ```bash
-uv run python playground/kernel_playground.py hooks --amount 5
-uv run python playground/kernel_playground.py context
-uv run python playground/kernel_playground.py lifecycle
-uv run python playground/kernel_playground.py lifecycle --fail-run
-uv run python playground/kernel_playground.py validation
+uv run python -m playground.examples.kernel hooks --amount 5
+uv run python -m playground.examples.kernel context
+uv run python -m playground.examples.kernel lifecycle
+uv run python -m playground.examples.kernel lifecycle --fail-run
+uv run python -m playground.examples.kernel validation
 ```
 
-[Playground 源码](../../playground/kernel_playground.py)使用真实内核和内存状态，无需模型或个人配置，打印依赖顺序、调用结果、ctx 变更来源、事务冲突与清理顺序。
+[Playground 源码](../../playground/examples/kernel.py)使用真实内核和内存状态，无需模型或个人配置，打印依赖顺序、调用结果、ctx 变更来源、事务冲突与清理顺序。
 
 ## 声明与调用
 

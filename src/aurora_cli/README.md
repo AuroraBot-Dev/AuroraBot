@@ -6,20 +6,31 @@
 
 ## 运行 Playground
 
-在项目根目录执行 [CLI Playground](../../playground/cli_playground.py)：
+在项目根目录启动交互式 Playground：
 
 ```bash
 uv sync --locked --group dev
-uv run python playground/cli_playground.py
+uv run python -m playground
 ```
 
-默认运行全部场景，也可单独选择：
+每行输入一个 JSON 对象；返回退出码、标准输出、错误输出和结构化业务结果：
+
+```json
+{"action":"describe","module":"cli"}
+{"module":"cli","operation":"execute","input":{"argv":["demo","greet","Aurora"]}}
+{"module":"cli","operation":"execute","input":{"argv":["--help"]}}
+{"action":"exit"}
+```
+
+交互入口使用真实解析和分派，只绑定内存演示命令；不读取个人配置或本机插件。输入与输出 schema、示例可通过 `describe` 查询，完整协议见 [Playground 说明](../../playground/README.md)。
+
+[CLI 场景脚本](../../playground/examples/cli.py)默认运行全部场景，也可单独选择：
 
 ```bash
-uv run python playground/cli_playground.py commands --name Aurora
-uv run python playground/cli_playground.py plugins --name 小极光
-uv run python playground/cli_playground.py config --message "你好，Aurora"
-uv run python playground/cli_playground.py validation
+uv run python -m playground.examples.cli commands --name Aurora
+uv run python -m playground.examples.cli plugins --name 小极光
+uv run python -m playground.examples.cli config --message "你好，Aurora"
+uv run python -m playground.examples.cli validation
 ```
 
 | 场景 | 观察内容 |
@@ -74,7 +85,7 @@ flowchart LR
 
 - 顶层与各级子命令的长选项均要求完整名称。
 - 执行器只绑定到叶子命令；未选择叶子时显示当前层级帮助。
-- `passthrough` 使用 `argparse.REMAINDER` 保留后续参数，供包装命令传给目标程序。
+- `passthrough` 使用 `argparse.REMAINDER` 保留后续参数；没有自身参数或选项的纯透传叶子直接保留全部输入，包括 `--help`，交给目标程序解释。解析器保留显式 `--` 分隔符，由执行器决定如何处理。
 - 独立使用 `--version` 不加载插件；`--help` 会发现并校验插件，但不构造 namespace、不读取个人配置、不创建文件。
 
 插件模块导入必须只声明元数据。发现过程会导入模块，宿主无法阻止模块顶层代码自行产生外部效果。

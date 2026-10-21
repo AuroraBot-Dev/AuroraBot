@@ -58,6 +58,7 @@ dev = [
     "ruff",
     "pytest",
     "pytest-cov",
+    "textual>=8.2,<9",
     { include-group = "learning" },
 ]
 learning = ["torch>=2.6,<3", "numpy>=2,<3"]

@@ -18,13 +18,23 @@ Namespace 用于组织模块的状态与调用点，hook 用于为调用点提�
 
 ```bash
 uv sync --locked --group dev
-uv run python -m playground
+uv run aurora playground
 ```
 
-添加 `--pretty` 可将响应缩进显示，添加 `--module kernel` 可预先选择模块：
+`playground` 后面的参数直接透传，`aurora playground --help` 查看帮助。该命令需要源码仓库及开发依赖；从其他目录运行时，用 `aurora --root /path/to/AuroraBot playground` 指定仓库。也可继续使用 `uv run python -m playground`。
+
+使用 Textual 界面可选择模块和操作、编辑参数 JSON，并切换查看格式化结果和接口说明：
 
 ```bash
-uv run python -m playground --pretty --module kernel
+uv run aurora playground --tui --module kernel
+```
+
+输入框只填写操作参数。点击“执行”或按 F5 / Ctrl+Enter 调用；点击“载入示例”或按 Ctrl+R 恢复示例，按 Ctrl+Q 退出。选择操作和载入示例不会执行调用，切换模块保留本次会话状态。执行期间禁止重复提交，退出时等待当前调用完成并释放资源。`--tui` 需要交互终端，输出始终缩进显示。
+
+默认行交互模式下，添加 `--pretty` 可将响应缩进显示，添加 `--module kernel` 可预先选择模块：
+
+```bash
+uv run aurora playground --pretty --module kernel
 ```
 
 可用简写命令查询和调用，无需反复输入完整请求：

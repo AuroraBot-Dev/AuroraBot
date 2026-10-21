@@ -1,0 +1,66 @@
+Screen {
+    min-width: 60;
+}
+
+#selectors {
+    height: auto;
+    padding: 0 1;
+}
+
+#selectors Select {
+    width: 1fr;
+}
+
+#description {
+    height: 2;
+    margin: 0 2;
+    color: $text-muted;
+}
+
+#workspace {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#request, #results {
+    width: 1fr;
+    height: 1fr;
+}
+
+#request {
+    margin-right: 1;
+}
+
+.caption {
+    height: 1;
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+TextArea, TabPane {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 0;
+}
+
+#actions {
+    height: 3;
+    margin-top: 1;
+}
+
+#actions Button {
+    min-width: 8;
+    width: 1fr;
+}
+
+#execute {
+    margin-right: 1;
+}
+
+#status {
+    height: 1;
+    margin: 0 1;
+    color: $text-muted;
+}

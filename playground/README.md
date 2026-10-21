@@ -4,17 +4,35 @@
 
 ```bash
 uv sync --locked --group dev
-uv run python -m playground
+uv run aurora playground
 ```
 
+命令名后的参数直接透传给 Playground，例如 `aurora playground --help` 查看帮助，也支持 `aurora playground -- --tui`。从其他目录启动时使用 `aurora --root /path/to/AuroraBot playground --tui`。该命令需要源码仓库及对应开发依赖，Playground 不随发行包安装；原有 `uv run python -m playground` 入口仍可使用。
+
 默认每个请求返回一行 JSON；终端提示写入 stderr，stdout 只包含响应。空行忽略，输入错误返回结构化错误，会话继续。`Ctrl+D` 结束输入，`Ctrl+C` 中断退出。
+
+## Textual 界面
+
+在交互终端中使用 `--tui`，可同时用 `--module` 选择初始模块：
+
+```bash
+uv run aurora playground --tui --module kernel
+```
+
+顶部选择模块和操作，左侧编辑参数 JSON，右侧查看结构化结果或切换到“接口说明”查看输入、输出 schema 和示例。输入框只填写操作参数，无需填写 `module`、`operation` 等请求字段；结果始终缩进显示，无需加 `--pretty`。
+
+- 点击“执行”，或按 F5 / Ctrl+Enter 提交；部分终端不区分 Ctrl+Enter，此时使用 F5。
+- 点击“载入示例”，或按 Ctrl+R 恢复当前操作的示例参数。
+- 按 Tab 切换焦点，按 Ctrl+Q 退出。
+
+选择操作和载入示例不会执行调用。切换模块保留本次会话的状态；执行期间暂时禁用输入与重复提交，错误会显示为 JSON，修改参数后可继续执行。退出时等待已经开始的调用完成并释放会话资源。`--tui` 需要交互终端，管道输入使用默认模式。
 
 ## 输入与输出便利功能
 
 用 `--pretty` 将响应缩进为多行，用 `--module` 预先选择模块：
 
 ```bash
-uv run python -m playground --pretty --module kernel
+uv run aurora playground --pretty --module kernel
 ```
 
 交互时既可以输入完整 JSON 请求，也可以使用简写命令：
@@ -139,6 +157,7 @@ playground/
 ├── session.py           # 会话状态、协议校验与模块分派
 ├── commands.py          # 简写转换与当前模块选择
 ├── terminal.py          # 行编辑、输入输出与格式
+├── tui/                 # Textual 界面及会话工作线程
 ├── modules/
 │   ├── agent/
 │   │   ├── __init__.py  # Run 操作适配与 MODULE

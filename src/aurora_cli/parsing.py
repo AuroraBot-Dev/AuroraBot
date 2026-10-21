@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, overload
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
     from aurora_cli.contracts.command import CommandRegistry, SubcommandSpec
 
@@ -18,6 +19,28 @@ _REPLACEMENTS = {
 
 
 class _ChineseArgumentParser(argparse.ArgumentParser):
+    forward_all = False
+
+    @overload
+    def parse_known_args(
+        self, args: Iterable[str] | None = None, namespace: None = None
+    ) -> tuple[argparse.Namespace, list[str]]: ...
+
+    @overload
+    def parse_known_args[T](self, args: Iterable[str] | None, namespace: T) -> tuple[T, list[str]]: ...
+
+    @overload
+    def parse_known_args[T](self, *, namespace: T) -> tuple[T, list[str]]: ...
+
+    def parse_known_args(self, args: Iterable[str] | None = None, namespace: object = None) -> tuple[object, list[str]]:
+        namespace = namespace if namespace is not None else argparse.Namespace()
+        if not self.forward_all:
+            return super().parse_known_args(args, namespace)
+        # 纯透传叶子没有自己的参数；包括帮助和同名全局选项在内，均归目标程序解释。
+        arguments, unknown = super().parse_known_args([], namespace)
+        cast("argparse.Namespace", arguments).passthrough = list(sys.argv[1:] if args is None else args)
+        return arguments, unknown
+
     def format_help(self) -> str:
         return _translate_argparse(super().format_help())
 
@@ -43,7 +66,7 @@ def build_parser(registry: CommandRegistry) -> argparse.ArgumentParser:
 
 
 def _apply_spec(
-    parser: argparse.ArgumentParser,
+    parser: _ChineseArgumentParser,
     spec: SubcommandSpec,
     executor: Callable[[argparse.Namespace], int],
 ) -> None:
@@ -68,6 +91,7 @@ def _apply_spec(
         passthrough = spec.get("passthrough")
         if passthrough is not None:
             parser.add_argument("passthrough", nargs=argparse.REMAINDER, help=passthrough)
+            parser.forward_all = not spec.get("options") and not spec.get("args")
         parser.set_defaults(executor=executor)
 
 

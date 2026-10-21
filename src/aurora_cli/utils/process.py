@@ -23,9 +23,10 @@ def _resolve_command(command: Sequence[str]) -> list[str]:
     return [executable, *command[1:]]
 
 
-def run_process(command: Sequence[str], root: Path) -> int:
-    sys.stdout.write(f"\n>>> {' '.join(command)}\n")
-    sys.stdout.flush()
+def run_process(command: Sequence[str], root: Path, *, announce: bool = True) -> int:
+    if announce:
+        sys.stdout.write(f"\n>>> {' '.join(command)}\n")
+        sys.stdout.flush()
     try:
         result = subprocess.run(_resolve_command(command), cwd=root, check=False)
     except FileNotFoundError:

@@ -58,7 +58,8 @@ def test_long_options_require_full_names_at_every_level(arguments: tuple[str, ..
     assert calls == []
 
 
-def test_passthrough_preserves_arguments_that_match_global_options() -> None:
+@pytest.mark.parametrize("prefix", [[], ["--"]])
+def test_passthrough_preserves_arguments_that_match_global_options(prefix: list[str]) -> None:
     forwarded: list[str] = []
     spec: CommandSpec = {"name": "forward", "passthrough": "透传给目标程序的参数"}
 
@@ -68,9 +69,9 @@ def test_passthrough_preserves_arguments_that_match_global_options() -> None:
 
     assert (
         run(
-            ["forward", "--", "--root", "elsewhere", "--version"],
+            ["forward", *prefix, "--root", "elsewhere", "--version", "--help"],
             registry=build_registry(((spec, execute),)),
         )
         == 0
     )
-    assert forwarded == ["--", "--root", "elsewhere", "--version"]
+    assert forwarded == [*prefix, "--root", "elsewhere", "--version", "--help"]

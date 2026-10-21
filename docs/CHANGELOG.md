@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 增加自动发现的 `aurora playground` 命令，直接透传参数并保留终端和 JSON 管道输出，支持用顶层 `--root` 指定源码仓库；纯透传命令的帮助参数由目标程序处理。
+- Playground 增加 `--tui` Textual 界面，支持模块与操作选择、参数 JSON 编辑、示例载入、接口说明和格式化结果；串行调用保留会话状态，退出时清理异步资源。
 - Playground 支持 `--pretty` 缩进输出、`--module` 预选模块和简写命令；终端增加内存历史、Tab 补全和多行 JSON 输入，管道默认保持 JSON Lines 输出。
 - Playground 增加自动发现的 Agent JSON 交互模块，支持按运行身份创建、逐步执行、追加输入、连续执行、快照与取消；会话按需复用事件循环并在退出时清理，预设场景与交互入口共用离线替身。
 - Playground 按模块子包自动发现 `MODULE`，会话按需绑定独立操作；交互适配与预设场景分开组织，场景入口统一为 `python -m playground.examples.<名称>`。

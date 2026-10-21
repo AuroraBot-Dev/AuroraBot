@@ -49,6 +49,8 @@ MODULE = command_plugin(
 
 在工作目录运行 `aurora hello Aurora` 即可看到问候。命令声明支持参数、选项和子命令。
 
+包装其他程序时可声明 `passthrough` 帮助文本，执行器通过 `arguments.passthrough` 读取后续参数。若叶子命令没有自己的 `args` 或 `options`，全部参数（包括 `--help`）直接透传，无需先写 `--`；显式写入的 `--` 也会保留，由执行器处理。顶层 `--root` 等选项放在命令名前。
+
 ## 同时贡献命令与配置
 
 一个插件可通过 `CliPlugin` 声明多项贡献。下面的 `module.py` 与 `greeting.toml` 放在同一个插件目录：
