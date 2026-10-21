@@ -58,9 +58,10 @@ class ConfigCatalog:
         return destination(root, self.spec(name).path)
 
     def load(self, root: Path) -> AuroraConfig:
-        for spec in self.specs:
-            self.path(root, spec.name)
-        return assemble_config(root, self.specs)
+        specs = self.specs
+        for spec in specs:
+            destination(root, spec.path)
+        return assemble_config(root, specs)
 
     def _files(self, root: Path, names: Iterable[str] | None) -> tuple[tuple[str, Path, str, Path], ...]:
         selected = self.names if names is None else tuple(sorted(set(names)))

@@ -12,9 +12,14 @@ if TYPE_CHECKING:
 
 
 def assemble_config(project_root: Path, specs: Iterable[ConfigSpec[Any]]) -> AuroraConfig:
-    """按声明式规格读取全部 TOML 并生成只读配置对象。"""
-    values: dict[ConfigSpec[object], object] = {}
-    sources: list[ConfigSource] = []
+    selected = tuple(specs)
+    _validate_specs(selected)
+    values = {cast("ConfigSpec[object]", spec): spec.load(project_root) for spec in selected}
+    sources = tuple(ConfigSource(spec.name, spec.path) for spec in selected)
+    return AuroraConfig(values, sources, project_root)
+
+
+def _validate_specs(specs: Iterable[ConfigSpec[Any]]) -> None:
     names: set[str] = set()
     paths: set[str] = set()
     for spec in specs:
@@ -24,10 +29,6 @@ def assemble_config(project_root: Path, specs: Iterable[ConfigSpec[Any]]) -> Aur
             raise ValueError(f"配置文件重复注册：{spec.path}")
         names.add(spec.name)
         paths.add(spec.path)
-        sources.append(ConfigSource(spec.name, spec.path))
-        stored = cast("ConfigSpec[object]", spec)
-        values[stored] = spec.load(project_root)
-    return AuroraConfig(values, tuple(sources), project_root)
 
 
 __all__ = ["assemble_config"]

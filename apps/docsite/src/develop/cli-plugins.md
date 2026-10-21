@@ -21,6 +21,8 @@ CLI 插件可以增加 `aurora` 子命令，以及通过 `aurora config` 管理�
 
 ## 单命令插件
 
+各层长选项必须使用完整名称；多层子命令未选择叶子时显示当前层级的帮助。
+
 将下面内容保存到 `extensions/cli/hello.py`：
 
 ```python
