@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-import shutil
 from typing import TYPE_CHECKING
 
 import pytest
 
-from tests import PROJECT_ROOT
+from aurora_cli.configs import initialize_configs
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -19,5 +18,5 @@ os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
 @pytest.fixture
 def configured_project(tmp_path: Path) -> Iterator[Path]:
-    shutil.copytree(PROJECT_ROOT / "config.example", tmp_path / "config")
+    initialize_configs(tmp_path)
     yield tmp_path

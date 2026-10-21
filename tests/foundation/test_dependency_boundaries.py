@@ -56,15 +56,8 @@ def test_src_packages_only_reach_capabilities_through_type_checking() -> None:
 
 
 def test_each_project_toml_has_one_registered_config_module() -> None:
-    toml_names = {
-        path.relative_to(_ROOT / "config.example").with_suffix("").as_posix()
-        for path in (_ROOT / "config.example").rglob("*.toml")
-    }
-    module_names = {
-        path.relative_to(_CLI / "configs").with_suffix("").as_posix()
-        for path in (_CLI / "configs").rglob("*.py")
-        if path.stem != "__init__"
-    }
+    toml_names = {path.stem for path in (_CLI / "configs").glob("*/*.toml") if path.parent.name == path.stem}
+    module_names = {path.stem for path in (_CLI / "configs").glob("*/*.py") if path.parent.name == path.stem}
     specs = config_specs()
     registered_names = {spec.name for spec in specs}
 

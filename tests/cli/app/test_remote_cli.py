@@ -395,7 +395,7 @@ def test_a_missing_registry_points_at_aurora_setup(
     code, _, err = _capture(capsys, tmp_path, *_BASE, "--yes")
 
     assert code == EXIT_CONFIG_ERROR
-    assert "aurora setup" in err
+    assert "aurora config apps --init" in err
     assert factory.specs == [], "连不上注册表就不必去连端点"
 
 

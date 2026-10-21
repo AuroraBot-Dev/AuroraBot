@@ -6,9 +6,9 @@ order: 3
 
 ## 个人配置与模板
 
-`config.example/` 发布完整模板，复制为被 Git 忽略的 `config/` 后生效。加载器不隐式回退模板。每个 TOML 由同路径配置模块导出的唯一 `CONFIG_SPEC` 解析，形成只读 `AuroraConfig`；运行包只通过 `Settings.resolve` 取得自己的 DTO，不持有项目加载器。
+`src/aurora_cli/configs/<name>/` 保存同名的 `.py` 解析器和 `.toml` 模板，配套文件放在该项的 `resources/` 中。`aurora start` 在加载前补齐个人 `config/` 中缺失的文件，已有内容不覆盖；加载器本身不回退模板。每个配置项导出唯一 `CONFIG_SPEC`，形成只读 `AuroraConfig`；运行包只通过 `Settings.resolve` 取得自己的 DTO。
 
-`aurora config` 默认只读；显式 `--edit` 或 `--set` 只修改个人配置。`.env` 只补充尚不存在的进程环境变量，不改写 TOML，不覆盖调用者的环境。配置与世界记录仅保存密钥变量名，真实值只在 SDK 调用时读取。
+`aurora config` 默认只读；`--init` 补齐缺失文件，`--edit` 或 `--set` 修改个人配置。`.env` 只补充尚不存在的进程环境变量，不改写 TOML，不覆盖调用者的环境。配置与世界记录仅保存密钥变量名，真实值只在 SDK 调用时读取。
 
 ## 配置职责
 

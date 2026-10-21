@@ -179,9 +179,7 @@ class AppStore:
 
 def _missing_registry(path: Path) -> ConfigError:
     """config/ 是 git 忽略的个人配置，缺失时指向生成它的命令而不是模板。"""
-    return ConfigError(
-        f"未找到 {APPS_RELATIVE_PATH}：{path}；先运行 aurora setup 生成个人配置，或从 config.example/apps.toml 复制。"
-    )
+    return ConfigError(f"未找到 {APPS_RELATIVE_PATH}：{path}；请运行 aurora config apps --init 创建个人配置。")
 
 
 def _raw_apps(document: TomlTable) -> tuple[TomlTable, ...]:
@@ -244,7 +242,7 @@ def render_entry(entry: AppConfig) -> str:
 
 
 def app_table(entry: AppConfig) -> Table:
-    """把一条配置写成 TOML 表；字段与顺序对齐 config.example/apps.toml。
+    """把一条配置写成 TOML 表；字段与顺序对齐 CLI 自带的 apps 配置模板。
 
     两种传输的键集不同，因为运行时解析器对它们各开了一份封闭白名单：stdio 条目
     多一个键就会被 ``aurora start`` 拒绝整个文件，streamable_http 条目多一个

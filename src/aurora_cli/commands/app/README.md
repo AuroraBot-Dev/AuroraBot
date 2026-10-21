@@ -3,8 +3,8 @@
 `aurora app` 管理 Bot 的 MCP App：登记 MCP Server，让 `aurora start` 启动本地 Server 或连接远程端点，
 并发现它们提供的工具。
 
-登记结果写在 `config/apps.toml`。这份文件是个人配置，由 `aurora setup` 生成，或从
-`config.example/apps.toml` 复制一份改。`aurora app` 只改它，不凭空造它。
+登记结果写在个人配置 `config/apps.toml`，运行 `aurora config apps --init` 创建。
+`aurora app` 只修改已有配置。
 
 ## 三种登记来源
 
@@ -162,7 +162,7 @@ event_mode = "world_events"
 | `event_mode`      | 是否把 Server 上报的事件送进 Bot 的世界线                                                                                   |
 
 两种 transport 的键集是各自封闭的白名单：多写一个键（例如给远程条目加 `working_dir`）会让
-`aurora start` 拒绝整个文件。手工编辑时请照抄 `config.example/apps.toml` 的形状。
+`aurora start` 拒绝整个文件。手工编辑时请参照 `src/aurora_cli/configs/apps/apps.toml` 的形状。
 
 注册表的 `auth_env` 只保存变量名，token 值从运行环境读取。URL 不接受用户信息或常见的凭据参数，
 例如 `token=`、`key=`；错误摘要会遮蔽已知的敏感变量值。
@@ -186,7 +186,7 @@ event_mode = "world_events"
 
 ## 排错
 
-**未找到 `config/apps.toml`** —— 运行 `aurora setup`，或从 `config.example/apps.toml` 复制。
+**未找到 `config/apps.toml`** —— 运行 `aurora config apps --init`。
 
 **仓库没有 `aurora-app.toml`** —— 用 `--command` 给出启动命令；如果它其实是个远程服务，改用
 `install <URL>` 登记地址。

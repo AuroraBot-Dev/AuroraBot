@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from typing import TYPE_CHECKING
 
 import pytest
@@ -19,9 +18,9 @@ from aurora_bot.contracts.identity import (
     is_path,
 )
 from aurora_bot.utils import resolve_names
+from aurora_cli.configs import initialize_configs
 from aurora_cli.configs.tags import CONFIG_SPEC as TAGS_CONFIG
 from aurora_cli.configurator import assemble_config
-from tests import PROJECT_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -254,7 +253,7 @@ def test_duplicate_tag_declarations_are_rejected() -> None:
 
 
 def test_template_declares_a_nested_tag_collection(tmp_path: Path) -> None:
-    shutil.copytree(PROJECT_ROOT / "config.example", tmp_path / "config")
+    initialize_configs(tmp_path)
     config = assemble_config(tmp_path, (TAGS_CONFIG,))
     table = config.get(TAGS_CONFIG).table
 

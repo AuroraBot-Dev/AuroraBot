@@ -22,7 +22,7 @@
 - 功能包的 `module.py` 可引用 Bot kernel 并导出唯一 `MODULE`；兄弟实现的类型引用限于 `TYPE_CHECKING`。
 - `src/aurora_cli/` 负责命令、配置和进程环境；命令入口保持 `aurora`。三个导入包同属一个发行包，Bot 不导入 CLI。
 - 命令与配置按目录发现；插件来自内置包、`extensions/plugins/` 和 entry point。兼容性、冲突与依赖环在准备效果前校验。
-- `config.example/` 保存模板；个人 `config/`、本机扩展由 Git 忽略。前端位于 `apps/`，工程配置位于 `tooling/`。
+- `src/aurora_cli/configs/<name>/` 保存同名解析器与 TOML 模板，CLI 在启动时补齐缺失的个人配置；个人 `config/`、本机扩展由 Git 忽略。前端位于 `apps/`，工程配置位于 `tooling/`。
 
 ## 文档与范围
 

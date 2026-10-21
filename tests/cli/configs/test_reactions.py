@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -11,9 +10,9 @@ import pytest
 from aurora_bot.cadence import ReactiveRule
 from aurora_bot.cadence.config import ReactionConfig, ReactionsConfig
 from aurora_bot.contracts import MCP_EVENT_RECEIVED, WorldCommit, WorldFrontier
+from aurora_cli.configs import initialize_configs
 from aurora_cli.configs.reactions import CONFIG_SPEC as REACTIONS_CONFIG
 from aurora_cli.configurator import assemble_config
-from tests import PROJECT_ROOT
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,7 +44,7 @@ def _rules(reactions: tuple[ReactionConfig, ...]) -> tuple[ReactiveRule, ...]:
 
 
 def test_template_declares_reaction_rules_as_data(tmp_path: Path) -> None:
-    shutil.copytree(PROJECT_ROOT / "config.example", tmp_path / "config")
+    initialize_configs(tmp_path)
 
     reactions = assemble_config(tmp_path, (REACTIONS_CONFIG,)).get(REACTIONS_CONFIG).reactions
 

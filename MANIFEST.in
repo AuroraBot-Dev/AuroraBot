@@ -1,4 +1,4 @@
 include uv.lock
-recursive-include config.example *.toml *.md
+recursive-include src/aurora_cli/configs *.toml *.md
 recursive-include tests *.py
 prune tests/.tmp

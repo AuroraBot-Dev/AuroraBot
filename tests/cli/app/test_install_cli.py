@@ -380,7 +380,7 @@ def test_a_missing_registry_points_at_aurora_setup(
     code, _, err = _capture(capsys, tmp_path, "install", _REQUESTED, "--yes")
 
     assert code == EXIT_CONFIG_ERROR
-    assert "aurora setup" in err
+    assert "aurora config apps --init" in err
     assert "App 配置错误" in err
     assert not (tmp_path / "config").exists(), "拒绝时不创建任何东西"
 

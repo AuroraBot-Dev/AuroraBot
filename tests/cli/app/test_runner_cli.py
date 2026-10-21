@@ -309,7 +309,7 @@ def test_a_missing_registry_points_at_aurora_setup(
     code, _, err = _capture(capsys, tmp_path, "install", "--npx", _SPECIFIER, "--yes")
 
     assert code == EXIT_CONFIG_ERROR
-    assert "aurora setup" in err
+    assert "aurora config apps --init" in err
 
 
 def test_an_unsafe_specifier_is_rejected(

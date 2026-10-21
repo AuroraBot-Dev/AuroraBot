@@ -1,7 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { constants, copyFileSync, cpSync, lstatSync, readFileSync, statSync } from 'node:fs';
+import { constants, copyFileSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
-import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -9,32 +8,69 @@ const steps = ['python', 'config', 'env', 'docs'] as const;
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
 export interface SetupIO {
-  confirm: (message: string) => Promise<boolean>;
+  confirm: (
+    message: string,
+    initialValue?: boolean,
+    labels?: { no: string; yes: string },
+  ) => Promise<boolean | undefined>;
   interactive: boolean;
   print: (message: string) => void;
   run: (command: string, args: string[], root: string, capture?: boolean) => { code: number; stdout: string };
 }
 
-function copyTemplate(root: string, template: string, personal: string, directory = false): void {
-  const source = join(root, template);
-  const destination = join(root, personal);
-  // 包括符号链接在内的现有路径均不覆盖；类型错误应明确失败。
+async function prepareEnv(root: string, io: SetupIO): Promise<number> {
+  const source = join(root, '.env.example');
+  const destination = join(root, '.env');
   const existing = lstatSync(destination, { throwIfNoEntry: false });
-  if (existing) {
-    if (directory ? !existing.isDirectory() : !existing.isFile()) {
-      throw new Error(`${personal} 已存在，但不是${directory ? '目录' : '普通文件'}。`);
-    }
-    return;
+  if (existing && !existing.isFile()) throw new Error('.env 已存在，但不是普通文件。');
+  const create = io.interactive
+    ? await io.confirm(
+        existing ? '.env 已存在，是否重置？' : '.env 不存在，是否现在创建？',
+        !existing,
+        existing ? { yes: '重置', no: '保留' } : { yes: '现在创建', no: '暂时跳过' },
+      )
+    : !existing;
+  if (create === undefined) return 130;
+  if (!create) {
+    io.print(existing ? '已保留 .env。' : '已暂时跳过 .env。');
+    return 0;
   }
-  const sourceType = statSync(source, { throwIfNoEntry: false });
-  if (directory ? !sourceType?.isDirectory() : !sourceType?.isFile()) {
+  if (!statSync(source, { throwIfNoEntry: false })?.isFile()) {
     throw new Error(`未找到有效的配置模板 ${source}。`);
   }
-  if (directory) {
-    cpSync(source, destination, { recursive: true, force: false, errorOnExist: true });
-  } else {
-    copyFileSync(source, destination, constants.COPYFILE_EXCL);
+  copyFileSync(source, destination, existing ? 0 : constants.COPYFILE_EXCL);
+  io.print(existing ? '已从模板重置 .env。' : '已创建 .env。');
+  return 0;
+}
+
+async function prepareConfigs(root: string, io: SetupIO): Promise<number> {
+  if (!io.interactive) {
+    io.print('个人配置暂时跳过，将在启动时补齐。');
+    return 0;
   }
+  const command = ['run', '--project', root, 'aurora', '--root', root, 'config'];
+  const result = io.run('uv', [...command, '--missing'], root, true);
+  if (result.code !== 0) {
+    io.print('读取缺失配置失败。');
+    return result.code;
+  }
+  const missing: Record<string, string[]> = JSON.parse(result.stdout);
+  const names = Object.keys(missing);
+  if (names.length === 0) io.print('个人配置已就绪。');
+  for (const name of names) {
+    const create = await io.confirm(`是否现在创建 ${name} 缺失的配置文件？`, false, {
+      yes: '现在创建',
+      no: '暂时跳过',
+    });
+    if (create === undefined) return 130;
+    if (create) {
+      const initialized = io.run('uv', [...command, name, '--init'], root);
+      if (initialized.code !== 0) return initialized.code;
+    } else {
+      io.print(`已暂时跳过 ${name}。`);
+    }
+  }
+  return 0;
 }
 
 function requireTool(io: SetupIO, root: string, command: string, guidance: string): void {
@@ -61,22 +97,22 @@ async function linkCommand(root: string, io: SetupIO): Promise<number> {
     return process.platform === 'win32' ? path.toLowerCase() === toolBin.toLowerCase() : path === toolBin;
   });
   if (!onPath) {
-    if (
-      process.platform === 'win32' &&
-      io.interactive &&
-      (await io.confirm(`是否通过 uv 将 ${toolBin} 写入用户 PATH？`))
-    ) {
-      const updated = io.run('uv', ['tool', 'update-shell'], root);
-      if (updated.code !== 0) return updated.code;
-      io.print('请打开新终端后使用 aurora。');
-    } else {
-      io.print(`请将 ${toolBin} 加入 PATH，或运行 uv tool update-shell 后打开新终端。`);
+    if (process.platform === 'win32' && io.interactive) {
+      const update = await io.confirm(`是否通过 uv 将 ${toolBin} 写入用户 PATH？`);
+      if (update === undefined) return 130;
+      if (update) {
+        const updated = io.run('uv', ['tool', 'update-shell'], root);
+        if (updated.code !== 0) return updated.code;
+        io.print('请打开新终端后使用 aurora。');
+        return 0;
+      }
     }
+    io.print(`请将 ${toolBin} 加入 PATH，或运行 uv tool update-shell 后打开新终端。`);
   }
   return 0;
 }
 
-/** 仅使用 Node 内置模块，确保尚未安装工作区依赖时也能引导。 */
+/** 初始化步骤与终端交互分离，取消选择后不再执行后续步骤。 */
 export async function setup(argv: string[], io: SetupIO, defaultRoot = repository): Promise<number> {
   const { values } = parseArgs({
     args: argv,
@@ -95,8 +131,10 @@ export async function setup(argv: string[], io: SetupIO, defaultRoot = repositor
     io.print(
       [
         '用法：node scripts/setup.ts [选项]（也可运行 pnpm run setup）',
-        '默认同步 Python 与应用工作区依赖，并创建 config/ 和 .env；已有配置不会覆盖。',
+        '默认同步依赖，并询问个人配置与环境文件的处理方式。',
         '--python / --config / --env / --docs：仅执行选中步骤，可组合。',
+        '缺失的个人配置默认暂时跳过，由 aurora start 补齐；也可运行 aurora config --init。',
+        '.env 不存在时默认创建，已存在时默认保留；非交互环境采用默认选择。',
         '--link：全局链接 aurora；--no-link：跳过全局链接。',
         '完整初始化在交互终端中询问是否全局链接，非交互环境默认跳过。',
         '--root <目录>：指定项目根目录。',
@@ -109,30 +147,30 @@ export async function setup(argv: string[], io: SetupIO, defaultRoot = repositor
   const selected = steps.filter((step) => values[step]);
   const full = selected.length === 0;
   const enabled = new Set(full ? steps : selected);
-  if (enabled.has('python') || values.link) {
+  if (enabled.has('python') || (enabled.has('config') && io.interactive) || values.link) {
     requireTool(io, root, 'uv', '请先安装 uv：https://docs.astral.sh/uv/getting-started/installation/');
   }
-  const link =
-    values.link ||
-    (full &&
-      !values['no-link'] &&
-      io.interactive &&
-      (await io.confirm('是否全局链接 aurora（editable，不复制项目）？')));
+  let link = values.link ?? false;
+  if (full && !values.link && !values['no-link'] && io.interactive) {
+    const choice = await io.confirm('是否全局链接 aurora（editable，不复制项目）？');
+    if (choice === undefined) return 130;
+    link = choice;
+  }
   if (link) {
     const code = await linkCommand(root, io);
     if (code !== 0) return code;
   }
-  if (enabled.has('config')) {
-    copyTemplate(root, 'config.example', 'config', true);
-    io.print('个人配置 config/ 已就绪（已有内容保留）。');
-  }
-  if (enabled.has('env')) {
-    copyTemplate(root, '.env.example', '.env');
-    io.print('环境文件 .env 已就绪（已有内容保留）。');
-  }
   if (enabled.has('python')) {
     const result = io.run('uv', ['sync'], root);
     if (result.code !== 0) return result.code;
+  }
+  if (enabled.has('config')) {
+    const code = await prepareConfigs(root, io);
+    if (code !== 0) return code;
+  }
+  if (enabled.has('env')) {
+    const code = await prepareEnv(root, io);
+    if (code !== 0) return code;
   }
   if (enabled.has('docs')) {
     if (io.run('pnpm', ['--version'], root, true).code === 0) {
@@ -147,22 +185,48 @@ export async function setup(argv: string[], io: SetupIO, defaultRoot = repositor
 }
 
 if (import.meta.main) {
+  let prompts: typeof import('@clack/prompts') | undefined;
   try {
     const locale = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8';
-    process.exitCode = await setup(process.argv.slice(2), {
+    const io: SetupIO = {
       interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
-      print: console.log,
-      async confirm(message) {
-        const reader = createInterface({ input: process.stdin, output: process.stdout });
-        try {
-          const answer = await reader.question(`${message} [Y/N]（回车默认 Y）: `);
-          return answer.trim() === '' || /^y/iu.test(answer.trim());
-        } finally {
-          reader.close();
+      print(message) {
+        if (prompts) prompts.log.info(message);
+        else console.log(message);
+      },
+      async confirm(message, initialValue = true, labels) {
+        if (!prompts) {
+          // 首次引导也能启动；只有实际需要交互时才安装并加载组件。
+          try {
+            import.meta.resolve('@clack/prompts');
+          } catch (error) {
+            if (!(error instanceof Error) || !('code' in error) || error.code !== 'ERR_MODULE_NOT_FOUND') {
+              throw error;
+            }
+            console.log('安装工程交互依赖…');
+            const result = io.run('pnpm', ['install', '--frozen-lockfile'], repository);
+            if (result.code !== 0) throw new Error('工程交互依赖安装失败。', { cause: error });
+          }
+          prompts = await import('@clack/prompts');
+          prompts.intro('AuroraBot 工程任务');
         }
+        const value = await prompts.select({
+          message: `${message}（↑↓ 选择，回车确认）`,
+          initialValue,
+          options: [
+            { value: true, label: labels?.yes ?? '是' },
+            { value: false, label: labels?.no ?? '否' },
+          ],
+          showInstructions: false,
+        });
+        if (prompts.isCancel(value)) {
+          prompts.cancel('已取消。');
+          return undefined;
+        }
+        return value;
       },
       run(command, args, root, capture = false) {
-        if (!capture) console.log(`>>> ${command} ${args.join(' ')}`);
+        if (!capture) io.print(`执行：${command} ${args.join(' ')}`);
         const result = spawnSync(command, args, {
           cwd: root,
           env: {
@@ -182,9 +246,13 @@ if (import.meta.main) {
         if (result.signal === 'SIGTERM') code = 143;
         return { code, stdout: result.stdout ?? '' };
       },
-    });
+    };
+    process.exitCode = await setup(process.argv.slice(2), io);
+    if (prompts && process.exitCode === 0) prompts.outro('已完成。');
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    if (prompts) prompts.cancel(message);
+    else console.error(message);
     process.exitCode = 1;
   }
 }

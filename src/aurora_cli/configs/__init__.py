@@ -1,4 +1,4 @@
-"""TOML 配置目录；按文件名自动发现每个模块的唯一 ``CONFIG_SPEC``。"""
+"""按配置项目录发现解析器，管理随包分发的模板与个人配置。"""
 
 from __future__ import annotations
 
@@ -6,26 +6,19 @@ from functools import cache
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
+from aurora_cli.configs._templates import (
+    config_names,
+    config_relative_path,
+    initialize_configs,
+    missing_config_files,
+)
 from aurora_cli.configurator import assemble_config
 from aurora_cli.contracts.config import ConfigSpec
-from aurora_cli.utils.modules import discover_module_names
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora_cli.contracts.config import AuroraConfig
-
-_CONFIG_DIRECTORY = "config"
-
-
-def config_names() -> tuple[str, ...]:
-    """按文件名排序返回全部已注册配置名，不导入模块本身。"""
-    return discover_module_names(tuple(str(path) for path in __path__))
-
-
-def config_relative_path(name: str) -> str:
-    """返回配置名约定的项目相对路径 ``config/<name>.toml``。"""
-    return f"{_CONFIG_DIRECTORY}/{name}.toml"
 
 
 def config_spec(name: str) -> ConfigSpec[Any]:
@@ -47,4 +40,12 @@ def load_config(project_root: Path) -> AuroraConfig:
     return assemble_config(project_root, config_specs())
 
 
-__all__ = ["config_names", "config_relative_path", "config_spec", "config_specs", "load_config"]
+__all__ = [
+    "config_names",
+    "config_relative_path",
+    "config_spec",
+    "config_specs",
+    "initialize_configs",
+    "load_config",
+    "missing_config_files",
+]

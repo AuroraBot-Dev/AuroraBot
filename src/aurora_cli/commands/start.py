@@ -30,8 +30,9 @@ COMMAND: CommandSpec = {
 
 
 def _load_config(project_root: Path) -> AuroraConfig:
-    from aurora_cli.configs import load_config
+    from aurora_cli.configs import initialize_configs, load_config
 
+    initialize_configs(project_root)
     return load_config(project_root)
 
 

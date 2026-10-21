@@ -68,7 +68,7 @@ graphify-out/
 # cache
 .npm-cache/
 
-# personal config copied from config.example
+# personal config initialized by aurora_cli
 /config/
 
 # Node.js / Vue 应用工作区

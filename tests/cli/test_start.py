@@ -48,6 +48,19 @@ def test_start_loads_config_and_runs_shared_lifecycle(
     assert calls[0][1] is True
 
 
+def test_first_start_initializes_missing_config_before_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[bool] = []
+
+    async def fake_run(config: object, *, headless: bool) -> None:
+        observed.append((tmp_path / "config/prompts/system/SOUL.md").is_file())
+
+    monkeypatch.setattr(start, "configure_project_logging", lambda _config: None)
+    monkeypatch.setattr(start, "_run_runtime", fake_run)
+    assert run(["--root", str(tmp_path), "start", "--headless"]) == 0
+    assert observed == [True]
+    assert (tmp_path / "config/apps.toml").is_file()
+
+
 def test_project_env_only_fills_missing_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / ".env").write_text(
         "AURORA_FROM_DOTENV=文件值\nAURORA_PROCESS_VALUE=文件值\n",

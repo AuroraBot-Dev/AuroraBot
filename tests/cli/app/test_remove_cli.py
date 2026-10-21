@@ -158,7 +158,7 @@ def test_a_missing_registry_points_at_aurora_setup(tmp_path: Path, capsys: pytes
     code, _, err = _capture(capsys, tmp_path, "remove", _PACKAGE)
 
     assert code == EXIT_CONFIG_ERROR
-    assert "aurora setup" in err
+    assert "aurora config apps --init" in err
 
 
 def test_a_duplicate_package_in_the_registry_is_a_config_error(

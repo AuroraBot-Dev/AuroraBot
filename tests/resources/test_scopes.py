@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 from pathlib import Path
 from typing import cast
 
@@ -20,9 +19,9 @@ from aurora_bot.mcp.scopes import mcp_scope
 from aurora_bot.runtime.assembly import declared_scopes, validate_declared_scopes
 from aurora_bot.runtime.events import RUNTIME_SCOPE
 from aurora_bot.tools import WORLD_SCOPES_TOOL, WorldScopesTool
+from aurora_cli.configs import initialize_configs
 from aurora_cli.configs.scopes import CONFIG_SPEC as SCOPES_CONFIG
 from aurora_cli.configurator import assemble_config
-from tests import PROJECT_ROOT
 
 _EXPECTED_OWNED_SCOPES = (
     "*:world",
@@ -152,7 +151,7 @@ def test_duplicate_patterns_are_rejected() -> None:
 
 def test_template_declares_every_scope_the_runtime_produces(tmp_path: Path) -> None:
     """域注册表的意义在于它是封闭且可校验的：代码产生的每个域都必须被声明覆盖。"""
-    shutil.copytree(PROJECT_ROOT / "config.example", tmp_path / "config")
+    initialize_configs(tmp_path)
     configured = assemble_config(tmp_path, (SCOPES_CONFIG,)).get(SCOPES_CONFIG)
     catalog = merge_scope_catalog(configured, (scope for spec in BuiltinSource().discover() for scope in spec.scopes))
 
@@ -172,7 +171,7 @@ def test_template_declares_every_scope_the_runtime_produces(tmp_path: Path) -> N
 
 
 def test_template_descriptions_are_model_readable(tmp_path: Path) -> None:
-    shutil.copytree(PROJECT_ROOT / "config.example", tmp_path / "config")
+    initialize_configs(tmp_path)
     configured = assemble_config(tmp_path, (SCOPES_CONFIG,)).get(SCOPES_CONFIG)
     catalog = merge_scope_catalog(configured, (scope for spec in BuiltinSource().discover() for scope in spec.scopes))
 
@@ -234,7 +233,7 @@ class _Settings:
 
 def test_builtin_modules_own_exactly_the_domains_the_registry_declares(tmp_path: Path) -> None:
     """每个产出域的模块都要声明它拥有的域，且这些域必须被注册表覆盖。"""
-    shutil.copytree(PROJECT_ROOT / "config.example", tmp_path / "config")
+    initialize_configs(tmp_path)
     configured = assemble_config(tmp_path, (SCOPES_CONFIG,)).get(SCOPES_CONFIG)
     catalog = merge_scope_catalog(configured, (scope for spec in BuiltinSource().discover() for scope in spec.scopes))
     specs = tuple(BuiltinSource().discover())

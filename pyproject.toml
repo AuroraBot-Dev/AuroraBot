@@ -33,6 +33,9 @@ where = ["src"]
 include = ["aurora_cli", "aurora_cli.*", "aurora_bot", "aurora_bot.*", "aurora_kernel", "aurora_kernel.*"]
 namespaces = false
 
+[tool.setuptools.package-data]
+aurora_cli = ["configs/*/*.toml", "configs/*/resources/*/*.md"]
+
 [dependency-groups]
 dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov", { include-group = "learning" }]
 learning = ["torch>=2.6,<3", "numpy>=2,<3"]

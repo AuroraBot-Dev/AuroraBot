@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -36,7 +35,6 @@ from aurora_cli.configs.engine import CONFIG_SPEC as ENGINE_CONFIG
 from aurora_cli.configs.memory import CONFIG_SPEC as MEMORY_CONFIG
 from aurora_cli.configs.providers import CONFIG_SPEC as PROVIDERS_CONFIG
 from aurora_cli.configs.runtime import CONFIG_SPEC as RUNTIME_CONFIG
-from tests import PROJECT_ROOT
 from tests.support.model import TemplateModel as FakeModel
 
 if TYPE_CHECKING:
@@ -385,9 +383,6 @@ def test_assembly_rejects_agent_model_whose_provider_is_unusable(configured_proj
 
 
 def test_loader_does_not_fall_back_to_source_template(tmp_path: Path) -> None:
-    project_root = PROJECT_ROOT
-    shutil.copytree(project_root / "config.example", tmp_path / "config.example")
-
     with pytest.raises(FileNotFoundError, match=r"config[\\/]+[a-z]+\.toml"):
         load_config(tmp_path)
 
