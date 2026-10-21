@@ -30,13 +30,13 @@ uv run aurora train memory train-memory.jsonl valid-memory.jsonl models/memory.p
 
 每个样本包含：
 
-| 字段 | 内容 |
-| --- | --- |
-| `observation` | 当时的 `bot_id`、带时区 `observed_at`、全局 `cursor`、`pending_events`、`elapsed_seconds`；可附目标、待核对动作、失败和计时特征 |
-| `think_value`、`wait_value` | 在同一评价尺度下，立即推理与继续等待的效用 |
-| `next_check_seconds` | 有限正数的下一次检查监督值 |
-| `outcome_cursor` | 严格晚于观察的结果获知游标 |
-| `outcome_at` | 不早于观察、带时区的结果获知时间 |
+| 字段                        | 内容                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `observation`               | 当时的 `bot_id`、带时区 `observed_at`、全局 `cursor`、`pending_events`、`elapsed_seconds`；可附目标、待核对动作、失败和计时特征 |
+| `think_value`、`wait_value` | 在同一评价尺度下，立即推理与继续等待的效用                                                                                      |
+| `next_check_seconds`        | 有限正数的下一次检查监督值                                                                                                      |
+| `outcome_cursor`            | 严格晚于观察的结果获知游标                                                                                                      |
+| `outcome_at`                | 不早于观察、带时区的结果获知时间                                                                                                |
 
 `aurora_bot.rhythm.dataset` 提供 `RhythmExample`、`RhythmEpisode`、`write_episodes`、`read_episodes` 和 `validate_partition`。没有结果时间或游标的输入不能自动补成有效样本。标签可以来自独立任务评估、受控回放或标注，但要记录该效用何时真正可知。
 

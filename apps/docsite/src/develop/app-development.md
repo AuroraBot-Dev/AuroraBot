@@ -32,17 +32,17 @@ pnpm build --help                # 查看任务支持的目标
 
 ## 任务与目标
 
-| 任务 | 目标 | 作用 |
-| --- | --- | --- |
-| `dev` | `landing`、`docs` | 启动对应应用的开发服务 |
-| `build` | `all`、`landing`、`docs` | 生产构建，产物位于各应用的 `dist/` |
-| `preview` | `landing`、`docs` | 预览已有构建产物 |
-| `check` | `apps`、`python`、`all` | 完整前端检查、Python 检查或两者 |
-| `typecheck` | `all`、`config`、`apps`、`landing`、`docs`、`tooling` | 检查相应范围的类型 |
-| `lint` | `all`、`prettier`、`oxlint`、`eslint`、`stylelint` | 检查格式、代码和样式规范 |
-| `format` | `all`、`prettier`、`oxlint`、`eslint`、`stylelint` | 自动修复与格式化 |
-| `test` | `all`、`apps`、`landing`、`docs`、`tooling` | 按测试项目运行，允许继续传入测试名等过滤参数 |
-| `clean` | `artifacts`、`deps` | 清理产物与缓存；`deps` 额外删除依赖，保留锁文件 |
+| 任务        | 目标                                                  | 作用                                            |
+| ----------- | ----------------------------------------------------- | ----------------------------------------------- |
+| `dev`       | `landing`、`docs`                                     | 启动对应应用的开发服务                          |
+| `build`     | `all`、`landing`、`docs`                              | 生产构建，产物位于各应用的 `dist/`              |
+| `preview`   | `landing`、`docs`                                     | 预览已有构建产物                                |
+| `check`     | `apps`、`python`、`all`                               | 完整前端检查、Python 检查或两者                 |
+| `typecheck` | `all`、`config`、`apps`、`landing`、`docs`、`tooling` | 检查相应范围的类型                              |
+| `lint`      | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`    | 检查格式、代码和样式规范                        |
+| `format`    | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`    | 自动修复与格式化                                |
+| `test`      | `all`、`apps`、`landing`、`docs`、`tooling`           | 按测试项目运行，允许继续传入测试名等过滤参数    |
+| `clean`     | `artifacts`、`deps`                                   | 清理产物与缓存；`deps` 额外删除依赖，保留锁文件 |
 
 `pnpm check apps` 依次执行全部类型检查、规范检查、测试及应用构建。
 `pnpm check all` 先执行 Python 检查，再执行前端检查。单独 `pnpm build all` 不会替代类型检查。
@@ -62,7 +62,7 @@ pnpm build --help                # 查看任务支持的目标
 - 应用的 `tsconfig.json` 检查浏览器代码，`tsconfig.node.json` 检查构建配置，共享选项位于 `tooling/tsconfig/`。
 - 根 `tsconfig.json` 检查根配置和 `scripts/**/*.mts`；工具包各自的 `typecheck` 检查其源码和测试。
 - ESLint、Oxlint 和 Stylelint 的根配置加载 `tooling/` 中对应的本地包。TypeScript 规则包直接导出源码，无须先构建；修改规则后重新运行检查即可生效。
-- Prettier 负责格式，Oxlint 负责语义与类型感知规则，ESLint 补充 Vue、导入排序及配置文件规则，Stylelint 检查样式。
+- Prettier 负责格式，Oxlint 负责语义与类型感知规则，ESLint 补充 Vue、导入排序及配置文件规则，Stylelint 检查样式。Prettier 按目录覆盖 `apps/`、`tooling/`、`scripts/`、`docs/` 和 `.github/`，新增的受支持文件自动纳入；未知后缀由 `--ignore-unknown` 跳过，构建产物与锁文件由 `.prettierignore` 排除。
 
 TypeScript 声明文件的三斜线指令必须保持 `///`。注释空格规则允许这一标记，自动修复不得把类型引用改成普通注释。
 

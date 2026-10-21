@@ -35,6 +35,7 @@
 
 ## 开发与验证
 
+- 当处于wsl环境时运行命令, 不要带有wsl前缀.
 - Python 3.12 使用 uv；前端使用 Node.js 24、pnpm 12。测试前执行 `uv sync --locked --group dev` 安装项目。
 - Ruff 行宽 120、LF、双引号；单个源码文件不超过 600 行，纯字段模型可例外。
 - 公开 API 保留必要注解，值对象优先 frozen + slots dataclass；hook 与 ctx 允许 Any，不堆叠类型包装，不以 lint ignore 掩盖复杂度。

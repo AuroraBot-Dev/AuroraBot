@@ -12,18 +12,18 @@ order: 3
 
 ## 配置职责
 
-| 文件 | 当前用途 |
-| --- | --- |
-| `bot.toml` | 长期 Bot 身份 |
-| `runtime.toml`、`engine.toml` | root 原型、节点 ID、日志级别和树深度、节点、步数上限 |
-| `agents.toml`、`prompts.toml`、`prompts/` | 原型、提示词资源和正文 |
-| `providers.toml`、`endpoints.toml` | 提供方、SDK 路由、实际模型和请求边界 |
-| `tags.toml` | 工具集合标签 |
-| `cadence.toml`、`reactions.toml`、`rhythm.toml` | 节律入口、即时匹配规则、规则或 GRU 策略 |
-| `memory.toml`、`memory_model.toml` | 经历候选范围、近期窗口、规则或 TGN 排序与投影保存间隔 |
-| `scopes.toml` | 领域分类与范围声明 |
-| `apps.toml`、`platforms.toml` | MCP App、传输、启用状态与终端诊断偏好 |
-| `storage.toml`、`artifacts.toml` | 世界与日志目录、固定内容存储目录 |
+| 文件                                            | 当前用途                                              |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| `bot.toml`                                      | 长期 Bot 身份                                         |
+| `runtime.toml`、`engine.toml`                   | root 原型、节点 ID、日志级别和树深度、节点、步数上限  |
+| `agents.toml`、`prompts.toml`、`prompts/`       | 原型、提示词资源和正文                                |
+| `providers.toml`、`endpoints.toml`              | 提供方、SDK 路由、实际模型和请求边界                  |
+| `tags.toml`                                     | 工具集合标签                                          |
+| `cadence.toml`、`reactions.toml`、`rhythm.toml` | 节律入口、即时匹配规则、规则或 GRU 策略               |
+| `memory.toml`、`memory_model.toml`              | 经历候选范围、近期窗口、规则或 TGN 排序与投影保存间隔 |
+| `scopes.toml`                                   | 领域分类与范围声明                                    |
+| `apps.toml`、`platforms.toml`                   | MCP App、传输、启用状态与终端诊断偏好                 |
+| `storage.toml`、`artifacts.toml`                | 世界与日志目录、固定内容存储目录                      |
 
 重复定义、未知 root/child/Prompt/model/Tool、无效资源身份和不兼容的配置在效果前失败。失选默认实现的私有配置不应阻止已选替代实现启动。
 

@@ -55,11 +55,11 @@ def changed(ctx: Context, value: int) -> None:
 
 这些声明必须在创建 Host 之前完成。注册 hook 不会自动触发调用，调用者显式执行 `ctx.call("counter:changed", value)`。
 
-| 模式 | 行为 |
-| --- | --- |
+| 模式             | 行为                                                                 |
+| ---------------- | -------------------------------------------------------------------- |
 | `single`（默认） | 选取最高 `priority` 的一个实现；缺少实现或最高优先级并列在构建前失败 |
-| `collect` | 按优先级从高到低执行，平级按模块依赖顺序与注册顺序执行，返回结果元组 |
-| `notify` | 使用同样顺序执行全部实现，返回 `None` |
+| `collect`        | 按优先级从高到低执行，平级按模块依赖顺序与注册顺序执行，返回结果元组 |
+| `notify`         | 使用同样顺序执行全部实现，返回 `None`                                |
 
 `collect` 和 `notify` 可以没有实现。调用是顺序执行，任一实现抛错就停止本次调用，已发生的效果不会自动回滚。`host.call()` / `ctx.call()` 用于同步调用，异步实现通过 `await host.acall()` / `await ctx.acall()` 调用；异步入口也接受同步实现。调用点不要求 Protocol 或输入输出 DTO，公共函数保留必要的参数和返回值注解即可。
 
@@ -123,12 +123,12 @@ Bot 启动发现内置模块、`extensions/plugins/`、`aurorabot_plugin` 和 `a
 
 Bot 适配层保留契约类型、资源声明、世界域与清单归档。`context.ctx` / `assembly.ctx` 暴露共享上下文，`get()` 与 `contributions()` 从其中实时读取：
 
-| ctx 空间 | 内容 |
-| --- | --- |
-| `aurora.bot` | `settings` 保存装配输入 |
-| `kernel.services` | 契约身份到实例的映射；`aurora_bot.kernel.context.capability_name(type)` 生成键 |
-| `kernel.contributions` | 贡献点名称到值元组的映射 |
-| 各模块完整名称 | 自动创建的模块自有状态空间 |
+| ctx 空间               | 内容                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `aurora.bot`           | `settings` 保存装配输入                                                        |
+| `kernel.services`      | 契约身份到实例的映射；`aurora_bot.kernel.context.capability_name(type)` 生成键 |
+| `kernel.contributions` | 贡献点名称到值元组的映射                                                       |
+| 各模块完整名称         | 自动创建的模块自有状态空间                                                     |
 
 通用模块可用 `requires=("aurora:kernel/module/具体模块",)` 等待某个入选 Bot 模块构造，也可以直接读写上述空间。提供方选择与依赖计划在构建时确定；修改 ctx 不会重跑装配，也不会替换其他对象已保存的服务引用。
 

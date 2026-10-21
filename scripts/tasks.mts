@@ -38,17 +38,11 @@ function commands(targets: readonly Target[]): Command[] {
 
 /** 交互菜单、明确参数入口和组合检查共用这份任务定义。 */
 export function createTasks(configFiles: string[]): Task[] {
-  const formatFiles = [
-    'apps/**/*.{ts,tsx,vue,css,scss,json,mjs}',
-    'tooling/**/*.{ts,tsx,vue,css,scss,json,mjs}',
-    'scripts/**/*.mts',
-    '*.{ts,json,yaml}',
-    '.github/workflows/apps.yml',
-    '.github/workflows/deploy-docs.yml',
-  ];
+  // 整目录纳入，后续新增的受支持文件自动参与格式检查；未知后缀由 --ignore-unknown 跳过。
+  const formatFiles = ['apps', 'tooling', 'scripts', 'docs', '.github', '*.{ts,json,yaml,md}'];
   const codeFiles = ['apps', 'tooling', 'scripts', ...configFiles];
   const styleFiles = ['apps/**/*.{vue,css,scss}', 'tooling/**/*.{vue,css,scss}'];
-  const prettier: Command = ['prettier', '--check', ...formatFiles];
+  const prettier: Command = ['prettier', '--check', '--ignore-unknown', ...formatFiles];
   const oxlint: Command = ['oxlint', '--type-aware', '--threads=4', ...codeFiles];
   const eslint: Command = ['eslint', ...codeFiles, 'package.json', 'pnpm-workspace.yaml', 'tsconfig.json', '--cache'];
   const stylelint: Command = ['stylelint', ...styleFiles, '--cache'];
@@ -57,7 +51,7 @@ export function createTasks(configFiles: string[]): Task[] {
     target('oxlint', '代码修复（Oxlint）', [[...oxlint, '--fix']]),
     target('eslint', '规则修复（ESLint）', [[...eslint, '--fix']]),
     target('stylelint', '样式修复（Stylelint）', [[...stylelint, '--fix']]),
-    target('prettier', '格式整理（Prettier）', [['prettier', '--write', ...formatFiles]]),
+    target('prettier', '格式整理（Prettier）', [['prettier', '--write', '--ignore-unknown', ...formatFiles]]),
   ];
   const builds = appTargets('build');
   const configTypes: Command = ['tsc', '-p', 'tsconfig.json'];

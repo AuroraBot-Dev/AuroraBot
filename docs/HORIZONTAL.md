@@ -16,12 +16,12 @@
 
 ## 1. 四条不变量
 
-| # | 不变量 | 为什么 |
-|---|---|---|
-| H1 | 一切可寻址之物只有一个 ID 形式：`<namespace>:<path>` | 否则每个物种各自发明语法与校验器（现状：8 套） |
-| H2 | ID 语法统一，**注册表按物种分** | 统一的是名字，不是类型。类型留在 value 侧继续抓 bug |
-| H3 | `namespace` 即**所有者**，唯一声明权威 | 「谁声明了这个名字」必须可回答 |
-| H4 | 名字与集合在**加载期**解析、校验、冻结；解析不到即启动失败 | 沿用项目既有纪律（缺失依赖、依赖环、同优先级冲突都在启动前失败） |
+| #   | 不变量                                                     | 为什么                                                           |
+| --- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| H1  | 一切可寻址之物只有一个 ID 形式：`<namespace>:<path>`       | 否则每个物种各自发明语法与校验器（现状：8 套）                   |
+| H2  | ID 语法统一，**注册表按物种分**                            | 统一的是名字，不是类型。类型留在 value 侧继续抓 bug              |
+| H3  | `namespace` 即**所有者**，唯一声明权威                     | 「谁声明了这个名字」必须可回答                                   |
+| H4  | 名字与集合在**加载期**解析、校验、冻结；解析不到即启动失败 | 沿用项目既有纪律（缺失依赖、依赖环、同优先级冲突都在启动前失败） |
 
 **红线（比上面四条更要紧）：**
 
@@ -50,31 +50,31 @@ path       [A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*
 
 内置的 `builtin.` 与 `system.` 是两个**非正式命名空间**。新语法把「所有者」和「物种」分开：
 
-| 概念 | 载体 |
-|---|---|
-| 所有者 | `namespace` |
-| 物种（tool / agent / prompt / platform / 域 / …） | `path` 的第一段 |
-| 条目 | `path` 的其余部分 |
+| 概念                                              | 载体              |
+| ------------------------------------------------- | ----------------- |
+| 所有者                                            | `namespace`       |
+| 物种（tool / agent / prompt / platform / 域 / …） | `path` 的第一段   |
+| 条目                                              | `path` 的其余部分 |
 
 ### 现状 → 目标映射
 
-| 现在 | 目标 | 归属 | 状态 |
-|---|---|---|---|
-| `aur.agent.delegate` | `aurora:tool/delegate` | 内置 | ✅ 已落地 |
-| `aur.serv.world.read` | `aurora:tool/world_read` | 内置 | ✅ 已落地 |
-| `aur.builtin.wait` | `aurora:tool/wait` | 内置 | ✅ 已落地 |
-| `aur.mcp.<package>.<raw_name>` | `<package>:tool/<raw_name 或别名>` | 扩展 | ✅ 已落地 |
-| `builtin.root`（agent） | `aurora:agent/root` | 内置 | ✅ 已落地 |
-| `system.soul`（prompt） | `aurora:prompt/system/soul` | 内置 | ✅ 已落地 |
-| `builtin.triage`（prompt） | `aurora:prompt/agent/triage` | 内置 | ✅ 已落地 |
-| `builtin.console`（platform） | `aurora:platform/console` | 内置 | ✅ 已落地 |
-| `world` / `mcp` / `engine`（module） | 保持原样 | 内部诊断名 | **不改** |
-| `tools.catalog`（贡献键） | 保持原样 | 内部贡献键 | **不改** |
-| `aurora:world/console` | `aurora:world/console` | 资源域 | ✅ 已落地 |
-| `aurora:world/cadence` | `aurora:world/cadence` | 资源域 | ✅ 已落地 |
-| `aurora:mcp:<package>` | `<package>:world` | 资源域 | ✅ 已落地 |
-| `aurora:tree:<id>` | `aurora:run/<id>` | **运行域** | ✅ 已落地 |
-| `AuroraConfig` 等能力类型 | 保留 Python 类型（value 侧） | — | 不需要 ID |
+| 现在                                 | 目标                               | 归属       | 状态      |
+| ------------------------------------ | ---------------------------------- | ---------- | --------- |
+| `aur.agent.delegate`                 | `aurora:tool/delegate`             | 内置       | ✅ 已落地 |
+| `aur.serv.world.read`                | `aurora:tool/world_read`           | 内置       | ✅ 已落地 |
+| `aur.builtin.wait`                   | `aurora:tool/wait`                 | 内置       | ✅ 已落地 |
+| `aur.mcp.<package>.<raw_name>`       | `<package>:tool/<raw_name 或别名>` | 扩展       | ✅ 已落地 |
+| `builtin.root`（agent）              | `aurora:agent/root`                | 内置       | ✅ 已落地 |
+| `system.soul`（prompt）              | `aurora:prompt/system/soul`        | 内置       | ✅ 已落地 |
+| `builtin.triage`（prompt）           | `aurora:prompt/agent/triage`       | 内置       | ✅ 已落地 |
+| `builtin.console`（platform）        | `aurora:platform/console`          | 内置       | ✅ 已落地 |
+| `world` / `mcp` / `engine`（module） | 保持原样                           | 内部诊断名 | **不改**  |
+| `tools.catalog`（贡献键）            | 保持原样                           | 内部贡献键 | **不改**  |
+| `aurora:world/console`               | `aurora:world/console`             | 资源域     | ✅ 已落地 |
+| `aurora:world/cadence`               | `aurora:world/cadence`             | 资源域     | ✅ 已落地 |
+| `aurora:mcp:<package>`               | `<package>:world`                  | 资源域     | ✅ 已落地 |
+| `aurora:tree:<id>`                   | `aurora:run/<id>`                  | **运行域** | ✅ 已落地 |
+| `AuroraConfig` 等能力类型            | 保留 Python 类型（value 侧）       | —          | 不需要 ID |
 
 **只改「可被配置或模型寻址」的东西。** module 名与贡献键是内部诊断与接线标识，
 既不被配置引用也不被模型看见，改成命名空间化只是噪声——横向体系管的是**可寻址面**，不是所有字符串。
@@ -99,11 +99,11 @@ aurora:prompt/system/soul           全局 system 片段
 MCP SDK 对 `Tool.name` **不做任何格式约束**（`annotation=str`），所以门只有我们这一道。
 这一层必须是**全函数**：
 
-| 情形 | 处理 | 理由 |
-|---|---|---|
-| raw name 本身合法 | **原样使用**，零映射 | 模型看到的就是服务器给的名字 |
-| 否则 | 确定性别名 `<slug>-<8位哈希>` | 只依赖 raw ⇒ 服务器增删工具不会让已有工具 ID 漂移 |
-| 首尾带空白 / 空 | **拒绝**，报出是哪个名字 | 这是 Server 的缺陷；静默别名会让两个看似相同的名字变成两个 ID |
+| 情形              | 处理                          | 理由                                                          |
+| ----------------- | ----------------------------- | ------------------------------------------------------------- |
+| raw name 本身合法 | **原样使用**，零映射          | 模型看到的就是服务器给的名字                                  |
+| 否则              | 确定性别名 `<slug>-<8位哈希>` | 只依赖 raw ⇒ 服务器增删工具不会让已有工具 ID 漂移             |
+| 首尾带空白 / 空   | **拒绝**，报出是哪个名字      | 这是 Server 的缺陷；静默别名会让两个看似相同的名字变成两个 ID |
 
 迁移前 `_MCP_TOOL_ID` 会拒绝 `tool/read`、`2fa_verify`、`_private` 这类**完全合法**的第三方名字，
 而 discovery 失败会升级成 `McpStartupError` —— **一个古怪工具名就能让整个 AuroraBot 起不来**。
@@ -116,11 +116,11 @@ MCP SDK 对 `Tool.name` **不做任何格式约束**（`annotation=str`），所
 
 现在 `*` 不跨哪些字符是**按位置**决定的，因为 ID 的层级语法本来就是三段式的：
 
-| 位置 | 分层字符 | 单星 `*` 不跨 | 例子 |
-|---|---|---|---|
-| 命名空间段（`:` 之前） | `.` | `.` `:` | `*:tool/*` 只够到一层命名空间 |
-| path 段（`:` 之后） | `/` | `/` | `org.aurora.qq:tool/*` 够得到 `send.message` |
-| 无 `:` 的模式 | `.` | `.` | `org.aurora.**` 仍是命名空间前缀模式 |
+| 位置                   | 分层字符 | 单星 `*` 不跨 | 例子                                         |
+| ---------------------- | -------- | ------------- | -------------------------------------------- |
+| 命名空间段（`:` 之前） | `.`      | `.` `:`       | `*:tool/*` 只够到一层命名空间                |
+| path 段（`:` 之后）    | `/`      | `/`           | `org.aurora.qq:tool/*` 够得到 `send.message` |
+| 无 `:` 的模式          | `.`      | `.`           | `org.aurora.**` 仍是命名空间前缀模式         |
 
 `**` 在任意位置都跨全部层级。第三方 MCP 的业务 scope 是自由文本，
 其中的 `:` 落在 path 段，所以 `qq:*` 仍能匹配 `qq:group:123`。
@@ -160,24 +160,24 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 
 项目里**已经有两套手写的 tag 系统**，只是不叫这个名字：
 
-| 位置 | 现状 |
-|---|---|
-| `config.example/agents.toml:15-18,41-42` | 内联 glob + `!` 取反，同一个集合写了两遍 |
-| `config.example/memory.toml:4-5` | `scope_include` / `scope_exclude`，同一套语法 |
+| 位置                                     | 现状                                          |
+| ---------------------------------------- | --------------------------------------------- |
+| `config.example/agents.toml:15-18,41-42` | 内联 glob + `!` 取反，同一个集合写了两遍      |
+| `config.example/memory.toml:4-5`         | `scope_include` / `scope_exclude`，同一套语法 |
 
 还有一处**硬编码的前缀切分**：`src/cadence/cadence.py:33` 的 `_MCP_SCOPE_PREFIX = "aurora:mcp:"`
 用字符串前缀硬切「业务域」，应改为 tag 引用。
 
 ### 加载期纪律
 
-| 情况 | 行为 |
-|---|---|
-| 引用未声明的标签 | **报错**（沿用「精确模式未匹配即报错」的纪律） |
-| 标签循环引用 | **报错** |
-| 嵌套超过 16 层 | **报错** |
-| 重复声明同名标签 | **报错** |
-| 展开后精确条目匹配不到任何注册项 | 由 `resolve_names` 报错 |
-| 展开后 glob 条目匹配不到 | 只 warn |
+| 情况                             | 行为                                           |
+| -------------------------------- | ---------------------------------------------- |
+| 引用未声明的标签                 | **报错**（沿用「精确模式未匹配即报错」的纪律） |
+| 标签循环引用                     | **报错**                                       |
+| 嵌套超过 16 层                   | **报错**                                       |
+| 重复声明同名标签                 | **报错**                                       |
+| 展开后精确条目匹配不到任何注册项 | 由 `resolve_names` 报错                        |
+| 展开后 glob 条目匹配不到         | 只 warn                                        |
 
 ---
 
@@ -185,17 +185,17 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 
 **统一的是 ID 语法，不是注册表。** 每个物种一张注册表，语法一致：
 
-| 物种 | 注册表 | 现状 |
-|---|---|---|
-| Tool | `ToolRegistry`（ID → executor） | ✅ 已有 |
-| Agent | `AgentCatalog`（ID → definition） | ✅ 已有 |
-| Prompt | `PromptCatalog`（ID → 文本） | ✅ 已有 |
-| 域 | `ScopeCatalog`（ID → 所有者/种类/语义） | ✅ **已落地** |
-| Tag | `TagTable`（ID → 条目集合） | ✅ 本轮新增 |
-| Platform | 组合期按 id 决定装配 | ⚠️ 隐式 |
-| Module | `ModuleSpec`（含 `owns_scopes` / `observes_scopes`） | ✅ **P3a 已落地** |
-| 贡献键 | `Assembly.contributions(key)` | ⚠️ 隐式 |
-| 能力（类型） | `Assembly.get(type)` | ✅ 保留在 value 侧 |
+| 物种         | 注册表                                               | 现状               |
+| ------------ | ---------------------------------------------------- | ------------------ |
+| Tool         | `ToolRegistry`（ID → executor）                      | ✅ 已有            |
+| Agent        | `AgentCatalog`（ID → definition）                    | ✅ 已有            |
+| Prompt       | `PromptCatalog`（ID → 文本）                         | ✅ 已有            |
+| 域           | `ScopeCatalog`（ID → 所有者/种类/语义）              | ✅ **已落地**      |
+| Tag          | `TagTable`（ID → 条目集合）                          | ✅ 本轮新增        |
+| Platform     | 组合期按 id 决定装配                                 | ⚠️ 隐式            |
+| Module       | `ModuleSpec`（含 `owns_scopes` / `observes_scopes`） | ✅ **P3a 已落地**  |
+| 贡献键       | `Assembly.contributions(key)`                        | ⚠️ 隐式            |
+| 能力（类型） | `Assembly.get(type)`                                 | ✅ 保留在 value 侧 |
 
 ---
 
@@ -203,12 +203,12 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 
 ### 两类域，必须分开
 
-| | 资源域 | 运行域 |
-|---|---|---|
-| 例子 | `aurora:world/console`、`org.aurora.qq:world` | `aurora:run/<tree_id>` |
-| 生命 | 长期存在，被观察 | 与一次认知运行同寿 |
-| 语义 | **Bot 经历的世界** | **引擎的运转台账** |
-| 默认可见 | 是 | 否 |
+|          | 资源域                                        | 运行域                 |
+| -------- | --------------------------------------------- | ---------------------- |
+| 例子     | `aurora:world/console`、`org.aurora.qq:world` | `aurora:run/<tree_id>` |
+| 生命     | 长期存在，被观察                              | 与一次认知运行同寿     |
+| 语义     | **Bot 经历的世界**                            | **引擎的运转台账**     |
+| 默认可见 | 是                                            | 否                     |
 
 实测（一次 2 节点、23 模型步的树）：94 条提交里 **约 92 条是引擎台账**，总行数
 **92% 是元数据**。混在一起写，等于让 Bot 的「生活记录」被自己的运转日志淹没。
@@ -223,12 +223,12 @@ values = ["#aurora:tool/qq-send", "#aurora:tool/qq-read"]   # 标签可嵌套
 
 ### 域注册表要存的字段
 
-| 字段 | 用途 |
-|---|---|
-| `pattern` | 精确域、`<前缀>:*` 一族域，或 `*:<path>` 任意命名空间 |
-| `owner` | 由 pattern 的命名空间推出；即声明权威（`*` 不算所有者） |
-| `kind` | `resource` / `run` |
-| `description` | **给模型读的一句话** |
+| 字段          | 用途                                                    |
+| ------------- | ------------------------------------------------------- |
+| `pattern`     | 精确域、`<前缀>:*` 一族域，或 `*:<path>` 任意命名空间   |
+| `owner`       | 由 pattern 的命名空间推出；即声明权威（`*` 不算所有者） |
+| `kind`        | `resource` / `run`                                      |
+| `description` | **给模型读的一句话**                                    |
 
 命名空间通配是扩展域逼出来的：`<package>:world` 里的 package 在发现之前不可知，
 注册表无法逐个列举。所以扩展域写成**两条**声明而不是含糊的 `*:world*`：
@@ -247,11 +247,11 @@ kind = "resource"
 
 ### 已经吃上力的地方
 
-| 用途 | 之前 | 现在 |
-|---|---|---|
-| 记忆可见性 | 用户得手写 `scope_include = ["**", "!aurora:tree:**"]` 才能挡住引擎台账 | 注册表声明 `kind=run`，默认不进记忆；未声明的域一律保留 |
-| 模型可读 | 域对模型完全不可见 | `aurora:tool/world_scopes` 列出所有者、种类与说明 |
-| 声明封闭性 | 无处校验 | 测试断言**代码产生的每个域都被模板覆盖**（`ScopeCatalog.undeclared(...) == ()`） |
+| 用途       | 之前                                                                    | 现在                                                                             |
+| ---------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 记忆可见性 | 用户得手写 `scope_include = ["**", "!aurora:tree:**"]` 才能挡住引擎台账 | 注册表声明 `kind=run`，默认不进记忆；未声明的域一律保留                          |
+| 模型可读   | 域对模型完全不可见                                                      | `aurora:tool/world_scopes` 列出所有者、种类与说明                                |
+| 声明封闭性 | 无处校验                                                                | 测试断言**代码产生的每个域都被模板覆盖**（`ScopeCatalog.undeclared(...) == ()`） |
 
 `ScopeCatalog.classify` 对未声明的域返回 `None`（宽松），只有**明确声明为 `run`** 的域才被排除——
 缺一条声明不能丢掉真实世界内容。
@@ -262,11 +262,11 @@ kind = "resource"
 
 一个扩展要能说三句话。两条入口的进度不同：
 
-| 扩展想说 | 组合期（`ModuleSpec`） | 运行期（`aurora app` / `apps.toml`） |
-|---|---|---|
-| 我提供哪些 **Act** | ✅ `provides` + `TOOL_CONTRIBUTIONS` | ✅ 冻结工具目录 |
-| 我拥有哪些**域** | ✅ **P3a**：`owns_scopes` | ✅ **P3b**：`scopes` |
-| 我需要观察哪些**域** | ✅ **P3a**：`observes_scopes` | ⚠️ 仅 MCP tool contract，声明权在远端 |
+| 扩展想说             | 组合期（`ModuleSpec`）               | 运行期（`aurora app` / `apps.toml`）  |
+| -------------------- | ------------------------------------ | ------------------------------------- |
+| 我提供哪些 **Act**   | ✅ `provides` + `TOOL_CONTRIBUTIONS` | ✅ 冻结工具目录                       |
+| 我拥有哪些**域**     | ✅ **P3a**：`owns_scopes`            | ✅ **P3b**：`scopes`                  |
+| 我需要观察哪些**域** | ✅ **P3a**：`observes_scopes`        | ⚠️ 仅 MCP tool contract，声明权在远端 |
 
 **两条入口都能说「我拥有哪些域」了，而且都由启动前校验把关。**
 
@@ -289,10 +289,10 @@ package = "org.aurora.qq"
 scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的域
 ```
 
-| 关 | 规则 | 在哪 |
-|---|---|---|
-| **归属**（H3） | 域必须落在该 App 自己的命名空间下，且前缀按**整段**匹配（`org.aurora.qq` 认领不了 `org.aurora.qqq`） | `AppConfig.__post_init__` |
-| **覆盖**（H4） | 域必须被域注册表覆盖 | `build_mcp_specs`（连接前） |
+| 关             | 规则                                                                                                 | 在哪                        |
+| -------------- | ---------------------------------------------------------------------------------------------------- | --------------------------- |
+| **归属**（H3） | 域必须落在该 App 自己的命名空间下，且前缀按**整段**匹配（`org.aurora.qq` 认领不了 `org.aurora.qqq`） | `AppConfig.__post_init__`   |
+| **覆盖**（H4） | 域必须被域注册表覆盖                                                                                 | `build_mcp_specs`（连接前） |
 
 于是「谁拥有这个域」有了唯一答案：`aurora:console` → `console` 模块，`aurora:tree:*` → `engine`，
 `aurora:mcp:*` → `mcp`，`aurora:cadence` → `cadence`，`aurora:mcp:org.aurora.qq` → 那个 App。
@@ -315,12 +315,12 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 
 循环**由域驱动**，四个操作现在各有名字、职责与不变量：
 
-| 操作 | 契约 | 域参数 | 状态 |
-|---|---|---|---|
-| **Observe** | `WorldReader.delta(start, scopes)` | ✅ 就是域 | ✅ 已声明（P4） |
-| **Recall** | `MemoryReader.recall(scopes=...)` | ✅ 就是域 | ✅ 已声明（P4） |
-| **Effect** | `WorldWriter.append_commit(scopes=...)` | ✅ 就是域 | ✅ 已声明（P4） |
-| **Act** | `ToolRegistry.execute(call)` | ⚠️ 靠 `ToolScopes` 携带，地址是工具名 | ✅ 已声明 |
+| 操作        | 契约                                    | 域参数                                | 状态            |
+| ----------- | --------------------------------------- | ------------------------------------- | --------------- |
+| **Observe** | `WorldReader.delta(start, scopes)`      | ✅ 就是域                             | ✅ 已声明（P4） |
+| **Recall**  | `MemoryReader.recall(scopes=...)`       | ✅ 就是域                             | ✅ 已声明（P4） |
+| **Effect**  | `WorldWriter.append_commit(scopes=...)` | ✅ 就是域                             | ✅ 已声明（P4） |
+| **Act**     | `ToolRegistry.execute(call)`            | ⚠️ 靠 `ToolScopes` 携带，地址是工具名 | ✅ 已声明       |
 
 三个结论：
 
@@ -338,15 +338,15 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 
 ## 8. 现状 → 目标：七个待清的点
 
-| # | 问题 | 证据 | 被什么解决 |
-|---|---|---|---|
-| 1 | 两套身份机制，字符串侧无唯一权威 → **8 套校验器** | `_validate_cross_references`、`_validate_agents`、`resolve_names`、`_reject_unknown`、`require_fields`、`AgentCatalog`、内核 `_validate_names`、`app` 的 24 个 `check_*` | H1+H3 |
-| 2 | **三套因果表示**：全局 `insertion_sequence`、每域 `sequence`、`based_on` 快照 | `based_on` 实测 **93.2% 重复**，生产代码只读一处 | 域模型 + P5b |
-| 3 | 引擎台账与世界资源同居一条线 | 94 提交里 ~92 条是台账 | ✅ 读侧已分离（P1：记忆按 `kind` 排除运行域）；读代价已按域分区隔离（P5a）；写侧仍共用一条线（P5b） |
-| 4 | 两套扩展入口、两个生命周期、无共同语言 | `ModuleSpec`（11 个 `module.py`）vs `aurora app`（12 文件 / ~4150 行） | ✅ 两条入口都能声明「我拥有哪些域」（P3a / P3b） |
-| 5 | 域命名空间混了资源域与运行域 | 无区分标记 | ✅ **P1 已解决**：`kind` 字段 + 注册表 |
-| 6 | 正则 / 校验器跨包复制 | `toml.py:91-144` 与 `src/utils/validation.py:13-59` 六函数逐字相同 | H1 |
-| 7 | 另外三个操作可替换但**未声明、未校验** | 内核 `priority` 裁决已支持，`WorldReader`/`MemoryReader`/`WorldWriter` 都是 `provides=` 契约 | §7：声明扩展点 + 语义一致性校验 |
+| #   | 问题                                                                          | 证据                                                                                                                                                                     | 被什么解决                                                                                          |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| 1   | 两套身份机制，字符串侧无唯一权威 → **8 套校验器**                             | `_validate_cross_references`、`_validate_agents`、`resolve_names`、`_reject_unknown`、`require_fields`、`AgentCatalog`、内核 `_validate_names`、`app` 的 24 个 `check_*` | H1+H3                                                                                               |
+| 2   | **三套因果表示**：全局 `insertion_sequence`、每域 `sequence`、`based_on` 快照 | `based_on` 实测 **93.2% 重复**，生产代码只读一处                                                                                                                         | 域模型 + P5b                                                                                        |
+| 3   | 引擎台账与世界资源同居一条线                                                  | 94 提交里 ~92 条是台账                                                                                                                                                   | ✅ 读侧已分离（P1：记忆按 `kind` 排除运行域）；读代价已按域分区隔离（P5a）；写侧仍共用一条线（P5b） |
+| 4   | 两套扩展入口、两个生命周期、无共同语言                                        | `ModuleSpec`（11 个 `module.py`）vs `aurora app`（12 文件 / ~4150 行）                                                                                                   | ✅ 两条入口都能声明「我拥有哪些域」（P3a / P3b）                                                    |
+| 5   | 域命名空间混了资源域与运行域                                                  | 无区分标记                                                                                                                                                               | ✅ **P1 已解决**：`kind` 字段 + 注册表                                                              |
+| 6   | 正则 / 校验器跨包复制                                                         | `toml.py:91-144` 与 `src/utils/validation.py:13-59` 六函数逐字相同                                                                                                       | H1                                                                                                  |
+| 7   | 另外三个操作可替换但**未声明、未校验**                                        | 内核 `priority` 裁决已支持，`WorldReader`/`MemoryReader`/`WorldWriter` 都是 `provides=` 契约                                                                             | §7：声明扩展点 + 语义一致性校验                                                                     |
 
 **其中 #2、#3、#5 是同一件事**，并且与 `delta()` 的全表扫描曾经是**同一个改动**：域成为物理分区键后，
 全表扫描已经消失（两万条提交：40001 条 SQL / 31.44 秒 → 1 条 SQL / 0.004 秒，见 §10 的 P5a）；
@@ -356,20 +356,20 @@ scopes = ["aurora:mcp:org.aurora.qq"]   # 只能声明自己命名空间下的�
 
 ## 9. 迁移阶段
 
-| 阶段 | 内容 | 触碰 | 状态 |
-|---|---|---|---|
-| **P0** | 身份层（`Identifier`）+ 标签集合 + 把策略搬出代码 | `src/contracts/identity.py`、新配置 | ✅ **已落地** |
-| **P1** | 域注册表 + `kind`（资源 / 运行）+ 给域一句 description | `src/contracts/scope.py`、新配置、`WorldScopesTool`、记忆可见性 | ✅ **已落地** |
-| **P2-1a** | 工具 ID 换根 + 第三方名字接纳（含修掉「古怪工具名让进程起不来」） | `registry` / `mcp.tool` / `config.example` / 测试 | ✅ **已落地** |
-| **P2-1b** | agent / prompt / platform ID 换根 + 三物种应用同一套规则 | `config.example` + 三处 DTO + 测试 | ✅ **已落地** |
-| **P2-2** | 域换根到命名空间语法（接受一次数据断层） | 四处域命名 + `scopes.toml` + 域模式 | ✅ **已落地** |
-| **P2-3** | 标签/可见性模式的语言跟随 ID 语法（按位置决定 `*` 的边界） | `src/utils/patterns.py` + 两处消费者 | ✅ **已落地** |
-| **P3a** | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块 | ✅ **已落地** |
-| **P3b** | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验 | `AppConfig` / `apps.toml` / `build_mcp_specs` | ✅ **已落地** |
-| **P3c** | 零工具的 Server 也能作为世界生产者登记（准入 = 至少一种贡献） | `aurora app` 准入规则 + `--events` | ✅ **已落地** |
-| **P4** | 声明四操作为扩展点 + 装配期校验（齐备性、世界单源） | `src/contracts/loop.py` + `src/runtime/assembly.py` | ✅ **已落地** |
-| **P5a** | 域作为物理分区键 + `delta()` 下推；世界线 schema 1 → 2 | `src/world` + migration | ✅ **已落地** |
-| **P5b** | 因果表示收敛（全局 `insertion_sequence` / 每域 `sequence` / `based_on` 三套归一） | `src/contracts/world.py` + `src/world` + 引擎与工具读侧 | ⬜ |
+| 阶段      | 内容                                                                              | 触碰                                                            | 状态          |
+| --------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------- |
+| **P0**    | 身份层（`Identifier`）+ 标签集合 + 把策略搬出代码                                 | `src/contracts/identity.py`、新配置                             | ✅ **已落地** |
+| **P1**    | 域注册表 + `kind`（资源 / 运行）+ 给域一句 description                            | `src/contracts/scope.py`、新配置、`WorldScopesTool`、记忆可见性 | ✅ **已落地** |
+| **P2-1a** | 工具 ID 换根 + 第三方名字接纳（含修掉「古怪工具名让进程起不来」）                 | `registry` / `mcp.tool` / `config.example` / 测试               | ✅ **已落地** |
+| **P2-1b** | agent / prompt / platform ID 换根 + 三物种应用同一套规则                          | `config.example` + 三处 DTO + 测试                              | ✅ **已落地** |
+| **P2-2**  | 域换根到命名空间语法（接受一次数据断层）                                          | 四处域命名 + `scopes.toml` + 域模式                             | ✅ **已落地** |
+| **P2-3**  | 标签/可见性模式的语言跟随 ID 语法（按位置决定 `*` 的边界）                        | `src/utils/patterns.py` + 两处消费者                            | ✅ **已落地** |
+| **P3a**   | 组合期扩展声明拥有的域与观察的域 + 启动前覆盖校验                                 | `ModuleSpec` + `src/runtime/assembly.py` + 4 个产出域的模块     | ✅ **已落地** |
+| **P3b**   | 运行期扩展（`aurora app`）声明自己拥有的域 + 归属与覆盖校验                       | `AppConfig` / `apps.toml` / `build_mcp_specs`                   | ✅ **已落地** |
+| **P3c**   | 零工具的 Server 也能作为世界生产者登记（准入 = 至少一种贡献）                     | `aurora app` 准入规则 + `--events`                              | ✅ **已落地** |
+| **P4**    | 声明四操作为扩展点 + 装配期校验（齐备性、世界单源）                               | `src/contracts/loop.py` + `src/runtime/assembly.py`             | ✅ **已落地** |
+| **P5a**   | 域作为物理分区键 + `delta()` 下推；世界线 schema 1 → 2                            | `src/world` + migration                                         | ✅ **已落地** |
+| **P5b**   | 因果表示收敛（全局 `insertion_sequence` / 每域 `sequence` / `based_on` 三套归一） | `src/contracts/world.py` + `src/world` + 引擎与工具读侧         | ⬜            |
 
 P2 建议在 P1 之后（域注册表要先有地方挂 owner——现已具备）。
 P5a 是唯一需要 schema migration 的阶段：只增加索引、不改动提交数据，因此对既有世界线是就地升级。
@@ -381,75 +381,75 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 ### P0：身份与集合
 
-| 文件 | 内容 |
-|---|---|
-| `src/contracts/identity.py` | `Identifier` / `TagDefinition` / `TagTable` / `TagsConfig` / `is_namespace` / `is_path` |
-| `aurora/configs/tags.py` + `config.example/tags.toml` | 标签集合的声明与解析 |
-| `src/agents/module.py` | 装配时展开 `#标签` 再 `resolve_names` |
-| `config.example/agents.toml` | 重复的 glob 收敛为 `#aurora:tool/qq-send` / `#aurora:tool/qq-read` |
-| `src/cadence/config.py` + `aurora/configs/reactions.py` + `config.example/reactions.toml` | 即时路由策略离开 Python |
-| `src/cadence/cadence.py` | **删除** `DEFAULT_REACTIVE_RULES`（含写死的中文触发词） |
+| 文件                                                                                      | 内容                                                                                    |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `src/contracts/identity.py`                                                               | `Identifier` / `TagDefinition` / `TagTable` / `TagsConfig` / `is_namespace` / `is_path` |
+| `aurora/configs/tags.py` + `config.example/tags.toml`                                     | 标签集合的声明与解析                                                                    |
+| `src/agents/module.py`                                                                    | 装配时展开 `#标签` 再 `resolve_names`                                                   |
+| `config.example/agents.toml`                                                              | 重复的 glob 收敛为 `#aurora:tool/qq-send` / `#aurora:tool/qq-read`                      |
+| `src/cadence/config.py` + `aurora/configs/reactions.py` + `config.example/reactions.toml` | 即时路由策略离开 Python                                                                 |
+| `src/cadence/cadence.py`                                                                  | **删除** `DEFAULT_REACTIVE_RULES`（含写死的中文触发词）                                 |
 
 ### P1：域注册表
 
-| 文件 | 内容 |
-|---|---|
-| `src/contracts/scope.py` | `ScopeKind` / `ScopeDeclaration` / `ScopeCatalog`（自带最小模式匹配，契约层不依赖 `src.utils`） |
-| `aurora/configs/scopes.py` + `config.example/scopes.toml` | 域注册表的声明与解析 |
-| `src/tools/builtin/world.py` | `aurora:tool/world_scopes`：把域注册表交给模型读 |
-| `src/memory/memory.py` + `module.py` | `kind=run` 的域默认不进记忆；未声明的域保留 |
-| `aurora/contracts/config.py` | `text_field` 支持 `transform`（与 `strings_field` 对称，供枚举字段使用） |
+| 文件                                                      | 内容                                                                                            |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `src/contracts/scope.py`                                  | `ScopeKind` / `ScopeDeclaration` / `ScopeCatalog`（自带最小模式匹配，契约层不依赖 `src.utils`） |
+| `aurora/configs/scopes.py` + `config.example/scopes.toml` | 域注册表的声明与解析                                                                            |
+| `src/tools/builtin/world.py`                              | `aurora:tool/world_scopes`：把域注册表交给模型读                                                |
+| `src/memory/memory.py` + `module.py`                      | `kind=run` 的域默认不进记忆；未声明的域保留                                                     |
+| `aurora/contracts/config.py`                              | `text_field` 支持 `transform`（与 `strings_field` 对称，供枚举字段使用）                        |
 
 ### P3a：组合期扩展声明域
 
-| 文件 | 内容 |
-|---|---|
-| `src/kernel/declaration.py` | `ModuleSpec` / `@module` 新增 `owns_scopes` / `observes_scopes`（校验非空、去空白、不重复） |
-| `src/runtime/assembly.py` | `declared_scopes()` 汇总 + `validate_declared_scopes()` 启动前覆盖校验 |
-| `src/engine/scopes.py` / `src/mcp/scopes.py` | 域模式常量 `SCOPE_PATTERN`，命名只在一处 |
-| `console` / `cadence` / `engine` / `mcp` 的 `module.py` | 各自声明它拥有的域 |
+| 文件                                                    | 内容                                                                                        |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/kernel/declaration.py`                             | `ModuleSpec` / `@module` 新增 `owns_scopes` / `observes_scopes`（校验非空、去空白、不重复） |
+| `src/runtime/assembly.py`                               | `declared_scopes()` 汇总 + `validate_declared_scopes()` 启动前覆盖校验                      |
+| `src/engine/scopes.py` / `src/mcp/scopes.py`            | 域模式常量 `SCOPE_PATTERN`，命名只在一处                                                    |
+| `console` / `cadence` / `engine` / `mcp` 的 `module.py` | 各自声明它拥有的域                                                                          |
 
 ### P3b：运行期扩展声明域
 
-| 文件 | 内容 |
-|---|---|
-| `src/mcp/scopes.py` | `owned_scope_prefix()` / `owns_scope()`：前缀按整段匹配，防 `org.aurora.qq` 误认领 `org.aurora.qqq` |
-| `src/mcp/config.py` | `AppConfig.scopes` + 归属校验（H3，命名空间即所有权） |
-| `src/mcp/models.py` | `McpAppSpec.scopes` 携带声明 |
-| `src/mcp/module.py` | `build_mcp_specs` 校验注册表覆盖（H4，连接前失败） |
-| `src/mcp/runtime.py` | `app_owned_scopes()`：发布事实时用声明值，未声明才退回标准域 |
-| `aurora/configs/apps.py` | `scopes` 加入白名单并保持可选（与 `event_mode` 同级） |
+| 文件                     | 内容                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `src/mcp/scopes.py`      | `owned_scope_prefix()` / `owns_scope()`：前缀按整段匹配，防 `org.aurora.qq` 误认领 `org.aurora.qqq` |
+| `src/mcp/config.py`      | `AppConfig.scopes` + 归属校验（H3，命名空间即所有权）                                               |
+| `src/mcp/models.py`      | `McpAppSpec.scopes` 携带声明                                                                        |
+| `src/mcp/module.py`      | `build_mcp_specs` 校验注册表覆盖（H4，连接前失败）                                                  |
+| `src/mcp/runtime.py`     | `app_owned_scopes()`：发布事实时用声明值，未声明才退回标准域                                        |
+| `aurora/configs/apps.py` | `scopes` 加入白名单并保持可选（与 `event_mode` 同级）                                               |
 
 ### P2-1a：工具 ID 换根与外来名字接纳
 
-| 文件 | 内容 |
-|---|---|
-| `src/contracts/identity.py` | `alias_path()`：全函数，合法即零映射，否则 `<slug>-<8位哈希>` |
-| `src/tools/registry.py` | `is_tool_id()` 成为**唯一**工具 ID 校验器（旧的两份 `_MCP_TOOL_ID` 消失） |
-| `src/mcp/tool.py` | `mcp_tool_id()`：package 段我们必须合法，raw_name 段原样接纳或别名 |
-| `src/mcp/runtime.py` | 同一命名空间内两个远端名收敛到同一 ID 时，同时报出两个名字 |
+| 文件                        | 内容                                                                      |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `src/contracts/identity.py` | `alias_path()`：全函数，合法即零映射，否则 `<slug>-<8位哈希>`             |
+| `src/tools/registry.py`     | `is_tool_id()` 成为**唯一**工具 ID 校验器（旧的两份 `_MCP_TOOL_ID` 消失） |
+| `src/mcp/tool.py`           | `mcp_tool_id()`：package 段我们必须合法，raw_name 段原样接纳或别名        |
+| `src/mcp/runtime.py`        | 同一命名空间内两个远端名收敛到同一 ID 时，同时报出两个名字                |
 
 ### P2-1b：三个物种换根并应用同一套规则
 
-| 文件 | 内容 |
-|---|---|
+| 文件                        | 内容                                                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `src/contracts/identity.py` | 物种前缀常量（`TOOL_` / `AGENT_` / `PROMPT_` / `PLATFORM_PATH_PREFIX`）与 `SYSTEM_` / `AGENT_PROMPT_PATH_PREFIX` |
-| `src/contracts/agent.py` | `AgentDefinition` 校验自身 ID、prompt ID、工具与 children 的物种 |
-| `src/prompt/models.py` | `PromptCatalog` 校验 Agent prompt ID |
-| `src/prompt/module.py` | 按 ID 的 kind 段切分 system / agent，未知 kind 直接报错（取代 `_SYSTEM_PREFIX`） |
-| `src/mcp/config.py` | `PlatformConfig` 校验平台物种前缀 |
+| `src/contracts/agent.py`    | `AgentDefinition` 校验自身 ID、prompt ID、工具与 children 的物种                                                 |
+| `src/prompt/models.py`      | `PromptCatalog` 校验 Agent prompt ID                                                                             |
+| `src/prompt/module.py`      | 按 ID 的 kind 段切分 system / agent，未知 kind 直接报错（取代 `_SYSTEM_PREFIX`）                                 |
+| `src/mcp/config.py`         | `PlatformConfig` 校验平台物种前缀                                                                                |
 
 ### P2-2：域换根
 
-| 文件 | 内容 |
-|---|---|
-| `src/contracts/identity.py` | `world_scope(owner)` / `WORLD_SCOPE_PATTERN` / `WORLD_SUB_SCOPE_PATTERN` |
-| `src/contracts/scope.py` | `*:<path>` 命名空间通配；尾部通配统一要求至少一段；`owners` 排除 `*` |
-| `src/console/events.py` / `src/cadence/cadence.py` | `aurora:world/console` / `aurora:world/cadence` |
-| `src/engine/scopes.py` | 运行域 `aurora:run/<tree_id>`，与其他物种共用同一套语法 |
-| `src/mcp/scopes.py` | `mcp_scope(package)` = `world_scope(package)`；子域用 `/` |
-| `src/cadence/cadence.py` | **删除**硬编码的 `_MCP_SCOPE_PREFIX`：改由 `source` 按域命名规则现算 |
-| `src/tools/builtin/world.py` | 域目录工具的 `owners` 改走 `ScopeCatalog.owners`，通配不算所有者 |
+| 文件                                               | 内容                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/contracts/identity.py`                        | `world_scope(owner)` / `WORLD_SCOPE_PATTERN` / `WORLD_SUB_SCOPE_PATTERN` |
+| `src/contracts/scope.py`                           | `*:<path>` 命名空间通配；尾部通配统一要求至少一段；`owners` 排除 `*`     |
+| `src/console/events.py` / `src/cadence/cadence.py` | `aurora:world/console` / `aurora:world/cadence`                          |
+| `src/engine/scopes.py`                             | 运行域 `aurora:run/<tree_id>`，与其他物种共用同一套语法                  |
+| `src/mcp/scopes.py`                                | `mcp_scope(package)` = `world_scope(package)`；子域用 `/`                |
+| `src/cadence/cadence.py`                           | **删除**硬编码的 `_MCP_SCOPE_PREFIX`：改由 `source` 按域命名规则现算     |
+| `src/tools/builtin/world.py`                       | 域目录工具的 `owners` 改走 `ScopeCatalog.owners`，通配不算所有者         |
 
 ### P3c：零工具的世界生产者
 
@@ -459,9 +459,9 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 现在准入问的是「至少能贡献一种东西」：
 
-| 贡献 | 判据 | 模型能做什么 |
-|---|---|---|
-| Act | 发现到至少一个 Tool | 调用它 |
+| 贡献       | 判据                        | 模型能做什么                      |
+| ---------- | --------------------------- | --------------------------------- |
+| Act        | 发现到至少一个 Tool         | 调用它                            |
 | 世界生产者 | `event_mode = world_events` | 等它的世界事件，然后 `world_read` |
 
 两者都做不到的条目纯粹是死配置——既调不动，也等不到它——仍然拒绝，
@@ -477,9 +477,9 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 ### P4：四操作显式化
 
-| 文件 | 内容 |
-|---|---|
-| `src/contracts/loop.py` | `LoopOperation`（名字 / 契约 / 职责 / 不变量）与 `LOOP_OPERATIONS`、`WORLD_PORTS` |
+| 文件                      | 内容                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `src/contracts/loop.py`   | `LoopOperation`（名字 / 契约 / 职责 / 不变量）与 `LOOP_OPERATIONS`、`WORLD_PORTS`        |
 | `src/runtime/assembly.py` | `validate_loop_operations`：四操作齐备 + 三个世界端口同源；在 `_create` 里对装配结果执行 |
 
 **校验只补内核问不了的那件事。** 内核已经保证：同契约同优先级冲突会失败、
@@ -498,8 +498,8 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 ### P2-3：模式语言跟随 ID 语法
 
-| 文件 | 内容 |
-|---|---|
+| 文件                    | 内容                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
 | `src/utils/patterns.py` | 按第一个 `:` 切成命名空间段与 path 段，两段各自决定 `*` / `?` 不跨什么；`**` 任意位置跨全部 |
 
 翻译从「按 `.` 切段」改成「逐字符走、按位置取屏蔽集」，因此不需要知道模式里
@@ -512,19 +512,19 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 ### P5a：域分区索引与 `delta()` 下推
 
-| 文件 | 内容 |
-|---|---|
-| `src/world/models.py` | `world_commit_scopes` 增加覆盖索引 `world_commit_scope_partition (scope, sequence, commit_id)`；`(scope, sequence)` 自此是域分区键 |
-| `src/world/migration/v1.py` | 1 → 2：`CREATE INDEX IF NOT EXISTS`，只加索引、不触碰数据 |
-| `src/world/migration/__init__.py` | `TARGET_VERSION = 2`，`STEPS[1]` 注册该步 |
-| `src/world/store.py` | `delta()` 把域过滤与 `insertion_sequence` 排序下推到 SQL；`_has_more()` 只查分区索引；`_load_commits()` 按页批量载入正文（每页固定 2 条语句，取代每行 2 条） |
+| 文件                              | 内容                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/world/models.py`             | `world_commit_scopes` 增加覆盖索引 `world_commit_scope_partition (scope, sequence, commit_id)`；`(scope, sequence)` 自此是域分区键                           |
+| `src/world/migration/v1.py`       | 1 → 2：`CREATE INDEX IF NOT EXISTS`，只加索引、不触碰数据                                                                                                    |
+| `src/world/migration/__init__.py` | `TARGET_VERSION = 2`，`STEPS[1]` 注册该步                                                                                                                    |
+| `src/world/store.py`              | `delta()` 把域过滤与 `insertion_sequence` 排序下推到 SQL；`_has_more()` 只查分区索引；`_load_commits()` 按页批量载入正文（每页固定 2 条语句，取代每行 2 条） |
 
 实测（20000 条提交、20 个域、`page_size=64`）：
 
-| 场景 | 改前 | 改后 |
-|---|---|---|
+| 场景                         | 改前                   | 改后               |
+| ---------------------------- | ---------------------- | ------------------ |
 | 前沿已在 head（应返回 0 条） | 40001 条语句 / 31.44 s | 1 条语句 / 0.004 s |
-| 前沿在深处（返回一页） | 69634 条语句 / 54.70 s | 4 条语句 / 0.018 s |
+| 前沿在深处（返回一页）       | 69634 条语句 / 54.70 s | 4 条语句 / 0.018 s |
 
 查询计划确认三条读路径都走覆盖索引：`delta()` 为 `MULTI-INDEX OR` + `SEARCH ... USING COVERING INDEX world_commit_scope_partition (scope=? AND sequence>?)`，
 `_has_more()` 与 `commits(scope, after, limit)` 同源。
@@ -533,18 +533,18 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 ### 测试
 
-| 文件 | 覆盖 |
-|---|---|
-| `tests/foundation/test_identity.py` | 45 项：ID 解析、`alias_path` 对 15 个真实外来名字的全函数性与稳定性、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返 |
-| `tests/resources/test_scopes.py` | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
-| `tests/cli/configs/test_reactions.py` | 9 项：模板往返、路由命中、字段缺失与未知字段 |
-| `tests/cli/configs/test_mcp.py` | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败 |
-| `tests/cli/app/test_verify.py` | +2 项：零工具 + `world_events` 作为世界生产者登记且声明落进注册表；远程端点拒绝 `--events` |
-| `tests/cli/app/test_install_cli.py` | +2 项：`--events` 的 CLI 通路（零工具也登记）与「不加 `--events` 仍拒绝」 |
-| `tests/engine/test_loop.py` | 6 项：四操作的名字与契约互不相同、职责与不变量非空、三个世界端口同源声明、齐备时通过、缺操作报出名字、两个世界被拒、**内建组合恰好满足全部四条不变量** |
-| `tests/mcp/test_mcp_tool.py` | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字 |
-| `tests/memory/test_memory.py` | +3 项：运行域默认排除、未声明域保留、可显式纳入 |
-| `tests/kernel/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验 |
+| 文件                                   | 覆盖                                                                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/foundation/test_identity.py`    | 45 项：ID 解析、`alias_path` 对 15 个真实外来名字的全函数性与稳定性、标签展开/嵌套/循环/深度、与内联模式逐字等价、模板往返                                                      |
+| `tests/resources/test_scopes.py`       | 19 项：声明校验、所有者推导、首条命中、按类分组、**模板覆盖全部运行时域**、工具输出、**内建模块拥有的域恰好等于注册表所声明**、未注册域启动前失败、观察声明与 `ModuleSpec` 校验 |
+| `tests/cli/configs/test_reactions.py`  | 9 项：模板往返、路由命中、字段缺失与未知字段                                                                                                                                    |
+| `tests/cli/configs/test_mcp.py`        | +6 项：模板声明 App 拥有的域、跨命名空间被拒、子域可用、重复被拒、前缀整段匹配、未注册域在连接前失败                                                                            |
+| `tests/cli/app/test_verify.py`         | +2 项：零工具 + `world_events` 作为世界生产者登记且声明落进注册表；远程端点拒绝 `--events`                                                                                      |
+| `tests/cli/app/test_install_cli.py`    | +2 项：`--events` 的 CLI 通路（零工具也登记）与「不加 `--events` 仍拒绝」                                                                                                       |
+| `tests/engine/test_loop.py`            | 6 项：四操作的名字与契约互不相同、职责与不变量非空、三个世界端口同源声明、齐备时通过、缺操作报出名字、两个世界被拒、**内建组合恰好满足全部四条不变量**                          |
+| `tests/mcp/test_mcp_tool.py`           | +8 项：`read` / `tool/read` / `2fa_verify` / `_private` / `send.message` / `SendMessage` / `send:message` / 非 ASCII **都能接入**；只拒绝真正无身份的名字                       |
+| `tests/memory/test_memory.py`          | +3 项：运行域默认排除、未声明域保留、可显式纳入                                                                                                                                 |
+| `tests/kernel/test_builtin_modules.py` | 9 条恒真断言（`isinstance(x, object)`）改为实际校验                                                                                                                             |
 
 验证：**1163 passed / 1 skipped**，`ruff` 与 `pyright` 均 0 error，配置 14 个 TOML ↔ 14 个 configs 模块（原 11 个 + `reactions` / `scopes` / `tags`）。
 
@@ -552,9 +552,9 @@ P5b 要动 `WorldCommit.based_on` 这类契约字段，属于语义变更，与 
 
 ## 11. 明确不做
 
-| 不做 | 理由 |
-|---|---|
+| 不做                                             | 理由                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | 引入 `Daemon` / `MessageBus` / `ParallelTask` 类 | AGENTS.md 禁止引入与 AgentTree 平行的运行模型；三者应表达为 **AgentTree 的性质 + 域** |
-| **树内**并行 | 会砸掉「确定性单循环」，收益远小于代价。并行只做在树之间 |
-| 为「模型驱动」放宽静态检查 | 贵的是「类型做身份」那 23 个样板文件，不是注解；注解是实现层唯一抓 bug 的手段 |
-| 先改世界线 schema、再定域的分区语义 | 会改两次；域必须先被确认为物理分区键（P5a 与域模型是同一个改动） |
+| **树内**并行                                     | 会砸掉「确定性单循环」，收益远小于代价。并行只做在树之间                              |
+| 为「模型驱动」放宽静态检查                       | 贵的是「类型做身份」那 23 个样板文件，不是注解；注解是实现层唯一抓 bug 的手段         |
+| 先改世界线 schema、再定域的分区语义              | 会改两次；域必须先被确认为物理分区键（P5a 与域模型是同一个改动）                      |

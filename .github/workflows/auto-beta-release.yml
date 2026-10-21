@@ -2,12 +2,12 @@ name: Auto Beta Release
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ['CI']
     types:
       - completed
   push:
     tags:
-      - "v*-beta.*"
+      - 'v*-beta.*'
 
 permissions:
   contents: write

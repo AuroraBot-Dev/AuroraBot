@@ -14,25 +14,25 @@ AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动�
 
 ## 同级能力包
 
-| 包 | 职责 |
-| --- | --- |
-| `src/aurora_bot/contracts`、`src/aurora_bot/utils` | 公共值对象、能力端口、贡献契约与无上层依赖的工具 |
-| `src/aurora_kernel` | 模块无关的 namespace、hook、ctx、发现、依赖解析与生命周期监督 |
-| `src/aurora_bot/kernel` | Bot 契约、贡献、资源和世界域的装配适配 |
-| `src/aurora_bot/runtime` | 从冻结装配创建 Bot 门面，绑定认知入口并驱动前台 |
-| `src/aurora_bot/bot` | 从世界提交投影主体目标、检查点和唤醒安排 |
-| `src/aurora_bot/clock` | 独立兑现主体保存的未来安排 |
-| `src/aurora_bot/world` | 追加式世界日志、全局游标、域序号与 SQLite migration |
-| `src/aurora_bot/cadence`、`src/aurora_bot/rhythm` | 世界与时间驱动的调度、可替换的规则或 GRU 策略及训练 |
-| `src/aurora_bot/memory`、`src/aurora_bot/memory_model` | 时间正确的经历读取、连续性与集合组装、规则或 TGN 排序及训练 |
-| `src/aurora_bot/agents`、`src/aurora_bot/prompt` | 不可变 Agent 定义、提示词目录与无 I/O 的四角色上下文装配 |
-| `src/aurora_bot/engine`、`src/aurora_bot/tools` | 单循环认知、工具目录、普通效果与委派 |
-| `src/aurora_bot/ai`、`src/aurora_bot/mcp` | LLM Provider 协议适配、MCP 连接与冻结工具目录 |
-| `src/aurora_bot/resources`、`src/aurora_bot/scopes` | 资源寻址、版本与别名解析、领域声明与范围校验 |
-| `src/aurora_bot/operations` | 统一命令与查询路由、回执、幂等及不确定效果处理 |
-| `src/aurora_bot/artifacts`、`src/aurora_bot/resource_content` | 大对象内容存储、固定版本校验与实际定义正文归档 |
-| `src/aurora_bot/instances` | 从世界事实发现运行实例与确定历史版本 |
-| `src/aurora_bot/console` | 本地异步终端、输入先入世界、领域指令入口 |
+| 包                                                            | 职责                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------- |
+| `src/aurora_bot/contracts`、`src/aurora_bot/utils`            | 公共值对象、能力端口、贡献契约与无上层依赖的工具              |
+| `src/aurora_kernel`                                           | 模块无关的 namespace、hook、ctx、发现、依赖解析与生命周期监督 |
+| `src/aurora_bot/kernel`                                       | Bot 契约、贡献、资源和世界域的装配适配                        |
+| `src/aurora_bot/runtime`                                      | 从冻结装配创建 Bot 门面，绑定认知入口并驱动前台               |
+| `src/aurora_bot/bot`                                          | 从世界提交投影主体目标、检查点和唤醒安排                      |
+| `src/aurora_bot/clock`                                        | 独立兑现主体保存的未来安排                                    |
+| `src/aurora_bot/world`                                        | 追加式世界日志、全局游标、域序号与 SQLite migration           |
+| `src/aurora_bot/cadence`、`src/aurora_bot/rhythm`             | 世界与时间驱动的调度、可替换的规则或 GRU 策略及训练           |
+| `src/aurora_bot/memory`、`src/aurora_bot/memory_model`        | 时间正确的经历读取、连续性与集合组装、规则或 TGN 排序及训练   |
+| `src/aurora_bot/agents`、`src/aurora_bot/prompt`              | 不可变 Agent 定义、提示词目录与无 I/O 的四角色上下文装配      |
+| `src/aurora_bot/engine`、`src/aurora_bot/tools`               | 单循环认知、工具目录、普通效果与委派                          |
+| `src/aurora_bot/ai`、`src/aurora_bot/mcp`                     | LLM Provider 协议适配、MCP 连接与冻结工具目录                 |
+| `src/aurora_bot/resources`、`src/aurora_bot/scopes`           | 资源寻址、版本与别名解析、领域声明与范围校验                  |
+| `src/aurora_bot/operations`                                   | 统一命令与查询路由、回执、幂等及不确定效果处理                |
+| `src/aurora_bot/artifacts`、`src/aurora_bot/resource_content` | 大对象内容存储、固定版本校验与实际定义正文归档                |
+| `src/aurora_bot/instances`                                    | 从世界事实发现运行实例与确定历史版本                          |
+| `src/aurora_bot/console`                                      | 本地异步终端、输入先入世界、领域指令入口                      |
 
 功能包在运行期只引用自身、`contracts` 和 `utils`；模块声明可以引用 `kernel`，`runtime` 依赖 `kernel`。兄弟包的类型引用可放在 `TYPE_CHECKING` 中，实际能力经契约注入。外部库由使用它的包封装，数据库、SDK 与计算张量不泄漏到主体和消息契约。边界由 `tests/foundation/test_dependency_boundaries.py` 校验。
 

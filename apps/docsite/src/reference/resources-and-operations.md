@@ -8,14 +8,14 @@ order: 1
 
 `ResourceKey` 的规范字符串为 `namespace:domain/kind/path`。namespace 表示提供方，domain 表示语义领域，kind 表示对象类别，path 定位具体定义。例如：
 
-| 身份 | 含义 |
-| --- | --- |
-| `aurora:rhythm/model/gru` | GRU 节律权重 |
-| `aurora:memory/model/tgn` | 时序图记忆权重 |
-| `lab:example/query/echo` | 扩展查询 |
-| `aurora:bot/command/goal_set` | 主体目标修改 |
-| `lab:kernel/module/example` | 扩展模组声明 |
-| `aurora:engine/process/agent_tree` | 认知过程定义 |
+| 身份                               | 含义           |
+| ---------------------------------- | -------------- |
+| `aurora:rhythm/model/gru`          | GRU 节律权重   |
+| `aurora:memory/model/tgn`          | 时序图记忆权重 |
+| `lab:example/query/echo`           | 扩展查询       |
+| `aurora:bot/command/goal_set`      | 主体目标修改   |
+| `lab:kernel/module/example`        | 扩展模组声明   |
+| `aurora:engine/process/agent_tree` | 认知过程定义   |
 
 `ResourceRef` 包含 `key` 与可选 `revision`。明确版本指向同一份定义，不能默认为“最新”；未指定版本时，由目录在唯一版本或显式别名下解析，有歧义时失败。终端用 `资源名@revision` 表达固定引用，序列化数据将 key 和 revision 分开保存。
 
@@ -25,11 +25,11 @@ order: 1
 
 ## 三种沟通语义
 
-| 语义 | 入口 | 状态与因果 |
-| --- | --- | --- |
+| 语义 | 入口                                       | 状态与因果                                                             |
+| ---- | ------------------------------------------ | ---------------------------------------------------------------------- |
 | 查询 | `OperationKind.QUERY` 或注入的只读能力端口 | 读取快照或计算推荐，不改变目标等业务状态；调用审计和可重建缓存可以更新 |
-| 命令 | `OperationKind.COMMAND` | 请求一个逻辑处理者执行明确意图，记录请求与结果 |
-| 事件 | `WorldWriter.append_commit/append_event` | 已发生事实进入追加世界，多方按游标或 scope 消费 |
+| 命令 | `OperationKind.COMMAND`                    | 请求一个逻辑处理者执行明确意图，记录请求与结果                         |
+| 事件 | `WorldWriter.append_commit/append_event`   | 已发生事实进入追加世界，多方按游标或 scope 消费                        |
 
 内部能力调用使用稳定的契约实例，跨入口的领域操作使用统一路由。事件不是字符串函数调用，也不保证订阅者已经处理；世界保存了事实不等于外部效果已成功。当前部署不提供跨机器消息代理或外部端到端恰好一次交付保证。
 
@@ -39,17 +39,17 @@ order: 1
 
 `OperationRequest` 字段如下：
 
-| 字段 | 语义 |
-| --- | --- |
-| `request_id` | 来源内稳定的调用 ID |
-| `bot_id` | 接受此次操作的主体 |
-| `source` | 调用来源 |
-| `target` | 待解析或固定版本的目标引用 |
-| `kind` | command 或 query，必须与目标定义一致 |
-| `arguments` | 递归不可变的 JSON 参数 |
-| `correlation_id` | 可选的关联链身份 |
-| `caused_by` | 可选的直接因果来源 |
-| `deadline_at` | 可选带时区期限 |
+| 字段             | 语义                                 |
+| ---------------- | ------------------------------------ |
+| `request_id`     | 来源内稳定的调用 ID                  |
+| `bot_id`         | 接受此次操作的主体                   |
+| `source`         | 调用来源                             |
+| `target`         | 待解析或固定版本的目标引用           |
+| `kind`           | command 或 query，必须与目标定义一致 |
+| `arguments`      | 递归不可变的 JSON 参数               |
+| `correlation_id` | 可选的关联链身份                     |
+| `caused_by`      | 可选的直接因果来源                   |
+| `deadline_at`    | 可选带时区期限                       |
 
 持久调用身份由 `(bot_id, source, request_id)` 的规范编码摘要构成。相同身份必须保持参数、目标、来源、关联与期限一致；目标首次解析后固定其版本，重试不追随别名变化。主体状态的 `expected_version` 是具体命令参数，不是所有请求都必需的全局字段。
 
