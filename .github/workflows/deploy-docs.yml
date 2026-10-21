@@ -37,7 +37,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 检查并构建全部应用
-        run: pnpm check:apps
+        run: pnpm check apps
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 

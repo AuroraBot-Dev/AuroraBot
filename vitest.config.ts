@@ -12,8 +12,16 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: 'apps',
-          include: ['apps/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
+          name: 'landing',
+          include: ['apps/landing/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
+          environment: 'happy-dom',
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'docsite',
+          include: ['apps/docsite/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
           environment: 'happy-dom',
         },
       },

@@ -9,8 +9,8 @@
     "build": "vitepress build .",
     "preview": "vitepress preview .",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "lint": "pnpm --dir ../.. lint",
-    "test": "pnpm --dir ../.. test apps/docsite --passWithNoTests",
+    "lint": "pnpm --dir ../.. lint all",
+    "test": "pnpm --dir ../.. test docs",
     "clean": "rimraf dist node_modules/.vite node_modules/.vitepress .vitepress/.temp .vitepress/cache"
   },
   "devDependencies": {

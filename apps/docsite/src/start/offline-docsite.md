@@ -25,9 +25,9 @@ pnpm install --frozen-lockfile
 在仓库根目录运行：
 
 ```bash
-pnpm dev:docs      # 开发服务，http://localhost:5173
-pnpm build:docs    # 生产构建，输出 apps/docsite/dist
-pnpm preview:docs  # 预览生产构建，地址以终端输出为准
+pnpm dev docs                    # 开发服务，http://localhost:5173
+pnpm build docs                  # 生产构建，输出 apps/docsite/dist
+pnpm preview docs                # 预览生产构建，地址以终端输出为准
 ```
 
 也可以通过 CLI 转发文档站命令：
@@ -43,13 +43,13 @@ aurora docs preview
 
 ## 检查与清理
 
-根目录 `pnpm check:apps` 会检查前端类型、代码规范、测试，并构建两个应用。
+根目录 `pnpm check apps` 会检查前端类型、代码规范、测试，并构建两个应用。
 构建会检查文档内部链接；部署工作流也执行同一检查入口，通过后才上传和发布产物。
 
 ```bash
-pnpm clean         # 清理工作区构建产物、Vite/VitePress 和检查器缓存，保留依赖
-pnpm clean --deps  # 额外删除根目录和各包的 node_modules，保留锁文件
-pnpm install --frozen-lockfile  # 删除依赖后重新安装
+pnpm clean artifacts             # 清理工作区构建产物、Vite/VitePress 和检查器缓存，保留依赖
+pnpm clean deps                  # 额外删除根目录和各包的 node_modules，保留锁文件
+pnpm install --frozen-lockfile   # 删除依赖后重新安装
 ```
 
 在 `apps/docsite/` 内运行 `pnpm clean`，只清理本站构建产物及 Vite/VitePress 缓存。

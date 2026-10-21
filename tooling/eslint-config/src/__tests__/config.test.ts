@@ -18,3 +18,15 @@ describe('声明文件自动修复', () => {
     expect(output).toContain('// 普通注释');
   });
 });
+
+describe('包脚本顺序', () => {
+  it('按工作流程排序且保留命令内容', async () => {
+    const lint = new ESLint({ overrideConfigFile: true, overrideConfig: await defineConfig(), fix: true });
+    const source = JSON.stringify({ scripts: { clean: 'clean', test: 'test', dev: 'dev', build: 'build' } });
+    const [result] = await lint.lintText(source, { filePath: 'apps/landing/package.json' });
+    expect(result?.errorCount).toBe(0);
+    const { scripts } = JSON.parse(result?.output ?? source) as { scripts: Record<string, string> };
+    expect(Object.keys(scripts)).toEqual(['dev', 'build', 'test', 'clean']);
+    expect(scripts).toEqual({ dev: 'dev', build: 'build', test: 'test', clean: 'clean' });
+  });
+});

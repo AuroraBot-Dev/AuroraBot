@@ -109,6 +109,10 @@ function sortPackageJson(): Linter.Config {
           pathPattern: '^$',
         },
         {
+          order: ['task', 'dev', 'build', 'preview', 'check', 'typecheck', 'lint', 'format', 'test', 'clean'],
+          pathPattern: '^scripts$',
+        },
+        {
           order: { type: 'asc' },
           pathPattern: '^(?:dev|peer|optional|bundled)?[Dd]ependencies(Meta)?$',
         },

@@ -47,7 +47,7 @@ jobs:
       - name: 安装工作区依赖
         run: pnpm install --frozen-lockfile
       - name: 检查并构建全部应用
-        run: pnpm check:apps
+        run: pnpm check apps
         env:
           NODE_OPTIONS: --max-old-space-size=8192
       - name: 保存静态产物

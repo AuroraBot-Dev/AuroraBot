@@ -56,7 +56,7 @@ Python 使用 src layout：`src/aurora_cli/` 提供项目入口，`src/aurora_ke
 
 前端应用位于 `apps/`，工程配置位于 `tooling/`，
 由根目录 pnpm workspace 管理。uv 与 pnpm 各自维护依赖锁、测试和构建；
-根目录 `pnpm check` 汇总两侧检查，Python 开发也可以独立使用 `uv run aurora check`。
+根目录 `pnpm check all` 汇总两侧检查，Python 开发也可以独立使用 `uv run aurora check`。
 
 `aurora_cli` 负责 CLI、`.env`、只读配置解析、进程日志和信号处理，再调用 `aurora_bot.runtime` 的装配入口。命令执行通过 namespace 调用点进入独立宿主；Bot 装配使用自己的宿主与 ctx。`aurora_bot` 不导入 `aurora_cli`。命令和配置按目录约定发现，新增能力不需要修改中心分派表。
 

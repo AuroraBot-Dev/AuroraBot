@@ -141,15 +141,17 @@ uv run pyright
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm dev:docs       # VitePress 文档站
-pnpm dev:landing    # Vue 落地页（默认 pnpm dev）
-pnpm typecheck     # 工程脚本和应用的类型检查
-pnpm test          # 前端单元测试
-pnpm build         # 构建两个应用
-pnpm check:python  # Python 完整质量检查
-pnpm clean         # 清理应用构建产物
-pnpm clean --deps  # 同时清理 Node.js 依赖
+pnpm dev docs                    # VitePress 文档站
+pnpm dev landing                 # Vue 落地页
+pnpm typecheck all               # 工程脚本和应用的类型检查
+pnpm test all                    # 前端单元测试
+pnpm build all                   # 构建两个应用
+pnpm check python                # Python 完整质量检查
+pnpm clean artifacts             # 清理应用构建产物
+pnpm clean deps                  # 同时清理 Node.js 依赖
 ```
+
+根目录 `pnpm task` 提供交互式任务菜单；也可省略具体任务的目标，例如 `pnpm dev`，通过方向键选择。自动化使用明确目标，命令与选项见[开发应用](../apps/docsite/src/develop/app-development.md)。
 
 新增 TypeScript 工程脚本放在 `scripts/*.mts`，通过 `pnpm exec tsx scripts/<name>.mts` 或根 `package.json` 的脚本运行。三平台安装脚本仍在各自平台目录。
 
@@ -162,6 +164,6 @@ pnpm clean --deps  # 同时清理 Node.js 依赖
 - 根 `tsconfig.json` 检查工程脚本及公共工具配置。
 - 应用 `tsconfig.json` 检查浏览器源码或文档主题。
 - 应用 `tsconfig.node.json` 检查 Vite / VitePress 配置。
-- `tooling/tsconfig/` 提供公共基线、浏览器、Node.js 与库配置；`pnpm typecheck` 从根目录运行完整应用检查。
+- `tooling/tsconfig/` 提供公共基线、浏览器与 Node.js 配置；`pnpm typecheck all` 从根目录运行完整应用检查。
 
-应用目录由主仓直接管理，克隆仓库后运行 `pnpm install --frozen-lockfile` 即可。`pnpm lint` 和 `pnpm format` 使用根目录的检查与格式配置，`pnpm test` 只发现应用、共享库和工程工具中的测试。
+应用目录由主仓直接管理，克隆仓库后运行 `pnpm install --frozen-lockfile` 即可。`pnpm lint all` 和 `pnpm format all` 使用根目录的检查与格式配置，`pnpm test all` 只发现应用和工程工具中的测试。

@@ -8,8 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --port 4174",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "lint": "pnpm --dir ../.. lint",
-    "test": "pnpm --dir ../.. test apps/landing --passWithNoTests",
+    "lint": "pnpm --dir ../.. lint all",
+    "test": "pnpm --dir ../.. test landing",
     "clean": "rimraf dist node_modules/.vite node_modules/.vitepress .vitepress/.temp .vitepress/cache"
   },
   "dependencies": {
