@@ -26,16 +26,15 @@
 
 ## 文档与范围
 
-- README 以当前版本为基准，保留介绍、设计哲学、快速开始和致谢；不追加实现细节或接口清单。
+- README 以当前版本为基准，保留介绍、设计哲学、快速开始和致谢；不追加实现细节或接口清单, 不随意改动README.
 - 现行结构见 [系统总览](apps/docsite/src/architecture/system-overview.md)，通用接口见 [Namespace 与 hook](apps/docsite/src/develop/namespace-modules.md)。
 - 领域扩展见 [模组开发](apps/docsite/src/develop/core-development.md)，精确协议见 `apps/docsite/src/reference/`；实现与相关文档一起更新。
 - 当前不推进 RFC；源码注释直接说明局部不变量，不引用 RFC 编号。
-- 新增并发、抢占、自动摘要、在线训练、sandbox 等能力前，先明确 Bot 用例、不变量与独立测试。
 - 面向人的文本以简体中文为准，描述当前能力和限制，不使用实验、旧版、迁移等历史阶段叙事。
+- 文档站只写当前用法、能力、限制和必要原理；变更经过、修复说明统一写入 `docs/CHANGELOG.md`，RFC 与未实施草案放在 `docs/rfc/`，不进入文档站。
 
 ## 开发与验证
 
-- 当处于wsl环境时运行命令, 不要带有wsl前缀.
 - Python 3.12 使用 uv；前端使用 Node.js 24、pnpm 12。测试前执行 `uv sync --locked --group dev` 安装项目。
 - Ruff 行宽 120、LF、双引号；单个源码文件不超过 600 行，纯字段模型可例外。
 - 公开 API 保留必要注解，值对象优先 frozen + slots dataclass；hook 与 ctx 允许 Any，不堆叠类型包装，不以 lint ignore 掩盖复杂度。
@@ -44,4 +43,4 @@
 - 优先验证认知循环、持久化、幂等、未知效果恢复、权限与路径、脱敏和记忆时间边界；不为简单转发或覆盖率补重复测试。
 - 日常不采集覆盖率；按需使用 `uv run aurora check --test --coverage`，CI 下限 20%，不作为删减目标。
 - 不提交密钥或真实会话；日志不记录 Prompt、消息正文、工具参数或凭据。
-- 提交前运行 `uv run aurora check --fix`。
+- 提交前运行 `uv run aurora check --fix` 或 `pnpm check`。

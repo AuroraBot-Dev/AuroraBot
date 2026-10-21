@@ -66,7 +66,7 @@ Type a message after startup to chat; use `/help` to discover operations and `/e
 
 ## AIGC
 
-This project contains code written with assistance from generative models such as large language models or diffusion models, and it has been reviewed by humans.
+This project contains human-reviewed code written with assistance from generative models.
 
 ## Contributing
 
