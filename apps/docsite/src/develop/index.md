@@ -14,6 +14,7 @@ order: 3
 - **通用模块开发者**：通过 [Namespace 与 hook](./namespace-modules) 注册调用点并使用共享 ctx。
 - **CLI 扩展开发者**：通过 [CLI 命令与配置插件](./cli-plugins) 贡献命令、配置解析与默认资源。
 - **运行时开发者**：改进 Bot 的运行行为与交互体验，开发约束见仓库根目录 `AGENTS.md`。
+- **任务执行宿主开发者**：通过[独立 Agent 任务](./agent-runtime)接入模型与工具，控制执行和追加输入。
 - **设计参与者**：通过 Issue 或 Discussion 讨论用例、公共契约与模块边界。
 
 如果还不确定从哪里开始，可以先在 Discussion 或 Issue 中描述你希望改善的使用体验。

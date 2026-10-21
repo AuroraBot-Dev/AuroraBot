@@ -14,14 +14,29 @@ Namespace 用于组织模块的状态与调用点，hook 用于为调用点提�
 
 ## 运行 Playground
 
-在仓库根目录运行，直接观察真实内核的执行顺序与上下文变化：
+在仓库根目录启动终端交互，用 JSON 输入调用模块并查看结构化结果：
 
 ```bash
 uv sync --locked --group dev
-uv run python playground/kernel_playground.py
+uv run python -m playground
 ```
 
-脚本使用内存状态，无需模型、网络或个人配置。可单独选择场景：
+每行输入一个完整的 JSON 对象。先查询模块与操作格式，再按示例调用：
+
+```json
+{"action":"list"}
+{"action":"describe","module":"kernel","operation":"increment"}
+{"module":"kernel","operation":"increment","input":{"amount":3}}
+{"module":"kernel","operation":"state"}
+{"module":"kernel","operation":"reset","input":{"extension":false}}
+{"action":"exit"}
+```
+
+`describe` 返回操作说明、输入与输出 JSON Schema，以及可直接执行的示例。默认启用双倍增量扩展，因此新会话传入 `3` 返回 `6`；重置时关闭扩展后，传入 `3` 返回 `3`。状态保留至重置或退出，各次启动独立。
+
+入口还支持 `cli` 模块，可用 `{"action":"describe","module":"cli"}` 查询。CLI 仅执行演示命令，返回退出码、终端输出及结构化结果。交互无需模型、网络或个人配置。输入错误返回 JSON，之后可继续调用；执行失败不会自动回滚或重试。
+
+标准输出每行只包含一条 JSON 响应，可用于管道处理。`Ctrl+D` 结束输入，`Ctrl+C` 中断退出。也可单独运行预设场景：
 
 ```bash
 uv run python playground/kernel_playground.py hooks --amount 5
