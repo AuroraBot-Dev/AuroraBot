@@ -9,6 +9,7 @@ dependencies = [
     "aiosqlite>=0.20,<1",
     "httpx2>=2.5,<3",
     "jsonschema>=4.23,<5",
+    "referencing>=0.36,<1",
     "litellm>=1.83.14",
     "loguru>=0.7,<1",
     "mcp>=2,<3",
@@ -35,22 +36,39 @@ learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["aurora_cli", "aurora_cli.*", "aurora_bot", "aurora_bot.*", "aurora_kernel", "aurora_kernel.*"]
+include = [
+    "aurora_cli",
+    "aurora_cli.*",
+    "aurora_bot",
+    "aurora_bot.*",
+    "aurora_kernel",
+    "aurora_kernel.*",
+    "aurora_agent",
+    "aurora_agent.*",
+]
 namespaces = false
 
 [tool.setuptools.package-data]
 aurora_cli = ["configs/*/*.toml", "configs/*/resources/*/*.md"]
 
 [dependency-groups]
-dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov", { include-group = "learning" }]
+dev = [
+    "donk>=1.1.0",
+    "pyright[nodejs]",
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    { include-group = "learning" },
+]
 learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]                                                                             # 仓库开发入口 playground 不随 Python 发行包安装
 addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basetemp=tests/.tmp"
 
 [tool.coverage.run]
-source = ["aurora_cli", "aurora_bot", "aurora_kernel"]
+source = ["aurora_cli", "aurora_bot", "aurora_kernel", "aurora_agent"]
 
 [tool.coverage.report]
 fail_under = 20
@@ -91,7 +109,7 @@ select = [
 ]
 ignore = [
     "ANN202",
-    "ANN401", # hook 与共享 ctx 接受动态值，避免为转发接口堆叠类型包装
+    "ANN401",  # hook 与共享 ctx 接受动态值，避免为转发接口堆叠类型包装
     "COM812",
     "PLR0913",
     "PLE1205",
@@ -123,7 +141,9 @@ package = true
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

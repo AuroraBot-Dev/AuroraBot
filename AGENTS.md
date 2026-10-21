@@ -15,12 +15,13 @@
 ## 包与组合
 
 - `src/aurora_kernel/` 是唯一通用组合机制：namespace、hook、ctx、发现、依赖解析和生命周期；不依赖 CLI 或 Bot。
+- `src/aurora_agent/` 提供独立 ReAct 任务执行核心，不依赖 Bot 或 CLI，不内置树与委派调度；宿主注入模型、工具、上下文装配和行动前策略，追加输入在工具调用全部配对后的安全边界交付。
 - 装饰器注册命名空间和调用点；宿主自动创建 ctx，模块可读写全部空间，事务检测冲突并记录来源。
 - namespace 不隔离权限；容器读写使用快照，服务对象按引用共享，ctx 不替代世界日志。
 - `src/aurora_bot/kernel/` 适配领域声明与契约，不重复实现内核；接线和生命周期跟随选中能力，失选实现不产生准备效果。
 - `src/aurora_bot/runtime/` 负责 Bot 装配与门面；功能包运行时只依赖自身、contracts、utils，兄弟能力通过注入调用。
 - 功能包的 `module.py` 可引用 Bot kernel 并导出唯一 `MODULE`；兄弟实现的类型引用限于 `TYPE_CHECKING`。
-- `src/aurora_cli/` 负责命令、配置和进程环境；命令入口保持 `aurora`。三个导入包同属一个发行包，Bot 不导入 CLI。
+- `src/aurora_cli/` 负责命令、配置和进程环境；命令入口保持 `aurora`。四个导入包同属一个发行包，Bot 不导入 CLI。
 - 命令与配置按目录发现；插件来自内置包、`extensions/plugins/` 和 entry point。兼容性、冲突与依赖环在准备效果前校验。
 - `src/aurora_cli/configs/<name>/` 保存同名解析器与 TOML 模板，CLI 在启动时补齐缺失的个人配置；个人 `config/`、本机扩展由 Git 忽略。前端位于 `apps/`，工程配置位于 `tooling/`。
 

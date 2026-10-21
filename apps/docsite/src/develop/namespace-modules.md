@@ -39,11 +39,11 @@ uv run python -m playground
 标准输出每行只包含一条 JSON 响应，可用于管道处理。`Ctrl+D` 结束输入，`Ctrl+C` 中断退出。也可单独运行预设场景：
 
 ```bash
-uv run python playground/kernel_playground.py hooks --amount 5
-uv run python playground/kernel_playground.py context
-uv run python playground/kernel_playground.py lifecycle
-uv run python playground/kernel_playground.py lifecycle --fail-run
-uv run python playground/kernel_playground.py validation
+uv run python -m playground.examples.kernel hooks --amount 5
+uv run python -m playground.examples.kernel context
+uv run python -m playground.examples.kernel lifecycle
+uv run python -m playground.examples.kernel lifecycle --fail-run
+uv run python -m playground.examples.kernel validation
 ```
 
 `hooks` 展示依赖排序、三种调用模式、嵌套调用与宿主独立状态；`context` 展示容器快照、跨空间事务、冲突和服务引用；`lifecycle` 打印阶段计划、实际回调与逆序清理，`--fail-run` 演示后台故障交付；`validation` 展示缺失依赖、依赖环和同优先级冲突在初始化之前失败。输出包含 ctx 版本、变更来源与字段，可修改脚本中的声明和优先级后重新运行。
@@ -57,8 +57,8 @@ uv run python playground/kernel_playground.py validation
 可先运行离线示例，对比默认实现与自定义 hook：
 
 ```bash
-uv run python playground/react_playground.py
-uv run python playground/react_playground.py --default
+uv run python -m playground.examples.react
+uv run python -m playground.examples.react --default
 ```
 
 插件示例、回调约定与执行限制见仓库中的 `src/aurora_bot/engine/README.md`。替换整个认知执行策略仍通过 `CognitionRunner` 能力完成。
