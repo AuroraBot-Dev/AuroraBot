@@ -13,7 +13,7 @@ order: 3
 - **应用开发者**：接入 MCP 能力，或按[模组开发](./core-development)贡献领域操作。
 - **通用模块开发者**：通过 [Namespace 与 hook](./namespace-modules) 注册调用点并使用共享 ctx。
 - **CLI 扩展开发者**：通过 [CLI 命令与配置插件](./cli-plugins) 贡献命令、配置解析与默认资源。
-- **运行时开发者**：改进认知执行、委派、engine、模型网关、MCP 适配或本地交互体验。
+- **运行时开发者**：改进 Bot 的运行行为与交互体验，开发约束见仓库根目录 `AGENTS.md`。
 - **设计参与者**：通过 Issue 或 Discussion 讨论用例、公共契约与模块边界。
 
 如果还不确定从哪里开始，可以先在 Discussion 或 Issue 中描述你希望改善的使用体验。
@@ -46,11 +46,11 @@ aurora start
 
 仅运行测试和静态检查不需要真实模型密钥。密钥只写入本地 `.env` 或进程环境；不要提交密钥、真实对话、完整模型回复、工作区事件、上传文件或运行日志。
 
-## 设计与实现
+## 贡献范围
 
-包职责和依赖方向见[系统总览](../architecture/system-overview)，认知与行动边界见[认知与恢复](../architecture/runtime-core)，开发约束见仓库根目录 `AGENTS.md`。
+产品概念见[系统总览](../architecture/system-overview)，重启与行动结果见[认知与恢复](../architecture/runtime-core)。代码组织与实现约束在仓库中维护。
 
-涉及公共契约、持久化或模块边界时，先明确 Bot 用例、不变量和验证方法，并同步更新对应文档。较大设计通过 Issue 或 Discussion 讨论。
+先明确希望改善的使用体验和验证方法。影响安装、配置、交互或公开扩展用法时，同步更新相关文档；内部重构不要求同步改写文档站。较大设计通过 Issue 或 Discussion 讨论。
 
 ## AIGC
 
@@ -59,7 +59,7 @@ AI 辅助生成的内容遵循相同的代码、文档和验证要求。提交�
 ## 提交你的改进
 
 1. 从 `dev` 创建短生命周期分支，推荐 `feat/`、`fix/` 或 `refact/` 前缀。
-2. 让每个 Pull Request 聚焦一个可审查目标，并补充对应测试和文档。
+2. 让每个 Pull Request 聚焦一个可审查目标，按影响范围补充验证，并更新受影响的使用说明。
 3. 合并目标设为 `dev`，说明行为变化、验证结果和相关 Issue；变更记录写入 `docs/CHANGELOG.md`。
 4. 等待 CI 与评审通过后合并，并删除已经完成的分支。
 
@@ -72,8 +72,8 @@ uv sync --locked --group dev
 uv run aurora check --fix
 ```
 
-按改动范围验证时，可运行具体测试，例如 `uv run pytest tests/runtime/test_bot_lifecycle.py -q`。前端使用 `pnpm check apps`，文档使用 `pnpm build docsite`。
+前端使用 `pnpm check apps`，文档使用 `pnpm build docsite`。
 
-测试必须离线、确定且可重复；外部 LLM、工具和 MCP 使用 fake。测试组织与验收重点见[质量与验收](../architecture/acceptance)。
+测试必须离线、确定且可重复；外部模型与服务使用替身。检查说明见[验证改动](../architecture/acceptance)。
 
 提交贡献即表示你同意遵守项目的[社区行为准则](/reference/CODE_OF_CONDUCT)。

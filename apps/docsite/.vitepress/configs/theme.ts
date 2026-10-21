@@ -4,7 +4,7 @@ export const themeConfig = {
   logo: '/logo.svg',
   nav: [
     { text: '快速开始', link: '/start/getting-started' },
-    { text: '架构总览', link: '/architecture/system-overview' },
+    { text: '概念与用法', link: '/architecture/system-overview' },
     { text: '开发', link: '/develop/' },
     { text: '常见问题', link: '/reference/faq' },
   ],

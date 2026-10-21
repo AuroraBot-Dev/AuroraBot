@@ -4,72 +4,36 @@ order: 2
 
 # 开发应用
 
-前端工作区包含 `apps/landing` 落地页和 `apps/docsite` 文档站。
-落地页通过 Vite 编译 Vue，文档站通过 VitePress 将 Markdown 和 Vue 主题构建为静态页面。
-Node.js 使用 24 系列，pnpm 使用 12 系列；具体版本见根目录 `.node-version` 和 `package.json`。
+前端工作区包含落地页 `apps/landing` 和文档站 `apps/docsite`。需要 Node.js 24 与 pnpm 12，具体版本见根目录 `.node-version` 和 `package.json`。
 
-## 交互式任务入口
+## 准备与运行
 
-在仓库根目录执行 `pnpm install --frozen-lockfile` 后，运行 `pnpm task`，通过方向键和回车依次选择任务与目标。
-也可以先指定任务，例如 `pnpm dev` 直接选择开发哪个应用，`pnpm clean` 选择是否保留依赖。按 Ctrl+C 取消，不执行任务。
-
-菜单和明确参数使用同一份任务定义。传入目标后直接执行：
+在仓库根目录执行：
 
 ```bash
-pnpm dev landing                 # 落地页开发服务，默认端口 5174
-pnpm dev docsite                 # 文档站开发服务，默认端口 5173
-pnpm build all                   # 构建两个应用
-pnpm preview docsite             # 预览文档站构建产物
-pnpm check apps                  # 完整前端检查和构建
-pnpm task build docsite          # 从总入口直接执行文档构建
-pnpm dev landing -- --port 5180  # 向单项任务透传参数
-pnpm build all --dry-run         # 只显示命令，不执行
-pnpm build --help                # 查看任务支持的目标
+pnpm install --frozen-lockfile
+pnpm dev landing                # 落地页，默认端口 5174
+pnpm dev docsite                # 文档站，默认端口 5173
 ```
 
-非交互环境必须指定任务与目标，否则立即报错，不等待输入。CI 和文档部署均执行 `pnpm check apps`，通过后才保存或发布产物。
-组合任务按顺序执行，任一命令失败即停止并返回其退出码；单项任务支持通过 `--` 传递工具参数，组合任务不接受透传参数。
+运行 `pnpm task` 可通过菜单选择任务和目标，也可用 `pnpm dev` 直接选择应用。非交互环境需要明确指定目标。
 
-## 任务与目标
+## 常用任务
 
-| 任务        | 目标                                                     | 作用                                            |
-| ----------- | -------------------------------------------------------- | ----------------------------------------------- |
-| `dev`       | `landing`、`docsite`                                     | 启动对应应用的开发服务                          |
-| `build`     | `all`、`landing`、`docsite`                              | 生产构建，产物位于各应用的 `dist/`              |
-| `preview`   | `landing`、`docsite`                                     | 预览已有构建产物                                |
-| `check`     | `apps`、`python`、`all`                                  | 完整前端检查、Python 检查或两者                 |
-| `typecheck` | `all`、`config`、`apps`、`landing`、`docsite`、`tooling` | 检查相应范围的类型                              |
-| `lint`      | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`       | 检查格式、代码和样式规范                        |
-| `format`    | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`       | 自动修复与格式化                                |
-| `test`      | `all`、`apps`、`landing`、`docsite`、`tooling`           | 按测试项目运行，允许继续传入测试名等过滤参数    |
-| `clean`     | `artifacts`、`deps`                                      | 清理产物与缓存；`deps` 额外删除依赖，保留锁文件 |
+```bash
+pnpm build all                  # 构建两个应用
+pnpm build docsite              # 只构建文档站
+pnpm preview docsite            # 预览文档站构建产物
+pnpm check apps                 # 前端检查、测试与构建
+pnpm dev landing -- --port 5180 # 为单项任务传递参数
+pnpm build all --dry-run        # 查看将执行的命令
+pnpm build --help               # 查看可用目标
+```
 
-`pnpm check apps` 依次执行全部类型检查、规范检查、测试及应用构建。
-`pnpm check all` 先执行 Python 检查，再执行前端检查。
-自动修复先运行 Oxlint、ESLint、Stylelint，最后统一应用 Prettier 格式。
+构建产物位于各应用的 `dist/`。组合任务中任一命令失败后即停止；需要自动修复格式与规范问题时，运行 `pnpm format all` 并复核差异。
 
-应用目录内的 `dev`、`build`、`preview`、`typecheck` 和 `clean` 直接运行对应工具。
-应用的 `test` 转发到根任务入口并限定测试项目，`lint` 转发到根 `lint all`。
+## 清理
 
-## 配置的职责
+`pnpm clean artifacts` 删除构建产物与缓存，保留依赖和源码。`pnpm clean deps` 还会删除 `node_modules`，之后需重新安装依赖。
 
-- 根 `package.json` 暴露任务入口；`scripts/tasks.ts` 声明选项和执行计划，`scripts/run.ts` 处理参数、菜单及进程执行。
-- `pnpm-workspace.yaml` 声明包范围和集中依赖版本，锁文件固定实际依赖。
-- `apps/landing/vite.config.ts` 注册 Vue 插件，HTML 入口为 `apps/landing/index.html`。
-- `apps/docsite/.vitepress/config.ts` 装配 `configs/` 下的站点、主题、侧边栏、Markdown、Mermaid 和 Vite 配置，各文件按职责维护。
-- 应用的 `tsconfig.json` 检查浏览器代码，`tsconfig.node.json` 检查构建配置，共享选项位于 `tooling/tsconfig/`。
-- 根 `tsconfig.json` 检查根配置和 `scripts/**/*.ts`；工具包各自的 `typecheck` 检查其源码和测试。
-- 规范配置位于 `tooling/`：Prettier 负责格式，Oxlint 检查语义与类型，ESLint 检查 Vue、导入排序和配置文件，Stylelint 检查样式。
-
-## 测试与清理边界
-
-根 `vitest.config.ts` 固定仓库根路径，区分 `landing`、`docsite` 和 `tooling` 三个测试项目。
-两个应用使用 happy-dom 和 Vue 插件，工程工具与脚本使用 Node 环境。测试目标限定项目，透传参数可继续筛选测试文件。
-应用尚无测试时，其过滤命令允许空结果；根 `pnpm test all` 要求至少发现测试。
-
-落地页缓存位于 `apps/landing/node_modules/.vite`，文档站缓存位于 `apps/docsite/node_modules/.vitepress`。
-`pnpm clean artifacts` 删除前端构建产物与缓存，保留依赖、源码及 Python 发行产物。
-清理后可直接运行检查和构建；`pnpm clean deps` 会额外删除根目录和各包的 `node_modules`，之后须重新安装依赖。
-
-文档站的页面源目录为 `src/`，Vite 的 `publicDir: '../public'` 指向 `apps/docsite/public/`，该目录的资源保持文件名复制到构建目录。
-落地页通过源码导入的图片、字体和 CSS 则由 Vite 处理。
+文档页面的编辑规范见[贡献与修订文档](./docs-contribution)，本地查看方式见[离线文档](../start/offline-docsite)。

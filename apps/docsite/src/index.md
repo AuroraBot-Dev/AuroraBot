@@ -13,11 +13,11 @@ hero:
       text: 快速开始
       link: /start/getting-started
     - theme: alt
-      text: 架构总览
+      text: 了解 AuroraBot
       link: /architecture/system-overview
     - theme: alt
-      text: 前端开发
-      link: /develop/app-development
+      text: 配置指南
+      link: /start/configs
 ---
 
 ## AuroraBot 是什么

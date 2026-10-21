@@ -27,8 +27,10 @@
 ## 文档与范围
 
 - README 以当前版本为基准，保留介绍、设计哲学、快速开始和致谢；不追加实现细节或接口清单, 不随意改动README.
-- 现行结构见 [系统总览](apps/docsite/src/architecture/system-overview.md)，通用接口见 [Namespace 与 hook](apps/docsite/src/develop/namespace-modules.md)。
-- 领域扩展见 [模组开发](apps/docsite/src/develop/core-development.md)，精确协议见 `apps/docsite/src/reference/`；实现与相关文档一起更新。
+- 文档站面向使用者与扩展开发者，聚焦操作指引、稳定概念、当前能力和使用限制，减少内部实现细节；不维护源码包表、内部类与字段清单、内部执行步骤或测试文件索引。
+- 内部代码重构、组织调整和实现替换原则上不要求修改文档站；引导用户交互或影响安装、配置、命令、公开扩展用法及使用结果的变更，才同步更新相关页面。实现说明就近维护在源码注释、包内 README 或测试中。
+- 尚不便确定或未经核实的文档内容统一写“文档待编写”，不得根据设想编造用法、能力、接口或保证。
+- 文档站阅读入口为 [系统总览](apps/docsite/src/architecture/system-overview.md)；扩展指引见 `apps/docsite/src/develop/`，使用参考见 `apps/docsite/src/reference/`。
 - 当前不推进 RFC；源码注释直接说明局部不变量，不引用 RFC 编号。
 - 面向人的文本以简体中文为准，描述当前能力和限制，不使用实验、旧版、迁移等历史阶段叙事。
 - 文档站只写当前用法、能力、限制和必要原理；变更经过、修复说明统一写入 `docs/CHANGELOG.md`，RFC 与未实施草案放在 `docs/rfc/`，不进入文档站。
