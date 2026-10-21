@@ -26,9 +26,8 @@ cd AuroraBot
 ## 快捷安装
 
 ```bash
-./scripts/linux/setup.sh
-# macOS: ./scripts/macos/setup.command;
-# Windows: .\scripts\windows\setup.ps1.
+node scripts/setup.ts
+# 也可使用：pnpm run setup
 ```
 
 安装脚本检查依赖工具，询问是否全局链接 `aurora`，并准备依赖、个人配置和应用工作区。

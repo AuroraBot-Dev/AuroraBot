@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 FAILED_EXIT_CODE = 3
 EXPECTED_LINT_COMMANDS = 3
-SETUP_PYTHON_STEPS = 1
 
 
 def build_parser() -> argparse.ArgumentParser:

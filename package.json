@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "setup": "node scripts/setup.ts",
     "task": "tsx scripts/run.ts",
     "dev": "tsx scripts/run.ts dev",
     "build": "tsx scripts/run.ts build",

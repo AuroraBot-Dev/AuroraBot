@@ -26,9 +26,7 @@ order: 3
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 cd AuroraBot
-./scripts/linux/setup.sh
-# macOS: ./scripts/macos/setup.command;
-# Windows: .\scripts\windows\setup.ps1.
+node scripts/setup.ts
 ```
 
 安装脚本准备依赖、个人配置和应用工作区。
