@@ -21,7 +21,26 @@ uv sync --locked --group dev
 uv run python -m playground
 ```
 
-每行输入一个完整的 JSON 对象。先查询模块与操作格式，再按示例调用：
+添加 `--pretty` 可将响应缩进显示，添加 `--module kernel` 可预先选择模块：
+
+```bash
+uv run python -m playground --pretty --module kernel
+```
+
+可用简写命令查询和调用，无需反复输入完整请求：
+
+```text
+list
+use kernel
+describe increment
+increment {"amount":3}
+state
+exit
+```
+
+终端支持 Tab 补全命令、模块和操作名，↑/↓ 调取当前会话历史，以及多行 JSON 输入或粘贴；JSON 未闭合时回车续行，闭合后回车提交。历史只保存在内存中。`help` 查看简写用法。
+
+也可以输入完整 JSON 请求。先查询模块与操作格式，再按示例调用：
 
 ```json
 {"action":"list"}
@@ -36,7 +55,7 @@ uv run python -m playground
 
 入口还支持 `cli` 模块，可用 `{"action":"describe","module":"cli"}` 查询。CLI 仅执行演示命令，返回退出码、终端输出及结构化结果。交互无需模型、网络或个人配置。输入错误返回 JSON，之后可继续调用；执行失败不会自动回滚或重试。
 
-标准输出每行只包含一条 JSON 响应，可用于管道处理。`Ctrl+D` 结束输入，`Ctrl+C` 中断退出。也可单独运行预设场景：
+默认标准输出每行只包含一条 JSON 响应，可用于管道处理；`--pretty` 改为多行输出，不再是 JSON Lines。管道输入始终逐行读取。`Ctrl+D` 结束输入，`Ctrl+C` 中断退出。也可单独运行预设场景：
 
 ```bash
 uv run python -m playground.examples.kernel hooks --amount 5
