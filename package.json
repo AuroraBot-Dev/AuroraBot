@@ -29,7 +29,6 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@vben/commitlint-config": "workspace:*",
     "@vben/eslint-config": "workspace:*",
     "@vben/oxlint-config": "workspace:*",
     "@vben/stylelint-config": "workspace:*",
