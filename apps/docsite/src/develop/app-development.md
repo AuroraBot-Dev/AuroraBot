@@ -17,11 +17,11 @@ Node.js 使用 24 系列，pnpm 使用 12 系列；具体版本见根目录 `.no
 
 ```bash
 pnpm dev landing                 # 落地页开发服务，默认端口 5174
-pnpm dev docs                    # 文档站开发服务，默认端口 5173
+pnpm dev docsite                 # 文档站开发服务，默认端口 5173
 pnpm build all                   # 构建两个应用
-pnpm preview docs                # 预览文档站构建产物
+pnpm preview docsite             # 预览文档站构建产物
 pnpm check apps                  # 完整前端检查和构建
-pnpm task build docs             # 从总入口直接执行文档构建
+pnpm task build docsite          # 从总入口直接执行文档构建
 pnpm dev landing -- --port 5180  # 向单项任务透传参数
 pnpm build all --dry-run         # 只显示命令，不执行
 pnpm build --help                # 查看任务支持的目标
@@ -32,17 +32,17 @@ pnpm build --help                # 查看任务支持的目标
 
 ## 任务与目标
 
-| 任务        | 目标                                                  | 作用                                            |
-| ----------- | ----------------------------------------------------- | ----------------------------------------------- |
-| `dev`       | `landing`、`docs`                                     | 启动对应应用的开发服务                          |
-| `build`     | `all`、`landing`、`docs`                              | 生产构建，产物位于各应用的 `dist/`              |
-| `preview`   | `landing`、`docs`                                     | 预览已有构建产物                                |
-| `check`     | `apps`、`python`、`all`                               | 完整前端检查、Python 检查或两者                 |
-| `typecheck` | `all`、`config`、`apps`、`landing`、`docs`、`tooling` | 检查相应范围的类型                              |
-| `lint`      | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`    | 检查格式、代码和样式规范                        |
-| `format`    | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`    | 自动修复与格式化                                |
-| `test`      | `all`、`apps`、`landing`、`docs`、`tooling`           | 按测试项目运行，允许继续传入测试名等过滤参数    |
-| `clean`     | `artifacts`、`deps`                                   | 清理产物与缓存；`deps` 额外删除依赖，保留锁文件 |
+| 任务        | 目标                                                     | 作用                                            |
+| ----------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `dev`       | `landing`、`docsite`                                     | 启动对应应用的开发服务                          |
+| `build`     | `all`、`landing`、`docsite`                              | 生产构建，产物位于各应用的 `dist/`              |
+| `preview`   | `landing`、`docsite`                                     | 预览已有构建产物                                |
+| `check`     | `apps`、`python`、`all`                                  | 完整前端检查、Python 检查或两者                 |
+| `typecheck` | `all`、`config`、`apps`、`landing`、`docsite`、`tooling` | 检查相应范围的类型                              |
+| `lint`      | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`       | 检查格式、代码和样式规范                        |
+| `format`    | `all`、`prettier`、`oxlint`、`eslint`、`stylelint`       | 自动修复与格式化                                |
+| `test`      | `all`、`apps`、`landing`、`docsite`、`tooling`           | 按测试项目运行，允许继续传入测试名等过滤参数    |
+| `clean`     | `artifacts`、`deps`                                      | 清理产物与缓存；`deps` 额外删除依赖，保留锁文件 |
 
 `pnpm check apps` 依次执行全部类型检查、规范检查、测试及应用构建。
 `pnpm check all` 先执行 Python 检查，再执行前端检查。单独 `pnpm build all` 不会替代类型检查。

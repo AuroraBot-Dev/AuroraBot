@@ -25,9 +25,9 @@ pnpm install --frozen-lockfile
 在仓库根目录运行：
 
 ```bash
-pnpm dev docs                    # 开发服务，http://localhost:5173
-pnpm build docs                  # 生产构建，输出 apps/docsite/dist
-pnpm preview docs                # 预览生产构建，地址以终端输出为准
+pnpm dev docsite                 # 开发服务，http://localhost:5173
+pnpm build docsite               # 生产构建，输出 apps/docsite/dist
+pnpm preview docsite             # 预览生产构建，地址以终端输出为准
 ```
 
 也可以通过 CLI 转发文档站命令：

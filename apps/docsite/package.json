@@ -10,7 +10,7 @@
     "preview": "vitepress preview .",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "pnpm --dir ../.. lint all",
-    "test": "pnpm --dir ../.. test docs",
+    "test": "pnpm --dir ../.. test docsite",
     "clean": "rimraf dist node_modules/.vite node_modules/.vitepress .vitepress/.temp .vitepress/cache"
   },
   "devDependencies": {

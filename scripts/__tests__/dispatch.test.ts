@@ -31,10 +31,10 @@ function harness(choices: (string | undefined)[] = [], exitCodes: number[] = [])
 
 describe('交互式任务分发', () => {
   it('菜单与明确参数执行相同计划', async () => {
-    const menu = harness(['build', 'docs']);
+    const menu = harness(['build', 'docsite']);
     const explicit = harness();
     expect(await dispatch([], tasks, menu.io)).toBe(0);
-    expect(await dispatch(['build', 'docs'], tasks, explicit.io)).toBe(0);
+    expect(await dispatch(['build', 'docsite'], tasks, explicit.io)).toBe(0);
     expect(menu.commands).toEqual(explicit.commands);
     expect(menu.commands).toEqual([['pnpm', '--filter', '@aurorabot/docsite', 'run', 'build']]);
     expect(menu.prompts()).toBe(2);
@@ -80,7 +80,7 @@ describe('交互式任务分发', () => {
 
   it('支持 pnpm 在任务与目标之间保留的分隔符', async () => {
     const state = harness();
-    await dispatch(['dev', '--', 'docs', '--', '--host', '127.0.0.1'], tasks, state.io);
+    await dispatch(['dev', '--', 'docsite', '--', '--host', '127.0.0.1'], tasks, state.io);
     expect(state.commands[0]).toEqual(['pnpm', '--filter', '@aurorabot/docsite', 'run', 'dev', '--host', '127.0.0.1']);
   });
 

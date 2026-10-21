@@ -141,7 +141,7 @@ uv run pyright
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm dev docs                    # VitePress 文档站
+pnpm dev docsite                 # VitePress 文档站
 pnpm dev landing                 # Vue 落地页
 pnpm typecheck all               # 工程脚本和应用的类型检查
 pnpm test all                    # 前端单元测试

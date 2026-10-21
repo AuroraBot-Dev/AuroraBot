@@ -25,7 +25,7 @@ function target(
 
 const apps = [
   { value: 'landing', label: '落地页', package: '@aurorabot/landing' },
-  { value: 'docs', label: '文档站', package: '@aurorabot/docsite' },
+  { value: 'docsite', label: '文档站', package: '@aurorabot/docsite' },
 ];
 
 function appTargets(script: string): Target[] {
@@ -109,7 +109,7 @@ export function createTasks(configFiles: string[]): Task[] {
         target('all', '全部测试', [test]),
         target('apps', '全部应用', [[...test, '--project', 'landing', '--project', 'docsite', '--passWithNoTests']]),
         target('landing', '落地页', [[...test, '--project', 'landing', '--passWithNoTests']]),
-        target('docs', '文档站', [[...test, '--project', 'docsite', '--passWithNoTests']]),
+        target('docsite', '文档站', [[...test, '--project', 'docsite', '--passWithNoTests']]),
         target('tooling', '工程工具与脚本', [[...test, '--project', 'tooling']]),
       ],
     },
