@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# macOS 使用系统提供的 UTF-8 locale，并传递给所有安装子进程。
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TOOL_BIN="$HOME/.local/bin"

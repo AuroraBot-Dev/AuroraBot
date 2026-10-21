@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 固定本进程及安装子进程的文本编码，不依赖调用终端的 locale。
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TOOL_BIN="$HOME/.local/bin"

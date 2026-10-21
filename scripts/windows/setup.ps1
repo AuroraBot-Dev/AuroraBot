@@ -1,6 +1,14 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# 保留 UTF-8 BOM，确保 PowerShell 5.1 在执行前也能正确解码中文源码。
+$Utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = $Utf8
+[Console]::OutputEncoding = $Utf8
+$OutputEncoding = $Utf8
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Resolve-Path "$ScriptDir\..\.."
@@ -27,7 +35,7 @@ if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
 $linked = $false
 if (Confirm-Action "确认将 aurora 全局链接到用户工具目录 $ToolBin（editable，不复制项目）吗？") {
     $linked = $true
-    $tomlContent = Get-Content "$RepoRoot\pyproject.toml" -Raw
+    $tomlContent = Get-Content "$RepoRoot\pyproject.toml" -Raw -Encoding UTF8
     $indexUrl = if ($tomlContent -match 'index-url\s*=\s*"([^"]+)"') { $Matches[1] } else { "" }
     if ($indexUrl) {
         uv tool install --editable --force --index-url $indexUrl $RepoRoot
