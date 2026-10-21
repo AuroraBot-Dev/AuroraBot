@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { cleanWorkspace } from '../clean.mts';
+import { cleanWorkspace } from '../clean.ts';
 
 const roots: string[] = [];
 

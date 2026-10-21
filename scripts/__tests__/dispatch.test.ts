@@ -1,10 +1,10 @@
-import type { DispatcherIO } from '../run.mts';
-import type { Command } from '../tasks.mts';
+import type { DispatcherIO } from '../run.ts';
+import type { Command } from '../tasks.ts';
 
 import { describe, expect, it } from 'vitest';
 
-import { dispatch } from '../run.mts';
-import { createTasks } from '../tasks.mts';
+import { dispatch } from '../run.ts';
+import { createTasks } from '../tasks.ts';
 
 const tasks = createTasks(['eslint.config.ts', 'vitest.config.ts']);
 
@@ -125,6 +125,6 @@ describe('交互式任务分发', () => {
       ['pnpm', '--filter', '@aurorabot/landing', 'run', 'build'],
       ['pnpm', '--filter', '@aurorabot/docsite', 'run', 'build'],
     ]);
-    expect(state.commands.some((command) => command.includes('scripts/run.mts'))).toBe(false);
+    expect(state.commands.some((command) => command.includes('scripts/run.ts'))).toBe(false);
   });
 });

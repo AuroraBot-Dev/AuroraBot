@@ -5,16 +5,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "task": "tsx scripts/run.mts",
-    "dev": "tsx scripts/run.mts dev",
-    "build": "tsx scripts/run.mts build",
-    "preview": "tsx scripts/run.mts preview",
-    "check": "tsx scripts/run.mts check",
-    "typecheck": "tsx scripts/run.mts typecheck",
-    "lint": "tsx scripts/run.mts lint",
-    "format": "tsx scripts/run.mts format",
-    "test": "tsx scripts/run.mts test",
-    "clean": "tsx scripts/run.mts clean"
+    "task": "tsx scripts/run.ts",
+    "dev": "tsx scripts/run.ts dev",
+    "build": "tsx scripts/run.ts build",
+    "preview": "tsx scripts/run.ts preview",
+    "check": "tsx scripts/run.ts check",
+    "typecheck": "tsx scripts/run.ts typecheck",
+    "lint": "tsx scripts/run.ts lint",
+    "format": "tsx scripts/run.ts format",
+    "test": "tsx scripts/run.ts test",
+    "clean": "tsx scripts/run.ts clean"
   },
   "devDependencies": {
     "@clack/prompts": "catalog:",

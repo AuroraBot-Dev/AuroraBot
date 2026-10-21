@@ -153,7 +153,7 @@ pnpm clean deps                  # 同时清理 Node.js 依赖
 
 根目录 `pnpm task` 提供交互式任务菜单；也可省略具体任务的目标，例如 `pnpm dev`，通过方向键选择。自动化使用明确目标，命令与选项见[开发应用](../apps/docsite/src/develop/app-development.md)。
 
-新增 TypeScript 工程脚本放在 `scripts/*.mts`，通过 `pnpm exec tsx scripts/<name>.mts` 或根 `package.json` 的脚本运行。三平台安装脚本仍在各自平台目录。
+新增 TypeScript 工程脚本放在 `scripts/*.ts`，通过 `pnpm exec tsx scripts/<name>.ts` 或根 `package.json` 的脚本运行。三平台安装脚本仍在各自平台目录。
 
 `aurora setup --docs` 在根目录统一安装应用工作区依赖。
 

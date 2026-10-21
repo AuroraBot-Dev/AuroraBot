@@ -1,4 +1,4 @@
-import type { Command, Task } from './tasks.mts';
+import type { Command, Task } from './tasks.ts';
 
 import { globSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { cancel, intro, isCancel, outro, select } from '@clack/prompts';
 import { execa } from 'execa';
 
-import { createTasks } from './tasks.mts';
+import { createTasks } from './tasks.ts';
 
 interface Choice {
   hint?: string;

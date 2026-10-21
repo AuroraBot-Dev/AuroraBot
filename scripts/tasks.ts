@@ -117,9 +117,9 @@ export function createTasks(configFiles: string[]): Task[] {
       value: 'clean',
       label: '清理工作区',
       targets: [
-        target('artifacts', '构建产物与缓存（保留依赖）', [['tsx', 'scripts/clean.mts']], false),
+        target('artifacts', '构建产物与缓存（保留依赖）', [['tsx', 'scripts/clean.ts']], false),
         {
-          ...target('deps', '构建产物、缓存和依赖', [['tsx', 'scripts/clean.mts', '--deps']], false),
+          ...target('deps', '构建产物、缓存和依赖', [['tsx', 'scripts/clean.ts', '--deps']], false),
           hint: '删除 node_modules 后需要重新安装依赖，保留锁文件',
         },
       ],

@@ -29,7 +29,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'tooling',
-          include: ['tooling/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', 'scripts/**/*.{test,spec}.{ts,mts}'],
+          include: ['tooling/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', 'scripts/**/*.{test,spec}.ts'],
           environment: 'node',
         },
       },

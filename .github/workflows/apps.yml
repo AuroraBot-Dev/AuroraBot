@@ -5,7 +5,7 @@ on:
     branches: [main, dev, nightly]
     paths:
       - 'apps/**'
-      - 'scripts/**/*.mts'
+      - 'scripts/**/*.ts'
       - 'package.json'
       - 'pnpm-*.yaml'
       - 'tsconfig*.json'
@@ -19,7 +19,7 @@ on:
   pull_request:
     paths:
       - 'apps/**'
-      - 'scripts/**/*.mts'
+      - 'scripts/**/*.ts'
       - 'package.json'
       - 'pnpm-*.yaml'
       - 'tsconfig*.json'

@@ -3,5 +3,5 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["*.config.ts", "scripts/**/*.mts"]
+  "include": ["*.config.ts", "scripts/**/*.ts"]
 }

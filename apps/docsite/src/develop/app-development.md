@@ -54,13 +54,13 @@ pnpm build --help                # 查看任务支持的目标
 
 ## 配置的职责
 
-- 根 `package.json` 只暴露任务入口；`scripts/tasks.mts` 声明选项和执行计划，`scripts/run.mts` 负责参数、菜单及进程执行。参数作为独立数组传给进程，不拼接 shell 命令。
+- 根 `package.json` 只暴露任务入口；`scripts/tasks.ts` 声明选项和执行计划，`scripts/run.ts` 负责参数、菜单及进程执行。参数作为独立数组传给进程，不拼接 shell 命令。
 - scripts 按 `task`、`dev`、`build`、`preview`、`check`、`typecheck`、`lint`、`format`、`test`、`clean` 排列，根和应用遵循同一顺序，由 ESLint 检查。
 - `pnpm-workspace.yaml` 声明包范围和集中依赖版本，锁文件固定实际依赖。
 - `apps/landing/vite.config.ts` 注册 Vue 插件，HTML 入口为 `apps/landing/index.html`。
 - `apps/docsite/.vitepress/config.ts` 装配 `configs/` 下的站点、主题、侧边栏、Markdown、Mermaid 和 Vite 配置，各文件按职责维护。
 - 应用的 `tsconfig.json` 检查浏览器代码，`tsconfig.node.json` 检查构建配置，共享选项位于 `tooling/tsconfig/`。
-- 根 `tsconfig.json` 检查根配置和 `scripts/**/*.mts`；工具包各自的 `typecheck` 检查其源码和测试。
+- 根 `tsconfig.json` 检查根配置和 `scripts/**/*.ts`；工具包各自的 `typecheck` 检查其源码和测试。
 - ESLint、Oxlint 和 Stylelint 的根配置加载 `tooling/` 中对应的本地包。TypeScript 规则包直接导出源码，无须先构建；修改规则后重新运行检查即可生效。
 - Prettier 负责格式，Oxlint 负责语义与类型感知规则，ESLint 补充 Vue、导入排序及配置文件规则，Stylelint 检查样式。Prettier 按目录覆盖 `apps/`、`tooling/`、`scripts/`、`docs/` 和 `.github/`，新增的受支持文件自动纳入；未知后缀由 `--ignore-unknown` 跳过，构建产物与锁文件由 `.prettierignore` 排除。
 
