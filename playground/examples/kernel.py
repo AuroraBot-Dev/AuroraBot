@@ -1,7 +1,7 @@
 """运行真实 aurora_kernel，逐步观察声明、调用、上下文和生命周期。
 
-从项目根目录执行：uv run python playground/kernel_playground.py
-单独运行场景：uv run python playground/kernel_playground.py context
+从项目根目录执行：uv run python -m playground.examples.kernel
+单独运行场景：uv run python -m playground.examples.kernel context
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from aurora_kernel import (
     ModuleSpec,
     namespace,
 )
+from playground.modules.kernel.fixtures import client, counter, extension
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -40,73 +41,6 @@ def show(label: str, value: object) -> None:
 def observe(change: Change) -> None:
     fields = ", ".join(f"{name}.{key}" for name, key in change.keys)
     show(f"ctx r{change.revision} / 来源 {change.source}", fields)
-
-
-# 修改这些声明，再运行 hooks 场景即可观察路由变化。
-@namespace("counter")
-def counter(ctx: Context) -> None:
-    ctx["counter"].update(value=0, history=[])
-
-
-@counter.callpoint("increment")
-def increment(ctx: Context, amount: int = 1) -> int:
-    with ctx.transaction() as staged:
-        staged["counter"]["value"] += amount
-    return ctx["counter"]["value"]
-
-
-counter.declare("describe", mode="collect")
-counter.declare("changed", mode="notify")
-
-
-@namespace("extension", requires=("counter",))
-def extension(ctx: Context) -> None:
-    ctx["extension"]["notifications"] = 0
-
-
-@extension.hook("counter:increment", priority=10)
-def increment_twice(ctx: Context, amount: int = 1) -> int:
-    # 跨命名空间写入仍标记为 extension；namespace 不隔离权限。
-    with ctx.transaction() as staged:
-        staged["counter"]["value"] += amount * 2
-    return ctx["counter"]["value"]
-
-
-@counter.hook("counter:describe")
-def describe_counter(ctx: Context) -> str:
-    return f"counter.value={ctx['counter']['value']}"
-
-
-@extension.hook("counter:describe", priority=10)
-def describe_extension(ctx: Context) -> str:
-    return f"extension.notifications={ctx['extension']['notifications']}"
-
-
-@counter.hook("counter:changed")
-def remember_change(ctx: Context, value: int) -> None:
-    with ctx.transaction() as staged:
-        staged["counter"]["history"] = [*staged["counter"]["history"], value]
-
-
-@extension.hook("counter:changed")
-def count_notification(ctx: Context, value: int) -> None:
-    with ctx.transaction() as staged:
-        staged["extension"]["notifications"] += 1
-        staged["extension"]["last_value"] = value
-
-
-@namespace("client", requires=("extension",))
-def client(ctx: Context) -> None:
-    ctx["client"]["calls"] = 0
-
-
-@client.callpoint("run")
-def run_client(ctx: Context, amount: int) -> int:
-    value = ctx.call("counter:increment", amount)
-    ctx.call("counter:changed", value)
-    with ctx.transaction() as staged:
-        staged["client"]["calls"] += 1
-    return value
 
 
 def demo_hooks(amount: int) -> None:
@@ -346,7 +280,7 @@ def main() -> None:
         asyncio.run(demo_lifecycle(fail_run=args.fail_run))
     if args.scene in ("all", "validation"):
         demo_validation()
-    console.print("\n演示完成；修改脚本中的 namespace、hook 或 priority 后可重新运行。")
+    console.print("\n演示完成；修改 modules/kernel/fixtures.py 中的声明或本场景后可重新运行。")
 
 
 if __name__ == "__main__":

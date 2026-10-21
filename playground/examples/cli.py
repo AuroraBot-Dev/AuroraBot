@@ -22,6 +22,7 @@ from aurora_cli.plugins.discovery import DiscoveredPlugin, plugin_spec
 from aurora_cli.utils.process import EXIT_CONFIG_ERROR
 from aurora_kernel import Context, ModuleSpec, namespace
 from aurora_kernel.discovery import DirectorySource, StaticSource
+from playground.modules.cli.fixtures import COMMAND
 
 if TYPE_CHECKING:
     from aurora_cli.contracts.command import CommandRegistry, CommandSpec
@@ -41,18 +42,6 @@ GREETING_CONFIG = ConfigSpec(
     shape=TableShape(("greeting",), (text_field("message"),), Greeting),
 )
 
-COMMAND: CommandSpec = {
-    "name": "demo",
-    "help": "演示参数解析和命令分派",
-    "subcommands": {
-        "greet": {
-            "help": "向指定对象问候",
-            "args": {"name": "称呼"},
-            "options": {"--uppercase": "将称呼转换为大写"},
-        },
-        "forward": {"help": "查看透传参数", "passthrough": "传给目标程序的参数"},
-    },
-}
 
 LOCAL_PLUGIN = dedent("""\
     import argparse
