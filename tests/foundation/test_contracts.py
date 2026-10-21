@@ -205,10 +205,8 @@ def test_tree_requires_identity_unique_nodes_and_matching_root_status() -> None:
         AgentTree("tree", "root", (root, root))
     with pytest.raises(ValueError, match="exactly one root"):
         AgentTree("tree", "missing", (root,))
-    with pytest.raises(ValueError, match=r"running.*terminal"):
-        AgentTree("tree", "root", (completed,))
-    with pytest.raises(ValueError, match=r"completed.*requires"):
-        AgentTree("tree", "root", (root,), TreeStatus.COMPLETED)
+    assert AgentTree("tree", "root", (completed,)).status is TreeStatus.COMPLETED
+    assert AgentTree("tree", "root", (root,)).status is TreeStatus.RUNNING
 
 
 def test_only_tool_messages_may_answer_pending_calls() -> None:

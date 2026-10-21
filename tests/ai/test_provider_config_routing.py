@@ -10,7 +10,6 @@ from litellm import get_llm_provider
 
 from aurora_bot.ai import gateway
 from aurora_bot.ai.config import EndpointConfig, EndpointsConfig
-from aurora_bot.contracts import TreeStatus
 from aurora_bot.contracts.pkgs.ai import Model
 from aurora_bot.runtime import compose_runtime
 from aurora_cli.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
@@ -66,8 +65,8 @@ def test_toml_sdk_route_drives_actual_default_gateway_and_survives_restart(
         stop.set()
         try:
             await handle.activate(stop)
-            result = await runtime.run("核对当前配置", tree_id="configured-route")
-            assert result.status is TreeStatus.COMPLETED
+            result = await runtime.run("核对当前配置", run_id="configured-route")
+            assert result.status == "completed"
             assert captured == [("deepseek/deepseek-chat", "deepseek", _BASE_URL)]
             assert original.provider.sdk_provider == "deepseek"
         finally:

@@ -11,7 +11,7 @@ import pytest
 from aurora_bot.agents import AgentCatalog
 from aurora_bot.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
 from aurora_bot.contracts.memory import MemoryRequest
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
 from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.engine.support import ScopedEchoTool, _agent, _assembler
@@ -60,7 +60,7 @@ def test_internal_and_tool_effects_do_not_change_recall_or_observation_scope(
             memory_scopes=memory_scopes,
         )
         try:
-            result = await AgentTreeRunner(
+            result = await CognitionEngine(
                 model,
                 _assembler(),
                 AgentCatalog((definition,)),
@@ -91,7 +91,7 @@ def test_delegation_preserves_trigger_and_explicit_memory_scope() -> None:
     scopes = frozenset({"test:world/conversation"})
     tree = AgentTree.create("tree", "root", root, "开始", caused_by="event", memory_scopes=scopes)
     result = asyncio.run(
-        AgentTreeRunner(model, _assembler(), agents, ToolRegistry((DelegateTool(agents),)), memory=memory).run(tree)
+        CognitionEngine(model, _assembler(), agents, ToolRegistry((DelegateTool(agents),)), memory=memory).run(tree)
     )
 
     assert result.caused_by == "event"

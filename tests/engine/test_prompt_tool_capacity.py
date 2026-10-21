@@ -22,7 +22,7 @@ from aurora_bot.contracts import (
 from aurora_bot.contracts.bot import Goal
 from aurora_bot.contracts.memory import MemoryContinuity
 from aurora_bot.contracts.model import ContextBudgetError
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.prompt import PromptAssembler
 from aurora_bot.tools import ToolRegistry
 from aurora_bot.utils.serialization import thaw_json
@@ -94,7 +94,7 @@ def test_engine_reserves_exactly_the_selected_node_tools_before_calling_model(la
     definition = _LARGE if large_visible else _SMALL
     agent = _agent(frozenset({definition.name}))
     model = FakeModel([ChatMessage.assistant("已核对")])
-    runner = AgentTreeRunner(
+    runner = CognitionEngine(
         model,
         _assembler(1000),
         AgentCatalog((agent,)),

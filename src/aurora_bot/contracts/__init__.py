@@ -10,19 +10,19 @@ from aurora_bot.contracts.agent import (
     AgentNode,
     AgentStatus,
     AgentTree,
-    TreeLaunchRequest,
     TreeStatus,
 )
+from aurora_bot.contracts.cognition import CognitionRequest, CognitionResult
 from aurora_bot.contracts.console import TerminalControl, TerminalResponse
 from aurora_bot.contracts.contributions import (
+    COGNITION_BINDINGS,
     FRONT_BINDINGS,
     TOOL_CONTRIBUTIONS,
-    TREE_LAUNCHER_BINDINGS,
+    CognitionBinding,
     Front,
     FrontBinding,
     FrontContext,
     FrontIO,
-    TreeLauncherBinding,
 )
 from aurora_bot.contracts.identity import (
     DEFAULT_NAMESPACE,
@@ -72,6 +72,7 @@ from aurora_bot.contracts.world import (
 
 __all__ = [
     "BUILTIN_TOOL_NAMES",
+    "COGNITION_BINDINGS",
     "DEFAULT_NAMESPACE",
     "DELEGATE_TOOL",
     "FRONT_BINDINGS",
@@ -79,7 +80,6 @@ __all__ = [
     "MCP_EVENT_RECEIVED",
     "TAG_PREFIX",
     "TOOL_CONTRIBUTIONS",
-    "TREE_LAUNCHER_BINDINGS",
     "WAIT_TOOL",
     "WORLD_PORTS",
     "WORLD_READ_TOOL",
@@ -91,6 +91,9 @@ __all__ = [
     "AgentTree",
     "ChatMessage",
     "ChatRole",
+    "CognitionBinding",
+    "CognitionRequest",
+    "CognitionResult",
     "ContributionKey",
     "DelegationRequest",
     "EnvironmentEvent",
@@ -121,8 +124,6 @@ __all__ = [
     "ToolScopes",
     "ToolStatus",
     "TreeActivity",
-    "TreeLaunchRequest",
-    "TreeLauncherBinding",
     "TreeStatus",
     "WorldCommit",
     "WorldCommitInput",

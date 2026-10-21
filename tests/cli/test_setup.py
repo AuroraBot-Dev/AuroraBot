@@ -149,7 +149,7 @@ def test_setup_combines_selected_flags_in_order(
     monkeypatch.setattr(setup, "run_process", fake_run)
     monkeypatch.setattr(setup.shutil, "which", lambda _name: "/usr/bin/pnpm")
     arguments = build_parser().parse_args(
-        ["--root", str(tmp_path), setup.COMMAND["name"], "--python", "--env", "--panel"]
+        ["--root", str(tmp_path), setup.COMMAND["name"], "--python", "--env", "--docs"]
     )
 
     assert setup.execute(arguments) == 0

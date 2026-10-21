@@ -130,7 +130,7 @@ def test_cadence_evokes_one_tree_per_five_counted_commits() -> None:
 
     asyncio.run(cadence.evaluate_once())
 
-    assert [request.tree_id for request in launcher.requests] == [launcher.requests[0].tree_id]
+    assert [request.run_id for request in launcher.requests] == [launcher.requests[0].run_id]
     assert launcher.requests[0].agent == "aurora:agent/definition/triage"
     assert cadence.status()["pending"] == 0
     assert [item.kind for item in writer.inputs].count("cadence.tree_planned") == 1

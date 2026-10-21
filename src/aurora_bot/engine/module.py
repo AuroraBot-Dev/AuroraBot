@@ -8,17 +8,17 @@ from aurora_bot.contracts import DELEGATE_TOOL
 from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.ai import Model
 from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.engine import AgentTreeRunner as AgentTreeRunnerPort
+from aurora_bot.contracts.pkgs.engine import CognitionRunner as CognitionRunnerPort
 from aurora_bot.contracts.pkgs.memory import MemoryReader
 from aurora_bot.contracts.pkgs.prompt import PromptAssembler
 from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.pkgs.world import WorldJournal
-from aurora_bot.contracts.process import TREE_PROCESS_MEDIA_TYPE, TreeProcessDefinition
+from aurora_bot.contracts.process import TREE_PROCESS_MEDIA_TYPE, CognitionProcess
 from aurora_bot.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from aurora_bot.contracts.scope import ScopeDeclaration, ScopeKind
 from aurora_bot.contracts.tree_lifecycle import TREE_SCOPE_PATTERN
 from aurora_bot.engine.config import EngineConfig
-from aurora_bot.engine.runtime import AgentTreeRunner
+from aurora_bot.engine.runtime import CognitionEngine
 from aurora_bot.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
@@ -27,9 +27,9 @@ if TYPE_CHECKING:
 
 @module(
     name="engine",
-    provides=AgentTreeRunnerPort,
+    provides=CognitionRunnerPort,
     requires=(
-        AgentTreeRunnerPort,
+        CognitionRunnerPort,
         PromptAssembler,
         Model,
         AgentCatalog,
@@ -43,9 +43,9 @@ if TYPE_CHECKING:
         TREE_SCOPE_PATTERN, ScopeKind.RUN, "一次 AgentTree 运行的因果台账；默认不自动召回，可按证据引用展开。"
     ),
 )
-def build(context: ModuleContext) -> AgentTreeRunnerPort:
+def build(context: ModuleContext) -> CognitionRunnerPort:
     """过程资源来自实际被选中的运行器，不读取失选运行器的配置。"""
-    runner = context.get_optional(AgentTreeRunnerPort)
+    runner = context.get_optional(CognitionRunnerPort)
     if runner is None:
         config = context.settings.resolve(EngineConfig)
         assembler = context.get(PromptAssembler)
@@ -53,7 +53,7 @@ def build(context: ModuleContext) -> AgentTreeRunnerPort:
         tools = context.get(ToolRegistry)
         model = context.get(Model)
         _validate_cross_references(agents, assembler.catalog.agent_prompts, model, tools.names)
-        runner = AgentTreeRunner(
+        runner = CognitionEngine(
             model,
             assembler,
             agents,
@@ -61,7 +61,7 @@ def build(context: ModuleContext) -> AgentTreeRunnerPort:
             world=context.get(WorldJournal),
             memory=context.get(MemoryReader),
             bot_id=context.get(BotStateStore).bot_id,
-            process=TreeProcessDefinition(config.max_depth, config.max_nodes, config.max_steps),
+            process=CognitionProcess(config.max_depth, config.max_nodes, config.max_steps),
         )
     process = runner.process_definition
     context.contribute(RESOURCE_CONTENTS, ResourceContent(process.ref, process.content, TREE_PROCESS_MEDIA_TYPE))

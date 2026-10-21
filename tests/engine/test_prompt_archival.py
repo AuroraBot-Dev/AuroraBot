@@ -53,7 +53,7 @@ def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(co
         original = runtime.assembly.get(PromptAssembler).catalog.get(ResourceRef(key))
         try:
             await lifecycle.activate(asyncio.Event())
-            tree = await runtime.run("记录本次提示词", tree_id="archived-prompt")
+            await runtime.run("记录本次提示词", run_id="archived-prompt")
         finally:
             await lifecycle.close()
         source = configured_project / "config" / "prompts" / "builtin" / "root.md"
@@ -63,7 +63,7 @@ def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(co
             await handle.activate(asyncio.Event())
             current = resumed.assembly.get(PromptAssembler).catalog.get(ResourceRef(key))
             assert current.ref != original.ref
-            fact = await resumed.world.commit(f"archived-prompt:{tree.root_id}:model:0:requested")
+            fact = await resumed.world.commit(f"archived-prompt:{runtime.root.node_id}:model:0:requested")
             assert fact is not None
             recorded = next(item for item in fact.data["resources"] if item["key"] == str(key))
             assert recorded["revision"] == original.ref.revision

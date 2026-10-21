@@ -1,13 +1,13 @@
 """认知焦点从安排、运行到委派保持显式传递。"""
 
 from aurora_bot.cadence.state import launch_data, read_launch
-from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, TreeLaunchRequest
+from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, CognitionRequest, ToolCall
 
 
 def test_goal_focus_survives_persistence_and_delegation() -> None:
     """子节点沿用所属目标，不需要从自然语言提示词猜测。"""
     focus = ("aurora:goal/check",)
-    request = TreeLaunchRequest("核对结果", focus_goal_ids=focus)
+    request = CognitionRequest("核对结果", focus_goal_ids=focus)
     assert read_launch(launch_data(request)) == request
     root = AgentDefinition(
         "aurora:agent/definition/root",

@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed, discovery
+from aurora_bot.kernel import BuiltinSource, DirectorySource, EntryPointSource, compose_managed
+from aurora_kernel import discovery
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:

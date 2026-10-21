@@ -8,12 +8,11 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from aurora_bot.contracts import (
-    TREE_LAUNCHER_BINDINGS,
+    COGNITION_BINDINGS,
     ChatMessage,
+    CognitionRequest,
     EnvironmentEvent,
     ModelRequest,
-    TreeLaunchRequest,
-    TreeStatus,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -39,7 +38,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora_bot.contracts import TreeActivity
-    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
     from aurora_bot.kernel import ModuleContext
     from aurora_bot.mcp.client import InboundEventHandler
     from aurora_cli.contracts.config import AuroraConfig
@@ -361,7 +360,7 @@ def test_run_runtime_orders_world_discovery_activation_and_reverse_shutdown(
         stop = asyncio.Event()
         stop.set()
 
-        def bind(launcher: TreeLauncher) -> None:
+        def bind(launcher: CognitionLauncher) -> None:
             assert launcher is not None
             trace.append("launcher.bind")
 
@@ -372,7 +371,7 @@ def test_run_runtime_orders_world_discovery_activation_and_reverse_shutdown(
             stop_event=stop,
             output=lambda _message: None,
             instances=((WorldJournal, world), (McpClientFactory, factory)),
-            contributions=((TREE_LAUNCHER_BINDINGS, bind),),
+            contributions=((COGNITION_BINDINGS, bind),),
         )
 
         assert runtime.world is world
@@ -389,11 +388,11 @@ def test_run_runtime_orders_world_discovery_activation_and_reverse_shutdown(
 
 def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Path) -> None:
     """新能力自行贡献窄端口绑定，无须扩展门面的构造参数或装配入口。"""
-    launchers: list[TreeLauncher] = []
+    launchers: list[CognitionLauncher] = []
 
-    @module(name="extra.launchers", contributes=(TREE_LAUNCHER_BINDINGS,))
+    @module(name="extra.launchers", contributes=(COGNITION_BINDINGS,))
     def build_extra(context: ModuleContext) -> None:
-        context.contribute(TREE_LAUNCHER_BINDINGS, launchers.append)
+        context.contribute(COGNITION_BINDINGS, launchers.append)
 
     config = load_config(configured_project)
     model = FakeModel()
@@ -407,13 +406,13 @@ def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Pat
     echoed: list[str] = []
 
     runtime = create_runtime(assembly, output=echoed.append)
-    tree = asyncio.run(launchers[0].launch_tree(TreeLaunchRequest("开始认知")))
+    tree = asyncio.run(launchers[0].launch(CognitionRequest("开始认知")))
 
     assert runtime.assembly is assembly
     assert runtime.settings is config
     assert runtime.world is world
-    assert tree.status is TreeStatus.COMPLETED
-    assert runtime.runtime_status()["trees"]["completed"] == 1
+    assert tree.status == "completed"
+    assert runtime.runtime_status()["runs"]["completed"] == 1
     assert echoed == ["Cadence> [aurora:agent/definition/root] 完成"]
 
 
@@ -423,7 +422,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
         world = FakeWorldJournal(trace)
         factory = FakeMcpFactory(trace)
 
-        def fail_binding(launcher: TreeLauncher) -> None:
+        def fail_binding(launcher: CognitionLauncher) -> None:
             del launcher
             raise ValueError("唤起端口绑定失败")
 
@@ -433,7 +432,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
                 FakeModel(),
                 headless=True,
                 instances=((WorldJournal, world), (McpClientFactory, factory)),
-                contributions=((TREE_LAUNCHER_BINDINGS, fail_binding),),
+                contributions=((COGNITION_BINDINGS, fail_binding),),
             )
 
         assert "mcp.discover" in trace

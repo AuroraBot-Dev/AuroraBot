@@ -39,28 +39,6 @@ class TreeStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class TreeLaunchRequest:
-    """cadence 等主动策略请求唤起一棵 AgentTree 的值对象。"""
-
-    message: str
-    tree_id: str | None = None
-    agent: str | None = None
-    frontier: WorldFrontier = field(default_factory=WorldFrontier)
-    caused_by: str | None = None
-    memory_scopes: frozenset[str] | None = None
-    focus_goal_ids: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "focus_goal_ids", _focus_goals(self.focus_goal_ids))
-        if self.memory_scopes is not None:
-            object.__setattr__(self, "memory_scopes", frozenset(self.memory_scopes))
-        if not self.message.strip():
-            raise ValueError("TreeLaunchRequest requires a non-empty message")
-        if self.caused_by is not None and not self.caused_by.strip():
-            raise ValueError("TreeLaunchRequest caused_by must not be empty")
-
-
-@dataclass(frozen=True, slots=True)
 class AgentDefinition:
     """创建同构 AgentNode 的无状态预定义原型。"""
 
@@ -189,12 +167,11 @@ class AgentNode:
 
 @dataclass(frozen=True, slots=True)
 class AgentTree:
-    """一次完整 Agent 运行的唯一聚合根。"""
+    """深度优先执行器的委派上下文；完成状态由入口节点推导。"""
 
     tree_id: str
     root_id: str
     nodes: tuple[AgentNode, ...]
-    status: TreeStatus = TreeStatus.RUNNING
     caused_by: str | None = None
 
     def __post_init__(self) -> None:
@@ -214,12 +191,15 @@ class AgentTree:
             if node.parent_id is not None and node.parent_id not in by_id:
                 raise ValueError("AgentTree child references missing parent")
             _depth(node.node_id, by_id)
-        if self.status == TreeStatus.RUNNING and root.terminal:
-            raise ValueError("running AgentTree cannot have terminal root")
-        if self.status == TreeStatus.COMPLETED and root.status != AgentStatus.COMPLETED:
-            raise ValueError("completed AgentTree requires completed root")
-        if self.status == TreeStatus.FAILED and root.status != AgentStatus.FAILED:
-            raise ValueError("failed AgentTree requires failed root")
+
+    @property
+    def status(self) -> TreeStatus:
+        status = self.node(self.root_id).status
+        if status == AgentStatus.COMPLETED:
+            return TreeStatus.COMPLETED
+        if status == AgentStatus.FAILED:
+            return TreeStatus.FAILED
+        return TreeStatus.RUNNING
 
     @classmethod
     def create(
@@ -403,7 +383,7 @@ class AgentTree:
             raise ValueError("only a ready node without pending calls can complete")
         replacement = replace(node, status=AgentStatus.COMPLETED, result=result)
         if node.parent_id is None:
-            return self._replace_node(replacement, status=TreeStatus.COMPLETED)
+            return self._replace_node(replacement)
         tree = self._replace_node(replacement)
         return tree._finish_node(node_id)
 
@@ -413,7 +393,7 @@ class AgentTree:
             raise ValueError("only an active node can fail with a non-empty error")
         replacement = replace(node, status=AgentStatus.FAILED, error=error)
         if node.parent_id is None:
-            return self._replace_node(replacement, status=TreeStatus.FAILED)
+            return self._replace_node(replacement)
         tree = self._replace_node(replacement)
         return tree._finish_node(node_id)
 
@@ -443,11 +423,10 @@ class AgentTree:
         )
         return self._replace_node(resumed)
 
-    def _replace_node(self, replacement: AgentNode, *, status: TreeStatus | None = None) -> AgentTree:
+    def _replace_node(self, replacement: AgentNode) -> AgentTree:
         return replace(
             self,
             nodes=tuple(replacement if node.node_id == replacement.node_id else node for node in self.nodes),
-            status=self.status if status is None else status,
         )
 
 

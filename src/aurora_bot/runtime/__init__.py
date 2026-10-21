@@ -3,15 +3,15 @@
 from aurora_bot.runtime.assembly import assemble_runtime, compose_runtime
 from aurora_bot.runtime.core import AuroraRuntime
 from aurora_bot.runtime.factory import RuntimeFactory, create_runtime
-from aurora_bot.runtime.presenter import TreeTextPresenter
+from aurora_bot.runtime.presenter import CognitionTextPresenter
 from aurora_bot.runtime.run import run_runtime
 from aurora_bot.runtime.terminal import TerminalCommandDispatcher
 
 __all__ = [
     "AuroraRuntime",
+    "CognitionTextPresenter",
     "RuntimeFactory",
     "TerminalCommandDispatcher",
-    "TreeTextPresenter",
     "assemble_runtime",
     "compose_runtime",
     "create_runtime",

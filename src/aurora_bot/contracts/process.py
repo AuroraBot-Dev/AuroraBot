@@ -1,4 +1,4 @@
-"""Bot 认知过程的确定定义，运行实例仍由 AgentTree 表示。"""
+"""Bot 认知过程的确定定义，固定执行策略和运行上界。"""
 
 import hashlib
 import json
@@ -11,7 +11,7 @@ TREE_PROCESS_MEDIA_TYPE = "application/vnd.aurora.agent-tree-process+json;versio
 
 
 @dataclass(frozen=True, slots=True)
-class TreeProcessDefinition:
+class CognitionProcess:
     """认知循环的策略与上界，定义版本覆盖实际执行所用的完整声明。"""
 
     max_depth: int = 4
@@ -47,4 +47,4 @@ class TreeProcessDefinition:
         object.__setattr__(self, "ref", ResourceRef(self.key, hashlib.sha256(content).hexdigest()))
 
 
-DEFAULT_TREE_PROCESS = TreeProcessDefinition()
+DEFAULT_TREE_PROCESS = CognitionProcess()

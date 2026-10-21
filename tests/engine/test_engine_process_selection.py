@@ -6,21 +6,20 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import TreeStatus
 from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.ai import Model
 from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
 from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.engine import AgentTreeRunner
+from aurora_bot.contracts.pkgs.engine import CognitionRunner
 from aurora_bot.contracts.pkgs.memory import MemoryReader
 from aurora_bot.contracts.pkgs.prompt import PromptAssembler
 from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.pkgs.world import WorldJournal
-from aurora_bot.contracts.process import TreeProcessDefinition
+from aurora_bot.contracts.process import CognitionProcess
 from aurora_bot.contracts.resource import ResourceKey
 from aurora_bot.contracts.resource_query import ResourceQuery
-from aurora_bot.engine import AgentTreeRunner as ConcreteRunner
+from aurora_bot.engine import CognitionEngine as ConcreteRunner
 from aurora_bot.engine.config import EngineConfig
 from aurora_bot.kernel import BuiltinSource, compose_managed, module
 from aurora_bot.mcp.config import PlatformsConfig
@@ -46,15 +45,15 @@ def test_selected_runner_process_is_published_and_used_without_loading_default_l
         PLATFORMS_CONFIG,
         PlatformsConfig(tuple(replace(item, enabled=False) for item in config.get(PLATFORMS_CONFIG).platforms)),
     )
-    expected = TreeProcessDefinition(max_steps=1, key=ResourceKey.parse("lab:engine/process/selected"))
+    expected = CognitionProcess(max_steps=1, key=ResourceKey.parse("lab:engine/process/selected"))
 
     @module(
         name="selected_engine",
-        provides=AgentTreeRunner,
+        provides=CognitionRunner,
         requires=(Model, PromptAssembler, AgentCatalog, ToolRegistry, WorldJournal, MemoryReader, BotStateStore),
         priority=10,
     )
-    def custom(context: ModuleContext) -> AgentTreeRunner:
+    def custom(context: ModuleContext) -> CognitionRunner:
         """使用真实引擎和世界端口验证替换，不以元数据对象冒充实际执行。"""
         return ConcreteRunner(
             context.get(Model),
@@ -78,8 +77,8 @@ def test_selected_runner_process_is_published_and_used_without_loading_default_l
         try:
             await lifecycle.activate(stop)
             assert runtime.runner.process_definition is expected
-            tree = await runtime.run("按选定过程核对", tree_id="selected-process")
-            assert tree.status is TreeStatus.COMPLETED
+            tree = await runtime.run("按选定过程核对", run_id="selected-process")
+            assert tree.status == "completed"
             page = await lifecycle.assembly.get(ResourceCatalog).browse(ResourceQuery(domain="engine", kind="process"))
             assert [item.ref for item in page.items] == [expected.ref]
             stored = await lifecycle.assembly.get(ArtifactStore).read(expected.ref)

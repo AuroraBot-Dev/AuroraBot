@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aurora_bot.clock.clock import PersistentBotClock
-from aurora_bot.contracts import TREE_LAUNCHER_BINDINGS
+from aurora_bot.contracts import COGNITION_BINDINGS
 from aurora_bot.contracts.pkgs.bot import BotStateStore
 from aurora_bot.contracts.pkgs.clock import BotClock
 from aurora_bot.contracts.pkgs.world import WorldReader
@@ -29,7 +29,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     name="clock",
     provides=BotClock,
     requires=(BotClock, BotStateStore, WorldReader),
-    contributes=TREE_LAUNCHER_BINDINGS,
+    contributes=COGNITION_BINDINGS,
     activate=activate,
     run=run,
 )
@@ -38,7 +38,7 @@ def build(context: ModuleContext) -> BotClock:
     clock = context.get_optional(BotClock)
     if clock is None:
         clock = PersistentBotClock(context.get(BotStateStore), context.get(WorldReader))
-    context.contribute(TREE_LAUNCHER_BINDINGS, clock.bind_launcher)
+    context.contribute(COGNITION_BINDINGS, clock.bind_launcher)
     return clock
 
 

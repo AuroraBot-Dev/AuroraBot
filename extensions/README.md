@@ -37,19 +37,21 @@ MCP 应用为 Bot 提供外部工具；符合事件协议并启用相应配置�
 模型端点由 `config/endpoints.toml` 定义，提示词由 `config/prompts.toml` 和引用的正文文件定义。
 委派需要可见的 `aurora:tool/definition/delegate` 工具，并受 `children` 中列出的目标约束。
 
-Bot 的一次认知运行由一棵 `AgentTree` 表示。root 与 child 使用同一种节点和循环，委派在同一棵树内创建 child。
+Bot 的认知入口接收请求并返回结果。默认执行器让 root 与 child 使用同一种节点和循环，以父子关系组织委派。
 配置示例见 [Agent 配置模板](../config.example/agents.toml)。
 
 ## 编写 Python 插件
 
 启动时会扫描 `extensions/plugins/`：每个 `*.py` 文件，或每个含 `module.py` 的子目录，都是一个插件入口。
-入口必须导出唯一的 `MODULE`，其值为 `@module` 生成的 `ModuleSpec`；包形式支持相对导入。
+入口必须导出唯一的 `MODULE`，其值可以是 `@namespace` 声明，或 Bot `@module` 生成的 `ModuleSpec`；包形式支持相对导入。
 
-插件与内置能力使用同一套组合机制：`provides` / `requires` 声明能力端口，
+通用插件通过 `aurora_kernel` 注册命名空间与 hook，宿主自动创建共享 ctx，模块可读写全部空间。示例见 [Namespace 与 hook](../apps/docsite/src/develop/namespace-modules.md)。
+
+Bot 领域插件与内置能力使用同一套组合机制：`provides` / `requires` 声明能力端口，
 `contributes` / `consumes` 声明贡献点，清单声明命名空间、发布版本和内核 API 兼容范围。
 完整可运行示例、生命周期和验证要求见 [模组开发](../apps/docsite/src/develop/core-development.md)。
 
-也可将插件安装为独立 Python 包，通过 `aurorabot_plugin` entry point 提供入口。
+也可将插件安装为独立 Python 包，通过 `aurora_module` 或 `aurorabot_plugin` entry point 提供入口。
 修改本地插件或配置后需要重启，当前不做热加载。
 
 ## 扩展边界

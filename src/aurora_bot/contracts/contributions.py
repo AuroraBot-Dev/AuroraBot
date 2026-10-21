@@ -13,13 +13,13 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from aurora_bot.contracts.kernel import Settings
-    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
 
 
-class TreeLauncherBinding(Protocol):
-    """把已构造的 TreeLauncher 接入某个运行期端口的同步绑定函数。"""
+class CognitionBinding(Protocol):
+    """把已构造的 CognitionLauncher 接入某个运行期端口的同步绑定函数。"""
 
-    def __call__(self, launcher: TreeLauncher) -> None: ...
+    def __call__(self, launcher: CognitionLauncher) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +57,6 @@ class FrontBinding(Protocol):
 
 TOOL_CONTRIBUTIONS = ContributionKey[Tool]("tools.catalog")
 
-TREE_LAUNCHER_BINDINGS = ContributionKey[TreeLauncherBinding]("runtime.tree_launcher.bindings")
+COGNITION_BINDINGS = ContributionKey[CognitionBinding]("runtime.cognition.bindings")
 
 FRONT_BINDINGS = ContributionKey[FrontBinding]("runtime.fronts")

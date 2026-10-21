@@ -23,8 +23,8 @@ from aurora_bot.contracts import (
     WorldCommit,
     WorldFrontier,
 )
-from aurora_bot.contracts.process import TreeProcessDefinition
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.contracts.process import CognitionProcess
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.tools import DELEGATE_TOOL, WORLD_READ_TOOL, DelegateTool, ToolRegistry, WorldReadTool
 from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.support.model import FakeModelDirectory
@@ -78,7 +78,7 @@ def test_terminal_result_on_the_final_allowed_iteration_is_returned(*, succeeds:
     root = _agent()
     model = FakeModel([ChatMessage.assistant("已完成")]) if succeeds else RejectingModel([])
     agents = AgentCatalog((root,))
-    runner = AgentTreeRunner(model, _assembler(), agents, ToolRegistry(), process=TreeProcessDefinition(max_steps=1))
+    runner = CognitionEngine(model, _assembler(), agents, ToolRegistry(), process=CognitionProcess(max_steps=1))
     result = asyncio.run(runner.run(AgentTree.create("tree", "root", root, "检查最后一步")))
     assert result.status is (TreeStatus.COMPLETED if succeeds else TreeStatus.FAILED)
     if succeeds:
@@ -93,8 +93,8 @@ def test_exhausted_budget_does_not_execute_the_next_pending_tool() -> None:
     root = _agent(tools=frozenset({tool.definition.name}))
     call = ToolCall("pending", tool.definition.name, {"value": "不要执行"})
     model = FakeModel([ChatMessage.assistant(tool_calls=(call,))])
-    runner = AgentTreeRunner(
-        model, _assembler(), AgentCatalog((root,)), ToolRegistry((tool,)), process=TreeProcessDefinition(max_steps=1)
+    runner = CognitionEngine(
+        model, _assembler(), AgentCatalog((root,)), ToolRegistry((tool,)), process=CognitionProcess(max_steps=1)
     )
     with pytest.raises(RuntimeError, match="step limit"):
         asyncio.run(runner.run(AgentTree.create("tree", "root", root, "检查边界")))
@@ -295,12 +295,12 @@ def test_runner_rejects_invalid_limits() -> None:
     root = _agent()
     with pytest.raises(ValueError, match="运行上界"):
         agents = AgentCatalog((root,))
-        AgentTreeRunner(
+        CognitionEngine(
             model,
             _assembler(),
             agents,
             ToolRegistry((DelegateTool(agents),)),
-            process=TreeProcessDefinition(max_steps=0),
+            process=CognitionProcess(max_steps=0),
         )
 
 

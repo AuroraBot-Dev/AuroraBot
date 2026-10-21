@@ -11,16 +11,18 @@ from aurora_bot.utils import get_logger
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from aurora_bot.contracts import AgentTree, WorldCommit
+    from aurora_bot.contracts import CognitionResult, WorldCommit
     from aurora_bot.runtime.resource_commands import ResourceCommands
 
 _logger = get_logger(__name__)
 
 
 class TerminalCommandDispatcher:
-    """把终端文本分派为本地命令或一次 AgentTree 运行。"""
+    """把终端文本分派为本地命令或一次认知运行。"""
 
-    def __init__(self, run_message: Callable[[WorldCommit], Awaitable[AgentTree]], resources: ResourceCommands) -> None:
+    def __init__(
+        self, run_message: Callable[[WorldCommit], Awaitable[CognitionResult]], resources: ResourceCommands
+    ) -> None:
         """绑定普通消息的认知入口与资源指令入口。"""
         self._run_message = run_message
         self._resources = resources
@@ -46,9 +48,8 @@ class TerminalCommandDispatcher:
 
         if commit is None:
             raise ValueError("终端消息必须先提交到世界")
-        tree = await self._run_message(commit)
-        root = tree.node(tree.root_id)
-        failed = root.status.value == "failed"
-        rendered = root.error if failed else root.result
-        _logger.debug("终端输入完成 input_type={} tree_status={}", input_type, tree.status.value)
-        return TerminalResponse(rendered, is_error=failed)
+        result = await self._run_message(commit)
+        _logger.debug("终端输入完成 input_type={} status={}", input_type, result.status)
+        return TerminalResponse(
+            result.error if result.error is not None else result.output, is_error=result.error is not None
+        )

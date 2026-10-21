@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import TreeLaunchRequest, TreeStatus
+from aurora_bot.contracts import CognitionRequest
 from aurora_bot.contracts.bot import BotChange, StateConflictError, WakePlan, WakeStatus
 from aurora_bot.utils import get_logger
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from aurora_bot.contracts.pkgs.bot import BotStateStore
-    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
     from aurora_bot.contracts.pkgs.world import WorldReader
 
 _logger = get_logger(__name__)
@@ -40,11 +40,11 @@ class PersistentBotClock:
         self._world = world
         self._poll_seconds = poll_seconds
         self._now = now or (lambda: datetime.now(UTC))
-        self._launcher: TreeLauncher | None = None
+        self._launcher: CognitionLauncher | None = None
         self._initialized = False
         self._lock = asyncio.Lock()
 
-    def bind_launcher(self, launcher: TreeLauncher) -> None:
+    def bind_launcher(self, launcher: CognitionLauncher) -> None:
         """接入已装配的主体认知入口。"""
         self._launcher = launcher
 
@@ -56,7 +56,7 @@ class PersistentBotClock:
         for wake in snapshot.wakes:
             if wake.status is not WakeStatus.RUNNING:
                 continue
-            tree_id = self.tree_id(wake)
+            tree_id = self.run_id(wake)
             completed = await self._world.commit(f"{tree_id}:tree:completed")
             failed = await self._world.commit(f"{tree_id}:tree:failed")
             started = await self._world.commit(f"{tree_id}:tree:started")
@@ -108,7 +108,7 @@ class PersistentBotClock:
             except TimeoutError:
                 continue
 
-    def tree_id(self, wake: WakePlan) -> str:
+    def run_id(self, wake: WakePlan) -> str:
         """从主体和安排身份确定唯一认知运行身份。"""
         identity = f"{self._state.bot_id}\n{wake.wake_id}"
         digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
@@ -120,21 +120,21 @@ class PersistentBotClock:
         snapshot = await self._state.snapshot()
         frontier = await self._world.head(frozenset({self._state.scope}))
         goal = f"\n关联目标：{wake.goal_id}" if wake.goal_id else ""
-        request = TreeLaunchRequest(
+        request = CognitionRequest(
             f"这是你安排的未来检查：{wake.message}{goal}\n请先核对自己的目标、检查点和未确认行动，再决定继续、调整或结束。",
-            tree_id=self.tree_id(wake),
+            run_id=self.run_id(wake),
             frontier=frontier,
             caused_by=f"{snapshot.bot_id}:state:{snapshot.version}",
             focus_goal_ids=(wake.goal_id,) if wake.goal_id is not None else (),
         )
         try:
-            result = await self._launcher.launch_tree(request)
+            result = await self._launcher.launch(request)
         except Exception as error:
             _logger.exception("未来活动执行失败 wake_id={}", wake.wake_id)
             await self._settle(wake, WakeStatus.FAILED, str(error))
             return
-        status = WakeStatus.COMPLETED if result.status is TreeStatus.COMPLETED else WakeStatus.FAILED
-        await self._settle(wake, status, f"认知运行状态：{result.status.value}")
+        status = WakeStatus.COMPLETED if result.error is None else WakeStatus.FAILED
+        await self._settle(wake, status, f"认知运行状态：{result.status}")
 
     async def _settle(self, wake: WakePlan, status: WakeStatus, detail: str) -> None:
         """保留并发目标修改，直到当前安排的结果得到确认。"""

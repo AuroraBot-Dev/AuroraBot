@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 from aurora_cli.commander import build_registry
 from aurora_cli.contracts.command import CommandSpec, SubcommandSpec
+from aurora_cli.utils.host import bind_commands
 from aurora_cli.utils.modules import discover_modules
 
 if TYPE_CHECKING:
@@ -36,6 +37,6 @@ COMMAND_SPECS = tuple(
     )
 )
 
-DEFAULT_REGISTRY = build_registry(COMMAND_SPECS)
+DEFAULT_REGISTRY = build_registry(bind_commands(COMMAND_SPECS))
 
 __all__ = ["COMMAND_SPECS", "DEFAULT_REGISTRY", "CommandSpec", "SubcommandSpec"]

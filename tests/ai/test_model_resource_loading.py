@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.artifacts.store import FileArtifactStore
-from aurora_bot.contracts import TreeStatus
 from aurora_bot.contracts.model_artifact import MODEL_MEDIA_TYPE
 from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
 from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
@@ -80,7 +79,7 @@ def test_training_resource_loads_after_export_and_input_files_are_removed(
             assert runtime.assembly.get(ResourceCatalog).resolve(reference).ref == reference
             assert (await runtime.assembly.get(ArtifactStore).stat(reference)).media_type == MODEL_MEDIA_TYPE
             result = await runtime.run("核对训练资源加载后的运行。")
-            assert result.status is TreeStatus.COMPLETED
+            assert result.status == "completed"
         finally:
             stop.set()
             await handle.close()

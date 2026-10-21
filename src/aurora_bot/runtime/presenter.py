@@ -1,4 +1,4 @@
-"""按节点增量渲染 AgentTree 文本到终端输出。"""
+"""按节点增量渲染 认知消息到终端输出。"""
 
 from __future__ import annotations
 
@@ -12,20 +12,20 @@ from aurora_bot.utils import bounded_summary
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from aurora_bot.contracts import AgentNode, AgentTree, ChatMessage
+    from aurora_bot.contracts import AgentNode, ChatMessage
 
 
-class TreeTextPresenter:
-    """把 AgentTree 的节点增量渲染为终端文本；不持有认知状态。"""
+class CognitionTextPresenter:
+    """把 执行器的节点消息增量渲染为终端文本；不持有认知状态。"""
 
     def __init__(self, output: Callable[[str], None] = print) -> None:
         self._output = output
         self._printed: dict[str, int] = {}
 
-    def echo(self, tree: AgentTree) -> None:
+    def echo(self, nodes: tuple[AgentNode, ...]) -> None:
         """只渲染每个节点自上次以来新增的消息。"""
         console = Console(highlight=False) if self._output is print else None
-        for node in tree.nodes:
+        for node in nodes:
             seen = self._printed.get(node.node_id, 0)
             for message in node.messages[seen:]:
                 self._echo_message(node, message, console)

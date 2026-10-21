@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from aurora_bot.contracts import (
     AgentNode,
     AgentTree,
     ChatMessage,
+    CognitionRequest,
+    CognitionResult,
     DelegationRequest,
     ModelRequest,
     ToolCall,
@@ -19,7 +22,7 @@ from aurora_bot.contracts import (
 )
 from aurora_bot.contracts.memory import MemoryRequest
 from aurora_bot.contracts.model import ContextBudgetError, ToolContext
-from aurora_bot.contracts.process import DEFAULT_TREE_PROCESS, TreeProcessDefinition
+from aurora_bot.contracts.process import DEFAULT_TREE_PROCESS, CognitionProcess
 from aurora_bot.engine.effects import NullEffectSink
 from aurora_bot.engine.world_effects import EngineWorldEffects, render_delta
 from aurora_bot.utils import get_logger
@@ -39,7 +42,7 @@ if TYPE_CHECKING:
     from aurora_bot.engine.effects import EngineEffectSink
 
 
-class AgentTreeRunner:
+class CognitionEngine:
     """按深度优先顺序运行一棵 AgentTree，直到 root 终止。"""
 
     def __init__(
@@ -52,7 +55,7 @@ class AgentTreeRunner:
         world: WorldJournal | None = None,
         memory: MemoryReader | None = None,
         bot_id: str = "aurora:bot/default",
-        process: TreeProcessDefinition = DEFAULT_TREE_PROCESS,
+        process: CognitionProcess = DEFAULT_TREE_PROCESS,
     ) -> None:
         if process.strategy != "depth_first":
             raise ValueError(f"当前引擎不支持认知策略：{process.strategy}")
@@ -71,7 +74,7 @@ class AgentTreeRunner:
         self._bot_id = bot_id
 
     @property
-    def process_definition(self) -> TreeProcessDefinition:
+    def process_definition(self) -> CognitionProcess:
         """公开当前循环真正采用的策略和上界，不从配置文件另造描述。"""
         return self._process
 
@@ -80,7 +83,28 @@ class AgentTreeRunner:
         """暴露当前不可变工具目录供只读观察；核心循环不依赖此属性。"""
         return self._tools.definitions
 
+    async def execute(
+        self, request: CognitionRequest, observer: Callable[[tuple[AgentNode, ...]], None] | None = None
+    ) -> CognitionResult:
+        """将认知请求交给深度优先执行策略，调用方只接收结果和可选消息观察。"""
+        if request.agent is None:
+            raise ValueError("认知请求必须明确 Agent")
+        tree = AgentTree.create(
+            request.run_id or uuid4().hex,
+            request.node_id,
+            self._agents.get(request.agent),
+            request.message,
+            request.frontier,
+            caused_by=request.caused_by,
+            memory_scopes=request.memory_scopes,
+            focus_goal_ids=request.focus_goal_ids,
+        )
+        result = await self.run(tree, (lambda current: observer(current.nodes)) if observer is not None else None)
+        root = result.node(result.root_id)
+        return CognitionResult(result.tree_id, root.result or "", root.error)
+
     async def run(self, tree: AgentTree, observer: Callable[[AgentTree], None] | None = None) -> AgentTree:
+        """执行深度优先策略的内部状态；Bot 通过 execute 请求认知。"""
         _logger.info("AgentTree 开始 tree_id={} root_id={}", tree.tree_id, tree.root_id)
         self._validate_definitions(tree)
         if self._world is not None:

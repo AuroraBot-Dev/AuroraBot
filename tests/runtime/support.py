@@ -5,12 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from aurora_bot.contracts import (
-    AgentDefinition,
-    AgentTree,
     ChatMessage,
+    CognitionRequest,
+    CognitionResult,
     ModelRequest,
     ToolCall,
-    TreeLaunchRequest,
 )
 from tests.support.model import TemplateModel as FakeModel
 
@@ -64,26 +63,11 @@ class PlanningModel(FakeModel):
 
 @dataclass(slots=True)
 class FakeLauncher:
-    requests: list[TreeLaunchRequest] = field(default_factory=list)
+    requests: list[CognitionRequest] = field(default_factory=list)
     failure: Exception | None = None
 
-    async def launch_tree(self, request: TreeLaunchRequest) -> AgentTree:
+    async def launch(self, request: CognitionRequest) -> CognitionResult:
         if self.failure is not None:
             raise self.failure
         self.requests.append(request)
-        definition = AgentDefinition(
-            definition_id=request.agent or "aurora:agent/definition/root",
-            description="cadence 测试原型",
-            prompt_id="aurora:prompt/agent/root",
-            model="test:ai/endpoint/fake",
-            tools=frozenset(),
-            children=frozenset(),
-        )
-        tree = AgentTree.create(
-            request.tree_id or "root",
-            "root",
-            definition,
-            request.message,
-            request.frontier,
-        )
-        return tree.complete("root", "测试完成")
+        return CognitionResult(request.run_id or "root", "测试完成")

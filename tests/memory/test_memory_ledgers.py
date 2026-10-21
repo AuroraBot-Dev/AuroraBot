@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import ScopeCatalog, ScopeKind, TreeLaunchRequest
+from aurora_bot.contracts import CognitionRequest, ScopeCatalog, ScopeKind
 from aurora_bot.contracts.bot import BotChange, Checkpoint
 from aurora_bot.contracts.memory import MemoryRequest
 from aurora_bot.contracts.memory_graph_codec import read_ranking
@@ -35,14 +35,14 @@ def test_repeated_training_exports_do_not_feed_graph_payloads_back_into_memory(c
             assert original.status is OperationStatus.SUCCEEDED
             graphs = []
             for index in range(2):
-                tree = await runtime.launch_tree(
-                    TreeLaunchRequest(
+                tree = await runtime.launch(
+                    CognitionRequest(
                         "继续核对实验",
-                        tree_id=f"after-export-{index}",
+                        run_id=f"after-export-{index}",
                         focus_goal_ids=(GOAL,),
                     )
                 )
-                model_id = f"{tree.tree_id}:{tree.root_id}:model:0:requested"
+                model_id = f"{tree.run_id}:{runtime.root.node_id}:model:0:requested"
                 result = await registry.dispatch(
                     request(runtime, f"export-{index}", "query/training_input", {"model_request_id": model_id})
                 )

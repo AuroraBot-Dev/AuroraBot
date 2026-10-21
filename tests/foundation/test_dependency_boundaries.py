@@ -132,3 +132,13 @@ def _imported_module(node: ast.AST) -> str:
 def _src_package(module: str) -> str:
     parts = module.split(".")
     return ".".join(parts[:2])
+
+
+def test_generic_kernel_has_no_bot_or_cli_dependency() -> None:
+    violations = [
+        f"{path.relative_to(_ROOT)} imports {module}"
+        for path in (_ROOT / "src" / "aurora_kernel").rglob("*.py")
+        for module, _ in _imports_of(path)
+        if module.split(".")[0] in {"aurora_bot", "aurora_cli"}
+    ]
+    assert violations == []

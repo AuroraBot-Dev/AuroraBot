@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from aurora_bot.cadence.cadence import Cadence
 from aurora_bot.cadence.config import CadenceConfig, ReactionsConfig
 from aurora_bot.cadence.reactions import ReactiveRule
-from aurora_bot.contracts import TREE_LAUNCHER_BINDINGS
+from aurora_bot.contracts import COGNITION_BINDINGS
 from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.bot import BotStateStore
 from aurora_bot.contracts.pkgs.cadence import Cadence as CadencePort
@@ -36,7 +36,7 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     name="cadence",
     provides=CadencePort,
     requires=(CadencePort, WorldReader, WorldWriter, AgentCatalog, BotStateStore, RhythmPolicy),
-    contributes=TREE_LAUNCHER_BINDINGS,
+    contributes=COGNITION_BINDINGS,
     scopes=ScopeDeclaration(
         "*:world/bot/*/cadence", ScopeKind.RESOURCE, "节律 tick 与唤起决策，记录 Bot 主动发起认知的理由。"
     ),
@@ -64,7 +64,7 @@ def build(context: ModuleContext) -> CadencePort:
             poll_interval=config.poll_seconds,
             reactive_rules=rules,
         )
-    context.contribute(TREE_LAUNCHER_BINDINGS, cadence.bind_launcher)
+    context.contribute(COGNITION_BINDINGS, cadence.bind_launcher)
     return cadence
 
 

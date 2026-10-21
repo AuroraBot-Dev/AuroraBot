@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.cadence import Cadence
-from aurora_bot.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts import MCP_EVENT_RECEIVED, CognitionRequest, WorldFrontier
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.contracts.rhythm import RhythmAction, RhythmDecision, RhythmObservation, RhythmPrediction
 from aurora_bot.rhythm.rules import RuleRhythmPolicy
@@ -191,17 +191,17 @@ def test_restart_delivers_only_cognition_that_was_confirmed_not_started(tmp_path
     async def scenario() -> None:
         world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
         await world.initialize()
-        captured: list[TreeLaunchRequest] = []
+        captured: list[CognitionRequest] = []
 
         class InterruptedLauncher(FakeLauncher):
             """模拟安排落库后、认知开始前后两种中断窗口。"""
 
-            async def launch_tree(self, request: TreeLaunchRequest):
+            async def launch(self, request: CognitionRequest):
                 """保存运行身份后中断，不返回虚假成功。"""
                 captured.append(request)
                 if already_started:
                     await world.append_commit(
-                        commit_id=f"{request.tree_id}:tree:started",
+                        commit_id=f"{request.run_id}:tree:started",
                         kind="engine.tree.started",
                         source="engine",
                         summary="认知已经开始",
@@ -227,7 +227,7 @@ def test_restart_delivers_only_cognition_that_was_confirmed_not_started(tmp_path
                 records = await world.commits(restarted.scope, 0, 20)
                 assert any(commit.data.get("status") == "interrupted" for commit in records)
             else:
-                assert launcher.requests[0].tree_id == captured[0].tree_id
+                assert launcher.requests[0].run_id == captured[0].run_id
         finally:
             await world.close()
 

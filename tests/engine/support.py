@@ -18,7 +18,7 @@ from aurora_bot.contracts import (
     ToolScopes,
     ToolStatus,
 )
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.prompt import PromptAssembler
 from aurora_bot.tools import DelegateTool, ToolRegistry
 from tests.support.model import FakeModelDirectory
@@ -134,7 +134,7 @@ def _runner(
     definitions: tuple[AgentDefinition, ...],
     *tools: Tool,
     world: WorldJournal | None = None,
-) -> AgentTreeRunner:
+) -> CognitionEngine:
     agents = AgentCatalog(definitions)
     registry = ToolRegistry((DelegateTool(agents), *tools))
-    return AgentTreeRunner(model, _assembler(), agents, registry, world=world)
+    return CognitionEngine(model, _assembler(), agents, registry, world=world)

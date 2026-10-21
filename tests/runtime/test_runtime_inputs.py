@@ -10,9 +10,9 @@ import pytest
 
 from aurora_bot.contracts import (
     ChatMessage,
+    CognitionRequest,
     EnvironmentEvent,
     ModelRequest,
-    TreeLaunchRequest,
     WorldCommit,
     WorldFrontier,
 )
@@ -32,24 +32,27 @@ def test_every_input_path_preserves_its_world_cause(configured_project: Path, en
     async def scenario() -> None:
         await runtime.world.initialize()
         try:
+            run_id = "tree"
             if entry == "runtime":
-                tree = await runtime.run("直接输入", tree_id="tree")
+                await runtime.run("直接输入", run_id="tree")
             else:
                 event = EnvironmentEvent("event", "test", "test:world", "message", datetime.now(UTC), "已提交消息")
                 if entry == "event":
-                    tree = await runtime.start_tree_from_event(event, tree_id="tree")
+                    await runtime.run_from_event(event, run_id="tree")
                 else:
                     commit = await runtime.submit_event(event)
                     if entry == "console":
                         await runtime.terminal.dispatch_terminal(commit.summary, commit=commit)
-                        tree = next(iter(runtime._trees.values()))
+                        page = await runtime.world.stream(0, 100)
+                        started = next(item for item in page.commits if item.kind == "engine.tree.started")
+                        run_id = started.data["tree_id"]
                     else:
-                        tree = await runtime.launch_tree(
-                            TreeLaunchRequest(commit.summary, tree_id="tree", caused_by=commit.commit_id)
+                        await runtime.launch(
+                            CognitionRequest(commit.summary, run_id="tree", caused_by=commit.commit_id)
                         )
-            assert tree.caused_by is not None
-            cause = await runtime.world.commit(tree.caused_by)
-            started = await runtime.world.commit(f"{tree.tree_id}:tree:started")
+            started = await runtime.world.commit(f"{run_id}:tree:started")
+            assert started is not None
+            cause = await runtime.world.commit(started.data["caused_by"])
             assert cause is not None and started is not None
             assert started.data["caused_by"] == cause.commit_id
             assert cause.kind == ("runtime.input" if entry == "runtime" else "environment.message")
@@ -95,9 +98,14 @@ def test_event_entry_does_not_skip_commits_arriving_after_its_trigger(configured
     async def scenario() -> None:
         try:
             event = EnvironmentEvent("trigger", "test", "test:world", "message", datetime.now(UTC), "触发消息")
-            result = await runtime.start_tree_from_event(event)
-            root = result.node(result.root_id)
-            disclosed = [message.content for message in root.messages if "world.delta" in message.content]
+            result = await runtime.run_from_event(event)
+            assert result.error is None
+            disclosed = [
+                message.content
+                for request in model.requests
+                for message in request.messages
+                if "world.delta" in message.content
+            ]
             assert any("稍后到达的事实" in content for content in disclosed)
         finally:
             await journal.close()
@@ -126,10 +134,10 @@ def test_primary_cognition_is_serial_while_environment_inputs_remain_available(c
         runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
         tasks: list[asyncio.Task[object]] = []
         try:
-            first = asyncio.create_task(runtime.run("第一次认知", tree_id="first"))
+            first = asyncio.create_task(runtime.run("第一次认知", run_id="first"))
             tasks.append(first)
             await started.wait()
-            second = asyncio.create_task(runtime.launch_tree(TreeLaunchRequest("第二次认知", tree_id="second")))
+            second = asyncio.create_task(runtime.launch(CognitionRequest("第二次认知", run_id="second")))
             tasks.append(second)
             await asyncio.sleep(0)
             assert len(model.requests) == 1
@@ -140,10 +148,50 @@ def test_primary_cognition_is_serial_while_environment_inputs_remain_available(c
             assert await runtime.world.commit(commit.commit_id) == commit
             release.set()
             await asyncio.gather(*tasks)
-            assert {tree.tree_id for tree in runtime._trees.values()} == {"first", "second"}
+            assert {result.run_id for result in (first.result(), second.result())} == {"first", "second"}
         finally:
             release.set()
             await asyncio.gather(*tasks, return_exceptions=True)
+            await runtime.world.close()
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_cognition_keeps_started_fact_and_cannot_be_replayed(configured_project: Path) -> None:
+    async def scenario() -> None:
+        entered = asyncio.Event()
+        blocked = asyncio.Event()
+
+        class WaitingModel(FakeModel):
+            async def complete(self, request: ModelRequest) -> ChatMessage:
+                self.requests.append(request)
+                entered.set()
+                await blocked.wait()
+                raise AssertionError("取消后不得继续执行")
+
+        model = WaitingModel()
+        runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
+        task = asyncio.create_task(runtime.run("等待结果", run_id="cancelled"))
+        try:
+            await entered.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert runtime.runtime_status()["runs"] == {
+                "running": 0,
+                "completed": 0,
+                "failed": 0,
+                "interrupted": 1,
+            }
+            assert await runtime.world.commit("cancelled:tree:started") is not None
+            assert await runtime.world.commit("cancelled:tree:completed") is None
+            assert await runtime.world.commit("cancelled:tree:failed") is None
+            with pytest.raises(ValueError, match="已存在"):
+                await runtime.run("重复执行", run_id="cancelled")
+            assert len(model.requests) == 1
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
             await runtime.world.close()
 
     asyncio.run(scenario())

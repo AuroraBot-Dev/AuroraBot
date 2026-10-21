@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.agents.config import AgentsConfig
-from aurora_bot.contracts import ChatMessage, ToolCall, ToolOutput, TreeStatus
+from aurora_bot.contracts import ChatMessage, ToolCall, ToolOutput
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
 from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.contracts.pkgs.tools import ToolRegistry
@@ -64,21 +64,21 @@ def test_visible_tool_versions_match_requests_execution_facts_and_public_content
         stop.set()
         try:
             await lifecycle.activate(stop)
-            tree = await runtime.run("核对结果", tree_id="tool-version")
-            assert tree.status is TreeStatus.COMPLETED
+            tree = await runtime.run("核对结果", run_id="tool-version")
+            assert tree.status == "completed"
             registry = runtime.assembly.get(ToolRegistry)
             hidden = next(item for item in registry.definitions if item.name == WAIT_TOOL)
             for index, request in enumerate(model.requests):
                 assert expected.ref in request.resources
                 assert hidden.ref not in request.resources
                 assert all(item.ref in request.resources for item in request.tools)
-                fact = await runtime.world.commit(f"tool-version:{tree.root_id}:model:{index}:requested")
+                fact = await runtime.world.commit(f"tool-version:{runtime.root.node_id}:model:{index}:requested")
                 assert fact is not None
                 assert list(fact.data["tool_refs"]) == [
                     {"key": item.name, "revision": item.ref.revision} for item in request.tools
                 ]
-            requested = await runtime.world.commit(f"tool-version:{tree.root_id}:echo:requested")
-            result = await runtime.world.commit(f"tool-version:{tree.root_id}:echo:result")
+            requested = await runtime.world.commit(f"tool-version:{runtime.root.node_id}:echo:requested")
+            result = await runtime.world.commit(f"tool-version:{runtime.root.node_id}:echo:result")
             assert requested is not None and result is not None
             assert requested.data["tool_ref"] == {"key": expected.name, "revision": expected.ref.revision}
             assert result.data["tool_ref"] == requested.data["tool_ref"]
@@ -130,9 +130,9 @@ def test_rejected_calls_do_not_invent_a_visible_interface_version(
         stop.set()
         try:
             await lifecycle.activate(stop)
-            tree = await runtime.run("检查调用边界", tree_id="hidden-tool")
+            await runtime.run("检查调用边界", run_id="hidden-tool")
             for stage in ("requested", "result"):
-                fact = await runtime.world.commit(f"hidden-tool:{tree.root_id}:hidden:{stage}")
+                fact = await runtime.world.commit(f"hidden-tool:{runtime.root.node_id}:hidden:{stage}")
                 assert fact is not None
                 assert fact.data["tool"] == name
                 assert fact.data["tool_ref"] is None

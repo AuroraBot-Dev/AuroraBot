@@ -10,7 +10,7 @@ order: 7
 
 ## 动机
 
-当前 setup、check、docs、panel、donk 等命令通过 `shutil.which` / `command -v` 在 PATH 中解析 git、uv、pnpm 等外部工具（`src/aurora_cli/utils/process.py`、`src/aurora_cli/commands/setup.py`、`src/aurora_cli/utils/pnpm.py`）。这要求这些工具预先安装并暴露在 PATH 中。
+当前 setup、check、docs、donk 等命令通过 `shutil.which` / `command -v` 在 PATH 中解析 git、uv、pnpm 等外部工具（`src/aurora_cli/utils/process.py`、`src/aurora_cli/commands/setup.py`、`src/aurora_cli/utils/pnpm.py`）。这要求这些工具预先安装并暴露在 PATH 中。
 
 未来会引入启动器：在软件内部携带并维护独立的 python/uv/pnpm/git，供项目引导与运行使用。启动器不能依赖系统的 PATH，因此外部工具的位置必须可以被显式指定。
 

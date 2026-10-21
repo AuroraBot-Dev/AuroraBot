@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aurora_bot.contracts import LOOP_OPERATIONS, TOOL_CONTRIBUTIONS, WORLD_PORTS, ScopeCatalog, Tool
 from aurora_bot.contracts.pkgs.ai import Model
@@ -47,7 +47,7 @@ def declared_scopes(specs: Iterable[ModuleSpec]) -> tuple[tuple[str, ...], tuple
     return tuple(sorted(owns)), tuple(sorted(observes))
 
 
-def validate_declared_scopes(settings: Settings, specs: Iterable[ModuleSpec]) -> None:
+def validate_declared_scopes(settings: Settings, specs: Iterable[Any]) -> None:
     """模块声明拥有或观察的域必须被域注册表覆盖；未注册即启动前失败。"""
     available = resolve(specs).modules
     owns, observes = declared_scopes(available)
@@ -77,9 +77,14 @@ def validate_loop_operations(capabilities: Capabilities) -> None:
         raise ValueError(f"Observe 与 Effect 必须是同一个世界：{names} 必须由同一个对象提供")
 
 
-def _discover(settings: Settings) -> tuple[ModuleSpec, ...]:
+def _discover(settings: Settings) -> tuple[Any, ...]:
     plugin_directory = settings.project_root.joinpath(*_PLUGIN_DIRECTORY)
-    sources = (BuiltinSource(), DirectorySource(plugin_directory), EntryPointSource())
+    sources = (
+        BuiltinSource(),
+        DirectorySource(plugin_directory),
+        EntryPointSource(),
+        EntryPointSource("aurora_module"),
+    )
     specs = tuple(spec for source in sources for spec in source.discover())
     validate_declared_scopes(settings, specs)
     return specs

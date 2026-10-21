@@ -6,7 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from aurora_bot.ai import LiteLLMModelGateway, ModelEndpoint, ProviderEndpoint
-from aurora_bot.contracts import TreeStatus
 from aurora_bot.runtime import compose_runtime
 from tests.ai.endpoint_support import _config, _read_definition
 
@@ -53,8 +52,8 @@ def test_actual_gateway_versions_are_recorded_before_call_and_survive_config_rep
         stop.set()
         try:
             await lifecycle.activate(stop)
-            tree = await runtime.run("核对执行配置", tree_id="model-provenance")
-            assert tree.status is TreeStatus.COMPLETED
+            tree = await runtime.run("核对执行配置", run_id="model-provenance")
+            assert tree.status == "completed"
             assert captured[0]["model"] == "openai/remote-v1"
             assert captured[0]["api_base"] == original.provider.base_url
             assert captured[0]["max_tokens"] == original.max_tokens

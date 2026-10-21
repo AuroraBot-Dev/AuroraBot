@@ -6,7 +6,6 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import TreeStatus
 from aurora_bot.contracts.bot import BotChange, Checkpoint, Goal, WakeStatus
 from aurora_bot.contracts.pkgs.bot import BotClock, BotStateStore
 from aurora_bot.runtime import assemble_runtime
@@ -26,7 +25,7 @@ def test_bot_resumes_its_own_goal_after_restart_without_new_user_input(configure
         runtime = assemble_runtime(config, PlanningModel(), output=lambda _: None)
         try:
             result = await runtime.run("按你自己的判断安排检查。")
-            assert result.status is TreeStatus.COMPLETED
+            assert result.status == "completed"
             state = await runtime.assembly.get(BotStateStore).snapshot()
             assert state.wake("aurora:wake/experiment").status is WakeStatus.PENDING
         finally:
@@ -64,9 +63,9 @@ def test_required_context_overflow_stops_before_model_or_action(configured_proje
             )
             await runtime.assembly.get(BotStateStore).apply(BotChange("large", 0, (goal,)))
             result = await runtime.run("继续核对。")
-            assert result.status is TreeStatus.FAILED
+            assert result.status == "failed"
             assert model.requests == []
-            failure = await runtime.world.commit(f"{result.tree_id}:tree:failed")
+            failure = await runtime.world.commit(f"{result.run_id}:tree:failed")
             assert failure is not None and "必要上下文超过容量" in failure.summary
         finally:
             await runtime.world.close()

@@ -69,7 +69,7 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     runtime = assemble_runtime(config, _Model("secret-in-model-result"))
 
     async def scenario() -> None:
-        await asyncio.wait_for(runtime.run("secret-in-message", tree_id="logging-tree"), timeout=5)
+        await asyncio.wait_for(runtime.run("secret-in-message", run_id="logging-tree"), timeout=5)
         result = await ToolRegistry((_FailingTool(),)).execute(
             ToolCall("logging-call", "test:tool/definition/logging", {"token": "secret-in-arguments"})
         )

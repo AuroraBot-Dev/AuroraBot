@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora_bot.contracts.operation import OperationResult
-    from aurora_bot.contracts.process import TreeProcessDefinition
+    from aurora_bot.contracts.process import CognitionProcess
 
 
 def _query(request_id: str, target: ResourceRef, arguments: Mapping[str, Any]) -> OperationRequest:
@@ -34,7 +34,7 @@ def _query(request_id: str, target: ResourceRef, arguments: Mapping[str, Any]) -
 
 
 async def _recorded_views(
-    registry: OperationRegistry, original: TreeProcessDefinition
+    registry: OperationRegistry, original: CognitionProcess
 ) -> tuple[OperationResult, OperationResult]:
     """通过公共入口读取实际运行的完成版本与开始版本。"""
     found = await registry.dispatch(_query("find-instance", RESOURCE_FIND, {"domain": "engine", "kind": "instance"}))
@@ -77,7 +77,7 @@ def test_instance_discovery_and_historical_inspection_use_real_runtime_and_publi
         stop.set()
         try:
             await lifecycle.activate(stop)
-            await runtime.run("检查实例资源", tree_id="森林/树:一")
+            await runtime.run("检查实例资源", run_id="森林/树:一")
             completed, started = await _recorded_views(runtime.assembly.get(OperationRegistry), original)
         finally:
             await lifecycle.close()

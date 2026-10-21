@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     import asyncio
     from collections.abc import Mapping
 
-    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
     from aurora_bot.contracts.resource import ResourceRef
     from aurora_bot.contracts.rhythm import RhythmObservation, RhythmPrediction
 
@@ -47,4 +47,4 @@ class Cadence(Protocol):
 
     async def run(self, stop_event: asyncio.Event) -> None: ...
 
-    def bind_launcher(self, launcher: TreeLauncher) -> None: ...
+    def bind_launcher(self, launcher: CognitionLauncher) -> None: ...

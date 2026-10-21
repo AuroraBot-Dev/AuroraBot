@@ -6,6 +6,8 @@ order: 3
 
 模组为 Bot 提供一种可发现的能力。她应能理解能力的输入、结果、影响和读取范围，实际调用仍由外围环境校验、执行并记录。先确定这项能力怎样服务主体，再决定它需要哪些端口和世界事实。
 
+通用宿主与共享状态见 [Namespace 与 hook](./namespace-modules)。本页介绍需要资源、工具、世界域和清单归档的 Bot 领域模块；两种声明共用宿主的装配与生命周期。
+
 ## 最小领域操作
 
 本地单文件放在 `extensions/plugins/example.py`，包形式放在 `extensions/plugins/example/module.py`，两种形式都导出唯一 `MODULE`。目录由 Git 忽略；需要发布时使用独立 Python 包和 `aurorabot_plugin` entry point。包内可以相对导入，重新发现会重新加载该本地包及其子模块。
@@ -94,7 +96,7 @@ MODULE = build
 
 准备阶段可以初始化外部资源并返回异步清理函数，构造阶段完成端口与贡献绑定。若消费者需要在 `prepare` 读取端口，提供者也必须在该阶段发布它，或由宿主预先注入；不能假设稍后构造的端口已经存在。
 
-`activate` 完成恢复和事件入口激活，`ready` 可归档已冻结的实际定义，`run` 接收停止事件并持续运行。`drain/close` 和准备清理按计划关闭，后台失败必须交还监督机制。创建认知入口的能力贡献 `TREE_LAUNCHER_BINDINGS`，不直接导入 runtime 或 engine。
+`activate` 完成恢复和事件入口激活，`ready` 可归档已冻结的实际定义，`run` 接收停止事件并持续运行。`drain/close` 和准备清理按计划关闭，后台失败必须交还监督机制。创建认知入口的能力贡献 `COGNITION_BINDINGS`，不直接导入 runtime 或 engine。
 
 静态定义用 `resources`；由实际配置或所选实例决定的定义用 `RESOURCE_CONTRIBUTIONS`。需要跨重启读取正文时贡献 `RESOURCE_CONTENTS`，由统一生命周期归档；大量实例和内容用动态提供者分页发现，避免把每条数据塞进内核注册表。定义、别名和运行实例的精确语义见[资源与操作协议](../reference/resources-and-operations)。
 

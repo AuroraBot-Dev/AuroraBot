@@ -8,13 +8,13 @@ if TYPE_CHECKING:
     import asyncio
     from datetime import datetime
 
-    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
 
 
 class BotClock(Protocol):
     """兑现 Bot 已经选择的未来活动安排。"""
 
-    def bind_launcher(self, launcher: TreeLauncher) -> None:
+    def bind_launcher(self, launcher: CognitionLauncher) -> None:
         """绑定当前进程的认知运行入口。"""
         ...
 

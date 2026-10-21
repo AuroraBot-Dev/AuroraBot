@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import ChatMessage, ToolCall, TreeStatus
+from aurora_bot.contracts import ChatMessage, ToolCall
 from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.tool import DELEGATE_TOOL
 from aurora_bot.mcp.config import PlatformsConfig
@@ -45,37 +45,41 @@ def test_actual_delegation_records_each_node_definition_at_the_time_of_use(confi
         stop.set()
         try:
             await lifecycle.activate(stop)
-            tree = await runtime.run("委派核对并整合结果", tree_id="agent-provenance")
-            assert tree.status is TreeStatus.COMPLETED
-            root, child = tree.nodes
+            tree = await runtime.run("委派核对并整合结果", run_id="agent-provenance")
+            assert tree.status == "completed"
             catalog = runtime.assembly.get(AgentCatalog)
-            assert root.definition is catalog.get(root.definition_id)
-            assert child.definition is catalog.get(worker_id)
-            assert root.definition_ref != child.definition_ref
-            steps = ((root, 0), (child, 0), (root, 1))
-            for request, (node, index) in zip(model.requests, steps, strict=True):
-                expected = {"key": node.definition_id, "revision": node.definition_ref.revision}
-                assert request.resources[0] == node.definition_ref
-                assert request.resources.count(node.definition_ref) == 1
-                record = await runtime.world.commit(f"{tree.tree_id}:{node.node_id}:model:{index}:requested")
+            root = catalog.get(runtime.root.agent)
+            child = catalog.get(worker_id)
+            assert root.ref != child.ref
+            child_id = f"{tree.run_id}:1"
+            steps = (
+                (root, runtime.root.node_id, 0),
+                (child, child_id, 0),
+                (root, runtime.root.node_id, 1),
+            )
+            for request, (node, node_id, index) in zip(model.requests, steps, strict=True):
+                expected = {"key": node.definition_id, "revision": node.ref.revision}
+                assert request.resources[0] == node.ref
+                assert request.resources.count(node.ref) == 1
+                record = await runtime.world.commit(f"{tree.run_id}:{node_id}:model:{index}:requested")
                 assert record is not None
                 assert record.data["definition_ref"] == expected
                 assert list(record.data["resources"]) == [
                     {"key": str(ref.key), "revision": ref.revision} for ref in request.resources
                 ]
-            started = await runtime.world.commit(f"{tree.tree_id}:tree:started")
-            spawned = await runtime.world.commit(f"{tree.tree_id}:{child.node_id}:spawned")
+            started = await runtime.world.commit(f"{tree.run_id}:tree:started")
+            spawned = await runtime.world.commit(f"{tree.run_id}:{child_id}:spawned")
             assert started is not None and spawned is not None
             assert started.data["definition_ref"] == {
                 "key": root.definition_id,
-                "revision": root.definition_ref.revision,
+                "revision": root.ref.revision,
             }
             assert spawned.data["definition_ref"] == {
                 "key": child.definition_id,
-                "revision": child.definition_ref.revision,
+                "revision": child.ref.revision,
             }
             delegate = next(tool for tool in model.requests[0].tools if tool.name == DELEGATE_TOOL)
-            result = await runtime.world.commit(f"{tree.tree_id}:{root.node_id}:delegate:result")
+            result = await runtime.world.commit(f"{tree.run_id}:{runtime.root.node_id}:delegate:result")
             assert result is not None
             assert result.data["tool_ref"] == {"key": DELEGATE_TOOL, "revision": delegate.ref.revision}
         finally:

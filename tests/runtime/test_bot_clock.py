@@ -11,7 +11,7 @@ import pytest
 
 from aurora_bot.bot.store import JournalBotState
 from aurora_bot.clock import PersistentBotClock
-from aurora_bot.contracts import AgentDefinition, AgentTree, TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts import CognitionRequest, CognitionResult, WorldFrontier
 from aurora_bot.contracts.bot import BotChange, Goal, GoalStatus, WakePlan, WakeStatus
 from aurora_bot.world import SqlAlchemyWorldJournal
 
@@ -21,33 +21,24 @@ if TYPE_CHECKING:
 _NOW = datetime(2026, 10, 18, 12, tzinfo=UTC)
 _GOAL = Goal("aurora:goal/check", "检查结果", "确认结果")
 _WAKE = WakePlan("aurora:wake/check", _NOW, "核对先前发起的操作", _GOAL.goal_id)
-_AGENT = AgentDefinition(
-    "aurora:agent/definition/root",
-    "认知",
-    "aurora:prompt/agent/root",
-    "test:ai/endpoint/fake",
-    frozenset(),
-    frozenset(),
-)
 
 
 @dataclass(slots=True)
 class FakeLauncher:
     """记录实际启动的认知，可模拟故障与正常结束。"""
 
-    requests: list[TreeLaunchRequest] = field(default_factory=list)
+    requests: list[CognitionRequest] = field(default_factory=list)
     failure: Exception | None = None
     stop: asyncio.Event | None = None
 
-    async def launch_tree(self, request: TreeLaunchRequest) -> AgentTree:
+    async def launch(self, request: CognitionRequest) -> CognitionResult:
         """执行一次确定的认知，不访问模型或网络。"""
         self.requests.append(request)
         if self.failure is not None:
             raise self.failure
         if self.stop is not None:
             self.stop.set()
-        tree = AgentTree.create(request.tree_id or "test", "root", _AGENT, request.message, request.frontier)
-        return tree.complete("root", "已核对")
+        return CognitionResult(request.run_id or "test", "已核对")
 
 
 def test_due_wake_survives_restart_and_runs_once_without_external_input(tmp_path: Path) -> None:
@@ -69,7 +60,7 @@ def test_due_wake_survives_restart_and_runs_once_without_external_input(tmp_path
             await clock.evaluate_once(_NOW)
             await clock.evaluate_once(_NOW + timedelta(hours=1))
             assert len(launcher.requests) == 1
-            assert launcher.requests[0].tree_id == clock.tree_id(_WAKE)
+            assert launcher.requests[0].run_id == clock.run_id(_WAKE)
             assert launcher.requests[0].focus_goal_ids == (_GOAL.goal_id,)
             cause_id = launcher.requests[0].caused_by
             assert cause_id is not None and await reopened.commit(cause_id) is not None
@@ -96,7 +87,7 @@ def test_restart_reconciles_started_runs_without_replaying_actions(
         await state.apply(BotChange("plan", 0, (_GOAL,), (_WAKE,)))
         await state.apply(BotChange("claim", 1, wakes=(replace(_WAKE, status=WakeStatus.RUNNING),)))
         clock = PersistentBotClock(JournalBotState(world, state.bot_id), world)
-        tree_id = clock.tree_id(_WAKE)
+        tree_id = clock.run_id(_WAKE)
         await world.append_commit(
             commit_id=f"{tree_id}:tree:{marker}",
             kind=f"engine.tree.{marker}",

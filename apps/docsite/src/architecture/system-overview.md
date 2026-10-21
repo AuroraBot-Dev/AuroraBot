@@ -4,7 +4,7 @@ order: 1
 
 # 系统总览
 
-AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动环境。Bot 拥有世界日志与森林；`AgentTree` 是她的一次认知运行。进程退出不会结束她已经接受的目标或取消尚未到期的活动。
+AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动环境。Bot 拥有世界日志、目标与记忆；一次认知执行通过请求与结果连接到她的持续生活，内部拓扑由执行器决定。进程退出不会结束她已经接受的目标或取消尚未到期的活动。
 
 ## 持续闭环
 
@@ -17,7 +17,8 @@ AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动�
 | 包 | 职责 |
 | --- | --- |
 | `src/aurora_bot/contracts`、`src/aurora_bot/utils` | 公共值对象、能力端口、贡献契约与无上层依赖的工具 |
-| `src/aurora_bot/kernel` | 模组发现、版本兼容、依赖解析、阶段计划、装配与生命周期监督 |
+| `src/aurora_kernel` | 模块无关的 namespace、hook、ctx、发现、依赖解析与生命周期监督 |
+| `src/aurora_bot/kernel` | Bot 契约、贡献、资源和世界域的装配适配 |
 | `src/aurora_bot/runtime` | 从冻结装配创建 Bot 门面，绑定认知入口并驱动前台 |
 | `src/aurora_bot/bot` | 从世界提交投影主体目标、检查点和唤醒安排 |
 | `src/aurora_bot/clock` | 独立兑现主体保存的未来安排 |
@@ -39,23 +40,25 @@ AuroraBot 为一个长期存在的 Bot 提供世界、目标、记忆和行动�
 
 ## 组合与发现
 
-发现源包括安装内的 `aurora_bot` 包、项目本地 `extensions/plugins/` 与 `aurorabot_plugin` entry point。本地插件支持单文件或带 `module.py` 的包；包内相对导入与重新发现使用独立模块空间。
+发现源包括安装内的 `aurora_bot` 包、项目本地 `extensions/plugins/` 与 `aurorabot_plugin` / `aurora_module` entry point。本地插件支持单文件或带 `module.py` 的包；包内相对导入与重新发现使用独立模块空间。
 
-模组以 `namespace:kernel/module/path` 标识，声明发布版本与内核 API 兼容范围，并按契约类型表达 `provides/requires`、按贡献点表达 `contributes/consumes/declares`。同优先级能力冲突、缺失依赖、未声明贡献和依赖环在启动效果前失败。完整模组声明冻结为规范 JSON，并在生命周期中归档；声明摘要描述发布清单，不等同于代码或整个 Python 环境的快照。
+Bot 领域模组以 `namespace:kernel/module/path` 标识，声明发布版本与内核 API 兼容范围，并按契约类型表达 `provides/requires`、按贡献点表达 `contributes/consumes/declares`。同优先级能力冲突、缺失依赖、未声明贡献和依赖环在启动效果前失败。完整模组声明冻结为规范 JSON，并在生命周期中归档；声明摘要描述发布清单，不等同于代码或整个 Python 环境的快照。
 
-生命周期默认经过 `prepare → construct → activate → ready → run → drain → close`，也支持声明额外阶段与顺序约束。构造阶段结束后冻结 `Assembly`；门面创建并完成所有 `TreeLauncher` 接线之后，才启动运行阶段。准备资源有逆序清理，后台失败交给宿主，关闭等待已启动的清理完成。第三方代码模组与进程同权限运行，当前没有操作系统隔离。
+生命周期默认经过 `prepare → construct → activate → ready → run → drain → close`，也支持声明额外阶段与顺序约束。构造阶段结束后固定 `Assembly` 的声明索引，能力值从共享 ctx 读取；门面创建并完成所有 `CognitionLauncher` 接线之后，才启动运行阶段。准备资源有逆序清理，后台失败交给宿主，关闭等待已启动的清理完成。第三方代码模组与进程同权限运行，当前没有操作系统隔离。
+
+通用模块通过 `@namespace` 注册初始化函数，通过装饰器声明调用点和 hook。宿主自动建立模块的 ctx 空间，所有模块都能读写全部空间；容器读写采用快照，多字段更新使用带版本冲突检测的事务，修改保留来源。服务对象按引用共享，ctx 不替代持久世界事实。Bot 适配层将领域契约转换为宿主名称，通用内核不导入 Bot 或 CLI。具体接口见 [Namespace 与 hook](../develop/namespace-modules)。
 
 ## 项目入口
 
-Python 使用 src layout：`src/aurora_cli/` 提供项目入口，`src/aurora_bot/` 提供框架，
-由同一份 `pyproject.toml` 发布为 AuroraBot。导入使用 `aurora_cli` 与 `aurora_bot`，`src/` 仅是源码目录。终端命令仍为 `aurora`，由 `aurora_cli.main:main` 提供入口。
+Python 使用 src layout：`src/aurora_cli/` 提供项目入口，`src/aurora_kernel/` 提供通用宿主，`src/aurora_bot/` 提供领域框架，
+由同一份 `pyproject.toml` 发布为 AuroraBot。导入使用 `aurora_cli`、`aurora_kernel` 与 `aurora_bot`，`src/` 仅是源码目录。终端命令仍为 `aurora`，由 `aurora_cli.main:main` 提供入口。
 开发时先执行 `uv sync --locked --group dev`，测试与运行均使用安装后的包。
 
 前端应用位于 `apps/`，共享库和工程配置位于 `packages/`、`tooling/`，
 由根目录 pnpm workspace 管理。uv 与 pnpm 各自维护依赖锁、测试和构建；
 根目录 `pnpm check` 汇总两侧检查，Python 开发也可以独立使用 `uv run aurora check`。
 
-`aurora_cli` 负责 CLI、`.env`、只读配置解析、进程日志和信号处理，再调用 `aurora_bot.runtime` 的装配入口。`aurora_bot` 不导入 `aurora_cli`。命令和配置按目录约定发现，新增能力不需要修改中心分派表。
+`aurora_cli` 负责 CLI、`.env`、只读配置解析、进程日志和信号处理，再调用 `aurora_bot.runtime` 的装配入口。命令执行通过 namespace 调用点进入独立宿主；Bot 装配使用自己的宿主与 ctx。`aurora_bot` 不导入 `aurora_cli`。命令和配置按目录约定发现，新增能力不需要修改中心分派表。
 
 `aurora start` 和 `--headless` 共用生命周期；无界面模式只排除交互式前台。Console 普通输入先提交世界；本地帮助、清屏和退出不作为外部观察。领域命令由同一个操作定义解析和校验。
 

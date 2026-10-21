@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     )
     from aurora_bot.contracts.memory import MemoryExposure
     from aurora_bot.contracts.pkgs.world import WorldJournal
-    from aurora_bot.contracts.process import TreeProcessDefinition
+    from aurora_bot.contracts.process import CognitionProcess
 
 _TOOL_EVENT_KINDS = {
     ToolStatus.SUCCEEDED: TOOL_SUCCEEDED,
@@ -65,7 +65,7 @@ class EngineWorldEffects:
         world: WorldJournal,
         *,
         tools: tuple[ToolDefinition, ...],
-        process: TreeProcessDefinition,
+        process: CognitionProcess,
         bot_id: str = "aurora:bot/default",
     ) -> None:
         """绑定世界与实际选中的冻结工具接口，不在写入时重新推断版本。"""

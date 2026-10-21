@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from aurora_bot.contracts import TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts import CognitionRequest, WorldFrontier
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 
 if TYPE_CHECKING:
@@ -101,11 +101,11 @@ def read_reference(data: Mapping[str, Any]) -> ResourceRef:
     return ResourceRef(ResourceKey.parse(data["key"]), data["revision"])
 
 
-def launch_data(request: TreeLaunchRequest) -> dict[str, Any]:
+def launch_data(request: CognitionRequest) -> dict[str, Any]:
     """记录重启前尚未启动的认知请求。"""
     return {
         "message": request.message,
-        "tree_id": request.tree_id,
+        "tree_id": request.run_id,
         "agent": request.agent,
         "frontier": dict(request.frontier.positions),
         "caused_by": request.caused_by,
@@ -114,9 +114,9 @@ def launch_data(request: TreeLaunchRequest) -> dict[str, Any]:
     }
 
 
-def read_launch(data: Mapping[str, Any]) -> TreeLaunchRequest:
+def read_launch(data: Mapping[str, Any]) -> CognitionRequest:
     """重启恢复使用原来的运行身份和触发事实。"""
-    return TreeLaunchRequest(
+    return CognitionRequest(
         data["message"],
         data["tree_id"],
         data["agent"],

@@ -13,9 +13,9 @@ from aurora_bot.agents import AgentCatalog
 from aurora_bot.contracts import AgentTree, ChatMessage, ToolCall, TreeStatus
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
 from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.process import TreeProcessDefinition
+from aurora_bot.contracts.process import CognitionProcess
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.engine.config import EngineConfig
 from aurora_bot.mcp.config import PlatformsConfig
 from aurora_bot.runtime import compose_runtime
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 def test_process_version_covers_every_execution_setting() -> None:
     """身份、策略和每项上界都属于执行定义，同名更改不能沿用旧版本。"""
-    original = TreeProcessDefinition()
+    original = CognitionProcess()
     assert original.ref.revision == hashlib.sha256(original.content).hexdigest()
     for changed in (
         replace(original, max_depth=1),
@@ -50,26 +50,26 @@ def test_process_version_covers_every_execution_setting() -> None:
 def test_process_limits_are_positive_integers(limit: int) -> None:
     """布尔值也不能作为执行次数发布。"""
     with pytest.raises(ValueError, match="运行上界"):
-        TreeProcessDefinition(max_steps=limit)
+        CognitionProcess(max_steps=limit)
 
 
 def test_runner_cannot_label_its_loop_as_an_unimplemented_strategy() -> None:
     """过程声明必须与执行方式一致，不支持的策略在运行开始前拒绝。"""
     root = _agent()
     with pytest.raises(ValueError, match="不支持认知策略"):
-        AgentTreeRunner(
+        CognitionEngine(
             SequenceModel([]),
             _assembler(),
             AgentCatalog((root,)),
             ToolRegistry(),
-            process=TreeProcessDefinition(strategy="breadth_first"),
+            process=CognitionProcess(strategy="breadth_first"),
         )
 
 
 @pytest.mark.parametrize("field", ["max_depth", "max_nodes"])
 def test_delegation_limits_come_from_the_published_process(field: str) -> None:
     """修改过程定义会实际限制委派，不能只改变资源说明。"""
-    process = replace(TreeProcessDefinition(), **{field: 1})
+    process = replace(CognitionProcess(), **{field: 1})
     root = _agent(tools=frozenset({DELEGATE_TOOL}), children=frozenset({"worker"}))
     worker = _agent("worker", "worker", tools=frozenset({DELEGATE_TOOL}), children=frozenset({"worker"}))
     call = ToolCall("delegate", DELEGATE_TOOL, {"agent": worker.definition_id, "instruction": "检查证据"})
@@ -79,7 +79,7 @@ def test_delegation_limits_come_from_the_published_process(field: str) -> None:
     responses.append(ChatMessage.assistant("父节点完成"))
     model = SequenceModel(responses)
     agents = AgentCatalog((root, worker))
-    runner = AgentTreeRunner(model, _assembler(), agents, ToolRegistry((DelegateTool(agents),)), process=process)
+    runner = CognitionEngine(model, _assembler(), agents, ToolRegistry((DelegateTool(agents),)), process=process)
     result = asyncio.run(runner.run(AgentTree.create("tree", "root", root, "开始核对")))
     assert result.status is TreeStatus.COMPLETED
     assert runner.process_definition is process
@@ -105,8 +105,8 @@ def test_instance_keeps_original_process_after_config_change_and_restart(configu
         stop.set()
         try:
             await lifecycle.activate(stop)
-            tree = await runtime.run("读取运行依据", tree_id="process:tree")
-            assert tree.status is TreeStatus.COMPLETED
+            tree = await runtime.run("读取运行依据", run_id="process:tree")
+            assert tree.status == "completed"
         finally:
             await lifecycle.close()
         revised = config.with_value(ENGINE_CONFIG, EngineConfig(2, 3, 2))

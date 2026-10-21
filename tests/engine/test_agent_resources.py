@@ -134,8 +134,11 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
         original = runtime.assembly.get(AgentCatalog).get(identity)
         try:
             await lifecycle.activate(asyncio.Event())
-            tree = await runtime.run("记录实际使用的原型", tree_id="agent-version")
-            assert tree.node(tree.root_id).definition is original
+            tree = await runtime.run("记录实际使用的原型", run_id="agent-version")
+            assert tree.error is None
+            fact = await runtime.world.commit(f"{tree.run_id}:{runtime.root.node_id}:model:0:requested")
+            assert fact is not None
+            assert fact.data["definition_ref"] == {"key": identity, "revision": original.ref.revision}
         finally:
             await lifecycle.close()
         agents = config.get(AGENTS_CONFIG)
@@ -152,7 +155,7 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
             await handle.activate(asyncio.Event())
             current = resumed.assembly.get(AgentCatalog).get(identity)
             assert current.ref != original.ref
-            fact = await resumed.world.commit(f"agent-version:{tree.root_id}:model:0:requested")
+            fact = await resumed.world.commit(f"agent-version:{runtime.root.node_id}:model:0:requested")
             assert fact is not None
             assert fact.data["definition_ref"] == {"key": identity, "revision": original.ref.revision}
             assert fact.data["definition_ref"] in fact.data["resources"]

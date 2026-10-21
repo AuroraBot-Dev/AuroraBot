@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.contracts import AgentTree, ChatMessage, TreeLaunchRequest
+from aurora_bot.contracts import AgentTree, ChatMessage, CognitionRequest
 from aurora_bot.mcp.config import PlatformsConfig
 from aurora_bot.runtime import compose_runtime
 from aurora_bot.world import SqlAlchemyWorldJournal
@@ -42,7 +42,7 @@ def test_restart_rejects_an_existing_instance_before_new_facts_or_model_calls(
         stop.set()
         try:
             await lifecycle.activate(stop)
-            await runtime.launch_tree(TreeLaunchRequest("核对结果", tree_id="persistent-instance"))
+            await runtime.launch(CognitionRequest("核对结果", run_id="persistent-instance"))
         finally:
             await lifecycle.close()
         model = FakeModel()
@@ -50,11 +50,11 @@ def test_restart_rejects_an_existing_instance_before_new_facts_or_model_calls(
         try:
             await handle.activate(stop)
             before = await resumed.world.cursor()
-            with pytest.raises(ValueError, match="AgentTree 已存在"):
+            with pytest.raises(ValueError, match="认知运行已存在"):
                 if entry == "run":
-                    await resumed.run("核对结果", tree_id="persistent-instance")
+                    await resumed.run("核对结果", run_id="persistent-instance")
                 else:
-                    await resumed.launch_tree(TreeLaunchRequest("核对结果", tree_id="persistent-instance"))
+                    await resumed.launch(CognitionRequest("核对结果", run_id="persistent-instance"))
             assert await resumed.world.cursor() == before
             assert not model.requests
         finally:

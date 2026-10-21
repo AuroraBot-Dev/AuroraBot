@@ -22,10 +22,9 @@ COMMAND: CommandSpec = {
         "--config": "从模板创建个人配置",
         "--env": "从模板创建环境文件",
         "--docs": "安装文档站所在的应用工作区依赖",
-        "--panel": "安装面板所在的应用工作区依赖",
     },
 }
-_FLAG_STEPS = ("python", "config", "env", "docs", "panel")
+_FLAG_STEPS = ("python", "config", "env", "docs")
 
 
 def _selection(arguments: argparse.Namespace) -> dict[str, bool]:
@@ -74,7 +73,7 @@ def execute(arguments: argparse.Namespace) -> int:
         return EXIT_FAILURE
     if selected["env"] and not _ensure_env_copy(root):
         return EXIT_FAILURE
-    if selected["docs"] or selected["panel"]:
+    if selected["docs"]:
         if shutil.which("pnpm") is None:
             sys.stderr.write("未找到 pnpm，跳过应用工作区依赖安装；安装 pnpm 后重新运行本命令即可。\n")
         else:

@@ -5,6 +5,7 @@ order: 2
 # 架构
 
 - [系统总览](./system-overview)：主体、同级能力包与进程组合。
+- [Namespace 与 hook](../develop/namespace-modules)：通用宿主、共享 ctx 与 Bot 适配。
 - [认知与恢复](./runtime-core)：持久状态、世界前沿与上下文连续性。
 - [配置与存储](./configs)：模型、外围连接与数据目录。
 - [节律与记忆模型](./learning)：训练数据、标签边界、启用与评估。

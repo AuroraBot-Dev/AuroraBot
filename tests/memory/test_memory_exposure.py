@@ -11,7 +11,7 @@ from aurora_bot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, Me
 from aurora_bot.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
 from aurora_bot.contracts.memory_codec import exposure_data, read_exposure
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.tools import ToolRegistry
 from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.memory.facts import _NOW, _fact
@@ -97,7 +97,7 @@ def test_engine_persists_the_assembled_exposure_before_model_attempt(tmp_path: P
         tree = AgentTree.create("tree", "root", agent, "核对")
         model = FakeModel([ChatMessage.assistant("已核对")])
         try:
-            await AgentTreeRunner(
+            await CognitionEngine(
                 model,
                 _assembler(limit=900),
                 AgentCatalog((agent,)),

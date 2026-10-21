@@ -12,6 +12,7 @@ from aurora_bot.artifacts.module import MODULE as ARTIFACTS_MODULE
 from aurora_bot.artifacts.store import FileArtifactStore
 from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ModelRequest
 from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS
+from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
 from aurora_bot.contracts.pkgs.prompt import PromptAssembler
 from aurora_bot.contracts.pkgs.resources import ResourceCatalog
@@ -166,18 +167,18 @@ def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(co
         source = configured_project / "config" / "prompts" / "builtin" / "root.md"
         source.write_text("这份新正文尚未用于当前运行。", encoding="utf-8")
         try:
-            tree = await runtime.run("检查提示词来源", tree_id="prompt-source")
+            await runtime.run("检查提示词来源", run_id="prompt-source")
             assert len(model.requests) == 1
             request = model.requests[0]
             assert request.resources == (
-                tree.node(tree.root_id).definition_ref,
+                runtime.assembly.get(AgentCatalog).get(runtime.root.agent).ref,
                 *(fragment.ref for fragment in selected),
                 request.endpoint.ref,
                 request.endpoint.provider.ref,
                 *(tool.ref for tool in request.tools),
             )
             assert "这份新正文尚未用于当前运行。" not in request.messages[0].content
-            record = await runtime.world.commit(f"prompt-source:{tree.root_id}:model:0:requested")
+            record = await runtime.world.commit(f"prompt-source:{runtime.root.node_id}:model:0:requested")
             assert record is not None
             assert list(record.data["resources"]) == [
                 {"key": str(ref.key), "revision": ref.revision} for ref in request.resources

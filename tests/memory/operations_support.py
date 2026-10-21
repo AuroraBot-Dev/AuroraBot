@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
-from aurora_bot.contracts import TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts import CognitionRequest, WorldFrontier
 from aurora_bot.contracts.bot import BotChange, Checkpoint, Goal
 from aurora_bot.contracts.operation import OperationKind, OperationRequest
 from aurora_bot.contracts.pkgs.bot import BotStateStore
@@ -43,8 +43,8 @@ async def prepared_runtime(project: Path) -> AsyncIterator[tuple[AuroraRuntime, 
         state = runtime.assembly.get(BotStateStore)
         goal = Goal(GOAL, "核对实验结果", "结果已确认", checkpoint=Checkpoint(evidence_refs=(SOURCE,)))
         await state.apply(BotChange("goal", 0, (goal,)))
-        tree = await runtime.launch_tree(TreeLaunchRequest("核对实验", tree_id="memory-audit", focus_goal_ids=(GOAL,)))
-        identity = f"{tree.tree_id}:{tree.root_id}:model:0:requested"
+        tree = await runtime.launch(CognitionRequest("核对实验", run_id="memory-audit", focus_goal_ids=(GOAL,)))
+        identity = f"{tree.run_id}:{runtime.root.node_id}:model:0:requested"
         await runtime.world.append_commit(
             commit_id=OUTCOME,
             kind="experiment.completed",

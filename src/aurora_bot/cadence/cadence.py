@@ -18,7 +18,7 @@ from aurora_bot.cadence.state import (
     read_launch,
     read_reference,
 )
-from aurora_bot.contracts import MCP_EVENT_RECEIVED, TreeLaunchRequest, TreeStatus, WorldFrontier
+from aurora_bot.contracts import MCP_EVENT_RECEIVED, CognitionRequest, WorldFrontier
 from aurora_bot.contracts.bot import GoalStatus, WakeStatus
 from aurora_bot.contracts.identity import Identifier
 from aurora_bot.contracts.resource_codec import resource_ref_data
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from aurora_bot.contracts import WorldCommit
     from aurora_bot.contracts.pkgs.bot import BotStateStore
     from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
-    from aurora_bot.contracts.pkgs.runtime import TreeLauncher
+    from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
     from aurora_bot.contracts.pkgs.world import WorldReader, WorldWriter
 
 _logger = get_logger(__name__)
@@ -57,7 +57,7 @@ class Cadence:
         writer: WorldWriter,
         *,
         policy: RhythmPolicy,
-        launcher: TreeLauncher | None = None,
+        launcher: CognitionLauncher | None = None,
         agent: str | None = None,
         enabled: bool = False,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
@@ -85,10 +85,10 @@ class Cadence:
         self._state = CadenceState(0, 0, current, current)
         self._initialized = False
         self._has_decision = False
-        self._recoverable: list[TreeLaunchRequest] = []
+        self._recoverable: list[CognitionRequest] = []
         self._lock = asyncio.Lock()
 
-    def bind_launcher(self, launcher: TreeLauncher) -> None:
+    def bind_launcher(self, launcher: CognitionLauncher) -> None:
         """绑定当前进程的认知入口。"""
         self._launcher = launcher
 
@@ -112,7 +112,7 @@ class Cadence:
             return
         head = await self._reader.head(frozenset({self.scope}))
         position = 0
-        planned: dict[str, TreeLaunchRequest] = {}
+        planned: dict[str, CognitionRequest] = {}
         while position < head.sequence(self.scope):
             commits = await self._reader.commits(self.scope, position, _PAGE_SIZE)
             if not commits:
@@ -124,7 +124,7 @@ class Cadence:
                     request = commit.data.get("launch")
                     if request is not None:
                         launch = read_launch(request)
-                        planned[launch.tree_id or ""] = launch
+                        planned[launch.run_id or ""] = launch
                 elif commit.kind in {CADENCE_TREE_COMPLETED, CADENCE_TREE_FAILED}:
                     self._restore(commit)
                     planned.pop(commit.data["tree_id"], None)
@@ -243,15 +243,15 @@ class Cadence:
             await self._launch(request)
         return deliberating
 
-    async def _request(self, cause: WorldCommit, focus_goal_ids: tuple[str, ...]) -> TreeLaunchRequest:
+    async def _request(self, cause: WorldCommit, focus_goal_ids: tuple[str, ...]) -> CognitionRequest:
         """即时事件保留会话域，其余机会交给主体理解近期世界。"""
         reactive = self._state.reactive_commit
         trigger = await self._reader.commit(reactive) if reactive is not None and reactive != cause.commit_id else cause
         if trigger is None:
             raise ValueError("节律触发事实不存在，不能凭空恢复会话")
-        return TreeLaunchRequest(
+        return CognitionRequest(
             _reactive_message(trigger) if reactive else DEFAULT_LAUNCH_MESSAGE,
-            tree_id=f"cadence:{uuid4().hex}",
+            run_id=f"cadence:{uuid4().hex}",
             agent=self._state.reactive_agent if reactive else self.agent,
             frontier=WorldFrontier(trigger.scopes) if reactive else WorldFrontier(),
             caused_by=trigger.commit_id,
@@ -273,25 +273,25 @@ class Cadence:
             occurred_at=now,
         )
 
-    async def _launch(self, request: TreeLaunchRequest) -> None:
+    async def _launch(self, request: CognitionRequest) -> None:
         """结果只记录实际运行状态；取消保留安排供重启核对。"""
         if self._launcher is None:
             raise RuntimeError("节律认知入口尚未绑定")
         started = asyncio.get_running_loop().time()
         try:
-            tree = await self._launcher.launch_tree(request)
+            result = await self._launcher.launch(request)
         except Exception as error:
-            _logger.exception("节律认知失败 tree_id={}", request.tree_id)
+            _logger.exception("节律认知失败 tree_id={}", request.run_id)
             await self._finish(request, "failed", str(error), started)
             return
-        status = "completed" if tree.status is TreeStatus.COMPLETED else "failed"
-        await self._finish(request, status, tree.status.value, started)
+        status = result.status
+        await self._finish(request, status, result.status, started)
 
-    async def _finish(self, request: TreeLaunchRequest, status: str, detail: str, started: float | None = None) -> None:
+    async def _finish(self, request: CognitionRequest, status: str, detail: str, started: float | None = None) -> None:
         """保留结果和实际运行耗时，不将调用成功等同于目标完成。"""
         state = replace(self._state, failed_runs=0 if status == "completed" else self._state.failed_runs + 1)
         await self._writer.append_commit(
-            commit_id=f"cadence:tree:{request.tree_id}:result",
+            commit_id=f"cadence:tree:{request.run_id}:result",
             kind=CADENCE_TREE_COMPLETED if status == "completed" else CADENCE_TREE_FAILED,
             source=self._bot_id,
             summary=f"节律认知结果：{status}，{detail}",
@@ -302,7 +302,7 @@ class Cadence:
                 "policy": resource_ref_data(self._policy.ref),
                 "policy_parameters": dict(self._policy.parameters),
                 "state": state.data(),
-                "tree_id": request.tree_id,
+                "tree_id": request.run_id,
                 "status": status,
                 "detail": detail,
                 "duration_seconds": asyncio.get_running_loop().time() - started if started is not None else None,
@@ -323,9 +323,9 @@ class Cadence:
         self._state = state
         self._has_decision = True
 
-    async def _reconcile(self, request: TreeLaunchRequest) -> None:
+    async def _reconcile(self, request: CognitionRequest) -> None:
         """只有确认未开始的安排可以恢复交付，已开始的运行先核对结果。"""
-        tree_id = request.tree_id
+        tree_id = request.run_id
         completed = await self._reader.commit(f"{tree_id}:tree:completed")
         failed = await self._reader.commit(f"{tree_id}:tree:failed")
         started = await self._reader.commit(f"{tree_id}:tree:started")

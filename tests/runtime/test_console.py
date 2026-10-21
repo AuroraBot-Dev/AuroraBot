@@ -159,9 +159,8 @@ def test_project_console_runs_message_tree_and_local_commands(configured_project
 
     assert len(model.requests) == 1
     assert model.requests[0].messages[1].content == "请处理"
-    tree = next(iter(runtime._trees.values()))
-    assert tree.caused_by is not None and tree.caused_by.startswith("console:")
-    assert runtime.runtime_status()["trees"]["completed"] == 1
+    assert any(ref.startswith("console:") for message in model.requests[0].messages for ref in message.evidence_refs)
+    assert runtime.runtime_status()["runs"]["completed"] == 1
     assert "Bot> 全链路完成" in output
     help_text = next(text for text in output if text.startswith("Bot> 本地命令："))
     assert "/help /clear /quit" in help_text
@@ -178,7 +177,7 @@ def test_project_headless_waits_only_for_shared_stop_event(configured_project: P
         run_runtime(load_config(configured_project), FakeModel(), headless=True, stop_event=stop, output=output.append)
     )
 
-    assert runtime.runtime_status()["tree_count"] == 0
+    assert runtime.runtime_status()["run_count"] == 0
     assert output == []
 
 

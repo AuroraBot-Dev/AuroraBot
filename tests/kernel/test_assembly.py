@@ -13,19 +13,19 @@ from aurora_bot.ai import LiteLLMModelGateway
 from aurora_bot.ai.config import ProvidersConfig
 from aurora_bot.contracts import (
     MCP_EVENT_RECEIVED,
+    AgentTree,
     ChatMessage,
+    CognitionRequest,
     Tool,
     ToolCall,
     ToolDefinition,
     ToolOutput,
-    TreeLaunchRequest,
-    TreeStatus,
     WorldFrontier,
 )
 from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.ai import Model
 from aurora_bot.contracts.pkgs.cadence import Cadence
-from aurora_bot.contracts.pkgs.engine import AgentTreeRunner
+from aurora_bot.contracts.pkgs.engine import CognitionRunner
 from aurora_bot.contracts.pkgs.memory import MemoryReader
 from aurora_bot.contracts.pkgs.prompt import PromptAssembler
 from aurora_bot.runtime import assemble_runtime
@@ -55,12 +55,11 @@ def test_project_config_builds_complete_runtime(configured_project: Path) -> Non
     model = FakeModel()
     runtime = assemble_runtime(config, model)
 
-    result = asyncio.run(runtime.run("hello", tree_id="tree"))
+    result = asyncio.run(runtime.run("hello", run_id="tree"))
 
-    assert result.status == TreeStatus.COMPLETED
-    assert result.tree_id == "tree"
-    assert result.node(runtime_config.node_id).definition_id == runtime_config.agent
-    assert result.node(runtime_config.node_id).model == root_definition.model
+    assert result.status == "completed"
+    assert result.run_id == "tree"
+    assert model.requests[0].resources[0].key.path.endswith("root")
     assert model.requests[0].model == root_definition.model
     assert [tool.name for tool in model.requests[0].tools] == [
         "aurora:tool/definition/artifact_find",
@@ -106,31 +105,29 @@ def test_cadence_trigger_launches_triage_tree_after_five_world_commits(configure
         await cadence.evaluate_once()
         after = cadence.status()
 
-        assert runtime.runtime_status()["trees"]["completed"] == 1
+        assert runtime.runtime_status()["runs"]["completed"] == 1
         assert before["pending"] == 0 and after["pending"] == 0
         after_cursor = after["cursor"]
         before_cursor = before["cursor"]
         assert isinstance(after_cursor, int) and isinstance(before_cursor, int)
         assert after_cursor > before_cursor
         assert model.requests[0].messages[1].content == "节律唤起：请初筛最近时间窗口内的世界活动。"
-        tree = next(iter(runtime._trees.values()))
-        assert tree.node(tree.root_id).definition_id == "aurora:agent/definition/triage"
+        assert str(model.requests[0].resources[0].key) == "aurora:agent/definition/triage"
         assert echoed == ["Cadence> [aurora:agent/definition/triage] done"]
 
     asyncio.run(scenario())
 
 
-def test_launch_tree_echoes_root_text_without_external_delivery(configured_project: Path) -> None:
+def test_launch_echoes_root_text_without_external_delivery(configured_project: Path) -> None:
     model = FakeModel()
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), model, output=echoed.append)
 
     async def scenario() -> None:
-        result = await runtime.launch_tree(
-            TreeLaunchRequest("节律唤起：请初筛。", agent="aurora:agent/definition/triage")
-        )
-        assert result.status is TreeStatus.COMPLETED
-        assert echoed == ["Cadence> [aurora:agent/definition/triage] done"]
+        result = await runtime.launch(CognitionRequest("节律唤起：请初筛。", agent="aurora:agent/definition/triage"))
+        assert result.status == "completed"
+        await runtime.launch(CognitionRequest("再次检查。", agent="aurora:agent/definition/triage"))
+        assert echoed == ["Cadence> [aurora:agent/definition/triage] done"] * 2
 
     asyncio.run(scenario())
 
@@ -140,7 +137,7 @@ def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path
     model = FakeModel()
     runtime = assemble_runtime(config, model)
 
-    asyncio.run(runtime.run("hello", tree_id="tree-memory"))
+    asyncio.run(runtime.run("hello", run_id="tree-memory"))
 
     assert "与你当前工作相关的世界记忆" in model.requests[0].messages[0].content
 
@@ -148,14 +145,16 @@ def test_memory_snapshot_is_injected_into_prompt_system(configured_project: Path
 def test_presenter_traces_tool_calls(configured_project: Path) -> None:
     echoed: list[str] = []
     runtime = assemble_runtime(load_config(configured_project), FakeModel(), output=echoed.append)
-    tree = runtime.create_tree("开始")
+    tree = AgentTree.create(
+        "trace", runtime.root.node_id, runtime.assembly.get(AgentCatalog).get(runtime.root.agent), "开始"
+    )
     tree = tree.append(
         "root", ChatMessage.assistant(tool_calls=(ToolCall("c1", "test:tool/definition/echo", {"value": "hi"}),))
     )
     tree = tree.append("root", ChatMessage.tool("c1", "hi"))
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
-    runtime.presenter.echo(tree)
+    runtime.presenter.echo(tree.nodes)
 
     assert echoed == [
         "  → [aurora:agent/definition/root] test:tool/definition/echo",
@@ -169,10 +168,12 @@ def test_presenter_renders_rich_for_terminal_sink(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
-    tree = runtime.create_tree("开始")
+    tree = AgentTree.create(
+        "trace", runtime.root.node_id, runtime.assembly.get(AgentCatalog).get(runtime.root.agent), "开始"
+    )
     tree = tree.append("root", ChatMessage.assistant("完成"))
 
-    runtime.presenter.echo(tree)
+    runtime.presenter.echo(tree.nodes)
 
     assert "Cadence> [aurora:agent/definition/root] 完成" in capsys.readouterr().out
 
@@ -291,7 +292,7 @@ def test_config_is_pure_data_until_composition_stages_run(configured_project: Pa
     assert engine.max_depth == EXPECTED_MAX_DEPTH
     assert assembly.get(PromptAssembler) is not None
     assert assembly.get(AgentCatalog) is not None
-    assert assembly.get(AgentTreeRunner) is not None
+    assert assembly.get(CognitionRunner) is not None
 
 
 def test_predefined_agents_form_a_dispatch_chain_with_tool_domains(configured_project: Path) -> None:

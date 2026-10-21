@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from aurora_bot.contracts import FRONT_BINDINGS, TREE_LAUNCHER_BINDINGS
+from aurora_bot.contracts import COGNITION_BINDINGS, FRONT_BINDINGS
 from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.engine import AgentTreeRunner
+from aurora_bot.contracts.pkgs.engine import CognitionRunner
 from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.contracts.pkgs.world import WorldJournal
 from aurora_bot.runtime.config import RuntimeConfig
@@ -26,15 +26,14 @@ class RuntimeFactory(Protocol):
 
 
 def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print) -> AuroraRuntime:
-    """从 Assembly 取出实际协作者创建门面，再绑定全部 TreeLauncher 贡献。"""
+    """从 Assembly 取出实际协作者创建门面，再绑定全部 CognitionLauncher 贡献。"""
     agents = assembly.get(AgentCatalog)
     root = assembly.settings.resolve(RuntimeConfig)
     if root.agent not in agents.ids:
         raise ValueError(f"root 引用了未知 Agent definition：{root.agent}")
     runtime = AuroraRuntime(
         assembly,
-        runner=assembly.get(AgentTreeRunner),
-        agents=agents,
+        runner=assembly.get(CognitionRunner),
         root=root,
         world=assembly.get(WorldJournal),
         operations=assembly.get(OperationRegistry),
@@ -42,6 +41,6 @@ def create_runtime(assembly: Assembly, *, output: Callable[[str], None] = print)
         output=output,
         front_bindings=assembly.contributions(FRONT_BINDINGS),
     )
-    for bind in assembly.contributions(TREE_LAUNCHER_BINDINGS):
+    for bind in assembly.contributions(COGNITION_BINDINGS):
         bind(runtime)
     return runtime

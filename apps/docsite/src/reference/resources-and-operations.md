@@ -53,7 +53,7 @@ order: 1
 
 持久调用身份由 `(bot_id, source, request_id)` 的规范编码摘要构成。相同身份必须保持参数、目标、来源、关联与期限一致；目标首次解析后固定其版本，重试不追随别名变化。主体状态的 `expected_version` 是具体命令参数，不是所有请求都必需的全局字段。
 
-处理者通过 `scopes_for` 声明观察和发布域，通过 `execute` 返回结果。路由校验主体、定义和参数，登记 `operation.requested`，在执行前核对期限，再调用处理者并记录结果。工具适配器把 `scopes_for` 的范围交给 engine 的观察屏障；显式终端调用不创建 AgentTree，也不借此推断模型已经观察了相关事实。这项审计不能代替处理者对外部服务的幂等保护。
+处理者通过 `scopes_for` 声明观察和发布域，通过 `execute` 返回结果。路由校验主体、定义和参数，登记 `operation.requested`，在执行前核对期限，再调用处理者并记录结果。工具适配器把 `scopes_for` 的范围交给 engine 的观察屏障；显式终端调用不启动认知，也不借此推断模型已经观察了相关事实。这项审计不能代替处理者对外部服务的幂等保护。
 
 ## 结果与恢复
 
@@ -74,3 +74,11 @@ order: 1
 过程定义描述如何执行，运行实例记录 Bot、独立实例 ID 和实际定义版本。实例目录从世界投影，以固定 cursor 形成可复查的历史描述；发现结果仍需分页。`started` 只表示缺少规范终态，不能证明当前任务还在进程里执行，也不能授权自动重放。
 
 目录、LLM 提供方和外部服务各有自己的名称边界。原生工具身份在 Provider 边界转换为协议安全别名，响应进入领域前反向映射；提供方的 `sdk_provider` 同样独立于资源路径，不能把资源对象的文本表示发送为远端模型名。
+
+## 认知执行接口
+
+`CognitionRequest` 携带 `message`、可选 `run_id`、Agent、世界前沿、触发事实和记忆范围；运行时补全身份与默认 Agent 后调用 `CognitionRunner.execute()`。`CognitionResult` 返回 `run_id`、`output` 和可选 `error`，`status` 从错误是否存在推导为 `completed` 或 `failed`。运行时还统计抛出的失败与中断，不保存节点图。
+
+调用入口为 `runtime.run(message, run_id=...)`、`runtime.run_from_event(event, run_id=...)` 和 `runtime.launch(request)`；领域模块通过 `COGNITION_BINDINGS` 获取 `CognitionLauncher`。更换执行器不改变输入先入世界、运行身份唯一和未知效果不重放的要求。
+
+持久协议的 `engine.tree.started/completed/failed`、`<运行ID>:tree:<阶段>` 提交身份、`tree_id` 字段和 `world_trees` 查询描述认知执行的历史事实，不要求执行器在内存中构建树。过程资源记录实际策略；默认过程 `aurora:engine/process/agent_tree` 使用深度优先委派。替换执行器仍须按协议登记开始与结果，并保留因果及过程版本。

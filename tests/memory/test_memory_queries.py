@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import ChatMessage, ModelRequest, ToolCall, TreeLaunchRequest, WorldFrontier
+from aurora_bot.contracts import ChatMessage, CognitionRequest, ModelRequest, ToolCall, WorldFrontier
 from aurora_bot.contracts.memory_codec import read_exposure
 from aurora_bot.contracts.operation import OperationStatus
 from aurora_bot.contracts.pkgs.operations import OperationRegistry
@@ -84,9 +84,7 @@ def test_bot_can_expand_a_source_and_audit_only_the_subsequent_actual_exposure(c
         model = ReadingModel()
         runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
         try:
-            await runtime.launch_tree(
-                TreeLaunchRequest("读取补充来源", tree_id="source-read", memory_scopes=frozenset())
-            )
+            await runtime.launch(CognitionRequest("读取补充来源", run_id="source-read", memory_scopes=frozenset()))
             first = await runtime.world.commit("source-read:root:model:0:requested")
             second = await runtime.world.commit("source-read:root:model:1:requested")
             assert first is not None and second is not None

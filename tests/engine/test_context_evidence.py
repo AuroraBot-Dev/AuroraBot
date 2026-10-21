@@ -13,7 +13,7 @@ from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCa
 from aurora_bot.contracts.memory_codec import read_exposure
 from aurora_bot.contracts.operation import OperationDefinition, OperationRequest, OperationResult
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
-from aurora_bot.engine import AgentTreeRunner
+from aurora_bot.engine import CognitionEngine
 from aurora_bot.operations.registry import OperationRegistry
 from aurora_bot.operations.tool import operation_tools
 from aurora_bot.resources.catalog import ResourceCatalog
@@ -106,7 +106,7 @@ def test_operation_sources_survive_receipt_tool_projection_engine_and_provider_b
                 ]
             )
             tree = AgentTree.create("tree", "root", agent, "读取证据")
-            await AgentTreeRunner(
+            await CognitionEngine(
                 model,
                 _assembler(),
                 AgentCatalog((agent,)),

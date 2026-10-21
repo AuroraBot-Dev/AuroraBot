@@ -14,7 +14,7 @@ from aurora_bot.contracts.pkgs.agents import AgentCatalog
 from aurora_bot.contracts.pkgs.ai import Model
 from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
 from aurora_bot.contracts.pkgs.console import TerminalConsole
-from aurora_bot.contracts.pkgs.engine import AgentTreeRunner
+from aurora_bot.contracts.pkgs.engine import CognitionRunner
 from aurora_bot.contracts.pkgs.mcp import McpRuntime
 from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
 from aurora_bot.contracts.pkgs.prompt import PromptAssembler
@@ -159,7 +159,7 @@ def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
         assembly.get(MemoryCheckpoints),
         assembly.get(TerminalConsole),
         assembly.get(McpRuntime),
-        assembly.get(AgentTreeRunner),
+        assembly.get(CognitionRunner),
     )
 
     assert all(capability is not None for capability in capabilities)
