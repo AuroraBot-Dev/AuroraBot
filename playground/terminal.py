@@ -1,18 +1,20 @@
-"""终端编辑和输出格式；管道默认保持一行请求、一行 JSON 响应。"""
+"""终端编辑和输出格式；默认缩进并在终端高亮，紧凑模式用于 JSON Lines。"""
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.output import create_output
+from prompt_toolkit.styles import Style
 
 from playground.commands import Commands
+from playground.rendering import write_response
 from playground.session import Session
 
 if TYPE_CHECKING:
@@ -63,8 +65,8 @@ class CommandCompleter(Completer):
 
     def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
         text = document.text_before_cursor
-        for suggestion in self.commands.suggestions(text):
-            yield Completion(suggestion, start_position=-len(text))
+        for suggestion, description in self.commands.completions(text):
+            yield Completion(suggestion, start_position=-len(text), display_meta=description)
 
 
 def create_editor(commands: Commands, input_stream: Input, output_stream: Output) -> PromptSession[str]:
@@ -74,19 +76,52 @@ def create_editor(commands: Commands, input_stream: Input, output_stream: Output
     def enter(event: KeyPressEvent) -> None:
         if needs_more_input(event.current_buffer.text):
             event.current_buffer.insert_text("\n")
+        elif event.current_buffer.complete_state and event.current_buffer.complete_state.completions:
+            state = event.current_buffer.complete_state
+            event.current_buffer.apply_completion(state.current_completion or state.completions[0])
         else:
             event.current_buffer.validate_and_handle()
 
-    return PromptSession(
+    @bindings.add("tab")
+    def complete(event: KeyPressEvent) -> None:
+        buffer = event.current_buffer
+        if buffer.complete_state and buffer.complete_state.completions:
+            state = buffer.complete_state
+            buffer.apply_completion(state.current_completion or state.completions[0])
+        else:
+            choices = commands.completions(buffer.text)
+            if len(choices) == 1:
+                name, description = choices[0]
+                buffer.apply_completion(Completion(name, start_position=-len(buffer.text), display_meta=description))
+            else:
+                buffer.start_completion(select_first=False)
+
+    @bindings.add("escape")
+    def cancel_completion(event: KeyPressEvent) -> None:
+        event.current_buffer.cancel_completion()
+
+    editor = PromptSession(
         input=input_stream,
         output=output_stream,
         history=InMemoryHistory(),
         completer=CommandCompleter(commands),
-        complete_while_typing=False,
+        complete_while_typing=Condition(lambda: editor.default_buffer.text.startswith("/")),
+        reserve_space_for_menu=8,
+        style=Style.from_dict(
+            {
+                "completion-menu.completion": "bg:#242424 #dedbd5",
+                "completion-menu.completion.current": "bg:#3c352b #f4dfb4",
+                "completion-menu.meta.completion": "bg:#242424 #8f8b83",
+                "completion-menu.meta.completion.current": "bg:#3c352b #bda17a",
+                "scrollbar.background": "bg:#242424",
+                "scrollbar.button": "bg:#69665f",
+            }
+        ),
         multiline=True,
         prompt_continuation="... ",
         key_bindings=bindings,
     )
+    return editor
 
 
 def read_request(stdin: TextIO, editor: PromptSession[str] | None, module: str | None) -> str:
@@ -98,15 +133,14 @@ def read_request(stdin: TextIO, editor: PromptSession[str] | None, module: str |
     return line
 
 
-def interact(stdin: TextIO, stdout: TextIO, stderr: TextIO, *, pretty: bool = False, module: str | None = None) -> int:
+def interact(stdin: TextIO, stdout: TextIO, stderr: TextIO, *, pretty: bool = True, module: str | None = None) -> int:
     commands = Commands(Session())
 
     def write(response: object) -> None:
-        stdout.write(json.dumps(response, ensure_ascii=False, allow_nan=False, indent=2 if pretty else None) + "\n")
-        stdout.flush()
+        write_response(response, stdout, pretty=pretty)
 
     if module is not None:
-        selected = commands.handle(f"use {module}")
+        selected = commands.handle(f"/use {module}")
         if not selected["ok"]:
             write(selected)
             commands.session.close()
@@ -118,12 +152,7 @@ def interact(stdin: TextIO, stdout: TextIO, stderr: TextIO, *, pretty: bool = Fa
             create_editor(commands, input_stream, create_output(stdout=stderr)) if input_stream is not None else None
         )
         if terminal:
-            stderr.write(
-                "Aurora Playground · JSON 或简写命令；help 查看用法\n"
-                "list → use <模块> → describe → <操作> {参数 JSON}\n"
-                "Tab 补全，↑/↓ 历史；JSON 未闭合时回车续行。\n"
-                "exit / Ctrl+D 退出；Ctrl+C 中断。\n"
-            )
+            stderr.write("Aurora Playground\n")
         while not commands.session.closed:
             line = read_request(stdin, editor, commands.module)
             if line.strip():

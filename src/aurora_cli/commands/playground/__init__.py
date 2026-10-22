@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 COMMAND: CommandSpec = {
     "name": "playground",
     "help": "启动模块交互 Playground（需要源码仓库）",
-    "passthrough": "透传给 Playground 的参数，例如 --tui、--pretty、--module kernel",
+    "passthrough": "透传给 Playground 的参数，例如 --tui、--no-pretty、--module kernel",
 }
 
 

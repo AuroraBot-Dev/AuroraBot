@@ -6,6 +6,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
+from playground.commands import Commands
+
 if TYPE_CHECKING:
     from playground.session import Session
 
@@ -13,13 +15,14 @@ if TYPE_CHECKING:
 class Backend:
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.commands = Commands(session)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playground-tui")
         self.closed = False
 
     async def request(self, text: str) -> dict[str, Any]:
         if self.closed:
             raise RuntimeError("会话已关闭")
-        return await asyncio.get_running_loop().run_in_executor(self._executor, self.session.handle, text)
+        return await asyncio.get_running_loop().run_in_executor(self._executor, self.commands.handle, text)
 
     async def close(self) -> None:
         if self.closed:

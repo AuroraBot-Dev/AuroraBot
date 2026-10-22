@@ -17,12 +17,12 @@ uv run python -m playground
 
 ```json
 {"action":"describe","module":"cli"}
-{"module":"cli","operation":"execute","input":{"argv":["demo","greet","Aurora"]}}
+{"module":"cli","operation":"execute","input":{"command":"aurora config --missing"}}
 {"module":"cli","operation":"execute","input":{"argv":["--help"]}}
 {"action":"exit"}
 ```
 
-交互入口使用真实解析和分派，只绑定内存演示命令；不读取个人配置或本机插件。输入与输出 schema、示例可通过 `describe` 查询，完整协议见 [Playground 说明](../../playground/README.md)。
+交互入口通过独立进程执行真实命令，读取当前项目配置与 CLI 插件，也支持 `/aurora ...` 或直接输入 `aurora ...`。`cli.demo` 单独提供不读取个人配置的内存演示命令。输入与输出 schema、示例可通过 `/describe` 查询，完整协议见 [Playground 说明](../../playground/README.md)。
 
 [CLI 场景脚本](../../playground/examples/cli.py)默认运行全部场景，也可单独选择：
 

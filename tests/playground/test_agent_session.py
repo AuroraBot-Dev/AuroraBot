@@ -140,7 +140,7 @@ def test_agent_pipe_emits_only_json_responses(capsys: pytest.CaptureFixture[str]
         {"action": "exit"},
     ]
     stdout, stderr = StringIO(), StringIO()
-    assert interact(StringIO("\n".join(json.dumps(item) for item in requests)), stdout, stderr) == 0
+    assert interact(StringIO("\n".join(json.dumps(item) for item in requests)), stdout, stderr, pretty=False) == 0
     responses = [json.loads(line) for line in stdout.getvalue().splitlines()]
     assert len(responses) == len(requests)
     assert responses[3]["result"]["status"] == "completed"

@@ -46,14 +46,14 @@ def test_pipe_remains_json_after_bad_input_and_cli_parse_errors() -> None:
         '{"module":"kernel","operation":"increment","input":{"amount":NaN}}',
         '{"module":"absent","operation":"x"}',
         '{"module":"kernel","operation":"absent"}',
-        '{"module":"cli","operation":"execute","input":{"argv":["demo","greet","Aurora","--upper"]}}',
-        '{"module":"cli","operation":"execute","input":{"argv":["--help"]}}',
-        '{"module":"cli","operation":"execute","input":{"argv":["demo","greet","Aurora","--uppercase"]}}',
+        '{"module":"cli","operation":"demo","input":{"argv":["demo","greet","Aurora","--upper"]}}',
+        '{"module":"cli","operation":"demo","input":{"argv":["--help"]}}',
+        '{"module":"cli","operation":"demo","input":{"argv":["demo","greet","Aurora","--uppercase"]}}',
         '{"action":"exit"}',
         '{"module":"kernel","operation":"increment"}',
     ]
     stdout, stderr = StringIO(), StringIO()
-    assert interact(StringIO("\n".join(requests)), stdout, stderr) == 0
+    assert interact(StringIO("\n".join(requests)), stdout, stderr, pretty=False) == 0
     responses = [json.loads(line) for line in stdout.getvalue().splitlines()]
     assert len(responses) == len(requests) - 1
     assert [item["error"]["code"] for item in responses[:5]] == [
