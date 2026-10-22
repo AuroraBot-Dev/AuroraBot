@@ -193,3 +193,50 @@ def test_missing_optional_namespaces_are_skipped_transitively_and_self_dependenc
     assert not host.ctx
     with pytest.raises(ValueError, match="自身"):
         Host((ModuleSpec("self", depends=("self",)),))
+
+
+def test_async_callable_is_rejected_before_any_collect_handler_runs() -> None:
+    touched = []
+
+    @namespace("mixed")
+    def mixed(ctx: Context) -> None:
+        pass
+
+    @mixed.callpoint("collect", mode="collect")
+    def synchronous(ctx: Context) -> str:
+        touched.append("sync")
+        return "sync"
+
+    class AsyncHandler:
+        async def __call__(self, ctx: Context) -> str:
+            touched.append("async")
+            return "async"
+
+    mixed.hook("mixed:collect")(AsyncHandler())
+    host = Host((mixed,)).build()
+    with pytest.raises(TypeError, match="acall"):
+        host.call("mixed:collect")
+    assert touched == []
+    assert asyncio.run(host.acall("mixed:collect")) == ("sync", "async")
+
+
+def test_call_routes_are_frozen_with_the_host_declarations() -> None:
+    @namespace("choice")
+    def choice(ctx: Context) -> None:
+        pass
+
+    @choice.callpoint("value")
+    def first(ctx: Context) -> str:
+        return "first"
+
+    original = Host((choice,)).build()
+
+    @choice.hook("choice:value", priority=10)
+    def second(ctx: Context) -> str:
+        return "second"
+
+    updated = Host((choice,)).build()
+    assert original.call("choice:value") == "first"
+    assert updated.call("choice:value") == "second"
+    assert original.routes["choice:value"].handlers[0][1].callback is first
+    assert updated.routes["choice:value"].handlers[0][1].callback is second

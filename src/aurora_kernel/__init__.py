@@ -1,5 +1,6 @@
 """namespace、hook 与共享 ctx 驱动的通用模块宿主。"""
 
+from aurora_kernel.calls import CallRoute
 from aurora_kernel.context import Change, Context, ContextConflictError
 from aurora_kernel.declaration import Callpoint, Hook, Manifest, ModuleSpec, Namespace, namespace
 from aurora_kernel.failures import ModuleLifecycleError
@@ -14,6 +15,7 @@ __all__ = [
     "PREPARE",
     "READY",
     "RUN",
+    "CallRoute",
     "Callpoint",
     "Change",
     "Context",

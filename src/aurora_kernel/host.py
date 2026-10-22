@@ -16,7 +16,9 @@ from aurora_kernel.resolve import resolve
 from aurora_kernel.tasks import raise_with_cleanup, wait_for_completion
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
+
+    from aurora_kernel.calls import CallRoute
 
 
 class Host:
@@ -36,6 +38,10 @@ class Host:
         self._constructed = False
         self._claimed = False
         self._lifecycle: ManagedAssembly | None = None
+
+    @property
+    def routes(self) -> Mapping[str, CallRoute]:
+        return self._calls.routes
 
     def call(self, target: str, *args: Any, **kwargs: Any) -> Any:
         self._require_ready()
