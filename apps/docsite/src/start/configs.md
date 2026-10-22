@@ -19,7 +19,7 @@ AuroraBot 的内置配置位于个人 `config/` 目录，由 CLI 管理并在启
 - `aurora config <name> --edit`：用 `$EDITOR`/`$VISUAL` 打开源文件，退出后重新校验；
 - `aurora config <name> --set KEY=VALUE`：按 TOML 路径改写源文件（保留注释与格式），可重复，写入后重新校验。
 
-`--set` 的键是文件内的点分路径，例如 `runtime.log_level=DEBUG`、`engine.tree.max_depth=8`、`endpoint.0.model=...`，
+`--set` 的键是文件内的点分路径，例如 `runtime.log_level=DEBUG`、`engine.run.max_model_calls=32`、`endpoint.0.model=...`，
 数组元素用下标访问。`--edit`/`--set` 修改配置声明指向的个人文件，不会写回随包分发的模板。使用 `aurora --root <目录> config` 可管理指定工作目录的内置与插件配置。
 
 修改后执行 `aurora config --check` 校验，再重启 Bot 使配置生效。

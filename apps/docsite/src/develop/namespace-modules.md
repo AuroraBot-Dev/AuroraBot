@@ -90,4 +90,4 @@ uv run python -m playground.examples.react
 uv run python -m playground.examples.react --default
 ```
 
-插件示例、回调约定与执行限制见仓库中的 `src/aurora_bot/engine/README.md`。替换整个认知执行策略仍通过 `CognitionRunner` 能力完成。
+插件示例、回调约定与执行限制见仓库中的 `src/aurora_bot/engine/README.md`。模型入口为 `aurora:kernel/module/ai:complete`，认知入口为 `aurora:kernel/module/engine:execute`；执行由独立 Agent Run 驱动，不包含父子 Agent 调度。

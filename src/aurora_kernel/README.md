@@ -4,15 +4,15 @@
 
 ## 与 Bot、ReAct 的关系
 
-| 层                  | 负责什么                                                 |
-| ------------------- | -------------------------------------------------------- |
-| `aurora_kernel`     | 通用声明、发现、装配、调用路由、上下文与资源生命周期     |
-| `aurora_bot.kernel` | 把 Bot 契约、贡献、资源和世界域声明适配到通用宿主        |
-| `aurora_bot.engine` | 认知执行：记忆召回、上下文装配、模型调用、工具执行和委派 |
+| 层                  | 负责什么                                                |
+| ------------------- | ------------------------------------------------------- |
+| `aurora_kernel`     | 通用声明、发现、装配、调用路由、上下文与资源生命周期    |
+| `aurora_bot.kernel` | 把 Bot 的命名服务、贡献、资源和世界域声明适配到通用宿主 |
+| `aurora_bot.engine` | 为独立 Agent Run 连接记忆、上下文、模型、工具与世界记录 |
 
 **内核提供扩展机制，领域模块定义扩展点和执行语义。** `@module.hook(target)` 只是注册实现；必须有调用方显式执行 `ctx.call(target, ...)` 或 `await ctx.acall(target, ...)`，实现才会运行。
 
-当前 Bot 的 `CognitionEngine` 直接调用注入的能力，未将 ReAct 每轮内部步骤暴露为 namespace 调用点。自定义认知执行可以替换 `CognitionRunner`；如果引擎要开放步骤级 hook，由引擎声明调用点、约定参数与结果，并在相应步骤触发。具体 ReAct 策略、循环状态和运行上界属于执行器，不属于通用内核。
+Bot 的认知接线通过共享宿主调用记忆、上下文、模型和工具模块，并提供步骤与工具通知。ReAct 执行由独立的 `aurora_agent` 负责，各领域模块定义自己的调用点，通用内核负责注册与优先级选择。具体接口与边界见 [engine README](../aurora_bot/engine/README.md)。
 
 `PREPARE / RUN / CLOSE` 等是**模块宿主的生命周期阶段**，不会自动成为每轮推理或每次工具执行的前后置回调。hook 也不会自动获得 Bot 工具授权或生成世界事件。
 
@@ -101,6 +101,7 @@ assert host.ctx["extension"]["last_value"] == 6
 - `Host(...)` 取得冻结声明并校验装配，在初始化之前建立所有入选模块的 ctx 空间。后续追加装饰器不会改变已有 Host。
 - `.build()` 同步构造，之后才允许调用。初始化函数用于建立状态，不能在构造期间调用 hook。
 - 同一组声明可用于多个 Host；每个 Host 默认拥有独立 ctx，且只能构造一次。
+- `host.routes` 是只读调用计划：每项 `CallRoute` 包含调用点和已选中的 `(来源模块, Hook)` 元组，创建宿主后不随声明变化。
 
 ### 三种调用模式
 
@@ -214,7 +215,7 @@ asyncio.run(main())
 
 宿主显式汇总各来源 `.discover()` 的结果并传给 `Host`。依赖模块也必须在发现结果或显式传入的集合中；声明依赖不会自动安装或查找模块。
 
-`ModuleSpec` 还提供字符串能力的 `provides/requires`、贡献点的 `declares/contributes/consumes`、优先级、可选模块与兼容范围，用于领域适配。它的 `depends` 对应 namespace 之间的直接依赖；`@namespace(..., requires=...)` 使用的正是这一字段。Bot 的类型契约转换由 `aurora_bot.kernel` 完成。
+`ModuleSpec` 还提供字符串能力的 `provides/requires`、贡献点的 `declares/contributes/consumes`、优先级、可选模块与兼容范围，用于领域适配。它的 `depends` 对应 namespace 之间的直接依赖；`@namespace(..., requires=...)` 使用的正是这一字段。Bot 适配层保留资源与世界域元数据，服务依赖同样使用名称。
 
 模块名称、API 兼容范围、缺失依赖、能力冲突、贡献声明和依赖环，以及调用点冲突，都在准备或构造效果之前校验。发现会导入 Python 模块，因此模块顶层应只声明功能，连接与资源获取放入生命周期回调。
 

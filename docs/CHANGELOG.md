@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- Bot 认知改为通过命名 hook 连接独立 `aurora_agent.Run`，移除 AgentTree、节点与内建委派；模块装配不再以 Python 契约类型作为服务键。
+- 世界事实、运行索引、实例资源、记忆曝光及节律／时钟恢复统一使用 `run_id`；增加并发运行身份争用、证据归属和取消期间结果提交的校验。
+- 运行配置使用 `[engine.run]` 的模型次数、工具次数与上下文字符上限；Agent 配置移除 `children`，工具 `world_runs` 提供运行索引，同步更新默认提示词和离线 ReAct 示例。
 - 增加自动发现的 `aurora playground` 命令，直接透传参数并保留终端和 JSON 管道输出，支持用顶层 `--root` 指定源码仓库；纯透传命令的帮助参数由目标程序处理。
 - Playground 增加 `--tui` Textual 界面，支持模块与操作选择、参数 JSON 编辑、示例载入、接口说明和格式化结果；串行调用保留会话状态，退出时清理异步资源。
 - Playground 支持 `--pretty` 缩进输出、`--module` 预选模块和简写命令；终端增加内存历史、Tab 补全和多行 JSON 输入，管道默认保持 JSON Lines 输出。

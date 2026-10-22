@@ -3,37 +3,44 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rich.console import Console
 
+from aurora_agent import CallStatus, RunSnapshot
 from aurora_bot.agents import AgentCatalog
 from aurora_bot.contracts import (
     AgentDefinition,
-    AgentNode,
-    AgentTree,
     ChatMessage,
+    CognitionRequest,
     ModelRequest,
     ToolCall,
     ToolDefinition,
     ToolOutput,
 )
-from aurora_bot.contracts.engine_hooks import ENGINE_NAMESPACE, ReActHook
 from aurora_bot.contracts.model_binding import ModelBinding, ProviderDefinition
 from aurora_bot.contracts.prompt import PromptFragment
 from aurora_bot.contracts.resource import ResourceKey
 from aurora_bot.engine import CognitionEngine
 from aurora_bot.engine.hooks import REACT
+from aurora_bot.kernel.context import SERVICES
+from aurora_bot.kernel.hooks import service_namespace
 from aurora_bot.prompt import PromptAssembler, PromptCatalog
 from aurora_bot.tools import ToolRegistry
-from aurora_kernel import Context, Host, namespace
-
-if TYPE_CHECKING:
-    from aurora_bot.contracts.pkgs.ai import Model
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_kernel import Context, Host, ModuleSpec, Namespace, namespace
 
 console = Console(highlight=False, markup=False)
 PROVIDER = ProviderDefinition(ResourceKey.parse("demo:ai/provider/local"), "fake", None, "UNUSED_DEMO_KEY")
 ENDPOINT = ModelBinding(ResourceKey.parse("demo:ai/endpoint/local"), PROVIDER, "local")
+PREFIX = "aurora:kernel/module/"
+MEMORY = Namespace(ModuleSpec(f"{PREFIX}memory"))
+
+
+@MEMORY.callpoint("recall")
+def recall(ctx: Context, request: object) -> None:
+    return None
 
 
 class DemoModel:
@@ -65,53 +72,51 @@ class EchoTool:
         return ToolOutput(str(call.arguments["value"]))
 
 
-@namespace("demo.trace", requires=(ENGINE_NAMESPACE,))
+@namespace("demo.trace", requires=(REACT.name,))
 def trace(ctx: Context) -> None:
     ctx["demo.trace"]["steps"] = 0
 
 
-@trace.hook(ReActHook.BEFORE_STEP)
-def before_step(ctx: Context, tree: AgentTree, node: AgentNode, index: int) -> None:
-    console.rule(f"步骤 {index + 1} · {'工具执行' if node.pending_calls else '推理'}")
+@trace.hook(f"{PREFIX}engine:before_step")
+def before_step(ctx: Context, snapshot: RunSnapshot) -> None:
+    pending = any(call.status is CallStatus.PENDING for call in snapshot.calls)
+    console.rule(f"步骤 {ctx['demo.trace']['steps'] + 1} · {'工具执行' if pending else '推理'}")
 
 
-@trace.hook(ReActHook.AFTER_STEP)
-def after_step(ctx: Context, tree: AgentTree, node: AgentNode, index: int) -> None:
+@trace.hook(f"{PREFIX}engine:after_step")
+def after_step(ctx: Context, snapshot: RunSnapshot) -> None:
     with ctx.transaction() as staged:
         staged["demo.trace"]["steps"] += 1
-    console.print(f"  after_step → node={node.node_id}, status={node.status.value}")
+    console.print(f"  after_step → run={snapshot.run_id}, status={snapshot.status.value}")
 
 
-@trace.hook(ReActHook.BEFORE_TOOL)
-def before_tool(ctx: Context, tree: AgentTree, node: AgentNode, call: ToolCall) -> None:
+@trace.hook(f"{PREFIX}engine:before_tool")
+def before_tool(ctx: Context, run_id: str, call: ToolCall) -> None:
     console.print(f"  before_tool → {call.name}")
 
 
-@trace.hook(ReActHook.AFTER_TOOL)
-def after_tool(ctx: Context, tree: AgentTree, node: AgentNode, call: ToolCall, result: ToolOutput) -> None:
+@trace.hook(f"{PREFIX}engine:after_tool")
+def after_tool(ctx: Context, run_id: str, call: ToolCall, result: ToolOutput) -> None:
     console.print(f"  after_tool → status={result.status.value}")
 
 
-@namespace("demo.reasoning", requires=(ENGINE_NAMESPACE,))
+@namespace("demo.reasoning", requires=(f"{PREFIX}ai",))
 def custom(ctx: Context) -> None:
     ctx["demo.reasoning"]["requests"] = 0
 
 
-@custom.hook(ReActHook.REASON, priority=10)
-async def reason(ctx: Context, request: ModelRequest, model: Model) -> ChatMessage:
+@custom.hook(f"{PREFIX}ai:complete", priority=10)
+async def reason(ctx: Context, request: ModelRequest) -> ChatMessage:
     with ctx.transaction() as staged:
         staged["demo.reasoning"]["requests"] += 1
     console.print("  reason → 选中 demo.reasoning，调用离线模型")
-    response = await model.complete(request)
+    response = await ctx[SERVICES]["ai"].complete(request)
     if response.tool_calls:
         return response
     return replace(response, content=f"自定义推理：{response.content}")
 
 
 async def run(*, use_custom: bool) -> None:
-    host = Host((REACT, trace, custom) if use_custom else (REACT, trace)).build()
-    route = host.routes[ReActHook.REASON]
-    console.print(f"reason 实现：{route.handlers[0][0]}")
     tool = EchoTool()
     definition = AgentDefinition(
         "demo:agent/definition/root",
@@ -119,7 +124,6 @@ async def run(*, use_custom: bool) -> None:
         "demo:prompt/agent/root",
         str(ENDPOINT.key),
         frozenset({tool.definition.name}),
-        frozenset(),
     )
     prompts = PromptCatalog(
         (
@@ -127,13 +131,36 @@ async def run(*, use_custom: bool) -> None:
             PromptFragment(ResourceKey.parse(definition.prompt_id), "调用回声工具，再回复结果。"),
         )
     )
-    engine = CognitionEngine(
-        DemoModel(), PromptAssembler(prompts), AgentCatalog((definition,)), ToolRegistry((tool,)), hooks=host.ctx
+    ctx = Context()
+    ctx.ensure(SERVICES).update(
+        ai=DemoModel(), prompt=PromptAssembler(prompts), agents=AgentCatalog((definition,)), tools=ToolRegistry((tool,))
     )
-    result = await engine.run(AgentTree.create("demo", "root", definition, "演示一次 ReAct"))
-    console.print(f"\n结果：{result.node('root').result}")
-    console.print(f"步骤数：{host.ctx['demo.trace']['steps']}")
-    console.print(f"最后一次 ctx 变更：{host.ctx.last_change}")
+    modules = (
+        service_namespace("ai", "ai", methods=("resolve_endpoint",), asynchronous=("complete",)),
+        service_namespace("agents", "agents", methods=("get",)),
+        service_namespace("prompt", "prompt", methods=("assemble",)),
+        service_namespace("tools", "tools", methods=("definitions_for", "scopes_for"), asynchronous=("execute",)),
+        MEMORY,
+        REACT,
+        trace,
+    )
+    host = Host((*modules, custom) if use_custom else modules, ctx=ctx).build()
+    console.print(f"推理实现：{host.routes[f'{PREFIX}ai:complete'].handlers[0][0]}")
+    with TemporaryDirectory(prefix="aurora-react-") as directory:
+        world = SqlAlchemyWorldJournal(Path(directory) / "world.sqlite3")
+        ctx[REACT.name]["runner"] = CognitionEngine(ctx, world, bot_id="demo:bot/aurora")
+        try:
+            result = await ctx.acall(
+                f"{PREFIX}engine:execute",
+                CognitionRequest("演示一次 ReAct", agent=definition.definition_id, run_id="demo"),
+            )
+            console.print(f"\n结果：{result.output}")
+            console.print(f"步骤数：{ctx['demo.trace']['steps']}")
+            finished = await world.commit("demo:run:finished")
+            assert finished is not None
+            console.print(f"持久结束状态：{finished.data['status']}")
+        finally:
+            await world.close()
 
 
 def main() -> None:
