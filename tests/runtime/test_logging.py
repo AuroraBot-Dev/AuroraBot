@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from aurora_agent import ToolExecutionError
 from aurora_bot.contracts import ChatMessage, ModelRequest, ToolCall, ToolDefinition, ToolOutput
 from aurora_bot.runtime import assemble_runtime
 from aurora_bot.tools import ToolRegistry
@@ -40,7 +41,7 @@ class _FailingTool:
 
     async def execute(self, call: ToolCall) -> ToolResult:
         del call
-        raise RuntimeError("secret-in-exception")
+        raise ToolExecutionError("secret-in-exception")
 
 
 @pytest.mark.parametrize("level", ("TRACE", "warn", "WARN", ""))
@@ -49,10 +50,7 @@ def test_logging_config_rejects_invalid_levels(
     level: str,
 ) -> None:
     (configured_project / "config" / "runtime.toml").write_text(
-        (
-            '[runtime]\nprofile = "prod"\nnode_id = "root"\n'
-            f'agent = "aurora:agent/definition/root"\nlog_level = "{level}"\n'
-        ),
+        (f'[runtime]\nprofile = "prod"\nagent = "aurora:agent/definition/root"\nlog_level = "{level}"\n'),
         encoding="utf-8",
     )
 
@@ -85,8 +83,10 @@ def test_runtime_logs_lifecycle_without_message_result_arguments_or_exception_de
     )
     content = logfile.read_text(encoding="utf-8")
 
-    assert "AgentTree 开始 tree_id=logging-tree" in content
-    assert "工具调用失败 tool=test:tool/definition/logging call_id=logging-call error_type=RuntimeError" in content
+    assert "认知运行开始 run_id=logging-tree" in content
+    assert (
+        "工具调用失败 tool=test:tool/definition/logging call_id=logging-call error_type=ToolExecutionError" in content
+    )
     assert "secret-in-message" not in content
     assert "secret-in-model-result" not in content
     assert "secret-in-arguments" not in content

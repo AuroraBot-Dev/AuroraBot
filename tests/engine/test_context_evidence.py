@@ -7,18 +7,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.agents import AgentCatalog
 from aurora_bot.ai.openai import to_openai_messages
-from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ToolCall, ToolScopes, WorldFrontier
+from aurora_bot.contracts import AgentDefinition, ChatMessage, CognitionRequest, ToolCall, ToolScopes, WorldFrontier
 from aurora_bot.contracts.memory_codec import read_exposure
 from aurora_bot.contracts.operation import OperationDefinition, OperationRequest, OperationResult
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
-from aurora_bot.engine import CognitionEngine
 from aurora_bot.operations.registry import OperationRegistry
 from aurora_bot.operations.tool import operation_tools
 from aurora_bot.resources.catalog import ResourceCatalog
-from aurora_bot.tools import ToolRegistry
 from aurora_bot.world import SqlAlchemyWorldJournal
+from tests.support.engine import make_engine
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.prompt import _agent, _assembler
 
@@ -28,19 +26,19 @@ if TYPE_CHECKING:
 
 def test_trimmed_tool_evidence_is_not_counted_and_literal_mentions_do_not_create_sources() -> None:
     """旧工具组退出后，其来源也退出曝光；最新正文提到旧 ID 不改变这一点。"""
-    tree = AgentTree.create("tree", "root", _agent(), "核对")
-    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("old-call", "read", {}),)))
-    tree = tree.append("root", ChatMessage.tool("old-call", "原始记录", evidence_refs=("old-source",)))
-    tree = tree.append("root", ChatMessage.message("很长的讨论" * 500))
-    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("current-call", "read", {}),)))
-    tree = tree.append(
-        "root", ChatMessage.tool("current-call", "提到 old-source 的新结果", evidence_refs=("current-source",))
+    transcript = (
+        ChatMessage.message("核对"),
+        ChatMessage.assistant(tool_calls=(ToolCall("old-call", "read", {}),)),
+        ChatMessage.tool("old-call", "原始记录", evidence_refs=("old-source",)),
+        ChatMessage.message("很长的讨论" * 500),
+        ChatMessage.assistant(tool_calls=(ToolCall("current-call", "read", {}),)),
+        ChatMessage.tool("current-call", "提到 old-source 的新结果", evidence_refs=("current-source",)),
     )
-    trimmed = _assembler(limit=500).assemble(tree, "root")
+    trimmed = _assembler(limit=500).assemble(_agent().prompt_id, transcript)
     assert trimmed.memory is not None
     assert trimmed.memory.transcript_ids == ("current-source",)
     assert trimmed.memory.included_ids == ("current-source",)
-    complete = _assembler(limit=10_000).assemble(tree, "root")
+    complete = _assembler(limit=10_000).assemble(_agent().prompt_id, transcript)
     assert complete.memory is not None
     assert complete.memory.transcript_ids == ("old-source", "current-source")
     with pytest.raises(ValueError, match="只有世界输入和工具结果"):
@@ -89,7 +87,7 @@ def test_operation_sources_survive_receipt_tool_projection_engine_and_provider_b
             operation = EvidenceOperation()
             catalog = ResourceCatalog((operation.definition.resource,))
             registry = OperationRegistry("aurora:bot/test", (operation,), catalog, world)
-            tools = ToolRegistry(operation_tools(registry, "aurora:bot/test"))
+            tools = operation_tools(registry, "aurora:bot/test")
             definition = _agent()
             agent = AgentDefinition(
                 definition.definition_id,
@@ -97,7 +95,6 @@ def test_operation_sources_survive_receipt_tool_projection_engine_and_provider_b
                 definition.prompt_id,
                 definition.model,
                 frozenset({"test:tool/definition/read"}),
-                frozenset(),
             )
             model = FakeModel(
                 [
@@ -105,20 +102,13 @@ def test_operation_sources_survive_receipt_tool_projection_engine_and_provider_b
                     ChatMessage.assistant("已核对"),
                 ]
             )
-            tree = AgentTree.create("tree", "root", agent, "读取证据")
-            await CognitionEngine(
-                model,
-                _assembler(),
-                AgentCatalog((agent,)),
-                tools,
-                world=world,
-                bot_id="aurora:bot/test",
-            ).run(tree)
-            event = await world.commit("tree:root:model:1:requested")
+            engine = make_engine(model, (agent,), tools=tools, world=world, bot_id="aurora:bot/test")
+            await engine.execute(CognitionRequest("读取证据", agent=agent.definition_id, run_id="run"))
+            event = await world.commit("run:model:1:requested")
             assert event is not None
             exposure = read_exposure(event.data["memory"])
             assert exposure.included_ids == ("source",)
-            result = await world.commit("tree:root:read:result")
+            result = await world.commit("run:tool:read:result")
             assert result is not None and result.data["evidence_refs"] == ("source",)
             assert model.requests[-1].messages[-1].evidence_refs == ("source",)
             assert all("evidence_refs" not in message for message in to_openai_messages(model.requests[-1].messages))

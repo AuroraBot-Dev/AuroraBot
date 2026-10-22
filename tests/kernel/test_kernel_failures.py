@@ -28,7 +28,7 @@ def test_background_failure_is_not_discarded_when_closing() -> None:
             started.set()
             raise ValueError("失去连接")
 
-        @module(name="poller", provides=int, run=run)
+        @module(name="poller", provides="int", run=run)
         def build(context: ModuleContext) -> int:
             """纯构造不影响后台失败。"""
             return 1
@@ -49,7 +49,7 @@ def test_failure_can_be_delivered_before_close_without_losing_its_history() -> N
         """后台失败先于宿主开始读取。"""
         raise ValueError("传感器断开")
 
-    @module(name="sensor", provides=int, run=run)
+    @module(name="sensor", provides="int", run=run)
     def build(context: ModuleContext) -> int:
         """服务类型只用于独立装配。"""
         return 1
@@ -91,7 +91,7 @@ def test_close_reports_all_hook_and_prepare_cleanup_errors() -> None:
         trace.append("close")
         raise ValueError("关闭失败")
 
-    @module(name="resources", provides=int, prepare=prepare, close=close)
+    @module(name="resources", provides="int", prepare=prepare, close=close)
     def build(context: ModuleContext) -> int:
         """构造阶段正常。"""
         return 1
@@ -129,7 +129,7 @@ def test_startup_error_and_cleanup_error_are_both_preserved(construction: bool) 
         """在实际激活阶段触发原始错误。"""
         raise original
 
-    @module(name="startup", provides=int, prepare=prepare, activate=activate)
+    @module(name="startup", provides="int", prepare=prepare, activate=activate)
     def build(context: ModuleContext) -> int:
         """也可选择在实际构造阶段失败。"""
         if construction:
@@ -160,7 +160,7 @@ def test_unexpected_cancellation_is_reported_but_requested_stop_is_normal(reques
             stop.set()
         raise asyncio.CancelledError("取消运行")
 
-    @module(name="cancelled", provides=int, run=run)
+    @module(name="cancelled", provides="int", run=run)
     def build(context: ModuleContext) -> int:
         """构造与取消语义互不干扰。"""
         return 1
@@ -186,7 +186,7 @@ def test_unexpected_cancellation_is_reported_but_requested_stop_is_normal(reques
 def test_close_wakes_a_host_waiting_for_failure() -> None:
     """正常关闭没有故障时，等待者也能结束而不泄漏监督任务。"""
 
-    @module(name="idle", provides=int)
+    @module(name="idle", provides="int")
     def build(context: ModuleContext) -> int:
         """此组合没有后台任务。"""
         return 1

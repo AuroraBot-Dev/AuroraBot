@@ -10,18 +10,18 @@ _SCOPE_DEFINITIONS = Phase("scope_definitions", 50, PhaseKind.SETUP)
 
 async def prepare(context: ModuleContext) -> None:
     """在文件和连接创建前检查声明并登记只读目录。"""
-    if not context.contains(ScopeCatalog):
-        context.provide(ScopeCatalog, _create_default(context))
+    if not context.contains("scopes"):
+        context.provide("scopes", _create_default(context))
 
 
 @module(
     name="scopes",
-    provides=ScopeCatalog,
+    provides="scopes",
     hooks={_SCOPE_DEFINITIONS: prepare},
 )
 def build(context: ModuleContext) -> ScopeCatalog:
     """同步装配使用同一份合并与校验规则。"""
-    catalog = context.get_optional(ScopeCatalog)
+    catalog = context.get_optional("scopes")
     if catalog is None:
         catalog = _create_default(context)
     return catalog

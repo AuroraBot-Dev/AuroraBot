@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from aurora_bot.contracts import (
     EnvironmentEvent,
-    TreeActivity,
+    RunActivity,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection, RowMapping
 
 _MAX_BODY_PAGE = 256
-_MAX_TREE_INDEX = 1000
+_MAX_RUN_INDEX = 1000
 
 
 class SqlAlchemyWorldJournal:
@@ -275,25 +275,24 @@ class SqlAlchemyWorldJournal:
             end = max((row.insertion_sequence for row in page_rows), default=after)
             return WorldStreamPage(after, end, commits, has_more)
 
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
-        """从引擎提交的 tree_id 事实推导 Bot 森林索引，按最近活动排序。"""
-        if limit < 1 or limit > _MAX_TREE_INDEX:
-            raise ValueError(f"limit must be within 1..{_MAX_TREE_INDEX}")
+    async def run_index(self, limit: int) -> tuple[RunActivity, ...]:
+        if limit < 1 or limit > _MAX_RUN_INDEX:
+            raise ValueError(f"limit must be within 1..{_MAX_RUN_INDEX}")
         async with self._sessions() as session:
-            tree_id = func.json_extract(WorldCommitRow.payload, "$.tree_id")
+            run_id = func.json_extract(WorldCommitRow.payload, "$.run_id")
             rows = await session.execute(
                 select(
-                    tree_id.label("tree_id"),
+                    run_id.label("run_id"),
                     func.count().label("commit_count"),
                     func.min(WorldCommitRow.occurred_at).label("first_seen"),
                     func.max(WorldCommitRow.occurred_at).label("last_seen"),
                 )
-                .where(tree_id.is_not(None), tree_id != "")
-                .group_by(tree_id)
+                .where(run_id.is_not(None), run_id != "")
+                .group_by(run_id)
                 .order_by(func.max(WorldCommitRow.occurred_at).desc())
                 .limit(limit)
             )
-        return tuple(_tree_activity(row._mapping) for row in rows)
+        return tuple(_run_activity(row._mapping) for row in rows)
 
     async def delta(self, start: WorldFrontier, scopes: frozenset[str]) -> WorldDeltaPage:
         """按域分区读取前沿之后的一页提交；域过滤与排序全部由 SQLite 的索引完成。"""
@@ -380,11 +379,11 @@ def _matches_input(commit: WorldCommit, item: WorldCommitInput) -> bool:
     )
 
 
-def _tree_activity(row: RowMapping) -> TreeActivity:
-    tree_id = row["tree_id"]
-    if not isinstance(tree_id, str):
-        raise RuntimeError("世界提交的 tree_id 必须是字符串")
-    return TreeActivity(tree_id, int(row["commit_count"]), _as_utc(row["first_seen"]), _as_utc(row["last_seen"]))
+def _run_activity(row: RowMapping) -> RunActivity:
+    run_id = row["run_id"]
+    if not isinstance(run_id, str):
+        raise RuntimeError("世界提交的 run_id 必须是字符串")
+    return RunActivity(run_id, int(row["commit_count"]), _as_utc(row["first_seen"]), _as_utc(row["last_seen"]))
 
 
 def _as_utc(value: datetime) -> datetime:

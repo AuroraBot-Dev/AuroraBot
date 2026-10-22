@@ -5,7 +5,8 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import DelegationRequest, ToolOutput, ToolScopes, ToolStatus
+from aurora_agent import ToolExecutionError
+from aurora_bot.contracts import ToolOutput, ToolScopes, ToolStatus
 from aurora_bot.contracts.tool_resource import tool_resource_key
 from aurora_bot.utils import get_logger
 
@@ -84,16 +85,16 @@ class ToolRegistry:
         _logger.debug("工具调用开始 tool={} call_id={}", call.name, call.call_id)
         try:
             result = await tool.execute(call)
-        except Exception as error:  # noqa: BLE001 - 工具异常必须成为可供 Agent 处理的确定结果
+        except ToolExecutionError as error:
             _logger.error(
                 "工具调用失败 tool={} call_id={} error_type={}",
                 call.name,
                 call.call_id,
                 type(error).__name__,
             )
-            return ToolOutput(f"工具执行失败：{error}", status=ToolStatus.FAILED)
-        if not isinstance(result, (ToolOutput, DelegationRequest)):
+            return ToolOutput("工具确认执行失败", status=ToolStatus.FAILED)
+        if not isinstance(result, ToolOutput):
             _logger.error("工具返回类型无效 tool={} call_id={}", call.name, call.call_id)
-            return ToolOutput(f"工具返回了无效结果：{call.name}", status=ToolStatus.FAILED)
+            raise TypeError(f"工具返回了无效结果：{call.name}")
         _logger.debug("工具调用完成 tool={} call_id={} result_type={}", call.name, call.call_id, type(result).__name__)
         return result

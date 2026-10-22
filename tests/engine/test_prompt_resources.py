@@ -10,12 +10,8 @@ import pytest
 
 from aurora_bot.artifacts.module import MODULE as ARTIFACTS_MODULE
 from aurora_bot.artifacts.store import FileArtifactStore
-from aurora_bot.contracts import AgentDefinition, AgentTree, ChatMessage, ModelRequest
+from aurora_bot.contracts import AgentDefinition, ChatMessage, ModelRequest
 from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS
-from aurora_bot.contracts.pkgs.agents import AgentCatalog
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.prompt import PromptAssembler
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.contracts.prompt import PROMPT_FRAGMENT_CONTRACT, PromptAssembly, PromptFragment
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.kernel import compose_managed, module
@@ -33,6 +29,7 @@ from tests.support.model import fake_endpoint
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_bot.contracts.pkgs.prompt import PromptAssembler
     from aurora_bot.kernel import ModuleContext
 
 
@@ -78,8 +75,8 @@ def test_catalog_preserves_order_and_rejects_duplicate_or_wrong_versions() -> No
 def test_project_resource_catalog_matches_the_actual_prompt_fragments(configured_project: Path) -> None:
     """正常装配即能发现提示词，改写源文件不能改变已经装配的目录与文本。"""
     runtime = assemble_runtime(load_config(configured_project), FakeModel())
-    assembler = runtime.assembly.get(PromptAssembler)
-    resources = runtime.assembly.get(ResourceCatalog)
+    assembler = runtime.assembly.get("prompt")
+    resources = runtime.assembly.get("resources")
     fragments = assembler.catalog.fragments
     found = resources.find(domain="prompt")
     assert {descriptor.ref for descriptor in found} == {fragment.ref for fragment in fragments}
@@ -100,7 +97,7 @@ def test_resource_contribution_follows_the_selected_prompt_assembler(tmp_path: P
     )
     selected = ConcreteAssembler(PromptCatalog(fragments))
 
-    @module(name="custom_prompt", provides=PromptAssembler, priority=10, declares=OPERATION_CONTRIBUTIONS)
+    @module(name="custom_prompt", provides="prompt", priority=10, declares=OPERATION_CONTRIBUTIONS)
     def build(context: ModuleContext) -> PromptAssembler:
         """实际能力覆盖默认装配器，测试配置没有任何提示词文件。"""
         return selected
@@ -111,12 +108,12 @@ def test_resource_contribution_follows_the_selected_prompt_assembler(tmp_path: P
         lifecycle = await compose_managed(
             _Settings(),
             (PROMPT_MODULE, RESOURCES_MODULE, ARTIFACTS_MODULE, CONTENT_MODULE, build),
-            instances=((ArtifactStore, store),),
+            instances=(("artifacts", store),),
         )
         try:
             assembly = lifecycle.assembly
-            assert assembly.get(PromptAssembler) is selected
-            assert {descriptor.ref for descriptor in assembly.get(ResourceCatalog).find(domain="prompt")} == {
+            assert assembly.get("prompt") is selected
+            assert {descriptor.ref for descriptor in assembly.get("resources").find(domain="prompt")} == {
                 fragment.ref for fragment in fragments
             }
             await lifecycle.activate(asyncio.Event())
@@ -136,9 +133,9 @@ def test_assembly_records_only_the_selected_fragments_in_their_actual_order() ->
     other = PromptFragment(ResourceKey.parse("lab:prompt/agent/other"), "其他角色")
     assembler = ConcreteAssembler(PromptCatalog((first, other, last, selected)))
     agent = AgentDefinition(
-        "lab:agent/definition/root", "主体", str(selected.key), "test:ai/endpoint/model", frozenset(), frozenset()
+        "lab:agent/definition/root", "主体", str(selected.key), "test:ai/endpoint/model", frozenset()
     )
-    result = assembler.assemble(AgentTree.create("tree", "root", agent, "开始"), "root")
+    result = assembler.assemble(agent.prompt_id, (ChatMessage.message("开始"),))
     assert result.resources == (first.ref, last.ref, selected.ref)
     assert result.messages[0].content == "第一个系统片段\n\n第二个系统片段\n\n选定角色"
 
@@ -162,7 +159,7 @@ def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(co
         """读取实际世界事实，避免只检查组装器返回的元数据。"""
         model = FakeModel()
         runtime = assemble_runtime(load_config(configured_project), model)
-        assembler = runtime.assembly.get(PromptAssembler)
+        assembler = runtime.assembly.get("prompt")
         selected = assembler.catalog.for_agent("aurora:prompt/agent/root")
         source = configured_project / "config" / "prompts" / "builtin" / "root.md"
         source.write_text("这份新正文尚未用于当前运行。", encoding="utf-8")
@@ -171,14 +168,14 @@ def test_actual_model_request_and_world_audit_keep_the_frozen_prompt_versions(co
             assert len(model.requests) == 1
             request = model.requests[0]
             assert request.resources == (
-                runtime.assembly.get(AgentCatalog).get(runtime.root.agent).ref,
+                runtime.assembly.get("agents").get(runtime.root.agent).ref,
                 *(fragment.ref for fragment in selected),
                 request.endpoint.ref,
                 request.endpoint.provider.ref,
                 *(tool.ref for tool in request.tools),
             )
             assert "这份新正文尚未用于当前运行。" not in request.messages[0].content
-            record = await runtime.world.commit(f"prompt-source:{runtime.root.node_id}:model:0:requested")
+            record = await runtime.world.commit("prompt-source:model:0:requested")
             assert record is not None
             assert list(record.data["resources"]) == [
                 {"key": str(ref.key), "revision": ref.revision} for ref in request.resources

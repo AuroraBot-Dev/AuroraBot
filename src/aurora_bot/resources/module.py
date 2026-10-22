@@ -13,8 +13,8 @@ from aurora_bot.resources.queries import ResourceFindQuery, ResourceInspectQuery
 
 @module(
     name="resources",
-    provides=ResourceCatalogPort,
-    requires=ResourceCatalogPort,
+    provides="resources",
+    requires="resources",
     contributes=OPERATION_CONTRIBUTIONS,
     consumes=(RESOURCE_CONTRIBUTIONS, RESOURCE_ALIASES, RESOURCE_PROVIDERS),
     declares=(RESOURCE_CONTRIBUTIONS, RESOURCE_ALIASES, RESOURCE_PROVIDERS),
@@ -22,7 +22,7 @@ from aurora_bot.resources.queries import ResourceFindQuery, ResourceInspectQuery
 )
 def build(context: ModuleContext) -> ResourceCatalogPort:
     """先读取模组静态定义，再合并依赖配置或模型状态的资源贡献。"""
-    catalog = context.get_optional(ResourceCatalogPort)
+    catalog = context.get_optional("resources")
     if catalog is None:
         definitions = (
             *context.contributions(RESOURCE_CONTRIBUTIONS),

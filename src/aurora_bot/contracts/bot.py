@@ -58,8 +58,6 @@ class Checkpoint:
 
 @dataclass(frozen=True, slots=True)
 class Goal:
-    """Bot 接受、修订或结束的一项目标，与认知树独立存续。"""
-
     goal_id: str
     purpose: str
     success_condition: str

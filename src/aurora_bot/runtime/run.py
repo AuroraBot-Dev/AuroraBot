@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any
 
 from aurora_bot.contracts import FrontIO
-from aurora_bot.contracts.pkgs.runtime import TerminalDispatcher
 from aurora_bot.runtime.assembly import compose_runtime
 from aurora_bot.runtime.supervision import supervise
 from aurora_bot.utils import get_logger
@@ -34,22 +33,22 @@ class _RuntimeFrontContext:
     ) -> None:
         self.settings = runtime.settings
         self._assembly = runtime.assembly
-        self._services: dict[type, object] = {
-            TerminalDispatcher: runtime.terminal,
-            FrontIO: FrontIO(readline=readline, output=output),
+        self._services: dict[str, object] = {
+            "terminal": runtime.terminal,
+            "io": FrontIO(readline=readline, output=output),
         }
 
-    def get[T](self, capability: type[T]) -> T:
-        service = self._services.get(capability)
+    def get(self, name: str) -> Any:
+        service = self._services.get(name)
         if service is not None:
-            return cast("T", service)
-        return self._assembly.get(capability)
+            return service
+        return self._assembly.get(name)
 
-    def get_optional[T](self, capability: type[T]) -> T | None:
-        service = self._services.get(capability)
+    def get_optional(self, name: str) -> Any:
+        service = self._services.get(name)
         if service is not None:
-            return cast("T | None", service)
-        return self._assembly.get_optional(capability)
+            return service
+        return self._assembly.get_optional(name)
 
 
 async def run_runtime(

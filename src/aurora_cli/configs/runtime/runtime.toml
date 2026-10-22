@@ -1,5 +1,4 @@
 [runtime]
 profile = "prod"
-node_id = "root"
 agent = "aurora:agent/definition/root"
 log_level = "INFO"

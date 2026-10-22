@@ -8,10 +8,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
-from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.kernel import BuiltinSource, compose, compose_managed, module
 from aurora_bot.memory_model.config import MemoryModelConfig
 from aurora_bot.memory_model.rules import RuleMemoryPolicy
@@ -67,22 +63,22 @@ def test_selected_models_and_checkpoints_do_not_require_default_configuration(
     memory = RuleMemoryPolicy()
     checkpoints = _Checkpoints()
 
-    @module(name="selected_models", provides=(RhythmPolicy, MemoryPolicy, MemoryCheckpoints), priority=10)
+    @module(name="selected_models", provides=("rhythm", "memory.policy", "memory.checkpoints"), priority=10)
     def selected(context: ModuleContext) -> None:
-        context.provide(RhythmPolicy, rhythm)
-        context.provide(MemoryPolicy, memory)
-        context.provide(MemoryCheckpoints, checkpoints)
+        context.provide("rhythm", rhythm)
+        context.provide("memory.policy", memory)
+        context.provide("memory.checkpoints", checkpoints)
 
     async def scenario() -> None:
         specs = (*BuiltinSource().discover(), selected)
-        instances = ((Model, FakeModel()),)
+        instances = (("ai", FakeModel()),)
         handle = await compose_managed(settings, specs, instances) if managed else None
         assembly = handle.assembly if handle is not None else compose(settings, specs, instances)
         try:
-            assert assembly.get(RhythmPolicy) is rhythm
-            assert assembly.get(MemoryPolicy) is memory
-            assert assembly.get(MemoryCheckpoints) is checkpoints
-            resources = assembly.get(ResourceCatalog)
+            assert assembly.get("rhythm") is rhythm
+            assert assembly.get("memory.policy") is memory
+            assert assembly.get("memory.checkpoints") is checkpoints
+            resources = assembly.get("resources")
             assert resources.resolve(rhythm.ref).ref == rhythm.ref
             assert resources.resolve(memory.ref).ref == memory.ref
             if handle is not None:

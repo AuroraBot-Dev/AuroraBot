@@ -12,7 +12,6 @@ CONFIG_SPEC = ConfigSpec[RuntimeConfig](
         path=("runtime",),
         fields=(
             text_field("profile"),
-            text_field("node_id"),
             text_field("agent"),
             text_field("log_level"),
         ),

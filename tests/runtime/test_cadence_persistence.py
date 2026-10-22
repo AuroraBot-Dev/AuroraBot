@@ -175,7 +175,7 @@ def test_internal_bookkeeping_cannot_postpone_a_due_time_check(tmp_path: Path) -
             clock.value += timedelta(seconds=60)
             await cadence.evaluate_once()
             records = await world.commits(cadence.scope, 0, 20)
-            decision = next(commit for commit in records if commit.kind == "cadence.tree_planned")
+            decision = next(commit for commit in records if commit.kind == "cadence.run_planned")
             assert decision.data["observation"]["cursor"] < previous_head
             assert len(launcher.requests) == 1
         finally:
@@ -201,7 +201,7 @@ def test_restart_delivers_only_cognition_that_was_confirmed_not_started(tmp_path
                 captured.append(request)
                 if already_started:
                     await world.append_commit(
-                        commit_id=f"{request.run_id}:tree:started",
+                        commit_id=f"{request.run_id}:run:started",
                         kind="engine.tree.started",
                         source="engine",
                         summary="认知已经开始",

@@ -1,39 +1,37 @@
-"""世界写入、观察范围与记忆召回之间的行为边界。"""
-
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.agents import AgentCatalog
-from aurora_bot.contracts import AgentTree, ChatMessage, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
-from aurora_bot.contracts.memory import MemoryRequest
-from aurora_bot.engine import CognitionEngine
-from aurora_bot.tools import DELEGATE_TOOL, DelegateTool, ToolRegistry
+from aurora_bot.contracts import ChatMessage, CognitionRequest, MemorySnapshot, ToolCall, ToolScopes, WorldFrontier
 from aurora_bot.world import SqlAlchemyWorldJournal
-from tests.engine.support import ScopedEchoTool, _agent, _assembler
-from tests.support.model import ScriptedModel as FakeModel
+from tests.engine.support import RecordingTool
+from tests.support.engine import make_engine
+from tests.support.model import ScriptedModel
+from tests.support.prompt import _agent
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from aurora_bot.contracts.memory import MemoryRequest
 
 
 class RecordingMemory:
     def __init__(self) -> None:
         self.scopes: list[frozenset[str] | None] = []
 
-    async def recall(self, request: MemoryRequest | None = None) -> MemorySnapshot:
-        request = request or MemoryRequest()
+    async def recall(self, request: MemoryRequest) -> MemorySnapshot:
         self.scopes.append(request.scopes)
-        return MemorySnapshot(request.observed_at or datetime(2026, 1, 1, tzinfo=UTC), ())
+        return MemorySnapshot(datetime(2026, 1, 1, tzinfo=UTC), ())
 
 
-class PublishOnlyTool(ScopedEchoTool):
+class PublishOnlyTool(RecordingTool):
     def resolve_scopes(self, call: ToolCall) -> ToolScopes:
-        return ToolScopes(publish=frozenset({self.scope}))
+        return ToolScopes(publish=frozenset({"test:world/published"}))
 
 
 @pytest.mark.parametrize("memory_scopes", [None, frozenset(), frozenset({"test:world/conversation"})])
@@ -42,58 +40,32 @@ def test_internal_and_tool_effects_do_not_change_recall_or_observation_scope(
 ) -> None:
     async def scenario() -> None:
         journal = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
-        tool = PublishOnlyTool("test:world/published")
-        definition = _agent(tools=frozenset({tool.definition.name}))
-        model = FakeModel(
+        tool = PublishOnlyTool()
+        definition = replace(_agent(), tools=frozenset({tool.definition.name}))
+        model = ScriptedModel(
             [
                 ChatMessage.assistant(tool_calls=(ToolCall("echo", tool.definition.name, {"value": "你好"}),)),
                 ChatMessage.assistant("完成"),
             ]
         )
         memory = RecordingMemory()
-        tree = AgentTree.create(
-            "tree",
-            "root",
-            definition,
-            "开始",
-            WorldFrontier({"test:world/conversation": 0}),
-            memory_scopes=memory_scopes,
-        )
+        engine = make_engine(model, (definition,), world=journal, memory=memory, tools=(tool,))
         try:
-            result = await CognitionEngine(
-                model,
-                _assembler(),
-                AgentCatalog((definition,)),
-                ToolRegistry((tool,)),
-                world=journal,
-                memory=memory,
-            ).run(tree)
+            result = await engine.execute(
+                CognitionRequest(
+                    "开始",
+                    run_id="run",
+                    agent=definition.definition_id,
+                    frontier=WorldFrontier({"test:world/conversation": 0}),
+                    memory_scopes=memory_scopes,
+                )
+            )
+            assert result.status == "completed"
             assert memory.scopes == [memory_scopes, memory_scopes]
-            node = result.node("root")
-            assert node.observation_scopes == {"test:world/conversation"}
-            assert node.observed_frontier.sequence("aurora:run/tree") > 0
-            assert node.observed_frontier.sequence("test:world/published") > 0
+            requested = await journal.commit("run:model:1:requested")
+            assert requested is not None and requested.based_on.sequence("test:world/published") > 0
+            assert await journal.commit("run:model:1:world-delta") is None
         finally:
             await journal.close()
 
     asyncio.run(scenario())
-
-
-def test_delegation_preserves_trigger_and_explicit_memory_scope() -> None:
-    root = _agent(tools=frozenset({DELEGATE_TOOL}), children=frozenset({"worker"}))
-    worker = _agent("worker", "worker")
-    agents = AgentCatalog((root, worker))
-    call = ToolCall("delegate", DELEGATE_TOOL, {"agent": worker.definition_id, "instruction": "检查"})
-    model = FakeModel(
-        [ChatMessage.assistant(tool_calls=(call,)), ChatMessage.assistant("检查完成"), ChatMessage.assistant("完成")]
-    )
-    memory = RecordingMemory()
-    scopes = frozenset({"test:world/conversation"})
-    tree = AgentTree.create("tree", "root", root, "开始", caused_by="event", memory_scopes=scopes)
-    result = asyncio.run(
-        CognitionEngine(model, _assembler(), agents, ToolRegistry((DelegateTool(agents),)), memory=memory).run(tree)
-    )
-
-    assert result.caused_by == "event"
-    assert all(node.memory_scopes == scopes for node in result.nodes)
-    assert memory.scopes == [scopes, scopes, scopes]

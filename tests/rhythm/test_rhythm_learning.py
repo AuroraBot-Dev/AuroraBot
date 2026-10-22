@@ -11,7 +11,6 @@ import pytest
 import torch
 
 from aurora_bot.contracts import EnvironmentEvent
-from aurora_bot.contracts.pkgs.cadence import Cadence, RhythmPolicy
 from aurora_bot.rhythm.config import RhythmConfig
 from aurora_bot.rhythm.dataset import RhythmEpisode
 from aurora_bot.rhythm.gru import GRURhythmPolicy, load_policy
@@ -120,10 +119,10 @@ def test_configured_bot_uses_real_weights_and_persists_gru_state(
 
     async def scenario() -> None:
         try:
-            policy = runtime.assembly.get(RhythmPolicy)
+            policy = runtime.assembly.get("rhythm")
             assert policy.ref == load_policy(path).ref
             await runtime.submit_event(EnvironmentEvent("first", "test", "test:world", "message", _NOW, "变化"))
-            cadence = runtime.assembly.get(Cadence)
+            cadence = runtime.assembly.get("cadence")
             await cadence.evaluate_once()
             records = await runtime.world.commits("aurora:world/bot/default/cadence", 0, 20)
             decisions = [record for record in records if "decision" in record.data]

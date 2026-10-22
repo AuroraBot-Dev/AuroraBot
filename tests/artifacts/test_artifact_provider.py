@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts.artifact import ArtifactIntegrityError
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.contracts.resource import ResourceKey
 from aurora_bot.contracts.resource_query import ResourceQuery
 from aurora_bot.runtime import assemble_runtime
@@ -28,8 +26,8 @@ def test_published_content_is_discoverable_without_entering_the_static_registry(
         """发现未加载的内容，并验证损坏文件不能通过检查入口。"""
         try:
             await runtime.world.initialize()
-            store = runtime.assembly.get(ArtifactStore)
-            catalog = runtime.assembly.get(ResourceCatalog)
+            store = runtime.assembly.get("artifacts")
+            catalog = runtime.assembly.get("resources")
             key = ResourceKey.parse("lab:memory/model/not-loaded")
             info = await store.put(key, b"weight bytes")
             assert catalog.find(namespace="lab") == ()

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from aurora_bot.kernel.adapter import ModuleDeclaration
 
 
-type InstanceBinding = tuple[type, object]
+type InstanceBinding = tuple[str, object]
 type ContributionBinding = tuple[ContributionKey[Any], object]
 
 
@@ -30,7 +30,7 @@ def _host(
 ) -> tuple[Host, _MutableContext]:
     listed = tuple(specs)
     context = _MutableContext(settings)
-    selected: dict[type, str] = {}
+    selected: dict[str, str] = {}
     host = Host(declarations(listed, context, selected), ctx=context.ctx)
     selected.update(providers(listed, host.resolution.providers))
     available = {spec.module_id for spec in host.resolution.modules}

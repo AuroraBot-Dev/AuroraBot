@@ -33,7 +33,7 @@ def test_actual_gateway_versions_are_recorded_before_call_and_survive_config_rep
         async def call(parameters: dict[str, Any]) -> dict[str, Any]:
             """调用发生时必须已经能查询到实际请求的确定版本。"""
             assert runtime is not None
-            fact = await runtime.world.commit("model-provenance:root:model:0:requested")
+            fact = await runtime.world.commit("model-provenance:model:0:requested")
             assert fact is not None
             assert fact.data["endpoint_ref"]["key"] == endpoint_name
             assert fact.data["provider_ref"]["key"] == provider_name
@@ -70,7 +70,7 @@ def test_actual_gateway_versions_are_recorded_before_call_and_survive_config_rep
         resumed, handle = await compose_runtime(config, revised, output=lambda _: None)
         try:
             await handle.activate(stop)
-            fact = await resumed.world.commit("model-provenance:root:model:0:requested")
+            fact = await resumed.world.commit("model-provenance:model:0:requested")
             assert fact is not None
             assert fact.data["endpoint_ref"] == {"key": endpoint_name, "revision": original.ref.revision}
             assert fact.data["provider_ref"] == {"key": provider_name, "revision": original.provider.ref.revision}

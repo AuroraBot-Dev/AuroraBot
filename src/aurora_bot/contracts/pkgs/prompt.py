@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from aurora_bot.contracts.agent import AgentTree
+    from aurora_bot.contracts.model import ChatMessage
     from aurora_bot.contracts.prompt import PromptAssembly, PromptFragment
     from aurora_bot.contracts.resource import ResourceRef
     from aurora_bot.contracts.tool import ToolDefinition
@@ -39,8 +39,8 @@ class PromptAssembler(Protocol):
 
     def assemble(
         self,
-        tree: AgentTree,
-        node_id: str,
+        prompt_id: str,
+        messages: tuple[ChatMessage, ...],
         *,
         memory: MemorySnapshot | None = None,
         tools: tuple[ToolDefinition, ...] = (),

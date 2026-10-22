@@ -39,9 +39,9 @@ _logger = get_logger(__name__)
 CADENCE_SCOPE = "aurora:world/bot/default/cadence"
 CADENCE_TICK = "cadence.tick"
 CADENCE_DECIDED = "cadence.decided"
-CADENCE_TREE_PLANNED = "cadence.tree_planned"
-CADENCE_TREE_FAILED = "cadence.tree_failed"
-CADENCE_TREE_COMPLETED = "cadence.tree_completed"
+CADENCE_RUN_PLANNED = "cadence.run_planned"
+CADENCE_RUN_FAILED = "cadence.run_failed"
+CADENCE_RUN_COMPLETED = "cadence.run_completed"
 DEFAULT_POLL_INTERVAL = 0.25
 DEFAULT_PAGE_SIZE = 1
 DEFAULT_LAUNCH_MESSAGE = "节律唤起：请初筛最近时间窗口内的世界活动。"
@@ -119,15 +119,15 @@ class Cadence:
                 raise RuntimeError("节律日志读取中断，不能跳过未恢复状态")
             for commit in commits:
                 position = commit.scopes[self.scope]
-                if commit.kind in {CADENCE_DECIDED, CADENCE_TREE_PLANNED}:
+                if commit.kind in {CADENCE_DECIDED, CADENCE_RUN_PLANNED}:
                     self._restore(commit)
                     request = commit.data.get("launch")
                     if request is not None:
                         launch = read_launch(request)
                         planned[launch.run_id or ""] = launch
-                elif commit.kind in {CADENCE_TREE_COMPLETED, CADENCE_TREE_FAILED}:
+                elif commit.kind in {CADENCE_RUN_COMPLETED, CADENCE_RUN_FAILED}:
                     self._restore(commit)
-                    planned.pop(commit.data["tree_id"], None)
+                    planned.pop(commit.data["run_id"], None)
         for request in planned.values():
             await self._reconcile(request)
         self._initialized = True
@@ -221,7 +221,7 @@ class Cadence:
         )
         await self._writer.append_commit(
             commit_id=f"cadence:decision:{uuid4().hex}",
-            kind=CADENCE_TREE_PLANNED if deliberating else CADENCE_DECIDED,
+            kind=CADENCE_RUN_PLANNED if deliberating else CADENCE_DECIDED,
             source=self._bot_id,
             summary=decision.reason,
             scopes=frozenset({self.scope}),
@@ -281,7 +281,7 @@ class Cadence:
         try:
             result = await self._launcher.launch(request)
         except Exception as error:
-            _logger.exception("节律认知失败 tree_id={}", request.run_id)
+            _logger.exception("节律认知失败 run_id={}", request.run_id)
             await self._finish(request, "failed", str(error), started)
             return
         status = result.status
@@ -292,7 +292,7 @@ class Cadence:
         state = replace(self._state, failed_runs=0 if status == "completed" else self._state.failed_runs + 1)
         await self._writer.append_commit(
             commit_id=f"cadence:tree:{request.run_id}:result",
-            kind=CADENCE_TREE_COMPLETED if status == "completed" else CADENCE_TREE_FAILED,
+            kind=CADENCE_RUN_COMPLETED if status == "completed" else CADENCE_RUN_FAILED,
             source=self._bot_id,
             summary=f"节律认知结果：{status}，{detail}",
             scopes=frozenset({self.scope}),
@@ -302,7 +302,7 @@ class Cadence:
                 "policy": resource_ref_data(self._policy.ref),
                 "policy_parameters": dict(self._policy.parameters),
                 "state": state.data(),
-                "tree_id": request.run_id,
+                "run_id": request.run_id,
                 "status": status,
                 "detail": detail,
                 "duration_seconds": asyncio.get_running_loop().time() - started if started is not None else None,
@@ -325,14 +325,13 @@ class Cadence:
 
     async def _reconcile(self, request: CognitionRequest) -> None:
         """只有确认未开始的安排可以恢复交付，已开始的运行先核对结果。"""
-        tree_id = request.run_id
-        completed = await self._reader.commit(f"{tree_id}:tree:completed")
-        failed = await self._reader.commit(f"{tree_id}:tree:failed")
-        started = await self._reader.commit(f"{tree_id}:tree:started")
-        if completed is not None:
+        run_id = request.run_id
+        finished = await self._reader.commit(f"{run_id}:run:finished")
+        started = await self._reader.commit(f"{run_id}:run:started")
+        if finished is not None and finished.data.get("status") == "completed":
             await self._finish(request, "completed", "已核对认知完成记录")
-        elif failed is not None:
-            await self._finish(request, "failed", failed.summary)
+        elif finished is not None:
+            await self._finish(request, "failed", finished.summary)
         elif started is not None:
             await self._finish(request, "interrupted", "认知已经开始，结果未知；需要核对行动状态")
         else:

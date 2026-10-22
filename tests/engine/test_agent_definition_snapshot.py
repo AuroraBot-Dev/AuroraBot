@@ -1,57 +1,50 @@
-"""节点保留创建时的完整原型，同名新配置不能替换它的能力与版本。"""
+from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
-import pytest
+from aurora_bot.contracts import ChatMessage, CognitionRequest, ModelRequest
+from aurora_bot.world import SqlAlchemyWorldJournal
+from aurora_kernel import Context, namespace
+from tests.support.engine import make_engine
+from tests.support.model import ScriptedModel
+from tests.support.prompt import _agent
 
-from aurora_bot.contracts import AgentTree, ChatMessage, ToolCall
-from aurora_bot.contracts.tool import DELEGATE_TOOL
-from tests.engine.support import _agent, _runner
-from tests.support.model import ScriptedModel as FakeModel
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-def test_tree_transitions_keep_the_original_definition_object() -> None:
-    """消息与终态只改变运行状态，身份、模型、工具与内容版本保持同一来源。"""
+def test_run_keeps_its_selected_definition_when_the_catalog_changes(tmp_path: Path) -> None:
     original = _agent()
-    tree = AgentTree.create("tree", "root", original, "继续实验")
-    revised = replace(original, description="新的原型说明")
-    completed = tree.append("root", ChatMessage.assistant("实验完成")).complete("root", "实验完成")
-    node = completed.node("root")
-    assert node.definition is original
-    assert node.definition_ref == original.ref
-    assert node.definition_ref != revised.ref
-    assert (node.definition_id, node.prompt_id, node.model, node.tools) == (
-        original.definition_id,
-        original.prompt_id,
-        original.model,
-        original.tools,
-    )
+    selected = [original]
 
+    @namespace("catalog_override")
+    def override(ctx: Context) -> None:
+        pass
 
-def test_delegated_node_keeps_its_own_complete_definition() -> None:
-    """委派时捕获子原型，父子节点不能误用同一个原型版本。"""
-    root = _agent(tools=frozenset({DELEGATE_TOOL}), children=frozenset({"worker"}))
-    worker = _agent("worker", "worker", "worker-model")
-    call = ToolCall("delegate", DELEGATE_TOOL, {"agent": worker.definition_id, "instruction": "检查证据"})
-    tree = AgentTree.create("tree", "root", root, "委派核对")
-    spawned = tree.append("root", ChatMessage.assistant(tool_calls=(call,))).spawn("root", call, worker, "检查证据")
-    assert spawned.node("root").definition is root
-    assert spawned.nodes[1].definition is worker
-    assert spawned.nodes[1].definition_ref == worker.ref
+    @override.hook("aurora:kernel/module/agents:get", priority=10)
+    def get(ctx: Context, identity: str):
+        return selected[0]
 
+    @override.hook("aurora:kernel/module/ai:complete", priority=10)
+    async def complete(ctx: Context, request: ModelRequest) -> ChatMessage:
+        selected[0] = replace(original, description="已修改的配置")
+        assert request.resources[0] == original.ref
+        return ChatMessage.assistant("完成")
 
-@pytest.mark.parametrize("field", ["description", "children"])
-def test_runner_rejects_same_name_with_a_different_complete_version(field: str) -> None:
-    """即使模型、提示词和工具没有变化，版本不同也必须在任何推理发生前拒绝。"""
-    original = _agent()
-    worker = _agent("worker", "worker")
-    if field == "description":
-        updated = replace(original, description="新的说明")
-    else:
-        updated = replace(original, children=frozenset({worker.definition_id}))
-    model = FakeModel([ChatMessage.assistant("不能执行")])
-    tree = AgentTree.create("tree", "root", original, "使用原始原型")
-    with pytest.raises(ValueError, match="预定义原型不一致"):
-        asyncio.run(_runner(model, (updated, worker)).run(tree))
-    assert not model.requests
+    async def scenario() -> None:
+        world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        try:
+            engine = make_engine(ScriptedModel([]), (original,), world=world, extensions=(override,))
+            await engine.execute(CognitionRequest("检查", agent=original.definition_id, run_id="snapshot"))
+            started = await world.commit("snapshot:run:started")
+            requested = await world.commit("snapshot:model:0:requested")
+            assert started is not None and requested is not None
+            assert started.data["definition_ref"] == requested.data["definition_ref"]
+            assert requested.data["definition_ref"]["revision"] == original.ref.revision
+            assert selected[0].ref != original.ref
+        finally:
+            await world.close()
+
+    asyncio.run(scenario())

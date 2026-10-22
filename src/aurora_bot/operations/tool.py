@@ -68,18 +68,18 @@ class OperationTool:
         """运行环境提供归属和因果，工具参数不能冒充其他主体。"""
         context = call.context
         request_id = (
-            json.dumps((context.tree_id, context.node_id, call.call_id), ensure_ascii=False)
+            json.dumps((context.bot_id, context.run_id, call.call_id), ensure_ascii=False)
             if context is not None
             else call.call_id
         )
         return OperationRequest(
             request_id=request_id,
             bot_id=context.bot_id if context is not None else self._bot_id,
-            source=f"agent:{context.node_id}" if context is not None else f"tool:{call.name}",
+            source=f"run:{context.run_id}" if context is not None else f"tool:{call.name}",
             target=self._operation.ref,
             kind=self._operation.kind,
             arguments=call.arguments,
-            correlation_id=context.tree_id if context is not None else None,
+            correlation_id=context.run_id if context is not None else None,
             caused_by=context.caused_by if context is not None else None,
         )
 

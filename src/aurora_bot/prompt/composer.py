@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
+from aurora_bot.contracts import ChatMessage, MemoryScopeSnapshot, MemorySnapshot
 from aurora_bot.contracts.memory import MemoryExposure
 from aurora_bot.contracts.model import ContextBudgetError
 from aurora_bot.contracts.prompt import PromptAssembly
@@ -38,16 +38,15 @@ class PromptAssembler:
 
     def assemble(
         self,
-        tree: AgentTree,
-        node_id: str,
+        prompt_id: str,
+        messages: tuple[ChatMessage, ...],
         *,
         memory: MemorySnapshot | None = None,
         tools: tuple[ToolDefinition, ...] = (),
     ) -> PromptAssembly:
         """保留原始意图、最新交互和主体状态，按完整交互组裁剪历史。"""
         message_budget = self._max_characters - _tools_size(tools)
-        node = tree.node(node_id)
-        sources = self._catalog.for_agent(node.prompt_id)
+        sources = self._catalog.for_agent(prompt_id)
         fragments = [fragment.content for fragment in sources]
         if memory is not None and memory.continuity is not None:
             fragments.append(self._render_continuity(memory.continuity))
@@ -57,7 +56,7 @@ class PromptAssembler:
             fragments.append(
                 f"尚未取得的证据引用：{json.dumps(memory.missing_refs, ensure_ascii=False)}；请先核对来源。"
             )
-        groups = _transcript_groups(node.messages)
+        groups = _transcript_groups(messages)
         required = groups[0] if len(groups) == 1 else (*groups[0], *groups[-1])
         base = "\n\n".join(fragments)
         minimum = len(base) + _total_size(required)
@@ -71,8 +70,8 @@ class PromptAssembler:
             if fragment:
                 fragments.append(fragment)
         system = ChatMessage.system("\n\n".join(fragments))
-        if len(system.content) + _total_size(node.messages) <= message_budget:
-            messages = (system, *node.messages)
+        if len(system.content) + _total_size(messages) <= message_budget:
+            messages = (system, *messages)
         else:
             messages = self._trim_history(system, groups, message_budget)
         return PromptAssembly(

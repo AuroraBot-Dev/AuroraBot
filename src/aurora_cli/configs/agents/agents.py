@@ -16,7 +16,6 @@ CONFIG_SPEC = ConfigSpec[AgentsConfig](
             text_field("prompt"),
             text_field("model"),
             strings_field("tools"),
-            strings_field("children", transform=frozenset),
         ),
         model=AgentConfig,
         container=AgentsConfig,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from aurora_agent import RunResult, RunStats, RunStatus
 from aurora_bot.contracts import (
     ChatMessage,
     CognitionRequest,
@@ -70,4 +71,4 @@ class FakeLauncher:
         if self.failure is not None:
             raise self.failure
         self.requests.append(request)
-        return CognitionResult(request.run_id or "root", "测试完成")
+        return RunResult(request.run_id or "run", RunStatus.COMPLETED, "测试完成", None, RunStats())

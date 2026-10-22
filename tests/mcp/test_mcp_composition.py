@@ -19,11 +19,8 @@ from aurora_bot.contracts import (
     WorldFrontier,
     WorldStreamPage,
 )
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.mcp import McpRuntime
-from aurora_bot.contracts.pkgs.world import WorldJournal
 from aurora_bot.kernel import BuiltinSource, compose, module
-from aurora_bot.mcp import McpAppSpec, McpCallResult, McpClientFactory, McpRemoteTool, McpToolsPage, prepare_mcp
+from aurora_bot.mcp import McpAppSpec, McpCallResult, McpRemoteTool, McpToolsPage, prepare_mcp
 from aurora_bot.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from aurora_bot.mcp.module import build_mcp_specs
 from aurora_bot.runtime import assemble_runtime, create_runtime, run_runtime
@@ -37,7 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
     from pathlib import Path
 
-    from aurora_bot.contracts import TreeActivity
+    from aurora_bot.contracts import RunActivity
     from aurora_bot.contracts.pkgs.runtime import CognitionLauncher
     from aurora_bot.kernel import ModuleContext
     from aurora_bot.mcp.client import InboundEventHandler
@@ -95,7 +92,7 @@ class FakeWorldJournal:
         commits = tuple(self.commits_log[after : after + limit])
         return WorldStreamPage(after, after + len(commits), commits, after + len(commits) < len(self.commits_log))
 
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
+    async def run_index(self, limit: int) -> tuple[RunActivity, ...]:
         _ = limit
         return ()
 
@@ -338,8 +335,8 @@ def test_prebuilt_world_and_mcp_are_injected_once_and_frozen_tool_reaches_regist
             runtime = assemble_runtime(config, FakeModel(), world=world, mcp=mcp)
 
             assert runtime.world is world
-            assert runtime.assembly.get(McpRuntime) is mcp
-            definitions = {definition.name: definition for definition in runtime.runner.tool_definitions}
+            assert runtime.assembly.get("mcp") is mcp
+            definitions = {definition.name: definition for definition in runtime.assembly.get("tools").definitions}
             assert definitions[_TOOL_ID].description == "连通性检查"
         finally:
             await mcp.close()
@@ -370,13 +367,13 @@ def test_run_runtime_orders_world_discovery_activation_and_reverse_shutdown(
             headless=True,
             stop_event=stop,
             output=lambda _message: None,
-            instances=((WorldJournal, world), (McpClientFactory, factory)),
+            instances=(("world", world), ("mcp.factory", factory)),
             contributions=((COGNITION_BINDINGS, bind),),
         )
 
         assert runtime.world is world
         assert factory.opened_specs[0].package == _PACKAGE
-        assert _TOOL_ID in {definition.name for definition in runtime.runner.tool_definitions}
+        assert _TOOL_ID in {definition.name for definition in runtime.assembly.get("tools").definitions}
         assert trace.index("world.initialize") < trace.index("mcp.open")
         assert trace.index("mcp.discover") < trace.index("mcp.activate")
         assert trace.index("mcp.discover") < trace.index("launcher.bind") < trace.index("mcp.activate")
@@ -400,7 +397,7 @@ def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Pat
     assembly = compose(
         config,
         (*BuiltinSource().discover(), build_extra),
-        ((Model, model), (WorldJournal, world)),
+        (("ai", model), ("world", world)),
     )
     assert launchers == []
     echoed: list[str] = []
@@ -413,7 +410,7 @@ def test_new_launcher_consumer_only_needs_its_own_module(configured_project: Pat
     assert runtime.world is world
     assert tree.status == "completed"
     assert runtime.runtime_status()["runs"]["completed"] == 1
-    assert echoed == ["Cadence> [aurora:agent/definition/root] 完成"]
+    assert len(echoed) == 1 and echoed[0].startswith("Cadence> [") and echoed[0].endswith("] 完成")
 
 
 def test_launcher_binding_failure_closes_prepared_resources_before_activation(configured_project: Path) -> None:
@@ -431,7 +428,7 @@ def test_launcher_binding_failure_closes_prepared_resources_before_activation(co
                 _active_config(configured_project),
                 FakeModel(),
                 headless=True,
-                instances=((WorldJournal, world), (McpClientFactory, factory)),
+                instances=(("world", world), ("mcp.factory", factory)),
                 contributions=((COGNITION_BINDINGS, fail_binding),),
             )
 
@@ -460,7 +457,7 @@ def test_run_runtime_closes_mcp_then_world_when_composition_fails(
                 broken,
                 FakeModel(),
                 headless=True,
-                instances=((WorldJournal, world), (McpClientFactory, factory)),
+                instances=(("world", world), ("mcp.factory", factory)),
             )
 
         assert trace.index("world.initialize") < trace.index("mcp.open")

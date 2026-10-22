@@ -1,5 +1,3 @@
-"""从认知树世界事实推导固定版本摘要，不保存另一套执行状态。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -7,12 +5,12 @@ from typing import TYPE_CHECKING
 
 from aurora_bot.contracts.resource import ResourceDescriptor, ResourceInstance, ResourceRef
 from aurora_bot.contracts.resource_codec import parse_resource_instance, parse_resource_ref, resource_instance_data
-from aurora_bot.contracts.tree_lifecycle import (
-    TREE_COMPLETED,
-    TREE_FAILED,
-    TREE_INSTANCE_CONTRACT,
-    TREE_STARTED,
-    tree_scope,
+from aurora_bot.contracts.run_lifecycle import (
+    RUN_COMPLETED,
+    RUN_FAILED,
+    RUN_INSTANCE_CONTRACT,
+    RUN_STARTED,
+    run_scope,
 )
 
 if TYPE_CHECKING:
@@ -39,15 +37,15 @@ class InstanceView:
     def advance(self, commit: WorldCommit) -> InstanceView:
         """归属域的每个新事实推进版本，只有规范终态事实能结束实例。"""
         state = self.state
-        tree_id = self.instance.instance_id
-        terminal = {TREE_COMPLETED: "completed", TREE_FAILED: "failed"}.get(commit.kind)
+        run_id = self.instance.instance_id
+        terminal = {RUN_COMPLETED: "completed", RUN_FAILED: "failed"}.get(commit.kind)
         if (
             terminal is not None
             and commit.source == "engine"
-            and commit.data.get("tree_id") == tree_id
-            and commit.commit_id == f"{tree_id}:tree:{terminal}"
+            and commit.data.get("run_id") == run_id
+            and commit.commit_id == f"{run_id}:run:finished"
         ):
-            state = terminal
+            state = str(commit.data.get("status", terminal))
         return replace(
             self,
             last_commit_id=commit.commit_id,
@@ -61,11 +59,11 @@ class InstanceView:
         return ResourceDescriptor(
             self.ref,
             "Bot 认知实例的世界记录摘要；started 表示已有开始事实，不能据此判断当前是否正在运行。",
-            TREE_INSTANCE_CONTRACT,
+            RUN_INSTANCE_CONTRACT,
             {
                 "instance": resource_instance_data(self.instance),
                 "state": self.state,
-                "scope": tree_scope(self.instance.instance_id),
+                "scope": run_scope(self.instance.instance_id),
                 "start_commit_id": self.start_commit_id,
                 "start_cursor": self.start_cursor,
                 "last_commit_id": self.last_commit_id,
@@ -77,19 +75,19 @@ class InstanceView:
 
 def instance_start(commit: WorldCommit, bot_id: str) -> InstanceView | None:
     """只读取属于 Bot 的规范开始事实，缺少实例版本的记录不能靠现配置补齐。"""
-    if commit.kind != TREE_STARTED or commit.source != "engine" or commit.data.get("bot_id") != bot_id:
+    if commit.kind != RUN_STARTED or commit.source != "engine" or commit.data.get("bot_id") != bot_id:
         return None
-    tree_id = commit.data.get("tree_id")
-    if not isinstance(tree_id, str) or not tree_id.strip():
+    run_id = commit.data.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
         return None
-    if commit.commit_id != f"{tree_id}:tree:started" or tree_scope(tree_id) not in commit.scopes:
+    if commit.commit_id != f"{run_id}:run:started" or run_scope(run_id) not in commit.scopes:
         return None
     if "instance" not in commit.data and "process_ref" not in commit.data:
         return None
     instance = parse_resource_instance(commit.data.get("instance"))
     process = parse_resource_ref(commit.data.get("process_ref"))
     if (
-        instance.instance_id != tree_id
+        instance.instance_id != run_id
         or instance.bot_id != bot_id
         or instance.definition != process
         or process.key.domain != "engine"

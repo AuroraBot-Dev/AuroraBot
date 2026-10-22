@@ -240,7 +240,7 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
                     "请求",
                     frozenset({"aurora:run/a"}),
                     WorldFrontier(),
-                    {"tree_id": "a", "tool": "x"},
+                    {"run_id": "a", "tool": "x"},
                     later,
                 ),
                 WorldCommitInput(
@@ -250,7 +250,7 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
                     "完成",
                     frozenset({"aurora:run/a"}),
                     WorldFrontier(),
-                    {"tree_id": "a", "tool": "x"},
+                    {"run_id": "a", "tool": "x"},
                     later,
                 ),
                 WorldCommitInput(
@@ -260,18 +260,18 @@ def test_sqlalchemy_journal_derives_forest_index_from_engine_commits(tmp_path: P
                     "请求",
                     frozenset({"aurora:run/b"}),
                     WorldFrontier(),
-                    {"tree_id": "b", "tool": "y"},
+                    {"run_id": "b", "tool": "y"},
                     earlier,
                 ),
             )
         )
 
-        index = await journal.tree_index(10)
-        assert [item.tree_id for item in index] == ["a", "b"]
+        index = await journal.run_index(10)
+        assert [item.run_id for item in index] == ["a", "b"]
         assert [item.commit_count for item in index] == [2, 1]
         assert index[0].first_seen <= index[0].last_seen
         assert index[0].first_seen == later and index[1].last_seen == earlier
-        assert await journal.tree_index(1) == index[:1]
+        assert await journal.run_index(1) == index[:1]
         await journal.close()
 
     asyncio.run(scenario())
@@ -361,7 +361,7 @@ def test_sqlalchemy_journal_rejects_invalid_query_bounds(tmp_path: Path) -> None
         with pytest.raises(ValueError, match="limit"):
             await journal.commits("scope", 0, 0)
         with pytest.raises(ValueError, match="limit"):
-            await journal.tree_index(0)
+            await journal.run_index(0)
         with pytest.raises(ValueError, match="commit_id"):
             await journal.commit("")
         await journal.close()

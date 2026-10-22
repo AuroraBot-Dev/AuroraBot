@@ -10,16 +10,6 @@ from aurora_bot.artifacts.config import ArtifactsConfig
 from aurora_bot.bot.config import BotConfig
 from aurora_bot.cadence.config import CadenceConfig, ReactionsConfig
 from aurora_bot.contracts.identity import TagsConfig
-from aurora_bot.contracts.pkgs.agents import AgentCatalog
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.console import TerminalConsole
-from aurora_bot.contracts.pkgs.engine import CognitionRunner
-from aurora_bot.contracts.pkgs.mcp import McpRuntime
-from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
-from aurora_bot.contracts.pkgs.prompt import PromptAssembler
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
-from aurora_bot.contracts.pkgs.world import WorldJournal
 from aurora_bot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
 from aurora_bot.engine.config import EngineConfig
 from aurora_bot.kernel import BuiltinSource, compose, resolve
@@ -74,13 +64,12 @@ def _settings(tmp_path: Path) -> _Settings:
                         "aurora:prompt/agent/chat",
                         "test:ai/endpoint/chat",
                         (),
-                        frozenset(),
                     ),
                 )
             ),
             EngineConfig: EngineConfig(2, 8, 16),
             BotConfig: BotConfig("aurora:bot/default"),
-            RuntimeConfig: RuntimeConfig("default", "root", "aurora:agent/definition/chat", "NONE"),
+            RuntimeConfig: RuntimeConfig("default", "aurora:agent/definition/chat", "NONE"),
             MemoryConfig: MemoryConfig(60, 10, (), ()),
             MemoryModelConfig: MemoryModelConfig(),
             ArtifactsConfig: ArtifactsConfig(),
@@ -148,18 +137,18 @@ def test_builtin_modules_assemble_into_one_assembly(tmp_path: Path) -> None:
     assembly = compose(_settings(tmp_path), BuiltinSource().discover())
 
     capabilities = (
-        assembly.get(Model),
-        assembly.get(ScopeCatalog),
-        assembly.get(ArtifactStore),
-        assembly.get(PromptAssembler),
-        assembly.get(AgentCatalog),
-        assembly.get(ToolRegistry),
-        assembly.get(WorldJournal),
-        assembly.get(MemoryReader),
-        assembly.get(MemoryCheckpoints),
-        assembly.get(TerminalConsole),
-        assembly.get(McpRuntime),
-        assembly.get(CognitionRunner),
+        assembly.get("ai"),
+        assembly.get("scopes"),
+        assembly.get("artifacts"),
+        assembly.get("prompt"),
+        assembly.get("agents"),
+        assembly.get("tools"),
+        assembly.get("world"),
+        assembly.get("memory"),
+        assembly.get("memory.checkpoints"),
+        assembly.get("console"),
+        assembly.get("mcp"),
+        assembly.get("engine"),
     )
 
     assert all(capability is not None for capability in capabilities)

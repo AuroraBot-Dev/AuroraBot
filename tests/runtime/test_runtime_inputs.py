@@ -44,13 +44,13 @@ def test_every_input_path_preserves_its_world_cause(configured_project: Path, en
                     if entry == "console":
                         await runtime.terminal.dispatch_terminal(commit.summary, commit=commit)
                         page = await runtime.world.stream(0, 100)
-                        started = next(item for item in page.commits if item.kind == "engine.tree.started")
-                        run_id = started.data["tree_id"]
+                        started = next(item for item in page.commits if item.kind == "engine.run.started")
+                        run_id = started.data["run_id"]
                     else:
                         await runtime.launch(
                             CognitionRequest(commit.summary, run_id="tree", caused_by=commit.commit_id)
                         )
-            started = await runtime.world.commit(f"{run_id}:tree:started")
+            started = await runtime.world.commit(f"{run_id}:run:started")
             assert started is not None
             cause = await runtime.world.commit(started.data["caused_by"])
             assert cause is not None and started is not None
@@ -99,7 +99,7 @@ def test_event_entry_does_not_skip_commits_arriving_after_its_trigger(configured
         try:
             event = EnvironmentEvent("trigger", "test", "test:world", "message", datetime.now(UTC), "触发消息")
             result = await runtime.run_from_event(event)
-            assert result.error is None
+            assert result.status == "completed"
             disclosed = [
                 message.content
                 for request in model.requests
@@ -181,11 +181,13 @@ def test_cancelled_cognition_keeps_started_fact_and_cannot_be_replayed(configure
                 "running": 0,
                 "completed": 0,
                 "failed": 0,
+                "cancelled": 0,
+                "limit_reached": 0,
                 "interrupted": 1,
             }
-            assert await runtime.world.commit("cancelled:tree:started") is not None
-            assert await runtime.world.commit("cancelled:tree:completed") is None
-            assert await runtime.world.commit("cancelled:tree:failed") is None
+            assert await runtime.world.commit("cancelled:run:started") is not None
+            finished = await runtime.world.commit("cancelled:run:finished")
+            assert finished is not None and finished.data["status"] == "cancelled"
             with pytest.raises(ValueError, match="已存在"):
                 await runtime.run("重复执行", run_id="cancelled")
             assert len(model.requests) == 1

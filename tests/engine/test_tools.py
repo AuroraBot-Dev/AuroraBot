@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from aurora_bot.agents import AgentCatalog
+from aurora_agent import ToolExecutionError
 from aurora_bot.contracts import (
-    AgentDefinition,
-    DelegationRequest,
     EnvironmentEvent,
+    RunActivity,
     ScopeCatalog,
     ScopeDeclaration,
     ScopeKind,
@@ -19,7 +18,6 @@ from aurora_bot.contracts import (
     ToolDefinition,
     ToolOutput,
     ToolStatus,
-    TreeActivity,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -27,17 +25,15 @@ from aurora_bot.contracts import (
     WorldStreamPage,
 )
 from aurora_bot.tools import (
-    DELEGATE_TOOL,
     WAIT_TOOL,
     WORLD_READ_TOOL,
+    WORLD_RUNS_TOOL,
     WORLD_SCOPES_TOOL,
-    WORLD_TREES_TOOL,
-    DelegateTool,
     ToolRegistrationError,
     ToolRegistry,
     WaitTool,
     WorldReadTool,
-    WorldTreesTool,
+    WorldRunsTool,
 )
 from aurora_bot.tools.builtin import builtin_tools
 from tests.support.tool import EchoTool
@@ -57,7 +53,7 @@ def _scope_catalog() -> ScopeCatalog:
 
 class FailingTool(EchoTool):
     async def execute(self, call: ToolCall) -> ToolOutput:
-        raise RuntimeError(str(call.arguments["error"]))
+        raise ToolExecutionError(str(call.arguments["error"]))
 
 
 class UnknownTool(EchoTool):
@@ -65,34 +61,11 @@ class UnknownTool(EchoTool):
         return ToolOutput(str(call.arguments["value"]), status=ToolStatus.UNKNOWN)
 
 
-def _agents() -> AgentCatalog:
-    return AgentCatalog(
-        (
-            AgentDefinition(
-                "aurora:agent/definition/root",
-                "总代理。",
-                "aurora:prompt/agent/root",
-                "test:ai/endpoint/quality",
-                frozenset({DELEGATE_TOOL}),
-                frozenset({"aurora:agent/definition/worker"}),
-            ),
-            AgentDefinition(
-                "aurora:agent/definition/worker",
-                "通用执行者。",
-                "aurora:prompt/agent/worker",
-                "test:ai/endpoint/fast",
-                frozenset(),
-                frozenset(),
-            ),
-        )
-    )
-
-
 def test_registry_forms_sorted_immutable_catalog_and_filters_visibility() -> None:
-    registry = ToolRegistry((EchoTool(), DelegateTool(_agents())))
+    registry = ToolRegistry((EchoTool(), WaitTool()))
 
-    assert registry.names == frozenset({DELEGATE_TOOL, "test:tool/definition/echo"})
-    assert [definition.name for definition in registry.definitions] == [DELEGATE_TOOL, "test:tool/definition/echo"]
+    assert registry.names == frozenset({WAIT_TOOL, "test:tool/definition/echo"})
+    assert [definition.name for definition in registry.definitions] == [WAIT_TOOL, "test:tool/definition/echo"]
     assert [definition.name for definition in registry.definitions_for(frozenset({"test:tool/definition/echo"}))] == [
         "test:tool/definition/echo"
     ]
@@ -145,54 +118,14 @@ def test_registry_routes_calls_and_normalizes_boundary_failures() -> None:
 
     assert echo == ToolOutput("ok")
     assert missing == ToolOutput("未知工具：test:tool/definition/missing", status=ToolStatus.FAILED)
-    assert failed == ToolOutput("工具执行失败：broken", status=ToolStatus.FAILED)
+    assert failed == ToolOutput("工具确认执行失败", status=ToolStatus.FAILED)
     assert unknown == ToolOutput("uncertain", status=ToolStatus.UNKNOWN)
-
-
-def test_delegate_is_a_registered_tool_that_produces_a_tree_operation_request() -> None:
-    registry = ToolRegistry((DelegateTool(_agents()),))
-    result = asyncio.run(
-        registry.execute(
-            ToolCall(
-                "delegate",
-                DELEGATE_TOOL,
-                {
-                    "agent": "aurora:agent/definition/worker",
-                    "instruction": "检查一个边界",
-                },
-            )
-        )
-    )
-
-    assert result == DelegationRequest("aurora:agent/definition/worker", "检查一个边界")
-    assert registry.definitions[0].name == DELEGATE_TOOL
-    choices = registry.definitions[0].parameters["properties"]["agent"]["oneOf"]  # type: ignore[index]
-    assert choices == (
-        {"const": "aurora:agent/definition/root", "description": "总代理。"},
-        {"const": "aurora:agent/definition/worker", "description": "通用执行者。"},
-    )
-
-
-@pytest.mark.parametrize(
-    "arguments",
-    (
-        {},
-        {"agent": "worker", "instruction": ""},
-        {"agent": "missing", "instruction": "x"},
-    ),
-)
-def test_delegate_rejects_invalid_arguments_as_tool_output(arguments: dict[str, object]) -> None:
-    result = asyncio.run(DelegateTool(_agents()).execute(ToolCall("delegate", DELEGATE_TOOL, arguments)))
-
-    assert isinstance(result, ToolOutput)
-    assert result.status is ToolStatus.FAILED
-    assert result.is_error is True
 
 
 class FakeJournal:
     """实现 WorldJournal 协议的内存桩，只支持世界读取工具使用的查询。"""
 
-    def __init__(self, commits: tuple[WorldCommit, ...] = (), activity: tuple[TreeActivity, ...] = ()) -> None:
+    def __init__(self, commits: tuple[WorldCommit, ...] = (), activity: tuple[RunActivity, ...] = ()) -> None:
         self.commits_by_scope = commits
         self.activity = activity
         self.queries: list[tuple[str, int, int]] = []
@@ -231,7 +164,7 @@ class FakeJournal:
     async def close(self) -> None:
         return None
 
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
+    async def run_index(self, limit: int) -> tuple[RunActivity, ...]:
         return self.activity[:limit]
 
     async def append_commit(
@@ -316,20 +249,20 @@ def test_world_read_rejects_invalid_arguments_as_tool_output(arguments: dict[str
     assert result.is_error is True
 
 
-def test_world_trees_lists_forest_index_and_limits() -> None:
-    journal = FakeJournal(activity=(TreeActivity("a", 2, datetime.now(UTC), datetime.now(UTC)),))
-    tool = WorldTreesTool(journal)
+def test_world_runs_lists_activity_and_limits() -> None:
+    journal = FakeJournal(activity=(RunActivity("a", 2, datetime.now(UTC), datetime.now(UTC)),))
+    tool = WorldRunsTool(journal)
 
-    scopes = tool.resolve_scopes(ToolCall("trees", WORLD_TREES_TOOL, {}))
-    result = asyncio.run(tool.execute(ToolCall("trees", WORLD_TREES_TOOL, {"limit": 32})))
-    too_many = asyncio.run(tool.execute(ToolCall("trees", WORLD_TREES_TOOL, {"limit": 257})))
+    scopes = tool.resolve_scopes(ToolCall("runs", WORLD_RUNS_TOOL, {}))
+    result = asyncio.run(tool.execute(ToolCall("runs", WORLD_RUNS_TOOL, {"limit": 32})))
+    too_many = asyncio.run(tool.execute(ToolCall("runs", WORLD_RUNS_TOOL, {"limit": 257})))
 
     assert scopes.observe == frozenset()
     assert isinstance(result, ToolOutput) and result.is_error is False
     payload = json.loads(result.content)
     assert payload["count"] == 1
-    assert payload["trees"][0]["tree_id"] == "a"
-    assert payload["trees"][0]["commit_count"] == journal.activity[0].commit_count
+    assert payload["runs"][0]["run_id"] == "a"
+    assert payload["runs"][0]["commit_count"] == journal.activity[0].commit_count
     assert isinstance(too_many, ToolOutput) and too_many.is_error is True
 
 
@@ -347,16 +280,16 @@ def test_wait_tool_sleeps_within_bounds_and_rejects_invalid_values() -> None:
 
 def test_builtin_tools_form_the_default_catalog_before_external_tools() -> None:
     journal = FakeJournal()
-    builtins = builtin_tools(agents=_agents(), journal=journal, scopes=_scope_catalog())
+    builtins = builtin_tools(journal=journal, scopes=_scope_catalog())
     registry = ToolRegistry((*builtins, EchoTool()))
 
     assert registry.names == frozenset(
-        {DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL, "test:tool/definition/echo"}
+        {WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_RUNS_TOOL, "test:tool/definition/echo"}
     )
 
 
 def test_world_tools_are_registered_under_service_domain_ids() -> None:
-    registry = ToolRegistry((WorldReadTool(FakeJournal()), WorldTreesTool(FakeJournal())))
+    registry = ToolRegistry((WorldReadTool(FakeJournal()), WorldRunsTool(FakeJournal())))
 
-    assert registry.names == frozenset({WORLD_READ_TOOL, WORLD_TREES_TOOL})
-    assert [definition.name for definition in registry.definitions] == [WORLD_READ_TOOL, WORLD_TREES_TOOL]
+    assert registry.names == frozenset({WORLD_READ_TOOL, WORLD_RUNS_TOOL})
+    assert [definition.name for definition in registry.definitions] == [WORLD_READ_TOOL, WORLD_RUNS_TOOL]

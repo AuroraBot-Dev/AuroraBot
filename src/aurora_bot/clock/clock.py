@@ -56,14 +56,13 @@ class PersistentBotClock:
         for wake in snapshot.wakes:
             if wake.status is not WakeStatus.RUNNING:
                 continue
-            tree_id = self.run_id(wake)
-            completed = await self._world.commit(f"{tree_id}:tree:completed")
-            failed = await self._world.commit(f"{tree_id}:tree:failed")
-            started = await self._world.commit(f"{tree_id}:tree:started")
-            if completed is not None:
+            run_id = self.run_id(wake)
+            finished = await self._world.commit(f"{run_id}:run:finished")
+            started = await self._world.commit(f"{run_id}:run:started")
+            if finished is not None and finished.data.get("status") == "completed":
                 await self._settle(wake, WakeStatus.COMPLETED, "重启后已核对认知完成记录")
-            elif failed is not None:
-                await self._settle(wake, WakeStatus.FAILED, failed.summary)
+            elif finished is not None:
+                await self._settle(wake, WakeStatus.FAILED, finished.summary)
             elif started is not None:
                 await self._settle(wake, WakeStatus.INTERRUPTED, "认知已经开始，完成结果未知；需要核对行动结果")
         self._initialized = True
@@ -133,7 +132,7 @@ class PersistentBotClock:
             _logger.exception("未来活动执行失败 wake_id={}", wake.wake_id)
             await self._settle(wake, WakeStatus.FAILED, str(error))
             return
-        status = WakeStatus.COMPLETED if result.error is None else WakeStatus.FAILED
+        status = WakeStatus.COMPLETED if result.status == "completed" else WakeStatus.FAILED
         await self._settle(wake, status, f"认知运行状态：{result.status}")
 
     async def _settle(self, wake: WakePlan, status: WakeStatus, detail: str) -> None:

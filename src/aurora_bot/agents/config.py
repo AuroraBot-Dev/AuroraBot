@@ -14,7 +14,6 @@ class AgentConfig:
     prompt: str
     model: str
     tools: tuple[str, ...]
-    children: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)

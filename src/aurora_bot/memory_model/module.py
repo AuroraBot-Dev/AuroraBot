@@ -7,10 +7,6 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 from aurora_bot.contracts.model_artifact import read_model_content
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryPolicyState
-from aurora_bot.contracts.pkgs.world import WorldJournal
 from aurora_bot.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceDescriptor, ResourceKey
 from aurora_bot.contracts.scope import ScopeDeclaration, ScopeKind
 from aurora_bot.kernel import ModuleContext, module
@@ -22,10 +18,12 @@ if TYPE_CHECKING:
     from pathlib import Path
     from types import ModuleType
 
+    from aurora_bot.contracts.pkgs.memory import MemoryPolicy, MemoryPolicyState
+
 
 async def prepare(context: ModuleContext) -> None:
     """在资源目录冻结前，从确切资源字节构造实际策略。"""
-    if not context.is_provider(MemoryPolicy) or context.contains(MemoryPolicy):
+    if not context.is_provider("memory.policy") or context.contains("memory.policy"):
         return
     config = context.settings.resolve(MemoryModelConfig)
     if config.policy != "aurora:memory/model/tgn":
@@ -35,36 +33,36 @@ async def prepare(context: ModuleContext) -> None:
     if config.weights is None and config.reference is None:
         raise ValueError("时序图记忆模型需要指定 weights 或 weights_ref")
     content, ref = await read_model_content(
-        context.get(ArtifactStore),
+        context.get("artifacts"),
         ResourceKey.parse(config.policy),
         reference=config.reference,
         path=context.settings.project_root / config.weights if config.weights is not None else None,
     )
     policy = await asyncio.to_thread(_backend().load_policy_bytes, content, expected=ref)
-    context.provide(MemoryPolicy, policy)
-    if not context.contains(MemoryPolicyState):
-        context.provide(MemoryPolicyState, policy)
+    context.provide("memory.policy", policy)
+    if not context.contains("memory.state"):
+        context.provide("memory.state", policy)
 
 
 async def activate(context: ModuleContext) -> None:
     """环境开始运行前尝试恢复与当前模型兼容的节点投影。"""
-    await context.get(MemoryCheckpoints).initialize()
+    await context.get("memory.checkpoints").initialize()
 
 
 async def run(context: ModuleContext, stop: asyncio.Event) -> None:
     """独立维护加速状态，不触发认知或训练模型参数。"""
-    await context.get(MemoryCheckpoints).run(stop)
+    await context.get("memory.checkpoints").run(stop)
 
 
 async def close(context: ModuleContext) -> None:
     """世界和内容存储关闭前保存最后一份已确认投影。"""
-    await context.get(MemoryCheckpoints).save()
+    await context.get("memory.checkpoints").save()
 
 
 @module(
     name="memory_model",
-    provides=(MemoryPolicy, MemoryCheckpoints),
-    requires=(ArtifactStore, BotStateStore, WorldJournal, MemoryPolicy),
+    provides=("memory.policy", "memory.checkpoints"),
+    requires=("artifacts", "bot", "world", "memory.policy"),
     contributes=RESOURCE_CONTRIBUTIONS,
     scopes=ScopeDeclaration("aurora:run/memory-model/*", ScopeKind.RUN, "记忆推荐模型的投影检查点与重建位置。"),
     prepare=prepare,
@@ -74,21 +72,21 @@ async def close(context: ModuleContext) -> None:
 )
 def build(context: ModuleContext) -> None:
     """默认规则策略与存储实现没有相互引用。"""
-    policy = context.get_optional(MemoryPolicy)
-    state = context.get_optional(MemoryPolicyState)
+    policy = context.get_optional("memory.policy")
+    state = context.get_optional("memory.state")
     if policy is None:
         policy, state = _policy(context.settings.resolve(MemoryModelConfig), context.settings.project_root)
-        context.provide(MemoryPolicy, policy)
+        context.provide("memory.policy", policy)
     if state is not None and state.ref != policy.ref:
         raise ValueError("记忆检查点能力必须属于当前排序模型版本")
-    if not context.contains(MemoryCheckpoints):
+    if not context.contains("memory.checkpoints"):
         context.provide(
-            MemoryCheckpoints,
+            "memory.checkpoints",
             MemoryModelCheckpoints(
-                context.get(BotStateStore).bot_id,
+                context.get("bot").bot_id,
                 state,
-                context.get(ArtifactStore),
-                context.get(WorldJournal),
+                context.get("artifacts"),
+                context.get("world"),
                 interval_seconds=context.settings.resolve(MemoryModelConfig).checkpoint_seconds,
             ),
         )

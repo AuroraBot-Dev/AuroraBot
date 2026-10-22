@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from aurora_bot.kernel.context import _ModuleContext, capability_name
+from aurora_bot.kernel.context import ModuleContext
 from aurora_bot.kernel.declaration import ModuleSpec
 from aurora_kernel.declaration import Manifest, Namespace
 from aurora_kernel.declaration import ModuleSpec as HostModule
-from aurora_kernel.phase import Ordering, PhaseKind
+from aurora_kernel.phase import PhaseKind
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
@@ -20,32 +20,23 @@ if TYPE_CHECKING:
 type ModuleDeclaration = ModuleSpec | HostModule | Namespace
 
 
-def providers(specs: Iterable[ModuleDeclaration], selected: Mapping[str, str]) -> dict[type, str]:
+def providers(specs: Iterable[ModuleDeclaration], selected: Mapping[str, str]) -> dict[str, str]:
     return {
-        capability: selected[capability_name(capability)]
+        capability: selected[capability]
         for spec in specs
         if isinstance(spec, ModuleSpec)
         for capability in spec.provides
-        if capability_name(capability) in selected
+        if capability in selected
     }
 
 
 def declarations(
     specs: Iterable[ModuleDeclaration],
     context: _MutableContext | None = None,
-    selected: dict[type, str] | None = None,
+    selected: dict[str, str] | None = None,
 ) -> tuple[HostModule, ...]:
     """资源和世界域仍留在 Bot；宿主只获得名称与普通回调。"""
     listed = tuple(specs)
-    identities: dict[str, type] = {}
-    for spec in listed:
-        if not isinstance(spec, ModuleSpec):
-            continue
-        for capability in (*spec.provides, *spec.requires):
-            name = capability_name(capability)
-            if name in identities and identities[name] is not capability:
-                raise ValueError(f"不同契约使用了同一个 Python 身份：{name}")
-            identities[name] = capability
     result = []
     for item in listed:
         spec = item.spec if isinstance(item, Namespace) else item
@@ -58,7 +49,7 @@ def declarations(
     return tuple(result)
 
 
-def _declaration(spec: ModuleSpec, context: _MutableContext | None, selected: dict[type, str] | None) -> HostModule:
+def _declaration(spec: ModuleSpec, context: _MutableContext | None, selected: dict[str, str] | None) -> HostModule:
     hooks = dict(spec.hooks)
     if context is not None and selected is not None:
         hooks = {
@@ -67,31 +58,31 @@ def _declaration(spec: ModuleSpec, context: _MutableContext | None, selected: di
         }
     return HostModule(
         spec.module_id,
-        provides=tuple(map(capability_name, spec.provides)),
-        requires=tuple(map(capability_name, spec.requires)),
+        provides=spec.provides,
+        requires=spec.requires,
         contributes=tuple(key.name for key in spec.contributes),
         consumes=tuple(key.name for key in spec.consumes),
         declares=tuple(key.name for key in spec.declares),
         priority=spec.priority,
         optional=spec.optional,
-        order=tuple(
-            Ordering(item.phase, tuple(map(capability_name, item.after)), item.after_phase) for item in spec.order
-        ),
+        order=spec.order,
         hooks=hooks,
+        points=spec.points,
+        handlers=spec.handlers,
         manifest=Manifest(spec.manifest.version, spec.manifest.kernel_api),
     )
 
 
 def _callback(
-    spec: ModuleSpec, callback: Callable, context: _MutableContext, selected: dict[type, str], *, build: bool
+    spec: ModuleSpec, callback: Callable, context: _MutableContext, selected: dict[str, str], *, build: bool
 ) -> Callable:
     def call(_ctx: Context, *args: Any) -> Any:
-        bound = _ModuleContext(context, spec.module_id, selected)
+        bound = ModuleContext(context, spec.module_id, selected)
         result = callback(bound, *args)
         if build:
             for capability in spec.provides:
                 if bound.is_provider(capability) and not bound.contains(capability):
-                    raise ValueError(f"{spec.module_id} 声明提供 {capability.__name__}，但构造期没有登记它")
+                    raise ValueError(f"{spec.module_id} 声明提供 {capability}，但构造期没有登记它")
         return result
 
     return call

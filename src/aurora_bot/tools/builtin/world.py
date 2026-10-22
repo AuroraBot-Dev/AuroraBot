@@ -1,5 +1,3 @@
-"""读取世界提交正文与 Bot 森林索引的框架服务工具。"""
-
 from __future__ import annotations
 
 import json
@@ -7,8 +5,8 @@ from typing import TYPE_CHECKING
 
 from aurora_bot.contracts import (
     WORLD_READ_TOOL,
+    WORLD_RUNS_TOOL,
     WORLD_SCOPES_TOOL,
-    WORLD_TREES_TOOL,
     ScopeCatalog,
     ScopeKind,
     ToolCall,
@@ -26,7 +24,7 @@ if TYPE_CHECKING:
 from aurora_bot.utils import thaw_json
 
 _MAX_READ_LIMIT = 100
-_MAX_TREES_LIMIT = 256
+_MAX_RUNS_LIMIT = 256
 
 
 class WorldReadTool:
@@ -41,7 +39,7 @@ class WorldReadTool:
             "properties": {
                 "scope": {
                     "type": "string",
-                    "description": "要读取的世界 scope，例如 aurora:run/<tree_id> 或环境 scope。",
+                    "description": "要读取的世界 scope，例如 aurora:run/<run_id> 或环境 scope。",
                 },
                 "after": {
                     "type": "integer",
@@ -105,20 +103,18 @@ class WorldReadTool:
         )
 
 
-class WorldTreesTool:
-    """列出世界日志已知的 AgentTree 活动摘要，构成 Bot 的持久森林索引。"""
-
+class WorldRunsTool:
     definition = ToolDefinition(
-        WORLD_TREES_TOOL,
-        "列出世界日志中已知的 AgentTree 活动摘要（Bot 森林索引），用于了解 Bot 已经运行过哪些树及其活动时间。",
+        WORLD_RUNS_TOOL,
+        "列出世界日志中已知的认知运行及其活动时间。",
         {
             "type": "object",
             "properties": {
                 "limit": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": _MAX_TREES_LIMIT,
-                    "description": f"最多返回的树数量（默认 32，上限 {_MAX_TREES_LIMIT}）。",
+                    "maximum": _MAX_RUNS_LIMIT,
+                    "description": f"最多返回的运行数量（默认 32，上限 {_MAX_RUNS_LIMIT}）。",
                 },
             },
             "additionalProperties": False,
@@ -133,20 +129,20 @@ class WorldTreesTool:
         return ToolScopes()
 
     async def execute(self, call: ToolCall) -> ToolResult:
-        limit = _bounded_int(call.arguments.get("limit"), 32, _MAX_TREES_LIMIT)
+        limit = _bounded_int(call.arguments.get("limit"), 32, _MAX_RUNS_LIMIT)
         if limit is None:
             return ToolOutput(
-                f"森林索引参数无效：limit 必须在 1 到 {_MAX_TREES_LIMIT} 之间",
+                f"运行索引参数无效：limit 必须在 1 到 {_MAX_RUNS_LIMIT} 之间",
                 status=ToolStatus.FAILED,
             )
-        activity = await self._journal.tree_index(limit)
+        activity = await self._journal.run_index(limit)
         return ToolOutput(
             json.dumps(
                 {
                     "count": len(activity),
-                    "trees": [
+                    "runs": [
                         {
-                            "tree_id": item.tree_id,
+                            "run_id": item.run_id,
                             "commit_count": item.commit_count,
                             "first_seen": item.first_seen.isoformat(),
                             "last_seen": item.last_seen.isoformat(),

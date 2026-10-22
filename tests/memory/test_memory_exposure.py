@@ -6,15 +6,13 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora_bot.agents import AgentCatalog
-from aurora_bot.contracts import AgentTree, ChatMessage, MemoryScopeSnapshot, MemorySnapshot
+from aurora_bot.contracts import ChatMessage, CognitionRequest, MemoryScopeSnapshot, MemorySnapshot
 from aurora_bot.contracts.memory import MemoryBundle, MemoryRecall, MemoryRequest, MemoryScore
 from aurora_bot.contracts.memory_codec import exposure_data, read_exposure
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
-from aurora_bot.engine import CognitionEngine
-from aurora_bot.tools import ToolRegistry
 from aurora_bot.world import SqlAlchemyWorldJournal
 from tests.memory.facts import _NOW, _fact
+from tests.support.engine import make_engine
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.prompt import _agent, _assembler
 
@@ -53,8 +51,8 @@ def _policy_ref() -> ResourceRef:
 def test_budgeted_assembly_reports_actual_evidence_and_recall_roundtrips() -> None:
     """推荐过但未载入的内容、正文提及的 ID 都不能成为曝光。"""
     snapshot = _snapshot()
-    tree = AgentTree.create("tree", "root", _agent(), "继续核对 large 和 absent。")
-    assembled = _assembler(limit=900).assemble(tree, "root", memory=snapshot)
+    transcript = (ChatMessage.message("继续核对 large 和 absent。"),)
+    assembled = _assembler(limit=900).assemble(_agent().prompt_id, transcript, memory=snapshot)
     assert assembled.memory is not None
     assert assembled.memory.recommended_ids == ("large", "support", "small")
     assert assembled.memory.included_ids == ("support", "small")
@@ -71,11 +69,11 @@ def test_scope_sources_are_deduplicated_and_required_sources_are_not_repeated() 
     snapshot = MemorySnapshot(
         _NOW, (MemoryScopeSnapshot("first", 1, (commit,)), MemoryScopeSnapshot("second", 1, (commit,)))
     )
-    tree = AgentTree.create("tree", "root", _agent(), "核对")
-    assembled = _assembler().assemble(tree, "root", memory=snapshot)
+    transcript = (ChatMessage.message("核对"),)
+    assembled = _assembler().assemble(_agent().prompt_id, transcript, memory=snapshot)
     assert assembled.messages[0].content.count("共享经历") == 1
     assert assembled.memory is not None and assembled.memory.included_ids == ("shared",)
-    required = _assembler().assemble(tree, "root", memory=replace(snapshot, required=(commit,)))
+    required = _assembler().assemble(_agent().prompt_id, transcript, memory=replace(snapshot, required=(commit,)))
     assert required.messages[0].content.count("共享经历") == 1
     assert required.memory is not None and required.memory.included_ids == ("shared",)
 
@@ -94,18 +92,11 @@ def test_engine_persists_the_assembled_exposure_before_model_attempt(tmp_path: P
     async def scenario() -> None:
         world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
         agent = _agent()
-        tree = AgentTree.create("tree", "root", agent, "核对")
         model = FakeModel([ChatMessage.assistant("已核对")])
         try:
-            await CognitionEngine(
-                model,
-                _assembler(limit=900),
-                AgentCatalog((agent,)),
-                ToolRegistry(()),
-                world=world,
-                memory=FixedMemory(),
-            ).run(tree)
-            event = await world.commit("tree:root:model:0:requested")
+            engine = make_engine(model, (agent,), world=world, assembler=_assembler(limit=900), memory=FixedMemory())
+            await engine.execute(CognitionRequest("核对", agent=agent.definition_id, run_id="run"))
+            event = await world.commit("run:model:0:requested")
             assert event is not None
             exposure = read_exposure(event.data["memory"])
             assert exposure.included_ids == ("support", "small")

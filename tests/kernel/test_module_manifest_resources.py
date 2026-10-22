@@ -29,7 +29,7 @@ _CONTRIBUTION = ContributionKey[str]("lab:example/contribution/values")
 def _spec() -> ModuleSpec:
     """声明真实构造器，清单记录作者钩子的来源。"""
 
-    @module(name="example", provides=str, manifest=ModuleManifest(namespace="lab"), resources=_RESOURCE)
+    @module(name="example", provides="str", manifest=ModuleManifest(namespace="lab"), resources=_RESOURCE)
     def build(context: ModuleContext) -> str:
         """构造器在公开清单中保留原始身份。"""
         del context
@@ -47,10 +47,10 @@ def test_module_content_and_catalog_description_bind_the_same_fixed_declaration(
     assert spec.resource.contract == MODULE_MANIFEST_CONTRACT
     assert data["key"] == spec.module_id
     assert data["version"] == spec.manifest.version
-    assert data["provides"] == ["builtins.str"]
+    assert data["provides"] == ["str"]
     assert data["resources"][0]["metadata"]["parameters"]["properties"]["count"] == {"type": "integer"}
     assert data["lifecycle"][0]["hook"] == f"{__name__}._spec.<locals>.build"
-    assert spec.resource.metadata["declared_capabilities"]["provides"] == ("builtins.str",)
+    assert spec.resource.metadata["declared_capabilities"]["provides"] == ("str",)
     assert spec.resource.metadata["declared_resources"][0]["key"] == str(_RESOURCE.ref.key)
 
 
@@ -61,8 +61,8 @@ def test_module_content_and_catalog_description_bind_the_same_fixed_declaration(
         ("manifest", ModuleManifest("2", namespace="lab")),
         ("manifest", ModuleManifest(kernel_api=">=1,<3", namespace="lab")),
         ("manifest", ModuleManifest(namespace="other")),
-        ("provides", (int,)),
-        ("requires", (int,)),
+        ("provides", ("int",)),
+        ("requires", ("int",)),
         ("contributes", (_CONTRIBUTION,)),
         ("consumes", (_CONTRIBUTION,)),
         ("declares", (_CONTRIBUTION,)),
@@ -73,7 +73,7 @@ def test_module_content_and_catalog_description_bind_the_same_fixed_declaration(
         ("resources", (replace(_RESOURCE, metadata={"parameters": {"type": "string"}}),)),
         ("priority", 10),
         ("optional", True),
-        ("order", (Ordering(READY, after=(str,)),)),
+        ("order", (Ordering(READY, after=("str",)),)),
     ],
 )
 def test_module_content_version_changes_with_each_declaration_dimension(field: str, value: object) -> None:

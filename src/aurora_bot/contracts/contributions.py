@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from aurora_bot.contracts.kernel import ContributionKey
 from aurora_bot.contracts.tool import Tool
@@ -44,9 +44,9 @@ class FrontContext(Protocol):
     @property
     def settings(self) -> Settings: ...
 
-    def get[T](self, capability: type[T]) -> T: ...
+    def get(self, name: str) -> Any: ...
 
-    def get_optional[T](self, capability: type[T]) -> T | None: ...
+    def get_optional(self, name: str) -> Any: ...
 
 
 class FrontBinding(Protocol):

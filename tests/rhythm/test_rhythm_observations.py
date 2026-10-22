@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from aurora_bot.contracts import EnvironmentEvent
-from aurora_bot.contracts.pkgs.cadence import Cadence
 from aurora_bot.rhythm.config import RhythmConfig
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
@@ -32,7 +31,7 @@ def test_observations_can_be_read_without_inventing_utility_labels(configured_pr
                     "first", "test", "test:world", "message", datetime(2026, 10, 18, tzinfo=UTC), "外部变化"
                 )
             )
-            await runtime.assembly.get(Cadence).evaluate_once()
+            await runtime.assembly.get("cadence").evaluate_once()
             response = await runtime.terminal.dispatch_terminal('/call aurora:rhythm/query/observations {"limit":1}')
             assert not response.is_error
             data = json.loads(response.text or "{}")["data"]

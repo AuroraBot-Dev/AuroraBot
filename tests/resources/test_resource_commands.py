@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.contracts.pkgs.bot import BotStateStore
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
 from tests.support.model import TemplateModel as FakeModel
@@ -80,7 +79,7 @@ def test_invalid_resource_commands_leave_subject_unchanged(configured_project: P
         try:
             response = await runtime.terminal.dispatch_terminal(command)
             assert response.is_error
-            assert (await runtime.assembly.get(BotStateStore).snapshot()).goals == ()
+            assert (await runtime.assembly.get("bot").snapshot()).goals == ()
         finally:
             await runtime.world.close()
 

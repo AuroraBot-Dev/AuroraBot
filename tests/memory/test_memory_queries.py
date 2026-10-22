@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from aurora_bot.contracts import ChatMessage, CognitionRequest, ModelRequest, ToolCall, WorldFrontier
 from aurora_bot.contracts.memory_codec import read_exposure
 from aurora_bot.contracts.operation import OperationStatus
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
 from tests.memory.operations_support import GOAL, SOURCE, prepared_runtime, request
@@ -23,7 +22,7 @@ def test_source_query_honors_knowledge_boundary_and_discloses_known_revisions(co
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, _model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             cutoff = await runtime.world.cursor()
             await runtime.world.append_commit(
                 commit_id="revised",
@@ -85,8 +84,8 @@ def test_bot_can_expand_a_source_and_audit_only_the_subsequent_actual_exposure(c
         runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
         try:
             await runtime.launch(CognitionRequest("读取补充来源", run_id="source-read", memory_scopes=frozenset()))
-            first = await runtime.world.commit("source-read:root:model:0:requested")
-            second = await runtime.world.commit("source-read:root:model:1:requested")
+            first = await runtime.world.commit("source-read:model:0:requested")
+            second = await runtime.world.commit("source-read:model:1:requested")
             assert first is not None and second is not None
             assert read_exposure(first.data["memory"]).included_ids == ()
             exposure = read_exposure(second.data["memory"])

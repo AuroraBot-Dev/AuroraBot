@@ -6,8 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from aurora_bot.contracts.memory import MemoryRequest
-from aurora_bot.contracts.pkgs.memory import MemoryPolicy, MemoryReader
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.memory_model.config import MemoryModelConfig
 from aurora_bot.memory_model.tgn import TGN_KEY, load_policy
 from aurora_bot.memory_model.training import train
@@ -34,11 +32,11 @@ def test_configured_bot_reads_memory_using_the_exported_graph_model(configured_p
 
     async def scenario() -> None:
         try:
-            policy = runtime.assembly.get(MemoryPolicy)
+            policy = runtime.assembly.get("memory.policy")
             assert policy.ref == ref == load_policy(path).ref
-            assert runtime.assembly.get(ResourceCatalog).resolve(ref).ref == ref
+            assert runtime.assembly.get("resources").resolve(ref).ref == ref
             await runtime.run("继续核对已有事实。")
-            snapshot = await runtime.assembly.get(MemoryReader).recall(MemoryRequest(query="已有事实"))
+            snapshot = await runtime.assembly.get("memory").recall(MemoryRequest(query="已有事实"))
             assert snapshot.recall is not None
             assert snapshot.recall.policy == ref
             assert snapshot.recall.policy.key == TGN_KEY

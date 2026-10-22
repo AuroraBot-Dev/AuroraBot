@@ -8,7 +8,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
 from aurora_bot.engine.config import EngineConfig
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora_bot.contracts.operation import OperationResult
+    from aurora_bot.contracts.pkgs.operations import OperationRegistry
     from aurora_bot.contracts.process import CognitionProcess
 
 
@@ -67,7 +67,7 @@ def test_instance_discovery_and_historical_inspection_use_real_runtime_and_publi
         PLATFORMS_CONFIG,
         PlatformsConfig(tuple(replace(item, enabled=False) for item in config.get(PLATFORMS_CONFIG).platforms)),
     )
-    config = config.with_value(ENGINE_CONFIG, EngineConfig(2, 3, 1))
+    config = config.with_value(ENGINE_CONFIG, EngineConfig(2, 3, 100000))
 
     async def scenario() -> None:
         """关闭真实连接后重建门面，通过固定引用读取相同历史状态与执行正文。"""
@@ -78,16 +78,16 @@ def test_instance_discovery_and_historical_inspection_use_real_runtime_and_publi
         try:
             await lifecycle.activate(stop)
             await runtime.run("检查实例资源", run_id="森林/树:一")
-            completed, started = await _recorded_views(runtime.assembly.get(OperationRegistry), original)
+            completed, started = await _recorded_views(runtime.assembly.get("operations"), original)
         finally:
             await lifecycle.close()
         model = FakeModel()
-        revised = config.with_value(ENGINE_CONFIG, EngineConfig(2, 3, 2))
+        revised = config.with_value(ENGINE_CONFIG, EngineConfig(3, 3, 100000))
         resumed, handle = await compose_runtime(revised, model, output=lambda _: None)
         try:
             await handle.activate(stop)
             assert resumed.runner.process_definition.ref != original.ref
-            registry = resumed.assembly.get(OperationRegistry)
+            registry = resumed.assembly.get("operations")
             completed_args = {"resource": completed.data["resource"], "revision": completed.data["revision"]}
             inspected = await registry.dispatch(_query("restart-completed", RESOURCE_INSPECT, completed_args))
             assert inspected.status is OperationStatus.SUCCEEDED

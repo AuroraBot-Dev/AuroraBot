@@ -30,11 +30,6 @@ class AgentCatalog:
             by_id[definition.definition_id] = definition
         if not by_id:
             raise AgentDefinitionError("至少需要一个 Agent definition")
-        for definition in by_id.values():
-            unknown = definition.children - by_id.keys()
-            if unknown:
-                names = ", ".join(sorted(unknown))
-                raise AgentDefinitionError(f"{definition.definition_id} 引用了未知 child Agent：{names}")
         self._definitions: Mapping[str, AgentDefinition] = MappingProxyType(
             {definition_id: by_id[definition_id] for definition_id in sorted(by_id)}
         )

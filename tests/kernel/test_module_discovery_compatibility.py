@@ -28,7 +28,7 @@ async def prepare(context):
     Path({marker!r}).write_text("prepare", encoding="utf-8")
 
 
-@module(name="plugin", provides=str, manifest=ModuleManifest("7.2", {api!r}), prepare=prepare)
+@module(name="plugin", provides="str", manifest=ModuleManifest("7.2", {api!r}), prepare=prepare)
 def build(context):
     """构造阶段留下可核对的副作用。"""
     Path({marker!r}).write_text("construct", encoding="utf-8")
@@ -95,7 +95,7 @@ def test_discovered_modules_share_api_gate_before_real_prepare_and_build(
             return
         handle = await compose_managed(_Settings(), specs)
         try:
-            assert handle.assembly.get(str) == "selected"
+            assert handle.assembly.get("str") == "selected"
             assert handle.assembly.modules[0].manifest is specs[0].manifest
             assert (tmp_path / "executed.txt").read_text(encoding="utf-8") == "construct"
         finally:

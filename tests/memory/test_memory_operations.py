@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING
 
 from aurora_bot.contracts import WorldFrontier
 from aurora_bot.contracts.operation import OperationStatus
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.memory.graph import graph_interactions
 from tests.memory.operations_support import GOAL, OUTCOME, SOURCE, feedback_arguments, prepared_runtime, request
 
@@ -21,10 +19,10 @@ def test_exposure_query_freezes_pages_and_excludes_other_bots(configured_project
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             model = await runtime.world.commit(model_id)
             assert model is not None
-            assert model.data["bot_id"] == runtime.assembly.get(BotStateStore).bot_id
+            assert model.data["bot_id"] == runtime.assembly.get("bot").bot_id
             await runtime.world.append_commit(
                 commit_id="foreign",
                 kind=model.kind,
@@ -72,7 +70,7 @@ def test_feedback_is_idempotent_reported_and_can_be_explicitly_corrected(configu
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             call = request(runtime, "feedback", "command/feedback", feedback_arguments(model_id))
             result = await registry.dispatch(call)
             assert result.status is OperationStatus.SUCCEEDED
@@ -96,7 +94,7 @@ def test_feedback_is_idempotent_reported_and_can_be_explicitly_corrected(configu
             assert correction.data["supersedes"] == feedback_id
             original = await runtime.world.commit(feedback_id)
             assert original is not None and original.data["helpful"] is True
-            commits = await runtime.world.commits(f"{runtime.assembly.get(BotStateStore).scope}/memory", 0, 10)
+            commits = await runtime.world.commits(f"{runtime.assembly.get('bot').scope}/memory", 0, 10)
             assert [commit.data["helpful"] for commit in commits] == [True, False]
             events = graph_interactions(commits)
             assert events[-1].relation == "unhelpful"
@@ -111,7 +109,7 @@ def test_feedback_rejects_unexposed_sources_old_evidence_and_unknown_goals(confi
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             invalid = (
                 {"memory_id": OUTCOME},
                 {"evidence_refs": [SOURCE]},
@@ -134,7 +132,7 @@ def test_feedback_rejects_unexposed_sources_old_evidence_and_unknown_goals(confi
                     )
                 )
                 assert result.status is OperationStatus.FAILED
-            scope = f"{runtime.assembly.get(BotStateStore).scope}/memory"
+            scope = f"{runtime.assembly.get('bot').scope}/memory"
             assert await runtime.world.commits(scope, 0, 10) == ()
 
     asyncio.run(scenario())

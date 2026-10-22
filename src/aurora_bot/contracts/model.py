@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from aurora_agent import ContextBudgetError
 from aurora_bot.contracts.data import freeze_object
 from aurora_bot.contracts.evidence import freeze_evidence_refs
 from aurora_bot.contracts.model_binding import ModelBinding
@@ -19,8 +20,7 @@ if TYPE_CHECKING:
 ChatRole = Literal["system", "message", "assistant", "tool"]
 
 
-class ContextBudgetError(ValueError):
-    """必要的身份、任务输入和恢复状态超过上下文容量。"""
+__all__ = ["ChatMessage", "ChatRole", "ContextBudgetError", "ModelRequest", "ToolCall", "ToolContext"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,14 +28,12 @@ class ToolContext:
     """由运行环境注入的调用归属与因果，模型不能通过工具参数设置。"""
 
     bot_id: str
-    tree_id: str
-    node_id: str
+    run_id: str
     caused_by: str | None = None
 
     def __post_init__(self) -> None:
-        """调用上下文必须能唯一定位主体、认知树与节点。"""
-        if not all(value.strip() for value in (self.bot_id, self.tree_id, self.node_id)):
-            raise ValueError("工具上下文需要主体、认知树与节点身份")
+        if not all(value.strip() for value in (self.bot_id, self.run_id)):
+            raise ValueError("工具上下文需要主体与运行身份")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +46,6 @@ class ToolCall:
     context: ToolContext | None = None
 
     def __post_init__(self) -> None:
-        """固定完整调用参数，环境适配器不能修改认知树中的原始提案。"""
         if not self.call_id or not self.name:
             raise ValueError("ToolCall requires call_id and name")
         object.__setattr__(self, "arguments", freeze_object(self.arguments))
@@ -56,7 +53,7 @@ class ToolCall:
 
 @dataclass(frozen=True, slots=True)
 class ChatMessage:
-    """AgentTree 内部使用的四角色消息。"""
+    """带有世界证据引用的四角色消息。"""
 
     role: ChatRole
     content: str = ""

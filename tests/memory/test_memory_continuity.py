@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from aurora_bot.contracts import AgentDefinition, AgentTree, MemorySnapshot
+from aurora_bot.contracts import AgentDefinition, ChatMessage, MemorySnapshot
 from aurora_bot.contracts.bot import BotSnapshot, Checkpoint, Goal, GoalStatus, WakePlan, WakeStatus
 from aurora_bot.contracts.memory import MemoryRequest
 from aurora_bot.memory.continuity import select_continuity
@@ -36,11 +36,10 @@ def test_explicit_goal_keeps_complete_checkpoint_amid_large_subject_history() ->
         "aurora:prompt/agent/root",
         "test:ai/endpoint/model",
         frozenset(),
-        frozenset(),
     )
-    tree = AgentTree.create("tree", "root", agent, "继续核对", focus_goal_ids=(target.goal_id,))
+    transcript = (ChatMessage.message("继续核对"),)
     prompt = PromptAssembler(make_prompt_catalog(("你是 Aurora。",), {agent.prompt_id: "按自己的判断行动。"}))
-    messages = prompt.assemble(tree, "root", memory=MemorySnapshot(now, (), continuity)).messages
+    messages = prompt.assemble(agent.prompt_id, transcript, memory=MemorySnapshot(now, (), continuity)).messages
     assert "operation-7 已发起，先核对结果" in messages[0].content
     assert "experiment:started:7" in messages[0].content
     assert "其他实验" not in messages[0].content

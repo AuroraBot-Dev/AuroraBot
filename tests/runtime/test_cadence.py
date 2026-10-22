@@ -10,7 +10,7 @@ from aurora_bot.cadence import CADENCE_SCOPE, CADENCE_TICK, Cadence, ReactiveRul
 from aurora_bot.contracts import (
     MCP_EVENT_RECEIVED,
     EnvironmentEvent,
-    TreeActivity,
+    RunActivity,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -72,7 +72,7 @@ class FakeReader:
     async def commits(self, scope: str, after: int, limit: int) -> tuple[WorldCommit, ...]:
         raise NotImplementedError
 
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]:
+    async def run_index(self, limit: int) -> tuple[RunActivity, ...]:
         raise NotImplementedError
 
 
@@ -133,8 +133,8 @@ def test_cadence_evokes_one_tree_per_five_counted_commits() -> None:
     assert [request.run_id for request in launcher.requests] == [launcher.requests[0].run_id]
     assert launcher.requests[0].agent == "aurora:agent/definition/triage"
     assert cadence.status()["pending"] == 0
-    assert [item.kind for item in writer.inputs].count("cadence.tree_planned") == 1
-    assert writer.inputs[-1].kind == "cadence.tree_completed"
+    assert [item.kind for item in writer.inputs].count("cadence.run_planned") == 1
+    assert writer.inputs[-1].kind == "cadence.run_completed"
     assert all(item.data["decision"]["action"] == "wait" for item in writer.inputs if item.kind == "cadence.decided")
 
 
@@ -171,7 +171,7 @@ def test_cadence_tick_and_launch_failure_are_recorded() -> None:
 
     kinds = [item.kind for item in writer.inputs]
     assert kinds[0] == CADENCE_TICK
-    assert kinds[-2:] == ["cadence.tree_planned", "cadence.tree_failed"]
+    assert kinds[-2:] == ["cadence.run_planned", "cadence.run_failed"]
     assert writer.inputs[0].scopes == frozenset({CADENCE_SCOPE})
 
 

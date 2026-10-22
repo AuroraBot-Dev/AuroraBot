@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from aurora_agent import RunResult, RunStats, RunStatus
 from aurora_bot.bot.store import JournalBotState
 from aurora_bot.clock import PersistentBotClock
 from aurora_bot.contracts import CognitionRequest, CognitionResult, WorldFrontier
@@ -38,7 +39,7 @@ class FakeLauncher:
             raise self.failure
         if self.stop is not None:
             self.stop.set()
-        return CognitionResult(request.run_id or "test", "已核对")
+        return RunResult(request.run_id or "test", RunStatus.COMPLETED, "已核对", None, RunStats())
 
 
 def test_due_wake_survives_restart_and_runs_once_without_external_input(tmp_path: Path) -> None:
@@ -89,13 +90,13 @@ def test_restart_reconciles_started_runs_without_replaying_actions(
         clock = PersistentBotClock(JournalBotState(world, state.bot_id), world)
         tree_id = clock.run_id(_WAKE)
         await world.append_commit(
-            commit_id=f"{tree_id}:tree:{marker}",
-            kind=f"engine.tree.{marker}",
+            commit_id=f"{tree_id}:run:{'started' if marker == 'started' else 'finished'}",
+            kind=f"engine.run.{marker}",
             source="engine",
             summary="认知记录",
             scopes=frozenset({f"aurora:run/{tree_id}"}),
             based_on=WorldFrontier(),
-            data={},
+            data={"status": marker},
             occurred_at=_NOW,
         )
         launcher = FakeLauncher()

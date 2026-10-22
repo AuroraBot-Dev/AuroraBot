@@ -102,7 +102,6 @@ class AuroraRuntime:
                 request,
                 run_id=request.run_id or uuid4().hex,
                 agent=request.agent or self.root.agent,
-                node_id=self.root.node_id,
             )
             assert request.run_id is not None
             await self.world.initialize()
@@ -110,7 +109,9 @@ class AuroraRuntime:
             self._counts["running"] += 1
             presenter = CognitionTextPresenter(self.output)
             try:
-                result = await self.runner.execute(request, observer=presenter.echo if echo else None)
+                result = await self.assembly.ctx.acall(
+                    "aurora:kernel/module/engine:execute", request, observer=presenter.echo if echo else None
+                )
                 if result.run_id != request.run_id:
                     raise ValueError("认知结果与请求身份不一致")
             except asyncio.CancelledError:
@@ -127,7 +128,7 @@ class AuroraRuntime:
 
     async def _require_new_run_id(self, run_id: str) -> None:
         """持久开始事实同样占用实例身份，重启不赋予再次执行的含义。"""
-        if await self.world.commit(f"{run_id}:tree:started") is not None:
+        if await self.world.commit(f"{run_id}:run:started") is not None:
             raise ValueError(f"认知运行已存在：{run_id}")
 
     async def submit_event(self, event: EnvironmentEvent) -> WorldCommit:
@@ -143,5 +144,8 @@ class AuroraRuntime:
         return await self.run_from_commit(commit, run_id=run_id)
 
     def runtime_status(self) -> dict[str, Any]:
-        statuses = {name: self._counts[name] for name in ("running", "completed", "failed", "interrupted")}
+        statuses = {
+            name: self._counts[name]
+            for name in ("running", "completed", "failed", "cancelled", "limit_reached", "interrupted")
+        }
         return {"run_count": sum(statuses.values()), "runs": statuses}

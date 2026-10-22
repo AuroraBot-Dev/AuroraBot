@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from aurora_bot.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.contracts.resource_requests import RESOURCE_FIND, RESOURCE_INSPECT
 from aurora_bot.mcp.config import PlatformsConfig
@@ -31,7 +30,7 @@ _PLUGIN = '''"""用于核对环境声明的独立插件。"""
 from aurora_bot.kernel import ModuleManifest, module
 
 
-@module(name="environment", provides=str, manifest=ModuleManifest({version!r}, namespace="lab"))
+@module(name="environment", provides="str", manifest=ModuleManifest({version!r}, namespace="lab"))
 def build(context):
     """构造实际服务，发布声明不代替真实装配。"""
     return "环境可用"
@@ -50,8 +49,8 @@ def _request(request_id: str, target: ResourceRef, arguments: Mapping[str, Any])
 async def _published(runtime: AuroraRuntime) -> tuple[ResourceDescriptor, bytes]:
     """公开查询、实际声明和归档正文三者使用同一版本。"""
     spec = next(spec for spec in runtime.assembly.modules if spec.module_id == "lab:kernel/module/environment")
-    assert runtime.assembly.get(str) == "环境可用"
-    registry = runtime.assembly.get(OperationRegistry)
+    assert runtime.assembly.get("str") == "环境可用"
+    registry = runtime.assembly.get("operations")
     found = await registry.dispatch(
         _request("find-module", RESOURCE_FIND, {"namespace": "lab", "domain": "kernel", "kind": "module"})
     )
@@ -103,7 +102,7 @@ def test_actual_plugin_manifest_is_discoverable_and_old_content_survives_restart
             spec = next(spec for spec in resumed.assembly.modules if spec.module_id == str(original.ref.key))
             assert spec.manifest.version == "2.0.0"
             assert spec.resource.ref != original.ref
-            registry = resumed.assembly.get(OperationRegistry)
+            registry = resumed.assembly.get("operations")
             read = await registry.dispatch(
                 _request(
                     "read-prior-module",

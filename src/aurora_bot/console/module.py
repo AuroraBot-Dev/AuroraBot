@@ -6,10 +6,7 @@ from typing import TYPE_CHECKING
 
 from aurora_bot.console.events import CONSOLE_SCOPE
 from aurora_bot.console.shell import TerminalConsole
-from aurora_bot.contracts import FRONT_BINDINGS, Front, FrontContext, FrontIO
-from aurora_bot.contracts.pkgs.console import TerminalConsole as TerminalConsolePort
-from aurora_bot.contracts.pkgs.runtime import TerminalDispatcher
-from aurora_bot.contracts.pkgs.world import WorldWriter
+from aurora_bot.contracts import FRONT_BINDINGS, Front, FrontContext
 from aurora_bot.contracts.scope import ScopeDeclaration, ScopeKind
 from aurora_bot.kernel import ModuleContext, module
 
@@ -17,20 +14,21 @@ if TYPE_CHECKING:
     import asyncio
 
     from aurora_bot.contracts import FrontBinding
+    from aurora_bot.contracts.pkgs.console import TerminalConsole as TerminalConsolePort
 
 
 @module(
     name="console",
-    provides=TerminalConsolePort,
-    requires=(TerminalConsolePort, WorldWriter),
+    provides="console",
+    requires=("console", "world.writer"),
     contributes=FRONT_BINDINGS,
     scopes=ScopeDeclaration(CONSOLE_SCOPE, ScopeKind.RESOURCE, "本地终端输入先进入的世界线；渲染输出不进入世界线。"),
 )
 def build(context: ModuleContext) -> TerminalConsolePort:
     """交互前台绑定实际选中的终端端口。"""
-    console = context.get_optional(TerminalConsolePort)
+    console = context.get_optional("console")
     if console is None:
-        console = TerminalConsole(context.get(WorldWriter))
+        console = TerminalConsole(context.get("world.writer"))
     context.contribute(FRONT_BINDINGS, _bind_console(console))
     return console
 
@@ -39,8 +37,8 @@ def _bind_console(console: TerminalConsolePort) -> FrontBinding:
     """把本地终端包装为交互式前台；所需能力由运行上下文按需提供。"""
 
     def bind(context: FrontContext) -> Front:
-        dispatcher = context.get(TerminalDispatcher)
-        io = context.get(FrontIO)
+        dispatcher = context.get("terminal")
+        io = context.get("io")
 
         async def run(stop: asyncio.Event) -> None:
             await console.run(dispatcher, stop_event=stop, readline=io.readline, output=io.output)

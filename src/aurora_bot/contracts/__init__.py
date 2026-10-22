@@ -5,13 +5,7 @@
 
 from __future__ import annotations
 
-from aurora_bot.contracts.agent import (
-    AgentDefinition,
-    AgentNode,
-    AgentStatus,
-    AgentTree,
-    TreeStatus,
-)
+from aurora_bot.contracts.agent import AgentDefinition
 from aurora_bot.contracts.cognition import CognitionRequest, CognitionResult
 from aurora_bot.contracts.console import TerminalControl, TerminalResponse
 from aurora_bot.contracts.contributions import (
@@ -39,17 +33,14 @@ from aurora_bot.contracts.identity import (
     world_scope,
 )
 from aurora_bot.contracts.kernel import ContributionKey, Settings
-from aurora_bot.contracts.loop import LOOP_OPERATIONS, WORLD_PORTS, LoopOperation
 from aurora_bot.contracts.model import ChatMessage, ChatRole, ModelRequest, ToolCall
 from aurora_bot.contracts.scope import ScopeCatalog, ScopeDeclaration, ScopeKind
 from aurora_bot.contracts.tool import (
     BUILTIN_TOOL_NAMES,
-    DELEGATE_TOOL,
     WAIT_TOOL,
     WORLD_READ_TOOL,
+    WORLD_RUNS_TOOL,
     WORLD_SCOPES_TOOL,
-    WORLD_TREES_TOOL,
-    DelegationRequest,
     Tool,
     ToolDefinition,
     ToolOutput,
@@ -61,8 +52,8 @@ from aurora_bot.contracts.world import (
     EnvironmentEvent,
     MemoryScopeSnapshot,
     MemorySnapshot,
+    RunActivity,
     ToolScopes,
-    TreeActivity,
     WorldCommit,
     WorldCommitInput,
     WorldDeltaPage,
@@ -74,28 +65,21 @@ __all__ = [
     "BUILTIN_TOOL_NAMES",
     "COGNITION_BINDINGS",
     "DEFAULT_NAMESPACE",
-    "DELEGATE_TOOL",
     "FRONT_BINDINGS",
-    "LOOP_OPERATIONS",
     "MCP_EVENT_RECEIVED",
     "TAG_PREFIX",
     "TOOL_CONTRIBUTIONS",
     "WAIT_TOOL",
-    "WORLD_PORTS",
     "WORLD_READ_TOOL",
+    "WORLD_RUNS_TOOL",
     "WORLD_SCOPES_TOOL",
-    "WORLD_TREES_TOOL",
     "AgentDefinition",
-    "AgentNode",
-    "AgentStatus",
-    "AgentTree",
     "ChatMessage",
     "ChatRole",
     "CognitionBinding",
     "CognitionRequest",
     "CognitionResult",
     "ContributionKey",
-    "DelegationRequest",
     "EnvironmentEvent",
     "Front",
     "FrontBinding",
@@ -103,10 +87,10 @@ __all__ = [
     "FrontIO",
     "Identifier",
     "IdentityError",
-    "LoopOperation",
     "MemoryScopeSnapshot",
     "MemorySnapshot",
     "ModelRequest",
+    "RunActivity",
     "ScopeCatalog",
     "ScopeDeclaration",
     "ScopeKind",
@@ -123,8 +107,6 @@ __all__ = [
     "ToolResult",
     "ToolScopes",
     "ToolStatus",
-    "TreeActivity",
-    "TreeStatus",
     "WorldCommit",
     "WorldCommitInput",
     "WorldDeltaPage",

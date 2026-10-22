@@ -27,12 +27,12 @@ def test_full_scope_metadata_is_visible_before_any_module_is_constructed() -> No
         assert declarations == (declaration,)
         assert not trace
 
-    @module(name="observer", provides=int, prepare=prepare)
+    @module(name="observer", provides="int", prepare=prepare)
     def observer(context: ModuleContext) -> int:
         """普通构造仍在准备完成之后。"""
         return 1
 
-    @module(name="producer", provides=str, scopes=declaration)
+    @module(name="producer", provides="str", scopes=declaration)
     def producer(context: ModuleContext) -> str:
         """域目录读取不应提前运行生产者。"""
         trace.append("constructed")
@@ -59,7 +59,7 @@ def test_replacing_a_spec_keeps_domain_metadata_and_freezes_original_hook_mappin
 
     declaration = ScopeDeclaration("lab:world/jobs/*", ScopeKind.RUN, "过程台账")
     hooks = {PREPARE: prepare}
-    spec = ModuleSpec("producer", provides=(str,), scopes=(declaration,), hooks=hooks)
+    spec = ModuleSpec("producer", provides=("str",), scopes=(declaration,), hooks=hooks)
     hooks.clear()
     copied = replace(spec, priority=10)
     assert copied.scopes == spec.scopes

@@ -11,8 +11,6 @@ import pytest
 from aurora_bot.agents.config import AgentsConfig
 from aurora_bot.contracts import ChatMessage, ToolCall, ToolOutput
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.contracts.tool import WAIT_TOOL
 from aurora_bot.mcp.config import PlatformsConfig
@@ -49,7 +47,7 @@ def test_visible_tool_versions_match_requests_execution_facts_and_public_content
         AGENTS_CONFIG,
         AgentsConfig(
             tuple(
-                replace(item, tools=(*item.tools, expected.name)) if item.id == "aurora:agent/definition/root" else item
+                replace(item, tools=(expected.name,)) if item.id == "aurora:agent/definition/root" else item
                 for item in config.get(AGENTS_CONFIG).agents
             )
         ),
@@ -66,19 +64,19 @@ def test_visible_tool_versions_match_requests_execution_facts_and_public_content
             await lifecycle.activate(stop)
             tree = await runtime.run("核对结果", run_id="tool-version")
             assert tree.status == "completed"
-            registry = runtime.assembly.get(ToolRegistry)
+            registry = runtime.assembly.get("tools")
             hidden = next(item for item in registry.definitions if item.name == WAIT_TOOL)
             for index, request in enumerate(model.requests):
                 assert expected.ref in request.resources
                 assert hidden.ref not in request.resources
                 assert all(item.ref in request.resources for item in request.tools)
-                fact = await runtime.world.commit(f"tool-version:{runtime.root.node_id}:model:{index}:requested")
+                fact = await runtime.world.commit(f"tool-version:model:{index}:requested")
                 assert fact is not None
                 assert list(fact.data["tool_refs"]) == [
                     {"key": item.name, "revision": item.ref.revision} for item in request.tools
                 ]
-            requested = await runtime.world.commit(f"tool-version:{runtime.root.node_id}:echo:requested")
-            result = await runtime.world.commit(f"tool-version:{runtime.root.node_id}:echo:result")
+            requested = await runtime.world.commit("tool-version:tool:echo:requested")
+            result = await runtime.world.commit("tool-version:tool:echo:result")
             assert requested is not None and result is not None
             assert requested.data["tool_ref"] == {"key": expected.name, "revision": expected.ref.revision}
             assert result.data["tool_ref"] == requested.data["tool_ref"]
@@ -90,7 +88,7 @@ def test_visible_tool_versions_match_requests_execution_facts_and_public_content
                 OperationKind.QUERY,
                 {**result.data["tool_ref"], "encoding": "utf-8", "limit": 16384},
             )
-            content = await runtime.assembly.get(OperationRegistry).dispatch(read)
+            content = await runtime.assembly.get("operations").dispatch(read)
             assert content.status is OperationStatus.SUCCEEDED
             assert content.data["text"].encode("utf-8") == expected.content
         finally:
@@ -131,11 +129,11 @@ def test_rejected_calls_do_not_invent_a_visible_interface_version(
         try:
             await lifecycle.activate(stop)
             await runtime.run("检查调用边界", run_id="hidden-tool")
-            for stage in ("requested", "result"):
-                fact = await runtime.world.commit(f"hidden-tool:{runtime.root.node_id}:hidden:{stage}")
-                assert fact is not None
-                assert fact.data["tool"] == name
-                assert fact.data["tool_ref"] is None
+            assert await runtime.world.commit("hidden-tool:tool:hidden:requested") is None
+            fact = await runtime.world.commit("hidden-tool:tool:hidden:result")
+            assert fact is not None
+            assert fact.data["tool"] == name
+            assert fact.data["tool_ref"] is None
             assert not invoked
             assert all(tool.definition.ref not in request.resources for request in model.requests)
         finally:

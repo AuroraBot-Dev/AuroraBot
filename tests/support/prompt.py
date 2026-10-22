@@ -46,5 +46,4 @@ def _agent(prompt: str = "aurora:prompt/agent/root") -> AgentDefinition:
         prompt,
         "test:ai/endpoint/quality-model",
         frozenset(),
-        frozenset(),
     )

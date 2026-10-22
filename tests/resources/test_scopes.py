@@ -12,8 +12,8 @@ import pytest
 from aurora_bot.cadence import CADENCE_SCOPE
 from aurora_bot.console.events import CONSOLE_SCOPE
 from aurora_bot.contracts import ScopeCatalog, ScopeDeclaration, ScopeKind, ToolCall, ToolOutput, ToolStatus
+from aurora_bot.contracts.run_lifecycle import run_scope
 from aurora_bot.contracts.scope import merge_scope_catalog
-from aurora_bot.contracts.tree_lifecycle import tree_scope
 from aurora_bot.kernel import BuiltinSource, ModuleSpec
 from aurora_bot.mcp.scopes import mcp_scope
 from aurora_bot.runtime.assembly import declared_scopes, validate_declared_scopes
@@ -160,14 +160,14 @@ def test_template_declares_every_scope_the_runtime_produces(tmp_path: Path) -> N
         RUNTIME_SCOPE,
         CADENCE_SCOPE,
         mcp_scope("org.aurora.qq"),
-        tree_scope("6f1c"),
+        run_scope("6f1c"),
     )
 
     assert catalog.undeclared(produced) == ()
     assert catalog.classify(CONSOLE_SCOPE) is ScopeKind.RESOURCE
     assert catalog.classify(CADENCE_SCOPE) is ScopeKind.RESOURCE
     assert catalog.classify(mcp_scope("org.aurora.qq")) is ScopeKind.RESOURCE
-    assert catalog.classify(tree_scope("6f1c")) is ScopeKind.RUN
+    assert catalog.classify(run_scope("6f1c")) is ScopeKind.RUN
 
 
 def test_template_descriptions_are_model_readable(tmp_path: Path) -> None:
@@ -246,14 +246,14 @@ def test_builtin_modules_own_exactly_the_domains_the_registry_declares(tmp_path:
 
 
 def test_module_declaring_an_unregistered_domain_fails_before_startup() -> None:
-    spec = ModuleSpec(name="ghost", provides=(object,), owns_scopes=("aurora:ghost",))
+    spec = ModuleSpec(name="ghost", provides=("object",), owns_scopes=("aurora:ghost",))
 
     with pytest.raises(ValueError, match="未注册的域：aurora:ghost"):
         validate_declared_scopes(_Settings(_catalog()), (spec,))
 
 
 def test_module_can_declare_the_domains_it_observes() -> None:
-    spec = ModuleSpec(name="watcher", provides=(object,), observes_scopes=("*:world",))
+    spec = ModuleSpec(name="watcher", provides=("object",), observes_scopes=("*:world",))
 
     validate_declared_scopes(_Settings(_catalog()), (spec,))
     assert declared_scopes((spec,)) == ((), ("*:world",))
@@ -261,11 +261,11 @@ def test_module_can_declare_the_domains_it_observes() -> None:
 
 def test_module_spec_rejects_blank_and_duplicated_domain_declarations() -> None:
     with pytest.raises(ValueError, match="非空且无首尾空白"):
-        ModuleSpec(name="blank", provides=(object,), owns_scopes=(" ",))
+        ModuleSpec(name="blank", provides=("object",), owns_scopes=(" ",))
     with pytest.raises(ValueError, match="重复声明域"):
         ModuleSpec(
             name="twice",
-            provides=(object,),
+            provides=("object",),
             owns_scopes=("aurora:world/console",),
             observes_scopes=("aurora:world/console",),
         )

@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.kernel import ACTIVATE, CLOSE, CONSTRUCT, RUN, ModuleSpec, Ordering, Phase, resolve
-from tests.kernel.support import Alpha, Beta, Gamma
 
 if TYPE_CHECKING:
     import asyncio
@@ -31,9 +30,9 @@ async def _run(context: ModuleContext, stop: asyncio.Event) -> None:
 def test_newly_ready_module_keeps_its_priority_independent_of_discovery_order() -> None:
     hooks = {CONSTRUCT: _build, ACTIVATE: _hook, CLOSE: _hook}
     specs = (
-        ModuleSpec("alpha", provides=(Alpha,), requires=(Beta,), hooks=hooks),
-        ModuleSpec("beta", provides=(Beta,), hooks=hooks),
-        ModuleSpec("gamma", provides=(Gamma,), hooks=hooks),
+        ModuleSpec("alpha", provides=("alpha",), requires=("beta",), hooks=hooks),
+        ModuleSpec("beta", provides=("beta",), hooks=hooks),
+        ModuleSpec("gamma", provides=("gamma",), hooks=hooks),
     )
     for discovery in permutations(specs):
         result = resolve(discovery)
@@ -47,12 +46,12 @@ def test_phase_ordering_only_applies_to_modules_participating_in_that_phase() ->
     specs = (
         ModuleSpec(
             "alpha",
-            provides=(Alpha,),
-            order=(Ordering(custom, after=(Beta, Gamma)),),
+            provides=("alpha",),
+            order=(Ordering(custom, after=("beta", "gamma")),),
             hooks={CONSTRUCT: _build, custom: _hook},
         ),
-        ModuleSpec("beta", provides=(Beta,), hooks={CONSTRUCT: _build, custom: _hook}),
-        ModuleSpec("gamma", provides=(Gamma,), hooks={CONSTRUCT: _build}),
+        ModuleSpec("beta", provides=("beta",), hooks={CONSTRUCT: _build, custom: _hook}),
+        ModuleSpec("gamma", provides=("gamma",), hooks={CONSTRUCT: _build}),
     )
     result = resolve(specs)
     assert [spec.name for spec in result.construction] == ["alpha", "beta", "gamma"]
@@ -62,8 +61,8 @@ def test_phase_ordering_only_applies_to_modules_participating_in_that_phase() ->
 def test_phase_cycle_is_rejected_even_when_construction_has_no_cycle() -> None:
     hooks = {CONSTRUCT: _build, RUN: _run}
     specs = (
-        ModuleSpec("alpha", provides=(Alpha,), order=(Ordering(RUN, after=(Beta,)),), hooks=hooks),
-        ModuleSpec("beta", provides=(Beta,), order=(Ordering(RUN, after=(Alpha,)),), hooks=hooks),
+        ModuleSpec("alpha", provides=("alpha",), order=(Ordering(RUN, after=("beta",)),), hooks=hooks),
+        ModuleSpec("beta", provides=("beta",), order=(Ordering(RUN, after=("alpha",)),), hooks=hooks),
     )
     with pytest.raises(ValueError, match="循环依赖"):
         resolve(specs)

@@ -38,7 +38,7 @@ def test_kernel_can_release_a_real_sdk_connection_from_its_cleanup_task(
         assert [tool.name for tool in page.tools] == ["echo"]
         return client.close
 
-    @module(name="connection", provides=int, prepare=prepare)
+    @module(name="connection", provides="int", prepare=prepare)
     def build(context: ModuleContext) -> int:
         """使用独立能力避免依赖项目级配置。"""
         return 1

@@ -1,5 +1,3 @@
-"""认知执行端口：调用方不需要创建或理解执行器的委派结构。"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
@@ -7,10 +5,9 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from aurora_bot.contracts.agent import AgentNode
+    from aurora_agent import RunSnapshot
     from aurora_bot.contracts.cognition import CognitionRequest, CognitionResult
     from aurora_bot.contracts.process import CognitionProcess
-    from aurora_bot.contracts.tool import ToolDefinition
 
 
 class CognitionRunner(Protocol):
@@ -19,9 +16,6 @@ class CognitionRunner(Protocol):
     @property
     def process_definition(self) -> CognitionProcess: ...
 
-    @property
-    def tool_definitions(self) -> tuple[ToolDefinition, ...]: ...
-
     async def execute(
-        self, request: CognitionRequest, observer: Callable[[tuple[AgentNode, ...]], None] | None = None
+        self, request: CognitionRequest, observer: Callable[[RunSnapshot], None] | None = None
     ) -> CognitionResult: ...

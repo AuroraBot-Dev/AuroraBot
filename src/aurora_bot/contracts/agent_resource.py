@@ -1,5 +1,3 @@
-"""Agent 原型的规范正文，版本覆盖创建节点与委派时实际采用的全部声明。"""
-
 from __future__ import annotations
 
 import json
@@ -21,7 +19,6 @@ def agent_content(definition: AgentDefinition) -> bytes:
             "prompt_id": definition.prompt_id,
             "model": definition.model,
             "tools": sorted(definition.tools),
-            "children": sorted(definition.children),
         },
         ensure_ascii=False,
         sort_keys=True,

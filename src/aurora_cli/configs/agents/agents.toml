@@ -1,110 +1,48 @@
 [[agent]]
 id = "aurora:agent/definition/triage"
-description = "注意力初筛：判断眼前世界事件是否值得处理，值得时委派给 root 或 fast-worker。"
+description = "观察世界并直接处理当前关注事项。"
 prompt = "aurora:prompt/agent/triage"
 model = "aurora:ai/endpoint/fast"
-tools = ["aurora:tool/definition/delegate"]
-children = ["aurora:agent/definition/root", "aurora:agent/definition/fast-worker"]
-
-[[agent]]
-id = "aurora:agent/definition/fast-worker"
-description = "快速执行者：可发送与读取 QQ 消息，直接完成低风险快速任务，不展开代理树。"
-prompt = "aurora:prompt/agent/fast"
-model = "aurora:ai/endpoint/fast"
-tools = ["#aurora:tool/tag/qq-send", "#aurora:tool/tag/qq-read"]
-children = []
+tools = ["#aurora:tool/tag/qq-send", "#aurora:tool/tag/qq-read", "aurora:tool/definition/bot_state", "aurora:tool/definition/goal_set"]
 
 [[agent]]
 id = "aurora:agent/definition/root"
-description = "总代理：理解完整任务、整合结果。"
+description = "理解任务并通过可用工具完成工作。"
 prompt = "aurora:prompt/agent/root"
 model = "aurora:ai/endpoint/quality"
-tools = [
-    "aurora:tool/definition/delegate",
-    "aurora:tool/definition/world_read",
-    "aurora:tool/definition/world_scopes",
-    "aurora:tool/definition/world_trees",
-    "aurora:tool/definition/bot_state",
-    "aurora:tool/definition/goal_set",
-    "aurora:tool/definition/wake_schedule",
-    "aurora:tool/definition/wake_cancel",
-    "aurora:tool/definition/memory_recall",
-    "aurora:tool/definition/memory_source",
-    "aurora:tool/definition/resources_find",
-    "aurora:tool/definition/resources_inspect",
-    "aurora:tool/definition/artifact_find",
-    "aurora:tool/definition/artifact_stat",
-    "aurora:tool/definition/artifact_read",
-    "aurora:tool/definition/memory_exposures",
-    "aurora:tool/definition/memory_feedback",
-]
-children = [
-    "aurora:agent/definition/fast-worker",
-    "aurora:agent/definition/chat",
-    "aurora:agent/definition/worker",
-    "aurora:agent/definition/reviewer",
-    "aurora:agent/definition/memory",
-]
+tools = ["aurora:tool/definition/*", "org.aurora.qq:tool/definition/*", "com.github.windows_mcp:tool/definition/*"]
 
 [[agent]]
-id = "aurora:agent/definition/chat"
-description = "即时会话回复：生成回复正文，或用发送工具像人类一样分多条投递回原会话。"
-prompt = "aurora:prompt/agent/chat"
+id = "aurora:agent/definition/fast-worker"
+description = "完成边界明确的快速任务。"
+prompt = "aurora:prompt/agent/fast"
 model = "aurora:ai/endpoint/fast"
-tools = ["#aurora:tool/tag/qq-send"]
-children = []
+tools = ["#aurora:tool/tag/qq-send", "#aurora:tool/tag/qq-read"]
 
 [[agent]]
 id = "aurora:agent/definition/worker"
-description = "通用执行者：掌握全部 QQ、Windows 桌面自动化工具与世界读取，深入完成边界明确的独立工作，可继续委派轻量任务或审阅。"
+description = "深入完成独立工作。"
 prompt = "aurora:prompt/agent/worker"
 model = "aurora:ai/endpoint/quality"
-tools = [
-    "aurora:tool/definition/delegate",
-    "aurora:tool/definition/world_read",
-    "aurora:tool/definition/world_scopes",
-    "aurora:tool/definition/world_trees",
-    "aurora:tool/definition/bot_state",
-    "aurora:tool/definition/goal_set",
-    "aurora:tool/definition/wake_schedule",
-    "aurora:tool/definition/wake_cancel",
-    "aurora:tool/definition/memory_recall",
-    "aurora:tool/definition/memory_source",
-    "aurora:tool/definition/resources_find",
-    "aurora:tool/definition/resources_inspect",
-    "aurora:tool/definition/artifact_find",
-    "aurora:tool/definition/artifact_stat",
-    "aurora:tool/definition/artifact_read",
-    "aurora:tool/definition/memory_exposures",
-    "aurora:tool/definition/memory_feedback",
-    "org.aurora.qq:tool/definition/*",
-    "com.github.windows_mcp:tool/definition/*",
-]
-children = ["aurora:agent/definition/reviewer", "aurora:agent/definition/fast-worker"]
+tools = ["aurora:tool/definition/*", "org.aurora.qq:tool/definition/*", "com.github.windows_mcp:tool/definition/*"]
+
+[[agent]]
+id = "aurora:agent/definition/chat"
+description = "生成会话回复并投递到原会话。"
+prompt = "aurora:prompt/agent/chat"
+model = "aurora:ai/endpoint/fast"
+tools = ["#aurora:tool/tag/qq-send"]
 
 [[agent]]
 id = "aurora:agent/definition/reviewer"
-description = "独立审阅者：检查给定结果的事实、遗漏和边界，返回简洁可执行的结论。"
+description = "检查给定结果的事实、遗漏和边界。"
 prompt = "aurora:prompt/agent/reviewer"
 model = "aurora:ai/endpoint/quality"
 tools = []
-children = []
 
 [[agent]]
 id = "aurora:agent/definition/memory"
-description = "记忆专员：围绕目标召回经历、核对原始来源，并按后续证据记录可更正的记忆反馈。"
+description = "围绕目标召回经历并核对原始来源。"
 prompt = "aurora:prompt/agent/memory"
 model = "aurora:ai/endpoint/quality"
-tools = [
-    "aurora:tool/definition/memory_recall",
-    "aurora:tool/definition/memory_source",
-    "aurora:tool/definition/resources_find",
-    "aurora:tool/definition/resources_inspect",
-    "aurora:tool/definition/artifact_find",
-    "aurora:tool/definition/artifact_stat",
-    "aurora:tool/definition/artifact_read",
-    "aurora:tool/definition/memory_exposures",
-    "aurora:tool/definition/memory_feedback",
-    "aurora:tool/definition/bot_state",
-]
-children = []
+tools = ["aurora:tool/definition/memory_*", "aurora:tool/definition/artifact_*", "aurora:tool/definition/resources_*", "aurora:tool/definition/bot_state"]

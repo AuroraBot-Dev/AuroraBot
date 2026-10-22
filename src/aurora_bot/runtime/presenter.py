@@ -12,7 +12,7 @@ from aurora_bot.utils import bounded_summary
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from aurora_bot.contracts import AgentNode, ChatMessage
+    from aurora_agent import ChatMessage, RunSnapshot
 
 
 class CognitionTextPresenter:
@@ -22,17 +22,14 @@ class CognitionTextPresenter:
         self._output = output
         self._printed: dict[str, int] = {}
 
-    def echo(self, nodes: tuple[AgentNode, ...]) -> None:
-        """只渲染每个节点自上次以来新增的消息。"""
+    def echo(self, snapshot: RunSnapshot) -> None:
         console = Console(highlight=False) if self._output is print else None
-        for node in nodes:
-            seen = self._printed.get(node.node_id, 0)
-            for message in node.messages[seen:]:
-                self._echo_message(node, message, console)
-            self._printed[node.node_id] = len(node.messages)
+        seen = self._printed.get(snapshot.run_id, 0)
+        for message in snapshot.messages[seen:]:
+            self._echo_message(snapshot.run_id, message, console)
+        self._printed[snapshot.run_id] = len(snapshot.messages)
 
-    def _echo_message(self, node: AgentNode, message: ChatMessage, console: Console | None) -> None:
-        tag = node.definition_id
+    def _echo_message(self, tag: str, message: ChatMessage, console: Console | None) -> None:
         if message.role == "assistant":
             if message.content.strip():
                 self._echo_line("Cadence>", tag, message.content, console)

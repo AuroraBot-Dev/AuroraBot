@@ -13,10 +13,6 @@ from aurora_bot.artifacts.config import ArtifactsConfig
 from aurora_bot.contracts import ToolCall, ToolOutput
 from aurora_bot.contracts.artifact_codec import read_artifact
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.runtime import assemble_runtime
 from aurora_bot.utils.serialization import thaw_json
@@ -52,17 +48,17 @@ def test_resource_content_is_available_through_port_registry_and_model_tools(con
 
     async def scenario() -> None:
         try:
-            operations = runtime.assembly.get(OperationRegistry)
+            operations = runtime.assembly.get("operations")
             content = "同一段经历与它的证据".encode()
             write = _request("put", {"key": _KEY, "content_base64": base64.b64encode(content).decode("ascii")})
             result = await operations.dispatch(write)
             assert result.status is OperationStatus.SUCCEEDED
             info = read_artifact(result.data)
-            assert await runtime.assembly.get(ArtifactStore).stat(info.ref) == info
+            assert await runtime.assembly.get("artifacts").stat(info.ref) == info
             assert await operations.dispatch(write) == result
-            resources = runtime.assembly.get(ResourceCatalog)
+            resources = runtime.assembly.get("resources")
             assert resources.resolve(write.target).ref == write.target
-            tools = runtime.assembly.get(ToolRegistry)
+            tools = runtime.assembly.get("tools")
             arguments = {"key": _KEY, "revision": info.ref.revision}
             stat = await operations.dispatch(_request("stat", arguments, request_id="stat"))
             assert stat.data == result.data
@@ -100,7 +96,7 @@ def test_invalid_resource_calls_fail_without_publishing_content(
 
     async def scenario() -> None:
         try:
-            result = await runtime.assembly.get(OperationRegistry).dispatch(_request(action, arguments))
+            result = await runtime.assembly.get("operations").dispatch(_request(action, arguments))
             assert result.status is not OperationStatus.SUCCEEDED
             assert result.message
             assert not (configured_project / "data/artifacts/bindings").exists()
@@ -125,7 +121,7 @@ def test_large_content_upload_keeps_real_runtime_world_records_compact(configure
         try:
             content = "连续训练经历".encode() * 10000
             request = _request("put", {"key": _KEY, "content_base64": base64.b64encode(content).decode("ascii")})
-            operations = runtime.assembly.get(OperationRegistry)
+            operations = runtime.assembly.get("operations")
             result = await operations.dispatch(request)
             assert result.status is OperationStatus.SUCCEEDED
             info = read_artifact(result.data)
@@ -134,7 +130,7 @@ def test_large_content_upload_keeps_real_runtime_world_records_compact(configure
             assert "request_ref" in request_fact.data["request"]
             assert all("content_base64" not in json.dumps(thaw_json(commit.data)) for commit in page.commits)
             assert await operations.dispatch(request) == result
-            stored = await runtime.assembly.get(ArtifactStore).read(info.ref, limit=info.size)
+            stored = await runtime.assembly.get("artifacts").read(info.ref, limit=info.size)
             assert stored.content == content
         finally:
             await runtime.world.close()
@@ -149,7 +145,7 @@ def test_strict_resource_input_reports_a_chinese_error(configured_project: Path)
     async def scenario() -> None:
         try:
             request = _request("read", {"key": _KEY, "revision": "a" * 64, "limit": 1.0})
-            result = await runtime.assembly.get(OperationRegistry).dispatch(request)
+            result = await runtime.assembly.get("operations").dispatch(request)
             assert result.status is OperationStatus.FAILED
             assert result.message == "资源参数不符合声明结构"
         finally:

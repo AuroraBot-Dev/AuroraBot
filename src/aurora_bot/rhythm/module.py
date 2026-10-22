@@ -8,10 +8,6 @@ from typing import TYPE_CHECKING
 
 from aurora_bot.contracts.model_artifact import read_model_content
 from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
-from aurora_bot.contracts.pkgs.world import WorldReader
 from aurora_bot.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceDescriptor, ResourceKey
 from aurora_bot.contracts.rhythm import RHYTHM_FEATURES
 from aurora_bot.kernel import ModuleContext, module
@@ -23,10 +19,12 @@ if TYPE_CHECKING:
     from pathlib import Path
     from types import ModuleType
 
+    from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
+
 
 async def prepare(context: ModuleContext) -> None:
     """在构造前按确切字节载入节律权重，计算不阻塞事件循环。"""
-    if not context.is_provider(RhythmPolicy) or context.contains(RhythmPolicy):
+    if not context.is_provider("rhythm") or context.contains("rhythm"):
         return
     config = context.settings.resolve(RhythmConfig)
     if config.policy != "aurora:rhythm/model/gru":
@@ -36,7 +34,7 @@ async def prepare(context: ModuleContext) -> None:
     if config.weights is None and config.reference is None:
         raise ValueError("GRU 节律模型需要指定 weights 或 weights_ref")
     content, ref = await read_model_content(
-        context.get(ArtifactStore),
+        context.get("artifacts"),
         ResourceKey.parse(config.policy),
         reference=config.reference,
         path=context.settings.project_root / config.weights if config.weights is not None else None,
@@ -49,24 +47,24 @@ async def prepare(context: ModuleContext) -> None:
         max_check_seconds=config.max_idle_seconds,
         probability_threshold=config.probability_threshold,
     )
-    context.provide(RhythmPolicy, policy)
+    context.provide("rhythm", policy)
 
 
 @module(
     name="rhythm",
-    provides=RhythmPolicy,
-    requires=(WorldReader, BotStateStore, ArtifactStore, RhythmPolicy),
+    provides="rhythm",
+    requires=("world.reader", "bot", "artifacts", "rhythm"),
     contributes=(RESOURCE_CONTRIBUTIONS, OPERATION_CONTRIBUTIONS),
     resources=RhythmObservations.definition.resource,
     prepare=prepare,
 )
 def build(context: ModuleContext) -> RhythmPolicy:
     """策略实例与时间、认知运行器分别由内核绑定。"""
-    policy = context.get_optional(RhythmPolicy)
+    policy = context.get_optional("rhythm")
     if policy is None:
         policy = _policy(context.settings.resolve(RhythmConfig), context.settings.project_root)
     context.contribute(
-        OPERATION_CONTRIBUTIONS, RhythmObservations(context.get(WorldReader), context.get(BotStateStore).bot_id)
+        OPERATION_CONTRIBUTIONS, RhythmObservations(context.get("world.reader"), context.get("bot").bot_id)
     )
     context.contribute(
         RESOURCE_CONTRIBUTIONS,

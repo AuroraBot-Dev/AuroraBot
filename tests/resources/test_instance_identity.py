@@ -8,16 +8,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.contracts import AgentTree, ChatMessage, CognitionRequest
+from aurora_bot.contracts import ChatMessage, CognitionRequest
 from aurora_bot.mcp.config import PlatformsConfig
 from aurora_bot.runtime import compose_runtime
 from aurora_bot.world import SqlAlchemyWorldJournal
 from aurora_cli import load_config
 from aurora_cli.configs.cadence import CONFIG_SPEC as CADENCE_CONFIG
 from aurora_cli.configs.platforms import CONFIG_SPEC as PLATFORMS_CONFIG
-from tests.engine.support import _agent, _runner
+from tests.support.engine import make_engine
 from tests.support.model import ScriptedModel as SequenceModel
 from tests.support.model import TemplateModel as FakeModel
+from tests.support.prompt import _agent
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -70,14 +71,14 @@ def test_new_runner_cannot_reexecute_a_recorded_instance(tmp_path: Path) -> None
         """保留同一个持久世界，更换运行器与模型实例。"""
         world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
         root = _agent()
-        tree = AgentTree.create("persistent-instance", "root", root, "核对结果")
+        request = CognitionRequest("核对结果", run_id="persistent-instance", agent=root.definition_id)
         try:
             first = SequenceModel([ChatMessage.assistant("已完成")])
-            await _runner(first, (root,), world=world).run(tree)
+            await make_engine(first, (root,), world=world).execute(request)
             second = SequenceModel([ChatMessage.assistant("不能再次执行")])
             before = await world.cursor()
-            with pytest.raises(ValueError, match="AgentTree 已存在"):
-                await _runner(second, (root,), world=world).run(tree)
+            with pytest.raises(ValueError, match="认知运行已存在"):
+                await make_engine(second, (root,), world=world).execute(request)
             assert not second.requests
             assert await world.cursor() == before
         finally:

@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from aurora_agent import RunResult, RunStats, RunStatus
 from aurora_bot.contracts import CognitionRequest, CognitionResult, WorldFrontier
-from aurora_bot.contracts.pkgs.engine import CognitionRunner
 from aurora_bot.contracts.process import CognitionProcess
 from aurora_bot.runtime import assemble_runtime
 from aurora_bot.world import SqlAlchemyWorldJournal
@@ -32,27 +32,27 @@ class DirectRunner:
         assert request.run_id is not None
         self.requests.append(request)
         # 运行身份与结果审计是执行器契约；委派拓扑不是契约的一部分。
-        for stage in ("started", "completed"):
+        for stage in ("started", "finished"):
             await self.world.append_commit(
-                commit_id=f"{request.run_id}:tree:{stage}",
-                kind=f"engine.tree.{stage}",
+                commit_id=f"{request.run_id}:run:{stage}",
+                kind=f"engine.run.{stage}",
                 source="direct",
                 summary="认知请求已处理",
                 scopes=frozenset({f"aurora:run/{request.run_id}"}),
                 based_on=request.frontier,
-                data={"tree_id": request.run_id, "caused_by": request.caused_by},
+                data={"run_id": request.run_id, "caused_by": request.caused_by},
             )
-        return CognitionResult(request.run_id, "直接执行完成")
+        return RunResult(request.run_id, RunStatus.COMPLETED, "直接执行完成", None, RunStats())
 
 
 def test_runtime_accepts_executor_without_tree_and_preserves_duplicate_protection(configured_project: Path) -> None:
     async def scenario() -> None:
         world = SqlAlchemyWorldJournal(configured_project / "direct.sqlite3")
         runner = DirectRunner(world)
-        runtime = assemble_runtime(load_config(configured_project), world=world, instances=((CognitionRunner, runner),))
+        runtime = assemble_runtime(load_config(configured_project), world=world, instances=(("engine", runner),))
         try:
             result = await runtime.run("请求处理", run_id="direct")
-            assert result == CognitionResult("direct", "直接执行完成")
+            assert result == RunResult("direct", RunStatus.COMPLETED, "直接执行完成", None, RunStats())
             request = runner.requests[0]
             assert request.agent == runtime.root.agent
             assert request.caused_by is not None

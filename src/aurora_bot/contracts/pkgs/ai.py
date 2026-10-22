@@ -10,8 +10,6 @@ if TYPE_CHECKING:
 
 
 class Model(Protocol):
-    """AgentTree 循环使用的唯一模型端口。"""
-
     @property
     def providers(self) -> tuple[ProviderDefinition, ...]: ...
 

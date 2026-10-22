@@ -52,8 +52,7 @@ class MemoryExposures:
                     "model_request_id": commit.commit_id,
                     "cursor": commit.cursor,
                     "recorded_at": commit.recorded_at.isoformat() if commit.recorded_at is not None else None,
-                    "tree_id": commit.data["tree_id"],
-                    "node_id": commit.data["node_id"],
+                    "run_id": commit.data["run_id"],
                     "model": commit.data["model"],
                     "stage": "prepared",
                     "memory": thaw_json(commit.data["memory"]),
@@ -61,7 +60,7 @@ class MemoryExposures:
                 for commit in page.commits
                 if commit.cursor <= until
                 and is_exposure(commit, self._bot_id)
-                and (parameters.tree_id is None or commit.data.get("tree_id") == parameters.tree_id)
+                and (parameters.run_id is None or commit.data.get("run_id") == parameters.run_id)
             ]
             end = min(page.end, until) if page.commits else until
             return OperationResult(

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
     from aurora_bot.contracts.world import (
         EnvironmentEvent,
-        TreeActivity,
+        RunActivity,
         WorldCommit,
         WorldCommitInput,
         WorldDeltaPage,
@@ -36,7 +36,7 @@ class WorldReader(Protocol):
 
     async def stream(self, after: int, limit: int) -> WorldStreamPage: ...
 
-    async def tree_index(self, limit: int) -> tuple[TreeActivity, ...]: ...
+    async def run_index(self, limit: int) -> tuple[RunActivity, ...]: ...
 
 
 class WorldWriter(Protocol):

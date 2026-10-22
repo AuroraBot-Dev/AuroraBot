@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts.pkgs.prompt import PromptAssembler as PromptAssemblerPort
 from aurora_bot.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
 from aurora_bot.contracts.resource import RESOURCE_CONTRIBUTIONS, ResourceKey
 from aurora_bot.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from aurora_bot.kernel import ModuleContext, module
+from aurora_bot.kernel.hooks import service_namespace
 from aurora_bot.prompt.composer import PromptAssembler
 from aurora_bot.prompt.config import PromptsConfig
 from aurora_bot.prompt.models import PromptCatalog
@@ -16,16 +16,22 @@ from aurora_bot.prompt.models import PromptCatalog
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_bot.contracts.pkgs.prompt import PromptAssembler as PromptAssemblerPort
+
+CALLS = service_namespace("prompt", "prompt", methods=("assemble",), attributes=("catalog",))
+
 
 @module(
     name="prompt",
-    provides=PromptAssemblerPort,
-    requires=PromptAssemblerPort,
+    provides="prompt",
+    requires="prompt",
     contributes=(RESOURCE_CONTRIBUTIONS, RESOURCE_CONTENTS),
+    points=CALLS.spec.points,
+    handlers=CALLS.spec.handlers,
 )
 def build(context: ModuleContext) -> PromptAssemblerPort:
     """资源描述来自实际载入的片段，不从配置路径推断内容版本。"""
-    assembler = context.get_optional(PromptAssemblerPort)
+    assembler = context.get_optional("prompt")
     if assembler is None:
         config = context.settings.resolve(PromptsConfig)
         directory = context.settings.project_root / "config" / "prompts"

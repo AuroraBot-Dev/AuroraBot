@@ -12,9 +12,6 @@ from aurora_bot.artifacts.module import MODULE as ARTIFACTS_MODULE
 from aurora_bot.artifacts.store import FileArtifactStore
 from aurora_bot.contracts.artifact import ArtifactInfo
 from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.pkgs.prompt import PromptAssembler
 from aurora_bot.contracts.prompt import PROMPT_MEDIA_TYPE, PromptFragment
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.kernel import compose_managed, module
@@ -50,7 +47,7 @@ def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(co
     async def scenario() -> None:
         """先运行并关闭全部模组，再用新目录与新存储实例读取旧正文。"""
         runtime, lifecycle = await compose_runtime(config, FakeModel(), output=lambda _: None)
-        original = runtime.assembly.get(PromptAssembler).catalog.get(ResourceRef(key))
+        original = runtime.assembly.get("prompt").catalog.get(ResourceRef(key))
         try:
             await lifecycle.activate(asyncio.Event())
             await runtime.run("记录本次提示词", run_id="archived-prompt")
@@ -61,9 +58,9 @@ def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(co
         resumed, handle = await compose_runtime(config, FakeModel(), output=lambda _: None)
         try:
             await handle.activate(asyncio.Event())
-            current = resumed.assembly.get(PromptAssembler).catalog.get(ResourceRef(key))
+            current = resumed.assembly.get("prompt").catalog.get(ResourceRef(key))
             assert current.ref != original.ref
-            fact = await resumed.world.commit(f"archived-prompt:{runtime.root.node_id}:model:0:requested")
+            fact = await resumed.world.commit("archived-prompt:model:0:requested")
             assert fact is not None
             recorded = next(item for item in fact.data["resources"] if item["key"] == str(key))
             assert recorded["revision"] == original.ref.revision
@@ -75,12 +72,12 @@ def test_recorded_prompt_body_survives_source_replacement_and_runtime_restart(co
                 OperationKind.QUERY,
                 {**recorded, "encoding": "utf-8", "limit": 16384},
             )
-            result = await resumed.assembly.get(OperationRegistry).dispatch(request)
+            result = await resumed.assembly.get("operations").dispatch(request)
             assert result.status is OperationStatus.SUCCEEDED
             assert result.data["text"] == original.content
             assert result.data["media_type"] == PROMPT_MEDIA_TYPE
             assert result.data["has_more"] is False
-            assert (await resumed.assembly.get(ArtifactStore).read(current.ref)).content == current.content.encode()
+            assert (await resumed.assembly.get("artifacts").read(current.ref)).content == current.content.encode()
         finally:
             await handle.close()
 
@@ -109,7 +106,7 @@ def test_failed_prompt_publication_prevents_background_start(tmp_path: Path, *, 
 
     @module(
         name="selected",
-        provides=(PromptAssembler, ArtifactStore),
+        provides=("prompt", "artifacts"),
         priority=10,
         declares=OPERATION_CONTRIBUTIONS,
         run=run,
@@ -120,8 +117,8 @@ def test_failed_prompt_publication_prevents_background_start(tmp_path: Path, *, 
             PromptFragment(ResourceKey.parse("lab:prompt/system/identity"), "身份"),
             PromptFragment(ResourceKey.parse("lab:prompt/agent/root"), "认知"),
         )
-        context.provide(PromptAssembler, ConcreteAssembler(PromptCatalog(fragments)))
-        context.provide(ArtifactStore, BrokenStore(tmp_path))
+        context.provide("prompt", ConcreteAssembler(PromptCatalog(fragments)))
+        context.provide("artifacts", BrokenStore(tmp_path))
 
     async def scenario() -> None:
         """激活失败自动关闭后，再次关闭仍可安全完成。"""

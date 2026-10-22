@@ -1,4 +1,4 @@
-[engine.tree]
-max_depth = 4
-max_nodes = 32
-max_steps = 256
+[engine.run]
+max_model_calls = 32
+max_tool_calls = 128
+max_context_chars = 100000

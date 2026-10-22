@@ -37,24 +37,24 @@ def test_scope_provider_reads_consumer_metadata_without_a_dependency_cycle() -> 
 
     async def prepare(context: ModuleContext) -> None:
         """业务准备前已经能读取自己声明的分类。"""
-        seen.append(context.get(ScopeCatalog))
+        seen.append(context.get("scopes"))
         assert seen[-1].classify("lab:world/jobs/one") is ScopeKind.RUN
 
-    @module(name="jobs", provides=str, requires=ScopeCatalog, scopes=declaration, prepare=prepare)
+    @module(name="jobs", provides="str", requires="scopes", scopes=declaration, prepare=prepare)
     def jobs(context: ModuleContext) -> str:
         """构造阶段读取同一个冻结目录。"""
-        seen.append(context.get(ScopeCatalog))
+        seen.append(context.get("scopes"))
         return "ready"
 
     async def scenario() -> None:
         handle = await compose_managed(_Settings(), (jobs, MODULE))
         try:
-            assert seen == [handle.assembly.get(ScopeCatalog)] * 2
+            assert seen == [handle.assembly.get("scopes")] * 2
         finally:
             await handle.close()
 
     asyncio.run(scenario())
-    assert compose(_Settings(), (jobs, MODULE)).get(ScopeCatalog).declarations == (declaration,)
+    assert compose(_Settings(), (jobs, MODULE)).get("scopes").declarations == (declaration,)
 
 
 @pytest.mark.parametrize("managed", [False, True])
@@ -69,8 +69,8 @@ def test_inconsistent_scope_declarations_fail_before_business_resources_open(man
 
     @module(
         name="a",
-        provides=str,
-        requires=ScopeCatalog,
+        provides="str",
+        requires="scopes",
         scopes=ScopeDeclaration(pattern, ScopeKind.RUN, "过程台账"),
         prepare=prepare,
     )
@@ -80,7 +80,7 @@ def test_inconsistent_scope_declarations_fail_before_business_resources_open(man
         return "first"
 
     @module(
-        name="b", provides=int, requires=ScopeCatalog, scopes=ScopeDeclaration(pattern, ScopeKind.RESOURCE, "业务事实")
+        name="b", provides="int", requires="scopes", scopes=ScopeDeclaration(pattern, ScopeKind.RESOURCE, "业务事实")
     )
     def second(context: ModuleContext) -> int:
         """同一模式的另一项不一致声明。"""

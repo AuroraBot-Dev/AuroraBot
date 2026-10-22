@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts import ToolCall, ToolOutput, ToolStatus
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.resource import ResourceKey
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
@@ -27,10 +25,10 @@ def test_terminal_and_bot_share_live_resource_pages_and_inspection(configured_pr
     async def scenario() -> None:
         """发布、跨入口翻页、核对和读取均使用实际选中的内容存储。"""
         try:
-            store = runtime.assembly.get(ArtifactStore)
+            store = runtime.assembly.get("artifacts")
             key = ResourceKey.parse("lab:memory/dataset/episodes")
             versions = (await store.put(key, b"first"), await store.put(key, b"second"))
-            tools = runtime.assembly.get(ToolRegistry)
+            tools = runtime.assembly.get("tools")
             arguments = {"namespace": "lab", "limit": 1}
             first = await tools.execute(ToolCall("find", "aurora:tool/definition/resources_find", arguments))
             assert isinstance(first, ToolOutput)

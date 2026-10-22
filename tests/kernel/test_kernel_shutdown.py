@@ -31,7 +31,7 @@ def test_concurrent_close_waits_for_the_same_resource_release() -> None:
             await release.wait()
             trace.append("close.finished")
 
-        @module(name="resource", provides=int, close=close)
+        @module(name="resource", provides="int", close=close)
         def build(context: ModuleContext) -> int:
             """提供一个独立模组用于控制释放过程。"""
             return 1
@@ -86,7 +86,7 @@ def test_cancellation_waits_for_every_cleanup_and_then_remains_cancelled(repeate
                 closer.cancel()
             trace.append("close.finished")
 
-        @module(name="resource", provides=int, prepare=prepare, close=close)
+        @module(name="resource", provides="int", prepare=prepare, close=close)
         def build(context: ModuleContext) -> int:
             """构造正常，测试只改变关闭调用者状态。"""
             return 1
@@ -120,7 +120,7 @@ def test_abort_keeps_the_original_failure_when_cancelled_during_cleanup() -> Non
             entered.set()
             await release.wait()
 
-        @module(name="resource", provides=int, close=close)
+        @module(name="resource", provides="int", close=close)
         def build(context: ModuleContext) -> int:
             """运行失败由宿主传入，不来自构造。"""
             return 1
@@ -164,7 +164,7 @@ def test_cancelled_close_preserves_cleanup_failure_and_finishes_remaining_resour
             await release.wait()
             raise original
 
-        @module(name="resource", provides=int, prepare=prepare, close=close)
+        @module(name="resource", provides="int", prepare=prepare, close=close)
         def build(context: ModuleContext) -> int:
             """构造过程不影响取消场景。"""
             return 1
@@ -204,7 +204,7 @@ def test_cancelled_waiter_cannot_interrupt_another_close() -> None:
             await release.wait()
             released.append("done")
 
-        @module(name="resource", provides=int, close=close)
+        @module(name="resource", provides="int", close=close)
         def build(context: ModuleContext) -> int:
             """提供可控制关闭时机的资源。"""
             return 1
@@ -256,12 +256,12 @@ def test_cancellation_during_construction_rollback_finishes_all_resources(initia
             await release.wait()
             trace.append("close.finished")
 
-        @module(name="resource", provides=str, prepare=prepare, close=close)
+        @module(name="resource", provides="str", prepare=prepare, close=close)
         def resource(context: ModuleContext) -> str:
             """先构造需要回收的依赖资源。"""
             return "ready"
 
-        @module(name="broken", provides=int, requires=str)
+        @module(name="broken", provides="int", requires="str")
         def broken(context: ModuleContext) -> int:
             """取得依赖之后才发生原始构造错误。"""
             raise original

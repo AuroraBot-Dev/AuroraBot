@@ -8,34 +8,32 @@ from aurora_bot.cadence.cadence import Cadence
 from aurora_bot.cadence.config import CadenceConfig, ReactionsConfig
 from aurora_bot.cadence.reactions import ReactiveRule
 from aurora_bot.contracts import COGNITION_BINDINGS
-from aurora_bot.contracts.pkgs.agents import AgentCatalog
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.cadence import Cadence as CadencePort
-from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
-from aurora_bot.contracts.pkgs.world import WorldReader, WorldWriter
 from aurora_bot.contracts.scope import ScopeDeclaration, ScopeKind
 from aurora_bot.kernel import ModuleContext, module
 
 if TYPE_CHECKING:
     import asyncio
 
+    from aurora_bot.contracts.pkgs.agents import AgentCatalog
+    from aurora_bot.contracts.pkgs.cadence import Cadence as CadencePort
+
 
 async def activate(context: ModuleContext) -> None:
-    cadence = context.get(CadencePort)
+    cadence = context.get("cadence")
     if cadence.enabled:
         await cadence.initialize()
 
 
 async def run(context: ModuleContext, stop: asyncio.Event) -> None:
-    cadence = context.get(CadencePort)
+    cadence = context.get("cadence")
     if cadence.enabled:
         await cadence.run(stop)
 
 
 @module(
     name="cadence",
-    provides=CadencePort,
-    requires=(CadencePort, WorldReader, WorldWriter, AgentCatalog, BotStateStore, RhythmPolicy),
+    provides="cadence",
+    requires=("cadence", "world.reader", "world.writer", "agents", "bot", "rhythm"),
     contributes=COGNITION_BINDINGS,
     scopes=ScopeDeclaration(
         "*:world/bot/*/cadence", ScopeKind.RESOURCE, "节律 tick 与唤起决策，记录 Bot 主动发起认知的理由。"
@@ -45,22 +43,22 @@ async def run(context: ModuleContext, stop: asyncio.Event) -> None:
 )
 def build(context: ModuleContext) -> CadencePort:
     """唤起接线始终绑定实际选中端口，不构造失选的节律。"""
-    cadence = context.get_optional(CadencePort)
+    cadence = context.get_optional("cadence")
     if cadence is None:
         config = context.settings.resolve(CadenceConfig)
         reactions = context.settings.resolve(ReactionsConfig)
         rules = tuple(
             ReactiveRule(item.source, item.event_kind, item.agent, item.contains_any) for item in reactions.reactions
         )
-        agents = context.get(AgentCatalog)
+        agents = context.get("agents")
         _validate_agents(config.agent, rules, agents)
         cadence = Cadence(
-            context.get(WorldReader),
-            context.get(WorldWriter),
+            context.get("world.reader"),
+            context.get("world.writer"),
             agent=config.agent,
             enabled=config.enabled,
-            policy=context.get(RhythmPolicy),
-            state=context.get(BotStateStore),
+            policy=context.get("rhythm"),
+            state=context.get("bot"),
             poll_interval=config.poll_seconds,
             reactive_rules=rules,
         )

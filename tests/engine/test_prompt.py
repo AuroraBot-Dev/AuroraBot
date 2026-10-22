@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 import pytest
 
 from aurora_bot.contracts import (
-    AgentTree,
     ChatMessage,
     MemoryScopeSnapshot,
     MemorySnapshot,
@@ -21,35 +20,40 @@ from tests.support.prompt import _agent, _assembler, make_prompt_catalog
 
 
 def test_assembler_emits_one_system_then_node_transcript() -> None:
-    tree = AgentTree.create("tree", "root", _agent(), "hello")
-    tree = tree.append(
-        "root",
+    transcript = (
+        ChatMessage.message("hello"),
         ChatMessage.assistant(tool_calls=(ToolCall("call-1", "clock", {}),)),
+        ChatMessage.tool("call-1", "12:00"),
     )
-    tree = tree.append("root", ChatMessage.tool("call-1", "12:00"))
 
-    messages = _assembler().assemble(tree, "root").messages
+    messages = _assembler().assemble(_agent().prompt_id, transcript).messages
 
     assert [message.role for message in messages] == ["system", "message", "assistant", "tool"]
     assert messages[0].content == ("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
 
 
 def test_assembler_rejects_capacity_that_cannot_hold_required_context() -> None:
-    tree = AgentTree.create("tree", "root", _agent(), "hello")
+    transcript = (ChatMessage.message("hello"),)
     limit = 10
 
     with pytest.raises(ContextBudgetError, match="必要上下文"):
-        _assembler(limit=limit).assemble(tree, "root")
+        _assembler(limit=limit).assemble(_agent().prompt_id, transcript)
 
 
 def test_assembler_preserves_initial_intent_when_trimming_old_history() -> None:
-    tree = AgentTree.create("tree", "root", _agent(), "原始任务")
-    tree = tree.append("root", ChatMessage.assistant("较早的回复" * 20))
-    tree = tree.append("root", ChatMessage.message("最新的世界事实"))
+    transcript = (
+        ChatMessage.message("原始任务"),
+        ChatMessage.assistant("较早的回复" * 20),
+        ChatMessage.message("最新的世界事实"),
+    )
     system_size = len("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
     tag = "部分对话未载入；请按检查点和证据引用恢复，必要时读取原始记录。"
 
-    messages = _assembler(limit=system_size + len(tag) + len("最新的世界事实") + 20).assemble(tree, "root").messages
+    messages = (
+        _assembler(limit=system_size + len(tag) + len("最新的世界事实") + 20)
+        .assemble(_agent().prompt_id, transcript)
+        .messages
+    )
 
     assert [message.role for message in messages] == ["system", "message", "message", "message"]
     assert messages[1].content == "原始任务"
@@ -59,18 +63,17 @@ def test_assembler_preserves_initial_intent_when_trimming_old_history() -> None:
 
 
 def test_assembler_truncation_never_leaves_orphan_tool_message() -> None:
-    tree = AgentTree.create("tree", "root", _agent(), "初始消息")
-    tree = tree.append(
-        "root",
+    transcript = (
+        ChatMessage.message("初始消息"),
         ChatMessage.assistant(tool_calls=(ToolCall("call-1", "clock", {}),)),
+        ChatMessage.tool("call-1", "12:00" * 20),
+        ChatMessage.assistant("最终回复"),
     )
-    tree = tree.append("root", ChatMessage.tool("call-1", "12:00" * 20))
-    tree = tree.append("root", ChatMessage.assistant("最终回复"))
     system_size = len("You are Aurora.\n\nThe world continues between messages.\n\nAct as the root.")
     tag = "部分对话未载入；请按检查点和证据引用恢复，必要时读取原始记录。"
 
     limit = system_size + len(tag) + len("初始消息最终回复")
-    messages = _assembler(limit=limit).assemble(tree, "root").messages
+    messages = _assembler(limit=limit).assemble(_agent().prompt_id, transcript).messages
 
     assert [message.role for message in messages] == ["system", "message", "message", "assistant"]
     assert messages[1].content == "初始消息"
@@ -91,12 +94,14 @@ def test_continuity_survives_memory_pressure_and_old_history_trimming() -> None:
     memory = MemorySnapshot(
         now, (MemoryScopeSnapshot("test", 1, (commit,)),), MemoryContinuity("aurora:bot/test", 1, (goal,))
     )
-    tree = AgentTree.create("tree", "root", _agent(), "检查结果")
-    tree = tree.append("root", ChatMessage.assistant("很久以前的讨论" * 300))
-    tree = tree.append("root", ChatMessage.message("恢复检查"))
+    transcript = (
+        ChatMessage.message("检查结果"),
+        ChatMessage.assistant("很久以前的讨论" * 300),
+        ChatMessage.message("恢复检查"),
+    )
 
     limit = 500
-    messages = _assembler(limit=limit).assemble(tree, "root", memory=memory).messages
+    messages = _assembler(limit=limit).assemble(_agent().prompt_id, transcript, memory=memory).messages
 
     assert "operation-7 已发起，先查询结果" in messages[0].content
     assert "started:7" in messages[0].content
@@ -108,19 +113,21 @@ def test_continuity_survives_memory_pressure_and_old_history_trimming() -> None:
 
 def test_latest_tool_batch_is_kept_whole_or_rejected() -> None:
     """容量不足时不把工具结果与发起调用拆开。"""
-    tree = AgentTree.create("tree", "root", _agent(), "检查")
-    tree = tree.append("root", ChatMessage.assistant(tool_calls=(ToolCall("call-1", "clock", {}),)))
-    tree = tree.append("root", ChatMessage.tool("call-1", "很长的工具结果" * 100))
+    transcript = (
+        ChatMessage.message("检查"),
+        ChatMessage.assistant(tool_calls=(ToolCall("call-1", "clock", {}),)),
+        ChatMessage.tool("call-1", "很长的工具结果" * 100),
+    )
 
     with pytest.raises(ContextBudgetError, match="必要上下文"):
-        _assembler(limit=200).assemble(tree, "root")
+        _assembler(limit=200).assemble(_agent().prompt_id, transcript)
 
 
 def test_assembler_rejects_missing_agent_prompt() -> None:
-    tree = AgentTree.create("tree", "root", _agent("aurora:prompt/agent/missing"), "hello")
+    transcript = (ChatMessage.message("hello"),)
 
     with pytest.raises(ValueError, match="Agent 提示词不存在"):
-        _assembler().assemble(tree, "root")
+        _assembler().assemble("aurora:prompt/agent/missing", transcript)
 
 
 def test_assembler_injects_memory_snapshot_into_system() -> None:
@@ -135,9 +142,9 @@ def test_assembler_injects_memory_snapshot_into_system() -> None:
         {"message_id": 1},
     )
     memory = MemorySnapshot(commit.occurred_at, (MemoryScopeSnapshot("qq:group", 1, (commit,)),))
-    tree = AgentTree.create("tree", "root", _agent(), "hello")
+    transcript = (ChatMessage.message("hello"),)
 
-    messages = _assembler().assemble(tree, "root", memory=memory).messages
+    messages = _assembler().assemble(_agent().prompt_id, transcript, memory=memory).messages
 
     assert "最近时间窗口内的世界活动" in messages[0].content
     assert "scope：qq:group" in messages[0].content

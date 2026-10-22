@@ -22,7 +22,7 @@ from aurora_bot.kernel import (
     module,
     resolve,
 )
-from tests.kernel.support import Alpha, Beta, Gamma
+from tests.kernel.support import Alpha, Beta
 from tests.kernel.support import Settings as _Settings
 
 if TYPE_CHECKING:
@@ -37,21 +37,21 @@ def _specs(*specs: ModuleSpec) -> StaticSource:
 
 
 def test_compose_injects_required_capabilities_by_dependency_order() -> None:
-    @module(name="alpha", provides=Alpha)
+    @module(name="alpha", provides="alpha")
     def build_alpha(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
 
-    @module(name="beta", provides=Beta, requires=Alpha)
+    @module(name="beta", provides="beta", requires="alpha")
     def build_beta(context: ModuleContext) -> Beta:
-        assert isinstance(context.get(Alpha), Alpha)
+        assert isinstance(context.get("alpha"), Alpha)
         return Beta()
 
     assembly = compose(_Settings(), _specs(build_beta, build_alpha).discover())
 
-    assert isinstance(assembly.get(Alpha), Alpha)
-    assert isinstance(assembly.get(Beta), Beta)
-    assert assembly.get_optional(Gamma) is None
+    assert isinstance(assembly.get("alpha"), Alpha)
+    assert isinstance(assembly.get("beta"), Beta)
+    assert assembly.get_optional("gamma") is None
 
 
 def test_contribution_aggregates_and_consumer_depends_on_contributors() -> None:
@@ -66,7 +66,7 @@ def test_contribution_aggregates_and_consumer_depends_on_contributors() -> None:
     def provider_b(context: ModuleContext) -> None:
         context.contribute(key, "b")
 
-    @module(name="consumer", provides=Beta, consumes=key)
+    @module(name="consumer", provides="beta", consumes=key)
     def consumer(context: ModuleContext) -> Beta:
         seen.extend(context.contributions(key))
         return Beta()
@@ -77,12 +77,12 @@ def test_contribution_aggregates_and_consumer_depends_on_contributors() -> None:
 
 
 def test_same_priority_conflict_fails() -> None:
-    @module(name="first", provides=Alpha)
+    @module(name="first", provides="alpha")
     def first(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
 
-    @module(name="second", provides=Alpha)
+    @module(name="second", provides="alpha")
     def second(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
@@ -92,7 +92,7 @@ def test_same_priority_conflict_fails() -> None:
 
 
 def test_missing_required_capability_fails() -> None:
-    @module(name="needs", provides=Beta, requires=Alpha)
+    @module(name="needs", provides="beta", requires="alpha")
     def needs(context: ModuleContext) -> Beta:
         del context
         return Beta()
@@ -102,23 +102,23 @@ def test_missing_required_capability_fails() -> None:
 
 
 def test_optional_module_is_skipped_when_dependency_missing() -> None:
-    @module(name="optional", provides=Beta, requires=Alpha, optional=True)
+    @module(name="optional", provides="beta", requires="alpha", optional=True)
     def optional(context: ModuleContext) -> Beta:
         del context
         return Beta()
 
     assembly = compose(_Settings(), _specs(optional).discover())
 
-    assert assembly.get_optional(Beta) is None
+    assert assembly.get_optional("beta") is None
 
 
 def test_cycle_dependency_fails_with_path() -> None:
-    @module(name="a", provides=Alpha, requires=Beta)
+    @module(name="a", provides="alpha", requires="beta")
     def a(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
 
-    @module(name="b", provides=Beta, requires=Alpha)
+    @module(name="b", provides="beta", requires="alpha")
     def b(context: ModuleContext) -> Beta:
         del context
         return Beta()
@@ -128,14 +128,14 @@ def test_cycle_dependency_fails_with_path() -> None:
 
 
 def test_one_instance_can_satisfy_multiple_contracts() -> None:
-    @module(name="multi", provides=(Alpha, Beta))
+    @module(name="multi", provides=("alpha", "beta"))
     def multi(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
 
     assembly = compose(_Settings(), _specs(multi).discover())
 
-    assert assembly.get(Alpha) is assembly.get(Beta)
+    assert assembly.get("alpha") is assembly.get("beta")
 
 
 def test_managed_lifecycle_prepare_activate_run_close_order() -> None:
@@ -165,7 +165,7 @@ def test_managed_lifecycle_prepare_activate_run_close_order() -> None:
 
     @module(
         name="lifecycle",
-        provides=Alpha,
+        provides="alpha",
         prepare=prepare,
         activate=activate,
         run=run,
@@ -202,12 +202,12 @@ def test_managed_lifecycle_rolls_back_when_construct_fails() -> None:
 
         return cleanup
 
-    @module(name="good", provides=Alpha, prepare=prepare)
+    @module(name="good", provides="alpha", prepare=prepare)
     def good(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
 
-    @module(name="bad", provides=Beta, requires=Alpha)
+    @module(name="bad", provides="beta", requires="alpha")
     def bad(context: ModuleContext) -> Beta:
         del context
         raise ValueError("构造失败")
@@ -240,7 +240,7 @@ def test_ready_and_drain_run_between_activate_and_close() -> None:
         del context
         trace.append("close")
 
-    @module(name="phased", provides=Alpha, activate=activate, ready=ready, drain=drain, close=close)
+    @module(name="phased", provides="alpha", activate=activate, ready=ready, drain=drain, close=close)
     def build_phased(context: ModuleContext) -> Alpha:
         del context
         trace.append("construct")
@@ -270,12 +270,12 @@ def test_order_constraint_orders_run_phase() -> None:
         trace.append("beta.run")
         await stop.wait()
 
-    @module(name="alpha", provides=Alpha, requires=Beta, order=Ordering(RUN, after=(Beta,)), run=run_alpha)
+    @module(name="alpha", provides="alpha", requires="beta", order=Ordering(RUN, after=("beta",)), run=run_alpha)
     def build_alpha(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
 
-    @module(name="beta", provides=Beta, run=run_beta)
+    @module(name="beta", provides="beta", run=run_beta)
     def build_beta(context: ModuleContext) -> Beta:
         del context
         return Beta()
@@ -294,7 +294,7 @@ def test_order_constraint_orders_run_phase() -> None:
 
 
 def test_resolution_exposes_phase_plan() -> None:
-    @module(name="alpha", provides=Alpha)
+    @module(name="alpha", provides="alpha")
     def build_alpha(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
@@ -346,7 +346,7 @@ def test_custom_phase_hook_runs_in_order() -> None:
         del context
         trace.append("audit")
 
-    @module(name="alpha", provides=Alpha, hooks={custom: audit})
+    @module(name="alpha", provides="alpha", hooks={custom: audit})
     def build_alpha(context: ModuleContext) -> Alpha:
         del context
         trace.append("construct")
@@ -369,7 +369,7 @@ def test_construction_phase_after_runtime_phase_fails() -> None:
     def late_build(context: ModuleContext) -> None:
         del context
 
-    @module(name="alpha", provides=Alpha, hooks={late: late_build})
+    @module(name="alpha", provides="alpha", hooks={late: late_build})
     def build_alpha(context: ModuleContext) -> Alpha:
         del context
         return Alpha()
@@ -384,7 +384,7 @@ def test_directory_source_loads_plugin_file(tmp_path: Path) -> None:
         "from aurora_bot.kernel import module\n\n"
         "class Widget:\n"
         "    pass\n\n"
-        "@module(name='external.alpha', provides=Widget)\n"
+        "@module(name='external.alpha', provides='widget')\n"
         "def build(context):\n"
         "    return Widget()\n\n"
         "MODULE = build\n",

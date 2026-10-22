@@ -9,9 +9,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts import ToolCall, ToolOutput, ToolStatus
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.contracts.resource_query import MAX_RESOURCE_PAGE
 from aurora_bot.runtime import assemble_runtime
@@ -32,10 +29,10 @@ def test_discovered_content_can_be_read_via_the_same_model_tools(configured_proj
     async def scenario() -> None:
         """用实际发布的两个权重版本演练模型可用的完整入口。"""
         try:
-            store = runtime.assembly.get(ArtifactStore)
+            store = runtime.assembly.get("artifacts")
             key = ResourceKey.parse("lab:memory/model/tgn")
             expected = {await store.put(key, b"one"), await store.put(key, b"two")}
-            tools = runtime.assembly.get(ToolRegistry)
+            tools = runtime.assembly.get("tools")
             arguments = {"namespace": "lab", "kind": "model", "limit": 1}
             found = []
             for identity in ("first", "next"):
@@ -60,7 +57,7 @@ def test_discovered_content_can_be_read_via_the_same_model_tools(configured_proj
             )
             assert isinstance(content, ToolOutput)
             assert json.loads(content.content)["text"] in {"one", "two"}
-            definition = runtime.assembly.get(ResourceCatalog).resolve(
+            definition = runtime.assembly.get("resources").resolve(
                 ResourceRef(ResourceKey.parse("aurora:artifacts/query/find"), "1")
             )
             assert definition.metadata["parameters"]["properties"]["limit"]["maximum"] == MAX_RESOURCE_PAGE
@@ -86,7 +83,7 @@ def test_discovery_tool_reports_invalid_queries(configured_project: Path, argume
     async def scenario() -> None:
         """统一路由与处理者共同落实输入契约。"""
         try:
-            output = await runtime.assembly.get(ToolRegistry).execute(ToolCall("invalid", _TOOL, arguments))
+            output = await runtime.assembly.get("tools").execute(ToolCall("invalid", _TOOL, arguments))
             assert isinstance(output, ToolOutput)
             assert output.status is ToolStatus.FAILED
         finally:

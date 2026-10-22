@@ -11,11 +11,11 @@ import pytest
 
 from aurora_bot.artifacts.provider import ArtifactProvider
 from aurora_bot.artifacts.store import FileArtifactStore
-from aurora_bot.contracts.process import DEFAULT_TREE_PROCESS
+from aurora_bot.contracts.process import DEFAULT_PROCESS
 from aurora_bot.contracts.resource import ResourceInstance, ResourceKey, ResourceRef
 from aurora_bot.contracts.resource_codec import resource_instance_data, resource_ref_data
 from aurora_bot.contracts.resource_query import ResourceQuery
-from aurora_bot.contracts.tree_lifecycle import TREE_COMPLETED, TREE_FAILED, TREE_STARTED, tree_scope
+from aurora_bot.contracts.run_lifecycle import RUN_COMPLETED, RUN_FAILED, RUN_STARTED, run_scope
 from aurora_bot.contracts.world import WorldCommitInput, WorldFrontier
 from aurora_bot.instances.provider import InstanceProvider
 from aurora_bot.resources.catalog import ResourceCatalog
@@ -43,16 +43,16 @@ async def _journal(tmp_path: Path) -> AsyncIterator[SqlAlchemyWorldJournal]:
 
 def _start(tree_id: str, bot_id: str = _BOT) -> WorldCommitInput:
     """使用生产开始事实的完整身份和过程版本。"""
-    instance = ResourceInstance(tree_id, bot_id, DEFAULT_TREE_PROCESS.ref)
+    instance = ResourceInstance(tree_id, bot_id, DEFAULT_PROCESS.ref)
     return WorldCommitInput(
-        f"{tree_id}:tree:started",
-        TREE_STARTED,
+        f"{tree_id}:run:started",
+        RUN_STARTED,
         "engine",
         "开始认知",
-        frozenset({tree_scope(tree_id)}),
+        frozenset({run_scope(tree_id)}),
         WorldFrontier(),
         {
-            "tree_id": tree_id,
+            "run_id": tree_id,
             "bot_id": bot_id,
             "instance": resource_instance_data(instance),
             "process_ref": resource_ref_data(instance.definition),
@@ -67,9 +67,9 @@ def _fact(tree_id: str, suffix: str, *, kind: str = "test.observed", source: str
         kind,
         source,
         "实例经历",
-        frozenset({tree_scope(tree_id)}),
+        frozenset({run_scope(tree_id)}),
         WorldFrontier(),
-        {"tree_id": tree_id},
+        {"run_id": tree_id},
     )
 
 
@@ -87,7 +87,7 @@ def test_instance_discovery_pages_all_owned_starts_and_ignores_decorative_tree_i
                 replace(_start("forged"), source="application"),
                 replace(_start("wrong-scope"), scopes=frozenset({"aurora:world/test"})),
                 replace(_start("wrong-id"), commit_id="decorative-start"),
-                replace(_start("legacy"), data={"tree_id": "legacy", "bot_id": _BOT}),
+                replace(_start("incomplete"), data={"run_id": "incomplete", "bot_id": _BOT}),
             )
             await world.append_commits(inputs)
             catalog = ResourceCatalog(providers=(InstanceProvider(world, _BOT),))
@@ -127,15 +127,15 @@ def test_historical_instance_views_remain_exact_across_long_scopes(tmp_path: Pat
             assert first.metadata["commit_count"] == 1
             events = await world.append_commits(tuple(_fact(tree_id, f"step-{i}") for i in range(270)))
             unrelated = (await world.append_commits((_fact("other", "unrelated"),)))[0]
-            kind = TREE_COMPLETED if terminal == "completed" else TREE_FAILED
+            kind = RUN_COMPLETED if terminal == "completed" else RUN_FAILED
             opposite = "failed" if terminal == "completed" else "completed"
-            opposite_kind = TREE_FAILED if terminal == "completed" else TREE_COMPLETED
+            opposite_kind = RUN_FAILED if terminal == "completed" else RUN_COMPLETED
             await world.append_commits((_fact(tree_id, f"tree:{opposite}", kind=opposite_kind, source="application"),))
             assert (await catalog.browse(ResourceQuery(kind="instance"))).items[0].metadata["state"] == "started"
             ending = _fact(tree_id, "wrong-end-id", kind=kind, source="engine")
             await world.append_commits((ending,))
             assert (await catalog.browse(ResourceQuery(kind="instance"))).items[0].metadata["state"] == "started"
-            last = (await world.append_commits((_fact(tree_id, f"tree:{terminal}", kind=kind, source="engine"),)))[0]
+            last = (await world.append_commits((_fact(tree_id, "run:finished", kind=kind, source="engine"),)))[0]
             latest = (await catalog.browse(ResourceQuery(kind="instance"))).items[0]
             assert latest.metadata["state"] == terminal
             assert latest.metadata["as_of_cursor"] == last.cursor
@@ -168,7 +168,7 @@ def test_instance_inspection_requires_owned_address_and_canonical_version(tmp_pa
                 await provider.resolve(ResourceRef(replace(found.ref.key, namespace="missing"), found.ref.revision))
                 is None
             )
-            assert await provider.resolve(ResourceRef(DEFAULT_TREE_PROCESS.key, "1")) is None
+            assert await provider.resolve(ResourceRef(DEFAULT_PROCESS.key, "1")) is None
             assert await provider.resolve(ResourceRef(replace(found.ref.key, domain="memory"), "1")) is None
 
     asyncio.run(scenario())
@@ -182,7 +182,7 @@ def test_declared_but_inconsistent_instance_metadata_is_an_explicit_error(tmp_pa
         """解析与版本核对使用事实本身，不使用当前运行器配置。"""
         async with _journal(tmp_path) as world:
             start = _start("tree")
-            instance = ResourceInstance("tree", _BOT, DEFAULT_TREE_PROCESS.ref)
+            instance = ResourceInstance("tree", _BOT, DEFAULT_PROCESS.ref)
             data = dict(start.data)
             match change:
                 case "missing-process":
@@ -190,7 +190,7 @@ def test_declared_but_inconsistent_instance_metadata_is_an_explicit_error(tmp_pa
                 case "missing-instance":
                     del data["instance"]
                 case "wrong-process":
-                    data["process_ref"] = resource_ref_data(ResourceRef(DEFAULT_TREE_PROCESS.key, "different"))
+                    data["process_ref"] = resource_ref_data(ResourceRef(DEFAULT_PROCESS.key, "different"))
                 case "wrong-owner":
                     data["instance"] = resource_instance_data(replace(instance, bot_id="aurora:bot/other"))
                 case "wrong-id":

@@ -10,8 +10,6 @@ import pytest
 
 from aurora_bot.contracts import WorldFrontier
 from aurora_bot.contracts.memory import MemoryRequest
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryReader
 from aurora_bot.contracts.resource_query import ResourceQuery
 from aurora_bot.mcp.config import PlatformsConfig
 from aurora_bot.memory_model.config import MemoryModelConfig
@@ -63,7 +61,7 @@ async def _observe(runtime: AuroraRuntime) -> None:
         based_on=WorldFrontier(),
         data={"result": "complete"},
     )
-    snapshot = await runtime.assembly.get(MemoryReader).recall(MemoryRequest(query="实验结果"))
+    snapshot = await runtime.assembly.get("memory").recall(MemoryRequest(query="实验结果"))
     assert snapshot.bundles
 
 
@@ -78,7 +76,7 @@ def test_shutdown_saves_and_startup_restores_without_replaying_or_reingesting_ch
         stop = asyncio.Event()
         try:
             await lifecycle.activate(stop)
-            assert not await runtime.assembly.get(MemoryCheckpoints).initialize()
+            assert not await runtime.assembly.get("memory.checkpoints").initialize()
             await _observe(runtime)
         finally:
             stop.set()
@@ -87,7 +85,7 @@ def test_shutdown_saves_and_startup_restores_without_replaying_or_reingesting_ch
         stop = asyncio.Event()
         try:
             await handle.activate(stop)
-            checkpoints = resumed.assembly.get(MemoryCheckpoints)
+            checkpoints = resumed.assembly.get("memory.checkpoints")
             assert await checkpoints.initialize()
             records = [
                 item for item in (await resumed.world.stream(0, 100)).commits if item.kind == "memory.model.checkpoint"
@@ -99,7 +97,7 @@ def test_shutdown_saves_and_startup_restores_without_replaying_or_reingesting_ch
                 raise AssertionError("不应重新计算已保存的图前缀")
 
             monkeypatch.setattr(TemporalMemoryNetwork, "update", unexpected_update)
-            snapshot = await resumed.assembly.get(MemoryReader).recall(MemoryRequest(query="实验结果"))
+            snapshot = await resumed.assembly.get("memory").recall(MemoryRequest(query="实验结果"))
             assert snapshot.recall is not None
             assert {item.memory_id for item in snapshot.recall.ranking} == {"experiment-evidence"}
             assert not set(records[0].scopes).intersection(snapshot.recall.candidate_scopes or ())
@@ -119,7 +117,7 @@ def test_periodic_module_task_saves_before_shutdown(configured_project: Path, mo
         runtime, lifecycle = await compose_runtime(config, FakeModel(), output=lambda _: None)
         stop = asyncio.Event()
         persisted = asyncio.Event()
-        checkpoints = runtime.assembly.get(MemoryCheckpoints)
+        checkpoints = runtime.assembly.get("memory.checkpoints")
         actual_save = checkpoints.save
 
         async def save() -> ArtifactInfo | None:
@@ -152,14 +150,14 @@ def test_rule_policy_lifecycle_does_not_create_model_state_resources(configured_
         stop = asyncio.Event()
         try:
             await lifecycle.activate(stop)
-            checkpoints = runtime.assembly.get(MemoryCheckpoints)
+            checkpoints = runtime.assembly.get("memory.checkpoints")
             assert not await checkpoints.initialize()
             await _observe(runtime)
             assert await checkpoints.save() is None
         finally:
             stop.set()
             await lifecycle.close()
-        assert not (await runtime.assembly.get(ArtifactStore).find(ResourceQuery(domain="memory"))).items
+        assert not (await runtime.assembly.get("artifacts").find(ResourceQuery(domain="memory"))).items
 
     asyncio.run(scenario())
 

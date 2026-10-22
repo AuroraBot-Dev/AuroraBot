@@ -19,7 +19,7 @@ from aurora_bot.kernel import ModuleManifest, module
 from .service import VALUE
 
 
-@module(name="example", provides=str, manifest=ModuleManifest({version!r}, namespace="lab"))
+@module(name="example", provides="str", manifest=ModuleManifest({version!r}, namespace="lab"))
 def build(context):
     """提供实际从同包模块读取的值。"""
     return VALUE
@@ -47,20 +47,20 @@ def test_directory_plugin_imports_siblings_and_nested_subpackages(tmp_path: Path
     specs = tuple(DirectorySource(tmp_path).discover())
     assert len(specs) == 1
     assert specs[0].module_id == "lab:kernel/module/example"
-    assert compose(_Settings(), specs).get(str) == "first"
+    assert compose(_Settings(), specs).get("str") == "first"
 
 
 def test_reloading_a_package_uses_new_entry_and_new_internal_modules(tmp_path: Path) -> None:
     """新发布声明不能意外配上旧 sys.modules 中的服务实现。"""
     package = _package(tmp_path)
     original = tuple(DirectorySource(tmp_path).discover())
-    assert compose(_Settings(), original).get(str) == "first"
+    assert compose(_Settings(), original).get("str") == "first"
     (package / "module.py").write_text(_ENTRY.format(version="2.0.0"), encoding="utf-8")
     (package / "helpers" / "value.py").write_text('VALUE = "second release"\n', encoding="utf-8")
     revised = tuple(DirectorySource(tmp_path).discover())
     assert revised[0].manifest.version == "2.0.0"
     assert revised[0].resource.ref != original[0].resource.ref
-    assert compose(_Settings(), revised).get(str) == "second release"
+    assert compose(_Settings(), revised).get("str") == "second release"
 
 
 def test_failed_package_import_removes_its_partially_loaded_modules(tmp_path: Path) -> None:
@@ -76,7 +76,7 @@ def test_failed_package_import_removes_its_partially_loaded_modules(tmp_path: Pa
     )
     (package / "service.py").write_text("from .helpers.value import VALUE\n", encoding="utf-8")
     (package / "helpers" / "value.py").write_text('VALUE = "recovered"\n', encoding="utf-8")
-    assert compose(_Settings(), DirectorySource(tmp_path).discover()).get(str) == "recovered"
+    assert compose(_Settings(), DirectorySource(tmp_path).discover()).get("str") == "recovered"
 
 
 def test_file_and_directory_plugins_have_separate_python_import_roots(tmp_path: Path) -> None:
@@ -88,12 +88,12 @@ def test_file_and_directory_plugins_have_separate_python_import_roots(tmp_path: 
     expected = 7
     (tmp_path / "example_module.py").write_text(
         "from aurora_bot.kernel import ModuleManifest, module\n"
-        '@module(name="example", provides=int, manifest=ModuleManifest(namespace="other"))\n'
+        '@module(name="example", provides="int", manifest=ModuleManifest(namespace="other"))\n'
         "def build(context):\n"
         f"    return {expected}\n"
         "MODULE = build\n",
         encoding="utf-8",
     )
     assembly = compose(_Settings(), DirectorySource(tmp_path).discover())
-    assert assembly.get(str) == "first"
-    assert assembly.get(int) == expected
+    assert assembly.get("str") == "first"
+    assert assembly.get("int") == expected

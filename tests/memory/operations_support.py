@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 from aurora_bot.contracts import CognitionRequest, WorldFrontier
 from aurora_bot.contracts.bot import BotChange, Checkpoint, Goal
 from aurora_bot.contracts.operation import OperationKind, OperationRequest
-from aurora_bot.contracts.pkgs.bot import BotStateStore
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
@@ -40,11 +39,11 @@ async def prepared_runtime(project: Path) -> AsyncIterator[tuple[AuroraRuntime, 
             based_on=WorldFrontier(),
             data={"operation_id": "operation-7"},
         )
-        state = runtime.assembly.get(BotStateStore)
+        state = runtime.assembly.get("bot")
         goal = Goal(GOAL, "核对实验结果", "结果已确认", checkpoint=Checkpoint(evidence_refs=(SOURCE,)))
         await state.apply(BotChange("goal", 0, (goal,)))
         tree = await runtime.launch(CognitionRequest("核对实验", run_id="memory-audit", focus_goal_ids=(GOAL,)))
-        identity = f"{tree.run_id}:{runtime.root.node_id}:model:0:requested"
+        identity = f"{tree.run_id}:model:0:requested"
         await runtime.world.append_commit(
             commit_id=OUTCOME,
             kind="experiment.completed",
@@ -64,7 +63,7 @@ def request(runtime: AuroraRuntime, identity: str, path: str, arguments: dict[st
     key = ResourceKey.parse(f"aurora:memory/{path}")
     return OperationRequest(
         identity,
-        runtime.assembly.get(BotStateStore).bot_id,
+        runtime.assembly.get("bot").bot_id,
         "test:evaluator",
         ResourceRef(key),
         OperationKind(key.kind),

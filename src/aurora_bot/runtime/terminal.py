@@ -50,6 +50,4 @@ class TerminalCommandDispatcher:
             raise ValueError("终端消息必须先提交到世界")
         result = await self._run_message(commit)
         _logger.debug("终端输入完成 input_type={} status={}", input_type, result.status)
-        return TerminalResponse(
-            result.error if result.error is not None else result.output, is_error=result.error is not None
-        )
+        return TerminalResponse(result.output or result.reason or "认知未完成", is_error=result.status != "completed")

@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts import FRONT_BINDINGS, Front
-from aurora_bot.contracts.pkgs.world import WorldJournal
 from aurora_bot.kernel import ModuleLifecycleError
 from aurora_bot.runtime import run_runtime
 from aurora_bot.runtime.events import RUNTIME_MODULE_FAILED
@@ -32,7 +31,7 @@ async def run(context, stop):
     raise ValueError("后台连接丢失")
 
 
-@module(name="broken_sensor", provides=str, run=run)
+@module(name="broken_sensor", provides="str", run=run)
 def build(context):
     """纯服务构造仍正常。"""
     return "ready"
@@ -80,7 +79,7 @@ def test_headless_background_failure_is_persisted_and_ends_the_process(configure
                     FakeModel(),
                     headless=True,
                     stop_event=stop,
-                    instances=((WorldJournal, world),),
+                    instances=(("world", world),),
                     output=lambda _: None,
                 )
         assert stop.is_set()
@@ -140,7 +139,7 @@ def test_fronts_are_cancelled_and_joined_before_resources_close(configured_proje
                         load_config(configured_project),
                         FakeModel(),
                         headless=True,
-                        instances=((WorldJournal, world),),
+                        instances=(("world", world),),
                         contributions=bindings,
                         output=lambda _: None,
                     )
@@ -149,7 +148,7 @@ def test_fronts_are_cancelled_and_joined_before_resources_close(configured_proje
                     load_config(configured_project),
                     FakeModel(),
                     headless=True,
-                    instances=((WorldJournal, world),),
+                    instances=(("world", world),),
                     contributions=bindings,
                     output=lambda _: None,
                 )
@@ -180,7 +179,7 @@ def test_external_runtime_cancellation_still_joins_fronts_and_closes_resources(c
                 load_config(configured_project),
                 FakeModel(),
                 headless=True,
-                instances=((WorldJournal, world),),
+                instances=(("world", world),),
                 contributions=((FRONT_BINDINGS, lambda _: Front(front)),),
                 output=lambda _: None,
             )
@@ -240,7 +239,7 @@ def test_world_recording_failure_preserves_the_original_module_error(configured_
                 load_config(configured_project),
                 FakeModel(),
                 headless=True,
-                instances=((WorldJournal, world),),
+                instances=(("world", world),),
                 output=lambda _: None,
             )
         assert any(isinstance(error, ModuleLifecycleError) for error in captured.value.exceptions)
@@ -290,7 +289,7 @@ def test_stop_waits_for_an_already_claimed_module_failure_to_be_recorded(
                 FakeModel(),
                 headless=True,
                 stop_event=stop,
-                instances=((WorldJournal, world),),
+                instances=(("world", world),),
                 contributions=((FRONT_BINDINGS, lambda _: Front(front)),),
                 output=lambda _: None,
             )
@@ -353,7 +352,7 @@ def test_cancellation_while_joining_fronts_waits_for_their_cleanup(configured_pr
                 FakeModel(),
                 headless=True,
                 stop_event=stop,
-                instances=((WorldJournal, world),),
+                instances=(("world", world),),
                 contributions=((FRONT_BINDINGS, lambda _: Front(front)),),
                 output=lambda _: None,
             )

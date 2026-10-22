@@ -6,14 +6,11 @@ import asyncio
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aurora_bot.contracts import CognitionRequest, ScopeCatalog, ScopeKind
+from aurora_bot.contracts import CognitionRequest, ScopeKind
 from aurora_bot.contracts.bot import BotChange, Checkpoint
 from aurora_bot.contracts.memory import MemoryRequest
 from aurora_bot.contracts.memory_graph_codec import read_ranking
 from aurora_bot.contracts.operation import OperationStatus
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.memory import MemoryReader
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from tests.memory.operations_support import GOAL, SOURCE, prepared_runtime, request
 
 if TYPE_CHECKING:
@@ -25,10 +22,10 @@ def test_repeated_training_exports_do_not_feed_graph_payloads_back_into_memory(c
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, original_model_id):
-            registry = runtime.assembly.get(OperationRegistry)
-            state = runtime.assembly.get(BotStateStore)
+            registry = runtime.assembly.get("operations")
+            state = runtime.assembly.get("bot")
             ledger_scope = f"{state.scope}/operations"
-            assert runtime.assembly.get(ScopeCatalog).classify(ledger_scope) is ScopeKind.RUN
+            assert runtime.assembly.get("scopes").classify(ledger_scope) is ScopeKind.RUN
             original = await registry.dispatch(
                 request(runtime, "first-export", "query/training_input", {"model_request_id": original_model_id})
             )
@@ -42,7 +39,7 @@ def test_repeated_training_exports_do_not_feed_graph_payloads_back_into_memory(c
                         focus_goal_ids=(GOAL,),
                     )
                 )
-                model_id = f"{tree.run_id}:{runtime.root.node_id}:model:0:requested"
+                model_id = f"{tree.run_id}:model:0:requested"
                 result = await registry.dispatch(
                     request(runtime, f"export-{index}", "query/training_input", {"model_request_id": model_id})
                 )
@@ -65,15 +62,15 @@ def test_required_receipt_is_restored_without_promoting_the_ledger_into_candidat
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, _model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             call = request(runtime, "source-read", "query/source", {"memory_id": SOURCE})
             await registry.dispatch(call)
             receipt_id = f"{call.identity}:result"
-            state = runtime.assembly.get(BotStateStore)
+            state = runtime.assembly.get("bot")
             before = await state.snapshot()
             goal = replace(before.goal(GOAL), checkpoint=Checkpoint(evidence_refs=(receipt_id,)))
             await state.apply(BotChange("checkpoint", before.version, (goal,)))
-            memory = runtime.assembly.get(MemoryReader)
+            memory = runtime.assembly.get("memory")
             snapshot = await memory.recall(MemoryRequest(focus_goal_ids=(GOAL,)))
             assert tuple(commit.commit_id for commit in snapshot.required) == (receipt_id,)
             assert snapshot.missing_refs == ()

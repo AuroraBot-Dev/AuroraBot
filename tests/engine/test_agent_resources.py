@@ -18,10 +18,6 @@ from aurora_bot.artifacts.store import FileArtifactStore
 from aurora_bot.contracts import TOOL_CONTRIBUTIONS, AgentDefinition
 from aurora_bot.contracts.agent_resource import AGENT_MEDIA_TYPE
 from aurora_bot.contracts.operation import OPERATION_CONTRIBUTIONS, OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.agents import AgentCatalog
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.contracts.resource_query import ResourceQuery
 from aurora_bot.kernel import compose_managed, module
@@ -39,6 +35,7 @@ from tests.support.model import TemplateModel as FakeModel
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_bot.contracts.pkgs.agents import AgentCatalog
     from aurora_bot.kernel import ModuleContext
 
 
@@ -50,11 +47,10 @@ def _definition() -> AgentDefinition:
         "lab:prompt/agent/research",
         "test:ai/endpoint/model",
         frozenset(),
-        frozenset(),
     )
 
 
-@pytest.mark.parametrize("field", ["description", "prompt_id", "model", "tools", "children"])
+@pytest.mark.parametrize("field", ["description", "prompt_id", "model", "tools"])
 def test_agent_version_covers_each_declaration(field: str) -> None:
     """正文摘要覆盖全部原型字段，能力集合变化不会沿用旧版本。"""
     original = _definition()
@@ -63,7 +59,6 @@ def test_agent_version_covers_each_declaration(field: str) -> None:
         "prompt_id": "lab:prompt/agent/review",
         "model": "test:ai/endpoint/other-model",
         "tools": frozenset({"lab:tool/definition/read"}),
-        "children": frozenset({"lab:agent/definition/worker"}),
     }
     changed = replace(original, **{field: changes[field]})
     assert original.ref.key == ResourceKey.parse(original.definition_id)
@@ -90,7 +85,7 @@ def test_custom_agent_catalog_is_published_without_reading_builtin_configuration
 
     @module(
         name="custom_agents",
-        provides=AgentCatalog,
+        provides="agents",
         priority=10,
         declares=(TOOL_CONTRIBUTIONS, OPERATION_CONTRIBUTIONS),
     )
@@ -103,11 +98,11 @@ def test_custom_agent_catalog_is_published_without_reading_builtin_configuration
         lifecycle = await compose_managed(
             _Settings(),
             (AGENTS_MODULE, ARTIFACTS_MODULE, RESOURCES_MODULE, CONTENT_MODULE, custom),
-            instances=((ArtifactStore, store),),
+            instances=(("artifacts", store),),
         )
         try:
             await lifecycle.activate(asyncio.Event())
-            catalog = lifecycle.assembly.get(ResourceCatalog)
+            catalog = lifecycle.assembly.get("resources")
             page = await catalog.browse(ResourceQuery(domain="agent", kind="definition"))
             assert [item.ref for item in page.items] == [expected.ref]
             assert (await catalog.inspect(expected.ref)).metadata["content_verified"] is True
@@ -131,12 +126,12 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
     async def scenario() -> None:
         """重建实际存储与目录，确认原始标签已展开为明确的工具身份。"""
         runtime, lifecycle = await compose_runtime(config, FakeModel(), output=lambda _: None)
-        original = runtime.assembly.get(AgentCatalog).get(identity)
+        original = runtime.assembly.get("agents").get(identity)
         try:
             await lifecycle.activate(asyncio.Event())
             tree = await runtime.run("记录实际使用的原型", run_id="agent-version")
-            assert tree.error is None
-            fact = await runtime.world.commit(f"{tree.run_id}:{runtime.root.node_id}:model:0:requested")
+            assert tree.status == "completed"
+            fact = await runtime.world.commit(f"{tree.run_id}:model:0:requested")
             assert fact is not None
             assert fact.data["definition_ref"] == {"key": identity, "revision": original.ref.revision}
         finally:
@@ -153,13 +148,13 @@ def test_actual_agent_definitions_remain_readable_after_config_change_and_restar
         resumed, handle = await compose_runtime(revised, FakeModel(), output=lambda _: None)
         try:
             await handle.activate(asyncio.Event())
-            current = resumed.assembly.get(AgentCatalog).get(identity)
+            current = resumed.assembly.get("agents").get(identity)
             assert current.ref != original.ref
-            fact = await resumed.world.commit(f"agent-version:{runtime.root.node_id}:model:0:requested")
+            fact = await resumed.world.commit("agent-version:model:0:requested")
             assert fact is not None
             assert fact.data["definition_ref"] == {"key": identity, "revision": original.ref.revision}
             assert fact.data["definition_ref"] in fact.data["resources"]
-            registry = resumed.assembly.get(OperationRegistry)
+            registry = resumed.assembly.get("operations")
             for definition in (original, current):
                 request = OperationRequest(
                     f"read-agent-{definition.ref.revision}",

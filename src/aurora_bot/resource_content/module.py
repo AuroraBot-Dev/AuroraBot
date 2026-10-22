@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from aurora_bot.contracts.artifact import ArtifactInfo
 from aurora_bot.contracts.module_manifest import MODULE_MANIFEST_MEDIA_TYPE
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
 from aurora_bot.contracts.resource_content import RESOURCE_CONTENTS, ResourceContent
 from aurora_bot.kernel import ModuleContext, module
 
 
 async def ready(context: ModuleContext) -> None:
     """归档可用模组声明与实际贡献正文，保存失败时不启动后台任务。"""
-    store = context.get(ArtifactStore)
+    store = context.get("artifacts")
     contents = (
         *(ResourceContent(spec.resource.ref, spec.content, MODULE_MANIFEST_MEDIA_TYPE) for spec in context.modules),
         *context.contributions(RESOURCE_CONTENTS),
@@ -24,7 +23,7 @@ async def ready(context: ModuleContext) -> None:
 
 @module(
     name="resource_content",
-    requires=ArtifactStore,
+    requires="artifacts",
     consumes=RESOURCE_CONTENTS,
     declares=RESOURCE_CONTENTS,
     ready=ready,

@@ -18,7 +18,6 @@ from aurora_bot.contracts import (
     WorldCommitInput,
     WorldFrontier,
 )
-from aurora_bot.contracts.pkgs.world import WorldJournal
 from aurora_bot.runtime import run_runtime
 from aurora_cli import load_config
 from tests.support.model import FakeModelDirectory
@@ -235,7 +234,7 @@ def test_contributed_front_reads_capabilities_by_declaration(configured_project:
     resolved: list[object] = []
 
     def bind(context: FrontContext) -> Front:
-        resolved.append(context.get(WorldJournal))
+        resolved.append(context.get("world"))
 
         async def front(stop: asyncio.Event) -> None:
             stop.set()

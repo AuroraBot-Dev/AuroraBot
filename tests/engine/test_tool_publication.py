@@ -7,10 +7,6 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from aurora_bot.agents.config import AgentsConfig
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.resource_query import ResourceQuery
 from aurora_bot.contracts.tool_resource import TOOL_MEDIA_TYPE
 from aurora_bot.kernel import BuiltinSource, compose_managed, module
@@ -29,6 +25,7 @@ if TYPE_CHECKING:
     import pytest
 
     from aurora_bot.contracts import Tool
+    from aurora_bot.contracts.pkgs.tools import ToolRegistry
     from aurora_bot.kernel import ModuleContext
 
 
@@ -44,7 +41,7 @@ def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
     )
     config = config.with_value(
         AGENTS_CONFIG,
-        AgentsConfig(tuple(replace(item, tools=(), children=frozenset()) for item in config.get(AGENTS_CONFIG).agents)),
+        AgentsConfig(tuple(replace(item, tools=()) for item in config.get(AGENTS_CONFIG).agents)),
     )
     selected = ConcreteRegistry((EchoTool(),))
     expected = selected.definitions[0]
@@ -55,7 +52,7 @@ def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
 
     monkeypatch.setattr("aurora_bot.tools.module.builtin_tools", unexpected_builtins)
 
-    @module(name="selected_tools", provides=ToolRegistry, priority=10)
+    @module(name="selected_tools", provides="tools", priority=10)
     def custom(context: ModuleContext) -> ToolRegistry:
         """为正式装配提供确定的替换目录。"""
         return selected
@@ -63,19 +60,19 @@ def test_replaced_registry_publishes_only_its_actual_frozen_definitions(
     async def scenario() -> None:
         """通过实际存储与资源提供者验证目录来源，关闭时回收真实世界连接。"""
         lifecycle = await compose_managed(
-            config, (*BuiltinSource().discover(), custom), instances=((Model, FakeModel()),)
+            config, (*BuiltinSource().discover(), custom), instances=(("ai", FakeModel()),)
         )
         stop = asyncio.Event()
         stop.set()
         try:
             await lifecycle.activate(stop)
             assembly = lifecycle.assembly
-            assert assembly.get(ToolRegistry) is selected
-            catalog = assembly.get(ResourceCatalog)
+            assert assembly.get("tools") is selected
+            catalog = assembly.get("resources")
             page = await catalog.browse(ResourceQuery(domain="tool", kind="definition"))
             assert [item.ref for item in page.items] == [expected.ref]
             assert (await catalog.inspect(expected.ref)).metadata["content_verified"] is True
-            stored = await assembly.get(ArtifactStore).read(expected.ref)
+            stored = await assembly.get("artifacts").read(expected.ref)
             assert stored.info.media_type == TOOL_MEDIA_TYPE
             assert stored.content == expected.content
         finally:

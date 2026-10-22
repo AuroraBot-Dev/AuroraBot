@@ -30,7 +30,7 @@ class Resolution:
     """一次解析结果：构造顺序、激活顺序与完整阶段计划。"""
 
     phases: tuple[PhaseStep, ...]
-    providers: Mapping[type, str]
+    providers: Mapping[str, str]
     modules: tuple[ModuleSpec, ...]
 
     def __post_init__(self) -> None:

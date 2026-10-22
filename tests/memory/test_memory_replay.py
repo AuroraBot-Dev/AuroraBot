@@ -10,8 +10,6 @@ from aurora_bot.contracts import WorldFrontier
 from aurora_bot.contracts.memory_codec import exposure_data, read_exposure
 from aurora_bot.contracts.memory_graph_codec import ranking_fingerprint, read_ranking
 from aurora_bot.contracts.operation import OperationStatus
-from aurora_bot.contracts.pkgs.memory import MemoryPolicy
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.memory_model.rules import RuleMemoryPolicy
 from tests.memory.operations_support import feedback_arguments, prepared_runtime, request
 
@@ -30,7 +28,7 @@ def test_training_input_rebuilds_exact_history_without_current_model_or_future_f
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             feedback = await registry.dispatch(
                 request(runtime, "feedback", "command/feedback", feedback_arguments(model_id))
             )
@@ -40,7 +38,7 @@ def test_training_input_rebuilds_exact_history_without_current_model_or_future_f
                 """重建不应调用当前配置的策略。"""
                 raise AssertionError("不能重新推理")
 
-            monkeypatch.setattr(runtime.assembly.get(MemoryPolicy), "score", unavailable)
+            monkeypatch.setattr(runtime.assembly.get("memory.policy"), "score", unavailable)
             result = await registry.dispatch(
                 request(runtime, "input", "query/training_input", {"model_request_id": model_id})
             )
@@ -65,7 +63,7 @@ def test_training_input_rejects_tampered_features_and_missing_original_fingerpri
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             event = await runtime.world.commit(model_id)
             assert event is not None
             exposure = read_exposure(event.data["memory"])

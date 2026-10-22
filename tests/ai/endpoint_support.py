@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from aurora_bot.agents.config import AgentsConfig
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.mcp.config import PlatformsConfig
 from aurora_cli import load_config
@@ -33,12 +32,7 @@ def _config(project: Path, endpoint_name: str) -> AuroraConfig:
     )
     return config.with_value(
         AGENTS_CONFIG,
-        AgentsConfig(
-            tuple(
-                replace(item, model=endpoint_name, tools=(), children=frozenset())
-                for item in config.get(AGENTS_CONFIG).agents
-            )
-        ),
+        AgentsConfig(tuple(replace(item, model=endpoint_name, tools=()) for item in config.get(AGENTS_CONFIG).agents)),
     )
 
 
@@ -52,6 +46,6 @@ async def _read_definition(runtime: AuroraRuntime, reference: Mapping[str, Any],
         OperationKind.QUERY,
         {**reference, "encoding": "utf-8", "limit": 16384},
     )
-    result = await runtime.assembly.get(OperationRegistry).dispatch(request)
+    result = await runtime.assembly.get("operations").dispatch(request)
     assert result.status is OperationStatus.SUCCEEDED
     return result.data["text"]

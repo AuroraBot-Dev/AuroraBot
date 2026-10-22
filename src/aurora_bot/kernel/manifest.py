@@ -11,7 +11,9 @@ from aurora_bot.contracts.resource import ResourceDescriptor, ResourceRef
 from aurora_bot.contracts.resource_codec import resource_data, resource_ref_data
 
 if TYPE_CHECKING:
-    from aurora_bot.kernel.declaration import ModuleSpec, PhaseHook
+    from collections.abc import Callable
+
+    from aurora_bot.kernel.declaration import ModuleSpec
     from aurora_bot.kernel.phase import Phase
 
 
@@ -36,6 +38,11 @@ def freeze_module(spec: ModuleSpec) -> tuple[bytes, ResourceDescriptor]:
         "resources": [resource_data(resource) for resource in spec.resources],
         "priority": spec.priority,
         "optional": spec.optional,
+        "callpoints": [{"name": point.name, "mode": point.mode} for point in spec.points],
+        "handlers": [
+            {"target": hook.target, "priority": hook.priority, "callback": _hook_name(hook.callback)}
+            for hook in spec.handlers
+        ],
         "lifecycle": [
             {**_phase_data(phase), "hook": _hook_name(hook)}
             for phase, hook in sorted(spec.hooks.items(), key=lambda entry: (entry[0].order, entry[0].name))
@@ -68,9 +75,8 @@ def freeze_module(spec: ModuleSpec) -> tuple[bytes, ResourceDescriptor]:
     return content, descriptor
 
 
-def _capabilities(values: tuple[type, ...]) -> list[str]:
-    """公开契约的 Python 身份用于核对声明，不序列化运行期对象。"""
-    return [f"{value.__module__}.{value.__qualname__}" for value in values]
+def _capabilities(values: tuple[str, ...]) -> list[str]:
+    return list(values)
 
 
 def _phase_data(phase: Phase) -> dict[str, Any]:
@@ -78,7 +84,7 @@ def _phase_data(phase: Phase) -> dict[str, Any]:
     return {"name": phase.name, "order": phase.order, "kind": phase.kind.value, "shutdown": phase.shutdown}
 
 
-def _hook_name(hook: PhaseHook) -> str:
+def _hook_name(hook: Callable) -> str:
     """记录钩子来源；实现变化仍需要作者发布新版本。"""
     namespace = getattr(hook, "__module__", type(hook).__module__)
     name = getattr(hook, "__qualname__", type(hook).__qualname__)

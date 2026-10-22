@@ -1,14 +1,8 @@
-"""``aurora_bot.engine`` 的配置形状。"""
-
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
 class EngineConfig:
-    """AgentTree 运行上界。"""
-
-    max_depth: int
-    max_nodes: int
-    max_steps: int
+    max_model_calls: int = 32
+    max_tool_calls: int = 128
+    max_context_chars: int = 100_000

@@ -12,10 +12,6 @@ import pytest
 
 from aurora_bot.artifacts.store import FileArtifactStore
 from aurora_bot.contracts.model_artifact import MODEL_MEDIA_TYPE
-from aurora_bot.contracts.pkgs.artifacts import ArtifactStore
-from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
-from aurora_bot.contracts.pkgs.memory import MemoryPolicy
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.memory_model.config import MemoryModelConfig
 from aurora_bot.memory_model.dataset import write_episodes
@@ -72,10 +68,10 @@ def test_training_resource_loads_after_export_and_input_files_are_removed(
         stop = asyncio.Event()
         try:
             await handle.activate(stop)
-            policy = runtime.assembly.get(MemoryPolicy) if domain == "memory" else runtime.assembly.get(RhythmPolicy)
+            policy = runtime.assembly.get("memory.policy") if domain == "memory" else runtime.assembly.get("rhythm")
             assert policy.ref == reference
-            assert runtime.assembly.get(ResourceCatalog).resolve(reference).ref == reference
-            assert (await runtime.assembly.get(ArtifactStore).stat(reference)).media_type == MODEL_MEDIA_TYPE
+            assert runtime.assembly.get("resources").resolve(reference).ref == reference
+            assert (await runtime.assembly.get("artifacts").stat(reference)).media_type == MODEL_MEDIA_TYPE
             result = await runtime.run("核对训练资源加载后的运行。")
             assert result.status == "completed"
         finally:
@@ -121,11 +117,11 @@ def test_path_weights_are_imported_before_runtime_construction(configured_projec
     async def scenario() -> None:
         runtime, handle = await compose_runtime(config, FakeModel(), output=lambda _: None)
         try:
-            policy = runtime.assembly.get(MemoryPolicy) if domain == "memory" else runtime.assembly.get(RhythmPolicy)
+            policy = runtime.assembly.get("memory.policy") if domain == "memory" else runtime.assembly.get("rhythm")
             assert policy.ref == reference
-            assert (await runtime.assembly.get(ArtifactStore).stat(reference)).media_type == MODEL_MEDIA_TYPE
+            assert (await runtime.assembly.get("artifacts").stat(reference)).media_type == MODEL_MEDIA_TYPE
             (configured_project / "path-model.pt").unlink()
-            assert runtime.assembly.get(ResourceCatalog).resolve(reference).ref == reference
+            assert runtime.assembly.get("resources").resolve(reference).ref == reference
         finally:
             await handle.close()
 

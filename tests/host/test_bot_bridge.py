@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.kernel import DirectorySource, ModuleContext, compose_managed, module
-from aurora_bot.kernel.context import capability_name
 from aurora_kernel import CLOSE, Context, Host, namespace
 from aurora_kernel.discovery import DirectorySource as HostDirectorySource
 from tests.kernel.support import Settings
@@ -20,13 +19,13 @@ _PLUGIN = """from aurora_kernel import namespace
 
 @namespace("extension", requires=("aurora:kernel/module/service",))
 def extension(ctx):
-    ctx["kernel.services"]["python:builtins.str"] = "changed"
+    ctx["bot.services"]["service"] = "changed"
     ctx["extension"]["events"] = []
 
 @extension.callpoint("echo")
 def echo(ctx, value):
     ctx["extension"]["events"] = [*ctx["extension"]["events"], value]
-    return ctx["kernel.services"]["python:builtins.str"]
+    return ctx["bot.services"]["service"]
 
 MODULE = extension
 """
@@ -39,13 +38,13 @@ def test_bot_and_discovered_namespace_share_context_and_lifecycle(tmp_path: Path
     async def activate(context: ModuleContext) -> None:
         trace.append(context.ctx.call("extension:echo", "activated"))
 
-    @module(name="service", provides=str, activate=activate)
+    @module(name="service", provides="service", activate=activate)
     def service(_context: ModuleContext) -> str:
         return "initial"
 
     @namespace("observer", requires=("extension",))
     def observer(ctx: Context) -> None:
-        assert ctx["kernel.services"][capability_name(str)] == "changed"
+        assert ctx["bot.services"]["service"] == "changed"
 
     @observer.on(CLOSE)
     def close(ctx: Context) -> None:
@@ -54,7 +53,7 @@ def test_bot_and_discovered_namespace_share_context_and_lifecycle(tmp_path: Path
     async def scenario() -> None:
         lifecycle = await compose_managed(Settings(), (*DirectorySource(tmp_path).discover(), observer, service))
         assembly = lifecycle.assembly
-        assert assembly.get(str) == "changed"
+        assert assembly.get("service") == "changed"
         assert assembly.modules == (service,)
         await lifecycle.activate(asyncio.Event())
         assert await assembly.ctx.acall("extension:echo", "called") == "changed"

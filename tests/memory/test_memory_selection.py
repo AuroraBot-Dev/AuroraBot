@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aurora_bot.contracts import AgentDefinition, AgentTree, MemorySnapshot
+from aurora_bot.contracts import AgentDefinition, ChatMessage, MemorySnapshot
 from aurora_bot.contracts.bot import Checkpoint, Goal
 from aurora_bot.contracts.memory import MemoryBundle, MemoryContinuity, MemoryRequest
 from aurora_bot.memory.selection import select_memories
@@ -70,13 +70,12 @@ def test_prompt_budget_does_not_drop_shared_dependency_when_skipping_large_bundl
         "aurora:prompt/agent/root",
         "test:ai/endpoint/model",
         frozenset(),
-        frozenset(),
     )
-    tree = AgentTree.create("tree", "root", agent, "继续")
+    transcript = (ChatMessage.message("继续"),)
     assembler = PromptAssembler(
         make_prompt_catalog(("你是 Aurora。",), {agent.prompt_id: "自行判断。"}), max_characters=700
     )
-    messages = assembler.assemble(tree, "root", memory=memory).messages
+    messages = assembler.assemble(agent.prompt_id, transcript, memory=memory).messages
     system = messages[0].content
     assert "已经发起，请先核对结果" in system
     assert "接下来检查状态" in system

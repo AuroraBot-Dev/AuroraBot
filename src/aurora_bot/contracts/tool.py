@@ -68,27 +68,13 @@ class ToolOutput:
         return self.status is not ToolStatus.SUCCEEDED
 
 
-@dataclass(frozen=True, slots=True)
-class DelegationRequest:
-    """工具请求 engine 创建一个 child Agent。"""
-
-    agent: str
-    instruction: str
-
-    def __post_init__(self) -> None:
-        if not self.agent.strip() or not self.instruction.strip():
-            raise ValueError("DelegationRequest requires agent and instruction")
-
-
-type ToolResult = ToolOutput | DelegationRequest
-
-DELEGATE_TOOL = "aurora:tool/definition/delegate"
+type ToolResult = ToolOutput
 WAIT_TOOL = "aurora:tool/definition/wait"
 WORLD_READ_TOOL = "aurora:tool/definition/world_read"
 WORLD_SCOPES_TOOL = "aurora:tool/definition/world_scopes"
-WORLD_TREES_TOOL = "aurora:tool/definition/world_trees"
+WORLD_RUNS_TOOL = "aurora:tool/definition/world_runs"
 
-BUILTIN_TOOL_NAMES = frozenset({DELEGATE_TOOL, WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_TREES_TOOL})
+BUILTIN_TOOL_NAMES = frozenset({WAIT_TOOL, WORLD_READ_TOOL, WORLD_SCOPES_TOOL, WORLD_RUNS_TOOL})
 
 
 class Tool(Protocol):

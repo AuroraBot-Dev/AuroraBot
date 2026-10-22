@@ -88,11 +88,11 @@ def test_config_set_parses_typed_values(
         config.COMMAND["name"],
         "engine",
         "--set",
-        "engine.tree.max_depth=8",
+        "engine.run.max_model_calls=8",
     ]
 
     assert run(arguments) == 0
-    assert "max_depth = 8" in (configured_project / "config" / "engine.toml").read_text(encoding="utf-8")
+    assert "max_model_calls = 8" in (configured_project / "config" / "engine.toml").read_text(encoding="utf-8")
 
 
 def test_config_set_updates_array_element(

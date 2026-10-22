@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts import WorldFrontier
-from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
 from aurora_bot.kernel import compose, compose_managed, module
 from aurora_bot.world import SqlAlchemyWorldJournal
 from aurora_bot.world.module import MODULE
@@ -17,6 +16,7 @@ from tests.kernel.support import Settings as _Settings
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_bot.contracts.pkgs.world import WorldJournal
     from aurora_bot.kernel import AsyncCleanup, ModuleContext
 
 
@@ -29,12 +29,12 @@ def test_selected_world_owns_its_configuration_preparation_and_read_write_ports(
     journal = SqlAlchemyWorldJournal(path)
 
     async def activate(context: ModuleContext) -> None:
-        await context.get(WorldJournal).initialize()
+        await context.get("world").initialize()
 
     async def close(context: ModuleContext) -> None:
-        await context.get(WorldJournal).close()
+        await context.get("world").close()
 
-    ports = (WorldJournal, WorldReader, WorldWriter) if all_ports else (WorldJournal,)
+    ports = ("world", "world.reader", "world.writer") if all_ports else ("world",)
 
     @module(name="zzz_selected_world", provides=ports, priority=10, activate=activate, close=close)
     def selected(context: ModuleContext) -> WorldJournal:
@@ -46,15 +46,15 @@ def test_selected_world_owns_its_configuration_preparation_and_read_write_ports(
         handle = await compose_managed(_Settings(), specs) if managed else None
         assembly = handle.assembly if handle is not None else compose(_Settings(), specs)
         try:
-            assert assembly.get(WorldJournal) is journal
-            assert assembly.get(WorldReader) is journal
-            assert assembly.get(WorldWriter) is journal
+            assert assembly.get("world") is journal
+            assert assembly.get("world.reader") is journal
+            assert assembly.get("world.writer") is journal
             assert not path.exists()
             if handle is not None:
                 await handle.activate(asyncio.Event())
             else:
                 await journal.initialize()
-            await assembly.get(WorldWriter).append_commit(
+            await assembly.get("world.writer").append_commit(
                 commit_id="selected-world-input",
                 kind="test.input",
                 source="test",
@@ -63,7 +63,7 @@ def test_selected_world_owns_its_configuration_preparation_and_read_write_ports(
                 based_on=WorldFrontier(),
                 data={},
             )
-            assert await assembly.get(WorldReader).commit("selected-world-input") is not None
+            assert await assembly.get("world.reader").commit("selected-world-input") is not None
         finally:
             if handle is not None:
                 await handle.close()
@@ -88,19 +88,19 @@ def test_prepared_world_is_borrowed_without_duplicate_initialization_or_cleanup(
     journal = Journal(tmp_path / "prepared.sqlite3")
 
     async def prepare(context: ModuleContext) -> AsyncCleanup:
-        context.provide(WorldJournal, journal)
+        context.provide("world", journal)
         await journal.initialize()
         return journal.close
 
-    @module(name="zzz_prepared_world", provides=WorldJournal, priority=10, prepare=prepare)
+    @module(name="zzz_prepared_world", provides="world", priority=10, prepare=prepare)
     def selected(context: ModuleContext) -> WorldJournal:
-        return context.get(WorldJournal)
+        return context.get("world")
 
     async def prepare_consumer(context: ModuleContext) -> None:
-        assert context.get(WorldWriter) is journal
+        assert context.get("world.writer") is journal
         trace.append("consumer")
 
-    @module(name="consumer", requires=WorldWriter, prepare=prepare_consumer)
+    @module(name="consumer", requires="world.writer", prepare=prepare_consumer)
     def consumer(context: ModuleContext) -> None:
         del context
 

@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts import ToolCall, ToolOutput
-from aurora_bot.contracts.pkgs.resources import ResourceCatalog
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
@@ -75,13 +73,13 @@ def test_plugin_declaration_adds_resource_command_and_tool_without_host_edits(co
         model = FakeModel()
         runtime = assemble_runtime(load_config(configured_project), model, output=lambda _: None)
         try:
-            resources = runtime.assembly.get(ResourceCatalog)
+            resources = runtime.assembly.get("resources")
             alias = resources.resolve(ResourceRef(ResourceKey.parse("lab:notes/document/default")))
             assert alias.metadata["content"] == "示例"
             response = await runtime.terminal.dispatch_terminal('/call lab:example/query/echo {"value":"好"}')
             assert not response.is_error
             assert json.loads(response.text or "{}")["data"] == {"value": "好"}
-            tools = runtime.assembly.get(ToolRegistry)
+            tools = runtime.assembly.get("tools")
             result = await tools.execute(ToolCall("echo", "lab:tool/definition/echo", {"value": "好"}))
             assert isinstance(result, ToolOutput) and not result.is_error
             assert json.loads(result.content) == {"value": "好"}

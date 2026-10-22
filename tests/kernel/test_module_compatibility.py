@@ -50,14 +50,14 @@ def test_incompatible_module_fails_before_any_prepare_or_constructor(managed: bo
         del context
         trace.append("prepare")
 
-    @module(name="first", provides=str, prepare=prepare)
+    @module(name="first", provides="str", prepare=prepare)
     def first(context: ModuleContext) -> str:
         """同步构造同样必须等待兼容检查。"""
         del context
         trace.append("construct")
         return "ready"
 
-    @module(name="future", provides=int, manifest=ModuleManifest("3.1", ">=2,<3"))
+    @module(name="future", provides="int", manifest=ModuleManifest("3.1", ">=2,<3"))
     def future(context: ModuleContext) -> int:
         """不兼容模组不会被静默跳过或执行。"""
         del context
@@ -77,12 +77,12 @@ def test_optional_or_replaced_declarations_cannot_hide_incompatible_api(mode: st
     """依赖筛选与优先级裁决之前就验证 SDK 契约。"""
     obsolete = ModuleSpec(
         "obsolete",
-        provides=(str,),
-        requires=(int,) if mode == "optional" else (),
+        provides=("str",),
+        requires=("int",) if mode == "optional" else (),
         optional=mode == "optional",
         manifest=ModuleManifest("0.1", "<1"),
     )
-    replacement = ModuleSpec("replacement", provides=(str,), priority=10)
+    replacement = ModuleSpec("replacement", provides=("str",), priority=10)
     with pytest.raises(ValueError, match=r"obsolete.*不兼容"):
         resolve((obsolete, replacement))
 
@@ -91,18 +91,18 @@ def test_compose_keeps_the_exact_manifest_in_the_frozen_assembly() -> None:
     """兼容模组成功装配，清单随实际声明提供给后续能力发现。"""
     manifest = ModuleManifest("2.4", ">=1,<2")
 
-    @module(name="compatible", provides=str, manifest=manifest)
+    @module(name="compatible", provides="str", manifest=manifest)
     def compatible(context: ModuleContext) -> str:
         """构造期可以读取同一份声明清单。"""
         assert context.modules[0].manifest is manifest
         return "selected"
 
     assembly = compose(_Settings(), (compatible,))
-    assert assembly.get(str) == "selected"
+    assert assembly.get("str") == "selected"
     assert assembly.modules[0].manifest is manifest
 
 
 def test_module_spec_rejects_an_unvalidated_manifest() -> None:
     """外部发现来源不能用任意对象替代版本声明。"""
     with pytest.raises(TypeError, match="ModuleManifest"):
-        ModuleSpec("invalid", provides=(str,), manifest=cast("ModuleManifest", {}))
+        ModuleSpec("invalid", provides=("str",), manifest=cast("ModuleManifest", {}))

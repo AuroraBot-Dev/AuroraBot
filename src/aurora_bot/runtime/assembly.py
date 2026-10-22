@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from aurora_bot.contracts import LOOP_OPERATIONS, TOOL_CONTRIBUTIONS, WORLD_PORTS, ScopeCatalog, Tool
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.mcp import McpRuntime
-from aurora_bot.contracts.pkgs.world import WorldJournal
+from aurora_bot.contracts import TOOL_CONTRIBUTIONS, ScopeCatalog, Tool
 from aurora_bot.contracts.scope import merge_scope_catalog
 from aurora_bot.kernel import (
     BuiltinSource,
@@ -18,13 +15,15 @@ from aurora_bot.kernel import (
     compose_managed,
     resolve,
 )
-from aurora_bot.runtime.factory import RuntimeFactory
 from aurora_bot.utils import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from aurora_bot.contracts import Settings
+    from aurora_bot.contracts.pkgs.ai import Model
+    from aurora_bot.contracts.pkgs.mcp import McpRuntime
+    from aurora_bot.contracts.pkgs.world import WorldJournal
     from aurora_bot.kernel import (
         Assembly,
         ContributionBinding,
@@ -59,22 +58,10 @@ def validate_declared_scopes(settings: Settings, specs: Iterable[Any]) -> None:
         raise ValueError(f"模块声明了未注册的域：{', '.join(undeclared)}")
 
 
-def validate_loop_operations(capabilities: Capabilities) -> None:
-    """ReAct 四操作必须齐备，并且 Observe 与 Effect 必须落在同一个世界上。
-
-    四操作由 ``provides`` 契约表达，所以内核本来就能替换它们；这里补的是
-    **替换之后仍然是一个完整循环**：缺一个操作就不是循环，而观察与效果落在
-    两个世界上时，Bot 会经历一个自己写不进去的世界。
-    """
-    missing = [
-        operation.name for operation in LOOP_OPERATIONS if capabilities.get_optional(operation.capability) is None
-    ]
-    if missing:
-        raise ValueError(f"ReAct 循环缺少操作实现：{', '.join(missing)}")
-    worlds = [capabilities.get(port) for port in WORLD_PORTS]
+def validate_world(capabilities: Capabilities) -> None:
+    worlds = [capabilities.get(name) for name in ("world", "world.reader", "world.writer")]
     if any(world is not worlds[0] for world in worlds[1:]):
-        names = "、".join(port.__name__ for port in WORLD_PORTS)
-        raise ValueError(f"Observe 与 Effect 必须是同一个世界：{names} 必须由同一个对象提供")
+        raise ValueError("世界读写必须使用同一个日志实例")
 
 
 def _discover(settings: Settings) -> tuple[Any, ...]:
@@ -98,14 +85,14 @@ def _seed(
 ) -> tuple[list[InstanceBinding], list[ContributionBinding]]:
     bindings = list(instances)
     if model is not None:
-        bindings.append((Model, model))
+        bindings.append(("ai", model))
     contributed = [*contributions, *((TOOL_CONTRIBUTIONS, tool) for tool in tools)]
     return bindings, contributed
 
 
 def _create(assembly: Assembly, output: Callable[[str], None]) -> AuroraRuntime:
-    validate_loop_operations(assembly)
-    factory = assembly.get(RuntimeFactory)
+    validate_world(assembly)
+    factory = assembly.get("runtime")
     return factory(assembly, output=output)
 
 
@@ -123,9 +110,9 @@ def assemble_runtime(
     """同步组合全部实例后，从单一 Assembly 构造进程门面。"""
     bindings, contributed = _seed(model, tools, instances, contributions)
     if world is not None:
-        bindings.append((WorldJournal, world))
+        bindings.append(("world", world))
     if mcp is not None:
-        bindings.append((McpRuntime, mcp))
+        bindings.append(("mcp", mcp))
     assembly = compose(settings, _discover(settings), bindings, contributed)
     return _create(assembly, output)
 

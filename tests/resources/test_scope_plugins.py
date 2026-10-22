@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 
 from aurora_bot.contracts import ScopeCatalog, ScopeKind, ToolCall, ToolOutput, WorldFrontier
 from aurora_bot.contracts.memory import MemoryRequest
-from aurora_bot.contracts.pkgs.memory import MemoryReader
-from aurora_bot.contracts.pkgs.tools import ToolRegistry
 from aurora_bot.runtime import assemble_runtime
 from aurora_bot.tools import WORLD_SCOPES_TOOL
 from aurora_cli import load_config
@@ -26,13 +24,13 @@ from aurora_bot.kernel import ModuleContext, module
 
 @module(
     name="lab_jobs",
-    provides=str,
-    requires=ScopeCatalog,
+    provides="str",
+    requires="scopes",
     scopes=ScopeDeclaration("lab:world/jobs/*", ScopeKind.RUN, "实验过程的投递台账"),
 )
 def build(context: ModuleContext) -> str:
     """插件可直接使用包含自身声明的目录。"""
-    assert context.get(ScopeCatalog).classify("lab:world/jobs/one") is ScopeKind.RUN
+    assert context.get("scopes").classify("lab:world/jobs/one") is ScopeKind.RUN
     return "ready"
 
 
@@ -63,13 +61,13 @@ def test_directory_plugin_registers_its_run_domain_without_project_configuration
                     based_on=WorldFrontier(),
                     data={},
                 )
-            catalog = runtime.assembly.get(ScopeCatalog)
+            catalog = runtime.assembly.get("scopes")
             assert catalog.classify("lab:world/jobs/one") is ScopeKind.RUN
-            result = await runtime.assembly.get(ToolRegistry).execute(ToolCall("scopes", WORLD_SCOPES_TOOL))
+            result = await runtime.assembly.get("tools").execute(ToolCall("scopes", WORLD_SCOPES_TOOL))
             assert isinstance(result, ToolOutput)
             definitions = json.loads(result.content)["scopes"]
             assert next(item for item in definitions if item["pattern"] == "lab:world/jobs/*")["kind"] == "run"
-            memory = await runtime.assembly.get(MemoryReader).recall(MemoryRequest(query="实验结果"))
+            memory = await runtime.assembly.get("memory").recall(MemoryRequest(query="实验结果"))
             assert memory.recall is not None
             assert "fact" in {item.memory_id for item in memory.recall.ranking}
             assert "ledger" not in {item.memory_id for item in memory.recall.ranking}

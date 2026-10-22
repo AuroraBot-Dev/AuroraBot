@@ -12,15 +12,8 @@ import pytest
 from aurora_bot.cadence import Cadence
 from aurora_bot.cadence.state import observation_data
 from aurora_bot.clock import PersistentBotClock
-from aurora_bot.contracts import ScopeCatalog, WorldFrontier
+from aurora_bot.contracts import WorldFrontier
 from aurora_bot.contracts.bot import WakeStatus
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.cadence import Cadence as CadencePort
-from aurora_bot.contracts.pkgs.cadence import RhythmPolicy
-from aurora_bot.contracts.pkgs.clock import BotClock
-from aurora_bot.contracts.pkgs.memory import MemoryCheckpoints, MemoryPolicy, MemoryReader
-from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader, WorldWriter
 from aurora_bot.contracts.rhythm import RhythmObservation
 from aurora_bot.kernel import BuiltinSource, compose_managed, module
 from aurora_bot.mcp.config import PlatformsConfig
@@ -47,6 +40,9 @@ from tests.support.model import TemplateModel as FakeModel
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_bot.contracts.pkgs.cadence import Cadence as CadencePort
+    from aurora_bot.contracts.pkgs.clock import BotClock
+    from aurora_bot.contracts.pkgs.memory import MemoryReader
     from aurora_bot.contracts.resource import ResourceRef
     from aurora_bot.kernel import ManagedAssembly, ModuleContext
     from aurora_bot.runtime.core import AuroraRuntime
@@ -99,52 +95,52 @@ async def _compose(config: AuroraConfig, model: FakeModel, at: datetime) -> tupl
 
     @module(
         name="test_cadence",
-        provides=CadencePort,
-        requires=(WorldReader, WorldWriter, RhythmPolicy, BotStateStore),
+        provides="cadence",
+        requires=("world.reader", "world.writer", "rhythm", "bot"),
         priority=10,
     )
     def cadence(context: ModuleContext) -> CadencePort:
         """默认节律使用实际所选策略，手动兑现检查以消除后台时序竞争。"""
         return Cadence(
-            context.get(WorldReader),
-            context.get(WorldWriter),
-            policy=context.get(RhythmPolicy),
-            state=context.get(BotStateStore),
+            context.get("world.reader"),
+            context.get("world.writer"),
+            policy=context.get("rhythm"),
+            state=context.get("bot"),
             now=lambda: at,
         )
 
     @module(
         name="test_memory",
-        provides=MemoryReader,
-        requires=(WorldReader, MemoryPolicy, BotStateStore, ScopeCatalog),
+        provides="memory",
+        requires=("world.reader", "memory.policy", "bot", "scopes"),
         priority=10,
     )
     def memory(context: ModuleContext) -> MemoryReader:
         """默认记忆使用实际所选排序器，与世界共用同一观察时间。"""
         return Memory(
-            context.get(WorldReader),
-            policy=context.get(MemoryPolicy),
-            state=context.get(BotStateStore),
-            catalog=context.get(ScopeCatalog),
+            context.get("world.reader"),
+            policy=context.get("memory.policy"),
+            state=context.get("bot"),
+            catalog=context.get("scopes"),
             now=lambda: at,
         )
 
-    @module(name="test_clock", provides=BotClock, requires=(BotStateStore, WorldReader), priority=10)
+    @module(name="test_clock", provides="clock", requires=("bot", "world.reader"), priority=10)
     def clock(context: ModuleContext) -> BotClock:
         """时间服务兑现主体保存的安排，不替换调度或恢复算法。"""
-        return PersistentBotClock(context.get(BotStateStore), context.get(WorldReader), now=lambda: at)
+        return PersistentBotClock(context.get("bot"), context.get("world.reader"), now=lambda: at)
 
     world = SqlAlchemyWorldJournal(config.project_root / "joint-world.sqlite3", now=lambda: at)
     handle = await compose_managed(
         config,
         (*BuiltinSource().discover(), cadence, memory, clock),
-        instances=((Model, model), (WorldJournal, world)),
+        instances=(("ai", model), ("world", world)),
     )
     runtime = create_runtime(handle.assembly, output=lambda _: None)
     stop = asyncio.Event()
     stop.set()
     await handle.activate(stop)
-    await handle.assembly.get(CadencePort).initialize()
+    await handle.assembly.get("cadence").initialize()
     return runtime, handle
 
 
@@ -162,13 +158,13 @@ async def _first_life(config: AuroraConfig, rhythm: ResourceRef, memory: Resourc
             based_on=WorldFrontier(),
             data={"operation_id": "operation-7"},
         )
-        await handle.assembly.get(CadencePort).evaluate_once()
+        await handle.assembly.get("cadence").evaluate_once()
         assert len(model.requests) == _PLANNING_STEPS
-        state = await handle.assembly.get(BotStateStore).snapshot()
+        state = await handle.assembly.get("bot").snapshot()
         assert state.wake(_WAKE).status is WakeStatus.PENDING
         assert state.goal(_GOAL).checkpoint.evidence_refs == (_EVIDENCE,)
         facts = (await runtime.world.stream(0, 256)).commits
-        planned = next(item for item in facts if item.kind == "cadence.tree_planned")
+        planned = next(item for item in facts if item.kind == "cadence.run_planned")
         assert planned.data["policy"] == {"key": str(rhythm.key), "revision": rhythm.revision}
         expected_size = _HIDDEN_SIZE if config.get(RHYTHM_CONFIG).weights is not None else 0
         assert len(planned.data["state"]["hidden"]) == expected_size
@@ -178,9 +174,9 @@ async def _first_life(config: AuroraConfig, rhythm: ResourceRef, memory: Resourc
             item.data["memory"]["recall"]["policy"] == {"key": str(memory.key), "revision": memory.revision}
             for item in requests
         )
-        checkpoint = await handle.assembly.get(MemoryCheckpoints).save()
+        checkpoint = await handle.assembly.get("memory.checkpoints").save()
         assert (checkpoint is not None) == (config.get(MEMORY_MODEL_CONFIG).weights is not None)
-        return handle.assembly.get(CadencePort).status()
+        return handle.assembly.get("cadence").status()
     finally:
         await handle.close()
 
@@ -211,17 +207,17 @@ async def _second_life(
     model = FakeModel()
     runtime, handle = await _compose(config, model, _DUE)
     try:
-        assert handle.assembly.get(RhythmPolicy).ref == rhythm
-        assert handle.assembly.get(MemoryPolicy).ref == memory
-        assert handle.assembly.get(CadencePort).status() == before
-        restored = await handle.assembly.get(MemoryCheckpoints).initialize()
+        assert handle.assembly.get("rhythm").ref == rhythm
+        assert handle.assembly.get("memory.policy").ref == memory
+        assert handle.assembly.get("cadence").status() == before
+        restored = await handle.assembly.get("memory.checkpoints").initialize()
         assert restored == (config.get(MEMORY_MODEL_CONFIG).weights_ref is not None)
-        await handle.assembly.get(BotClock).evaluate_once()
+        await handle.assembly.get("clock").evaluate_once()
         assert len(model.requests) == 1
         system = model.requests[0].messages[0].content
         assert "operation-7 已经发起，先查询完成状态" in system
         assert "operation-7 实验已经发起" in system
-        state = await handle.assembly.get(BotStateStore).snapshot()
+        state = await handle.assembly.get("bot").snapshot()
         assert state.wake(_WAKE).status is WakeStatus.COMPLETED
         facts = (await runtime.world.stream(0, 256)).commits
         request = tuple(item for item in facts if item.kind == "engine.model.requested")[-1]
@@ -238,9 +234,9 @@ async def _second_life(
 
 async def _continue_rhythm(runtime: AuroraRuntime, model: FakeModel) -> None:
     """重启后的第二次节律前向必须继承第一轮真实隐状态。"""
-    await runtime.assembly.get(CadencePort).evaluate_once()
+    await runtime.assembly.get("cadence").evaluate_once()
     facts = (await runtime.world.stream(0, 256)).commits
-    plans = tuple(item for item in facts if item.kind == "cadence.tree_planned")
+    plans = tuple(item for item in facts if item.kind == "cadence.run_planned")
     first, resumed = plans
     raw = resumed.data["observation"]
     observation = RhythmObservation(
@@ -254,7 +250,7 @@ async def _continue_rhythm(runtime: AuroraRuntime, model: FakeModel) -> None:
         timer_due=True,
     )
     assert thaw_json(raw) == observation_data(observation)
-    policy = runtime.assembly.get(RhythmPolicy)
+    policy = runtime.assembly.get("rhythm")
     expected = policy.evaluate(observation, tuple(first.data["state"]["hidden"]))
     assert tuple(resumed.data["state"]["hidden"]) == expected.hidden
     if first.data["state"]["hidden"]:

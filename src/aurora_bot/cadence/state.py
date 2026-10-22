@@ -105,7 +105,7 @@ def launch_data(request: CognitionRequest) -> dict[str, Any]:
     """记录重启前尚未启动的认知请求。"""
     return {
         "message": request.message,
-        "tree_id": request.run_id,
+        "run_id": request.run_id,
         "agent": request.agent,
         "frontier": dict(request.frontier.positions),
         "caused_by": request.caused_by,
@@ -118,7 +118,7 @@ def read_launch(data: Mapping[str, Any]) -> CognitionRequest:
     """重启恢复使用原来的运行身份和触发事实。"""
     return CognitionRequest(
         data["message"],
-        data["tree_id"],
+        data["run_id"],
         data["agent"],
         WorldFrontier(data["frontier"]),
         data["caused_by"],

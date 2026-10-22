@@ -44,7 +44,7 @@ class ExposuresInput(BaseModel):
     after: int | None = Field(default=None, ge=0, strict=True)
     until_cursor: int | None = Field(default=None, ge=0, strict=True)
     limit: int = Field(default=100, ge=1, le=256, strict=True)
-    tree_id: str | None = None
+    run_id: str | None = None
 
 
 class FeedbackInput(BaseModel):

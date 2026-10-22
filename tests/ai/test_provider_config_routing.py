@@ -10,7 +10,6 @@ from litellm import get_llm_provider
 
 from aurora_bot.ai import gateway
 from aurora_bot.ai.config import EndpointConfig, EndpointsConfig
-from aurora_bot.contracts.pkgs.ai import Model
 from aurora_bot.runtime import compose_runtime
 from aurora_cli.configs.endpoints import CONFIG_SPEC as ENDPOINTS_CONFIG
 from tests.ai.endpoint_support import _config, _read_definition
@@ -60,7 +59,7 @@ def test_toml_sdk_route_drives_actual_default_gateway_and_survives_restart(
         """重启替换配置后，从旧世界引用读取原先采用的 SDK 路由。"""
         config = _configured(configured_project, "deepseek", "deepseek-chat")
         runtime, handle = await compose_runtime(config, output=lambda _: None)
-        original = runtime.assembly.get(Model).resolve_endpoint(_ENDPOINT)
+        original = runtime.assembly.get("ai").resolve_endpoint(_ENDPOINT)
         stop = asyncio.Event()
         stop.set()
         try:
@@ -75,10 +74,10 @@ def test_toml_sdk_route_drives_actual_default_gateway_and_survives_restart(
         resumed, lifecycle = await compose_runtime(revised, output=lambda _: None)
         try:
             await lifecycle.activate(stop)
-            current = resumed.assembly.get(Model).resolve_endpoint(_ENDPOINT)
+            current = resumed.assembly.get("ai").resolve_endpoint(_ENDPOINT)
             assert current.provider.sdk_provider == "openai"
             assert current.ref != original.ref
-            fact = await resumed.world.commit("configured-route:root:model:0:requested")
+            fact = await resumed.world.commit("configured-route:model:0:requested")
             assert fact is not None
             assert fact.data["provider_ref"]["revision"] == original.provider.ref.revision
             text = await _read_definition(resumed, fact.data["provider_ref"], "read-configured-route")

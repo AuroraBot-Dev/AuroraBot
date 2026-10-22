@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aurora_bot.contracts.operation import OperationRequest, OperationResult, OperationStatus
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
 from aurora_bot.runtime import assemble_runtime
 from aurora_cli import load_config
 from tests.memory.operations_support import feedback_arguments, prepared_runtime, request
@@ -26,7 +24,7 @@ def test_committed_feedback_survives_receipt_interruption_and_restart(
 
     async def scenario() -> None:
         async with prepared_runtime(configured_project) as (runtime, model_id):
-            registry = runtime.assembly.get(OperationRegistry)
+            registry = runtime.assembly.get("operations")
             call = request(runtime, "interrupted", "command/feedback", feedback_arguments(model_id))
 
             async def interrupt_receipt(_request: OperationRequest, _result: OperationResult) -> OperationResult:
@@ -40,11 +38,11 @@ def test_committed_feedback_survives_receipt_interruption_and_restart(
             assert await runtime.world.commit(f"{call.identity}:result") is None
         reopened = assemble_runtime(load_config(configured_project), FakeModel(), output=lambda _: None)
         try:
-            restored = reopened.assembly.get(OperationRegistry)
+            restored = reopened.assembly.get("operations")
             result = await restored.dispatch(call)
             assert result.status is OperationStatus.SUCCEEDED
             assert result.data["feedback_id"] == f"{call.identity}:feedback"
-            scope = f"{reopened.assembly.get(BotStateStore).scope}/memory"
+            scope = f"{reopened.assembly.get('bot').scope}/memory"
             records = await reopened.world.commits(scope, 0, 10)
             assert len(records) == 1
         finally:

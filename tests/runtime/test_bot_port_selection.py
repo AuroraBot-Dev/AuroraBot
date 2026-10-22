@@ -10,11 +10,6 @@ from aurora_bot.bot.store import JournalBotState
 from aurora_bot.clock import PersistentBotClock
 from aurora_bot.contracts.bot import WakeStatus
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.clock import BotClock
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.pkgs.world import WorldJournal, WorldReader
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.kernel import BuiltinSource, compose_managed, module
 from aurora_bot.runtime import create_runtime
@@ -24,6 +19,9 @@ from tests.support.model import TemplateModel as FakeModel
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_bot.contracts.pkgs.bot import BotStateStore
+    from aurora_bot.contracts.pkgs.clock import BotClock
+    from aurora_bot.contracts.pkgs.operations import OperationRegistry
     from aurora_bot.kernel import ModuleContext
 
 _DUE = datetime(2026, 10, 18, tzinfo=UTC)
@@ -56,24 +54,24 @@ def test_selected_subject_is_used_by_public_commands_and_default_clock(configure
     """默认配置中的主体身份不能泄漏到替换后的命令或等待安排中。"""
     config = _config(configured_project, "aurora:ai/endpoint/default")
 
-    @module(name="selected_subject", provides=BotStateStore, requires=WorldJournal, priority=10)
+    @module(name="selected_subject", provides="bot", requires="world", priority=10)
     def selected(context: ModuleContext) -> BotStateStore:
         """提供真实世界投影，以不同身份识别私有默认状态误用。"""
-        return JournalBotState(context.get(WorldJournal), "lab:bot/selected")
+        return JournalBotState(context.get("world"), "lab:bot/selected")
 
     async def scenario() -> None:
         """真实状态、命令、默认时间服务和引擎共享一个主体。"""
         model = FakeModel()
-        handle = await compose_managed(config, (*BuiltinSource().discover(), selected), instances=((Model, model),))
+        handle = await compose_managed(config, (*BuiltinSource().discover(), selected), instances=(("ai", model),))
         create_runtime(handle.assembly, output=lambda _: None)
         stop = asyncio.Event()
         stop.set()
         try:
             await handle.activate(stop)
-            state = handle.assembly.get(BotStateStore)
-            await _schedule(handle.assembly.get(OperationRegistry), state)
+            state = handle.assembly.get("bot")
+            await _schedule(handle.assembly.get("operations"), state)
             assert state.bot_id == "lab:bot/selected"
-            await handle.assembly.get(BotClock).evaluate_once(_DUE)
+            await handle.assembly.get("clock").evaluate_once(_DUE)
             assert (await state.snapshot()).wake(_WAKE).status is WakeStatus.COMPLETED
             assert model.requests
             assert "核对选中主体" in model.requests[0].messages[0].content
@@ -88,25 +86,25 @@ def test_selected_clock_can_depend_on_default_subject_without_losing_launcher(co
     config = _config(configured_project, "aurora:ai/endpoint/default")
     clocks: list[PersistentBotClock] = []
 
-    @module(name="selected_clock", provides=BotClock, requires=(BotStateStore, WorldReader), priority=10)
+    @module(name="selected_clock", provides="clock", requires=("bot", "world.reader"), priority=10)
     def selected(context: ModuleContext) -> BotClock:
         """真实时间服务通过契约获得默认主体。"""
-        clock = PersistentBotClock(context.get(BotStateStore), context.get(WorldReader), now=lambda: _DUE)
+        clock = PersistentBotClock(context.get("bot"), context.get("world.reader"), now=lambda: _DUE)
         clocks.append(clock)
         return clock
 
     async def scenario() -> None:
         """实际运行一次到期认知，以世界终态证明接线落在正确实例。"""
         model = FakeModel()
-        handle = await compose_managed(config, (*BuiltinSource().discover(), selected), instances=((Model, model),))
+        handle = await compose_managed(config, (*BuiltinSource().discover(), selected), instances=(("ai", model),))
         create_runtime(handle.assembly, output=lambda _: None)
         stop = asyncio.Event()
         stop.set()
         try:
             await handle.activate(stop)
-            state = handle.assembly.get(BotStateStore)
-            await _schedule(handle.assembly.get(OperationRegistry), state)
-            assert handle.assembly.get(BotClock) is clocks[0]
+            state = handle.assembly.get("bot")
+            await _schedule(handle.assembly.get("operations"), state)
+            assert handle.assembly.get("clock") is clocks[0]
             await clocks[0].evaluate_once()
             assert (await state.snapshot()).wake(_WAKE).status is WakeStatus.COMPLETED
             assert model.requests

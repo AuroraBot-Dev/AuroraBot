@@ -12,14 +12,6 @@ import pytest
 from aurora_bot.cadence import Cadence as ConcreteCadence
 from aurora_bot.contracts import EnvironmentEvent, MemorySnapshot
 from aurora_bot.contracts.operation import OperationKind, OperationRequest, OperationStatus
-from aurora_bot.contracts.pkgs.ai import Model
-from aurora_bot.contracts.pkgs.bot import BotStateStore
-from aurora_bot.contracts.pkgs.cadence import Cadence, RhythmPolicy
-from aurora_bot.contracts.pkgs.console import TerminalConsole
-from aurora_bot.contracts.pkgs.mcp import McpRuntime
-from aurora_bot.contracts.pkgs.memory import MemoryReader
-from aurora_bot.contracts.pkgs.operations import OperationRegistry
-from aurora_bot.contracts.pkgs.world import WorldReader, WorldWriter
 from aurora_bot.contracts.resource import ResourceKey, ResourceRef
 from aurora_bot.kernel import BuiltinSource, compose_managed, module
 from aurora_bot.mcp.runtime import McpRuntime as ConcreteMcpRuntime
@@ -36,6 +28,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from aurora_bot.contracts.memory import MemoryRequest
+    from aurora_bot.contracts.pkgs.cadence import Cadence
+    from aurora_bot.contracts.pkgs.mcp import McpRuntime
+    from aurora_bot.contracts.pkgs.memory import MemoryReader
     from aurora_bot.contracts.pkgs.runtime import TerminalDispatcher
     from aurora_bot.kernel import ModuleContext
 
@@ -56,30 +51,30 @@ def test_selected_real_cadence_receives_the_runtime_launcher(
 
     @module(
         name="selected_cadence",
-        provides=Cadence,
+        provides="cadence",
         priority=10,
-        requires=(WorldReader, WorldWriter, RhythmPolicy, BotStateStore),
+        requires=("world.reader", "world.writer", "rhythm", "bot"),
     )
     def selected(context: ModuleContext) -> Cadence:
         """复用真实节律机制，仅由其他模组提供配置与实例。"""
         return ConcreteCadence(
-            context.get(WorldReader),
-            context.get(WorldWriter),
-            policy=context.get(RhythmPolicy),
-            state=context.get(BotStateStore),
+            context.get("world.reader"),
+            context.get("world.writer"),
+            policy=context.get("rhythm"),
+            state=context.get("bot"),
         )
 
     async def scenario() -> None:
         """真实装配、启动与唤起全部使用同一个高优先级端口。"""
         model = FakeModel()
-        handle = await compose_managed(config, (*BuiltinSource().discover(), selected), instances=((Model, model),))
+        handle = await compose_managed(config, (*BuiltinSource().discover(), selected), instances=(("ai", model),))
         runtime = create_runtime(handle.assembly, output=lambda _: None)
         stop = asyncio.Event()
         stop.set()
         try:
             await handle.activate(stop)
             await runtime.submit_event(EnvironmentEvent("signal", "test", "test:world", "changed", _NOW, "环境变化"))
-            await handle.assembly.get(Cadence).evaluate_once()
+            await handle.assembly.get("cadence").evaluate_once()
             assert model.requests
         finally:
             await handle.close()
@@ -123,12 +118,12 @@ def test_interactive_front_uses_selected_console_port(configured_project: Path) 
         run_runtime(
             config,
             FakeModel(),
-            instances=((TerminalConsole, console),),
+            instances=(("console", console),),
             readline=eof,
             output=lambda _: None,
         )
     )
-    assert runtime.assembly.get(TerminalConsole) is console
+    assert runtime.assembly.get("console") is console
     assert console.calls == 1
 
 
@@ -146,7 +141,7 @@ def test_unselected_mcp_provider_does_not_prepare_default_connections(
 
     monkeypatch.setattr("aurora_bot.mcp.module.prepare_mcp", unexpected)
 
-    @module(name="selected_mcp", provides=McpRuntime, priority=10)
+    @module(name="selected_mcp", provides="mcp", priority=10)
     def selected(context: ModuleContext) -> McpRuntime:
         """真实替换对象在构造阶段才可见。"""
         del context
@@ -155,10 +150,10 @@ def test_unselected_mcp_provider_does_not_prepare_default_connections(
     async def scenario() -> None:
         """复用正式 prepare/construct 阶段计划，不提前 seed 运行器。"""
         handle = await compose_managed(
-            config, (*BuiltinSource().discover(), selected), instances=((Model, FakeModel()),)
+            config, (*BuiltinSource().discover(), selected), instances=(("ai", FakeModel()),)
         )
         try:
-            assert handle.assembly.get(McpRuntime) is expected
+            assert handle.assembly.get("mcp") is expected
         finally:
             await handle.close()
 
@@ -184,7 +179,7 @@ def test_engine_and_public_recall_query_use_the_same_selected_memory(configured_
     config = config.with_value(MEMORY_CONFIG, replace(config.get(MEMORY_CONFIG), window_minutes=0))
     memory = SelectedMemory()
 
-    @module(name="selected_memory", provides=MemoryReader, priority=10)
+    @module(name="selected_memory", provides="memory", priority=10)
     def selected(context: ModuleContext) -> MemoryReader:
         """实际选择的能力由构造器直接提供。"""
         del context
@@ -193,7 +188,7 @@ def test_engine_and_public_recall_query_use_the_same_selected_memory(configured_
     async def scenario() -> None:
         """同一实例先服务引擎，再服务正式领域操作。"""
         handle = await compose_managed(
-            config, (*BuiltinSource().discover(), selected), instances=((Model, FakeModel()),)
+            config, (*BuiltinSource().discover(), selected), instances=(("ai", FakeModel()),)
         )
         runtime = create_runtime(handle.assembly, output=lambda _: None)
         stop = asyncio.Event()
@@ -203,7 +198,7 @@ def test_engine_and_public_recall_query_use_the_same_selected_memory(configured_
             await runtime.run("核对记忆端口")
             before = len(memory.requests)
             assert before > 0
-            result = await handle.assembly.get(OperationRegistry).dispatch(
+            result = await handle.assembly.get("operations").dispatch(
                 OperationRequest(
                     "recall-selected",
                     "aurora:bot/default",

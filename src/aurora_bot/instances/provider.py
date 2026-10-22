@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from aurora_bot.contracts.resource import ResourceDescriptor, ResourceKey, resource_instance_identity
 from aurora_bot.contracts.resource_paging import resource_cursor, resource_order, resource_position
 from aurora_bot.contracts.resource_query import ResourcePage
-from aurora_bot.contracts.tree_lifecycle import tree_scope
+from aurora_bot.contracts.run_lifecycle import run_scope
 from aurora_bot.instances.history import InstanceView, instance_start
 
 if TYPE_CHECKING:
@@ -59,23 +59,23 @@ class InstanceProvider:
         if ref.key.domain != "engine" or ref.key.kind != "instance":
             return None
         try:
-            bot_id, tree_id = resource_instance_identity(ref.key)
+            bot_id, run_id = resource_instance_identity(ref.key)
         except ValueError:
             return None
         cursor = _revision_cursor(ref.revision)
         if bot_id != self._bot_id or cursor is None:
             return None
-        started = await self._world.commit(f"{tree_id}:tree:started")
+        started = await self._world.commit(f"{run_id}:run:started")
         if started is None:
             return None
         view = instance_start(started, bot_id)
         if view is None or view.instance.key != ref.key or view.start_cursor > cursor:
             return None
-        return await self._at(view, started.scopes[tree_scope(tree_id)], cursor)
+        return await self._at(view, started.scopes[run_scope(run_id)], cursor)
 
     async def _at(self, view: InstanceView, after: int, cursor: int) -> ResourceDescriptor | None:
         """只重放实例开始之后的所属域，目标游标必须确实属于该实例。"""
-        scope = tree_scope(view.instance.instance_id)
+        scope = run_scope(view.instance.instance_id)
         while view.last_cursor < cursor:
             page = await self._world.commits(scope, after, _WORLD_PAGE_SIZE)
             if not page:
@@ -104,10 +104,9 @@ class InstanceProvider:
                 raise ValueError("实例发现无法读取已存在的世界前缀")
 
     def _apply(self, commit: WorldCommit) -> None:
-        """索引只保留属于当前 Bot 且具有明确执行定义的树。"""
         started = instance_start(commit, self._bot_id)
         if started is not None:
-            self._views[tree_scope(started.instance.instance_id)] = started
+            self._views[run_scope(started.instance.instance_id)] = started
             return
         for scope in commit.scopes:
             view = self._views.get(scope)

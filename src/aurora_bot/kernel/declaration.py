@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
     from aurora_bot.contracts import ContributionKey
     from aurora_bot.kernel.context import ModuleContext
+    from aurora_kernel import Callpoint, Hook
 
 type AsyncCleanup = Callable[[], Awaitable[None]]
 type ModuleRegistrar = Callable[["ModuleContext"], None]
@@ -35,8 +36,8 @@ class ModuleSpec:
     """一个自描述模块：提供什么契约、需要什么契约、在哪些运行阶段参与。"""
 
     name: str
-    provides: tuple[type, ...] = ()
-    requires: tuple[type, ...] = ()
+    provides: tuple[str, ...] = ()
+    requires: tuple[str, ...] = ()
     contributes: tuple[ContributionKey[Any], ...] = ()
     consumes: tuple[ContributionKey[Any], ...] = ()
     declares: tuple[ContributionKey[Any], ...] = ()
@@ -48,6 +49,8 @@ class ModuleSpec:
     optional: bool = False
     order: tuple[Ordering, ...] = ()
     hooks: Mapping[Phase, PhaseHook] = field(default_factory=dict)
+    points: tuple[Callpoint, ...] = ()
+    handlers: tuple[Hook, ...] = ()
     manifest: ModuleManifest = DEFAULT_MODULE_MANIFEST
     content: bytes = field(init=False, repr=False)
     resource: ResourceDescriptor = field(init=False, repr=False)
@@ -65,6 +68,8 @@ class ModuleSpec:
             "scopes",
             "resources",
             "order",
+            "points",
+            "handlers",
         ):
             object.__setattr__(self, attribute, tuple(getattr(self, attribute)))
         object.__setattr__(self, "hooks", MappingProxyType(dict(self.hooks)))
@@ -74,7 +79,9 @@ class ModuleSpec:
             raise ValueError(f"模块重复声明域：{self.name}")
         if not self.name.strip():
             raise ValueError("模块名称不能为空")
-        if not any((self.provides, self.contributes, self.hooks, self.scopes, self.resources)):
+        if not any(
+            (self.provides, self.contributes, self.hooks, self.scopes, self.resources, self.points, self.handlers)
+        ):
             raise ValueError(f"模块既不提供能力也不贡献值：{self.name}")
         contribution_names = [key.name for key in (*self.contributes, *self.consumes)]
         if len(contribution_names) != len(set(contribution_names)):
@@ -92,6 +99,11 @@ class ModuleSpec:
         """声明式元数据必须是公共值对象，不能把未校验字典带入解析阶段。"""
         if not isinstance(self.manifest, ModuleManifest):
             raise TypeError("模块清单必须使用 ModuleManifest")
+        if any(
+            not isinstance(name, str) or not name or any(char.isspace() for char in name)
+            for name in (*self.provides, *self.requires)
+        ):
+            raise ValueError("模块依赖必须使用非空名称")
         if not isinstance(self.name, str) or not is_path(self.name):
             raise ValueError("模块名称必须是合法的局部资源路径")
         if any(not isinstance(scope, ScopeDeclaration) for scope in self.scopes):
@@ -134,8 +146,8 @@ def module(
     *,
     name: str,
     manifest: ModuleManifest = DEFAULT_MODULE_MANIFEST,
-    provides: type | tuple[type, ...] = (),
-    requires: type | tuple[type, ...] = (),
+    provides: str | tuple[str, ...] = (),
+    requires: str | tuple[str, ...] = (),
     contributes: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
     consumes: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
     declares: ContributionKey[Any] | tuple[ContributionKey[Any], ...] = (),
@@ -145,7 +157,7 @@ def module(
     resources: ResourceDescriptor | tuple[ResourceDescriptor, ...] = (),
     priority: int = 0,
     optional: bool = False,
-    activation_after: type | tuple[type, ...] = (),
+    activation_after: str | tuple[str, ...] = (),
     order: Ordering | tuple[Ordering, ...] = (),
     prepare: ModulePrepare | None = None,
     activate: ModuleHook | None = None,
@@ -154,6 +166,8 @@ def module(
     drain: ModuleHook | None = None,
     close: ModuleHook | None = None,
     hooks: Mapping[Phase, PhaseHook] | None = None,
+    points: tuple[Callpoint, ...] = (),
+    handlers: tuple[Hook, ...] = (),
 ) -> Callable[[ModuleBuilder], ModuleSpec]:
     """把 ``build(context) -> instance`` 构造器登记为 ``ModuleSpec``。
 
@@ -199,6 +213,8 @@ def module(
             optional=optional,
             order=extra_order,
             hooks=collected,
+            points=points,
+            handlers=handlers,
         )
 
     return decorator

@@ -6,14 +6,14 @@ import asyncio
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 
-from aurora_bot.agents import AgentCatalog
 from aurora_bot.contracts import (
     AgentDefinition,
-    AgentTree,
     ChatMessage,
+    CognitionRequest,
     MemorySnapshot,
     ToolCall,
     ToolDefinition,
@@ -22,12 +22,15 @@ from aurora_bot.contracts import (
 from aurora_bot.contracts.bot import Goal
 from aurora_bot.contracts.memory import MemoryContinuity
 from aurora_bot.contracts.model import ContextBudgetError
-from aurora_bot.engine import CognitionEngine
 from aurora_bot.prompt import PromptAssembler
-from aurora_bot.tools import ToolRegistry
 from aurora_bot.utils.serialization import thaw_json
+from aurora_bot.world import SqlAlchemyWorldJournal
+from tests.support.engine import make_engine
 from tests.support.model import ScriptedModel as FakeModel
 from tests.support.prompt import make_prompt_catalog
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _PROMPT = "aurora:prompt/agent/root"
 _SMALL = ToolDefinition("lab:tool/definition/small", "读取一项实验状态", {"type": "object"})
@@ -38,7 +41,7 @@ _LARGE = ToolDefinition(
 
 def _agent(tools: frozenset[str] = frozenset()) -> AgentDefinition:
     """测试主体只带显式选择的能力。"""
-    return AgentDefinition("aurora:agent/definition/root", "认知", _PROMPT, "test:ai/endpoint/fake", tools, frozenset())
+    return AgentDefinition("aurora:agent/definition/root", "认知", _PROMPT, "test:ai/endpoint/fake", tools)
 
 
 def _assembler(limit: int) -> PromptAssembler:
@@ -48,27 +51,30 @@ def _assembler(limit: int) -> PromptAssembler:
 
 def test_tool_schema_overflow_preserves_required_state_by_refusing_assembly() -> None:
     """不能静默删掉任务约束或删减能力结构来适配过小容量。"""
-    tree = AgentTree.create("capacity", "root", _agent(), "核对先前实验")
+    transcript = (ChatMessage.message("核对先前实验"),)
     memory = MemorySnapshot(
         datetime(2026, 10, 18, tzinfo=UTC),
         (),
         continuity=MemoryContinuity("aurora:bot/default", 1, (Goal("aurora:goal/check", "核对结果", "结果明确"),)),
     )
     assembler = _assembler(1000)
-    assert "核对结果" in assembler.assemble(tree, "root", memory=memory).messages[0].content
+    assert "核对结果" in assembler.assemble(_PROMPT, transcript, memory=memory).messages[0].content
     with pytest.raises(ContextBudgetError, match="工具定义与必要上下文"):
-        assembler.assemble(tree, "root", memory=memory, tools=(_LARGE,))
+        assembler.assemble(_PROMPT, transcript, memory=memory, tools=(_LARGE,))
 
 
 def test_history_is_trimmed_using_capacity_left_after_visible_tool_definitions() -> None:
     """工具完整保留时，裁剪的是可恢复旧历史，原始意图和最新输入仍在。"""
-    tree = AgentTree.create("capacity", "root", _agent(), "原始意图")
-    tree = tree.append("root", ChatMessage.assistant("旧交互" * 40)).append("root", ChatMessage.message("最新证据"))
+    transcript = (
+        ChatMessage.message("原始意图"),
+        ChatMessage.assistant("旧交互" * 40),
+        ChatMessage.message("最新证据"),
+    )
     limit = 220
     assembler = _assembler(limit)
-    full = assembler.assemble(tree, "root")
+    full = assembler.assemble(_PROMPT, transcript)
     assert any("旧交互" in message.content for message in full.messages)
-    trimmed = assembler.assemble(tree, "root", tools=(_SMALL,))
+    trimmed = assembler.assemble(_PROMPT, transcript, tools=(_SMALL,))
     assert not any("旧交互" in message.content for message in trimmed.messages)
     assert "原始意图" in {message.content for message in trimmed.messages}
     assert "最新证据" in {message.content for message in trimmed.messages}
@@ -89,21 +95,26 @@ class _Tool:
 
 
 @pytest.mark.parametrize("large_visible", [False, True])
-def test_engine_reserves_exactly_the_selected_node_tools_before_calling_model(large_visible: bool) -> None:
+def test_engine_reserves_exactly_the_selected_tools_before_calling_model(tmp_path: Path, large_visible: bool) -> None:
     """未暴露的工具不占当前上下文；可见结构超限时模型不被调用。"""
     definition = _LARGE if large_visible else _SMALL
     agent = _agent(frozenset({definition.name}))
     model = FakeModel([ChatMessage.assistant("已核对")])
-    runner = CognitionEngine(
-        model,
-        _assembler(1000),
-        AgentCatalog((agent,)),
-        ToolRegistry((_Tool(_SMALL), _Tool(_LARGE))),
-    )
-    tree = asyncio.run(runner.run(AgentTree.create("capacity", "root", agent, "核对实验")))
-    if large_visible:
-        assert not model.requests
-        assert "工具定义与必要上下文" in (tree.node("root").error or "")
-    else:
-        assert tree.node("root").result == "已核对"
-        assert model.requests[0].tools == (_SMALL,)
+
+    async def scenario() -> None:
+        world = SqlAlchemyWorldJournal(tmp_path / "world.sqlite3")
+        runner = make_engine(
+            model, (agent,), world=world, assembler=_assembler(1000), tools=(_Tool(_SMALL), _Tool(_LARGE))
+        )
+        try:
+            result = await runner.execute(CognitionRequest("核对实验", agent=agent.definition_id, run_id="capacity"))
+            if large_visible:
+                assert not model.requests
+                assert result.reason == "ContextBudgetError"
+            else:
+                assert result.output == "已核对"
+                assert model.requests[0].tools == (_SMALL,)
+        finally:
+            await world.close()
+
+    asyncio.run(scenario())

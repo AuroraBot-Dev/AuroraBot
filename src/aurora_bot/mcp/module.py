@@ -6,12 +6,8 @@ import os
 from typing import TYPE_CHECKING
 
 from aurora_bot.contracts import TOOL_CONTRIBUTIONS, ScopeCatalog, Settings
-from aurora_bot.contracts.pkgs.cadence import Cadence
-from aurora_bot.contracts.pkgs.mcp import McpRuntime as McpRuntimePort
-from aurora_bot.contracts.pkgs.world import WorldWriter
 from aurora_bot.contracts.scope import ScopeDeclaration, ScopeKind
 from aurora_bot.kernel import ModuleContext, module
-from aurora_bot.mcp.client import McpClientFactory
 from aurora_bot.mcp.config import AppConfig, AppsConfig, PlatformConfig, PlatformsConfig
 from aurora_bot.mcp.models import McpAppSpec, McpEventMode, McpTransport
 from aurora_bot.mcp.runtime import McpRuntime, prepare_mcp
@@ -19,6 +15,7 @@ from aurora_bot.mcp.scopes import SCOPE_PATTERN as MCP_SCOPE_PATTERN
 from aurora_bot.mcp.scopes import SUB_SCOPE_PATTERN as MCP_SUB_SCOPE_PATTERN
 
 if TYPE_CHECKING:
+    from aurora_bot.contracts.pkgs.mcp import McpRuntime as McpRuntimePort
     from aurora_bot.kernel import AsyncCleanup
 
 _MCP_PLATFORM_ID = "aurora:platform/mcp"
@@ -26,42 +23,42 @@ _MCP_PLATFORM_ID = "aurora:platform/mcp"
 
 async def prepare(context: ModuleContext) -> AsyncCleanup | None:
     """只有被选中的默认实现才准备连接，外部实现拥有自己的准备过程。"""
-    if not context.is_provider(McpRuntimePort) or context.contains(McpRuntimePort):
+    if not context.is_provider("mcp") or context.contains("mcp"):
         return None
     platform = _mcp_platform(context.settings)
-    factory = context.get_optional(McpClientFactory)
+    factory = context.get_optional("mcp.factory")
     runtime = await prepare_mcp(
-        build_mcp_specs(context.settings, catalog=context.get(ScopeCatalog)),
+        build_mcp_specs(context.settings, catalog=context.get("scopes")),
         platform_enabled=platform.enabled,
-        world=context.get(WorldWriter),
+        world=context.get("world.writer"),
         factory=factory,
     )
-    context.provide(McpRuntimePort, runtime)
+    context.provide("mcp", runtime)
     return runtime.close
 
 
 async def activate(context: ModuleContext) -> None:
-    await context.get(McpRuntimePort).activate()
+    await context.get("mcp").activate()
 
 
 @module(
     name="mcp",
-    provides=McpRuntimePort,
-    requires=(McpRuntimePort, WorldWriter, ScopeCatalog),
+    provides="mcp",
+    requires=("mcp", "world.writer", "scopes"),
     contributes=TOOL_CONTRIBUTIONS,
     scopes=(
         ScopeDeclaration(MCP_SCOPE_PATTERN, ScopeKind.RESOURCE, "一个扩展拥有的世界域：<package>:world。"),
         ScopeDeclaration(MCP_SUB_SCOPE_PATTERN, ScopeKind.RESOURCE, "扩展世界域的子域，例如 <package>:world/room/1。"),
     ),
-    activation_after=Cadence,
+    activation_after="cadence",
     prepare=prepare,
     activate=activate,
 )
 def build(context: ModuleContext) -> McpRuntimePort:
-    runtime = context.get_optional(McpRuntimePort)
+    runtime = context.get_optional("mcp")
     if runtime is None:
         platform = _mcp_platform(context.settings)
-        specs = build_mcp_specs(context.settings, catalog=context.get(ScopeCatalog))
+        specs = build_mcp_specs(context.settings, catalog=context.get("scopes"))
         if platform.enabled and any(spec.enabled for spec in specs):
             raise ValueError("启用 MCP App 必须先经过异步连接与完整工具发现")
         runtime = McpRuntime.disabled(specs, platform_enabled=platform.enabled)

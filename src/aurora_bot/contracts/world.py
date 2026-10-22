@@ -182,19 +182,17 @@ class WorldStreamPage:
 
 
 @dataclass(frozen=True, slots=True)
-class TreeActivity:
-    """由世界日志推导出的一棵树的活动摘要。"""
-
-    tree_id: str
+class RunActivity:
+    run_id: str
     commit_count: int
     first_seen: datetime
     last_seen: datetime
 
     def __post_init__(self) -> None:
-        if not self.tree_id.strip() or self.commit_count <= 0:
-            raise ValueError("TreeActivity requires a non-empty tree id and positive commit count")
+        if not self.run_id.strip() or self.commit_count <= 0:
+            raise ValueError("RunActivity requires a non-empty run id and positive commit count")
         if self.first_seen > self.last_seen:
-            raise ValueError("TreeActivity first_seen must not be after last_seen")
+            raise ValueError("RunActivity first_seen must not be after last_seen")
 
 
 @dataclass(frozen=True, slots=True)
