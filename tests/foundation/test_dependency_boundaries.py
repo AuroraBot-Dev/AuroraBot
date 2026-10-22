@@ -135,3 +135,13 @@ def test_generic_kernel_has_no_bot_or_cli_dependency() -> None:
         if module.split(".")[0] in {"aurora_bot", "aurora_cli"}
     ]
     assert violations == []
+
+
+def test_agent_core_has_no_bot_or_cli_dependency() -> None:
+    violations = [
+        f"{path.relative_to(_ROOT)} imports {module}"
+        for path in (_ROOT / "src" / "aurora_agent").rglob("*.py")
+        for module, _ in _imports_of(path)
+        if module.split(".")[0] in {"aurora_bot", "aurora_cli"}
+    ]
+    assert violations == []
