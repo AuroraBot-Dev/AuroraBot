@@ -51,6 +51,8 @@ class Operation:
     output_type: type[Model]
     handler: Callable[..., Model | Awaitable[Model]]
     example: dict[str, Any]
+    record: bool = True
+    replayable: bool = False
 
     def describe(self, module: str) -> dict[str, Any]:
         return {
@@ -59,6 +61,8 @@ class Operation:
             "input_schema": self.input_type.model_json_schema(),
             "output_schema": self.output_type.model_json_schema(),
             "example": {"module": module, "operation": self.name, "input": self.example},
+            "record": self.record,
+            "replayable": self.replayable,
         }
 
 
