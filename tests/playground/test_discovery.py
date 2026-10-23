@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from importlib import import_module
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -102,3 +103,58 @@ def test_discovery_description_and_bad_input_do_not_build_kernel(monkeypatch: py
     assert response["result"] == {"value": 2}
     assert len(built) == 1
     session.close()
+
+
+def test_new_workspace_is_discovered_from_one_module_declaration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "discovered_workspaces"
+    child = package / "counter"
+    child.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (child / "__init__.py").write_text(
+        dedent("""\
+        from contextlib import contextmanager
+        from playground.protocol import Empty, Model, Module, Operation
+        from playground.workspace import WorkspaceSpec
+
+        events = []
+
+        class Configuration(Model):
+            initial: int = 0
+
+        class Value(Model):
+            value: int
+
+        @contextmanager
+        def open_instance(configuration, instance_id):
+            events.append("open")
+            try:
+                yield [configuration.initial]
+            finally:
+                events.append("close")
+
+        def state(counter):
+            return Value(value=counter[0])
+
+        MODULE = Module("counter", "自动发现的工作台", workspace=WorkspaceSpec(
+            configuration=Configuration,
+            open=open_instance,
+            snapshot=Operation("state", "读取值", Empty, Value, state, {}, record=False),
+            isolated=True,
+        ))
+    """),
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    source = PackageSource("discovered_workspaces", extract=module_spec, entry_module=None)
+    with Session((source,)) as session:
+        assert session.handle('{"action":"describe","module":"counter"}')["ok"]
+        plugin = import_module("discovered_workspaces.counter")
+        assert not plugin.events
+        created = session.handle('{"module":"counter","operation":"create","input":{"initial":3}}')
+        assert created["result"] == {"value": 3}
+        record = session.handle('{"module":"counter","operation":"export"}')["result"]
+        replay = session.handle(json.dumps({"module": "counter", "operation": "replay", "input": {"archive": record}}))
+        assert replay["result"]["matched"]
+    assert plugin.events == ["open", "open", "close", "close"]

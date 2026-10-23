@@ -240,3 +240,31 @@ def test_module_declaration_binds_management_operations_without_allocating_resou
         assert session.handle('{"module":"counter","operation":"close"}')["ok"]
         assert events == ["open:default", "open:replay", "close:default"]
     assert events[-1] == "close:replay"
+
+
+def test_python_and_json_entrypoints_use_the_same_declared_identity_default() -> None:
+    events: list[str] = []
+    spec = replace(declaration(events), default_id="named", identity="case_id")
+
+    async def exercise() -> None:
+        async with Workspace("counter", spec) as workspace:
+            await workspace.create({"initial": 3})
+            assert await workspace.snapshot() == Number(value=3)
+            await workspace.reset()
+            assert (await workspace.export()).instance_id == "named"
+
+    asyncio.run(exercise())
+    module = Module("counter", "自定义身份", workspace=spec)
+    with Session((StaticSource((module,)),)) as session:
+        assert session.handle('{"module":"counter","operation":"create","input":{"initial":3}}')["ok"]
+        record = session.handle('{"module":"counter","operation":"export"}')["result"]
+        assert record["instance_id"] == "named"
+        assert events[-1] == "open:named"
+
+
+@pytest.mark.parametrize("identity", ["archive", "configuration", "_private", "not-an-identifier"])
+def test_reserved_identity_fields_are_rejected_before_binding(identity: str) -> None:
+    events: list[str] = []
+    with pytest.raises(ValueError, match="身份字段"):
+        Workspace("counter", replace(declaration(events), identity=identity))
+    assert not events

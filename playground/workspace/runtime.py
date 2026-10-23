@@ -34,6 +34,9 @@ class Instance:
 class Workspace:
     def __init__(self, module: str, specification: WorkspaceSpec) -> None:
         self.module, self.spec = module, specification
+        identity = specification.identity
+        if not identity.isidentifier() or identity.startswith("_") or identity in {"configuration", "archive"}:
+            raise ValueError("身份字段必须是非私有标识符，且不能占用 configuration 或 archive")
         self.operations: dict[str, Operation] = {}
         for operation in (specification.snapshot, *specification.operations):
             if operation.name in self.operations or operation.name in _RESERVED:
@@ -62,6 +65,9 @@ class Workspace:
     def active(self) -> bool:
         return bool(self._instances)
 
+    def identify(self, instance_id: str | None) -> str:
+        return self.spec.default_id if instance_id is None else instance_id
+
     @contextmanager
     def claim(self, instance_id: str) -> Iterator[None]:
         if self.closed or not instance_id.strip():
@@ -89,7 +95,8 @@ class Workspace:
             await resources.aclose()
             raise
 
-    async def create(self, configuration: dict[str, Any], instance_id: str = "default") -> Model:
+    async def create(self, configuration: dict[str, Any], instance_id: str | None = None) -> Model:
+        instance_id = self.identify(instance_id)
         parsed = self.spec.configuration.model_validate(configuration)
         with self.claim(instance_id):
             if instance_id in self._instances:
@@ -109,7 +116,8 @@ class Workspace:
         result = await resolve(operation.handler(value))
         return operation.output_type.model_validate(result)
 
-    async def snapshot(self, instance_id: str = "default") -> Model:
+    async def snapshot(self, instance_id: str | None = None) -> Model:
+        instance_id = self.identify(instance_id)
         instance = await self.ensure(instance_id)
         with self.claim(instance_id):
             return await self.query(self.spec.snapshot, instance.value)
@@ -144,7 +152,8 @@ class Workspace:
                         )
                     )
 
-    async def reset(self, instance_id: str = "default", configuration: dict[str, Any] | None = None) -> Model:
+    async def reset(self, instance_id: str | None = None, configuration: dict[str, Any] | None = None) -> Model:
+        instance_id = self.identify(instance_id)
         parsed = self.spec.configuration.model_validate(configuration) if configuration is not None else None
         if instance_id not in self._instances and self.spec.implicit:
             # 首次 reset 直接装配目标配置，不能先准备一遍未选中的默认模块。
@@ -158,7 +167,8 @@ class Workspace:
             await old.resources.aclose()
             return state
 
-    async def inspect(self, instance_id: str = "default") -> Model:
+    async def inspect(self, instance_id: str | None = None) -> Model:
+        instance_id = self.identify(instance_id)
         if "inspect" in self.operations:
             return await self.call(instance_id, "inspect")
         instance = await self.ensure(instance_id)
@@ -172,7 +182,8 @@ class Workspace:
             ],
         )
 
-    async def export(self, instance_id: str = "default") -> Archive:
+    async def export(self, instance_id: str | None = None) -> Archive:
+        instance_id = self.identify(instance_id)
         inspection = await self.inspect(instance_id)
         instance = await self.ensure(instance_id)
         with self.claim(instance_id):
