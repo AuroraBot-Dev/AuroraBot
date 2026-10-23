@@ -1,0 +1,3 @@
+[artifacts]
+# 内容摘要固定资源版本；该目录需要与世界日志一起备份。
+directory = "data/artifacts"

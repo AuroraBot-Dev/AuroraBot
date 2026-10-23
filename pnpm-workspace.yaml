@@ -1,0 +1,71 @@
+packages:
+  - apps/*
+  - tooling/*
+publicHoistPattern:
+  - eslint
+  - oxlint
+  - stylelint
+  - '*postcss*'
+strictPeerDependencies: false
+autoInstallPeers: true
+dedupePeerDependents: true
+verifyDepsBeforeRun: false
+minimumReleaseAge: 0
+overrides:
+  '@vue/compiler-sfc': 3.5.44
+  '@vue/shared': 'catalog:'
+  vite: 'catalog:'
+  vue: 'catalog:'
+catalog:
+  '@clack/prompts': ^1.8.1
+  '@eslint-community/eslint-plugin-eslint-comments': ^4.8.1
+  '@eslint/js': ^10.0.1
+  '@nolebase/vitepress-plugin-enhanced-readabilities': ^2.21.1
+  '@stylistic/stylelint-plugin': ^5.3.1
+  '@types/node': ^24.0.0
+  '@typescript-eslint/parser': ^8.72.0
+  '@vitejs/plugin-vue': ^6.0.10
+  '@vue/shared': 3.5.44
+  eslint: ^10.13.0
+  eslint-plugin-command: ^3.5.3
+  eslint-plugin-jsonc: ^3.4.2
+  eslint-plugin-n: ^18.5.0
+  eslint-plugin-perfectionist: ^5.13.0
+  eslint-plugin-pnpm: ^1.9.1
+  eslint-plugin-unused-imports: ^4.4.1
+  eslint-plugin-vue: ^10.11.1
+  eslint-plugin-yml: ^3.9.0
+  execa: ^10.2.0
+  globals: ^17.13.0
+  happy-dom: ^20.14.6
+  jiti: ^2.7.0
+  mermaid: ^11.17.2
+  oxlint: ^1.89.0
+  oxlint-tsgolint: ^7.0.2004
+  postcss: ^8.5.31
+  postcss-html: ^2.0.0
+  postcss-scss: ^4.0.9
+  prettier: ^3.9.10
+  rimraf: ^6.1.3
+  stylelint: ^17.16.0
+  stylelint-config-recess-order: ^7.8.2
+  stylelint-config-recommended: ^18.0.0
+  stylelint-config-recommended-scss: ^17.0.1
+  stylelint-config-recommended-vue: ^2.0.0
+  stylelint-config-standard: ^40.0.0
+  stylelint-order: ^8.1.2
+  stylelint-scss: ^7.3.0
+  tsx: ^4.23.15
+  typescript: ^6.0.3
+  vite: 8.3.4
+  vitepress: 2.0.0-alpha.20
+  vitepress-plugin-mermaid: ^2.0.17
+  vitepress-sidebar: ^1.40.0
+  vitest: ^4.1.12
+  vue: 3.5.44
+  vue-eslint-parser: ^10.4.1
+  vue-tsc: ^3.3.13
+  yaml-eslint-parser: ^2.1.0
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true

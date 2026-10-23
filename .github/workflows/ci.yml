@@ -3,14 +3,14 @@ name: CI
 on:
   push:
     branches:
-      - "main"
-      - "dev"
-      - "nightly"
+      - 'main'
+      - 'dev'
+      - 'nightly'
   pull_request:
     branches:
-      - "main"
-      - "dev"
-      - "nightly"
+      - 'main'
+      - 'dev'
+      - 'nightly'
 
 jobs:
   lint:
@@ -21,9 +21,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: 'uv.lock'
 
       - name: Install dependencies
         run: uv sync --locked --group dev
@@ -31,11 +31,14 @@ jobs:
       - name: Lint
         run: uv run aurora check --lint
 
+      - name: Build Python distributions
+        run: uv build
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ['3.12', '3.13']
 
     steps:
       - uses: actions/checkout@v4
@@ -45,10 +48,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: 'uv.lock'
 
       - name: Install dependencies
         run: uv sync --locked --group dev
 
       - name: Test
-        run: uv run aurora check --test
+        run: uv run aurora check --test --coverage

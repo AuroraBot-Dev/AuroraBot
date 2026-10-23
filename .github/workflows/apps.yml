@@ -1,0 +1,60 @@
+name: Vue 应用
+
+on:
+  push:
+    branches: [main, dev, nightly]
+    paths:
+      - 'apps/**'
+      - 'scripts/**/*.ts'
+      - 'package.json'
+      - 'pnpm-*.yaml'
+      - 'tsconfig*.json'
+      - '*.config.ts'
+      - 'tooling/**'
+      - '.prettierignore'
+      - '.stylelintignore'
+      - '.node-version'
+      - '.github/workflows/apps.yml'
+      - '.github/workflows/deploy-docs.yml'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'scripts/**/*.ts'
+      - 'package.json'
+      - 'pnpm-*.yaml'
+      - 'tsconfig*.json'
+      - '*.config.ts'
+      - 'tooling/**'
+      - '.prettierignore'
+      - '.stylelintignore'
+      - '.node-version'
+      - '.github/workflows/apps.yml'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: 安装工作区依赖
+        run: pnpm install --frozen-lockfile
+      - name: 检查并构建全部应用
+        run: pnpm check apps
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+      - name: 保存静态产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurorabot-apps
+          include-hidden-files: true
+          path: |
+            apps/docsite/dist
+            apps/landing/dist

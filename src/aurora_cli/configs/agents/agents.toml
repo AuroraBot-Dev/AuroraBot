@@ -1,0 +1,48 @@
+[[agent]]
+id = "aurora:agent/definition/triage"
+description = "观察世界并直接处理当前关注事项。"
+prompt = "aurora:prompt/agent/triage"
+model = "aurora:ai/endpoint/fast"
+tools = ["#aurora:tool/tag/qq-send", "#aurora:tool/tag/qq-read", "aurora:tool/definition/bot_state", "aurora:tool/definition/goal_set"]
+
+[[agent]]
+id = "aurora:agent/definition/root"
+description = "理解任务并通过可用工具完成工作。"
+prompt = "aurora:prompt/agent/root"
+model = "aurora:ai/endpoint/quality"
+tools = ["aurora:tool/definition/*", "org.aurora.qq:tool/definition/*", "com.github.windows_mcp:tool/definition/*"]
+
+[[agent]]
+id = "aurora:agent/definition/fast-worker"
+description = "完成边界明确的快速任务。"
+prompt = "aurora:prompt/agent/fast"
+model = "aurora:ai/endpoint/fast"
+tools = ["#aurora:tool/tag/qq-send", "#aurora:tool/tag/qq-read"]
+
+[[agent]]
+id = "aurora:agent/definition/worker"
+description = "深入完成独立工作。"
+prompt = "aurora:prompt/agent/worker"
+model = "aurora:ai/endpoint/quality"
+tools = ["aurora:tool/definition/*", "org.aurora.qq:tool/definition/*", "com.github.windows_mcp:tool/definition/*"]
+
+[[agent]]
+id = "aurora:agent/definition/chat"
+description = "生成会话回复并投递到原会话。"
+prompt = "aurora:prompt/agent/chat"
+model = "aurora:ai/endpoint/fast"
+tools = ["#aurora:tool/tag/qq-send"]
+
+[[agent]]
+id = "aurora:agent/definition/reviewer"
+description = "检查给定结果的事实、遗漏和边界。"
+prompt = "aurora:prompt/agent/reviewer"
+model = "aurora:ai/endpoint/quality"
+tools = []
+
+[[agent]]
+id = "aurora:agent/definition/memory"
+description = "围绕目标召回经历并核对原始来源。"
+prompt = "aurora:prompt/agent/memory"
+model = "aurora:ai/endpoint/quality"
+tools = ["aurora:tool/definition/memory_*", "aurora:tool/definition/artifact_*", "aurora:tool/definition/resources_*", "aurora:tool/definition/bot_state"]

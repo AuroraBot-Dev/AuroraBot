@@ -1,78 +1,49 @@
 # AuroraBot
 
-AuroraBot 是以 `AgentTree` 为核心的自主智能体框架。当前工作树只描述现行架构与实现；只保留完整最小循环和项目级组合骨架。
+以 Bot 为中心设计：Bot 是持久主体，拥有世界、目标与记忆；认知执行有明确的输入和结果，不要求树状拓扑。
 
-## Architecture authority
+## 设计边界
 
-- `docs/rfc/0300-unified-architecture-and-contracts.md` 是唯一设计基准。
-- `docs/architecture/` 是按包拆分的实施架构说明；`docs/architecture/packages/package-baseline.md` 是新增模块/包的最低扩展成本基线。
-- `docs/` 是独立文档仓库的子模块；RFC 先在 docs 仓库提交，再由主仓库更新子模块指针。
-- 影响 AgentTree、四角色消息、模型/工具端口、配置或组合根的改动，必须先更新 RFC。
-- Python 源码和测试的注释与 docstring 不提具体 RFC 编号，直接说明局部不变量。
+- 外部输入先成为世界事件；Bot 理解后决定回应或行动，外部效果经声明的 Tool 执行，结果回到世界。
+- 认知入口只传递请求与结果；默认执行器复用 `aurora_agent.Run`，独立上下文、消息配对和运行上界由执行器保障，不内建树、父子 Agent 或委派调度。
+- `ChatMessage` 只有 system/message/assistant/tool；仅 Provider adapter 映射协议角色，模型身份显式进入每次请求。
+- `PromptAssembler` 只装配上下文，记忆快照显式注入；必要状态与约束超限时在模型调用或行动前失败。
+- 世界只校验、编号和追加，提交方决定 scope；通过 contracts 端口访问，禁止跨包导入 world 实现。
+- Bot 状态与时钟可独立替换；记忆、检查点、模型投影分开保存，后续反馈不得泄漏到过去查询。
+- 操作定义统一生成工具与终端入口，持久保存版本、请求、回执和因果；效果未知的非幂等操作不自动重放。
 
-## Project layout
+## 包与组合
 
-```text
-config.example/ 随源码发布的完整配置模板；每个 TOML 对应一个 configuration 模块
-config/         从模板复制的个人生效配置，始终由 Git 忽略
-aurora/         项目级入口、统一 Config/Composer、runtime 门面与 utils
-aurora/commands/       每个 CLI 命令一个注册模块
-aurora/configuration/  每个 TOML 一个解析与注册模块
-aurora/composition/    每个需构造实例的 src 子包一个注册模块
-ops/            统一 OperationSpec 目录、运行监测、限定配置改动与本地 Panel HTTP
-src/utils/      无上层依赖的日志、时间、文本与序列化工具
-src/contracts/  AgentTree、ChatMessage、Model 和 Tool 公共契约
-src/agents/     不可变 AgentDefinition 目录与唯一解析
-src/tools/      工具注册表与框架内建工具
-src/prompt/     四角色 PromptAssembler
-src/engine/     AgentTree 的确定性单循环
-src/ai/         LiteLLM 模型网关与 Provider 协议映射
-src/mcp/        MCP SDK 2.x 客户端适配、冻结工具目录与业务事件入口
-src/world/      WorldJournal 唯一持久化实现与 migration
-src/console/    输入先入世界线的本地异步终端
-tests/          离线行为、组合与边界测试
-docs/           文档站点与唯一 RFC 子模块
-panel/          消费同一 ops 目录的独立前端子模块
-```
+- `src/aurora_kernel/` 是唯一通用组合机制：namespace、hook、ctx、发现、依赖解析和生命周期；不依赖 CLI 或 Bot。
+- `src/aurora_agent/` 提供独立 ReAct 任务执行核心，不依赖 Bot 或 CLI，不内置树与委派调度；宿主注入模型、工具、上下文装配和行动前策略，追加输入在工具调用全部配对后的安全边界交付。
+- 装饰器注册命名空间和调用点；宿主自动创建 ctx，模块可读写全部空间，事务检测冲突并记录来源。
+- namespace 不隔离权限；容器读写使用快照，服务对象按引用共享，ctx 不替代世界日志。
+- `src/aurora_bot/kernel/` 适配命名服务、贡献、资源和世界域，不重复实现内核，不以 Python 契约类型充当服务键；接线和生命周期跟随选中能力，失选实现不产生准备效果。
+- `src/aurora_bot/runtime/` 负责 Bot 装配与门面；功能包运行时只依赖自身、contracts、utils，兄弟能力通过注入调用。
+- 功能包的 `module.py` 可引用 Bot kernel 并导出唯一 `MODULE`；兄弟实现的类型引用限于 `TYPE_CHECKING`。
+- `src/aurora_cli/` 负责命令、配置和进程环境；命令入口保持 `aurora`。四个导入包同属一个发行包，Bot 不导入 CLI。
+- 命令与配置按目录发现；插件来自内置包、`extensions/plugins/` 和 entry point。兼容性、冲突与依赖环在准备效果前校验。
+- `src/aurora_cli/configs/<name>/` 保存同名解析器与 TOML 模板，CLI 在启动时补齐缺失的个人配置；个人 `config/`、本机扩展由 Git 忽略。前端位于 `apps/`，工程配置位于 `tooling/`。
 
-## Core boundaries
+## 文档与范围
 
-- 一棵 `AgentTree` 表示一次完整运行；不再引入独立 Task、mailbox、Activity 或 continuation 作为平行运行模型。
-- root 与 child 使用同一种 `AgentNode` 和循环。实例只因 prompt、初始 message、可见 tools 和 LLM model 不同。
-- `ChatMessage` 只允许 `system`、`message`、`assistant`、`tool` 四种领域 role；只有 Provider adapter 可把
-  `message` 映射成协议的 `user`。
-- `PromptAssembler` 只装配上下文，不访问模型、工具、数据库或记忆服务；未来需要世界上下文时只注入 `WorldReader`。
-- `AgentTreeRunner` 只执行给定树：依赖 contracts + agents + prompt + tools，并通过 `WorldJournal` 记录运行因果；普通 Tool 经端口执行，`delegate` 是唯一由 engine 解释的内建 Tool。
-- `src/world` 是逻辑事件总线，代码上是叶子；`WorldReader / WorldWriter / WorldJournal` 端口只属于 contracts，其他包不得 import 实现。
-- 世界提交归属哪个 scope 由提交方决定；world 只校验、编号和追加，不产生事件。
-- Console 输入先作为 `console.input` 提交到 `aurora:console`，终端渲染输出不进入世界线。
-- 每个运行时包在 ops 中拥有窄 RuntimePort 和 method/path + 斜杠入口，成功数据以 JSON 输出；未装配端口返回 `NOT_AVAILABLE`。
-- model id 是节点事实，必须显式进入每个 `ModelRequest`，不得由全局 runner 或 profile 隐式推导。
-- `aurora` 是唯一项目组合层：`configuration` 只产生纯 DTO，`composition` 分阶段构造 Prompt、Engine 与 Runtime，
-  `commands` 按模块注册 CLI，`main.py` 只分派。
-- 命令、配置和组件都通过目录入口的显式元组注册；新增并列项只增加一个模块和一条注册记录。
-- 下层无项目语义的共享功能放入 `src.utils`；项目组合工具放入 `aurora.utils`；并列模块不得寄存彼此的工具函数。
-- 依赖方向固定为 `utils/contracts ← agents/prompt/ai/world/mcp`、`agents/contracts ← tools ← engine ← aurora`、
-  `console ← aurora`、`ops ← aurora`；`src` 不导入 `aurora` 或 `ops`，ops 不导入 src 或 aurora。
+- README 以当前版本为基准，保留介绍、设计哲学、快速开始和致谢；不追加实现细节或接口清单, 不随意改动README.
+- 文档站面向使用者与扩展开发者，聚焦操作指引、稳定概念、当前能力和使用限制，减少内部实现细节；不维护源码包表、内部类与字段清单、内部执行步骤或测试文件索引。
+- 内部代码重构、组织调整和实现替换原则上不要求修改文档站；引导用户交互或影响安装、配置、命令、公开扩展用法及使用结果的变更，才同步更新相关页面。实现说明就近维护在源码注释、包内 README 或测试中。
+- 尚不便确定或未经核实的文档内容统一写“文档待编写”，不得根据设想编造用法、能力、接口或保证。
+- 文档站阅读入口为 [系统总览](apps/docsite/src/architecture/system-overview.md)；扩展指引见 `apps/docsite/src/develop/`，使用参考见 `apps/docsite/src/reference/`。
+- 当前不推进 RFC；源码注释直接说明局部不变量，不引用 RFC 编号。
+- 面向人的文本以简体中文为准，描述当前能力和限制，不使用实验、旧版、迁移等历史阶段叙事。
+- 文档站只写当前用法、能力、限制和必要原理；变更经过、修复说明统一写入 `docs/CHANGELOG.md`，RFC 与未实施草案放在 `docs/rfc/`，不进入文档站。
 
-## Current scope
+## 开发与验证
 
-当前实现 ops（含本地 Panel HTTP 后端与 Token 登录）、LiteLLM Model、Console、cadence、只读 World Memory、MCP SDK 2.x 与 start 生命周期，
-以及 WorldJournal 持久化与 migration；panel 子模块是消费同一 ops 目录的 Vue 前端；
-不实现 Panel 附件与 WebSocket、自动记忆、Inbox、并发/抢占、通用 Platform、sandbox、费用体系，以及 MCP sampling、elicitation、roots、Tasks 或非文本结果注入。
-引入这些能力前，先给出围绕 AgentTree 的真实用例、不变量和独立测试。
-
-## Language and text
-
-- 项目文本以简体中文为默认和权威版本，包括 CLI 帮助与输出、错误说明、配置注释、默认 Prompt、README 和设计文档。
-- 代码标识符、协议字面量、外部 API 字段和必要的技术术语可以使用英文；面向人的完整句子优先使用中文。
-- 英文与日文翻译可以保留，但中文内容先更新；翻译冲突或落后时以中文为准。
-- 用户可见文本只描述当前身份、能力和限制，不使用实验、重构、旧版、迁移等历史阶段叙事。
-
-## Runtime and quality
-
-- Python 3.12，使用 uv。
-- Ruff 行宽 120，LF，双引号；公开 API 有类型注解；值对象优先 frozen + slots dataclass。
-- 主源码文件不超过 500 行；不以 lint ignore 掩盖核心复杂度。
-- 测试必须离线、确定、无网络、无环境变量依赖；Model 和 Tool 使用 fake；除 WorldJournal 与 Panel 会话的临时 SQLite 集成测试外不使用数据库。
-- 提交前运行 `uv run aurora check`。
+- Python 3.12 使用 uv；前端使用 Node.js 24、pnpm 12。测试前执行 `uv sync --locked --group dev` 安装项目。
+- Ruff 行宽 120、LF、双引号；单个源码文件不超过 600 行，纯字段模型可例外。
+- 公开 API 保留必要注解，值对象优先 frozen + slots dataclass；hook 与 ctx 允许 Any，不堆叠类型包装，不以 lint ignore 掩盖复杂度。
+- 测试必须离线、确定，无网络或环境变量依赖；Model/Tool 使用 fake，数据库仅用于 WorldJournal 临时 SQLite 集成测试。
+- pytest 使用 importlib 模式，测试按能力分目录；专用辅助代码就近放置，跨能力替身放 `tests/support/`，经 `tests.*` 导入。
+- 优先验证认知循环、持久化、幂等、未知效果恢复、权限与路径、脱敏和记忆时间边界；不为简单转发或覆盖率补重复测试。
+- 日常不采集覆盖率；按需使用 `uv run aurora check --test --coverage`，CI 下限 20%，不作为删减目标。
+- 不提交密钥或真实会话；日志不记录 Prompt、消息正文、工具参数或凭据。
+- 提交前运行 `uv run aurora check --fix` 或 `pnpm check`。

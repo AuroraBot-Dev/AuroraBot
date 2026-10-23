@@ -3,6 +3,7 @@
 
 # 源代码文件 - 明确使用 LF
 *.ts text eol=lf
+*.vue text eol=lf
 *.js text eol=lf
 *.tsx text eol=lf
 *.jsx text eol=lf

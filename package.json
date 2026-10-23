@@ -1,0 +1,49 @@
+{
+  "name": "aurorabot",
+  "version": "0.7.0",
+  "description": "AuroraBot 的 Python 运行时与 Vue 应用工作区",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.ts",
+    "task": "tsx scripts/run.ts",
+    "dev": "tsx scripts/run.ts dev",
+    "build": "tsx scripts/run.ts build",
+    "preview": "tsx scripts/run.ts preview",
+    "check": "tsx scripts/run.ts check",
+    "typecheck": "tsx scripts/run.ts typecheck",
+    "lint": "tsx scripts/run.ts lint",
+    "format": "tsx scripts/run.ts format",
+    "test": "tsx scripts/run.ts test",
+    "clean": "tsx scripts/run.ts clean"
+  },
+  "devDependencies": {
+    "@clack/prompts": "catalog:",
+    "@types/node": "catalog:",
+    "@vben/eslint-config": "workspace:*",
+    "@vben/oxlint-config": "workspace:*",
+    "@vben/stylelint-config": "workspace:*",
+    "@vben/tsconfig": "workspace:*",
+    "@vitejs/plugin-vue": "catalog:",
+    "eslint": "catalog:",
+    "execa": "catalog:",
+    "happy-dom": "catalog:",
+    "jiti": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "prettier": "catalog:",
+    "rimraf": "catalog:",
+    "stylelint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:",
+    "vue-tsc": "catalog:"
+  },
+  "engines": {
+    "node": ">=24.12.0 <25",
+    "pnpm": ">=12 <13"
+  },
+  "packageManager": "pnpm@12.14.0"
+}

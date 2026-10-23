@@ -1,0 +1,4 @@
+[runtime]
+profile = "prod"
+agent = "aurora:agent/definition/root"
+log_level = "INFO"

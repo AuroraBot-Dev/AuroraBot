@@ -1,0 +1,14 @@
+[[storage]]
+name = "DATA_ROOT"
+description = "所有数据的根"
+path = "data/"
+
+[[storage]]
+name = "world"
+description = "WorldJournal 持久化目录"
+path = "%DATA_ROOT%/world/"
+
+[[storage]]
+name = "logs"
+description = "轮转文件日志目录"
+path = "%DATA_ROOT%/logs/"
