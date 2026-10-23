@@ -1,0 +1,30 @@
+{
+  "version": "aurora.agent.case/v1",
+  "instructions": "先读取温度，再根据工具结果回答。",
+  "model": "script/temperature",
+  "message": "当前温度是多少？",
+  "replies": [
+    {
+      "tool_calls": [
+        {"call_id": "read-1", "name": "temperature", "arguments": {"room": "office"}}
+      ]
+    },
+    {"content": "办公室温度为 23 度。", "input_tokens": 40, "output_tokens": 10}
+  ],
+  "tools": [
+    {
+      "name": "temperature",
+      "description": "读取指定房间的温度",
+      "parameters": {
+        "type": "object",
+        "properties": {"room": {"type": "string"}},
+        "required": ["room"],
+        "additionalProperties": false
+      },
+      "outcomes": [{"content": "23"}]
+    }
+  ],
+  "max_model_calls": 4,
+  "max_tool_calls": 2,
+  "max_context_chars": 4000
+}

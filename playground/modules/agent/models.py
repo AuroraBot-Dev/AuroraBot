@@ -2,14 +2,15 @@
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from aurora_agent import CallStatus, ChatRole, RunStatus
 from aurora_agent.data import mutable_json
+from playground.modules.agent.case import Case
 from playground.protocol import Model
 
 if TYPE_CHECKING:
-    from aurora_agent import RunSnapshot, ToolCall
+    from aurora_agent import ChatMessage, RunSnapshot, ToolCall
 
 
 class Target(Model):
@@ -17,10 +18,20 @@ class Target(Model):
 
 
 class Create(Target):
+    case: Case | None = Field(default=None, description="完整离线用例；提供后不使用预设场景")
     message: str = Field(default="收集两项事实并汇总。", pattern=r"\S")
     scenario: Literal["loop", "answer", "policy", "unknown"] = "loop"
     max_model_calls: int = Field(default=32, ge=1)
     max_tool_calls: int = Field(default=128, ge=0)
+    max_context_chars: int = Field(default=100_000, ge=1)
+
+    @model_validator(mode="after")
+    def check_source(self) -> "Create":
+        if self.case is not None:
+            for name in ("message", "scenario", "max_model_calls", "max_tool_calls", "max_context_chars"):
+                if getattr(self, name) != type(self).model_fields[name].default:
+                    raise ValueError("case 与预设参数不能混用；请在 case 内设置任务和限制")
+        return self
 
 
 class Append(Target):
@@ -44,10 +55,20 @@ class MessageView(Model):
     tool_call_id: str | None
     is_error: bool
 
+    @classmethod
+    def of(cls, message: "ChatMessage") -> "MessageView":
+        return cls(
+            role=message.role,
+            content=message.content,
+            tool_calls=[CallView.of(call) for call in message.tool_calls],
+            tool_call_id=message.tool_call_id,
+            is_error=message.is_error,
+        )
+
 
 class CallRecordView(Model):
     call: CallView
-    status: CallStatus
+    status: CallStatus = Field(strict=False)
     output: str | None
     is_error: bool | None
 
@@ -60,14 +81,14 @@ class Stats(Model):
 
 
 class Result(Model):
-    status: RunStatus
+    status: RunStatus = Field(strict=False)
     output: str | None
     reason: str | None
 
 
 class State(Model):
     run_id: str
-    status: RunStatus
+    status: RunStatus = Field(strict=False)
     messages: list[MessageView]
     queued_messages: list[str]
     calls: list[CallRecordView]
@@ -82,16 +103,7 @@ class State(Model):
         return cls(
             run_id=snapshot.run_id,
             status=snapshot.status,
-            messages=[
-                MessageView(
-                    role=message.role,
-                    content=message.content,
-                    tool_calls=[CallView.of(call) for call in message.tool_calls],
-                    tool_call_id=message.tool_call_id,
-                    is_error=message.is_error,
-                )
-                for message in snapshot.messages
-            ],
+            messages=[MessageView.of(message) for message in snapshot.messages],
             queued_messages=[message.content for message in snapshot.queued_messages],
             calls=[
                 CallRecordView(

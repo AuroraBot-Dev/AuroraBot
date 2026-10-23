@@ -1,4 +1,6 @@
-# 模块交互 Playground
+# 模块独立工作台
+
+用于在模块接入完整系统前独立装配、控制输入并观察真实行为。公共层负责入口、校验和展示，模块自己负责运行环境。Agent 支持可编辑离线依赖、Python 端口注入和运行记录复现；Kernel 与 CLI 当前仍以固定示例和命令调用为主。
 
 从仓库根目录启动终端会话：
 
@@ -121,21 +123,23 @@ uv run aurora playground --module kernel
 {"action":"exit"}
 ```
 
-## 独立 Agent 交互
+## Agent 独立工作台
 
-`agent` 使用真实 `aurora_agent` 和静默的本地模型、工具替身。无需密钥，先创建 Run，再逐步调用；同一会话可以用不同 `run_id` 保存多个独立任务。
+`agent` 驱动真实 `aurora_agent.Run`。使用 `case` 编辑模型响应、工具 schema、回执和行动前策略，不局限于固定 echo 场景；同一会话可以用不同 `run_id` 保存多个独立任务。
 
 ```json
 {"action":"describe","module":"agent"}
-{"module":"agent","operation":"create","input":{"run_id":"demo","message":"收集事实并汇总。"}}
+{"module":"agent","operation":"create","input":{"case":{"message":"查询后汇总","replies":[{"tool_calls":[{"call_id":"read-1","name":"read","arguments":{}}]},{"content":"已汇总"}],"tools":[{"name":"read","outcomes":[{"content":"事实"}]}]}}}
 {"module":"agent","operation":"step"}
 {"module":"agent","operation":"append","input":{"message":"请用一句话回答。"}}
 {"module":"agent","operation":"step"}
 {"module":"agent","operation":"snapshot"}
 {"module":"agent","operation":"run"}
+{"module":"agent","operation":"inspect"}
+{"module":"agent","operation":"export"}
 ```
 
-省略 `run_id` 时使用 `demo`。首次 `step` 由模型提出两个工具调用；第二次 `step` 只执行第一个工具，快照中的 `queued_messages` 仍保留追加输入。`run` 处理剩余调用，再将追加输入交给模型。
+省略 `run_id` 时使用 `demo`。`step` 推进一次模型或工具调用；追加输入在工具调用全部配对后交给模型。`inspect` 显式展示最近的实际模型请求、响应及不含正文的端口轨迹。`reset` 重新装配当前离线配置并清空状态；`export` 显式返回配置、控制操作和检查点，`replay` 在新的运行身份下离线重跑并逐项比对，不覆盖原运行。
 
 各操作返回统一的结构化快照，包括消息、排队输入、工具调用状态、统计与最终结果。`ok` 表示交互操作成功；任务是否完成应查看 `result.status`，最终回答在 `result.result.output`。同一身份不能重复创建，终态不能追加输入，再次执行终态不会重放工具效果。
 
@@ -147,9 +151,19 @@ uv run aurora playground --module kernel
 {"module":"agent","operation":"cancel","input":{"run_id":"stop"}}
 ```
 
-`create` 支持 `scenario`：`loop` 为默认工具循环，`answer` 直接回答，`policy` 在行动前要求重新判断，`unknown` 模拟工具效果未知；可通过 `max_model_calls` 和 `max_tool_calls` 调整执行上限。完整字段与输出 schema 通过 `describe` 查询。
+不提供 `case` 时，`create` 支持四种快捷预设：`loop`、`answer`、`policy`、`unknown`。完整输入和输出 schema 通过 `describe` 查询。
 
 交互会话顺序处理每行请求：`run` 返回前不接收另一条 JSON 命令。需要手动追加或取消时使用 `step` 停在边界；模型或工具正在等待时的并发控制见下面的预设场景。所有异步操作复用会话自己的事件循环，`exit`、EOF 或中断时关闭。程序中直接使用 `Session` 时应使用 `with Session() as session`，或显式调用 `close()`；同步会话不能嵌套在运行中的事件循环内。
+
+也可以完全不启动交互界面，从文件运行和复现：
+
+```bash
+uv run python -m playground.modules.agent playground/modules/agent/cases/tool-loop.json
+uv run python -m playground.modules.agent playground/modules/agent/cases/tool-loop.json --record /path/to/record.json
+uv run python -m playground.modules.agent --replay /path/to/record.json
+```
+
+Python `Workbench` 支持直接注入自己的 Model、Tool、上下文装配器和策略，无需接入 Bot。运行记录含正文，只能显式导出；真实依赖不自动重放。配置、比对结果、资源归属与注入示例见 [Agent 工作台](modules/agent/README.md)。
 
 ## 独立 Agent 场景
 
@@ -172,7 +186,12 @@ playground/
 ├── tui/                 # Textual 界面及会话工作线程
 ├── modules/
 │   ├── agent/
-│   │   ├── __init__.py  # Run 操作适配与 MODULE
+│   │   ├── __init__.py  # Run 操作适配、离线装配与 MODULE
+│   │   ├── __main__.py  # 独立文件运行与记录比对
+│   │   ├── workbench.py # Python 端口注入与元数据观察
+│   │   ├── case.py      # 可编辑离线依赖
+│   │   ├── records.py   # 检查视图、控制操作与运行记录
+│   │   ├── cases/       # 可复现的离线用例
 │   │   ├── models.py    # JSON 输入与快照输出模型
 │   │   └── fixtures.py  # 共用的离线模型、工具和策略
 │   ├── cli/

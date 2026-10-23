@@ -1,0 +1,14 @@
+{
+  "version": "aurora.agent.case/v1",
+  "message": "执行操作。",
+  "replies": [
+    {"tool_calls": [{"call_id": "write-1", "name": "write", "arguments": {}}]}
+  ],
+  "tools": [
+    {
+      "name": "write",
+      "description": "模拟回执丢失的外部写入，不产生真实效果",
+      "outcomes": [{"effect": "unknown"}]
+    }
+  ]
+}
