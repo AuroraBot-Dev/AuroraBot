@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -28,3 +28,4 @@ class WorkspaceSpec:
     identity: str = "instance_id"
     default_id: str = "default"
     implicit: bool = False
+    example: dict[str, Any] = field(default_factory=dict)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -8,7 +9,9 @@ from typing import TYPE_CHECKING
 import pytest
 from pydantic import ValidationError
 
-from playground.protocol import Empty, Model, Operation
+from aurora_kernel.discovery import StaticSource
+from playground.protocol import Empty, Model, Module, Operation
+from playground.session import Session
 from playground.workspace import Archive, InvocationError, Workspace, WorkspaceSpec
 
 if TYPE_CHECKING:
@@ -217,3 +220,23 @@ def test_async_resources_reject_concurrent_replacement_and_all_close_after_clean
         assert workspace.closed
 
     asyncio.run(exercise())
+
+
+def test_module_declaration_binds_management_operations_without_allocating_resources_for_queries() -> None:
+    events: list[str] = []
+    module = Module("counter", "独立计数器", workspace=declaration(events))
+    with Session((StaticSource((module,)),)) as session:
+        assert session.handle('{"action":"describe","module":"counter"}')["ok"]
+        invalid = session.handle('{"module":"counter","operation":"create","input":{"initial":true}}')
+        assert invalid["error"]["code"] == "invalid_input"
+        assert session._runner is None
+        assert not events
+        created = session.handle('{"module":"counter","operation":"create","input":{"initial":3}}')
+        assert created["result"] == {"value": 3}
+        session.handle('{"module":"counter","operation":"increment"}')
+        record = session.handle('{"module":"counter","operation":"export"}')["result"]
+        replay = session.handle(json.dumps({"module": "counter", "operation": "replay", "input": {"archive": record}}))
+        assert replay["result"]["matched"]
+        assert session.handle('{"module":"counter","operation":"close"}')["ok"]
+        assert events == ["open:default", "open:replay", "close:default"]
+    assert events[-1] == "close:replay"

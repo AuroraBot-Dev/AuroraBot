@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
 from playground.discovery import bind_operations, discover_modules
 from playground.protocol import REQUEST, Call, Describe, Exit, ListModules, Model, Operation
+from playground.workspace import Workspace
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable
@@ -53,6 +55,7 @@ class Session:
     def __init__(self, sources: Iterable[DiscoverySource] | None = None) -> None:
         self.modules = discover_modules(sources)
         self._operations: dict[str, dict[str, Operation]] = {}
+        self._workspaces: dict[str, Workspace] = {}
         self._runner: asyncio.Runner | None = None
         self.closed = False
 
@@ -67,7 +70,18 @@ class Session:
         self.closed = True
         if self._runner is not None:
             runner, self._runner = self._runner, None
-            runner.close()
+            try:
+                runner.run(self.close_workspaces())
+            finally:
+                runner.close()
+        else:
+            for workspace in self._workspaces.values():
+                workspace.closed = True
+
+    async def close_workspaces(self) -> None:
+        async with AsyncExitStack() as resources:
+            for workspace in self._workspaces.values():
+                resources.push_async_callback(workspace.close)
 
     def resolve(self, result: Model | Awaitable[Model]) -> Model:
         if isinstance(result, Model):
@@ -143,7 +157,11 @@ class Session:
 
     def operations(self, module: str) -> dict[str, Operation]:
         if module not in self._operations:
-            self._operations[module] = bind_operations(self.modules[module])
+            declaration = self.modules[module]
+            workspace = Workspace(module, declaration.workspace) if declaration.workspace is not None else None
+            self._operations[module] = bind_operations(declaration, workspace)
+            if workspace is not None:
+                self._workspaces[module] = workspace
         return self._operations[module]
 
 

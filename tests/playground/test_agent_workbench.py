@@ -94,12 +94,12 @@ def test_export_round_trip_compares_every_checkpoint_and_reset_rebuilds_dependen
         assert replay["result"]["state"]["run_id"] == "replay"
         assert call(session, "snapshot")["result"] == final
         assert not call(session, "replay", archive=record)["ok"]
-        assert call(session, "reset")["result"] == record["initial"]
+        assert call(session, "reset")["result"] == record["initial"] | {"run_id": "demo"}
         assert call(session, "inspect")["result"]["trace"] == []
         assert call(session, "export")["result"]["checkpoints"] == []
         assert call(session, "run")["result"]["result"]["output"] == final["result"]["output"]
         # 原记录没有被 reset 或 replay 改写。
-        assert [item["control"]["action"] for item in record["checkpoints"]] == [
+        assert [item["operation"] for item in record["checkpoints"]] == [
             "step",
             "append",
             "step",
@@ -356,7 +356,7 @@ def test_standalone_runner_saves_replays_and_refuses_overwrite(
     assert "FileExistsError" in capsys.readouterr().err
     assert record.read_bytes() == saved
     changed = json.loads(saved)
-    changed["trace"] = []
+    changed["inspection"]["trace"] = []
     record.write_text(json.dumps(changed), encoding="utf-8")
     monkeypatch.setattr("sys.argv", ["agent", "--replay", str(record)])
     assert entry.main() == 1

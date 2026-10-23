@@ -11,33 +11,34 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from playground.modules.agent import AgentSession
+from playground.modules.agent import MODULE, SPEC
 from playground.modules.agent.case import Case
-from playground.modules.agent.records import Archive
 from playground.session import reject_constant, validation_failure
+from playground.workspace import Archive, InvocationError, Workspace
 
 
 async def execute(arguments: argparse.Namespace) -> tuple[dict[str, Any], bool]:
-    session = AgentSession()
-    if arguments.replay is not None:
-        record = Archive.model_validate(
-            json.loads(arguments.replay.read_text(encoding="utf-8"), parse_constant=reject_constant)
+    async with Workspace(MODULE.name, SPEC) as workspace:
+        if arguments.replay is not None:
+            record = Archive.model_validate(
+                json.loads(arguments.replay.read_text(encoding="utf-8"), parse_constant=reject_constant)
+            )
+            result = await workspace.replay(record)
+            return result.model_dump(mode="json"), result.matched
+        case = Case.model_validate(
+            json.loads(arguments.case.read_text(encoding="utf-8"), parse_constant=reject_constant)
         )
-        result = await session.replay(archive=record.model_dump(mode="json"))
-        return result.model_dump(mode="json"), result.matched
-    case = Case.model_validate(json.loads(arguments.case.read_text(encoding="utf-8"), parse_constant=reject_constant))
-    await session.create(case=case.model_dump(mode="json"))
-    try:
-        state = await session.run()
-    except RuntimeError:
-        # 非预期的端口失败同样可检查、可显式记录，而不是丢失现场。
-        state = await session.snapshot()
-    if arguments.record is not None:
-        record = await session.export()
-        # 显式导出，拒绝覆盖现存文件；不自动保存或恢复执行状态。
-        with arguments.record.open("x", encoding="utf-8") as stream:
-            stream.write(record.model_dump_json(indent=2) + "\n")
-    return state.model_dump(mode="json"), state.status == "completed"
+        await workspace.create({"case": case.model_dump(mode="json")}, "demo")
+        try:
+            state = await workspace.call("demo", "run")
+        except InvocationError:
+            state = await workspace.snapshot("demo")
+        if arguments.record is not None:
+            record = await workspace.export("demo")
+            with arguments.record.open("x", encoding="utf-8") as stream:
+                stream.write(record.model_dump_json(indent=2) + "\n")
+        output = state.model_dump(mode="json")
+        return output, output["status"] == "completed"
 
 
 def main() -> int:

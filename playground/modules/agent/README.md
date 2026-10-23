@@ -63,7 +63,7 @@ uv run aurora playground --tui --module agent
 
 ## 离线依赖的行为
 
-用例版本是 `aurora.agent.case/v1`，记录版本是 `aurora.agent.record/v1`。不支持的版本直接拒绝，不猜测如何解释。
+用例版本是 `aurora.agent.case/v1`；运行记录使用公共格式 `aurora.playground.record/v1`，同时保存模块名称与模块声明版本。不支持的版本直接拒绝，不猜测如何解释。检查点保存操作名称、输入、输出、状态和异常类型；复现只忽略宿主分配的运行身份，不改写正文或工具参数里的同名字段。
 
 - `replies` 按模型调用次数消耗；`error: true` 或响应耗尽产生 `ModelError`。
 - 每个工具的 `outcomes` 独立按实际执行次数消耗；参数不合法或被策略拦截时不消耗回执。

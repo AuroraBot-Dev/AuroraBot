@@ -52,6 +52,12 @@ class Workspace:
         self._busy: set[str] = set()
         self.closed = False
 
+    async def __aenter__(self) -> Workspace:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
     @property
     def active(self) -> bool:
         return bool(self._instances)

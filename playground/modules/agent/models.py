@@ -13,11 +13,7 @@ if TYPE_CHECKING:
     from aurora_agent import ChatMessage, RunSnapshot, ToolCall
 
 
-class Target(Model):
-    run_id: str = Field(default="demo", pattern=r"\S", description="当前会话内的运行身份")
-
-
-class Create(Target):
+class Create(Model):
     case: Case | None = Field(default=None, description="完整离线用例；提供后不使用预设场景")
     message: str = Field(default="收集两项事实并汇总。", pattern=r"\S")
     scenario: Literal["loop", "answer", "policy", "unknown"] = "loop"
@@ -34,7 +30,7 @@ class Create(Target):
         return self
 
 
-class Append(Target):
+class Append(Model):
     message: str = Field(pattern=r"\S", description="追加的普通输入，在安全边界交付")
 
 

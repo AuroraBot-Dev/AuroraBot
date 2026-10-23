@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, Literal
-
-from pydantic import Field, model_validator
+from typing import TYPE_CHECKING, Any
 
 from aurora_agent.data import mutable_json
-from playground.modules.agent.models import Create, MessageView, State, Target
+from playground.modules.agent.models import Create, MessageView, State
 from playground.protocol import Model
 
 if TYPE_CHECKING:
@@ -64,42 +62,3 @@ class Inspection(Model):
             ),
             response=MessageView.of(response.message) if response is not None else None,
         )
-
-
-class Control(Model):
-    action: Literal["step", "run", "append", "cancel"]
-    message: str | None = None
-
-    @model_validator(mode="after")
-    def check_message(self) -> Control:
-        if self.action == "append":
-            if self.message is None or not self.message.strip():
-                raise ValueError("append 需要非空 message")
-        elif self.message is not None:
-            raise ValueError("只有 append 接受 message")
-        return self
-
-
-class Checkpoint(Model):
-    control: Control
-    state: State
-    error_type: str | None = None
-
-
-class Archive(Model):
-    version: Literal["aurora.agent.record/v1"] = "aurora.agent.record/v1"
-    configuration: Create
-    initial: State
-    checkpoints: list[Checkpoint]
-    trace: list[Trace]
-
-
-class Replay(Target):
-    run_id: str = Field(default="replay", pattern=r"\S")
-    archive: Archive
-
-
-class ReplayResult(Model):
-    matched: bool
-    differences: list[str]
-    state: State

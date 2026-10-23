@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from playground.workspace.spec import WorkspaceSpec
+
 
 class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -68,8 +70,9 @@ class Operation:
 
 @dataclass(frozen=True, slots=True)
 class Module:
-    """发现阶段只读取声明；create 为当前会话绑定操作，不获取运行资源。"""
+    """声明独立工作台，或直接绑定无实例的操作；发现时不获取运行资源。"""
 
     name: str
     description: str
-    create: Callable[[], tuple[Operation, ...]]
+    create: Callable[[], tuple[Operation, ...]] | None = None
+    workspace: WorkspaceSpec | None = None
