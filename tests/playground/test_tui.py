@@ -25,9 +25,10 @@ def test_editor_validation_module_switching_and_state() -> None:
         app = PlaygroundApp(module="kernel")
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
-            assert json.loads(app.input_editor.text) == {"amount": 3}
+            assert json.loads(app.input_editor.text) == {"modules": ["counter", "extension", "client"]}
             assert "input_schema" in json.loads(app.schema_editor.text)
             assert app.output_editor.text == "尚未执行操作。"
+            app.select_operation("increment")
             assert await pilot.click("#execute")
             await app.workers.wait_for_complete()
             assert json.loads(app.output_editor.text)["result"] == {"value": 6}
@@ -52,6 +53,7 @@ def test_editor_validation_module_switching_and_state() -> None:
             await pilot.press("enter")
             await pilot.pause()
             assert not app.execute_button.disabled
+            app.select_operation("increment")
             app.input_editor.load_text('{"amount":0}')
             await pilot.press("f5")
             await app.workers.wait_for_complete()

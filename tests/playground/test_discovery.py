@@ -15,6 +15,8 @@ from playground.session import Session
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aurora_kernel.lifecycle import ManagedAssembly
+
 
 def test_package_discovers_new_playground_without_session_registration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -83,13 +85,13 @@ def test_duplicate_operations_are_rejected_without_executing_handlers() -> None:
 
 def test_discovery_description_and_bad_input_do_not_build_kernel(monkeypatch: pytest.MonkeyPatch) -> None:
     built: list[Host] = []
-    original = Host.build
+    original = Host.prepare
 
-    def build(host: Host) -> Host:
+    async def prepare(host: Host) -> ManagedAssembly:
         built.append(host)
-        return original(host)
+        return await original(host)
 
-    monkeypatch.setattr(Host, "build", build)
+    monkeypatch.setattr(Host, "prepare", prepare)
     session = Session()
     assert session.handle('{"action":"list"}')["ok"]
     assert session.handle('{"action":"describe","module":"kernel"}')["ok"]
@@ -99,3 +101,4 @@ def test_discovery_description_and_bad_input_do_not_build_kernel(monkeypatch: py
     response = session.handle('{"module":"kernel","operation":"increment"}')
     assert response["result"] == {"value": 2}
     assert len(built) == 1
+    session.close()

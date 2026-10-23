@@ -33,6 +33,7 @@ def test_shortcuts_share_state_and_validation_with_json_requests() -> None:
         "name": "小极光",
         "message": "你好，小极光！",
     }
+    commands.session.close()
 
 
 @pytest.mark.parametrize("pretty", [False, True])
@@ -67,7 +68,7 @@ def test_editor_multiline_history_and_completion() -> None:
             editor = create_editor(commands, pipe, DummyOutput())
             pipe.send_text('increment {\r"amount": 3\r}\r')
             request = await asyncio.wait_for(editor.prompt_async(), timeout=3)
-            assert commands.handle(request)["result"] == {"value": 6}
+            assert commands.request(request)["input"] == {"amount": 3}
             pipe.send_text("\x1b[A\r")
             previous = await asyncio.wait_for(editor.prompt_async(), timeout=3)
             assert previous == request
@@ -85,6 +86,7 @@ def test_editor_multiline_history_and_completion() -> None:
             pipe.send_text('cli.demo {"argv":["demo","greet","{"]}\r')
             quoted = await asyncio.wait_for(editor.prompt_async(), timeout=3)
             assert commands.handle(quoted)["ok"]
+        commands.session.close()
 
     asyncio.run(scenario())
 
@@ -126,23 +128,25 @@ def test_slash_commands_share_state_and_preserve_json_and_cli_arguments() -> Non
 
 
 def test_slash_menu_opens_on_typing_and_confirms_without_executing() -> None:
-    async def scenario() -> None:
-        with Session() as session, create_pipe_input() as pipe:
-            commands = Commands(session)
-            commands.handle("/use kernel")
-            editor = create_editor(commands, pipe, DummyOutput())
-            visible = asyncio.Event()
-            editor.default_buffer.on_completions_changed += lambda buffer: (
-                visible.set() if buffer.complete_state and buffer.complete_state.completions else None
-            )
-            prompting = asyncio.create_task(editor.prompt_async())
-            pipe.send_text("/inc")
-            await asyncio.wait_for(visible.wait(), timeout=3)
-            assert not prompting.done()
-            assert commands.handle("/state")["result"]["namespaces"]["counter"]["value"] == 0
-            pipe.send_text("\x1b[B\x1b[B\t\r")
-            completed = await asyncio.wait_for(prompting, timeout=3)
-            assert completed == "/kernel.increment"
-            assert commands.handle(completed)["result"] == {"value": 2}
+    with Session() as session:
+        commands = Commands(session)
+        commands.handle("/use kernel")
 
-    asyncio.run(scenario())
+        async def scenario() -> str:
+            with create_pipe_input() as pipe:
+                editor = create_editor(commands, pipe, DummyOutput())
+                visible = asyncio.Event()
+                editor.default_buffer.on_completions_changed += lambda buffer: (
+                    visible.set() if buffer.complete_state and buffer.complete_state.completions else None
+                )
+                prompting = asyncio.create_task(editor.prompt_async())
+                pipe.send_text("/inc")
+                await asyncio.wait_for(visible.wait(), timeout=3)
+                assert not prompting.done()
+                assert session._runner is None
+                pipe.send_text("\x1b[B\x1b[B\t\r")
+                return await asyncio.wait_for(prompting, timeout=3)
+
+        completed = asyncio.run(scenario())
+        assert completed == "/kernel.increment"
+        assert commands.handle(completed)["result"] == {"value": 2}

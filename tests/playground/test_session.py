@@ -17,26 +17,26 @@ def call(session: Session, operation: str, **inputs: Any) -> dict[str, Any]:
 
 
 def test_kernel_state_is_retained_reset_and_isolated() -> None:
-    session = Session()
-    assert call(session, "run", amount=3)["result"] == {"value": 6}
-    assert call(session, "increment", amount=-1)["result"] == {"value": 4}
-    state = call(session, "state")["result"]["namespaces"]
-    assert state["counter"] == {"value": 4, "history": [6]}
-    assert state["extension"] == {"notifications": 1, "last_value": 6}
-    assert state["client"] == {"calls": 1}
-    assert call(Session(), "state")["result"]["namespaces"]["counter"]["value"] == 0
-    call(session, "reset", extension=False)
-    assert call(session, "increment", amount=3)["result"] == {"value": 3}
-    assert call(session, "run")["error"]["code"] == "execution_error"
-    assert call(session, "increment")["result"] == {"value": 4}
+    with Session() as session, Session() as other:
+        assert call(session, "run", amount=3)["result"] == {"value": 6}
+        assert call(session, "increment", amount=-1)["result"] == {"value": 4}
+        state = call(session, "state")["result"]["namespaces"]
+        assert state["counter"] == {"value": 4, "history": [6]}
+        assert state["extension"] == {"notifications": 1, "last_value": 6}
+        assert state["client"] == {"calls": 1}
+        assert call(other, "state")["result"]["namespaces"]["counter"]["value"] == 0
+        call(session, "reset", configuration={"modules": ["counter"]})
+        assert call(session, "increment", amount=3)["result"] == {"value": 3}
+        assert call(session, "run")["error"]["code"] == "execution_error"
+        assert call(session, "increment")["result"] == {"value": 4}
 
 
 @pytest.mark.parametrize("inputs", [{"amount": True}, {"amount": "2"}, {"amount": 2.5}, {"extra": 2}])
 def test_invalid_input_is_rejected_before_state_changes(inputs: dict[str, Any]) -> None:
-    session = Session()
-    before = call(session, "state")
-    assert call(session, "increment", **inputs)["error"]["code"] == "invalid_input"
-    assert call(session, "state") == before
+    with Session() as session:
+        before = call(session, "state")
+        assert call(session, "increment", **inputs)["error"]["code"] == "invalid_input"
+        assert call(session, "state") == before
 
 
 def test_pipe_remains_json_after_bad_input_and_cli_parse_errors() -> None:

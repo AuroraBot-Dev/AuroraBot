@@ -1,6 +1,6 @@
 # 模块独立工作台
 
-用于在模块接入完整系统前独立装配、控制输入并观察真实行为。公共层负责入口、校验和展示，模块自己负责运行环境。Agent 支持可编辑离线依赖、Python 端口注入和运行记录复现；Kernel 与 CLI 当前仍以固定示例和命令调用为主。
+用于在模块接入完整系统前独立装配、控制输入并观察真实行为。公共层负责实例管理、资源释放、校验和记录，模块声明自己的配置、装配与操作。Agent 和 Kernel 共用这套机制；CLI 当前提供无实例的命令调用。
 
 从仓库根目录启动终端会话：
 
@@ -49,7 +49,7 @@ uv run aurora playground --module kernel
 /describe increment
 /increment {"amount":3}
 /state
-/kernel.reset {"extension":false}
+/kernel.reset {"configuration":{"modules":["counter"]}}
 /aurora --help
 /aurora config --missing
 /cli.execute {"argv":["--version"]}
@@ -91,15 +91,15 @@ uv run aurora playground --module kernel
 {"ok":true,"module":"kernel","operation":"increment","result":{"value":6}}
 ```
 
-`kernel` 使用真实内核与内存示例模块，支持 `increment`、`describe`、`notify`、`run`、`state` 和 `reset`。连续调用保留状态；`increment` 只执行增量，`run` 同时发送通知。用下面的请求读取状态、重置为无扩展的计数器，再递增：
+`kernel` 使用真实 Host，支持选择模块组合、通用 `call` 和真实路由观察，也保留 `increment`、`describe`、`notify`、`run` 快捷操作。连续调用保留状态；`increment` 只执行增量，`run` 同时发送通知。用下面的请求读取状态、重置为只装配 counter，再递增：
 
 ```json
 {"module":"kernel","operation":"state"}
-{"module":"kernel","operation":"reset","input":{"extension":false}}
+{"module":"kernel","operation":"reset","input":{"configuration":{"modules":["counter"]}}}
 {"module":"kernel","operation":"increment","input":{"amount":3}}
 ```
 
-重置后的返回值为 `3`；此时 `run` 不可用，因为没有装配 client。执行 `reset` 并传入 `{"extension":true}` 可重新启用扩展，状态重新从零开始。
+重置后递增返回 `3`；此时 `run` 不可用，因为没有装配 client。传入 `{"configuration":{"modules":["counter","extension","client"]}}` 重置可恢复完整组合。`inspect` 观察实际模块和调用路由，`export` 与 `replay` 使用公共记录机制；通过 Python 可换入自己的 namespace，见 [Kernel 工作台](modules/kernel/README.md)。
 
 `cli.execute` 通过独立进程执行真实 `aurora` 命令，每次调用独立，读取当前项目的个人配置与 CLI 插件。可以直接输入 `aurora ...`，也可以提供 `argv` 数组或 `command` 字符串，两者必须且只能提供一个：
 
@@ -196,10 +196,11 @@ playground/
 │   │   ├── models.py    # JSON 输入与快照输出模型
 │   │   └── fixtures.py  # 共用的离线模型、工具和策略
 │   ├── cli/
-│   │   ├── __init__.py  # 操作适配与 MODULE
+│   │   ├── __init__.py  # 操作声明与 MODULE
 │   │   └── fixtures.py  # 共用的演示命令声明
 │   └── kernel/
-│       ├── __init__.py  # 操作适配与 MODULE
+│       ├── __init__.py  # 本地快捷操作与 MODULE
+│       ├── environment.py # Host 装配、模块选择与路由观察
 │       └── fixtures.py  # 共用的内存模块声明
 └── examples/            # 可独立运行的预设场景
 ```

@@ -146,6 +146,9 @@ class Workspace:
 
     async def reset(self, instance_id: str = "default", configuration: dict[str, Any] | None = None) -> Model:
         parsed = self.spec.configuration.model_validate(configuration) if configuration is not None else None
+        if instance_id not in self._instances and self.spec.implicit:
+            # 首次 reset 直接装配目标配置，不能先准备一遍未选中的默认模块。
+            return await self.create(configuration if configuration is not None else {}, instance_id)
         old = await self.ensure(instance_id)
         parsed = old.configuration if parsed is None else parsed
         with self.claim(instance_id):
