@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -32,7 +32,7 @@ She has her own persona and state, and can connect with people and the outside w
 
 AuroraBot treats the Bot as the subject of her world, not an interface to be called: she persists, with her own persona, state, and boundaries, and everything is designed around her life. This principle lands in three points in the architecture:
 
-- **She owns the world; a tree is only one of her runs**: the Bot holds an append-only world journal (WorldJournal) and multiple `AgentTree`s. A tree is only one run, not another subject parallel to her; chats, tasks, and delegations are episodes in her life, and when an episode ends, she still exists.
+- **She owns the world; each run is an experience**: the Bot has her own world, goals, and memories. Each cognitive run is an episode in her life; chats, tasks, and delegations are episodes in her life, and when an episode ends, she still exists.
 - **Every input has a medium**: any change that affects her must first become a world event. The message you send her must first be committed to her world as `console.input`, and so are application events, MCP reports, tool results, and the passage of time. She is not responding to an interface; she is experiencing her world.
 - **She understands before she decides**: a message from a user does not automatically become the highest command just because of its source. She first understands what happened, then decides to respond, act, delegate, or stay quiet; the model is only responsible for understanding and judgment, external actions must go through declared Tools, and outcomes return to her world as new events.
 
@@ -50,7 +50,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the docs/panel submodules.
+`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the application workspace.
 
 ### 2. Fill in the required configuration
 
@@ -66,11 +66,11 @@ Type a message after startup to chat; use `/help` to discover operations and `/e
 
 ## AIGC
 
-This project contains code written with assistance from generative models such as large language models or diffusion models, and it has been reviewed by humans.
+This project contains human-reviewed code written with assistance from generative models.
 
 ## Contributing
 
-See [Contributing to AuroraBot](CONTRIBUTING.en.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](CODE_OF_CONDUCT.md).
+See [Contributing to AuroraBot](apps/docsite/src/develop/index.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](apps/docsite/src/reference/CODE_OF_CONDUCT.md).
 
 ## Acknowledgements
 
@@ -80,7 +80,6 @@ AuroraBot would not exist without many excellent open-source projects:
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider integration and call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP client and tool protocol                       |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Local Panel backend                                |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console and terminal experience                    |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal persistence                           |
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -32,7 +32,7 @@ AuroraBot 是一个为 Agent 提供可以"生活"的运行环境的 Bot 框架�
 
 AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一直存在，拥有自己的人格、状态与边界，一切设计都围绕她的生活展开。这个原则落到架构上有三条：
 
-- **她拥有世界，树只是她的运行**：Bot 持有追加式的世界提交（WorldJournal）与多棵 `AgentTree`。一棵树只是一次运行，不是与她平行的另一个主体；聊天、任务、委派都是她生活中的一次经历，经历结束，她仍然存在。
+- **她拥有世界，运行只是她的经历**：Bot 持有自己的世界、目标与记忆。一次认知运行只是她的一段经历；聊天、任务、委派都是她生活中的一次经历，经历结束，她仍然存在。
 - **一切输入都有媒介**：任何影响她的变化都必须先成为一条世界事件。你发给她的消息要先作为 `console.input` 提交到她的世界，应用事件、MCP 上报、工具结果、时间的流逝也是如此。她不是在响应接口，而是在经历世界。
 - **她理解之后才决定**：来自用户的消息不会因为来源就自动成为最高指令。她先理解发生了什么，再决定回应、行动、委派或保持安静；模型只负责理解与判断，外部行动必须经声明的 Tool 执行，结果再作为新事件回到她的世界。
 
@@ -50,7 +50,7 @@ cd AuroraBot
 # Windows: .\scripts\windows\setup.ps1.
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及 docs/panel 子模块引导。
+`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及应用工作区依赖安装。
 
 ### 2. 填写必要配置
 
@@ -66,11 +66,11 @@ aurora start
 
 ## AIGC
 
-本项目存在由大语言模型或扩散模型等生成式模型辅助编写的代码, 并经由人工审核.
+本项目存在经由人工审核的由生成式模型辅助编写的代码.
 
 ## 参与贡献
 
-见[参与 AuroraBot](CONTRIBUTING.md)与[AuroraBot 文档站](https://www.aurorabot.org), 提交贡献即表示你同意遵守项目的[社区行为准则](CODE_OF_CONDUCT.md).
+见[参与 AuroraBot](apps/docsite/src/develop/index.md)与[AuroraBot 文档站](https://www.aurorabot.org), 提交贡献即表示你同意遵守项目的[社区行为准则](apps/docsite/src/reference/CODE_OF_CONDUCT.md).
 
 ## 开源致谢
 
@@ -80,7 +80,6 @@ AuroraBot 的诞生离不开许多优秀的开源项目：
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | 模型 Provider 接入与调用基础设施 |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP 客户端与工具协议             |
-| [FastAPI](https://github.com/fastapi/fastapi) / [Uvicorn](https://github.com/encode/uvicorn)                           | Panel 本地后端                   |
 | [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console 与终端体验               |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal 持久化              |
 

@@ -1,0 +1,9 @@
+[[platform]]
+id = "aurora:platform/console"
+enabled = true
+logging = "INFO"
+
+[[platform]]
+id = "aurora:platform/mcp"
+enabled = true
+logging = "INFO"

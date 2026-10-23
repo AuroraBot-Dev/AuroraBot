@@ -36,19 +36,22 @@ htmlcov/
 .coverage.*
 coverage.xml
 .pytest_cache/
+tests/.tmp/
 
 # OS
 .DS_store
 config.ini
 
 # Project data
-logs/
-data/
-temp/
-extensions/
+/data/
+/models/
+/extensions/
+/config/
 
 # IDE / Editor
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .editor/
 .cursor/
 .idea/
@@ -64,5 +67,16 @@ graphify-out/
 # cache
 .npm-cache/
 
-# personal config copied from config.example
-config/
+# Node.js / Vue 应用工作区
+node_modules/
+.pnpm-store/
+.vitepress/cache/
+.vitepress/dist/
+*.tsbuildinfo
+
+# 前端构建与检查缓存
+.vitepress/.temp/
+.eslintcache
+.stylelintcache
+*.log
+*.local

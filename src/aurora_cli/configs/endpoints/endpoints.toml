@@ -1,0 +1,24 @@
+[[endpoint]]
+name = "aurora:ai/endpoint/default"
+provider = "aurora:ai/provider/deepseek"
+model = "deepseek-chat"
+
+[[endpoint]]
+name = "aurora:ai/endpoint/fast"
+provider = "aurora:ai/provider/deepseek"
+model = "deepseek-v4-flash"
+
+[[endpoint]]
+name = "aurora:ai/endpoint/quality"
+provider = "aurora:ai/provider/deepseek"
+model = "deepseek-v4-pro"
+
+[[endpoint]]
+name = "aurora:ai/endpoint/multimodal"
+provider = "aurora:ai/provider/xiaomi_mimo"
+model = "mimo-v2.5-pro"
+
+[[endpoint]]
+name = "aurora:ai/endpoint/embedding"
+provider = "aurora:ai/provider/siliconflow"
+model = "BAAI/bge-m3"

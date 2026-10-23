@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    "charliermarsh.ruff",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "tamasfe.even-better-toml",
+    "mikestead.dotenv",
+    "EditorConfig.EditorConfig",
+    "Vue.volar",
+    "dbaeumer.vscode-eslint",
+    "oxc.oxc-vscode",
+    "esbenp.prettier-vscode",
+    "stylelint.vscode-stylelint",
+    "vitest.explorer",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}

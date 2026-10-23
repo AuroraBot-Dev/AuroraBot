@@ -1,0 +1,21 @@
+{
+  "python.languageServer": "Default",
+  "workbench.browser.openLocalhostLinks": false,
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "*.py": "${capture}.pyi, ${capture}_test.py, test_${capture}.py",
+    "*.ts": "${capture}.js, ${capture}.js.map, ${capture}.d.ts, ${capture}.test.ts, ${capture}.spec.ts",
+    "*.vue": "${capture}.test.ts, ${capture}.spec.ts, ${capture}.module.css, ${capture}.module.scss",
+    "main.py": "main_*.py, main.*.py, __main__.py",
+    "module.py": "config.py, runtime.py, __init__.py",
+    "README.md": "README.*.md, LICENSE*, NOTICE*, CHANGELOG*, CODE_OF_CONDUCT*, CONTRIBUTING*, AGENTS.md, skills-lock.json",
+    "pyproject.toml": "uv.lock, MANIFEST.in, .python-version, pyrightconfig.json, ruff.toml, .ruff.toml, pytest.ini, tox.ini, .coveragerc, .coverage, .coverage.*, coverage.xml",
+    ".env": ".env.*",
+    ".gitignore": ".gitattributes, .gitmodules, .gitmessage, .dockerignore, .editorconfig, .pre-commit-config.yaml",
+    "package.json": "pnpm-lock.yaml, pnpm-workspace.yaml, package-lock.json, yarn.lock, .npmrc, .node-version, .nvmrc, tsconfig*.json, vite.config.*, vitest.config.*, eslint.config.*, oxlint.config.*, prettier.config.*, stylelint.config.*, postcss.config.*, .eslintrc*, .eslintignore, .eslintcache, .oxlintrc*, .prettierrc*, .prettierignore, .stylelintrc*, .stylelintignore, .stylelintcache, *.tsbuildinfo",
+    "Dockerfile": "Dockerfile.*, docker-compose.*, compose.*"
+  },
+  "basedpyright.analysis.inlayHints.variableTypes": false,
+  "basedpyright.disableLanguageServices": true
+}

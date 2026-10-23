@@ -3,7 +3,7 @@ name: Auto Alpha Release
 on:
   push:
     tags:
-      - "v*-alpha.*"
+      - 'v*-alpha.*'
 
 permissions:
   contents: write

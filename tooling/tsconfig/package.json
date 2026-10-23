@@ -1,0 +1,22 @@
+{
+  "name": "@vben/tsconfig",
+  "version": "5.7.0",
+  "private": true,
+  "homepage": "https://github.com/AuroraBot-Dev/AuroraBot",
+  "bugs": "https://github.com/AuroraBot-Dev/AuroraBot/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AuroraBot-Dev/AuroraBot.git",
+    "directory": "tooling/tsconfig"
+  },
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "base.json",
+    "node.json",
+    "web.json"
+  ],
+  "dependencies": {
+    "vite": "catalog:"
+  }
+}

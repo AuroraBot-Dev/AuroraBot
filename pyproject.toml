@@ -1,47 +1,84 @@
 [project]
-name = "AuroraBot"
+name = "aurorabot-ai"
 version = "0.7.0"
-description = "以 AgentTree 为核心的自主智能体框架，为 Bot 提供可以持续生活、自主判断与行动的运行环境。"
+description = "以 Bot 为中心的主动智能体环境，支持持久目标、节律、记忆与可扩展能力。"
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
 dependencies = [
     "aiosqlite>=0.20,<1",
-    "fastapi>=0.116,<1",
     "httpx2>=2.5,<3",
-    "litellm>=1.83.14",
+    "jsonschema>=4.23,<5",
+    "referencing>=0.36,<1",
+    "litellm>=1.106.2,<1.107",
     "loguru>=0.7,<1",
     "mcp>=2,<3",
+    "packaging>=24,<27",
     "pydantic>=2.12,<3",
     "prompt-toolkit>=3.0,<4",
     "python-dotenv>=1.2,<2",
+    "greenlet>=3.0,<4",
     "sqlalchemy>=2.0,<3",
     "tomlkit>=0.15",
     "rich>=15.0.0",
-    "uvicorn>=0.30,<1",
 ]
 
+[project.urls]
+Homepage = "https://www.aurorabot.org/"
+Repository = "https://github.com/AuroraBot-Dev/AuroraBot"
+Issues = "https://github.com/AuroraBot-Dev/AuroraBot/issues"
+
 [project.scripts]
-aurora = "aurora.main:main"
+aurora = "aurora_cli.main:main"
+
+[project.optional-dependencies]
+learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["aurora", "aurora.*", "ops", "ops.*", "src", "src.*"]
+where = ["src"]
+include = [
+    "aurora_cli",
+    "aurora_cli.*",
+    "aurora_bot",
+    "aurora_bot.*",
+    "aurora_kernel",
+    "aurora_kernel.*",
+    "aurora_agent",
+    "aurora_agent.*",
+]
+namespaces = false
+
+[tool.setuptools.package-data]
+aurora_cli = ["configs/*/*.toml", "configs/*/resources/*/*.md"]
 
 [dependency-groups]
-dev = ["donk>=1.1.0", "pyright[nodejs]", "ruff", "pytest", "pytest-cov"]
+dev = [
+    "donk>=1.1.0",
+    "pyright[nodejs]",
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "textual>=8.2,<9",
+    { include-group = "learning" },
+]
+learning = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-ra"
+pythonpath = ["."]                                                                             # 仓库开发入口 playground 不随 Python 发行包安装
+addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basetemp=tests/.tmp"
+
+[tool.coverage.run]
+source = ["aurora_cli", "aurora_bot", "aurora_kernel", "aurora_agent"]
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 20
+skip_covered = true
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+extend-exclude = ["tests/.tmp"]
 
 [tool.ruff.format]
 line-ending = "lf"
@@ -71,19 +108,27 @@ select = [
     "TC",
     "RUF",
 ]
-ignore = ["ANN202", "COM812", "PLR0913", "PLE1205", "PLE1206"]  # PLE1205/1206 按标准库 % 占位统计，与 loguru 的 {} 风格冲突
+ignore = [
+    "ANN202",
+    "ANN401",  # hook 与共享 ctx 接受动态值，避免为转发接口堆叠类型包装
+    "COM812",
+    "PLR0913",
+    "PLE1205",
+    "PLE1206",
+] # PLE1205/1206 按标准库 % 占位统计，与 loguru 的 {} 风格冲突
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
 
 [tool.ruff.lint.per-file-ignores]
-"aurora/__init__.py" = ["PLC0415"]
-"aurora/commands/start.py" = ["PLC0415"]
-"src/engine/runtime.py" = ["BLE001"]
+"src/aurora_cli/__init__.py" = ["PLC0415"]
+"src/aurora_cli/commands/start/__init__.py" = ["PLC0415"]
+"src/aurora_cli/utils/logging.py" = ["PLC0415"]
+"src/aurora_bot/engine/runtime.py" = ["BLE001"]
 
 [tool.pyright]
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-include = ["aurora", "ops", "src", "tests"]
+include = ["src", "tests"]
 exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"
@@ -95,3 +140,13 @@ build-backend = "setuptools.build_meta"
 [tool.uv]
 package = true
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

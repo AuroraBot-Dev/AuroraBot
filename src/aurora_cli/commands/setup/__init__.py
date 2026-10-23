@@ -1,0 +1,35 @@
+"""提供 ``aurora setup`` 命令插件，转交统一工程引导入口。"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from aurora_cli.plugins import command_plugin
+from aurora_cli.utils.process import run_process
+
+if TYPE_CHECKING:
+    import argparse
+    from pathlib import Path
+
+    from aurora_cli.contracts.command import CommandSpec
+
+COMMAND: CommandSpec = {
+    "name": "setup",
+    "help": "初始化依赖与个人配置",
+    "options": {
+        "--python": "同步 Python 依赖",
+        "--config": "选择是否创建缺失的个人配置（默认跳过）",
+        "--env": "选择创建或重置环境文件（默认保留已有文件）",
+        "--docs": "安装文档站所在的应用工作区依赖",
+    },
+}
+_FLAG_STEPS = ("python", "config", "env", "docs")
+
+
+def execute(arguments: argparse.Namespace) -> int:
+    root: Path = arguments.root
+    flags = tuple(f"--{name}" for name in _FLAG_STEPS if getattr(arguments, name))
+    return run_process(("node", str(root / "scripts" / "setup.ts"), "--no-link", *flags), root)
+
+
+MODULE = command_plugin("aurora.cli.commands.setup", COMMAND, execute)

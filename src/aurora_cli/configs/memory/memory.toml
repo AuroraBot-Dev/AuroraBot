@@ -1,0 +1,5 @@
+[memory]
+window_minutes = 60
+commits_per_scope = 50
+scope_include = []
+scope_exclude = []

@@ -1,0 +1,181 @@
+Screen {
+    min-width: 60;
+    background: #141414;
+    color: #dedbd5;
+}
+
+#toolbar {
+    height: 3;
+    padding: 1 2 0 2;
+}
+
+#brand {
+    width: 1fr;
+    color: #a7a29a;
+    text-style: bold;
+}
+
+Button {
+    height: 1;
+    min-width: 8;
+    width: auto;
+    padding: 0 2;
+    border: none;
+    background: #242424;
+    color: #dedbd5;
+    text-style: none;
+}
+
+Button:hover, Button:focus {
+    background: #34332f;
+    color: #f4dfb4;
+    text-style: none;
+}
+
+Button:disabled {
+    background: #1c1c1c;
+    color: #69665f;
+}
+
+#module {
+    margin-right: 1;
+}
+
+#description {
+    height: 2;
+    margin: 0 2;
+    color: #8f8b83;
+}
+
+#workspace {
+    height: 1fr;
+    padding: 0 2;
+}
+
+#results {
+    height: 1fr;
+}
+
+TabPane {
+    height: 1fr;
+    padding: 0;
+}
+
+Tabs {
+    background: #141414;
+}
+
+Tab {
+    background: #141414;
+    color: #8f8b83;
+}
+
+Tab.-active {
+    color: #e5cca2;
+}
+
+Underline > .underline--bar {
+    color: #ae9671;
+    background: #141414;
+}
+
+TextArea {
+    height: 1fr;
+    border: none;
+    padding: 0 1;
+    background: #141414;
+}
+
+TextArea:focus {
+    border: none;
+}
+
+#request {
+    height: 9;
+    margin: 1 0;
+    padding: 1 1 0 1;
+    background: #202020;
+    border-left: wide #a68c66;
+}
+
+#input {
+    background: #202020;
+}
+
+.caption {
+    height: 1;
+    color: #a7a29a;
+}
+
+#actions {
+    height: 1;
+    margin: 0 0 1 0;
+}
+
+#status {
+    width: 1fr;
+    color: #8f8b83;
+}
+
+#execute {
+    color: #e5cca2;
+    background: #202020;
+}
+
+Footer {
+    background: #141414;
+}
+
+Picker {
+    align: center middle;
+    background: #000000 65%;
+}
+
+#picker {
+    width: 72;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+    padding: 1 2;
+    background: #242424;
+    border: none;
+}
+
+#picker-title {
+    height: 1;
+    color: #e5cca2;
+    text-style: bold;
+}
+
+#picker-search {
+    height: 1;
+    padding: 0 1;
+    margin: 1 0;
+    border: none;
+    background: #303030;
+}
+
+#picker-options {
+    height: auto;
+    max-height: 12;
+    border: none;
+    background: #242424;
+}
+
+#picker-hint {
+    height: 1;
+    margin-top: 1;
+    color: #8f8b83;
+}
+
+
+#picker-options > .option-list--option-highlighted {
+    background: #3c352b;
+    color: #f4dfb4;
+    text-style: none;
+}
+
+Footer > .footer-key--key {
+    color: #bda17a;
+    background: #141414;
+}
