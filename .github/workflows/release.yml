@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已存在且与包版本一致的标签（如 v0.8.0 或 v0.8.0-alpha.1）
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.tag.outputs.sha }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 验证标签、主线归属与工作区版本
+        id: tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ['RELEASE_TAG']
+          match = re.fullmatch(r'v(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.\d+)?', tag)
+          if match is None:
+              raise SystemExit('标签格式必须为 vX.Y.Z 或 vX.Y.Z-alpha/beta/rc.N')
+          sha = subprocess.check_output(['git', 'rev-parse', f'refs/tags/{tag}^{{commit}}'], text=True).strip()
+          subprocess.run(['git', 'merge-base', '--is-ancestor', sha, 'origin/main'], check=True)
+          paths = ['pyproject.toml'] + [
+              f'packages/{name}/pyproject.toml'
+              for name in ('aurora_core', 'aurora_config', 'aurora_control', 'aurora_agent',
+                           'aurora_adapter', 'aurora_bot', 'aurora_cli', 'aurora_api',
+                           'aurora_logging', 'aurora_world')
+          ]
+          for path in paths:
+              content = subprocess.check_output(['git', 'show', f'{sha}:{path}'], text=True)
+              if tomllib.loads(content)['project']['version'] != match[1]:
+                  raise SystemExit(f'{path} 版本与标签不一致')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write(f'sha={sha}\nprerelease={str(match[2] is not None).lower()}\n')
+          PY
+
+  verify:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
+
+  publish:
+    needs: [validate, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aurorabot-wheels
+          path: wheels
+      - name: 创建带 wheel 的 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          current_sha=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          test "$current_sha" = "$RELEASE_SHA"
+          flags=()
+          if [ "$PRERELEASE" = true ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" wheels/*.whl --verify-tag --generate-notes "${flags[@]}"

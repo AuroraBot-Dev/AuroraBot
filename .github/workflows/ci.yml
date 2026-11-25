@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: 要验证的提交或标签
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    name: Python ${{ matrix.python }} 完整检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: 安装锁定工作区依赖
+        run: |
+          uv sync --locked --all-packages
+          pnpm install --frozen-lockfile
+      - name: 完整检查
+        run: pnpm exec uv run --locked aurora check --full
+      - name: 构建全部 wheel 与 Panel
+        if: matrix.python == '3.12'
+        run: |
+          uv build --all-packages --wheel --out-dir build/wheels
+          pnpm --filter @aurorabot/panel build
+      - name: 保存 Python 分发包
+        if: matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurorabot-wheels
+          path: build/wheels/*.whl
+          if-no-files-found: error
+      - name: 保存 Panel
+        if: matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurorabot-panel
+          path: apps/aurora_panel/dist/
+          if-no-files-found: error
