@@ -1,0 +1,6 @@
+[steady]
+adapter = "dev.example.workshop:adapters/fake"
+model = "steady"
+[fast]
+adapter = "dev.example.workshop:adapters/fake"
+model = "fast"

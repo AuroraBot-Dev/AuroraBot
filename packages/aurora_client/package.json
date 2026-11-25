@@ -1,0 +1,16 @@
+{
+  "name": "@aurorabot/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@vben/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

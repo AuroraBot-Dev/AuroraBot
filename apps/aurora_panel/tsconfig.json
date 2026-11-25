@@ -1,0 +1,11 @@
+{
+  "extends": "@vben/tsconfig/web.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts", "vite.config.ts"],
+  "vueCompilerOptions": {
+    "strictTemplates": true,
+    "dataAttributes": ["aria-*", "data-*", "role"]
+  }
+}

@@ -18,3 +18,15 @@
 **/yarn.lock
 **/pnpm-lock.yaml
 **/bun.lockb
+
+# Python 环境、产物与工具缓存
+**/.venv/**
+**/build/**
+**/*.egg-info/**
+**/__pycache__/**
+**/.pytest_cache/**
+**/.ruff_cache/**
+uv.lock
+
+# 项目说明单独维护
+**/*.md

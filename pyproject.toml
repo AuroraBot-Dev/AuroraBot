@@ -1,152 +1,110 @@
 [project]
 name = "aurorabot-ai"
-version = "0.7.0"
-description = "以 Bot 为中心的主动智能体环境，支持持久目标、节律、记忆与可扩展能力。"
-license = "Apache-2.0"
-readme = "README.md"
-requires-python = ">=3.12, <3.15"
+version = "0.1.0"
+description = "AuroraBot unified installation package"
+requires-python = ">=3.12"
 dependencies = [
-    "aiosqlite>=0.20,<1",
-    "httpx2>=2.5,<3",
-    "jsonschema>=4.23,<5",
-    "referencing>=0.36,<1",
-    "litellm>=1.106.2,<1.107",
-    "loguru>=0.7,<1",
-    "mcp>=2,<3",
-    "packaging>=24,<27",
-    "pydantic>=2.12,<3",
-    "prompt-toolkit>=3.0,<4",
+    "aurora-bot>=0.1.0",
+    "aurora-cli>=0.1.0",
+    "aurora-api>=0.1.0",
+    "aurora-world[environment]>=0.1.0",
+    "aurora-adapter[mcp-bot]>=0.1.0",
     "python-dotenv>=1.2,<2",
-    "greenlet>=3.0,<4",
-    "sqlalchemy>=2.0,<3",
-    "tomlkit>=0.15",
-    "rich>=15.0.0",
 ]
 
-[project.urls]
-Homepage = "https://www.aurorabot.org/"
-Repository = "https://github.com/AuroraBot-Dev/AuroraBot"
-Issues = "https://github.com/AuroraBot-Dev/AuroraBot/issues"
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
-[project.scripts]
-aurora = "aurora_cli.main:main"
-
-[project.optional-dependencies]
-learning = ["torch>=2.6,<3", "numpy>=2,<3"]
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = [
-    "aurora_cli",
-    "aurora_cli.*",
-    "aurora_bot",
-    "aurora_bot.*",
-    "aurora_kernel",
-    "aurora_kernel.*",
-    "aurora_agent",
-    "aurora_agent.*",
-]
-namespaces = false
-
-[tool.setuptools.package-data]
-aurora_cli = ["configs/*/*.toml", "configs/*/resources/*/*.md"]
+[tool.setuptools]
+packages = []
 
 [dependency-groups]
 dev = [
-    "donk>=1.1.0",
-    "pyright[nodejs]",
-    "ruff",
-    "pytest",
-    "pytest-cov",
-    "textual>=8.2,<9",
-    { include-group = "learning" },
+    "pytest>=8",
+    "pytest-cov>=6",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.9",
+    "tomli-w>=1.2,<2",
 ]
-learning = ["torch>=2.6,<3", "numpy>=2,<3"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]                                                                             # 仓库开发入口 playground 不随 Python 发行包安装
-addopts = "-ra --import-mode=importlib --strict-config --strict-markers --basetemp=tests/.tmp"
 
 [tool.coverage.run]
-source = ["aurora_cli", "aurora_bot", "aurora_kernel", "aurora_agent"]
+source = [
+    "aurora_adapter",
+    "aurora_config",
+    "aurora_core",
+    "aurora_control",
+    "aurora_agent",
+    "aurora_cli",
+    "aurora_bot",
+    "aurora_api",
+    "aurora_logging",
+    "aurora_world",
+]
 
 [tool.coverage.report]
 fail_under = 20
 skip_covered = true
 
+[tool.pytest.ini_options]
+testpaths = ["packages/*/tests", "tests"]
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+include = [
+    "packages/*/src",
+    "packages/*/tests",
+    "tests",
+    "conftest.py",
+    "scripts",
+    "examples",
+]
+exclude = ["**/__pycache__", "**/node_modules", ".venv", "build", "dist"]
+extraPaths = [
+    "packages/aurora_adapter/src",
+    "packages/aurora_config/src",
+    "packages/aurora_core/src",
+    "packages/aurora_control/src",
+    "packages/aurora_agent/src",
+    "packages/aurora_bot/src",
+    "packages/aurora_cli/src",
+    "packages/aurora_api/src",
+    "packages/aurora_logging/src",
+    "packages/aurora_world/src",
+]
+
+[tool.uv.workspace]
+members = [
+    "packages/aurora_adapter",
+    "packages/aurora_config",
+    "packages/aurora_core",
+    "packages/aurora_control",
+    "packages/aurora_agent",
+    "packages/aurora_bot",
+    "packages/aurora_cli",
+    "packages/aurora_api",
+    "packages/aurora_logging",
+    "packages/aurora_world",
+]
+
+[tool.uv.sources]
+aurora-adapter = { workspace = true }
+aurora-config = { workspace = true }
+aurora-core = { workspace = true }
+aurora-control = { workspace = true }
+aurora-agent = { workspace = true }
+aurora-bot = { workspace = true }
+aurora-cli = { workspace = true }
+aurora-api = { workspace = true }
+aurora-logging = { workspace = true }
+aurora-world = { workspace = true }
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = ["tests/.tmp"]
 
 [tool.ruff.format]
 line-ending = "lf"
-
-[tool.ruff.lint]
-select = [
-    "F",
-    "W",
-    "E",
-    "I",
-    "C90",
-    "N",
-    "PL",
-    "UP",
-    "ANN",
-    "ASYNC",
-    "BLE",
-    "B",
-    "COM",
-    "DTZ",
-    "T10",
-    "PIE",
-    "T20",
-    "PTH",
-    "RET",
-    "SIM",
-    "TC",
-    "RUF",
-]
-ignore = [
-    "ANN202",
-    "ANN401",  # hook 与共享 ctx 接受动态值，避免为转发接口堆叠类型包装
-    "COM812",
-    "PLR0913",
-    "PLE1205",
-    "PLE1206",
-] # PLE1205/1206 按标准库 % 占位统计，与 loguru 的 {} 风格冲突
-allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "（", "）", "、"]
-
-[tool.ruff.lint.per-file-ignores]
-"src/aurora_cli/__init__.py" = ["PLC0415"]
-"src/aurora_cli/commands/start/__init__.py" = ["PLC0415"]
-"src/aurora_cli/utils/logging.py" = ["PLC0415"]
-"src/aurora_bot/engine/runtime.py" = ["BLE001"]
-
-[tool.pyright]
-pythonVersion = "3.12"
-pythonPlatform = "All"
-typeCheckingMode = "standard"
-include = ["src", "tests"]
-exclude = [".venv", "**/node_modules", "**/__pycache__", "**/.*"]
-venvPath = "."
-venv = ".venv"
-
-[build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
-
-[tool.uv]
-package = true
-index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true

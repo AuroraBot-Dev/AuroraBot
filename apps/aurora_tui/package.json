@@ -1,0 +1,20 @@
+{
+  "name": "@aurorabot/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-ffi src/main.ts",
+    "test:terminal": "node --experimental-ffi --test tests/terminal.native.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aurorabot/client": "workspace:*",
+    "@opentui/core": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

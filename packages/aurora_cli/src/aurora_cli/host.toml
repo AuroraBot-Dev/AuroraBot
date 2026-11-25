@@ -1,0 +1,4 @@
+# 启用的插件 entry point 名称；依赖插件也须显式列出。
+plugins = []
+# 默认装配；需要运行 bot 时取消注释并启用对应插件。
+# assembly = "org.aurora.bot:assemblies/default"

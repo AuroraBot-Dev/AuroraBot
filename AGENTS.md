@@ -1,49 +1,115 @@
-# AuroraBot
+## 编码规范
 
-以 Bot 为中心设计：Bot 是持久主体，拥有世界、目标与记忆；认知执行有明确的输入和结果，不要求树状拓扑。
+- 以**中文**为项目的主要注释、提交和 docstring 语言。
+- 遵循小步提交规范，不在暂存区留存大量未提交更改。使用谷歌风格的提交信息，以动词开头，说明本次提交的目的。
+- 新功能须在 `feat/<功能名>` 分支上开发，完成相关验证后通过 PR 合并到 `main`，不直接向 `main` 提交新功能。
+- 开始工作前检查工作区和暂存区；提交包含本任务范围和在任务范围内的用户的修改，不夹带其他任务的修改。
+- 不编写过程解释性注释，直接描述当前职责、行为和约束，不在代码中叙述改动历史。
+- 更改 README.md 或 AGENTS.md 需要用户确认；用户明确要求修改该文件即视为确认，不重复询问。
+  - README.md 一般保持稳定，不轻易改动。
+  - 可以捕捉用户提出的要求，并询问是否记录到 AGENTS.md。
+- 变更说明和验收记录写入[变更文档](docs/CHAGELOG.md)，不另外创建过程记录；用户明确指定独立文档时按指定位置编写。
+- 拆包或调整接口时同步处理依赖、公共 ID、插件入口、配置、消费者、示例和文档，不留下未经要求的兼容别名、转发层或重复实现。
+- 涉及 Github 操作的行为优先通过 gh-cli 完成.
 
-## 设计边界
+## 项目结构
 
-- 外部输入先成为世界事件；Bot 理解后决定回应或行动，外部效果经声明的 Tool 执行，结果回到世界。
-- 认知入口只传递请求与结果；默认执行器复用 `aurora_agent.Run`，独立上下文、消息配对和运行上界由执行器保障，不内建树、父子 Agent 或委派调度。
-- `ChatMessage` 只有 system/message/assistant/tool；仅 Provider adapter 映射协议角色，模型身份显式进入每次请求。
-- `PromptAssembler` 只装配上下文，记忆快照显式注入；必要状态与约束超限时在模型调用或行动前失败。
-- 世界只校验、编号和追加，提交方决定 scope；通过 contracts 端口访问，禁止跨包导入 world 实现。
-- Bot 状态与时钟可独立替换；记忆、检查点、模型投影分开保存，后续反馈不得泄漏到过去查询。
-- 操作定义统一生成工具与终端入口，持久保存版本、请求、回执和因果；效果未知的非幂等操作不自动重放。
+```text
+.
+├── packages/
+│   ├── aurora_core/           # 微内核
+│   ├── aurora_config/         # 配置声明、校验、TOML 模板与加载服务
+│   ├── aurora_control/        # 执行契约与控制组合
+│   ├── aurora_agent/          # ReAct、模型调用、工具执行与运行调度
+│   ├── aurora_adapter/        # 模型协议、模型供应商与 MCP 适配
+│   ├── aurora_bot/            # 默认装配、配置与产品入口
+│   ├── aurora_cli/            # 命令行交互
+│   ├── aurora_api/            # HTTP / WS 传输
+│   ├── aurora_logging/        # 日志配置
+│   ├── aurora_world/          # 世界来源、事件归档与环境观察
+│   └── aurora_client/         # TS 共享 ctx 访问与连接
+├── apps/
+│   ├── aurora_tui/            # OpenTUI 终端界面
+│   ├── aurora_panel/          # Vue Web 界面
+│   ├── docsite/               # 文档站
+│   └── landing/               # 落地页
+├── docs/                     # 设计与公共 ID 文档
+├── examples/                 # 首次安装配置助手：朴素 ReAct + terminal MCP
+├── scripts/                  # 开发与按需生成脚本
+├── tooling/                  # TS、lint 与样式工具共享配置
+└── tests/
+    ├── contract/
+    └── e2e/
+```
 
-## 包与组合
+## 包边界
 
-- `src/aurora_kernel/` 是唯一通用组合机制：namespace、hook、ctx、发现、依赖解析和生命周期；不依赖 CLI 或 Bot。
-- `src/aurora_agent/` 提供独立 ReAct 任务执行核心，不依赖 Bot 或 CLI，不内置树与委派调度；宿主注入模型、工具、上下文装配和行动前策略，追加输入在工具调用全部配对后的安全边界交付。
-- 装饰器注册命名空间和调用点；宿主自动创建 ctx，模块可读写全部空间，事务检测冲突并记录来源。
-- namespace 不隔离权限；容器读写使用快照，服务对象按引用共享，ctx 不替代世界日志。
-- `src/aurora_bot/kernel/` 适配命名服务、贡献、资源和世界域，不重复实现内核，不以 Python 契约类型充当服务键；接线和生命周期跟随选中能力，失选实现不产生准备效果。
-- `src/aurora_bot/runtime/` 负责 Bot 装配与门面；功能包运行时只依赖自身、contracts、utils，兄弟能力通过注入调用。
-- 功能包的 `module.py` 可引用 Bot kernel 并导出唯一 `MODULE`；兄弟实现的类型引用限于 `TYPE_CHECKING`。
-- `src/aurora_cli/` 负责命令、配置和进程环境；命令入口保持 `aurora`。四个导入包同属一个发行包，Bot 不导入 CLI。
-- 命令与配置按目录发现；插件来自内置包、`extensions/plugins/` 和 entry point。兼容性、冲突与依赖环在准备效果前校验。
-- `src/aurora_cli/configs/<name>/` 保存同名解析器与 TOML 模板，CLI 在启动时补齐缺失的个人配置；个人 `config/`、本机扩展由 Git 忽略。前端位于 `apps/`，工程配置位于 `tooling/`。
+| 包 | 职责与约束 |
+| --- | --- |
+| `aurora_core` | 提供 ID、登记、ctx、订阅、连接、调用、生命周期和持久化机制；不承担 TOML 加载、配置 schema 策略、模型或业务流程控制 |
+| `aurora_config` | 基于 core 提供配置声明、结构及关联校验、模板文件处理和 config 阶段服务；core 不反向依赖配置包 |
+| `aurora_control` | 提供执行身份、状态绑定、插头插槽及 Serial、Branch、While、Parallel；仅依赖 core，不依赖 agent 或模型 |
+| `aurora_adapter` | `model` 提供模型协议、能力声明、供应商适配与模型配置，`mcp` 提供外部协议及工具/世界桥；SDK 和桥依赖按 extra 安装，基础包仅依赖 core |
+| `aurora_agent` | 提供 ReAct、模型调用、工具执行、默认阶段和 AgentRuntime；不依赖 bot、CLI 或 API |
+| `aurora_bot` | 提供默认配置、产品装配、资源所有权、运行操作与命令；使用 agent，不复制 agent 的执行机制 |
+| `aurora_cli` / `aurora_api` | 提供宿主、命令交互与 HTTP/WS 传输；不重复实现 agent 业务语义 |
+| `aurora_logging` / `aurora_world` | 分别提供日志配置与世界来源、事件归档及有界环境观察；主动调度由 bot 的 cadence 接入 |
+| `aurora_client` / `apps/*` | 客户端复用后端 ctx 语义，界面与静态站点不承担 Python 插件装配 |
 
-## 文档与范围
+执行依赖方向为 `bot → agent → control → core`；agent 和 bot 也可直接使用 core 与 aurora_adapter.model。agent 仅依赖 adapter 基础包；bot 使用 litellm extra；MCP 的工具、世界和产品桥通过独立 extra 与插件显式启用。配置能力通过 aurora_config 接入。独立 `aurora_harness` 是后续目标，不提前引入尚无实际消费者的框架抽象。
 
-- README 以当前版本为基准，保留介绍、设计哲学、快速开始和致谢；不追加实现细节或接口清单, 不随意改动README.
-- 文档站面向使用者与扩展开发者，聚焦操作指引、稳定概念、当前能力和使用限制，减少内部实现细节；不维护源码包表、内部类与字段清单、内部执行步骤或测试文件索引。
-- 内部代码重构、组织调整和实现替换原则上不要求修改文档站；引导用户交互或影响安装、配置、命令、公开扩展用法及使用结果的变更，才同步更新相关页面。实现说明就近维护在源码注释、包内 README 或测试中。
-- 尚不便确定或未经核实的文档内容统一写“文档待编写”，不得根据设想编造用法、能力、接口或保证。
-- 文档站阅读入口为 [系统总览](apps/docsite/src/architecture/system-overview.md)；扩展指引见 `apps/docsite/src/develop/`，使用参考见 `apps/docsite/src/reference/`。
-- 当前不推进 RFC；源码注释直接说明局部不变量，不引用 RFC 编号。
-- 面向人的文本以简体中文为准，描述当前能力和限制，不使用实验、旧版、迁移等历史阶段叙事。
-- 文档站只写当前用法、能力、限制和必要原理；变更经过、修复说明统一写入 `docs/CHANGELOG.md`，RFC 与未实施草案放在 `docs/rfc/`，不进入文档站。
+## 公共 ID 与插件
+
+- ID 格式为 `<namespace>:<domain>/<local_path>`。公开定义按所属包命名：`org.aurora.core`、`org.aurora.config`、`org.aurora.control`、`org.aurora.agent`、`org.aurora.bot` 等。
+- control 和 agent 的定义不能放在 bot 命名空间。bot 装配分配的配置、消息、引导、运行及工作状态地址仍归 bot，由状态绑定注入 agent。
+- 插件发现分组为 `aurora.plugins`；entry point 名称与 `Plugin.name` 一致。控制入口为 `aurora_control`，agent 入口为 `aurora_agent.model`、`aurora_agent.react`、`aurora_agent.tools`、`aurora_agent.react_defaults`。
+- 适配包名使用单数 `aurora_adapter`，模型入口为 `aurora_adapter.model`，MCP 入口为 `aurora_adapter.mcp` 及其桥插件；公共定义统一归属 `org.aurora.adapter`，local_path 按 model/mcp 区分。
+- 安装包与启用插件分开；`requires` 只校验依赖插件已显式启用，不隐式加载依赖。只使用执行契约不要求启用四种控制组件。
+- 定义身份、实例身份、run_id 与 execution_id 分开管理。调用等待决定执行结束，不能用残留状态推断调用完成。
+- ID 或插件名变更须说明配置和快照的影响，不自动改写或删除用户数据；不要为通过恢复测试而静默忽略未登记的状态。
+
+## 配置与运行约定
+
+- 配置声明、模板和通用校验使用 `aurora_config`。插件通过 `ConfigSpec`、`ConfigSchema`、`ConfigTemplate` 和 `config_entries` 声明配置及对应的非持久状态，避免各包重复实现加载和默认值处理。
+- TOML 是配置的持久来源；ctx 中的配置状态设置 `persistent=False`。运行期覆盖不自动写回文件，不把配置混入业务快照。
+- 模板使用包内 `config.toml` 或 `config.tomls/`，同一包不同时提供两种形式；发布时包含模板资源。只复制缺失的用户文件，不覆盖已有配置。
+- 宿主在恢复业务状态后执行 config 阶段，完成配置校验与注入，再执行 prepare/start。资源在配置就绪后创建；插件发现和定义查询不启动模型、工具或后台任务。
+- 运行期凭证单独解析，不进入 TOML 模板、ctx、快照或日志。
+- 每个 agent 实例只有一个调度所有者。AgentRuntime 的 execute 等待激活和清理完成，is_executing 覆盖整个占用期间；引导 progress 表示已接纳，不表示业务完成。
+- 等待者取消不隐式取消 agent；显式取消须等待收尾。关闭时停止接收工作、结束自有任务、关闭工具与模型，再由宿主完成最终落盘。
+- 恢复状态不代表透明续跑；未完成工具动作不自动重试，避免重复副作用。状态保留与裁剪由宿主明确，不由 core 推断。
 
 ## 开发与验证
 
-- Python 3.12 使用 uv；前端使用 Node.js 24、pnpm 12。测试前执行 `uv sync --locked --group dev` 安装项目。
-- Ruff 行宽 120、LF、双引号；单个源码文件不超过 600 行，纯字段模型可例外。
-- 公开 API 保留必要注解，值对象优先 frozen + slots dataclass；hook 与 ctx 允许 Any，不堆叠类型包装，不以 lint ignore 掩盖复杂度。
-- 测试必须离线、确定，无网络或环境变量依赖；Model/Tool 使用 fake，数据库仅用于 WorldJournal 临时 SQLite 集成测试。
-- pytest 使用 importlib 模式，测试按能力分目录；专用辅助代码就近放置，跨能力替身放 `tests/support/`，经 `tests.*` 导入。
-- 优先验证认知循环、持久化、幂等、未知效果恢复、权限与路径、脱敏和记忆时间边界；不为简单转发或覆盖率补重复测试。
-- 日常不采集覆盖率；按需使用 `uv run aurora check --test --coverage`，CI 下限 20%，不作为删减目标。
-- 不提交密钥或真实会话；日志不记录 Prompt、消息正文、工具参数或凭据。
-- 提交前运行 `uv run aurora check --fix` 或 `pnpm check`。
+Python 使用 uv workspace，版本要求见各包 pyproject.toml；Node 与 pnpm 版本以根 package.json 为准。
+
+```powershell
+# 安装 Python 工作区
+uv sync --locked --all-packages
+# 日常检查：格式、lint、Python/TypeScript 类型与快速边界测试
+uv run --locked aurora check
+# 完整检查：另含包内单测、前端、原生终端与长耗时集成测试
+uv run --locked aurora check --full
+# 按影响范围先运行针对性测试
+uv run --locked pytest packages/aurora_agent/tests/unit/test_agent_runtime.py tests/e2e/test_package_boundaries.py -q
+# 验证分发包与资源
+uv build --all-packages --wheel --out-dir build/wheels
+```
+
+- 根据改动选择有意义的验证。日常 `aurora check` 只收集快速边界测试，`--test` 跳过静态检查，`--full` 显式启用完整测试，`--coverage` 也使用完整测试范围。纯文档修改检查链接与差异，不为此运行无关测试；涉及跨包契约、生命周期或配置行为时完成相关回归和 `aurora check --full`。
+- 新增测试须覆盖现有用例无法验证的关键行为或真实缺陷，优先扩展、合并或替换既有用例，并在变更说明中交代独有价值；不为同一行为堆叠跨层重复测试、同类边界枚举或参数笛卡尔积，不添加仅复述实现步骤的断言，集成测试只保留代表链路。新增或扩大测试范围后，须在依赖已安装的同一开发环境实测完整命令墙钟时间，确保 `aurora check` 不超过 15 秒、`aurora check --full` 不超过 60 秒；超预算优先精简重复覆盖或改用可控夹具，不通过跳过检查、削弱有效断言或继续增加 worker 数规避。
+- 拆包、依赖或分发内容变更还需验证 wheel；在干净环境中确认 control 无需 agent/模型包，agent 无需 bot/CLI/API。工作区可导入不能代替安装验收。
+- 包级单元测试和协议测试分别位于 `packages/<包>/tests/unit`、`packages/<包>/tests/contract`；跨包契约测试位于根目录 `tests/contract`，工作区、真实进程及跨包集成测试位于根目录 `tests/e2e`。不通过删除有效断言或扩大容错来掩盖失败。
+- `examples` 只保留 `onboarding` 安装配置助手，使用正式 ReAct 与 terminal MCP；不默认启用 QQ、世界订阅或决策模型。`examples/START.md` 保持为首次启动短指南，详细配置与操作说明放入 `docs`。旧离线应用仅作为 `tests/fixtures/runtime_apps` 回归夹具保留，不作为用户示例。
+- 真实模型验收使用当前 CLI 和独立数据目录中的宿主、模型及工具配置，须由用户明确要求调用供应商；普通回归使用假模型或模拟传输，不因检查代码而自行调用真实服务。
+
+## 参考入口
+
+- [当前文档索引](docs/INDEX.md)
+- [示例启动指南](examples/START.md)
+- [架构设计](docs/aurorabot-design-v0.2.3.md)
+- [公共 ID 目录](docs/aurorabot-id-catalog-v0.2.3.md)
+- [拆包评估](docs/aurora_agent_extraction_assessment.md)
+- [变更与验收记录](docs/CHAGELOG.md)
+
+文档中的规划内容不等于已实现能力。发生不一致时先核对当前代码、插件清单和测试，不照搬历史交接文档中的待办。

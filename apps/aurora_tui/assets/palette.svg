@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="620" viewBox="0 0 1040 620" role="img" aria-labelledby="title desc">
+  <title id="title">Aurora 终端调色板</title>
+  <desc id="desc">中性深灰背景、灰白文字。主题蓝 #4B79EC，互补暖金 #ECBE4B，浅蓝从色 #81A1F2，深蓝从色 #3555A5。</desc>
+  <rect width="1040" height="620" fill="#181818"/>
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif" fill="#E0E0E0">
+    <text x="40" y="57" font-size="25" letter-spacing="3">AURORA / TERMINAL</text>
+    <text x="40" y="91" font-size="15" fill="#999999">中性底色 · 灰白文字 · 克制的品牌强调</text>
+    <g transform="translate(40 126)">
+      <rect width="225" height="108" rx="8" fill="#4B79EC"/>
+      <text y="140" font-size="18">主题蓝</text>
+      <text y="166" font-size="16" fill="#999999">#4B79EC · 选中 / 焦点</text>
+    </g>
+    <g transform="translate(285 126)">
+      <rect width="225" height="108" rx="8" fill="#ECBE4B"/>
+      <text y="140" font-size="18">互补暖金</text>
+      <text y="166" font-size="16" fill="#999999">#ECBE4B · 预留对比强调</text>
+    </g>
+    <g transform="translate(530 126)">
+      <rect width="225" height="108" rx="8" fill="#81A1F2"/>
+      <text y="140" font-size="18">浅蓝从色</text>
+      <text y="166" font-size="16" fill="#999999">#81A1F2 · 主色混白 30%</text>
+    </g>
+    <g transform="translate(775 126)">
+      <rect width="225" height="108" rx="8" fill="#3555A5"/>
+      <text y="140" font-size="18">深蓝从色</text>
+      <text y="166" font-size="16" fill="#999999">#3555A5 · 主色混黑 30%</text>
+    </g>
+    <path d="M40 328H1000" stroke="#383838"/>
+    <text x="40" y="365" font-size="16">NEUTRALS / 中性色</text>
+    <g transform="translate(40 389)">
+      <rect width="176" height="64" rx="6" fill="#181818" stroke="#383838"/>
+      <text y="91" font-size="15">背景 #181818</text>
+    </g>
+    <g transform="translate(236 389)">
+      <rect width="176" height="64" rx="6" fill="#222222"/>
+      <text y="91" font-size="15">输入区 #222222</text>
+    </g>
+    <g transform="translate(432 389)">
+      <rect width="176" height="64" rx="6" fill="#383838"/>
+      <text y="91" font-size="15">边界 #383838</text>
+    </g>
+    <g transform="translate(628 389)">
+      <rect width="176" height="64" rx="6" fill="#999999"/>
+      <text y="91" font-size="15">辅助文字 #999999</text>
+    </g>
+    <g transform="translate(824 389)">
+      <rect width="176" height="64" rx="6" fill="#E0E0E0"/>
+      <text y="91" font-size="15">正文 #E0E0E0</text>
+    </g>
+    <g font-size="14" fill="#999999">
+      <text x="40" y="538">互补色：HSL 色相 +180°，饱和度与明度保持不变；从色按 sRGB 通道混合并四舍五入。</text>
+      <text x="40" y="567">对背景的对比度：正文 13.45:1 · 辅助文字 6.23:1 · 主题蓝 4.44:1 · 浅蓝 7.03:1</text>
+      <text x="40" y="594">深蓝用于装饰层级，暖金作为预留色；当前界面不使用它们承载正文。</text>
+    </g>
+  </g>
+</svg>

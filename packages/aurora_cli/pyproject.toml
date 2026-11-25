@@ -1,0 +1,16 @@
+[project]
+name = "aurora-cli"
+version = "0.1.0"
+description = "AuroraBot command-line interface"
+requires-python = ">=3.12"
+dependencies = ["aurora-core>=0.1.0", "aurora-config>=0.1.0", "aurora-api>=0.1.0", "aurora-logging>=0.1.0", "rich>=14,<15", "tomlkit>=0.13,<1"]
+
+[project.scripts]
+aurora = "aurora_cli.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aurora_cli"]

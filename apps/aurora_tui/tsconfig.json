@@ -1,0 +1,7 @@
+{
+  "extends": "@vben/tsconfig/node.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

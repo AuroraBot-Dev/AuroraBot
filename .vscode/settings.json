@@ -1,5 +1,5 @@
 {
-  "python.languageServer": "Default",
+  "python.languageServer": "None",
   "workbench.browser.openLocalhostLinks": false,
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
@@ -16,6 +16,7 @@
     "package.json": "pnpm-lock.yaml, pnpm-workspace.yaml, package-lock.json, yarn.lock, .npmrc, .node-version, .nvmrc, tsconfig*.json, vite.config.*, vitest.config.*, eslint.config.*, oxlint.config.*, prettier.config.*, stylelint.config.*, postcss.config.*, .eslintrc*, .eslintignore, .eslintcache, .oxlintrc*, .prettierrc*, .prettierignore, .stylelintrc*, .stylelintignore, .stylelintcache, *.tsbuildinfo",
     "Dockerfile": "Dockerfile.*, docker-compose.*, compose.*"
   },
+  "basedpyright.analysis.typeCheckingMode": "basic",
   "basedpyright.analysis.inlayHints.variableTypes": false,
-  "basedpyright.disableLanguageServices": true
+  "basedpyright.analysis.inlayHints.genericTypes": false
 }

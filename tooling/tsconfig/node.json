@@ -8,6 +8,7 @@
     "moduleResolution": "bundler",
     "types": ["node"],
     "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
     "noImplicitAny": true
   }
 }

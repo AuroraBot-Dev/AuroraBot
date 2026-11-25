@@ -1,7 +1,0 @@
-{
-  "extends": "@vben/tsconfig/node.json",
-  "compilerOptions": {
-    "noEmit": true
-  },
-  "include": ["vite.config.ts"]
-}

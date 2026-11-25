@@ -1,0 +1,8 @@
+instance_id = "main"
+model_role = "reasoning"
+
+[[tools]]
+tool = "dev.example.default:tools/echo"
+instance_id = "echo"
+[tools.config]
+prefix = "回显:"

@@ -1,0 +1,30 @@
+# 服务名就是连接身份；模板仅补缺失文件，旧配置须显式迁移。
+schema_version = 2
+
+[servers]
+
+# remote/local 均支持 legacy（默认）、auto 和固定新版。
+# [servers.local]
+# type = "remote"
+# url = "http://127.0.0.1:8000/mcp"
+# protocol = "2026-07-28"
+# required_capabilities = ["tools"]
+# timeout = { startup = 10, catalog = 30, execution = 30, shutdown = 10 }
+#
+# [servers.local.headers]
+# Authorization = "Bearer {env:AURORA_MCP_TOKEN}"
+#
+# 工具桥默认发现全部工具并自动命名；可显式选择或覆盖别名，include=[] 不暴露工具。
+# [servers.local.tools]
+# include = ["echo"]
+# aliases = { echo = "local_echo" }
+
+# 本地 stdio 服务；宿主须为 MCPClients 显式提供 workspace_root。
+# [servers.files]
+# type = "local"
+# command = ["python", "server.py"]
+# cwd = "."
+# [servers.files.environment]
+# APP_TOKEN = "{env:APP_TOKEN}"
+# [servers.files.tools]
+# include = []

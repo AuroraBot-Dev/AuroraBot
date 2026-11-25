@@ -1,0 +1,16 @@
+[project]
+name = "aurora-config"
+version = "0.1.0"
+description = "AuroraBot declarative configuration service"
+requires-python = ">=3.12"
+dependencies = ["aurora-core>=0.1.0", "jsonschema>=4.23,<5", "referencing>=0.36,<1"]
+
+[project.entry-points."aurora.plugins"]
+aurora_config = "aurora_config:plugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aurora_config"]

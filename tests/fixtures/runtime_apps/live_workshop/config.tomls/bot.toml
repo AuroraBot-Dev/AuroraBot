@@ -1,0 +1,11 @@
+# 离线巡检 bot 的配置。
+instance_id = "workshop"
+model_role = "reasoning"
+max_iterations = 20
+tool_timeout = 60
+[[tools]]
+tool = "dev.example.workshop:tools/inspect"
+instance_id = "inspect"
+[[tools]]
+tool = "dev.example.workshop:tools/report"
+instance_id = "report"

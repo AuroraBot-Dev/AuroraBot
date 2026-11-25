@@ -12,24 +12,19 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: 'landing',
-          include: ['apps/landing/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
+          name: 'web',
+          include: ['apps/{aurora_panel,landing,docsite}/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
           environment: 'happy-dom',
         },
       },
       {
         extends: true,
         test: {
-          name: 'docsite',
-          include: ['apps/docsite/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'],
-          environment: 'happy-dom',
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: 'tooling',
-          include: ['tooling/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', 'scripts/**/*.{test,spec}.ts'],
+          name: 'node',
+          include: [
+            '{tooling,packages/aurora_client,apps/aurora_tui}/**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}',
+            'scripts/**/*.{test,spec}.ts',
+          ],
           environment: 'node',
         },
       },
