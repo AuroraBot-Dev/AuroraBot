@@ -1,57 +1,124 @@
 # Contributing to AuroraBot
 
-[简体中文](CONTRIBUTING.md) · [日本語](CONTRIBUTING.ja.md)
+<a href="CONTRIBUTING.md">中文</a> | <b>English</b> | <a href="CONTRIBUTING.ja.md">日本語</a>
 
-Contributions to documentation, bug fixes, tools, interfaces and runtime behavior are welcome. Discuss substantial contract or architecture changes in an Issue or Discussion first, including the use case, invariants and validation plan. Follow the [code of conduct](CODE_OF_CONDUCT.md).
+AuroraBot is not aiming for a tool-like Agent, but a Bot that persists, develops her own rhythm, and judges and acts within her own world. We want to explore not just "how to plug in a model," but how she keeps working, acts reliably, and lets people understand why she does what she does.
+Whether you bring a bug fix, a more natural introduction, an MCP application, or a runtime improvement, you are welcome.
 
-## Development environment
+## Find your entry point
 
-Install Python 3.12+, uv, and the pnpm and Node.js versions in [package.json](../package.json) and [.node-version](../.node-version):
+- **First contribution**: fix documentation, add tests, or pick a small, well-bounded issue.
+- **Application developers**: connect MCP services or plugins to provide capabilities for AuroraBot.
+- **Runtime developers**: improve ReAct execution, model adapters, MCP integration, or the local interaction experience.
+- **Design participants**: discuss use cases, public contracts, and module boundaries in Issues or Discussions.
+
+If you are not sure where to start, describe the experience you want to improve in a Discussion or an Issue first.
+
+## Prepare your development environment
+
+### 1. Clone this repository
+
+You need Python 3.12+, Git, and [uv](https://docs.astral.sh/uv/); CI verifies Python 3.12 / 3.13.
+TUI, Panel and engineering scripts additionally need the [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/) versions declared in [package.json](../package.json) and [.node-version](../.node-version). Run `pnpm install --frozen-lockfile` before development checks.
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 cd AuroraBot
 uv sync --locked --all-packages
-pnpm install --frozen-lockfile
-pnpm exec uv run --locked aurora check
+uv run --locked python examples/onboarding/main.py --init
 ```
 
-To run a Bot, follow the [onboarding guide](../examples/START.md). Checks use fake models or simulated transports and do not require model credentials. Do not call real providers without explicit authorization. Credentials belong in environment variables or a local `.env`, never in TOML, ctx, snapshots or logs.
+Initialization creates missing onboarding assistant files in the separate `build/onboarding` directory without calling models or starting tools.
 
-## Code and package boundaries
+### 2. Fill in the required configuration
 
-[AGENTS.md](../AGENTS.md) and the [development guide](../docs/development.md) contain the full rules, maintained in Simplified Chinese.
+Set `provider`, `model`, and any required `base_url` in `build/onboarding/config/org.aurora.adapter/model/profiles.toml`. Set `AURORA_MODEL_API_KEY` in the root `.env`; `credential` contains only the environment variable name.
 
-- Use Chinese for comments, docstrings and commit messages; describe current responsibilities and behavior.
-- Keep the execution direction `bot → agent → control → core`. Use `aurora_adapter` for model/MCP integration and `aurora_config` for configuration.
-- Core provides mechanisms, not model or business control. CLI, API and interfaces reuse backend execution semantics.
-- Public IDs follow `<namespace>:<domain>/<local_path>` and belong to their defining package. Update configuration, consumers, tests and documentation with interface changes.
-- TOML is the persistent configuration source. Runtime overrides do not write back automatically. Restoring snapshots does not resume execution or replay unfinished tool actions.
-- Package tests live in `packages/<package>/tests/unit` or `tests/contract`; cross-package tests live in root `tests/contract` and `tests/e2e`.
-
-## Validation and pull requests
-
-1. Branch from current `main`; use `feat/<name>` for features.
-2. Check the working tree and index before starting. Make small commits containing only relevant changes.
-3. Run focused checks first and full checks for contract, lifecycle or configuration changes.
-4. Record changes, validation results and the distinct value of added tests in [docs/CHAGELOG.md](../docs/CHAGELOG.md).
-5. Open a PR against `main`, explain behavior and verification, and wait for CI and review. Do not commit features directly to `main`.
+### 3. Start from the terminal
 
 ```bash
-pnpm exec uv run --locked aurora check
-pnpm exec uv run --locked aurora check --full
-uv build --all-packages --wheel --out-dir build/wheels
-pnpm --filter @aurorabot/panel build
+uv run --locked python examples/onboarding/main.py --text "Check my environment and tell me what is missing for the first Aurora startup."
 ```
 
-The default check covers formatting, linting, types and fast boundary tests. `--full` adds all Python, frontend, native terminal and integration tests; `--coverage` also uses the full scope. CI runs full checks on Python 3.12 / 3.13 and builds all wheels and Panel.
+The assistant processes this message and exits; real conversations call your configured model. See the [first-run guide](../examples/START.md) for continuous conversations, TUI and Panel connections, and [operations](../docs/operations.md) for starting the main Bot.
 
-Prefer existing tests that can demonstrate a real defect over redundant coverage. Never remove assertions, relax expectations or skip checks to hide failures. When expanding tests, measure complete command wall time in the same installed environment: target at most 15 seconds for default checks and 60 seconds for full checks. Documentation-only changes need link and diff checks. Distribution or dependency changes also require clean wheel installation checks.
+Running tests and static checks does not require real model keys. Keys live only in the local `.env` or the process environment; never commit keys, real conversations, full model replies, workspace events, uploaded files, or run logs.
 
-README.md and AGENTS.md changes follow the project's user-confirmation rule. Technical documentation is authoritative in Simplified Chinese; keep English and Japanese community entry points aligned.
+## Before making changes
 
-## AI-assisted contributions
+For changes to public contracts, persistence, or module boundaries, identify the Bot use case, invariants, and verification method. See [AGENTS.md](../AGENTS.md) for development constraints and the [system overview](../docs/aurorabot-design-v0.2.3.md) for component responsibilities. Discuss larger designs in Issues or Discussions.
 
-AI assistance is welcome. Contributors must understand generated content, explain its behavior and take responsibility for correctness. Disclose the scope of assistance in the PR, respect package boundaries and licensing, and report only verification actually performed. Generated content does not exempt a contribution from checks. Reviewers may request corrections; serious or repeated violations follow community rules.
+Documentation describes current usage, capabilities, and limits. Record changes in [docs/CHAGELOG.md](../docs/CHAGELOG.md). Simplified Chinese is authoritative; keep corresponding translations in sync.
 
-Remove secrets, real conversations, complete model responses, uploads and private runtime data before submitting. Ordinary regression tests must not consume model credits.
+## Keep the loop closed
+
+While contributing code, hold the boundaries that keep AuroraBot reliable:
+
+- The model decides, the runtime executes: assistant may only reply or request tools; real external effects run only through the Tool contract, and plain model text is not an effect.
+- Each agent instance has one AgentRuntime owner; conversations, cadence and scheduled wakeups submit guidance to that same owner.
+- Execution dependencies follow `bot → agent → control → core`; `aurora_adapter` connects models and MCP, and `aurora_config` declares configuration. CLI, API and interfaces reuse backend execution semantics.
+- Structural configuration stays in TOML; keys keep coming only from environment variables.
+- `aurora_logging` configures shared logging, obtained through `logging.getLogger(__name__)`; never record full prompts, model replies, or sensitive payloads.
+
+For the fuller maintainer boundaries, see `AGENTS.md` at the repository root.
+
+## AIGC
+
+AuroraBot welcomes AI-assisted development, but generated content is bound by the same project boundaries and gets no exemption just because it was "written by AI":
+
+- **Must be verifiable**: code generated or heavily modified by AI must pass all of `aurora check --full` and come with offline, deterministic, repeatable tests;
+- **Must be understood and owned**: you must read every generated line, be able to explain its behavior, and take responsibility for its correctness and security;
+- **Must respect boundaries**: generated code keeps the existing dependency direction and contracts, introducing no parallel run model or bypass around the closed loop;
+- **No masking quality**: do not use lint ignores to hide generated complexity; as a rule, no single file exceeds 600 lines;
+- **Chinese text is authoritative**: user-facing copy is authoritative in Simplified Chinese, with no "experimental, refactoring, legacy, migration" narratives and no invented capabilities, APIs, or sample data;
+- **Source and safety**: do not introduce code of unknown origin or incompatible licenses, and do not generate or commit keys, real sessions, or private data;
+- **Disclose honestly**: state in the Pull Request description which parts were generated or assisted by AI, so reviewers can focus.
+
+Consequences of violations:
+
+- PRs that violate the above are sent back for revision or rewriting of the affected parts;
+- PRs that skip `aurora check` without explanation are not merged;
+- Repeated or severe violations (e.g. leaking keys, faking test results, bypassing security or architecture boundaries) lead to the PR being closed, a maintainer record, and possibly restricted future contributions.
+
+## Submit your work
+
+1. Create a short-lived branch from `main`; use `feat/<name>` for features, and `fix/` or `refact/` for fixes or refactoring.
+2. Keep each Pull Request focused on one reviewable goal, with matching tests and documentation.
+3. Set `main` as the merge target and describe behavioral changes, verification results, and related Issues.
+4. Wait for CI and review, then delete the finished branch.
+
+## Verification
+
+Run the unified check before submitting:
+
+```powershell
+pnpm exec uv run --locked aurora check
+```
+
+Depending on the verification scope, run separately:
+
+```powershell
+pnpm exec uv run --locked pytest packages/aurora_agent/tests/unit/test_agent_runtime.py -q
+pnpm exec uv run --locked aurora check --full
+pnpm exec uv run --locked aurora check --test --coverage
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+pnpm typecheck
+```
+
+Install development dependencies with `uv sync --locked --all-packages` and `pnpm install --frozen-lockfile`.
+Package tests live in `packages/<package>/tests/unit` and `tests/contract`; cross-package contracts live in root `tests/contract`, and process/integration tests in `tests/e2e`. Shared fixtures live in `tests/fixtures` and root `conftest.py`.
+Default checks run fast boundary tests; `--full` and `--coverage` use the full test scope. CI runs `--full`; explicit coverage checks have a 20% minimum. This is a floor, not a target for deleting tests.
+Prefer behavior, boundary, and recovery tests over duplicate cases, tests of test helpers, or assertions added only for coverage.
+
+Tests must be offline, deterministic, and repeatable. Models, clocks, and MCP use fakes; no real quota is consumed and no public network is needed. Bug fixes should cover the original failure path; event and effect tests should also verify transactional boundaries, idempotency, and execution identity associations.
+
+## Pre-submission checklist
+
+- Users can understand the behavioral difference from the docs or tests.
+- New behavior does not bypass the closed loop between model decisions, Tool execution, and result feedback.
+- Configuration, documentation, and tests are consistent.
+- Logs and test fixtures contain no real keys, sessions, or private data.
+- `aurora check` passes, or the Pull Request clearly explains what could not be run.
+
+By contributing, you agree to abide by the project's [Code of Conduct](CODE_OF_CONDUCT.md).
