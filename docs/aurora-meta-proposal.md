@@ -1,573 +1,432 @@
-# aurora.meta.toml 收敛方案与完整示例
+# aurora.meta.toml：插件导出与集中装配方案
 
-日期：2026-11-26。状态：讨论稿，未实施。本文中的清单格式、生成器、方法插头与槽实例 API、`aurora meta` 命令均为拟议能力。示例通过端点对象委托当前 core 的登记与连接接口；第 5.9 节给出最小实现草图，项目尚未提供这些端点类型。
+日期：2026-11-26。状态：讨论稿，未实施。本文以真实的 `aurora_config` 插件为主例，区分现有行为与拟议接口。清单格式、集中装配文件、`@plug`、`ComponentFactory` 和生成工具均是设计内容，不代表当前 CLI 已支持这些能力。本次只修改文档。
 
-## 1. 目标与原则
+## 1. 设计中心
 
-`aurora.meta.toml` 描述插件公开什么、各定义有什么用途、向哪里登记、声明连接到哪个插槽。开发者、用户、文档工具和未来的插件目录都能读取这些信息，无需运行插件。
+插件描述并导出插头、插槽、状态和配置，实现自己的处理逻辑，维护自己负责的 ctx、订阅和资源。应用通过一份集中装配配置，决定启用哪些插件、创建哪些实例，以及把哪个实例的插头接到哪个实例的插槽。
 
-默认信任用户和开发者遵循契约。元信息用来说明、引用、生成和查询，不承担插件审批、权限隔离或通用业务验证。开发检查帮助发现错误，运行期保留让调用语义成立所需的检查。
+插件知道自己提供的插槽何时被调用、调用具有什么业务意义；它不需要预先知道最终插入的是哪个插件的哪个实现。插头知道自己实现什么契约，不需要把最终目标插槽写进定义。装饰器只关联定义与实现，集中配置描述运行拓扑。
 
-本方案采用五条约定：
-
-1. 每个事实只有一个可编辑来源，其他文件可以引用或由它生成。
-2. 公共 ID、归属和静态关系从清单生成；实现对象和实际行为留在 Python。
-3. 继续使用现有 `Plugin`、`RegistryEntry`、`HookConnections` 和 `ExecutionPlug`；端点对象委托既有连接管理器，不维护第二份连接表。
-4. 复杂业务规则由插件自己实现；不要求所有插槽都提供 schema 或自定义接受函数。
-5. 先支持明确的描述和生成，不设计通用对象构造语言、条件表达式、自动连接或自动启用依赖。
-
-## 2. 相对现状的最小变化
-
-当前 [Plugin](../packages/aurora_core/src/aurora_core/discovery.py) 包含名称、登记项和依赖，[RegistryEntry](../packages/aurora_core/src/aurora_core/registry.py) 已有 ID、kind、provider、register_to、slot 和 interface。清单为这些现有概念提供一个可读的声明来源。
-
-保留 `pyproject.toml` 中的标准 `aurora.plugins` entry points。插件入口的名称和 Python 工厂路径以这里为准，清单使用 `entry_point` 引用它。清单不重复定义 `name` 或 `factory`，也不额外引入生成 entry points 的构建后端。
-
-构建前的开发工具将清单编译成：
-
-- 包内 `_meta.py`：定义对象及其 ID、声明数据、结构契约数据和构造 `Plugin` 的薄辅助函数。
-- `aurora.meta.json`：不含 Python 实例的静态目录，用于 CLI、文档和市场索引。
-
-二者都不手工修改。生成模块只使用标准库和 core；拟议端点类型也放在 core，不在每个插件中复制实现。模块不导入插件实现、不启动资源，也不读取 TOML。core 不增加 TOML 加载职责，control 保持仅依赖 core。
-
-首次实现可以提供独立的开发脚本，之后由 CLI 提供命令入口；代码生成工具不成为插件的运行时依赖。构建前显式生成或检查产物，不要求每次启动都核对源码摘要。
-
-## 3. 信息归属与唯一来源
-
-| 信息 | 唯一可编辑来源 | 使用方式 |
+| 层次 | 决定什么 | 主要来源 |
 | --- | --- | --- |
-| 发行包版本、作者、许可证、安装依赖、extra | `pyproject.toml` | 静态查询合并读取标准发行元数据 |
-| 插件名称、入口工厂路径 | `pyproject.toml` 的 `aurora.plugins` | 清单引用 entry point；生成代码沿用其名称 |
-| 插件简介、用法、文档、启用依赖 | 清单 | 目录展示；生成 `Plugin.requires` |
-| 固定公共 ID、kind、provider、登记与插槽关系 | 清单 | 生成定义对象及 `RegistryEntry` 的声明部分 |
-| Python 实现对象、绑定方法 | Python | 工厂向生成函数提供实际 target |
-| 数据结构契约 | 一个契约文件或一个代码导出函数 | 清单引用，目录和运行消费者读取同一内容 |
-| 状态持久化属性、配置关联的状态和模板 | 所属包的清单扩展 | 所属包的构造函数读取声明 |
-| 用户配置值、环境凭证、业务快照 | 用户数据与运行环境 | 不进入发布清单 |
-| 实例身份、状态地址、连接顺序、生命周期依赖 | 装配代码或既有用户配置 | 引用定义，构造实际运行对象 |
-| MCP 实际工具名称、参数和实现 | 远端发现结果 | 形成运行期目录，静态清单只声明动态集合 |
+| 插件能力 | 有哪些公共定义、职责、契约、组件入口及宿主依赖 | `aurora.meta.toml` |
+| 插件行为 | 方法实现、ctx 读写与订阅、资源创建与收尾、调用插槽的时机 | Python |
+| 应用组合 | 实例选择、连接、状态绑定、优先级和生命周期依赖 | 集中装配配置 |
+| 基础机制 | 登记、ctx、订阅、连接、调用、生命周期推进与持久化 | core 与宿主 |
 
-同一个 ID 出现在生成文件和引用处，不代表有两个来源。判断标准是：修改这个定义时，开发者是否只改一处，其余结果是否能确定性重建。
+默认信任开发者。配置连接不需要经过额外审批；schema、类型说明和用途帮助理解与接入，不建立全局兼容判定器。保留重复 ID、缺失实现、无效连接等让运行语义无法成立的错误，不叠加多层防御检查。
 
-引用不重新定义被引用者。例如 `entry_point = "example_greeting"` 引用标准入口；`register_to` 引用 core 的注册表；都不在本文件重新声明对方的路径、结构或实现。
+同一插件可以提供多个插头和插槽，也可以实现私有的内部组合。公开的应用接线由集中配置表达；插件发布的默认接线作为独立装配预设提供，不成为插头不可更改的目标约束。
 
-## 4. 清单格式
+## 2. 现有代码与需要调整的地方
 
-每个发行包一份 `aurora.meta.toml`，放在 `pyproject.toml` 旁。一个包可以描述多个插件。插件随发行包版本发布，暂不增加独立插件版本体系。
+### 2.1 已有机制可以继续使用
 
-### 4.1 基础字段
+- [Plugin](../packages/aurora_core/src/aurora_core/discovery.py) 收集公开定义并声明显式启用依赖。
+- [RegistryEntry](../packages/aurora_core/src/aurora_core/registry.py) 区分定义 ID、kind、实现 target 和 provider。
+- [HookConnections](../packages/aurora_core/src/aurora_core/hooks.py) 已经按定义和实例分别寻址，支持显式绑定实际方法。
+- [Lifecycle](../packages/aurora_core/src/aurora_core/lifecycle.py) 已登记并驱动 `config / prepare / start / stop / clean` 五个真实的 `hook_slot`。
+- control 的 [ExecutionPlug / ExecutionSlot](../packages/aurora_control/src/aurora_control/execution.py) 已把组件身份、状态地址和实际执行分开；通用执行插头没有固定的目标槽。
 
-根字段 `schema_version = 1` 表示本格式版本。下面各表的键是文件内符号，不是额外的公共 ID。
+### 2.2 当前的接线仍有代码耦合
 
-| 区域 | 字段 | 含义 |
+[hook_handler](../packages/aurora_core/src/aurora_core/declarations.py) 要求填写目标 slot，core 连接时会检查已声明的 slot 是否匹配。[configuration_component](../packages/aurora_config/src/aurora_config/service.py) 负责创建配置服务并把它接到 CONFIG；[ReActDefaults.connect](../packages/aurora_agent/src/aurora_agent/react_defaults.py) 与 [DefaultAssembly](../packages/aurora_bot/src/aurora_bot/assembly.py) 也直接决定了一部分连接。
+
+当前 [host.toml](../packages/aurora_cli/src/aurora_cli/host.toml) 主要选择插件与代码装配入口，并不是完整的集中接线文件。本文提出把应用连接逐步外移，不能仅靠美化 `connect()` 的 Python 写法完成。
+
+迁移到新声明方式的插头不再携带固定目标 slot，生成的 `RegistryEntry.slot` 使用 `None`。装饰器不再要求 slot。实际连接继续由 `HookConnections.connect()` 接收明确的两端。
+
+不需要先全局删除 `RegistryEntry.slot` 或现有程序化接口。已迁移插件去除自身的固定目标声明；未迁移插件暂时保持现状。不能同时保留两套会执行的接线，再让用户配置看起来可以覆盖实际上仍被旧代码固定的关系。
+
+## 3. 三份输入与唯一来源
+
+| 信息 | 唯一可编辑来源 | 其他位置的关系 |
 | --- | --- | --- |
-| `plugins.<符号>` | `entry_point` | 必填，引用本发行包的 `aurora.plugins` 入口 |
-| 同上 | `summary` | 必填，一句话说明职责 |
-| 同上 | `title`、`description`、`usage`、`documentation`、`tags` | 可选，人可读介绍和检索信息 |
-| 同上 | `requires` | 默认空，必须同时显式启用的插件名 |
-| 同上 | `install_extras` | 默认空，引用本包已定义的 extra，供安装说明使用 |
-| 同上 | `provider` | 可选，默认使用 entry point 名；保留当前包级 provider 习惯 |
-| `definitions.<符号>` | `plugin`、`id`、`kind`、`summary` | 必填，所有者、公共身份、类别和用途 |
-| 同上 | `register_to`、`slot` | 可选，沿用当前登记关系和插槽声明语义 |
-| 同上 | `interface` | 可选，显式的数据值或定义引用，映射到 `RegistryEntry.interface` |
-| 同上 | `inputs`、`outputs` | 可选，引用 `contracts` 中的契约符号，供描述和查询 |
-| 同上 | `description`、`extensions` | 详细说明，以及由所属包解释的扩展数据 |
-| `contracts.<符号>` | `format` 与 `file` 或 `export` | 契约格式及唯一来源，`file` 与 `export` 二选一 |
-| `dynamic.<符号>` | `plugin`、`kind`、`id_root`、`summary` | 描述运行期才能发现的定义集合 |
-| 同上 | `register_to`、`phase`、`discoverer` | 可选，登记目标、发现阶段和发现入口引用 |
+| 发行包名称、版本、作者、许可证、安装依赖和 extra | `pyproject.toml` | 查询时合并标准发行元数据 |
+| 插件 entry point 名称及工厂路径 | `pyproject.toml` | 清单引用入口，不重写 name/factory |
+| 公共 ID、kind、provider、登记目录 | 清单 | 生成代码常量和登记项 |
+| 插头、插槽及状态的用途与契约 | 清单或它引用的契约来源 | 生成静态能力目录 |
+| 方法实现哪个插头 | 代码中的 `@plug(生成的定义引用)` | 工厂显式导出方法，从装饰器读取身份 |
+| 组件工厂和自有资源的收尾行为 | 插件代码 | 宿主按导出协议创建、关闭实例 |
+| 实例名称、插件选择、组件选择、端点连接 | 集中装配配置 | 装配器建立实际对象与连接 |
+| 配置值、状态地址绑定及组件间生命周期依赖 | 对应用户配置与集中装配配置 | 插件读取或接受注入，不重复写死 |
+| 数据结构 | 单个 schema 文件或纯代码导出函数 | 目录、运行消费者和客户端生成共用来源 |
+| 业务快照、运行期凭证 | 用户数据与运行环境 | 不进入插件发布清单 |
 
-`kind` 继续允许第三方扩展。`inputs`、`outputs` 不隐式包装函数或启用运行校验，也不取代 `interface`。某个消费者需要结构验证时，应直接使用这些契约，而不是再手写一份结构规则。
+`register_to` 继续表达“定义登记到哪个分类或协议接收目录”，例如处理器登记到 core 的 hook_handlers。它不代表运行时把该处理器连接到某个具体插槽。
 
-引用采用两种明确形式：
+`requires` 继续只声明插件启用依赖。安装依赖、插件依赖、实例生命周期依赖、实例连接是四种不同关系，不互相推导，不自动启用依赖插件。
 
-```toml
-slot = { local = "GREETING_SLOT" }
-register_to = { id = "org.aurora.core:registries/hook_handlers" }
-```
+同一个定义可以在多个引用和生成产物中出现，但只在清单定义一次。运行连接只在选定的集中配置中决定一次；发布默认预设时，宿主使用用户选定的预设，不另叠加一份隐藏默认连接。
 
-`local` 引用本清单的定义；`id` 引用外部完整公共 ID。`interface` 如需表达当前 control 使用的组件身份，写为 `interface = { definition = { local = "COMPONENT" } }`，生成时还原为 `Id`；如需普通 JSON 描述，使用 `interface = { value = { ... } }`，按接收方约定解释。
+## 4. 清单的收敛格式
 
-v1 不为任意 Python 对象建立 TOML 编码规则。确实依赖不可序列化 interface 的程序化插件继续由代码提供，静态目录标明需要代码解释；不声称清单覆盖了这类对象的全部语义。
+每个发行包一份 `aurora.meta.toml`，与 `pyproject.toml` 同级。一个文件可以描述多个插件。表键是文件内符号，公共身份仍使用现有完整 ID。
 
-### 4.2 契约来源
+| 区域 | 内容 |
+| --- | --- |
+| `schema_version` | 文件格式版本，v1 为 1；与包版本分开 |
+| `plugins.<符号>` | `entry_point`、`summary`，可选 title/description/documentation/tags/requires/provider/install_extras |
+| `definitions.<符号>` | 所属 plugin、id、kind、summary，可选 register_to/interface/contract/description/extensions |
+| `components.<符号>` | 所属 plugin、summary、需要注入的宿主服务 inject、导出的 plugs/slots |
+| `contracts.<符号>` | format，以及 file 或 export 二选一的结构来源 |
+| `dynamic.<符号>` | 所属 plugin、kind、id_root、summary，按需描述运行时才能发现的集合 |
 
-`file` 指向相对清单目录的文件。JSON Schema 使用标准 JSON 文件，保持编辑器和工具支持。生成目录内嵌其内容，安装后的查询不需要访问源码目录。
+约定如下：
 
-`export` 指向开发者提供的无参数纯函数，构建时调用一次，返回可序列化的结构。例如现有 [describe_conversation](../packages/aurora_bot/src/aurora_bot/conversation_contract.py) 可以成为 HTTP 契约的唯一来源。运行时消费者和构建导出使用同一函数或同一生成结果，不分别维护路由和字段。
+- 清单的插头定义没有目标 `slot`，也没有 `connect_to` 或隐含的目标组件。
+- `plugs`、`slots` 列出某类组件导出的本地定义符号，不表达它们之间的连接。插件可以只提供其中一类，也可以不提供实例组件。
+- `register_to = { id = "完整 ID" }` 引用外部目录；同一文件已有的定义使用 `{ local = "符号" }` 引用。
+- control 使用的 `interface = { definition = { local = "组件符号" } }` 表达插头所属组件，不代表目标槽。普通协议也可以使用显式可序列化描述。
+- `inject` 只列出工厂需要的已知宿主服务，例如 registry、ctx、storage、hooks。宿主按名称传入对象；不靠遍历构造函数签名猜测依赖。
+- 专用状态、配置、工具等描述由所属包解释。core 不因此接管 ConfigSpec、模型或 MCP 语义。
+- 说明与业务约束可以保留文字；不要求每个插件都提交完整 schema，不自动把说明变成运行校验。
 
-导出只在显式生成时执行，不在插件列表查询时执行。不为导出器设计沙箱或全程序副作用检测；开发者负责让它不启动模型、工具、网络连接或读取用户凭证。导出异常正常报告，不补造空契约。
+### 4.1 契约与静态目录
 
-v1 不实现 Python 类型到通用 schema 的自动推断。无法结构化的行为用说明与代码表达，目录明确保留其边界。
+`file` 指向相对清单目录的契约文件。`export` 指向开发者提供的无参数纯导出函数，生成时返回可序列化内容；例如已有的 `describe_configuration()`。生成后的静态目录包含结构内容及来源信息。
 
-### 4.3 扩展、宿主与动态定义
+开发者负责让导出函数不启动客户端、网络或后台任务。生成工具正常报告导出失败，不设计沙箱或全程序副作用检查。查询已发布目录不执行导出函数，也不导入插件实现。
 
-`extensions."org.aurora.config"` 等命名空间可以描述专用信息，基础生成器保留它们；解释代码由对应包提供。首次实现只支持实际迁移需要的扩展，不预建通用扩展注册框架。
+初版不实现通用 Python 类型到 schema 的转换。无法静态描述的 Python 对象、接收逻辑和复杂业务约束保留在代码，目录明确说明其边界。
 
-扩展中的信息如果参与运行，消费者直接读取它。例如 `StateKey` 的持久化属性从声明取得，`ConfigSpec` 的 state 和 template 从声明取得；清单引用的结构契约也用于实际配置校验。跨配置关联检查保留在 Python。扩展如果只用于说明，应明确标成说明，不能在 UI 中宣称其已被强制执行。
+### 4.2 宿主定义与动态能力
 
-core 的自举目录、生命周期插槽和 ctx 操作可以使用同格式的定义，由 `host_group` 替代 `plugin` 标记宿主分组。分组没有 entry point，不要求用户启用额外的 core 插件；宿主仍在当前登记时机绑定它们。先有宿主迁移需求再补充分组生成入口。
+core 的五个生命周期槽由宿主登记，不要求把 core 伪装为一个用户必须启用的插件。它们可用同样的目录格式描述为宿主所有的定义；提供方始终是 core，实例作用域由生命周期组件确定。
 
-动态集合示例：
+MCP 等动态集合只描述来源和公开范围。实际工具 ID、参数与实现来自 prepare 阶段的发现结果。没有发现时显示“尚未发现的动态集合”，不显示为空就当作没有能力。动态元信息不触发发现，也不替代运行目录。
 
-```toml
-[dynamic.MCP_TOOLS]
-plugin = "mcp_tools"
-kind = "tool"
-id_root = "org.aurora.adapter:tools/mcp"
-register_to = { id = "org.aurora.agent:registries/tools" }
-phase = "prepare"
-summary = "按用户配置选择并发现 MCP 工具"
-```
+## 5. 主例：现有 aurora_config 插件
 
-这是字段示意，`mcp_tools` 必须在实际清单的 plugins 中声明。`id_root` 描述子路径范围，不创建工具、不赋予权限，也不要求增加一套运行时拦截器。尚未发现时，目录显示动态集合，而不是声称插件没有工具。实际 schema 来自现有 MCP 发现结果；目录变化仍遵循当前重建宿主的约定。
+选择它作为第一例，是因为它有三个固定公开定义、一个现成的服务类，并直接消费 core 的生命周期插槽，不需要模型、MCP 或网络服务。
 
-## 5. 完整示例：一个处理器定义，两个实例
+### 5.1 当前真实能力
 
-示例包提供一个问候插槽和一个问候处理器。宿主创建正式、日常两个处理器实例，按顺序连接到同一个插槽实例。两者共享定义身份，实例身份和输出前缀分别由装配指定。
+入口在 [aurora_config/pyproject.toml](../packages/aurora_config/pyproject.toml)，实现主要在 [service.py](../packages/aurora_config/src/aurora_config/service.py)、[declarations.py](../packages/aurora_config/src/aurora_config/declarations.py) 和 [editor.py](../packages/aurora_config/src/aurora_config/editor.py)。
 
-采用普通 core hook，并为它提供与 control 的 `slot.connect(plug)` 一致的用法。生成的槽定义绑定到一个宿主槽实例，处理器定义绑定到一个实际方法后成为方法插头；装配只需把插头交给槽。control 的执行插头对应关系在第 6 节说明。
+| 现有 ID | kind | 职责 |
+| --- | --- | --- |
+| `org.aurora.config:registries/configs` | registry | 接收各插件的 ConfigSpec 配置声明 |
+| `org.aurora.config:handlers/load` | hook_handler | 加载、校验并将配置注入 ctx，准备配置文件编辑服务 |
+| `org.aurora.config:endpoints/configuration` | endpoint | 提供已声明配置的编辑端点 |
 
-```text
-example-greeting/
-├── pyproject.toml
-├── aurora.meta.toml
-├── contracts/
-│   ├── greeting-input.schema.json
-│   └── greeting-output.schema.json
-├── metadata/
-│   └── aurora.meta.json                 # 生成产物
-└── src/example_greeting/
-    ├── __init__.py                      # 空文件
-    ├── _meta.py                         # 生成产物
-    ├── implementation.py
-    ├── plugin.py
-    └── demo.py
-```
+其中 load 现在由 `ConfigurationService.configure()` 实现。它扫描配置声明、只补缺失模板、进行结构和关联校验，然后调用 `ctx.configure(...)`，不决定哪个具体业务插件必须存在。
 
-### 5.1 标准包信息：pyproject.toml
+这个插件自身没有导出生命周期插槽。它的加载插头应当由应用接到 core 的 config 插槽。配置注册表虽然也有自己的接收协议，但 kind 是 registry，不应为了插头比喻改成 hook_slot。
+
+### 5.2 标准发行入口保持原样
+
+以下是现有 `pyproject.toml` 的入口片段，不是新的入口名称：
 
 ```toml
-[project]
-name = "example-greeting"
-version = "0.1.0"
-description = "Aurora 问候插件示例"
-requires-python = ">=3.12"
-dependencies = ["aurora-core>=0.1.0"]
-
 [project.entry-points."aurora.plugins"]
-example_greeting = "example_greeting.plugin:plugin"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/example_greeting"]
-
-[tool.hatch.build.targets.wheel.extra-metadata]
-"metadata/aurora.meta.json" = "aurora.meta.json"
-"aurora.meta.toml" = "aurora.meta.toml"
-"contracts" = "contracts"
-
-[tool.aurora.meta]
-source = "aurora.meta.toml"
-module = "src/example_greeting/_meta.py"
-catalog = "metadata/aurora.meta.json"
+aurora_config = "aurora_config:plugin"
 ```
 
-`tool.aurora.meta` 是拟议的生成器配置，Hatch 不解释这一段。发布前先显式生成产物；Hatch 只负责把产物和资源装进 wheel。上述 `extra-metadata` 将文件放在发行包的 `.dist-info/extra_metadata/` 中。
+配置包的依赖和 extra 继续归标准发行声明。清单不重复维护版本、Python 约束或入口工厂路径。
 
-生成工具同时读取标准 entry points 表，由此得到插件名称和工厂路径。第三方采用其他构建后端时，只要把同样的静态目录发布到约定位置即可，不要求更换运行框架。
+### 5.3 拟议的 packages/aurora_config/aurora.meta.toml
 
-### 5.2 唯一的公共定义来源：aurora.meta.toml
+下面覆盖这个插件现有的全部三个公开定义，不把其他插件的配置和状态复制进来。`configuration` 组件符号是本方案新增的导出描述，不是新增公共 ID。
 
 ```toml
 schema_version = 1
 
-[plugins.greeting]
-entry_point = "example_greeting"
-title = "问候处理器"
-summary = "提供问候插槽和可绑定实例的问候处理器"
-description = "调用方提供包含 name 的请求，处理器返回问候文本。"
-usage = "将 Greeter.greet 的绑定方法制成插头，再通过槽实例的 connect 接入。"
+[plugins.configuration]
+entry_point = "aurora_config"
+title = "声明配置服务"
+summary = "加载已登记的 TOML 配置，完成校验并注入 ctx"
+description = "只补齐缺失模板；运行配置状态不持久化；提供声明配置编辑入口。"
 requires = []
-tags = ["example", "greeting"]
 
-[contracts.greeting_input]
-format = "json-schema"
-file = "contracts/greeting-input.schema.json"
+[definitions.CONFIGS]
+plugin = "configuration"
+id = "org.aurora.config:registries/configs"
+kind = "registry"
+summary = "接收各插件提供的 ConfigSpec"
+register_to = { id = "org.aurora.core:registries/registries" }
 
-[contracts.greeting_output]
-format = "json-schema"
-file = "contracts/greeting-output.schema.json"
-
-[definitions.GREETING_SLOT]
-plugin = "greeting"
-id = "dev.example.greeting:slots/greet"
-kind = "hook_slot"
-summary = "接收问候请求，由调用方按连接顺序调用处理器"
-register_to = { id = "org.aurora.core:registries/hook_slots" }
-inputs = "greeting_input"
-outputs = "greeting_output"
-
-[definitions.GREETING_HANDLER]
-plugin = "greeting"
-id = "dev.example.greeting:handlers/greet"
+[definitions.LOAD]
+plugin = "configuration"
+id = "org.aurora.config:handlers/load"
 kind = "hook_handler"
-summary = "按实例配置的前缀生成问候文本"
+summary = "加载全部声明配置并注入 ctx，准备配置编辑服务"
+description = "无参数调用；配置错误正常传播；具体状态由已登记的 ConfigSpec 决定。"
 register_to = { id = "org.aurora.core:registries/hook_handlers" }
-slot = { local = "GREETING_SLOT" }
-inputs = "greeting_input"
-outputs = "greeting_output"
+
+[definitions.CONFIGURATION]
+plugin = "configuration"
+id = "org.aurora.config:endpoints/configuration"
+kind = "endpoint"
+summary = "列出、读取和保存已声明的 TOML 配置"
+register_to = { id = "org.aurora.api:registries/endpoints" }
+contract = "configuration_http"
+
+[contracts.configuration_http]
+format = "aurora-http"
+export = "aurora_config.editor_contract:describe_configuration"
+
+[components.configuration]
+plugin = "configuration"
+summary = "持有当前宿主的配置加载与编辑服务"
+inject = ["registry", "ctx", "storage"]
+plugs = ["LOAD"]
+slots = []
 ```
 
-插件名和代码路径没有在清单重新定义。两个公共 ID、两条登记关系和处理器的 slot 意向都在这里定义，后面的 Python 业务文件不再手写这些值。生成器根据 kind 产生 `SlotDefinition` 或 `HandlerDefinition`；端点对象名称及其 ID 均来自同一声明，不增加手写的第二套端口表。
+这份清单没有 `slot = core/config`，没有 config_loader 实例名，也没有生命周期优先级。LOAD 可以被任何遵循其调用约定的宿主槽调用；正常启动预设将它接到 core/config，是应用组合的选择。
 
-`inputs`、`outputs` 关联的是契约，不是公开登记项。只有某个契约需要被其他插件通过公共 ID 引用时，才额外声明 `kind = "schema"` 的公共定义。
+CONFIGURATION 向 API 的端点目录登记是可选接收关系。只运行配置服务不需要启用 aurora_api，更不能因此隐式启动 HTTP 服务。
 
-### 5.3 数据契约
+### 5.4 插件代码怎样变化
 
-`contracts/greeting-input.schema.json`：
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "name": { "type": "string" }
-  },
-  "required": ["name"],
-  "additionalProperties": false
-}
-```
-
-`contracts/greeting-output.schema.json`：
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "string"
-}
-```
-
-这里只描述双方约定，没有给每次进程内调用添加 JSON Schema 验证。未来若通过 HTTP 接收不确定输入，端点可以复用这份契约做边界校验。
-
-### 5.4 行为实现：implementation.py
+以下是迁移后的完整服务与工厂草案；其中 `plug`、`ComponentFactory`、`_meta` 和生成函数 `configuration_plugin` 都尚未实现。配置加载与关闭方法的业务行为取自当前代码，不增加新的资源策略。
 
 ```python
-from collections.abc import Mapping
+from aurora_core import plug
+from aurora_core.ctx import Context
+from aurora_core.discovery import ComponentFactory, Plugin
+from aurora_core.registry import DefinitionRegistry
+from aurora_core.storage import StorageService
+
+from ._meta import CONFIGS, CONFIGURATION, LOAD, configuration_plugin
+from .declarations import ConfigReceiver
+from .editor import ConfigurationEndpoint
+from .files import ConfigurationFiles, load_configuration
 
 
-class Greeter:
-    """使用实例前缀，为符合问候契约的请求生成文本。"""
+class ConfigurationService:
+    def __init__(
+        self,
+        registry: DefinitionRegistry,
+        ctx: Context,
+        storage: StorageService,
+    ) -> None:
+        self.registry, self.ctx, self.storage = registry, ctx, storage
+        self.endpoint = registry.get(CONFIGURATION).target
 
-    def __init__(self, prefix: str) -> None:
-        self.prefix = prefix
+    @plug(LOAD)
+    def configure(self) -> None:
+        self.ctx.configure(
+            load_configuration(self.registry, self.storage.configuration_directory())
+        )
+        self.endpoint.files = ConfigurationFiles(
+            self.registry, self.storage.configuration_directory()
+        )
 
-    async def greet(self, request: Mapping[str, str]) -> str:
-        return f"{self.prefix}，{request['name']}！"
-```
-
-实现没有公共 ID、登记关系、插件依赖和重复的 schema。没有检查请求是否为字典、是否包含 name、name 是否为字符串的多层防御。调用方遵循契约；缺失 name 会产生正常的 Python 错误。
-
-### 5.5 预期生成结果：_meta.py
-
-下面完整展示本例所需的 Python 生成结果，便于审查清单如何落到现有接口。它不属于开发者手写的第二份声明。通用生成器尚未实现。
-
-```python
-"""由 aurora.meta.toml、契约文件与标准发行声明生成。"""
-
-from collections.abc import Mapping
-
-from aurora_core.discovery import Plugin
-from aurora_core.hooks import HandlerDefinition, SlotDefinition
-from aurora_core.ids import Id
-from aurora_core.registry import RegistryEntry
-
-GREETING_SLOT = SlotDefinition(Id("dev.example.greeting:slots/greet"))
-GREETING_HANDLER = HandlerDefinition(Id("dev.example.greeting:handlers/greet"))
-
-CONTRACTS = {
-    "greeting_input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {"name": {"type": "string"}},
-        "required": ["name"],
-        "additionalProperties": False,
-    },
-    "greeting_output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "string",
-    },
-}
-
-
-def greeting_plugin(targets: Mapping[str, object]) -> Plugin:
-    """将实际实现对象绑定到已生成的问候插件声明。"""
-    return Plugin(
-        name="example_greeting",
-        entries=(
-            RegistryEntry(
-                GREETING_SLOT.id,
-                "hook_slot",
-                targets["GREETING_SLOT"],
-                "example_greeting",
-                register_to=Id("org.aurora.core:registries/hook_slots"),
-            ),
-            RegistryEntry(
-                GREETING_HANDLER.id,
-                "hook_handler",
-                targets["GREETING_HANDLER"],
-                "example_greeting",
-                register_to=Id("org.aurora.core:registries/hook_handlers"),
-                slot=GREETING_SLOT.id,
-            ),
-        ),
-        requires=(),
-    )
-```
-
-`SlotDefinition`、`HandlerDefinition` 是拟议的 core 定义引用类型，不是当前已有的 `HookSlot`。前者让使用者创建端点，`HookSlot` 仍是登记时提供接收规则的 target。定义对象创建时只持有 ID；它不注册插件、不创建宿主、不查找实例。需要底层 ID 的消费者使用 `.id`。
-
-必要 target 缺失时，普通字典访问就能给出缺失符号，未完成的 `Plugin` 不会被登记。没有为了拒绝多余 target 再写一套运行校验；开发检查可以报告未使用绑定。
-
-生成目录 `metadata/aurora.meta.json` 则保存本例全部插件说明、完整 ID、展开后的 register_to/slot、inputs/outputs 和契约内容。每个定义附所属 entry point 与源文件内的符号。它是清单的可序列化展开结果，不包含 target 或实例状态。发行包版本和许可证等由读取方合并标准发行元数据，无需在目录另存一份。
-
-### 5.6 实现绑定：plugin.py
-
-```python
-from aurora_core.discovery import Plugin
-from aurora_core.hooks import HookSlot
-
-from ._meta import greeting_plugin
-from .implementation import Greeter
+    def close(self) -> None:
+        self.endpoint.files = None
 
 
 def plugin() -> Plugin:
-    """提供定义对应的实现，不创建问候实例或建立连接。"""
-    return greeting_plugin(
-        {
-            "GREETING_SLOT": HookSlot(),
-            "GREETING_HANDLER": Greeter.greet,
-        }
+    return configuration_plugin(
+        targets={
+            CONFIGS: ConfigReceiver(),
+            CONFIGURATION: ConfigurationEndpoint(),
+        },
+        components={
+            "configuration": ComponentFactory(
+                create=ConfigurationService,
+                plugs=(ConfigurationService.configure,),
+                stop_accepting=ConfigurationService.close,
+            ),
+        },
     )
 ```
 
-`HookSlot()` 使用当前最小接收约定，不提供额外 accept 函数。`Greeter.greet` 是未绑定方法，用于登记定义；装配中把实例的绑定方法交给 `GREETING_HANDLER.bind(...)`，形成实际插头。清单不会尝试构造 Greeter 或猜测 prefix 参数。
+`@plug(LOAD)` 只把生成的定义 ID 关联到函数，保留原函数与绑定方法语义；不指定目标槽，不自行登记、构造实例、订阅 ctx 或建立连接。工厂显式列出导出方法，不扫描模块内所有函数，不推断方法名称。
 
-业务实现绑定关系只在这个函数中编写。清单负责列出需要的定义符号，不再写一套逐定义的 Python 实现路径。
+`ComponentFactory` 的最小职责是保存 create、导出的 plugs，以及可选的本地 stop_accepting 回调。生成的 Plugin 需要能够携带这些组件工厂导出，具体内存容器在实现时确定；不能假装当前只有 name/entries/requires 的 Plugin 已经具备此能力。宿主用 inject 中的服务创建实例，再把显式导出的未绑定方法绑定到该实例，得到按公共 ID 索引的实际插头。
 
-### 5.7 实例装配与调用：demo.py
+生成函数从清单取得 LOAD 的 id/kind/provider/register_to，并从装饰器取得对应实现。未绑定 configure 方法登记为原始 target，实例连接时再提供绑定方法；这延续当前 core 的方式。没有第二份“LOAD 映射到 configure”的手写字符串表。
 
-```python
-import asyncio
+`close` 保持当前 `stop_accepting` 行为，不为它杜撰一个现有的公开清理 ID。它是组件自己的停止接收动作，由宿主既有关闭流程调用；不是一条隐藏的跨插件接线，也不是第六个生命周期阶段。
 
-from aurora_core.bootstrap import bootstrap
-from aurora_core.discovery import load_plugins, register_plugins
-from aurora_core.hooks import HookConnections
+配置服务依赖的 CONFIGS 和 CONFIGURATION 常量要一起改为引用生成模块，包括 declarations.py、editor.py 和公共出口。生成模块本身不导入这些实现模块，避免循环导入。用户配置、公开 ID 与快照身份均不因迁移改变。
 
-from ._meta import GREETING_HANDLER, GREETING_SLOT
-from .implementation import Greeter
-from .plugin import plugin
+本例只创建一个配置服务实例。当前配置编辑端点在同一 registry 中共享，不能因为元信息可以描述多个实例，就宣称已实现多配置服务隔离。
 
+## 6. 集中装配配置怎样写
 
-async def main() -> None:
-    registry = bootstrap()
-    register_plugins(registry, load_plugins(explicit=[plugin()]))
-    hooks = HookConnections(registry)
-    try:
-        greeting = GREETING_SLOT.bind(hooks, instance_id="console")
-        formal = GREETING_HANDLER.bind(Greeter("您好").greet, instance_id="formal")
-        casual = GREETING_HANDLER.bind(Greeter("你好").greet, instance_id="casual")
+### 6.1 最小完整示例
 
-        greeting.connect(formal)
-        greeting.connect(casual, priority=10)
+建议文件名为 `assembly.toml`。下面是本方案的拟议语法，不是当前 host.toml 可以直接读取的字段。
 
-        for text in await greeting.emit({"name": "小明"}):
-            print(text)
-    finally:
-        hooks.close()
+```toml
+schema_version = 1
+plugins = ["aurora_config"]
 
+[instances.aurora_config]
+plugin = "aurora_config"
+component = "configuration"
+depends_on = []
 
-if __name__ == "__main__":
-    asyncio.run(main())
+[[connections]]
+plug = { instance = "aurora_config", id = "org.aurora.config:handlers/load" }
+slot = { instance = "aurora_config", id = "org.aurora.core:lifecycle/config" }
+priority = 0
 ```
 
-在端点 API 实现、产物生成并安装示例包之后，运行 `python -m example_greeting.demo` 的预期输出：
+| 字段 | 解释 |
+| --- | --- |
+| plugins | 明确启用并登记哪些插件；不自动启用其 requires |
+| instances 的表键 | 本次装配的实例身份，与插件名、定义 ID 分开 |
+| instance.plugin / component | 选择已启用插件导出的哪种组件工厂 |
+| depends_on | 实例生命周期依赖；沿用启动正序、关闭逆序的规则 |
+| connection.plug | 插头的公共定义 ID 与实际提供者实例 |
+| connection.slot | 槽的公共定义 ID 与实际槽实例 |
+| priority | 同一槽实例中按现有规则排序；同值保留配置中的连接顺序 |
+
+安装包、启用插件与创建实例是不同动作。启用一个只提供定义的插件，不代表必须为它创建一个生命周期组件；没有在实例表选择的工厂不会自行运行。
+
+### 6.2 为什么两端的 instance 都是 aurora_config
+
+插头定义的提供者是 `aurora_config`，槽定义的提供者是 `aurora_core`。两者的公共 ID 已明确区分所属包。
+
+当前 Lifecycle 按组件推进阶段，通过 `hooks.for_slot(阶段 ID, component.instance_id)` 取得连接。因此宿主会为每个生命周期组件使用一组按该组件实例身份寻址的 core 槽。本例的 core/config 槽作用于 aurora_config 组件，所以 slot.instance 与组件实例相同。
+
+这不表示配置插件导出了自己的 config 槽，也不表示插头指向自己的定义。实际关系是：
 
 ```text
-您好，小明！
-你好，小明！
+core 定义的 lifecycle/config，作用于 aurora_config 组件
+    → 调用集中配置接入的 aurora_config:handlers/load 实例方法
 ```
 
-这里 `greeting` 是槽实例，`formal`、`casual` 是持有各自绑定方法的方法插头。Python 的绑定方法保留所属 Greeter 对象，不需要另建对象保活表。实例名称只在 bind 时指定一次，连接只接收一个插头对象。
+不把所有组件的 config 处理器塞进一个全局广播槽，否则会丢掉现有组件依赖排序和逐组件生命周期语义。
 
-此处“实例装配”就是创建对象、绑定实例身份并显式插接。清单中的 slot 意向不会自动连上实例，实际顺序也不由清单表的排列顺序决定。`GREETING_HANDLER.bind(...)` 表示让这个实例方法实现已经声明的处理器；开发者可以显式提供其他符合约定的 callable，不通过反射强制它必须等于原始工厂中的函数。
+### 6.3 启动和关闭实际发生什么
 
-安装后的 entry point 发现可由现有 `load_plugins(enabled=["example_greeting"])` 完成。demo 使用显式插件只是为了把从登记到调用的链路完整写在一个文件中。
+1. 宿主先读取 assembly.toml，得到插件、实例和连接选择。
+2. 登记 core 自举目录、生命周期槽和插件定义，建立 ctx 与存储服务。
+3. 用清单声明的 inject 参数创建 ConfigurationService；此时不加载用户配置、不调用 configure。
+4. 装配器按 connections，将实际的 service.configure 绑定到该组件的 core/config 槽。
+5. 按 instances 创建 LifecycleComponent；使用 depends_on 与组件导出的 stop_accepting。
+6. 生命周期先恢复持久状态，再推进 config。core 调用连接，配置插件加载声明文件并写入非持久配置状态。
+7. prepare/start 继续按现有规则推进。这个实例没有其他阶段插头，不需要伪造空方法。
+8. 关闭时通过既有 stop_accepting 调用 service.close，配置编辑服务停止接收操作；宿主统一完成连接、存储与 ctx 的收尾。
 
-### 5.8 端点 API 的行为
+集中配置只决定连接和组件关系。阶段顺序、失败收束、取消和最终落盘仍由现有生命周期实现负责，不在 TOML 中编写执行算法。
 
-| 写法 | 作用 |
-| --- | --- |
-| `GREETING_SLOT.bind(hooks, instance_id="console")` | 把槽定义绑定到某个宿主中的槽实例，不建立连接 |
-| `GREETING_HANDLER.bind(method, instance_id="formal")` | 把处理器定义、实例身份和实际方法合成插头，不调用方法 |
-| `connection = greeting.connect(formal)` | 把一个方法插头接入槽，返回现有 `HookConnection` |
-| `greeting.disconnect(connection)` | 拔掉这条连接，委托既有连接管理器 |
-| `await greeting.emit(request)` | 按当前连接快照依次调用，返回结果元组 |
-| `greeting.connections()` | 取得由既有连接管理器排序的连接快照 |
-| `await greeting.invoke(connection, request)` | 调用某条连接，供业务代码自行决定流程 |
+### 6.4 装配器与底层连接的对应
 
-`emit` 是普通 hook 的串行广播便利方法：priority 小者先执行，同级按 connect 顺序；没有连接时返回空元组；结果按调用顺序排列。异常直接传播，之后的连接不继续调用，取消沿当前 await 链传播；不额外重试、并发执行、吞掉错误或自动归并结果。
-
-调用期间的连接变化沿用 `HookConnections` 的语义。新增连接不进入已取得的快照；某条尚未调用的连接被断开后，调用它会沿现有 invoke 路径报告连接失效，不额外静默跳过。断开连接不取消已开始的调用，也不关闭处理器自有资源。
-
-如果业务需要分支、并行或选择性调用，使用 connections/invoke 或现有控制组件。`emit` 不改变控制组件的执行策略。宿主仍持有和关闭 `hooks`；单个槽没有关闭整个宿主连接管理器的权力。
-
-普通方法继续是普通方法。为了把它接入系统，显式通过生成定义的 bind 产生插头即可。无需要求所有业务类继承框架基类、增加隐藏实例 ID、扫描方法名或维护对象与公共 ID 的自动匹配表。`slot.connect(plug)` 与现有 control 用法一致，本轮不增加方向难以辨认的运算符重载。
-
-### 5.9 端点到现有 core 的最小映射
-
-下面是拟议 core API 的完整最小草图，供评审行为和验证示例；不是要求每个插件携带的辅助文件，也不是本次对运行代码的修改。四个小对象只保存定义引用、实际方法及实例身份，连接仍全部由同一个 `HookConnections` 管理。
+下面仅展示宿主内部映射，不是插件代码需要维护的循环；名称是算法变量，不代表已实现的公共 API。
 
 ```python
-from __future__ import annotations
-
-from collections.abc import Callable
-from dataclasses import dataclass
-
-from aurora_core.hooks import HookConnection, HookConnections
-from aurora_core.ids import Id
-
-
-@dataclass(frozen=True)
-class MethodPlug:
-    definition: Id
-    target: Callable[..., object]
-    instance_id: str
-
-
-@dataclass(frozen=True)
-class HandlerDefinition:
-    id: Id
-
-    def bind(self, target: Callable[..., object], *, instance_id: str) -> MethodPlug:
-        return MethodPlug(self.id, target, instance_id)
-
-
-@dataclass(frozen=True)
-class SlotDefinition:
-    id: Id
-
-    def bind(self, hooks: HookConnections, *, instance_id: str) -> BoundSlot:
-        return BoundSlot(self.id, hooks, instance_id)
-
-
-@dataclass(frozen=True)
-class BoundSlot:
-    definition: Id
-    hooks: HookConnections
-    instance_id: str
-
-    def connect(self, plug: MethodPlug, *, priority: int = 0) -> HookConnection:
-        return self.hooks.connect(
-            self.definition,
-            plug.definition,
-            slot_instance=self.instance_id,
-            handler_instance=plug.instance_id,
-            target=plug.target,
-            priority=priority,
-        )
-
-    def disconnect(self, connection: HookConnection) -> bool:
-        return self.hooks.disconnect(connection)
-
-    def connections(self) -> tuple[HookConnection, ...]:
-        return self.hooks.for_slot(self.definition, self.instance_id)
-
-    async def invoke(self, connection: HookConnection, *args: object, **kwargs: object) -> object:
-        return await self.hooks.invoke(connection, *args, **kwargs)
-
-    async def emit(self, *args: object, **kwargs: object) -> tuple[object, ...]:
-        results = []
-        for connection in self.connections():
-            results.append(await self.invoke(connection, *args, **kwargs))
-        return tuple(results)
+for connection in assembly.connections:
+    plug_instance = instances[connection.plug.instance]
+    target = plug_instance.plugs[connection.plug.id]
+    hooks.connect(
+        connection.slot.id,
+        connection.plug.id,
+        slot_instance=connection.slot.instance,
+        handler_instance=connection.plug.instance,
+        target=target,
+        priority=connection.priority,
+    )
 ```
 
-这里没有新的接收规则、连接缓存或隐式生命周期。端点对象只是更适合装配代码阅读的调用入口。只有 bind 保存描述，connect 才访问注册表并建立实际连接，emit/invoke 才执行方法；缺失定义、重复连接和接收方拒绝仍由现有路径报告。
+所有公开应用连接经过同一份配置和这一类底层调用。插件不必知道对端实例，也不需要给自己的处理器调用 connect。插槽提供方只在相应业务时机调用自身槽内已连接的处理器。
 
-## 6. 对应项目现有能力
+## 7. 必须解决的引导边界
 
-### 6.1 control 与 agent 的执行插头
+集中装配文件决定配置服务能否启动，因此不能由该配置服务在 config 阶段反过来决定自己的初始连接。
 
-当前 [component_entries](../packages/aurora_control/src/aurora_control/execution.py) 生成 component、`/execute`，以及可选的 `/children`。迁移时把这些固定定义写入清单或生成展开目录，业务代码引用生成常量；不同时保留两套手写的固定登记声明。
+宿主引导层先解析 assembly.toml 的小型结构，只读取插件选择、实例描述和引用，不依赖已经运行的 config 服务。项目已有 [read_host_config](../packages/aurora_cli/src/aurora_cli/configuration.py) 在插件发现前读取宿主选择，可以沿这条路径接入；通用结构处理仍由配置层支持，core 不增加 TOML 解析职责。
 
-执行插头仍是登记层的 `hook_handler` 与实例层的 `ExecutionPlug`。`interface` 继续引用其组件定义，不新增一个 plug 登记种类。v1 沿用现有 `/execute` 端口命名约定，清单不能凭空承诺任意端口命名都能被当前 ExecutionPlug 使用。
+其后，业务 TOML 仍通过 ConfigSpec、ConfigSchema、ConfigTemplate 和配置服务加载。运行时覆盖不自动写回文件，不把装配配置或业务配置混入持久业务快照。
 
-`ExecutionRequest`、`StateBinding`、`InstanceStateBinding` 及实际状态地址留在代码。元信息可描述 input/output 等角色和用途，但不把 bot 的地址写进 agent 定义。`ExecutionSlot.accept` 保持可选；没有业务需要就不写。不增加全局 schema 相等校验，不把静态“候选连接”显示为已确认兼容。
+真实实现需为宿主提供一个显式选择集中装配文件的入口。旧 `assembly = 公共装配 ID` 和新文件模式作为不同宿主选择，不能同时执行，否则会重复创建实例和连接。文件选择的 CLI 拼写不在本文提前固定。
 
-control 已有 `slot.connect(component.plug)`，普通方法插头沿用相同的装配表达。`MethodPlug` 不冒充携带执行身份和状态地址的 `ExecutionPlug`，也不把控制组件的 invoke 换成普通 hook 的 emit。二者复用底层连接机制，各自保留实际调用协议。
+当前 CLI 自动登记配置插件，并在执行宿主时自动加入 configuration_component。采用新文件模式后，应由文件中的实例和连接接管这两步；不能保留隐藏注入后又创建第二个配置服务。旧代码装配模式仍按自己的路径运行，迁移是切换选择，不是双重叠加。
 
-### 6.2 配置、状态、工具和端点
+## 8. 如何在这个真实插件上验证
 
-[config_entries](../packages/aurora_config/src/aurora_config/declarations.py) 同时产生配置与非持久状态。迁移这些定义时要同步把状态纳入目录，避免清单展示一个定义、运行时又隐含出现另一个固定 ID。
+### 8.1 先核对能力和最小连接
 
-具体实现可以使用配置包的薄构造函数读取声明中的状态、模板和契约；不要求 core 理解 ConfigSpec。业务关联校验仍留在代码。工具参数、HTTP 路由、CLI 参数等可以沿用现有纯数据描述或纯导出函数，目录从同一来源取得内容，不要求第一轮全部改写成 TOML。
+不改业务实现即可核对 entry point、三个公开 ID、提供者与登记目录，并通过当前 core 手动演练同一条生命周期连接。演练中继续使用现有 ConfigurationService，直接创建实例并建立连接，不调用已经自行接线的 configuration_component，避免重复连接。
 
-持久化属性如果进入清单，就必须由实际 StateKey 构造读取；在完成这种消费关系之前，不添加一个仅供展示、可能与运行行为不一致的 persistent 字段。
+仅启用 aurora_config 时，没有其他插件声明的业务配置可注入；配置服务仍可完成启动和关闭，配置编辑服务中可见配置数为零。这验证加载插头与 core/config 的衔接，不应描述为已运行完整 Bot。
 
-### 6.3 装饰器和显式替换
+### 8.2 用现有 world 配置观察真实 ctx 注入
 
-对于已迁移到清单的 operation/hook_handler，代码不再使用带完整 ID 和 slot 的重复声明。可以直接像示例那样绑定对象；若保留装饰器，装饰器只引用生成的声明符号。
+为了观察配置值进入 ctx，可将第 6.1 节插件列表替换为：
 
-现有 `registry.replace()` 和运行期显式 target 绑定继续可用。用户可以编写程序化插件、替换实现或直接组合组件。静态目录描述发行包声明的默认能力，运行期查询显示实际登记与连接；替换后的对象不应被静态目录误报为原始实现。
+```toml
+plugins = ["aurora_config", "aurora_world", "aurora_world.configuration"]
+```
 
-程序化插件可以没有清单，查询时显示“仅运行期提供”。不为了强迫全部插件进入清单而添加加载禁令，也不为此引入兼容转发层。
+保留唯一的 aurora_config 实例和原连接。这里启用另外两个插件是为了使用现成的 `org.aurora.world:configs/sources` 声明及 `org.aurora.world:state/config`，不创建 WorldSources、时间或天气来源实例。
 
-## 7. 校验收敛到哪里
+在临时数据目录中，config 阶段应复制缺失的 world 配置模板并将解析结果写入非持久状态；配置文件编辑服务应能列出该声明。关闭后服务的 files 引用应恢复为 None。全程不调用模型、不发起网络访问、不读取或改写用户实际数据目录。
 
-| 情况 | 处理方式 |
+这证明“一个插件导出配置声明，配置服务消费声明并维护 ctx”的现有链路。world 自身的 configure/start 等插头没有被接线，不会因为启用插件而自动运行。
+
+## 9. 如何扩展到其他真实插件
+
+### 9.1 ReAct 与模型调用
+
+下面只是一条拓扑示意，假设 agent 和 model 实例已按各自导出协议创建，不是完整可运行的 Agent 装配：
+
+```toml
+[[connections]]
+plug = { instance = "model", id = "org.aurora.agent:handlers/model_call/execute" }
+slot = { instance = "agent", id = "org.aurora.agent:react/infer" }
+priority = 0
+```
+
+两端都是现有公共 ID。ReAct 知道何时进入 infer，ModelCall 知道如何从 ctx 读取模型请求并写出结果，集中配置决定把哪个模型实例放入该阶段。
+
+但这条边本身不能完成现有 ReAct 链路。当前默认阶段还包括 build_prompt、interpret_response、record_observation 和工具执行，状态地址及处理顺序也要配套迁移。不能保留 ReActDefaults.connect() 自动连边，再额外读配置重复接线。
+
+执行端口连接应使用现有 `ExecutionSlot.connect(ExecutionPlug)`，保留状态地址握手和实际接收逻辑；装配器按组件导出的端口类别调用它，不把执行插头降级成普通无参数 hook。组件工厂按其需要接收集中配置中的状态绑定，agent 定义不硬编码 bot 的状态地址。
+
+### 9.2 ctx 与订阅
+
+插件描述自己公开的状态、配置与可复用的地址角色；代码负责何时读取、写入和订阅。例如现有 WorldSources 在 start 中订阅 ctx，并在停止接收时解除订阅，这属于其自身行为。
+
+只有插件确实提供可配置的订阅选择时，应用配置才选择具体 key/location。v1 不强迫把每一次 ctx 读写或内部订阅转成装配表，也不把所有 ctx 变化自动当作执行入口。
+
+### 9.3 默认装配预设
+
+正式 Bot 可以发布独立的默认 assembly.toml，集中记录默认组件、状态绑定、生命周期依赖和连接。用户选用或修改它。插件清单可以给出预设资源位置，加载插件本身不应用预设。
+
+插件实现依然可以管理自己的内部对象。需要跨插件替换的公开边应当在预设中出现，避免“预设之外还有一组固定接线”破坏配置作为唯一运行拓扑来源的意义。
+
+## 10. 校验与信任边界
+
+| 情况 | 做法 |
 | --- | --- |
-| 无法解析清单、格式版本无法解释 | 生成时报告明确错误，不猜测含义 |
-| 固定公共 ID 重复 | 保留现有登记冲突错误 |
-| 必需实现未提供、实际调用的定义不存在 | 使用直接的绑定或查询错误，不静默生成占位对象 |
-| 显式 requires 未满足 | 保留现有插件选择校验，不自动安装或启用 |
-| 可选接收方缺席 | 保留现有 unconnected 诊断，不升级为通用加载禁令 |
-| 非调用对象被当作处理器、实例连接重复 | 保留现有连接语义所需检查，不叠加另一套 |
-| 不认识的说明字段、第三方 kind 或扩展 | 保留供查询；开发检查提示拼写或解释边界，不一律拒绝运行 |
-| 生成物过期、模板缺失、契约链接失效 | 放在生成检查和发布验收中，不在每次调用重查 |
-| 两个契约不同或没有契约 | 接收方自行决定；框架不建立全局兼容判定器 |
-| 外部输入、用户配置、实际副作用边界 | 保留对应消费者已有的必要校验，不因信任开发者删除有效检查 |
+| 清单或装配文件无法解析 | 在读取处报告直接错误 |
+| 公共 ID 冲突、实际使用的定义或实例缺失 | 沿现有登记、查找或连接路径报告错误 |
+| requires 缺失 | 保留显式选择规则，不偷偷安装或启用插件 |
+| lifecycle depends_on 缺失或有环 | 沿用已有组件排序检查，不把所有 hook 图都要求成 DAG |
+| 可选登记接收方缺席 | 保留 unconnected 诊断，不强制启动对方 |
+| 契约不同或没有完整 schema | 允许按双方约定连接，接收方按实际需要解释 |
+| 未认识的说明字段和第三方扩展 | 保留并展示，开发工具提示；不一律阻止运行 |
+| 外部输入、真实配置、不可逆副作用 | 保留所属消费者必要的校验和行为约束 |
+| 生成物过期、资源遗漏或未导出的符号 | 放入开发与发布检查，不在每次调用重复核对 |
 
-基础生成器保留未知说明/扩展数据，但不尝试执行其中未知的行为。某个消费者必须理解一项配置才能工作时，由该消费者给出局部错误；“忽略未知字段”不等于执行自己无法解释的指令。
+不新增插件权限审批、全程序签名扫描、对象来源强制比对、每次调用的重复 schema 验证、源码哈希守卫或自动数据迁移。开发者可以显式选择特殊组合，也承担其业务意义；元信息负责让选择可见、可解释。
 
-不新增递归对象验证、方法签名全覆盖扫描、运行期源码哈希检查、权限审批、自动修复或静默数据迁移。已有检查是否需要精简，应针对真实成本或问题单独讨论，不借元信息迁移批量删除。
+静态目录能回答“有哪些插头和槽”；装配文件能回答“计划连接什么”；运行宿主能回答“现在实际连接了什么”。不把其中一个视图当成另一个，也不把静态候选连接标成已经运行成功。
 
-拟议 `aurora meta check` 检查的是开发产物：引用可解析、入口对应、目录完整、生成结果一致、契约资源存在。它不自动导入全部已安装插件或启动宿主；需要调用 export 时，应针对开发者明确选择的项目。未使用绑定等提示不必默认成为启动阻断条件。
+## 11. 生成、包边界与分发
 
-## 8. 构建、查询与实施范围
+生成工具读取 pyproject.toml、aurora.meta.toml 及契约来源，生成包内纯声明模块和静态目录。公共 ID 常量、Plugin 的声明部分以及组件导出描述由这些输入确定；生成代码不手工维护，不导入业务实现来猜测连接。
 
-生成工具读取 `pyproject.toml`、清单及契约来源，确定性输出 Python 声明和 JSON 目录。构建消费已经生成的文件。生成物可以随源码提交，方便可编辑安装和源码阅读；修改声明后重新生成，CI 用只读检查发现遗漏。
+插件实现只把实际对象、装饰过的导出方法和组件工厂交给生成入口。装饰器对方法的关联是实现来源，清单是公共身份来源；这不是重复声明目标槽或实例连接。
 
-Hatch 示例将静态目录发布到 `.dist-info/extra_metadata/aurora.meta.json`。读取方通过发行包元数据读取它，不通过 `importlib.resources` 导入插件包来定位。目录内嵌契约并保留来源符号；查阅不依赖模型 SDK、MCP、用户配置或运行凭证。
+静态目录随 wheel 放在约定的 `.dist-info/extra_metadata/aurora.meta.json` 中，查询方从发行元数据读取；不通过导入插件包来定位，不需要安装模型或 MCP 的可选 SDK。清单及契约资源一同分发，生成物可随源码提交，通过只读开发检查验证一致性。
 
-拟议查询入口：
+core 只处理已经解析的声明、工厂导出、对象和连接；TOML 读取、静态生成与装配文件解释属于开发工具和宿主配置层。control 保持仅依赖 core，agent 不因此依赖 CLI、API 或 bot。实例工厂协议是集中装配这个实际消费者需要的能力，不在此基础上提前引入新的通用 harness 或任意 Python 对象配置语言。
 
-```text
-aurora plugin list
-aurora plugin show example_greeting
-aurora id show dev.example.greeting:slots/greet
-aurora id references dev.example.greeting:slots/greet
-aurora meta generate <项目目录>
-aurora meta check <项目目录>
-```
+## 12. 后续实施顺序与本次边界
 
-这些入口属于后续实现。静态查询应展示“插件提供一个插槽和一个处理器，处理器声明指向这个插槽”；只有连接到运行宿主，才能展示“console 当前连接 formal 和 casual 两个实例”。
+1. 用 aurora_config 固定三个真实定义，提供清单生成与仅标记身份的 plug 装饰器；导出 ConfigurationService 工厂与 configure 方法。
+2. 增加集中装配文件的宿主入口，处理引导读取、显式实例化、生命周期连接及关闭，不同时注入旧配置组件。
+3. 在临时目录验证配置服务自身，以及额外登记现有 world 配置后的 ctx 注入；保持真实 ID、模板与非持久语义。
+4. 再选择一个真实业务组件迁移实例接线，处理状态绑定和现有自动连接路径；不跳到一次性改写全部 DefaultAssembly。
+5. 完成相应边界与生命周期回归、完整检查和 wheel 独立安装验收后，才把拟议能力写成已支持的操作指南。
 
-第一轮实现集中在标准入口关联、固定定义生成、方法插头与槽实例的薄 API、静态目录、必要的契约资源引用，以及代表插件的迁移。配置等专用扩展按实际消费者逐步接入。后续市场可以按 ID、kind、插槽关系和说明检索；安装更新、自动装配、权限系统及通用 schema 兼容引擎不纳入本轮。
-
-迁移某个定义时应同时切换 ID 常量、声明装饰器、登记工厂、消费者和文档来源，保留原公共 ID、插件名和生命周期行为。已有配置与快照不因加入清单被改写。构建工具不能为了元信息读取破坏 control/agent 的独立安装边界。
-
-## 9. 本文验收范围
-
-本文作为独立方案保存，未修改项目实现、依赖、入口、配置、README.md 或 AGENTS.md。文档验收包括本地链接、TOML/JSON 片段解析、完整示例 Python 语法，以及在临时验证环境中把第 5.9 节草图接到现有 core 后运行示例，核对绑定、插接、输出与拔除行为。该验证不能证明拟议端点 API 已进入项目，也不能证明尚未实现的生成器或 wheel 打包流程已完成。
+本次只重写这份独立设计文档，不增加清单文件、装配文件、装饰器、工厂类型或运行代码，不更改 README.md、AGENTS.md、配置和用户数据。文档验收核对本地链接、TOML 与 Python 片段、真实插件定义和临时目录中的现有配置链路；它不代表新生成器、装配器或装饰器已经实现。
