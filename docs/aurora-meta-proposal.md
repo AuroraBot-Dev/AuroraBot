@@ -1,6 +1,6 @@
 # aurora.meta.toml 收敛方案与完整示例
 
-日期：2026-11-26。状态：讨论稿，未实施。本文中的清单格式、生成器和 `aurora meta` 命令均为拟议能力；现有项目尚不能直接执行生成命令。示例使用当前 core 的登记与连接接口，生成文件展示的是生成器未来应产生的结果。
+日期：2026-11-26。状态：讨论稿，未实施。本文中的清单格式、生成器、方法插头与槽实例 API、`aurora meta` 命令均为拟议能力。示例通过端点对象委托当前 core 的登记与连接接口；第 5.9 节给出最小实现草图，项目尚未提供这些端点类型。
 
 ## 1. 目标与原则
 
@@ -12,7 +12,7 @@
 
 1. 每个事实只有一个可编辑来源，其他文件可以引用或由它生成。
 2. 公共 ID、归属和静态关系从清单生成；实现对象和实际行为留在 Python。
-3. 继续使用现有 `Plugin`、`RegistryEntry`、`HookConnections` 和 `ExecutionPlug`，不新增平行的运行机制。
+3. 继续使用现有 `Plugin`、`RegistryEntry`、`HookConnections` 和 `ExecutionPlug`；端点对象委托既有连接管理器，不维护第二份连接表。
 4. 复杂业务规则由插件自己实现；不要求所有插槽都提供 schema 或自定义接受函数。
 5. 先支持明确的描述和生成，不设计通用对象构造语言、条件表达式、自动连接或自动启用依赖。
 
@@ -24,10 +24,10 @@
 
 构建前的开发工具将清单编译成：
 
-- 包内 `_meta.py`：ID 常量、声明数据、结构契约数据和构造 `Plugin` 的薄辅助函数。
+- 包内 `_meta.py`：定义对象及其 ID、声明数据、结构契约数据和构造 `Plugin` 的薄辅助函数。
 - `aurora.meta.json`：不含 Python 实例的静态目录，用于 CLI、文档和市场索引。
 
-二者都不手工修改。生成模块只使用标准库和已有 core 接口，不导入插件实现、不启动资源，也不读取 TOML。core 不增加 TOML 加载职责，control 保持仅依赖 core。
+二者都不手工修改。生成模块只使用标准库和 core；拟议端点类型也放在 core，不在每个插件中复制实现。模块不导入插件实现、不启动资源，也不读取 TOML。core 不增加 TOML 加载职责，control 保持仅依赖 core。
 
 首次实现可以提供独立的开发脚本，之后由 CLI 提供命令入口；代码生成工具不成为插件的运行时依赖。构建前显式生成或检查产物，不要求每次启动都核对源码摘要。
 
@@ -38,7 +38,7 @@
 | 发行包版本、作者、许可证、安装依赖、extra | `pyproject.toml` | 静态查询合并读取标准发行元数据 |
 | 插件名称、入口工厂路径 | `pyproject.toml` 的 `aurora.plugins` | 清单引用 entry point；生成代码沿用其名称 |
 | 插件简介、用法、文档、启用依赖 | 清单 | 目录展示；生成 `Plugin.requires` |
-| 固定公共 ID、kind、provider、登记与插槽关系 | 清单 | 生成常量和 `RegistryEntry` 的声明部分 |
+| 固定公共 ID、kind、provider、登记与插槽关系 | 清单 | 生成定义对象及 `RegistryEntry` 的声明部分 |
 | Python 实现对象、绑定方法 | Python | 工厂向生成函数提供实际 target |
 | 数据结构契约 | 一个契约文件或一个代码导出函数 | 清单引用，目录和运行消费者读取同一内容 |
 | 状态持久化属性、配置关联的状态和模板 | 所属包的清单扩展 | 所属包的构造函数读取声明 |
@@ -124,7 +124,7 @@ summary = "按用户配置选择并发现 MCP 工具"
 
 示例包提供一个问候插槽和一个问候处理器。宿主创建正式、日常两个处理器实例，按顺序连接到同一个插槽实例。两者共享定义身份，实例身份和输出前缀分别由装配指定。
 
-采用普通 core hook，足以展示定义、插槽意向、实现绑定和实例连接。control 的执行插头对应关系在第 6 节说明。
+采用普通 core hook，并为它提供与 control 的 `slot.connect(plug)` 一致的用法。生成的槽定义绑定到一个宿主槽实例，处理器定义绑定到一个实际方法后成为方法插头；装配只需把插头交给槽。control 的执行插头对应关系在第 6 节说明。
 
 ```text
 example-greeting/
@@ -188,7 +188,7 @@ entry_point = "example_greeting"
 title = "问候处理器"
 summary = "提供问候插槽和可绑定实例的问候处理器"
 description = "调用方提供包含 name 的请求，处理器返回问候文本。"
-usage = "创建 Greeter 实例，将其 greet 方法显式连接到问候插槽。"
+usage = "将 Greeter.greet 的绑定方法制成插头，再通过槽实例的 connect 接入。"
 requires = []
 tags = ["example", "greeting"]
 
@@ -220,7 +220,7 @@ inputs = "greeting_input"
 outputs = "greeting_output"
 ```
 
-插件名和代码路径没有在清单重新定义。两个公共 ID、两条登记关系和处理器的 slot 意向都在这里定义，后面的 Python 业务文件不再手写这些值。
+插件名和代码路径没有在清单重新定义。两个公共 ID、两条登记关系和处理器的 slot 意向都在这里定义，后面的 Python 业务文件不再手写这些值。生成器根据 kind 产生 `SlotDefinition` 或 `HandlerDefinition`；端点对象名称及其 ID 均来自同一声明，不增加手写的第二套端口表。
 
 `inputs`、`outputs` 关联的是契约，不是公开登记项。只有某个契约需要被其他插件通过公共 ID 引用时，才额外声明 `kind = "schema"` 的公共定义。
 
@@ -279,11 +279,12 @@ class Greeter:
 from collections.abc import Mapping
 
 from aurora_core.discovery import Plugin
+from aurora_core.hooks import HandlerDefinition, SlotDefinition
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
 
-GREETING_SLOT = Id("dev.example.greeting:slots/greet")
-GREETING_HANDLER = Id("dev.example.greeting:handlers/greet")
+GREETING_SLOT = SlotDefinition(Id("dev.example.greeting:slots/greet"))
+GREETING_HANDLER = HandlerDefinition(Id("dev.example.greeting:handlers/greet"))
 
 CONTRACTS = {
     "greeting_input": {
@@ -306,24 +307,26 @@ def greeting_plugin(targets: Mapping[str, object]) -> Plugin:
         name="example_greeting",
         entries=(
             RegistryEntry(
-                GREETING_SLOT,
+                GREETING_SLOT.id,
                 "hook_slot",
                 targets["GREETING_SLOT"],
                 "example_greeting",
                 register_to=Id("org.aurora.core:registries/hook_slots"),
             ),
             RegistryEntry(
-                GREETING_HANDLER,
+                GREETING_HANDLER.id,
                 "hook_handler",
                 targets["GREETING_HANDLER"],
                 "example_greeting",
                 register_to=Id("org.aurora.core:registries/hook_handlers"),
-                slot=GREETING_SLOT,
+                slot=GREETING_SLOT.id,
             ),
         ),
         requires=(),
     )
 ```
+
+`SlotDefinition`、`HandlerDefinition` 是拟议的 core 定义引用类型，不是当前已有的 `HookSlot`。前者让使用者创建端点，`HookSlot` 仍是登记时提供接收规则的 target。定义对象创建时只持有 ID；它不注册插件、不创建宿主、不查找实例。需要底层 ID 的消费者使用 `.id`。
 
 必要 target 缺失时，普通字典访问就能给出缺失符号，未完成的 `Plugin` 不会被登记。没有为了拒绝多余 target 再写一套运行校验；开发检查可以报告未使用绑定。
 
@@ -349,7 +352,7 @@ def plugin() -> Plugin:
     )
 ```
 
-`HookSlot()` 使用当前最小接收约定，不提供额外 accept 函数。`Greeter.greet` 是未绑定方法，用于登记定义；实际连接时提供实例的绑定方法。清单不会尝试构造 Greeter 或猜测 prefix 参数。
+`HookSlot()` 使用当前最小接收约定，不提供额外 accept 函数。`Greeter.greet` 是未绑定方法，用于登记定义；装配中把实例的绑定方法交给 `GREETING_HANDLER.bind(...)`，形成实际插头。清单不会尝试构造 Greeter 或猜测 prefix 参数。
 
 业务实现绑定关系只在这个函数中编写。清单负责列出需要的定义符号，不再写一套逐定义的 Python 实现路径。
 
@@ -372,24 +375,15 @@ async def main() -> None:
     register_plugins(registry, load_plugins(explicit=[plugin()]))
     hooks = HookConnections(registry)
     try:
-        formal = Greeter("您好")
-        casual = Greeter("你好")
-        for instance_id, target, priority in (
-            ("formal", formal.greet, 0),
-            ("casual", casual.greet, 10),
-        ):
-            hooks.connect(
-                GREETING_SLOT,
-                GREETING_HANDLER,
-                slot_instance="console",
-                handler_instance=instance_id,
-                target=target,
-                priority=priority,
-            )
+        greeting = GREETING_SLOT.bind(hooks, instance_id="console")
+        formal = GREETING_HANDLER.bind(Greeter("您好").greet, instance_id="formal")
+        casual = GREETING_HANDLER.bind(Greeter("你好").greet, instance_id="casual")
 
-        for connection in hooks.for_slot(GREETING_SLOT, "console"):
-            result = await hooks.invoke(connection, {"name": "小明"})
-            print(result)
+        greeting.connect(formal)
+        greeting.connect(casual, priority=10)
+
+        for text in await greeting.emit({"name": "小明"}):
+            print(text)
     finally:
         hooks.close()
 
@@ -398,16 +392,109 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-在已有生成产物且安装了该示例包的环境运行 `python -m example_greeting.demo`，预期输出：
+在端点 API 实现、产物生成并安装示例包之后，运行 `python -m example_greeting.demo` 的预期输出：
 
 ```text
 您好，小明！
 你好，小明！
 ```
 
-此处“实例装配”就是创建 formal/casual，分配实例名称、选择 console 插槽实例并指定顺序。它没有重新定义插件或公共 ID。清单中的 slot 意向不会自动连上这两个实例，实际顺序也不由清单表的排列顺序决定。
+这里 `greeting` 是槽实例，`formal`、`casual` 是持有各自绑定方法的方法插头。Python 的绑定方法保留所属 Greeter 对象，不需要另建对象保活表。实例名称只在 bind 时指定一次，连接只接收一个插头对象。
+
+此处“实例装配”就是创建对象、绑定实例身份并显式插接。清单中的 slot 意向不会自动连上实例，实际顺序也不由清单表的排列顺序决定。`GREETING_HANDLER.bind(...)` 表示让这个实例方法实现已经声明的处理器；开发者可以显式提供其他符合约定的 callable，不通过反射强制它必须等于原始工厂中的函数。
 
 安装后的 entry point 发现可由现有 `load_plugins(enabled=["example_greeting"])` 完成。demo 使用显式插件只是为了把从登记到调用的链路完整写在一个文件中。
+
+### 5.8 端点 API 的行为
+
+| 写法 | 作用 |
+| --- | --- |
+| `GREETING_SLOT.bind(hooks, instance_id="console")` | 把槽定义绑定到某个宿主中的槽实例，不建立连接 |
+| `GREETING_HANDLER.bind(method, instance_id="formal")` | 把处理器定义、实例身份和实际方法合成插头，不调用方法 |
+| `connection = greeting.connect(formal)` | 把一个方法插头接入槽，返回现有 `HookConnection` |
+| `greeting.disconnect(connection)` | 拔掉这条连接，委托既有连接管理器 |
+| `await greeting.emit(request)` | 按当前连接快照依次调用，返回结果元组 |
+| `greeting.connections()` | 取得由既有连接管理器排序的连接快照 |
+| `await greeting.invoke(connection, request)` | 调用某条连接，供业务代码自行决定流程 |
+
+`emit` 是普通 hook 的串行广播便利方法：priority 小者先执行，同级按 connect 顺序；没有连接时返回空元组；结果按调用顺序排列。异常直接传播，之后的连接不继续调用，取消沿当前 await 链传播；不额外重试、并发执行、吞掉错误或自动归并结果。
+
+调用期间的连接变化沿用 `HookConnections` 的语义。新增连接不进入已取得的快照；某条尚未调用的连接被断开后，调用它会沿现有 invoke 路径报告连接失效，不额外静默跳过。断开连接不取消已开始的调用，也不关闭处理器自有资源。
+
+如果业务需要分支、并行或选择性调用，使用 connections/invoke 或现有控制组件。`emit` 不改变控制组件的执行策略。宿主仍持有和关闭 `hooks`；单个槽没有关闭整个宿主连接管理器的权力。
+
+普通方法继续是普通方法。为了把它接入系统，显式通过生成定义的 bind 产生插头即可。无需要求所有业务类继承框架基类、增加隐藏实例 ID、扫描方法名或维护对象与公共 ID 的自动匹配表。`slot.connect(plug)` 与现有 control 用法一致，本轮不增加方向难以辨认的运算符重载。
+
+### 5.9 端点到现有 core 的最小映射
+
+下面是拟议 core API 的完整最小草图，供评审行为和验证示例；不是要求每个插件携带的辅助文件，也不是本次对运行代码的修改。四个小对象只保存定义引用、实际方法及实例身份，连接仍全部由同一个 `HookConnections` 管理。
+
+```python
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from aurora_core.hooks import HookConnection, HookConnections
+from aurora_core.ids import Id
+
+
+@dataclass(frozen=True)
+class MethodPlug:
+    definition: Id
+    target: Callable[..., object]
+    instance_id: str
+
+
+@dataclass(frozen=True)
+class HandlerDefinition:
+    id: Id
+
+    def bind(self, target: Callable[..., object], *, instance_id: str) -> MethodPlug:
+        return MethodPlug(self.id, target, instance_id)
+
+
+@dataclass(frozen=True)
+class SlotDefinition:
+    id: Id
+
+    def bind(self, hooks: HookConnections, *, instance_id: str) -> BoundSlot:
+        return BoundSlot(self.id, hooks, instance_id)
+
+
+@dataclass(frozen=True)
+class BoundSlot:
+    definition: Id
+    hooks: HookConnections
+    instance_id: str
+
+    def connect(self, plug: MethodPlug, *, priority: int = 0) -> HookConnection:
+        return self.hooks.connect(
+            self.definition,
+            plug.definition,
+            slot_instance=self.instance_id,
+            handler_instance=plug.instance_id,
+            target=plug.target,
+            priority=priority,
+        )
+
+    def disconnect(self, connection: HookConnection) -> bool:
+        return self.hooks.disconnect(connection)
+
+    def connections(self) -> tuple[HookConnection, ...]:
+        return self.hooks.for_slot(self.definition, self.instance_id)
+
+    async def invoke(self, connection: HookConnection, *args: object, **kwargs: object) -> object:
+        return await self.hooks.invoke(connection, *args, **kwargs)
+
+    async def emit(self, *args: object, **kwargs: object) -> tuple[object, ...]:
+        results = []
+        for connection in self.connections():
+            results.append(await self.invoke(connection, *args, **kwargs))
+        return tuple(results)
+```
+
+这里没有新的接收规则、连接缓存或隐式生命周期。端点对象只是更适合装配代码阅读的调用入口。只有 bind 保存描述，connect 才访问注册表并建立实际连接，emit/invoke 才执行方法；缺失定义、重复连接和接收方拒绝仍由现有路径报告。
 
 ## 6. 对应项目现有能力
 
@@ -418,6 +505,8 @@ if __name__ == "__main__":
 执行插头仍是登记层的 `hook_handler` 与实例层的 `ExecutionPlug`。`interface` 继续引用其组件定义，不新增一个 plug 登记种类。v1 沿用现有 `/execute` 端口命名约定，清单不能凭空承诺任意端口命名都能被当前 ExecutionPlug 使用。
 
 `ExecutionRequest`、`StateBinding`、`InstanceStateBinding` 及实际状态地址留在代码。元信息可描述 input/output 等角色和用途，但不把 bot 的地址写进 agent 定义。`ExecutionSlot.accept` 保持可选；没有业务需要就不写。不增加全局 schema 相等校验，不把静态“候选连接”显示为已确认兼容。
+
+control 已有 `slot.connect(component.plug)`，普通方法插头沿用相同的装配表达。`MethodPlug` 不冒充携带执行身份和状态地址的 `ExecutionPlug`，也不把控制组件的 invoke 换成普通 hook 的 emit。二者复用底层连接机制，各自保留实际调用协议。
 
 ### 6.2 配置、状态、工具和端点
 
@@ -475,10 +564,10 @@ aurora meta check <项目目录>
 
 这些入口属于后续实现。静态查询应展示“插件提供一个插槽和一个处理器，处理器声明指向这个插槽”；只有连接到运行宿主，才能展示“console 当前连接 formal 和 casual 两个实例”。
 
-第一轮实现集中在标准入口关联、固定定义生成、静态目录、必要的契约资源引用，以及代表插件的迁移。配置等专用扩展按实际消费者逐步接入。后续市场可以按 ID、kind、插槽关系和说明检索；安装更新、自动装配、权限系统及通用 schema 兼容引擎不纳入本轮。
+第一轮实现集中在标准入口关联、固定定义生成、方法插头与槽实例的薄 API、静态目录、必要的契约资源引用，以及代表插件的迁移。配置等专用扩展按实际消费者逐步接入。后续市场可以按 ID、kind、插槽关系和说明检索；安装更新、自动装配、权限系统及通用 schema 兼容引擎不纳入本轮。
 
 迁移某个定义时应同时切换 ID 常量、声明装饰器、登记工厂、消费者和文档来源，保留原公共 ID、插件名和生命周期行为。已有配置与快照不因加入清单被改写。构建工具不能为了元信息读取破坏 control/agent 的独立安装边界。
 
 ## 9. 本文验收范围
 
-本文作为独立方案保存，未修改项目实现、依赖、入口、配置、README.md 或 AGENTS.md。文档验收包括本地链接、TOML/JSON 片段解析、完整示例 Python 语法，以及使用文中预期生成模块验证现有 core 的实例连接与输出。该验证不能证明尚未实现的生成器或 wheel 打包流程已完成。
+本文作为独立方案保存，未修改项目实现、依赖、入口、配置、README.md 或 AGENTS.md。文档验收包括本地链接、TOML/JSON 片段解析、完整示例 Python 语法，以及在临时验证环境中把第 5.9 节草图接到现有 core 后运行示例，核对绑定、插接、输出与拔除行为。该验证不能证明拟议端点 API 已进入项目，也不能证明尚未实现的生成器或 wheel 打包流程已完成。
