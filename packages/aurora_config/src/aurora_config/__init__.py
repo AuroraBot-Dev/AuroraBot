@@ -1,10 +1,11 @@
 """配置声明、通用校验和 config 阶段服务。"""
 
-from .declarations import CONFIGS, ConfigSpec, config_entries
-from .editor import CONFIGURATION
+from ._meta import CONFIGS, CONFIGURATION
+from .assembly import configuration_component
+from .declarations import ConfigSpec, config_entries
 from .files import load_configuration
 from .schema import ConfigSchema
-from .service import configuration_component, plugin
+from .service import plugin
 from .templates import ConfigTemplate, copy_missing, read_toml
 
 __all__ = [

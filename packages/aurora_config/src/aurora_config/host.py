@@ -6,8 +6,12 @@ HOST_SCHEMA = ConfigSchema(
     {
         "type": "object",
         "additionalProperties": False,
+        "not": {"required": ["assembly", "assembly_file"]},
+        "if": {"required": ["assembly_file"]},
+        "then": {"properties": {"plugins": {"maxItems": 0}}},
         "properties": {
             "plugins": {"type": "array", "items": {"type": "string", "pattern": r"\S"}, "default": []},
+            "assembly_file": {"type": "string", "minLength": 1},
             "assembly": {"type": "string", "format": "aurora-id"},
         },
     }
