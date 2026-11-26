@@ -1,0 +1,14 @@
+/** 品牌蓝与暖金沿用 TUI 调色板。 */
+:root {
+  --color-primary: #4b79ec;
+  --color-primary-text: #3555a5;
+  --color-primary-foreground: #fff;
+  --color-primary-500: #4b79ec;
+  --color-primary-600: #3555a5;
+  --color-secondary: #ecbe4b;
+  --color-secondary-foreground: #30394d;
+  --color-secondary-text: #806019;
+  --panel-ink: #30394d;
+  --panel-muted: #798296;
+  --panel-line: #e9edf5;
+}

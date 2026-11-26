@@ -24,7 +24,7 @@ export async function node(): Promise<Linter.Config[]> {
           'error',
           {
             ignores: [],
-            version: '>=24.12.0 <25',
+            version: '>=26.4.0 <27',
           },
         ],
         'n/prefer-global/buffer': ['error', 'never'],

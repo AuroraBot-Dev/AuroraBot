@@ -61,10 +61,10 @@ body:
       label: 日志 / 错误信息 | Logs / Error Output
       description: |
         请粘贴相关的日志输出或 Python Traceback。
-        请先移除密钥、完整提示词、真实对话、continuation 和其他敏感载荷。
+        请先移除密钥、完整提示词、真实对话、访问令牌、快照和其他敏感载荷。
 
         Please paste the relevant log output or Python traceback.
-        Remove secrets, full prompts, real conversations, continuations, and other sensitive payloads first.
+        Remove secrets, full prompts, real conversations, access tokens, snapshots, and other sensitive payloads first.
       render: text
     validations:
       required: true
@@ -78,10 +78,10 @@ body:
       value: |
         - OS:
         - Python 版本 | Python Version:
-        - AuroraBot 版本 | AuroraBot Version:
+        - AuroraBot 版本与提交 SHA | AuroraBot Version and Commit SHA:
         - 使用的模型角色与 Provider | Model Role and Provider:
-        - 启动的平台 | Platforms (Console / Dashboard / MCP / Headless):
-        - 使用的 profile | Profile:
-        - 相关 MCP 应用 | Related MCP Applications:
+        - 界面与入口 | Interface (CLI / TUI / Panel / API / Onboarding):
+        - 启用的插件与实例 | Enabled Plugins and Instance:
+        - 相关 MCP 服务 | Related MCP Servers:
     validations:
       required: true

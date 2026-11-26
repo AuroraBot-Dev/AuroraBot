@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src=".github/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-AuroraBot-181717?logo=github" alt="GitHub" /></a>
-  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-aurorabot.org-315b7d" alt="Documentation" /></a>
+  <a href="docs/INDEX.md"><img src="https://img.shields.io/badge/Docs-repository-315b7d" alt="Documentation" /></a>
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
@@ -24,7 +24,7 @@
 
 AuroraBot 是一个为 Agent 提供可以"生活"的运行环境的 Bot 框架。我们想做的不是一个工具一般的 Agent，而是一个能够持续存在、形成自己的节律，并在环境中自主判断和行动的 Bot。
 
-她有自己的人格、状态，可以在需要时与人和外部世界建立联系, 在她的世界里, 所有的消息都有一个"媒介": 你发给她的消息也必须先成为一个应用通知喔~
+她有自己的人格、状态，可以在需要时与人和外部世界建立联系, 在她的世界里, 所有的消息都有一个"媒介": 你发给她的消息通过交流入口送达，外部应用也可以把事件带进她的世界喔~
 
 ## 设计哲学
 
@@ -32,37 +32,36 @@ AuroraBot 是一个为 Agent 提供可以"生活"的运行环境的 Bot 框架�
 
 AuroraBot 把 Bot 当作世界的主体，而不是被调用的接口：她一直存在，拥有自己的人格、状态与边界，一切设计都围绕她的生活展开。这个原则落到架构上有三条：
 
-- **她拥有世界，运行只是她的经历**：Bot 持有自己的世界、目标与记忆。一次认知运行只是她的一段经历；聊天、任务、委派都是她生活中的一次经历，经历结束，她仍然存在。
-- **一切输入都有媒介**：任何影响她的变化都必须先成为一条世界事件。你发给她的消息要先作为 `console.input` 提交到她的世界，应用事件、MCP 上报、工具结果、时间的流逝也是如此。她不是在响应接口，而是在经历世界。
-- **她理解之后才决定**：来自用户的消息不会因为来源就自动成为最高指令。她先理解发生了什么，再决定回应、行动、委派或保持安静；模型只负责理解与判断，外部行动必须经声明的 Tool 执行，结果再作为新事件回到她的世界。
+- **她拥有世界，运行只是她的经历**：Bot 持有自己的世界、目标与记忆。一次认知运行只是她的一段经历；聊天、任务都是她生活中的一次经历，经历结束，她仍然存在。
+- **一切输入都有媒介**：用户消息通过交流入口提交引导；应用事件和 MCP 上报通过世界来源接入，工具结果回到当前推理，计划唤醒由运行所有者接纳。启用主动节律后，她也可以根据世界变化决定是否介入。
+- **她理解之后才决定**：世界事件和外部内容不会因为出现就自动成为最高指令。她先理解发生了什么，再决定回应、行动或继续观察；模型只负责理解与判断，外部行动必须经声明的 Tool 执行，结果回到推理上下文，启用行动证据后另行归档。
 
 ## 快速开始
 
 ### 1. 克隆本仓库
 
-需要 Python 3.12、Git 与 [uv](https://docs.astral.sh/uv/)
+需要 Python 3.12+、Git 与 [uv](https://docs.astral.sh/uv/)
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 cd AuroraBot
-./scripts/linux/setup.sh
-# macOS: ./scripts/macos/setup.command;
-# Windows: .\scripts\windows\setup.ps1.
+uv sync --locked --all-packages
+uv run --locked python examples/onboarding/main.py --init
 ```
 
-`setup.sh` 会检查 git/uv/pnpm，询问是否将 aurora 全局链接到用户工具目录，然后由 `aurora setup` 完成依赖同步、个人配置以及应用工作区依赖安装。
+初始化会在独立的 `build/onboarding` 中补齐安装配置助手所需文件，不调用模型或启动工具。
 
 ### 2. 填写必要配置
 
-在 `.env` 中填入默认模型所需密钥（如 `DEEPSEEK_API_KEY`）
+在 `build/onboarding/config/org.aurora.adapter/model/profiles.toml` 中填写模型的 `provider`、`model` 和必要的 `base_url`；在根目录 `.env` 中设置 `AURORA_MODEL_API_KEY`，`credential` 只填环境变量名。
 
 ### 3. 从终端启动
 
 ```bash
-aurora start
+uv run --locked python examples/onboarding/main.py --text "请检查我的环境，告诉我首次启动 Aurora 还缺什么。"
 ```
 
-启动后直接输入消息即可对话；输入 `/help` 查看操作，输入 `/exit` 停止。
+助手处理这条消息后退出，真实对话会调用你配置的模型。连续对话、TUI 和 Panel 的连接方法见[首次启动指南](examples/START.md)，正式 Bot 的启动见[操作指南](docs/operations.md)。
 
 ## AIGC
 
@@ -70,7 +69,7 @@ aurora start
 
 ## 参与贡献
 
-见[参与 AuroraBot](apps/docsite/src/develop/index.md)与[AuroraBot 文档站](https://www.aurorabot.org), 提交贡献即表示你同意遵守项目的[社区行为准则](apps/docsite/src/reference/CODE_OF_CONDUCT.md).
+见[参与 AuroraBot](.github/CONTRIBUTING.md)与[AuroraBot 文档](docs/INDEX.md), 提交贡献即表示你同意遵守项目的[社区行为准则](.github/CODE_OF_CONDUCT.md).
 
 ## 开源致谢
 
@@ -80,8 +79,8 @@ AuroraBot 的诞生离不开许多优秀的开源项目：
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | 模型 Provider 接入与调用基础设施 |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP 客户端与工具协议             |
-| [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console 与终端体验               |
-| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal 持久化              |
+| [OpenTUI](https://github.com/anomalyco/opentui) / [Rich](https://github.com/Textualize/rich) | TUI 与日志展示               |
+| [Vue](https://github.com/vuejs/core) / [Vite](https://github.com/vitejs/vite)             | Panel 界面与构建              |
 
 也感谢其他开源 Agent/Bot 项目对这个领域的探索。特别感谢 [MaiBot](https://github.com/MaiM-with-u/MaiBot)，其"数字生命"理念为 AuroraBot 的早期思考提供了重要启发。
 

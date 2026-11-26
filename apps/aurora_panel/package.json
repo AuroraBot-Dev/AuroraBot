@@ -1,0 +1,30 @@
+{
+  "name": "@aurorabot/panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@aurorabot/client": "workspace:*",
+    "@kungal/ui-core": "catalog:",
+    "@kungal/ui-tokens": "catalog:",
+    "@kungal/ui-vue": "catalog:",
+    "@lucide/vue": "catalog:",
+    "pinia": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "@vitejs/plugin-vue": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

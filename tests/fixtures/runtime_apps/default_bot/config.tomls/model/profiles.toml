@@ -1,0 +1,7 @@
+[primary]
+adapter = "dev.example.default:adapters/fake"
+model = "模型一"
+
+[secondary]
+adapter = "dev.example.default:adapters/fake"
+model = "模型二"

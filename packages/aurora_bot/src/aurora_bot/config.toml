@@ -1,0 +1,47 @@
+# 默认 bot 的实例与运行参数。
+instance_id = "main"
+model_role = "reasoning"
+# 默认不限推理轮次；有界任务可显式设置正整数 max_iterations。
+tool_timeout = 30.0
+streaming = true
+system_prompt = ""
+tools = []
+
+# 每轮观察已启用的 world，预算只限制临时视图，不裁剪历史或归档。
+[context_view]
+enabled = true
+events = true
+environment = true
+notes = true
+actions = true
+max_chars = 12000
+
+# 显式启用实例隔离的笔记工具；笔记由宿主快照保存，不自动执行其中的计划。
+[notes]
+enabled = false
+
+# 显式启用计划唤醒、自动引导暂停/恢复与本轮结束工具；直接交流仍可用。
+[self_control]
+enabled = false
+
+# 显式启用当前 world 的只读事件归档工具；预算覆盖单次返回值的完整 JSON。
+[archive]
+enabled = false
+max_chars = 8000
+
+# 显式启用持久行动证据及按引用查询；与 world 和笔记开关独立。
+[actions]
+enabled = false
+max_chars = 8000
+
+# 统一模型请求 JSON 字符预算；保留当前交流及完整工具关系，不等同于 token 上限。
+[input_budget]
+enabled = false
+max_chars = 128000
+
+# 需要 actions 和 input_budget；摘要使用当前聊天模型，可能增加模型调用。
+[context_management]
+enabled = false
+tool_result_chars = 6000
+summary_chars = 6000
+timeout_seconds = 60.0

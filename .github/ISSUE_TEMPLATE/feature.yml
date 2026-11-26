@@ -42,10 +42,10 @@ body:
         Which subsystem does this feature mainly involve? (Optional)
       options:
         - Agent runtime / Agents
-        - Kernel / Causality / Storage
-        - Model Gateway / AI
-        - Console / Dashboard / Localhost
-        - MCP Platform / Applications
-        - Contracts / Configuration
+        - Core / Control / Persistence
+        - Adapter / Model
+        - CLI / TUI / Panel / API
+        - Adapter / MCP / World
+        - Configuration / Plugins
         - Documentation / Landing Page
         - 其他 / Other

@@ -1,0 +1,874 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        }
+      ]
+    },
+    "StateId": {
+      "type": "string",
+      "format": "aurora-id"
+    },
+    "Location": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "StateAddress": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": ["id", "location"],
+      "additionalProperties": false
+    },
+    "GetRequest": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": ["key"],
+      "additionalProperties": false
+    },
+    "ListRequest": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "SetRequest": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": ["key", "value"],
+      "additionalProperties": false
+    },
+    "DeleteRequest": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": ["key"],
+      "additionalProperties": false
+    },
+    "WatchRequest": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "WatchHandshake": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "access_token": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32,256}$"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "GetResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ListResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateAddress"
+          }
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "SetResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "null"
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "DeleteResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "boolean"
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ApiError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ApiError"
+        }
+      },
+      "required": ["error"],
+      "additionalProperties": false
+    },
+    "StateChange": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StateId"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "enum": ["set", "delete"]
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "previous": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "existed": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "location", "revision", "action", "value", "previous", "existed"],
+      "additionalProperties": false
+    },
+    "WatchReady": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "ready"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "WatchEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "event"
+        },
+        "event": {
+          "const": "org.aurora.core:events/ctx/changed"
+        },
+        "data": {
+          "$ref": "#/$defs/StateChange"
+        }
+      },
+      "required": ["type", "event", "data"],
+      "additionalProperties": false
+    },
+    "WatchError": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "error"
+        },
+        "error": {
+          "$ref": "#/$defs/ApiError"
+        }
+      },
+      "required": ["type", "error"],
+      "additionalProperties": false
+    },
+    "WatchMessage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WatchReady"
+        },
+        {
+          "$ref": "#/$defs/WatchEvent"
+        },
+        {
+          "$ref": "#/$defs/WatchError"
+        }
+      ]
+    },
+    "ConversationAttachment": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+            "application/pdf",
+            "text/plain",
+            "text/markdown",
+            "text/csv",
+            "application/json"
+          ]
+        },
+        "data": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 13981016
+        }
+      },
+      "required": ["name", "media_type", "data"],
+      "additionalProperties": false
+    },
+    "ConversationInfoRequest": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "ConversationInfoResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "instance_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": ["session_id", "instance_ids"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ConversationSubmitRequest": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "instance_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/ConversationAttachment"
+          }
+        }
+      },
+      "required": ["session_id", "instance_id", "request_id", "text"],
+      "additionalProperties": false
+    },
+    "ConversationSubmitResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/$defs/ConversationReceipt"
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ConversationQueryRequest": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "instance_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        }
+      },
+      "required": ["session_id", "instance_id", "request_id"],
+      "additionalProperties": false
+    },
+    "ConversationQueryResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "instance_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "guidance_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "run_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "accepted": {
+              "const": true
+            },
+            "run_status": {
+              "enum": ["pending", "completed", "cancelled", "failed"]
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "session_id",
+            "instance_id",
+            "request_id",
+            "guidance_id",
+            "sequence",
+            "run_id",
+            "accepted",
+            "run_status",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ConversationCancelRequest": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "instance_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        }
+      },
+      "required": ["session_id", "instance_id", "run_id"],
+      "additionalProperties": false
+    },
+    "ConversationCancelResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "instance_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "run_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "\\S"
+            },
+            "cancelled": {
+              "type": "boolean"
+            }
+          },
+          "required": ["session_id", "instance_id", "run_id", "cancelled"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ConversationReceipt": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "instance_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "guidance_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "accepted": {
+          "const": true
+        }
+      },
+      "required": ["session_id", "instance_id", "request_id", "guidance_id", "sequence", "run_id", "accepted"],
+      "additionalProperties": false
+    },
+    "ConfigurationFile": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StateId"
+        },
+        "state": {
+          "$ref": "#/$defs/StateId"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "state", "path"],
+      "additionalProperties": false
+    },
+    "ConfigurationDocument": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StateId"
+        },
+        "content": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "content", "revision"],
+      "additionalProperties": false
+    },
+    "ConfigurationListRequest": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "ConfigurationListResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigurationFile"
+          }
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ConfigurationGetRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StateId"
+        }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "ConfigurationGetResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/$defs/ConfigurationDocument"
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    },
+    "ConfigurationSaveRequest": {
+      "$ref": "#/$defs/ConfigurationDocument"
+    },
+    "ConfigurationSaveResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/StateId"
+            },
+            "restart_required": {
+              "const": true
+            }
+          },
+          "required": ["id", "restart_required"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["result"],
+      "additionalProperties": false
+    }
+  },
+  "http": {
+    "get": {
+      "method": "POST",
+      "path": "/ctx/get",
+      "operation": "org.aurora.core:operations/ctx/get",
+      "request": {
+        "$ref": "#/$defs/GetRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/GetResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "list": {
+      "method": "POST",
+      "path": "/ctx/list",
+      "operation": "org.aurora.core:operations/ctx/list",
+      "request": {
+        "$ref": "#/$defs/ListRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ListResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "set": {
+      "method": "POST",
+      "path": "/ctx/set",
+      "operation": "org.aurora.core:operations/ctx/set",
+      "request": {
+        "$ref": "#/$defs/SetRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/SetResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "delete": {
+      "method": "POST",
+      "path": "/ctx/delete",
+      "operation": "org.aurora.core:operations/ctx/delete",
+      "request": {
+        "$ref": "#/$defs/DeleteRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/DeleteResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "conversationInfo": {
+      "method": "POST",
+      "path": "/conversation/info",
+      "operation": null,
+      "request": {
+        "$ref": "#/$defs/ConversationInfoRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConversationInfoResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "conversationSubmit": {
+      "method": "POST",
+      "path": "/conversation/submit",
+      "operation": "org.aurora.bot:operations/run/submit",
+      "request": {
+        "$ref": "#/$defs/ConversationSubmitRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConversationSubmitResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      },
+      "max_body_bytes": 15728640
+    },
+    "conversationQuery": {
+      "method": "POST",
+      "path": "/conversation/query",
+      "operation": null,
+      "request": {
+        "$ref": "#/$defs/ConversationQueryRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConversationQueryResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "conversationCancel": {
+      "method": "POST",
+      "path": "/conversation/cancel",
+      "operation": "org.aurora.bot:operations/run/cancel",
+      "request": {
+        "$ref": "#/$defs/ConversationCancelRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConversationCancelResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "configurationList": {
+      "method": "POST",
+      "path": "/configuration/list",
+      "operation": null,
+      "request": {
+        "$ref": "#/$defs/ConfigurationListRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConfigurationListResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "configurationGet": {
+      "method": "POST",
+      "path": "/configuration/get",
+      "operation": null,
+      "request": {
+        "$ref": "#/$defs/ConfigurationGetRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConfigurationGetResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    },
+    "configurationSave": {
+      "method": "POST",
+      "path": "/configuration/save",
+      "operation": null,
+      "request": {
+        "$ref": "#/$defs/ConfigurationSaveRequest"
+      },
+      "response": {
+        "$ref": "#/$defs/ConfigurationSaveResponse"
+      },
+      "error": {
+        "$ref": "#/$defs/ErrorResponse"
+      }
+    }
+  },
+  "watch": {
+    "path": "/ctx/watch",
+    "subscribe": "org.aurora.core:operations/ctx/subscribe",
+    "unsubscribe": "org.aurora.core:operations/ctx/unsubscribe",
+    "event": "org.aurora.core:events/ctx/changed",
+    "request": {
+      "$ref": "#/$defs/WatchHandshake"
+    },
+    "message": {
+      "$ref": "#/$defs/WatchMessage"
+    },
+    "subscription": "one_per_connection",
+    "unsubscribe_by": "close_connection",
+    "revision_scope": "host_context",
+    "replay": false,
+    "reconnect": "resubscribe_then_refresh"
+  }
+}

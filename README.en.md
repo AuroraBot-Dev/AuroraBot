@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/landing/src/assets/logo.svg" width="112" alt="AuroraBot Logo" />
+  <img src=".github/assets/logo.svg" width="112" alt="AuroraBot Logo" />
 </p>
 
 <h1 align="center">AuroraBot</h1>
@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/AuroraBot-Dev/AuroraBot"><img src="https://img.shields.io/badge/GitHub-AuroraBot-181717?logo=github" alt="GitHub" /></a>
-  <a href="https://www.aurorabot.org/"><img src="https://img.shields.io/badge/Docs-aurorabot.org-315b7d" alt="Documentation" /></a>
+  <a href="docs/INDEX.md"><img src="https://img.shields.io/badge/Docs-repository-315b7d" alt="Documentation" /></a>
   <a href="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml"><img src="https://github.com/AuroraBot-Dev/AuroraBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-315b7d" alt="Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-315b7d?logo=python&logoColor=white" alt="Python 3.12" />
@@ -24,7 +24,7 @@
 
 AuroraBot is a Bot framework that provides a "living" runtime for Agents. We are not aiming for a tool-like Agent, but a Bot that persists, forms its own rhythm, and judges and acts autonomously in its environment.
 
-She has her own persona and state, and can connect with people and the outside world when needed. In her world, every message has a medium: even the message you send her must first become an app notification ~
+She has her own persona and state, and can connect with people and the outside world when needed. In her world, every message has a medium: your messages arrive through the conversation interface, and external applications can bring events into her world ~
 
 ## Design philosophy
 
@@ -32,37 +32,36 @@ She has her own persona and state, and can connect with people and the outside w
 
 AuroraBot treats the Bot as the subject of her world, not an interface to be called: she persists, with her own persona, state, and boundaries, and everything is designed around her life. This principle lands in three points in the architecture:
 
-- **She owns the world; each run is an experience**: the Bot has her own world, goals, and memories. Each cognitive run is an episode in her life; chats, tasks, and delegations are episodes in her life, and when an episode ends, she still exists.
-- **Every input has a medium**: any change that affects her must first become a world event. The message you send her must first be committed to her world as `console.input`, and so are application events, MCP reports, tool results, and the passage of time. She is not responding to an interface; she is experiencing her world.
-- **She understands before she decides**: a message from a user does not automatically become the highest command just because of its source. She first understands what happened, then decides to respond, act, delegate, or stay quiet; the model is only responsible for understanding and judgment, external actions must go through declared Tools, and outcomes return to her world as new events.
+- **She owns the world; each run is an experience**: the Bot has her own world, goals, and memories. Each cognitive run is an episode in her life; chats and tasks are episodes in her life, and when an episode ends, she still exists.
+- **Every input has a medium**: user messages arrive as guidance through the conversation interface; application events and MCP reports enter through world sources, tool results return to the current reasoning loop, and scheduled wakeups go to the runtime owner. With autonomous cadence enabled, she can also decide whether to act on world changes.
+- **She understands before she decides**: world events and external content do not automatically become the highest command just because they appear. She first understands what happened, then decides to respond, act, or keep observing; the model is only responsible for understanding and judgment, external actions must go through declared Tools, and outcomes return to the reasoning context and are separately archived when action evidence is enabled.
 
 ## Quick start
 
 ### 1. Clone this repository
 
-You need Python 3.12, Git, and [uv](https://docs.astral.sh/uv/)
+You need Python 3.12+, Git, and [uv](https://docs.astral.sh/uv/)
 
 ```bash
 git clone https://github.com/AuroraBot-Dev/AuroraBot.git
 cd AuroraBot
-./scripts/linux/setup.sh
-# macOS: ./scripts/macos/setup.command;
-# Windows: .\scripts\windows\setup.ps1.
+uv sync --locked --all-packages
+uv run --locked python examples/onboarding/main.py --init
 ```
 
-`setup.sh` checks for git/uv/pnpm, asks whether to globally link aurora into your user tool directory, and then lets `aurora setup` bootstrap dependencies, personal configuration, and the application workspace.
+Initialization creates missing onboarding assistant files in the separate `build/onboarding` directory without calling models or starting tools.
 
 ### 2. Fill in the required configuration
 
-Fill in the key the default model needs (e.g. `DEEPSEEK_API_KEY`) in `.env`
+Set `provider`, `model`, and any required `base_url` in `build/onboarding/config/org.aurora.adapter/model/profiles.toml`. Set `AURORA_MODEL_API_KEY` in the root `.env`; `credential` contains only the environment variable name.
 
 ### 3. Start from the terminal
 
 ```bash
-aurora start
+uv run --locked python examples/onboarding/main.py --text "Check my environment and tell me what is missing for the first Aurora startup."
 ```
 
-Type a message after startup to chat; use `/help` to discover operations and `/exit` to stop.
+The assistant processes this message and exits; real conversations call your configured model. See the [first-run guide](examples/START.md) for continuous conversations, TUI and Panel connections, and [operations](docs/operations.md) for starting the main Bot.
 
 ## AIGC
 
@@ -70,7 +69,7 @@ This project contains human-reviewed code written with assistance from generativ
 
 ## Contributing
 
-See [Contributing to AuroraBot](apps/docsite/src/develop/index.md) and the [AuroraBot documentation site](https://www.aurorabot.org). By contributing, you agree to abide by the project's [Code of Conduct](apps/docsite/src/reference/CODE_OF_CONDUCT.md).
+See [Contributing to AuroraBot](.github/CONTRIBUTING.en.md) and the [AuroraBot documentation](docs/INDEX.md). By contributing, you agree to abide by the project's [Code of Conduct](.github/CODE_OF_CONDUCT.md).
 
 ## Acknowledgements
 
@@ -80,8 +79,8 @@ AuroraBot would not exist without many excellent open-source projects:
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | [LiteLLM](https://github.com/BerriAI/litellm)                                                                          | Model Provider integration and call infrastructure |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)                                                   | MCP client and tool protocol                       |
-| [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) / [Rich](https://github.com/Textualize/rich) | Console and terminal experience                    |
-| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) / [aiosqlite](https://github.com/omnilib/aiosqlite)             | WorldJournal persistence                           |
+| [OpenTUI](https://github.com/anomalyco/opentui) / [Rich](https://github.com/Textualize/rich) | TUI and log display                    |
+| [Vue](https://github.com/vuejs/core) / [Vite](https://github.com/vitejs/vite)             | Panel interface and build                           |
 
 We also thank the other open-source Agent/Bot projects exploring this field. Special thanks to [MaiBot](https://github.com/MaiM-with-u/MaiBot), whose "digital life" idea was an important inspiration for AuroraBot's early thinking.
 

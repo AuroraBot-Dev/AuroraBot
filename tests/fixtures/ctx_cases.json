@@ -1,0 +1,33 @@
+[
+  { "action": "list", "request": {}, "result": [] },
+  { "action": "set", "request": { "key": "dev.client:state/public", "value": null }, "result": null },
+  { "action": "get", "request": { "key": "dev.client:state/public" }, "result": null },
+  {
+    "action": "set",
+    "request": {
+      "key": "dev.client:state/public",
+      "location": { "scope": "中文" },
+      "value": { "text": "内容😀", "items": [1, null, true, 1.25] }
+    },
+    "result": null
+  },
+  {
+    "action": "list",
+    "request": { "location": {} },
+    "result": [{ "id": "dev.client:state/public", "location": {} }]
+  },
+  {
+    "action": "list",
+    "request": { "key": "dev.client:state/public", "location": { "scope": "中文" } },
+    "result": [{ "id": "dev.client:state/public", "location": { "scope": "中文" } }]
+  },
+  { "action": "delete", "request": { "key": "dev.client:state/public" }, "result": true },
+  { "action": "delete", "request": { "key": "dev.client:state/public" }, "result": false },
+  { "action": "get", "request": { "key": "dev.client:state/public" }, "error": "not_found" },
+  {
+    "action": "get",
+    "request": { "key": "dev.client:state/public", "location": { "scope": "中文" } },
+    "result": { "text": "内容😀", "items": [1, null, true, 1.25] }
+  },
+  { "action": "get", "request": { "key": "dev.client:state/private" }, "error": "forbidden" }
+]

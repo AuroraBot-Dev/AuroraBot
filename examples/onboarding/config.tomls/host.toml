@@ -1,0 +1,14 @@
+assembly = "org.aurora.adapter:assemblies/mcp/default_bot"
+plugins = [
+  "aurora_config",
+  "aurora_adapter.model",
+  "aurora_agent.model",
+  "aurora_agent.react",
+  "aurora_agent.tools",
+  "aurora_agent.react_defaults",
+  "aurora_bot.assembly",
+  "aurora_adapter.mcp",
+  "aurora_adapter.mcp.tools",
+  "aurora_adapter.mcp.bot",
+  "aurora_api",
+]

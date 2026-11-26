@@ -1,0 +1,11 @@
+# 按你的供应商修改 provider、model 和可选 base_url；credential 只填环境变量名。
+[primary]
+adapter = "org.aurora.adapter:adapters/model/litellm/chat"
+provider = "deepseek"
+model = "deepseek-flash"
+credential = "AURORA_MODEL_API_KEY"
+
+[primary.capabilities]
+streaming = true
+tool_calls = true
+file_input = false

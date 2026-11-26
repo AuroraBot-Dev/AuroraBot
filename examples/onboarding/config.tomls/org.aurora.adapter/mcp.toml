@@ -1,0 +1,20 @@
+schema_version = 2
+
+[servers.terminal]
+type = "local"
+command = ["uvx", "--from", "terminal-mcp==0.4.7", "terminal-mcp"]
+cwd = "."
+required_capabilities = ["tools"]
+timeout = { startup = 180, catalog = 30, execution = 40, shutdown = 10 }
+
+[servers.terminal.tools]
+aliases = { session_create = "terminal_create", session_send = "terminal_send", session_interact = "terminal_interact", session_read = "terminal_read", session_list = "terminal_list", session_close = "terminal_close", session_wait_for = "terminal_wait_for" }
+include = [
+    "session_create",
+    "session_send",
+    "session_interact",
+    "session_read",
+    "session_list",
+    "session_close",
+    "session_wait_for",
+]

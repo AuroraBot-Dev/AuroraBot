@@ -1,24 +1,25 @@
 {
-  "name": "aurorabot",
-  "version": "0.7.0",
-  "description": "AuroraBot 的 Python 运行时与 Vue 应用工作区",
+  "name": "aurorabot-workspace",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "setup": "node scripts/setup.ts",
-    "task": "tsx scripts/run.ts",
-    "dev": "tsx scripts/run.ts dev",
-    "build": "tsx scripts/run.ts build",
-    "preview": "tsx scripts/run.ts preview",
-    "check": "tsx scripts/run.ts check",
-    "typecheck": "tsx scripts/run.ts typecheck",
-    "lint": "tsx scripts/run.ts lint",
-    "format": "tsx scripts/run.ts format",
-    "test": "tsx scripts/run.ts test",
-    "clean": "tsx scripts/run.ts clean"
+    "bot": "uv run --locked python scripts/bot.py",
+    "panel": "uv run --locked python scripts/panel.py",
+    "tui": "uv run --locked python scripts/tui.py",
+    "check": "node scripts/check.ts",
+    "typecheck": "pnpm typecheck:python && pnpm typecheck:typescript",
+    "lint": "pnpm lint:oxlint && pnpm lint:eslint && pnpm lint:style",
+    "lint:oxlint": "oxlint -c oxlint.config.ts --deny-warnings .",
+    "lint:eslint": "eslint . --max-warnings 0",
+    "lint:style": "stylelint \"{apps,packages}/**/*.{css,scss,vue,html}\" --allow-empty-input --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "typecheck:typescript": "tsc -p tsconfig.json && pnpm -r --if-present typecheck",
+    "typecheck:python": "pyright --project pyproject.toml"
   },
   "devDependencies": {
-    "@clack/prompts": "catalog:",
     "@types/node": "catalog:",
     "@vben/eslint-config": "workspace:*",
     "@vben/oxlint-config": "workspace:*",
@@ -26,24 +27,26 @@
     "@vben/tsconfig": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "eslint": "catalog:",
-    "execa": "catalog:",
     "happy-dom": "catalog:",
     "jiti": "catalog:",
     "oxlint": "catalog:",
-    "oxlint-tsgolint": "catalog:",
     "prettier": "catalog:",
-    "rimraf": "catalog:",
+    "pyright": "catalog:",
     "stylelint": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "vue": "catalog:",
-    "vue-tsc": "catalog:"
+    "vue": "catalog:"
   },
   "engines": {
-    "node": ">=24.12.0 <25",
-    "pnpm": ">=12 <13"
+    "node": ">=26.4.0 <27"
   },
-  "packageManager": "pnpm@12.14.0"
+  "packageManager": "pnpm@12.15.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "26.13.0",
+      "onFail": "download"
+    }
+  }
 }

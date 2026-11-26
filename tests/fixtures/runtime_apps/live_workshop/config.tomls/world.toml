@@ -1,0 +1,4 @@
+# 模拟巡检来源经正式 world 托管并归档。
+[[sources]]
+source = "dev.example.workshop:sources/workshop"
+source_id = "workshop/environment"

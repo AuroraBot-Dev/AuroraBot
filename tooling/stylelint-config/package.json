@@ -12,7 +12,7 @@
   "license": "MIT",
   "type": "module",
   "files": [
-    "dist"
+    "index.mjs"
   ],
   "main": "./index.mjs",
   "module": "./index.mjs",
@@ -22,20 +22,23 @@
       "default": "./index.mjs"
     }
   },
+  "peerDependencies": {
+    "stylelint": "^17.6.0"
+  },
   "dependencies": {
     "@stylistic/stylelint-plugin": "catalog:",
-    "stylelint-config-recess-order": "catalog:",
-    "stylelint-scss": "catalog:"
-  },
-  "devDependencies": {
     "postcss": "catalog:",
     "postcss-html": "catalog:",
     "postcss-scss": "catalog:",
-    "stylelint": "catalog:",
+    "stylelint-config-recess-order": "catalog:",
     "stylelint-config-recommended": "catalog:",
     "stylelint-config-recommended-scss": "catalog:",
     "stylelint-config-recommended-vue": "catalog:",
     "stylelint-config-standard": "catalog:",
-    "stylelint-order": "catalog:"
+    "stylelint-order": "catalog:",
+    "stylelint-scss": "catalog:"
+  },
+  "devDependencies": {
+    "stylelint": "catalog:"
   }
 }

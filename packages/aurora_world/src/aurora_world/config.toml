@@ -1,0 +1,33 @@
+# 来源定义由已启用插件提供；只有列出的实例才会启动。
+sources = []
+
+# 使用来源时移除上面的空列表声明，并按以下结构填写：
+# [[sources]]
+# source = "org.aurora.world:sources/environment/time"
+# source_id = "environment/time"
+# [sources.config]
+# mean_seconds = 1800.0
+# deviation_seconds = 300.0
+# 主动更新时间服从三倍标准差内的截断正态分布；ctx 变化时另行刷新。
+#
+# 环境来源需要显式启用 aurora_world.environment。
+# [[sources]]
+# source = "org.aurora.world:sources/environment/weather"
+# source_id = "environment/weather"
+# [sources.config]
+# place = "南京"
+# latitude = 32.0617
+# longitude = 118.7778
+# interval_seconds = 900
+# timeout_seconds = 10
+# temperature_change_c = 3
+
+# world 统一管理呈现；来源配置只包含采样和连接参数。
+[view]
+recent_seconds = 3600
+max_chars = 32000
+max_event_chars = 8000
+time_count = 1
+weather_count = 4
+weather_seconds = 3600
+refresh_seconds = 30

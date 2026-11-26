@@ -1,0 +1,16 @@
+[project]
+name = "aurora-api"
+version = "0.1.0"
+description = "AuroraBot HTTP and WebSocket transport"
+requires-python = ">=3.12"
+dependencies = ["aurora-core>=0.1.0", "aiohttp>=3.14.5,<4"]
+
+[project.entry-points."aurora.plugins"]
+"aurora_api" = "aurora_api.endpoints:plugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aurora_api"]
