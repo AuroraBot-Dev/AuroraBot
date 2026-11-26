@@ -1,6 +1,6 @@
 # plugin.meta.toml：插件导出与集中装配方案
 
-日期：2026-11-26。状态：讨论稿，未实施。本文以真实的 `aurora_config` 插件为主例，区分现有行为与拟议接口。清单格式、集中装配文件、`@plug`、`ComponentFactory` 和生成工具均是设计内容，不代表当前 CLI 已支持这些能力。本次只修改文档。
+日期：2026-11-27。状态：`aurora_config` 首轮实现，待审查；其他插件尚未迁移。已实现该包的 `plugin.meta.toml`、生成模块与静态目录、`@plug`、组件工厂导出和集中装配文件入口。本轮装配器支持方法插头接入 core 的五个生命周期槽；业务插槽、执行端口和状态绑定仍是后续设计。
 
 ## 1. 设计中心
 
@@ -31,7 +31,7 @@
 
 ### 2.2 当前的接线仍有代码耦合
 
-[hook_handler](../packages/aurora_core/src/aurora_core/declarations.py) 要求填写目标 slot，core 连接时会检查已声明的 slot 是否匹配。[configuration_component](../packages/aurora_config/src/aurora_config/service.py) 负责创建配置服务并把它接到 CONFIG；[ReActDefaults.connect](../packages/aurora_agent/src/aurora_agent/react_defaults.py) 与 [DefaultAssembly](../packages/aurora_bot/src/aurora_bot/assembly.py) 也直接决定了一部分连接。
+[hook_handler](../packages/aurora_core/src/aurora_core/declarations.py) 要求填写目标 slot，core 连接时会检查已声明的 slot 是否匹配。[configuration_component](../packages/aurora_config/src/aurora_config/assembly.py) 现在显式选用包内 assembly.toml 预设，配置服务实现不再自行接线；[ReActDefaults.connect](../packages/aurora_agent/src/aurora_agent/react_defaults.py) 与 [DefaultAssembly](../packages/aurora_bot/src/aurora_bot/assembly.py) 也直接决定了一部分连接。
 
 当前 [host.toml](../packages/aurora_cli/src/aurora_cli/host.toml) 主要选择插件与代码装配入口，并不是完整的集中接线文件。本文提出把应用连接逐步外移，不能仅靠美化 `connect()` 的 Python 写法完成。
 
@@ -97,7 +97,7 @@
 
 `file` 指向相对清单目录的契约文件。`export` 指向开发者提供的无参数纯导出函数，生成时返回可序列化内容；例如已有的 `describe_configuration()`。生成后的静态目录包含结构内容及来源信息。
 
-开发者负责让导出函数不启动客户端、网络或后台任务。生成工具正常报告导出失败，不设计沙箱或全程序副作用检查。查询已发布目录不执行导出函数，也不导入插件实现。
+开发者负责让导出函数不启动客户端、网络或后台任务。本轮构建工具按 export 定位 src 下的独立 Python 文件，通过 runpy 执行纯导出函数，不导入插件入口；当前 describe_configuration 无其他导入。此阶段不支持依赖包内相对导入的导出文件。生成工具正常报告导出失败，不设计沙箱或全程序副作用检查。查询已发布目录不执行导出函数，也不导入插件实现。
 
 初版不实现通用 Python 类型到 schema 的转换。无法静态描述的 Python 对象、接收逻辑和复杂业务约束保留在代码，目录明确说明其边界。
 
@@ -136,9 +136,9 @@ aurora_config = "aurora_config:plugin"
 
 配置包的依赖和 extra 继续归标准发行声明。清单不重复维护版本、Python 约束或入口工厂路径。
 
-### 5.3 拟议的 packages/aurora_config/plugin.meta.toml
+### 5.3 packages/aurora_config/plugin.meta.toml
 
-下面覆盖这个插件现有的全部三个公开定义，不把其他插件的配置和状态复制进来。`configuration` 组件符号是本方案新增的导出描述，不是新增公共 ID。
+已落地的[清单](../packages/aurora_config/plugin.meta.toml)覆盖这个插件的全部三个公开定义，不把其他插件的配置和状态复制进来。`configuration` 组件符号是本方案新增的导出描述，不是新增公共 ID。
 
 ```toml
 schema_version = 1
@@ -191,7 +191,7 @@ CONFIGURATION 向 API 的端点目录登记是可选接收关系。只运行配�
 
 ### 5.4 插件代码怎样变化
 
-以下是迁移后的完整服务与工厂草案；其中 `plug`、`ComponentFactory`、`_meta` 和生成函数 `configuration_plugin` 都尚未实现。配置加载与关闭方法的业务行为取自当前代码，不增加新的资源策略。
+以下展示已落地的服务与工厂写法，完整实现见 [service.py](../packages/aurora_config/src/aurora_config/service.py)。`plug`、`ComponentFactory`、生成模块 `_meta` 和绑定入口 `configuration_plugin` 已可用。配置加载与关闭方法保持原业务职责。
 
 ```python
 from aurora_core import plug
@@ -218,12 +218,8 @@ class ConfigurationService:
 
     @plug(LOAD)
     def configure(self) -> None:
-        self.ctx.configure(
-            load_configuration(self.registry, self.storage.configuration_directory())
-        )
-        self.endpoint.files = ConfigurationFiles(
-            self.registry, self.storage.configuration_directory()
-        )
+        self.ctx.configure(load_configuration(self.registry, self.storage.configuration_directory()))
+        self.endpoint.files = ConfigurationFiles(self.registry, self.storage.configuration_directory())
 
     def close(self) -> None:
         self.endpoint.files = None
@@ -247,7 +243,7 @@ def plugin() -> Plugin:
 
 `@plug(LOAD)` 只把生成的定义 ID 关联到函数，保留原函数与绑定方法语义；不指定目标槽，不自行登记、构造实例、订阅 ctx 或建立连接。工厂显式列出导出方法，不扫描模块内所有函数，不推断方法名称。
 
-`ComponentFactory` 的最小职责是保存 create、导出的 plugs，以及可选的本地 stop_accepting 回调。生成的 Plugin 需要能够携带这些组件工厂导出，具体内存容器在实现时确定；不能假装当前只有 name/entries/requires 的 Plugin 已经具备此能力。宿主用 inject 中的服务创建实例，再把显式导出的未绑定方法绑定到该实例，得到按公共 ID 索引的实际插头。
+`ComponentFactory` 的最小职责是保存 create、导出的 plugs，以及可选的本地 stop_accepting 回调。Plugin.components 按组件符号保存 ComponentExport，其中包含工厂和注入服务名；生成的 PluginDeclaration.bind 收集并核对显式导出。宿主用 inject 中的服务创建实例，再把显式导出的未绑定方法绑定到该实例，得到按公共 ID 索引的实际插头。
 
 生成函数从清单取得 LOAD 的 id/kind/provider/register_to，并从装饰器取得对应实现。未绑定 configure 方法登记为原始 target，实例连接时再提供绑定方法；这延续当前 core 的方式。没有第二份“LOAD 映射到 configure”的手写字符串表。
 
@@ -261,7 +257,7 @@ def plugin() -> Plugin:
 
 ### 6.1 最小完整示例
 
-建议文件名为 `assembly.toml`。下面是本方案的拟议语法，不是当前 host.toml 可以直接读取的字段。
+文件名为 `assembly.toml`，以下就是已发布在配置包中的[最小预设](../packages/aurora_config/src/aurora_config/assembly.toml)。它通过 CLI 的 `--assembly-file` 或 host.toml 的 `assembly_file` 选择。
 
 ```toml
 schema_version = 1
@@ -346,17 +342,17 @@ for connection in assembly.connections:
 
 其后，业务 TOML 仍通过 ConfigSpec、ConfigSchema、ConfigTemplate 和配置服务加载。运行时覆盖不自动写回文件，不把装配配置或业务配置混入持久业务快照。
 
-真实实现需为宿主提供一个显式选择集中装配文件的入口。旧 `assembly = 公共装配 ID` 和新文件模式作为不同宿主选择，不能同时执行，否则会重复创建实例和连接。文件选择的 CLI 拼写不在本文提前固定。
+CLI 已提供 `--assembly-file PATH`；host.toml 也可以设置 `assembly_file = "assembly.toml"`，相对路径按 host.toml 所在目录解析。命令行文件路径按工作目录解析。旧 `--assembly`、host.toml 的 `assembly` 和命令自带的装配 ID 与文件模式不能同时执行。文件模式的插件列表只来自装配文件，不能另加 `--plugin` 或 host.toml 的非空 plugins；命令行显式选择装配会覆盖宿主默认选择。
 
-当前 CLI 自动登记配置插件，并在执行宿主时自动加入 configuration_component。采用新文件模式后，应由文件中的实例和连接接管这两步；不能保留隐藏注入后又创建第二个配置服务。旧代码装配模式仍按自己的路径运行，迁移是切换选择，不是双重叠加。
+文件模式不自动登记配置插件或创建配置组件；程序化传入的插件对象仅作为被文件选中时的实现来源。旧代码装配模式继续显式选用 configuration_component 对应的包内预设；两种模式不会叠加。CLI 的内置命令和配置声明仍由宿主登记，这不等于自动创建配置服务。
 
 ## 8. 如何在这个真实插件上验证
 
 ### 8.1 先核对能力和最小连接
 
-不改业务实现即可核对 entry point、三个公开 ID、提供者与登记目录，并通过当前 core 手动演练同一条生命周期连接。演练中继续使用现有 ConfigurationService，直接创建实例并建立连接，不调用已经自行接线的 configuration_component，避免重复连接。
+快速契约检查核对清单、生成物与插件的三个真实定义；端到端用例通过正式 CLI 读取装配文件、发现插件、创建组件、连接和关闭。用例还删除连接并将连接移到 start，验证没有隐藏的 config 接线；空插件列表验证文件模式不会自动启用配置插件。
 
-仅启用 aurora_config 时，没有其他插件声明的业务配置可注入；配置服务仍可完成启动和关闭，配置编辑服务中可见配置数为零。这验证加载插头与 core/config 的衔接，不应描述为已运行完整 Bot。
+直接在不登记其他声明的 core 宿主中只启用 aurora_config 时，可见配置数为零；通过 CLI 启动时还会读取 CLI 自身的配置声明。这验证加载插头与 core/config 的衔接，不应描述为已运行完整 Bot。
 
 ### 8.2 用现有 world 配置观察真实 ctx 注入
 
@@ -368,9 +364,9 @@ plugins = ["aurora_config", "aurora_world", "aurora_world.configuration"]
 
 保留唯一的 aurora_config 实例和原连接。这里启用另外两个插件是为了使用现成的 `org.aurora.world:configs/sources` 声明及 `org.aurora.world:state/config`，不创建 WorldSources、时间或天气来源实例。
 
-在临时数据目录中，config 阶段应复制缺失的 world 配置模板并将解析结果写入非持久状态；配置文件编辑服务应能列出该声明。关闭后服务的 files 引用应恢复为 None。全程不调用模型、不发起网络访问、不读取或改写用户实际数据目录。
+在临时数据目录中，config 阶段应复制缺失的 world 配置模板并将解析结果写入非持久状态；配置文件编辑服务应能列出该声明。正常关闭后服务的 files 引用恢复为 None。若后续 config 失败，Lifecycle 也会停止已进入 config 的组件接收入口；未进入 prepare 的组件仍不执行 stop 阶段。全程不调用模型、不发起网络访问、不读取或改写用户实际数据目录。
 
-这证明“一个插件导出配置声明，配置服务消费声明并维护 ctx”的现有链路。world 自身的 configure/start 等插头没有被接线，不会因为启用插件而自动运行。
+这证明“一个插件导出配置声明，配置服务消费声明并维护 ctx”的集中装配链路。world 自身的 configure/start 等插头没有被接线，不会因为启用插件而自动运行。
 
 ## 9. 如何扩展到其他真实插件
 
@@ -423,20 +419,56 @@ priority = 0
 
 ## 11. 生成、包边界与分发
 
-生成工具读取 pyproject.toml、plugin.meta.toml 及契约来源，生成包内纯声明模块和静态目录。公共 ID 常量、Plugin 的声明部分以及组件导出描述由这些输入确定；生成代码不手工维护，不导入业务实现来猜测连接。
+本轮生成工具为 [build_meta.py](../packages/aurora_config/build_meta.py)，读取 pyproject.toml、plugin.meta.toml 及契约来源，生成包内 `_meta.py` 和 `plugin.meta.json`。工具暂为 aurora_config 定址，不作为所有发行包的通用生成器。公共 ID 常量、Plugin 的声明部分以及组件导出描述由这些输入确定；生成代码不手工维护，不导入业务实现来猜测连接。
 
 插件实现只把实际对象、装饰过的导出方法和组件工厂交给生成入口。装饰器对方法的关联是实现来源，清单是公共身份来源；这不是重复声明目标槽或实例连接。
 
-静态目录随 wheel 放在约定的 `.dist-info/extra_metadata/plugin.meta.json` 中，查询方从发行元数据读取；不通过导入插件包来定位，不需要安装模型或 MCP 的可选 SDK。清单及契约资源一同分发，生成物可随源码提交，通过只读开发检查验证一致性。
+静态目录随 wheel 放在约定的 `.dist-info/extra_metadata/plugin.meta.json` 中，查询方从发行元数据读取；不通过导入插件包来定位，不需要安装模型或 MCP 的可选 SDK。本包同时分发清单和纯契约导出文件。生成物随源码提交，快速契约测试与 Hatch 构建钩子均执行只读一致性检查。Python 生成物按 AST 比较、JSON 按数据比较，允许格式器调整排版；不在调用期间检查文件或哈希。
 
 core 只处理已经解析的声明、工厂导出、对象和连接；TOML 读取、静态生成与装配文件解释属于开发工具和宿主配置层。control 保持仅依赖 core，agent 不因此依赖 CLI、API 或 bot。实例工厂协议是集中装配这个实际消费者需要的能力，不在此基础上提前引入新的通用 harness 或任意 Python 对象配置语言。
 
-## 12. 后续实施顺序与本次边界
+## 12. 运行、生成与审查入口
 
-1. 用 aurora_config 固定三个真实定义，提供清单生成与仅标记身份的 plug 装饰器；导出 ConfigurationService 工厂与 configure 方法。
-2. 增加集中装配文件的宿主入口，处理引导读取、显式实例化、生命周期连接及关闭，不同时注入旧配置组件。
-3. 在临时目录验证配置服务自身，以及额外登记现有 world 配置后的 ctx 注入；保持真实 ID、模板与非持久语义。
-4. 再选择一个真实业务组件迁移实例接线，处理状态绑定和现有自动连接路径；不跳到一次性改写全部 DefaultAssembly。
-5. 完成相应边界与生命周期回归、完整检查和 wheel 独立安装验收后，才把拟议能力写成已支持的操作指南。
+在工作区完成依赖安装后，可以使用真实配置服务预设运行一次宿主命令：
 
-本次只重写这份独立设计文档，不增加清单文件、装配文件、装饰器、工厂类型或运行代码，不更改 README.md、AGENTS.md、配置和用户数据。文档验收核对本地链接、TOML 与 Python 片段、真实插件定义和临时目录中的现有配置链路；它不代表新生成器、装配器或装饰器已经实现。
+```bash
+uv run --locked aurora --data-dir /tmp/aurora-config-review \
+  --assembly-file packages/aurora_config/src/aurora_config/assembly.toml ctx list
+```
+
+应能看到 CLI 的配置状态；命令结束后生命周期完成关闭。选择独立数据目录，避免混入既有业务快照。若需要验证 world 配置，复制该 assembly.toml，并把 plugins 改为第 8.2 节的三个入口，然后通过 `ctx get org.aurora.world:state/config` 查看结果。这个操作不创建 world 来源或 Agent。
+
+也可以在数据目录的 config/host.toml 写入以下选择，后续省略 `--assembly-file`：
+
+```toml
+assembly_file = "assembly.toml"
+```
+
+清单修改后，使用已安装开发环境生成并格式化产物。首次生成使用 `--no-sync`，避免 uv 在产物更新前触发构建一致性检查：
+
+```bash
+uv run --locked --no-sync python packages/aurora_config/build_meta.py
+uv run --locked ruff format packages/aurora_config/src/aurora_config/_meta.py
+pnpm exec prettier --write packages/aurora_config/plugin.meta.json
+uv run --locked python packages/aurora_config/build_meta.py --check
+```
+
+安装 wheel 后，无需导入插件即可读取目录：
+
+```python
+import json
+from importlib.metadata import distribution
+
+catalog = json.loads(distribution("aurora-config").read_text("extra_metadata/plugin.meta.json"))
+print(catalog["definitions"]["LOAD"])
+```
+
+静态目录描述能力；assembly.toml 描述计划连接；实际连接仍可通过 HookConnections.for_slot 查询。没有新增插件审批或全局契约兼容检查。
+
+## 13. 本轮范围与后续审查
+
+本轮只迁移 aurora_config 的三个既有定义与配置服务组件，补齐必要的 core 声明机制、配置层装配读取和 CLI 引导。公开 ID、entry point、依赖关系、用户配置及快照身份保持不变，不迁移或改名既有用户文件。`plugin.config.toml(s)` 模板命名仍是后续事项。
+
+集中装配目前支持配置服务所需的显式实例、注入服务、方法插头、生命周期槽、连接优先级与组件 depends_on。业务槽与 ExecutionSlot、状态地址绑定、动态定义和更多插件的生成支持尚未落地；不把不支持的端口静默当成普通 hook。组件构造保持同步且不启动运行资源，资源在生命周期中创建与关闭。同一 registry 中只应配置一个配置服务实例，端点尚不提供多实例隔离。
+
+后续先审查这一条链路，再选择真实业务组件迁移公开接线；需要同时处理其状态绑定和旧自动连接路径。其他插件代码、默认 Bot 装配和配置模板本轮不迁移。测试和发行验收结果记录在[变更记录](CHAGELOG.md)。

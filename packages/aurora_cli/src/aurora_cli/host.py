@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import cast
 
 from aurora_config import configuration_component
+from aurora_config.assembly import AssemblyPlan
 from aurora_core.ctx import install_context
+from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.lifecycle import Lifecycle, LifecycleComponent
@@ -26,8 +28,12 @@ async def execute(
     data_dir: Path,
     assembly: Id | None,
     config: object,
+    plan: AssemblyPlan | None = None,
+    plugins: tuple[Plugin, ...] = (),
 ) -> int:
     """工厂接收 registry/ctx/hooks/storage/workspace_root，prepare/start 内初始化资源。"""
+    if plan is not None and assembly is not None:
+        raise ValueError("集中装配文件与代码装配不能同时使用")
     registry = context.registry
     ctx = install_context(registry)
     lifecycle: Lifecycle | None = None
@@ -52,7 +58,19 @@ async def execute(
                 raise TypeError("装配工厂必须同步返回组件")
             if not isinstance(components, Iterable):
                 raise TypeError("装配工厂必须返回 LifecycleComponent 可迭代对象")
-            components = (configuration_component(registry, ctx, hooks, storage), *components)
+            if plan is None:
+                components = (configuration_component(registry, ctx, hooks, storage), *components)
+            else:
+                components = plan.assemble(
+                    plugins,
+                    {
+                        "registry": registry,
+                        "ctx": ctx,
+                        "hooks": hooks,
+                        "storage": storage,
+                        "workspace_root": context.root,
+                    },
+                )
             if any(not isinstance(component, LifecycleComponent) for component in components):
                 raise TypeError("装配包含无效组件")
             lifecycle = Lifecycle(

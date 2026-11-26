@@ -79,7 +79,16 @@ def test_explicit_plugin_and_assembly_selection_override_host_defaults(tmp_path,
 
 
 @pytest.mark.parametrize(
-    "content", ['plugins = "bad"', "plugins = [1]", "assembly = 1", "unknown = true", "invalid = ["]
+    "content",
+    [
+        'plugins = "bad"',
+        "plugins = [1]",
+        "assembly = 1",
+        "unknown = true",
+        "invalid = [",
+        'assembly_file = "assembly.toml"\nassembly = "dev.test:assemblies/app"',
+        'assembly_file = "assembly.toml"\nplugins = ["aurora_config"]',
+    ],
 )
 def test_invalid_host_configuration_fails_before_storage_initialization(tmp_path, content):
     write_host(tmp_path, content)
