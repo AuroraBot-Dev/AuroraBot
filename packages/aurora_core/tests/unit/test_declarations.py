@@ -92,3 +92,35 @@ def test_invalid_and_duplicate_declarations_fail_early():
         operation("dev.example:operations/class")(type("Example", (), {}))
     with pytest.raises(TypeError, match="没有有效"):
         entry_from(lambda: None, provider="example")
+
+
+def test_plug_identity_binds_independent_methods_without_declaring_a_target_slot():
+    from aurora_core import plug
+    from aurora_core.components import ComponentDeclaration, ComponentFactory, Definition, PluginDeclaration
+    from aurora_core.declarations import plug_id
+
+    identity = Id("dev.example:handlers/read")
+
+    class Service:
+        def __init__(self, value):
+            self.value = value
+
+        @plug(identity)
+        async def read(self):
+            return self.value
+
+    assert inspect.iscoroutinefunction(Service.read)
+    assert asyncio.run(Service(7).read()) == 7
+    assert asyncio.run(Service(8).read()) == 8
+    assert plug_id(Service(1).read) == identity
+    declaration = PluginDeclaration(
+        "example",
+        (Definition(identity, "hook_handler", "example"),),
+        components={"service": ComponentDeclaration(plugs=(identity,))},
+    )
+    factory = ComponentFactory(Service, (Service.read,))
+    plugin = declaration.bind(targets={}, components={"service": factory})
+    assert plugin.entries[0].target is Service.read
+    assert plugin.entries[0].slot is None
+    with pytest.raises(ValueError, match="插头导出"):
+        declaration.bind(targets={}, components={"service": ComponentFactory(Service)})

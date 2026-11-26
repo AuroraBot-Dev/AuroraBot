@@ -175,7 +175,8 @@ class Lifecycle:
     async def _shutdown(self) -> None:
         try:
             components = [item for item in reversed(self._components) if item.instance_id in self._attempted]
-            for component in components:
+            configured = [item for item in reversed(self._components) if item.instance_id in self._configured]
+            for component in configured:
                 if component.instance_id not in self._quiesced:
                     if component.stop_accepting is not None:
                         async with asyncio.timeout(self._timeout):

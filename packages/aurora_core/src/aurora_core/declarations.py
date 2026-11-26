@@ -77,3 +77,26 @@ def entry_from(target: Callable[..., object], *, provider: str) -> RegistryEntry
         slot=declaration.slot,
         interface=declaration.interface,
     )
+
+
+def plug(identity: str | Id) -> Callable[[F], F]:
+    """只关联插头身份，保留函数与方法绑定语义，不声明目标槽或登记信息。"""
+    identity = _identity(identity)
+
+    def decorate(function: F) -> F:
+        if not inspect.isfunction(function):
+            raise TypeError("插头装饰器仅用于 Python 函数或方法")
+        if hasattr(function, _ATTRIBUTE):
+            raise ValueError("同一函数只允许一个公共声明")
+        setattr(function, _ATTRIBUTE, identity)
+        return function
+
+    return decorate
+
+
+def plug_id(target: Callable[..., object]) -> Id:
+    """读取显式导出方法的插头身份。"""
+    identity = getattr(getattr(target, "__func__", target), _ATTRIBUTE, None)
+    if not isinstance(identity, Id):
+        raise TypeError("目标没有有效的 Aurora 插头身份")
+    return identity
