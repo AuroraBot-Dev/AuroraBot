@@ -119,8 +119,8 @@ def environment(tmp_path, monkeypatch):
         },
     }
     ctx.set(CONFIG_STATE, config)
-    clients = MCPClients(ctx, hooks)
-    bridge = MCPTools(registry, ctx, hooks, clients)
+    clients = MCPClients(ctx)
+    bridge = MCPTools(registry, ctx, clients)
 
     @asynccontextmanager
     async def start(*, discover=True, timeout=1.0):

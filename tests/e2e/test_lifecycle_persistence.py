@@ -4,7 +4,7 @@ import asyncio
 from threading import Event
 
 import pytest
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
 from aurora_core.hooks import HookConnections
@@ -36,7 +36,7 @@ def test_final_snapshot_is_host_owned_and_restored_before_prepare(tmp_path, stop
     async def scenario():
         registry, ctx, hooks, storage, _, lifecycle = environment(tmp_path)
 
-        @hook_handler("dev.lifecycle:handlers/stop", slot=phase)
+        @plug("dev.lifecycle:handlers/stop")
         def stop():
             storage.set("dev.lifecycle", "finished", True)
             ctx.set(VALUE, "stopped")
@@ -58,7 +58,7 @@ def test_final_snapshot_is_host_owned_and_restored_before_prepare(tmp_path, stop
         registry, ctx, hooks, storage, _, lifecycle = environment(tmp_path)
         restored = []
 
-        @hook_handler("dev.lifecycle:handlers/prepare", slot=PREPARE)
+        @plug("dev.lifecycle:handlers/prepare")
         def prepare():
             restored.append(ctx.get(VALUE))
 
@@ -78,7 +78,7 @@ def test_final_flush_failure_preserves_state_and_storage_for_retry(tmp_path, mon
         registry, ctx, hooks, storage, store, lifecycle = environment(tmp_path)
         stopped = []
 
-        @hook_handler("dev.lifecycle:handlers/stop", slot=STOP)
+        @plug("dev.lifecycle:handlers/stop")
         def stop():
             stopped.append(True)
             ctx.set(VALUE, "final")
@@ -165,7 +165,7 @@ def test_shutdown_drains_writers_before_final_snapshot_and_resource_release(tmp_
             trace.append("gate:closed")
             gate_closed.set()
 
-        @hook_handler("dev.lifecycle:handlers/stop", slot=STOP)
+        @plug("dev.lifecycle:handlers/stop")
         def stop():
             storage.set("dev.lifecycle", "stopped", True)
             ctx.set(VALUE, "stopped")

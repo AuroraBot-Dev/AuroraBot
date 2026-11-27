@@ -14,12 +14,11 @@ _ATTRIBUTE = "__aurora_declaration__"
 
 @dataclass(frozen=True)
 class Declaration:
-    """函数的公开身份及连接关系；不包含某次装配的提供者或实例。"""
+    """函数的公开身份及登记关系；不包含某次装配的提供者或实例。"""
 
     id: Id
     kind: str
     register_to: Id
-    slot: Id | None = None
     interface: object | None = None
 
 
@@ -46,19 +45,6 @@ def operation(identity: str | Id, *, interface: object | None = None) -> Callabl
     return _decorate(Declaration(_identity(identity), "operation", OPERATIONS, interface=interface))
 
 
-def hook_handler(identity: str | Id, *, slot: str | Id, interface: object | None = None) -> Callable[[F], F]:
-    """声明处理器及显式插槽目标；兼容判断仍由实际插槽接收方完成。"""
-    return _decorate(
-        Declaration(
-            _identity(identity),
-            "hook_handler",
-            Id("org.aurora.core:registries/hook_handlers"),
-            slot=_identity(slot),
-            interface=interface,
-        )
-    )
-
-
 def entry_from(target: Callable[..., object], *, provider: str) -> RegistryEntry:
     """将装饰过的函数或绑定方法转换为登记项，由宿主显式登记。
 
@@ -66,6 +52,10 @@ def entry_from(target: Callable[..., object], *, provider: str) -> RegistryEntry
     """
     function = getattr(target, "__func__", target)
     declaration = getattr(function, _ATTRIBUTE, None)
+    if isinstance(declaration, Id):
+        from ._meta import HOOK_HANDLERS
+
+        declaration = Declaration(declaration, "hook_handler", HOOK_HANDLERS)
     if not callable(target) or not isinstance(declaration, Declaration):
         raise TypeError("目标没有有效的 Aurora 函数声明")
     return RegistryEntry(
@@ -74,7 +64,6 @@ def entry_from(target: Callable[..., object], *, provider: str) -> RegistryEntry
         target,
         provider,
         register_to=declaration.register_to,
-        slot=declaration.slot,
         interface=declaration.interface,
     )
 

@@ -31,7 +31,7 @@ def environment(components, *, timeout: float = 1):
 
 def handler(registry, hooks, phase, instance, callback, *, name="handler"):
     identity = Id(f"dev.lifecycle:handlers/{instance}/{phase.local_path}/{name}")
-    registry.register(RegistryEntry(identity, "hook_handler", callback, "测试插件", slot=phase))
+    registry.register(RegistryEntry(identity, "hook_handler", callback, "测试插件"))
     return hooks.connect(phase, identity, slot_instance=instance, handler_instance=instance)
 
 

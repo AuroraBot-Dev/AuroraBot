@@ -17,9 +17,7 @@ def setup_connections(slot=None, handler=None, interface=None):
     registry = bootstrap()
     registry.register(RegistryEntry(SLOT, "hook_slot", slot or HookSlot(), "example", interface="插槽描述"))
     registry.register(
-        RegistryEntry(
-            HANDLER, "hook_handler", handler or (lambda value: value), "example", slot=SLOT, interface=interface
-        )
+        RegistryEntry(HANDLER, "hook_handler", handler or (lambda value: value), "example", interface=interface)
     )
     return registry, HookConnections(registry)
 
@@ -71,7 +69,7 @@ def test_priority_and_explicit_connection_order():
 def test_replacement_does_not_rewire_connected_implementation():
     registry, hooks = setup_connections(handler=lambda: 1)
     connection = connect(hooks)
-    registry.replace(RegistryEntry(HANDLER, "hook_handler", lambda: 2, "replacement", slot=SLOT))
+    registry.replace(RegistryEntry(HANDLER, "hook_handler", lambda: 2, "replacement"))
     assert asyncio.run(hooks.invoke(connection)) == 1
     assert hooks.disconnect(connection) is True
     assert hooks.disconnect(connection) is False
@@ -81,15 +79,12 @@ def test_replacement_does_not_rewire_connected_implementation():
         asyncio.run(hooks.invoke(connection))
 
 
-def test_missing_wrong_kind_and_mismatched_slot_do_not_connect():
+def test_missing_slot_and_wrong_kind_do_not_connect():
     registry, hooks = setup_connections()
     with pytest.raises(KeyError):
         hooks.connect(Id("dev.missing:slots/input"), HANDLER, slot_instance="root", handler_instance="first")
     registry.replace(RegistryEntry(HANDLER, "resource", lambda: None, "example"))
     with pytest.raises(TypeError, match="hook_handler"):
-        connect(hooks)
-    registry.replace(RegistryEntry(HANDLER, "hook_handler", lambda: None, "example", slot=Id("dev.other:slots/input")))
-    with pytest.raises(ValueError, match="不符"):
         connect(hooks)
     assert hooks.for_slot(SLOT, "root") == ()
 

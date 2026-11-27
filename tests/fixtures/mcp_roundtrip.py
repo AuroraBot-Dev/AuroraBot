@@ -10,13 +10,57 @@ from typing import cast
 import uvicorn
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
+from aurora_core.declarations import plug_id
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
+from aurora_core.lifecycle import (
+    CLEAN,
+    CONFIG,
+    PREPARE,
+    START,
+    STOP,
+    Lifecycle,
+    LifecycleComponent,
+    install_lifecycle_slots,
+)
 from aurora_core.persistence import ContextPersistence
 from aurora_core.storage import StorageService
 from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, PROTOCOL_VERSION, MCPClientError, MCPClients
 from mcp.server import MCPServer
+
+
+def wire(hooks, identity, bindings, *, depends_on=(), stop_accepting=None):
+    for phase, method in bindings:
+        hooks.connect(phase, plug_id(method), slot_instance=identity, handler_instance=identity, target=method)
+    return LifecycleComponent(identity, depends_on=depends_on, stop_accepting=stop_accepting)
+
+
+def configured_world(ctx, hooks, records, *, depends_on=(), clients=None):
+    from aurora_world.configuration import _SourceConfiguration
+    from aurora_world.sources import WorldSources
+
+    sources = WorldSources(ctx, records)
+    configuration = _SourceConfiguration(ctx)
+    resources = {}
+    if clients is not None:
+        from aurora_mcp.world import WORLD_SOURCE
+
+        resources = {str(WORLD_SOURCE): {"ctx": ctx, "clients": clients}}
+        depends_on = (*depends_on, clients.instance_id)
+    configuration.bind(sources=sources, source_resources=resources)
+    return wire(
+        hooks,
+        "aurora_world/sources",
+        (
+            (CONFIG, configuration.configure),
+            (PREPARE, sources.prepare),
+            (START, sources.start),
+            (STOP, sources.stop),
+            (CLEAN, sources.clean),
+        ),
+        depends_on=("aurora_config", *depends_on),
+        stop_accepting=sources.stop_accepting,
+    )
 
 
 def configuration_component(registry, ctx, hooks, storage):
@@ -68,12 +112,26 @@ async def run(root: Path) -> dict:
             'required_capabilities = ["tools", "resources"]\ntimeout.execution = 1.0\n'
         )
         config.write_text(text, encoding="utf-8")
-        owner = MCPClients(ctx, hooks)
+        owner = MCPClients(ctx)
         store = storage.snapshot_store()
         host = Lifecycle(
             ctx,
             hooks,
-            [owner.component(), configuration_component(registry, ctx, hooks, storage)],
+            [
+                wire(
+                    hooks,
+                    owner.instance_id,
+                    (
+                        (CONFIG, owner.configure),
+                        (PREPARE, owner.prepare),
+                        (STOP, owner.stop),
+                        (CLEAN, owner.clean),
+                    ),
+                    depends_on=("aurora_config",),
+                    stop_accepting=owner.stop_accepting,
+                ),
+                configuration_component(registry, ctx, hooks, storage),
+            ],
             persistence=ContextPersistence(ctx, store, interval=60),
             storage=storage,
         )

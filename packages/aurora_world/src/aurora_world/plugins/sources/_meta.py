@@ -60,7 +60,7 @@ sources_plugin = PluginDeclaration(
                 SOURCES_CLEAN,
             ),
             slots=(),
-            inject=("ctx", "hooks", "instance_id"),
+            inject=("ctx", "instance_id"),
             states=(),
             resources=("sources",),
             inputs=("records",),

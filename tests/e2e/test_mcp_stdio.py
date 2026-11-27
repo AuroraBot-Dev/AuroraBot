@@ -11,7 +11,6 @@ import pytest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, MCPClientError, MCPClients
 from mcp.types import CallToolRequest, CallToolRequestParams, CallToolResult
@@ -63,7 +62,7 @@ def environment(root, mode="normal", protocol="legacy", **overrides):
     install_lifecycle_slots(registry)
     register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
     ctx = Context(registry)
-    owner = MCPClients(ctx, HookConnections(registry), workspace_root=root)
+    owner = MCPClients(ctx, workspace_root=root)
     server = {
         "type": "local",
         "command": [sys.executable, str(FIXTURE), str(root), mode, '空 格 "引号" $HOME'],

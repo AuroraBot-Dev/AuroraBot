@@ -16,7 +16,7 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.storage import StorageService
 from aurora_mcp import CLIENT_STATUS, MCPClients
-from aurora_mcp.world import WORLD_SOURCE, WORLD_STATUS, mcp_world_component
+from aurora_mcp.world import WORLD_SOURCE, WORLD_STATUS
 from aurora_world import RECORDS, SOURCE_STATUS, WorldRecords
 from mcp.server import MCPServer
 from mcp.server.subscriptions import InMemorySubscriptionBus
@@ -43,6 +43,44 @@ class CountingBus(InMemorySubscriptionBus):
             unsubscribe()
 
         return close
+
+
+from aurora_core.declarations import plug_id
+from aurora_core.lifecycle import CLEAN, CONFIG, PREPARE, START, STOP, LifecycleComponent
+
+
+def wire(hooks, identity, bindings, *, depends_on=(), stop_accepting=None):
+    for phase, method in bindings:
+        hooks.connect(phase, plug_id(method), slot_instance=identity, handler_instance=identity, target=method)
+    return LifecycleComponent(identity, depends_on=depends_on, stop_accepting=stop_accepting)
+
+
+def configured_world(ctx, hooks, records, *, depends_on=(), clients=None):
+    from aurora_world.configuration import _SourceConfiguration
+    from aurora_world.sources import WorldSources
+
+    sources = WorldSources(ctx, records)
+    configuration = _SourceConfiguration(ctx)
+    resources = {}
+    if clients is not None:
+        from aurora_mcp.world import WORLD_SOURCE
+
+        resources = {str(WORLD_SOURCE): {"ctx": ctx, "clients": clients}}
+        depends_on = (*depends_on, clients.instance_id)
+    configuration.bind(sources=sources, source_resources=resources)
+    return wire(
+        hooks,
+        "aurora_world/sources",
+        (
+            (CONFIG, configuration.configure),
+            (PREPARE, sources.prepare),
+            (START, sources.start),
+            (STOP, sources.stop),
+            (CLEAN, sources.clean),
+        ),
+        depends_on=("aurora_config", *depends_on),
+        stop_accepting=sources.stop_accepting,
+    )
 
 
 def configuration_component(registry, ctx, hooks, storage):
@@ -137,17 +175,39 @@ async def run(root: Path) -> dict:
                     f'[[sources.config.resources]]\nuri="test://{identity}"\nmode="{mode}"\n'
                 )
             source_path.write_text(selection, encoding="utf-8")
-            clients = MCPClients(ctx, hooks, instance_id="test/mcp")
+            clients = MCPClients(ctx, instance_id="test/mcp")
             records = WorldRecords(ctx, storage)
-            sources = mcp_world_component(ctx, hooks, clients, records, depends_on=("aurora_world/records",))
+            sources = configured_world(ctx, hooks, records, clients=clients, depends_on=("aurora_world/records",))
             store = storage.snapshot_store()
             host = Lifecycle(
                 ctx,
                 hooks,
                 [
-                    records.component(hooks),
+                    wire(
+                        hooks,
+                        "aurora_world/records",
+                        (
+                            (PREPARE, records.prepare),
+                            (START, records.start),
+                            (STOP, records.stop),
+                            (CLEAN, records.clean),
+                        ),
+                        depends_on=(),
+                        stop_accepting=None,
+                    ),
                     sources,
-                    clients.component(),
+                    wire(
+                        hooks,
+                        clients.instance_id,
+                        (
+                            (CONFIG, clients.configure),
+                            (PREPARE, clients.prepare),
+                            (STOP, clients.stop),
+                            (CLEAN, clients.clean),
+                        ),
+                        depends_on=("aurora_config",),
+                        stop_accepting=clients.stop_accepting,
+                    ),
                     configuration_component(registry, ctx, hooks, storage),
                 ],
                 persistence=ContextPersistence(ctx, store, interval=60),

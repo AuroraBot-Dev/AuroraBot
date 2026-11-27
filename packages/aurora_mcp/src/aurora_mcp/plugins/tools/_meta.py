@@ -34,7 +34,7 @@ tools_plugin = PluginDeclaration(
         "catalog": ComponentDeclaration(
             plugs=(PREPARE,),
             slots=(),
-            inject=("ctx", "registry", "hooks", "instance_id"),
+            inject=("ctx", "registry", "instance_id"),
             states=(),
             resources=("catalog",),
             inputs=("clients",),

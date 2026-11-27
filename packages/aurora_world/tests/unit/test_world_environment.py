@@ -58,7 +58,7 @@ def environment(factory, config):
     clock = factory.keywords.get("now")
     records = WorldRecords(ctx, now=(lambda: clock().timestamp()) if clock else time)
     records.open()
-    sources = WorldSources(ctx, hooks, records)
+    sources = WorldSources(ctx, records)
     sources.add(
         identity, source_id="environment/test", config=config, presentation="weather" if "place" in config else "time"
     )

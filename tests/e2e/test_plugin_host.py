@@ -67,24 +67,10 @@ def test_receiver_registered_after_declaration_and_rejection():
     assert "resource" in result.reason
 
 
-def test_registration_acceptance_does_not_hide_missing_slot():
-    registry = bootstrap()
-    registry.register(
-        RegistryEntry(
-            Id("dev.example:handlers/prepare"),
-            "hook_handler",
-            object(),
-            "example",
-            register_to=Id("org.aurora.core:registries/hook_handlers"),
-            slot=Id("org.aurora.agent:react/prepare"),
-        )
-    )
-    results = inspect_admissions(registry)[-2:]
-    assert results[0].status == AdmissionStatus.ACCEPTED
-    assert results[1].status == AdmissionStatus.UNCONNECTED
+def test_slot_owns_compatibility_at_connection_time():
+    import pytest
+    from aurora_core.hooks import HookConnections
 
-
-def test_slot_owns_compatibility_without_schema_equality():
     class CompatibleSlot:
         def rejection_reason(self, entry):
             return None if entry.interface in (None, "可接受的另一种描述") else "接口不兼容"
@@ -92,19 +78,23 @@ def test_slot_owns_compatibility_without_schema_equality():
     registry = bootstrap()
     slot = Id("dev.example:slots/prepare")
     registry.register(RegistryEntry(slot, "hook_slot", CompatibleSlot(), "example", interface="插槽描述"))
+    hooks = HookConnections(registry)
     for name, description in (("plain", None), ("compatible", "可接受的另一种描述"), ("invalid", "其他描述")):
+        identity = Id(f"dev.example:handlers/{name}")
         registry.register(
             RegistryEntry(
-                Id(f"dev.example:handlers/{name}"),
+                identity,
                 "hook_handler",
-                object(),
+                lambda: None,
                 "example",
-                slot=slot,
+                register_to=Id("org.aurora.core:registries/hook_handlers"),
                 interface=description,
             )
         )
-    assert [result.status for result in inspect_admissions(registry)[-3:]] == [
-        AdmissionStatus.ACCEPTED,
-        AdmissionStatus.ACCEPTED,
-        AdmissionStatus.REJECTED,
-    ]
+        assert inspect_admissions(registry)[-1].status == AdmissionStatus.ACCEPTED
+        if name == "invalid":
+            with pytest.raises(ValueError, match="接口不兼容"):
+                hooks.connect(slot, identity, slot_instance="root", handler_instance=name)
+        else:
+            hooks.connect(slot, identity, slot_instance="root", handler_instance=name)
+    assert len(hooks.for_slot(slot, "root")) == 2

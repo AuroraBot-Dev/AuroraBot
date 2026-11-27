@@ -10,7 +10,6 @@ import pytest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, MCPClientError, MCPClients
 from aurora_mcp import transports as module
@@ -44,9 +43,9 @@ def owner_for(value, resolver=lambda name: pytest.fail("不得解析凭证")):
     registry = bootstrap()
     install_lifecycle_slots(registry)
     register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
-    ctx, hooks = Context(registry), HookConnections(registry)
+    ctx = Context(registry)
     ctx.set(CONFIG_STATE, value)
-    owner = MCPClients(ctx, hooks, resolve_env=resolver)
+    owner = MCPClients(ctx, resolve_env=resolver)
     owner.configure()
     return owner, ctx
 

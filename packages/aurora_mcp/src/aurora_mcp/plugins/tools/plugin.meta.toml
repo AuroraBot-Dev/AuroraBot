@@ -41,7 +41,6 @@ plugin = "tools"
 inject = [
     "ctx",
     "registry",
-    "hooks",
     "instance_id",
 ]
 plugs = [

@@ -160,7 +160,7 @@
         "sources": {
           "plugin": "sources",
           "summary": "选择来源工厂、管理任务与接纳入口，借用记录服务",
-          "inject": ["ctx", "hooks", "instance_id"],
+          "inject": ["ctx", "instance_id"],
           "plugs": ["SOURCES_PREPARE", "SOURCES_START", "SOURCES_STOP", "SOURCES_CLEAN"],
           "slots": [],
           "resources": ["sources"],

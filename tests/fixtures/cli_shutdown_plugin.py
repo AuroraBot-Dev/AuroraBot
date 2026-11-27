@@ -5,7 +5,7 @@ import os
 import signal
 from dataclasses import replace
 
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.components import ComponentDeclaration, ComponentExport, ComponentFactory, InstanceExport
 from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
@@ -44,7 +44,7 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
         path = storage.snapshot_store().path
         storage.snapshot_store = lambda: FailingStore(path)
 
-    @hook_handler("dev.cli_shutdown:handlers/prepare", slot=PREPARE)
+    @plug("dev.cli_shutdown:handlers/prepare")
     def prepare():
         nonlocal subscription
         subscription = ctx.subscribe(lambda change: record(change.value), key=KEY)
@@ -57,12 +57,12 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
         await asyncio.sleep(0)
         signal.raise_signal(signal.SIGINT)
 
-    @hook_handler("dev.cli_shutdown:handlers/start", slot=START)
+    @plug("dev.cli_shutdown:handlers/start")
     def start():
         nonlocal worker
         worker = asyncio.create_task(produce())
 
-    @hook_handler("dev.cli_shutdown:handlers/stop", slot=STOP)
+    @plug("dev.cli_shutdown:handlers/stop")
     async def stop():
         if worker is not None:
             await worker

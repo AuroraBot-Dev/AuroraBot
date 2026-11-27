@@ -19,7 +19,7 @@ class AdmissionStatus(StrEnum):
 
 @dataclass(frozen=True)
 class Admission:
-    """一条登记或插槽声明的接收结果。"""
+    """一条登记声明的接收结果。"""
 
     source: Id
     provider: str
@@ -36,34 +36,31 @@ def inspect_admissions(registry: DefinitionRegistry) -> tuple[Admission, ...]:
     """
     results: list[Admission] = []
     for entry in registry.entries():
-        for relation, identity, kind in (
-            ("register_to", entry.register_to, "registry"),
-            ("slot", entry.slot, "hook_slot"),
-        ):
-            if identity is None:
-                continue
-            reason = None
-            try:
-                receiver = registry.get(identity)
-            except KeyError:
-                status = AdmissionStatus.UNCONNECTED
-                reason = "接收方缺席"
+        identity, relation, kind = entry.register_to, "register_to", "registry"
+        if identity is None:
+            continue
+        reason = None
+        try:
+            receiver = registry.get(identity)
+        except KeyError:
+            status = AdmissionStatus.UNCONNECTED
+            reason = "接收方缺席"
+        else:
+            if receiver.kind != kind or not isinstance(receiver.target, Receiver):
+                reason = f"目标不是提供接收规则的 {kind}"
             else:
-                if receiver.kind != kind or not isinstance(receiver.target, Receiver):
-                    reason = f"目标不是提供接收规则的 {kind}"
-                else:
-                    reason = receiver.target.rejection_reason(entry)
-                status = AdmissionStatus.REJECTED if reason is not None else AdmissionStatus.ACCEPTED
-            result = Admission(entry.id, entry.provider, relation, identity, status, reason)
-            results.append(result)
-            if status != AdmissionStatus.ACCEPTED:
-                logger.warning(
-                    "提供者 %s 的 %s 经 %s 指向 %s：%s（%s）",
-                    entry.provider,
-                    entry.id,
-                    relation,
-                    identity,
-                    status,
-                    reason,
-                )
+                reason = receiver.target.rejection_reason(entry)
+            status = AdmissionStatus.REJECTED if reason is not None else AdmissionStatus.ACCEPTED
+        result = Admission(entry.id, entry.provider, relation, identity, status, reason)
+        results.append(result)
+        if status != AdmissionStatus.ACCEPTED:
+            logger.warning(
+                "提供者 %s 的 %s 经 %s 指向 %s：%s（%s）",
+                entry.provider,
+                entry.id,
+                relation,
+                identity,
+                status,
+                reason,
+            )
     return tuple(results)

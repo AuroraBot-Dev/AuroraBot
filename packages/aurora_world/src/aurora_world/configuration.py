@@ -10,11 +10,9 @@ from aurora_core import Id, plug
 from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import Plugin
-from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import CONFIG, LifecycleComponent
 
 from .plugins.configuration._meta import CONFIG_STATE, CONFIGURATION, CONFIGURE, configuration_plugin
-from .records import WorldRecords, WorldView, _identity
+from .records import WorldView, _identity
 from .sources import WorldSources
 
 
@@ -59,30 +57,6 @@ class _SourceConfiguration:
                 resources=self.source_resources.get(identity, {}),
                 presentation=source.get("presentation"),
             )
-
-
-def configured_sources_component(
-    ctx: Context,
-    hooks: HookConnections,
-    records: WorldRecords,
-    *,
-    instance_id: str = "aurora_world/sources",
-    depends_on: tuple[str, ...] = (),
-    source_resources: Mapping[Id, Mapping[str, object]] | None = None,
-) -> LifecycleComponent:
-    """先加载和选择全部声明，prepare 才创建来源；依赖 aurora_config 组件。"""
-    sources = WorldSources(ctx, hooks, records, instance_id=instance_id)
-    configuration = _SourceConfiguration(ctx)
-    configuration.bind(sources=sources)
-    configuration.source_resources = source_resources or {}
-    link = hooks.connect(
-        CONFIG, CONFIGURE, slot_instance=instance_id, handler_instance=instance_id, target=configuration.configure
-    )
-    try:
-        return sources.component(depends_on=tuple(dict.fromkeys(("aurora_config", *depends_on))))
-    except Exception:
-        hooks.disconnect(link)
-        raise
 
 
 def plugin() -> Plugin:

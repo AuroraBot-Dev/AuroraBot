@@ -26,6 +26,8 @@ from aurora_world import (
 from aurora_world.records import plugin as records_plugin
 from aurora_world.sources import plugin
 
+from tests.fixtures.lifecycle_graph import wire
+
 SOURCE = Id("dev.sources:sources/manual")
 
 
@@ -59,7 +61,7 @@ def environment():
     registry.register(RegistryEntry(SOURCE, "source", SourceSpec(factory), "test", register_to=SOURCES))
     records = WorldRecords(ctx)
     records.open()
-    sources = WorldSources(ctx, hooks, records)
+    sources = WorldSources(ctx, records)
     yield registry, ctx, hooks, sources, captures, events
     records.close()
     hooks.close()
@@ -72,7 +74,18 @@ def test_source_admission_and_component_binding_do_not_run_factories(environment
     assert all(item.status == AdmissionStatus.ACCEPTED for item in admissions)
     assert next(item for item in admissions if item.source == SOURCE).target == SOURCES
     sources.add(SOURCE, source_id="sensor/a")
-    component = sources.component(depends_on=("shared-client",))
+    component = wire(
+        hooks,
+        "aurora_world/sources",
+        (
+            (PREPARE, sources.prepare),
+            (START, sources.start),
+            (STOP, sources.stop),
+            (CLEAN, sources.clean),
+        ),
+        depends_on=("shared-client",),
+        stop_accepting=sources.stop_accepting,
+    )
     assert component.depends_on == ("shared-client",)
     for phase in (PREPARE, START, STOP, CLEAN):
         assert len(hooks.for_slot(phase, component.instance_id)) == 1
@@ -87,7 +100,24 @@ def test_same_definition_has_independent_bound_identities_and_config_copies(envi
     config["nested"].clear()
 
     async def scenario():
-        host = Lifecycle(ctx, hooks, [sources.component()])
+        host = Lifecycle(
+            ctx,
+            hooks,
+            [
+                wire(
+                    hooks,
+                    "aurora_world/sources",
+                    (
+                        (PREPARE, sources.prepare),
+                        (START, sources.start),
+                        (STOP, sources.stop),
+                        (CLEAN, sources.clean),
+                    ),
+                    depends_on=(),
+                    stop_accepting=sources.stop_accepting,
+                )
+            ],
+        )
         await host.start()
         a, first_config = captures["sensor/a"]
         b, second_config = captures["sensor/b"]
@@ -230,26 +260,6 @@ def test_invalid_definitions_are_rejected_by_receiver_and_runtime(environment):
     assert events == []
 
 
-def test_partial_connection_failure_rolls_back_and_allows_explicit_retry(environment, monkeypatch):
-    _, _, hooks, sources, _, _ = environment
-    original = hooks.connect
-
-    def fail(slot, *args, **kwargs):
-        if slot == STOP:
-            raise RuntimeError("插槽拒绝")
-        return original(slot, *args, **kwargs)
-
-    monkeypatch.setattr(hooks, "connect", fail)
-    with pytest.raises(RuntimeError, match="插槽拒绝"):
-        sources.component()
-    for phase in (PREPARE, START, STOP, CLEAN):
-        assert hooks.for_slot(phase, "aurora_world/sources") == ()
-    monkeypatch.setattr(hooks, "connect", original)
-    sources.component()
-    with pytest.raises(RuntimeError, match="已连接"):
-        sources.component()
-
-
 def test_source_binding_honors_the_registered_receivers_rejection(environment):
     registry, _, _, sources, _, events = environment
     original = registry.get(SOURCES)
@@ -311,7 +321,24 @@ def test_stop_accepting_during_startup_does_not_reopen_a_retained_callback(envir
     sources.add(SOURCE, source_id="b")
 
     async def scenario():
-        host = Lifecycle(ctx, hooks, [sources.component()])
+        host = Lifecycle(
+            ctx,
+            hooks,
+            [
+                wire(
+                    hooks,
+                    "aurora_world/sources",
+                    (
+                        (PREPARE, sources.prepare),
+                        (START, sources.start),
+                        (STOP, sources.stop),
+                        (CLEAN, sources.clean),
+                    ),
+                    depends_on=(),
+                    stop_accepting=sources.stop_accepting,
+                )
+            ],
+        )
         try:
             with pytest.raises(SourceUnavailableError, match="期间已停止"):
                 await host.start()

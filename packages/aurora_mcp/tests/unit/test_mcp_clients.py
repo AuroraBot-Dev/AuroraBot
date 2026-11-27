@@ -11,7 +11,6 @@ import pytest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, PROTOCOL_VERSION, MCPClientError, MCPClients
 from aurora_mcp import transports as module
@@ -32,8 +31,8 @@ def environment(values=None):
     registry = bootstrap()
     install_lifecycle_slots(registry)
     register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
-    ctx, hooks = Context(registry), HookConnections(registry)
-    owner = MCPClients(ctx, hooks)
+    ctx = Context(registry)
+    owner = MCPClients(ctx)
     ctx.set(CONFIG_STATE, configuration([declaration()] if values is None else values))
     owner.configure()
     return owner, ctx

@@ -8,18 +8,14 @@ from uuid import uuid4
 
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import Plugin
-from aurora_core.hooks import HookConnections
 from aurora_core.json_data import decode_json, encode_json
-from aurora_core.lifecycle import LifecycleComponent
 from aurora_world import (
     MessageConflictError,
     SourceEmit,
     SourceInstance,
     SourceSpec,
     SourceUnavailableError,
-    WorldRecords,
 )
-from aurora_world.configuration import configured_sources_component
 from mcp import Client
 from mcp.client.subscriptions import ResourceUpdated, Subscription, SubscriptionLost, ToolsListChanged
 from mcp.types import TextResourceContents
@@ -270,26 +266,6 @@ async def create_source(*, source_id: str, emit: SourceEmit, config: dict[str, o
     values = cast(dict, WORLD_CONFIG.parse(config))
     source = _ResourceSource(resources["ctx"], resources["clients"], source_id, emit, values)
     return SourceInstance(source.start, source.stop, source.close, source.run)
-
-
-def mcp_world_component(
-    ctx: Context,
-    hooks: HookConnections,
-    clients: MCPClients,
-    records: WorldRecords,
-    *,
-    instance_id: str = "aurora_world/sources",
-    depends_on: tuple[str, ...] = (),
-) -> LifecycleComponent:
-    """装配同一 world 来源所有者并注入共享客户端，替代 configured_sources_component。"""
-    return configured_sources_component(
-        ctx,
-        hooks,
-        records,
-        instance_id=instance_id,
-        depends_on=tuple(dict.fromkeys((clients.instance_id, *depends_on))),
-        source_resources={WORLD_SOURCE: {"ctx": ctx, "clients": clients}},
-    )
 
 
 def _validate_status(value: object) -> None:

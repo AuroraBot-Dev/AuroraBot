@@ -14,11 +14,9 @@ from typing import Literal, cast
 from uuid import uuid4
 
 from aurora_core import plug
-from aurora_core.components import ComponentFactory, InstanceExport, plug_id
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context, StateKey
-from aurora_core.hooks import HookConnections
 from aurora_core.json_data import decode_json, encode_json
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.storage import StorageService
 
 from .plugins.records._meta import (
@@ -204,7 +202,6 @@ class WorldRecords:
         self._owner = get_ident()
         self._db: sqlite3.Connection | None = None
         self._closed = False
-        self._connected = False
         self._worker: asyncio.Task[None] | None = None
         self._presentations: dict[str, Presentation] = {}
         self.last_error: str | None = None
@@ -502,27 +499,6 @@ class WorldRecords:
                 )
                 result.append((item["received_at"], record))
         return tuple(record for _, record in sorted(result, key=lambda pair: pair[0]))
-
-    def component(
-        self, hooks: HookConnections, *, instance_id: str = "aurora_world/records", depends_on: tuple[str, ...] = ()
-    ) -> LifecycleComponent:
-        self._check_owner()
-        if self._connected:
-            raise RuntimeError("世界记录生命周期已经连接")
-        links = []
-        try:
-            for phase, method in ((PREPARE, self.prepare), (START, self.start), (STOP, self.stop), (CLEAN, self.clean)):
-                links.append(
-                    hooks.connect(
-                        phase, plug_id(method), slot_instance=instance_id, handler_instance=instance_id, target=method
-                    )
-                )
-        except Exception:
-            for link in links:
-                hooks.disconnect(link)
-            raise
-        self._connected = True
-        return LifecycleComponent(instance_id, depends_on=depends_on)
 
     @plug(RECORDS_PREPARE)
     def prepare(self) -> None:

@@ -24,10 +24,8 @@ def _validate_status(value: object) -> None:
     encode_json(value)
 
 
-def _create(*, ctx, hooks, instance_id, workspace_root, resolve_credential):
-    return MCPClients(
-        ctx, hooks, instance_id=instance_id, workspace_root=workspace_root, resolve_env=resolve_credential
-    )
+def _create(*, ctx, instance_id, workspace_root, resolve_credential):
+    return MCPClients(ctx, instance_id=instance_id, workspace_root=workspace_root, resolve_env=resolve_credential)
 
 
 def plugin() -> Plugin:

@@ -96,7 +96,7 @@
       "components": {
         "clients": {
           "plugin": "clients",
-          "inject": ["ctx", "hooks", "instance_id", "workspace_root", "resolve_credential"],
+          "inject": ["ctx", "instance_id", "workspace_root", "resolve_credential"],
           "plugs": ["CONFIGURE", "PREPARE", "STOP", "CLEAN"],
           "slots": [],
           "resources": ["clients"]
@@ -362,7 +362,7 @@
       "components": {
         "catalog": {
           "plugin": "tools",
-          "inject": ["ctx", "registry", "hooks", "instance_id"],
+          "inject": ["ctx", "registry", "instance_id"],
           "plugs": ["PREPARE"],
           "slots": [],
           "inputs": ["clients"],

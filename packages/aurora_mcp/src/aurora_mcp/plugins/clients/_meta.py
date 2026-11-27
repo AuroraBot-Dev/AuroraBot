@@ -68,7 +68,7 @@ clients_plugin = PluginDeclaration(
                 CLEAN,
             ),
             slots=(),
-            inject=("ctx", "hooks", "instance_id", "workspace_root", "resolve_credential"),
+            inject=("ctx", "instance_id", "workspace_root", "resolve_credential"),
             states=(),
             resources=("clients",),
             inputs=(),

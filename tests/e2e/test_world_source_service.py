@@ -9,7 +9,7 @@ from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
+from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
@@ -23,7 +23,9 @@ from aurora_world import (
     SourceUnavailableError,
     WorldRecords,
 )
-from aurora_world.configuration import CONFIG_STATE, configured_sources_component
+from aurora_world.configuration import CONFIG_STATE
+
+from tests.fixtures.lifecycle_graph import configured_world, wire
 
 SOURCE = Id("dev.test:sources/configured")
 
@@ -49,8 +51,19 @@ def environment(root, factory, text=None, *, timeout=1.0):
         ctx,
         hooks,
         [
-            records.component(hooks),
-            configured_sources_component(ctx, hooks, records, depends_on=("aurora_world/records",)),
+            wire(
+                hooks,
+                "aurora_world/records",
+                (
+                    (PREPARE, records.prepare),
+                    (START, records.start),
+                    (STOP, records.stop),
+                    (CLEAN, records.clean),
+                ),
+                depends_on=(),
+                stop_accepting=None,
+            ),
+            configured_world(ctx, hooks, records, depends_on=("aurora_world/records",)),
             configuration_component(registry, ctx, hooks, storage),
         ],
         persistence=ContextPersistence(ctx, store, interval=60),

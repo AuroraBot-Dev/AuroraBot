@@ -268,7 +268,6 @@ def test_lifecycle_rebuilds_configuration_before_prepare_and_excludes_snapshot(t
                 "hook_handler",
                 lambda: prepared.append((ctx.get(CONFIG), ctx.get(RUNTIME))),
                 "测试插件",
-                slot=PREPARE,
             )
         )
         hooks.connect(PREPARE, identity, slot_instance="app", handler_instance="app")

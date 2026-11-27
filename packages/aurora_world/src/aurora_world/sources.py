@@ -11,12 +11,10 @@ from typing import Protocol, cast
 
 from aurora_core import plug
 from aurora_core.bootstrap import Receiver
-from aurora_core.components import ComponentFactory, InstanceExport, plug_id
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context, StateChange, StateKey
-from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
 
 from .plugins.sources._meta import (
@@ -128,18 +126,16 @@ class WorldSources:
     def __init__(
         self,
         ctx: Context,
-        hooks: HookConnections,
         records: WorldRecords | None = None,
         *,
         instance_id: str = "aurora_world/sources",
     ) -> None:
         _identity(instance_id)
-        self._ctx, self._hooks = ctx, hooks
+        self._ctx = ctx
         self.records = cast(WorldRecords, records)
         self._instance_id = instance_id
         self._owner = get_ident()
         self._bindings: dict[str, _Binding] = {}
-        self._connected = False
         self._prepare_called = False
         self._prepared = False
         self._start_called = False
@@ -190,30 +186,6 @@ class WorldSources:
         self._bindings[source_id] = _Binding(
             source_id, identity, entry.target.factory, deepcopy(values), {} if resources is None else dict(resources)
         )
-
-    def component(self, *, depends_on: tuple[str, ...] = ()) -> LifecycleComponent:
-        """连接来源所有者的生命周期；不创建来源、任务或状态。"""
-        self._check_owner()
-        if self._connected or self._prepare_called or self._quiesced:
-            raise RuntimeError("来源生命周期已连接或不再允许装配")
-        links = []
-        try:
-            for phase, method in ((PREPARE, self.prepare), (START, self.start), (STOP, self.stop), (CLEAN, self.clean)):
-                links.append(
-                    self._hooks.connect(
-                        phase,
-                        plug_id(method),
-                        slot_instance=self._instance_id,
-                        handler_instance=self._instance_id,
-                        target=method,
-                    )
-                )
-        except Exception:
-            for link in links:
-                self._hooks.disconnect(link)
-            raise
-        self._connected = True
-        return LifecycleComponent(self._instance_id, depends_on=depends_on, stop_accepting=self.stop_accepting)
 
     def _emit(self, binding: _Binding, *, message_id: str, payload: object) -> WorldReceipt:
         self._check_owner()

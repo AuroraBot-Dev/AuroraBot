@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from aurora_cli.commander import run_cli
-from aurora_core import Id, entry_from, hook_handler, operation
+from aurora_core import Id, entry_from, operation, plug
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
@@ -168,17 +168,17 @@ def test_run_applies_config_before_prepare_and_flushes_stop(tmp_path):
         def factory(*, registry, ctx, hooks, storage, workspace_root, resolve_credential):
             logging.getLogger(__name__).info("装配工厂日志")
 
-            @hook_handler("dev.test:handlers/prepare", slot=PREPARE)
+            @plug("dev.test:handlers/prepare")
             def prepare():
                 logging.getLogger(__name__).info("准备阶段日志")
                 observations.append(ctx.get(Id(CONFIG)))
 
-            @hook_handler("dev.test:handlers/start", slot=START)
+            @plug("dev.test:handlers/start")
             def start():
                 logging.getLogger(__name__).info("启动阶段日志")
                 started.set()
 
-            @hook_handler("dev.test:handlers/stop", slot=STOP)
+            @plug("dev.test:handlers/stop")
             def stop():
                 logging.getLogger(__name__).info("停止阶段日志")
                 ctx.set(Id(CONFIG), {"stopped": True})

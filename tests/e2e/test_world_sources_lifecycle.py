@@ -9,13 +9,15 @@ from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import register_plugins
 from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
+from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
 from aurora_world import SOURCES, SourceInstance, SourceSpec, SourceUnavailableError, WorldRecords, WorldSources
 from aurora_world.records import plugin as records_plugin
 from aurora_world.sources import plugin
+
+from tests.fixtures.lifecycle_graph import wire
 
 
 def environment(root, *, failure=None, source="b", block=None):
@@ -66,13 +68,38 @@ def environment(root, *, failure=None, source="b", block=None):
 
     identity = Id("dev.sources:sources/lifecycle")
     registry.register(RegistryEntry(identity, "source", SourceSpec(factory), "test", register_to=SOURCES))
-    sources = WorldSources(ctx, hooks, records)
+    sources = WorldSources(ctx, records)
     for name in ("a", "b"):
         sources.add(identity, source_id=name)
     host = Lifecycle(
         ctx,
         hooks,
-        [records.component(hooks), sources.component(depends_on=("aurora_world/records",))],
+        [
+            wire(
+                hooks,
+                "aurora_world/records",
+                (
+                    (PREPARE, records.prepare),
+                    (START, records.start),
+                    (STOP, records.stop),
+                    (CLEAN, records.clean),
+                ),
+                depends_on=(),
+                stop_accepting=None,
+            ),
+            wire(
+                hooks,
+                "aurora_world/sources",
+                (
+                    (PREPARE, sources.prepare),
+                    (START, sources.start),
+                    (STOP, sources.stop),
+                    (CLEAN, sources.clean),
+                ),
+                depends_on=("aurora_world/records",),
+                stop_accepting=sources.stop_accepting,
+            ),
+        ],
         persistence=ContextPersistence(ctx, store, interval=60),
         storage=storage,
     )

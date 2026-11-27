@@ -11,7 +11,15 @@ from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import Lifecycle, LifecycleComponent, install_lifecycle_slots
+from aurora_core.lifecycle import (
+    CLEAN,
+    PREPARE,
+    START,
+    STOP,
+    Lifecycle,
+    LifecycleComponent,
+    install_lifecycle_slots,
+)
 from aurora_core.storage import StorageService
 from aurora_host import configuration_component
 from aurora_mcp.clients import MCPClients
@@ -21,7 +29,6 @@ from aurora_mcp.world import (
     WORLD_STATUS,
     MCPWorldError,
     _ResourceSource,
-    mcp_world_component,
     plugin,
 )
 from aurora_mcp.world_config import WORLD_CONFIG
@@ -31,6 +38,8 @@ from aurora_world.sources import SourceSpec
 from aurora_world.sources import plugin as world_plugin
 from mcp.client.subscriptions import ResourceUpdated, SubscriptionLost, ToolsListChanged
 from mcp.types import BlobResourceContents, TextResourceContents
+
+from tests.fixtures.lifecycle_graph import configured_world, wire
 
 URI = "test://one"
 
@@ -206,11 +215,26 @@ def test_world_factory_is_bound_per_host_without_mutating_shared_definition(tmp_
                     ctx,
                     hooks,
                     [
-                        world_records.component(hooks),
+                        wire(
+                            hooks,
+                            "aurora_world/records",
+                            (
+                                (PREPARE, world_records.prepare),
+                                (START, world_records.start),
+                                (STOP, world_records.stop),
+                                (CLEAN, world_records.clean),
+                            ),
+                            depends_on=(),
+                            stop_accepting=None,
+                        ),
                         configuration_component(registry, ctx, hooks, storage),
                         LifecycleComponent("client"),
-                        mcp_world_component(
-                            ctx, hooks, cast(MCPClients, client), world_records, depends_on=("aurora_world/records",)
+                        configured_world(
+                            ctx,
+                            hooks,
+                            world_records,
+                            clients=cast(MCPClients, client),
+                            depends_on=("aurora_world/records",),
                         ),
                     ],
                     storage=storage,

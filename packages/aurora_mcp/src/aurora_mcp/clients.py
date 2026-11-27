@@ -10,10 +10,7 @@ from pathlib import Path
 from typing import cast
 
 from aurora_core import plug
-from aurora_core.components import plug_id
 from aurora_core.ctx import Context
-from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import CLEAN, CONFIG, PREPARE, STOP, LifecycleComponent
 from mcp import Client
 
 from . import transports
@@ -53,7 +50,7 @@ class _Connection:
 class MCPClients:
     """一个宿主的连接所有者；消费者在自己的生命周期内借用客户端。
 
-    component 只连接声明，config 选择连接，prepare 才创建网络资源。
+    config 选择连接，prepare 才创建网络资源。
     stop 封闭借用入口并取消、等待剩余借用；clean 在消费者清理后释放客户端。
     关闭等待取消或超时不再次打断正在执行的收尾，可再次等待；失败连接不自动重连。
     客户端及 SDK 类型仅供适配层使用，不应写入 ctx 或传出到 world/agent 契约。
@@ -62,7 +59,6 @@ class MCPClients:
     def __init__(
         self,
         ctx: Context,
-        hooks: HookConnections,
         *,
         instance_id: str = "aurora_mcp",
         resolve_env: Callable[[str], str | None] = os.environ.get,
@@ -70,11 +66,10 @@ class MCPClients:
     ) -> None:
         if not instance_id or not instance_id.strip():
             raise ValueError("MCP 所有者身份不能为空")
-        self._ctx, self._hooks, self._instance_id = ctx, hooks, instance_id
+        self._ctx, self._instance_id = ctx, instance_id
         self._resolve_env = resolve_env
         self._workspace_root = workspace_root
         self._connections: dict[str, _Connection] = {}
-        self._connected = False
         self._configured = False
         self._prepared = False
         self._closing = False
@@ -110,38 +105,6 @@ class MCPClients:
                 "capabilities": binding.capabilities.copy(),
             },
             location={"owner": self._instance_id, "connection_id": binding.config["connection_id"]},
-        )
-
-    def component(self, *, depends_on: tuple[str, ...] = ()) -> LifecycleComponent:
-        """依赖配置服务；消费者须将此组件列为依赖，保证准备和关闭顺序。"""
-        if self._connected or self._configured or self._closing:
-            raise RuntimeError("MCP 生命周期已连接或不再允许装配")
-        links = []
-        try:
-            for phase, method in (
-                (CONFIG, self.configure),
-                (PREPARE, self.prepare),
-                (STOP, self.stop),
-                (CLEAN, self.clean),
-            ):
-                links.append(
-                    self._hooks.connect(
-                        phase,
-                        plug_id(method),
-                        slot_instance=self._instance_id,
-                        handler_instance=self._instance_id,
-                        target=method,
-                    )
-                )
-        except Exception:
-            for link in links:
-                self._hooks.disconnect(link)
-            raise
-        self._connected = True
-        return LifecycleComponent(
-            self._instance_id,
-            depends_on=tuple(dict.fromkeys(("aurora_config", *depends_on))),
-            stop_accepting=self.stop_accepting,
         )
 
     @plug(CONFIGURE)

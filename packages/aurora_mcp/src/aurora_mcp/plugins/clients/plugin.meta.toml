@@ -73,7 +73,6 @@ id = "org.aurora.core:registries/hook_handlers"
 plugin = "clients"
 inject = [
     "ctx",
-    "hooks",
     "instance_id",
     "workspace_root",
     "resolve_credential",

@@ -11,7 +11,6 @@ import pytest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, MCPClientError, MCPClients, transports
 from aurora_mcp import clients as clients_module
@@ -155,7 +154,7 @@ def host(monkeypatch):
         registry = bootstrap()
         install_lifecycle_slots(registry)
         register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
-        ctx, hooks = Context(registry), HookConnections(registry)
+        ctx = Context(registry)
         contexts.append(ctx)
         ctx.set(
             CONFIG_STATE,
@@ -172,7 +171,7 @@ def host(monkeypatch):
                 },
             },
         )
-        owner = MCPClients(ctx, hooks)
+        owner = MCPClients(ctx)
         owner.configure()
 
         def status():

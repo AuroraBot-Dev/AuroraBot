@@ -21,7 +21,7 @@ from aurora_agent.react_defaults import (
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_agent.runtime import AgentRuntime
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateChange, StateKey
 from aurora_core.discovery import register_plugins
@@ -185,11 +185,11 @@ async def run(args: argparse.Namespace) -> None:
 
     runtime = AgentRuntime(get_agent=lambda: agent, execute=execute, is_executing=lambda: executing)
 
-    @hook_handler("dev.example.react:handlers/stop_agent", slot=STOP)
+    @plug("dev.example.react:handlers/stop_agent")
     async def stop_agent() -> None:
         await runtime.close()
 
-    @hook_handler("dev.example.react:handlers/close", slot=CLEAN)
+    @plug("dev.example.react:handlers/close")
     async def close() -> None:
         await client.aclose()
         keep = {model.output_state.address(request)}

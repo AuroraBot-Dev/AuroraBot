@@ -4,12 +4,10 @@ import asyncio
 
 from aurora_control import ExecutionPlug, StateBinding
 from aurora_core import Id, plug
-from aurora_core.components import ComponentFactory, InstanceExport, plug_id
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
-from aurora_core.hooks import HookConnections
 from aurora_core.json_data import JsonValue
-from aurora_core.lifecycle import PREPARE, LifecycleComponent
 from aurora_core.registry import DefinitionRegistry
 from aurora_core.storage import StorageService
 from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
@@ -63,37 +61,19 @@ class MCPTools:
         self,
         registry: DefinitionRegistry,
         ctx: Context,
-        hooks: HookConnections,
         clients: MCPClients | None = None,
         *,
         instance_id: str = "aurora_mcp/tools",
     ) -> None:
         if not instance_id or not instance_id.strip():
             raise ValueError("MCP 工具桥实例身份不能为空")
-        self.registry, self.ctx, self.hooks, self.clients = registry, ctx, hooks, clients
+        self.registry, self.ctx, self.clients = registry, ctx, clients
         self.instance_id = instance_id
         self.prepared = False
-        self._connected = False
         self._tool_ids: tuple[Id, ...] = ()
 
     def definitions(self):
         return [self.registry.get(identity).target.definition for identity in self.tool_ids]
-
-    def component(self, *, depends_on: tuple[str, ...] = ()) -> LifecycleComponent:
-        """声明客户端依赖，不访问网络；bot components 的 depends_on 应引用本组件。"""
-        if self._connected or self.prepared:
-            raise RuntimeError("MCP 工具桥已连接或完成准备")
-        self.hooks.connect(
-            PREPARE,
-            plug_id(self.prepare),
-            slot_instance=self.instance_id,
-            handler_instance=self.instance_id,
-            target=self.prepare,
-        )
-        self._connected = True
-        return LifecycleComponent(
-            self.instance_id, depends_on=tuple(dict.fromkeys((self.clients.instance_id, *depends_on)))
-        )
 
     def bind(self, *, clients):
         self.clients = clients

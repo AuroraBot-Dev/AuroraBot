@@ -26,7 +26,7 @@ from aurora_cli.declarations import CONFIG as CLI_CONFIG
 from aurora_config import ConfigSpec, ConfigTemplate
 from aurora_control import CONTROL_STATE, ExecutionPlug, component_entries
 from aurora_control import plugin as control_plugin
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
@@ -173,7 +173,7 @@ class Workshop:
         self.subscription = None
         self.finish_link = None
 
-    @hook_handler(f"{NAMESPACE}:handlers/prepare", slot=PREPARE)
+    @plug(f"{NAMESPACE}:handlers/prepare")
     def prepare(self):
         try:
             initial = self.ctx.get(CLI_CONFIG)
@@ -197,7 +197,7 @@ class Workshop:
             for address in self.ctx.list(key=key):
                 self.ctx.delete(key, location=dict(address.location))
 
-    @hook_handler(f"{NAMESPACE}:handlers/start_observer", slot=START)
+    @plug(f"{NAMESPACE}:handlers/start_observer")
     def start_observer(self):
         assert self.bot.agent is not None
         self.finish_link = self.bot.agent.slots["finish"].connect(
@@ -277,13 +277,13 @@ class Workshop:
 
         return SourceInstance(start=noop, stop=noop, aclose=noop, run=produce)
 
-    @hook_handler(f"{NAMESPACE}:handlers/stop_observer", slot=STOP)
+    @plug(f"{NAMESPACE}:handlers/stop_observer")
     def stop_observer(self):
         if self.subscription is not None:
             self.ctx.unsubscribe(self.subscription)
             self.subscription = None
 
-    @hook_handler(f"{NAMESPACE}:handlers/clean_observer", slot=CLEAN)
+    @plug(f"{NAMESPACE}:handlers/clean_observer")
     def clean_observer(self):
         self.stop_observer()
         if self.finish_link is not None:

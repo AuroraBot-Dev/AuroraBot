@@ -9,7 +9,7 @@ from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import Guidance, ReActAgent
 from aurora_agent.react import plugin as react_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import register_plugins
@@ -132,7 +132,7 @@ def assemble(data_dir, *, fail_tool=False, fail_model=False):
     assert model_link.slot_states["inbox"] == agent.inbox
     assert model_link.plug.states["input"] == model_input
 
-    @hook_handler("dev.react.integration:handlers/close", slot=STOP)
+    @plug("dev.react.integration:handlers/close")
     async def close():
         # 装配持有模型资源，并明确本示例的中间值保留策略。
         await client.aclose()

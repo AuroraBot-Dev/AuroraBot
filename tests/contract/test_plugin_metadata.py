@@ -82,7 +82,7 @@ def test_manifest_generated_catalog_and_runtime_definitions_agree():
                 assert entry.kind == declaration["kind"]
                 receiver = declaration.get("register_to")
                 assert entry.register_to == (Id(receiver["id"]) if receiver else None)
-                assert entry.slot is None
+
             if name == "aurora_config":
                 assert manifest["contracts"]["configuration_http"]["content"] == describe_configuration()
 

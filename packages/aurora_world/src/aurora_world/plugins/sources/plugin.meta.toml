@@ -64,7 +64,6 @@ plugin = "sources"
 summary = "选择来源工厂、管理任务与接纳入口，借用记录服务"
 inject = [
     "ctx",
-    "hooks",
     "instance_id",
 ]
 plugs = [

@@ -29,6 +29,44 @@ from mcp.server import MCPServer
 STATE = Id("dev.mcp:state/work")
 
 
+from aurora_core.declarations import plug_id
+from aurora_core.lifecycle import CLEAN, CONFIG, PREPARE, START, STOP, LifecycleComponent
+
+
+def wire(hooks, identity, bindings, *, depends_on=(), stop_accepting=None):
+    for phase, method in bindings:
+        hooks.connect(phase, plug_id(method), slot_instance=identity, handler_instance=identity, target=method)
+    return LifecycleComponent(identity, depends_on=depends_on, stop_accepting=stop_accepting)
+
+
+def configured_world(ctx, hooks, records, *, depends_on=(), clients=None):
+    from aurora_world.configuration import _SourceConfiguration
+    from aurora_world.sources import WorldSources
+
+    sources = WorldSources(ctx, records)
+    configuration = _SourceConfiguration(ctx)
+    resources = {}
+    if clients is not None:
+        from aurora_mcp.world import WORLD_SOURCE
+
+        resources = {str(WORLD_SOURCE): {"ctx": ctx, "clients": clients}}
+        depends_on = (*depends_on, clients.instance_id)
+    configuration.bind(sources=sources, source_resources=resources)
+    return wire(
+        hooks,
+        "aurora_world/sources",
+        (
+            (CONFIG, configuration.configure),
+            (PREPARE, sources.prepare),
+            (START, sources.start),
+            (STOP, sources.stop),
+            (CLEAN, sources.clean),
+        ),
+        depends_on=("aurora_config", *depends_on),
+        stop_accepting=sources.stop_accepting,
+    )
+
+
 def echo_service(record) -> MCPServer:
     """两种传输共用同一工具声明和执行结果。"""
     service = MCPServer("aurora-tools-test")
@@ -144,9 +182,30 @@ async def run(
                 },
             },
         )
-        clients = MCPClients(ctx, hooks, workspace_root=root)
-        bridge = MCPTools(registry, ctx, hooks, clients)
-        components = [bridge.component(), clients.component(), configuration_component(registry, ctx, hooks, storage)]
+        clients = MCPClients(ctx, workspace_root=root)
+        bridge = MCPTools(registry, ctx, clients)
+        components = [
+            wire(
+                hooks,
+                bridge.instance_id,
+                ((PREPARE, bridge.prepare),),
+                depends_on=(clients.instance_id,),
+                stop_accepting=None,
+            ),
+            wire(
+                hooks,
+                clients.instance_id,
+                (
+                    (CONFIG, clients.configure),
+                    (PREPARE, clients.prepare),
+                    (STOP, clients.stop),
+                    (CLEAN, clients.clean),
+                ),
+                depends_on=("aurora_config",),
+                stop_accepting=clients.stop_accepting,
+            ),
+            configuration_component(registry, ctx, hooks, storage),
+        ]
         assembly = None
         if with_bot:
             import tomllib

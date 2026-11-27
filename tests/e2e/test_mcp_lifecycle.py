@@ -15,13 +15,15 @@ from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
+from aurora_core.lifecycle import CLEAN, CONFIG, PREPARE, STOP, Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.storage import StorageService
 from aurora_host import configuration_component
 from aurora_mcp import PROTOCOL_VERSION, MCPClients
 from aurora_mcp import transports as module
 from mcp.types import ServerCapabilities
+
+from tests.fixtures.lifecycle_graph import wire
 
 
 def test_mcp_roundtrip_without_execution_world_or_product_packages(tmp_path):
@@ -100,7 +102,7 @@ def test_configured_host_preserves_files_and_finishes_resources_before_snapshot(
         if selection != "empty":
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")
-        owner = MCPClients(ctx, hooks)
+        owner = MCPClients(ctx)
         store = storage.snapshot_store()
         save = store.save
 
@@ -113,7 +115,21 @@ def test_configured_host_preserves_files_and_finishes_resources_before_snapshot(
         host = Lifecycle(
             ctx,
             hooks,
-            [owner.component(), configuration_component(registry, ctx, hooks, storage)],
+            [
+                wire(
+                    hooks,
+                    owner.instance_id,
+                    (
+                        (CONFIG, owner.configure),
+                        (PREPARE, owner.prepare),
+                        (STOP, owner.stop),
+                        (CLEAN, owner.clean),
+                    ),
+                    depends_on=("aurora_config",),
+                    stop_accepting=owner.stop_accepting,
+                ),
+                configuration_component(registry, ctx, hooks, storage),
+            ],
             persistence=ContextPersistence(ctx, store, interval=60),
             storage=storage,
         )

@@ -8,7 +8,7 @@ import pytest
 import tomli_w
 from aurora_cli.commander import run_cli
 from aurora_config import read_toml
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.components import ComponentDeclaration, ComponentExport, ComponentFactory, InstanceExport
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import PREPARE
@@ -60,7 +60,7 @@ def test_host_default_assembly_reads_toml_before_prepare_and_keeps_runtime_edits
     observations = []
 
     def factory(*, ctx):
-        @hook_handler("dev.configuration:handlers/prepare", slot=PREPARE)
+        @plug("dev.configuration:handlers/prepare")
         def prepare():
             observations.append(ctx.get(CONFIG))
             ctx.set(CONFIG, {"value": "runtime"})
