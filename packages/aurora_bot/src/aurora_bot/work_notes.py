@@ -186,7 +186,7 @@ async def _declared(request: ExecutionRequest) -> None:
     raise RuntimeError("笔记工具需要由默认装配创建实例")
 
 
-async def _factory(action, *, ctx, storage, instance_id, input_state, output_state, config):
+async def _factory(action, *, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
     owner = dict(input_state.location).get("instance_id")
     if (
         config

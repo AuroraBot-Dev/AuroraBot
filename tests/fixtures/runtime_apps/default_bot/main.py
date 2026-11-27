@@ -63,7 +63,9 @@ async def create_model(config: ModelConfig, *, api_key: str | None = None) -> Fa
     return FakeModel(respond)
 
 
-async def create_tool(*, ctx, storage, instance_id, input_state, output_state, config) -> ToolInstance:
+async def create_tool(
+    *, ctx, storage, instance_id, input_state, output_state, owner, resources, config
+) -> ToolInstance:
     """实例只使用分配的工作地址；可关闭资源通过 aclose 交给装配管理。"""
 
     async def execute(request):

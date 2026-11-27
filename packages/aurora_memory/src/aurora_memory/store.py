@@ -2,11 +2,11 @@
 
 import json
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
 from time import time
 from uuid import uuid4
 
-from aurora_agent.compaction import CompactionRecord
 from aurora_core.json_data import encode_json
 from aurora_model import EmbeddingClient, normalize_vectors
 from aurora_tools.execution import ToolExecutionError
@@ -60,7 +60,7 @@ class MemoryStore:
             for row in self.db.execute("SELECT * FROM memories WHERE owner = ? ORDER BY memory_id", (self.owner,))
         ]
 
-    def archive(self, record: CompactionRecord) -> None:
+    def archive(self, record: Mapping[str, object]) -> None:
         """先提交原始材料；同一历史前缀重复压缩不重复入库。"""
         with self.db:
             self.db.execute(

@@ -2,6 +2,16 @@
 
 ## 2026-11-27
 
+### 完成 W05 世界与记忆能力解耦
+
+- world 拆为同包内的 aurora_world.records 与 aurora_world.sources；删除旧总入口，configuration/environment 和全部消费者显式选择新插件。records 独立拥有状态及归档，sources 借用 records；两者导出真实组件、生命周期方法和资源，配置选择也可通过版本 2 装配连接。来源仍使用直接生命周期协议，SourceFactory 接收应用提供的资源；MCP 与测试来源删除工厂替换机制，改为传入共享资源。
+- 新增 aurora_memory，将存储、五种工具、配置和公共 ID 从 Bot 迁出；基础包无需 agent/Bot/宿主。工具通过明确的 owner、storage、输入输出状态和 embedding 执行，不读取 Bot WORK/BOT_CONFIG 或解析凭证。ToolFactory 增加 owner/resources 参数，现有工具工厂及消费者一起切换；模型资源组件和工具集合仍按 W06 推进。
+- 可选 aurora_memory.compaction 借用记忆存储，导出压缩记录器及后台任务生命周期；数据库与 embedding 分别由其提供方关闭。DefaultAssembly 只接收工具资源和 agent 的 CompactionRecorder 协议，不再创建或管理记忆实现；保留原有压缩前归档、失败延后索引、恢复补索引且不重放工具的行为。
+- world 四个插件及 memory 两个插件补齐 plugin.meta.toml、生成声明和静态目录；配置 schema 与工具契约分别共用单一来源。生成器按实际组件声明生成导入，使仅提供来源定义的清单也能通过格式、lint 与构建核对。同步 workspace、发布包检查和锁文件。
+- 删除 aurora_bot.memory 入口及源码。记忆公共定义改用 org.aurora.memory，配置改为 config/org.aurora.memory/plugin.config.toml，数据库使用 org.aurora.memory 存储目录；不探测、转换或覆盖旧配置、数据库和快照。world 既有公共 ID 保持不变，启用名称须按新插件拆分填写。README、AGENTS 和其他手写文档继续按要求暂缓统一更新。
+- 搬迁既有记忆单测并保留真实工具往返、压缩故障和恢复断言；新增两条代表验收：禁止 Bot/agent/宿主导入后完成五种记忆工具及恢复，并确认借用客户端只由外部关闭一次；通过版本 2 文件绑定真实 world 组件、归档事件并关闭。records 原有恢复测试改为只启用 records，明确验证来源注册表不存在。
+- 验收：日常检查 8.51 秒、完整检查 30.89 秒；1226 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 39 条依赖警告。16 个 wheel 构建及干净环境安装通过，world/memory 的 sdist 在工作区外离线重建 wheel 通过；独立 records、memory、可选压缩桥与无运行依赖的静态目录查询均通过，既有 control/tools/agent/model/MCP/host/CLI 安装验收保持通过。未增加 worker、超时或重试，未调用真实模型供应商。
+
 ### 完成 W04 独立宿主与版本 2 装配
 
 - 新增 aurora_host，只依赖 core/config/control；接管装配读取、实例创建/导出/绑定、状态地址、资源引用、方法/执行连接、运行图和生命周期。CLI 只负责命令交互并消费 Host；宿主不认识 CommandContext、命令名或 Bot 装配 ID。程序化入口与文件装配使用相同的生命周期及资源释放路径。

@@ -18,6 +18,7 @@ members = [
     "aurora-host",
     "aurora-logging",
     "aurora-mcp",
+    "aurora-memory",
     "aurora-meta-build",
     "aurora-model",
     "aurora-tools",
@@ -415,6 +416,34 @@ requires-dist = [
 provides-extras = ["tools", "world"]
 
 [[package]]
+name = "aurora-memory"
+version = "0.1.0"
+source = { editable = "packages/aurora_memory" }
+dependencies = [
+    { name = "aurora-config" },
+    { name = "aurora-control" },
+    { name = "aurora-core" },
+    { name = "aurora-model" },
+    { name = "aurora-tools" },
+]
+
+[package.optional-dependencies]
+compaction = [
+    { name = "aurora-agent" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aurora-agent", marker = "extra == 'compaction'", editable = "packages/aurora_agent" },
+    { name = "aurora-config", editable = "packages/aurora_config" },
+    { name = "aurora-control", editable = "packages/aurora_control" },
+    { name = "aurora-core", editable = "packages/aurora_core" },
+    { name = "aurora-model", editable = "packages/aurora_model" },
+    { name = "aurora-tools", editable = "packages/aurora_tools" },
+]
+provides-extras = ["compaction"]
+
+[[package]]
 name = "aurora-meta-build"
 version = "0.1.0"
 source = { editable = "tooling/aurora_meta_build" }
@@ -502,6 +531,11 @@ dependencies = [
     { name = "python-dotenv" },
 ]
 
+[package.optional-dependencies]
+memory = [
+    { name = "aurora-memory", extra = ["compaction"] },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "aurora-meta-build" },
@@ -518,9 +552,11 @@ requires-dist = [
     { name = "aurora-api", editable = "packages/aurora_api" },
     { name = "aurora-bot", extras = ["mcp-world"], editable = "packages/aurora_bot" },
     { name = "aurora-cli", editable = "packages/aurora_cli" },
+    { name = "aurora-memory", extras = ["compaction"], marker = "extra == 'memory'", editable = "packages/aurora_memory" },
     { name = "aurora-world", extras = ["environment"], editable = "packages/aurora_world" },
     { name = "python-dotenv", specifier = ">=1.2,<2" },
 ]
+provides-extras = ["memory"]
 
 [package.metadata.requires-dev]
 dev = [

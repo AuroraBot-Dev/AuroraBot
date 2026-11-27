@@ -1,20 +1,21 @@
 """显式启用的 TOML 来源装配；需要安装 aurora-world[config]。"""
 
+import json
 from collections.abc import Mapping
+from importlib.resources import files
 from typing import cast
 
-from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate, config_entries
-from aurora_core import Id, entry_from, hook_handler
-from aurora_core.ctx import Context
+from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate
+from aurora_core import Id, plug
+from aurora_core.components import ComponentFactory, InstanceExport
+from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import CONFIG, LifecycleComponent
 
+from .plugins.configuration._meta import CONFIG_STATE, CONFIGURATION, CONFIGURE, configuration_plugin
 from .records import WorldRecords, WorldView, _identity
-from .sources import SourceFactory, WorldSources
-
-CONFIGURATION = Id("org.aurora.world:configs/sources")
-CONFIG_STATE = Id("org.aurora.world:state/config")
+from .sources import WorldSources
 
 
 def _check_sources(value: object) -> None:
@@ -28,61 +29,23 @@ def _check_sources(value: object) -> None:
 
 
 SOURCE_CONFIG = ConfigSchema(
-    {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "view": {
-                "type": "object",
-                "additionalProperties": False,
-                "default": {},
-                "properties": {
-                    **{
-                        name: {"type": "number", "exclusiveMinimum": 0, "default": default}
-                        for name, default in (
-                            ("recent_seconds", 3600),
-                            ("weather_seconds", 3600),
-                            ("refresh_seconds", 30),
-                        )
-                    },
-                    **{
-                        name: {"type": "integer", "minimum": 1, "default": default}
-                        for name, default in (
-                            ("max_chars", 32000),
-                            ("max_event_chars", 8000),
-                            ("time_count", 1),
-                            ("weather_count", 4),
-                        )
-                    },
-                },
-            },
-            "sources": {
-                "type": "array",
-                "default": [],
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["source", "source_id"],
-                    "properties": {
-                        "source": {"type": "string", "format": "aurora-id"},
-                        "source_id": {"type": "string"},
-                        "presentation": {"type": "string", "enum": ["events", "time", "weather"]},
-                        "config": {"type": "object", "default": {}},
-                    },
-                },
-            },
-        },
-    },
+    json.loads(
+        files("aurora_world").joinpath("plugins/configuration/source_config.schema.json").read_text(encoding="utf-8")
+    ),
     check=_check_sources,
 )
 
 
 class _SourceConfiguration:
-    def __init__(self, ctx: Context, sources: WorldSources, factories: Mapping[Id, SourceFactory]) -> None:
-        self._ctx, self._sources = ctx, sources
-        self._factories = dict(factories)
+    def __init__(self, ctx: Context) -> None:
+        self._ctx = ctx
+        self._sources: WorldSources
+        self.source_resources: Mapping[Id, Mapping[str, object]] = {}
 
-    @hook_handler("org.aurora.world:handlers/sources/configure", slot=CONFIG)
+    def bind(self, *, sources: WorldSources) -> None:
+        self._sources = sources
+
+    @plug(CONFIGURE)
     def configure(self) -> None:
         values = cast(dict, SOURCE_CONFIG.parse(self._ctx.get(CONFIG_STATE)))
         self._sources.records.configure(view=WorldView(**values["view"]))
@@ -92,7 +55,7 @@ class _SourceConfiguration:
                 identity,
                 source_id=source["source_id"],
                 config=source["config"],
-                factory=self._factories.get(identity),
+                resources=self.source_resources.get(identity, {}),
                 presentation=source.get("presentation"),
             )
 
@@ -104,14 +67,15 @@ def configured_sources_component(
     *,
     instance_id: str = "aurora_world/sources",
     depends_on: tuple[str, ...] = (),
-    source_factories: Mapping[Id, SourceFactory] | None = None,
+    source_resources: Mapping[Id, Mapping[str, object]] | None = None,
 ) -> LifecycleComponent:
     """先加载和选择全部声明，prepare 才创建来源；依赖 aurora_config 组件。"""
     sources = WorldSources(ctx, hooks, records, instance_id=instance_id)
-    configuration = _SourceConfiguration(ctx, sources, source_factories or {})
-    entry = entry_from(configuration.configure, provider="aurora_world.configuration")
+    configuration = _SourceConfiguration(ctx)
+    configuration.bind(sources=sources)
+    configuration.source_resources = source_resources or {}
     link = hooks.connect(
-        CONFIG, entry.id, slot_instance=instance_id, handler_instance=instance_id, target=configuration.configure
+        CONFIG, CONFIGURE, slot_instance=instance_id, handler_instance=instance_id, target=configuration.configure
     )
     try:
         return sources.component(depends_on=tuple(dict.fromkeys(("aurora_config", *depends_on))))
@@ -121,16 +85,17 @@ def configured_sources_component(
 
 
 def plugin() -> Plugin:
-    """登记配置及装配声明；依赖插件须由宿主显式启用。"""
-    return Plugin(
-        "aurora_world.configuration",
-        (
-            *config_entries(
-                CONFIGURATION,
-                ConfigSpec(CONFIG_STATE, ConfigTemplate("aurora_world"), SOURCE_CONFIG),
-                provider="aurora_world.configuration",
-            ),
-            entry_from(_SourceConfiguration.configure, provider="aurora_world.configuration"),
-        ),
-        requires=("aurora_world", "aurora_config"),
+    return configuration_plugin(
+        targets={
+            CONFIGURATION: ConfigSpec(CONFIG_STATE, ConfigTemplate("aurora_world"), SOURCE_CONFIG),
+            CONFIG_STATE: StateKey(SOURCE_CONFIG.validate, persistent=False),
+        },
+        components={
+            "configuration": ComponentFactory(
+                _SourceConfiguration,
+                lambda instance: InstanceExport(plugs={CONFIGURE: instance.configure}),
+                plugs=(_SourceConfiguration.configure,),
+                bind=lambda instance, resources: instance.bind(**resources),
+            )
+        },
     )

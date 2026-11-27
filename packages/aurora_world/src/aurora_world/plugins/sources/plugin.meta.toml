@@ -1,0 +1,82 @@
+schema_version = 2
+
+[plugins.sources]
+entry_point = "aurora_world.sources"
+title = "世界来源"
+summary = "选择来源工厂、管理任务与接纳入口，借用记录服务"
+requires = [
+    "aurora_world.records",
+]
+
+[definitions.SOURCE_STATUS]
+plugin = "sources"
+id = "org.aurora.world:state/sources"
+kind = "state_key"
+summary = "来源实例的非持久运行诊断"
+
+[definitions.SOURCES]
+plugin = "sources"
+id = "org.aurora.world:registries/sources"
+kind = "registry"
+summary = "世界来源工厂登记目录"
+
+[definitions.SOURCES.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.SOURCES_PREPARE]
+plugin = "sources"
+id = "org.aurora.world:handlers/sources/prepare"
+kind = "hook_handler"
+summary = "按选择创建来源并传入资源引用"
+
+[definitions.SOURCES_PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.SOURCES_START]
+plugin = "sources"
+id = "org.aurora.world:handlers/sources/start"
+kind = "hook_handler"
+summary = "开放接纳入口并启动所选来源"
+
+[definitions.SOURCES_START.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.SOURCES_STOP]
+plugin = "sources"
+id = "org.aurora.world:handlers/sources/stop"
+kind = "hook_handler"
+summary = "停止接纳并结束所选来源任务"
+
+[definitions.SOURCES_STOP.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.SOURCES_CLEAN]
+plugin = "sources"
+id = "org.aurora.world:handlers/sources/clean"
+kind = "hook_handler"
+summary = "释放各来源持有的资源"
+
+[definitions.SOURCES_CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.sources]
+plugin = "sources"
+summary = "选择来源工厂、管理任务与接纳入口，借用记录服务"
+inject = [
+    "ctx",
+    "hooks",
+    "instance_id",
+]
+plugs = [
+    "SOURCES_PREPARE",
+    "SOURCES_START",
+    "SOURCES_STOP",
+    "SOURCES_CLEAN",
+]
+slots = []
+resources = [
+    "sources",
+]
+inputs = [
+    "records",
+]

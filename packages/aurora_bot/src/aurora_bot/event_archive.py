@@ -99,6 +99,8 @@ async def create_reader(
     instance_id: str,
     input_state: StateBinding,
     output_state: StateBinding,
+    owner,
+    resources,
     config: dict[str, JsonValue],
 ) -> ToolInstance:
     if config or records.ctx is not ctx:

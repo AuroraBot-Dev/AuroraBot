@@ -20,7 +20,6 @@ mcp-world = ["aurora-mcp[tools,world]>=0.1.0", "tomli-w>=1.2,<2"]
 [project.entry-points."aurora.plugins"]
 "aurora_bot.assembly" = "aurora_bot.assembly:plugin"
 "aurora_bot.cadence" = "aurora_bot.cadence:plugin"
-"aurora_bot.memory" = "aurora_bot.memory:plugin"
 
 [build-system]
 requires = ["hatchling"]

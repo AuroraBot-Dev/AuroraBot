@@ -189,3 +189,29 @@ assert not any(name.split('.')[0] in {'aurora_cli', 'aurora_api'} for name in sy
     assert result.returncode == 0, result.stderr
     assert "内部输出: 模型一:回显:隔离验收" in result.stdout
     assert (tmp_path / "framework" / "ctx.json").is_file()
+
+
+def test_memory_tools_and_restore_without_bot_agent_or_application_host(tmp_path):
+    launcher = """
+import importlib.abc
+import runpy
+import sys
+blocked = {'aurora_agent', 'aurora_bot', 'aurora_host', 'aurora_cli', 'aurora_api', 'litellm', 'mcp'}
+class AbsentPackages(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in blocked:
+            raise ModuleNotFoundError('记忆基础环境不提供：' + fullname)
+sys.meta_path.insert(0, AbsentPackages())
+runpy.run_path(sys.argv.pop(1), run_name='__main__')
+assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
+"""
+    fixture = Path(__file__).resolve().parents[1] / "fixtures/memory_roundtrip.py"
+    result = subprocess.run(
+        [sys.executable, "-c", launcher, str(fixture), str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"tools": 5, "restored": True, "embedding_closed_once": True}

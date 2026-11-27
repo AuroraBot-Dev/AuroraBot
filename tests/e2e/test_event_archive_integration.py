@@ -12,7 +12,8 @@ from aurora_core.json_data import JsonValue, encode_json
 from aurora_model.testing import FakeReply
 from aurora_tools.contract import ToolCall
 from aurora_world.configuration import plugin as configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import seed, setup
 
 
@@ -33,7 +34,7 @@ def test_note_reference_reads_expired_event_in_pages_and_survives_restart(tmp_pa
     async def scenario():
         clock = [10000.0]
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
         assert assembly.world_records is not None
         assembly.world_records.now = lambda: clock[0]
@@ -129,7 +130,7 @@ def test_note_reference_reads_expired_event_in_pages_and_survives_restart(tmp_pa
             await host.stop()
 
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
         assert assembly.world_records is not None
         assembly.world_records.now = lambda: clock[0]
@@ -151,7 +152,7 @@ def test_note_reference_reads_expired_event_in_pages_and_survives_restart(tmp_pa
 def test_wrong_references_return_tool_errors_without_fallback(tmp_path):
     async def scenario():
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
 
         def configure():
@@ -219,7 +220,7 @@ def test_archive_requires_owned_world_and_rejects_manual_database_override(tmp_p
 def test_archive_disabled_does_not_advertise_tool(tmp_path):
     async def scenario():
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
         await host.start(configure=lambda: seed(ctx, tools=False))
         try:

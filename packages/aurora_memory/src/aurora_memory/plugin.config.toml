@@ -1,0 +1,5 @@
+# embedding 资源的稳定标识；更换向量空间后更新标识并显式重建索引。
+embedding_id = "primary"
+chunk_chars = 800
+overlap_chars = 120
+index_version = "1"

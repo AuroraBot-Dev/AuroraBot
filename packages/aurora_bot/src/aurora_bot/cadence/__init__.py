@@ -29,5 +29,5 @@ def plugin() -> Plugin:
                 for method in (Cadence.prepare, Cadence.start, Cadence.stop, Cadence.clean)
             ),
         ),
-        requires=("aurora_bot.assembly", "aurora_world", "aurora_config"),
+        requires=("aurora_bot.assembly", "aurora_world.records", "aurora_config"),
     )

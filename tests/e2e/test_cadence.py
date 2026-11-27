@@ -23,7 +23,8 @@ from aurora_world import (
     SourceUnavailableError,
 )
 from aurora_world.configuration import plugin as world_configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import seed, setup
 
 LOCATION = {"instance_id": "main"}
@@ -34,7 +35,7 @@ def configured(root):
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text(tomli_w.dumps({}), encoding="utf-8")
-    return setup(root, extra_plugins=(world_plugin(), cadence_plugin()))
+    return setup(root, extra_plugins=(records_plugin(), world_plugin(), cadence_plugin()))
 
 
 def state(ctx):
@@ -336,7 +337,7 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
         emitters = []
         source = Id("dev.cadence:sources/test")
 
-        async def factory(*, source_id, emit, config):
+        async def factory(*, source_id, emit, config, resources):
             emitters.append(emit)
 
             async def start():
@@ -365,6 +366,7 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
         host, assembly, ctx, _, clients, _, _, _ = setup(
             tmp_path,
             extra_plugins=(
+                records_plugin(),
                 world_plugin(),
                 world_configuration_plugin(),
                 cadence_plugin(),
@@ -464,7 +466,13 @@ def test_environment_sources_wake_without_changing_world_presentation(tmp_path, 
         (tmp_path / "config/org.aurora.bot/cadence.toml").write_text("", encoding="utf-8")
         host, assembly, ctx, _, clients, _, _, _ = setup(
             tmp_path,
-            extra_plugins=(world_plugin(), world_configuration_plugin(), environment_plugin(), cadence_plugin()),
+            extra_plugins=(
+                records_plugin(),
+                world_plugin(),
+                world_configuration_plugin(),
+                environment_plugin(),
+                cadence_plugin(),
+            ),
         )
         await host.start(configure=lambda: seed(ctx, tools=False))
         try:

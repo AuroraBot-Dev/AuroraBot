@@ -336,6 +336,8 @@ async def create_tool(
     instance_id,
     input_state: StateBinding,
     output_state: StateBinding,
+    owner,
+    resources,
     config,
 ) -> ToolInstance:
     if (

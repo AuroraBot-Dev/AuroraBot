@@ -2,13 +2,14 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 
 from aurora_agent.compaction import CompactionRecord
-from aurora_model import EmbeddingClient
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_model.usage import usage_scope
 
-from .store import MemoryStore
+from .. import MemoryResource
+from ._meta import CLEAN, START, STOP, compaction_plugin
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +17,19 @@ logger = logging.getLogger(__name__)
 class CompactionMemory:
     """数据库提交先于上下文替换；供应商失败只延后索引，不丢弃已归档材料。"""
 
-    def __init__(
-        self,
-        store: MemoryStore,
-        client_factory: Callable[[], Awaitable[EmbeddingClient]],
-        *,
-        index_timeout_seconds: float,
-        retry_seconds: float,
-    ):
-        self.store, self.client_factory = store, client_factory
-        self.index_timeout_seconds, self.retry_seconds = index_timeout_seconds, retry_seconds
+    def __init__(self, *, options):
+        self.memory: MemoryResource
+        self.index_timeout_seconds = options["index_timeout_seconds"]
+        self.retry_seconds = options["retry_seconds"]
         self._wake = asyncio.Event()
         self._task: asyncio.Task | None = None
+
+    def bind(self, *, memory: MemoryResource):
+        self.memory = memory
+
+    @property
+    def store(self):
+        return self.memory.store
 
     def archive(self, record: CompactionRecord) -> None:
         self.store.archive(record)
@@ -36,6 +38,7 @@ class CompactionMemory:
         self.store.queue_summary(digest, text)
         self._wake.set()
 
+    @plug(START)
     def start(self) -> None:
         if self._task is None:
             self._wake.set()
@@ -54,8 +57,6 @@ class CompactionMemory:
                 for job in jobs:
                     try:
                         async with asyncio.timeout(self.index_timeout_seconds):
-                            if self.store.client is None:
-                                self.store.client = await self.client_factory()
                             with usage_scope("memory_compaction"):
                                 await self.store.index_compaction(job)
                     except Exception as error:  # noqa: BLE001 — 后台索引失败保留队列，日志仅输出脱敏类型。
@@ -67,6 +68,7 @@ class CompactionMemory:
             except Exception as error:  # noqa: BLE001 — 数据库故障保留待处理记录，下一周期重试。
                 logger.error("自动记忆队列读取或提交失败：%s", type(error).__name__)
 
+    @plug(STOP)
     async def stop(self) -> None:
         if self._task is not None:
             self._task.cancel()
@@ -76,9 +78,23 @@ class CompactionMemory:
                 pass
             self._task = None
 
-    async def close(self) -> None:
+    @plug(CLEAN)
+    async def clean(self):
         await self.stop()
-        if self.store.client is not None:
-            await self.store.client.aclose()
-            self.store.client = None
-        self.store.close()
+
+
+def plugin():
+    return compaction_plugin(
+        targets={},
+        components={
+            "recorder": ComponentFactory(
+                CompactionMemory,
+                lambda instance: InstanceExport(
+                    plugs={START: instance.start, STOP: instance.stop, CLEAN: instance.clean},
+                    resources={"recorder": instance},
+                ),
+                plugs=(CompactionMemory.start, CompactionMemory.stop, CompactionMemory.clean),
+                bind=lambda instance, resources: instance.bind(**resources),
+            )
+        },
+    )

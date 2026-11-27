@@ -221,6 +221,8 @@ async def run(
                     instance_id="echo",
                     input_state=state("input"),
                     output_state=state("output"),
+                    owner="test",
+                    resources={},
                     config={},
                 )
                 executor.connect(tool_id, tool.plug)

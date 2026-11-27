@@ -4,6 +4,7 @@ import asyncio
 import json
 from importlib.resources import files
 from io import StringIO
+from typing import cast
 
 import pytest
 from aurora_cli.commander import run_cli
@@ -20,7 +21,8 @@ def assembly_file(tmp_path, *, world=False, connected=True):
     )
     if world:
         content = content.replace(
-            'plugins = ["aurora_config"]', 'plugins = ["aurora_config", "aurora_world", "aurora_world.configuration"]'
+            'plugins = ["aurora_config"]',
+            'plugins = ["aurora_config", "aurora_world.records", "aurora_world.sources", "aurora_world.configuration"]',
         )
     if not connected:
         content = content.split("[[connections]]")[0]
@@ -79,7 +81,7 @@ def test_missing_instance_or_connection_does_not_implicitly_run_configuration(tm
     )
     assert json.loads(output.getvalue())["sources"] == []
     assembly.write_text(
-        'schema_version = 2\nplugins = ["aurora_config", "aurora_world", "aurora_world.configuration"]\n[instances]\n',
+        'schema_version = 2\nplugins = ["aurora_config", "aurora_world.records", "aurora_world.sources", "aurora_world.configuration"]\n[instances]\n',
         encoding="utf-8",
     )
     output = StringIO()
@@ -122,3 +124,65 @@ def test_failed_assembly_releases_storage_for_corrected_selection(tmp_path):
     # 出错后存储已释放，改正配置可再次启动相同目录。
     path = assembly_file(tmp_path)
     assert asyncio.run(run_cli(["-d", str(data), "--assembly-file", str(path), "ctx/list"], output=StringIO())) == 0
+
+
+def test_world_exports_assemble_records_sources_and_configuration(tmp_path):
+    import tomli_w
+    from aurora_host import Host, read_assembly
+    from aurora_world import RECORDS, WorldRecords, WorldSources
+
+    path = assembly_file(tmp_path, world=True)
+    declaration = read_toml(path)
+    declaration["instances"].update(
+        {
+            "records": {"plugin": "aurora_world.records", "component": "records"},
+            "sources": {
+                "plugin": "aurora_world.sources",
+                "component": "sources",
+                "resources": {"records": {"instance": "records", "export": "records"}},
+                "depends_on": ["records"],
+            },
+            "selection": {
+                "plugin": "aurora_world.configuration",
+                "component": "configuration",
+                "resources": {"sources": {"instance": "sources", "export": "sources"}},
+                "depends_on": ["loader"],
+            },
+        }
+    )
+    for name, phases in (
+        ("records", ("prepare", "start", "stop", "clean")),
+        ("sources", ("prepare", "start", "stop", "clean")),
+    ):
+        for phase in phases:
+            declaration["connections"].append(
+                {
+                    "plug": {"instance": name, "id": f"org.aurora.world:handlers/{name}/{phase}"},
+                    "slot": {"instance": name, "id": f"org.aurora.core:lifecycle/{phase}"},
+                }
+            )
+    declaration["connections"].append(
+        {
+            "plug": {"instance": "selection", "id": "org.aurora.world:handlers/sources/configure"},
+            "slot": {"instance": "selection", "id": "org.aurora.core:lifecycle/config"},
+        }
+    )
+    path.write_text(tomli_w.dumps(declaration), encoding="utf-8")
+
+    async def run():
+        host = Host.create(read_assembly(path), [], tmp_path / "data", workspace_root=tmp_path)
+        records = host.graph.instances["records"].exports.resources["records"]
+        sources = host.graph.instances["sources"].exports.resources["sources"]
+        assert isinstance(records, WorldRecords) and isinstance(sources, WorldSources)
+        assert sources.records is records
+        try:
+            await host.start()
+            receipt = records.append(source_id="manual", message_id="one", payload={"text": "已记录"})
+            assert not receipt.duplicate
+            assert cast(dict, host.ctx.get(RECORDS))["version"] == 3
+        finally:
+            await host.stop()
+        with pytest.raises(RuntimeError, match="关闭"):
+            records.read()
+
+    asyncio.run(run())

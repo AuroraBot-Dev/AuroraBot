@@ -211,11 +211,12 @@ def test_disabled_does_not_create_database_or_advertise_tool(tmp_path):
 
 def test_all_view_sections_fit_minimum_budget_and_query_errors_are_explicit(tmp_path):
     from aurora_world.configuration import plugin as configuration_plugin
-    from aurora_world.plugin import plugin as world_plugin
+    from aurora_world.records import plugin as records_plugin
+    from aurora_world.sources import plugin as world_plugin
 
     async def scenario():
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
         await host.start(configure=lambda: configure(ctx, archive={"enabled": True}, context_view={"max_chars": 1024}))
 

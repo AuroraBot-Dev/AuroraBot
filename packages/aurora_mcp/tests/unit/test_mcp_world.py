@@ -26,8 +26,9 @@ from aurora_mcp.world import (
 )
 from aurora_mcp.world_config import WORLD_CONFIG
 from aurora_world import WorldRecords
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
 from aurora_world.sources import SourceSpec
+from aurora_world.sources import plugin as world_plugin
 from mcp.client.subscriptions import ResourceUpdated, SubscriptionLost, ToolsListChanged
 from mcp.types import BlobResourceContents, TextResourceContents
 
@@ -109,7 +110,7 @@ class FakeClient:
 
 def environment(client, config=None):
     registry = bootstrap()
-    register_plugins(registry, [world_plugin(), plugin()])
+    register_plugins(registry, [records_plugin(), world_plugin(), plugin()])
     ctx = Context(registry)
     records = WorldRecords(ctx)
     records.open()
@@ -177,7 +178,8 @@ def test_world_factory_is_bound_per_host_without_mutating_shared_definition(tmp_
             load_plugins(
                 enabled=[
                     "aurora_config",
-                    "aurora_world",
+                    "aurora_world.records",
+                    "aurora_world.sources",
                     "aurora_world.configuration",
                     "aurora_mcp",
                     "aurora_mcp.world",

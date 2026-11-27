@@ -12,13 +12,14 @@ from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import register_plugins
 from aurora_core.registry import RegistryEntry
 from aurora_world import ENVIRONMENT, WorldRecords
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 
 @pytest.fixture
 def world():
     registry = bootstrap()
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     hidden = Id("dev.view:state/private")
     registry.register(RegistryEntry(hidden, "state_key", StateKey(), "test"))
     ctx = Context(registry)

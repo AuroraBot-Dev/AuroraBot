@@ -14,13 +14,14 @@ from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
 from aurora_world import SOURCES, SourceInstance, SourceSpec, SourceUnavailableError, WorldRecords, WorldSources
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 
 def environment(root, *, failure=None, source="b", block=None):
     registry = bootstrap()
     install_lifecycle_slots(registry)
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     ctx, hooks = Context(registry), HookConnections(registry)
     storage = StorageService(root)
     records = WorldRecords(ctx, storage)
@@ -37,7 +38,7 @@ def environment(root, *, failure=None, source="b", block=None):
             failed.add(name)
             raise RuntimeError(f"来源 {source_id} {name} 失败")
 
-    async def factory(*, source_id, emit, config):
+    async def factory(*, source_id, emit, config, resources):
         captures[source_id] = emit
         with pytest.raises(SourceUnavailableError):
             emit(message_id="prepare", payload=None)

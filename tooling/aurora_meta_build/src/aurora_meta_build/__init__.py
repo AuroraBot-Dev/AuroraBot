@@ -45,7 +45,9 @@ def _module(manifest: dict) -> str:
 
     lines = [
         '"""由 aurora-meta 生成；公共声明的编辑来源为同目录 plugin.meta.toml。"""',
-        "from aurora_core.components import ComponentDeclaration, Definition, PluginDeclaration",
+        "from aurora_core.components import "
+        + ("ComponentDeclaration, " if manifest.get("components") else "")
+        + "Definition, PluginDeclaration",
         "from aurora_core.ids import Id",
         "",
     ]

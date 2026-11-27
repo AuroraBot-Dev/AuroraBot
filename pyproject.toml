@@ -11,6 +11,9 @@ dependencies = [
     "python-dotenv>=1.2,<2",
 ]
 
+[project.optional-dependencies]
+memory = ["aurora-memory[compaction]>=0.1.0"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -31,6 +34,7 @@ dev = [
 
 [tool.coverage.run]
 source = [
+    "aurora_memory",
     "aurora_host",
     "aurora_model",
     "aurora_mcp",
@@ -69,6 +73,7 @@ include = [
 ]
 exclude = ["**/__pycache__", "**/node_modules", ".venv", "build", "dist"]
 extraPaths = [
+    "packages/aurora_memory/src",
     "packages/aurora_host/src",
     "tooling/aurora_meta_build/src",
     "packages/aurora_model/src",
@@ -87,6 +92,7 @@ extraPaths = [
 
 [tool.uv.workspace]
 members = [
+    "packages/aurora_memory",
     "packages/aurora_host",
     "tooling/aurora_meta_build",
     "packages/aurora_model",
@@ -105,6 +111,7 @@ members = [
 
 [tool.uv.sources]
 aurora-host = { workspace = true }
+aurora-memory = { workspace = true }
 aurora-meta-build = { workspace = true }
 aurora-model = { workspace = true }
 aurora-mcp = { workspace = true }

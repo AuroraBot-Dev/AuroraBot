@@ -194,7 +194,14 @@ def seed(ctx, *, tools=True, credential=False, model="first"):
 
 
 def setup(
-    root, *, behavior="normal", capabilities=None, secret="runtime-secret", extra_plugins=(), assembly_options=None
+    root,
+    *,
+    behavior="normal",
+    capabilities=None,
+    secret="runtime-secret",
+    extra_plugins=(),
+    assembly_options=None,
+    extra_components=None,
 ):
     registry = bootstrap()
     register_plugins(registry, (configuration_plugin(),))
@@ -243,7 +250,7 @@ def setup(
         clients.append(client)
         return client
 
-    async def tool_factory(*, ctx, storage, instance_id, input_state, output_state, config):
+    async def tool_factory(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
         events.append("tool.created")
 
         async def execute(request):
@@ -318,10 +325,15 @@ def setup(
 
             await super().start(configure=configure_files)
 
+    extras = () if extra_components is None else extra_components(assembly)
     host = ConfiguredLifecycle(
         ctx,
         hooks,
-        (configuration_component(registry, ctx, hooks, storage), *assembly.components()),
+        (
+            configuration_component(registry, ctx, hooks, storage),
+            *extras,
+            *assembly.components(depends_on=tuple(item.instance_id for item in extras)),
+        ),
         persistence=ContextPersistence(ctx, storage.snapshot_store()),
         storage=storage,
         timeout=0.05 if behavior == "wait" else 10,

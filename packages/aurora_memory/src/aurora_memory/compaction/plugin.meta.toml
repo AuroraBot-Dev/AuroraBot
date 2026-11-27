@@ -1,0 +1,60 @@
+schema_version = 2
+
+[plugins.compaction]
+entry_point = "aurora_memory.compaction"
+title = "压缩归档桥"
+summary = "先归档原文，再异步索引摘要；只借用记忆存储"
+requires = [
+    "aurora_memory",
+]
+
+[definitions.START]
+plugin = "compaction"
+id = "org.aurora.memory:handlers/compaction/start"
+kind = "hook_handler"
+summary = "启动可恢复的摘要索引任务"
+
+[definitions.START.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.STOP]
+plugin = "compaction"
+id = "org.aurora.memory:handlers/compaction/stop"
+kind = "hook_handler"
+summary = "停止并等待自有索引任务"
+
+[definitions.STOP.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "compaction"
+id = "org.aurora.memory:handlers/compaction/clean"
+kind = "hook_handler"
+summary = "确认后台任务已结束，不关闭借用的存储和模型"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.recorder]
+plugin = "compaction"
+summary = "压缩记录器及索引任务"
+inject = [
+    "options",
+]
+plugs = [
+    "START",
+    "STOP",
+    "CLEAN",
+]
+slots = []
+inputs = [
+    "memory",
+]
+resources = [
+    "recorder",
+]
+options = "options"
+
+[contracts.options]
+format = "json-schema"
+file = "options.schema.json"

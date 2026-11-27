@@ -42,7 +42,8 @@ from aurora_world import RECORDS, SOURCE_STATUS, SOURCES, SourceInstance, Source
 from aurora_world.configuration import CONFIG_STATE as WORLD_CONFIG
 from aurora_world.configuration import configured_sources_component
 from aurora_world.configuration import plugin as world_configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from pipeline import INSPECT, PIPELINE, STEPS, create_inspector, declared
 
 NAMESPACE = "dev.example.workshop"
@@ -140,7 +141,7 @@ async def create_model(config, *, api_key=None, ctx=None):
     return model
 
 
-async def create_reporter(*, ctx, storage, instance_id, input_state, output_state, config):
+async def create_reporter(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
     async def execute(request):
         arguments = input_state.get(ctx, request)["arguments"]
         try:
@@ -171,7 +172,7 @@ class Workshop:
             hooks=hooks,
             storage=storage,
             world_component_factory=partial(
-                configured_sources_component, source_factories={SOURCE: self.create_source}
+                configured_sources_component, source_resources={SOURCE: {"workshop": self}}
             ),
         )
         self.changed = asyncio.Event()
@@ -252,7 +253,7 @@ class Workshop:
             },
         )
 
-    async def create_source(self, *, source_id, emit, config):
+    async def create_source(self, *, source_id, emit, config, resources):
         if config:
             raise ValueError("巡检来源参数通过 settings 状态管理")
 
@@ -297,8 +298,8 @@ class Workshop:
             self.finish_link = None
 
 
-async def declared_source(*, source_id, emit, config):
-    raise RuntimeError("巡检来源需要示例装配注入业务环境")
+async def declared_source(*, source_id, emit, config, resources):
+    return await resources["workshop"].create_source(source_id=source_id, emit=emit, config=config, resources=resources)
 
 
 def assemble(*, registry, ctx, hooks, storage, workspace_root):
@@ -413,7 +414,7 @@ def plugins(*, with_world=True):
         tools_plugin(),
         defaults_plugin(),
         assembly_plugin(),
-        *((world_plugin(), world_configuration_plugin(), cadence_plugin()) if with_world else ()),
+        *((records_plugin(), world_plugin(), world_configuration_plugin(), cadence_plugin()) if with_world else ()),
         example,
     )
     resources = {

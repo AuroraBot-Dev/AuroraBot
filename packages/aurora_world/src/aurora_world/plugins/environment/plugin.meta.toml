@@ -1,0 +1,39 @@
+schema_version = 2
+
+[plugins.environment]
+entry_point = "aurora_world.environment"
+title = "环境观察"
+summary = "提供时间与天气观察工厂，实例创建时才初始化外部资源"
+requires = [
+    "aurora_world.sources",
+]
+
+[definitions.TIME]
+plugin = "environment"
+id = "org.aurora.world:sources/environment/time"
+kind = "source"
+summary = "周期时间观察来源"
+contract = "time_config"
+
+[definitions.TIME.register_to]
+id = "org.aurora.world:registries/sources"
+
+[definitions.WEATHER]
+plugin = "environment"
+id = "org.aurora.world:sources/environment/weather"
+kind = "source"
+summary = "Open-Meteo 天气观察来源"
+contract = "weather_config"
+
+[definitions.WEATHER.register_to]
+id = "org.aurora.world:registries/sources"
+
+[components]
+
+[contracts.time_config]
+format = "json-schema"
+file = "time_config.schema.json"
+
+[contracts.weather_config]
+format = "json-schema"
+file = "weather_config.schema.json"

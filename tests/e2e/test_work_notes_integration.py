@@ -12,7 +12,8 @@ from aurora_core import Id
 from aurora_model.testing import FakeReply
 from aurora_tools.contract import ToolCall
 from aurora_world.configuration import plugin as configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import seed, setup
 
 
@@ -124,7 +125,7 @@ def test_invalid_integer_arguments_are_rejected_without_changing_notes(tmp_path)
 @pytest.mark.parametrize("with_world", [False, True])
 def test_notes_refresh_conflict_and_restore_without_automatic_work(tmp_path, with_world):
     async def scenario():
-        plugins = (world_plugin(), configuration_plugin()) if with_world else ()
+        plugins = (records_plugin(), world_plugin(), configuration_plugin()) if with_world else ()
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path, extra_plugins=plugins)
 
         def configure():
@@ -178,7 +179,7 @@ def test_notes_refresh_conflict_and_restore_without_automatic_work(tmp_path, wit
         finally:
             await host.stop()
 
-        plugins = (world_plugin(), configuration_plugin()) if with_world else ()
+        plugins = (records_plugin(), world_plugin(), configuration_plugin()) if with_world else ()
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path, extra_plugins=plugins)
         await host.start()
         try:

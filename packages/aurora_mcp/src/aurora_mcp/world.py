@@ -270,18 +270,10 @@ class _ResourceSource:
         await self.stop()
 
 
-class _WorldFactory:
-    def __init__(self, ctx: Context, clients: MCPClients) -> None:
-        self.ctx, self.clients = ctx, clients
-
-    async def __call__(self, *, source_id: str, emit: SourceEmit, config: dict[str, object]) -> SourceInstance:
-        values = cast(dict, WORLD_CONFIG.parse(config))
-        source = _ResourceSource(self.ctx, self.clients, source_id, emit, values)
-        return SourceInstance(source.start, source.stop, source.close, source.run)
-
-
-async def _unbound_factory(*, source_id: str, emit: SourceEmit, config: dict[str, object]) -> SourceInstance:
-    raise RuntimeError("MCP 世界来源尚未装配客户端所有者")
+async def create_source(*, source_id: str, emit: SourceEmit, config: dict[str, object], resources) -> SourceInstance:
+    values = cast(dict, WORLD_CONFIG.parse(config))
+    source = _ResourceSource(resources["ctx"], resources["clients"], source_id, emit, values)
+    return SourceInstance(source.start, source.stop, source.close, source.run)
 
 
 def mcp_world_component(
@@ -294,16 +286,13 @@ def mcp_world_component(
     depends_on: tuple[str, ...] = (),
 ) -> LifecycleComponent:
     """装配同一 world 来源所有者并注入共享客户端，替代 configured_sources_component。"""
-    spec = ctx.registry.get(WORLD_SOURCE).target
-    if not isinstance(spec, SourceSpec) or spec.factory is not _unbound_factory:
-        raise TypeError("MCP 世界来源定义不匹配")
     return configured_sources_component(
         ctx,
         hooks,
         records,
         instance_id=instance_id,
         depends_on=tuple(dict.fromkeys((clients.instance_id, *depends_on))),
-        source_factories={WORLD_SOURCE: _WorldFactory(ctx, clients)},
+        source_resources={WORLD_SOURCE: {"ctx": ctx, "clients": clients}},
     )
 
 
@@ -316,10 +305,8 @@ def plugin() -> Plugin:
     return Plugin(
         "aurora_mcp.world",
         (
-            RegistryEntry(
-                WORLD_SOURCE, "source", SourceSpec(_unbound_factory), "aurora_mcp.world", register_to=SOURCES
-            ),
+            RegistryEntry(WORLD_SOURCE, "source", SourceSpec(create_source), "aurora_mcp.world", register_to=SOURCES),
             RegistryEntry(WORLD_STATUS, "state_key", StateKey(_validate_status, persistent=False), "aurora_mcp.world"),
         ),
-        requires=("aurora_mcp", "aurora_world.configuration"),
+        requires=("aurora_mcp", "aurora_world.sources"),
     )

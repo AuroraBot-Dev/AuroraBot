@@ -152,6 +152,8 @@ def environment(tmp_path, monkeypatch):
                 instance_id="echo-instance",
                 input_state=state("input"),
                 output_state=state("output"),
+                owner="test",
+                resources={},
                 config={},
             )
             executor.connect(TOOL, instance.plug)

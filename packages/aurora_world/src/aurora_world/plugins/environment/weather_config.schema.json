@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["place", "latitude", "longitude"],
+  "properties": {
+    "place": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "latitude": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "longitude": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    },
+    "interval_seconds": {
+      "type": "number",
+      "minimum": 60,
+      "maximum": 86400,
+      "default": 900
+    },
+    "timeout_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 30,
+      "default": 10
+    },
+    "temperature_change_c": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 50,
+      "default": 3
+    }
+  }
+}

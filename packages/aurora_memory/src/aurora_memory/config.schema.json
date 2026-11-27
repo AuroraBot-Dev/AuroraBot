@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "embedding_id": {
+      "type": "string",
+      "minLength": 1,
+      "default": "primary"
+    },
+    "chunk_chars": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 2000,
+      "default": 800
+    },
+    "overlap_chars": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 500,
+      "default": 120
+    },
+    "index_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "default": "1"
+    }
+  }
+}

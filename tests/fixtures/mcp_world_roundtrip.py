@@ -111,7 +111,8 @@ async def run(root: Path) -> dict:
                 load_plugins(
                     enabled=[
                         "aurora_config",
-                        "aurora_world",
+                        "aurora_world.records",
+                        "aurora_world.sources",
                         "aurora_world.configuration",
                         "aurora_mcp",
                         "aurora_mcp.world",

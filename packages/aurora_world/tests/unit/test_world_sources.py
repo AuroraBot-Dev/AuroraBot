@@ -23,7 +23,8 @@ from aurora_world import (
     WorldRecords,
     WorldSources,
 )
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 SOURCE = Id("dev.sources:sources/manual")
 
@@ -32,11 +33,11 @@ SOURCE = Id("dev.sources:sources/manual")
 def environment():
     registry = bootstrap()
     install_lifecycle_slots(registry)
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     ctx, hooks = Context(registry), HookConnections(registry)
     captures, events = {}, []
 
-    async def factory(*, source_id, emit, config):
+    async def factory(*, source_id, emit, config, resources):
         captures[source_id] = emit, config
         events.append((source_id, "prepare"))
         with pytest.raises(SourceUnavailableError):
@@ -168,7 +169,9 @@ def test_context_callback_failure_closes_only_its_source_and_is_retained(environ
 
         return replace(instance, run=run, on_context_change=changed)
 
-    sources.add(SOURCE, source_id="broken", factory=factory)
+    broken = Id("dev.world:sources/broken")
+    registry.register(RegistryEntry(broken, "source", SourceSpec(factory), "test", register_to=SOURCES))
+    sources.add(broken, source_id="broken")
     sources.add(SOURCE, source_id="healthy")
 
     async def scenario():
@@ -287,7 +290,7 @@ def test_stop_accepting_during_startup_does_not_reopen_a_retained_callback(envir
     registry, ctx, hooks, sources, _, events = environment
     emitters = []
 
-    async def factory(*, source_id, emit, config):
+    async def factory(*, source_id, emit, config, resources):
         emitters.append(emit)
         if phase == "prepare":
             sources.stop_accepting()

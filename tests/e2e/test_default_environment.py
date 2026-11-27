@@ -59,7 +59,8 @@ def test_default_assembly_exposes_environment_without_activating_model_and_resto
             clocks = [Period(), Period()]
             plugins = load_plugins(
                 enabled=[
-                    "aurora_world",
+                    "aurora_world.records",
+                    "aurora_world.sources",
                     "aurora_world.configuration",
                     "aurora_world.environment",
                     "aurora_config",

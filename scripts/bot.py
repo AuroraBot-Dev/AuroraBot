@@ -27,7 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGINS = (
     *MCP_PLUGINS,
     "aurora_control",
-    "aurora_world",
+    "aurora_world.records",
+    "aurora_world.sources",
     "aurora_world.configuration",
     "aurora_world.environment",
     "aurora_mcp.world",

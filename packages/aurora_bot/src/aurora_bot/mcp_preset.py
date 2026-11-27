@@ -51,7 +51,7 @@ def initialize(
     existing = read_toml(target) if target.exists() else None
     selected = list(plugins)
     if world:
-        selected += ["aurora_world", "aurora_world.configuration", "aurora_mcp.world"]
+        selected += ["aurora_world.records", "aurora_world.sources", "aurora_world.configuration", "aurora_mcp.world"]
     if api:
         selected += ["aurora_api"]
     candidate = tomllib.loads(files("aurora_config").joinpath("assembly.toml").read_text(encoding="utf-8"))

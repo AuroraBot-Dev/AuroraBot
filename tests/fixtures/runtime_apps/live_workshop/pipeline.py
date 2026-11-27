@@ -18,7 +18,7 @@ async def declared(request):
     raise RuntimeError("请使用工具工厂创建的执行实例")
 
 
-async def create_inspector(*, registry, ctx, storage, instance_id, input_state, output_state, config):
+async def create_inspector(*, registry, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
     hooks = HookConnections(registry)
     counter = StateBinding(PIPELINE, (("part", "count"),))
     parity = StateBinding(PIPELINE, (("part", "parity"),))

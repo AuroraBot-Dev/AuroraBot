@@ -20,7 +20,8 @@ from aurora_world import RECORDS, SOURCES, WorldRecords
 
 def environment(path):
     registry = bootstrap()
-    register_plugins(registry, load_plugins(enabled=["aurora_world"]))
+    register_plugins(registry, load_plugins(enabled=["aurora_world.records"]))
+    assert SOURCES not in {entry.id for entry in registry.entries()}
     ctx = Context(registry)
     store = JsonSnapshotStore(path)
     return ctx, store, ContextPersistence(ctx, store, interval=60)
@@ -132,11 +133,13 @@ def test_world_distribution_owns_records_sources_and_lifecycle_definitions():
         "aurora-config>=0.1.0; extra == 'environment'",
         "httpx<1,>=0.28; extra == 'environment'",
     ]
-    plugin = load_plugins(enabled=["aurora_world"])[0]
-    assert plugin.requires == ()
-    entries = {entry.id: entry for entry in plugin.entries}
+    records, sources = load_plugins(enabled=["aurora_world.records", "aurora_world.sources"])
+    assert records.requires == ()
+    assert sources.requires == ("aurora_world.records",)
+    entries = {entry.id: entry for plugin in (records, sources) for entry in plugin.entries}
     assert all(
-        entry.id.namespace == "org.aurora.world" and entry.provider == "aurora_world" for entry in entries.values()
+        entry.id.namespace == "org.aurora.world" and entry.provider in ("aurora_world.records", "aurora_world.sources")
+        for entry in entries.values()
     )
     assert entries[SOURCES].kind == "registry"
     assert {str(entry.id) for entry in entries.values() if entry.kind == "hook_handler"} == {

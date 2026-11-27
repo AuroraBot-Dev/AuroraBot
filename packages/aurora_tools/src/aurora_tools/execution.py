@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
@@ -110,6 +110,7 @@ class ToolFactory(Protocol):
     """异步创建显式工具实例；返回前失败或取消时，工厂负责释放自身部分资源。
 
     插头须沿用装配分配的 instance_id 与 input/output 地址，config 为该工具的 JSON 配置。
+    owner 明确指定业务所有者；resources 是已解析的资源引用，借用资源由提供方关闭。
     与模型一样，共享 storage 由宿主关闭，不由工具工厂关闭。
     """
 
@@ -121,6 +122,8 @@ class ToolFactory(Protocol):
         instance_id: str,
         input_state: StateBinding,
         output_state: StateBinding,
+        owner: str,
+        resources: Mapping[str, object],
         config: dict[str, JsonValue],
     ) -> ToolInstance: ...
 

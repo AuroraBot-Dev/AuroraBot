@@ -39,7 +39,7 @@ def configuration_component(registry, ctx, hooks, storage):
 
 async def main(root, *, configured=False):
     registry = bootstrap()
-    enabled = ["aurora_world"]
+    enabled = ["aurora_world.records", "aurora_world.sources"]
     if configured:
         enabled.extend(("aurora_config", "aurora_world.configuration"))
     register_plugins(registry, load_plugins(enabled=enabled))
@@ -48,7 +48,7 @@ async def main(root, *, configured=False):
     hooks = HookConnections(registry)
     emitters = []
 
-    async def factory(*, source_id, emit, config):
+    async def factory(*, source_id, emit, config, resources):
         emitters.append(emit)
 
         async def start():

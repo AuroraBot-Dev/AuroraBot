@@ -23,7 +23,8 @@ from aurora_core.snapshots import JsonSnapshotStore
 from aurora_model.config import BINDINGS
 from aurora_model.config import CONFIG as MODEL_CONFIG
 from aurora_model.registry import ADAPTERS, ModelAdapter
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from test_cadence import append, state, until
 from test_default_assembly import seed, setup
 
@@ -96,7 +97,9 @@ def configured(root, *, decision_config=None):
             encoding="utf-8",
         )
     host, assembly, ctx, registry, clients, _, events, _ = setup(
-        root, extra_plugins=(world_plugin(), cadence_plugin()), assembly_options={"cadence_timing": clock.timing}
+        root,
+        extra_plugins=(records_plugin(), world_plugin(), cadence_plugin()),
+        assembly_options={"cadence_timing": clock.timing},
     )
 
     async def factory(config, *, api_key=None):

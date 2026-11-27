@@ -34,6 +34,8 @@ class _Factory:
         instance_id: str,
         input_state: StateBinding,
         output_state: StateBinding,
+        owner,
+        resources,
         config: dict[str, JsonValue],
     ) -> ToolInstance:
         if ctx is not self.bridge.ctx or not self.bridge.prepared:

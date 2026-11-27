@@ -36,7 +36,12 @@ def test_initialization_preserves_files_and_validates_minimal_configuration(tmp_
     host = read_toml(directory / "host.toml")
     assert host == {"assembly_file": "assembly.toml"}
     host = read_toml(directory / host["assembly_file"])
-    assert not {"aurora_world", "aurora_world.configuration", "aurora_bot.cadence"} & set(host["plugins"])
+    assert not {
+        "aurora_world.records",
+        "aurora_world.sources",
+        "aurora_world.configuration",
+        "aurora_bot.cadence",
+    } & set(host["plugins"])
     registry = bootstrap()
     install_lifecycle_slots(registry)
     register_plugins(registry, load_plugins(enabled=host["plugins"]))

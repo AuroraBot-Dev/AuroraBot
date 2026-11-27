@@ -2,18 +2,26 @@
 
 import asyncio
 import json
+import os
 from typing import cast
 
 import httpx
 import tomli_w
 from aurora_bot.assembly_config import MESSAGES
-from aurora_bot.memory import MEMORY_TOOLS
-from aurora_bot.memory import plugin as memory_plugin
+from aurora_control import InstanceStateBinding
 from aurora_core import Id
 from aurora_core.json_data import JsonValue
+from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
+from aurora_memory import CONFIG as MEMORY_CONFIG
+from aurora_memory import MEMORY_TOOLS, MemoryResource
+from aurora_memory import _meta as memory_meta
+from aurora_memory import plugin as memory_plugin
+from aurora_memory.compaction import CompactionMemory
+from aurora_memory.compaction import _meta as compaction_meta
+from aurora_memory.compaction import plugin as compaction_plugin
+from aurora_model import ModelConfig
 from aurora_model.litellm import LiteLLMClient
-from aurora_model.registry import ADAPTERS, ModelAdapter
 from aurora_model.testing import FakeReply
 
 from tests.e2e.test_default_assembly import ADAPTER, settings, setup
@@ -33,20 +41,21 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                 200, json={"data": [{"index": i, "embedding": [1, 0]} for i, _ in enumerate(body["input"])]}
             )
 
-        async def factory(config, *, api_key=None):
-            client = LiteLLMClient(
-                kind="embedding", config=config, api_key=api_key, transport=httpx.MockTransport(handle)
-            )
-            embeddings.append(client)
-            return client
-
         for phase in ("write", "search"):
-            host, assembly, _, registry, models, _, _, _ = setup(tmp_path, extra_plugins=(memory_plugin(),))
-            adapter = Id("dev.memory:adapters/embedding")
-            registry.register(
-                RegistryEntry(adapter, "adapter", ModelAdapter("embedding", factory), "test", register_to=ADAPTERS)
+            embedding = LiteLLMClient(
+                kind="embedding",
+                config=ModelConfig("test-vector", provider="openai", base_url="https://embedding.test/v1"),
+                api_key=os.environ["MEMORY_TEST_KEY"],
+                transport=httpx.MockTransport(handle),
             )
-
+            embeddings.append(embedding)
+            host, assembly, _, _, models, _, _, _ = setup(
+                tmp_path,
+                extra_plugins=(memory_plugin(),),
+                assembly_options={
+                    "tool_resources": {f"memory/{action}": {"embedding": embedding} for action in MEMORY_TOOLS}
+                },
+            )
             if phase == "write":
                 files = {
                     "org.aurora.bot/plugin.config.toml": {
@@ -58,15 +67,8 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                     },
                     "org.aurora.model/profiles.toml": {
                         "primary": {"adapter": str(ADAPTER), "model": "fake"},
-                        "embedding": {
-                            "adapter": str(adapter),
-                            "model": "test-vector",
-                            "provider": "openai",
-                            "base_url": "https://embedding.test/v1",
-                            "credential": "MEMORY_TEST_KEY",
-                        },
                     },
-                    "org.aurora.model/bindings.toml": {"reasoning": "primary", "memory": "embedding"},
+                    "org.aurora.model/bindings.toml": {"reasoning": "primary"},
                 }
                 for relative, value in files.items():
                     path = tmp_path / "config" / relative
@@ -98,6 +100,8 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                 assert result.status == "completed"
             finally:
                 await host.stop()
+            assert not embedding._transport.is_closed()
+            await embedding.aclose()
             assert all(client._transport.is_closed() for client in embeddings)
         assert len(requests) == 2
         assert observations[1]["items"][0]["revision"] == observations[0]["revision"]
@@ -106,10 +110,10 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
         assert (
             "memory-runtime-secret" not in snapshot
             and "vectors" not in snapshot
-            and "state/memory/config" not in snapshot
+            and "org.aurora.memory:state/config" not in snapshot
         )
-        assert (tmp_path / "config/org.aurora.bot/memory.toml").is_file()
-        assert (tmp_path / "namespaces/ns-org.aurora.bot/memory.sqlite3").is_file()
+        assert (tmp_path / "config/org.aurora.memory/plugin.config.toml").is_file()
+        assert (tmp_path / "namespaces/ns-org.aurora.memory/memory.sqlite3").is_file()
 
     asyncio.run(scenario())
 
@@ -132,19 +136,59 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
             async def aclose(self):
                 self.closed = True
 
-        async def factory(config, *, api_key=None):
+        def create():
             client = Embeddings()
             embeddings.append(client)
-            return client
-
-        adapter = Id("dev.memory:adapters/automatic")
-
-        def create():
-            bundle = setup(tmp_path, extra_plugins=(memory_plugin(),))
-            bundle[3].register(
-                RegistryEntry(adapter, "adapter", ModelAdapter("embedding", factory), "test", register_to=ADAPTERS)
+            exported = (
+                compaction_plugin()
+                .components["recorder"]
+                .create(
+                    {}, instance_id="memory/compaction", options={"index_timeout_seconds": 0.02, "retry_seconds": 60.0}
+                )
             )
-            return bundle
+            automatic = cast(CompactionMemory, exported.exports.resources["recorder"])
+
+            def components(assembly):
+                resource = MemoryResource(
+                    assembly.ctx,
+                    assembly.storage,
+                    instance_id="memory/store",
+                    states={"config": InstanceStateBinding(MEMORY_CONFIG)},
+                    options={"owner": "main"},
+                )
+                resource.bind(embedding=client)
+                exported.bind({"memory": resource})
+                close_id = Id("dev.memory:handlers/close_embedding")
+                assembly.registry.register(
+                    RegistryEntry(
+                        close_id,
+                        "hook_handler",
+                        client.aclose,
+                        "test",
+                        register_to=Id("org.aurora.core:registries/hook_handlers"),
+                    )
+                )
+                for owner, phase, identity, method in (
+                    ("memory/embedding", CLEAN, close_id, client.aclose),
+                    ("memory/store", PREPARE, memory_meta.PREPARE, resource.prepare),
+                    ("memory/store", CLEAN, memory_meta.CLEAN, resource.clean),
+                    ("memory/compaction", START, compaction_meta.START, automatic.start),
+                    ("memory/compaction", STOP, compaction_meta.STOP, automatic.stop),
+                    ("memory/compaction", CLEAN, compaction_meta.CLEAN, automatic.clean),
+                ):
+                    assembly.hooks.connect(phase, identity, slot_instance=owner, handler_instance=owner, target=method)
+                return (
+                    LifecycleComponent("memory/embedding"),
+                    LifecycleComponent("memory/store", ("memory/embedding",)),
+                    LifecycleComponent("memory/compaction", ("memory/store",)),
+                )
+
+            return setup(
+                tmp_path,
+                extra_plugins=(memory_plugin(), compaction_plugin()),
+                assembly_options={"compaction_recorder": automatic},
+                extra_components=components,
+            )
 
         host, assembly, ctx, _, models, _, events, _ = create()
 
@@ -159,15 +203,11 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
             config["tools"][0]["config"]["prefix"] = "完整工具结果" * 700
             profiles = {
                 "primary": {"adapter": str(ADAPTER), "model": "fake"},
-                "embedding": {"adapter": str(adapter), "model": "fake-vector"},
             }
-            bindings = {"reasoning": "primary", "memory": "embedding"}
-            path = tmp_path / "config/org.aurora.bot/memory.toml"
+            bindings = {"reasoning": "primary"}
+            path = tmp_path / "config/org.aurora.memory/plugin.config.toml"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                "[auto_compaction]\nenabled = true\nindex_timeout_seconds = 0.02\nretry_seconds = 60.0\n",
-                encoding="utf-8",
-            )
+            path.write_text('embedding_id = "fake-vector"\n', encoding="utf-8")
             for value, relative in (
                 (config, "org.aurora.bot/plugin.config.toml"),
                 (profiles, "org.aurora.model/profiles.toml"),
@@ -195,7 +235,7 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
             result = await asyncio.wait_for(assembly.runtime.submit("持续核对21项结果").run.wait(), 5)
             assert result.status == "completed" and count == 22 and events.count("tool.executed") == 21
             await asyncio.wait_for(embedding_started.wait(), 1)
-            automatic = assembly.compaction_memory
+            automatic = cast(CompactionMemory, assembly.compaction_recorder)
             assert automatic is not None
             pending = automatic.store.pending_compactions()
             assert pending and json.loads(pending[0]["record"])["run_id"]
@@ -210,7 +250,7 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
         host, assembly, ctx, _, models, _, events, _ = create()
         await host.start()
         try:
-            automatic = assembly.compaction_memory
+            automatic = cast(CompactionMemory, assembly.compaction_recorder)
             assert automatic is not None
             async with asyncio.timeout(2):
                 while automatic.store.pending_compactions():
