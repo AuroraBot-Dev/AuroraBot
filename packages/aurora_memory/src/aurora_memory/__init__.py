@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from dataclasses import asdict
 from functools import partial
 from importlib.resources import files
 from typing import cast
@@ -68,7 +69,9 @@ class MemoryResource:
     def prepare(self):
         binding = self.states["config"]
         options = cast(dict, SCHEMA.parse(self.ctx.get(binding.key, location=dict(binding.location))))
-        fingerprint = hashlib.sha256(json.dumps(options, sort_keys=True).encode()).hexdigest()
+        fingerprint = hashlib.sha256(
+            json.dumps({"memory": options, "model": asdict(self.embedding.identity)}, sort_keys=True).encode()
+        ).hexdigest()
         self._store = MemoryStore(
             self.storage.directory("org.aurora.memory") / "memory.sqlite3",
             self.options["owner"],

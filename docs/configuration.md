@@ -154,7 +154,7 @@ overlap_chars = 120
 index_version = "1"
 ```
 
-`embedding_id` 是索引身份标记，不是模型 profile 路由；实际 embedding 由装配资源引用决定。当前索引指纹使用上述记忆配置，**不会自动纳入所借用模型的 adapter/model/base_url**。因此更换模型、端点或向量空间时，须显式更新 embedding_id 或 index_version 并重建索引；不能依赖同维向量检测发现这种更换。
+`embedding_id` 是索引身份标记，不是模型 profile 路由；实际 embedding 由装配资源引用决定。索引指纹同时包含记忆配置和所借用资源的 `ModelIdentity`（adapter、model、provider、base_url）。更换实际模型或端点后，即使向量维数相同，也须显式调用 memory_reindex；仅重命名 profile 或轮换凭证不使索引失效。若供应商在相同名称和端点下更换向量空间，可更新 embedding_id 或 index_version 后重建。采用新指纹规则前写入的索引也需显式重建；原文和版本保留，不自动修改用户数据库。
 
 | 工具 | 作用 |
 | --- | --- |

@@ -132,6 +132,16 @@ class ChatCapabilities:
 
 
 @dataclass(frozen=True)
+class ModelIdentity:
+    """模型资源的稳定身份，不包含 profile 名称或运行期凭证。"""
+
+    adapter: str
+    model: str
+    provider: str | None = None
+    base_url: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelConfig:
     """工厂的连接描述；密钥通过独立运行参数注入，不属于可恢复配置。"""
 

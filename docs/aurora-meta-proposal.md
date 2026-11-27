@@ -61,7 +61,7 @@ ID 格式为 `<namespace>:<domain>/<local_path>`，归实际能力所在包。�
 | `resource_maps` | 接受一组具名资源引用的角色 |
 | `options` | 对应 contracts 中的组件参数契约名称 |
 
-角色名是局部语义，例如模型调用组件的 input/output 状态与 chat 资源，不预设 Bot 的存储地址。配置桥声明公共配置与非持久状态，业务组件按需绑定；资源对象不塞进 ctx。资源提供方负责创建和关闭，消费方只借用。
+角色名是局部语义，例如模型调用组件的 input/output 状态与 chat 资源，不预设 Bot 的存储地址。配置桥声明公共配置与非持久状态，业务组件按需绑定；资源对象不塞进 ctx。资源提供方负责创建和关闭，消费方只借用。模型资源在 prepare 解析后提供 `ModelIdentity`（adapter、model、provider、base_url）；记忆资源借用 embedding 时使用该身份建立索引指纹，自定义 embedding 资源须同样明确提供身份和 embed 方法。profile 名称与凭证不属于模型身份。
 
 Python 中 `ComponentFactory` 提供 create、export 和需要时的 bind。create 构造实例，export 返回 `InstanceExport` 的端口及资源，bind 接入明确借用的资源；stop_accepting 等导出行为负责本实例的接收边界。`@plug(ID)` 关联方法身份，执行包装可导出对应 ExecutionPlug。装饰器不会登记实例、创建资源或自动接线。
 

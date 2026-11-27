@@ -3,7 +3,7 @@
 from aurora_core import Id, plug
 
 from .content import require_capabilities
-from .contract import ChatCapabilities, ModelConfig
+from .contract import ChatCapabilities, ModelConfig, ModelIdentity
 from .plugins.model._meta import (
     CHAT_CLEAN,
     CHAT_PREPARE,
@@ -15,6 +15,8 @@ from .plugins.model._meta import (
 
 
 class ModelResource:
+    identity: ModelIdentity
+
     def __init__(self, ctx, registry, resolve_credential, *, states, options):
         self.ctx, self.registry, self.resolve_credential = ctx, registry, resolve_credential
         self.states, self.options = states, options
@@ -37,7 +39,11 @@ class ModelResource:
             config["capabilities"] = ChatCapabilities(**config["capabilities"])
         credential = values.get("credential")
         api_key = None if credential is None else self.resolve_credential(credential)
-        self.client = await adapter.factory(ModelConfig(**config), api_key=api_key)
+        configuration = ModelConfig(**config)
+        self.identity = ModelIdentity(
+            values["adapter"], configuration.model, configuration.provider, configuration.base_url
+        )
+        self.client = await adapter.factory(configuration, api_key=api_key)
         if self.kind == "chat" and self.catalog is not None:
             require_capabilities(self.client, {"messages": [], "tools": self.catalog.definitions()}, streaming=False)
 

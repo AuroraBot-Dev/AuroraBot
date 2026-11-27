@@ -15,9 +15,12 @@ from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
 from aurora_memory import CONFIG, _meta
+from aurora_model import ModelIdentity
 
 
 class Embedding:
+    identity = ModelIdentity("dev.memory:adapters/embedding", "fake")
+
     def __init__(self):
         self.closed = 0
 

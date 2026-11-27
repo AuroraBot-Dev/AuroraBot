@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from types import SimpleNamespace
 from typing import cast
 
 import httpx
@@ -20,7 +21,7 @@ from aurora_memory import plugin as memory_plugin
 from aurora_memory.compaction import CompactionMemory
 from aurora_memory.compaction import _meta as compaction_meta
 from aurora_memory.compaction import plugin as compaction_plugin
-from aurora_model import ModelConfig
+from aurora_model import ModelConfig, ModelIdentity
 from aurora_model.litellm import LiteLLMClient
 from aurora_model.testing import FakeReply
 
@@ -50,11 +51,17 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                 transport=httpx.MockTransport(handle),
             )
             embeddings.append(embedding)
+            resource = SimpleNamespace(
+                identity=ModelIdentity(
+                    "org.aurora.model:adapters/litellm/embedding", "test-vector", "openai", "https://embedding.test/v1"
+                ),
+                embed=embedding.embed,
+            )
             host, assembly, ctx, _, models, _, _, _ = setup(
                 tmp_path,
                 extra_plugins=(memory_plugin(),),
                 assembly_options={
-                    "tool_resources": {f"memory/{action}": {"embedding": embedding} for action in MEMORY_TOOLS}
+                    "tool_resources": {f"memory/{action}": {"embedding": resource} for action in MEMORY_TOOLS}
                 },
             )
             if phase == "write":
@@ -127,6 +134,7 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
         embeddings = []
 
         class Embeddings:
+            identity = ModelIdentity("dev.memory:adapters/embedding", "fake-vector")
             closed = False
 
             async def embed(self, texts):
