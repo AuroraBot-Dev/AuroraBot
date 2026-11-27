@@ -1,95 +1,75 @@
 # 上下文与运行
 
-核对日期：2026-11-11。本页描述当前代码，预算单位是字符或字节，不代表供应商 token。安装助手仅启用普通 ReAct 和终端工具，未启用本页的主动行为。
+核对基线：W08（2026-11-27）。本页说明模型输入、长期任务和主动行为的可观察语义。预算单位是字符或字节，不代表供应商 token；实际启用哪些能力由[完整装配](configuration.md#选择完整预设)决定。
 
 ## 主推理模型的每次输入
 
-按顺序发送：system_prompt、临时 business_context（启用时）、保留的 user / assistant / tool 历史；另附当前已连接工具的全部定义。工具往返中的 assistant 调用、返回及必要的 reasoning_content / thinking_blocks 保留。
+模型依次收到 system_prompt、已绑定的临时业务视图、保留的 user / assistant / tool 历史，另附当前已连接工具的定义。工具往返中的调用、返回及必要的 reasoning_content / thinking_blocks 保留。
 
-临时业务视图不写入消息历史。cadence 引导仅保存本次关注的材料：attend_events 包含未投递事件与环境变化，review_work 包含笔记与行动证据，不复制整个 business 快照。选中材料仍可能与最新视图重叠，以保留投递时的事实。工具结果也会随保留历史重复发送。默认保留完整结果；显式启用下面的上下文管理后，对已归档结果生成有界观察，并消除 MCP 中完全相同的文本与 structuredContent 副本。
+临时业务视图不写入消息历史。世界视图可包含近期事件、环境观察、未归档笔记和行动证据，按配置限制字符。abridged 表示正文截短，omitted 表示当前候选中因预算省略的条目；二者不表示工作完成或完整归档。cadence 引导保存本次关注的材料，可能与最新视图重叠，保留投递时的事实。
 
-业务视图包含近期事件、保留的环境观察、未归档笔记和最近行动证据，按启用类别分配字符预算，优先最新材料。abridged 表示正文截短，omitted 只计当前候选中因预算省略的条目；不是完整归档，也不表示事项已完成。
+工具返回会随保留历史再次发送。使用动作证据和观察转换资源后，可保留完整原文并向模型提供有界预览；没有连接这些资源时，不会仅凭配置字段自动增加该行为。
 
-实现：[ReActDefaults](../packages/aurora_agent/src/aurora_agent/react_defaults.py)、[业务视图](../packages/aurora_bot/src/aurora_bot/context_view.py)。
-
-远程图片链接由供应商读取，QQ 等来源的签名链接可能失效或无法被供应商访问。LiteLLM 适配器仅在 HTTP 400 明确报告 `Failed to download image from`，且地址与当前请求的图片匹配时，将该图片替换为“图片未读取”的文本说明，最多补发一次。有效图片、文字和原始持久历史保持不变，不伪造图片内容，也不改写压缩校验值。
-
-流式调用只有尚未输出有效片段时才允许这一补发；其他错误、部分输出后的失败及第二次失败仍明确返回。每个客户端最多记住 128 个失败地址摘要，后续请求不反复发送它们；缓存只在本进程内有效，重启或淘汰后可重新尝试，重新上传的新地址不受影响。这不恢复已失败的 agent 激活，也不重放工具动作。适配器错误日志仅记录 HTTP 状态与错误类别，不记录图片签名 URL 或供应商正文。
+远程图片由供应商读取，链接可能失效。LiteLLM 适配器仅在明确的图片下载失败、能匹配当前图片且尚无有效流式输出时，将失败图片替换为未读取说明并补发一次；其他失败正常返回。原始历史不改写，不伪造图片内容，也不重放工具动作。
 
 ## 输入预算与历史
 
-Bot 的 input_budget 开启后对完整应用层模型请求限制 JSON 文本字符，并限制内嵌文件合计 10 MiB。system、临时视图、工具定义保留；超过预算时从请求中省略较早的完整交流段，至少保留最新交流。当前交流加固定输入仍超限时抛错，不拆断工具调用关系。
+输入预算由 agent 的 `input_budget` 资源组件提供，绑定到默认阶段；业务参数位于 `config/org.aurora.agent/input_budget.toml`：
 
-单独启用 input_budget 不生成摘要、不压缩工具正文、不删除持久历史。默认不限制一次激活的轮次；有界任务可显式设置正整数 max_iterations，达到该上限仍会报 LoopLimitExceeded。删除既有 TOML 中的该字段才会移除旧上限。模型结束、bot_finish、取消和宿主关闭仍能收束运行；正常结束后由调度所有者等待和接纳下一次输入，不会自动空转推理。供应商传输还可能增加协议包装，字符预算不能替代真实 token 统计。超限日志列出实际所需字符、附件字节、system / view / history / tools / overhead 分项，不打印输入正文。
+```toml
+max_chars = 128000
+```
 
-| 配置 | 包模板默认值 | 安装助手 |
-| --- | --- | --- |
-| context_view.enabled | true | false |
-| context_view.max_chars | 12000 | 未使用 |
-| input_budget.enabled | false | true |
-| input_budget.max_chars | 128000 | 48000 |
-| max_iterations | 省略，不限轮次 | 省略，不限轮次 |
+安装助手使用 48000，memory/full 预设显式绑定预算；default/MCP/bot 预设不因配置文件存在而自动启用它。完整请求包含 system、业务视图、工具定义和历史；内嵌文件另有合计 10 MiB 限额。超过预算时省略较早的完整交流段，至少保留最新交流，不拆断工具调用关系。
 
-既有用户 TOML 不因模板变化而更新。实现：[ModelInputBudget](../packages/aurora_agent/src/aurora_agent/input_budget.py)。
+仅有预算不会生成摘要、压缩工具正文或删除持久历史。最新交流与固定输入仍超限时明确失败；供应商协议包装还可能增加开销。超限日志报告字符与字节分项，不打印正文。
+
+ReAct 的 `config/org.aurora.agent/react.toml` 可设置正整数 `max_iterations`；省略表示不限轮次，达到上限仍会报 LoopLimitExceeded。正常结束、bot_finish、取消和关闭可以收束运行；所有者等待下一次输入，不会自动空转推理。初始化不覆盖用户已有字段。
 
 ## 长任务上下文管理
 
-Bot 配置的 `context_management` 默认关闭，开启时必须同时启用 `input_budget` 和 `actions`。摘要串行复用当前聊天模型，会增加模型调用；额外启用记忆插件的 `auto_compaction` 可将压缩材料和摘要保存到长期记忆存储，配置见下文。
+历史压缩由 agent 的 `compaction` 资源组件提供，明确绑定聊天模型与输入预算，再由默认阶段借用。memory/full 预设包含该组合；动作证据与长期记忆归档都是独立资源，不是启用压缩的隐式前提。压缩会增加模型调用。
+
+`config/org.aurora.agent/compaction.toml` 的业务参数：
 
 ```toml
-[input_budget]
-enabled = true
-max_chars = 128000
-
-[actions]
-enabled = true
-max_chars = 8000
-
-[context_management]
-enabled = true
 tool_result_chars = 6000
 summary_chars = 6000
 timeout_seconds = 60.0
 ```
 
-工具执行先把完整结果写入行动证据，再生成进入上下文的观察。超长结果提供明确的截短预览、原状态、错误码和 `actions_read` 的 run_id/call_id 引用；分页读取原结果，不重跑动作。MCP 文本只有在它是唯一文本块且解码后与 structuredContent 完全相等时才去重，附加说明和非文本内容保留。actions_read 本身直接交付分页，页预算自动不超过 tool_result_chars 减 512，避免把读取工具的结果再次变成读取引用。已有历史中的大结果不会被就地改写。
+当前任务过长时，在完整工具批次边界生成续接摘要，保留最近的完整往返。固定系统提示、业务视图与工具定义不靠摘要缩减。摘要保留目标、约束、事实、未知状态和待办，作为历史材料使用；它可能遗漏细节，不能替代执行证据。摘要源不包含旧思考与签名，附件只标记为未读取；最近往返仍保留原有思考与签名。
 
-每次推理前先按 80% 预算尝试省略已结束的旧交流；当前任务仍过长时，在收齐工具批次结果的边界生成续接摘要。至少保留最近两组完整消息（assistant 工具调用及全部返回视为一组），尽量把请求降到 60%；固定系统提示、业务视图、工具定义与最近往返保持完整。摘要保留目标、约束、关键事实、执行结果、未知状态和待办，作为低优先级历史材料注入；它可能遗漏细节，不是执行证据。
+摘要请求受同一字符预算及总超时约束。失败、超时或取消不提交部分摘要，也不自动重试模型调用。已提交摘要随 ReAct 状态保存，恢复时可复用，但不会自动续跑。原消息不删除；若宿主修改已覆盖的历史，须同步处理摘要记录，校验不符会拒绝复用。这里描述的是新基线自身恢复，不承诺旧基线快照兼容。
 
-摘要源不包含旧的内部思考与签名，附件只提供“未读取附件”的标记；原始消息仍保留，最近往返的思考和签名原样交付。过长源材料按实际 JSON 大小分片，每次摘要请求都受同一硬预算约束，总耗时受 timeout_seconds 限制。返回必须正常结束、无工具调用且符合 summary_chars（JSON 编码长度）限制；失败、超时或取消不提交部分摘要，也不自动重试。
+full 同时启用 `aurora_bot.actions`：执行器先保存完整工具结果，默认阶段借用观察服务生成预览。超长结果包含状态和 `actions_read` 的 run_id/call_id 引用；分页读原文，不重新执行动作。读取工具的结果不再包装成读取引用。MCP 完全相同的单一文本与 structuredContent 可去重，附加说明和非文本内容保留；已有历史不被就地改写。
 
-摘要保存于原有 ReActContext 的可选 compaction 字段，记录覆盖位置与历史摘要校验值。旧快照无需迁移，重启可以复用已提交摘要，不自动继续执行或重新调用摘要模型。原消息及交流结束位置不删除；宿主若另行修改已覆盖的历史，必须同步处理 compaction，校验不符会明确拒绝。关闭功能后按原始历史执行原有预算逻辑。
-
-固定输入或最近两组消息本身已超过硬预算时仍会报错，不能保证所有输入都能压缩成功。应减少开放工具、缩小业务视图或分页读取大内容；不要把增加字符预算当作模型 token 上限的保证。实现：[HistoryCompactor](../packages/aurora_agent/src/aurora_agent/compaction.py)、[行动证据与预览](../packages/aurora_bot/src/aurora_bot/action_evidence.py)。
+固定输入或最近往返本身超限仍会失败。应减少开放工具、缩小业务视图或分页读取大内容；增加字符预算不等于提高模型 token 上限。
 
 ## 压缩时自动保存长期记忆
 
-显式启用 `aurora_bot.memory`、配置 embedding 角色，并在 `config/org.aurora.bot/memory.toml` 中添加：
+`aurora_memory.compaction` 提供 recorder，借用 `aurora_memory` 存储并交给 agent 压缩组件；memory/full 已显式连接。没有 `auto_compaction.enabled` 或 Bot 聚合配置开关。后台索引参数属于装配实例 options，例如以下 **memory/full 中已有实例的局部配置**：
 
 ```toml
-[auto_compaction]
-enabled = true
+[instances.memory_recorder.options]
 index_timeout_seconds = 15.0
 retry_seconds = 60.0
 ```
 
-该功能要求同时启用 context_management。压缩前，同步把本次被压缩的消息、旧摘要、run_id、覆盖范围及历史校验值提交到记忆数据库的 compactions 表；摘要通过预算检查后，先提交待索引摘要，再替换上下文。原始消息不删除，超长工具原文仍通过 actions_read 读取。未触发压缩的对话及仅被省略的已完成交流不会自动写入此队列；需要主动保存的事实仍可使用 memory_write。
+压缩先归档覆盖的消息、旧摘要、run_id、范围与校验值；摘要通过检查后提交待索引记录，再替换上下文。原始消息不删除。没有触发压缩的对话及仅被预算省略的交流不会自动写入该队列，显式事实仍可调用 memory_write 保存。
 
-宿主持有独立后台索引任务，成功后将摘要发布为 `auto_` 开头的普通记忆，memory_search/read 可检索和读取。供应商失败、超时或取消保留队列，按 retry_seconds 重试；启动会补处理待索引记录，关闭会取消等待并关闭客户端，不续跑旧 agent 或重放工具动作。检索结果中的 pending_index_count 表示尚未发布的摘要数量。本地归档或队列提交失败会阻止提交压缩状态，避免声称已保存却丢失材料。
+记录器拥有后台索引任务，成功后将摘要发布为普通记忆，memory_search/read 可查询。索引失败保留队列，按 retry_seconds 重试；启动可补处理待索引记录。pending_index_count 表示未发布的摘要数量。本地归档或队列提交失败会阻止提交压缩状态；关闭结束自有任务，不关闭借用的存储或模型，不重放旧 agent 动作。
 
-自动摘要保留来源但不是事实证明，检索不会自动注入每轮输入；Bot 仍按需调用 memory_search。同一历史前缀重复压缩按所有者与校验值去重，已发布后手动编辑或删除不会被后台重新覆盖。删除记忆不清理原始归档或会话副本。记忆数据库从 v1 增量升级到 v2，保留已有记忆、索引与版本；不改公共 ID 和快照。
+摘要保留来源但不是事实证明，搜索结果不自动注入每轮输入。同一历史前缀按 owner 与校验值去重，已发布记忆手动修改或删除后不会被后台重新覆盖；删除记忆不清理原始归档或会话副本。
 
-已索引记忆仍有每实例 1000 条容量上限；满容量时待索引摘要保留，释放容量后继续处理。原始归档与待索引队列不会自动裁剪，长期运行需关注磁盘占用。摘要调用、embedding 与远程故障仍有各自的成本和失败边界，移除轮次上限不等于无限上下文或永不失败。
+每个 owner 最多 1000 条已索引记忆；满容量时待索引摘要保留，释放容量后继续处理。原始归档与队列不自动裁剪，长期运行需管理磁盘与调用成本。模型变化的索引身份限制见[记忆配置](configuration.md#显式文本记忆朴素-rag)。
 
 ## cadence 决策
 
-启用 aurora_bot.cadence 后，省略 decision 表时按原样转交世界记录；显式配置 decision 后使用 choice 模型判断。
-
-决策输入包含观察时间、Bot 是否忙碌与 run_id、上次引导时间、业务视图、判断指令和 observe / attend_events / review_work 三个选项。不携带主模型整段对话或工具定义。决策视图预算为 max_chars 减 2048，应用层完整 ChoiceRequest 再检查 max_chars。
+cadence 借用世界记录和唯一运行所有者。省略 `config/org.aurora.bot/cadence.toml` 的 decision 表时，按原样转交世界记录；需要模型判断时，还须在装配中绑定 choice 资源与业务视图。full 已提供这些资源，普通 bot 预设没有 choice 实例。
 
 ```toml
 [decision]
-model_role = "cadence"
 active_seconds = 5.0
 idle_seconds = 180.0
 half_life_seconds = 60.0
@@ -98,15 +78,11 @@ timeout_seconds = 15.0
 max_chars = 12000
 ```
 
-model_role 必须绑定 choice 适配器；聊天模型适配器不能直接替代。节律受 ctx 活动刺激并随静默衰减，在窗口内随机判断，静默时仍会检查。内部反馈和被动时间刺激逐次衰减，世界事件和环境变化可重新激活。
+不存在 model_role 参数，实际模型来自资源引用。决策输入包含观察时间、忙闲状态、run_id、上次引导时间、业务视图与 observe / attend_events / review_work 选项，不携带主模型全部历史或工具定义。max_chars 限制完整 ChoiceRequest；业务视图有独立 max_chars，须为其他请求字段留出空间，不会自动从视图预算扣除固定值。
 
-observe 只更新观察位置，不推进事件投递位置。cadence 比较业务材料与 Bot 忙闲状态的指纹；同一材料在上次成功判断后的 idle_seconds 内不再调用模型，也不写入伪造的决策或推进游标。观察时间、run_id 和被动时钟刷新不使指纹变化；新事件、笔记修订、行动状态、主动时间观察及忙闲变化仍触发重评。达到 idle_seconds 后的下一次节律检查重新判断，保留随时间变化的事项检查能力；它不是准点唤醒，明确的计划继续使用自身控制工具。
+节律受 ctx 活动刺激并随静默衰减，在窗口内随机判断。材料与忙闲状态没有变化时，在 idle_seconds 内不重复调用模型；到期后的检查可重新判断，不是准点唤醒。明确计划使用自身控制工具。
 
-Bot 忙碌时仍可接受补充引导；显式忙碌拒绝不缓存此次判断，后续可再次投递。指纹只在当前进程保存，重启会重新评估材料，已有消费游标仍防止事件重复转交。累计消耗仍取决于输入大小、实际材料变化和调用次数。
-
-观察、投递、接纳、运行完成和业务完成是不同状态。改变 cadence 模式应使用独立数据目录，不自动转换既有 checkpoint；错误会暂停自动转交，不靠重启或清空状态掩盖不确定副作用。
-
-实现：[cadence](../packages/aurora_bot/src/aurora_bot/cadence/forwarder.py)、[节律](../packages/aurora_bot/src/aurora_bot/cadence/rhythm.py)。
+observe 只更新观察位置，不推进投递位置。接纳回执也不表示运行或业务已经完成。Bot 忙碌时可接纳补充引导；拒绝接纳不缓存为投递成功。重启可重新评估，但不把未完成外部动作当作可自动重试的工作。改变 cadence 模式应使用独立数据目录，不自动转换旧 checkpoint。
 
 ## 实际模型用量
 
@@ -120,24 +96,24 @@ status 区分 completed、failed、cancelled 和 incomplete（响应流提前结
 
 ## 世界、笔记与证据
 
-世界事件原文持久归档，ctx 只保留近期窗口；环境按来源保留有界观察。world_read_event 按 record_id 分页读取原文，读取不表示消费或处理。QQ 图片事件中的有效图片引用可由 cadence 转为模型图片输入，仍由主模型处理，不自动下载或另开视觉模型。
+world records 持久归档事件原文，ctx 只保留近期窗口；sources 管理来源，环境观察有界。`aurora_bot.world_view` 借用记录与可选笔记/证据生成业务视图，提供 world_read_event 分页读原文。读取不表示消费或处理，图片仍由主模型处理，不另开视觉模型。
 
-notes.enabled 提供 notes_write / notes_read / notes_list，笔记按实例隔离并随快照保存。未归档笔记可进入业务视图，记录和引用不证明外部动作成功。
+`aurora_bot.notes` 的服务和工具提供 notes_write/read/list，笔记按绑定的 owner 隔离并随快照保存；未归档笔记可进入已绑定的业务视图。
 
-actions.enabled 提供工具调用证据和 actions_read 分页查询。completed / failed 表示工具返回结果，unknown 需要核实，不能视作未执行或要求重试。证据缺失也不能证明动作未发生。
+`aurora_bot.actions` 提供动作证据与 actions_read。completed / failed 表示工具返回结果，unknown 需要核实，不能视作未执行或自动重试的依据；证据缺失也不能证明动作未发生。启用插件后还须在装配中选择组件、状态、资源与工具，旧 notes.enabled/actions.enabled 开关不再存在。
 
 ## 长期文本记忆
 
-显式启用 `aurora_bot.memory` 并连接工具后，ReAct 可通过 `memory_write / memory_search / memory_read / memory_delete` 保存和查询长期记忆。原文按字符分块，以 embedding 向量做精确余弦 top-k 检索；本版使用有界 SQLite 语料，不需要额外向量数据库，也不提供重排或自动摘要。配置和重建方法见[显式文本记忆](configuration.md#显式文本记忆朴素-rag)。
+独立插件 `aurora_memory` 提供 memory_write/search/read/delete/reindex 五个工具。原文按字符分块，以 embedding 做余弦 top-k 检索；当前使用有界 SQLite 存储，无额外向量数据库或重排器。完整配置与索引重建见[配置指南](configuration.md#显式文本记忆朴素-rag)。
 
-记忆与工作笔记独立：工作笔记继续表示当前工作状态，长期记忆只接收显式写入，不自动复制笔记正文。记忆不加入每轮 business_context，由模型按需调用搜索工具；结果含来源、版本和分块字符偏移，需要全文时再读取。相似度不代表事实可信度，检索内容也不具有指令优先级。
+工作笔记表示当前工作状态，长期记忆接收显式写入或已连接压缩记录器发布的摘要，不自动复制笔记。记忆不加入每轮业务视图，由模型按需搜索；结果含来源、版本和字符偏移。相似度不代表事实可信度，检索内容不具有指令优先级。
 
-写入先生成向量，再在事务内检查版本并提交正文与索引；并发修改、供应商失败或取消不会覆盖已提交版本。删除后不再从记忆库召回，但已进入会话历史的工具结果仍按现有历史保留规则保存。实例隔离用于数据归属，不构成同进程插件权限边界。
+写入先生成向量，再按版本提交正文和索引；并发修改、失败或取消不覆盖已提交版本。删除后不再召回，但已进入会话的工具结果仍按历史规则保存。owner 用于数据归属，不构成同进程权限隔离。
 
 ## 计划唤醒与自身控制
 
-self_control.enabled 提供 wake_schedule / wake_list / wake_cancel、bot_status、bot_autonomy 与 bot_finish。唤醒只向既有运行所有者提交引导，不创建第二个调度所有者；计划到期不等于业务动作完成。
+`aurora_bot.self_control` 绑定既有运行所有者，提供 wake_schedule/list/cancel、bot_status、bot_autonomy 和 bot_finish。full 显式连接这些工具；计划到期只提交引导，不创建第二个调度所有者，也不代表动作完成。
 
-bot_finish 正常结束当前运行，不暂停 cadence。bot_autonomy(paused=true) 暂停自动引导，包括计划唤醒，直接交流仍可用。恢复后按当前事实判断，不自动重放未完成的外部动作。
+bot_finish 正常结束当前运行，不暂停 cadence；bot_autonomy(paused=true) 暂停自动引导，包括计划唤醒，直接交流仍可用。恢复后按当前事实判断，不自动重放未完成动作。
 
-工具结果限制、任务摘要和模型用量记录按上述机制工作；完整请求仍按字符约束，尚未提供供应商 token 预算或累计费用熔断。
+模型调用、工具执行、摘要和后台索引分别有自己的失败与成本边界。当前没有供应商 token 总预算或累计费用熔断。

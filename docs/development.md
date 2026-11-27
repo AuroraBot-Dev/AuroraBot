@@ -1,6 +1,6 @@
 # 开发与验证
 
-核对日期：2026-11-09。首次使用走[安装助手](../examples/START.md)，本页供维护者使用。
+核对基线：W08（2026-11-27）。首次使用走[安装助手](../examples/START.md)，本页供维护者使用。
 
 ## 环境与检查
 
@@ -9,8 +9,8 @@ Python 使用 uv workspace，版本以各包 pyproject.toml 为准。Node / pnpm
 ```powershell
 uv sync --locked --all-packages
 pnpm install --frozen-lockfile
-pnpm exec uv run --locked aurora check
-pnpm exec uv run --locked aurora check --full
+uv run --locked aurora check
+uv run --locked aurora check --full
 ```
 
 默认检查包含格式、lint、Python / TypeScript 类型与快速边界测试；--test 跳过静态检查，--full 运行全部保留的包内单测、契约、前端、原生终端和集成测试；--coverage 也使用完整测试范围。
@@ -21,7 +21,8 @@ pnpm exec uv run --locked aurora check --full
 
 ```powershell
 pnpm exec uv run --locked pytest tests/e2e/test_onboarding.py tests/e2e/test_package_boundaries.py -q
-uv build --all-packages --wheel --out-dir build/wheels
+uv build tooling/aurora_meta_build --wheel --out-dir build/meta
+uv build --all-packages --wheel --find-links build/meta --out-dir build/wheels
 ```
 
 依赖或分发内容变化时，在干净环境安装 wheel，确认 control 无需 agent / 模型，agent 无需 bot / CLI / API；工作区导入不能替代验收。
@@ -30,23 +31,37 @@ uv build --all-packages --wheel --out-dir build/wheels
 
 包内 unit / contract 位于 packages 下；跨包契约在 tests/contract，真实进程及跨包集成在 tests/e2e。tests/fixtures/runtime_apps 保留五组离线回归应用，供持久化、取消、包边界与常驻宿主测试使用，不再承担用户教学入口。
 
-用户示例仅为 examples/onboarding。它复用 MCP 产品装配、CLI 宿主、模型工具执行和现有界面，不复制 ReAct 调度。初始化不启动模型或 MCP；普通验收通过假模型与本机 stdio 覆盖配置、工具回填和历史恢复。固定版本 terminal MCP 可单独检查目录与工具调用，不需真实模型。
+用户示例仅为 examples/onboarding。它提供完整装配文件，复用通用宿主、模型工具执行和现有界面，不复制 ReAct 调度。初始化不启动模型或 MCP；普通验收通过假模型与本机 stdio 覆盖配置、工具回填和历史恢复。固定版本 terminal MCP 可单独检查目录与工具调用，不需真实模型。
 
 测试优先验证可观察结果、数据隔离、资源释放和故障恢复；跨层验收选择能覆盖不同路径的代表组合，协议与校验细节集中在所属包，避免在每个宿主重复参数笛卡尔积。不要通过删除有效断言或放宽容错掩盖失败；运行夹具需要的配置资源随夹具一起保留。涉及原生终端的针对性 pytest 命令也通过 pnpm exec 使用工作区 Node。
 
-## 查询定义与插件
+## 清单生成与静态目录
 
-插件发现只登记定义，适合核对实际公共 ID，不会创建客户端或后台任务：
+每个插件的公开身份和组件角色以 `plugin.meta.toml` 为源，发行信息与入口工厂以 pyproject.toml 为源。修改后生成并检查一致性：
+
+```powershell
+uv run --locked aurora-meta generate
+uv run --locked aurora-meta generate --check
+uv run --locked aurora-meta catalog aurora-agent
+```
+
+生成器更新清单相邻的 `_meta.py` 和发行根目录 `plugin.meta.json`，不要手改生成物。契约使用纯导出或包内文件；构建工具不安装业务运行依赖。按项目格式工具处理生成物后，再执行检查。
+
+catalog 读取已安装发行包的静态目录，不导入插件或创建资源；无需模型供应商 SDK。源码目录汇总在[公共 ID 目录](aurorabot-id-catalog-v0.2.3.md)，组件角色、端口及契约的权威来源仍是清单和契约文件。
+
+## 查询运行定义
+
+当前 CLI 的 `id list` 登记所选插件并列出定义，不执行 prepare/start，不启动客户端或后台任务：
 
 ```powershell
 uv run --locked aurora --data-dir build/onboarding id list
 ```
 
-上面的目录应已由助手 --init 初始化。完整静态目录见[公共 ID 目录](aurorabot-id-catalog-v0.2.3.md)；MCP 动态工具只会在准备连接和读取目录后出现。公开接口以契约文件和测试为准，不照搬历史设计中的拟议 schema。
+上面的目录应已由助手 --init 初始化。这条命令需要所选插件的运行依赖；它与只读发行数据的 catalog 不同。MCP 动态工具只会在准备连接和读取目录后出现。独立的 CLI 插件目录、装配计划与实际图命令仍属 W09 待办，当前不要使用规划中的命令名。公开接口以契约文件和测试为准，不照搬历史设计中的拟议 schema。
 
 ## 文档与提交
 
-当前入口集中在 [INDEX.md](INDEX.md)，START.md 保持为首次启动短指南。配置、操作、上下文与架构分别维护，旧计划和讨论保留归档标记；变更与验收统一写入 CHAGELOG.md。
+当前入口集中在 [INDEX.md](INDEX.md)，START.md 保持为首次启动短指南。文档描述职责、公共约定和使用行为；实现步骤、私有方法与算法细节留在代码及测试。公开接口、配置或行为变化时同步主题文档，内部重构不要求重写使用指南。配置、操作、上下文与架构分别维护，旧计划和讨论保留归档标记；变更与验收统一写入 CHAGELOG.md。
 
 按项目 AGENTS.md 使用中文注释、docstring 与提交说明，小步提交，在功能分支验证后通过 PR 合并。README.md 和 AGENTS.md 的修改遵守用户确认规则；不改写用户数据来适配示例或测试。
 

@@ -11,7 +11,7 @@ uv sync --locked --all-packages
 uv run --locked python examples/onboarding/main.py --init
 ```
 
-初始化只补齐缺失文件，不调用模型或启动终端。助手启动时由 `uvx` 安装并运行固定版本 `terminal-mcp==0.4.7`，首次需要联网下载。
+初始化生成 `config/host.toml`、完整 `config/assembly.toml` 和声明配置，只补齐缺失文件，不调用模型或启动终端。助手启动时由 `uvx` 安装并运行固定版本 `terminal-mcp==0.4.7`，首次需要联网下载。
 
 ## 2. 填写模型
 
@@ -44,4 +44,4 @@ pnpm --filter @aurorabot/tui start --connect http://127.0.0.1:10271 --instance o
 
 `--data-dir` 可选择另一份助手数据，`--env-file` 可指定环境文件。默认 API 仅供本机非浏览器客户端访问；Panel 连接和访问令牌见[操作指南](../docs/operations.md#连接安装助手)。不要让两个宿主共用同一数据目录。
 
-更多内容：[文档索引](../docs/INDEX.md) · [配置与 MCP](../docs/configuration.md) · [开发与验证](../docs/development.md)
+更多内容：[文档索引](../docs/INDEX.md) · [配置与装配](../docs/configuration.md) · [开发与验证](../docs/development.md)
